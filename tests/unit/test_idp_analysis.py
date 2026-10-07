@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import io
 import uuid
+from datetime import date
 from unittest.mock import AsyncMock
 
 import pytest
@@ -12,6 +13,7 @@ from fastapi import HTTPException
 
 from core.config import settings
 from core.idp import reconcile, report, stamps, store
+from core.idp.pages import DocumentError
 
 TENANT = uuid.uuid4()
 
@@ -53,6 +55,45 @@ class TestReconcile:
         assert reconcile.agree("id", "abcde 1234 f", "ABCDE1234F") and not reconcile.agree("id", "", "")
         assert reconcile.agree("amount", "41,250", "41250.00") and reconcile.agree("amount", "100000", "101000")
         assert not reconcile.agree("amount", "100000", "120000") and not reconcile.agree("amount", "x", "1")
+
+    def test_agreement_is_required_between_every_pair_of_values(self):
+        # An initial matches both full names, but the full names do not match each other.
+        documents = [
+            _doc(0, "government_id", name="A Example"),
+            _doc(1, "salary_slip", employee_name="Anil Example"),
+            _doc(2, "kyc_form", customer_name="Arun Example"),
+        ]
+        assert reconcile.names_agree("A Example", "Anil Example") and reconcile.names_agree("A Example", "Arun Example")
+        result = reconcile.reconcile(documents)
+        assert "name" not in result["agreements"] and result["disagreements"][0]["item"] == "name"
+        consistent = reconcile.reconcile(documents[:2] + [_doc(2, "kyc_form", customer_name="Anil K Example")])
+        assert "name" in consistent["agreements"] and consistent["consistent"] is True
+
+    def test_two_digit_birth_years_resolve_to_the_latest_century_not_in_the_future(self):
+        today = date(2026, 10, 7)
+        assert reconcile.normalise_date("01/01/90", today=today) == "1990-01-01"
+        assert reconcile.normalise_date("15-08-05", today=today) == "2005-08-15"
+        assert reconcile.normalise_date("01/10/26", today=today) == "2026-10-01"
+        assert reconcile.normalise_date("01/12/26", today=today) == "1926-12-01"
+        assert reconcile.normalise_date("31/02/90", today=today) is None
+        assert reconcile.agree("date", "01/01/90", "1990-01-01")
+        documents = [
+            _doc(0, "government_id", date_of_birth="01/01/90"),
+            _doc(1, "kyc_form", date_of_birth="1990-01-01"),
+        ]
+        assert reconcile.reconcile(documents)["agreements"] == ["date_of_birth"]
+
+    def test_amounts_keep_their_sign(self):
+        assert reconcile.normalise_amount("-1,000") == -1000.0 and reconcile.normalise_amount("1000") == 1000.0
+        assert reconcile.normalise_amount("Rs. -1,000") == -1000.0 and reconcile.normalise_amount("-₹ 12.50") == -12.5
+        assert reconcile.normalise_amount("−7") == -7.0 and reconcile.normalise_amount("₹41,250/-") == 41250.0
+        assert reconcile.normalise_amount("10-20") is None and reconcile.normalise_amount("") is None
+        assert not reconcile.agree("amount", "-1000", "1000") and reconcile.agree("amount", "-1000", "-1,000.00")
+        documents = [
+            _doc(0, "salary_slip", net_pay="-41250"),
+            _doc(1, "salary_slip", net_pay="41250"),
+        ]
+        assert reconcile.reconcile(documents)["disagreements"][0]["item"] == "net_pay"
 
     def test_disagreements_name_every_value_with_its_document_and_box(self):
         documents = [
@@ -174,6 +215,27 @@ class TestReport:
         empty = report.build({"id": "d2", "status": "approved", "documents": []})
         assert empty["narrative"] == "The file holds no recognised document. The file was approved."
 
+    def test_corrected_fields_are_neither_missing_nor_weak(self):
+        document = _doc(0, "salary_slip", employee_name="Anil Example", net_pay="41250")
+        document["fields"] += [
+            # As the store returns them: the reviewer's value applied, the extraction status kept.
+            {"name": "pay_period", "value": "September 2026", "original_value": None, "status": "missing",
+             "required": True, "corrected": True, "confidence": 0, "page": None},
+            {"name": "employer", "value": "Example Works", "original_value": "Exampl Wrks", "status": "weak",
+             "required": True, "corrected": True, "confidence": 0.4, "page": 1},
+            {"name": "gross_pay", "value": "50000", "status": "weak", "required": False, "corrected": False,
+             "confidence": 0.4, "page": 1},
+            {"name": "branch", "value": None, "status": "missing", "required": True, "corrected": False,
+             "confidence": 0, "page": None},
+        ]  # fmt: skip
+        built = report.build({"id": "d3", "status": "review", "documents": [document]})
+        section = built["documents"][0]
+        assert section["missing_fields"] == ["branch"] and section["weak_fields"] == ["gross_pay"]
+        assert "Not found: branch on the salary slip." in built["narrative"] and "pay_period" not in built["narrative"]
+        period = next(f for f in section["key_fields"] if f["name"] == "pay_period")
+        assert period["corrected"] is True and period["value"] == "September 2026"
+        assert "| pay_period | September 2026 |" in report.to_markdown(built)
+
 
 class TestRoutes:
     @pytest.mark.asyncio
@@ -193,7 +255,8 @@ class TestRoutes:
             "documents": [_doc(0, "cheque", name="A")],
         }
         monkeypatch.setattr(store, "get_document", AsyncMock(return_value=detail))
-        monkeypatch.setattr(store, "page_image", AsyncMock(return_value=b"png"))
+        monkeypatch.setattr(store, "document_content", AsyncMock(return_value=(b"file", "application/pdf")))
+        monkeypatch.setattr(store, "render_pages", lambda _data, _mime, numbers: ((n, b"png") for n in numbers))
         candidate = stamps.Candidate(1, (300, 500, 400, 600), "blue", 0.02, 0.5, 0.8)
         monkeypatch.setattr(stamps, "detect_from_png", lambda *_a, **_k: [candidate])
 
@@ -216,3 +279,42 @@ class TestRoutes:
         with pytest.raises(HTTPException) as info:
             await api.report_of_document(uuid.uuid4(), output="json", with_stamps=False, tenant_id=str(TENANT))
         assert info.value.status_code == 404
+
+    @pytest.mark.asyncio
+    async def test_the_stamp_scan_reads_and_parses_the_file_once_for_all_pages(self, monkeypatch):
+        from api.v1 import idp_analysis as api
+        from tests.unit.idp_pdf_fixture import make_pdf
+
+        pdf = make_pdf(["one"], ["two"], ["three"], table_columns=False)
+        content = AsyncMock(return_value=(pdf, "application/pdf"))
+        monkeypatch.setattr(store, "document_content", content)
+        monkeypatch.setattr(store, "page_image", AsyncMock(side_effect=AssertionError("loaded per page")))
+        opened: list[int] = []
+        real_open = store.open_pdf
+        monkeypatch.setattr(store, "open_pdf", lambda data: opened.append(len(data)) or real_open(data))
+        seen: list[int] = []
+        monkeypatch.setattr(stamps, "detect_from_png", lambda png, page_number, **_k: seen.append(page_number) or [])
+        detail = {
+            "pages_detail": [{"number": n, "width": 595, "height": 842, "lines": []} for n in (1, 2, 3, 9)],
+            "documents": [{**_doc(0, "cheque"), "pages": [1, 2, 3]}],
+        }
+        result = await api.stamp_check(str(TENANT), uuid.uuid4(), detail)
+        assert content.await_count == 1 and opened == [len(pdf)] and seen == [1, 2, 3]
+        assert result["missing_on"] == [1, 2, 3] and [p["page"] for p in result["pages"]] == [1, 2, 3]
+
+        content.side_effect = DocumentError(404, "not_found", "No such document")
+        assert (await api.stamp_check(str(TENANT), uuid.uuid4(), detail))["pages"] == []
+
+    def test_pages_render_lazily_from_one_open_of_the_file(self, monkeypatch):
+        from tests.unit.idp_pdf_fixture import make_pdf
+
+        pdf = make_pdf(["one"], ["two"], table_columns=False)
+        opened: list[int] = []
+        real_open = store.open_pdf
+        monkeypatch.setattr(store, "open_pdf", lambda data: opened.append(1) or real_open(data))
+        rendered = list(store.render_pages(pdf, "application/pdf", [2, 1, 2, 7]))
+        assert [n for n, _png in rendered] == [1, 2] and all(png[:4] == b"\x89PNG" for _n, png in rendered)
+        assert opened == [1]
+        assert store.render_page(pdf, "application/pdf", 2)[:4] == b"\x89PNG"
+        with pytest.raises(DocumentError):
+            store.render_page(pdf, "application/pdf", 3)

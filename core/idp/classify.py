@@ -23,6 +23,9 @@ class DocumentType:
     category: str  # identity | address | income | financial | lending | servicing | other
     patterns: tuple[tuple[str, float], ...]
     first_page_patterns: tuple[str, ...] = ()  # what the first page of this type says
+    # What the end of a document of this type says (a closing balance, a net pay, a signature block):
+    # evidence that the document before a repeated heading is complete, so the heading starts another one.
+    last_page_patterns: tuple[str, ...] = ()
 
 
 CATALOGUE: tuple[DocumentType, ...] = (
@@ -39,6 +42,7 @@ CATALOGUE: tuple[DocumentType, ...] = (
             (r"\b(passport|driving licen[cs]e|voter)\b", 0.5),
         ),
         (r"\b(permanent account number|government of india|passport)\b",),
+        (r"\bsignature\b",),
     ),
     DocumentType(
         "address_proof",
@@ -51,6 +55,7 @@ CATALOGUE: tuple[DocumentType, ...] = (
             (r"\b(rent agreement|lease deed)\b", 0.6),
         ),
         (r"\b(bill|rent agreement|lease deed)\b",),
+        (r"\b(amount payable|total amount|units consumed|due date)\b",),
     ),
     DocumentType(
         "bank_statement",
@@ -64,6 +69,7 @@ CATALOGUE: tuple[DocumentType, ...] = (
             (r"\bstatement period\b", 0.4),
         ),
         (r"\b(account statement|statement of account|bank statement)\b",),
+        (r"\b(closing balance|end of statement)\b",),
     ),
     DocumentType(
         "salary_slip",
@@ -76,6 +82,7 @@ CATALOGUE: tuple[DocumentType, ...] = (
             (r"\b(pay period|month of)\b", 0.3),
         ),
         (r"\b(salary slip|pay ?slip|payslip)\b",),
+        (r"\b(net (pay|salary)|take home)\b",),
     ),
     DocumentType(
         "tax_return",
@@ -87,6 +94,7 @@ CATALOGUE: tuple[DocumentType, ...] = (
             (r"\bform 16\b", 0.6),
         ),
         (r"\b(income tax return|form 16|itr)\b",),
+        (r"\b(total tax paid|verification)\b",),
     ),
     DocumentType(
         "invoice",
@@ -99,6 +107,7 @@ CATALOGUE: tuple[DocumentType, ...] = (
             (r"\b(bill to|ship to)\b", 0.3),
         ),
         (r"\b(tax invoice|invoice)\b",),
+        (r"\b(grand total|amount due|total amount|authori[sz]ed signatory)\b",),
     ),
     DocumentType(
         "loan_application",
@@ -111,6 +120,7 @@ CATALOGUE: tuple[DocumentType, ...] = (
             (r"\b(declaration|i hereby declare)\b", 0.2),
         ),
         (r"\b(loan application|application form)\b",),
+        (r"\b(i hereby declare|signature of (the )?applicant)\b",),
     ),
     DocumentType(
         "cheque",
@@ -123,6 +133,7 @@ CATALOGUE: tuple[DocumentType, ...] = (
             (r"\b\d{6}\b.*\b\d{9}\b", 0.2),
         ),
         (r"\b(cheque|or bearer)\b",),
+        (r"\b(or bearer|or order|rupees)\b",),
     ),
     DocumentType(
         "property_document",
@@ -135,6 +146,7 @@ CATALOGUE: tuple[DocumentType, ...] = (
             (r"\b(vendor|purchaser|schedule of property)\b", 0.3),
         ),
         (r"\b(sale deed|title deed|conveyance)\b",),
+        (r"\b(in witness whereof|schedule of property)\b",),
     ),
     DocumentType(
         "agreement",
@@ -147,6 +159,7 @@ CATALOGUE: tuple[DocumentType, ...] = (
             (r"\b(terms and conditions)\b", 0.2),
         ),
         (r"\b(this agreement|agreement is made)\b",),
+        (r"\b(in witness whereof)\b",),
     ),
     DocumentType(
         "kyc_form",
@@ -159,6 +172,7 @@ CATALOGUE: tuple[DocumentType, ...] = (
             (r"\b(occupation|annual income|source of funds)\b", 0.3),
         ),
         (r"\b(know your customer|kyc form)\b",),
+        (r"\b(i hereby declare|declaration|signature)\b",),
     ),
 )
 
@@ -208,6 +222,14 @@ def looks_like_first_page(text: str, document_type: str) -> bool:
         return False
     head = text[:600]
     return any(re.search(pattern, head, re.I) for pattern in item.first_page_patterns)
+
+
+def looks_like_last_page(text: str, document_type: str) -> bool:
+    """Whether the text carries what the end of a document of this type says."""
+    item = TYPES.get(document_type)
+    if item is None:
+        return False
+    return any(re.search(pattern, text, re.I) for pattern in item.last_page_patterns)
 
 
 def classify(text: str, *, floor: float = MIN_CONFIDENCE) -> Classification:

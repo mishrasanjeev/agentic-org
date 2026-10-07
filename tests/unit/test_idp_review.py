@@ -153,6 +153,35 @@ class TestStore:
         period = next(f for f in documents[0]["fields"] if f["name"] == "pay_period")
         assert period["corrected"] is False
 
+    def test_corrections_apply_to_extra_fields_too(self):
+        documents = store.effective_documents(
+            _result(), {"0": {"branch": {"value": "Pune Main", "by": "r1", "at": "t"}}}
+        )
+        branch = documents[0]["extra_fields"][0]
+        assert branch["value"] == "Pune Main" and branch["original_value"] == "Pune" and branch["corrected"] is True
+        assert branch["corrected_by"] == "r1"
+        untouched = store.effective_documents(_result(), {})
+        assert untouched[0]["extra_fields"][0]["corrected"] is False
+        assert untouched[0]["extra_fields"][0]["value"] == "Pune"
+
+    def test_pdf_raster_scale_is_capped_before_rendering(self):
+        assert store.pdf_render_scale(595, 842) == pytest.approx(store.IMAGE_DPI / 72.0)
+        capped = store.pdf_render_scale(200_000, 1_000)
+        assert 200_000 * capped <= store.MAX_IMAGE_SIDE
+        assert round(200_000 * capped) == store.MAX_IMAGE_SIDE
+        for width, height in ((0, 0), (-5, -5), (float("nan"), 10), (float("inf"), 10)):
+            with pytest.raises(DocumentError) as info:
+                store.pdf_render_scale(width, height)
+            assert info.value.code == "page_size_invalid"
+
+    def test_an_oversized_pdf_page_renders_within_the_maximum_side(self):
+        from PIL import Image
+
+        png = store.render_page(make_pdf(["hello"], width=14_400, height=7_200), "application/pdf", 1)
+        size = Image.open(io.BytesIO(png)).size
+        assert max(size) <= store.MAX_IMAGE_SIDE and max(size) >= store.MAX_IMAGE_SIDE - 1
+        assert size[0] > size[1]
+
     def test_pages_render_as_png_from_pdfs_and_images(self):
         png = store.render_page(_pdf(["hello"]), "application/pdf", 1)
         assert png[:8] == b"\x89PNG\r\n\x1a\n"
@@ -183,7 +212,11 @@ class TestStore:
             and period["corrected_by"] == "r1"
             and row.corrections["0"]["pay_period"]["by"] == "r1"
         )
-        await store.correct(TENANT, row.id, document_index=0, field="branch", value="Pune Main", user_id="r1")
+        corrected = await store.correct(
+            TENANT, row.id, document_index=0, field="branch", value="Pune Main", user_id="r1"
+        )
+        branch = corrected["documents"][0]["extra_fields"][0]
+        assert branch["value"] == "Pune Main" and branch["corrected"] is True and branch["original_value"] == "Pune"
         for kwargs, code in (
             ({"document_index": 9, "field": "net_pay"}, "document_index_unknown"),
             ({"document_index": 0, "field": "nope"}, "field_unknown"),
