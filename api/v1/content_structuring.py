@@ -6,12 +6,18 @@ from __future__ import annotations
 import uuid
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Depends, Query, Request
+from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel, Field
 
-from api.deps import get_current_tenant, get_user_domains, require_tenant_admin
+from api.deps import (
+    ActiveHumanAdmin,
+    get_active_human_admin,
+    get_current_tenant,
+    get_user_domains,
+    require_tenant_admin,
+)
 from api.route_metadata import route_meta
-from api.v1.content import _off, _refused, _run, _user_id
+from api.v1.content import _off, _refused, _run
 from core.content import clauses, responding, services, structuring, tone
 
 router = APIRouter(prefix="/content", tags=["Content"])
@@ -151,13 +157,17 @@ async def list_clauses(
     idempotency="not-idempotent-create",
     audit_event="content.clauses.create",
 )
-async def create_clause(body: ClauseIn, request: Request, tenant_id: str = Depends(get_current_tenant)) -> dict:
+async def create_clause(
+    body: ClauseIn,
+    admin: ActiveHumanAdmin = Depends(get_active_human_admin),
+    tenant_id: str = Depends(get_current_tenant),
+) -> dict:
     """A new clause, as a draft, waiting for a second person's approval."""
     if not services.enabled():
         raise _off()
     try:
         fields = clauses.parse_clause_fields(body.model_dump())
-        return await clauses.create_clause(uuid.UUID(tenant_id), fields, user_id=_user_id(request))
+        return await clauses.create_clause(uuid.UUID(tenant_id), fields, user_id=str(admin.user_id))
     except services.ContentError as exc:
         raise _refused(exc) from None
 
@@ -172,14 +182,17 @@ async def create_clause(body: ClauseIn, request: Request, tenant_id: str = Depen
     audit_event="content.clauses.update",
 )
 async def update_clause(
-    clause_id: uuid.UUID, body: ClausePatch, request: Request, tenant_id: str = Depends(get_current_tenant)
+    clause_id: uuid.UUID,
+    body: ClausePatch,
+    admin: ActiveHumanAdmin = Depends(get_active_human_admin),
+    tenant_id: str = Depends(get_current_tenant),
 ) -> dict[str, Any]:
     """A change: a new version of the clause that waits for approval again."""
     if not services.enabled():
         raise _off()
     try:
         fields = clauses.parse_clause_fields(body.model_dump(exclude_unset=True), partial=True)
-        return await clauses.update_clause(uuid.UUID(tenant_id), clause_id, fields, user_id=_user_id(request))
+        return await clauses.update_clause(uuid.UUID(tenant_id), clause_id, fields, user_id=str(admin.user_id))
     except services.ContentError as exc:
         raise _refused(exc) from None
 
@@ -193,12 +206,16 @@ async def update_clause(
     idempotency="idempotent-lifecycle-state",
     audit_event="content.clauses.approve",
 )
-async def approve_clause(clause_id: uuid.UUID, request: Request, tenant_id: str = Depends(get_current_tenant)) -> dict:
+async def approve_clause(
+    clause_id: uuid.UUID,
+    admin: ActiveHumanAdmin = Depends(get_active_human_admin),
+    tenant_id: str = Depends(get_current_tenant),
+) -> dict:
     """Approve a clause version; its author may not."""
     if not services.enabled():
         raise _off()
     try:
-        return await clauses.approve_clause(uuid.UUID(tenant_id), clause_id, user_id=_user_id(request), approve=True)
+        return await clauses.approve_clause(uuid.UUID(tenant_id), clause_id, user_id=str(admin.user_id), approve=True)
     except services.ContentError as exc:
         raise _refused(exc) from None
 
@@ -212,11 +229,15 @@ async def approve_clause(clause_id: uuid.UUID, request: Request, tenant_id: str 
     idempotency="idempotent-lifecycle-state",
     audit_event="content.clauses.retire",
 )
-async def retire_clause(clause_id: uuid.UUID, request: Request, tenant_id: str = Depends(get_current_tenant)) -> dict:
+async def retire_clause(
+    clause_id: uuid.UUID,
+    admin: ActiveHumanAdmin = Depends(get_active_human_admin),
+    tenant_id: str = Depends(get_current_tenant),
+) -> dict:
     """Retire a clause so it no longer assembles."""
     if not services.enabled():
         raise _off()
     try:
-        return await clauses.approve_clause(uuid.UUID(tenant_id), clause_id, user_id=_user_id(request), approve=False)
+        return await clauses.approve_clause(uuid.UUID(tenant_id), clause_id, user_id=str(admin.user_id), approve=False)
     except services.ContentError as exc:
         raise _refused(exc) from None
