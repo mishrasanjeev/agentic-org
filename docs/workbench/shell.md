@@ -95,7 +95,9 @@ corrections first; a customer's name, identifiers, industry, address and signato
 the account numbers and bank codes found in kept documents with the holder's name beside. Facet
 filters are repeated query parameters named after the facet (a case's `state`, `purpose`,
 `provider`; a document's `status`, `document_type`; a customer's `industry`, `state_code`,
-`active`) and the response counts the values present so the person can narrow further. Every read
+`active`, which is `true` or `false`) and the response counts the values present so the person can
+narrow further. A document type narrows the query itself, before the row limit, and an excluded term
+is judged per account for account hits. Every read
 is tenant scoped, bounded per kind, and a kind is searched only where the caller holds a workbench
 tab that shows it (customers where the companies page admits the role). The review officer's and
 the investigator's workbenches show the search as a tab.

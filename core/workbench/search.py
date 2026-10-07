@@ -105,8 +105,10 @@ def check_filters(kind: str, raw: dict[str, Any]) -> dict[str, list[str]]:
         if not isinstance(values, list) or len(values) > 20:
             raise SearchError(422, "filter_invalid", f"filter {name} is a list of up to 20 values")
         cleaned = [str(v).strip()[:100] for v in values if str(v).strip()]
+        if name == "active" and any(v.lower() not in ("true", "false") for v in cleaned):
+            raise SearchError(422, "filter_invalid", "filter active is true or false")
         if cleaned:
-            out[name] = cleaned
+            out[name] = [v.lower() for v in cleaned] if name == "active" else cleaned
     return out
 
 
@@ -218,8 +220,12 @@ async def _document_rows(
     statement = select(IdpDocument).where(IdpDocument.tenant_id == tenant_id, *_term_clause(columns, must, must_not))
     if "status" in filters:
         statement = statement.where(IdpDocument.status.in_(filters["status"]))
-    rows = (await session.execute(statement.order_by(IdpDocument.updated_at.desc()).limit(limit))).scalars().all()
     wanted = set(filters.get("document_type") or [])
+    if wanted:
+        statement = statement.where(
+            or_(*[IdpDocument.result.contains({"documents": [{"document_type": kind}]}) for kind in sorted(wanted)])
+        )
+    rows = (await session.execute(statement.order_by(IdpDocument.updated_at.desc()).limit(limit))).scalars().all()
     if wanted:
         rows = [
             r
@@ -380,17 +386,17 @@ async def search(
             hits.extend(
                 await _case_hits(session, tenant_id, must, must_not, check_filters("case", filters or {}), per_kind)
             )
-        document_rows: list[Any] = []
-        if "document" in wanted or "account" in wanted:
+        if "document" in wanted:
             document_rows = await _document_rows(
                 session, tenant_id, must, must_not, check_filters("document", filters or {}), per_kind
             )
-        if "document" in wanted:
             hits.extend(_document_hits(document_rows, must))
         if "account" in wanted:
-            hits.extend(
-                _account_hits(document_rows, must, must_not, check_filters("account", filters or {}))[:per_kind]
+            # The excluded terms are judged per account below, so the rows are fetched without them.
+            account_rows = await _document_rows(
+                session, tenant_id, must, [], check_filters("document", filters or {}), per_kind
             )
+            hits.extend(_account_hits(account_rows, must, must_not, check_filters("account", filters or {}))[:per_kind])
         if "customer" in wanted:
             hits.extend(
                 await _customer_hits(

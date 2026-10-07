@@ -138,6 +138,10 @@ class TestQuery:
         }
         with pytest.raises(search.SearchError):
             search.check_filters("case", {"state": ["x"] * 21})
+        assert search.check_filters("customer", {"active": ["True"]}) == {"active": ["true"]}
+        with pytest.raises(search.SearchError) as info:
+            search.check_filters("customer", {"active": ["yes"]})
+        assert info.value.code == "filter_invalid"
 
     def test_who_may_search_what(self):
         assert search.kinds_for("admin") == ["case", "document", "customer", "account"]
@@ -174,7 +178,10 @@ class TestHits:
             "active": {"true": 1},
         }
         for text in session.statements:
-            assert "LIKE lower(" in text and "NOT (" in text  # every term must match, the excluded one must not
+            assert "LIKE lower(" in text  # every term must match
+        assert (
+            sum("NOT (" in text for text in session.statements) == len(session.statements) - 1
+        )  # accounts judge exclusions per account
         assert sum("companies" in text for text in session.statements) == 1
 
     @pytest.mark.asyncio
@@ -190,6 +197,18 @@ class TestHits:
         assert found["hits"] == [] and found["counts"] == {"document": 0}
         found = await search.search(TENANT, q="", kinds=["document"], filters={"status": ["review"]}, limit=10)
         assert found["counts"] == {"document": 1} and "idp_documents.status IN" in session.statements[-1]
+        await search.search(TENANT, q="", kinds=["document"], filters={"document_type": ["bank_statement"]}, limit=10)
+        assert "idp_documents.result @>" in session.statements[-1]  # narrowed in the query, before the row limit
+
+    @pytest.mark.asyncio
+    async def test_an_excluded_term_drops_only_the_account_it_names(self, monkeypatch):
+        session = _Session({"idp_documents": [_document()]})
+        _use(monkeypatch, session)
+        found = await search.search(TENANT, q="account -salary", kinds=["account", "document"], limit=10)
+        accounts = [h["title"] for h in found["hits"] if h["kind"] == "account"]
+        assert accounts == ["account number XXXX1234"]  # the salary slip account is dropped, the statement account kept
+        account_statement = next(t for t in session.statements if "NOT (" not in t)
+        assert "LIKE lower(" in account_statement  # the account rows are fetched without the exclusion
 
     @pytest.mark.asyncio
     async def test_case_and_customer_filters_go_into_the_query(self, monkeypatch):
