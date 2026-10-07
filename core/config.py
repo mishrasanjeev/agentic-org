@@ -368,6 +368,14 @@ class Settings(BaseSettings):
     # confirmation) and a confirmed action runs the bound tool under the
     # grant. Off by default: off, every message reaches the agent as before.
     conversation_v2_enabled: bool = False
+    # Content services (core/content/): governed drafting, structured
+    # summarisation and obligation extraction as APIs, each with a schema, a
+    # guardrail profile and an evaluation dataset. Off by default: off, the
+    # catalogue answers and every other route is not found.
+    content_services_enabled: bool = False
+    # The model the content services call through the direct router; empty
+    # means the router's default.
+    content_services_model: str = ""
     # JSON object keyed provider/model with input and output USD per million
     # tokens; a negotiated rate replaces the list price.
     model_price_overrides_json: str = ""

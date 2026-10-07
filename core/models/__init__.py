@@ -72,6 +72,7 @@ from core.models.company import Company as Company
 from core.models.compliance_deadline import ComplianceDeadline as ComplianceDeadline
 from core.models.connector import Connector as Connector
 from core.models.connector_config import ConnectorConfig as ConnectorConfig
+from core.models.content_draft import ContentDraft as ContentDraft
 from core.models.conversation_session import ConversationSession as ConversationSession
 from core.models.delegation import UserDelegation as UserDelegation
 from core.models.document import Document as Document
