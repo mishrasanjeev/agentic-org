@@ -263,6 +263,10 @@ class TestPipeline:
         }
 
 
+def _request():
+    return SimpleNamespace(state=SimpleNamespace(claims={}))
+
+
 class TestRoutes:
     @pytest.mark.asyncio
     async def test_document_types_answer_and_the_rest_is_not_found_while_off(self, monkeypatch):
@@ -277,7 +281,7 @@ class TestRoutes:
             filename="x.pdf", content_type="application/pdf", read=AsyncMock(return_value=_pdf(STATEMENT))
         )
         with pytest.raises(HTTPException) as info:
-            await api.analyse(upload, ocr=True, with_words=False, tenant_id="t")
+            await api.analyse(upload, _request(), ocr=True, with_words=False, store=False, tenant_id="t")
         assert info.value.status_code == 404
 
     @pytest.mark.asyncio
@@ -288,11 +292,11 @@ class TestRoutes:
         upload = SimpleNamespace(
             filename="bundle.pdf", content_type="application/pdf", read=AsyncMock(return_value=_pdf(SLIP))
         )
-        answer = await api.analyse(upload, ocr=True, with_words=False, tenant_id="t")
+        answer = await api.analyse(upload, _request(), ocr=True, with_words=False, store=False, tenant_id="t")
         assert answer["filename"] == "bundle.pdf" and answer["documents"][0]["document_type"] == "salary_slip"
         bad = SimpleNamespace(filename="x.txt", content_type="text/plain", read=AsyncMock(return_value=b"hello"))
         with pytest.raises(HTTPException) as info:
-            await api.analyse(bad, ocr=True, with_words=False, tenant_id="t")
+            await api.analyse(bad, _request(), ocr=True, with_words=False, store=False, tenant_id="t")
         assert info.value.status_code == 415
         assert (await api.classify_text({"text": "\n".join(SLIP)}, tenant_id="t"))["document_type"] == "salary_slip"
         with pytest.raises(HTTPException):

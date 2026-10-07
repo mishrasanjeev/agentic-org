@@ -3,10 +3,11 @@
 
 from __future__ import annotations
 
+import uuid
 from typing import Annotated, Any
 
 import structlog
-from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, UploadFile
 
 from api.deps import get_current_tenant
 from api.route_metadata import route_meta
@@ -66,8 +67,10 @@ async def document_types(tenant_id: str = Depends(get_current_tenant)) -> dict[s
 )
 async def analyse(
     file: UploadFile,
+    request: Request,
     ocr: bool = True,
     with_words: Annotated[bool, Query()] = False,
+    store: Annotated[bool, Query()] = False,
     tenant_id: str = Depends(get_current_tenant),
 ) -> dict[str, Any]:
     """Split a file into documents, type each, extract fields and tables with boxes, and say what needs review."""
@@ -78,7 +81,27 @@ async def analyse(
         result = pipeline.process(stream, file.content_type or "", ocr=ocr, with_words=with_words)
     except DocumentError as exc:
         raise HTTPException(exc.status, detail={"error": exc.code, "message": exc.message}) from None
-    return {"filename": file.filename, **result}
+    answer: dict[str, Any] = {"filename": file.filename, **result}
+    if store:
+        # Kept for review: the file, the result, and who sent it (core/idp/store.py).
+        from core.idp import store as review_store
+
+        claims = getattr(request.state, "claims", None) or {}
+        user_id = str(claims.get("agenticorg:user_id") or claims.get("sub") or "")
+        try:
+            kept = await review_store.save(
+                uuid.UUID(tenant_id),
+                filename=file.filename or "",
+                mime_type=file.content_type or "",
+                data=stream,
+                result=result,
+                created_by=user_id or None,
+            )
+        except DocumentError as exc:
+            raise HTTPException(exc.status, detail={"error": exc.code, "message": exc.message}) from None
+        answer["document_id"] = kept["id"]
+        answer["status"] = kept["status"]
+    return answer
 
 
 @router.post("/classify-text")

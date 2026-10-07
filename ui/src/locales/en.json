@@ -24,6 +24,7 @@
     "workflows": "Workflows",
     "approvals": "Approvals",
     "conversations": "Conversations",
+    "documents": "Documents",
     "connectors": "Connectors",
     "commerceRuntime": "Commerce Runtime",
     "promptTemplates": "Prompt Templates",

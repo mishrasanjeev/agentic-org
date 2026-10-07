@@ -38,6 +38,23 @@ confidence. `core/idp/tables.py` extracts tables: the PDF layout engine's where 
 runs of consecutive lines whose columns align (how a statement's transaction list reads), each
 with its page, box, header and rows.
 
+## Review with overlays
+
+`POST /idp/analyse?store=true` keeps the file and the result (`idp_documents`, migration
+`v6z64_idp_documents`, `core/idp/store.py`); a document the pipeline routed to review waits in
+`review`, the rest in `processed`. `GET /idp/documents` lists them by status; `GET
+/idp/documents/{id}` serves a document with its pages, segments, documents, fields (corrections
+applied, the extracted value kept beside), tables and review reasons; `GET
+/idp/documents/{id}/pages/{n}.png` renders a page from the kept file at 110 dpi so the overlay draws
+boxes on the real page. `POST /idp/documents/{id}/fields` takes a reviewer's value for one field
+(who and when are kept); `POST /idp/documents/{id}/decide` approves or rejects, after which the
+document is closed to corrections.
+
+The Documents page (`ui/src/pages/Documents.tsx`) lists documents by status, shows the page with
+every field drawn where it came from (green at or above the field floor, amber below, red for a
+missing required field, indigo once corrected; tables dashed), lets the reviewer click a field to
+find its box and page, edit its value and save, and approve or reject the file.
+
 ## Confidence routing
 
 `core/idp/pipeline.py` decides what needs a person and why: a document whose type is unknown or
