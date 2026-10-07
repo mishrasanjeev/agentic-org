@@ -108,7 +108,7 @@ class TestCatalogue:
         speech = [k for k in console.definitions() if k.startswith("speech.")]
         assert "speech.required_disclosures" in speech
         assert "speech.redaction_kinds" in speech and "speech.redact_on_transcription" in speech
-        assert [key for key, _ in console.GROUPS][-1] == "speech"
+        assert "speech" in [key for key, _ in console.GROUPS]
 
     def test_values_are_checked_against_their_kind_and_bounds(self):
         assert console.check("documents.type_confidence_floor", 0.8) == 0.8

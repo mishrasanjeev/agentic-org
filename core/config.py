@@ -391,6 +391,11 @@ class Settings(BaseSettings):
     # default: off, GET /speech/status answers ``enabled: false`` and every
     # other speech route is not found.
     speech_intelligence_enabled: bool = False
+    # Transaction intelligence (core/txn/): movements aggregated by entity,
+    # structuring and pass-through detectors, findings under human
+    # disposition. Off by default: off, GET /txn/status answers
+    # ``enabled: false`` and every other transaction route is not found.
+    transaction_intelligence_enabled: bool = False
     # JSON object keyed provider/model with input and output USD per million
     # tokens; a negotiated rate replaces the list price.
     model_price_overrides_json: str = ""

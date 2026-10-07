@@ -97,6 +97,7 @@ from api.v1 import (
     tenant_ai_credentials,
     tenant_ai_settings,
     tool_registry,
+    txn,
     voice,
     voice_runtime,
     webhooks,
@@ -331,6 +332,7 @@ app.include_router(workbench_console.router, prefix="/api/v1")
 app.include_router(workbench_search.router, prefix="/api/v1")
 app.include_router(speech.router, prefix="/api/v1")
 app.include_router(speech_assist.router, prefix="/api/v1")
+app.include_router(txn.router, prefix="/api/v1")
 app.include_router(companies.router, prefix="/api/v1", tags=["Companies"])
 app.include_router(ca_operations.router, prefix="/api/v1", tags=["CA Operations"])
 app.include_router(

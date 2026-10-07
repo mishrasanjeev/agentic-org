@@ -4,6 +4,22 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
 
 ## [Unreleased] - 2026-08-29
 
+### Added - Transaction intelligence: records, entity aggregation and detectors
+- `POST /txn/records` keeps movements on accounts in batches, idempotent
+  under each record's reference, and `POST /txn/import/document/{id}`
+  books a kept bank statement's line items. `GET /txn/entities` and
+  `GET /txn/entities/{kind}/{ref}` give the entity-centric view (totals,
+  channels, branches, counterparties, a daily series, the findings).
+  `POST /txn/detect` runs the structuring detector (cash deposits under
+  the threshold, several within the window, together at or above it,
+  graver across branches) and the pass-through detector (an inflow
+  mostly gone within the window) over the recent records and keeps
+  every new finding once under its fingerprint; a person dispositions a
+  finding (dismiss with a reason, confirm, escalate to a case) and the
+  detectors file nothing. Thresholds come from the business console.
+  (`core/txn/`, `txn_records`, `txn_findings`, `docs/txn/intelligence.md`).
+  Off by default (`AGENTICORG_TRANSACTION_INTELLIGENCE_ENABLED`).
+
 ### Added - Speech intelligence: spoken sensitive data redacted from the recording and the transcript
 - `POST /speech/recordings/{id}/redact` finds spoken card numbers (Luhn
   over runs of spoken digits, number words, double and triple), one-time

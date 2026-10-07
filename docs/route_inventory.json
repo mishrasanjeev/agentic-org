@@ -9990,6 +9990,186 @@
     "tenant_required": true
   },
   {
+    "audit_event": "txn.detect",
+    "auth_required": true,
+    "function": "detect",
+    "idempotency": "idempotent-by-finding-fingerprint",
+    "key": "POST /api/v1/txn/detect api/v1/txn.py:detect",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/txn.py",
+    "path": "/api/v1/txn/detect",
+    "public_exempt_reason": null,
+    "rate_limit": "chat-query",
+    "scope": "txn.findings.sensitive.write",
+    "source_line": 225,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "txn.entities.list",
+    "auth_required": true,
+    "function": "list_entities",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/txn/entities api/v1/txn.py:list_entities",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/txn.py",
+    "path": "/api/v1/txn/entities",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "txn.records.sensitive.read",
+    "source_line": 172,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "txn.entities.read",
+    "auth_required": true,
+    "function": "get_entity",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/txn/entities/{kind}/{ref} api/v1/txn.py:get_entity",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/txn.py",
+    "path": "/api/v1/txn/entities/{kind}/{ref}",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "txn.records.sensitive.read",
+    "source_line": 201,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "txn.findings.list",
+    "auth_required": true,
+    "function": "list_findings",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/txn/findings api/v1/txn.py:list_findings",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/txn.py",
+    "path": "/api/v1/txn/findings",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "txn.findings.sensitive.read",
+    "source_line": 247,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "txn.findings.read",
+    "auth_required": true,
+    "function": "get_finding",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/txn/findings/{finding_id} api/v1/txn.py:get_finding",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/txn.py",
+    "path": "/api/v1/txn/findings/{finding_id}",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "txn.findings.sensitive.read",
+    "source_line": 274,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "txn.findings.disposition",
+    "auth_required": true,
+    "function": "disposition",
+    "idempotency": "terminal-state-conflict-prevents-duplicate-decision",
+    "key": "POST /api/v1/txn/findings/{finding_id}/disposition api/v1/txn.py:disposition",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/txn.py",
+    "path": "/api/v1/txn/findings/{finding_id}/disposition",
+    "public_exempt_reason": null,
+    "rate_limit": "approval-decision",
+    "scope": "txn.findings.sensitive.write",
+    "source_line": 293,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "txn.records.import",
+    "auth_required": true,
+    "function": "import_document",
+    "idempotency": "idempotent-by-record-reference",
+    "key": "POST /api/v1/txn/import/document/{document_id} api/v1/txn.py:import_document",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/txn.py",
+    "path": "/api/v1/txn/import/document/{document_id}",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "txn.records.sensitive.write",
+    "source_line": 153,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "txn.records.list",
+    "auth_required": true,
+    "function": "list_records",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/txn/records api/v1/txn.py:list_records",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/txn.py",
+    "path": "/api/v1/txn/records",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "txn.records.sensitive.read",
+    "source_line": 122,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "txn.records.ingest",
+    "auth_required": true,
+    "function": "ingest_records",
+    "idempotency": "idempotent-by-record-reference",
+    "key": "POST /api/v1/txn/records api/v1/txn.py:ingest_records",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/txn.py",
+    "path": "/api/v1/txn/records",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "txn.records.sensitive.write",
+    "source_line": 103,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "txn.status",
+    "auth_required": true,
+    "function": "status",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/txn/status api/v1/txn.py:status",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/txn.py",
+    "path": "/api/v1/txn/status",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "txn.read",
+    "source_line": 81,
+    "tenant_required": true
+  },
+  {
     "audit_event": "voice.calls.list",
     "auth_required": true,
     "function": "list_voice_calls",

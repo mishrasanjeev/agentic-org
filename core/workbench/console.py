@@ -115,7 +115,12 @@ GROUPS: tuple[tuple[str, str], ...] = (
     ("conversations", "Conversations"),
     ("queue", "Review queue"),
     ("speech", "Speech"),
+    ("transactions", "Transaction intelligence"),
 )
+
+
+def _txn_on() -> bool:
+    return bool(getattr(settings, "transaction_intelligence_enabled", False))
 
 
 def _speech_on() -> bool:
@@ -244,6 +249,78 @@ def catalogue() -> tuple[Setting, ...]:
                 "boolean",
                 False,
                 "core/speech/store.py save and attach_transcript",
+            ),
+        )
+    if _txn_on():
+        # Detector thresholds exist only while transaction intelligence is on.
+        base = base + (
+            Setting(
+                "txn.structuring_threshold",
+                "Structuring: reporting threshold",
+                "Several cash deposits under this amount within the window, together at or above it, raise a finding.",
+                "transactions",
+                "number",
+                1000000.0,
+                "core/txn/detectors.py structuring",
+                minimum=1,
+                maximum=1000000000,
+                unit="INR",
+            ),
+            Setting(
+                "txn.structuring_window_days",
+                "Structuring: window in days",
+                "The deposits must fall within this many days.",
+                "transactions",
+                "integer",
+                7,
+                "core/txn/detectors.py structuring",
+                minimum=1,
+                maximum=90,
+            ),
+            Setting(
+                "txn.structuring_min_count",
+                "Structuring: minimum deposits",
+                "At least this many deposits within the window.",
+                "transactions",
+                "integer",
+                3,
+                "core/txn/detectors.py structuring",
+                minimum=2,
+                maximum=20,
+            ),
+            Setting(
+                "txn.passthrough_window_hours",
+                "Pass-through: window in hours",
+                "Outflows within this many hours of an inflow count against it.",
+                "transactions",
+                "integer",
+                48,
+                "core/txn/detectors.py pass_through",
+                minimum=1,
+                maximum=720,
+            ),
+            Setting(
+                "txn.passthrough_ratio",
+                "Pass-through: share that must leave",
+                "The outflows must take at least this share of the inflow.",
+                "transactions",
+                "number",
+                0.8,
+                "core/txn/detectors.py pass_through",
+                minimum=0.5,
+                maximum=1.0,
+            ),
+            Setting(
+                "txn.passthrough_min_amount",
+                "Pass-through: minimum inflow",
+                "Inflows under this amount are not considered.",
+                "transactions",
+                "number",
+                100000.0,
+                "core/txn/detectors.py pass_through",
+                minimum=1,
+                maximum=1000000000,
+                unit="INR",
             ),
         )
     return base
