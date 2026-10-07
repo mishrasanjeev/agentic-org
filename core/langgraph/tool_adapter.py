@@ -36,6 +36,7 @@ from core.governance.action_policy import (
     evaluate_action,
 )
 from core.pii.pseudonymiser import PseudonymisationError, PseudonymSession, refusal
+from core.tool_gateway import registry as tool_registry
 from observability import tracing
 
 logger = structlog.get_logger()
@@ -387,11 +388,71 @@ async def _dispatch_connector_tool(
         logger.warning("connector_call_refused_guardrail", connector=connector_name, tool=tool_name, rule=exc.rule_name)
         return {"error": "guardrail_blocked", "message": exc.reason, "guardrail": exc.to_error()["guardrail"]}
 
+    # Tool registry (off by default): a registered tool's inputs are checked
+    # against its schema before dispatch, and the dispatch runs under the
+    # registered envelope. This is the boundary LangGraph agents, workflow
+    # connector steps and remote MCP tools share, so the registry holds here
+    # as it does in ToolGateway.execute. A refused call is audited and never
+    # dispatched; a registry that cannot be read refuses the call.
+    registry_check = await tool_registry.screen_call(tenant_id, connector_name, tool_name, params)
+    if registry_check is not None and registry_check.refused:
+        logger.warning(
+            "connector_call_refused_tool_registry",
+            connector=connector_name,
+            tool=tool_name,
+            unregistered=registry_check.unregistered,
+            unavailable=registry_check.unavailable,
+        )
+        await _audit_registry_refusal(tenant_id, connector_name, tool_name, registry_check)
+        return tool_registry.refusal(registry_check, tool_name)
+
+    async def _dispatch() -> dict[str, Any]:
+        return await _dispatch_checked_tool(
+            connector_name,
+            tool_name,
+            params,
+            config,
+            tenant_id=tenant_id,
+            company_id=company_id,
+            domain=domain,
+            capability_authorization=capability_authorization,
+            agent_id=agent_id,
+            remote_schema_hash=remote_schema_hash,
+        )
+
+    if registry_check is not None and registry_check.registration is not None:
+        return await tool_registry.enveloped(
+            registry_check.registration, _dispatch, tenant_id=tenant_id, agent_id=agent_id or None
+        )
+    return await _dispatch()
+
+
+async def _dispatch_checked_tool(
+    connector_name: str,
+    tool_name: str,
+    params: dict[str, Any],
+    config: dict[str, Any] | None = None,
+    *,
+    tenant_id: str | None = None,
+    company_id: str | None = None,
+    domain: ActionDomain | str | None = None,
+    capability_authorization: CapabilityAuthorization | None = None,
+    agent_id: str = "",
+    remote_schema_hash: str | None = None,
+) -> dict[str, Any]:
+    """The dispatch once the operator override, the action guardrail and the tool registry have passed the call."""
     if connector_name.startswith("mcp_"):
         from core.remote_mcp import execute
 
-        return await execute(tenant_id, agent_id, connector_name, tool_name, params,
-                             expected_hash=remote_schema_hash, company_id=company_id)
+        return await execute(
+            tenant_id,
+            agent_id,
+            connector_name,
+            tool_name,
+            params,
+            expected_hash=remote_schema_hash,
+            company_id=company_id,
+        )
 
     if is_strict_runtime_env(settings.env) or tenant_id is not None or company_id is not None or domain is not None:
         decision = await evaluate_action(
@@ -926,8 +987,14 @@ async def execute_agent_tool(
 
     if connector_name.startswith("mcp_"):
         return await _execute_connector_tool(
-            connector_name, tool_name, params, tenant_id=tenant_id, company_id=company_id,
-            domain=domain, capability_authorization=capability_authorization, agent_id=agent_id,
+            connector_name,
+            tool_name,
+            params,
+            tenant_id=tenant_id,
+            company_id=company_id,
+            domain=domain,
+            capability_authorization=capability_authorization,
+            agent_id=agent_id,
         )
 
     config = await load_connector_config(connector_name, tenant_id, company_id)
@@ -976,6 +1043,40 @@ async def _audit_operator_override(tenant_id: str | None, connector_name: str, t
         action="operator_override",
         outcome="blocked",
         details={"reason": reason, "connector": connector_name},
+    )
+
+
+async def _audit_registry_refusal(
+    tenant_id: str | None, connector_name: str, tool_name: str, check: tool_registry.Check
+) -> None:
+    """Audit a tool call the tool registry refused, as ``ToolGateway`` does, in the tenant's RLS context."""
+    import uuid as _uuid
+
+    from core.database import get_tenant_session
+    from core.tool_gateway.audit_logger import AuditLogger
+
+    session_factory = None
+    if tenant_id:
+        try:
+            tid = _uuid.UUID(str(tenant_id))
+        except ValueError:
+            tid = None
+        if tid is not None:
+
+            def session_factory() -> Any:
+                return get_tenant_session(tid)
+
+    await AuditLogger(session_factory).log(
+        tenant_id=str(tenant_id or ""),
+        tool_name=tool_name,
+        action="input_rejected",
+        outcome="blocked",
+        details={
+            "connector": connector_name,
+            "errors": check.errors[:5],
+            "unregistered": check.unregistered,
+            "unavailable": check.unavailable,
+        },
     )
 
 
@@ -1169,8 +1270,14 @@ def build_tools_for_agent(
         handler_params, handler_accepts_var_kw = _handler_param_names(handler)
         from core.remote_mcp import CATALOG_KEY
 
-        remote_descriptor = next((item for item in (connector_config or {}).get(CATALOG_KEY, {}).get(connector_name, [])
-                                  if item["name"] == actual_tool_name), None)
+        remote_descriptor = next(
+            (
+                item
+                for item in (connector_config or {}).get(CATALOG_KEY, {}).get(connector_name, [])
+                if item["name"] == actual_tool_name
+            ),
+            None,
+        )
         if remote_descriptor is not None:
             handler_accepts_var_kw = True
         # The full docstring lists the params for ``**params`` handlers;
@@ -1237,8 +1344,11 @@ def build_tools_for_agent(
             ),
             name=public_tool_name,
             description=tool_description,
-            args_schema=(remote_descriptor["inputSchema"] if remote_descriptor is not None
-                         else _tool_args_schema(handler, actual_tool_name)),
+            args_schema=(
+                remote_descriptor["inputSchema"]
+                if remote_descriptor is not None
+                else _tool_args_schema(handler, actual_tool_name)
+            ),
             # Lets the graph map ``gmail.send_email`` / ``gmail:send_email``
             # tool calls back to this registered name (bug sheet #14).
             metadata={"connector": connector_name, "tool": actual_tool_name},

@@ -90,6 +90,25 @@ class TestDialogueContext:
             found["payee_options"] == ["Ravi", "Priya"] and found["amount"] == 500.0 and "amount_options" not in found
         )
 
+    def test_a_marked_amount_and_a_bare_alternative_are_both_named(self):
+        assert catalogue.parse_amounts("transfer ₹500 or 600 to Ravi") == [500.0, 600.0]
+        assert catalogue.parse_amounts("transfer 500 or ₹600 to Ravi") == [500.0, 600.0]
+        assert catalogue.parse_amounts("pay rs 2 lakh or 150000") == [200000.0, 150000.0]
+        assert catalogue.extract_entities("transfer ₹500 or 600 to Ravi")["amount_options"] == [500.0, 600.0]
+
+    def test_numbers_that_are_not_amounts_do_not_make_a_marked_amount_ambiguous(self):
+        assert catalogue.parse_amounts("transfer ₹500 to account ending 1234") == [500.0]
+        assert catalogue.parse_amounts("transfer ₹500 to Ravi in 2 days") == [500.0]
+        assert catalogue.parse_amounts("pay ₹5k on 12/10/2026") == [5000.0]
+        assert "amount_options" not in catalogue.extract_entities("send ₹500 to Ravi, reference ABC12345")
+
+    def test_a_marked_amount_with_a_bare_alternative_is_asked_about_instead_of_acted_on(self):
+        _, outcomes = _turns("transfer ₹500 or 600 to Ravi", "600")
+        assert outcomes[0].kind == "ask" and [o["value"] for o in outcomes[0].options] == [500.0, 600.0]
+        assert outcomes[1].kind == "confirm" and outcomes[1].slots == {"amount": 600.0, "payee": "Ravi"}
+        _, outcomes = _turns("transfer 500 or ₹600 to Ravi")
+        assert outcomes[0].kind == "ask" and [o["value"] for o in outcomes[0].options] == [500.0, 600.0]
+
 
 class TestFallbacks:
     def test_the_kind_follows_what_happened(self):
@@ -103,9 +122,10 @@ class TestFallbacks:
         assert fallbacks.classify({"status": "completed"}, answer="x", confidence=0.9) is None
         assert fallbacks.classify(None, answer=None) == fallbacks.KIND_NO_ANSWER
 
-    def test_messages_say_nothing_changed_and_offer_a_person_after_two(self):
+    def test_messages_say_what_is_known_and_offer_a_person_after_two(self):
         first = fallbacks.message(fallbacks.KIND_TIMEOUT, consecutive=1)
-        assert "did not answer in time" in first and "not done anything" in first and "talk to a person" in first
+        assert "did not answer in time" in first and "talk to a person" in first
+        assert "cannot tell whether the request went through" in first and "check" in first
         second = fallbacks.message(fallbacks.KIND_NO_ANSWER, consecutive=2)
         assert "connect you to a person" in second and fallbacks.offers_person(2) and not fallbacks.offers_person(1)
 
@@ -113,5 +133,34 @@ class TestFallbacks:
         chat = (ROOT / "api" / "v1" / "chat.py").read_text(encoding="utf-8")
         assert "run_context = conversation_context.context_block(history_entries)" in chat
         assert '"context": run_context}' in chat
-        assert "conversation_fallbacks.message(kind, consecutive=1)" in chat
+        assert "conversation_fallbacks.message(fallback_kind, consecutive=consecutive)" in chat
+        assert "consecutive=1" not in chat
         assert chat.index("conversation_fallbacks.message(") < chat.index('"No agent was able to answer that query. "')
+
+    def test_a_timeout_never_claims_that_nothing_changed(self):
+        text = fallbacks.message(fallbacks.KIND_TIMEOUT, consecutive=2).lower()
+        for claim in ("not done anything", "nothing has been changed", "nothing was changed", "nothing has been done"):
+            assert claim not in text
+        assert "cannot tell" in text and "connect you to a person" in text
+
+    def test_a_low_confidence_answer_is_held_back_unless_it_reports_a_human_review(self):
+        completed = {"status": "completed"}
+        assert fallbacks.hold_back(completed, answer="x", confidence=0.2) == fallbacks.KIND_LOW_CONFIDENCE
+        assert fallbacks.hold_back(completed, answer="x", confidence=0.9) is None
+        assert fallbacks.hold_back(completed, answer="", confidence=None) == fallbacks.KIND_NO_ANSWER
+        assert fallbacks.hold_back({"status": "hitl_triggered"}, answer="queued", confidence=0.1, hitl=True) is None
+        assert fallbacks.hold_back(None, answer=None, confidence=None, hitl=True) == fallbacks.KIND_NO_ANSWER
+
+    def test_the_streak_counts_trailing_fallbacks_in_the_history(self):
+        def agent(fallback=None):
+            entry = {"role": "agent", "text": "a"}
+            if fallback:
+                entry[fallbacks.FALLBACK_KEY] = fallback
+            return entry
+
+        user = {"role": "user", "text": "q"}
+        assert fallbacks.streak(None) == 0 and fallbacks.streak([]) == 0
+        assert fallbacks.streak([user, agent("timeout")]) == 1
+        assert fallbacks.streak([user, agent("timeout"), user, agent("no_answer")]) == 2
+        assert fallbacks.streak([user, agent("timeout"), user, agent(), user, agent("no_answer")]) == 1
+        assert fallbacks.streak([user, agent("timeout"), user, agent()]) == 0
