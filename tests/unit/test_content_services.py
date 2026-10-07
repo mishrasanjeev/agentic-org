@@ -465,7 +465,9 @@ class TestRoutes:
 
         monkeypatch.setattr(settings, "content_services_enabled", False)
         listed = await api.list_services(tenant_id=str(TENANT))
-        assert listed["enabled"] is False and len(listed["services"]) == 3
+        assert listed["enabled"] is False and {"draft", "summarise", "extract"} <= {
+            s["name"] for s in listed["services"]
+        }
         request = SimpleNamespace(state=SimpleNamespace(claims={"agenticorg:user_id": "u1"}))
         for call in (
             api.post_draft(

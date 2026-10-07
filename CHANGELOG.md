@@ -4,6 +4,21 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
 
 ## [Unreleased] - 2026-08-29
 
+### Added - Content services: narrative to payload, grounded responses, tone adaptation and clause assembly
+- Four more content services under `/content`: narrative to payload
+  (`structure`: a schema-shaped JSON object from free text, validated
+  against an inline, registered or built-in schema, rendered as XML on
+  request, with what the text says but the schema cannot hold listed),
+  policy-grounded responses (`respond`: an answer from an approved source
+  set with a cited quote per claim, or an honest statement that the
+  sources do not cover the question), audience-adaptive tone (`adapt`:
+  a rewrite for an audience, tone and reading level with every figure
+  checked to be still there), and rule-driven clause assembly
+  (`assemble`: a document from approved clauses whose conditions hold for
+  the facts, placeholders filled and the gaps named, no model involved;
+  clause library with versions and second-person approval, table
+  `content_clauses`, migration `v6z63_content_clauses`).
+
 ### Added - Content services: governed drafting, structured summarisation and obligation extraction
 - With `AGENTICORG_CONTENT_SERVICES_ENABLED` on (off by default), three
   reusable capability APIs under `/content` (`core/content/`), each with

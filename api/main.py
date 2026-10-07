@@ -44,6 +44,7 @@ from api.v1 import (
     connectors,
     content,
     content_safety,
+    content_structuring,
     conversation,
     conversation_supervisor,
     costs,
@@ -307,6 +308,7 @@ app.include_router(chat.router, prefix="/api/v1", tags=["Chat"])
 app.include_router(conversation.router, prefix="/api/v1")
 app.include_router(conversation_supervisor.router, prefix="/api/v1")
 app.include_router(content.router, prefix="/api/v1")
+app.include_router(content_structuring.router, prefix="/api/v1")
 app.include_router(companies.router, prefix="/api/v1", tags=["Companies"])
 app.include_router(ca_operations.router, prefix="/api/v1", tags=["CA Operations"])
 app.include_router(

@@ -44,10 +44,39 @@ who must do what by when. Every item quotes the text it comes from; an item whos
 its source is dropped and counted (`dropped`). Deadlines are ISO dates or null with the basis the
 document gives; items are sorted by deadline.
 
+**Narrative to payload** (`POST /content/structure`, `core/content/structuring.py`): a schema-shaped
+JSON object from free text. The schema is given inline (`schema`), named from the tenant's schema
+registry (`schema_name`, the tenant's own row first, then a global one) or named from the built-in
+domain schemas. The payload is validated against it and the result says what failed; with `strict`
+an invalid payload is refused. `format: xml` or `both` adds a deterministic XML rendering (keys
+become elements, list items the singular of their key, nulls left out) that is parsed back to prove
+it is well formed. What the text says but the schema cannot hold is listed as `unplaced`.
+
+**Policy-grounded response** (`POST /content/respond`, `core/content/responding.py`): an answer to
+a question written only from an approved source set (inline or knowledge-base documents). Every
+claim carries a citation whose quote must be in its source; with no valid citation the response is
+withheld and the service says the approved sources do not cover the question, naming the gaps.
+
+**Audience-adaptive tone** (`POST /content/adapt`, `core/content/tone.py`): the same facts
+rewritten for an audience (customer, relationship manager, internal, regulator, vulnerable
+customer, partner), a tone and a reading level. Every number, amount, date and percentage of the
+original, and every term in `keep`, must still be there: `facts_preserved` and `missing_facts`
+say so.
+
+**Clause assembly** (`POST /content/assemble`, `core/content/clauses.py`): a document built from
+the approved clause library by rules, with no model. A clause (`/content/clauses`, tenant
+administrator) belongs to document types, sits in a category with an order, applies when every
+one of its conditions holds for the facts given (`equals`, `in`, `gte`, `exists`, ... on dotted
+fields), and carries `{placeholders}` filled from the facts. A change makes a new version that
+waits for approval again; approval is by a second person; a retired clause no longer assembles.
+The result names the clauses and versions used, the clauses skipped, the facts missing (left
+visible as `[PLACEHOLDER]`), the required clauses whose conditions failed, and whether the
+document is complete.
+
 ## Evaluation datasets
 
 Each service ships synthetic evaluation cases (an input and what the answer must contain or avoid).
-`POST /content/services/{name}/dataset/install` creates the dataset for the tenant through the
+`POST /content/services/{name}/dataset` creates the dataset for the tenant through the
 evaluation framework (`core/evals/datasets.py`), so the service can be scored and gated like a
 prompt; a dataset that already exists is reported, not duplicated.
 
