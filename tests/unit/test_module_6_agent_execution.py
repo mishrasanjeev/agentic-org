@@ -270,11 +270,14 @@ def test_tc_exec_005_only_measurable_runs_count_toward_accuracy() -> None:
 
 
 def test_tc_exec_006_only_retired_status_blocks_run_at_api_layer() -> None:
-    """Honest pin of actual behavior: the API only refuses
-    retired agents. Paused agents WILL run via the API; the UI
-    gates the pause-state button. Pin the EXACT status check
-    so a refactor that adds 'paused' here without updating the
-    UI flow doesn't silently break the kill-switch UX."""
+    """Pin the default status policy through the shared run guard.
+
+    Paused refusal remains opt-in, and the source is checked before
+    traffic allocation can replace it with a runnable target.
+    """
+    import inspect
+
+    from api.v1.agents import _require_agent_runnable
     from core.governance import agent_status
 
     src = (REPO / "api" / "v1" / "agents.py").read_text(encoding="utf-8")
@@ -285,7 +288,10 @@ def test_tc_exec_006_only_retired_status_blocks_run_at_api_layer() -> None:
     # default (paused_agents_refused off) refuses retired agents only; the
     # setting adds paused (FINDINGS A-110), and the pause-state button in the
     # UI keeps gating the rest. Pin the default here.
-    assert "agent_status_refusal(agent_row.status)" in run_block
+    assert "agent_status_refusal(agent.status)" in inspect.getsource(_require_agent_runnable)
+    assert run_block.index("await _require_agent_runnable(agent_row, tenant_id)") < run_block.index(
+        "agent_traffic.choose("
+    )
     assert 'if agent_row.status == "paused"' not in run_block
     assert agent_status.settings.paused_agents_refused is False
     assert agent_status.refusal_for("retired") == "Cannot run a retired agent"
