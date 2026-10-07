@@ -122,7 +122,7 @@ async def get_item(
     if kind not in await _kinds(tenant_id, request, role):
         raise HTTPException(404, detail={"error": "not_found", "message": "No such item"})
     try:
-        return await queue.get_item(uuid.UUID(tenant_id), kind, item_id[:128])
+        return await queue.get_item(uuid.UUID(tenant_id), kind, item_id[:128], caller=caller_from_request(request))
     except queue.QueueError as exc:
         raise _refused(exc) from None
 
@@ -190,6 +190,11 @@ async def decide(
             role,
             user_domains,
         )
+        # Recorded only now: the approvals handler has authorised the caller and taken the decision.
+        try:
+            edited = await queue.record_approval_edits(tenant, item_id[:128], edits, user_id=user_id)
+        except queue.QueueError as exc:
+            raise _refused(exc) from None
     elif kind == "document":
         from core.idp import store
         from core.idp.pages import DocumentError

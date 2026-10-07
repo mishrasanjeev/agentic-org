@@ -124,7 +124,20 @@ def _use(monkeypatch, session):
     monkeypatch.setattr(core.database, "get_tenant_session", lambda tenant_id: session)
 
 
+@pytest.fixture(autouse=True)
+def _subsystems_on(monkeypatch):
+    monkeypatch.setattr(settings, "idp_enabled", True)
+    monkeypatch.setattr(settings, "content_services_enabled", True)
+
+
 class TestKinds:
+    def test_a_kind_whose_subsystem_is_off_is_not_offered(self, monkeypatch):
+        monkeypatch.setattr(settings, "idp_enabled", False)
+        assert queue.kinds_for("admin") == ["approval", "draft", "case"]
+        monkeypatch.setattr(settings, "content_services_enabled", False)
+        assert queue.kinds_for("cfo") == ["approval", "case"]
+        assert queue.kinds_for("cmo", {"investigator"}) == ["case"]
+
     def test_a_role_sees_the_kinds_its_workbenches_show_and_the_queue_tab_opens_all(self):
         assert queue.kinds_for("admin") == ["approval", "document", "draft", "case"]
         assert queue.kinds_for("cfo") == ["approval", "document", "draft", "case"]  # review officer holds the queue tab
@@ -235,8 +248,15 @@ class TestItems:
         assert found["editable"] == [{"name": "net_pay", "value": "", "document_index": 0, "status": "missing"}]
 
         row = _approval(context={"step_id": "pay", "review_edits": [{"name": "amount", "value": "450"}]})
-        _use(monkeypatch, _Session({"hitl_queue": [row]}))
-        found = await queue.get_item(TENANT, "approval", str(row.id))
+        session = _Session({"hitl_queue": [row]})
+        _use(monkeypatch, session)
+        found = await queue.get_item(TENANT, "approval", str(row.id), caller=ADMIN)
+        assert "agents" not in session.statements[-1]
+        cfo = Caller(user_id=uuid.uuid4(), role="cfo", domains=["finance"], is_admin=False, is_machine=False)
+        await queue.get_item(TENANT, "approval", str(row.id), caller=cfo)
+        assert "agents" in session.statements[-1]  # the detail read applies the same visibility as the list
+        await queue.get_item(TENANT, "approval", str(row.id))
+        assert "false" in session.statements[-1].lower()  # no caller: nothing
         assert (
             found["item"]["review_edits"] == [{"name": "amount", "value": "450"}]
             and found["editable"] == []
@@ -311,6 +331,9 @@ class TestEdits:
             with pytest.raises(services.ContentError) as info:
                 await drafts.edit(TENANT, uuid.uuid4(), user_id="rev", fields=fields)
             assert info.value.code == code
+        with pytest.raises(services.ContentError) as info:
+            await drafts.edit(TENANT, uuid.uuid4(), user_id="u1", fields={"title": "x"})
+        assert info.value.code == "same_person"
         row.status = "approved"
         with pytest.raises(services.ContentError) as info:
             await drafts.edit(TENANT, uuid.uuid4(), user_id="rev", fields={"title": "x"})
@@ -341,20 +364,19 @@ class TestEdits:
 
         row = _approval()
         _use(monkeypatch, _Session({"hitl_queue": [row]}))
-        out = await queue.apply_edits(
-            TENANT, "approval", str(row.id), [{"name": "amount", "value": "450", "document_index": 0}], user_id="r"
-        )
-        assert (
-            out["review_edits"][0]["name"] == "amount"
-            and row.context["review_edits"][0]["by"] == "r"
-            and row.context["step_id"] == "pay"
-        )
+        amendments = [{"name": "amount", "value": "450", "document_index": 0}]
+        assert await queue.apply_edits(TENANT, "approval", str(row.id), amendments, user_id="r") is None
+        assert "review_edits" not in row.context  # nothing recorded before the approvals handler decides
         row.status = "decided"
+        out = await queue.record_approval_edits(TENANT, str(row.id), amendments, user_id="r")
+        assert out["review_edits"][0]["name"] == "amount" and row.context["review_edits"][0]["by"] == "r"
+        assert row.context["step_id"] == "pay"
+        assert await queue.record_approval_edits(TENANT, str(row.id), [], user_id="r") is None
+        _use(monkeypatch, _Session({}))
         with pytest.raises(queue.QueueError) as info:
-            await queue.apply_edits(
-                TENANT, "approval", str(row.id), [{"name": "a", "value": "b", "document_index": 0}], user_id="r"
-            )
-        assert info.value.status == 409
+            await queue.record_approval_edits(TENANT, str(uuid.uuid4()), amendments, user_id="r")
+        assert info.value.status == 404
+        _use(monkeypatch, _Session({"hitl_queue": [row]}))
         with pytest.raises(queue.QueueError) as info:
             await queue.apply_edits(
                 TENANT, "case", "KYB-1", [{"name": "a", "value": "b", "document_index": 0}], user_id="r"
@@ -480,6 +502,7 @@ class TestRoutes:
         monkeypatch.setattr(drafts, "decide", AsyncMock(return_value={"id": "d", "status": "approved"}))
         monkeypatch.setattr(store, "decide", AsyncMock(return_value={"id": "x", "status": "rejected"}))
         monkeypatch.setattr(approvals_api, "decide", AsyncMock(return_value={"hitl_id": "h", "status": "decided"}))
+        monkeypatch.setattr(queue, "record_approval_edits", AsyncMock(return_value={"review_edits": []}))
         request = self._request()
         draft_id = str(uuid.uuid4())
         body = api.DecisionIn(decision="approve", notes="fine", edits=[api.EditIn(name="title", value="New")])
@@ -533,6 +556,7 @@ class TestRoutes:
             and args[6] == "cfo"
             and args[7] == ["finance"]
         )
+        assert queue.record_approval_edits.call_args.args[1] == str(hitl_id)  # after the handler decided
 
         with pytest.raises(HTTPException) as info:
             await api.decide(

@@ -57,10 +57,12 @@ the edits first and then decides through the store that owns the item, so that s
 unchanged: a draft's title and text fields are edited with the originals kept (`content_drafts.edits`)
 and decided under maker-checker with the administrator scope; a document's extracted fields are
 corrected with the original beside and decided through the review store; an approval's amendments
-are recorded on the item (`context.review_edits`) and summarised in the decision notes, which a
-resumed run receives, and the decision goes through the approvals route's own function (role
-hierarchy, delegation, expiry, policy steps); a governed case is decided on its own page, and the
-queue says so. The review officer's and the supervisor's workbenches show the queue as a tab, with
+are summarised in the decision notes, which a resumed run receives, the decision goes through the
+approvals route's own function (role hierarchy, delegation, expiry, policy steps), and only then
+are the amendments recorded on the item (`context.review_edits`), so a refused decision leaves
+nothing behind; a governed case is decided on its own page, and the queue says so. A kind whose
+subsystem is off (document processing, content services) is not offered, as its own routes are not
+found. The review officer's and the supervisor's workbenches show the queue as a tab, with
 the sum of the four counters behind it.
 
 ## The shell
