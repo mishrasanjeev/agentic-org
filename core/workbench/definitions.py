@@ -67,7 +67,7 @@ CATALOGUE: tuple[Workbench, ...] = (
             Tab(
                 "drafts", "Content drafts", "/dashboard/workbench/review_officer/drafts", "drafts", actions=("decide",)
             ),
-            Tab("cases", "Governed cases", "/dashboard/governed-cases", "cases", actions=("review",)),
+            Tab("cases", "Governed cases", "/dashboard/approvals/cases", "cases", actions=("review",)),
         ),
         default_roles=("admin", "cfo", "coo", "domain_lead"),
     ),
@@ -79,7 +79,7 @@ CATALOGUE: tuple[Workbench, ...] = (
             Tab("conversations", "Conversations", "/dashboard/conversations", "conversations", actions=("watch",)),
             Tab("knowledge", "Knowledge base", "/dashboard/knowledge", "knowledge"),
             Tab("agents", "Agents", "/dashboard/agents", "agents"),
-            Tab("cases", "Governed cases", "/dashboard/governed-cases", "cases", actions=("review",)),
+            Tab("cases", "Governed cases", "/dashboard/approvals/cases", "cases", actions=("review",)),
         ),
         default_roles=("admin", "cmo", "domain_lead"),
     ),
@@ -89,7 +89,7 @@ CATALOGUE: tuple[Workbench, ...] = (
         "Documents and their analysis, governed cases, the audit trail and run timelines.",
         (
             Tab("documents", "Documents", "/dashboard/documents", "documents", actions=("correct",)),
-            Tab("cases", "Governed cases", "/dashboard/governed-cases", "cases", actions=("review",)),
+            Tab("cases", "Governed cases", "/dashboard/approvals/cases", "cases", actions=("review",)),
             Tab("audit", "Audit trail", "/dashboard/audit", "audit", roles=("admin", "auditor"), sensitive=True),
             Tab(
                 "observability",
@@ -117,7 +117,13 @@ CATALOGUE: tuple[Workbench, ...] = (
                 actions=("takeover", "reply"),
             ),
             Tab("approvals", "Approvals", "/dashboard/approvals", "approvals", actions=("decide",)),
-            Tab("guardrails", "Guardrails", "/dashboard/guardrails", "guardrails", roles=("admin", "coo", "auditor")),
+            Tab(
+                "guardrails",
+                "Guardrails",
+                "/dashboard/settings/guardrails",
+                "guardrails",
+                roles=("admin", "coo", "auditor"),
+            ),
             Tab("costs", "Costs", "/dashboard/costs", "costs", roles=("admin", "cfo", "coo"), sensitive=True),
         ),
         default_roles=("admin", "coo"),

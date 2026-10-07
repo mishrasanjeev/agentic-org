@@ -91,6 +91,16 @@ async def counts(tenant_id: uuid.UUID, sources: set[str]) -> dict[str, int | Non
                     ContentDraft.tenant_id == tenant_id,
                     ContentDraft.status == "pending_approval",
                 )
+            if "cases" in sources:
+                from core.cases.states import CaseState
+                from core.models.governed_case import GovernedCase
+
+                out["cases"] = await _count(
+                    session,
+                    GovernedCase,
+                    GovernedCase.tenant_id == tenant_id,
+                    GovernedCase.state == CaseState.AWAITING_DECISION.value,
+                )
             if "conversations" in sources:
                 from core.models.conversation_session import ConversationSession
 
