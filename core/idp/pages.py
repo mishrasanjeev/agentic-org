@@ -1,9 +1,11 @@
 # SPDX-License-Identifier: Apache-2.0
 """Pages of words with bounding boxes, from a PDF's text layer or from OCR of a scanned page or an image.
 
-Every word carries its box in page points (origin top-left) and a confidence:
-1.0 from a text layer, the engine's own figure from OCR. A page with no text
-layer is OCR'd when the engine is installed; when it is not, the page says so
+PDFs are read with PDFium (``pypdfium2``): every character's box from the
+text layer, grouped into words; a page with no text layer is rendered and
+OCR'd when the engine is installed. Every word carries its box in page
+points (origin top-left) and a confidence: 1.0 from a text layer, the
+engine's own figure from OCR. When OCR is not installed the page says so
 (``ocr: unavailable``) rather than pretending it read nothing.
 """
 
@@ -23,6 +25,7 @@ MAX_BYTES = 25 * 1024 * 1024
 OCR_DPI = 200
 PDF_MIMES = ("application/pdf",)
 IMAGE_MIMES = ("image/png", "image/jpeg", "image/tiff", "image/bmp", "image/webp")
+_WHITESPACE = frozenset(" \t\r\n\x0c\xa0\u2028\u2029")
 
 
 class DocumentError(Exception):
@@ -168,58 +171,86 @@ def ocr_words(image: Any, *, scale: float = 1.0) -> tuple[list[Word], str | None
     return words, script
 
 
-def _pdf_module() -> Any:
+def open_pdf(stream: bytes) -> Any:
+    """The PDF as a PDFium document; refused when it cannot be parsed."""
+    import pypdfium2 as pdfium  # type: ignore[import-untyped]
+
     try:
-        import pymupdf  # type: ignore[import-untyped]
+        return pdfium.PdfDocument(stream)
+    # enterprise-gate: broad-except-ok reason=ocr-engine-boundary-page-marked-failed-and-routed-to-review
+    except Exception as exc:  # noqa: BLE001 - the parser's own error types vary
+        raise DocumentError(422, "pdf_unreadable", f"The PDF could not be opened: {type(exc).__name__}") from None
 
-        return pymupdf
-    except ImportError:  # pragma: no cover - older installs
-        import fitz  # type: ignore[import-untyped]
 
-        return fitz
+def text_layer_words(raw_page: Any, height: float) -> list[Word]:
+    """The words of a page's text layer: runs of non-blank characters, each box the union of its characters' boxes.
+
+    PDFium reports character boxes with the origin at the bottom left; the
+    page's boxes have it at the top left, so the vertical axis is flipped.
+    """
+    textpage = raw_page.get_textpage()
+    count = int(textpage.count_chars())
+    if count <= 0:
+        return []
+    text = textpage.get_text_range(0, count)
+    words: list[Word] = []
+    chars: list[str] = []
+    boxes: list[tuple[float, float, float, float]] = []
+
+    def close() -> None:
+        if chars and boxes:
+            words.append(Word(text="".join(chars), bbox=union(boxes)))
+        chars.clear()
+        boxes.clear()
+
+    for index in range(min(count, len(text))):
+        char = text[index]
+        if char in _WHITESPACE:
+            close()
+            continue
+        left, bottom, right, top = textpage.get_charbox(index)
+        if right - left <= 0 and top - bottom <= 0:
+            continue
+        chars.append(char)
+        boxes.append((float(left), float(height - top), float(right), float(height - bottom)))
+    close()
+    return words
+
+
+def render_pdf_page(raw_page: Any, *, dpi: int) -> Any:
+    """A PDFium page as a PIL image at ``dpi``."""
+    return raw_page.render(scale=dpi / 72.0).to_pil()
 
 
 def pdf_pages(stream: bytes, *, ocr: bool = True, max_pages: int = MAX_PAGES) -> list[Page]:
     """The pages of a PDF: the text layer's words where there is one, OCR where there is not."""
-    pdf = _pdf_module()
-    try:
-        document = pdf.open(stream=stream, filetype="pdf")
-    # enterprise-gate: broad-except-ok reason=ocr-engine-boundary-page-marked-failed-and-routed-to-review
-    except Exception as exc:  # noqa: BLE001 - the parser's own error types vary
-        raise DocumentError(422, "pdf_unreadable", f"The PDF could not be opened: {type(exc).__name__}") from None
+    document = open_pdf(stream)
     pages: list[Page] = []
     engine = ocr_available()
-    for index, raw in enumerate(document):
-        if index >= max_pages:
-            break
-        page = Page(number=index + 1, width=float(raw.rect.width), height=float(raw.rect.height))
-        words = raw.get_text("words") or []
-        if words:
-            page.words = [
-                Word(text=str(w[4]), bbox=(float(w[0]), float(w[1]), float(w[2]), float(w[3])))
-                for w in words
-                if str(w[4]).strip()
-            ]
-            page.source = "text"
-        elif ocr and engine:
-            try:
-                from PIL import Image
-
-                pix = raw.get_pixmap(dpi=OCR_DPI)
-                image = Image.open(io.BytesIO(pix.tobytes("png")))
-                page.words, page.script = ocr_words(image, scale=OCR_DPI / 72.0)
-                page.source = "ocr" if page.words else "empty"
-                page.ocr = "done"
-            # enterprise-gate: broad-except-ok reason=ocr-engine-boundary-page-marked-failed-and-routed-to-review
-            except Exception as exc:  # noqa: BLE001 - OCR failures are reported on the page, not raised
-                logger.warning("idp_ocr_failed", page=index + 1, error_type=type(exc).__name__)
-                page.source, page.ocr = "empty", "failed"
-        else:
-            page.source = "empty"
-            page.ocr = "unavailable" if ocr else "not_needed"
-        group_lines(page.words)
-        pages.append(page)
-    document.close()
+    try:
+        for index in range(min(len(document), max_pages)):
+            raw = document[index]
+            width, height = raw.get_size()
+            page = Page(number=index + 1, width=float(width), height=float(height))
+            page.words = text_layer_words(raw, float(height))
+            if page.words:
+                page.source = "text"
+            elif ocr and engine:
+                try:
+                    page.words, page.script = ocr_words(render_pdf_page(raw, dpi=OCR_DPI), scale=OCR_DPI / 72.0)
+                    page.source = "ocr" if page.words else "empty"
+                    page.ocr = "done"
+                # enterprise-gate: broad-except-ok reason=ocr-engine-boundary-page-marked-failed-and-routed-to-review
+                except Exception as exc:  # noqa: BLE001 - OCR failures are reported on the page, not raised
+                    logger.warning("idp_ocr_failed", page=index + 1, error_type=type(exc).__name__)
+                    page.source, page.ocr = "empty", "failed"
+            else:
+                page.source = "empty"
+                page.ocr = "unavailable" if ocr else "not_needed"
+            group_lines(page.words)
+            pages.append(page)
+    finally:
+        document.close()
     return pages
 
 

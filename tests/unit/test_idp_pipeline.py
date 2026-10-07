@@ -13,6 +13,7 @@ from fastapi import HTTPException
 from core.config import settings
 from core.idp import bundle, classify, fields, pages, pipeline, tables
 from core.idp.pages import Page, Word
+from tests.unit.idp_pdf_fixture import make_pdf
 
 STATEMENT = [
     "ACCOUNT STATEMENT",
@@ -40,26 +41,9 @@ SLIP = [
 ]
 
 
-def _pdf(*documents: list[str], table_columns: bool = True) -> bytes:
+def _pdf(*documents: list[str], table_columns: bool = True, width: int = 595, height: int = 842) -> bytes:
     """A PDF with one page per document, each line placed so word boxes are real."""
-    import pymupdf
-
-    doc = pymupdf.open()
-    for lines in documents:
-        page = doc.new_page(width=595, height=842)
-        y = 80
-        for line in lines:
-            if table_columns and "  " in line:
-                x = 60
-                for cell in [c for c in line.split("  ") if c.strip()]:
-                    page.insert_text((x, y), cell.strip(), fontsize=10)
-                    x += 110
-            else:
-                page.insert_text((60, y), line, fontsize=11)
-            y += 22
-    data = doc.tobytes()
-    doc.close()
-    return data
+    return make_pdf(*documents, table_columns=table_columns, width=width, height=height)
 
 
 def _png() -> bytes:
@@ -87,11 +71,7 @@ class TestPages:
         assert pages.group_lines([]) == []
 
     def test_a_scanned_page_is_ocrd_when_the_engine_is_there_and_says_so_when_it_is_not(self, monkeypatch):
-        import pymupdf
-
-        doc = pymupdf.open()
-        doc.new_page(width=300, height=300)  # no text layer
-        blank = doc.tobytes()
+        blank = _pdf([], width=300, height=300)  # no text layer
         monkeypatch.setattr(pages, "ocr_available", lambda: False)
         result = pages.load_pages(blank, "application/pdf")
         assert result[0].source == "empty" and result[0].ocr == "unavailable"
@@ -238,11 +218,7 @@ class TestPipeline:
 
     def test_unknown_types_missing_fields_and_unread_pages_need_review(self, monkeypatch):
         monkeypatch.setattr(pages, "ocr_available", lambda: False)
-        import pymupdf
-
-        doc = pymupdf.open()
-        doc.new_page()
-        blank = doc.tobytes()
+        blank = _pdf([])
         result = pipeline.process(blank, "application/pdf")
         assert result["review"]["needed"] is True
         reasons = result["documents"][0]["review"]["reasons"]
