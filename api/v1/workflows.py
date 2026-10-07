@@ -275,7 +275,11 @@ async def _upsert_step_execution(
     row.output = step_result.get("output")
     row.confidence = step_result.get("confidence")
     row.error = _step_result_error(step_result)
-    row.completed_at = _step_completed_at(step_status, row.completed_at) if step_status != "waiting_hitl" else None
+    row.completed_at = (
+        _step_completed_at(step_status, row.completed_at)
+        if step_status != "waiting_hitl"
+        else None
+    )  # fmt: skip
     if row.started_at is None:
         row.started_at = now
     return row, created
