@@ -4,6 +4,16 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
 
 ## [Unreleased] - 2026-08-29
 
+### Added - AI governance: asset inventory and bill-of-materials export
+- With `AGENTICORG_GOVERNANCE_INVENTORY_ENABLED` on (off by default), a
+  tenant administrator reads a live inventory of the tenant's agents,
+  models, prompts (as hashes), knowledge bases, tools and connectors with
+  owner, version, risk tier, status and dependencies
+  (`core/governance/inventory.py`, `GET /governance/inventory`), and
+  exports it as a bill-of-materials document
+  (`GET /governance/inventory/export`); the summary counts unowned assets
+  and untiered agents.
+
 ### Added - Knowledge retrieval: quality metrics, grounding indicator and re-indexing
 - With `AGENTICORG_KNOWLEDGE_METRICS_ENABLED` on (off by default), every
   knowledge search leaves a figures-only sample (`core/rag/metrics.py`,
