@@ -228,6 +228,12 @@ class Settings(BaseSettings):
     # rate, or regresses beyond its allowance. Off by default: off, a gate is
     # kept and reported but not applied.
     eval_promotion_gate_enabled: bool = False
+    # Agent registry (core/agent_registry/): each agent's card and its
+    # governance lifecycle (draft, review, approved, published, deprecated,
+    # retired) with recorded transitions. Off by default: off, the registry
+    # endpoints answer 409 and nothing is written; the runtime is not
+    # affected by the registry either way in this release.
+    agent_registry_enabled: bool = False
     # Task queue wait: a published background task is stamped with its publish
     # time and the worker meters how long it waited. Off by default: off, no
     # header is added and nothing is measured.

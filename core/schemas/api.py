@@ -348,6 +348,24 @@ class FleetLimits(BaseModel):
     max_replicas_global_ceiling: int = 20
 
 
+class AgentCardIn(BaseModel):
+    """The card fields an administrator writes; only the fields sent are changed, and unknown fields are refused."""
+
+    model_config = {"extra": "forbid"}
+
+    purpose: str | None = Field(None, max_length=2000)
+    risk_tier: str | None = Field(None, max_length=16)
+    use_case: str | None = Field(None, max_length=120)
+    channels: list[str] | None = Field(None, max_length=10)
+
+
+class AgentLifecycleIn(BaseModel):
+    model_config = {"extra": "forbid"}
+
+    to: str = Field(..., min_length=1, max_length=16)
+    note: str | None = Field(None, max_length=500)
+
+
 class AgentEvalGateIn(BaseModel):
     """An agent's evaluation gate for promotion, or null to remove it."""
 
