@@ -474,12 +474,23 @@ def build_agent_graph(
             _llm_cache["instance"] = llm.bind_tools(tools) if tools else llm
         return _llm_cache["instance"]
 
+    # The agent's own limits, bounded by the platform's (core/langgraph/limits.py).
+    run_limits = execution_limits.effective(limits)
+
     # --- Node functions ---
 
     async def reason(state: AgentState) -> dict[str, Any]:
         """Call the LLM with current messages to reason about the task."""
         messages = state["messages"]
         trace = list(state.get("reasoning_trace") or [])
+
+        # The step limit, before every model call: after a round of tools and
+        # on an output-schema correction alike.
+        if execution_limits.enabled():
+            step_stop = execution_limits.check_steps(messages, run_limits)
+            if step_stop is not None:
+                execution_limits.meter(step_stop.reason)
+                return execution_limits.stop_update(step_stop, trace)
 
         # Ensure system prompt is the first message
         if not messages or not isinstance(messages[0], SystemMessage):
@@ -736,6 +747,7 @@ def build_agent_graph(
                 "reasoning_trace": trace,
                 "tool_calls_log": tool_calls_log,
                 "limit_stop": limit_stop,
+                "output_repair": False,
             }
         grant_denial = state.get("grant_denial")
         if grant_denial:
@@ -847,6 +859,9 @@ def build_agent_graph(
 
     def should_use_tools(state: AgentState) -> str:
         """Route to tools if the LLM requested tool calls, else to evaluate."""
+        if state.get("limit_stop"):
+            # Stopped by an execution limit before the model was called: no tools run.
+            return "evaluate"
         messages = state["messages"]
         last = messages[-1] if messages else None
         if isinstance(last, AIMessage) and last.tool_calls:
@@ -860,6 +875,9 @@ def build_agent_graph(
         is not a decision for a human reviewer (PRD F-1 deny).
         """
         if state.get("grant_denial"):
+            return END
+        if state.get("limit_stop"):
+            # A run stopped by an execution limit or the loop rule ends as failed, never in review.
             return END
         if state.get("output_repair"):
             # The answer did not match its output schema: back to the model with what is wrong.
@@ -875,7 +893,6 @@ def build_agent_graph(
 
     # --- Build the graph ---
 
-    run_limits = execution_limits.effective(limits)
     graph = StateGraph(AgentState)
 
     graph.add_node("reason", reason)

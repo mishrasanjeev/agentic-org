@@ -726,6 +726,22 @@ def _run_resume_spec(
     }
 
 
+def _debug_resume_spec(agent_config: dict[str, Any], connector_ids: Any) -> dict[str, Any]:
+    """What a debug step needs beyond the approval resume spec to re-enter the run under its own policies.
+
+    The output schema, inline schema and execution limits are rebuilt into
+    the graph on every step. Connectors are kept as server-side ids and their
+    credentials are resolved again at step time; nothing decrypted is stored.
+    """
+    config = agent_config.get("config") or {}
+    return {
+        "output_schema": agent_config.get("output_schema"),
+        "output_schema_json": config.get(prompt_output_schema.INLINE_KEY),
+        "limits": config.get(execution_limits.LIMITS_KEY),
+        "connector_ids": [str(cid) for cid in (connector_ids or [])],
+    }
+
+
 def _user_uuid_from_claims(user: dict | None) -> _uuid.UUID | None:
     """Extract a user UUID from JWT claims for audit-log ``edited_by``.
 
@@ -1051,6 +1067,7 @@ async def _record_cost_ledger(
     perf: dict,
     *,
     count_zero_usage_task: bool = False,
+    count_task: bool = True,
 ) -> bool:
     """Upsert today's ``AgentCostLedger`` row (unique on tenant+agent+date).
 
@@ -1062,6 +1079,8 @@ async def _record_cost_ledger(
     to surface that (run flags ``budget_tracking_failed``, chat continues).
     With ``count_zero_usage_task`` a turn that reported no tokens still
     counts as a task; otherwise zero-usage runs write nothing (legacy).
+    ``count_task=False`` adds usage to a task already counted (a debug step
+    of a run paused at a breakpoint).
     """
     try:
         perf = perf if isinstance(perf, dict) else {}
@@ -1087,7 +1106,7 @@ async def _record_cost_ledger(
             if ledger:
                 ledger.token_count = (ledger.token_count or 0) + tokens_used
                 ledger.cost_usd = float(ledger.cost_usd or 0) + cost_usd
-                ledger.task_count = (ledger.task_count or 0) + 1
+                ledger.task_count = (ledger.task_count or 0) + (1 if count_task else 0)
             else:
                 session.add(
                     AgentCostLedger(
@@ -1095,7 +1114,7 @@ async def _record_cost_ledger(
                         tenant_id=tid,
                         cost_usd=cost_usd,
                         token_count=tokens_used,
-                        task_count=1,
+                        task_count=1 if count_task else 0,
                         period_date=today,
                     )
                 )
@@ -1119,6 +1138,51 @@ async def _record_cost_ledger(
 # MCP, and A2A which previously called langgraph_run with no
 # connector_config and reproduced the same shadow-accuracy 40%.
 # ──────────────────────────────────────────────────────────────────
+
+
+async def _monthly_budget_refusal(tid: _uuid.UUID, agent_id: _uuid.UUID, cost_controls: Any) -> dict | None:
+    """The ``budget_exceeded`` result when the agent's monthly cost cap is spent, else ``None``.
+
+    The debugging console's steps check the cap a run checks (the run route
+    keeps its own copy of this check, with the same lock and window).
+    """
+    monthly_cap = cost_controls.get("monthly_cost_cap_usd", 0) if isinstance(cost_controls, dict) else 0
+    if not monthly_cap or monthly_cap <= 0:
+        return None
+    # P3.1: Use a Postgres advisory lock keyed on agent_id to serialize
+    # concurrent budget checks. Without this, two requests could both see
+    # spend < cap and both proceed, causing overspend.
+    async with get_tenant_session(tid) as session:
+        from sqlalchemy import func as sqlfunc
+        from sqlalchemy import text as sqltext
+
+        # Acquire advisory lock for this agent (auto-released at txn end)
+        # pg_advisory_xact_lock(int8) — use hash of UUID as the key
+        lock_key = abs(hash(str(agent_id))) % (2**31)
+        await session.execute(sqltext("SELECT pg_advisory_xact_lock(:k)"), {"k": lock_key})
+
+        month_start = datetime.now(UTC).replace(day=1, hour=0, minute=0, second=0, microsecond=0, tzinfo=None)
+        spent_result = await session.execute(
+            select(sqlfunc.coalesce(sqlfunc.sum(AgentCostLedger.cost_usd), 0)).where(
+                AgentCostLedger.agent_id == agent_id,
+                AgentCostLedger.period_date >= month_start,
+            )
+        )
+        monthly_spent = float(spent_result.scalar() or 0)
+        if monthly_spent >= monthly_cap:
+            return {
+                "task_id": f"msg_{_uuid.uuid4().hex[:12]}",
+                "agent_id": str(agent_id),
+                "status": "budget_exceeded",
+                "error": {
+                    "code": "E1008",
+                    "message": f"Monthly budget exceeded: ${monthly_spent:.2f} / ${monthly_cap:.2f}",
+                },
+                "output": {},
+                "confidence": 0,
+                "reasoning_trace": [f"Budget check: ${monthly_spent:.2f} >= cap ${monthly_cap:.2f}"],
+            }
+    return None
 
 
 async def _resolve_agent_connector_ids_for_type(
@@ -1799,6 +1863,11 @@ async def create_agent(
         await prompt_activation.check_new_agent_status(_uuid.UUID(tenant_id), initial_status)
     except prompt_activation.ActivationError as exc:
         raise _activation_refused(exc) from None
+    # Registry: a new agent has no approved entry, so it cannot start in production.
+    try:
+        registry_approval.check_new_agent_status(initial_status)
+    except registry_approval.ApprovalError as exc:
+        raise _approval_refused(exc) from None
 
     # Auto-populate authorized tools based on agent type / domain when none provided.
     # When the caller supplied ``connector_ids`` but no explicit
@@ -3383,14 +3452,19 @@ async def run_agent(
             raise HTTPException(404, "Agent not found")
         # Bug sheet 2026-09-14 rows 19/22: domain RBAC + personal ownership.
         require_agent_visible(agent_row, effective_caller)
-        # Traffic split: a share of the runs asked of this agent are served by another active agent.
+        # The agent asked for answers for itself first: a paused, retired, halted or
+        # under-floor agent is refused before any run of it is redirected elsewhere.
+        await _refuse_unrunnable_agent(agent_row, tenant_id)
+        # Traffic split: a share of the runs asked of this agent are served by another active
+        # agent. One draw decides the run; a target that would itself be refused is skipped.
         requested_agent_id = agent_id
         served_by_split: str | None = None
         split = agent_traffic.declared(agent_row) if agent_traffic.enabled() else None
         if split is not None:
             split_cid = str(payload.get("thread_id") or payload.get("correlation_id") or "") or None
+            split_draw = agent_traffic.bucket(split_cid)
             target_row = None
-            if agent_traffic.chooses_target(split, split_cid):
+            if agent_traffic.chooses_target(split, draw=split_draw):
                 target_row = (
                     await session.execute(
                         select(Agent).where(Agent.id == _uuid.UUID(split["to_agent_id"]), Agent.tenant_id == tid)
@@ -3398,34 +3472,23 @@ async def run_agent(
                 ).scalar_one_or_none()
                 if target_row is not None and not can_view_agent(target_row, effective_caller):
                     target_row = None
-            chosen, served_by_split = agent_traffic.choose(agent_row, split_cid, lambda _id: target_row)
+                if target_row is not None:
+                    try:
+                        await _refuse_unrunnable_agent(target_row, tenant_id)
+                    except HTTPException as exc:
+                        logger.warning(
+                            "agent_traffic_split_target_skipped",
+                            agent_id=str(agent_row.id),
+                            reason="target_refused",
+                            status_code=exc.status_code,
+                        )
+                        target_row = None
+            chosen, served_by_split = agent_traffic.choose(
+                agent_row, split_cid, lambda _id: target_row, draw=split_draw
+            )
             if chosen is not agent_row:
                 agent_row = chosen
                 agent_id = chosen.id
-        status_refusal = agent_status_refusal(agent_row.status)
-        if status_refusal is not None:
-            raise HTTPException(409, status_refusal)
-        if _active_agent_below_production_floor(agent_row):
-            raise HTTPException(
-                409,
-                (
-                    "Active agent is below the production shadow-accuracy "
-                    f"floor ({agent_row.shadow_accuracy_current} < "
-                    f"{_effective_shadow_accuracy_floor(agent_row)}). "
-                    "Rollback to shadow and retest before running live work."
-                ),
-            )
-
-        override = await check_operator_override(tenant_id, agent_id=str(agent_id))
-        if override.blocked:
-            raise HTTPException(
-                423,
-                detail={
-                    "error": "operator_override",
-                    "message": override.reason,
-                    "override": override.override.to_dict() if override.override else None,
-                },
-            )
 
         agent_config = _agent_to_dict(agent_row)
         review_learning = agent_config["review_learning"]
@@ -3433,15 +3496,19 @@ async def run_agent(
         run_agent_visibility = str(getattr(agent_row, "visibility", None) or AGENT_VISIBILITY_TENANT)
         run_agent_owner_user_id = getattr(agent_row, "owner_user_id", None)
         # FinOps: the run's attribution (use case, application, business unit, department, cost centre).
+        # While thresholds are enforced the labels are server-owned (the agent's configuration, type and
+        # domain): a caller's use_case or business_unit would let it relabel the run, and its ledger row,
+        # out of a scoped throttle or suspension.
         attribution_token = None
         if cost_attribution.enabled():
+            caller_labels = not finops_thresholds.enabled()
             attribution_token = cost_attribution.bind(
                 await cost_attribution.resolve_for_agent(
                     session,
                     agent_row,
-                    use_case=payload.get("use_case"),
+                    use_case=payload.get("use_case") if caller_labels else None,
                     application="agents",
-                    business_unit=payload.get("business_unit"),
+                    business_unit=payload.get("business_unit") if caller_labels else None,
                 )
             )
 
@@ -4017,6 +4084,8 @@ async def run_agent(
                 breakpoints=run_debugger.declared({"config": agent_config.get("config") or {}}),
                 spec={
                     **_run_resume_spec(agent_config, review_learning, authorized_tools, connector_names_for_tools),
+                    # Output schema, limits and connector ids (credentials are resolved again per step).
+                    **_debug_resume_spec(agent_config, raw_connector_ids),
                     # A run bound to a caller token stays bound when stepped (PRD F-1).
                     **({CALLER_GRANT_KEY: run_caller.marker()} if run_caller.marker() is not None else {}),
                 },
@@ -4197,6 +4266,9 @@ async def run_agent(
     if lg_result.get("grant_denial"):
         # PRD F-1 deny: the reason code for the refused tool call.
         response["grant_denial"] = lg_result["grant_denial"]
+    if lg_result.get("limit"):
+        # An execution limit or the loop rule stopped the run: the reason and the detail.
+        response["limit"] = lg_result["limit"]
     if task_status == run_debugger.STATUS_PAUSED:
         # Paused at a breakpoint: the console steps the thread (api/v1/agent_debug.py).
         response["thread_id"] = lg_result.get("thread_id")
@@ -4204,6 +4276,33 @@ async def run_agent(
     if incoming_action == "shadow_sample":
         response["shadow_metrics"] = shadow_metrics
     return response
+
+
+async def _refuse_unrunnable_agent(agent_row: Agent, tenant_id: str) -> None:
+    """The lifecycle and emergency controls a run is held to: status, production floor, operator override."""
+    status_refusal = agent_status_refusal(agent_row.status)
+    if status_refusal is not None:
+        raise HTTPException(409, status_refusal)
+    if _active_agent_below_production_floor(agent_row):
+        raise HTTPException(
+            409,
+            (
+                "Active agent is below the production shadow-accuracy "
+                f"floor ({agent_row.shadow_accuracy_current} < "
+                f"{_effective_shadow_accuracy_floor(agent_row)}). "
+                "Rollback to shadow and retest before running live work."
+            ),
+        )
+    override = await check_operator_override(tenant_id, agent_id=str(agent_row.id))
+    if override.blocked:
+        raise HTTPException(
+            423,
+            detail={
+                "error": "operator_override",
+                "message": override.reason,
+                "override": override.override.to_dict() if override.override else None,
+            },
+        )
 
 
 # ── POST /agents/{id}/pause ──────────────────────────────────────────────────
@@ -5178,6 +5277,11 @@ async def clone_agent(
             await prompt_activation.check_new_agent_status(tid, body.initial_status or "shadow")
         except prompt_activation.ActivationError as exc:
             raise _activation_refused(exc) from None
+        # Registry: a clone has no approved entry either.
+        try:
+            registry_approval.check_new_agent_status(body.initial_status or "shadow")
+        except registry_approval.ApprovalError as exc:
+            raise _approval_refused(exc) from None
         # Admins keep the source's visibility/owner; a non-admin (who can only
         # mutate their own personal agent) always gets a personal clone they own.
         if effective_caller.is_admin:

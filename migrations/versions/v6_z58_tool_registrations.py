@@ -8,7 +8,8 @@ Create Date: 2026-10-07
 ``tool_registrations``: a tenant's registered tools with their input and
 output JSON Schemas, risk class and execution envelope
 (``core/tool_gateway/registry.py``). One row per tenant and name; tenant
-scoped under a row-level policy.
+scoped under a row-level policy, enabled and forced so the table owner is
+bound by it too.
 """
 
 from alembic import op
@@ -51,6 +52,9 @@ def upgrade() -> None:
         "CREATE INDEX IF NOT EXISTS ix_tool_registrations_tenant_enabled ON tool_registrations(tenant_id, enabled);"
     )
     op.execute("ALTER TABLE tool_registrations ENABLE ROW LEVEL SECURITY;")
+    # FORCE: the policy binds the table owner too, so a deployment where the
+    # migration role and the application role are the same is still isolated.
+    op.execute("ALTER TABLE tool_registrations FORCE ROW LEVEL SECURITY;")
     op.execute("DROP POLICY IF EXISTS tool_registrations_tenant_isolation ON tool_registrations;")
     op.execute(
         """

@@ -104,6 +104,21 @@ def _threshold_refused(exc: thresholds.ThresholdError) -> HTTPException:
     return HTTPException(exc.status, detail={"error": exc.code, "message": exc.message})
 
 
+async def _flush_threshold(session: Any, name: str | None) -> None:
+    """Flush a created or changed threshold; a name the tenant already uses is a 409, not a 500."""
+    from sqlalchemy.exc import IntegrityError
+
+    try:
+        await session.flush()
+    except IntegrityError as exc:
+        if "ux_finops_thresholds_tenant_name" not in str(getattr(exc, "orig", exc)):
+            raise
+        raise HTTPException(
+            409,
+            detail={"error": "duplicate_name", "message": f"A threshold named {name!r} already exists"},
+        ) from None
+
+
 async def _threshold_row(session: Any, tid: uuid.UUID, threshold_id: uuid.UUID) -> Any:
     from sqlalchemy import select
 
@@ -171,9 +186,17 @@ async def create_threshold(
     tid = uuid.UUID(tenant_id)
     actor = _user_uuid_from_claims(user)
     async with get_tenant_session(tid) as session:
+        if await thresholds.count_rows(session, tid) >= thresholds.MAX_THRESHOLDS:
+            raise HTTPException(
+                409,
+                detail={
+                    "error": "threshold_limit",
+                    "message": f"A tenant holds at most {thresholds.MAX_THRESHOLDS} thresholds; remove one first",
+                },
+            )
         row = FinopsThreshold(tenant_id=tid, created_by=actor, updated_by=actor, **fields)
         session.add(row)
-        await session.flush()
+        await _flush_threshold(session, fields.get("name"))
         return thresholds.row_dict(row)
 
 
@@ -205,7 +228,7 @@ async def update_threshold(
         for key, value in fields.items():
             setattr(row, key, value)
         row.updated_by = _user_uuid_from_claims(user)
-        await session.flush()
+        await _flush_threshold(session, fields.get("name", row.name))
         return thresholds.row_dict(row)
 
 
