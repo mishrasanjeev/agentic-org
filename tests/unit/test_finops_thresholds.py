@@ -17,6 +17,7 @@ from core.finops import attribution, thresholds
 
 ROOT = Path(__file__).resolve().parents[2]
 NOW = datetime(2026, 10, 7, 12, 0, tzinfo=UTC)
+REAL_CLAIM = thresholds.claim_breach  # the check-run tests replace it with an in-memory claim
 
 
 def _row(**over):
@@ -56,6 +57,9 @@ class _Result:
     def scalar_one_or_none(self):
         return self.rows[0] if self.rows else None
 
+    def scalar(self):
+        return self.rows[0] if self.rows else None
+
 
 class _Session:
     def __init__(self, *answers):
@@ -63,6 +67,8 @@ class _Session:
         self.calls = []
         self.added = []
         self.deleted = []
+        self.commits = 0
+        self.flush_error = None
 
     async def __aenter__(self):
         return self
@@ -81,7 +87,17 @@ class _Session:
         self.deleted.append(row)
 
     async def flush(self):
+        if self.flush_error is not None:
+            raise self.flush_error
         return None
+
+    async def commit(self):
+        self.commits += 1
+
+
+def _both_on(monkeypatch):
+    monkeypatch.setattr(settings, "finops_attribution_enabled", True)
+    monkeypatch.setattr(settings, "finops_thresholds_enabled", True)
 
 
 class TestFields:
@@ -183,7 +199,22 @@ async def test_spend_reads_the_ledger_for_the_scope_and_period():
 class TestCheckRun:
     @pytest.fixture
     def on(self, monkeypatch):
-        monkeypatch.setattr(settings, "finops_thresholds_enabled", True)
+        _both_on(monkeypatch)
+
+    @pytest.fixture(autouse=True)
+    def claims(self, monkeypatch):
+        """The conditional update, in memory: a period already recorded is not claimed again."""
+        made = []
+
+        async def _claim(_session, _tid, row, key, *, now, spent):
+            if row.last_breach_period == key:
+                return False
+            row.last_breach_period, row.last_breach_at, row.last_breach_spend_usd = key, now, spent
+            made.append((row.name, key))
+            return True
+
+        monkeypatch.setattr(thresholds, "claim_breach", _claim)
+        return made
 
     @pytest.fixture
     def rows(self, monkeypatch):
@@ -214,6 +245,11 @@ class TestCheckRun:
             == thresholds.NONE
         )
         monkeypatch.setattr(settings, "finops_thresholds_enabled", True)
+        assert (
+            await thresholds.check_run(_Session(), uuid.uuid4(), attribution.Attribution(use_case="kyc"))
+            == thresholds.NONE
+        ), "thresholds without attribution never run"
+        monkeypatch.setattr(settings, "finops_attribution_enabled", True)
         spends["KYC monthly"] = 99.99
         assert (
             await thresholds.check_run(_Session(), uuid.uuid4(), attribution.Attribution(use_case="kyc"), now=NOW)
@@ -252,6 +288,62 @@ class TestCheckRun:
         assert lifted.action == "throttle" and lifted.name == "throttle"
         later = await thresholds.check_run(_Session(), uuid.uuid4(), given, now=NOW + timedelta(days=40))
         assert later.notified is True and alert.last_breach_period == "2026-11"
+
+    @pytest.mark.asyncio
+    async def test_concurrent_runs_notify_once_and_the_claim_is_committed_first(self, on, rows, spends, monkeypatch):
+        row = _row(name="alert")
+        rows["rows"] = [row]
+        spends["alert"] = 150.0
+        told = []
+        order = []
+
+        async def _notify(session, _tid, notified_row, spent):
+            order.append(("notify", session.commits))
+            told.append(notified_row.name)
+            return True
+
+        monkeypatch.setattr(thresholds, "notify", _notify)
+        given = attribution.Attribution(use_case="kyc")
+        first_session, second_session = _Session(), _Session()
+        first = await thresholds.check_run(first_session, uuid.uuid4(), given, now=NOW)
+        # A second run that read the row before the first committed still sees the old period;
+        # the conditional update finds it recorded and claims nothing.
+        row.last_breach_period = "2026-10"
+        stale = _row(name="alert", id=row.id, last_breach_period=None)
+        rows["rows"] = [stale]
+
+        async def _lost(_session, _tid, _row, _key, *, now, spent):
+            return False
+
+        monkeypatch.setattr(thresholds, "claim_breach", _lost)
+        second = await thresholds.check_run(second_session, uuid.uuid4(), given, now=NOW)
+        assert first.notified is True and second.notified is False and told == ["alert"]
+        assert order == [("notify", 1)] and first_session.commits == 1 and second_session.commits == 0
+        assert first.action == second.action == "alert"
+
+    @pytest.mark.asyncio
+    async def test_the_claim_is_one_conditional_update(self):
+        tid = uuid.uuid4()
+        row = _row()
+        won = _Session([(row.id,)])
+        assert await REAL_CLAIM(won, tid, row, "2026-10", now=NOW, spent=150.0) is True
+        sql, params = won.calls[0]
+        assert sql.startswith("UPDATE finops_thresholds SET last_breach_period = :key")
+        assert (
+            "last_breach_period IS DISTINCT FROM :key RETURNING id" in sql and "tenant_id = CAST(:tid AS uuid)" in sql
+        )
+        assert params == {"key": "2026-10", "at": NOW, "spent": 150.0, "id": str(row.id), "tid": str(tid)}
+        assert row.last_breach_period == "2026-10" and row.last_breach_spend_usd == 150.0
+        other = _row()
+        assert await REAL_CLAIM(_Session([]), tid, other, "2026-10", now=NOW, spent=150.0) is False
+        assert other.last_breach_period is None
+
+    @pytest.mark.asyncio
+    async def test_every_enabled_threshold_is_evaluated(self):
+        session = _Session([_row(name=f"t{i:03d}") for i in range(thresholds.MAX_THRESHOLDS + 5)])
+        loaded = await thresholds.enabled_rows(session, uuid.uuid4())
+        assert len(loaded) == thresholds.MAX_THRESHOLDS + 5
+        assert "LIMIT" not in session.calls[0][0].upper()
 
     @pytest.mark.asyncio
     async def test_notification_uses_the_channels_and_never_raises(self, monkeypatch):
@@ -318,7 +410,7 @@ class TestEndpoints:
 
     @pytest.mark.asyncio
     async def test_on_a_threshold_is_created_updated_and_deleted(self, monkeypatch):
-        monkeypatch.setattr(settings, "finops_thresholds_enabled", True)
+        _both_on(monkeypatch)
         session = _Session([], [], [])
         monkeypatch.setattr(api, "get_tenant_session", lambda _tid: session)
         tid = str(uuid.uuid4())
@@ -352,6 +444,88 @@ class TestEndpoints:
         assert await api.delete_threshold(row.id, tenant_id=tid, user=user) is None and delete_session.deleted == [row]
 
 
+class TestEndpointRefusals:
+    @pytest.mark.asyncio
+    async def test_creation_is_refused_at_the_cap(self, monkeypatch):
+        _both_on(monkeypatch)
+        session = _Session([thresholds.MAX_THRESHOLDS])
+        monkeypatch.setattr(api, "get_tenant_session", lambda _tid: session)
+        with pytest.raises(HTTPException) as refused:
+            await api.create_threshold(
+                api.ThresholdIn(name="one more", scope_kind="organisation", threshold_usd=1),
+                tenant_id=str(uuid.uuid4()),
+                user={},
+            )
+        assert refused.value.status_code == 409 and refused.value.detail["error"] == "threshold_limit"
+        assert session.added == [] and "count" in session.calls[0][0].lower()
+        below = _Session([thresholds.MAX_THRESHOLDS - 1])
+        monkeypatch.setattr(api, "get_tenant_session", lambda _tid: below)
+        created = await api.create_threshold(
+            api.ThresholdIn(name="last", scope_kind="organisation", threshold_usd=1),
+            tenant_id=str(uuid.uuid4()),
+            user={},
+        )
+        assert created["name"] == "last" and len(below.added) == 1
+
+    @pytest.mark.asyncio
+    async def test_a_duplicate_name_is_a_conflict(self, monkeypatch):
+        from sqlalchemy.exc import IntegrityError
+
+        _both_on(monkeypatch)
+        duplicate = IntegrityError(
+            "INSERT", {}, Exception('duplicate key value violates unique constraint "ux_finops_thresholds_tenant_name"')
+        )
+        session = _Session([0])
+        session.flush_error = duplicate
+        monkeypatch.setattr(api, "get_tenant_session", lambda _tid: session)
+        with pytest.raises(HTTPException) as refused:
+            await api.create_threshold(
+                api.ThresholdIn(name="KYC monthly", scope_kind="organisation", threshold_usd=1),
+                tenant_id=str(uuid.uuid4()),
+                user={},
+            )
+        assert refused.value.status_code == 409 and refused.value.detail["error"] == "duplicate_name"
+        row = _row(name="loans")
+        renamed = _Session([row])
+        renamed.flush_error = duplicate
+        monkeypatch.setattr(api, "get_tenant_session", lambda _tid: renamed)
+        with pytest.raises(HTTPException) as refused:
+            await api.update_threshold(
+                row.id, api.ThresholdPatch(name="KYC monthly"), tenant_id=str(uuid.uuid4()), user={}
+            )
+        assert refused.value.status_code == 409 and refused.value.detail["error"] == "duplicate_name"
+        other = _Session([0])
+        other.flush_error = IntegrityError("INSERT", {}, Exception("violates check constraint"))
+        monkeypatch.setattr(api, "get_tenant_session", lambda _tid: other)
+        with pytest.raises(IntegrityError):
+            await api.create_threshold(
+                api.ThresholdIn(name="x", scope_kind="organisation", threshold_usd=1),
+                tenant_id=str(uuid.uuid4()),
+                user={},
+            )
+
+
+class TestConfiguration:
+    def test_thresholds_without_attribution_refuse_to_load(self):
+        from pydantic import ValidationError
+
+        from core.config import Settings
+
+        with pytest.raises(ValidationError) as refused:
+            Settings(_env_file=None, finops_thresholds_enabled=True, finops_attribution_enabled=False)
+        assert "AGENTICORG_FINOPS_ATTRIBUTION_ENABLED" in str(refused.value)
+        both = Settings(_env_file=None, finops_thresholds_enabled=True, finops_attribution_enabled=True)
+        assert both.finops_thresholds_enabled and both.finops_attribution_enabled
+        assert Settings(_env_file=None).finops_thresholds_enabled is False
+
+    def test_thresholds_run_only_with_attribution(self, monkeypatch):
+        monkeypatch.setattr(settings, "finops_thresholds_enabled", True)
+        monkeypatch.setattr(settings, "finops_attribution_enabled", False)
+        assert thresholds.enabled() is False
+        monkeypatch.setattr(settings, "finops_attribution_enabled", True)
+        assert thresholds.enabled() is True
+
+
 class TestHooks:
     def test_the_run_checks_thresholds_after_the_budget_and_says_what_it_did(self):
         src = (ROOT / "api" / "v1" / "agents.py").read_text(encoding="utf-8")
@@ -361,6 +535,27 @@ class TestHooks:
         assert run.index("finops_thresholds.check_run(") < run.index("# 5b. Execute via LangGraph runner")
         assert "finops_thresholds.refusal(decision" in run and "asyncio.sleep(decision.delay_seconds)" in run
         assert '"finops_action": finops_action,' in src
+
+    def test_enforced_labels_are_server_owned(self):
+        src = (ROOT / "api" / "v1" / "agents.py").read_text(encoding="utf-8")
+        run = src[src.index('@router.post("/agents/{agent_id}/run")') :]
+        bind = run[run.index("attribution_token = None") : run.index("finops_thresholds.check_run(")]
+        assert "caller_labels = not finops_thresholds.enabled()" in bind
+        assert 'use_case=payload.get("use_case") if caller_labels else None' in bind
+        assert 'business_unit=payload.get("business_unit") if caller_labels else None' in bind
+        assert "finops_thresholds.check_run(session, tid, cost_attribution.current())" in run
+
+    @pytest.mark.asyncio
+    async def test_the_agent_labels_decide_when_the_caller_sends_none(self):
+        agent = SimpleNamespace(
+            id=uuid.uuid4(), config={"business_unit": "Retail"}, agent_type="kyc", domain="ops", cost_center_id=None
+        )
+        server = await attribution.resolve_for_agent(None, agent, use_case=None, application="agents")
+        assert server.use_case == "kyc" and server.business_unit == "retail" and server.application == "agents"
+        given = attribution.Attribution(use_case="loans")
+        assert thresholds.matches(_row(scope_value="kyc"), server) and not thresholds.matches(
+            _row(scope_value="kyc"), given
+        )
 
     def test_the_migration_and_the_model_are_shaped(self):
         migration = (ROOT / "migrations" / "versions" / "v6_z56_finops_thresholds.py").read_text(encoding="utf-8")
