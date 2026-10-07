@@ -81,6 +81,11 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
   the target script, and marks the translation trusted only when all
   hold; `verify` adds a back-translation with its word overlap for review.
   `GET /content/languages` lists the languages and scripts.
+- Figures are compared with their currency and magnitude (lakh, crore,
+  thousand, million, in each supported language and in native digits), a
+  translation changed by an output guardrail is no longer marked trusted,
+  a text is at most 4,000 characters (the completion budget is sized to
+  match), and a batch refuses a register or format the single request refuses.
 
 ### Added - Content services: narrative to payload, grounded responses, tone adaptation and clause assembly
 - Four more content services under `/content`: narrative to payload
@@ -96,6 +101,12 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
   the facts, placeholders filled and the gaps named, no model involved;
   clause library with versions and second-person approval, table
   `content_clauses`, migration `v6z63_content_clauses`).
+- A grounded response is withheld when any of its claims is not covered by a
+  verified citation; tone fact checks keep currency, lakh and crore, and
+  percent; a payload changed by output guardrails is validated again; a named
+  schema resolves to the requested or latest version; clause writes need a
+  signed-in tenant administrator, and an update that changes nothing keeps the
+  version and approval.
 
 ### Added - Content services: governed drafting, structured summarisation and obligation extraction
 - With `AGENTICORG_CONTENT_SERVICES_ENABLED` on (off by default), three
@@ -112,6 +123,13 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
   counted. Inputs pass the input guardrails, the model answers in JSON
   checked against the schema with one retry, and outputs pass the output
   guardrails with the sources as grounding context.
+- Content services hardening: the `/content` routes need `audit:read` to
+  read and `approvals:write` to act; drafting and draft decisions need an
+  active human administrator (never an API key); a masked input is what
+  the model sees; knowledge-base sources pass the retrieval guardrails;
+  every output field passes the output guardrails; pre-model
+  pseudonymisation applies to every content model call; extracted
+  obligations need a quote of at least three words that supports them.
 
 ### Added - Conversational services: scenario templates, summaries, feedback and sentiment
 - Multi-step scenarios chain intents without a model: a raised dispute
