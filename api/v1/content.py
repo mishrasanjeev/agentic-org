@@ -10,7 +10,13 @@ import structlog
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel, Field
 
-from api.deps import get_current_tenant, get_user_domains, require_tenant_admin
+from api.deps import (
+    ActiveHumanAdmin,
+    get_active_human_admin,
+    get_current_tenant,
+    get_user_domains,
+    require_tenant_admin,
+)
 from api.route_metadata import route_meta
 from core.content import drafting, drafts, extraction, services, summarisation
 from core.workbench import console
@@ -48,6 +54,13 @@ def _off() -> HTTPException:
 def _user_id(request: Request) -> str:
     claims = getattr(request.state, "claims", None) or {}
     return str(claims.get("agenticorg:user_id") or claims.get("sub") or getattr(request.state, "user_sub", "") or "")
+
+
+def _human(principal: object) -> str:
+    """The active human administrator's user id; anything else (an API key, no identity) is refused."""
+    if not isinstance(principal, ActiveHumanAdmin):
+        raise HTTPException(403, "A human tenant administrator is required")
+    return str(principal.user_id)
 
 
 async def _run(service: services.Service, payload: Any, tenant_id: str, domains: list[str] | None) -> services.Run:
@@ -136,20 +149,32 @@ async def post_draft(
     request: Request,
     tenant_id: str = Depends(get_current_tenant),
     domains: list[str] | None = Depends(get_user_domains),
+    principal: ActiveHumanAdmin = Depends(get_active_human_admin),
 ) -> dict[str, Any]:
-    """Draft a document from points and approved sources; notices and circulars wait in the drafts queue."""
+    """Draft a document from points and approved sources; notices and circulars wait in the drafts queue.
+
+    The author is an active human administrator of the tenant, never an API
+    key, so the maker-checker check compares two people.
+    """
+    if not services.enabled():
+        raise _off()
+    author = _human(principal)
     run = await _run(drafting.SERVICE, body, tenant_id, domains)
-    needs = drafting.requires_approval(body, kinds=await console.approval_kinds(tenant_id))
+    kept = run.input if isinstance(run.input, drafting.DraftIn) else body
+    needs = drafting.requires_approval(kept, kinds=await console.approval_kinds(tenant_id))
     try:
         draft = await drafts.record(
             uuid.UUID(tenant_id),
-            user_id=_user_id(request),
+            user_id=author,
             run=run,
-            payload=body.model_dump(),
-            kind=body.kind,
-            title=str(run.output.get("title") or body.subject),
+            # The input as the model saw it: after the input guardrails, so a masked value is kept masked.
+            payload=kept.model_dump(mode="json"),
+            kind=kept.kind,
+            title=str(run.output.get("title") or kept.subject),
             requires_approval=needs,
         )
+    except services.ContentError as exc:
+        raise _refused(exc) from None
     except (RuntimeError, OSError, ValueError, TypeError) as exc:
         logger.warning("content_draft_record_failed", error_type=type(exc).__name__)
         raise HTTPException(
@@ -246,14 +271,19 @@ async def get_draft(draft_id: uuid.UUID, tenant_id: str = Depends(get_current_te
     audit_event="content.drafts.decide",
 )
 async def decide_draft(
-    draft_id: uuid.UUID, body: DecisionIn, request: Request, tenant_id: str = Depends(get_current_tenant)
+    draft_id: uuid.UUID,
+    body: DecisionIn,
+    request: Request,
+    tenant_id: str = Depends(get_current_tenant),
+    principal: ActiveHumanAdmin = Depends(get_active_human_admin),
 ) -> dict[str, Any]:
-    """Approve or reject a waiting draft; its author may not decide it."""
+    """Approve or reject a waiting draft; an active human administrator other than its author decides it."""
     if not services.enabled():
         raise _off()
+    checker = _human(principal)
     try:
         return await drafts.decide(
-            uuid.UUID(tenant_id), draft_id, user_id=_user_id(request), decision=body.decision, notes=body.notes
+            uuid.UUID(tenant_id), draft_id, user_id=checker, decision=body.decision, notes=body.notes
         )
     except services.ContentError as exc:
         raise _refused(exc) from None
