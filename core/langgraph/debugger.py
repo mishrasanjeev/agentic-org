@@ -497,6 +497,28 @@ async def claim_session(tenant_id: uuid.UUID, agent_id: uuid.UUID, thread_id: st
         )
 
 
+async def release_session(tenant_id: uuid.UUID, agent_id: uuid.UUID, thread_id: str) -> None:
+    """Put a claimed session back to paused when its step was refused before the run was re-entered."""
+    from core.database import get_tenant_session
+    from core.models.agent_debug_session import AgentDebugSession
+
+    async with get_tenant_session(tenant_id) as session:
+        row = (
+            await session.execute(
+                select(AgentDebugSession)
+                .where(
+                    AgentDebugSession.tenant_id == tenant_id,
+                    AgentDebugSession.agent_id == agent_id,
+                    AgentDebugSession.thread_id == thread_id,
+                )
+                .with_for_update()
+            )
+        ).scalar_one_or_none()
+        if row is not None and row.status == "running":
+            row.status = "paused"
+            row.updated_at = datetime.now(UTC)
+
+
 async def finish_session(tenant_id: uuid.UUID, agent_id: uuid.UUID, thread_id: str, result: dict[str, Any]) -> dict:
     """Record where a step left the session: paused again, finished, or failed."""
     from core.database import get_tenant_session

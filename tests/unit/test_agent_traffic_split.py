@@ -126,22 +126,34 @@ class TestEndpoints:
 
 
 class TestRunPath:
-    def test_the_run_chooses_the_served_agent_before_the_status_checks_and_says_so(self):
+    def test_the_run_checks_the_agent_asked_for_then_redirects_on_one_draw_and_says_so(self):
         src = (ROOT / "api" / "v1" / "agents.py").read_text(encoding="utf-8")
         run = src[src.index('@router.post("/agents/{agent_id}/run")') :]
         run = run[: run.index('"runtime": "langgraph",', run.index("response = {"))]
         assert run.index("require_agent_visible(agent_row, effective_caller)") < run.index(
+            "_refuse_unrunnable_agent(agent_row, tenant_id)"
+        )
+        # The agent asked for passes its own status, floor and override checks before any redirection.
+        assert run.index("_refuse_unrunnable_agent(agent_row, tenant_id)") < run.index(
             "agent_traffic.declared(agent_row)"
         )
-        assert run.index("agent_traffic.choose(agent_row, split_cid, lambda _id: target_row)") < run.index(
-            "status_refusal = agent_status_refusal(agent_row.status)"
-        )
-        # The target is loaded tenant-scoped and must be visible to the caller.
-        assert (
-            "Agent.tenant_id == tid"
-            in run[run.index("agent_traffic.chooses_target(") : run.index("agent_traffic.choose(")]
-        )
-        assert "can_view_agent(target_row, effective_caller)" in run
+        # One draw per run, shared by the decision to load the target and the choice.
+        assert run.count("agent_traffic.bucket(split_cid)") == 1
+        assert "agent_traffic.chooses_target(split, draw=split_draw)" in run
+        assert "lambda _id: target_row, draw=split_draw" in run
+        # The target is loaded tenant-scoped, must be visible to the caller and is held to the same checks.
+        between = run[run.index("agent_traffic.chooses_target(") : run.index("agent_traffic.choose(")]
+        assert "Agent.tenant_id == tid" in between
+        assert "can_view_agent(target_row, effective_caller)" in between
+        assert "_refuse_unrunnable_agent(target_row, tenant_id)" in between and "target_row = None" in between
+        helper_start = src.index("async def _refuse_unrunnable_agent(")
+        helper = src[helper_start : src.index("@router.", helper_start)]
+        for control in (
+            "agent_status_refusal(agent_row.status)",
+            "_active_agent_below_production_floor(agent_row)",
+            "check_operator_override(tenant_id, agent_id=str(agent_row.id))",
+        ):
+            assert control in helper
         assert '"requested_agent_id": str(requested_agent_id),' in run and '"served_by": served_by_split,' in run
         # The served agent is the one the rest of the run uses.
         assert "agent_id = chosen.id" in run

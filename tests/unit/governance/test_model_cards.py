@@ -371,6 +371,44 @@ class TestEndpoints:
         assert answer["provider"] == "openai" and answer["written"]["intended_use"] == "Letters."
         assert answer["written"]["status"] == "draft" and answer["written"]["updated_by"] == str(EDITOR)
 
+    @pytest.mark.asyncio
+    async def test_on_the_list_the_card_and_the_approval_answer_through_the_service(self, monkeypatch):
+        monkeypatch.setattr(settings, "governance_model_cards_enabled", True)
+        session = _Session([])
+        monkeypatch.setattr(api, "get_tenant_session", lambda _tid: session)
+        tid = str(uuid.uuid4())
+
+        async def _list(_session, _tid):
+            return [{"model": "gpt-4o-mini", "complete": False}, {"model": "text-embedding-3-small", "complete": True}]
+
+        async def _collect(_session, _tid, provider, model, **_kw):
+            if model == "nowhere":
+                raise model_cards.ModelCardError(404, "model_unknown", "the tenant does not use this model")
+            return {"provider": provider, "model": model, "complete": False}
+
+        async def _approve(_session, _tid, provider, model, *, actor):
+            if actor is None:
+                raise model_cards.ModelCardError(403, "no_actor", "an approver is required")
+            return _row(provider=provider, model=model, status="approved", approved_by=actor)
+
+        monkeypatch.setattr(model_cards, "list_cards", _list)
+        monkeypatch.setattr(model_cards, "collect_card", _collect)
+        monkeypatch.setattr(model_cards, "approve", _approve)
+        listed = await api.list_model_cards(tenant_id=tid)
+        assert listed["total"] == 2 and listed["incomplete"] == 1
+        card = await api.get_model_card(provider="openai", model="gpt-4o-mini", tenant_id=tid)
+        assert card["model"] == "gpt-4o-mini"
+        with pytest.raises(HTTPException) as refused:
+            await api.get_model_card(provider="openai", model="nowhere", tenant_id=tid)
+        assert refused.value.status_code == 404 and refused.value.detail["error"] == "model_unknown"
+        with pytest.raises(HTTPException) as refused:
+            await api.approve_model_card(provider="openai", model="gpt-4o-mini", tenant_id=tid, user={})
+        assert refused.value.status_code == 403 and refused.value.detail["error"] == "no_actor"
+        approved = await api.approve_model_card(
+            provider="openai", model="gpt-4o-mini", tenant_id=tid, user={"agenticorg:user_id": str(OWNER)}
+        )
+        assert approved["provider"] == "openai" and approved["written"]["status"] == "approved"
+
     def test_the_router_is_registered_behind_admin_and_the_governance_scopes(self):
         main = (ROOT / "api" / "main.py").read_text(encoding="utf-8")
         assert "governance_model_cards," in main and "app.include_router(governance_model_cards.router" in main
