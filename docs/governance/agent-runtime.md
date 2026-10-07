@@ -51,6 +51,14 @@ remembers (the same content about the same subject refreshes its expiry), and
 with the count, so a request to be forgotten is one audited call. `GET /memory/policy` states the
 kinds, retentions and bounds. Off, no run reads or writes memory and the endpoints are not found.
 
+Recall needs `audit:read` and writes need `approvals:write` (the `memory` scope family); an
+`agent_id` must name an agent of the caller's tenant that the caller may see, or the request is not
+found. The table is under a forced tenant row-level policy. Recalled entries are model input: they
+are pseudonymised or redacted with the task before they join the prompt. Memory is a sidecar: a
+database error while recalling leaves the run without memory and one while storing leaves the run's
+outcome as it was, both logged. The same content about the same subject, for an agent or shared, is
+one entry under a unique index (`content_hash`), written by a single atomic upsert.
+
 ## Execution limits and loop detection
 
 Every run is held to the platform's maxima: `AGENTICORG_MAX_AGENT_STEPS` graph steps (200 by

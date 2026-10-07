@@ -6188,7 +6188,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "memory.sensitive.write",
-    "source_line": 145,
+    "source_line": 168,
     "tenant_required": true
   },
   {
@@ -6206,7 +6206,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "memory.sensitive.read",
-    "source_line": 80,
+    "source_line": 97,
     "tenant_required": true
   },
   {
@@ -6224,7 +6224,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "memory.sensitive.write",
-    "source_line": 108,
+    "source_line": 127,
     "tenant_required": true
   },
   {
@@ -6242,7 +6242,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "memory.sensitive.read",
-    "source_line": 66,
+    "source_line": 83,
     "tenant_required": true
   },
   {
@@ -6260,7 +6260,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "memory.sensitive.write",
-    "source_line": 171,
+    "source_line": 194,
     "tenant_required": true
   },
   {
@@ -9014,7 +9014,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "workflows.sensitive.list",
-    "source_line": 453,
+    "source_line": 457,
     "tenant_required": true
   },
   {
@@ -9032,7 +9032,7 @@
     "public_exempt_reason": null,
     "rate_limit": "workflow-write",
     "scope": "workflows.write",
-    "source_line": 586,
+    "source_line": 590,
     "tenant_required": true
   },
   {
@@ -9050,7 +9050,7 @@
     "public_exempt_reason": null,
     "rate_limit": "ai-generation",
     "scope": "workflows.generate",
-    "source_line": 294,
+    "source_line": 298,
     "tenant_required": true
   },
   {
@@ -9068,7 +9068,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "workflows.runs.sensitive.read",
-    "source_line": 1023,
+    "source_line": 1027,
     "tenant_required": true
   },
   {
@@ -9086,7 +9086,7 @@
     "public_exempt_reason": null,
     "rate_limit": "workflow-control",
     "scope": "workflows.runs.cancel",
-    "source_line": 1109,
+    "source_line": 1113,
     "tenant_required": true
   },
   {
@@ -9104,7 +9104,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "workflows.runs.sensitive.replan-history",
-    "source_line": 1067,
+    "source_line": 1071,
     "tenant_required": true
   },
   {
@@ -9122,7 +9122,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "workflows.templates.read",
-    "source_line": 428,
+    "source_line": 432,
     "tenant_required": false
   },
   {
@@ -9140,7 +9140,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "workflows.write",
-    "source_line": 385,
+    "source_line": 389,
     "tenant_required": true
   },
   {
@@ -9158,7 +9158,7 @@
     "public_exempt_reason": null,
     "rate_limit": "workflow-write",
     "scope": "workflows.write",
-    "source_line": 654,
+    "source_line": 658,
     "tenant_required": true
   },
   {
@@ -9176,7 +9176,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "workflows.sensitive.read",
-    "source_line": 504,
+    "source_line": 508,
     "tenant_required": true
   },
   {
@@ -9194,7 +9194,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "workflows.read",
-    "source_line": 400,
+    "source_line": 404,
     "tenant_required": true
   },
   {
@@ -9212,7 +9212,7 @@
     "public_exempt_reason": null,
     "rate_limit": "workflow-write",
     "scope": "workflows.write",
-    "source_line": 1212,
+    "source_line": 1216,
     "tenant_required": true
   },
   {
@@ -9230,7 +9230,7 @@
     "public_exempt_reason": null,
     "rate_limit": "workflow-execution",
     "scope": "workflows.run",
-    "source_line": 897,
+    "source_line": 901,
     "tenant_required": true
   },
   {
@@ -9248,7 +9248,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "workflows.runs.sensitive.list",
-    "source_line": 528,
+    "source_line": 532,
     "tenant_required": true
   },
   {

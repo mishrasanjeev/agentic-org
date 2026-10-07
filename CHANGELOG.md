@@ -11,6 +11,11 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
   `agent_memories`, migration `v6z57_agent_memories`); entries expire by
   their kind's retention and are pruned nightly; `/memory` recalls,
   remembers and erases every entry about a subject, with the count.
+- Recall needs `audit:read` and writes need `approvals:write`; an `agent_id`
+  must name an agent of the tenant the caller can see (404 otherwise).
+  Recalled entries are redacted with the task before the model sees them,
+  a memory database error never fails a run, and the same content is one
+  entry under a unique index written by an atomic upsert.
 
 ### Added - Agent runtime: visual workflow builder with branching and fallback
 - The console's Build visually tab draws a workflow as a graph of steps,
