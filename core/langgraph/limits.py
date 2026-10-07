@@ -5,14 +5,16 @@ An agent may carry limits in its configuration (``config["limits"]``): the
 most model steps a run may take, the longest it may run, the most tool calls
 it may make, and the loop rule (how many identical tool calls in a row, and
 how long a repeating pattern of tool calls, count as a loop). While
-``AGENTICORG_RUNTIME_LIMITS_ENABLED`` is on the graph checks them before
-every round of tool execution (``check``) and the runner applies the duration
-as the run's timeout: a run that exceeds a limit, or repeats a tool call
+``AGENTICORG_RUNTIME_LIMITS_ENABLED`` is on the graph checks the step limit
+before every model call (``check_steps``), checks them all before every round
+of tool execution (``check``) and the runner applies the duration as the run's
+timeout: a run that exceeds a limit, or repeats a tool call
 pattern, is stopped with ``status`` ``failed``, ``error`` ``stopped: ...`` and
 a ``limit`` block naming the reason and the detail, which the agents API
 audits and meters. Every limit is bounded by the platform's own maxima
 (``AGENTICORG_MAX_AGENT_STEPS``, ``AGENTICORG_MAX_AGENT_DURATION_SEC``), which
-apply to every run whether or not the switch is on.
+bound every run whether or not the switch is on; with the switch off a run
+that reaches them fails as it always has.
 
 Loop detection reads the tool calls the model has asked for so far, as a
 sequence of signatures (the tool name and a hash of its arguments): the same
@@ -188,18 +190,35 @@ def detect_loop(
     return None
 
 
+def check_steps(messages: Any, limits: Limits) -> Stop | None:
+    """What stops the run before its next model call: the model has already answered max_steps times."""
+    steps = model_steps(messages)
+    if steps >= limits.max_steps:
+        return Stop(
+            "step_limit",
+            f"the agent reached its limit of {limits.max_steps} model steps",
+            steps,
+            len(tool_signatures(messages)),
+        )
+    return None
+
+
 def check(messages: Any, limits: Limits) -> Stop | None:
-    """What stops the run before its next round of tools, if anything."""
+    """What stops the run before its next round of tools, if anything.
+
+    The tool calls counted include the round about to run, so the limit stops a
+    run only when the model has asked for more than ``max_tool_calls``.
+    """
     steps = model_steps(messages)
     signatures = tool_signatures(messages)
     if steps >= limits.max_steps:
         return Stop(
             "step_limit", f"the agent reached its limit of {limits.max_steps} model steps", steps, len(signatures)
         )
-    if len(signatures) >= limits.max_tool_calls:
+    if len(signatures) > limits.max_tool_calls:
         return Stop(
             "tool_call_limit",
-            f"the agent reached its limit of {limits.max_tool_calls} tool calls",
+            f"the agent asked for more than its limit of {limits.max_tool_calls} tool calls",
             steps,
             len(signatures),
         )

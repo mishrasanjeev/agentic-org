@@ -392,6 +392,20 @@ async def validate_workflow(body: WorkflowValidateIn, tenant_id: str = Depends(g
     return {"valid": not problems, "errors": problems, "graph": workflow_graph.to_graph(body.definition)}
 
 
+@router.get("/workflows/builder")
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="workflows.read",
+    rate_limit="standard",
+    idempotency="read-only",
+    audit_event="workflows.builder.read",
+)
+async def workflow_builder_status(tenant_id: str = Depends(get_current_tenant)) -> dict[str, Any]:
+    """Whether the visual builder is on; the console shows the builder and the stored-workflow graph only then."""
+    return {"enabled": workflow_graph.enabled()}
+
+
 @router.get("/workflows/{wf_id}/graph")
 @route_meta(
     auth_required=True,
@@ -415,6 +429,7 @@ async def workflow_graph_view(wf_id: UUID, tenant_id: str = Depends(get_current_
         definition = dict(row.definition or {})
     return {
         "workflow_id": str(wf_id),
+        "enabled": workflow_graph.enabled(),
         "graph": workflow_graph.to_graph(definition),
         "errors": workflow_graph.validate(definition),
     }

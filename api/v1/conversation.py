@@ -68,6 +68,27 @@ def _user_id(request: Request) -> str:
     return _session_user_id(request)
 
 
+async def _require_visible_agent(request: Request, tenant_id: str, company_id: str, agent_id: str) -> None:
+    """The agent must exist under the caller's tenant and company and be visible to the caller; 404 otherwise."""
+    from api.v1.agents import _require_company_for_tenant
+
+    try:
+        aid = uuid.UUID(agent_id)
+    except ValueError:
+        raise HTTPException(404, "Agent not found") from None
+    company_uuid = await _require_company_for_tenant(tenant_id, company_id)
+    tid = uuid.UUID(tenant_id)
+    async with get_tenant_session(tid, company_uuid) as session:
+        agent = (
+            await session.execute(
+                select(Agent).where(Agent.id == aid, Agent.tenant_id == tid, Agent.company_id == company_uuid)
+            )
+        ).scalar_one_or_none()
+        if agent is None:
+            raise HTTPException(404, "Agent not found")
+        require_agent_visible(agent, caller_from_request(request))
+
+
 async def _execution_context(
     request: Request, tenant_id: str, company_id: str, agent_id: str
 ) -> runtime.ExecutionContext | None:
@@ -157,18 +178,17 @@ async def post_turn(body: TurnIn, request: Request, tenant_id: str = Depends(get
     held = await runtime.held_turn(tid, key, body.text, dialogue)
     if held is not None:
         return held
-    from core.conversation import dialogue as engine
-
-    rules = await runtime.business_rules(tid)
-    outcome = engine.advance(
-        dialogue, body.text, rules=engine.Rules(retries=rules.retries, amount_limits=rules.amount_limits)
+    outcome, execution = await runtime.run_turn(
+        tid,
+        key,
+        dialogue,
+        body.text,
+        context,
+        user_id=user_id,
+        agent_id=body.agent_id or None,
+        channel=channel,
+        no_agent_message="Choose an agent to run this.",
     )
-    execution: dict[str, Any] | None = None
-    if outcome.kind == "execute":
-        if context is None:
-            execution = {"status": "unbound", "intent": outcome.intent, "message": "Choose an agent to run this."}
-        else:
-            execution = await runtime.execute(outcome, context)
     return await runtime.finish_turn(
         tid,
         key,
@@ -208,19 +228,25 @@ async def list_intents(tenant_id: str = Depends(get_current_tenant)) -> dict[str
     tenant_required=True,
     scope="chat.write",
     rate_limit="standard",
-    idempotency="idempotent-full-replace",
+    idempotency="idempotent-full-replace-session-rating-event-key",
     audit_event="conversation.feedback",
 )
 async def post_feedback(
     body: FeedbackIn, request: Request, tenant_id: str = Depends(get_current_tenant)
 ) -> dict[str, Any]:
-    """A rating from 1 to 5 for the caller's conversation, kept on the session and with the agent's feedback."""
+    """A rating from 1 to 5 for the caller's conversation, kept on the session and with the agent's feedback.
+
+    The session's rating is replaced, and the agent feedback row carries a stable event key derived from
+    the session, rating and comment, so a retried request stores one row.
+    """
     from core.conversation import feedback
 
     if not runtime.enabled():
         raise _off()
     channel = _channel(body.channel)
     user_id = _user_id(request)
+    if body.agent_id:
+        await _require_visible_agent(request, tenant_id, body.company_id, body.agent_id)
     tid = uuid.UUID(tenant_id)
     key = runtime.session_key(channel, body.company_id, body.agent_id, user_id)
     dialogue = await runtime.load_dialogue(tid, key)
@@ -283,12 +309,24 @@ async def get_session(
     channel: Annotated[str, Query(max_length=16)] = "web",
     tenant_id: str = Depends(get_current_tenant),
 ) -> dict[str, Any]:
-    """The caller's own dialogue for a channel, company and agent: stage, intent, slots and what is missing."""
+    """The caller's own dialogue for a channel, company and agent: stage, intent, slots and what is missing.
+
+    ``messages`` are the supervisor's replies and notices on the caller's own
+    session, so a chat that was closed when they arrived shows them on reopening
+    (the live feed only says that a message arrived, never what it says).
+    """
+    from core.conversation import supervisor
+
     if not runtime.enabled():
         raise _off()
     key = runtime.session_key(_channel(channel), company_id, agent_id, _user_id(request))
-    dialogue = await runtime.load_dialogue(uuid.UUID(tenant_id), key)
-    return {"session_key": key, "dialogue": runtime.dialogue_view(dialogue)}
+    tid = uuid.UUID(tenant_id)
+    dialogue = await runtime.load_dialogue(tid, key)
+    return {
+        "session_key": key,
+        "dialogue": runtime.dialogue_view(dialogue),
+        "messages": await supervisor.replay(tid, key),
+    }
 
 
 @router.delete("/session")

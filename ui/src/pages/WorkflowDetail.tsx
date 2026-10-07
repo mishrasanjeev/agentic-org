@@ -4,7 +4,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import api from "@/lib/api";
-import WorkflowBuilder from "@/components/WorkflowBuilder";
+import WorkflowBuilder, { graphToSteps, type WorkflowStep } from "@/components/WorkflowBuilder";
 
 const LIVE_RUN_STATUSES = new Set(["running", "waiting_hitl", "waiting_delay", "waiting_event"]);
 
@@ -33,12 +33,24 @@ export default function WorkflowDetail() {
   const [triggerInFlight, setTriggerInFlight] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [runsError, setRunsError] = useState<string | null>(null);
+  // The detail response carries no definition; the graph route draws the stored one, while the builder flag is on.
+  const [graphSteps, setGraphSteps] = useState<WorkflowStep[]>([]);
 
   useEffect(() => {
     if (!id) return;
     fetchWorkflow();
     fetchRuns();
+    fetchGraph();
   }, [id]);
+
+  async function fetchGraph() {
+    try {
+      const { data } = await api.get(`/workflows/${id}/graph`);
+      setGraphSteps(data?.enabled === true ? graphToSteps(data?.graph) : []);
+    } catch {
+      setGraphSteps([]);
+    }
+  }
 
   const latestRun = runs[0] || null;
 
@@ -220,10 +232,10 @@ export default function WorkflowDetail() {
         </CardContent>
       </Card>
 
-      {steps.length > 0 && (
+      {graphSteps.length > 0 && (
         <div className="border rounded-lg p-6" data-testid="workflow-graph">
           <h3 className="text-lg font-semibold mb-4">Workflow Graph</h3>
-          <WorkflowBuilder definition={workflow?.definition} readOnly height={360} />
+          <WorkflowBuilder definition={{ steps: graphSteps }} readOnly height={360} />
         </div>
       )}
 
