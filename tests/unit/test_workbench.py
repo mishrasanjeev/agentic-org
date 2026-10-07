@@ -97,15 +97,15 @@ class TestAccess:
     def test_sensitive_and_role_bound_tabs_are_hidden_from_other_roles(self):
         investigator = definitions.WORKBENCHES["investigator"]
         assert [t.key for t in access.tabs_for(investigator, "analyst")] == []  # no page admits an analyst yet
-        assert [t.key for t in access.tabs_for(investigator, "auditor")] == ["audit", "transactions", "search"]
+        assert [t.key for t in access.tabs_for(investigator, "auditor")] == ["audit", "search", "transactions"]
         assert [t.key for t in access.tabs_for(investigator, "domain_lead")] == ["documents", "cases", "search"]
         assert [t.key for t in access.tabs_for(investigator, "admin")] == [
             "documents",
             "cases",
             "audit",
             "observability",
-            "transactions",
             "search",
+            "transactions",
         ]
         supervisor = next(b for b in access.workbenches_for("cfo", {"supervisor"}) if b["name"] == "supervisor")
         assert [t["key"] for t in supervisor["tabs"]] == ["approvals", "costs"]

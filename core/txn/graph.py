@@ -151,7 +151,7 @@ async def expand(
         frontier = next_frontier
         if not frontier:
             break
-    by_ref = {f.get("entity_ref"): [] for f in (findings or [])}
+    by_ref: dict[str | None, list[dict[str, Any]]] = {f.get("entity_ref"): [] for f in (findings or [])}
     for finding in findings or []:
         by_ref.setdefault(finding.get("entity_ref"), []).append(
             {
