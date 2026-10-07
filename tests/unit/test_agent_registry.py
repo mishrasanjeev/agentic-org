@@ -39,7 +39,9 @@ class _Session:
         self.statements.append(str(statement))
         value = self.answers.pop(0)
         return SimpleNamespace(
-            scalar_one_or_none=lambda: value, scalars=lambda: SimpleNamespace(all=lambda: list(value))
+            scalar_one_or_none=lambda: value,
+            scalars=lambda: SimpleNamespace(all=lambda: list(value)),
+            all=lambda: list(value),
         )
 
     def add(self, row):
@@ -456,14 +458,15 @@ class TestEndpoints:
             "approved"
         ]
         assert result["transitions"]["approved"] == ["draft", "review", "published"]
-        session = store([entry], [agent])
+        session = store([(agent, entry)])
         listed = asyncio.run(
             api.list_agent_registry(state="approved", tenant_id=str(TENANT), user_domains=None, caller=None)
         )
         assert [row["agent_id"] for row in listed["entries"]] == [str(agent.id)]
         assert listed["entries"][0]["name"] == "Claims decider" and listed["entries"][0]["state"] == "approved"
         assert (
-            "agent_registry.state = " in session.statements[0] and "agent_registry.tenant_id" in session.statements[0]
+            "coalesce(agent_registry.state" in session.statements[0]
+            and "agent_registry.tenant_id" in session.statements[0]
         )
         assert listed["risk_tiers"] == ["low", "medium", "high", "critical"]
 

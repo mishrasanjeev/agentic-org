@@ -127,9 +127,10 @@ the current search, and a failed request clears the previous results.
 `GET /agent-registry/templates?pack=` lists the agent templates the industry packs offer, in the
 card's terms: pack, type, domain, model, tools, review condition, confidence floor and the pack's
 compliance markers, with whether the pack can be installed. Installing a pack (Industry Packs)
-creates its agents in shadow mode. A card must first be saved through
-`PUT /agents/{agent_id}/card` for its registry entry to appear in the catalogue
-as a draft; installing a pack alone does not create registry entries or approvals.
+creates its agents in shadow mode. Agents without a saved registry card appear
+as drafts with empty card fields and no transition timestamp. Catalogue reads
+do not insert registry rows or create approvals. Save card fields through
+`PUT /agents/{agent_id}/card` before submitting an agent for review.
 
 **Banking pack.** Five templates for retail and SME banking operations, each with a review
 condition and a confidence floor of at least 85%, using only tools the platform has:

@@ -200,7 +200,7 @@ async def list_agent_registry(
     tid = _uuid.UUID(tenant_id)
     effective = _effective_caller(caller, user_domains)
     async with get_tenant_session(tid) as session:
-        entries = await lifecycle.list_entries(
+        entries = await lifecycle.list_catalogue(
             session,
             tid,
             state=state,
@@ -211,18 +211,10 @@ async def list_agent_registry(
             q=q,
             caller=effective,
         )
-        ids = [entry.agent_id for entry in entries]
-        agents = {}
-        if ids:
-            rows = (
-                (await session.execute(select(Agent).where(Agent.id.in_(ids), Agent.tenant_id == tid))).scalars().all()
-            )
-            agents = {agent.id: agent for agent in rows}
         from core.ownership import can_view_agent
 
         listed = []
-        for entry in entries:
-            agent = agents.get(entry.agent_id)
+        for agent, entry in entries:
             if agent is None or not can_view_agent(agent, effective):
                 continue
             if domain and agent.domain != domain:

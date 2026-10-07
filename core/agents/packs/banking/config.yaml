@@ -3,12 +3,6 @@ display_name: Banking Pack
 description: Agent templates for retail and SME banking operations - loan underwriting support, KYC review, collections, complaint handling and reconciliation - each held to a review condition and a confidence floor
 version: "1.0.0"
 installable: true
-pricing:
-  inr_monthly_per_client: 9999
-  usd_monthly_per_client: 120
-  type: paid_addon
-  trial_days: 14
-  max_trial_clients: 3
 compliance:
   - KYC_AML
   - fair_practices_code

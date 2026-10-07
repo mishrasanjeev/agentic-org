@@ -206,6 +206,33 @@ async def test_catalogue_filters_and_visibility_precede_limit(registry_db, monke
             assert [row["name"] for row in result["entries"]] == ["Needle 10%_ approved"]
         result = await api.list_agent_registry(q="missing%_", tenant_id=str(tid), user_domains=None, caller=caller)
         assert result["entries"] == []
+        async with factory.begin() as session:
+            fresh_agent = Agent(
+                id=uuid.uuid4(),
+                tenant_id=tid,
+                name="New unregistered agent",
+                agent_type="custom",
+                domain="finance",
+                status="shadow",
+                visibility="tenant",
+                system_prompt_ref="synthetic/v1",
+                hitl_condition="confidence < 0.8",
+            )
+            session.add(fresh_agent)
+            fresh_id = fresh_agent.id
+        result = await api.list_agent_registry(
+            q="New unregistered",
+            state="draft",
+            tenant_id=str(tid),
+            user_domains=None,
+            caller=caller,
+        )
+        assert len(result["entries"]) == 1
+        assert result["entries"][0]["agent_id"] == str(fresh_id)
+        assert result["entries"][0]["state"] == "draft"
+        assert result["entries"][0]["state_changed_at"] is None
+        async with session_for(tid) as session:
+            assert await lifecycle.get_entry(session, tid, fresh_id) is None  # GET never writes.
     finally:
         await engine.dispose()
 

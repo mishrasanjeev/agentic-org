@@ -41,6 +41,11 @@ test.describe("local dev stack @dev-stack", () => {
       }
       const agent = pack.agents_created.find((a: { type: string }) => a.type === "kyc_reviewer");
       expect(agent).toBeTruthy();
+      const initial = await request.get(`/api/v1/agent-registry?q=${encodeURIComponent(agent.name)}&state=draft`);
+      expect(initial.status()).toBe(200);
+      expect((await initial.json()).entries).toEqual(expect.arrayContaining([
+        expect.objectContaining({ agent_id: agent.id, state: "draft", state_changed_at: null }),
+      ]));
       const card = await request.put(`/api/v1/agents/${agent.id}/card`, {
         data: { purpose: "Synthetic catalogue browser regression", risk_tier: "high", use_case: "review", channels: ["chat"] },
       });

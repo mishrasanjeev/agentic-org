@@ -233,7 +233,7 @@ async def events(session: Any, tenant_id: uuid.UUID, agent_id: uuid.UUID) -> lis
     return list((await session.execute(statement)).scalars().all())
 
 
-async def list_entries(
+async def list_catalogue(
     session: Any,
     tenant_id: uuid.UUID,
     *,
@@ -244,11 +244,14 @@ async def list_entries(
     domain: str | None = None,
     q: str | None = None,
     caller: Caller | None = None,
-) -> list[AgentRegistryEntry]:
+) -> list[tuple[Agent, AgentRegistryEntry | None]]:
     statement = (
-        select(AgentRegistryEntry)
-        .join(Agent, (Agent.id == AgentRegistryEntry.agent_id) & (Agent.tenant_id == AgentRegistryEntry.tenant_id))
-        .where(AgentRegistryEntry.tenant_id == tenant_id, Agent.tenant_id == tenant_id)
+        select(Agent, AgentRegistryEntry)
+        .outerjoin(
+            AgentRegistryEntry,
+            (Agent.id == AgentRegistryEntry.agent_id) & (Agent.tenant_id == AgentRegistryEntry.tenant_id),
+        )
+        .where(Agent.tenant_id == tenant_id, Agent.status != "deleted")
     )
     # Filtering after LIMIT hides valid matches behind invisible or unrelated rows.
     if caller is not None:
@@ -269,18 +272,20 @@ async def list_entries(
         )
         statement = statement.where(func.lower(searchable).contains(q.strip().lower(), autoescape=True))
     if state:
-        statement = statement.where(AgentRegistryEntry.state == state)
+        statement = statement.where(func.coalesce(AgentRegistryEntry.state, "draft") == state)
     if risk_tier:
         statement = statement.where(AgentRegistryEntry.risk_tier == risk_tier)
     if use_case:
         statement = statement.where(AgentRegistryEntry.use_case == use_case)
     if channel:
         statement = statement.where(AgentRegistryEntry.channels.contains([channel]))
-    statement = statement.order_by(AgentRegistryEntry.updated_at.desc()).limit(MAX_LISTED)
-    return list((await session.execute(statement)).scalars().all())
+    statement = statement.order_by(
+        func.coalesce(AgentRegistryEntry.updated_at, Agent.updated_at).desc(), Agent.id
+    ).limit(MAX_LISTED)
+    return [(agent, entry) for agent, entry in (await session.execute(statement)).all()]
 
 
-def matches_search(agent: Any, entry: AgentRegistryEntry, q: str | None) -> bool:
+def matches_search(agent: Any, entry: AgentRegistryEntry | None, q: str | None) -> bool:
     """Whether a catalogue search term appears in the agent's name, type, description, purpose or use case."""
     if not q:
         return True
@@ -293,8 +298,8 @@ def matches_search(agent: Any, entry: AgentRegistryEntry, q: str | None) -> bool
             getattr(agent, "name", None),
             getattr(agent, "agent_type", None),
             getattr(agent, "description", None),
-            entry.purpose,
-            entry.use_case,
+            entry.purpose if entry else None,
+            entry.use_case if entry else None,
         )
     ).lower()
     return needle in haystack

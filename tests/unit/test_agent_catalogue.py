@@ -30,7 +30,9 @@ class _Session:
         self.statements.append(str(statement))
         value = self.answers.pop(0)
         return SimpleNamespace(
-            scalar_one_or_none=lambda: value, scalars=lambda: SimpleNamespace(all=lambda: list(value))
+            scalar_one_or_none=lambda: value,
+            scalars=lambda: SimpleNamespace(all=lambda: list(value)),
+            all=lambda: list(value),
         )
 
 
@@ -71,14 +73,14 @@ class TestFilters:
     def test_the_query_carries_the_stored_filters(self):
         session = _Session([])
         asyncio.run(
-            lifecycle.list_entries(
+            lifecycle.list_catalogue(
                 session, TENANT, state="approved", risk_tier="high", use_case="claims", channel="chat"
             )
         )
         statement = session.statements[0]
         for fragment in (
             "agent_registry.tenant_id",
-            "agent_registry.state = ",
+            "coalesce(agent_registry.state",
             "agent_registry.risk_tier = ",
             "agent_registry.use_case = ",
             "agent_registry.channels @> ",
@@ -116,13 +118,13 @@ class TestCatalogueEndpoint:
         claims = _agent("Claims decider", "claims", "ops", "Decides simple motor claims.")
         loans = _agent("Loan analyst", "loan_underwriting_analyst", "finance")
         entries = [_entry(claims, use_case="motor claims"), _entry(loans)]
-        store(entries, [claims, loans])
+        store(list(zip([claims, loans], entries, strict=True)))
         listed = asyncio.run(
             api.list_agent_registry(domain="finance", tenant_id=str(TENANT), user_domains=None, caller=None)
         )
         assert [row["name"] for row in listed["entries"]] == ["Loan analyst"]
         assert listed["channels"] == list(lifecycle.CHANNELS)
-        store(entries, [claims, loans])
+        store(list(zip([claims, loans], entries, strict=True)))
         listed = asyncio.run(api.list_agent_registry(q="motor", tenant_id=str(TENANT), user_domains=None, caller=None))
         assert [row["name"] for row in listed["entries"]] == ["Claims decider"]
         assert listed["entries"][0]["environment"] == "staging"
