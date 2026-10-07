@@ -44,6 +44,7 @@ from core.governance.model_gateway_records import (
 )
 from core.governance.operator_override import OperatorOverrideBlocked
 from core.governance.operator_override import check as check_operator_override
+from core.langgraph import limits as execution_limits
 from core.langgraph.grantex_auth import get_grantex_client
 from core.langgraph.llm_factory import (
     create_chat_model,
@@ -395,6 +396,7 @@ def build_agent_graph(
     run_grant: RunGrant | None,
     output_schema: str | None = None,
     output_schema_json: dict[str, Any] | None = None,
+    limits: dict[str, Any] | None = None,
 ) -> StateGraph:
     """Build a compiled LangGraph agent graph.
 
@@ -723,6 +725,18 @@ def build_agent_graph(
             trace.append("Confidence capped to 0.5 (output_incomplete)")
 
         trace.append(f"Confidence: {confidence:.3f}")
+        limit_stop = state.get("limit_stop")
+        if limit_stop:
+            # An execution limit or the loop rule stopped the run before its next round of tools.
+            return {
+                "output": output,
+                "confidence": 0.0,
+                "status": "failed",
+                "error": state.get("error") or f"stopped: {limit_stop.get('detail', '')}",
+                "reasoning_trace": trace,
+                "tool_calls_log": tool_calls_log,
+                "limit_stop": limit_stop,
+            }
         grant_denial = state.get("grant_denial")
         if grant_denial:
             # PRD F-1 deny: the run stops at the refused tool call and must be
@@ -861,6 +875,7 @@ def build_agent_graph(
 
     # --- Build the graph ---
 
+    run_limits = execution_limits.effective(limits)
     graph = StateGraph(AgentState)
 
     graph.add_node("reason", reason)
@@ -884,6 +899,12 @@ def build_agent_graph(
         grant_holder: list[RunGrant | None] = [run_grant]
 
         async def validate_scopes(state: AgentState) -> dict[str, Any]:
+            # Execution limits and the loop rule, before any tool of this round runs.
+            if execution_limits.enabled():
+                stop = execution_limits.check(state.get("messages"), run_limits)
+                if stop is not None:
+                    execution_limits.meter(stop.reason)
+                    return execution_limits.stop_update(stop, list(state.get("reasoning_trace") or []))
             current = grant_holder[0]
             update: dict[str, Any] = {}
             if current is not None and current.mode is not EnforcementMode.OFF:

@@ -25,6 +25,12 @@ task_latency = Histogram(
     ["domain", "agent_type"],
 )
 
+agent_runs_stopped_total = Counter(
+    "agenticorg_agent_runs_stopped_total",
+    "Agent runs stopped by an execution limit, by reason (step_limit, duration_limit, tool_call_limit, loop_detected)",
+    ["reason"],
+)
+
 # ── HITL ────────────────────────────────────────────────────────────
 
 hitl_rate = Gauge(

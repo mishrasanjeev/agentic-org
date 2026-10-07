@@ -337,6 +337,11 @@ class Settings(BaseSettings):
     # per use case from the attributed ledger and a model cost comparison from
     # the call records. Off by default: off, the endpoints are not found.
     finops_forecast_enabled: bool = False
+    # Per-agent execution limits and loop detection (core/langgraph/limits.py):
+    # an agent's own step, duration and tool-call limits and its loop rule are
+    # enforced in the graph and the runner. Off by default: off, the platform
+    # maxima alone apply, as today.
+    runtime_limits_enabled: bool = False
     # JSON object keyed provider/model with input and output USD per million
     # tokens; a negotiated rate replaces the list price.
     model_price_overrides_json: str = ""
