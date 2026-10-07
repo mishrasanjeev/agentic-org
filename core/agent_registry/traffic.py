@@ -74,21 +74,30 @@ def bucket(correlation_id: str | None) -> int:
     return secrets.randbelow(100)
 
 
-def chooses_target(split: dict[str, Any], correlation_id: str | None) -> bool:
-    return bucket(correlation_id) < int(split["percent"])
+def chooses_target(split: dict[str, Any], correlation_id: str | None = None, *, draw: int | None = None) -> bool:
+    """Whether the run's draw falls in the target's share.
+
+    A run makes one draw (``bucket``); callers that decide in two steps pass
+    the same ``draw`` to both, so a random draw is never made twice.
+    """
+    number = bucket(correlation_id) if draw is None else int(draw)
+    return number < int(split["percent"])
 
 
-def choose(agent: Any, correlation_id: str | None, load_target: Any) -> tuple[Any, str | None]:
+def choose(
+    agent: Any, correlation_id: str | None, load_target: Any, *, draw: int | None = None
+) -> tuple[Any, str | None]:
     """The agent that serves the run and, when it is not the one asked for, why it was chosen.
 
     ``load_target`` returns the target agent row for an id, or None. A target
     that is missing or not active is skipped and the run stays on ``agent``.
-    Nothing here is awaited: callers load the target before choosing.
+    Nothing here is awaited: callers load the target before choosing, and pass
+    the ``draw`` they loaded it on.
     """
     if not enabled():
         return agent, None
     split = declared(agent)
-    if split is None or not chooses_target(split, correlation_id):
+    if split is None or not chooses_target(split, correlation_id, draw=draw):
         return agent, None
     target = load_target(uuid.UUID(split["to_agent_id"]))
     if target is None or str(getattr(target, "status", "")) != "active":
