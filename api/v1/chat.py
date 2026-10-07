@@ -25,6 +25,7 @@ from core.conversation import runtime as conversation_runtime
 from core.database import get_tenant_session
 from core.governance.agent_status import refusal_for as agent_status_refusal
 from core.governance.operator_override import check as check_operator_override
+from core.langgraph import limits as execution_limits
 from core.models.agent import Agent
 from core.models.hitl import HITLQueue
 from core.ownership import (
@@ -803,6 +804,9 @@ async def chat_query(
     agent_connector_ids: list[str] = []
     agent_system_prompt = ""
     agent_llm_provider: str | None = None
+    # The agent's own execution limits (core/langgraph/limits.py); the
+    # runner applies them only while AGENTICORG_RUNTIME_LIMITS_ENABLED is on.
+    agent_limits: dict[str, Any] | None = None
     # Ownership of the agent that will run, for the personal-connector guard
     # in _assert_connectors_ready_for_dispatch (bug sheet 2026-09-14 rows 19/30).
     # Unknown agent: shared semantics, so any personal connector is refused.
@@ -849,6 +853,7 @@ async def chat_query(
             agent_llm_provider = _pinned_llm_provider(
                 getattr(agent, "llm_provider", None), getattr(agent, "llm_config", None)
             )
+            agent_limits = execution_limits.declared(agent)
             agent_visibility = agent_ownership_fields(agent)["visibility"]
             agent_owner_user_id = getattr(agent, "owner_user_id", None)
             agent_linked_connector_ids = list(agent_connector_ids)
@@ -880,6 +885,7 @@ async def chat_query(
                 agent_visibility = agent_ownership_fields(routed_agent)["visibility"]
                 agent_owner_user_id = getattr(routed_agent, "owner_user_id", None)
                 agent_linked_connector_ids = list(getattr(routed_agent, "connector_ids", None) or [])
+                agent_limits = execution_limits.declared(routed_agent)
     # Start without a fixed confidence — it gets set from the real
     # agent signal below. Initializing to a constant here was exactly
     # what kept user-visible confidence pinned at 60% on reopen TC_003
@@ -1138,6 +1144,7 @@ async def chat_query(
                 connector_config=connector_config,
                 connector_names=connector_names,
                 company_id=str(company_uuid),
+                limits=agent_limits,
             )
             # Bug sheet #28 (2026-09-14): every chat turn with a known agent
             # is a task for the cost ledger, even when no tokens were

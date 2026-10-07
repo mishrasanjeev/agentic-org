@@ -46,6 +46,10 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
   `agent_debug_sessions`, migration `v6z59_agent_debug_sessions`) the
   console steps one node at a time or continues to the next breakpoint.
   The console opens a run's thread from its timeline (`agent.thread_id`).
+  A step passes the plan, budget and cost-threshold gates a run passes, adds
+  what it spent to the agent's cost ledger, resolves the run's connector
+  credentials again, keeps the run's output schema and limits, and an
+  approval it reaches opens the normal approval flow.
 
 ### Added - Agent runtime: schema-validated tool registration and the execution envelope
 - With `AGENTICORG_TOOL_REGISTRY_ENABLED` on (off by default), a tenant
@@ -55,6 +59,12 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
   `/tools/registry`); the gateway refuses inputs that fail the schema
   before any call leaves it, audits the refusal, and holds a call to its
   timeout, output cap and output schema, marking the output untrusted.
+- The check and the envelope also hold at the shared connector dispatch
+  that LangGraph agents, workflow connector steps and remote MCP tools use;
+  a registry that cannot be read refuses the call
+  (`tool_registry_unavailable`); untrusted output passes the guardrails'
+  retrieval stage and is withheld when a rule blocks it; the table's
+  row-level policy is forced for the table owner.
 
 ### Added - Agent runtime: long-term memory with retention and erasure
 - With `AGENTICORG_RUNTIME_MEMORY_ENABLED` on (off by default), a run that
@@ -63,6 +73,11 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
   `agent_memories`, migration `v6z57_agent_memories`); entries expire by
   their kind's retention and are pruned nightly; `/memory` recalls,
   remembers and erases every entry about a subject, with the count.
+- Recall needs `audit:read` and writes need `approvals:write`; an `agent_id`
+  must name an agent of the tenant the caller can see (404 otherwise).
+  Recalled entries are redacted with the task before the model sees them,
+  a memory database error never fails a run, and the same content is one
+  entry under a unique index written by an atomic upsert.
 
 ### Added - Agent runtime: visual workflow builder with branching and fallback
 - The console's Build visually tab draws a workflow as a graph of steps,
@@ -73,6 +88,11 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
   one. The engine gains `on_failure: fallback(step)`. With
   `AGENTICORG_WORKFLOW_BUILDER_V2_ENABLED` on (off by default),
   `POST /workflows` refuses a definition with problems.
+- The Build visually tab and the workflow page graph show only while
+  `GET /workflows/builder` reports the flag on. A fallback step runs only
+  when its source failed, with or without a declared dependency; validation
+  refuses entries without a text id and conditions with `rules`, which the
+  engine does not branch on yet.
 
 ### Added - Agent runtime: execution limits and loop detection
 - With `AGENTICORG_RUNTIME_LIMITS_ENABLED` on (off by default), an agent's
@@ -81,6 +101,10 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
   the platform's maxima (`core/langgraph/limits.py`): a run over a limit, or
   repeating a tool call pattern, is stopped with the reason in its error and
   a `limit` block that the run's audit entry and a Prometheus counter carry.
+- The step limit is checked before every model call, chat runs carry the
+  agent's limits too, `POST /agents/{id}/run` returns the `limit` block, a
+  run may make exactly `max_tool_calls` tool calls, and with the switch off
+  a run that reaches the platform ceiling fails as it did before.
 
 ### Added - FinOps: cost comparison and forecasting
 - With `AGENTICORG_FINOPS_FORECAST_ENABLED` on (off by default),
@@ -89,6 +113,10 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
   `GET /finops/comparison` folds the model calls per use case with the
   cheapest catalogue alternatives and a before-and-after around a change
   date (`core/finops/forecast.py`).
+  The forecast totals cover every label; the listed rows are the highest
+  projected spend first, with `total_rows` and `truncated` when the list is
+  cut. Calls without an input and output split are priced at the blended rate
+  alongside the split calls in the comparison.
 
 ### Added - FinOps: thresholds and actions
 - With `AGENTICORG_FINOPS_THRESHOLDS_ENABLED` on (off by default), a
@@ -98,6 +126,11 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
   `v6z56_finops_thresholds`, `/finops/thresholds`): a breached threshold
   alerts the owner once per period, throttles the run with a short delay,
   or suspends runs until the period resets or an administrator lifts it.
+  Thresholds need `AGENTICORG_FINOPS_ATTRIBUTION_ENABLED` (settings refuse
+  to load without it), match runs on the agent's own use case and business
+  unit rather than the caller's labels, notify once per period under
+  concurrent runs, cap a tenant at 200 thresholds and answer a duplicate
+  name with 409.
 
 ### Added - FinOps: use-case attribution
 - With `AGENTICORG_FINOPS_ATTRIBUTION_ENABLED` on (off by default), a run
@@ -107,6 +140,9 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
   `v6z55_finops_attribution`), each model call record carries the business
   unit and application, and `GET /finops/attribution` folds the ledger by
   any dimension with the unattributed share.
+- The ledger's row-level policy is forced, its unique key includes the
+  department and cost centre (a mid-day change starts a new row), and the
+  legacy-table column additions skip a table that is missing.
 
 ### Added - AI governance: policy console
 - With `AGENTICORG_GOVERNANCE_POLICY_CONSOLE_ENABLED` on (off by default),
@@ -115,6 +151,9 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
   shape, writes and removes one through its own store's writer, and dry-runs
   a described call, text, tool or workflow across the enforcement points
   (`core/governance/policy_console.py`, `/governance/policies`).
+- The console lists disabled policies too, checks approval steps as the
+  approval policies API does, and its dry run resolves approvals, model
+  access by application and principal, and tool actions as runtime does.
 
 ### Added - AI governance: regulatory risk tiers
 - With `AGENTICORG_GOVERNANCE_RISK_TIERS_ENABLED` on (off by default), an
@@ -252,15 +291,18 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
 - With `AGENTICORG_AGENT_REGISTRY_GATES_PROMOTION` on (off by default),
   promotion and resume to active need an approved or published registry
   entry (`core/agent_registry/approval.py`), checked after the shadow
-  evidence, the maker-checker check and the evaluation gate; promotion
+  evidence, the maker-checker check and the evaluation gate, and a new or
+  cloned agent cannot start active; promotion
   publishes an approved entry and retirement retires a published one, each
   a recorded transition. Environments (development, staging, production)
   are read from the state. `PUT /agents/{id}/traffic-split` sends a share
   of an agent's runs through the agents API to another active agent while
   `AGENTICORG_AGENT_TRAFFIC_SPLIT_ENABLED` is on (`core/agent_registry/
   traffic.py`), chosen from the run's thread or correlation id so a retry
-  lands on the same agent; the response names the agent that served the
-  run, and removing the split is the one-action rollback.
+  lands on the same agent (one draw per run otherwise); the agent asked for
+  passes its own status, floor and override controls before any redirection
+  and the target is held to the same; the response names the agent that
+  served the run, and removing the split is the one-action rollback.
 
 ### Added - Agent registry: cards and lifecycle states
 - Behind `AGENTICORG_AGENT_REGISTRY_ENABLED` (off by default), each agent

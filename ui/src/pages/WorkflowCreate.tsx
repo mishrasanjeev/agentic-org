@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate, useLocation } from "react-router";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -74,6 +74,16 @@ export default function WorkflowCreate() {
   const [buildSteps, setBuildSteps] = useState<WorkflowStep[]>([]);
   const [buildErrors, setBuildErrors] = useState<string[] | null>(null);
   const [validating, setValidating] = useState(false);
+  // The builder is shown only while the server reports its flag on; any failure keeps it hidden.
+  const [builderEnabled, setBuilderEnabled] = useState(false);
+  useEffect(() => {
+    let live = true;
+    api
+      .get("/workflows/builder")
+      .then(({ data }) => { if (live) setBuilderEnabled(data?.enabled === true); })
+      .catch(() => { if (live) setBuilderEnabled(false); });
+    return () => { live = false; };
+  }, []);
   const [cronSchedule, setCronSchedule] = useState("0 9 * * 1-5");
   const [replanOnFailure, setReplanOnFailure] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -252,17 +262,19 @@ export default function WorkflowCreate() {
         >
           Use Template
         </button>
-        <button
-          className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${activeTab === "build" ? "border-primary text-primary" : "border-transparent text-muted-foreground hover:text-foreground"}`}
-          onClick={() => setActiveTab("build")}
-          data-testid="tab-build"
-        >
-          Build visually
-        </button>
+        {builderEnabled && (
+          <button
+            className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${activeTab === "build" ? "border-primary text-primary" : "border-transparent text-muted-foreground hover:text-foreground"}`}
+            onClick={() => setActiveTab("build")}
+            data-testid="tab-build"
+          >
+            Build visually
+          </button>
+        )}
       </div>
 
       {/* ── Visual builder tab ── */}
-      {activeTab === "build" && (
+      {builderEnabled && activeTab === "build" && (
         <Card>
           <CardHeader>
             <CardTitle>Draw the workflow</CardTitle>
