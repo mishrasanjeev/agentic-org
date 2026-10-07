@@ -4,6 +4,16 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
 
 ## [Unreleased] - 2026-08-29
 
+### Added - Knowledge retrieval: query transformation and retrieval traces
+- With `AGENTICORG_KNOWLEDGE_QUERY_TRANSFORM_ENABLED` on (off by default),
+  a knowledge search is planned before it runs (`core/rag/query.py`): the
+  query is normalised, a compound question decomposed by named rules and a
+  keyword form added, with a model proposing further queries when
+  `AGENTICORG_KNOWLEDGE_QUERY_REWRITE_MODEL` names one. A weak first pass is
+  expanded to the variants and fused by reciprocal rank; `"trace": true` on
+  `POST /knowledge/search` returns every step with its counts, and the
+  console shows them under the results.
+
 ### Added - Knowledge retrieval: document access control
 - A knowledge document belongs to a domain or to the tenant as a whole
   (`knowledge_documents.domain`, migration

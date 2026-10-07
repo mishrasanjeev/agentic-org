@@ -286,6 +286,14 @@ class Settings(BaseSettings):
     # (core/rag/rerank.py): the query's own terms decide the final order.
     # Off by default: off, the fused order is returned as it was.
     knowledge_rerank_enabled: bool = False
+    # Query transformation and agentic retrieval (core/rag/query.py): a query
+    # is normalised, decomposed and rewritten, a weak first pass is expanded
+    # to the variants and fused, and the response can carry the trace.
+    # Off by default: off, a search runs exactly as before.
+    knowledge_query_transform_enabled: bool = False
+    # A model (provider/model) that proposes alternative queries for the plan;
+    # empty, the plan is deterministic only.
+    knowledge_query_rewrite_model: str = ""
     # JSON object keyed provider/model with input and output USD per million
     # tokens; a negotiated rate replaces the list price.
     model_price_overrides_json: str = ""

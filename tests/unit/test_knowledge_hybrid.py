@@ -207,7 +207,8 @@ async def test_search_response_contract_is_unchanged(monkeypatch) -> None:
     # The three original fields are unchanged; ``citation`` was added with the retrieval package and is
     # None for a source that keeps no provenance.
     assert response.model_dump() == {
-        "results": [{"chunk_text": "alpha", "score": 0.5, "document_name": "Synthetic", "citation": None}]
+        "results": [{"chunk_text": "alpha", "score": 0.5, "document_name": "Synthetic", "citation": None}],
+        "trace": None,
     }
 
 

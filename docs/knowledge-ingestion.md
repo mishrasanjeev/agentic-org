@@ -72,6 +72,28 @@ The re-ranker reads the texts only and calls no model; it knows no synonyms and 
 is why it sits behind a switch and why its scores are explainable. Off, the fused order is
 returned as it was.
 
+## Query transformation and retrieval traces
+
+With `AGENTICORG_KNOWLEDGE_QUERY_TRANSFORM_ENABLED` on, a search is planned before it runs
+(`core/rag/query.py`): the query is normalised, a compound question is decomposed into its parts
+(two questions, `difference between A and B`, `A versus B`, `A and B` under one question word)
+and a keyword form without the lead-in and stop words is added for the sparse ranking. Each
+rule that fired is named in the plan. `AGENTICORG_KNOWLEDGE_QUERY_REWRITE_MODEL` may name a
+model (`provider/model`) that proposes up to three further queries; a model that fails or
+answers badly adds nothing and the trace says so.
+
+Retrieval is then agentic: the normalised query is searched first; when the first pass is weak
+(fewer hits than asked for, or the best score below 0.35) and the plan has variants, each
+variant is searched through the same path (filters and document access included) and the lists
+are fused by reciprocal rank, a chunk found by every search scoring 1; a strong first pass is
+returned as it is. With `"trace": true` on `POST /knowledge/search` the response carries the
+steps (plan, rewrite, search, decision, fuse) with their queries, counts and elapsed time, and
+the console shows them under the results as "How this was retrieved". The trace holds queries
+and counts, never tenant or user identifiers.
+
+Off, a search runs exactly as before and the response carries no trace. An external RAG
+service, when configured, answers before any of this runs.
+
 ## Citations and excerpts
 
 Every search hit carries a `citation` (`core/rag/citations.py`): the chunk row's id, its source,
