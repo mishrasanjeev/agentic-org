@@ -45,6 +45,9 @@ export const APPROVAL_ROLES: readonly string[] = [
 /** Roles that may watch live conversations and take them over (the backend requires a tenant admin). */
 export const SUPERVISOR_ROLES: readonly string[] = ["admin"];
 
+/** Every platform role may open the workbench shell; the backend decides which workbenches it lists. */
+export const WORKBENCH_ROLES: readonly string[] = ["admin", "cfo", "chro", "cmo", "coo", "auditor", "domain_lead", "analyst", "developer"];
+
 /** Agent domains offered by the create and edit forms. */
 export const AGENT_DOMAINS: readonly string[] = ["finance", "hr", "marketing", "ops", "backoffice", "comms"];
 

@@ -4,6 +4,21 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
 
 ## [Unreleased] - 2026-08-29
 
+### Added - Workbenches: the shell and who holds which
+- `GET /workbench` lists the role-shaped consoles the caller holds (review
+  officer, relationship manager, investigator, supervisor) with the tabs
+  their role may see; `GET /workbench/{name}/summary` adds the number of
+  items waiting behind each tab (approvals pending, documents in review,
+  content drafts pending approval, conversations active or escalated).
+  Administrators read the catalogue and assign workbenches to users
+  (`PUT /workbench/assignments/{user_id}`, `workbench_assignments`,
+  tenant-scoped under row-level security). The UI shows the shell at
+  `/dashboard/workbench`: the held workbenches, a workbench's tabs with
+  counts, and the review officer's content drafts decided in place
+  (`core/workbench/`, `ui/src/pages/Workbench.tsx`, `docs/workbench/shell.md`).
+  Off by default (`AGENTICORG_WORKBENCH_V2_ENABLED`): off, the index
+  answers `enabled: false` and the other routes are not found.
+
 ### Added - Document processing: statement line items and version comparison
 - `GET /idp/documents/{id}/statement` reads the transactions of a kept
   bank statement from its extracted table (date, description, debit,
