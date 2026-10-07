@@ -133,6 +133,19 @@ Every prompt is synthetic, names its tools, returns one JSON object and leaves t
 human. The pack is a starting point: a bank's own policies come from its knowledge base, and the
 thresholds are the agent's to change.
 
+## Dependency graph
+
+`GET /agents/{id}/dependencies` returns the agent's dependency graph as nodes and edges
+(`core/agent_registry/dependencies.py`): the model it calls and its fallback, its prompt (the
+template reference and, where it has one, its own text as a hash), its tools and the connectors
+behind them (a `connector:tool` name points at its connector; the knowledge base search points at
+the tenant's knowledge base for the agent's domain), the policies that govern it (the guardrail
+rules that apply by agent, use case, risk tier or to every agent; its review condition; its
+output schema; its evaluation gate's dataset), the agent it was cloned from, the agent its traffic
+split sends runs to, and the teams it belongs to. Labels are names and references, never prompt
+text or rule reasons; a related agent the caller may not see is named by its id only. The graph
+is assembled from configuration, not from runs, and has no console view yet.
+
 ## Storage
 
 `agent_registry` (one row per agent) and `agent_registry_events`, both tenant-scoped under
@@ -144,6 +157,6 @@ row-level security (`v6z48_agent_registry`); both are removed with the agent.
   name where an agent stands in the lifecycle, not separate infrastructure.
 - **A split is between two agents.** Splitting traffic between two stored versions of one agent
   is not available; clone the agent to compare versions.
-- **No dependency graph or ratings.**
+- **No ratings or reliability metrics**, and no console view of the dependency graph.
 - **The card, the lifecycle and the split are read and changed through the API**; the console
   has the catalogue only.
