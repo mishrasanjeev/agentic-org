@@ -81,6 +81,29 @@ supervisor, the user is told a colleague has joined, and the supervisor's replie
 user's chat through the live feed (`conversation.message`). Releasing hands the conversation
 back to the assistant. Only the holder may reply.
 
+## Scenarios, summaries, feedback and sentiment
+
+A scenario (`core/conversation/scenarios.py`) chains intents into a multi-step flow without a
+model. Once an action has run, the conversation offers the next step as a yes-or-no question and a
+yes starts the next intent with its slots prefilled: a raised dispute offers to track its
+reference (`application_status`); a loan enquiry offers to start the application
+(`loan_application`: loan type, amount, tenure in months or years, confirmed) and the application
+offers tracking; a blocked card offers a replacement (`card_replacement`); an application whose
+status needs something from the user offers a person.
+
+A summary (`core/conversation/summary.py`) is built from the dialogue's own record, never from a
+model: the requests, the actions that ran with their references, what is pending, the hand-off,
+the rating and the last sentiment. The caller reads their own with `GET
+/conversation/session/summary`; the supervisor's transcript and the hand-off's review item carry
+it too.
+
+Feedback (`core/conversation/feedback.py`): after an action or a hand-off the assistant asks once
+for a rating from 1 to 5 (a thumbs up or down works too); `POST /conversation/feedback` takes one
+from the interface. The rating is kept on the session and, when an agent owns the conversation,
+stored with the agent's feedback as thumbs up (3 and above) or down with the rating in its
+context. Sentiment is read on every user turn from a small lexicon; two negative turns in a row
+offer a person, and a yes is the hand-off.
+
 ## Execution under the grant
 
 A confirmed action runs through the agent's own governed tools (`core/conversation/runtime.py`).

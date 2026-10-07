@@ -179,6 +179,7 @@ async def handoff(
         "channel": channel,
         "reason": reason,
         "handoff": dialogue_engine.handoff_summary(dialogue),
+        "conversation_summary": _conversation_summary(dialogue),
     }
     try:
         record["hitl_id"] = await _review_item(
@@ -227,6 +228,12 @@ async def handoff(
         "conversation_handoff", intent=tag, reason=reason, ticket=bool(record["ticket"]), review=bool(record["hitl_id"])
     )
     return record
+
+
+def _conversation_summary(dialogue: Dialogue) -> dict[str, Any]:
+    from core.conversation import summary as conversation_summary
+
+    return conversation_summary.summarise(dialogue)
 
 
 def handoff_answer(record: dict[str, Any]) -> str:

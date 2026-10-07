@@ -4,6 +4,22 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
 
 ## [Unreleased] - 2026-08-29
 
+### Added - Conversational services: scenario templates, summaries, feedback and sentiment
+- Multi-step scenarios chain intents without a model: a raised dispute
+  offers to track its reference, a loan enquiry offers to start the
+  application (a new `loan_application` intent with tenure) and the
+  application offers tracking, a blocked card offers a replacement (a new
+  `card_replacement` intent), and an application that needs something
+  from the user offers a person (`core/conversation/scenarios.py`). A
+  deterministic summary of requests, actions, pending items, hand-off,
+  rating and sentiment is available to the caller
+  (`GET /conversation/session/summary`), the supervisor and the hand-off
+  (`core/conversation/summary.py`). A rating from 1 to 5 is asked once
+  after an action or a hand-off or sent from the interface
+  (`POST /conversation/feedback`) and kept with the agent's feedback;
+  sentiment is read on every user turn and two negative turns in a row
+  offer a person (`core/conversation/feedback.py`).
+
 ### Added - Conversational services: escalation hand-off and the supervisor console
 - A hand-off leaves a review-queue item (`conversation_escalation`) with
   the summary, the intent tag, the slots and the recent turns, raises a

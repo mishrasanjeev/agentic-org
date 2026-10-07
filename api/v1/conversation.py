@@ -26,6 +26,16 @@ router = APIRouter(prefix="/conversation", tags=["Conversation"])
 _CHANNELS = ("web", "voice", "whatsapp", "teams", "api")
 
 
+class FeedbackIn(BaseModel):
+    model_config = {"extra": "forbid"}
+
+    rating: int = Field(..., ge=1, le=5)
+    comment: str = Field("", max_length=500)
+    company_id: str = ""
+    agent_id: str = ""
+    channel: str = Field("web", max_length=16)
+
+
 class TurnIn(BaseModel):
     model_config = {"extra": "forbid"}
 
@@ -187,6 +197,71 @@ async def list_intents(tenant_id: str = Depends(get_current_tenant)) -> dict[str
         "actions": {action: list(aliases) for action, aliases in runtime.ACTIONS.items()},
         "min_confidence": catalogue.MIN_CONFIDENCE,
     }
+
+
+@router.post("/feedback")
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="chat.write",
+    rate_limit="standard",
+    idempotency="idempotent-full-replace",
+    audit_event="conversation.feedback",
+)
+async def post_feedback(
+    body: FeedbackIn, request: Request, tenant_id: str = Depends(get_current_tenant)
+) -> dict[str, Any]:
+    """A rating from 1 to 5 for the caller's conversation, kept on the session and with the agent's feedback."""
+    from core.conversation import feedback
+
+    if not runtime.enabled():
+        raise _off()
+    channel = _channel(body.channel)
+    user_id = _user_id(request)
+    tid = uuid.UUID(tenant_id)
+    key = runtime.session_key(channel, body.company_id, body.agent_id, user_id)
+    dialogue = await runtime.load_dialogue(tid, key)
+    dialogue.rating = body.rating
+    dialogue.rating_asked = True
+    record = await feedback.record_rating(
+        tid,
+        session_key=key,
+        agent_id=body.agent_id or None,
+        user_id=user_id,
+        rating=body.rating,
+        comment=body.comment,
+        channel=channel,
+        intent=dialogue.last_intent,
+        sentiment_label=feedback.latest_label(dialogue.sentiment),
+    )
+    await runtime.save_dialogue(tid, key, dialogue, user_id=user_id, agent_id=body.agent_id or None, channel=channel)
+    return {"session_key": key, **record}
+
+
+@router.get("/session/summary")
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="chat.read",
+    rate_limit="standard",
+    idempotency="read-only",
+    audit_event="conversation.session.summary",
+)
+async def get_summary(
+    request: Request,
+    company_id: Annotated[str, Query(max_length=64)] = "",
+    agent_id: Annotated[str, Query(max_length=64)] = "",
+    channel: Annotated[str, Query(max_length=16)] = "web",
+    tenant_id: str = Depends(get_current_tenant),
+) -> dict[str, Any]:
+    """A summary of the caller's own conversation: requests, actions, what is pending, rating and sentiment."""
+    from core.conversation import summary as conversation_summary
+
+    if not runtime.enabled():
+        raise _off()
+    key = runtime.session_key(_channel(channel), company_id, agent_id, _user_id(request))
+    dialogue = await runtime.load_dialogue(uuid.UUID(tenant_id), key)
+    return {"session_key": key, "summary": conversation_summary.summarise(dialogue)}
 
 
 @router.get("/session")
