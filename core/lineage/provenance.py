@@ -25,6 +25,7 @@ from typing import Any
 
 import structlog
 from sqlalchemy import select
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from core.config import settings
 
@@ -112,14 +113,20 @@ def check_node(raw: Any) -> dict[str, Any]:
     kind = _text(raw.get("kind"), 32).lower()
     if kind not in KINDS:
         raise LineageError(422, "node_invalid", f"kind is one of {', '.join(KINDS)}")
-    ref = _text(raw.get("ref"), MAX_REF)
+    ref = str(raw.get("ref") or "").strip()
     if not ref:
         raise LineageError(422, "node_invalid", "ref is required")
+    if len(ref) > MAX_REF:
+        # An identifier is never cut: two references sharing a prefix would become one node.
+        raise LineageError(422, "node_invalid", f"ref is at most {MAX_REF} characters")
+    version = str(raw.get("version") or "").strip()
+    if len(version) > MAX_VERSION:
+        raise LineageError(422, "node_invalid", f"version is at most {MAX_VERSION} characters")
     return {
         "kind": kind,
         "ref": ref,
         "source": _text(raw.get("source"), MAX_REF),
-        "version": _text(raw.get("version"), MAX_VERSION),
+        "version": version,
         "observed_at": _when(raw.get("observed_at")),
         "attributes": _bounded(raw.get("attributes"), "attributes"),
     }
@@ -179,10 +186,15 @@ def _step_dict(row: Any) -> dict[str, Any]:
 
 
 async def _note(session: Any, tenant_id: uuid.UUID, node: dict[str, Any]) -> Any:
-    """The node under its key (kind, ref, version), kept once."""
+    """The node under its key (kind, ref, version), kept once: an insert that yields on conflict, then the row."""
     from core.models.lineage import LineageNode
 
-    existing = (
+    await session.execute(
+        pg_insert(LineageNode)
+        .values(id=uuid.uuid4(), tenant_id=tenant_id, **node)
+        .on_conflict_do_nothing(index_elements=["tenant_id", "kind", "ref", "version"])
+    )
+    rows = (
         (
             await session.execute(
                 select(LineageNode).where(
@@ -196,19 +208,29 @@ async def _note(session: Any, tenant_id: uuid.UUID, node: dict[str, Any]) -> Any
         .scalars()
         .all()
     )
-    if existing:
-        return existing[0]
-    row = LineageNode(tenant_id=tenant_id, **node)
-    session.add(row)
-    await session.flush()
-    return row
+    return rows[0]
 
 
 async def _link(session: Any, tenant_id: uuid.UUID, from_row: Any, to_row: Any, step: dict[str, Any]) -> Any:
-    """The step between two nodes, kept once under (from, to, step)."""
+    """The step between two nodes, kept once under (from, to, step), the same way."""
     from core.models.lineage import LineageStep
 
-    existing = (
+    await session.execute(
+        pg_insert(LineageStep)
+        .values(
+            id=uuid.uuid4(),
+            tenant_id=tenant_id,
+            from_node=from_row.id,
+            to_node=to_row.id,
+            step=step["step"],
+            tool=step["tool"],
+            params_hash=step["params_hash"],
+            details=step["details"],
+            at=step["at"],
+        )
+        .on_conflict_do_nothing(index_elements=["tenant_id", "from_node", "to_node", "step"])
+    )
+    rows = (
         (
             await session.execute(
                 select(LineageStep).where(
@@ -222,20 +244,7 @@ async def _link(session: Any, tenant_id: uuid.UUID, from_row: Any, to_row: Any, 
         .scalars()
         .all()
     )
-    if existing:
-        return existing[0]
-    row = LineageStep(
-        tenant_id=tenant_id,
-        from_node=from_row.id,
-        to_node=to_row.id,
-        step=step["step"],
-        tool=step["tool"],
-        params_hash=step["params_hash"],
-        details=step["details"],
-        at=step["at"],
-    )
-    session.add(row)
-    return row
+    return rows[0]
 
 
 async def record_chain(tenant_id: uuid.UUID, nodes: list[Any], steps: list[Any] | None = None) -> dict[str, Any]:
@@ -322,8 +331,8 @@ async def trace(
         truncated = False
         for way in ("upstream", "downstream") if direction == "both" else (direction,):
             frontier = [root.id]
+            near = LineageStep.to_node if way == "upstream" else LineageStep.from_node
             for _hop in range(hops):
-                near = LineageStep.to_node if way == "upstream" else LineageStep.from_node
                 found = (
                     (
                         await session.execute(
@@ -340,6 +349,7 @@ async def trace(
                     if other not in nodes and other not in next_ids:
                         next_ids.append(other)
                 if not next_ids:
+                    frontier = []
                     break
                 if len(nodes) + len(next_ids) > MAX_NODES:
                     truncated = True
@@ -358,9 +368,22 @@ async def trace(
                     )
                     for row in rows:
                         nodes[row.id] = row
+                frontier = next_ids
                 if truncated:
                     break
-                frontier = next_ids
+            if frontier and not truncated:
+                # The hops are spent with a frontier left: is there lineage beyond it? Then the trace is cut.
+                beyond = (
+                    (
+                        await session.execute(
+                            select(LineageStep).where(LineageStep.tenant_id == tenant_id, near.in_(frontier))
+                        )
+                    )
+                    .scalars()
+                    .all()
+                )
+                if any((step.from_node if way == "upstream" else step.to_node) not in nodes for step in beyond):
+                    truncated = True
     known = set(nodes)
     return {
         "root": _node_dict(root),
