@@ -216,6 +216,50 @@ class TestRuntimeFlow:
         assert fourth is not None and fourth["outcome"]["kind"] == "rated" and fourth["dialogue"]["rating"] == 5
 
     @pytest.mark.asyncio
+    async def test_the_follow_up_is_written_after_a_claim_and_a_superseded_confirmation_writes_nothing(
+        self, monkeypatch
+    ):
+        dialogue = Dialogue()
+        engine.advance(dialogue, "I was charged twice for 450 yesterday, it was a duplicate", today=TODAY)
+        assert dialogue.stage == engine.STAGE_CONFIRMING
+        self._patch_common(monkeypatch, dialogue)
+        saved = AsyncMock()
+        monkeypatch.setattr(runtime, "save_dialogue", saved)
+
+        async def claimed(outcome, context, claim=None):
+            assert claim is not None and await claim() == "key-1"
+            dialogue.execution_key = "key-1"  # what claim_dialogue stores with the advanced dialogue
+            return {"status": "executed", "intent": outcome.intent, "result": {"dispute_id": "DSP-9"}}
+
+        monkeypatch.setattr(runtime, "execute", claimed)
+        monkeypatch.setattr(runtime, "claim_dialogue", AsyncMock(return_value="key-1"))
+        context = runtime.ExecutionContext(tenant_id=str(TENANT), agent_id="a1", run_grant=object())
+        common = {"tenant_id": str(TENANT), "company_id": "c", "user_id": "u", "agent_id": "a1", "context": context}
+
+        done = await runtime.chat_turn(text="yes", **common)
+        # The offer of tracking is written on top of the claimed state, which keeps its execution key.
+        assert done is not None and done["outcome"]["offer"]["intent"] == "application_status"
+        assert saved.await_count == 1 and saved.call_args.args[2].execution_key == "key-1"
+
+        stale = Dialogue()
+        engine.advance(stale, "I was charged twice for 450 yesterday, it was a duplicate", today=TODAY)
+        self._patch_common(monkeypatch, stale)
+        saved = AsyncMock()
+        monkeypatch.setattr(runtime, "save_dialogue", saved)
+        monkeypatch.setattr(runtime, "claim_dialogue", AsyncMock(return_value=None))
+
+        async def refused_claim(outcome, context, claim=None):
+            assert claim is not None and await claim() is None
+            return {"status": "superseded", "intent": outcome.intent, "message": "no longer current"}
+
+        monkeypatch.setattr(runtime, "execute", refused_claim)
+
+        refused = await runtime.chat_turn(text="yes", **common)
+        assert refused is not None and "no longer current" in refused["answer"]
+        assert feedback.RATING_PROMPT not in refused["answer"] and "offer" not in refused["outcome"]
+        assert stale.actions == [] and stale.offer is None and saved.await_count == 0
+
+    @pytest.mark.asyncio
     async def test_two_negative_turns_offer_a_person_and_yes_hands_off(self, monkeypatch):
         dialogue = Dialogue()
         self._patch_common(monkeypatch, dialogue)

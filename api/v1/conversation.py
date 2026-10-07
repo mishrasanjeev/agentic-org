@@ -178,15 +178,17 @@ async def post_turn(body: TurnIn, request: Request, tenant_id: str = Depends(get
     held = await runtime.held_turn(tid, key, body.text, dialogue)
     if held is not None:
         return held
-    from core.conversation import dialogue as engine
-
-    outcome = engine.advance(dialogue, body.text)
-    execution: dict[str, Any] | None = None
-    if outcome.kind == "execute":
-        if context is None:
-            execution = {"status": "unbound", "intent": outcome.intent, "message": "Choose an agent to run this."}
-        else:
-            execution = await runtime.execute(outcome, context)
+    outcome, execution = await runtime.run_turn(
+        tid,
+        key,
+        dialogue,
+        body.text,
+        context,
+        user_id=user_id,
+        agent_id=body.agent_id or None,
+        channel=channel,
+        no_agent_message="Choose an agent to run this.",
+    )
     return await runtime.finish_turn(
         tid,
         key,

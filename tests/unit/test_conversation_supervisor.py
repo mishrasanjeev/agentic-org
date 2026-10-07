@@ -110,7 +110,9 @@ class TestHandoffContent:
             intent="talk_to_agent",
         )
         assert record["hitl_id"] is None and record["ticket"] is None and record["intent"] == "talk_to_agent"
-        assert "pick this up shortly" in escalation.handoff_answer(record)
+        # The session is still marked for a supervisor, but nobody was asked to take over: nothing is promised.
+        told = escalation.handoff_answer(record)
+        assert "nothing has been handed over" in told and "handed this over" not in told
 
 
 class TestTurns:
@@ -392,8 +394,14 @@ class TestConsoleRoutes:
     @pytest.mark.asyncio
     async def test_the_review_item_of_a_handoff_is_written_for_the_agent(self, monkeypatch):
         import core.database as database
+        import core.push.sender as sender
 
         added: list = []
+        agent_row = SimpleNamespace(name="Branch assistant", visibility="tenant", owner_user_id=None)
+
+        class _Found:
+            def scalar_one_or_none(self):
+                return agent_row
 
         class _Session:
             async def __aenter__(self):
@@ -402,6 +410,9 @@ class TestConsoleRoutes:
             async def __aexit__(self, *args):
                 return False
 
+            async def execute(self, *_a, **_k):
+                return _Found()
+
             def add(self, row):
                 added.append(row)
 
@@ -409,6 +420,8 @@ class TestConsoleRoutes:
                 return None
 
         monkeypatch.setattr(database, "get_tenant_session", lambda *_a, **_k: _Session())
+        notify = AsyncMock(return_value={})
+        monkeypatch.setattr(sender, "notify_approval_created", notify)
         agent = uuid.uuid4()
         item_id = await escalation._review_item(
             TENANT,
@@ -424,6 +437,7 @@ class TestConsoleRoutes:
             and added[0].priority == "high"
             and added[0].trigger_type == escalation.TRIGGER
         )
+        assert notify.call_args.kwargs["item_id"] == item_id == str(added[0].id)
         assert (
             await escalation._review_item(TENANT, agent_id="", title="t", reason="r", context={}, requested_by=None)
             is None

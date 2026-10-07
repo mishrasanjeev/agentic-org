@@ -133,7 +133,6 @@ They are not waived by a design document or another product's marketing page.
 | Speech | `SPEECH-03`, `SPEECH-04`, `SPEECH-05`, `SPEECH-07`, `SPEECH-08` |
 | Retrieval and documents | `RAG-04`, `RAG-06`, `RAG-12`, `RAG-14`, `RAG-15`, `IDP-01`, `IDP-05`, `IDP-08`, `IDP-12` |
 | Transactions and vector | `TXN-02`, `TXN-03`, `TXN-04`, `TXN-05`, `VEC-03`, `VEC-05` |
-| Prompt and evaluation | `EVAL-02` |
 | Governance, FinOps and experience | `AIGOV-05`, `AIGOV-06`, `FIN-04`, `FE-04`, `FE-05`, `FE-07`, `FE-14` |
 
 ## Requirement-level acceptance rule
