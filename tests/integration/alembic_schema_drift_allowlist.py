@@ -79,6 +79,7 @@ MIGRATION_ONLY_INDEXES: frozenset[tuple[str, str]] = frozenset(
         ("departments", "ix_fk_departments_company_id"),
         ("departments", "ix_fk_departments_manager_user_id"),
         ("departments", "ix_fk_departments_parent_id"),
+        ("finops_cost_ledger", "ux_finops_cost_ledger_key"),
         ("governance_config", "ix_fk_governance_config_updated_by"),
         ("hitl_queue", "ix_fk_hitl_queue_agent_id"),
         ("hitl_queue", "ix_fk_hitl_queue_decision_by"),
