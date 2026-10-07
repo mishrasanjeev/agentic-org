@@ -578,9 +578,10 @@ class TestRoutes:
         from api.main import app
         from api.route_enforcement import SCOPE_FAMILIES
 
-        paths = {route.path for route in app.routes}
-        assert {"/api/v1/lineage/status", "/api/v1/lineage", "/api/v1/lineage/nodes/{kind}/{ref:path}"} <= paths
-        assert "/api/v1/lineage/trace/{kind}/{ref:path}" in paths
+        # The OpenAPI paths hold the full path whether routers are included eagerly or lazily.
+        paths = set(app.openapi()["paths"])
+        assert {"/api/v1/lineage/status", "/api/v1/lineage", "/api/v1/lineage/nodes/{kind}/{ref}"} <= paths
+        assert "/api/v1/lineage/trace/{kind}/{ref}" in paths
         assert SCOPE_FAMILIES["lineage"] == ("audit:read", "approvals:write")
 
 

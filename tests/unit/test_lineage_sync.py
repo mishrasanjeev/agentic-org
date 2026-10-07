@@ -533,7 +533,8 @@ class TestRoutes:
         from api.main import app
         from core.tasks.celery_app import app as celery_app
 
-        paths = {route.path for route in app.routes}
+        # The OpenAPI paths hold the full path whether routers are included eagerly or lazily.
+        paths = set(app.openapi()["paths"])
         assert {
             "/api/v1/lineage/sync/sources",
             "/api/v1/lineage/sync/sources/{source_id}",
