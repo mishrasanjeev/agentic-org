@@ -50,6 +50,7 @@ Every agent-execution endpoint returns the same JSON shape:
 | `hitl_trigger` | no | The human-gate reason string when `status == "hitl_triggered"`; `null` otherwise. |
 | `error` | no | Human-readable error string when `status == "failed"`; `null` otherwise. |
 | `grant_denial` | no | Present only when grant enforcement refused a tool call (`grants.enforce_closed` deny, see `docs/operations/grant-enforcement.md`): `reason`, `sub_reason`, `grant_id`, `connector`, `tool`. The run's `status` is `failed` and `error` is `grant_denied: <reason>`. |
+| `limit` | no | Present only when an execution limit stopped the run while `AGENTICORG_RUNTIME_LIMITS_ENABLED` is on (see `docs/governance/agent-runtime.md`): `reason` (`step_limit`, `duration_limit`, `tool_call_limit` or `loop_detected`) and `detail`, plus `steps` and `tool_calls` when the graph stopped it. The run's `status` is `failed` and `error` begins with `stopped:` (`timeout:` for the duration). |
 
 ## Legacy aliases (deprecated, removed in v5.0)
 

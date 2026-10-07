@@ -380,30 +380,25 @@ class ToolGateway:
         # 4. Resolve connector — tenant-scoped + global fallback
         connector = self._connectors.get((tenant_id, company_id, connector_name))
         # Tool registry: a registered tool's inputs are checked against its schema before the call
-        # leaves the gateway; a refused call is audited and never dispatched.
-        registry_check = None
-        if tool_registry.enabled():
-            try:
-                registrations = await tool_registry.load(tenant_id)
-            except (RuntimeError, TypeError, ValueError, OSError) as exc:
-                logger.warning("tool_registry_load_failed", error_type=type(exc).__name__)
-                registrations = {}
-            registry_check = tool_registry.check_call(registrations, connector_name, tool_name, params)
-            if registry_check.refused:
-                await _release_reservation()
-                if self.audit:
-                    await self.audit.log(
-                        tenant_id=tenant_id,
-                        agent_id=agent_id,
-                        tool_name=tool_name,
-                        action="input_rejected",
-                        outcome="blocked",
-                        details={
-                            "errors": registry_check.errors[:5],
-                            "unregistered": registry_check.unregistered,
-                        },
-                    )
-                return tool_registry.refusal(registry_check, tool_name)
+        # leaves the gateway; a refused call (including one whose registrations could not be read)
+        # is audited and never dispatched.
+        registry_check = await tool_registry.screen_call(tenant_id, connector_name, tool_name, params)
+        if registry_check is not None and registry_check.refused:
+            await _release_reservation()
+            if self.audit:
+                await self.audit.log(
+                    tenant_id=tenant_id,
+                    agent_id=agent_id,
+                    tool_name=tool_name,
+                    action="input_rejected",
+                    outcome="blocked",
+                    details={
+                        "errors": registry_check.errors[:5],
+                        "unregistered": registry_check.unregistered,
+                        "unavailable": registry_check.unavailable,
+                    },
+                )
+            return tool_registry.refusal(registry_check, tool_name)
         if connector is None and company_id is None:
             connector = self._connectors.get(("_global", None, connector_name))
         if not connector:
@@ -419,7 +414,10 @@ class ToolGateway:
             if registry_check is not None and registry_check.registration is not None:
                 # The registered envelope: a timeout, an output cap, the output schema, untrusted output.
                 result = await tool_registry.enveloped(
-                    registry_check.registration, lambda: connector.execute_tool(tool_name, params)
+                    registry_check.registration,
+                    lambda: connector.execute_tool(tool_name, params),
+                    tenant_id=tenant_id,
+                    agent_id=agent_id,
                 )
             else:
                 result = await connector.execute_tool(tool_name, params)
