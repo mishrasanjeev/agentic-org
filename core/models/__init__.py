@@ -93,6 +93,7 @@ from core.models.kpi_cache import KPICache as KPICache
 from core.models.lead_pipeline import EmailSequence as EmailSequence
 from core.models.lead_pipeline import LeadPipeline as LeadPipeline
 from core.models.model_access_policy import ModelAccessPolicy as ModelAccessPolicy
+from core.models.model_card import ModelCard as ModelCard
 from core.models.model_gateway_record import ModelGatewayRecord as ModelGatewayRecord
 from core.models.model_limit import ModelLimit as ModelLimit
 from core.models.model_routing_policy import ModelRoutingPolicy as ModelRoutingPolicy

@@ -311,6 +311,10 @@ class Settings(BaseSettings):
     # and its bill-of-materials export, tenant-admin only. Off by default: off,
     # the endpoints are not found and nothing is read.
     governance_inventory_enabled: bool = False
+    # Model cards (core/governance/model_cards.py): one standard card per model
+    # the tenant uses, with the administrator's part written and approved by a
+    # second person. Off by default: off, the endpoints are not found.
+    governance_model_cards_enabled: bool = False
     # JSON object keyed provider/model with input and output USD per million
     # tokens; a negotiated rate replaces the list price.
     model_price_overrides_json: str = ""
