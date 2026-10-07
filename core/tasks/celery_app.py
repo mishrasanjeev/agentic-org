@@ -111,6 +111,13 @@ app.conf.beat_schedule = {
         "schedule": 60.0,
         "options": {"queue": "workflows"},
     },
+    "sweep-lineage-sync-sources": {
+        # Every tenant's due sync sources (core/tasks/lineage_tasks.py). A no-op
+        # unless AGENTICORG_LINEAGE_ENABLED and AGENTICORG_LINEAGE_SYNC_SWEEP_ENABLED.
+        "task": "core.tasks.lineage_tasks.sweep_sync_sources",
+        "schedule": 300.0,
+        "options": {"queue": "maintenance"},
+    },
     "generate-scheduled-reports": {
         "task": "core.tasks.report_tasks.generate_scheduled_reports",
         "schedule": 300.0,  # every 5 minutes

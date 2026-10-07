@@ -50,8 +50,32 @@ URL-encoded in the path.
 Reads need `audit:read`, writes `approvals:write` (`api/route_enforcement.py`, family `lineage`).
 Telemetry carries counts only.
 
+## Incremental synchronisation
+
+A **sync source** (`core/lineage/sync.py`, tables `lineage_sync_sources` and `lineage_sync_runs`,
+migration `v6z76`) names a feed the tenant administrator set up: a public HTTPS endpoint
+(validated for egress, DNS pinned) that answers `{"items": [...], "cursor": "..."}` for
+`GET <url>?since=<cursor>`, with an optional bearer token kept encrypted for the tenant and never
+returned. Each item carries a stable `ref`, a `kind` (`document` with `title`, `mime_type` and
+`text` or `content_base64`; or `record` with the transaction `record`), a `version` (or one is
+taken from the content) and `modified_at`.
+
+A **run** (`POST /lineage/sync/sources/{id}/run`, or the schedule) fetches the items since the
+cursor, skips every item whose (kind, reference, version) provenance already keeps, ingests the
+rest (documents through knowledge ingestion, records through the transaction store, both of which
+note their lineage), links each document to the feed it was acquired from with an `acquire` step
+that carries the source's `basis` and `licence` when its config names them, and records what it
+received, processed, skipped and failed with the first errors. The cursor advances only when
+nothing failed, so a failed item is offered again; the run is `completed`, `partial` or `failed`.
+
+`GET/POST /lineage/sync/sources`, `PATCH/DELETE /lineage/sync/sources/{id}` (the cursor can be
+reset), `GET /lineage/sync/sources/{id}/runs`. The **schedule**: each source has an interval
+(five minutes to a week); a sweep claims the due sources of a tenant under a row lock and runs
+them in turn, so two sweepers never run the same source. The sweep runs from Celery beat every
+five minutes (`core/tasks/lineage_tasks.py`) and is a no-op unless `lineage_sync_sweep_enabled`
+is on as well. Another way of listing
+changed items (a connector) registers a fetcher under its own source kind.
+
 ## Next
 
-Incremental synchronisation (a sync job that processes only what changed since its last run and
-records what it processed) and the lineage graph in the console are the following parts of this
-work package.
+The lineage graph in the console is the last part of this work package.

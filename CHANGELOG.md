@@ -4,6 +4,22 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
 
 ## [Unreleased] - 2026-08-29
 
+### Added - Provenance and lineage: incremental synchronisation
+- `core/lineage/sync.py`: a sync source names a feed (public HTTPS,
+  egress validated, optional bearer token kept encrypted) polled on an
+  interval for what changed since its cursor; a run skips every item
+  whose version provenance already keeps, ingests the rest (documents
+  through knowledge ingestion, records through the transaction store),
+  links each document to the feed it was acquired from, and records what
+  it received, processed, skipped and failed; the cursor advances only
+  when nothing failed. Sources are claimed under a row lock.
+- `GET/POST /lineage/sync/sources`, `PATCH/DELETE /lineage/sync/sources/{id}`,
+  `POST /lineage/sync/sources/{id}/run`, `GET /lineage/sync/sources/{id}/runs`;
+  the sweep from Celery beat, behind `lineage_sync_sweep_enabled` (default
+  off). Migration `v6z76` adds
+  `lineage_sync_sources` and `lineage_sync_runs` under forced row-level
+  security.
+
 ### Added - Provenance and lineage: the provenance model
 - `core/lineage/provenance.py`: a node for every kept thing (a source, a
   document, a chunk, an embedding, a transaction record, a transcript, a

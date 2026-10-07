@@ -401,6 +401,10 @@ class Settings(BaseSettings):
     # default: off, GET /lineage/status answers ``enabled: false``, every other
     # lineage route is not found and ingestion notes nothing.
     lineage_enabled: bool = False
+    # The periodic sweep that runs every tenant's due sync sources
+    # (core/tasks/lineage_tasks.py). Off by default: a manual run and the
+    # cron trigger still work while lineage itself is on.
+    lineage_sync_sweep_enabled: bool = False
     # JSON object keyed provider/model with input and output USD per million
     # tokens; a negotiated rate replaces the list price.
     model_price_overrides_json: str = ""
