@@ -845,6 +845,8 @@ async def upload_document(
             "extraction_details": extracted_content.extra,
         }
     )
+    # A domain reaches here as a validated string from the query; anything else is no domain.
+    domain = domain if isinstance(domain, str) and domain else None
     if domain:
         doc_metadata["domain"] = domain
 
@@ -1219,12 +1221,12 @@ async def _native_semantic_search(
     try:
         acl_sql, acl_params = knowledge_access.metadata_clause(domains)
         content_sql = (
-            "SELECT filename, COALESCE(metadata->>'content_text', '') AS content_text "
+            "SELECT filename, COALESCE(metadata->>'content_text', '') AS content_text "  # nosec B608 — clauses from core/rag (fixed column names, bound parameters), nothing from the request
             f"FROM documents WHERE tenant_id = :tid AND status = 'indexed'{acl_sql} "
             "AND metadata->>'content_text' IS NOT NULL "
             "AND strpos(lower(metadata->>'content_text'), lower(:query)) > 0 LIMIT :k"
             if hybrid_enabled
-            else "SELECT filename, COALESCE(metadata->>'content_text', '') AS content_text "
+            else "SELECT filename, COALESCE(metadata->>'content_text', '') AS content_text "  # nosec B608 — clauses from core/rag (fixed column names, bound parameters), nothing from the request
             f"FROM documents WHERE tenant_id = :tid AND status = 'indexed'{acl_sql} "
             "AND metadata->>'content_text' IS NOT NULL "
             "AND metadata->>'content_text' ILIKE :like LIMIT :k"
@@ -1352,7 +1354,7 @@ async def _native_vector_or_keyword_search(
             rows = (
                 await session.execute(
                     _sqtext(
-                        f"SELECT d.title, d.content, d.id, d.source, {PROVENANCE_COLUMNS} "
+                        f"SELECT d.title, d.content, d.id, d.source, {PROVENANCE_COLUMNS} "  # nosec B608 — clauses from core/rag (fixed column names, bound parameters), nothing from the request
                         f"FROM knowledge_documents d{PROVENANCE_JOIN} "
                         "WHERE d.tenant_id = :tid AND d.status = 'ready' AND "
                         f"(d.title ILIKE :like OR d.content ILIKE :like){where_filters} "
@@ -1442,7 +1444,7 @@ async def _native_hybrid_search(
             rows = (
                 await session.execute(
                     _sqtext(
-                        f"SELECT d.id, d.title, d.content, d.source, {PROVENANCE_COLUMNS} "
+                        f"SELECT d.id, d.title, d.content, d.source, {PROVENANCE_COLUMNS} "  # nosec B608 — clauses from core/rag (fixed column names, bound parameters), nothing from the request
                         f"FROM knowledge_documents d{PROVENANCE_JOIN} "
                         f"WHERE d.tenant_id = :tid AND d.status = 'ready'{where_filters} "
                         "AND to_tsvector('english', d.title || ' ' || d.content) "
@@ -1464,7 +1466,7 @@ async def _native_hybrid_search(
                 rows = (
                     await session.execute(
                         _sqtext(
-                            f"SELECT d.id, d.title, d.content, d.source, {PROVENANCE_COLUMNS} "
+                            f"SELECT d.id, d.title, d.content, d.source, {PROVENANCE_COLUMNS} "  # nosec B608 — clauses from core/rag (fixed column names, bound parameters), nothing from the request
                             f"FROM knowledge_documents d{PROVENANCE_JOIN} "
                             f"WHERE d.tenant_id = :tid AND d.status = 'ready'{where_filters} "
                             "AND (strpos(lower(d.title), lower(:query)) > 0 "
@@ -1487,12 +1489,12 @@ async def _native_hybrid_search(
         if col not in {"embedding", "embedding_bge_m3"}:
             raise ValueError("unsupported embedding column")
         vector_sql = (
-            f"SELECT d.id, d.title, d.content, d.source, {PROVENANCE_COLUMNS} "
+            f"SELECT d.id, d.title, d.content, d.source, {PROVENANCE_COLUMNS} "  # nosec B608 — clauses from core/rag (fixed column names, bound parameters), nothing from the request
             f"FROM knowledge_documents d{PROVENANCE_JOIN} "
             f"WHERE d.tenant_id = :tid AND d.status = 'ready' AND d.embedding IS NOT NULL{where_filters} "
             "ORDER BY d.embedding <=> CAST(:vector AS vector), d.id ASC LIMIT :limit"
             if col == "embedding"
-            else f"SELECT d.id, d.title, d.content, d.source, {PROVENANCE_COLUMNS} "
+            else f"SELECT d.id, d.title, d.content, d.source, {PROVENANCE_COLUMNS} "  # nosec B608 — clauses from core/rag (fixed column names, bound parameters), nothing from the request
             f"FROM knowledge_documents d{PROVENANCE_JOIN} "
             f"WHERE d.tenant_id = :tid AND d.status = 'ready' AND d.embedding_bge_m3 IS NOT NULL{where_filters} "
             "ORDER BY d.embedding_bge_m3 <=> CAST(:vector AS vector), d.id ASC LIMIT :limit"
@@ -1578,7 +1580,7 @@ async def knowledge_excerpt(
         row = (
             await session.execute(
                 _sqtext(
-                    f"SELECT d.id, d.title, d.content, d.source, {PROVENANCE_COLUMNS} "
+                    f"SELECT d.id, d.title, d.content, d.source, {PROVENANCE_COLUMNS} "  # nosec B608 — clauses from core/rag (fixed column names, bound parameters), nothing from the request
                     f"FROM knowledge_documents d{PROVENANCE_JOIN} "
                     f"WHERE d.id = :id AND d.tenant_id = :tid AND d.status = 'ready'{acl_sql} LIMIT 1"
                 ),
@@ -1595,7 +1597,7 @@ async def knowledge_excerpt(
                 neighbour = (
                     await session.execute(
                         _sqtext(
-                            "SELECT d.id FROM knowledge_documents d WHERE d.tenant_id = :tid AND d.status = 'ready' "
+                            "SELECT d.id FROM knowledge_documents d WHERE d.tenant_id = :tid AND d.status = 'ready' "  # nosec B608 — clauses from core/rag (fixed column names, bound parameters), nothing from the request
                             f"AND d.source LIKE :pattern{acl_sql} LIMIT 1"
                         ),
                         {"tid": str(tid), "pattern": f"{prefix}#chunk{citation.chunk_index + offset}-%", **acl_params},
