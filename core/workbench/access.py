@@ -14,7 +14,7 @@ import uuid
 from typing import Any
 
 import structlog
-from sqlalchemy import func, select
+from sqlalchemy import false, func, select
 
 from core.config import settings
 from core.workbench.definitions import ADMIN, WORKBENCHES, Tab, Workbench
@@ -58,12 +58,26 @@ def may_open(workbench_name: str, tab_key: str, role: str, assigned: set[str] | 
     return any(tab.key == tab_key for tab in tabs_for(workbench, role))
 
 
+def approval_filter(tenant_id: uuid.UUID, caller: Any) -> list[Any]:
+    """The approvals a caller may see: those of the agents visible to them; none without a caller (fail closed)."""
+    if caller is None:
+        return [false()]
+    if getattr(caller, "is_admin", False):
+        return []
+    from core.models.agent import Agent
+    from core.models.hitl import HITLQueue
+    from core.ownership import approval_visibility_clause
+
+    visible = select(Agent.id).where(Agent.tenant_id == tenant_id, approval_visibility_clause(Agent, caller))
+    return [HITLQueue.agent_id.in_(visible)]
+
+
 async def _count(session: Any, model: Any, *conditions: Any) -> int:
     value = await session.scalar(select(func.count()).select_from(model).where(*conditions))
     return int(value or 0)
 
 
-async def counts(tenant_id: uuid.UUID, sources: set[str]) -> dict[str, int | None]:
+async def counts(tenant_id: uuid.UUID, sources: set[str], *, caller: Any = None) -> dict[str, int | None]:
     """The number of items waiting behind each source; None when a source has no counter or cannot be read."""
     from core.database import get_tenant_session
 
@@ -74,7 +88,11 @@ async def counts(tenant_id: uuid.UUID, sources: set[str]) -> dict[str, int | Non
                 from core.models.hitl import HITLQueue
 
                 out["approvals"] = await _count(
-                    session, HITLQueue, HITLQueue.tenant_id == tenant_id, HITLQueue.status == "pending"
+                    session,
+                    HITLQueue,
+                    HITLQueue.tenant_id == tenant_id,
+                    HITLQueue.status == "pending",
+                    *approval_filter(tenant_id, caller),
                 )
             if "documents" in sources:
                 from core.models.idp_document import IdpDocument
@@ -118,14 +136,14 @@ async def counts(tenant_id: uuid.UUID, sources: set[str]) -> dict[str, int | Non
 
 
 async def summary(
-    tenant_id: uuid.UUID, workbench_name: str, role: str, assigned: set[str] | None = None
+    tenant_id: uuid.UUID, workbench_name: str, role: str, assigned: set[str] | None = None, *, caller: Any = None
 ) -> dict[str, Any] | None:
     """One workbench with the caller's tabs and the count behind each."""
     workbench = WORKBENCHES.get(workbench_name)
     if workbench is None or not holds(workbench, role, assigned or set()):
         return None
     tabs = tabs_for(workbench, role)
-    found = await counts(tenant_id, {tab.source for tab in tabs})
+    found = await counts(tenant_id, {tab.source for tab in tabs}, caller=caller)
     return {
         **workbench.to_dict(tabs),
         "held_by": "assignment" if workbench_name in (assigned or set()) else "role",

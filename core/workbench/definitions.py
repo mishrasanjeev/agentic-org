@@ -3,7 +3,9 @@
 
 A tab names the page it opens, the counter behind its badge, the roles that
 may see it and whether it is sensitive (a sensitive tab is hidden from every
-role not named, whatever workbench the caller holds). The catalogue is
+role not named, whatever workbench the caller holds). A tab names the roles
+its page admits (the UI route guard), never more: the shell lists nothing a
+person could not open. The catalogue is
 fixed; which workbenches a person holds is decided by role and assignment
 (``core/workbench/access.py``).
 """
@@ -62,12 +64,33 @@ CATALOGUE: tuple[Workbench, ...] = (
         "Review officer",
         "Items that wait for a decision: approvals, documents in review, content drafts and governed cases.",
         (
-            Tab("approvals", "Approvals", "/dashboard/approvals", "approvals", actions=("decide", "edit")),
-            Tab("documents", "Documents", "/dashboard/documents", "documents", actions=("correct", "decide")),
+            Tab(
+                "approvals",
+                "Approvals",
+                "/dashboard/approvals",
+                "approvals",
+                roles=("admin", "cfo", "chro", "cmo", "coo", "domain_lead", "developer"),
+                actions=("decide", "edit"),
+            ),
+            Tab(
+                "documents",
+                "Documents",
+                "/dashboard/documents",
+                "documents",
+                roles=("admin", "cfo", "chro", "cmo", "coo", "domain_lead", "developer"),
+                actions=("correct", "decide"),
+            ),
             Tab(
                 "drafts", "Content drafts", "/dashboard/workbench/review_officer/drafts", "drafts", actions=("decide",)
             ),
-            Tab("cases", "Governed cases", "/dashboard/approvals/cases", "cases", actions=("review",)),
+            Tab(
+                "cases",
+                "Governed cases",
+                "/dashboard/approvals/cases",
+                "cases",
+                roles=("admin", "cfo", "chro", "cmo", "coo", "domain_lead", "developer"),
+                actions=("review",),
+            ),
         ),
         default_roles=("admin", "cfo", "coo", "domain_lead"),
     ),
@@ -76,10 +99,36 @@ CATALOGUE: tuple[Workbench, ...] = (
         "Relationship manager",
         "Customers and their conversations, the knowledge base, and the agents that serve them.",
         (
-            Tab("conversations", "Conversations", "/dashboard/conversations", "conversations", actions=("watch",)),
-            Tab("knowledge", "Knowledge base", "/dashboard/knowledge", "knowledge"),
-            Tab("agents", "Agents", "/dashboard/agents", "agents"),
-            Tab("cases", "Governed cases", "/dashboard/approvals/cases", "cases", actions=("review",)),
+            Tab(
+                "conversations",
+                "Conversations",
+                "/dashboard/conversations",
+                "conversations",
+                roles=("admin",),
+                actions=("watch",),
+            ),
+            Tab(
+                "knowledge",
+                "Knowledge base",
+                "/dashboard/knowledge",
+                "knowledge",
+                roles=("admin", "cfo", "chro", "cmo", "coo"),
+            ),
+            Tab(
+                "agents",
+                "Agents",
+                "/dashboard/agents",
+                "agents",
+                roles=("admin", "cfo", "chro", "cmo", "coo", "domain_lead", "developer"),
+            ),
+            Tab(
+                "cases",
+                "Governed cases",
+                "/dashboard/approvals/cases",
+                "cases",
+                roles=("admin", "cfo", "chro", "cmo", "coo", "domain_lead", "developer"),
+                actions=("review",),
+            ),
         ),
         default_roles=("admin", "cmo", "domain_lead"),
     ),
@@ -88,19 +137,40 @@ CATALOGUE: tuple[Workbench, ...] = (
         "Investigator",
         "Documents and their analysis, governed cases, the audit trail and run timelines.",
         (
-            Tab("documents", "Documents", "/dashboard/documents", "documents", actions=("correct",)),
-            Tab("cases", "Governed cases", "/dashboard/approvals/cases", "cases", actions=("review",)),
-            Tab("audit", "Audit trail", "/dashboard/audit", "audit", roles=("admin", "auditor"), sensitive=True),
+            Tab(
+                "documents",
+                "Documents",
+                "/dashboard/documents",
+                "documents",
+                roles=("admin", "cfo", "chro", "cmo", "coo", "domain_lead", "developer"),
+                actions=("correct",),
+            ),
+            Tab(
+                "cases",
+                "Governed cases",
+                "/dashboard/approvals/cases",
+                "cases",
+                roles=("admin", "cfo", "chro", "cmo", "coo", "domain_lead", "developer"),
+                actions=("review",),
+            ),
+            Tab(
+                "audit",
+                "Audit trail",
+                "/dashboard/audit",
+                "audit",
+                roles=("admin", "cfo", "chro", "cmo", "coo", "auditor"),
+                sensitive=True,
+            ),
             Tab(
                 "observability",
                 "Run timelines",
                 "/dashboard/observability",
                 "observability",
-                roles=("admin", "auditor", "developer"),
+                roles=("admin",),
                 sensitive=True,
             ),
         ),
-        default_roles=("admin", "auditor", "analyst"),
+        default_roles=("admin", "auditor", "domain_lead"),
     ),
     Workbench(
         "supervisor",
@@ -112,19 +182,20 @@ CATALOGUE: tuple[Workbench, ...] = (
                 "Live conversations",
                 "/dashboard/conversations",
                 "conversations",
-                roles=("admin", "coo"),
+                roles=("admin",),
                 sensitive=True,
                 actions=("takeover", "reply"),
             ),
-            Tab("approvals", "Approvals", "/dashboard/approvals", "approvals", actions=("decide",)),
             Tab(
-                "guardrails",
-                "Guardrails",
-                "/dashboard/settings/guardrails",
-                "guardrails",
-                roles=("admin", "coo", "auditor"),
+                "approvals",
+                "Approvals",
+                "/dashboard/approvals",
+                "approvals",
+                roles=("admin", "cfo", "chro", "cmo", "coo", "domain_lead", "developer"),
+                actions=("decide",),
             ),
-            Tab("costs", "Costs", "/dashboard/costs", "costs", roles=("admin", "cfo", "coo"), sensitive=True),
+            Tab("guardrails", "Guardrails", "/dashboard/settings/guardrails", "guardrails", roles=("admin",)),
+            Tab("costs", "Costs", "/dashboard/costs", "costs", roles=("admin", "cfo"), sensitive=True),
         ),
         default_roles=("admin", "coo"),
     ),

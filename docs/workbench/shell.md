@@ -29,12 +29,14 @@ workbenches that name it by default, plus any an administrator assigned
 them; `GET /workbench/assignments` lists them by user; `workbench_assignments`, tenant-scoped under
 row-level security). Within a held workbench a person sees the tabs their role may see. The shell
 never authorises on its own: every page behind a tab checks the caller as it always did, so a tab
-that is not listed is not reachable by typing its path either.
+that is not listed is not reachable by typing its path either. A tab names the roles its page's
+route guard admits, never more, and a test pins every tab to the UI's route table and guards.
 
 ## Counts
 
 `GET /workbench/{name}/summary` returns the workbench with the caller's tabs and the number of
-items waiting behind each: approvals pending in the human-in-the-loop queue, documents in review,
+items waiting behind each: approvals pending in the human-in-the-loop queue (only those of agents
+the caller may see, as the approvals list scopes them), documents in review,
 content drafts pending approval, governed cases awaiting a decision, conversations active or
 escalated. A tab without a counter, or a
 store that cannot be read, reports `null` rather than zero, and `waiting` sums only the counts that
