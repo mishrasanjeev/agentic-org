@@ -67,6 +67,15 @@ install_trace_redaction()
 MAX_AGENT_DURATION_SEC = int(os.getenv("AGENTICORG_MAX_AGENT_DURATION_SEC", "1800"))  # 30 min
 MAX_AGENT_STEPS = int(os.getenv("AGENTICORG_MAX_AGENT_STEPS", "200"))
 
+
+def _limit_stop_errors() -> tuple[type[BaseException], ...]:
+    """The exceptions the runner reports as a limit stop: the step ceiling, only while execution limits are on.
+
+    Off, the tuple is empty, so the platform ceiling fails through the generic handler as it always has.
+    """
+    return (GraphRecursionError,) if execution_limits.enabled() else ()
+
+
 # Blended per-token estimate (Gemini 2.5 Flash list price, $0.15/1M input +
 # $0.60/1M output averaged). Not per-provider pricing — an estimate only.
 _BLENDED_COST_PER_1K_TOKENS_USD = 0.000375
@@ -199,6 +208,18 @@ stay search text. If search returns zero or multiple exact candidates, return
 that ambiguity instead of guessing.
 </tool_reference_resolution>
 """.strip()
+
+
+def _redacted_memory_block(block: str, pii_mode: str, redactor: PIIRedactor, token_map: dict[str, str]) -> str:
+    """Recalled long-term memory as model input: redacted like the task under ``before_llm``/``before_log``.
+
+    The tokens join the run's map, so tool arguments that carry them are restored as for the task's own.
+    """
+    if not block or pii_mode not in ("before_llm", "before_log"):
+        return block
+    redacted, tokens = redactor.redact(block)
+    token_map.update(tokens)
+    return redacted
 
 
 def _with_reference_resolution_guidance(system_prompt: str) -> str:
@@ -337,8 +358,10 @@ async def run_agent(
         amended_prompt = amendments_block + system_prompt
         logger.info("prompt_amendments_applied", agent_id=agent_id, count=len(prompt_amendments))
     amended_prompt = _with_reference_resolution_guidance(amended_prompt)
-    # Long-term memory: what is remembered about the subject the run names, as context.
+    # Long-term memory: what is remembered about the subject the run names, as context. It joins
+    # the prompt only after the PII step below, which treats it as model input like the task.
     memory_subject = long_term_memory.subject_of(task_input) if long_term_memory.enabled() else ""
+    memory_block = ""
     if memory_subject:
         try:
             from core.database import get_tenant_session as _memory_session
@@ -347,8 +370,9 @@ async def run_agent(
                 remembered = await long_term_memory.recall(
                     memory_db, uuid.UUID(str(tenant_id)), subject=memory_subject, agent_id=agent_id
                 )
-                amended_prompt = long_term_memory.prompt_block(remembered) + amended_prompt
-        except (RuntimeError, TypeError, ValueError, OSError) as exc:
+                memory_block = long_term_memory.prompt_block(remembered)
+        except long_term_memory.SIDECAR_ERRORS as exc:
+            memory_block = ""
             logger.warning("memory_recall_failed", error=type(exc).__name__)
 
     # P1.2: PII redaction MUST happen before any LLM input. Raise loud error
@@ -390,7 +414,10 @@ async def run_agent(
         try:
             masked_input = await pseudonymiser.pseudonymise_value(task_input)
             user_message, amended_prompt = await pseudonymiser.pseudonymise_texts(
-                [_build_user_message(masked_input), pseudonymisation.with_model_guidance(amended_prompt)]
+                [
+                    _build_user_message(masked_input),
+                    pseudonymisation.with_model_guidance(memory_block + amended_prompt),
+                ]
             )
         except pseudonymisation.PseudonymisationError as exc:
             return _pseudonymisation_failed(exc)
@@ -415,6 +442,9 @@ async def run_agent(
         if trusted_shadow_fixture_prompt and pii_mode in ("before_llm", "before_log"):
             logger.info("pii_redaction_skipped_for_shadow_fixture", agent_id=agent_id)
         user_message = _build_user_message(task_input)
+    if memory_block and pseudonymiser is None:
+        # Recalled memory is never a trusted fixture: redacted under the mode whatever the task.
+        amended_prompt = _redacted_memory_block(memory_block, pii_mode, pii_redactor, pii_token_map) + amended_prompt
 
     # The model gateway applies the tenant's routing policy to the agent's
     # model before the credential is resolved; a refusal ends the run here.
@@ -480,6 +510,8 @@ async def run_agent(
         # A reused thread (voice ``voice:{call_sid}``) must not inherit a
         # denial from an earlier turn.
         "grant_denial": {},
+        # Nor an earlier turn's limit stop.
+        "limit_stop": {},
         # Nor an earlier turn's output-schema corrections.
         "output_repairs": 0,
         "output_repair": False,
@@ -678,7 +710,7 @@ async def run_agent(
                         output=response["output"],
                         run_id=str(response.get("correlation_id") or response.get("task_id") or "") or None,
                     )
-            except (RuntimeError, TypeError, ValueError, OSError) as exc:
+            except long_term_memory.SIDECAR_ERRORS as exc:
                 logger.warning("memory_store_failed", error=type(exc).__name__)
         return _traced_result(run_span, response)
 
@@ -742,8 +774,9 @@ async def run_agent(
     except GuardrailBlocked as exc:
         logger.warning("agent_run_blocked_guardrail", agent_id=agent_id, rule=exc.rule_name, stage=exc.stage)
         return _traced_result(run_span, guardrail_blocked_result(exc))
-    except GraphRecursionError:
-        # The platform's step ceiling: the graph ran MAX_AGENT_STEPS nodes without finishing.
+    except _limit_stop_errors():
+        # The platform's step ceiling while execution limits are on: the graph ran
+        # MAX_AGENT_STEPS nodes without finishing. Off, it fails as any other error.
         run_span.set(**{"agent.run.status": "stopped"})
         latency_ms = int((time.perf_counter() - t0) * 1000)
         execution_limits.meter("step_limit")
@@ -766,7 +799,9 @@ async def run_agent(
     except TimeoutError:
         run_span.set(**{"agent.run.status": "timeout"})
         latency_ms = int((time.perf_counter() - t0) * 1000)
-        execution_limits.meter("duration_limit")
+        limits_on = execution_limits.enabled()
+        if limits_on:
+            execution_limits.meter("duration_limit")
         logger.warning(
             "langgraph_agent_timeout",
             agent_id=agent_id,
@@ -781,10 +816,16 @@ async def run_agent(
             "tool_calls": [],  # BUG-11 dual-emit
             "hitl_trigger": "",
             "error": f"timeout: agent exceeded {run_limits.max_duration_seconds}s",
-            "limit": {
-                "reason": "duration_limit",
-                "detail": f"the run exceeded its limit of {run_limits.max_duration_seconds} seconds",
-            },
+            **(
+                {
+                    "limit": {
+                        "reason": "duration_limit",
+                        "detail": f"the run exceeded its limit of {run_limits.max_duration_seconds} seconds",
+                    }
+                }
+                if limits_on
+                else {}
+            ),
             "explanation": {},
             "performance": {
                 "total_latency_ms": latency_ms,
