@@ -18,6 +18,7 @@ from pydantic import BaseModel, Field
 
 from api.deps import get_current_tenant, get_user_role, require_tenant_admin
 from api.route_metadata import route_meta
+from core.ownership import caller_from_request
 from core.workbench import access, assignments, definitions
 
 router = APIRouter(prefix="/workbench", tags=["Workbench"])
@@ -147,7 +148,7 @@ async def summary(
     if name not in definitions.WORKBENCHES:
         raise HTTPException(404, detail={"error": "not_found", "message": "No such workbench"})
     held = await _assigned(tenant_id, request)
-    found = await access.summary(uuid.UUID(tenant_id), name, role, held)
+    found = await access.summary(uuid.UUID(tenant_id), name, role, held, caller=caller_from_request(request))
     if found is None:
         raise HTTPException(404, detail={"error": "not_found", "message": "No such workbench"})
     return found

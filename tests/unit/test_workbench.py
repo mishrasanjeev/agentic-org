@@ -16,7 +16,33 @@ from core.config import settings
 from core.workbench import access, assignments, definitions
 
 TENANT = uuid.uuid4()
-UI_ROUTES = set(re.findall(r'path="(/dashboard/[^"]*)"', Path("ui/src/App.tsx").read_text(encoding="utf-8")))
+APP_TSX = Path("ui/src/App.tsx").read_text(encoding="utf-8")
+ROLES_TS = Path("ui/src/lib/roles.ts").read_text(encoding="utf-8")
+UI_ROUTES = set(re.findall(r'path="(/dashboard/[^"]*)"', APP_TSX))
+
+
+def _role_lists() -> dict[str, set[str]]:
+    """The named role arrays of ``ui/src/lib/roles.ts``."""
+    out: dict[str, set[str]] = {}
+    for name, body in re.findall(r"export const (\w+_ROLES): readonly string\[\] = \[([^\]]*)\];", ROLES_TS):
+        out[name] = set(re.findall(r'"([^"]+)"', body))
+    return out
+
+
+def route_guards() -> dict[str, set[str] | None]:
+    """Each dashboard route's ``allowedRoles``; None when the route admits every signed-in role."""
+    named = _role_lists()
+    guards: dict[str, set[str] | None] = {}
+    pattern = r'<Route\s+path="(/dashboard/[^"]*)"\s+element=\{\s*<ProtectedRoute(?:\s+allowedRoles=\{([^}]*)\})?'
+    for path, guard in re.findall(pattern, APP_TSX):
+        guard = guard.strip()
+        if not guard:
+            guards[path] = None
+        elif guard.startswith("["):
+            guards[path] = set(re.findall(r'"([^"]+)"', guard))
+        else:
+            guards[path] = named[guard]
+    return guards
 
 
 class TestDefinitions:
@@ -30,6 +56,18 @@ class TestDefinitions:
                 assert set(tab.roles) <= set(definitions.ALL_ROLES)
                 assert tab.path.startswith("/dashboard/")
                 assert tab.path in UI_ROUTES or tab.path.startswith("/dashboard/workbench/"), tab.path
+
+    def test_a_tab_names_no_role_its_page_would_turn_away(self):
+        guards = route_guards()
+        for bench in definitions.CATALOGUE:
+            for tab in bench.tabs:
+                if tab.path.startswith("/dashboard/workbench/"):
+                    continue
+                guard = guards.get(tab.path)
+                if guard is None:
+                    continue
+                shown_to = set(tab.roles) if tab.roles else set(definitions.ALL_ROLES)
+                assert shown_to <= guard, (bench.name, tab.key, sorted(shown_to - guard))
                 if tab.sensitive:
                     assert tab.roles, "a sensitive tab names the roles that may see it"
 
@@ -37,7 +75,15 @@ class TestDefinitions:
         found = definitions.catalogue()
         assert [item["name"] for item in found] == list(definitions.NAMES)
         review = next(item for item in found if item["name"] == "review_officer")
-        assert "cfo" in review["default_roles"] and review["tabs"][0]["roles"] == []
+        assert "cfo" in review["default_roles"] and review["tabs"][0]["roles"] == [
+            "admin",
+            "cfo",
+            "chro",
+            "cmo",
+            "coo",
+            "domain_lead",
+            "developer",
+        ]
         assert definitions.WORKBENCHES["supervisor"].to_dict()["tabs"][0]["sensitive"] is True
 
 
@@ -52,11 +98,14 @@ class TestAccess:
         assert assigned["held_by"] == "assignment"
         assert [b["name"] for b in access.workbenches_for("admin")] == list(definitions.NAMES)
         assert access.workbenches_for("merchant") == []
+        assert access.workbenches_for("analyst", {"investigator"}) == []  # held, but no tab its role may open
 
     def test_sensitive_and_role_bound_tabs_are_hidden_from_other_roles(self):
         investigator = definitions.WORKBENCHES["investigator"]
-        assert [t.key for t in access.tabs_for(investigator, "analyst")] == ["documents", "cases"]
-        assert [t.key for t in access.tabs_for(investigator, "auditor")] == [
+        assert [t.key for t in access.tabs_for(investigator, "analyst")] == []  # no page admits an analyst yet
+        assert [t.key for t in access.tabs_for(investigator, "auditor")] == ["audit"]
+        assert [t.key for t in access.tabs_for(investigator, "domain_lead")] == ["documents", "cases"]
+        assert [t.key for t in access.tabs_for(investigator, "admin")] == [
             "documents",
             "cases",
             "audit",
@@ -64,7 +113,8 @@ class TestAccess:
         ]
         supervisor = next(b for b in access.workbenches_for("cfo", {"supervisor"}) if b["name"] == "supervisor")
         assert [t["key"] for t in supervisor["tabs"]] == ["approvals", "costs"]
-        assert access.may_open("supervisor", "live", "coo") is True
+        assert access.may_open("supervisor", "live", "coo") is False  # the conversations page admits admins only
+        assert access.may_open("supervisor", "live", "admin") is True
         assert access.may_open("supervisor", "live", "cfo", {"supervisor"}) is False
         assert access.may_open("supervisor", "costs", "cfo") is False  # not held without an assignment
         assert access.may_open("nowhere", "x", "admin") is False
@@ -126,6 +176,36 @@ class TestAccess:
         ]
         assert await access.summary(TENANT, "supervisor", "cfo") is None
         assert await access.summary(TENANT, "unknown", "admin") is None
+
+    @pytest.mark.asyncio
+    async def test_approval_counts_are_scoped_to_the_callers_visible_agents(self, monkeypatch):
+        from core.ownership import Caller
+
+        statements: list[str] = []
+
+        async def scalar(statement):
+            statements.append(str(statement.compile(compile_kwargs={"literal_binds": False})))
+            return 3
+
+        class Session:
+            async def __aenter__(self):
+                return SimpleNamespace(scalar=scalar)
+
+            async def __aexit__(self, *args):
+                return False
+
+        import core.database
+
+        monkeypatch.setattr(core.database, "get_tenant_session", lambda tenant_id: Session())
+        admin = Caller(user_id=uuid.uuid4(), role="admin", domains=None, is_admin=True, is_machine=False)
+        cfo = Caller(user_id=uuid.uuid4(), role="cfo", domains=["finance"], is_admin=False, is_machine=False)
+        assert (await access.counts(TENANT, {"approvals"}, caller=admin))["approvals"] == 3
+        assert "agents" not in statements[-1]
+        assert (await access.counts(TENANT, {"approvals"}, caller=cfo))["approvals"] == 3
+        assert "agents" in statements[-1] and "domain IN" in statements[-1]
+        assert (await access.counts(TENANT, {"approvals"}))["approvals"] == 3
+        assert "false" in statements[-1].lower()  # no caller: the filter admits nothing
+        assert access.approval_filter(TENANT, None)[0] is not None and access.approval_filter(TENANT, admin) == []
 
     @pytest.mark.asyncio
     async def test_unreadable_stores_leave_every_count_unknown(self, monkeypatch):
@@ -247,7 +327,9 @@ class TestRoutes:
         monkeypatch.setattr(
             assignments, "set_assignments", AsyncMock(return_value={"user_id": "u1", "workbenches": ["supervisor"]})
         )
-        request = SimpleNamespace(state=SimpleNamespace(claims={"agenticorg:user_id": "u1"}))
+        request = SimpleNamespace(
+            state=SimpleNamespace(claims={"agenticorg:user_id": "u1", "role": "domain_lead"}, scopes=[])
+        )
 
         listed = await api.list_workbenches(request, role="cfo", tenant_id=str(TENANT))
         assert listed["enabled"] is True and [b["name"] for b in listed["workbenches"]] == [
@@ -256,7 +338,8 @@ class TestRoutes:
         ]
         assert assignments.assigned_to.call_args.args == (TENANT, "u1")
 
-        found = await api.summary("investigator", request, role="analyst", tenant_id=str(TENANT))
+        found = await api.summary("investigator", request, role="domain_lead", tenant_id=str(TENANT))
+        assert access.counts.call_args.kwargs["caller"].role == "domain_lead"
         assert found["counts"] == {"documents": 1, "cases": None} and found["waiting"] == 1
         with pytest.raises(HTTPException) as info:
             await api.summary("supervisor", request, role="cfo", tenant_id=str(TENANT))
