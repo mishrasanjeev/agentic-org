@@ -23,6 +23,14 @@ TODAY = date(2026, 10, 7)
 TENANT = uuid.uuid4()
 
 
+@pytest.fixture(autouse=True)
+def _no_operator_overrides(monkeypatch):
+    """Operator overrides allow every call unless a test places one."""
+    from core.governance import operator_override
+
+    monkeypatch.setattr(operator_override, "check", AsyncMock(return_value=operator_override.ALLOWED))
+
+
 # ── Recognition and entities ──────────────────────────────────────────────────
 
 
@@ -164,6 +172,20 @@ class TestDialogue:
         summary = engine.handoff_summary(dialogue)
         assert summary["turns"] == 1 and summary["recent"][0]["role"] == "user"
 
+    def test_a_request_for_a_person_mid_transfer_keeps_what_was_collected_and_promises_nothing(self):
+        dialogue, outcomes = _turns("send money to Ravi", "connect me with a human agent")
+        handoff = outcomes[1].handoff
+        assert outcomes[1].kind == "escalate" and dialogue.stage == engine.STAGE_IDLE
+        assert handoff["intent"] == "fund_transfer" and handoff["slots"] == {"payee": "Ravi"}
+        assert handoff["reason"] == "requested" and handoff["recent"][-1]["role"] == "assistant"
+        assert "connect you" not in outcomes[1].text and "One moment" not in outcomes[1].text
+        _, outcomes = _turns("send money to Ravi", "lots", "a bit", "dunno")
+        assert (
+            outcomes[-1].handoff["reason"] == engine.ESCALATION_SLOTS
+            and outcomes[-1].handoff["intent"] == "fund_transfer"
+        )
+        assert "connect you" not in outcomes[-1].text
+
     def test_unknown_text_falls_back_and_greetings_are_answered(self):
         _, outcomes = _turns("what is the weather", "hello")
         assert outcomes[0].kind == "fallback" and outcomes[1].kind == "greeting"
@@ -204,6 +226,39 @@ class TestRuntime:
         assert runtime.bindings_of({"conversation": {"bindings": {"fund_transfer": "x", "bad": 1}}}) == {
             "fund_transfer": "x"
         }
+
+    def test_a_qualified_binding_prefers_its_own_connector_over_an_earlier_tool_of_the_same_name(self):
+        tools = ["banking_aa:fetch_bank_statement", "zoho_books:fetch_bank_statement"]
+        bound = {"mini_statement": "zoho_books:fetch_bank_statement"}
+        assert runtime.resolve_binding("mini_statement", tools, bound) == "zoho_books:fetch_bank_statement"
+        # The same connector and tool in another spelling is still the exact match.
+        spelled = ["banking_aa:fetch_bank_statement", "tool:zoho_books:read:fetch_bank_statement"]
+        assert runtime.resolve_binding("mini_statement", spelled, bound) == "tool:zoho_books:read:fetch_bank_statement"
+        # Never another connector's tool of the same name.
+        assert runtime.resolve_binding("mini_statement", ["banking_aa:fetch_bank_statement"], bound) is None
+        # A bare binding falls back to the bare name only when it is unambiguous.
+        bare = {"mini_statement": "fetch_bank_statement"}
+        assert runtime.resolve_binding("mini_statement", tools, bare) is None
+        assert (
+            runtime.resolve_binding("mini_statement", ["banking_aa:fetch_bank_statement", "send_email"], bare)
+            == "banking_aa:fetch_bank_statement"
+        )
+        # An unqualified authorised tool still serves a qualified binding when it is the only one.
+        assert runtime.resolve_binding("mini_statement", ["fetch_bank_statement"], bound) == "fetch_bank_statement"
+        # The action's aliases never pick between two connectors either.
+        assert runtime.resolve_binding("mini_statement", tools, {}) is None
+
+    def test_bill_payment_never_binds_a_payment_intent_tool_by_alias(self):
+        assert "create_payment_intent" not in runtime.ACTIONS["bill_payment"]
+        assert runtime.resolve_binding("bill_payment", ["stripe:create_payment_intent"], {}) is None
+        assert runtime.resolve_binding("bill_payment", ["stripe:create_payment_intent", "biller:pay_bill"], {}) == (
+            "biller:pay_bill"
+        )
+        # An agent that means it declares the binding explicitly.
+        explicit = {"bill_payment": "stripe:create_payment_intent"}
+        assert runtime.resolve_binding("bill_payment", ["stripe:create_payment_intent"], explicit) == (
+            "stripe:create_payment_intent"
+        )
 
     def test_params_carry_the_slots_and_the_intent(self):
         assert runtime.params_for("fund_transfer", {"amount": 5.0, "payee": "Ravi", "remarks": ""}) == {
@@ -297,6 +352,60 @@ class TestRuntime:
         assert execution["status"] == "failed" and execution["tool_call"]["status"] == "error"
         assert "Insufficient balance" in runtime.answer_for(outcome, execution)
 
+    @staticmethod
+    def _wire(monkeypatch, calls: list[dict]):
+        from core.langgraph import tool_adapter
+
+        class _Tool:
+            async def ainvoke(self, params):
+                calls.append(params)
+                return {"status": "ok", "reference": "TXN-1"}
+
+        monkeypatch.setattr(tool_adapter, "_build_tool_index", lambda *_a, **_k: {"transfer_funds": ("core_bank", "d")})
+        monkeypatch.setattr(tool_adapter, "build_tools_for_agent", lambda *_a, **_k: [_Tool()])
+        import auth.run_grants as run_grants
+
+        monkeypatch.setattr(run_grants, "direct_tool_call_permitted", AsyncMock(return_value=True))
+
+    @pytest.mark.asyncio
+    async def test_an_agent_throttle_or_halt_holds_the_action_before_the_tool_and_the_claim(self, monkeypatch):
+        from core.governance import operator_override
+
+        calls: list[dict] = []
+        self._wire(monkeypatch, calls)
+        check = AsyncMock(return_value=operator_override.OverrideDecision(blocked=True, reason="Agent is throttled."))
+        monkeypatch.setattr(operator_override, "check", check)
+        claim = AsyncMock(return_value="k1")
+        outcome = engine.Outcome(kind="execute", text="t", intent="fund_transfer", slots={"amount": 1.0, "payee": "R"})
+        context = runtime.ExecutionContext(
+            tenant_id=str(TENANT), agent_id="a1", authorized_tools=["transfer_funds"], run_grant=object()
+        )
+
+        execution = await runtime.execute(outcome, context, claim=claim)
+
+        assert execution["status"] == "held" and calls == [] and claim.await_count == 0
+        assert check.call_args.kwargs == {"agent_id": "a1", "throttle_unit": "agent"}
+        answer = runtime.answer_for(outcome, execution)
+        assert "Agent is throttled." in answer and "Nothing has been done" in answer
+
+    @pytest.mark.asyncio
+    async def test_a_claimed_action_carries_its_key_and_an_unclaimed_one_never_runs(self, monkeypatch):
+        calls: list[dict] = []
+        self._wire(monkeypatch, calls)
+        outcome = engine.Outcome(kind="execute", text="t", intent="fund_transfer", slots={"amount": 1.0, "payee": "R"})
+        context = runtime.ExecutionContext(
+            tenant_id=str(TENANT), agent_id="a1", authorized_tools=["transfer_funds"], run_grant=object()
+        )
+
+        execution = await runtime.execute(outcome, context, claim=AsyncMock(return_value="key-1"))
+        assert execution["status"] == "executed" and execution["execution_key"] == "key-1"
+        assert calls == [{"amount": 1.0, "payee": "R", "intent": "fund_transfer", "idempotency_key": "key-1"}]
+        assert "idempotency_key" not in execution["tool_call"]["params"]
+
+        lost = await runtime.execute(outcome, context, claim=AsyncMock(return_value=None))
+        assert lost["status"] == "superseded" and len(calls) == 1
+        assert "nothing more has been done" in runtime.answer_for(outcome, lost)
+
     @pytest.mark.asyncio
     async def test_the_chat_hook_handles_banking_turns_and_leaves_the_rest_to_the_agent(self, monkeypatch):
         monkeypatch.setattr(settings, "conversation_v2_enabled", True)
@@ -365,6 +474,10 @@ class TestRuntime:
         assert "conversation: dict | None = None" in chat
         assert chat.count("await _append_history(") == 2
         assert chat.index("conversation_runtime.enabled()") < chat.index("lg_result = await langgraph_run(")
+
+    def test_the_chat_route_comments_cite_reviews_by_date_only(self):
+        chat = (ROOT / "api" / "v1" / "chat.py").read_text(encoding="utf-8")
+        assert "Codex" not in chat and "the 2026-04-22 review" in chat
 
 
 # ── Routes ─────────────────────────────────────────────────────────────────────

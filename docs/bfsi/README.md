@@ -19,9 +19,9 @@ part, and what it does not provide yet, with the repository evidence for each an
 | Section | Items | Covered | Partial | Gap |
 |---|---:|---:|---:|---:|
 | Baseline conditions | 5 | 1 | 4 | 0 |
-| Technical capabilities | 50 | 4 | 33 | 13 |
-| Functional capabilities | 150 | 20 | 100 | 30 |
-| Total | 205 | 25 | 137 | 43 |
+| Technical capabilities | 50 | 5 | 32 | 13 |
+| Functional capabilities | 150 | 24 | 97 | 29 |
+| Total | 205 | 30 | 133 | 42 |
 
 Status rules: **Covered** means the capability exists in product form with tests; **Partial** means part of it
 exists or it exists for one domain only; **Gap** means nothing usable exists yet. The combined status reports
