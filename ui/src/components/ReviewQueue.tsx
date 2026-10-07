@@ -241,10 +241,15 @@ export default function ReviewQueue() {
                   <button type="button" className="rounded-md bg-emerald-600 px-3 py-1.5 text-sm font-medium text-white disabled:opacity-50" disabled={busy || !detail.decidable} onClick={() => void decide("approve")}>
                     Approve
                   </button>
-                  <button type="button" className="rounded-md border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-700 disabled:opacity-50" disabled={busy || !detail.decidable} onClick={() => void decide("reject")}>
+                  <button type="button" className="rounded-md border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-700 disabled:opacity-50" disabled={busy || !detail.decidable || (selected.kind === "finding" && !notes.trim())} onClick={() => void decide("reject")} data-testid="queue-reject">
                     Reject
                   </button>
                   {!detail.decidable && <span className="self-center text-xs text-slate-500">This item is no longer open for a decision.</span>}
+                  {detail.decidable && selected.kind === "finding" && !notes.trim() && (
+                    <span className="self-center text-xs text-slate-500" data-testid="queue-reason-hint">
+                      A reason in the notes is needed to dismiss a finding.
+                    </span>
+                  )}
                 </div>
               </>
             )}

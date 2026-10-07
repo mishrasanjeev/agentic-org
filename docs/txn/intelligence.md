@@ -67,7 +67,9 @@ basis, a recommendation (dismiss, confirm, escalate) and the gaps an investigato
 The model path goes through the content services' checked JSON call; the extractive path writes the
 same sections from the facts, so a draft exists without a model; `auto` takes the model and falls
 back to the facts, saying so. The draft is kept on the finding, which stays open in the investigator
-queue for a person to review; nothing is filed. `GET /txn/findings/{id}/evidence?format=json|csv`
+queue for a person to review; nothing is filed. In the queue a finding is listed only for the
+roles the Transactions tab admits (admin, COO, auditor, CFO), whatever another workbench opens;
+it is decided by a signed-in person, and rejecting it needs a reason in the notes. `GET /txn/findings/{id}/evidence?format=json|csv`
 is the evidence package: the finding with its narrative, the supporting rows, the entity view, the
 fund-flow graph and rows, exported with a digest over the whole so a reviewer can tell it was not
 altered; the digest is recorded on the finding. Open findings appear in the workbench review queue as

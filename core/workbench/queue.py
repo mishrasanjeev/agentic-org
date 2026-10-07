@@ -67,8 +67,24 @@ def enabled_kinds() -> list[str]:
     return out
 
 
+def sensitive_roles(source: str) -> set[str] | None:
+    """The roles a sensitive tab showing this source admits; None when no tab showing it is sensitive."""
+    roles: set[str] = set()
+    sensitive = False
+    for workbench in WORKBENCHES.values():
+        for tab in workbench.tabs:
+            if tab.source == source and tab.sensitive:
+                sensitive = True
+                roles |= set(tab.roles)
+    return roles if sensitive else None
+
+
 def kinds_for(role: str, assigned: set[str] | None = None) -> list[str]:
-    """The kinds a role may see: those shown by a tab of a workbench it holds, whose subsystem is on."""
+    """The kinds a role may see: those shown by a tab of a workbench it holds, whose subsystem is on.
+
+    A kind shown by a sensitive tab (transaction findings) is seen only by the roles that tab
+    admits, whatever the queue tab of another workbench opens.
+    """
     available = enabled_kinds()
     if role == ADMIN:
         return available
@@ -77,8 +93,15 @@ def kinds_for(role: str, assigned: set[str] | None = None) -> list[str]:
         if holds(workbench, role, assigned or set()):
             sources |= {tab.source for tab in tabs_for(workbench, role)}
     if "queue" in sources:
-        return available
-    return [kind for kind, source in KINDS.items() if source in sources and kind in available]
+        wanted = list(available)
+    else:
+        wanted = [kind for kind, source in KINDS.items() if source in sources and kind in available]
+    out: list[str] = []
+    for kind in wanted:
+        admitted = sensitive_roles(KINDS[kind])
+        if admitted is None or role in admitted:
+            out.append(kind)
+    return out
 
 
 def _age(created_at: datetime | None, now: datetime) -> int | None:

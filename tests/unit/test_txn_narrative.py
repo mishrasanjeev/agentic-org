@@ -316,6 +316,12 @@ class TestQueue:
         monkeypatch.setattr(settings, "content_services_enabled", True)
         assert queue.KINDS["finding"] == "transactions" and "finding" in queue.enabled_kinds()
         assert "finding" in queue.kinds_for("auditor") and "finding" not in queue.kinds_for("cmo")
+        # the transactions tab is sensitive: the queue tab of the review officer does not open findings
+        assert "finding" in queue.kinds_for("cfo") and "finding" in queue.kinds_for("coo")
+        assert "finding" not in queue.kinds_for("domain_lead") and "finding" not in queue.kinds_for("developer")
+        assert "finding" not in queue.kinds_for("cmo", {"investigator"})  # holding the workbench is not enough
+        assert queue.sensitive_roles("transactions") == {"admin", "coo", "auditor", "cfo"}
+        assert queue.sensitive_roles("approvals") is None
         monkeypatch.setattr(settings, "transaction_intelligence_enabled", False)
         assert "finding" not in queue.enabled_kinds()
         monkeypatch.setattr(settings, "transaction_intelligence_enabled", True)
@@ -376,6 +382,23 @@ class TestQueue:
             user_domains=None,
         )
         assert findings.disposition.call_args.kwargs["outcome"] == "confirm"
+        for state in (
+            SimpleNamespace(claims={"role": "auditor"}, scopes=[]),  # no signed-in person
+            SimpleNamespace(claims={"agenticorg:user_id": "u1", "sub": "apikey:k1"}, scopes=[], auth_mode="api_key"),
+        ):
+            with pytest.raises(HTTPException) as refused:
+                await api.decide(
+                    "finding",
+                    str(row.id),
+                    api.DecisionIn(decision="approve"),
+                    SimpleNamespace(),
+                    SimpleNamespace(state=state),
+                    role="auditor",
+                    tenant_id=str(TENANT),
+                    user_claims={},
+                    user_domains=None,
+                )
+            assert refused.value.status_code == 403 and refused.value.detail["error"] == "human_required"
         monkeypatch.setattr(findings, "disposition", AsyncMock(side_effect=TxnError(409, "decided", "no")))
         with pytest.raises(HTTPException) as info:
             await api.decide(

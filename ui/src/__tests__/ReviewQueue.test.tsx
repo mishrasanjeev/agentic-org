@@ -96,6 +96,27 @@ describe("ReviewQueue", () => {
     expect(await screen.findByTestId("queue-notice")).toHaveTextContent("Draft approved with 1 edit(s).");
   });
 
+  it("needs a reason before a finding is rejected", async () => {
+    const FINDING = { ...DRAFT, kind: "finding", id: "f1", title: "structuring on A1", path: "/dashboard/transactions", actions: ["approve", "reject"] };
+    mockGet.mockImplementation((url: string) => {
+      if (url === "/workbench/queue") return Promise.resolve({ data: { items: [FINDING], allowed_kinds: ["finding"], counts: { finding: 1 } } });
+      if (url === "/workbench/queue/finding/f1") return Promise.resolve({ data: { kind: "finding", item: { title: "structuring on A1" }, editable: [], decidable: true } });
+      return Promise.reject(new Error(`unexpected ${url}`));
+    });
+    mockPost.mockResolvedValue({ data: { kind: "finding", decision: "reject" } });
+    renderQueue();
+    fireEvent.click((await screen.findAllByTestId("queue-item"))[0]);
+    const reject = (await screen.findByTestId("queue-reject")) as HTMLButtonElement;
+    expect(reject.disabled).toBe(true);
+    expect(screen.getByTestId("queue-reason-hint")).toBeInTheDocument();
+    expect((screen.getByText("Approve") as HTMLButtonElement).disabled).toBe(false);
+    fireEvent.change(screen.getByTestId("queue-notes"), { target: { value: "a known payroll run" } });
+    expect(reject.disabled).toBe(false);
+    expect(screen.queryByTestId("queue-reason-hint")).not.toBeInTheDocument();
+    fireEvent.click(reject);
+    await waitFor(() => expect(mockPost).toHaveBeenCalledWith("/workbench/queue/finding/f1/decide", { decision: "reject", notes: "a known payroll run", edits: [] }));
+  });
+
   it("sends a case to its own page instead of deciding it", async () => {
     renderQueue();
     const rows = await screen.findAllByTestId("queue-item");
