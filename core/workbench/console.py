@@ -118,9 +118,13 @@ GROUPS: tuple[tuple[str, str], ...] = (
 )
 
 
+def _speech_on() -> bool:
+    return bool(getattr(settings, "speech_intelligence_enabled", False))
+
+
 def catalogue() -> tuple[Setting, ...]:
     """The settings, built on demand so the catalogues they draw options from load lazily."""
-    return (
+    base: tuple[Setting, ...] = (
         Setting(
             "documents.type_confidence_floor",
             "Document type confidence floor",
@@ -207,36 +211,42 @@ def catalogue() -> tuple[Setting, ...]:
             [],
             "core/workbench/queue.py list_items",
         ),
-        Setting(
-            "speech.required_disclosures",
-            "Disclosures required on calls",
-            "The scripts an agent must say; each applies to the call types it names.",
-            "speech",
-            "list",
-            ["recorded_line", "identity_verification"],
-            "core/speech/disclosures.py required_for",
-            options=_disclosure_keys(),
-        ),
-        Setting(
-            "speech.redaction_kinds",
-            "Spoken data redacted",
-            "The kinds of spoken sensitive data cut from recordings and transcripts.",
-            "speech",
-            "list",
-            ["card", "otp", "cvv", "pin"],
-            "core/speech/redaction.py find_spans",
-            options=_redaction_kinds(),
-        ),
-        Setting(
-            "speech.redact_on_transcription",
-            "Redact at transcription",
-            "Cut spoken sensitive data from a recording and its transcript as soon as it is transcribed.",
-            "speech",
-            "boolean",
-            False,
-            "core/speech/store.py save and attach_transcript",
-        ),
     )
+    if _speech_on():
+        # Speech settings exist only while speech intelligence is on, so the console of a
+        # deployment without it is unchanged.
+        base = base + (
+            Setting(
+                "speech.required_disclosures",
+                "Disclosures required on calls",
+                "The scripts an agent must say; each applies to the call types it names.",
+                "speech",
+                "list",
+                ["recorded_line", "identity_verification"],
+                "core/speech/disclosures.py required_for",
+                options=_disclosure_keys(),
+            ),
+            Setting(
+                "speech.redaction_kinds",
+                "Spoken data redacted",
+                "The kinds of spoken sensitive data cut from recordings and transcripts.",
+                "speech",
+                "list",
+                ["card", "otp", "cvv", "pin"],
+                "core/speech/redaction.py find_spans",
+                options=_redaction_kinds(),
+            ),
+            Setting(
+                "speech.redact_on_transcription",
+                "Redact at transcription",
+                "Cut spoken sensitive data from a recording and its transcript as soon as it is transcribed.",
+                "speech",
+                "boolean",
+                False,
+                "core/speech/store.py save and attach_transcript",
+            ),
+        )
+    return base
 
 
 def definitions() -> dict[str, Setting]:
@@ -415,7 +425,8 @@ def _tenant(tenant_id: uuid.UUID | str) -> uuid.UUID | None:
 
 
 async def value(tenant_id: uuid.UUID | str, key: str) -> Any:
-    return (await effective(tenant_id, [key]))[key]
+    """The effective value of one setting; None for a key the catalogue does not hold now (a gated group that is off)."""
+    return (await effective(tenant_id, [key])).get(key)
 
 
 def _audit(session: Any, tenant_id: uuid.UUID, *, actor: str, event: str, key: str, previous: Any, new: Any) -> None:

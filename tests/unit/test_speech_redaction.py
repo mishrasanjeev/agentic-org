@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
-"""Speech, part 4: spoken card numbers, codes, CVVs and PINs found, cut from the transcript and silenced in the audio."""
+"""Speech, part 4: spoken card numbers, codes, CVVs and PINs found, cut from the transcript, silenced in the audio."""
 
 from __future__ import annotations
 
@@ -7,7 +7,6 @@ import io
 import json
 import uuid
 import wave
-from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
 import numpy as np
@@ -125,7 +124,7 @@ class TestRedaction:
         words = _words(
             ("card", 0), ("number", 0.5), ("4111", 1), ("1111", 1.5), ("1111", 2), ("1111", 2.5), ("thanks", 3)
         )
-        transcript = transcribe.transcript_of([transcribe.Word(**{k: v for k, v in w.items()}) for w in words], [])
+        transcript = transcribe.transcript_of([transcribe.Word(**w) for w in words], [])
         cleaned, spans = redaction.redact_transcript(transcript)
         assert len(spans) == 1 and cleaned["word_count"] == 4
         texts = [w["text"] for w in cleaned["words"]]
@@ -187,6 +186,7 @@ class _Session:
         return _Result(self.rows)
 
     def add(self, row):
+        row.id = row.id or uuid.uuid4()
         self.rows.append(row)
 
     async def flush(self):

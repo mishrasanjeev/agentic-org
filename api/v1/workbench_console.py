@@ -66,6 +66,8 @@ async def list_settings(tenant_id: str = Depends(get_current_tenant)) -> dict[st
         {"key": key, "title": title, "settings": [item for item in found if item["group"] == key]}
         for key, title in console.GROUPS
     ]
+    # A group with nothing in it (speech while speech intelligence is off) is not listed.
+    groups = [group for group in groups if group["settings"]]
     return {"groups": groups, "total": len(found)}
 
 

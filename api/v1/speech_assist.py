@@ -18,7 +18,7 @@ from typing import Annotated, Any
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel, Field
 
-from api.deps import get_current_tenant
+from api.deps import get_current_tenant, get_user_domains
 from api.route_metadata import route_meta
 from core.speech import assist, disclosures, store
 from core.speech.audio import SpeechError
@@ -159,14 +159,17 @@ async def start_session(
     audit_event="speech.live.turn",
 )
 async def post_turn(
-    session_id: uuid.UUID, body: TurnIn, tenant_id: str = Depends(get_current_tenant)
+    session_id: uuid.UUID,
+    body: TurnIn,
+    tenant_id: str = Depends(get_current_tenant),
+    domains: list[str] | None = Depends(get_user_domains),
 ) -> dict[str, Any]:
-    """One transcribed turn of the call; the answer is what the agent should see now."""
+    """One transcribed turn of the call; the answer is what the agent should see now, within their knowledge."""
     if not store.enabled():
         raise _off()
     try:
         return await assist.append_turn(
-            uuid.UUID(tenant_id), session_id, speaker=body.speaker, text=body.text, at=body.at
+            uuid.UUID(tenant_id), session_id, speaker=body.speaker, text=body.text, at=body.at, domains=domains
         )
     except SpeechError as exc:
         raise _refused(exc) from None

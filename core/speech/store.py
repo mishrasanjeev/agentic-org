@@ -224,7 +224,7 @@ async def attach_transcript(tenant_id: uuid.UUID, recording_id: uuid.UUID, raw_w
         for s in kept_segments
     ]
     transcript = engines.transcript_of(words, found)
-    spans = []
+    spans: list[redaction.Span] = []
     if await _redact_on_transcription(tenant_id):
         transcript, spans = redaction.redact_transcript(transcript, kinds=await _redaction_kinds(tenant_id))
     envelope = await _encrypt(tenant_id, transcript)

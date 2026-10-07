@@ -171,6 +171,20 @@ export default function LiveAssist() {
                 Closed: {session.report.compliant ? "compliant" : `${session.report.missing.length} missing, ${session.report.late.length} late`}.
               </p>
             )}
+            {session.status === "closed" && (
+              <button
+                type="button"
+                className="rounded-md border border-slate-300 px-3 py-1.5 text-sm text-slate-700"
+                onClick={() => {
+                  setSession(null);
+                  setView(null);
+                  setFlags([]);
+                }}
+                data-testid="live-new"
+              >
+                New call
+              </button>
+            )}
           </div>
           <div className="space-y-2 lg:col-span-7">
             {session.status === "open" && (

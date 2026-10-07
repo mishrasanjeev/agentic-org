@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
-"""Spoken sensitive data: card numbers, one-time codes, CVVs and PINs found in timed words, then cut from the transcript and the audio.
+"""Spoken sensitive data: card numbers, codes, CVVs and PINs found in timed words, cut from transcript and audio.
 
 Speech comes as digits, number words ("four one two three"), "double" and
 "triple", and spelled separators, so the finder first reads every run of
@@ -164,8 +164,9 @@ def digit_runs(words: list[dict[str, Any]]) -> list[tuple[int, int, str]]:
     return runs
 
 
-def _context(words: list[dict[str, Any]], first: int, *, window: int = CUE_WINDOW_WORDS) -> str:
-    return " ".join(str(w.get("text") or "") for w in words[max(0, first - window) : first]).lower()
+def _context(words: list[dict[str, Any]], first: int, *, floor: int = 0, window: int = CUE_WINDOW_WORDS) -> str:
+    """The words spoken just before a run: at most ``window`` of them, and none before ``floor`` (the previous run)."""
+    return " ".join(str(w.get("text") or "") for w in words[max(floor, first - window) : first]).lower()
 
 
 def _cued(context: str, cues: tuple[str, ...]) -> bool:
@@ -176,8 +177,11 @@ def find_spans(words: list[dict[str, Any]], *, kinds: tuple[str, ...] | list[str
     """The sensitive spans among timed words, by kind, each with its time range; the digits are not kept."""
     wanted = set(kinds)
     spans: list[Span] = []
+    floor = 0
     for first, last, digits in digit_runs(words):
-        context = _context(words, first)
+        # A cue belongs to the run that follows it: the context never reaches back past the previous run.
+        context = _context(words, first, floor=floor)
+        floor = last + 1
         kind: str | None = None
         keep_last = 0
         length = len(digits)
@@ -264,6 +268,10 @@ def redact_transcript(
         ],
         [],
     )
+    # The rebuilt words come from the transcript builder; the redacted flag rides on the words themselves.
+    rebuilt["words"] = [
+        {**word, "start": round(float(word["start"]), 3), "end": round(float(word["end"]), 3)} for word in cleaned
+    ]
     rebuilt["redacted"] = [span.to_dict() for span in spans]
     return rebuilt, spans
 

@@ -35,12 +35,19 @@ MAX_SUGGESTIONS = 3
 STATUSES = ("open", "closed")
 
 
-async def default_search(tenant_id: uuid.UUID, text: str, limit: int) -> list[dict[str, Any]]:
-    """The tenant's knowledge for a customer turn, through the knowledge search; nothing when it cannot answer."""
+async def default_search(
+    tenant_id: uuid.UUID, text: str, limit: int, domains: list[str] | None = None
+) -> list[dict[str, Any]]:
+    """The tenant's knowledge for a customer turn, through the knowledge search with the caller's domains.
+
+    ``domains`` is the caller's domain restriction as the knowledge routes resolve it (None means unrestricted,
+    an empty list means none), so the agent sees only what they could read themselves; nothing when the
+    search cannot answer.
+    """
     try:
         from api.v1.knowledge import _native_semantic_search
 
-        results = await _native_semantic_search(str(tenant_id), text, limit)
+        results = await _native_semantic_search(str(tenant_id), text, limit, None, domains)
     # enterprise-gate: broad-except-ok reason=knowledge-search-boundary-degrades-to-no-suggestions-logging-the-failure
     except Exception as exc:  # noqa: BLE001 - the retrieval boundary; the agent gets no suggestion, not an error
         logger.warning("speech_assist_search_failed", error_type=type(exc).__name__)
@@ -227,6 +234,9 @@ def assess(
     }
 
 
+MAX_RETRIES = 3
+
+
 async def append_turn(
     tenant_id: uuid.UUID,
     session_id: uuid.UUID,
@@ -235,8 +245,14 @@ async def append_turn(
     text: str,
     at: float | None,
     search: Any = None,
+    domains: list[str] | None = None,
 ) -> dict[str, Any]:
-    """Take a turn, re-check the call and tell the agent what to do next; knowledge is surfaced for a customer turn."""
+    """Take a turn, re-check the call and tell the agent what to do next; knowledge is surfaced for a customer turn.
+
+    Two turns arriving together are serialised: the turns are read with their count, the new list is
+    encrypted outside any lock, and the write happens under a row lock only if the count is still the
+    one read; otherwise the whole step is retried on the newer list, so no turn is lost.
+    """
     from core.database import get_tenant_session
     from core.models.speech_live_session import SpeechLiveSession
 
@@ -244,61 +260,64 @@ async def append_turn(
     if not clean:
         raise SpeechError(422, "text_empty", "A turn needs text")
     who = (speaker or "customer").strip().lower()[:32]
-    async with get_tenant_session(tenant_id) as session:
-        row = (
-            await session.execute(
-                select(SpeechLiveSession).where(
-                    SpeechLiveSession.tenant_id == tenant_id, SpeechLiveSession.id == session_id
+    for _attempt in range(MAX_RETRIES):
+        async with get_tenant_session(tenant_id) as session:
+            row = (
+                await session.execute(
+                    select(SpeechLiveSession).where(
+                        SpeechLiveSession.tenant_id == tenant_id, SpeechLiveSession.id == session_id
+                    )
                 )
-            )
-        ).scalar_one_or_none()
-        if row is None:
-            raise SpeechError(404, "not_found", "No such live session")
-        if row.status != "open":
-            raise SpeechError(409, "closed", "The live session is closed")
-        turns = turns_of_row(row)
-        if len(turns) >= MAX_TURNS:
-            raise SpeechError(413, "too_many_turns", f"A live session holds at most {MAX_TURNS} turns")
-        started = row.started_at
-        required = list(row.required or [])
-        previous_flags = list(row.flags or [])
-    now = datetime.now(UTC)
-    elapsed = float(at) if at is not None else (now - started).total_seconds() if started else 0.0
-    kept_text, cut = redaction.redact_text(clean)
-    turns.append({"speaker": who, "text": kept_text, "start": round(max(0.0, elapsed), 3)})
-    agent_name = (
-        analytics.roles_of(sorted({t["speaker"] for t in turns}))[0]
-        if "agent" not in {t["speaker"] for t in turns}
-        else "agent"
-    )
-    view = assess(turns, required=required, agent=agent_name, elapsed=elapsed, previous_flags=previous_flags)
-    suggestions: list[dict[str, Any]] = []
-    if who != agent_name:
-        suggestions = await (search or default_search)(tenant_id, clean, MAX_SUGGESTIONS)
-    envelope = await _encrypt_turns(tenant_id, turns)
-    async with get_tenant_session(tenant_id) as session:
-        row = (
-            await session.execute(
-                select(SpeechLiveSession)
-                .where(SpeechLiveSession.tenant_id == tenant_id, SpeechLiveSession.id == session_id)
-                .with_for_update()
-            )
-        ).scalar_one_or_none()
-        if row is None:
-            raise SpeechError(404, "not_found", "No such live session")
-        row.turns_encrypted = envelope
-        row.turn_count = len(turns)
-        row.flags = previous_flags + view["new_flags"]
-        row.updated_at = now
-        answer = session_dict(row)
-    if view["new_flags"]:
-        logger.info("speech_live_flags", kinds=[f["kind"] for f in view["new_flags"]])
-    return {
-        **answer,
-        **view,
-        "suggestions": suggestions,
-        "turn": {"speaker": who, "start": round(max(0.0, elapsed), 3), "redacted": cut},
-    }
+            ).scalar_one_or_none()
+            if row is None:
+                raise SpeechError(404, "not_found", "No such live session")
+            if row.status != "open":
+                raise SpeechError(409, "closed", "The live session is closed")
+            turns = turns_of_row(row)
+            expected = int(row.turn_count or 0)
+            if len(turns) >= MAX_TURNS:
+                raise SpeechError(413, "too_many_turns", f"A live session holds at most {MAX_TURNS} turns")
+            started = row.started_at
+            required = list(row.required or [])
+            previous_flags = list(row.flags or [])
+        now = datetime.now(UTC)
+        elapsed = float(at) if at is not None else (now - started).total_seconds() if started else 0.0
+        kept_text, cut = redaction.redact_text(clean)
+        turns.append({"speaker": who, "text": kept_text, "start": round(max(0.0, elapsed), 3)})
+        speakers = {t["speaker"] for t in turns}
+        agent_name = "agent" if "agent" in speakers else analytics.roles_of(sorted(speakers))[0]
+        view = assess(turns, required=required, agent=agent_name, elapsed=elapsed, previous_flags=previous_flags)
+        suggestions: list[dict[str, Any]] = []
+        if who != agent_name:
+            suggestions = await (search or default_search)(tenant_id, clean, MAX_SUGGESTIONS, domains)
+        envelope = await _encrypt_turns(tenant_id, turns)
+        async with get_tenant_session(tenant_id) as session:
+            row = (
+                await session.execute(
+                    select(SpeechLiveSession)
+                    .where(SpeechLiveSession.tenant_id == tenant_id, SpeechLiveSession.id == session_id)
+                    .with_for_update()
+                )
+            ).scalar_one_or_none()
+            if row is None:
+                raise SpeechError(404, "not_found", "No such live session")
+            if int(row.turn_count or 0) != expected:
+                logger.info("speech_live_turn_retried", expected=expected, found=row.turn_count)
+                continue
+            row.turns_encrypted = envelope
+            row.turn_count = len(turns)
+            row.flags = previous_flags + view["new_flags"]
+            row.updated_at = now
+            answer = session_dict(row)
+        if view["new_flags"]:
+            logger.info("speech_live_flags", kinds=[f["kind"] for f in view["new_flags"]])
+        return {
+            **answer,
+            **view,
+            "suggestions": suggestions,
+            "turn": {"speaker": who, "start": round(max(0.0, elapsed), 3), "redacted": cut},
+        }
+    raise SpeechError(409, "busy", "The live session is taking turns faster than they can be kept; send the turn again")
 
 
 async def close(tenant_id: uuid.UUID, session_id: uuid.UUID) -> dict[str, Any]:

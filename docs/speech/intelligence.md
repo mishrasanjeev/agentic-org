@@ -80,7 +80,10 @@ recognised, the next question the intent still needs, the knowledge articles tha
 customer's turn (the tenant's knowledge search; nothing when it cannot answer), and the flags raised
 by this turn: a disclosure overdue the moment its deadline passes unsaid, two negative turns in a
 row, a request for a person or a complaint. `POST .../close` gives the compliance report. The
-turns are kept encrypted like a transcript; the flags and the report hold no words
+turns are kept encrypted like a transcript; the flags and the report hold no words. The knowledge
+search runs with the caller's own domains, so the agent sees only what they could read themselves;
+two turns arriving together are serialised by the session's turn count, so none is lost; the
+speech settings appear in the business console only while speech intelligence is on
 (`core/speech/assist.py`, `speech_live_sessions`).
 
 ## Spoken sensitive data
