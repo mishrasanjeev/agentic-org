@@ -174,16 +174,26 @@ async def transition(
     *,
     actor: uuid.UUID | None,
     note: Any = None,
+    require_actor: bool = True,
 ) -> tuple[AgentRegistryEntry, AgentRegistryEvent]:
-    """Move the agent to ``to_state`` under the transition table; the entry row is locked."""
+    """Move the agent to ``to_state`` under the transition table; the entry row is locked.
+
+    A governance transition is made by a signed-in person: without a local
+    user id (an API key, a delegated credential, a malformed claim) it is
+    refused, so the same-person rule can never be stepped around by an
+    unattributed request. ``require_actor=False`` is for transitions the
+    runtime makes as a consequence of its own, authorised changes.
+    """
     if to_state not in STATES:
         raise RegistryError(422, "invalid", f"state must be one of {', '.join(STATES)}")
+    if require_actor and actor is None:
+        raise RegistryError(403, "no_actor", "A lifecycle transition needs a signed-in user")
     clean_note = _text(note, "note", MAX_NOTE)
     entry = await ensure_entry(session, tenant_id, agent.id, lock=True)
     if to_state not in TRANSITIONS[entry.state]:
         allowed = ", ".join(TRANSITIONS[entry.state]) or "none"
         raise RegistryError(409, "transition", f"An agent in {entry.state} can move to: {allowed}")
-    if to_state == "approved" and actor is not None and entry.submitted_by == actor:
+    if to_state == "approved" and (actor is None or entry.submitted_by == actor):
         raise RegistryError(409, "same_person", "The person who submitted the agent for review cannot approve it")
     if to_state == "published" and str(getattr(agent, "status", "")) != "active":
         raise RegistryError(409, "not_active", "Only an active agent can be published; promote it first")

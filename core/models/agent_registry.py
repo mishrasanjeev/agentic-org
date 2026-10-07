@@ -6,7 +6,7 @@ from __future__ import annotations
 import uuid
 from datetime import datetime
 
-from sqlalchemy import TIMESTAMP, ForeignKey, Index, String, Text, func
+from sqlalchemy import TIMESTAMP, CheckConstraint, ForeignKey, Index, String, Text, func
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -27,6 +27,14 @@ class AgentRegistryEntry(BaseModel):
 
     __tablename__ = "agent_registry"
     __table_args__ = (
+        CheckConstraint(
+            "state IN ('draft','review','approved','published','deprecated','retired')",
+            name="ck_agent_registry_state",
+        ),
+        CheckConstraint(
+            "risk_tier IS NULL OR risk_tier IN ('low','medium','high','critical')",
+            name="ck_agent_registry_risk_tier",
+        ),
         # Leads with the foreign key: one entry per agent.
         Index("ux_agent_registry_agent", "agent_id", unique=True),
         Index("ix_agent_registry_tenant_state", "tenant_id", "state", "risk_tier"),
@@ -60,6 +68,10 @@ class AgentRegistryEvent(BaseModel):
 
     __tablename__ = "agent_registry_events"
     __table_args__ = (
+        CheckConstraint(
+            "to_state IN ('draft','review','approved','published','deprecated','retired')",
+            name="ck_agent_registry_events_to",
+        ),
         # Leads with the foreign key: the transitions of one agent, in order.
         Index("ix_agent_registry_events_agent_created", "agent_id", "created_at"),
         Index("ix_agent_registry_events_tenant_created", "tenant_id", "created_at"),
