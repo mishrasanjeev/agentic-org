@@ -116,6 +116,13 @@ agent as before. It splits between two agents, not between two stored versions o
 `agent_registry` (one row per agent) and `agent_registry_events`, both tenant-scoped under
 row-level security (`v6z48_agent_registry`); both are removed with the agent.
 
+`v6z49_registry_from_state` adds the event source-state constraint even when a
+database already applied v6z48. It is repeatable and never rewrites audit rows.
+If legacy rows contain invalid source states, new writes are still constrained
+but the constraint remains `NOT VALID` until an operator reviews that history.
+Rollout checks must inspect constraint validation, not just the Alembic version.
+Downgrading v6z49 removes only this check; it does not remove events or registry data.
+
 ## What is not here yet
 
 - **Environments are derived, not deployed.** There is one runtime; `staging` and `production`

@@ -28,6 +28,7 @@ from core.schemas.api import AgentCardIn
 
 DB_URL = os.getenv("AGENTICORG_DB_URL", "")
 migration = importlib.import_module("migrations.versions.v6_z48_agent_registry")
+source_state_migration = importlib.import_module("migrations.versions.v6_z49_registry_from_state")
 pytestmark = pytest.mark.skipif(not DB_URL, reason="Requires local PostgreSQL")
 
 
@@ -58,6 +59,8 @@ def registry_db(request):
             with Operations.context(MigrationContext.configure(conn)):
                 migration.upgrade()
                 migration.upgrade()
+                source_state_migration.upgrade()
+                source_state_migration.upgrade()
             conn.execute(text(f'GRANT USAGE ON SCHEMA "{schema}" TO {role}'))
             conn.execute(text(f'GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA "{schema}" TO {role}'))
         yield schema, role
@@ -150,3 +153,44 @@ async def test_registry_first_card_write_is_serialized_and_tenant_isolated(regis
                     await session.flush()
     finally:
         await engine.dispose()
+
+
+@pytest.mark.parametrize("historical_state", ["review", "legacy_invalid"])
+def test_forward_source_state_migration_preserves_history_and_rejects_new_invalid_rows(historical_state):
+    schema = f"registry_upgrade_{uuid.uuid4().hex}"
+    engine = create_engine(DB_URL.replace("postgresql+asyncpg", "postgresql"), poolclass=NullPool)
+    try:
+        with engine.begin() as conn:
+            conn.execute(text(f'CREATE SCHEMA "{schema}"'))
+            conn.execute(text(f'SET LOCAL search_path TO "{schema}"'))
+            with Operations.context(MigrationContext.configure(conn)):
+                source_state_migration.upgrade()  # An absent legacy table is safe.
+            conn.execute(text("CREATE TABLE agent_registry_events (from_state VARCHAR(16) NOT NULL)"))
+            conn.execute(text("INSERT INTO agent_registry_events VALUES (:state)"), {"state": historical_state})
+            with Operations.context(MigrationContext.configure(conn)):
+                source_state_migration.upgrade()
+                source_state_migration.upgrade()
+            assert (
+                conn.execute(text("SELECT from_state FROM agent_registry_events")).scalar_one() == historical_state
+            )
+            validated = conn.execute(
+                text(
+                    "SELECT convalidated FROM pg_constraint "
+                    "WHERE conname = 'ck_agent_registry_events_from' "
+                    "AND conrelid = 'agent_registry_events'::regclass"
+                )
+            ).scalar_one()
+            assert validated is (historical_state == "review")
+            with pytest.raises(IntegrityError):
+                with conn.begin_nested():
+                    conn.execute(text("INSERT INTO agent_registry_events VALUES ('invalid')"))
+            conn.execute(text("INSERT INTO agent_registry_events VALUES ('draft')"))
+            with Operations.context(MigrationContext.configure(conn)):
+                source_state_migration.downgrade()
+                source_state_migration.downgrade()
+                source_state_migration.upgrade()
+            assert conn.execute(text("SELECT count(*) FROM agent_registry_events")).scalar_one() == 2
+    finally:
+        with engine.begin() as conn:
+            conn.execute(text(f'DROP SCHEMA IF EXISTS "{schema}" CASCADE'))
+        engine.dispose()

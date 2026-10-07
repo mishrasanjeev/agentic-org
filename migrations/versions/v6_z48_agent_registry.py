@@ -32,7 +32,6 @@ _CHECKS = (
         "risk_tier IS NULL OR risk_tier IN ('low','medium','high','critical')",
     ),
     ("agent_registry_events", "ck_agent_registry_events_to", f"to_state IN ({_STATES})"),
-    ("agent_registry_events", "ck_agent_registry_events_from", f"from_state IN ({_STATES})"),
 )
 
 

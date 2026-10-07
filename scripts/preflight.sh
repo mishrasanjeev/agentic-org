@@ -315,6 +315,7 @@ run_step "mypy (whole tree)"      mypy_check
 run_step "bandit (api/auth/core)" bandit_check
 run_step "secret scan (branch)"   secret_scan
 run_step "alembic revision <=32"  alembic_id_check
+run_step "schema migration required" python scripts/check_migration_required.py
 run_step "verify=False scan"      verify_false_scan
 run_step "licence headers (new)"  license_header_check
 run_step "prompt tool references" prompt_tool_check
