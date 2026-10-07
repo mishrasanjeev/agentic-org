@@ -194,3 +194,66 @@ async def attach_transcript(
         return await store.attach_transcript(uuid.UUID(tenant_id), recording_id, body.words)
     except SpeechError as exc:
         raise _refused(exc) from None
+
+
+@router.post("/recordings/{recording_id}/summary")
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="speech.recordings.sensitive.write",
+    rate_limit="chat-query",
+    idempotency="idempotent-lifecycle-state",
+    audit_event="speech.recordings.summarise",
+)
+async def summarise_recording(
+    recording_id: uuid.UUID,
+    method: Annotated[str, Query(max_length=16)] = "auto",
+    tenant_id: str = Depends(get_current_tenant),
+) -> dict[str, Any]:
+    """Summarise a transcribed recording (intent, key points, next actions, outcome) and compute its analytics.
+
+    ``method`` is ``auto`` (the model, the words when it does not answer), ``model`` or ``extractive``.
+    """
+    if not store.enabled():
+        raise _off()
+    try:
+        return await store.summarise(uuid.UUID(tenant_id), recording_id, method=method)
+    except SpeechError as exc:
+        raise _refused(exc) from None
+
+
+@router.get("/recordings/{recording_id}/summary")
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="speech.recordings.sensitive.read",
+    rate_limit="standard",
+    idempotency="read-only",
+    audit_event="speech.recordings.summary",
+)
+async def get_summary(recording_id: uuid.UUID, tenant_id: str = Depends(get_current_tenant)) -> dict[str, Any]:
+    """The kept summary and analytics of a recording."""
+    if not store.enabled():
+        raise _off()
+    found = await store.get_recording(uuid.UUID(tenant_id), recording_id)
+    if found is None:
+        raise HTTPException(404, detail={"error": "not_found", "message": "No such recording"})
+    return {"id": found["id"], "summary": found.get("summary"), "analytics": found.get("analytics") or {}}
+
+
+@router.get("/analytics")
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="speech.recordings.sensitive.read",
+    rate_limit="standard",
+    idempotency="read-only",
+    audit_event="speech.analytics",
+)
+async def analytics_overview(
+    limit: Annotated[int, Query(ge=1, le=store.MAX_LIST)] = 200, tenant_id: str = Depends(get_current_tenant)
+) -> dict[str, Any]:
+    """Sentiment, empathy, talk share and escalation signals averaged over the latest summarised recordings."""
+    if not store.enabled():
+        raise _off()
+    return await store.overview(uuid.UUID(tenant_id), limit=limit)

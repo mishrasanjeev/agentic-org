@@ -227,6 +227,7 @@ CATALOGUE: tuple[Workbench, ...] = (
                 roles=("admin", "cfo", "chro", "cmo", "coo", "domain_lead", "developer"),
                 actions=("decide",),
             ),
+            Tab("calls", "Calls", "/dashboard/calls", "calls", roles=("admin", "coo"), sensitive=True),
             Tab("guardrails", "Guardrails", "/dashboard/settings/guardrails", "guardrails", roles=("admin",)),
             Tab(
                 "console",

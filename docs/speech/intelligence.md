@@ -36,6 +36,29 @@ split at a pause over a second; the transcript carries the words, the turns, the
 confidence. An engine that is not installed or not configured leaves the recording kept with its
 speakers and `status: failed` naming the reason, never a blank transcript presented as speech.
 
+## Summaries
+
+`POST /speech/recordings/{id}/summary` summarises a transcribed recording into one shape: the
+intent, the key points, the next actions, the outcome (resolved, unresolved, escalated, follow up)
+and the customer's mood (`core/speech/summary.py`). The model path goes through the content
+services' checked JSON call (schema, one retry); the extractive path needs no model: the intent
+from the banking intent catalogue over the customer's turns, the key points as the most informative
+turns, the next actions as the turns that commit to something, the outcome from the closing turns.
+`method=auto` takes the model and falls back to the words, saying so; `model` and `extractive` insist.
+The summary is kept encrypted like the transcript.
+
+## Analytics
+
+`core/speech/analytics.py` computes, from the words and timings alone, the customer's sentiment turn
+by turn and by thirds of the call (the conversation service's lexicon), the agent's empathy markers
+(acknowledgement, apology, reassurance, thanks) and whether negative customer turns were answered
+with one (a 0 to 100 empathy score), the interaction figures (talk ratio, words per minute,
+interruptions as overlapping segments of different speakers, silences over three seconds, the
+longest monologue) and escalation signals (a phrase asking for a person or a complaint, a run of
+negative turns, a mood that fell). Roles come from `channel_roles` or recognisable speaker names,
+else the first speaker is the agent. The figures hold no words and are kept in clear;
+`GET /speech/analytics` averages them over the latest summarised recordings.
+
 ## Storage
 
 `speech_recordings` keeps the audio, the segments and speakers in clear (they hold no words), and

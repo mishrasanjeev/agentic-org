@@ -4,6 +4,20 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
 
 ## [Unreleased] - 2026-08-29
 
+### Added - Speech intelligence: call summaries and analytics
+- `POST /speech/recordings/{id}/summary` summarises a transcribed call
+  into intent, key points, next actions, outcome and customer mood,
+  through the content services' checked model call or from the words
+  alone (the banking intent catalogue, the most informative turns, the
+  turns that commit to something, the closing turns), and computes the
+  call's analytics: customer sentiment by turn and by thirds, the
+  agent's empathy markers and a 0 to 100 score for answering negative
+  turns with one, talk ratio, pace, interruptions, silences, the longest
+  monologue and escalation signals. `GET /speech/analytics` averages
+  them over the latest recordings (`core/speech/summary.py`,
+  `core/speech/analytics.py`). The summary is kept encrypted like the
+  transcript; the figures hold no words.
+
 ### Added - Speech intelligence: batch transcription and diarisation
 - `POST /speech/recordings` takes a PCM WAV call recording, finds who
   spoke when (by channel for a stereo call with `channel_roles`, by

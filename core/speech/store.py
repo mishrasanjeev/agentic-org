@@ -20,7 +20,9 @@ from sqlalchemy import select
 
 from core.config import settings
 from core.crypto.tenant_secrets import decrypt_for_tenant, encrypt_for_tenant
+from core.speech import analytics as call_analytics
 from core.speech import segments as diarisation
+from core.speech import summary as summaries
 from core.speech import transcribe as engines
 from core.speech.audio import Recording, SpeechError, load
 
@@ -49,6 +51,8 @@ def summary_dict(row: Any) -> dict[str, Any]:
         "language": row.language,
         "speakers": dict(row.speakers or {}),
         "segments": len(row.segments or []),
+        "summarised": bool(row.summary_encrypted),
+        "scores": dict((row.analytics or {}).get("scores") or {}),
         "last_error": row.last_error,
         "created_by": row.created_by,
         "created_at": row.created_at.isoformat() if row.created_at else None,
@@ -69,8 +73,29 @@ def transcript_of_row(row: Any) -> dict[str, Any] | None:
         return None
 
 
+def _decrypt(envelope: Any, what: str) -> dict[str, Any] | None:
+    ciphertext = envelope.get("_encrypted") if isinstance(envelope, dict) else None
+    if not ciphertext:
+        return None
+    try:
+        return json.loads(decrypt_for_tenant(str(ciphertext)))
+    except (ValueError, TypeError) as exc:
+        logger.warning("speech_envelope_unreadable", what=what, error_type=type(exc).__name__)
+        return None
+
+
+def summary_of_row(row: Any) -> dict[str, Any] | None:
+    return _decrypt(getattr(row, "summary_encrypted", None), "summary")
+
+
 def detail_dict(row: Any) -> dict[str, Any]:
-    return {**summary_dict(row), "segments_detail": list(row.segments or []), "transcript": transcript_of_row(row)}
+    return {
+        **summary_dict(row),
+        "segments_detail": list(row.segments or []),
+        "transcript": transcript_of_row(row),
+        "summary": summary_of_row(row),
+        "analytics": dict(row.analytics or {}),
+    }
 
 
 async def _encrypt(tenant_id: uuid.UUID, transcript: dict[str, Any]) -> dict[str, Any]:
@@ -110,6 +135,8 @@ async def save(
         segments=[s.to_dict() for s in found],
         speakers=diarisation.speakers_of(found),
         transcript_encrypted={},
+        summary_encrypted={},
+        analytics={},
         created_by=(created_by or None),
     )
     if engine and engine != "supplied":
@@ -196,3 +223,91 @@ async def audio_of(tenant_id: uuid.UUID, recording_id: uuid.UUID) -> tuple[bytes
         if row is None:
             raise SpeechError(404, "not_found", "No such recording")
         return bytes(row.content), row.mime_type or "audio/wav"
+
+
+def _roles(row: Any) -> tuple[str | None, str | None]:
+    roles = [str(r) for r in (row.channel_roles or [])]
+    return call_analytics.roles_of(
+        list((row.speakers or {}).keys()),
+        agent=roles[0] if roles else None,
+        customer=roles[1] if len(roles) > 1 else None,
+    )
+
+
+async def summarise(
+    tenant_id: uuid.UUID, recording_id: uuid.UUID, *, method: str = "auto", complete: Any = None
+) -> dict[str, Any]:
+    """Summarise a transcribed recording and compute its analytics; both are kept, the summary encrypted."""
+    from core.database import get_tenant_session
+
+    if method not in summaries.METHODS:
+        raise SpeechError(422, "method_unknown", f"method is one of {', '.join(summaries.METHODS)}")
+    async with get_tenant_session(tenant_id) as session:
+        row = await _row(session, tenant_id, recording_id, lock=True)
+        if row is None:
+            raise SpeechError(404, "not_found", "No such recording")
+        transcript = transcript_of_row(row)
+        if not transcript or not transcript.get("turns"):
+            raise SpeechError(409, "not_transcribed", "The recording has no transcript to summarise yet")
+        agent, customer = _roles(row)
+        try:
+            summary = await summaries.summarise(
+                tenant_id, transcript, method=method, agent=agent, customer=customer, complete=complete
+            )
+        except ValueError as exc:
+            raise SpeechError(422, "method_unknown", str(exc)) from None
+        # enterprise-gate: broad-except-ok reason=model-boundary-refused-with-an-explicit-error-nothing-kept
+        except Exception as exc:  # noqa: BLE001 - the model boundary when the caller insisted on the model
+            logger.warning("speech_summary_failed", error_type=type(exc).__name__)
+            raise SpeechError(502, "summary_failed", "The model did not produce a summary") from None
+        analytics = call_analytics.analyse(
+            transcript, list(row.segments or []), float(row.duration_seconds or 0.0), agent=agent, customer=customer
+        )
+        row.summary_encrypted = await _encrypt(tenant_id, summary)
+        row.analytics = analytics
+        row.updated_at = datetime.now(UTC)
+        answer = {"id": str(row.id), "summary": summary, "analytics": analytics}
+    logger.info("speech_recording_summarised", method=summary.get("method"), outcome=summary.get("outcome"))
+    return answer
+
+
+async def overview(tenant_id: uuid.UUID, *, limit: int = 200) -> dict[str, Any]:
+    """The analytics of the latest summarised recordings, averaged: sentiment, empathy, talk share and signals."""
+    from core.database import get_tenant_session
+    from core.models.speech_recording import SpeechRecording
+
+    statement = (
+        select(SpeechRecording)
+        .where(SpeechRecording.tenant_id == tenant_id)
+        .order_by(SpeechRecording.created_at.desc())
+        .limit(max(1, min(limit, MAX_LIST)))
+    )
+    async with get_tenant_session(tenant_id) as session:
+        rows = (await session.execute(statement)).scalars().all()
+    scored = [dict(r.analytics or {}) for r in rows if (r.analytics or {}).get("scores")]
+    if not scored:
+        return {"recordings": len(rows), "analysed": 0, "averages": {}, "escalation_risk": {}, "signals": {}}
+
+    def mean(key: str) -> float | None:
+        values = [float(a["scores"][key]) for a in scored if a["scores"].get(key) is not None]
+        return round(sum(values) / len(values), 3) if values else None
+
+    risk: dict[str, int] = {}
+    signals: dict[str, int] = {}
+    for item in scored:
+        risk[item["scores"].get("escalation_risk", "low")] = (
+            risk.get(item["scores"].get("escalation_risk", "low"), 0) + 1
+        )
+        for signal in item.get("signals") or []:
+            signals[signal["kind"]] = signals.get(signal["kind"], 0) + 1
+    return {
+        "recordings": len(rows),
+        "analysed": len(scored),
+        "averages": {
+            "customer_sentiment": mean("customer_sentiment"),
+            "empathy": mean("empathy"),
+            "customer_talk_share": mean("customer_talk_share"),
+        },
+        "escalation_risk": risk,
+        "signals": signals,
+    }

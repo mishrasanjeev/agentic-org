@@ -9324,6 +9324,24 @@
     "tenant_required": true
   },
   {
+    "audit_event": "speech.analytics",
+    "auth_required": true,
+    "function": "analytics_overview",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/speech/analytics api/v1/speech.py:analytics_overview",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/speech.py",
+    "path": "/api/v1/speech/analytics",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "speech.recordings.sensitive.read",
+    "source_line": 253,
+    "tenant_required": true
+  },
+  {
     "audit_event": "speech.recordings.list",
     "auth_required": true,
     "function": "list_recordings",
@@ -9393,6 +9411,42 @@
     "rate_limit": "standard",
     "scope": "speech.recordings.sensitive.read",
     "source_line": 167,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "speech.recordings.summary",
+    "auth_required": true,
+    "function": "get_summary",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/speech/recordings/{recording_id}/summary api/v1/speech.py:get_summary",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/speech.py",
+    "path": "/api/v1/speech/recordings/{recording_id}/summary",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "speech.recordings.sensitive.read",
+    "source_line": 234,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "speech.recordings.summarise",
+    "auth_required": true,
+    "function": "summarise_recording",
+    "idempotency": "idempotent-lifecycle-state",
+    "key": "POST /api/v1/speech/recordings/{recording_id}/summary api/v1/speech.py:summarise_recording",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/speech.py",
+    "path": "/api/v1/speech/recordings/{recording_id}/summary",
+    "public_exempt_reason": null,
+    "rate_limit": "chat-query",
+    "scope": "speech.recordings.sensitive.write",
+    "source_line": 208,
     "tenant_required": true
   },
   {
