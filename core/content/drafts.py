@@ -49,7 +49,9 @@ async def record(
     title: str,
     requires_approval: bool,
 ) -> dict[str, Any]:
-    """Keep the draft; a draft that needs approval waits in the queue."""
+    """Keep the draft; a draft that needs approval waits in the queue and must name its author."""
+    if requires_approval and not str(user_id or "").strip():
+        raise ContentError(403, "author_unknown", "A draft that needs approval is written by an identified person")
     from core.database import get_tenant_session
     from core.models.content_draft import ContentDraft
 
@@ -108,6 +110,9 @@ async def decide(
     status = DECISIONS.get(decision)
     if status is None:
         raise ContentError(422, "decision_unknown", "decision must be approve or reject")
+    checker = str(user_id or "").strip()[:128]
+    if not checker:
+        raise ContentError(403, "decider_unknown", "A draft is decided by an identified person")
     async with get_tenant_session(tenant_id) as session:
         row = (
             await session.execute(
@@ -120,10 +125,13 @@ async def decide(
             raise ContentError(404, "not_found", "No such draft")
         if row.status != "pending_approval":
             raise ContentError(409, "not_pending", f"The draft is {row.status}, not awaiting approval")
-        if row.created_by and user_id and str(row.created_by) == str(user_id)[:128]:
+        if not str(row.created_by or "").strip():
+            # Without a recorded author no one can show they are the second person.
+            raise ContentError(409, "author_unknown", "The draft has no recorded author, so it cannot be decided")
+        if str(row.created_by) == checker:
             raise ContentError(409, "same_person", "A draft is approved by a second person, not its author")
         row.status = status
-        row.decided_by = str(user_id)[:128] if user_id else None
+        row.decided_by = checker
         row.decision_notes = notes[:2000] or None
         row.decided_at = datetime.now(UTC)
         row.updated_at = datetime.now(UTC)
