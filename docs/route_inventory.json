@@ -4370,7 +4370,7 @@
     "public_exempt_reason": null,
     "rate_limit": "chat-query",
     "scope": "content.adapt.sensitive.write",
-    "source_line": 99,
+    "source_line": 105,
     "tenant_required": true
   },
   {
@@ -4388,7 +4388,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "content.assemble.sensitive.write",
-    "source_line": 117,
+    "source_line": 123,
     "tenant_required": true
   },
   {
@@ -4406,7 +4406,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "content.clauses.sensitive.read",
-    "source_line": 133,
+    "source_line": 139,
     "tenant_required": true
   },
   {
@@ -4424,7 +4424,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "content.clauses.sensitive.write",
-    "source_line": 154,
+    "source_line": 160,
     "tenant_required": true
   },
   {
@@ -4442,7 +4442,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "content.clauses.sensitive.write",
-    "source_line": 174,
+    "source_line": 184,
     "tenant_required": true
   },
   {
@@ -4460,7 +4460,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "content.clauses.sensitive.write",
-    "source_line": 196,
+    "source_line": 209,
     "tenant_required": true
   },
   {
@@ -4478,7 +4478,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "content.clauses.sensitive.write",
-    "source_line": 215,
+    "source_line": 232,
     "tenant_required": true
   },
   {
@@ -4496,7 +4496,7 @@
     "public_exempt_reason": null,
     "rate_limit": "chat-query",
     "scope": "content.draft.sensitive.write",
-    "source_line": 133,
+    "source_line": 146,
     "tenant_required": true
   },
   {
@@ -4514,7 +4514,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "content.drafts.sensitive.read",
-    "source_line": 205,
+    "source_line": 230,
     "tenant_required": true
   },
   {
@@ -4532,7 +4532,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "content.drafts.sensitive.read",
-    "source_line": 228,
+    "source_line": 253,
     "tenant_required": true
   },
   {
@@ -4550,7 +4550,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "content.drafts.sensitive.write",
-    "source_line": 247,
+    "source_line": 272,
     "tenant_required": true
   },
   {
@@ -4568,7 +4568,7 @@
     "public_exempt_reason": null,
     "rate_limit": "chat-query",
     "scope": "content.extract.sensitive.write",
-    "source_line": 187,
+    "source_line": 212,
     "tenant_required": true
   },
   {
@@ -4604,7 +4604,7 @@
     "public_exempt_reason": null,
     "rate_limit": "chat-query",
     "scope": "content.respond.sensitive.write",
-    "source_line": 81,
+    "source_line": 87,
     "tenant_required": true
   },
   {
@@ -4622,7 +4622,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "content.read",
-    "source_line": 70,
+    "source_line": 83,
     "tenant_required": true
   },
   {
@@ -4640,7 +4640,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "content.datasets.sensitive.write",
-    "source_line": 84,
+    "source_line": 97,
     "tenant_required": true
   },
   {
@@ -4658,7 +4658,7 @@
     "public_exempt_reason": null,
     "rate_limit": "chat-query",
     "scope": "content.structure.sensitive.write",
-    "source_line": 63,
+    "source_line": 69,
     "tenant_required": true
   },
   {
@@ -4676,7 +4676,7 @@
     "public_exempt_reason": null,
     "rate_limit": "chat-query",
     "scope": "content.summarise.sensitive.write",
-    "source_line": 169,
+    "source_line": 194,
     "tenant_required": true
   },
   {
@@ -4694,7 +4694,7 @@
     "public_exempt_reason": null,
     "rate_limit": "chat-query",
     "scope": "content.translate.sensitive.write",
-    "source_line": 82,
+    "source_line": 83,
     "tenant_required": true
   },
   {
@@ -4712,7 +4712,7 @@
     "public_exempt_reason": null,
     "rate_limit": "chat-query",
     "scope": "content.translate.sensitive.write",
-    "source_line": 105,
+    "source_line": 106,
     "tenant_required": true
   },
   {
@@ -6494,7 +6494,7 @@
     "public_exempt_reason": null,
     "rate_limit": "chat-query",
     "scope": "documents.analyse.sensitive.write",
-    "source_line": 68,
+    "source_line": 90,
     "tenant_required": true
   },
   {
@@ -6512,7 +6512,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "documents.read",
-    "source_line": 116,
+    "source_line": 141,
     "tenant_required": true
   },
   {
@@ -6530,7 +6530,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "documents.read",
-    "source_line": 40,
+    "source_line": 62,
     "tenant_required": true
   },
   {
@@ -6656,7 +6656,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "documents.review.sensitive.read",
-    "source_line": 76,
+    "source_line": 79,
     "tenant_required": true
   },
   {
@@ -6674,7 +6674,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "documents.review.sensitive.read",
-    "source_line": 106,
+    "source_line": 109,
     "tenant_required": true
   },
   {
@@ -6692,7 +6692,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "documents.review.sensitive.read",
-    "source_line": 91,
+    "source_line": 94,
     "tenant_required": true
   },
   {
