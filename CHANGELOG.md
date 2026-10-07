@@ -4,6 +4,17 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
 
 ## [Unreleased] - 2026-08-29
 
+### Added - AI governance: policy console
+- With `AGENTICORG_GOVERNANCE_POLICY_CONSOLE_ENABLED` on (off by default),
+  a tenant administrator sees every policy (model routing, access and
+  limits, guardrail rules, approval policies, the action taxonomy) in one
+  shape, writes and removes one through its own store's writer, and dry-runs
+  a described call, text, tool or workflow across the enforcement points
+  (`core/governance/policy_console.py`, `/governance/policies`).
+- The console lists disabled policies too, checks approval steps as the
+  approval policies API does, and its dry run resolves approvals, model
+  access by application and principal, and tool actions as runtime does.
+
 ### Added - AI governance: regulatory risk tiers
 - With `AGENTICORG_GOVERNANCE_RISK_TIERS_ENABLED` on (off by default), an
   agent's risk tier forces controls whatever the separate switches say

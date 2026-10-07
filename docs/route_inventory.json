@@ -5004,6 +5004,78 @@
     "tenant_required": true
   },
   {
+    "audit_event": "governance.policies.list",
+    "auth_required": true,
+    "function": "list_policies",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/governance/policies api/v1/governance_policies.py:list_policies",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/governance_policies.py",
+    "path": "/api/v1/governance/policies",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "governance.policies.sensitive.read",
+    "source_line": 90,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "governance.policies.write",
+    "auth_required": true,
+    "function": "write_policy",
+    "idempotency": "not-idempotent-create",
+    "key": "POST /api/v1/governance/policies api/v1/governance_policies.py:write_policy",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/governance_policies.py",
+    "path": "/api/v1/governance/policies",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "governance.policies.sensitive.write",
+    "source_line": 121,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "governance.policies.evaluate",
+    "auth_required": true,
+    "function": "evaluate_policies",
+    "idempotency": "read-only",
+    "key": "POST /api/v1/governance/policies/evaluate api/v1/governance_policies.py:evaluate_policies",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/governance_policies.py",
+    "path": "/api/v1/governance/policies/evaluate",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "governance.policies.sensitive.read",
+    "source_line": 189,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "governance.policies.delete",
+    "auth_required": true,
+    "function": "delete_policy",
+    "idempotency": "idempotent-delete",
+    "key": "DELETE /api/v1/governance/policies/{kind}/{policy_id} api/v1/governance_policies.py:delete_policy",
+    "metadata_present": true,
+    "methods": [
+      "DELETE"
+    ],
+    "module": "api/v1/governance_policies.py",
+    "path": "/api/v1/governance/policies/{kind}/{policy_id}",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "governance.policies.sensitive.write",
+    "source_line": 156,
+    "tenant_required": true
+  },
+  {
     "audit_event": "governance.risk_tiers.read",
     "auth_required": true,
     "function": "risk_tier_overview",

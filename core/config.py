@@ -319,6 +319,10 @@ class Settings(BaseSettings):
     # tier forces at promotion, resume, tier change, update and gate removal,
     # and GET /governance/risk-tiers. Off by default: off, nothing runs.
     governance_risk_tiers_enabled: bool = False
+    # Policy console (core/governance/policy_console.py): every policy in one
+    # list, written through its own store and dry-run across the enforcement
+    # points. Off by default: off, the endpoints are not found.
+    governance_policy_console_enabled: bool = False
     # JSON object keyed provider/model with input and output USD per million
     # tokens; a negotiated rate replaces the list price.
     model_price_overrides_json: str = ""
