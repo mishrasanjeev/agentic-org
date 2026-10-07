@@ -294,6 +294,11 @@ class Settings(BaseSettings):
     # A model (provider/model) that proposes alternative queries for the plan;
     # empty, the plan is deterministic only.
     knowledge_query_rewrite_model: str = ""
+    # Graph retrieval (core/rag/entities.py): ingestion records the entities
+    # each chunk mentions and a search fuses in the chunks the graph reaches
+    # from the query. Off by default: off, ingestion writes no entity rows
+    # and a search runs exactly as before.
+    knowledge_graph_retrieval_enabled: bool = False
     # JSON object keyed provider/model with input and output USD per million
     # tokens; a negotiated rate replaces the list price.
     model_price_overrides_json: str = ""
