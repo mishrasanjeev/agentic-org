@@ -8060,7 +8060,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "tenant_ai_settings.sensitive.read",
-    "source_line": 204,
+    "source_line": 216,
     "tenant_required": true
   },
   {
@@ -8078,7 +8078,7 @@
     "public_exempt_reason": null,
     "rate_limit": "security-admin-write",
     "scope": "tenant_ai_settings.control_plane.write",
-    "source_line": 225,
+    "source_line": 237,
     "tenant_required": true
   },
   {
@@ -8096,7 +8096,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "tenant_ai_settings.registry.read",
-    "source_line": 160,
+    "source_line": 172,
     "tenant_required": false
   },
   {

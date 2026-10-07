@@ -47,6 +47,8 @@ class TenantAISetting(BaseModel):
     embedding_dimensions: Mapped[int | None] = mapped_column(Integer, nullable=True)
     chunk_size: Mapped[int | None] = mapped_column(Integer, nullable=True)
     chunk_overlap: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # sentence (the default), paragraph or heading: core/rag/chunking.py.
+    chunk_strategy: Mapped[str | None] = mapped_column(String(16), nullable=True)
     # BYO policy — when "deny", the resolver refuses platform-env fallback
     # for this tenant (enterprise regulated mode).
     ai_fallback_policy: Mapped[str] = mapped_column(

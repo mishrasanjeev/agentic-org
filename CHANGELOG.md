@@ -4,6 +4,16 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
 
 ## [Unreleased] - 2026-08-29
 
+### Added - Knowledge retrieval: layout-preserving extraction and chunking strategies
+- PDF pages are split into numbered paragraphs with headings recognised
+  from line shape, Word documents keep their heading styles and attach
+  table rows to their section, and every chunk records its paragraph and
+  nearest heading beside its page (`knowledge_chunk_sources.paragraph`,
+  `.heading`; migration `v6z50_chunk_layout`). A tenant chooses how spans
+  become chunks with `chunk_strategy` in the tenant AI settings
+  (`core/rag/chunking.py`): `sentence` (the default, unchanged), `paragraph`
+  or `heading`, sized by `chunk_size`. Existing chunks are not re-chunked.
+
 ### Added - Agent registry: ratings, reliability and certification
 - The card carries reliability metrics over a window (runs by status,
   completion, failure and human-review rates, average and 95th-percentile

@@ -19,6 +19,7 @@ import csv
 import io
 import json
 import os
+import re
 import shutil
 import subprocess
 import tempfile
@@ -58,6 +59,51 @@ class ExtractedSpan:
     cell_range: str | None = None
     # Frame timestamp (seconds) for video; None otherwise.
     frame_timestamp_s: float | None = None
+    # Layout: what the span is (paragraph, heading, table_row, page), its
+    # paragraph number within the document (1-indexed) and the nearest
+    # heading above it, so a citation can name the place and a chunking
+    # strategy can keep sections together.
+    kind: str = "paragraph"
+    paragraph: int | None = None
+    heading: str | None = None
+
+
+MAX_HEADING_CHARS = 200
+_HEADING_NUMBER = re.compile(r"^(?:\d+(?:\.\d+)*[.)]?|[A-Z][.)]|[IVXLC]+[.)])\s+\S")
+
+
+def looks_like_heading(line: str) -> bool:
+    """A short line that reads as a section title: numbered, all capitals, or title case without a final stop."""
+    text = line.strip()
+    if not text or len(text) > 90 or text.endswith((".", ":", ";", ",")):
+        return False
+    words = text.split()
+    if len(words) > 12:
+        return False
+    if _HEADING_NUMBER.match(text):
+        return True
+    letters = [c for c in text if c.isalpha()]
+    if letters and all(c.isupper() for c in letters) and len(letters) >= 3:
+        return True
+    return len(words) <= 8 and all(w[:1].isupper() or not w[:1].isalpha() for w in words) and len(letters) >= 3
+
+
+def paragraphs_of(text: str, *, page: int | None = None, start: int = 1) -> list[ExtractedSpan]:
+    """Split page text into paragraph and heading spans, numbering paragraphs from ``start``."""
+    spans: list[ExtractedSpan] = []
+    number = start
+    heading: str | None = None
+    for block in re.split(r"\n\s*\n", text):
+        block = block.strip()
+        if not block:
+            continue
+        if "\n" not in block and looks_like_heading(block):
+            heading = block[:MAX_HEADING_CHARS]
+            spans.append(ExtractedSpan(text=block, page=page, kind="heading", paragraph=number, heading=heading))
+        else:
+            spans.append(ExtractedSpan(text=block, page=page, kind="paragraph", paragraph=number, heading=heading))
+        number += 1
+    return spans
 
 
 @dataclass
@@ -233,6 +279,7 @@ def _extract_pdf(stream: bytes, mime_type: str) -> ExtractedContent:
         raise UnsupportedMimeType(f"PDF exceeds the {MAX_PDF_PAGES}-page extraction limit")
     spans: list[ExtractedSpan] = []
     low_text_pages: list[int] = []
+    next_paragraph = 1
     for idx, page in enumerate(reader.pages, start=1):
         try:
             text = page.extract_text() or ""
@@ -241,7 +288,14 @@ def _extract_pdf(stream: bytes, mime_type: str) -> ExtractedContent:
             text = ""
         text = text.strip()
         if len(text) >= 40:
-            spans.append(ExtractedSpan(text=text, page=idx))
+            # Layout-preserving: paragraphs and headings of the page, numbered through the document.
+            page_spans = paragraphs_of(text, page=idx, start=next_paragraph)
+            if page_spans:
+                spans.extend(page_spans)
+                next_paragraph += len(page_spans)
+            else:
+                spans.append(ExtractedSpan(text=text, page=idx, paragraph=next_paragraph))
+                next_paragraph += 1
         else:
             low_text_pages.append(idx)
     ocr_confidences: list[float] = []
@@ -274,13 +328,28 @@ def _extract_docx(stream: bytes, mime_type: str) -> ExtractedContent:
     _validate_zip_container(stream)
     doc = Document(io.BytesIO(stream))
     spans: list[ExtractedSpan] = []
+    heading: str | None = None
     for idx, paragraph in enumerate(doc.paragraphs, start=1):
         text = (paragraph.text or "").strip()
         if text:
             # DOCX has no page concept until reflow. Use paragraph index
             # as provenance so retrieval can still point operators at
-            # "paragraph 42".
-            spans.append(ExtractedSpan(text=text, page=None, cell_range=f"para {idx}"))
+            # "paragraph 42". A Heading style, or a line that reads as a
+            # title, opens a section the following paragraphs belong to.
+            style = str(getattr(getattr(paragraph, "style", None), "name", "") or "")
+            is_heading = style.lower().startswith(("heading", "title")) or looks_like_heading(text)
+            if is_heading:
+                heading = text[:MAX_HEADING_CHARS]
+            spans.append(
+                ExtractedSpan(
+                    text=text,
+                    page=None,
+                    cell_range=f"para {idx}",
+                    kind="heading" if is_heading else "paragraph",
+                    paragraph=idx,
+                    heading=heading,
+                )
+            )
     # Also pull tables — often the most information-dense part of
     # business documents.
     for t_idx, table in enumerate(getattr(doc, "tables", []), start=1):
@@ -292,6 +361,8 @@ def _extract_docx(stream: bytes, mime_type: str) -> ExtractedContent:
                     ExtractedSpan(
                         text=joined,
                         cell_range=f"table {t_idx} row {r_idx}",
+                        kind="table_row",
+                        heading=heading,
                     )
                 )
     return ExtractedContent(

@@ -25,6 +25,32 @@ pipeline.
 Audio and video are not document uploads and are explicitly rejected. The API
 advertises the current matrix through `GET /api/v1/knowledge/supported-types`.
 
+## Layout and chunking
+
+Extraction keeps the layout it can see. A PDF page is split into paragraphs at blank lines and
+each paragraph is numbered through the document; a short line that reads as a section title
+(numbered, in capitals, or in title case without a final stop) is a heading, and the paragraphs
+under it carry its text. A Word document keeps its Heading and Title styles as headings, numbers
+its paragraphs, and attaches table rows to the section they sit in. Every chunk records the
+page, the paragraph number and the nearest heading of its first span in `knowledge_chunk_sources`
+(`paragraph`, `heading`), beside the page, sheet, cell range and frame provenance it already had,
+so a citation can name the place (`core/rag/extractors.py`).
+
+How spans become chunks is a tenant setting, `chunk_strategy` in the tenant AI settings
+(`core/rag/chunking.py`), with `chunk_size` (tokens, four characters a token here) as the size
+band:
+
+| Strategy | What it does |
+|---|---|
+| `sentence` (default) | The original behaviour: cut at sentence boundaries into a 120 to `chunk_size` band and merge short neighbours. Layout is not consulted. A tenant that has set nothing is chunked exactly as before. |
+| `paragraph` | One chunk per paragraph, table row or list item; short consecutive paragraphs under the same heading merge up to the band; a long paragraph is cut at sentence boundaries. A chunk never crosses a heading. |
+| `heading` | Spans are grouped under their nearest heading until the band is full, and each chunk starts with the heading's text, so a retrieved chunk says which section it came from. A chunk never crosses a heading. |
+
+Changing the strategy affects documents ingested after the change; existing chunks are not
+re-chunked (re-indexing is a later part of this package). Heading detection on PDFs is a
+heuristic over line shape; a document whose titles end with a full stop or run to several lines
+is read as paragraphs only, which the `sentence` and `paragraph` strategies handle as before.
+
 ## OCR flow
 
 ```mermaid
