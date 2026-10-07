@@ -221,6 +221,9 @@ async def attach_transcript(tenant_id: uuid.UUID, recording_id: uuid.UUID, raw_w
         row.status = "transcribed"
         row.engine = "supplied"
         row.last_error = None
+        # A new transcript makes the summary and the analytics of the old one stale: they go with it.
+        row.summary_encrypted = {}
+        row.analytics = {}
         row.updated_at = datetime.now(UTC)
         answer = detail_dict(row)
     logger.info("speech_transcript_attached", words=len(words))
@@ -238,11 +241,15 @@ async def audio_of(tenant_id: uuid.UUID, recording_id: uuid.UUID) -> tuple[bytes
 
 
 def _roles(row: Any) -> tuple[str | None, str | None]:
+    """The agent and the customer among the speakers: by a recognisable label first, by channel position only when
+    neither label says which is which, so ``channel_roles=customer,agent`` is read as it was meant."""
+    names = list((row.speakers or {}).keys())
     roles = [str(r) for r in (row.channel_roles or [])]
+    labelled = any(r.lower() in call_analytics.AGENT_NAMES or r.lower() in call_analytics.CUSTOMER_NAMES for r in roles)
+    if labelled:
+        return call_analytics.roles_of(names)
     return call_analytics.roles_of(
-        list((row.speakers or {}).keys()),
-        agent=roles[0] if roles else None,
-        customer=roles[1] if len(roles) > 1 else None,
+        names, agent=roles[0] if roles else None, customer=roles[1] if len(roles) > 1 else None
     )
 
 
