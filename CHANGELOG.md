@@ -4,6 +4,20 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
 
 ## [Unreleased] - 2026-08-29
 
+### Added - Transaction intelligence: narrative drafting and evidence export
+- `POST /txn/findings/{id}/narrative` drafts a suspicious-transaction
+  narrative from a finding, its rows and its entity view (through the
+  content services' checked model call or from the facts alone): what
+  was seen, when, on which accounts, through whom, why, a timeline, the
+  parties, the basis, a recommendation and the gaps to check; the draft
+  stays on the open finding for a person to review in the investigator
+  queue and nothing is filed. `GET /txn/findings/{id}/evidence` exports
+  the finding, narrative, rows, entity view and fund flow with a digest
+  (`core/txn/narrative.py`). Open findings join the workbench review
+  queue as the finding kind (approve confirms, reject dismisses with a
+  reason). The Transactions page drafts the narrative and downloads the
+  evidence.
+
 ### Added - Transaction intelligence: fund-flow graphs across hops
 - `GET /txn/graph/{kind}/{ref}` builds the fund-flow graph around an
   account, customer or counterparty: counterparties as nodes expanded hop

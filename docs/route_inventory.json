@@ -10098,6 +10098,42 @@
     "tenant_required": true
   },
   {
+    "audit_event": "txn.findings.evidence",
+    "auth_required": true,
+    "function": "finding_evidence",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/txn/findings/{finding_id}/evidence api/v1/txn.py:finding_evidence",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/txn.py",
+    "path": "/api/v1/txn/findings/{finding_id}/evidence",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "txn.findings.sensitive.read",
+    "source_line": 418,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "txn.findings.narrative",
+    "auth_required": true,
+    "function": "draft_narrative",
+    "idempotency": "idempotent-lifecycle-state",
+    "key": "POST /api/v1/txn/findings/{finding_id}/narrative api/v1/txn.py:draft_narrative",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/txn.py",
+    "path": "/api/v1/txn/findings/{finding_id}/narrative",
+    "public_exempt_reason": null,
+    "rate_limit": "chat-query",
+    "scope": "txn.findings.sensitive.write",
+    "source_line": 395,
+    "tenant_required": true
+  },
+  {
     "audit_event": "txn.graph.read",
     "auth_required": true,
     "function": "fund_flow",

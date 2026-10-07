@@ -21,6 +21,8 @@ interface Finding {
   detected_at: string | null;
   disposition: Record<string, unknown>;
   case_ref: string | null;
+  narrative?: { method?: string; title?: string; summary?: string; timeline?: string[]; parties?: string[]; basis?: string[]; recommendation?: string; gaps?: string[]; fallback_from?: string };
+  narrative_at?: string | null;
 }
 
 interface Node {
@@ -129,6 +131,23 @@ export default function Transactions() {
     [],
   );
 
+  const draftNarrative = async () => {
+    if (!selected) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const { data } = await api.post(`/txn/findings/${selected.id}/narrative?method=auto`);
+      const updated = data as Finding;
+      setSelected(updated);
+      setFindings((prev) => prev.map((f) => (f.id === updated.id ? updated : f)));
+      setNotice("Narrative drafted for review.");
+    } catch (err) {
+      setError(extractApiError(err, "The narrative could not be drafted."));
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const decide = async (outcome: "dismiss" | "confirm" | "escalate") => {
     if (!selected) return;
     setBusy(true);
@@ -202,6 +221,28 @@ export default function Transactions() {
                 </p>
                 <p className="text-slate-700">{selected.summary}</p>
                 <p className="text-xs text-slate-500">{selected.record_refs.length} supporting record(s)</p>
+                <div className="flex flex-wrap gap-2">
+                  <button type="button" className="rounded-md border border-slate-300 px-2 py-1 text-xs text-slate-700 disabled:opacity-50" disabled={busy} onClick={() => void draftNarrative()} data-testid="txn-narrative">
+                    Draft narrative
+                  </button>
+                  <a className="rounded-md border border-slate-300 px-2 py-1 text-xs text-slate-700" href={`/api/v1/txn/findings/${selected.id}/evidence?format=json`} data-testid="txn-evidence">
+                    Download evidence
+                  </a>
+                </div>
+                {selected.narrative && selected.narrative.summary && (
+                  <div className="rounded-md border border-slate-200 bg-slate-50 p-2 text-sm" data-testid="txn-narrative-text">
+                    <p className="font-medium text-slate-900">
+                      {selected.narrative.title} <span className="font-normal text-slate-500">· {selected.narrative.method}{selected.narrative.fallback_from ? " (the model did not answer)" : ""} · recommends {selected.narrative.recommendation}</span>
+                    </p>
+                    <p className="text-slate-700">{selected.narrative.summary}</p>
+                    {(selected.narrative.basis || []).length > 0 && (
+                      <ul className="list-disc pl-5 text-slate-700">{(selected.narrative.basis || []).map((b, i) => <li key={i}>{b}</li>)}</ul>
+                    )}
+                    {(selected.narrative.gaps || []).length > 0 && (
+                      <p className="text-xs text-amber-800">Still to check: {(selected.narrative.gaps || []).join("; ")}</p>
+                    )}
+                  </div>
+                )}
                 <button type="button" className="text-xs text-indigo-700 hover:underline" onClick={() => { setKind("account"); setRef(selected.entity_ref); void loadGraph("account", selected.entity_ref, hops); }} data-testid="txn-finding-graph">
                   Show the fund flow
                 </button>

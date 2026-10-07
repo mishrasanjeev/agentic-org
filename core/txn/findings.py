@@ -18,7 +18,7 @@ from typing import Any
 import structlog
 from sqlalchemy import select
 
-from core.txn import aggregate, detectors, records
+from core.txn import aggregate, detectors, narrative, records
 from core.txn.records import TxnError
 
 logger = structlog.get_logger()
@@ -69,6 +69,9 @@ def finding_dict(row: Any) -> dict[str, Any]:
         "detected_at": row.detected_at.isoformat() if row.detected_at else None,
         "disposition": dict(row.disposition or {}),
         "case_ref": row.case_ref,
+        "narrative": dict(getattr(row, "narrative", None) or {}),
+        "narrative_at": row.narrative_at.isoformat() if getattr(row, "narrative_at", None) else None,
+        "evidence_digest": getattr(row, "evidence_digest", None),
         "updated_at": row.updated_at.isoformat() if row.updated_at else None,
     }
 
@@ -242,3 +245,86 @@ async def entity(tenant_id: uuid.UUID, kind: str, ref: str, *, since_days: int =
         rows = await records.list_records(tenant_id, counterparty=ref, since=since, limit=records.MAX_LIST)
     found = await list_findings(tenant_id, limit=MAX_LIST)
     return aggregate.entity_view(rows, kind, ref, found)
+
+
+async def draft_narrative(
+    tenant_id: uuid.UUID, finding_id: uuid.UUID, *, method: str = "auto", complete: Any = None
+) -> dict[str, Any]:
+    """Draft the narrative of a finding from its facts, its rows and its entity view, and keep it on the finding.
+
+    The finding stays open: the draft is for a person to review in the queue, never a filing.
+    """
+    from core.database import get_tenant_session
+    from core.models.txn_finding import TxnFinding
+
+    if method not in narrative.METHODS:
+        raise TxnError(422, "method_unknown", f"method is one of {', '.join(narrative.METHODS)}")
+    found = await get_finding(tenant_id, finding_id, with_records=True)
+    if found is None:
+        raise TxnError(404, "not_found", "No such finding")
+    view = await entity(tenant_id, found["entity_kind"], found["entity_ref"])
+    try:
+        text = await narrative.draft(
+            tenant_id, found, list(found.get("records") or []), view, method=method, complete=complete
+        )
+    except ValueError as exc:
+        raise TxnError(422, "method_unknown", str(exc)) from None
+    # enterprise-gate: broad-except-ok reason=model-boundary-refused-with-an-explicit-error-nothing-kept
+    except Exception as exc:  # noqa: BLE001 - the model boundary when the caller insisted on the model
+        logger.warning("txn_narrative_failed", error_type=type(exc).__name__)
+        raise TxnError(502, "narrative_failed", "The model did not produce a narrative") from None
+    async with get_tenant_session(tenant_id) as session:
+        row = (
+            await session.execute(
+                select(TxnFinding)
+                .where(TxnFinding.tenant_id == tenant_id, TxnFinding.id == finding_id)
+                .with_for_update()
+            )
+        ).scalar_one_or_none()
+        if row is None:
+            raise TxnError(404, "not_found", "No such finding")
+        row.narrative = text
+        row.narrative_at = datetime.now(UTC)
+        row.updated_at = row.narrative_at
+        answer = finding_dict(row)
+    logger.info("txn_narrative_drafted", method=text.get("method"), recommendation=text.get("recommendation"))
+    return answer
+
+
+async def evidence(tenant_id: uuid.UUID, finding_id: uuid.UUID, *, hops: int = 2) -> dict[str, Any]:
+    """The evidence package of a finding: finding and narrative, rows, entity view, fund-flow rows, a digest."""
+    from core.database import get_tenant_session
+    from core.models.txn_finding import TxnFinding
+    from core.txn import graph
+
+    found = await get_finding(tenant_id, finding_id, with_records=True)
+    if found is None:
+        raise TxnError(404, "not_found", "No such finding")
+    view = await entity(tenant_id, found["entity_kind"], found["entity_ref"])
+    flow = await graph.export(
+        tenant_id,
+        "account" if found["entity_kind"] == "account" else found["entity_kind"],
+        found["entity_ref"],
+        hops=hops,
+        findings=[found],
+    )
+    package = {
+        "finding": {k: v for k, v in found.items() if k != "records"},
+        "records": list(found.get("records") or []),
+        "entity": view,
+        "fund_flow": {"graph": flow["graph"], "records": flow["records"]},
+        "exported_at": datetime.now(UTC).isoformat(),
+    }
+    package["digest"] = narrative.digest(package)
+    async with get_tenant_session(tenant_id) as session:
+        row = (
+            await session.execute(
+                select(TxnFinding)
+                .where(TxnFinding.tenant_id == tenant_id, TxnFinding.id == finding_id)
+                .with_for_update()
+            )
+        ).scalar_one_or_none()
+        if row is not None:
+            row.evidence_digest = package["digest"]
+            row.updated_at = datetime.now(UTC)
+    return {**package, "csv": flow["csv"]}

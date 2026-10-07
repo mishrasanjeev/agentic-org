@@ -195,6 +195,22 @@ async def decide(
             edited = await queue.record_approval_edits(tenant, item_id[:128], edits, user_id=user_id)
         except queue.QueueError as exc:
             raise _refused(exc) from None
+    elif kind == "finding":
+        from core.txn import findings as txn_findings
+        from core.txn.records import TxnError
+
+        try:
+            outcome = await txn_findings.disposition(
+                tenant,
+                uuid.UUID(item_id),
+                outcome="confirm" if body.decision == "approve" else "dismiss",
+                notes=notes,
+                user_id=user_id,
+            )
+        except TxnError as exc:
+            raise HTTPException(exc.status, detail={"error": exc.code, "message": exc.message}) from None
+        except ValueError:
+            raise HTTPException(404, detail={"error": "not_found", "message": "No such item"}) from None
     elif kind == "document":
         from core.idp import store
         from core.idp.pages import DocumentError

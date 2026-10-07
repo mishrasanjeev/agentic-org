@@ -29,7 +29,13 @@ from core.workbench.access import ADMIN, WORKBENCHES, approval_filter, holds, ta
 logger = structlog.get_logger()
 
 # kind -> the tab source that shows it; a caller sees a kind when a held workbench shows that source.
-KINDS: dict[str, str] = {"approval": "approvals", "document": "documents", "draft": "drafts", "case": "cases"}
+KINDS: dict[str, str] = {
+    "approval": "approvals",
+    "document": "documents",
+    "draft": "drafts",
+    "case": "cases",
+    "finding": "transactions",
+}
 PRIORITY_RANK = {"critical": 0, "urgent": 0, "high": 1, "normal": 2, "medium": 2, "low": 3}
 MAX_ITEMS = 200
 MAX_EDITS = 50
@@ -54,6 +60,10 @@ def enabled_kinds() -> list[str]:
         out.remove("document")
     if not services.enabled():
         out.remove("draft")
+    from core.txn import records as txn_records
+
+    if not txn_records.enabled():
+        out.remove("finding")
     return out
 
 
@@ -165,6 +175,26 @@ def case_item(row: Any, now: datetime) -> dict[str, Any]:
     }
 
 
+def finding_item(row: Any, now: datetime) -> dict[str, Any]:
+    facts = row.facts if isinstance(row.facts, dict) else {}
+    return {
+        "kind": "finding",
+        "id": str(row.id),
+        "title": f"{str(row.kind).replace('_', ' ').capitalize()} on {row.entity_kind} {row.entity_ref}",
+        "facts": {k: v for k, v in facts.items() if isinstance(v, str | int | float)},
+        "summary": str(row.summary or "")[:300],
+        "priority": "high" if row.severity == "high" else "normal",
+        "status": row.status,
+        "requested_by": None,
+        "narrative": bool(row.narrative),
+        "created_at": _iso(row.detected_at),
+        "due_at": None,
+        "age_seconds": _age(row.detected_at, now),
+        "path": "/dashboard/transactions",
+        "actions": ["approve", "reject", "note"],
+    }
+
+
 def _rank(item: dict[str, Any]) -> tuple[int, str]:
     return (PRIORITY_RANK.get(str(item.get("priority", "normal")).lower(), 2), item.get("created_at") or "")
 
@@ -244,6 +274,19 @@ async def list_items(tenant_id: uuid.UUID, kinds: list[str], *, limit: int = 50,
             found = [case_item(r, now) for r in rows]
             counts["case"] = len(found)
             items.extend(found)
+        if "finding" in wanted:
+            from core.models.txn_finding import TxnFinding
+
+            rows = await _rows(
+                session,
+                select(TxnFinding)
+                .where(TxnFinding.tenant_id == tenant_id, TxnFinding.status == "open")
+                .order_by(TxnFinding.detected_at)
+                .limit(per_kind),
+            )
+            found = [finding_item(r, now) for r in rows]
+            counts["finding"] = len(found)
+            items.extend(found)
     items = console.apply_priority_rules(items, await console.value(tenant_id, "queue.priority_rules"))
     items.sort(key=_rank)
     return {"items": items[:per_kind], "counts": counts, "kinds": wanted}
@@ -281,6 +324,17 @@ async def get_item(tenant_id: uuid.UUID, kind: str, item_id: str, *, caller: Any
     if kind not in KINDS:
         raise QueueError(404, "kind_unknown", f"kind is one of {', '.join(KINDS)}")
     now = datetime.now(UTC)
+    if kind == "finding":
+        from core.txn import findings as txn_findings
+
+        try:
+            finding_id = uuid.UUID(item_id)
+        except ValueError:
+            raise QueueError(404, "not_found", "No such item") from None
+        detail = await txn_findings.get_finding(tenant_id, finding_id, with_records=True)
+        if detail is None:
+            raise QueueError(404, "not_found", "No such item")
+        return {"kind": kind, "item": detail, "editable": [], "decidable": detail["status"] == "open"}
     if kind == "draft":
         from core.content import drafts
 

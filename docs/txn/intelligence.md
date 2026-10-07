@@ -52,6 +52,22 @@ carries the graph, the records behind every edge and the findings, as JSON or as
 case file. The Transactions page draws the graph by hop, expands a node on click, lists the paths
 and the findings on the entity, and downloads the export.
 
+## Narratives and evidence
+
+`POST /txn/findings/{id}/narrative?method=` drafts the suspicious-transaction narrative of a finding
+(`core/txn/narrative.py`): what was seen, over which period, on which accounts, through which
+counterparties, why the detector raised it, a timeline of the supporting movements, the parties, the
+basis, a recommendation (dismiss, confirm, escalate) and the gaps an investigator should still check.
+The model path goes through the content services' checked JSON call; the extractive path writes the
+same sections from the facts, so a draft exists without a model; `auto` takes the model and falls
+back to the facts, saying so. The draft is kept on the finding, which stays open in the investigator
+queue for a person to review; nothing is filed. `GET /txn/findings/{id}/evidence?format=json|csv`
+is the evidence package: the finding with its narrative, the supporting rows, the entity view, the
+fund-flow graph and rows, exported with a digest over the whole so a reviewer can tell it was not
+altered; the digest is recorded on the finding. Open findings appear in the workbench review queue as
+the `finding` kind (the investigator's Transactions tab): approve confirms, reject dismisses with a
+reason, and escalation is taken on the Transactions page with the case reference.
+
 ## Findings and disposition
 
 `POST /txn/detect` runs the detectors over the recent records (one account or all, `since_days`)

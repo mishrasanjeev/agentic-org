@@ -381,3 +381,59 @@ async def export_fund_flow(
             headers={"Content-Disposition": f'attachment; filename="fund-flow-{ref[:32]}.csv"'},
         )
     return {k: v for k, v in exported.items() if k != "csv"}
+
+
+@router.post("/findings/{finding_id}/narrative")
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="txn.findings.sensitive.write",
+    rate_limit="chat-query",
+    idempotency="idempotent-lifecycle-state",
+    audit_event="txn.findings.narrative",
+)
+async def draft_narrative(
+    finding_id: uuid.UUID,
+    method: Annotated[str, Query(max_length=16)] = "auto",
+    tenant_id: str = Depends(get_current_tenant),
+) -> dict[str, Any]:
+    """Draft the narrative of a finding (model, facts, or model with the facts as fallback); it stays open."""
+    if not records.enabled():
+        raise _off()
+    try:
+        return await findings.draft_narrative(uuid.UUID(tenant_id), finding_id, method=method)
+    except TxnError as exc:
+        raise _refused(exc) from None
+
+
+@router.get("/findings/{finding_id}/evidence")
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="txn.findings.sensitive.read",
+    rate_limit="standard",
+    idempotency="read-only",
+    audit_event="txn.findings.evidence",
+)
+async def finding_evidence(
+    finding_id: uuid.UUID,
+    hops: Annotated[int, Query(ge=1, le=graph.MAX_HOPS)] = 2,
+    output: Annotated[str, Query(alias="format", max_length=8)] = "json",
+    tenant_id: str = Depends(get_current_tenant),
+) -> Any:
+    """The evidence package of a finding with its digest, as JSON or as the fund-flow CSV rows."""
+    if not records.enabled():
+        raise _off()
+    if output not in ("json", "csv"):
+        raise HTTPException(422, detail={"error": "format_unknown", "message": "format is json or csv"})
+    try:
+        package = await findings.evidence(uuid.UUID(tenant_id), finding_id, hops=hops)
+    except TxnError as exc:
+        raise _refused(exc) from None
+    if output == "csv":
+        return Response(
+            content=package["csv"],
+            media_type="text/csv",
+            headers={"Content-Disposition": f'attachment; filename="evidence-{finding_id}.csv"'},
+        )
+    return {k: v for k, v in package.items() if k != "csv"}

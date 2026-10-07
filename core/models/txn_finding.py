@@ -39,5 +39,8 @@ class TxnFinding(BaseModel):
     detected_at: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), server_default=func.now(), nullable=False)
     disposition: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False, default=dict)
     case_ref: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    narrative: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False, default=dict)
+    narrative_at: Mapped[datetime | None] = mapped_column(TIMESTAMP(timezone=True), nullable=True)
+    evidence_digest: Mapped[str | None] = mapped_column(String(64), nullable=True)
     created_at: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), server_default=func.now(), nullable=False)
     updated_at: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), server_default=func.now(), nullable=False)

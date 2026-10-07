@@ -112,6 +112,20 @@ describe("Transactions", () => {
     await waitFor(() => expect(mockGet).toHaveBeenCalledWith("/txn/graph/counterparty/Y1", { params: { hops: "3" } }));
   });
 
+  it("drafts a narrative for a finding and offers the evidence package", async () => {
+    mockPost.mockResolvedValue({
+      data: { ...FINDING, narrative: { method: "extractive", title: "Structuring on account A1", summary: "The structuring detector raised account A1.", basis: ["3 cash deposits"], recommendation: "escalate", gaps: [] }, narrative_at: "t" },
+    });
+    renderPage();
+    fireEvent.click(await screen.findByTestId("txn-finding"));
+    await screen.findByTestId("txn-finding-detail");
+    expect(screen.getByTestId("txn-evidence").getAttribute("href")).toBe("/api/v1/txn/findings/f1/evidence?format=json");
+    fireEvent.click(screen.getByTestId("txn-narrative"));
+    await waitFor(() => expect(mockPost).toHaveBeenCalledWith("/txn/findings/f1/narrative?method=auto"));
+    expect(await screen.findByTestId("txn-narrative-text")).toHaveTextContent("recommends escalate");
+    expect(screen.getByTestId("txn-narrative-text").textContent).toContain("3 cash deposits");
+  });
+
   it("requires a reason to dismiss and reports a failed graph", async () => {
     renderPage();
     fireEvent.click(await screen.findByTestId("txn-finding"));
