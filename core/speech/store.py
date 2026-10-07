@@ -10,6 +10,7 @@ clear. Tenant scoped under row-level security.
 
 from __future__ import annotations
 
+import asyncio
 import json
 import uuid
 from datetime import UTC, datetime
@@ -92,8 +93,9 @@ async def save(
     from core.database import get_tenant_session
     from core.models.speech_recording import SpeechRecording
 
-    recording: Recording = load(data, mime_type)
-    found = diarisation.diarise(recording, channel_roles=channel_roles)
+    # Decoding and the signal work over a two-hour recording are CPU bound: off the event loop.
+    recording: Recording = await asyncio.to_thread(load, data, mime_type)
+    found = await asyncio.to_thread(diarisation.diarise, recording, channel_roles=channel_roles)
     row = SpeechRecording(
         tenant_id=tenant_id,
         filename=(filename or "recording.wav")[:255],
@@ -164,21 +166,31 @@ async def get_recording(tenant_id: uuid.UUID, recording_id: uuid.UUID) -> dict[s
 
 
 async def attach_transcript(tenant_id: uuid.UUID, recording_id: uuid.UUID, raw_words: Any) -> dict[str, Any]:
-    """Words a caller supplies, aligned to the kept segments and stored as the recording's transcript."""
+    """Words a caller supplies, aligned to the kept segments and stored as the recording's transcript.
+
+    The segments are read and the transcript encrypted before the row is locked, so the tenant key
+    lookup never runs while a connection holds a lock.
+    """
     from core.database import get_tenant_session
 
     words = engines.check_words(raw_words)
     async with get_tenant_session(tenant_id) as session:
+        row = await _row(session, tenant_id, recording_id)
+        if row is None:
+            raise SpeechError(404, "not_found", "No such recording")
+        kept_segments = list(row.segments or [])
+    found = [
+        diarisation.Segment(
+            speaker=s["speaker"], start=float(s["start"]), end=float(s["end"]), channel=int(s.get("channel", 0))
+        )
+        for s in kept_segments
+    ]
+    envelope = await _encrypt(tenant_id, engines.transcript_of(words, found))
+    async with get_tenant_session(tenant_id) as session:
         row = await _row(session, tenant_id, recording_id, lock=True)
         if row is None:
             raise SpeechError(404, "not_found", "No such recording")
-        found = [
-            diarisation.Segment(
-                speaker=s["speaker"], start=float(s["start"]), end=float(s["end"]), channel=int(s.get("channel", 0))
-            )
-            for s in (row.segments or [])
-        ]
-        row.transcript_encrypted = await _encrypt(tenant_id, engines.transcript_of(words, found))
+        row.transcript_encrypted = envelope
         row.status = "transcribed"
         row.engine = "supplied"
         row.last_error = None

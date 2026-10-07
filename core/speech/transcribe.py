@@ -14,6 +14,7 @@ transcript presented as speech.
 
 from __future__ import annotations
 
+import asyncio
 import uuid
 from dataclasses import dataclass
 from typing import Any
@@ -177,7 +178,8 @@ async def transcribe(tenant_id: uuid.UUID, recording: Recording, *, engine: str,
     if engine == "faster_whisper":
         if not whisper_available():
             raise SpeechError(503, "engine_unavailable", "faster-whisper is not installed in this deployment")
-        return transcribe_whisper(recording, language=language)
+        # Model loading and inference are CPU bound: a worker thread keeps the event loop serving.
+        return await asyncio.to_thread(transcribe_whisper, recording, language=language)
     if engine == "deepgram":
         return await transcribe_deepgram(tenant_id, recording, language=language)
     if engine == "supplied":

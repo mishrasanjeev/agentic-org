@@ -43,4 +43,8 @@ the transcript under the tenant's key as the voice runtime keeps call transcript
 (`{"_encrypted": ...}`, `core/crypto/tenant_secrets.py`), so a database read never yields speech in
 clear. Tenant scoped under a forced row-level policy. `GET /speech/recordings` lists without
 transcripts; `GET /speech/recordings/{id}` returns the segments, speakers and transcript;
-`GET /speech/recordings/{id}/audio` returns the audio as kept.
+`GET /speech/recordings/{id}/audio` returns the audio as kept. The speech routes map onto enforced
+RBAC scopes (`api/route_enforcement.py`): a read needs `audit:read`, a write `approvals:write`;
+administrators pass. An upload is read one byte past the limit at most and refused beyond it; the
+decoding, the signal work and local inference run in worker threads so the event loop keeps
+serving; a transcript is encrypted before the row is locked.

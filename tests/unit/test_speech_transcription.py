@@ -384,6 +384,47 @@ class TestStore:
         assert store.transcript_of_row(row) is None
 
 
+class TestEnforcement:
+    def test_the_speech_routes_map_onto_enforced_scopes(self):
+        from api.route_enforcement import GRANTABLE_ROUTE_SCOPES, SCOPE_FAMILIES, required_scopes_for
+
+        assert SCOPE_FAMILIES["speech"] == ("audit:read", "approvals:write")
+        assert required_scopes_for("speech.recordings.sensitive.read", "GET") == ("audit:read",)
+        assert required_scopes_for("speech.recordings.sensitive.write", "POST") == ("approvals:write",)
+        assert {"audit:read", "approvals:write"} <= GRANTABLE_ROUTE_SCOPES
+
+    @pytest.mark.asyncio
+    async def test_the_upload_is_bounded_before_it_is_read(self, monkeypatch):
+        from api.v1 import speech as api
+
+        monkeypatch.setattr(settings, "speech_intelligence_enabled", True)
+        monkeypatch.setattr(store, "save", AsyncMock(return_value={"id": "r"}))
+        request = SimpleNamespace(state=SimpleNamespace(claims={"agenticorg:user_id": "u1"}))
+        read = AsyncMock(return_value=b"x" * (audio.MAX_BYTES + 1))
+        upload = SimpleNamespace(filename="a.wav", content_type="audio/wav", read=read)
+        with pytest.raises(HTTPException) as info:
+            await api.upload_recording(
+                upload, request, channel_roles="", language="en", engine=None, tenant_id=str(TENANT)
+            )
+        assert info.value.status_code == 413 and read.call_args.args == (audio.MAX_BYTES + 1,)
+        assert store.save.call_count == 0
+
+    @pytest.mark.asyncio
+    async def test_local_inference_runs_in_a_worker_thread(self, monkeypatch):
+        import threading
+
+        seen: dict[str, object] = {}
+
+        def fake_whisper(recording, *, language="en"):
+            seen["thread"] = threading.current_thread() is not threading.main_thread()
+            return [transcribe.Word("hello", 0.1, 0.4)]
+
+        monkeypatch.setattr(transcribe, "whisper_available", lambda: True)
+        monkeypatch.setattr(transcribe, "transcribe_whisper", fake_whisper)
+        words = await transcribe.transcribe(TENANT, audio.load(mono_call(), "audio/wav"), engine="faster_whisper")
+        assert [w.text for w in words] == ["hello"] and seen["thread"] is True
+
+
 class TestRoutes:
     @pytest.mark.asyncio
     async def test_status_answers_off_and_the_rest_is_not_found(self, monkeypatch):
