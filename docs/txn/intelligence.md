@@ -47,10 +47,16 @@ direction of flow between two nodes an edge carrying the total, the count, the f
 movement and the channels; a node found at one hop is expanded at the next from its own records, up
 to four hops and two hundred nodes, so the graph never runs away. The answer lists the nodes by hop
 with what came in and went out and the findings on each, the edges by amount, and the heaviest
-outward paths of money from the root. `GET /txn/graph/{kind}/{ref}/export?format=json|csv`
-carries the graph, the records behind every edge and the findings, as JSON or as CSV rows, for the
-case file. The Transactions page draws the graph by hop, expands a node on click, lists the paths
-and the findings on the entity, and downloads the export.
+outward paths of money from the root, ranked by the amount carried. A node known only by name (a
+statement import) expands by that name; a customer with more accounts than the node bound is capped
+and the answer says so. `GET /txn/graph/{kind}/{ref}/export?format=json|csv` carries the graph,
+the records behind every edge and the findings, as JSON or as CSV (the records, then the findings
+with their severity, status and disposition), for the case file: every record behind an edge is
+fetched in batches and the answer says how many were expected and how many were missing, and a
+cell a spreadsheet would read as a formula is kept as text. The Transactions page draws the graph
+by hop, wide enough for the last hop, expands a node on click, lists the paths and the findings on
+the entity, offers the disposition controls to the approval roles only, and downloads the export
+through the API client. The navigation entry appears only once the subsystem reports itself on.
 
 ## Narratives and evidence
 

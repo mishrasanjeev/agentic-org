@@ -79,6 +79,9 @@ async def expand(
         roots = sorted({str(r["account"]) for r in own})
     else:
         roots = [ref]
+    # A customer with more accounts than the node bound is capped, and the answer says so.
+    truncated = len(roots) > MAX_NODES
+    roots = roots[:MAX_NODES]
     nodes: dict[str, dict[str, Any]] = {}
     edges: dict[tuple[str, str], dict[str, Any]] = {}
     edge_records: dict[tuple[str, str], list[str]] = {}
@@ -95,7 +98,6 @@ async def expand(
             "records": 0,
             "root": True,
         }
-    truncated = False
     for hop in range(1, hops + 1):
         next_frontier: list[str] = []
         for node in frontier:
@@ -204,7 +206,8 @@ def paths_from(
 
     for root in roots:
         walk(root, [], {root})
-    found.sort(key=lambda p: (-len(p["hops"]), -p["carried"]))
+    # The amount carried is the weight a reader sees, so it ranks first; a longer chain wins a tie.
+    found.sort(key=lambda p: (-p["carried"], -len(p["hops"])))
     return found[:limit]
 
 
@@ -234,26 +237,76 @@ def export_rows(graph: dict[str, Any], records_by_ref: dict[str, dict[str, Any]]
     return rows
 
 
-def to_csv(rows: list[dict[str, Any]]) -> str:
-    out = io.StringIO()
-    writer = csv.DictWriter(
-        out,
-        fieldnames=[
-            "hop",
-            "from",
-            "to",
-            "record_ref",
-            "booked_at",
-            "amount",
-            "direction",
-            "channel",
-            "branch",
-            "description",
-        ],
-    )
+_FORMULA_LEADS = ("=", "+", "-", "@", "\t", "\r")
+RECORD_COLUMNS = [
+    "hop",
+    "from",
+    "to",
+    "record_ref",
+    "booked_at",
+    "amount",
+    "direction",
+    "channel",
+    "branch",
+    "description",
+]
+FINDING_COLUMNS = [
+    "finding_id",
+    "kind",
+    "entity_kind",
+    "entity_ref",
+    "severity",
+    "status",
+    "summary",
+    "outcome",
+    "case_ref",
+    "detected_at",
+]
+
+
+def csv_safe(value: Any) -> Any:
+    """A cell a spreadsheet would read as a formula is prefixed with an apostrophe, so it stays text."""
+    if isinstance(value, str) and value and value[0] in _FORMULA_LEADS:
+        return "'" + value
+    return value
+
+
+def finding_rows(findings: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """One row per finding: what it is, on which entity, how severe, its status and disposition."""
+    rows: list[dict[str, Any]] = []
+    for finding in findings:
+        disposition = finding.get("disposition") or {}
+        rows.append(
+            {
+                "finding_id": finding.get("id"),
+                "kind": finding.get("kind"),
+                "entity_kind": finding.get("entity_kind"),
+                "entity_ref": finding.get("entity_ref"),
+                "severity": finding.get("severity"),
+                "status": finding.get("status"),
+                "summary": finding.get("summary"),
+                "outcome": disposition.get("outcome") if isinstance(disposition, dict) else None,
+                "case_ref": finding.get("case_ref"),
+                "detected_at": finding.get("detected_at"),
+            }
+        )
+    return rows
+
+
+def _write_table(out: io.StringIO, columns: list[str], rows: list[dict[str, Any]]) -> None:
+    writer = csv.DictWriter(out, fieldnames=columns, extrasaction="ignore")
     writer.writeheader()
     for row in rows:
-        writer.writerow(row)
+        writer.writerow({key: csv_safe(value) for key, value in row.items() if key in columns})
+
+
+def to_csv(rows: list[dict[str, Any]], findings: list[dict[str, Any]] | None = None) -> str:
+    """The records behind the edges, then, after a blank line, the findings with severity, status and disposition."""
+    out = io.StringIO()
+    _write_table(out, RECORD_COLUMNS, rows)
+    if findings:
+        out.write("\r\n")
+        _write_table(out, FINDING_COLUMNS, finding_rows(findings))
     return out.getvalue()
 
 
@@ -268,10 +321,18 @@ async def export(
 ) -> dict[str, Any]:
     """The graph with the records behind every edge and the findings on every node, for the case file."""
     graph = await expand(tenant_id, kind, ref, hops=hops, since_days=since_days, findings=findings)
-    refs = [ref for refs in graph["edge_records"].values() for ref in refs][:MAX_EXPORT_RECORDS]
+    refs = [ref for refs in graph["edge_records"].values() for ref in refs]
     rows_by_ref: dict[str, dict[str, Any]] = {}
-    if refs:
-        for record in await records.list_by_refs(tenant_id, refs):
+    # Every record behind an edge is fetched, in batches the store accepts; nothing is dropped quietly.
+    for first in range(0, len(refs), MAX_EXPORT_RECORDS):
+        for record in await records.list_by_refs(tenant_id, refs[first : first + MAX_EXPORT_RECORDS]):
             rows_by_ref[record["record_ref"]] = record
     rows = export_rows(graph, rows_by_ref)
-    return {"graph": graph, "records": rows, "findings": findings or [], "csv": to_csv(rows)}
+    return {
+        "graph": graph,
+        "records": rows,
+        "findings": findings or [],
+        "csv": to_csv(rows, findings),
+        "records_expected": len(refs),
+        "records_missing": len(refs) - len(rows_by_ref),
+    }

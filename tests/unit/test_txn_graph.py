@@ -96,7 +96,9 @@ class TestGraph:
             and edges[("Y1", "Z1")]["count"] == 1
         )
         assert found["edges"][0]["amount"] == 1_000_000  # heaviest first
-        assert found["paths"][0]["hops"] == ["Y1", "Z1"] and found["paths"][0]["carried"] == 500_000
+        # ranked by the amount carried: A1 to Y1 carries 600,000, the chain on to Z1 carries 500,000
+        assert [p["hops"] for p in found["paths"][:2]] == [["Y1"], ["Y1", "Z1"]]
+        assert found["paths"][1]["carried"] == 500_000
         assert found["edge_records"]["A1->Y1"] == ["p2"] and found["totals"] == {"nodes": 5, "edges": 4, "records": 4}
         assert found["truncated"] is False
 
@@ -120,6 +122,50 @@ class TestGraph:
         bounded = await graph.expand(TENANT, "account", "A1", hops=1, fetch=fetch)
         assert bounded["truncated"] is True and bounded["totals"]["nodes"] == 2
 
+    @pytest.mark.asyncio
+    async def test_a_customer_with_too_many_accounts_is_capped(self, monkeypatch):
+        many = [dict(BOOK["A1"][0], account=f"A{i}", record_ref=f"m{i}") for i in range(graph.MAX_NODES + 5)]
+        monkeypatch.setattr(records, "list_records", AsyncMock(return_value=many))
+        found = await graph.expand(TENANT, "customer", "C1", hops=1, fetch=AsyncMock(return_value=[]))
+        assert found["truncated"] is True and len(found["root"]["accounts"]) == graph.MAX_NODES
+
+    def test_csv_cells_that_look_like_formulas_stay_text_and_the_findings_follow_the_records(self):
+        rows = [
+            {
+                "hop": 1,
+                "from": "=SUM(A1)",
+                "to": "+B",
+                "record_ref": "r",
+                "booked_at": None,
+                "amount": 5,
+                "direction": "credit",
+                "channel": "cash",
+                "branch": "@x",
+                "description": "-1+1",
+            }
+        ]
+        findings = [
+            {
+                "id": "f1",
+                "kind": "structuring",
+                "entity_kind": "account",
+                "entity_ref": "A1",
+                "severity": "high",
+                "status": "confirmed",
+                "summary": "@cmd",
+                "disposition": {"outcome": "confirm", "notes": "x"},
+                "case_ref": "CASE-1",
+                "detected_at": "2026-10-07T00:00:00+00:00",
+            }
+        ]
+        text = graph.to_csv(rows, findings)
+        assert "'=SUM(A1)" in text and "'+B" in text and "'@x" in text and "'-1+1" in text
+        records_part, findings_part = text.split("\r\n\r\n", 1)
+        assert records_part.startswith("hop,from,to,record_ref") and findings_part.startswith("finding_id,kind,")
+        assert "f1,structuring,account,A1,high,confirmed,'@cmd,confirm,CASE-1," in findings_part
+        assert "\r\n\r\n" not in graph.to_csv(rows)  # no findings, no second table
+        assert graph.csv_safe(5) == 5 and graph.csv_safe("plain") == "plain" and graph.csv_safe("") == ""
+
     def test_paths_follow_the_heaviest_outward_edges(self):
         edges = [
             {"from": "A", "to": "B", "amount": 100},
@@ -128,7 +174,8 @@ class TestGraph:
             {"from": "D", "to": "A", "amount": 50},  # a cycle back is not followed
         ]
         paths = graph.paths_from(["A"], edges)
-        assert paths[0]["hops"] == ["C", "D"] and paths[0]["carried"] == 250
+        # ranked by the amount carried, then by length: C carries 300, C then D carries 250, B carries 100
+        assert [p["hops"] for p in paths] == [["C"], ["C", "D"], ["B"]] and paths[1]["carried"] == 250
         assert all("A" not in p["hops"] for p in paths)
         assert graph.paths_from(["A"], []) == []
 
@@ -155,7 +202,20 @@ class TestGraph:
             and out["records"][0]["hop"] == 1
         )
         assert out["csv"].splitlines()[0].startswith("hop,from,to,record_ref") and "p2" in out["csv"]
-        assert records.list_by_refs.call_args.args[1] == ["p2"]
+        assert records.list_by_refs.call_args.args[1] == ["p2"] and out["records_expected"] == 1
+        assert out["records_missing"] == 0
+        monkeypatch.setattr(graph, "MAX_EXPORT_RECORDS", 1)
+        monkeypatch.setattr(
+            graph, "expand", AsyncMock(return_value={"nodes": [], "edge_records": {"A1->Y1": ["p2", "p3"]}})
+        )
+        monkeypatch.setattr(
+            records,
+            "list_by_refs",
+            AsyncMock(side_effect=lambda tenant, refs: [dict(BOOK["A1"][1], record_ref=refs[0])]),
+        )
+        out = await graph.export(TENANT, "account", "A1")
+        # fetched in batches of the bound, every record accounted for
+        assert records.list_by_refs.call_count == 2 and out["records_expected"] == 2 and out["records_missing"] == 0
         assert graph.export_rows({"nodes": [], "edge_records": {}}, {}) == [] and graph.to_csv([]).startswith("hop,")
 
 

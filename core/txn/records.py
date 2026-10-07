@@ -224,8 +224,12 @@ async def list_records(
     if customer_ref:
         statement = statement.where(TxnRecord.customer_ref == customer_ref[:64])
     if counterparty:
+        # A node is an account, a counterparty reference, or a counterparty known only by name (statement imports).
+        needle = counterparty[:200]
         statement = statement.where(
-            (TxnRecord.counterparty == counterparty[:64]) | (TxnRecord.account == counterparty[:64])
+            (TxnRecord.counterparty == needle[:64])
+            | (TxnRecord.account == needle[:64])
+            | (TxnRecord.counterparty_name == needle)
         )
     if since is not None:
         statement = statement.where(TxnRecord.booked_at >= since)

@@ -2,6 +2,8 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Helmet } from "react-helmet-async";
 import api, { extractApiError } from "@/lib/api";
+import { useAuth } from "@/contexts/AuthContext";
+import { APPROVAL_ROLES } from "@/lib/roles";
 
 /**
  * Transactions: the findings the detectors raised with a person's disposition, and the fund-flow
@@ -58,7 +60,6 @@ interface Graph {
 }
 
 export const KINDS = ["account", "customer", "counterparty"];
-const WIDTH = 720;
 const COLUMN = 170;
 const ROW = 46;
 
@@ -86,7 +87,15 @@ export function graphHeight(nodes: Node[]): number {
   return 80 + Math.max(1, ...Object.values(counts)) * ROW;
 }
 
+/** Wide enough for the last hop: a column per hop after the root, plus the margin. */
+export function graphWidth(nodes: Node[]): number {
+  return 90 + (Math.max(0, ...nodes.map((n) => n.hop)) + 1) * COLUMN;
+}
+
 export default function Transactions() {
+  const auth = useAuth();
+  // Dispositions need approvals:write; the backend refuses everyone else, so the controls follow the same role list.
+  const canDecide = APPROVAL_ROLES.includes(auth.user?.role || "");
   const [findings, setFindings] = useState<Finding[]>([]);
   const [status, setStatus] = useState("open");
   const [selected, setSelected] = useState<Finding | null>(null);
@@ -165,6 +174,42 @@ export default function Transactions() {
     }
   };
 
+  /** A blob from the API client, saved under the given name: the download reaches the API host with the session. */
+  const saveBlob = (data: Blob, name: string) => {
+    const url = URL.createObjectURL(data);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = name;
+    link.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const downloadEvidence = async () => {
+    if (!selected) return;
+    setError(null);
+    try {
+      const { data } = await api.get(`/txn/findings/${selected.id}/evidence`, { params: { format: "json" }, responseType: "blob" });
+      saveBlob(data as Blob, `evidence-${selected.id.slice(0, 32)}.json`);
+    } catch (err) {
+      setError(extractApiError(err, "The evidence package did not download."));
+    }
+  };
+
+  const exportCsv = async () => {
+    if (!graph) return;
+    setError(null);
+    try {
+      // Through the configured API client, so the download reaches the API host with the session.
+      const { data } = await api.get(`/txn/graph/${graph.root.kind}/${encodeURIComponent(graph.root.ref)}/export`, {
+        params: { format: "csv", hops: String(graph.hops) },
+        responseType: "blob",
+      });
+      saveBlob(data as Blob, `fund-flow-${graph.root.ref.slice(0, 32)}.csv`);
+    } catch (err) {
+      setError(extractApiError(err, "The export did not download."));
+    }
+  };
+
   const positions = useMemo(() => (graph ? layout(graph.nodes) : {}), [graph]);
   const maxEdge = useMemo(() => (graph ? Math.max(1, ...graph.edges.map((e) => e.amount)) : 1), [graph]);
 
@@ -225,9 +270,9 @@ export default function Transactions() {
                   <button type="button" className="rounded-md border border-slate-300 px-2 py-1 text-xs text-slate-700 disabled:opacity-50" disabled={busy} onClick={() => void draftNarrative()} data-testid="txn-narrative">
                     Draft narrative
                   </button>
-                  <a className="rounded-md border border-slate-300 px-2 py-1 text-xs text-slate-700" href={`/api/v1/txn/findings/${selected.id}/evidence?format=json`} data-testid="txn-evidence">
+                  <button type="button" className="rounded-md border border-slate-300 px-2 py-1 text-xs text-slate-700 disabled:opacity-50" disabled={busy} onClick={() => void downloadEvidence()} data-testid="txn-evidence">
                     Download evidence
-                  </a>
+                  </button>
                 </div>
                 {selected.narrative && selected.narrative.summary && (
                   <div className="rounded-md border border-slate-200 bg-slate-50 p-2 text-sm" data-testid="txn-narrative-text">
@@ -246,7 +291,7 @@ export default function Transactions() {
                 <button type="button" className="text-xs text-indigo-700 hover:underline" onClick={() => { setKind("account"); setRef(selected.entity_ref); void loadGraph("account", selected.entity_ref, hops); }} data-testid="txn-finding-graph">
                   Show the fund flow
                 </button>
-                {selected.status === "open" && (
+                {selected.status === "open" && canDecide && (
                   <>
                     <label className="block text-sm text-slate-700">
                       Notes
@@ -303,15 +348,15 @@ export default function Transactions() {
             Build graph
           </button>
           {graph && (
-            <a className="rounded-md border border-slate-300 px-3 py-1.5 text-sm text-slate-700" href={`/api/v1/txn/graph/${graph.root.kind}/${encodeURIComponent(graph.root.ref)}/export?format=csv&hops=${graph.hops}`} data-testid="txn-export">
+            <button type="button" className="rounded-md border border-slate-300 px-3 py-1.5 text-sm text-slate-700" onClick={() => void exportCsv()} data-testid="txn-export">
               Export CSV
-            </a>
+            </button>
           )}
         </form>
         {graph && (
           <div className="grid gap-3 lg:grid-cols-12" data-testid="txn-graph">
             <div className="overflow-x-auto rounded-md border border-slate-200 bg-white lg:col-span-8">
-              <svg role="img" aria-label={`Fund flow around ${graph.root.ref}`} width={WIDTH} height={graphHeight(graph.nodes)} viewBox={`0 0 ${WIDTH} ${graphHeight(graph.nodes)}`}>
+              <svg role="img" aria-label={`Fund flow around ${graph.root.ref}`} width={graphWidth(graph.nodes)} height={graphHeight(graph.nodes)} viewBox={`0 0 ${graphWidth(graph.nodes)} ${graphHeight(graph.nodes)}`}>
                 {graph.edges.map((edge) => {
                   const a = positions[edge.from];
                   const b = positions[edge.to];
