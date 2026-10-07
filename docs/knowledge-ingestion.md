@@ -56,10 +56,12 @@ is read as paragraphs only, which the `sentence` and `paragraph` strategies hand
 `POST /knowledge/search` takes optional `filters` (`core/rag/filters.py`): `category`, `source`
 and `file_type` (lists; a document matches any value), and a `created_from` / `created_to` date
 window. Every filter is an `AND` condition on the knowledge documents, applied inside the dense
-and the sparse rankings alike, so the fused result only ever holds documents that pass. A bank's
-branch, product line or business segment is recorded in `category` at upload, which is what the
-filters narrow on. A narrowed search answers from the knowledge base only: the upload-metadata
-fallback carries nothing to filter on and is not consulted.
+and the sparse rankings alike, so the fused result only ever holds documents that pass.
+`category` is the source object type ingestion records for a chunk (`document`, `invoice` and so
+on) and `source` the upload it came from; a document's branch, product line or business segment
+is not yet a field of its own, which the access-control part of this package adds. A narrowed
+search answers from the knowledge base only: the upload-metadata fallback carries nothing to
+filter on and is not consulted.
 
 With `AGENTICORG_KNOWLEDGE_HYBRID_SEARCH` on, a search fuses the dense (pgvector) and sparse
 (PostgreSQL full text) rankings by reciprocal rank. With `AGENTICORG_KNOWLEDGE_RERANK_ENABLED` on
