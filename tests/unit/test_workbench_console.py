@@ -353,6 +353,7 @@ class TestConversationRoute:
         monkeypatch.setattr(runtime, "enabled", lambda: True)
         monkeypatch.setattr(runtime, "load_dialogue", AsyncMock(return_value=engine.Dialogue()))
         monkeypatch.setattr(runtime, "held_turn", AsyncMock(return_value=None))
+        monkeypatch.setattr(runtime, "save_dialogue", AsyncMock(return_value=None))  # run_turn keeps the session
         monkeypatch.setattr(runtime, "finish_turn", AsyncMock(return_value={"answer": "ok"}))
         monkeypatch.setattr(
             runtime,
