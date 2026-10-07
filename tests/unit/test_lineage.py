@@ -10,7 +10,9 @@ from unittest.mock import AsyncMock
 
 import pytest
 from fastapi import HTTPException
+from sqlalchemy.dialects import postgresql
 from sqlalchemy.sql import operators
+from sqlalchemy.sql.dml import Insert
 from sqlalchemy.sql.elements import BinaryExpression, BooleanClauseList, Grouping
 
 from api.v1 import lineage as api
@@ -57,6 +59,20 @@ class _Session:
 
     async def execute(self, statement):
         self.queries += 1
+        if isinstance(statement, Insert):
+            # an insert that does nothing on conflict: the row is added once under its unique key
+            from core.models.lineage import LineageNode, LineageStep
+
+            table = statement.table.name
+            values = statement.compile(dialect=postgresql.dialect()).params
+            model, key = {
+                "lineage_nodes": (LineageNode, ("tenant_id", "kind", "ref", "version")),
+                "lineage_steps": (LineageStep, ("tenant_id", "from_node", "to_node", "step")),
+            }[table]
+            assert statement._post_values_clause is not None  # on_conflict_do_nothing
+            if not any(r.__tablename__ == table and all(getattr(r, c) == values[c] for c in key) for r in self.rows):
+                self.rows.append(model(**values))
+            return _Result([])
         table = statement.get_final_froms()[0].name
         return _Result([r for r in self.rows if r.__tablename__ == table and _matches(statement.whereclause, r)])
 
@@ -127,6 +143,18 @@ class TestChecks:
                 {"kind": "source", "ref": "x", "attributes": {"blob": "x" * provenance.MAX_ATTRIBUTES}}
             )
         assert refused.value.code == "attributes_too_large"
+        # an identifier is refused when oversized, never cut
+        for oversized in (
+            {"kind": "chunk", "ref": "r" * (provenance.MAX_REF + 1)},
+            {"kind": "chunk", "ref": "r", "version": "v" * 81},
+        ):
+            with pytest.raises(LineageError) as refused:
+                provenance.check_node(oversized)
+            assert refused.value.code == "node_invalid" and "at most" in refused.value.message
+        assert (
+            len(provenance.check_node({"kind": "chunk", "ref": "r", "source": "s" * 600})["source"])
+            == provenance.MAX_REF
+        )
 
     def test_a_step_names_two_positions_and_a_known_step(self):
         step = provenance.check_step({"from": 0, "to": 1, "step": "Embed", "tool": "m", "params": {"dims": 3}}, 2)
@@ -178,6 +206,11 @@ class TestStore:
         assert [s["step"] for s in up["steps"]] == ["extract", "chunk", "embed"] and up["truncated"] is False
         down = await provenance.trace(TENANT, "source", "upload://a.pdf", direction="downstream", hops=1)
         assert [n["kind"] for n in down["nodes"]] == ["source", "document"] and len(down["steps"]) == 1
+        assert down["truncated"] is True  # cut at the hop bound with lineage beyond it
+        full = await provenance.trace(TENANT, "source", "upload://a.pdf", direction="downstream", hops=3)
+        assert len(full["nodes"]) == 4 and full["truncated"] is False  # the bound was enough
+        tip = await provenance.trace(TENANT, "embedding", "upload://a.pdf#chunk1-ab", direction="downstream", hops=1)
+        assert len(tip["nodes"]) == 1 and tip["truncated"] is False  # nothing beyond
         both = await provenance.trace(TENANT, "chunk", "upload://a.pdf#chunk1-ab", direction="both")
         assert len(both["nodes"]) == 4 and len(both["steps"]) == 3
         monkeypatch.setattr(provenance, "MAX_NODES", 2)
@@ -408,6 +441,20 @@ class TestHooks:
                 "description": "cash",
             }
         ]
+        # without a batch source, each record keeps its own
+        noted.reset_mock()
+        mixed = [
+            dict(raw[0], source="statement:stmt-1"),
+            dict(raw[0], amount=11, source="statement:stmt-1"),
+            dict(raw[0], amount=12, source="switch"),
+        ]
+        out = await txn_records.ingest(TENANT, mixed)
+        assert out["kept"] == 3
+        assert sorted((c.kwargs["source"], len(c.kwargs["records"])) for c in noted.call_args_list) == [
+            ("statement:stmt-1", 2),
+            ("switch", 1),
+        ]
+        noted.reset_mock()
         out = await txn_records.ingest(TENANT, raw, source="core-banking")
         assert out["kept"] == 1
         assert (

@@ -199,10 +199,14 @@ async def ingest(tenant_id: uuid.UUID, raw_records: list[Any], *, source: str | 
             kept += 1
         await session.flush()
     if kept_items:
-        # Provenance (core/lineage): each kept record acquired from its source; never fails the ingestion.
+        # Provenance (core/lineage): each kept record acquired from its own source; never fails the ingestion.
         from core.lineage import provenance
 
-        await provenance.on_records(tenant_id, source=(source or "api")[:64], records=kept_items)
+        by_source: dict[str, list[dict[str, Any]]] = {}
+        for item in kept_items:
+            by_source.setdefault(str(item.get("source") or "api")[:64], []).append(item)
+        for name, group in by_source.items():
+            await provenance.on_records(tenant_id, source=name, records=group)
     logger.info("txn_records_ingested", kept=kept, skipped=len(checked) - kept)
     return {
         "received": len(checked),
