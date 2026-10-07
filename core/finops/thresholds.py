@@ -16,11 +16,22 @@ breached action wins:
   resets, the threshold is disabled, or an administrator lifts it until a
   time.
 
-A breach is recorded on the threshold (period, time, spend) and the owner
-notified once per period through the threshold's channels (``email`` to the
-tenant's earliest active administrator, ``log``); a notification that fails
-never touches the run. ``status`` shows every threshold with its spend and
-share, for the console.
+The scope a run is matched against is server-owned: while thresholds are
+on, the run's use case and business unit come from the agent's configuration,
+type and domain, never from the caller's request, so a caller cannot relabel a
+run (or its ledger row) out of a scoped threshold.
+
+A breach is claimed on the threshold (period, time, spend) by one conditional
+update, committed before anyone is told, so concurrent runs notify the owner
+once per period through the threshold's channels (``email`` to the tenant's
+earliest active administrator, ``log``); a notification that fails never
+touches the run. Every enabled threshold is evaluated; a tenant holds at most
+``MAX_THRESHOLDS``. ``status`` shows every threshold with its spend and share,
+for the console.
+
+Thresholds read the ledger that attribution writes, so they run only while
+``AGENTICORG_FINOPS_ATTRIBUTION_ENABLED`` is on too; settings refuse to load
+with thresholds on and attribution off.
 
 Off, nothing here runs: no run is checked, delayed or refused.
 """
@@ -62,7 +73,8 @@ class ThresholdError(Exception):
 
 
 def enabled() -> bool:
-    return bool(settings.finops_thresholds_enabled)
+    """On only with attribution on too: without the attributed ledger every spend would read zero."""
+    return bool(settings.finops_thresholds_enabled) and bool(settings.finops_attribution_enabled)
 
 
 def period_start(period: str, now: datetime) -> date:
@@ -266,6 +278,7 @@ async def notify(session: Any, tenant_id: uuid.UUID, row: Any, spend_usd: float)
 
 
 async def enabled_rows(session: Any, tenant_id: uuid.UUID) -> list[Any]:
+    """Every enabled threshold of the tenant; none is cut off (creation is capped at MAX_THRESHOLDS)."""
     from sqlalchemy import select
 
     from core.models.finops_threshold import FinopsThreshold
@@ -276,12 +289,51 @@ async def enabled_rows(session: Any, tenant_id: uuid.UUID) -> list[Any]:
                 select(FinopsThreshold)
                 .where(FinopsThreshold.tenant_id == tenant_id, FinopsThreshold.enabled.is_(True))
                 .order_by(FinopsThreshold.name)
-                .limit(MAX_THRESHOLDS)
             )
         )
         .scalars()
         .all()
     )
+
+
+async def count_rows(session: Any, tenant_id: uuid.UUID) -> int:
+    """How many thresholds the tenant holds, enabled or not."""
+    from sqlalchemy import func, select
+
+    from core.models.finops_threshold import FinopsThreshold
+
+    found = (
+        await session.execute(
+            select(func.count()).select_from(FinopsThreshold).where(FinopsThreshold.tenant_id == tenant_id)
+        )
+    ).scalar()
+    return int(found or 0)
+
+
+async def claim_breach(session: Any, tenant_id: uuid.UUID, row: Any, key: str, *, now: datetime, spent: float) -> bool:
+    """Record the breach for the period unless another run already has; True for the one run that did.
+
+    One conditional update: a concurrent run blocks on the row until this
+    transaction ends, then finds the period recorded and updates nothing.
+    """
+    from sqlalchemy import text as sqltext
+
+    claimed = (
+        await session.execute(
+            sqltext(
+                "UPDATE finops_thresholds SET last_breach_period = :key, last_breach_at = :at, "
+                "last_breach_spend_usd = :spent WHERE id = CAST(:id AS uuid) AND tenant_id = CAST(:tid AS uuid) "
+                "AND last_breach_period IS DISTINCT FROM :key RETURNING id"
+            ),
+            {"key": key, "at": now, "spent": spent, "id": str(row.id), "tid": str(tenant_id)},
+        )
+    ).fetchone()
+    if claimed is None:
+        return False
+    row.last_breach_period = key
+    row.last_breach_at = now
+    row.last_breach_spend_usd = spent
+    return True
 
 
 async def check_run(
@@ -301,15 +353,17 @@ async def check_run(
             breached.append((row, spent))
     if not breached:
         return NONE
+    claimed: list[tuple[Any, float]] = []
     for row, spent in breached:
+        row.notified = False  # transient attribute, not a column
         key = period_key(row.period, now)
-        if row.last_breach_period != key:
-            row.last_breach_period = key
-            row.last_breach_at = now
-            row.last_breach_spend_usd = spent
-            row.notified = await notify(session, tenant_id, row, spent)  # transient attribute, not a column
-        else:
-            row.notified = False
+        if row.last_breach_period != key and await claim_breach(session, tenant_id, row, key, now=now, spent=spent):
+            claimed.append((row, spent))
+    if claimed:
+        # The claim is committed before anyone is told, so the row lock is not held while notifying.
+        await session.commit()
+        for row, spent in claimed:
+            row.notified = await notify(session, tenant_id, row, spent)
 
     def effective(row: Any) -> str:
         lifted = getattr(row, "lifted_until", None)

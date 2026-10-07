@@ -23,6 +23,10 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
   `GET /finops/comparison` folds the model calls per use case with the
   cheapest catalogue alternatives and a before-and-after around a change
   date (`core/finops/forecast.py`).
+  The forecast totals cover every label; the listed rows are the highest
+  projected spend first, with `total_rows` and `truncated` when the list is
+  cut. Calls without an input and output split are priced at the blended rate
+  alongside the split calls in the comparison.
 
 ### Added - FinOps: thresholds and actions
 - With `AGENTICORG_FINOPS_THRESHOLDS_ENABLED` on (off by default), a
@@ -32,6 +36,11 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
   `v6z56_finops_thresholds`, `/finops/thresholds`): a breached threshold
   alerts the owner once per period, throttles the run with a short delay,
   or suspends runs until the period resets or an administrator lifts it.
+  Thresholds need `AGENTICORG_FINOPS_ATTRIBUTION_ENABLED` (settings refuse
+  to load without it), match runs on the agent's own use case and business
+  unit rather than the caller's labels, notify once per period under
+  concurrent runs, cap a tenant at 200 thresholds and answer a duplicate
+  name with 409.
 
 ### Added - FinOps: use-case attribution
 - With `AGENTICORG_FINOPS_ATTRIBUTION_ENABLED` on (off by default), a run
@@ -41,6 +50,9 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
   `v6z55_finops_attribution`), each model call record carries the business
   unit and application, and `GET /finops/attribution` folds the ledger by
   any dimension with the unattributed share.
+- The ledger's row-level policy is forced, its unique key includes the
+  department and cost centre (a mid-day change starts a new row), and the
+  legacy-table column additions skip a table that is missing.
 
 ### Added - AI governance: policy console
 - With `AGENTICORG_GOVERNANCE_POLICY_CONSOLE_ENABLED` on (off by default),
@@ -49,6 +61,9 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
   shape, writes and removes one through its own store's writer, and dry-runs
   a described call, text, tool or workflow across the enforcement points
   (`core/governance/policy_console.py`, `/governance/policies`).
+- The console lists disabled policies too, checks approval steps as the
+  approval policies API does, and its dry run resolves approvals, model
+  access by application and principal, and tool actions as runtime does.
 
 ### Added - AI governance: regulatory risk tiers
 - With `AGENTICORG_GOVERNANCE_RISK_TIERS_ENABLED` on (off by default), an
@@ -186,15 +201,18 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
 - With `AGENTICORG_AGENT_REGISTRY_GATES_PROMOTION` on (off by default),
   promotion and resume to active need an approved or published registry
   entry (`core/agent_registry/approval.py`), checked after the shadow
-  evidence, the maker-checker check and the evaluation gate; promotion
+  evidence, the maker-checker check and the evaluation gate, and a new or
+  cloned agent cannot start active; promotion
   publishes an approved entry and retirement retires a published one, each
   a recorded transition. Environments (development, staging, production)
   are read from the state. `PUT /agents/{id}/traffic-split` sends a share
   of an agent's runs through the agents API to another active agent while
   `AGENTICORG_AGENT_TRAFFIC_SPLIT_ENABLED` is on (`core/agent_registry/
   traffic.py`), chosen from the run's thread or correlation id so a retry
-  lands on the same agent; the response names the agent that served the
-  run, and removing the split is the one-action rollback.
+  lands on the same agent (one draw per run otherwise); the agent asked for
+  passes its own status, floor and override controls before any redirection
+  and the target is held to the same; the response names the agent that
+  served the run, and removing the split is the one-action rollback.
 
 ### Added - Agent registry: cards and lifecycle states
 - Behind `AGENTICORG_AGENT_REGISTRY_ENABLED` (off by default), each agent
