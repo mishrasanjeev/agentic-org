@@ -35,6 +35,9 @@ except ImportError:
 logger = structlog.get_logger()
 
 
+_FALLBACK_DIRECTIVE_RE = re.compile(r"fallback\(\s*([A-Za-z0-9_.-]+)\s*\)")
+
+
 class WorkflowTimeoutError(Exception):
     """Raised when a workflow exceeds its configured timeout_hours."""
 
@@ -278,7 +281,13 @@ class WorkflowEngine:
                 )
                 if replan_enabled:
                     replan_result = await self._attempt_replan(
-                        state, run_id, step_id, step, steps, execution_order, str(exc),
+                        state,
+                        run_id,
+                        step_id,
+                        step,
+                        steps,
+                        execution_order,
+                        str(exc),
                     )
                     if replan_result is not None:
                         # Re-planning succeeded — restart execution with updated steps
@@ -305,6 +314,9 @@ class WorkflowEngine:
             result = self._normalize_step_result(step, result)
             state["step_results"][step_id] = self._state_result_from_step_result(result)
             state["steps_completed"] = len(state["step_results"])
+            fallback_target = self._fallback_target(step)
+            if fallback_target:
+                state["step_results"][step_id]["fallback_target"] = fallback_target
 
             if result.get("status") == "failed" and not self._step_allows_failure(step):
                 state["status"] = "failed"
@@ -479,6 +491,9 @@ class WorkflowEngine:
             result = self._normalize_step_result(step, result)
             state["step_results"][step_id] = self._state_result_from_step_result(result)
             state["steps_completed"] = len(state["step_results"])
+            fallback_target = self._fallback_target(step)
+            if fallback_target:
+                state["step_results"][step_id]["fallback_target"] = fallback_target
 
             if result.get("status") == "failed" and not self._step_allows_failure(step):
                 state["status"] = "failed"
@@ -736,10 +751,7 @@ class WorkflowEngine:
         # Identify remaining steps (not yet executed and not the failed step)
         executed_ids = set(state.get("step_results", {}).keys()) | {failed_step_id}
         step_index = self._build_step_index(all_steps)
-        remaining_steps = [
-            step_index[sid] for sid in execution_order
-            if sid not in executed_ids and sid in step_index
-        ]
+        remaining_steps = [step_index[sid] for sid in execution_order if sid not in executed_ids and sid in step_index]
 
         try:
             new_steps = await replan_workflow(
@@ -775,9 +787,7 @@ class WorkflowEngine:
 
         # Replace remaining steps in the definition with the replanned ones
         # Keep completed steps + the replanned marker, append new steps
-        completed_step_defs = [
-            s for s in all_steps if s["id"] in state.get("step_results", {})
-        ]
+        completed_step_defs = [s for s in all_steps if s["id"] in state.get("step_results", {})]
         # Mark new steps as replanned for UI display
         for ns in new_steps:
             ns["replanned"] = True
@@ -942,7 +952,14 @@ class WorkflowEngine:
             step.get("optional") is True
             or step.get("allow_failure") is True
             or fallback_tokens & {"continue", "ignore", "optional"}
+            or WorkflowEngine._fallback_target(step) is not None
         )
+
+    @staticmethod
+    def _fallback_target(step: dict) -> str | None:
+        """The step ``on_failure: fallback(<id>)`` names; it runs when this one fails."""
+        match = _FALLBACK_DIRECTIVE_RE.search(str(step.get("on_failure", "")))
+        return match.group(1) if match else None
 
     @staticmethod
     def _build_step_index(steps: list[dict]) -> dict[str, dict]:
@@ -997,9 +1014,7 @@ class WorkflowEngine:
         started_at = datetime.fromisoformat(state["started_at"])
         elapsed = (datetime.now(UTC) - started_at).total_seconds()
         if elapsed > timeout_hours * 3600:
-            raise WorkflowTimeoutError(
-                f"Workflow exceeded timeout of {timeout_hours}h (elapsed {elapsed / 3600:.2f}h)"
-            )
+            raise WorkflowTimeoutError(f"Workflow exceeded timeout of {timeout_hours}h (elapsed {elapsed / 3600:.2f}h)")
 
     # ------------------------------------------------------------------
     # Dependency checking
@@ -1015,6 +1030,11 @@ class WorkflowEngine:
                 return f"Dependency '{dep_id}' has not been executed"
             if dep_result.get("status") == "skipped" and dep_result.get("reason") == "branch_not_taken":
                 return "branch_not_taken"
+            if dep_result.get("fallback_target") == step.get("id"):
+                # A fallback runs only when the step it falls back from failed.
+                if dep_result.get("status") == "failed":
+                    continue
+                return "fallback_not_needed"
             if dep_result.get("status") not in ("completed",):
                 return f"Dependency '{dep_id}' did not complete successfully (status={dep_result.get('status')})"
         return None

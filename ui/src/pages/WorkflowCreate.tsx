@@ -3,6 +3,7 @@ import { useNavigate, useLocation } from "react-router";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import api from "@/lib/api";
+import WorkflowBuilder, { type WorkflowStep } from "@/components/WorkflowBuilder";
 
 const TRIGGER_TYPES = ["manual", "schedule", "webhook", "api_event", "email_received"];
 
@@ -35,7 +36,7 @@ const STEP_TEMPLATE = JSON.stringify([
   },
 ], null, 2);
 
-type TabMode = "describe" | "template";
+type TabMode = "describe" | "template" | "build";
 
 interface GeneratedStep {
   id: string;
@@ -69,6 +70,10 @@ export default function WorkflowCreate() {
   const [domain, setDomain] = useState(templateState?.templateDomain as string || "finance");
   const [triggerType, setTriggerType] = useState(templateState?.templateTrigger as string || "manual");
   const [stepsJson, setStepsJson] = useState(STEP_TEMPLATE);
+  // The visual builder's steps; "Use these steps" copies them into the JSON form.
+  const [buildSteps, setBuildSteps] = useState<WorkflowStep[]>([]);
+  const [buildErrors, setBuildErrors] = useState<string[] | null>(null);
+  const [validating, setValidating] = useState(false);
   const [cronSchedule, setCronSchedule] = useState("0 9 * * 1-5");
   const [replanOnFailure, setReplanOnFailure] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -247,7 +252,72 @@ export default function WorkflowCreate() {
         >
           Use Template
         </button>
+        <button
+          className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${activeTab === "build" ? "border-primary text-primary" : "border-transparent text-muted-foreground hover:text-foreground"}`}
+          onClick={() => setActiveTab("build")}
+          data-testid="tab-build"
+        >
+          Build visually
+        </button>
       </div>
+
+      {/* ── Visual builder tab ── */}
+      {activeTab === "build" && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Draw the workflow</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <p className="text-sm text-muted-foreground">
+              Add agent steps, human checkpoints and conditions, connect them, and set what happens on failure
+              (halt, continue, retry, or fall back to another step). Validate, then use the steps in the form.
+            </p>
+            <WorkflowBuilder definition={{ steps: buildSteps }} onChange={(d) => { setBuildSteps(d.steps); setBuildErrors(null); }} />
+            {buildErrors && buildErrors.length > 0 && (
+              <ul className="text-sm text-destructive list-disc pl-5" data-testid="build-errors">
+                {buildErrors.map((e) => (
+                  <li key={e}>{e}</li>
+                ))}
+              </ul>
+            )}
+            {buildErrors && buildErrors.length === 0 && (
+              <p className="text-sm text-green-700" data-testid="build-valid">The workflow can be drawn and run.</p>
+            )}
+            <div className="flex gap-3">
+              <Button
+                type="button"
+                variant="outline"
+                disabled={validating || buildSteps.length === 0}
+                onClick={async () => {
+                  setValidating(true);
+                  try {
+                    const { data } = await api.post("/workflows/validate", { definition: { steps: buildSteps } });
+                    setBuildErrors(Array.isArray(data?.errors) ? data.errors : []);
+                  } catch (e: any) {
+                    setBuildErrors([e?.response?.data?.detail || "Validation failed."]);
+                  } finally {
+                    setValidating(false);
+                  }
+                }}
+                data-testid="build-validate"
+              >
+                {validating ? "Validating..." : "Validate"}
+              </Button>
+              <Button
+                type="button"
+                disabled={buildSteps.length === 0}
+                onClick={() => {
+                  setStepsJson(JSON.stringify(buildSteps, null, 2));
+                  setActiveTab("template");
+                }}
+                data-testid="build-use-steps"
+              >
+                Use these steps
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* â”€â”€ Describe in English tab â”€â”€ */}
       {activeTab === "describe" && (
