@@ -159,7 +159,10 @@ async def post_turn(body: TurnIn, request: Request, tenant_id: str = Depends(get
         return held
     from core.conversation import dialogue as engine
 
-    outcome = engine.advance(dialogue, body.text)
+    rules = await runtime.business_rules(tid)
+    outcome = engine.advance(
+        dialogue, body.text, rules=engine.Rules(retries=rules.retries, amount_limits=rules.amount_limits)
+    )
     execution: dict[str, Any] | None = None
     if outcome.kind == "execute":
         if context is None:

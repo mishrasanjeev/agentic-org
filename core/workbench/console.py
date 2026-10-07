@@ -23,6 +23,7 @@ from typing import Any
 
 import structlog
 from sqlalchemy import select
+from sqlalchemy.exc import SQLAlchemyError
 
 from core.config import settings
 
@@ -350,7 +351,7 @@ async def effective(tenant_id: uuid.UUID | str, keys: list[str]) -> dict[str, An
                 .scalars()
                 .all()
             )
-    except (RuntimeError, OSError) as exc:
+    except (RuntimeError, OSError, SQLAlchemyError) as exc:
         logger.warning("business_settings_unavailable", error_type=type(exc).__name__)
         return out
     for row in rows:

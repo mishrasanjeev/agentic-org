@@ -11,6 +11,7 @@ from unittest.mock import AsyncMock
 
 import pytest
 from fastapi import HTTPException
+from sqlalchemy.exc import OperationalError
 
 from core.config import settings
 from core.workbench import access, assignments, definitions
@@ -201,10 +202,13 @@ class TestAccess:
         assert access.approval_filter(TENANT, None)[0] is not None and access.approval_filter(TENANT, admin) == []
 
     @pytest.mark.asyncio
-    async def test_unreadable_stores_leave_every_count_unknown(self, monkeypatch):
+    @pytest.mark.parametrize(
+        "failure", [RuntimeError("no database"), OperationalError("select", {}, Exception("down"))]
+    )
+    async def test_unreadable_stores_leave_every_count_unknown(self, monkeypatch, failure):
         class Session:
             async def __aenter__(self):
-                raise RuntimeError("no database")
+                raise failure
 
             async def __aexit__(self, *args):
                 return False

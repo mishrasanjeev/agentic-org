@@ -4730,7 +4730,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "chat.write",
-    "source_line": 211,
+    "source_line": 214,
     "tenant_required": true
   },
   {
@@ -4748,7 +4748,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "chat.read",
-    "source_line": 192,
+    "source_line": 195,
     "tenant_required": true
   },
   {
@@ -4766,7 +4766,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "chat.write",
-    "source_line": 300,
+    "source_line": 303,
     "tenant_required": true
   },
   {
@@ -4784,7 +4784,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "chat.read",
-    "source_line": 276,
+    "source_line": 279,
     "tenant_required": true
   },
   {
@@ -4802,7 +4802,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "chat.read",
-    "source_line": 250,
+    "source_line": 253,
     "tenant_required": true
   },
   {

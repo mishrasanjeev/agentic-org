@@ -37,6 +37,7 @@ def upgrade() -> None:
         "CREATE UNIQUE INDEX IF NOT EXISTS ux_business_settings_tenant_key ON business_settings(tenant_id, key);"
     )
     op.execute("ALTER TABLE business_settings ENABLE ROW LEVEL SECURITY;")
+    op.execute("ALTER TABLE business_settings FORCE ROW LEVEL SECURITY;")
     op.execute("DROP POLICY IF EXISTS business_settings_tenant_isolation ON business_settings;")
     op.execute(
         """

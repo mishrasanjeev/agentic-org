@@ -9,6 +9,7 @@ from unittest.mock import AsyncMock
 
 import pytest
 from fastapi import HTTPException
+from sqlalchemy.exc import OperationalError
 
 from core.config import settings
 from core.workbench import console
@@ -38,6 +39,8 @@ class _Session:
         self.fail = fail
 
     async def execute(self, statement):
+        if self.fail is OperationalError:
+            raise OperationalError("select", {}, Exception("connection refused"))
         if self.fail:
             raise RuntimeError("no database")
         text = str(statement)
@@ -184,6 +187,8 @@ class TestStore:
         }  # a bad row is ignored
         _use(monkeypatch, _Session(fail=True))
         assert await console.value(TENANT, "documents.type_confidence_floor") == 0.6
+        _use(monkeypatch, _Session(fail=OperationalError))
+        assert await console.value(TENANT, "documents.type_confidence_floor") == 0.6  # a database outage too
         assert await console.effective(TENANT, []) == {}
 
 
@@ -317,3 +322,40 @@ class TestRoutes:
         assert (await api.reset_setting("conversations.slot_retries", request, tenant_id=str(TENANT)))[
             "source"
         ] == "default"
+
+
+class TestConversationRoute:
+    @pytest.mark.asyncio
+    async def test_the_direct_turns_route_takes_the_rules(self, monkeypatch):
+        from api.v1 import conversation as api
+        from core.conversation import dialogue as engine
+        from core.conversation import runtime
+
+        seen: dict[str, object] = {}
+        real_advance = engine.advance
+
+        def spy(dialogue, text, **kwargs):
+            seen.update(kwargs)
+            return real_advance(dialogue, text, **kwargs)
+
+        monkeypatch.setattr(engine, "advance", spy)
+        monkeypatch.setattr(runtime, "enabled", lambda: True)
+        monkeypatch.setattr(runtime, "load_dialogue", AsyncMock(return_value=engine.Dialogue()))
+        monkeypatch.setattr(runtime, "held_turn", AsyncMock(return_value=None))
+        monkeypatch.setattr(runtime, "finish_turn", AsyncMock(return_value={"answer": "ok"}))
+        monkeypatch.setattr(
+            runtime,
+            "business_rules",
+            AsyncMock(
+                return_value=console.ConversationRules(
+                    retries=1, negative_turns=2, amount_limits={"fund_transfer": 500}
+                )
+            ),
+        )
+        monkeypatch.setattr(api, "_execution_context", AsyncMock(return_value=None))
+        request = SimpleNamespace(state=SimpleNamespace(claims={"agenticorg:user_id": "u1"}))
+        assert await api.post_turn(api.TurnIn(text="transfer money to Ravi"), request, tenant_id=str(TENANT)) == {
+            "answer": "ok"
+        }
+        rules = seen["rules"]
+        assert isinstance(rules, engine.Rules) and rules.retries == 1 and rules.amount_limits == {"fund_transfer": 500}
