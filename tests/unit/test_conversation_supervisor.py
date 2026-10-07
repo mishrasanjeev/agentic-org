@@ -110,7 +110,9 @@ class TestHandoffContent:
             intent="talk_to_agent",
         )
         assert record["hitl_id"] is None and record["ticket"] is None and record["intent"] == "talk_to_agent"
-        assert "pick this up shortly" in escalation.handoff_answer(record)
+        # The session is still marked for a supervisor, but nobody was asked to take over: nothing is promised.
+        told = escalation.handoff_answer(record)
+        assert "nothing has been handed over" in told and "handed this over" not in told
 
 
 class TestTurns:
@@ -285,15 +287,13 @@ class TestSupervisor:
         refused = await supervisor.reply(TENANT, row.id, "someone-else", "hello")
         assert refused is not None and refused["refused"] == "not_taken_over"
         replied = await supervisor.reply(TENANT, row.id, "sup-1", "Hello, I am here to help.")
-        assert replied is not None and row.state["history"][-1] == {
+        last = row.state["history"][-1]
+        assert replied is not None and {k: last[k] for k in ("role", "text")} == {
             "role": "supervisor",
             "text": "Hello, I am here to help.",
         }
-        assert announced.call_args.kwargs == {
-            "event": "conversation.message",
-            "role": "supervisor",
-            "text": "Hello, I am here to help.",
-        }
+        assert last["at"]
+        assert announced.call_args.kwargs == {"event": "conversation.message", "role": "supervisor"}
 
         released = await supervisor.release(TENANT, row.id, "sup-1")
         assert (
@@ -394,8 +394,14 @@ class TestConsoleRoutes:
     @pytest.mark.asyncio
     async def test_the_review_item_of_a_handoff_is_written_for_the_agent(self, monkeypatch):
         import core.database as database
+        import core.push.sender as sender
 
         added: list = []
+        agent_row = SimpleNamespace(name="Branch assistant", visibility="tenant", owner_user_id=None)
+
+        class _Found:
+            def scalar_one_or_none(self):
+                return agent_row
 
         class _Session:
             async def __aenter__(self):
@@ -404,6 +410,9 @@ class TestConsoleRoutes:
             async def __aexit__(self, *args):
                 return False
 
+            async def execute(self, *_a, **_k):
+                return _Found()
+
             def add(self, row):
                 added.append(row)
 
@@ -411,6 +420,8 @@ class TestConsoleRoutes:
                 return None
 
         monkeypatch.setattr(database, "get_tenant_session", lambda *_a, **_k: _Session())
+        notify = AsyncMock(return_value={})
+        monkeypatch.setattr(sender, "notify_approval_created", notify)
         agent = uuid.uuid4()
         item_id = await escalation._review_item(
             TENANT,
@@ -426,7 +437,151 @@ class TestConsoleRoutes:
             and added[0].priority == "high"
             and added[0].trigger_type == escalation.TRIGGER
         )
+        assert notify.call_args.kwargs["item_id"] == item_id == str(added[0].id)
         assert (
             await escalation._review_item(TENANT, agent_id="", title="t", reason="r", context={}, requested_by=None)
             is None
         )
+
+
+class TestReviewFixes:
+    """What was said stays off the tenant-wide feed, replies replay, refusals do not write, hand-offs keep context."""
+
+    @pytest.mark.asyncio
+    async def test_no_announcement_on_the_tenant_wide_feed_carries_what_was_said(self, monkeypatch):
+        import api.websocket.feed as feed
+        import core.database as database
+
+        sent: list[dict] = []
+
+        async def capture(_tenant: str, payload: dict) -> None:
+            sent.append(payload)
+
+        monkeypatch.setattr(feed, "broadcast_to_tenant", capture)
+        monkeypatch.setattr(settings, "conversation_v2_enabled", True)
+        monkeypatch.setattr(runtime, "load_dialogue", AsyncMock(return_value=Dialogue()))
+        monkeypatch.setattr(runtime, "save_dialogue", AsyncMock())
+        monkeypatch.setattr(supervisor, "taken_over", AsyncMock(return_value=None))
+        await runtime.chat_turn(
+            tenant_id=str(TENANT), company_id="c", user_id="u", agent_id="", text="transfer 500 to Ravi"
+        )
+
+        row = _row(taken_over_by="sup-1")
+        monkeypatch.setattr(database, "get_tenant_session", lambda *_a, **_k: _Session(row))
+        await supervisor.user_message(TENANT, row.session_key, "my card number is private")
+        await supervisor.reply(TENANT, row.id, "sup-1", "Please share the last four digits only.")
+
+        assert [p["type"] for p in sent] == ["conversation.turn", "conversation.turn"] + ["conversation.message"] * 2
+        for payload in sent:
+            assert "text" not in payload
+            assert not any("Ravi" in str(v) or "private" in str(v) or "four digits" in str(v) for v in payload.values())
+
+    @pytest.mark.asyncio
+    async def test_a_refused_reply_leaves_the_transcript_and_the_session_untouched(self, monkeypatch):
+        import core.database as database
+
+        before = datetime(2026, 1, 1, tzinfo=UTC)
+        row = _row(taken_over_by="sup-1", updated_at=before)
+        history = list(row.state["history"])
+        monkeypatch.setattr(database, "get_tenant_session", lambda *_a, **_k: _Session(row))
+        announced = AsyncMock()
+        monkeypatch.setattr(supervisor, "announce", announced)
+
+        refused = await supervisor.reply(TENANT, row.id, "someone-else", "an unauthorised message")
+
+        assert refused is not None and refused["refused"] == supervisor.NOT_HOLDER
+        assert row.state["history"] == history and row.updated_at == before and announced.await_count == 0
+
+    @pytest.mark.asyncio
+    async def test_the_own_session_replays_supervisor_messages_sent_while_the_chat_was_closed(self, monkeypatch):
+        import core.database as database
+        from api.v1 import conversation as api
+
+        row = _row(
+            state={
+                "history": [
+                    {"role": "user", "text": "transfer 500 to Ravi"},
+                    {"role": "system", "text": "A supervisor has joined the conversation.", "at": "2026-10-07T10:00"},
+                    {"role": "supervisor", "text": "I can help with that.", "at": "2026-10-07T10:01"},
+                ]
+            }
+        )
+        monkeypatch.setattr(database, "get_tenant_session", lambda *_a, **_k: _Session(row))
+        replayed = await supervisor.replay(TENANT, row.session_key)
+        assert replayed == [
+            {"role": "system", "text": "A supervisor has joined the conversation.", "at": "2026-10-07T10:00"},
+            {"role": "supervisor", "text": "I can help with that.", "at": "2026-10-07T10:01"},
+        ]
+        monkeypatch.setattr(database, "get_tenant_session", lambda *_a, **_k: _Session(None))
+        assert await supervisor.replay(TENANT, "web:c:a:u:nobody") == []
+
+        monkeypatch.setattr(settings, "conversation_v2_enabled", True)
+        monkeypatch.setattr(runtime, "load_dialogue", AsyncMock(return_value=Dialogue()))
+        replay = AsyncMock(return_value=replayed)
+        monkeypatch.setattr(supervisor, "replay", replay)
+        request = SimpleNamespace(state=SimpleNamespace(claims={"agenticorg:user_id": "u1"}))
+        shown = await api.get_session(request, company_id="c", agent_id="a1", channel="web", tenant_id=str(TENANT))
+        assert shown["messages"] == replayed and replay.call_args.args[1] == "web:c:a1:u:u1"
+
+    def test_three_bad_answers_escalate_with_the_intent_and_the_slots_already_collected(self):
+        dialogue = Dialogue()
+        for text in ("block my card ending 4321", "blah", "blah"):
+            engine.advance(dialogue, text)
+        outcome = engine.advance(dialogue, "blah")
+        assert outcome.kind == "escalate" and dialogue.intent is None
+        assert outcome.intent == "card_block" and outcome.slots == {"card": "4321"}
+        assert outcome.escalation == escalation.REASON_SLOTS and outcome.missing == ["reason"]
+
+    @pytest.mark.asyncio
+    async def test_the_handoff_after_bad_answers_carries_the_card_block_tag_and_slots(self, monkeypatch):
+        dialogue = Dialogue()
+        for text in ("block my card ending 4321", "blah", "blah"):
+            engine.advance(dialogue, text)
+        monkeypatch.setattr(settings, "conversation_v2_enabled", True)
+        monkeypatch.setattr(runtime, "load_dialogue", AsyncMock(return_value=dialogue))
+        monkeypatch.setattr(runtime, "save_dialogue", AsyncMock())
+        monkeypatch.setattr(supervisor, "taken_over", AsyncMock(return_value=None))
+        monkeypatch.setattr(supervisor, "announce", AsyncMock())
+        monkeypatch.setattr(supervisor, "mark_escalated", AsyncMock())
+        review = AsyncMock(return_value="h1")
+        monkeypatch.setattr(escalation, "_review_item", review)
+
+        answer = await runtime.chat_turn(
+            tenant_id=str(TENANT), company_id="c", user_id="u", agent_id=str(uuid.uuid4()), text="blah"
+        )
+
+        assert answer is not None and answer["outcome"]["handoff"]["intent"] == "card_block"
+        context = review.call_args.kwargs["context"]
+        assert context["intent"] == "card_block" and context["slots"] == {"card": "4321"}
+        assert context["summary"].startswith("Hand-off from chat: card block") and "card 4321" in context["summary"]
+        assert context["handoff"]["intent"] == "card_block" and context["handoff"]["slots"] == {"card": "4321"}
+        assert review.call_args.kwargs["reason"] == escalation.REASON_SLOTS
+
+    @pytest.mark.asyncio
+    async def test_accepting_the_offer_of_a_person_after_fallbacks_hands_off_as_fallbacks(self, monkeypatch):
+        dialogue = Dialogue()
+        for text in ("qwerty zzz", "asdf ghjk"):
+            engine.advance(dialogue, text)
+        monkeypatch.setattr(settings, "conversation_v2_enabled", True)
+        monkeypatch.setattr(runtime, "load_dialogue", AsyncMock(return_value=dialogue))
+        monkeypatch.setattr(runtime, "save_dialogue", AsyncMock())
+        monkeypatch.setattr(supervisor, "taken_over", AsyncMock(return_value=None))
+        monkeypatch.setattr(supervisor, "announce_turn", AsyncMock())
+        handoff = AsyncMock(return_value={"reason": "fallbacks", "intent": "talk_to_agent", "hitl_id": None})
+        monkeypatch.setattr(escalation, "handoff", handoff)
+
+        from api.v1 import conversation as api
+
+        request = SimpleNamespace(state=SimpleNamespace(claims={"agenticorg:user_id": "u"}))
+        answer = await api.post_turn(api.TurnIn(text="yes"), request, tenant_id=str(TENANT))
+
+        assert answer is not None and answer["outcome"]["kind"] == "escalate"
+        assert handoff.call_args.kwargs["reason"] == escalation.REASON_FALLBACKS
+        ticket = escalation.ticket_params(
+            "create_ticket", summary="s", tag="t", lines=[], reason=escalation.REASON_FALLBACKS
+        )
+        assert ticket["priority"] == "high"
+
+    def test_an_unsolicited_request_for_a_person_is_still_requested(self):
+        outcome = engine.advance(Dialogue(), "I want to talk to a human")
+        assert outcome.kind == "escalate" and outcome.escalation == escalation.REASON_REQUESTED
