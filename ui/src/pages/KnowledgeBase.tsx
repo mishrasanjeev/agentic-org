@@ -107,6 +107,36 @@ interface KnowledgeExcerpt {
   next_id?: string | null;
 }
 
+export interface KnowledgeTraceStep {
+  stage: string;
+  elapsed_ms?: number;
+  detail?: Record<string, unknown>;
+}
+
+/** One line of the retrieval trace: what the step did, in words. */
+export function traceLine(step: KnowledgeTraceStep): string {
+  const d = step.detail ?? {};
+  const str = (k: string) => (typeof d[k] === "string" ? (d[k] as string) : "");
+  const num = (k: string) => (typeof d[k] === "number" ? (d[k] as number) : null);
+  switch (step.stage) {
+    case "plan": {
+      const variants = Array.isArray(d.variants) ? (d.variants as unknown[]).length : 0;
+      const rules = Array.isArray(d.rules) ? (d.rules as unknown[]).join(", ") : "";
+      return `plan: ${variants} variant${variants === 1 ? "" : "s"}${rules ? ` (${rules})` : ""}`;
+    }
+    case "rewrite":
+      return `rewrite: model ${str("model")} added ${num("added") ?? 0}${str("reason") ? ` (${str("reason")})` : ""}`;
+    case "search":
+      return `search: "${str("query")}" · ${num("hits") ?? 0} hits · best ${(num("best") ?? 0).toFixed(2)}`;
+    case "decision":
+      return `decision: ${str("action")}${str("reason") ? ` (${str("reason")})` : ""}`;
+    case "fuse":
+      return `fuse: ${num("lists") ?? 0} lists · ${num("candidates") ?? 0} candidates · ${num("returned") ?? 0} returned`;
+    default:
+      return step.stage;
+  }
+}
+
 /** The short form of a citation: page 4 · paragraph 12 · Exposure limits. */
 export function citationLabel(citation: KnowledgeCitation | undefined | null): string {
   if (!citation) return "";
@@ -211,6 +241,7 @@ export default function KnowledgeBase() {
   // TC_002 (Aishwarya 2026-04-23): surface real backend errors to the user
   // instead of a blanket "API offline" line.
   const [searchError, setSearchError] = useState<string | null>(null);
+  const [searchTrace, setSearchTrace] = useState<KnowledgeTraceStep[]>([]);
   // The excerpt opened from a search hit: the whole chunk with the query terms marked.
   const [excerpt, setExcerpt] = useState<KnowledgeExcerpt | null>(null);
   const [excerptError, setExcerptError] = useState<string | null>(null);
@@ -394,11 +425,17 @@ export default function KnowledgeBase() {
     if (!searchQuery.trim()) return;
     setSearchError(null);
     try {
-      const res = await api.post("/knowledge/search", { query: searchQuery });
+      const res = await api.post("/knowledge/search", { query: searchQuery, trace: true });
       const results = (Array.isArray(res.data?.results) ? res.data.results : [])
         .map(normalizeSearchResult)
         .filter((r: KnowledgeSearchResult | null): r is KnowledgeSearchResult => r !== null);
       setSearchResults(results);
+      const steps = res.data?.trace?.steps;
+      setSearchTrace(
+        Array.isArray(steps)
+          ? steps.filter((s: unknown): s is KnowledgeTraceStep => !!s && typeof (s as KnowledgeTraceStep).stage === "string")
+          : [],
+      );
       // TC_002 (Aishwarya 2026-04-23): when the backend returns zero
       // results, show a dedicated empty state — not the previous
       // "API offline" line, which misled testers into filing bugs
@@ -546,6 +583,16 @@ export default function KnowledgeBase() {
               <p className="text-muted-foreground">{r.chunk_text}</p>
             </div>
           ))}
+          {searchTrace.length > 0 && (
+            <details className="text-xs text-muted-foreground" data-testid="kb-search-trace">
+              <summary className="cursor-pointer">How this was retrieved ({searchTrace.length} steps)</summary>
+              <ol className="mt-1 space-y-0.5 list-decimal pl-4">
+                {searchTrace.map((s, i) => (
+                  <li key={i}>{traceLine(s)}</li>
+                ))}
+              </ol>
+            </details>
+          )}
         </div>
       )}
       {excerptError && (

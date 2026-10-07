@@ -50,7 +50,7 @@ describe("KnowledgeBase search results contract", () => {
     fireEvent.change(input, { target: { value: "gst rate" } });
     fireEvent.click(screen.getByRole("button", { name: "Search" }));
 
-    await waitFor(() => expect(mockPost).toHaveBeenCalledWith("/knowledge/search", { query: "gst rate" }));
+    await waitFor(() => expect(mockPost).toHaveBeenCalledWith("/knowledge/search", { query: "gst rate", trace: true }));
     expect(await screen.findByText("The applicable GST rate is 18%.")).toBeTruthy();
     expect(screen.getByText("Composition scheme threshold is 1.5 crore.")).toBeTruthy();
     expect(screen.getAllByTestId("kb-search-result")).toHaveLength(2);

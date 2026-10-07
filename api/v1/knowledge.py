@@ -21,6 +21,7 @@ from api.deps import get_current_tenant, get_user_domains
 from api.route_metadata import route_meta
 from core.config import settings
 from core.rag import access as knowledge_access
+from core.rag import query as query_transform
 from core.rag import rerank
 from core.rag.citations import (
     PROVENANCE_COLUMNS,
@@ -144,6 +145,18 @@ class SearchRequest(BaseModel):
     top_k: int = Field(default=5, ge=1, le=100)
     # Narrow the documents a query may match (core/rag/filters.py); every field is an AND condition.
     filters: SearchFilters | None = None
+    # Carry the retrieval trace (core/rag/query.py) in the response; nothing without the transform switch.
+    trace: bool = False
+
+
+class TraceStep(BaseModel):
+    stage: str
+    elapsed_ms: int = 0
+    detail: dict[str, Any] = Field(default_factory=dict)
+
+
+class RetrievalTrace(BaseModel):
+    steps: list[TraceStep]
 
 
 class SearchResult(BaseModel):
@@ -156,6 +169,8 @@ class SearchResult(BaseModel):
 
 class SearchResponse(BaseModel):
     results: list[SearchResult]
+    # The steps that produced the results, when asked for and the transform is on.
+    trace: RetrievalTrace | None = None
 
 
 # Canonical status values surfaced to the UI. "ready" was a legacy
@@ -1651,6 +1666,52 @@ async def search_knowledge(
         return await _search_knowledge(req, tenant_id, knowledge_access.normalise_domains(user_domains))
 
 
+async def _agentic_search(
+    req: SearchRequest, tenant_id: str, domains: list[str] | None
+) -> tuple[list[SearchResult], query_transform.Trace]:
+    """Plan the query, search it, expand to its variants when the first pass is weak; every step traced."""
+    trace = query_transform.Trace()
+    planned = query_transform.plan(req.query)
+    model = str(settings.knowledge_query_rewrite_model or "").strip()
+    if model:
+        proposals, reason = await query_transform.model_variants(uuid.UUID(tenant_id), req.query)
+        added = sum(1 for proposal in proposals if planned.add_variant(proposal, "model"))
+        trace.add("rewrite", model=model, added=added, reason=reason)
+
+    async def _search(text: str) -> list[SearchResult]:
+        return await _native_semantic_search(tenant_id, text, req.top_k, req.filters, domains)
+
+    results, trace = await query_transform.retrieve(
+        planned,
+        req.top_k,
+        _search,
+        key=lambda hit: (hit.document_name, hit.chunk_text),
+        score_of=lambda hit: hit.score,
+        rescore=lambda hit, score: hit.model_copy(update={"score": score}),
+        trace=trace,
+    )
+    logger.info(
+        "knowledge_retrieval_traced",
+        steps=len(trace.steps),
+        variants=len(planned.variants),
+        expanded=any(step.get("action") == "expand" for step in trace.steps),
+    )
+    return results, trace
+
+
+def _trace_out(trace: query_transform.Trace) -> RetrievalTrace:
+    return RetrievalTrace(
+        steps=[
+            TraceStep(
+                stage=str(step["stage"]),
+                elapsed_ms=int(step.get("elapsed_ms", 0)),
+                detail={key: value for key, value in step.items() if key not in ("stage", "elapsed_ms")},
+            )
+            for step in trace.steps
+        ]
+    )
+
+
 async def _search_knowledge(req: SearchRequest, tenant_id: str, domains: list[str] | None = None) -> SearchResponse:
     """The search itself: RAGFlow when configured, else native semantic search; both pass the retrieval guardrails."""
     if _ragflow_available() and await _ragflow_allowed(tenant_id):
@@ -1661,6 +1722,11 @@ async def _search_knowledge(req: SearchRequest, tenant_id: str, domains: list[st
             logger.warning("ragflow_search_failed", error=str(exc))
 
     try:
+        if query_transform.enabled():
+            results, trace = await _agentic_search(req, tenant_id, domains)
+            return SearchResponse(
+                results=await _guard_results(tenant_id, results), trace=_trace_out(trace) if req.trace else None
+            )
         results = await _native_semantic_search(tenant_id, req.query, req.top_k, req.filters, domains)
         return SearchResponse(results=await _guard_results(tenant_id, results))
     except HTTPException:
