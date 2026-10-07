@@ -14,6 +14,10 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
   approves or rejects. The Documents page draws every field on the page
   it came from, coloured by confidence, with the reviewer's edits and
   decision (`core/idp/store.py`, `api/v1/idp_review.py`).
+- Corrections to extra fields show in the served document, PDF page
+  images are rendered with a scale capped at 2400 pixels a side, and the
+  Documents page ignores a detail that arrives for a document no longer
+  selected.
 
 ### Added - Document processing: classification and extraction
 - With `AGENTICORG_IDP_ENABLED` on (off by default), `POST /idp/analyse`
