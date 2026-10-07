@@ -215,6 +215,11 @@ def finish(payload: StructureIn, sources: list[Source], answer: dict[str, Any]) 
     return out
 
 
+def revalidate(output: dict[str, Any]) -> dict[str, Any]:
+    """The output after the output guardrails changed it: the payload checked again, the XML rebuilt."""
+    return apply_text(output, rendered(output))
+
+
 def rendered(output: dict[str, Any]) -> str:
     return json.dumps(output.get("payload") or {}, ensure_ascii=False)
 
@@ -283,5 +288,6 @@ SERVICE = services.register(
         rendered=rendered,
         apply_text=apply_text,
         resolve_sources=resolve_sources,
+        after_output_guard=revalidate,
     )
 )

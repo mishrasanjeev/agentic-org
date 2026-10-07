@@ -168,27 +168,41 @@ class TestStructuring:
     async def test_a_payload_changed_by_the_output_guardrails_is_validated_again_under_its_root(self, on, monkeypatch):
         import core.governance.guardrails.hooks as hooks
 
+        # The output stage screens every field; this rule redacts the invoice number wherever it appears.
         async def redact(stage, text, **_kwargs):
-            if stage != "output":
+            if stage != "output" or "EX-1042" not in text:
                 return None
-            masked = json.loads(text)
-            masked.pop("invoice_id", None)
-            masked["note"] = "[REDACTED]"
-            return SimpleNamespace(text=json.dumps(masked), findings=1, flagged=True, correlation_id="c1")
+            return SimpleNamespace(
+                text=text.replace("EX-1042", "[REDACTED]"), findings=1, flagged=True, correlation_id="c1"
+            )
 
         monkeypatch.setattr(hooks, "guard_text", redact)
+        schema = {
+            **INVOICE_SCHEMA,
+            "properties": {**INVOICE_SCHEMA["properties"], "invoice_id": {"type": "string", "pattern": "^EX-[0-9]+$"}},
+        }
         answer = {"payload": {"invoice_id": "EX-1042", "total": 2832}, "unplaced": [], "assumptions": []}
-        payload = structuring.StructureIn(text="x", schema=INVOICE_SCHEMA, format="both", root_element="invoice")
+        payload = structuring.StructureIn(text="x", schema=schema, format="both", root_element="invoice")
         run = await services.run(structuring.SERVICE, TENANT, payload, complete=_completer(_Reply(answer)))
         out = run.output
-        assert out["payload"] == {"total": 2832, "note": "[REDACTED]"}
+        assert out["payload"] == {"invoice_id": "[REDACTED]", "total": 2832}
+        # validated again: the redacted value no longer matches the schema
         assert out["validation"]["valid"] is False and any("invoice_id" in e for e in out["validation"]["errors"])
         root = ET.fromstring(out["xml"].split("?>", 1)[1])  # noqa: S314  # nosec B314
-        assert root.tag == "invoice" and root.find("invoice_id") is None and root.find("note").text == "[REDACTED]"
-        strict = structuring.StructureIn(text="x", schema=INVOICE_SCHEMA, strict=True)
+        assert root.tag == "invoice" and root.find("invoice_id").text == "[REDACTED]"
+        strict = structuring.StructureIn(text="x", schema=schema, strict=True)
         with pytest.raises(services.ContentError) as info:
             await services.run(structuring.SERVICE, TENANT, strict, complete=_completer(_Reply(answer)))
         assert info.value.code == "payload_invalid" and info.value.status == 422
+        # An untouched output is not revalidated: the hook runs only when the guardrails changed something.
+        clean = {"payload": {"invoice_id": "EX-7", "total": 1}, "unplaced": [], "assumptions": []}
+        plain = await services.run(
+            structuring.SERVICE,
+            TENANT,
+            structuring.StructureIn(text="x", schema=schema),
+            complete=_completer(_Reply(clean)),
+        )
+        assert plain.output["validation"]["valid"] is True
         # Without a schema to check against, a changed payload is never reported valid.
         unchecked = structuring.apply_text({"payload": {}, "validation": {"valid": True, "errors": []}}, '{"a": 1}')
         assert unchecked["validation"]["valid"] is False

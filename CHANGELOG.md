@@ -40,6 +40,13 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
   counted. Inputs pass the input guardrails, the model answers in JSON
   checked against the schema with one retry, and outputs pass the output
   guardrails with the sources as grounding context.
+- Content services hardening: the `/content` routes need `audit:read` to
+  read and `approvals:write` to act; drafting and draft decisions need an
+  active human administrator (never an API key); a masked input is what
+  the model sees; knowledge-base sources pass the retrieval guardrails;
+  every output field passes the output guardrails; pre-model
+  pseudonymisation applies to every content model call; extracted
+  obligations need a quote of at least three words that supports them.
 
 ### Added - Conversational services: scenario templates, summaries, feedback and sentiment
 - Multi-step scenarios chain intents without a model: a raised dispute

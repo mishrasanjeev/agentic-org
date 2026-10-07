@@ -4496,7 +4496,7 @@
     "public_exempt_reason": null,
     "rate_limit": "chat-query",
     "scope": "content.draft.sensitive.write",
-    "source_line": 133,
+    "source_line": 146,
     "tenant_required": true
   },
   {
@@ -4514,7 +4514,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "content.drafts.sensitive.read",
-    "source_line": 205,
+    "source_line": 230,
     "tenant_required": true
   },
   {
@@ -4532,7 +4532,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "content.drafts.sensitive.read",
-    "source_line": 228,
+    "source_line": 253,
     "tenant_required": true
   },
   {
@@ -4550,7 +4550,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "content.drafts.sensitive.write",
-    "source_line": 247,
+    "source_line": 272,
     "tenant_required": true
   },
   {
@@ -4568,7 +4568,7 @@
     "public_exempt_reason": null,
     "rate_limit": "chat-query",
     "scope": "content.extract.sensitive.write",
-    "source_line": 187,
+    "source_line": 212,
     "tenant_required": true
   },
   {
@@ -4604,7 +4604,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "content.read",
-    "source_line": 70,
+    "source_line": 83,
     "tenant_required": true
   },
   {
@@ -4622,7 +4622,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "content.datasets.sensitive.write",
-    "source_line": 84,
+    "source_line": 97,
     "tenant_required": true
   },
   {
@@ -4658,7 +4658,7 @@
     "public_exempt_reason": null,
     "rate_limit": "chat-query",
     "scope": "content.summarise.sensitive.write",
-    "source_line": 169,
+    "source_line": 194,
     "tenant_required": true
   },
   {
