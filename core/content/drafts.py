@@ -121,6 +121,8 @@ async def edit(tenant_id: uuid.UUID, draft_id: uuid.UUID, *, user_id: str, field
             raise ContentError(404, "not_found", "No such draft")
         if row.status != "pending_approval":
             raise ContentError(409, "not_pending", f"The draft is {row.status}, not awaiting approval")
+        if row.created_by and user_id and str(row.created_by) == str(user_id)[:128]:
+            raise ContentError(409, "same_person", "A draft is amended by its reviewer, not its author")
         output = dict(row.output or {})
         edits = dict(row.edits or {})
         recorded = dict(edits.get("fields") or {})

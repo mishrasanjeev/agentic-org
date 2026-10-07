@@ -44,17 +44,31 @@ class QueueError(Exception):
         self.message = message
 
 
+def enabled_kinds() -> list[str]:
+    """The kinds whose subsystem is on: documents need document processing, drafts the content services."""
+    from core.content import services
+    from core.idp import pipeline
+
+    out = list(KINDS)
+    if not pipeline.enabled():
+        out.remove("document")
+    if not services.enabled():
+        out.remove("draft")
+    return out
+
+
 def kinds_for(role: str, assigned: set[str] | None = None) -> list[str]:
-    """The kinds a role may see: those shown by a tab of a workbench it holds; an administrator sees all."""
+    """The kinds a role may see: those shown by a tab of a workbench it holds, whose subsystem is on."""
+    available = enabled_kinds()
     if role == ADMIN:
-        return list(KINDS)
+        return available
     sources: set[str] = set()
     for workbench in WORKBENCHES.values():
         if holds(workbench, role, assigned or set()):
             sources |= {tab.source for tab in tabs_for(workbench, role)}
     if "queue" in sources:
-        return list(KINDS)
-    return [kind for kind, source in KINDS.items() if source in sources]
+        return available
+    return [kind for kind, source in KINDS.items() if source in sources and kind in available]
 
 
 def _age(created_at: datetime | None, now: datetime) -> int | None:
@@ -259,8 +273,11 @@ def _editable_document(detail: dict[str, Any]) -> list[dict[str, Any]]:
     return out
 
 
-async def get_item(tenant_id: uuid.UUID, kind: str, item_id: str) -> dict[str, Any]:
-    """One item in full, with the fields a reviewer may edit before deciding."""
+async def get_item(tenant_id: uuid.UUID, kind: str, item_id: str, *, caller: Any = None) -> dict[str, Any]:
+    """One item in full, with the fields a reviewer may edit before deciding.
+
+    An approval is shown only when the caller may see its agent (``access.approval_filter``), as the list does.
+    """
     if kind not in KINDS:
         raise QueueError(404, "kind_unknown", f"kind is one of {', '.join(KINDS)}")
     now = datetime.now(UTC)
@@ -309,7 +326,11 @@ async def get_item(tenant_id: uuid.UUID, kind: str, item_id: str) -> dict[str, A
         async with get_tenant_session(tenant_id) as session:
             row = (
                 await session.execute(
-                    select(HITLQueue).where(HITLQueue.tenant_id == tenant_id, HITLQueue.id == hitl_id)
+                    select(HITLQueue).where(
+                        HITLQueue.tenant_id == tenant_id,
+                        HITLQueue.id == hitl_id,
+                        *approval_filter(tenant_id, caller),
+                    )
                 )
             ).scalar_one_or_none()
             if row is None:
@@ -362,8 +383,13 @@ def check_edits(raw: Any) -> list[dict[str, Any]]:
 async def apply_edits(
     tenant_id: uuid.UUID, kind: str, item_id: str, edits: list[dict[str, Any]], *, user_id: str
 ) -> dict[str, Any] | None:
-    """A reviewer's amendments before the decision, kept by the store that owns the item."""
-    if not edits:
+    """A reviewer's amendments before the decision, kept by the store that owns the item.
+
+    An approval's amendments go into the decision notes and are recorded on the item by
+    ``record_approval_edits`` once the approvals handler has authorised and taken the decision, so a
+    refused decision leaves nothing behind.
+    """
+    if not edits or kind == "approval":
         return None
     if kind == "draft":
         from core.content import drafts, services
@@ -396,34 +422,39 @@ async def apply_edits(
         except ValueError:
             raise QueueError(404, "not_found", "No such item") from None
         return answer
-    if kind == "approval":
-        from core.database import get_tenant_session
-        from core.models.hitl import HITLQueue
-
-        try:
-            hitl_id = uuid.UUID(item_id)
-        except ValueError:
-            raise QueueError(404, "not_found", "No such item") from None
-        stamp = datetime.now(UTC).isoformat()
-        async with get_tenant_session(tenant_id) as session:
-            row = (
-                await session.execute(
-                    select(HITLQueue).where(HITLQueue.tenant_id == tenant_id, HITLQueue.id == hitl_id).with_for_update()
-                )
-            ).scalar_one_or_none()
-            if row is None:
-                raise QueueError(404, "not_found", "No such item")
-            if row.status != "pending":
-                raise QueueError(409, "decided", f"The approval is {row.status}; amendments are closed")
-            context = dict(row.context or {}) if isinstance(row.context, dict) else {}
-            recorded = list(context.get("review_edits") or [])
-            recorded.extend(
-                {"name": e["name"], "value": e["value"][:2000], "by": str(user_id)[:128], "at": stamp} for e in edits
-            )
-            context["review_edits"] = recorded[-MAX_EDITS * 4 :]
-            row.context = context
-        return {"review_edits": recorded}
     raise QueueError(422, "edits_unsupported", "A governed case is decided on its own page; the queue does not edit it")
+
+
+async def record_approval_edits(
+    tenant_id: uuid.UUID, item_id: str, edits: list[dict[str, Any]], *, user_id: str
+) -> dict[str, Any] | None:
+    """The amendments a reviewer made with their decision, kept on the approval item (``context.review_edits``)."""
+    if not edits:
+        return None
+    from core.database import get_tenant_session
+    from core.models.hitl import HITLQueue
+
+    try:
+        hitl_id = uuid.UUID(item_id)
+    except ValueError:
+        raise QueueError(404, "not_found", "No such item") from None
+    stamp = datetime.now(UTC).isoformat()
+    async with get_tenant_session(tenant_id) as session:
+        row = (
+            await session.execute(
+                select(HITLQueue).where(HITLQueue.tenant_id == tenant_id, HITLQueue.id == hitl_id).with_for_update()
+            )
+        ).scalar_one_or_none()
+        if row is None:
+            raise QueueError(404, "not_found", "No such item")
+        context = dict(row.context or {}) if isinstance(row.context, dict) else {}
+        recorded = list(context.get("review_edits") or [])
+        recorded.extend(
+            {"name": e["name"], "value": e["value"][:2000], "by": str(user_id)[:128], "at": stamp} for e in edits
+        )
+        context["review_edits"] = recorded[-MAX_EDITS * 4 :]
+        row.context = context
+    return {"review_edits": recorded}
 
 
 def edit_note(edits: list[dict[str, Any]]) -> str:

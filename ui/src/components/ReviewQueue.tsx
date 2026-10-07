@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Link } from "react-router";
 import api, { extractApiError } from "@/lib/api";
 
@@ -68,6 +68,7 @@ export default function ReviewQueue() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const openSeq = useRef(0);
 
   const load = useCallback(async () => {
     setError(null);
@@ -89,6 +90,7 @@ export default function ReviewQueue() {
   }, [load]);
 
   const open = async (item: QueueItem) => {
+    const seq = ++openSeq.current;
     setSelected(item);
     setDetail(null);
     setEdits({});
@@ -97,8 +99,10 @@ export default function ReviewQueue() {
     setError(null);
     try {
       const { data } = await api.get(`/workbench/queue/${item.kind}/${encodeURIComponent(item.id)}`);
+      if (seq !== openSeq.current) return; // a later selection superseded this one
       setDetail(data as Detail);
     } catch (err) {
+      if (seq !== openSeq.current) return;
       setError(extractApiError(err, "Failed to load the item."));
     }
   };
