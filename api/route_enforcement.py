@@ -142,6 +142,13 @@ SCOPE_FAMILIES: dict[str, tuple[str, str]] = {
     "audit": ("audit:read", "audit:read"),
     "connectors": ("connectors.read", "connectors.read"),
     "report_schedules": ("report_schedules.read", "report_schedules.write"),
+    # Content services (/content: drafting, summarisation, extraction and the
+    # drafts queue) send the tenant's documents to a model and return
+    # regulated text. Reads need audit:read (CxO, domain lead, auditor) and
+    # actions need approvals:write (CxO, domain lead, developer); an analyst
+    # holds neither. Drafting, draft decisions and the dataset install also
+    # need an administrator at the route.
+    "content": ("audit:read", "approvals:write"),
     # A2A tasks and MCP calls run any agent type for machine callers (FINDINGS
     # A-68). No role holds these scopes: API keys and agent grants are given
     # them. Enforced only while AGENTICORG_ROUTE_SCOPE_A2A_MCP is on

@@ -363,6 +363,11 @@ def apply_text(output: dict[str, Any], text: str) -> dict[str, Any]:
     return {**output, "translation": text, "checks": checks, "trusted": False}
 
 
+def transformed(output: dict[str, Any]) -> dict[str, Any]:
+    """The output guardrails changed some field after the checks ran: the checks no longer hold."""
+    return apply_text(output, str(output.get("translation") or ""))
+
+
 async def resolve_sources(tenant_id: uuid.UUID, payload: TranslateIn, domains: list[str] | None) -> list[Source]:
     check_language(payload.target_language)
     check_language(payload.source_language, allow_auto=True)
@@ -438,5 +443,6 @@ SERVICE = services.register(
         apply_text=apply_text,
         resolve_sources=resolve_sources,
         max_tokens=COMPLETION_BUDGET,
+        after_output_guard=transformed,
     )
 )
