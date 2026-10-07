@@ -8,25 +8,31 @@ import { expect, test } from "@playwright/test";
 test.describe("local dev stack @dev-stack", () => {
   test("catalogue follows the registry flag and supports real banking pack cards", async ({ page }) => {
     const password = process.env.AGENTICORG_DEV_SEED_PASSWORD;
+    const registryEnabled = process.env.AGENTICORG_E2E_REGISTRY_ENABLED === "true";
+    const email = registryEnabled ? process.env.AGENTICORG_E2E_REGISTRY_ADMIN_EMAIL : "approver.a@example.com";
     expect(password, "Local seed password is required").toBeTruthy();
+    expect(email, "An isolated local admin fixture is required for the opt-in registry replay").toBeTruthy();
     await page.goto("/login?next=/dashboard/agent-catalogue");
-    await page.fill('input[type="email"]', "approver.a@example.com");
+    await page.fill('input[type="email"]', email!);
     await page.fill('input[type="password"]', password!);
     await page.locator('button[type="submit"]').click();
-    await expect(page).toHaveURL(/\/dashboard\/agent-catalogue/, { timeout: 15_000 });
+    await expect(page).toHaveURL((url) => url.pathname === "/dashboard/agent-catalogue", { timeout: 15_000 });
     const request = page.context().request;
     const catalogue = await request.get("/api/v1/agent-registry");
-    if (process.env.AGENTICORG_E2E_REGISTRY_ENABLED !== "true") {
+    if (!registryEnabled) {
       expect(catalogue.status()).toBe(409);
       await expect(page.getByTestId("catalogue-off")).toBeVisible();
       await expect(page.getByTestId("catalogue-templates-toggle")).toBeDisabled();
       return;
     }
     expect(catalogue.status()).toBe(200);
+    const csrf = (await page.context().cookies()).find((cookie) => cookie.name === "agenticorg_csrf");
+    expect(csrf).toBeTruthy();
+    const headers = { "X-CSRF-Token": csrf!.value };
     const installedBefore = await request.get("/api/v1/packs/installed");
-    expect(installedBefore.ok()).toBeTruthy();
+    expect(installedBefore.status()).toBe(200);
     expect(JSON.stringify(await installedBefore.json())).not.toContain('"banking"');
-    const install = await request.post("/api/v1/packs/banking/install");
+    const install = await request.post("/api/v1/packs/banking/install", { headers });
     expect(install.status()).toBe(200);
     const pack = await install.json();
     try {
@@ -47,6 +53,7 @@ test.describe("local dev stack @dev-stack", () => {
         expect.objectContaining({ agent_id: agent.id, state: "draft", state_changed_at: null }),
       ]));
       const card = await request.put(`/api/v1/agents/${agent.id}/card`, {
+        headers,
         data: { purpose: "Synthetic catalogue browser regression", risk_tier: "high", use_case: "review", channels: ["chat"] },
       });
       expect(card.status()).toBe(200);
@@ -70,7 +77,7 @@ test.describe("local dev stack @dev-stack", () => {
       await page.keyboard.press("Enter");
       await expect(page).toHaveURL(new RegExp(`/dashboard/agents/${agent.id}$`));
     } finally {
-      const removed = await request.delete("/api/v1/packs/banking");
+      const removed = await request.delete("/api/v1/packs/banking", { headers });
       expect(removed.status()).toBe(200);
     }
   });
