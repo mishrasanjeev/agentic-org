@@ -9338,7 +9338,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "speech.recordings.sensitive.read",
-    "source_line": 253,
+    "source_line": 259,
     "tenant_required": true
   },
   {
@@ -9428,7 +9428,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "speech.recordings.sensitive.read",
-    "source_line": 234,
+    "source_line": 240,
     "tenant_required": true
   },
   {
@@ -9446,7 +9446,7 @@
     "public_exempt_reason": null,
     "rate_limit": "chat-query",
     "scope": "speech.recordings.sensitive.write",
-    "source_line": 208,
+    "source_line": 214,
     "tenant_required": true
   },
   {
