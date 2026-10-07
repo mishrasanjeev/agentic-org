@@ -359,6 +359,12 @@ class AgentCardIn(BaseModel):
     channels: list[str] | None = Field(None, max_length=10)
 
 
+class AgentTrafficSplitIn(BaseModel):
+    """A share of an agent's runs served by another agent, or null to remove the split."""
+
+    split: dict[str, Any] | None = None
+
+
 class AgentLifecycleIn(BaseModel):
     model_config = {"extra": "forbid"}
 
