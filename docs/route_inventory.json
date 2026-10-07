@@ -4406,7 +4406,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "chat.write",
-    "source_line": 327,
+    "source_line": 339,
     "tenant_required": true
   },
   {

@@ -13,7 +13,7 @@ from fastapi import HTTPException
 
 from core.config import settings
 from core.conversation import dialogue as engine
-from core.conversation import runtime
+from core.conversation import runtime, supervisor
 from core.conversation.dialogue import Dialogue, Outcome
 
 TENANT = uuid.uuid4()
@@ -234,6 +234,7 @@ class TestSessionRoutes:
             stage=engine.STAGE_COLLECTING, intent="fund_transfer", pending="amount", slots={"payee": "Ravi"}
         )
         monkeypatch.setattr(runtime, "load_dialogue", AsyncMock(return_value=dialogue))
+        monkeypatch.setattr(supervisor, "replay", AsyncMock(return_value=[]))
         reset = AsyncMock(return_value=True)
         monkeypatch.setattr(runtime, "reset_dialogue", reset)
         request = SimpleNamespace(state=SimpleNamespace(claims={"agenticorg:user_id": "u1"}))

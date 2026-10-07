@@ -409,7 +409,10 @@ async def finish_turn(
     from core.conversation import escalation, feedback, scenarios, supervisor
 
     handoff: dict[str, Any] | None = None
-    reason = escalation.REASON_REQUESTED if outcome.intent == "talk_to_agent" else escalation.REASON_SLOTS
+    # The dialogue says why it escalated (an accepted offer after fallbacks is not an unsolicited request).
+    reason = outcome.escalation or (
+        escalation.REASON_REQUESTED if outcome.intent == "talk_to_agent" else escalation.REASON_SLOTS
+    )
     tail = ""
     if outcome.kind == "execute":
         # The record of what ran, for the summary; then the scenario's next step, if any.
@@ -464,6 +467,7 @@ async def finish_turn(
         )
     await save_dialogue(tid, key, dialogue, user_id=user_id, agent_id=agent_id or None, channel=channel)
     if outcome.kind == "escalate":
+        # The dialogue has started over by now; the outcome carries the intent and slots it had.
         handoff = await escalation.handoff(
             tid,
             session_key=key,
@@ -474,6 +478,7 @@ async def finish_turn(
             reason=reason,
             context=context,
             intent=outcome.intent,
+            slots=outcome.slots,
         )
     answer = (escalation.handoff_answer(handoff) if handoff is not None else answer_for(outcome, execution)) + tail
     payload = outcome.to_dict()
@@ -484,8 +489,8 @@ async def finish_turn(
     if handoff is not None:
         payload["handoff"] = {k: handoff.get(k) for k in ("reason", "intent", "hitl_id", "ticket")}
     stage = dialogue.stage
-    await supervisor.announce_turn(tid, key, role="user", text=text, intent=dialogue.intent, stage=stage)
-    await supervisor.announce_turn(tid, key, role="assistant", text=answer, intent=dialogue.intent, stage=stage)
+    await supervisor.announce_turn(tid, key, role="user", intent=dialogue.intent, stage=stage)
+    await supervisor.announce_turn(tid, key, role="assistant", intent=dialogue.intent, stage=stage)
     tool_call = (execution or {}).get("tool_call")
     return {
         "answer": answer,
