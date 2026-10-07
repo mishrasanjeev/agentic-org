@@ -249,33 +249,42 @@ def _roles(row: Any) -> tuple[str | None, str | None]:
 async def summarise(
     tenant_id: uuid.UUID, recording_id: uuid.UUID, *, method: str = "auto", complete: Any = None
 ) -> dict[str, Any]:
-    """Summarise a transcribed recording and compute its analytics; both are kept, the summary encrypted."""
+    """Summarise a transcribed recording and compute its analytics; both are kept, the summary encrypted.
+
+    The transcript is read, the summary made and encrypted before the row is locked, so neither the
+    model call nor the tenant key lookup runs while a connection holds a lock.
+    """
     from core.database import get_tenant_session
 
     if method not in summaries.METHODS:
         raise SpeechError(422, "method_unknown", f"method is one of {', '.join(summaries.METHODS)}")
     async with get_tenant_session(tenant_id) as session:
-        row = await _row(session, tenant_id, recording_id, lock=True)
+        row = await _row(session, tenant_id, recording_id)
         if row is None:
             raise SpeechError(404, "not_found", "No such recording")
         transcript = transcript_of_row(row)
-        if not transcript or not transcript.get("turns"):
-            raise SpeechError(409, "not_transcribed", "The recording has no transcript to summarise yet")
+        kept_segments = list(row.segments or [])
+        duration = float(row.duration_seconds or 0.0)
         agent, customer = _roles(row)
-        try:
-            summary = await summaries.summarise(
-                tenant_id, transcript, method=method, agent=agent, customer=customer, complete=complete
-            )
-        except ValueError as exc:
-            raise SpeechError(422, "method_unknown", str(exc)) from None
-        # enterprise-gate: broad-except-ok reason=model-boundary-refused-with-an-explicit-error-nothing-kept
-        except Exception as exc:  # noqa: BLE001 - the model boundary when the caller insisted on the model
-            logger.warning("speech_summary_failed", error_type=type(exc).__name__)
-            raise SpeechError(502, "summary_failed", "The model did not produce a summary") from None
-        analytics = call_analytics.analyse(
-            transcript, list(row.segments or []), float(row.duration_seconds or 0.0), agent=agent, customer=customer
+    if not transcript or not transcript.get("turns"):
+        raise SpeechError(409, "not_transcribed", "The recording has no transcript to summarise yet")
+    try:
+        summary = await summaries.summarise(
+            tenant_id, transcript, method=method, agent=agent, customer=customer, complete=complete
         )
-        row.summary_encrypted = await _encrypt(tenant_id, summary)
+    except ValueError as exc:
+        raise SpeechError(422, "method_unknown", str(exc)) from None
+    # enterprise-gate: broad-except-ok reason=model-boundary-refused-with-an-explicit-error-nothing-kept
+    except Exception as exc:  # noqa: BLE001 - the model boundary when the caller insisted on the model
+        logger.warning("speech_summary_failed", error_type=type(exc).__name__)
+        raise SpeechError(502, "summary_failed", "The model did not produce a summary") from None
+    analytics = call_analytics.analyse(transcript, kept_segments, duration, agent=agent, customer=customer)
+    envelope = await _encrypt(tenant_id, summary)
+    async with get_tenant_session(tenant_id) as session:
+        row = await _row(session, tenant_id, recording_id, lock=True)
+        if row is None:
+            raise SpeechError(404, "not_found", "No such recording")
+        row.summary_encrypted = envelope
         row.analytics = analytics
         row.updated_at = datetime.now(UTC)
         answer = {"id": str(row.id), "summary": summary, "analytics": analytics}
