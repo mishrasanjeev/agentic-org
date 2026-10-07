@@ -1,13 +1,12 @@
 # Agent registry
 
-Each agent has a card and a place in a governance lifecycle, kept apart from its runtime status.
-This is the first part of the registry; the approval workflow with environments, the catalogue
-with templates, the dependency graph and the reliability metrics are not here yet (see the end of
-this page).
+Each agent has a card and a place in a governance lifecycle, kept apart from its runtime status;
+with the approval workflow on, production follows the lifecycle, and a traffic split can send a
+share of an agent's runs to another. The catalogue with templates, the dependency graph and the
+reliability metrics are not here yet (see the end of this page).
 
 Behind `AGENTICORG_AGENT_REGISTRY_ENABLED`, off by default. Off, the endpoints answer 409 and
-nothing is written. The runtime is not affected by the registry either way in this release: an
-agent's lifecycle state does not change what it may do.
+nothing is written, and the runtime is not affected by the registry.
 
 ## The card
 
@@ -55,8 +54,48 @@ and records who moved it. Two rules hold at the transition:
 name, type, domain and runtime status.
 
 The runtime status and the lifecycle state answer different questions: whether the agent runs
-(shadow, active, paused), and whether it has been reviewed and approved for what it does. The next
-part ties them: an agent will not be promoted to production without passing the approval workflow.
+(shadow, active, paused), and whether it has been reviewed and approved for what it does. The
+approval workflow below ties them.
+
+## Approval workflow and environments
+
+With `AGENTICORG_AGENT_REGISTRY_GATES_PROMOTION` on (beside the registry switch), the two
+follow each other (`core/agent_registry/approval.py`):
+
+- **Promotion and resume to `active` need an `approved` or `published` entry.** The check runs
+  after the shadow evidence, the maker-checker check on the prompt and the evaluation gate, so a
+  refusal (`409`, `agent_registry`, `not_approved`) names the first thing that is missing. An
+  agent with no entry is a draft and is refused.
+- **Promotion publishes.** When an `approved` agent becomes active, its entry moves to
+  `published` with a recorded transition.
+- **Retirement retires.** When a `published` or `deprecated` agent is retired at runtime, its
+  entry moves to `retired` (through `deprecated` when it was published). A draft that is retired
+  keeps its state: it was never in production.
+
+Off, the registry neither gates nor follows; the lifecycle is what administrators make of it.
+
+**Environments** are read from the state and not stored: `draft` and `review` are
+`development`, `approved` is `staging`, `published` and `deprecated` are `production`, `retired`
+has none. The card, the lifecycle and the list carry `environment`.
+
+## Traffic split
+
+An agent may send a share of its runs to another agent of the tenant
+(`core/agent_registry/traffic.py`): `PUT /agents/{id}/traffic-split` with
+`{"split": {"to_agent_id": ..., "percent": 1-100}}`, which requires the target to be active;
+`{"split": null}` removes it. `GET /agents/{id}/traffic-split` reads it.
+
+With `AGENTICORG_AGENT_TRAFFIC_SPLIT_ENABLED` on, that share of the runs asked of the agent
+through `POST /agents/{id}/run` are served by the target instead. The choice is made from the
+run's `thread_id` or `correlation_id` when the request carries one, so a retry lands on the same
+agent and the share is reproducible; otherwise it is random. The target must be active and
+visible to the caller at run time; otherwise the run stays on the agent asked for and the skip is
+logged. The response carries `requested_agent_id`, the `agent_id` that served the run, and
+`served_by` (`traffic_split:<percent>` or null). Removing the split is the rollback: one action,
+and every run returns to the agent asked for.
+
+The split applies to runs through the agents API only; chat, voice, workflows and A2A pick their
+agent as before. It splits between two agents, not between two stored versions of one agent.
 
 ## Storage
 
@@ -65,10 +104,10 @@ row-level security (`v6z48_agent_registry`); both are removed with the agent.
 
 ## What is not here yet
 
-- **No approval workflow beyond the two rules above**, and no environments (development,
-  staging, production) or traffic allocation between versions.
-- **The lifecycle state does not gate promotion.** An agent can be promoted to active in any
-  state; publishing follows promotion, not the other way round.
+- **Environments are derived, not deployed.** There is one runtime; `staging` and `production`
+  name where an agent stands in the lifecycle, not separate infrastructure.
+- **A split is between two agents.** Splitting traffic between two stored versions of one agent
+  is not available; clone the agent to compare versions.
 - **No catalogue page, templates, dependency graph or ratings.** The list endpoint is the
   catalogue's data only.
-- **No console.** The card and the lifecycle are read and changed through the API.
+- **No console.** The card, the lifecycle and the split are read and changed through the API.

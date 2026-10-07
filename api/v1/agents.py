@@ -33,6 +33,8 @@ from auth.run_grants import (
     direct_tool_call_permitted,
     resolve_run_grant,
 )
+from core.agent_registry import approval as registry_approval
+from core.agent_registry import traffic as agent_traffic
 from core.commerce.sales_guardrails import GRANTEX_COMMERCE_DEFAULT_TOOLS
 from core.database import get_tenant_session
 from core.evals import gates as eval_gates
@@ -74,6 +76,7 @@ from core.schemas.api import (
     AgentEvalGateIn,
     AgentFeedbackSubmit,
     AgentOutputSchemaIn,
+    AgentTrafficSplitIn,
     AgentUpdate,
     FleetLimits,
     PaginatedResponse,
@@ -3339,6 +3342,27 @@ async def run_agent(
             raise HTTPException(404, "Agent not found")
         # Bug sheet 2026-09-14 rows 19/22: domain RBAC + personal ownership.
         require_agent_visible(agent_row, effective_caller)
+        # Traffic split: a share of the runs asked of this agent are served by another active agent.
+        requested_agent_id = agent_id
+        served_by_split: str | None = None
+        split = agent_traffic.declared(agent_row) if agent_traffic.enabled() else None
+        if split is not None:
+            split_cid = str(payload.get("thread_id") or payload.get("correlation_id") or "") or None
+            target_row = None
+            if agent_traffic.chooses_target(split, split_cid):
+                target_row = (
+                    await session.execute(
+                        select(Agent).where(
+                            Agent.id == _uuid.UUID(split["to_agent_id"]), Agent.tenant_id == tid
+                        )
+                    )
+                ).scalar_one_or_none()
+                if target_row is not None and not can_view_agent(target_row, effective_caller):
+                    target_row = None
+            chosen, served_by_split = agent_traffic.choose(agent_row, split_cid, lambda _id: target_row)
+            if chosen is not agent_row:
+                agent_row = chosen
+                agent_id = chosen.id
         status_refusal = agent_status_refusal(agent_row.status)
         if status_refusal is not None:
             raise HTTPException(409, status_refusal)
@@ -4067,6 +4091,9 @@ async def run_agent(
         "run_id": msg_id,
         "task_id": msg_id,  # deprecated alias, removed in v5.0
         "agent_id": str(agent_id),
+        # The agent asked for and, when a traffic split sent the run elsewhere, why.
+        "requested_agent_id": str(requested_agent_id),
+        "served_by": served_by_split,
         "agent_type": None,  # this endpoint invokes by id; type path is /a2a/tasks
         "correlation_id": correlation_id,
         "trace_id": tracing.current_trace_id() or None,
@@ -4228,6 +4255,10 @@ async def resume_agent(
                 await eval_gates.check_promotion(session, tid, agent)
             except eval_gates.GateError as exc:
                 raise _gate_refused(exc) from None
+            try:
+                await registry_approval.check_promotion(session, tid, agent)
+            except registry_approval.ApprovalError as exc:
+                raise _approval_refused(exc) from None
             async with get_tenant_session(tid, agent.company_id) as connector_session:
                 await _assert_connectors_ready_for_activation(
                     connector_session,
@@ -4236,6 +4267,8 @@ async def resume_agent(
                     agent.company_id,
                 )
         agent.status = resume_to
+        if resume_to == "active":
+            await registry_approval.follow_promotion(session, tid, agent, actor=resumed_by)
 
         event = AgentLifecycleEvent(
             tenant_id=tid,
@@ -4305,6 +4338,98 @@ async def set_agent_output_schema(
         "output_schema": schema,
         "enforced": prompt_output_schema.enabled(),
     }
+
+
+def _approval_refused(exc: registry_approval.ApprovalError) -> HTTPException:
+    return HTTPException(
+        409,
+        detail={"error": registry_approval.TRIGGER, "code": exc.code, "message": exc.message, "state": exc.state},
+    )
+
+
+# ── PUT /agents/{id}/traffic-split ────────────────────────────────────────────
+@router.put("/agents/{agent_id}/traffic-split")
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="agents.write",
+    rate_limit="agent-write",
+    idempotency="idempotent-full-replace",
+    audit_event="agents.traffic_split.set",
+)
+async def set_agent_traffic_split(
+    agent_id: UUID,
+    body: AgentTrafficSplitIn,
+    tenant_id: str = Depends(get_current_tenant),
+    user_domains: list[str] | None = Depends(get_user_domains),
+    caller: Caller | None = Depends(caller_from_request),
+):
+    """Send a share of this agent's runs to another active agent of the tenant, or remove the split.
+
+    Removing it (``{"split": null}``) is the rollback: one action, and every
+    run returns to this agent. Applied while
+    ``AGENTICORG_AGENT_TRAFFIC_SPLIT_ENABLED`` is on.
+    """
+    tid = _uuid.UUID(tenant_id)
+    split = None
+    if body.split is not None:
+        try:
+            split = agent_traffic.parse_split(body.split, own_id=agent_id)
+        except agent_traffic.TrafficError as exc:
+            raise HTTPException(422, str(exc)) from None
+    async with get_tenant_session(tid) as session:
+        result = await session.execute(
+            select(Agent).where(Agent.id == agent_id, Agent.tenant_id == tid).with_for_update()
+        )
+        agent = result.scalar_one_or_none()
+        if not agent:
+            raise HTTPException(404, "Agent not found")
+        require_agent_mutable(agent, _effective_caller(caller, user_domains))
+        if split is not None:
+            target = (
+                await session.execute(
+                    select(Agent).where(Agent.id == _uuid.UUID(split["to_agent_id"]), Agent.tenant_id == tid)
+                )
+            ).scalar_one_or_none()
+            if target is None:
+                raise HTTPException(404, "Target agent not found")
+            if target.status != "active":
+                raise HTTPException(409, "The target agent must be active")
+        config = dict(agent.config or {})
+        if split is None:
+            config.pop(agent_traffic.SPLIT_KEY, None)
+        else:
+            config[agent_traffic.SPLIT_KEY] = split
+        agent.config = config
+    return {"id": str(agent_id), "split": split, "enforced": agent_traffic.enabled()}
+
+
+# ── GET /agents/{id}/traffic-split ────────────────────────────────────────────
+@router.get("/agents/{agent_id}/traffic-split")
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="agents.read",
+    rate_limit="standard",
+    idempotency="read-only",
+    audit_event="agents.traffic_split.read",
+)
+async def get_agent_traffic_split(
+    agent_id: UUID,
+    tenant_id: str = Depends(get_current_tenant),
+    user_domains: list[str] | None = Depends(get_user_domains),
+    caller: Caller | None = Depends(caller_from_request),
+):
+    """The agent's traffic split, if any, and whether splits are applied."""
+    tid = _uuid.UUID(tenant_id)
+    async with get_tenant_session(tid) as session:
+        agent = (
+            await session.execute(select(Agent).where(Agent.id == agent_id, Agent.tenant_id == tid))
+        ).scalar_one_or_none()
+        if not agent:
+            raise HTTPException(404, "Agent not found")
+        require_agent_visible(agent, _effective_caller(caller, user_domains))
+        return {"id": str(agent_id), "split": agent_traffic.declared(agent), "enforced": agent_traffic.enabled()}
 
 
 def _gate_refused(exc: eval_gates.GateError) -> HTTPException:
@@ -4504,6 +4629,11 @@ async def promote_agent(
                 await eval_gates.check_promotion(session, tid, agent)
             except eval_gates.GateError as exc:
                 raise _gate_refused(exc) from None
+            # Registry: the agent has been approved by a second person.
+            try:
+                await registry_approval.check_promotion(session, tid, agent)
+            except registry_approval.ApprovalError as exc:
+                raise _approval_refused(exc) from None
         old_status = agent.status
         old_version = agent.version or "1.0.0"
         new_version = _next_agent_version(old_version)
@@ -4541,6 +4671,8 @@ async def promote_agent(
             )
 
         agent.status = new_status
+        if new_status == "active":
+            await registry_approval.follow_promotion(session, tid, agent, actor=activator)
         agent.version = new_version
         session.add(_agent_version_snapshot(agent, new_version, is_verified_good=True))
 
@@ -4605,6 +4737,9 @@ async def retire_agent(
 
         old_status = agent.status
         agent.status = "retired"
+        await registry_approval.follow_retirement(
+            session, tid, agent, actor=getattr(_effective_caller(caller), "user_id", None)
+        )
 
         event = AgentLifecycleEvent(
             tenant_id=tid,

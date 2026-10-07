@@ -234,6 +234,17 @@ class Settings(BaseSettings):
     # endpoints answer 409 and nothing is written; the runtime is not
     # affected by the registry either way in this release.
     agent_registry_enabled: bool = False
+    # Registry approval workflow (core/agent_registry/approval.py): with the
+    # registry on, promotion and resume to active need an approved or
+    # published registry entry, promotion publishes an approved entry and
+    # retirement retires it. Off by default: off, the registry neither gates
+    # nor follows the runtime.
+    agent_registry_gates_promotion: bool = False
+    # Traffic split (core/agent_registry/traffic.py): a share of the runs
+    # asked of an agent through the agents API are served by another active
+    # agent of the tenant. Off by default: off, a stored split is kept and
+    # reported and no run is redirected.
+    agent_traffic_split_enabled: bool = False
     # Task queue wait: a published background task is stamped with its publish
     # time and the worker meters how long it waited. Off by default: off, no
     # header is added and nothing is measured.
