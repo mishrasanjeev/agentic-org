@@ -78,13 +78,12 @@ def process(stream: bytes, mime_type: str, *, ocr: bool = True, with_words: bool
     """Pages, segments and documents from one file, with the review decision per document."""
     pages = load_pages(stream, mime_type, ocr=ocr)
     segments = bundle.split(pages)
-    raw_pages: list[Any] | None = None
     documents: list[Document] = []
     for segment in segments:
         own_pages = [p for p in pages if p.number in segment.pages]
         found = field_extraction.extract(segment.document_type, own_pages)
         extra = field_extraction.generic(own_pages, known={f.name for f in found})
-        own_tables = tables.extract(own_pages, raw_pages)
+        own_tables = tables.extract(own_pages)
         documents.append(
             Document(
                 index=segment.index,
