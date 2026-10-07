@@ -40,6 +40,7 @@ from core.database import get_tenant_session
 from core.evals import gates as eval_gates
 from core.file_ingestion.limits import cleanup_tempfile, stream_to_tempfile
 from core.finops import attribution as cost_attribution
+from core.finops import thresholds as finops_thresholds
 from core.governance import risk_tiers
 from core.governance.agent_status import refusal_for as agent_status_refusal
 from core.governance.operator_override import check as check_operator_override
@@ -3615,6 +3616,19 @@ async def run_agent(
                     "reasoning_trace": [f"Budget check: ${monthly_spent:.2f} >= cap ${monthly_cap:.2f}"],
                 }
 
+    # 5a'. FinOps thresholds: a breached organisation, application, use-case or business-unit
+    # threshold alerts, throttles (a short delay) or suspends (refuses) the run.
+    finops_action = None
+    if finops_thresholds.enabled():
+        async with get_tenant_session(tid) as session:
+            decision = await finops_thresholds.check_run(session, tid, cost_attribution.current())
+        if decision.action == "suspend":
+            if attribution_token is not None:
+                cost_attribution.reset(attribution_token)
+            return finops_thresholds.refusal(decision, agent_id=str(agent_id))
+        if decision.action == "throttle":
+            await asyncio.sleep(decision.delay_seconds)
+        finops_action = decision.as_dict() if decision.action else None
     # 5b. Execute via LangGraph runner
     from core.langgraph.checkpointer import CheckpointerUnavailableError
     from core.langgraph.runner import run_agent as langgraph_run
@@ -4118,6 +4132,7 @@ async def run_agent(
         # The agent asked for and, when a traffic split sent the run elsewhere, why.
         "requested_agent_id": str(requested_agent_id),
         "served_by": served_by_split,
+        "finops_action": finops_action,
         "agent_type": None,  # this endpoint invokes by id; type path is /a2a/tasks
         "correlation_id": correlation_id,
         "trace_id": tracing.current_trace_id() or None,

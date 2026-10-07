@@ -328,6 +328,11 @@ class Settings(BaseSettings):
     # write adds a row to finops_cost_ledger and the model call records carry
     # the labels. Off by default: off, nothing is written or tagged.
     finops_attribution_enabled: bool = False
+    # FinOps thresholds (core/finops/thresholds.py): a breached organisation,
+    # application, use-case or business-unit threshold alerts, throttles or
+    # suspends runs through the agents API. Off by default: off, no run is
+    # checked, delayed or refused.
+    finops_thresholds_enabled: bool = False
     # JSON object keyed provider/model with input and output USD per million
     # tokens; a negotiated rate replaces the list price.
     model_price_overrides_json: str = ""

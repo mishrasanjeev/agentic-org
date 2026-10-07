@@ -81,6 +81,7 @@ from core.models.feed import FeedEvent as FeedEvent
 from core.models.feedback import AgentFeedback as AgentFeedback
 from core.models.filing_approval import FilingApproval as FilingApproval
 from core.models.finops_ledger import FinopsCostLedger as FinopsCostLedger
+from core.models.finops_threshold import FinopsThreshold as FinopsThreshold
 from core.models.governance_config import GovernanceConfig as GovernanceConfig
 from core.models.governed_case import GovernedCase as GovernedCase
 from core.models.governed_case import GovernedCaseTransition as GovernedCaseTransition
