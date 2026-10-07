@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from typing import Annotated, Any
 
 import structlog
@@ -25,6 +26,27 @@ def _off() -> HTTPException:
             "message": "Document processing is off for this deployment (AGENTICORG_IDP_ENABLED).",
         },
     )
+
+
+def _too_large() -> HTTPException:
+    return HTTPException(
+        413, detail={"error": "too_large", "message": f"The file is larger than {MAX_BYTES // (1024 * 1024)} MB"}
+    )
+
+
+async def _read_bounded(file: UploadFile) -> bytes:
+    """The upload's bytes, refused with 413 as soon as it is known to exceed the limit.
+
+    The declared size is checked first; the read itself asks for at most one
+    byte more than the limit, so an oversized upload is never held in memory whole.
+    """
+    declared = getattr(file, "size", None)
+    if isinstance(declared, int) and declared > MAX_BYTES:
+        raise _too_large()
+    stream = await file.read(MAX_BYTES + 1)
+    if len(stream) > MAX_BYTES:
+        raise _too_large()
+    return stream
 
 
 @router.get("/document-types")
@@ -73,9 +95,12 @@ async def analyse(
     """Split a file into documents, type each, extract fields and tables with boxes, and say what needs review."""
     if not pipeline.enabled():
         raise _off()
-    stream = await file.read()
+    stream = await _read_bounded(file)
     try:
-        result = pipeline.process(stream, file.content_type or "", ocr=ocr, with_words=with_words)
+        # Rasterising and OCR are blocking and can take minutes on a scanned file: run them off the event loop.
+        result = await asyncio.to_thread(
+            pipeline.process, stream, file.content_type or "", ocr=ocr, with_words=with_words
+        )
     except DocumentError as exc:
         raise HTTPException(exc.status, detail={"error": exc.code, "message": exc.message}) from None
     return {"filename": file.filename, **result}

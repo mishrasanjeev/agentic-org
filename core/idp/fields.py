@@ -147,9 +147,16 @@ class Field:
 
 
 def normalise_value(value: str, kind: str) -> str:
-    value = value.strip(" :;,.-")
     if kind == "amount":
-        return re.sub(r"[^\d.-]", "", value.replace(",", "")) or value
+        # A minus before the first digit is the amount's sign, not punctuation: -1,234.00 stays negative.
+        text = value.strip(" :;,.")
+        first_digit = re.search(r"\d", text)
+        negative = first_digit is not None and "-" in text[: first_digit.start()]
+        digits = re.sub(r"[^\d.]", "", text.replace(",", "")).strip(".")
+        if not digits:
+            return text
+        return f"-{digits}" if negative else digits
+    value = value.strip(" :;,.-")
     if kind == "id":
         return re.sub(r"\s+", " ", value).strip()
     return re.sub(r"\s+", " ", value)
@@ -217,6 +224,32 @@ def extract(document_type: str, pages: list[Page]) -> list[Field]:
             out.append(found)
         else:
             out.append(Field(spec.name, None, 0.0, required=spec.required, kind=spec.kind, status="missing"))
+    return out
+
+
+# The fields that tell one document of a type from another of the same type (bundle splitting).
+IDENTITY_FIELDS: dict[str, tuple[str, ...]] = {
+    "bank_statement": ("account_number", "statement_period"),
+    "salary_slip": ("employee_id", "pay_period"),
+    "invoice": ("invoice_number",),
+    "government_id": ("id_number",),
+    "tax_return": ("acknowledgement_number", "assessment_year"),
+    "loan_application": ("applicant_name",),
+    "address_proof": ("consumer_id", "bill_date"),
+    "kyc_form": ("customer_id",),
+}
+
+
+def identity(document_type: str, pages: list[Page]) -> dict[str, str]:
+    """The identifying field values found on ``pages`` for a document type (absent fields are left out)."""
+    names = IDENTITY_FIELDS.get(document_type, ())
+    out: dict[str, str] = {}
+    for spec in SPECS.get(document_type, ()):
+        if spec.name not in names:
+            continue
+        found = _find(spec, pages)
+        if found is not None and found.value:
+            out[spec.name] = found.value.lower()
     return out
 
 

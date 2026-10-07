@@ -273,3 +273,139 @@ class TestRoutes:
         assert (await api.classify_text({"text": "\n".join(SLIP)}, tenant_id="t"))["document_type"] == "salary_slip"
         with pytest.raises(HTTPException):
             await api.classify_text({"text": ""}, tenant_id="t")
+
+
+class TestReviewHardening:
+    def test_negative_amounts_keep_their_sign(self):
+        assert fields.normalise_value("-1,234.00", "amount") == "-1234.00"
+        assert fields.normalise_value("₹ -12,500.50", "amount") == "-12500.50"
+        assert fields.normalise_value("Rs. 500", "amount") == "500"
+        assert fields.normalise_value("41,250.", "amount") == "41250"
+        page = Page(number=1, width=595, height=842)
+        x = 60
+        for token in ("Closing", "Balance:", "-1,234.00"):
+            page.words.append(Word(token, (x, 50, x + 8 * len(token), 62)))
+            x += 8 * len(token) + 6
+        found = {f.name: f for f in fields.extract("bank_statement", [page])}
+        assert found["closing_balance"].value == "-1234.00"
+
+    def test_a_pdf_over_the_page_limit_is_refused_not_truncated(self, monkeypatch):
+        monkeypatch.setattr(pages, "MAX_PAGES", 2)
+        with pytest.raises(pages.DocumentError) as info:
+            pages.load_pages(_pdf(STATEMENT, SLIP, SLIP), "application/pdf")
+        assert info.value.status == 413 and info.value.code == "too_many_pages"
+        assert len(pages.load_pages(_pdf(STATEMENT, SLIP), "application/pdf")) == 2
+
+    def test_a_repeated_heading_alone_does_not_split_a_statement(self):
+        first = [
+            "ACCOUNT STATEMENT",
+            "Account Number: 123456789012",
+            "Opening Balance: 12,500.00",
+            "02/09/2026  Salary credit  45,000  57,500",
+        ]
+        middle = ["ACCOUNT STATEMENT", "Account Number: 123456789012", "05/09/2026  Card payment  2,300  55,200"]
+        last = [
+            "ACCOUNT STATEMENT",
+            "Account Number: 123456789012",
+            "09/09/2026  Transfer  5,000  50,200",
+            "Closing Balance: 50,200.00",
+        ]
+        result = pages.load_pages(_pdf(first, middle, last), "application/pdf")
+        assert all(classify.classify(p.text).first_page for p in result)
+        segments = bundle.split(result)
+        assert len(segments) == 1 and segments[0].pages == [1, 2, 3]
+        assert segments[0].document_type == "bank_statement"
+
+    def test_a_differing_identifying_field_splits_a_bundle(self):
+        one = ["ACCOUNT STATEMENT", "Account Number: 123456789012", "Opening Balance: 1,000.00"]
+        two = ["ACCOUNT STATEMENT", "Account Number: 999988887777", "Opening Balance: 2,000.00"]
+        segments = bundle.split(pages.load_pages(_pdf(one, two), "application/pdf"))
+        assert [s.pages for s in segments] == [[1], [2]]
+
+    def test_page_numbering_decides_when_the_pages_carry_it(self):
+        head = ["ACCOUNT STATEMENT", "Account Number: 123456789012"]
+        result = pages.load_pages(
+            _pdf(
+                [*head, "Closing Balance: 10.00", "Page 1 of 2"],
+                [*head, "Page 2 of 2"],
+                [*head, "Page 1 of 1"],
+            ),
+            "application/pdf",
+        )
+        # Page 2 continues the numbering even though page 1 ends with a closing balance; page 3 restarts it.
+        assert [s.pages for s in bundle.split(result)] == [[1, 2], [3]]
+
+    @pytest.mark.asyncio
+    async def test_the_upload_is_read_with_a_bound_and_oversize_is_refused(self, monkeypatch):
+        from api.v1 import idp as api
+
+        monkeypatch.setattr(settings, "idp_enabled", True)
+        asked: list[int] = []
+
+        async def read(size: int = -1) -> bytes:
+            asked.append(size)
+            return b"%PDF-" + b"0" * (size - 5)
+
+        upload = SimpleNamespace(filename="big.pdf", content_type="application/pdf", read=read)
+        with pytest.raises(HTTPException) as info:
+            await api.analyse(upload, ocr=True, with_words=False, tenant_id="t")
+        assert info.value.status_code == 413 and info.value.detail["error"] == "too_large"
+        assert asked == [pages.MAX_BYTES + 1]
+
+        declared = SimpleNamespace(
+            filename="big.pdf", content_type="application/pdf", size=pages.MAX_BYTES + 1, read=AsyncMock()
+        )
+        with pytest.raises(HTTPException) as info:
+            await api.analyse(declared, ocr=True, with_words=False, tenant_id="t")
+        assert info.value.status_code == 413
+        declared.read.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_processing_runs_off_the_event_loop(self, monkeypatch):
+        import threading
+
+        from api.v1 import idp as api
+
+        monkeypatch.setattr(settings, "idp_enabled", True)
+        seen: dict[str, object] = {}
+
+        def fake_process(stream, mime, *, ocr, with_words):
+            seen["thread"] = threading.current_thread()
+            seen["args"] = (stream, mime, ocr, with_words)
+            return {"documents": []}
+
+        monkeypatch.setattr(pipeline, "process", fake_process)
+        upload = SimpleNamespace(
+            filename="a.pdf", content_type="application/pdf", read=AsyncMock(return_value=b"%PDF-1")
+        )
+        answer = await api.analyse(upload, ocr=False, with_words=True, tenant_id="t")
+        assert answer == {"filename": "a.pdf", "documents": []}
+        assert seen["thread"] is not threading.main_thread() and seen["args"] == (
+            b"%PDF-1",
+            "application/pdf",
+            False,
+            True,
+        )
+
+
+class TestDocumentScopes:
+    def test_the_documents_family_maps_to_review_queue_scopes(self):
+        from api.route_enforcement import SCOPE_FAMILIES, required_scopes_for, unmapped_scope_families
+        from core.rbac import ROLE_SCOPES
+
+        assert SCOPE_FAMILIES["documents"] == ("approvals:read", "approvals:write")
+        assert required_scopes_for("documents.read", "GET") == ("approvals:read",)
+        assert required_scopes_for("documents.analyse.sensitive.write", "POST") == ("approvals:write",)
+        assert required_scopes_for("documents.read", "POST") == ("approvals:write",)
+        assert "documents" not in unmapped_scope_families(["documents.read", "documents.analyse.sensitive.write"])
+        writers = {role for role, scopes in ROLE_SCOPES.items() if "approvals:write" in scopes}
+        assert {"cfo", "chro", "cmo", "coo", "domain_lead", "developer"} <= writers
+        assert "auditor" not in writers and "analyst" not in writers
+
+    def test_the_routes_declare_scopes_in_the_documents_family(self):
+        from api.route_metadata import ROUTE_METADATA_ATTR
+        from api.v1 import idp as api
+
+        for handler in (api.document_types, api.analyse, api.classify_text):
+            scope = getattr(handler, ROUTE_METADATA_ATTR)["scope"]
+            assert scope.split(".", 1)[0] == "documents"
