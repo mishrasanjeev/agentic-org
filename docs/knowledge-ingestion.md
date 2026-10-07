@@ -56,10 +56,12 @@ is read as paragraphs only, which the `sentence` and `paragraph` strategies hand
 `POST /knowledge/search` takes optional `filters` (`core/rag/filters.py`): `category`, `source`
 and `file_type` (lists; a document matches any value), and a `created_from` / `created_to` date
 window. Every filter is an `AND` condition on the knowledge documents, applied inside the dense
-and the sparse rankings alike, so the fused result only ever holds documents that pass. A bank's
-branch, product line or business segment is recorded in `category` at upload, which is what the
-filters narrow on. A narrowed search answers from the knowledge base only: the upload-metadata
-fallback carries nothing to filter on and is not consulted.
+and the sparse rankings alike, so the fused result only ever holds documents that pass.
+`category` is the source object type ingestion records for a chunk (`document`, `invoice` and so
+on) and `source` the upload it came from; a document's branch, product line or business segment
+is not yet a field of its own, which the access-control part of this package adds. A narrowed
+search answers from the knowledge base only: the upload-metadata fallback carries nothing to
+filter on and is not consulted.
 
 With `AGENTICORG_KNOWLEDGE_HYBRID_SEARCH` on, a search fuses the dense (pgvector) and sparse
 (PostgreSQL full text) rankings by reciprocal rank. With `AGENTICORG_KNOWLEDGE_RERANK_ENABLED` on
@@ -69,6 +71,25 @@ sit, a title match, and the fused score as the tie-breaker, weighted into one sc
 The re-ranker reads the texts only and calls no model; it knows no synonyms and no meaning, which
 is why it sits behind a switch and why its scores are explainable. Off, the fused order is
 returned as it was.
+
+## Citations and excerpts
+
+Every search hit carries a `citation` (`core/rag/citations.py`): the chunk row's id, its source,
+its chunk number, and the place in the source that ingestion recorded for it (page, paragraph
+number, nearest heading, sheet, cell range). The search paths read it through a join on
+`knowledge_chunk_sources`, so a hit from a chunk that keeps no provenance (an older upload, a
+RAGFlow document) carries `null`; the three original fields of a hit are unchanged.
+
+`GET /knowledge/documents/{id}/excerpt?q=` returns the cited chunk whole, with the query's terms
+located in it as character spans, its citation, and the ids of the chunks either side in the same
+upload, so the console can open the place in the source and move through it. The text passes the
+retrieval guardrails as a search result does; a chunk they withhold is not found. The Knowledge
+Base page shows the citation beside each hit and opens the excerpt with the terms marked and
+previous/next links.
+
+An excerpt is the chunk as it was ingested, not the original file: a page image, a table's
+formatting or a figure are not shown. Access to a document is the tenant's as a whole; document
+access control is the next part of this package.
 
 ## OCR flow
 

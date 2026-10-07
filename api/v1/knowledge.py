@@ -21,6 +21,14 @@ from api.deps import get_current_tenant
 from api.route_metadata import route_meta
 from core.config import settings
 from core.rag import rerank
+from core.rag.citations import (
+    PROVENANCE_COLUMNS,
+    PROVENANCE_JOIN,
+    Citation,
+    citation_from_row,
+    highlights,
+    source_prefix,
+)
 from core.rag.filters import SearchFilters, sql_clauses
 from core.runtime_capacity import AsyncCapacityGate, CapacityLimitError
 from observability import tracing
@@ -141,6 +149,8 @@ class SearchResult(BaseModel):
     chunk_text: str
     score: float
     document_name: str
+    # Where the chunk came from (core/rag/citations.py); None for sources that keep no provenance.
+    citation: Citation | None = None
 
 
 class SearchResponse(BaseModel):
@@ -1265,11 +1275,11 @@ async def _native_vector_or_keyword_search(
             rows = (
                 await session.execute(
                     _sqtext(
-                        "SELECT title, content, "  # nosec B608 — `col` is a module-level constant name, not user input
-                        f"1 - ({col} <=> CAST(:q AS vector)) AS score "
-                        "FROM knowledge_documents "
-                        f"WHERE tenant_id = :tid AND status = 'ready' AND {col} IS NOT NULL{where_filters} "
-                        f"ORDER BY {col} <=> CAST(:q AS vector) "
+                        "SELECT d.title, d.content, "  # nosec B608 — `col` is a module-level constant name, not user input
+                        f"1 - (d.{col} <=> CAST(:q AS vector)) AS score, d.id, d.source, {PROVENANCE_COLUMNS} "
+                        f"FROM knowledge_documents d{PROVENANCE_JOIN} "
+                        f"WHERE d.tenant_id = :tid AND d.status = 'ready' AND d.{col} IS NOT NULL{where_filters} "
+                        f"ORDER BY d.{col} <=> CAST(:q AS vector) "
                         "LIMIT :k"
                     ),
                     {"q": vector_literal, "tid": str(tid), "k": top_k, **filter_params},
@@ -1281,6 +1291,7 @@ async def _native_vector_or_keyword_search(
                     chunk_text=(r[1] or "")[:300],
                     score=round(float(r[2] or 0.0), 4),
                     document_name=r[0] or "",
+                    citation=_citation_of(r, 3, 4),
                 )
                 for r in rows
             ]
@@ -1294,9 +1305,10 @@ async def _native_vector_or_keyword_search(
             rows = (
                 await session.execute(
                     _sqtext(
-                        "SELECT title, content FROM knowledge_documents "  # nosec B608 — clauses from core/rag (fixed column names, bound parameters), nothing from the request
-                        "WHERE tenant_id = :tid AND status = 'ready' AND "
-                        f"(title ILIKE :like OR content ILIKE :like){where_filters} "
+                        f"SELECT d.title, d.content, d.id, d.source, {PROVENANCE_COLUMNS} "  # nosec B608 — clauses from core/rag (fixed column names, bound parameters), nothing from the request
+                        f"FROM knowledge_documents d{PROVENANCE_JOIN} "
+                        "WHERE d.tenant_id = :tid AND d.status = 'ready' AND "
+                        f"(d.title ILIKE :like OR d.content ILIKE :like){where_filters} "
                         "LIMIT :k"
                     ),
                     {"tid": str(tid), "like": f"%{query}%", "k": top_k, **filter_params},
@@ -1307,6 +1319,7 @@ async def _native_vector_or_keyword_search(
                 chunk_text=(r[1] or "")[:300],
                 score=0.0,
                 document_name=r[0] or "",
+                citation=_citation_of(r, 2, 3),
             )
             for r in rows
         ]
@@ -1317,24 +1330,40 @@ async def _native_vector_or_keyword_search(
     return []
 
 
+def _citation_of(row: Any, id_index: int, source_index: int) -> Citation | None:
+    """The citation of a search row: the id at ``id_index``, the source at ``source_index`` and the five
+    provenance columns (page, paragraph, heading, sheet, cell range) right after the source."""
+    if len(row) <= source_index:
+        return None
+    rest = list(row[source_index + 1 : source_index + 6]) + [None] * 5
+    return citation_from_row(row[id_index], row[source_index], *rest[:5])
+
+
 def _fuse_native_hits(
-    vector_rows: list[tuple[str, str, str]],
-    lexical_rows: list[tuple[str, str, str]],
+    vector_rows: list[tuple[Any, ...]],
+    lexical_rows: list[tuple[Any, ...]],
     top_k: int,
 ) -> list[SearchResult]:
-    """Fuse bounded candidate lists by reciprocal rank, then stable row ID."""
+    """Fuse bounded candidate lists by reciprocal rank, then stable row ID.
+
+    A row is ``(id, title, content)`` with, when the search joined provenance,
+    the citation as a fourth element.
+    """
     scores: dict[str, float] = {}
-    hits: dict[str, tuple[str, str]] = {}
+    hits: dict[str, tuple[str, str, Citation | None]] = {}
     for rows in (vector_rows, lexical_rows):
-        for rank, (row_id, title, content) in enumerate(rows, start=1):
+        for rank, row in enumerate(rows, start=1):
+            row_id, title, content = row[0], row[1], row[2]
+            citation = row[3] if len(row) > 3 else None
             scores[row_id] = scores.get(row_id, 0.0) + 1.0 / (60 + rank)
-            hits.setdefault(row_id, (title, content))
+            hits.setdefault(row_id, (title, content, citation))
     ordered_ids = sorted(scores, key=lambda row_id: (-scores[row_id], row_id))[:top_k]
     return [
         SearchResult(
             chunk_text=hits[row_id][1][:300],
             score=round(scores[row_id] / (2.0 / 61), 4),
             document_name=hits[row_id][0],
+            citation=hits[row_id][2],
         )
         for row_id in ordered_ids
     ]
@@ -1359,18 +1388,19 @@ async def _native_hybrid_search(
             rows = (
                 await session.execute(
                     _sqtext(
-                        "SELECT id, title, content FROM knowledge_documents "  # nosec B608 — clauses from core/rag (fixed column names, bound parameters), nothing from the request
-                        f"WHERE tenant_id = :tid AND status = 'ready'{where_filters} "
-                        "AND to_tsvector('english', title || ' ' || content) "
+                        f"SELECT d.id, d.title, d.content, d.source, {PROVENANCE_COLUMNS} "  # nosec B608 — clauses from core/rag (fixed column names, bound parameters), nothing from the request
+                        f"FROM knowledge_documents d{PROVENANCE_JOIN} "
+                        f"WHERE d.tenant_id = :tid AND d.status = 'ready'{where_filters} "
+                        "AND to_tsvector('english', d.title || ' ' || d.content) "
                         "@@ websearch_to_tsquery('english', :query) "
-                        "ORDER BY ts_rank_cd(to_tsvector('english', title || ' ' || content), "
-                        "websearch_to_tsquery('english', :query)) DESC, id ASC "
+                        "ORDER BY ts_rank_cd(to_tsvector('english', d.title || ' ' || d.content), "
+                        "websearch_to_tsquery('english', :query)) DESC, d.id ASC "
                         "LIMIT :limit"
                     ),
                     params,
                 )
             ).fetchall()
-        lexical_rows = [(str(r[0]), r[1] or "", r[2] or "") for r in rows]
+        lexical_rows = [_hit_row(r) for r in rows]
     except _DB_READ_ERRORS as exc:
         logger.debug("native_full_text_search_skipped", error_type=type(exc).__name__)
 
@@ -1380,17 +1410,18 @@ async def _native_hybrid_search(
                 rows = (
                     await session.execute(
                         _sqtext(
-                            "SELECT id, title, content FROM knowledge_documents "  # nosec B608 — clauses from core/rag (fixed column names, bound parameters), nothing from the request
-                            f"WHERE tenant_id = :tid AND status = 'ready'{where_filters} "
-                            "AND (strpos(lower(title), lower(:query)) > 0 "
-                            "OR strpos(lower(content), lower(:query)) > 0) "
-                            "ORDER BY CASE WHEN strpos(lower(title), lower(:query)) > 0 "
-                            "THEN 0 ELSE 1 END, id ASC LIMIT :limit"
+                            f"SELECT d.id, d.title, d.content, d.source, {PROVENANCE_COLUMNS} "  # nosec B608 — clauses from core/rag (fixed column names, bound parameters), nothing from the request
+                            f"FROM knowledge_documents d{PROVENANCE_JOIN} "
+                            f"WHERE d.tenant_id = :tid AND d.status = 'ready'{where_filters} "
+                            "AND (strpos(lower(d.title), lower(:query)) > 0 "
+                            "OR strpos(lower(d.content), lower(:query)) > 0) "
+                            "ORDER BY CASE WHEN strpos(lower(d.title), lower(:query)) > 0 "
+                            "THEN 0 ELSE 1 END, d.id ASC LIMIT :limit"
                         ),
                         params,
                     )
                 ).fetchall()
-            lexical_rows = [(str(r[0]), r[1] or "", r[2] or "") for r in rows]
+            lexical_rows = [_hit_row(r) for r in rows]
         except _DB_READ_ERRORS as exc:
             logger.debug("native_keyword_search_skipped", error_type=type(exc).__name__)
 
@@ -1402,13 +1433,15 @@ async def _native_hybrid_search(
         if col not in {"embedding", "embedding_bge_m3"}:
             raise ValueError("unsupported embedding column")
         vector_sql = (
-            "SELECT id, title, content FROM knowledge_documents "  # nosec B608 — clauses from core/rag (fixed column names, bound parameters), nothing from the request
-            f"WHERE tenant_id = :tid AND status = 'ready' AND embedding IS NOT NULL{where_filters} "
-            "ORDER BY embedding <=> CAST(:vector AS vector), id ASC LIMIT :limit"
+            f"SELECT d.id, d.title, d.content, d.source, {PROVENANCE_COLUMNS} "  # nosec B608 — clauses from core/rag (fixed column names, bound parameters), nothing from the request
+            f"FROM knowledge_documents d{PROVENANCE_JOIN} "
+            f"WHERE d.tenant_id = :tid AND d.status = 'ready' AND d.embedding IS NOT NULL{where_filters} "
+            "ORDER BY d.embedding <=> CAST(:vector AS vector), d.id ASC LIMIT :limit"
             if col == "embedding"
-            else "SELECT id, title, content FROM knowledge_documents "  # nosec B608 — clauses from core/rag (fixed column names, bound parameters), nothing from the request
-            f"WHERE tenant_id = :tid AND status = 'ready' AND embedding_bge_m3 IS NOT NULL{where_filters} "
-            "ORDER BY embedding_bge_m3 <=> CAST(:vector AS vector), id ASC LIMIT :limit"
+            else f"SELECT d.id, d.title, d.content, d.source, {PROVENANCE_COLUMNS} "  # nosec B608 — clauses from core/rag (fixed column names, bound parameters), nothing from the request
+            f"FROM knowledge_documents d{PROVENANCE_JOIN} "
+            f"WHERE d.tenant_id = :tid AND d.status = 'ready' AND d.embedding_bge_m3 IS NOT NULL{where_filters} "
+            "ORDER BY d.embedding_bge_m3 <=> CAST(:vector AS vector), d.id ASC LIMIT :limit"
         )
         qvec = await embed_one_async(query)
         vector_literal = "[" + ",".join(f"{x:.6f}" for x in qvec) + "]"
@@ -1419,7 +1452,7 @@ async def _native_hybrid_search(
                     {"tid": str(tid), "vector": vector_literal, "limit": limit, **filter_params},
                 )
             ).fetchall()
-        vector_rows = [(str(r[0]), r[1] or "", r[2] or "") for r in rows]
+        vector_rows = [_hit_row(r) for r in rows]
     except _NATIVE_VECTOR_ERRORS as exc:
         logger.debug("native_vector_search_skipped", error_type=type(exc).__name__)
 
@@ -1433,10 +1466,104 @@ async def _native_hybrid_search(
     ]
     ordered = rerank.rerank(query, candidates, top_k)
     tracing.set_attributes(**{"search.reranked": len(candidates)})
+    by_key = {str(index): hit for index, hit in enumerate(fused)}
     return [
-        SearchResult(chunk_text=candidate.text, score=new_score, document_name=candidate.title)
+        SearchResult(
+            chunk_text=candidate.text,
+            score=new_score,
+            document_name=candidate.title,
+            citation=by_key[candidate.key].citation,
+        )
         for candidate, new_score in ordered
     ]
+
+
+def _hit_row(r: Any) -> tuple[Any, ...]:
+    """A hybrid candidate row ``(id, title, content, citation)`` from a joined search row."""
+    return (str(r[0]), r[1] or "", r[2] or "", _citation_of(r, 0, 3) if len(r) > 3 else None)
+
+
+class ExcerptResponse(BaseModel):
+    document_id: str
+    document_name: str
+    content: str
+    citation: Citation | None = None
+    # Character spans of the query terms in the content, for the console to mark.
+    highlights: list[tuple[int, int]] = Field(default_factory=list)
+    previous_id: str | None = None
+    next_id: str | None = None
+
+
+@router.get("/knowledge/documents/{doc_id}/excerpt", response_model=ExcerptResponse)
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="knowledge.sensitive.search",
+    rate_limit="knowledge-search",
+    idempotency="read-only",
+    audit_event="knowledge.excerpt",
+)
+async def knowledge_excerpt(
+    doc_id: uuid.UUID,
+    q: str | None = None,
+    tenant_id: str = Depends(get_current_tenant),
+) -> ExcerptResponse:
+    """The chunk a search cited, whole, with the query's terms located and the chunks either side.
+
+    The text passes the retrieval guardrails as a search result does; a chunk
+    they withhold is answered with 404.
+    """
+    from sqlalchemy import text as _sqtext
+
+    from core.database import get_tenant_session
+
+    tid = uuid.UUID(tenant_id)
+    async with get_tenant_session(tid) as session:
+        row = (
+            await session.execute(
+                _sqtext(
+                    f"SELECT d.id, d.title, d.content, d.source, {PROVENANCE_COLUMNS} "  # nosec B608 — clauses from core/rag (fixed column names, bound parameters), nothing from the request
+                    f"FROM knowledge_documents d{PROVENANCE_JOIN} "
+                    "WHERE d.id = :id AND d.tenant_id = :tid AND d.status = 'ready' LIMIT 1"
+                ),
+                {"id": str(doc_id), "tid": str(tid)},
+            )
+        ).fetchone()
+        if row is None:
+            raise HTTPException(404, "Knowledge chunk not found")
+        citation = _citation_of(row, 0, 3)
+        previous_id = next_id = None
+        prefix = source_prefix(row[3])
+        if prefix and citation is not None and citation.chunk_index is not None:
+            for offset, slot in ((-1, "previous"), (1, "next")):
+                neighbour = (
+                    await session.execute(
+                        _sqtext(
+                            "SELECT id FROM knowledge_documents WHERE tenant_id = :tid AND status = 'ready' "
+                            "AND source LIKE :pattern LIMIT 1"
+                        ),
+                        {"tid": str(tid), "pattern": f"{prefix}#chunk{citation.chunk_index + offset}-%"},
+                    )
+                ).fetchone()
+                if neighbour is not None:
+                    if slot == "previous":
+                        previous_id = str(neighbour[0])
+                    else:
+                        next_id = str(neighbour[0])
+    content = row[2] or ""
+    kept = await _guard_results(tenant_id, [SearchResult(chunk_text=content, score=1.0, document_name=row[1] or "")])
+    if not kept:
+        raise HTTPException(404, "Knowledge chunk not found")
+    content = kept[0].chunk_text
+    return ExcerptResponse(
+        document_id=str(row[0]),
+        document_name=row[1] or "",
+        content=content,
+        citation=citation,
+        highlights=highlights(content, q or ""),
+        previous_id=previous_id,
+        next_id=next_id,
+    )
 
 
 async def _guard_results(tenant_id: str, results: list[SearchResult]) -> list[SearchResult]:

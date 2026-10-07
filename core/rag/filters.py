@@ -53,8 +53,13 @@ class SearchFilters(BaseModel):
         return not any((self.category, self.source, self.file_type, self.created_from, self.created_to))
 
 
-def sql_clauses(filters: SearchFilters | None, *, prefix: str = "f") -> tuple[str, dict[str, Any]]:
-    """The ``AND`` clauses and their parameters for ``filters``; empty when there is nothing to narrow."""
+def sql_clauses(
+    filters: SearchFilters | None, *, prefix: str = "f", alias: str = "d"
+) -> tuple[str, dict[str, Any]]:
+    """The ``AND`` clauses and their parameters for ``filters``; empty when there is nothing to narrow.
+
+    Columns are qualified with ``alias``, the documents table in the search SQL.
+    """
     if filters is None or filters.is_empty():
         return "", {}
     clauses: list[str] = []
@@ -67,11 +72,11 @@ def sql_clauses(filters: SearchFilters | None, *, prefix: str = "f") -> tuple[st
                 key = f"{prefix}_{column}_{index}"
                 params[key] = value
                 names.append(f":{key}")
-            clauses.append(f"{column} IN ({', '.join(names)})")
+            clauses.append(f"{alias}.{column} IN ({', '.join(names)})")
     if filters.created_from is not None:
         params[f"{prefix}_from"] = datetime.combine(filters.created_from, datetime.min.time(), tzinfo=UTC)
-        clauses.append(f"created_at >= :{prefix}_from")
+        clauses.append(f"{alias}.created_at >= :{prefix}_from")
     if filters.created_to is not None:
         params[f"{prefix}_to"] = datetime.combine(filters.created_to, datetime.max.time(), tzinfo=UTC)
-        clauses.append(f"created_at <= :{prefix}_to")
+        clauses.append(f"{alias}.created_at <= :{prefix}_to")
     return (" AND " + " AND ".join(clauses)) if clauses else "", params

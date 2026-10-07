@@ -25,8 +25,8 @@ class TestFilters:
         )
         where, params = sql_clauses(filters)
         assert where == (
-            " AND category IN (:f_category_0, :f_category_1) AND file_type IN (:f_file_type_0)"
-            " AND created_at >= :f_from AND created_at <= :f_to"
+            " AND d.category IN (:f_category_0, :f_category_1) AND d.file_type IN (:f_file_type_0)"
+            " AND d.created_at >= :f_from AND d.created_at <= :f_to"
         )
         assert params["f_category_0"] == "retail" and params["f_category_1"] == "sme"
         assert params["f_from"].isoformat().startswith("2026-01-01T00:00:00") and params["f_to"].hour == 23
@@ -146,8 +146,8 @@ async def test_filters_reach_every_sql_of_the_hybrid_path(sessions, monkeypatch)
     results = await knowledge._native_hybrid_search(uuid.uuid4(), "locker rent", 3, filters)
     assert results and results[0].document_name == "Locker rent"
     for sql, params in session.calls:
-        assert "category IN (:f_category_0)" in sql and "created_at >= :f_from" in sql
-        assert params["f_category_0"] == "retail" and "tenant_id = :tid" in sql
+        assert "d.category IN (:f_category_0)" in sql and "d.created_at >= :f_from" in sql
+        assert params["f_category_0"] == "retail" and "d.tenant_id = :tid" in sql
 
 
 @pytest.mark.asyncio
@@ -164,7 +164,7 @@ async def test_filters_reach_the_vector_and_keyword_paths(sessions, monkeypatch)
     await knowledge._native_vector_or_keyword_search(uuid.uuid4(), "locker", 3, SearchFilters(file_type=["pdf"]))
     assert len(session.calls) == 2
     for sql, params in session.calls:
-        assert "file_type IN (:f_file_type_0)" in sql and params["f_file_type_0"] == "pdf"
+        assert "d.file_type IN (:f_file_type_0)" in sql and params["f_file_type_0"] == "pdf"
 
 
 @pytest.mark.asyncio
@@ -216,6 +216,6 @@ async def test_rerank_reorders_the_fused_pool_when_on(sessions, monkeypatch):
 def test_the_request_carries_filters_and_the_response_shape_is_unchanged():
     request = knowledge.SearchRequest(query="locker", filters={"category": ["retail"]})
     assert request.filters is not None and request.filters.category == ["retail"]
-    assert set(knowledge.SearchResult.model_fields) == {"chunk_text", "score", "document_name"}
+    assert set(knowledge.SearchResult.model_fields) == {"chunk_text", "score", "document_name", "citation"}
     src = (ROOT / "api" / "v1" / "knowledge.py").read_text(encoding="utf-8")
     assert "await _native_semantic_search(tenant_id, req.query, req.top_k, req.filters)" in src

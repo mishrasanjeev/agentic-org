@@ -83,6 +83,40 @@ interface KnowledgeSearchResult {
   chunk_text: string;
   score?: number;
   document_name?: string;
+  citation?: KnowledgeCitation;
+}
+
+export interface KnowledgeCitation {
+  document_id: string;
+  source?: string | null;
+  chunk_index?: number | null;
+  page?: number | null;
+  paragraph?: number | null;
+  heading?: string | null;
+  sheet?: string | null;
+  cell_range?: string | null;
+}
+
+interface KnowledgeExcerpt {
+  document_id: string;
+  document_name: string;
+  content: string;
+  citation?: KnowledgeCitation | null;
+  highlights: Array<[number, number]>;
+  previous_id?: string | null;
+  next_id?: string | null;
+}
+
+/** The short form of a citation: page 4 · paragraph 12 · Exposure limits. */
+export function citationLabel(citation: KnowledgeCitation | undefined | null): string {
+  if (!citation) return "";
+  const parts: string[] = [];
+  if (citation.page != null) parts.push(`page ${citation.page}`);
+  if (citation.sheet) parts.push(`sheet ${citation.sheet}`);
+  if (citation.cell_range && citation.paragraph == null) parts.push(citation.cell_range);
+  if (citation.paragraph != null) parts.push(`paragraph ${citation.paragraph}`);
+  if (citation.heading) parts.push(citation.heading);
+  return parts.join(" · ");
 }
 
 /** Coerce a /knowledge/search result row (object or legacy string) into a renderable shape. */
@@ -92,11 +126,27 @@ export function normalizeSearchResult(raw: unknown): KnowledgeSearchResult | nul
   const r = raw as Record<string, unknown>;
   const text = typeof r.chunk_text === "string" ? r.chunk_text : typeof r.content === "string" ? r.content : "";
   if (!text) return null;
+  const citation = r.citation && typeof r.citation === "object" ? (r.citation as KnowledgeCitation) : undefined;
   return {
     chunk_text: text,
     score: typeof r.score === "number" ? r.score : undefined,
     document_name: typeof r.document_name === "string" ? r.document_name : undefined,
+    citation: citation && typeof citation.document_id === "string" ? citation : undefined,
   };
+}
+
+/** The excerpt text with the highlighted spans marked, as a list of plain and marked pieces. */
+export function markedPieces(content: string, highlights: Array<[number, number]>): Array<{ text: string; marked: boolean }> {
+  const pieces: Array<{ text: string; marked: boolean }> = [];
+  let cursor = 0;
+  for (const [start, end] of highlights) {
+    if (start < cursor || end > content.length || end <= start) continue;
+    if (start > cursor) pieces.push({ text: content.slice(cursor, start), marked: false });
+    pieces.push({ text: content.slice(start, end), marked: true });
+    cursor = end;
+  }
+  if (cursor < content.length) pieces.push({ text: content.slice(cursor), marked: false });
+  return pieces;
 }
 
 function DuplicateDecisionModal({
@@ -161,6 +211,9 @@ export default function KnowledgeBase() {
   // TC_002 (Aishwarya 2026-04-23): surface real backend errors to the user
   // instead of a blanket "API offline" line.
   const [searchError, setSearchError] = useState<string | null>(null);
+  // The excerpt opened from a search hit: the whole chunk with the query terms marked.
+  const [excerpt, setExcerpt] = useState<KnowledgeExcerpt | null>(null);
+  const [excerptError, setExcerptError] = useState<string | null>(null);
   // Modal state for the duplicate-file decision flow.
   const [dupPrompt, setDupPrompt] = useState<{
     filename: string;
@@ -326,6 +379,17 @@ export default function KnowledgeBase() {
     await fetchData();
   };
 
+  const openExcerpt = async (documentId: string) => {
+    setExcerptError(null);
+    try {
+      const res = await api.get(`/knowledge/documents/${documentId}/excerpt`, { params: { q: searchQuery } });
+      setExcerpt(res.data as KnowledgeExcerpt);
+    } catch (err) {
+      setExcerpt(null);
+      setExcerptError(extractApiError(err, "The excerpt could not be opened."));
+    }
+  };
+
   const handleSearch = async () => {
     if (!searchQuery.trim()) return;
     setSearchError(null);
@@ -466,11 +530,69 @@ export default function KnowledgeBase() {
                 <p className="text-xs text-muted-foreground">
                   {r.document_name}
                   {r.score != null ? `${r.document_name ? " · " : ""}score ${r.score.toFixed(2)}` : ""}
+                  {r.citation && citationLabel(r.citation) ? ` · ${citationLabel(r.citation)}` : ""}
+                  {r.citation && (
+                    <button
+                      type="button"
+                      className="ml-2 underline"
+                      onClick={() => void openExcerpt(r.citation!.document_id)}
+                      data-testid={`kb-open-excerpt-${i}`}
+                    >
+                      Open excerpt
+                    </button>
+                  )}
                 </p>
               )}
               <p className="text-muted-foreground">{r.chunk_text}</p>
             </div>
           ))}
+        </div>
+      )}
+      {excerptError && (
+        <div className="border border-amber-200 bg-amber-50 text-amber-900 rounded-lg p-3 text-sm" role="alert" data-testid="kb-excerpt-error">
+          {excerptError}
+        </div>
+      )}
+      {excerpt && (
+        <div className="border rounded-lg p-4 bg-white space-y-2 text-sm" data-testid="kb-excerpt">
+          <div className="flex items-center justify-between">
+            <p className="text-xs text-muted-foreground">
+              {excerpt.document_name}
+              {excerpt.citation && citationLabel(excerpt.citation) ? ` · ${citationLabel(excerpt.citation)}` : ""}
+            </p>
+            <span className="flex gap-2 text-xs">
+              <button
+                type="button"
+                className="underline disabled:no-underline disabled:text-muted-foreground"
+                disabled={!excerpt.previous_id}
+                onClick={() => excerpt.previous_id && void openExcerpt(excerpt.previous_id)}
+                data-testid="kb-excerpt-previous"
+              >
+                Previous
+              </button>
+              <button
+                type="button"
+                className="underline disabled:no-underline disabled:text-muted-foreground"
+                disabled={!excerpt.next_id}
+                onClick={() => excerpt.next_id && void openExcerpt(excerpt.next_id)}
+                data-testid="kb-excerpt-next"
+              >
+                Next
+              </button>
+              <button type="button" className="underline" onClick={() => setExcerpt(null)} data-testid="kb-excerpt-close">
+                Close
+              </button>
+            </span>
+          </div>
+          <p className="whitespace-pre-wrap" data-testid="kb-excerpt-text">
+            {markedPieces(excerpt.content, excerpt.highlights).map((piece, index) =>
+              piece.marked ? (
+                <mark key={index}>{piece.text}</mark>
+              ) : (
+                <span key={index}>{piece.text}</span>
+              ),
+            )}
+          </p>
         </div>
       )}
       {searchError && searchResults.length === 0 && (
