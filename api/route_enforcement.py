@@ -142,6 +142,11 @@ SCOPE_FAMILIES: dict[str, tuple[str, str]] = {
     "audit": ("audit:read", "audit:read"),
     "connectors": ("connectors.read", "connectors.read"),
     "report_schedules": ("report_schedules.read", "report_schedules.write"),
+    # Call recordings and their transcripts are customer speech: a read
+    # needs the audit scope the domain roles and the auditor hold, a write
+    # (an upload, a transcript, a summary) the approvals write scope the
+    # domain roles hold. Administrators pass as everywhere.
+    "speech": ("audit:read", "approvals:write"),
     # A2A tasks and MCP calls run any agent type for machine callers (FINDINGS
     # A-68). No role holds these scopes: API keys and agent grants are given
     # them. Enforced only while AGENTICORG_ROUTE_SCOPE_A2A_MCP is on
@@ -174,9 +179,7 @@ KNOWN_AUTH_MODES = frozenset({"api_key", "grantex", "legacy", "commerce_buyer"})
 # canonical family scopes: never ``agenticorg:admin``, legacy aliases or any
 # scope outside SCOPE_FAMILIES. The A2A and MCP scopes are included even while
 # their setting is off, so an agent can hold them before they are required.
-GRANTABLE_ROUTE_SCOPES: frozenset[str] = frozenset(
-    scope for pair in SCOPE_FAMILIES.values() for scope in pair
-)
+GRANTABLE_ROUTE_SCOPES: frozenset[str] = frozenset(scope for pair in SCOPE_FAMILIES.values() for scope in pair)
 
 
 def validate_route_scopes(scopes: object) -> list[str]:
@@ -190,8 +193,7 @@ def validate_route_scopes(scopes: object) -> list[str]:
     unknown = sorted({s for s in scopes if s not in GRANTABLE_ROUTE_SCOPES})
     if unknown:
         raise ValueError(
-            f"route_scopes {unknown} cannot be granted to an agent; "
-            f"allowed: {sorted(GRANTABLE_ROUTE_SCOPES)}"
+            f"route_scopes {unknown} cannot be granted to an agent; allowed: {sorted(GRANTABLE_ROUTE_SCOPES)}"
         )
     return sorted(set(scopes))
 
@@ -271,8 +273,11 @@ async def _check_rate_limit(request: Request, meta: dict[str, Any]) -> None:
     tenant_id = getattr(request.state, "tenant_id", None)
     buyer_access_id = getattr(request.state, "buyer_access_id", None)
     principal = (
-        f"buyer:{buyer_access_id}" if buyer_access_id else
-        f"t:{tenant_id}" if (meta.get("auth_required") and tenant_id) else f"ip:{_client_ip(request)}"
+        f"buyer:{buyer_access_id}"
+        if buyer_access_id
+        else f"t:{tenant_id}"
+        if (meta.get("auth_required") and tenant_id)
+        else f"ip:{_client_ip(request)}"
     )
 
     from core.auth_state import check_window_rate

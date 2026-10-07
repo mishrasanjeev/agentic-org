@@ -97,7 +97,13 @@ async def upload_recording(
             422, detail={"error": "engine_unknown", "message": f"engine is one of {', '.join(transcribe.ENGINES)}"}
         )
     roles = [r.strip() for r in channel_roles.split(",") if r.strip()][:2]
-    data = await file.read()
+    # Read one byte past the limit at most, so an oversized body is refused without being held whole.
+    data = await file.read(MAX_BYTES + 1)
+    if len(data) > MAX_BYTES:
+        raise HTTPException(
+            413,
+            detail={"error": "too_large", "message": f"The recording is larger than {MAX_BYTES // (1024 * 1024)} MB"},
+        )
     try:
         return await store.save(
             uuid.UUID(tenant_id),
