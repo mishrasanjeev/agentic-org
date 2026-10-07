@@ -10,7 +10,10 @@ Off, `GET /idp/document-types` still answers with `enabled: false` and the rest 
 (origin top-left); a page with no text layer is OCR'd (Tesseract through `pytesseract`, 200 dpi,
 boxes scaled back to page points, orientation and script detected) when the engine is installed.
 When it is not, the page says `ocr: unavailable` and the document is routed to review rather than
-silently read as empty. Images are one page each. A file is at most 25 MB and 50 pages. Words are
+silently read as empty. Images are one page each. A file is at most 25 MB and 50 pages: a larger
+upload is refused with 413 while it is read (never held whole), and a PDF with more pages is refused
+(`too_many_pages`), never read in part. Rasterising and OCR run in a worker thread, off the API's
+event loop. Words are
 grouped into lines by vertical position; every word, line and page carries a confidence (1.0 from a
 text layer, the engine's figure from OCR).
 
@@ -21,9 +24,13 @@ documents a bank handles: government identity document, address proof, bank stat
 slip, income tax return, invoice, loan application form, cheque, property document, agreement,
 KYC form. The confidence is the sum of the weights matched; below 0.5 the page is `unknown`, not a
 guess. `core/idp/bundle.py` splits a file into segments of consecutive pages, one document each: a
-new segment starts when the type changes or when a page of the same type looks like a first page
-again (a second statement in the bundle); untyped continuation pages join the document before
-them. `POST /idp/classify-text` is a dry run of the classifier.
+new segment starts when the type changes. A page of the same type that repeats the type's heading
+(statements and agreements repeat it on every page) starts a new segment only on stronger evidence:
+page numbering that restarts or a previous page that ended its numbering, an identifying field
+(account number, statement period, invoice number) that differs from the segment's, or a previous
+page whose last lines close the document (a closing balance, a net pay, a signature block);
+numbering that continues keeps the page in the segment. Untyped continuation pages join the
+document before them. `POST /idp/classify-text` is a dry run of the classifier.
 
 ## Fields and tables
 
@@ -34,9 +41,14 @@ and a value pattern, the value on the same line or the next. Each field found ha
 (the union of its words' boxes), the source line and a confidence combining the label match, the
 value match and the OCR confidence of its words; a required field not found is reported as
 `missing`. A generic pass also picks up `Label: value` lines the spec does not name, at a lower
-confidence. `core/idp/tables.py` extracts tables: the PDF layout engine's where it finds any, else
-runs of consecutive lines whose columns align (how a statement's transaction list reads), each
-with its page, box, header and rows.
+confidence. Amounts keep their sign: a leading minus survives normalisation. `core/idp/tables.py` extracts
+tables from runs of consecutive lines whose columns align (how a statement's transaction list
+reads), on text-layer and OCR pages alike, each with its page, box, header and rows.
+
+## Access
+
+The routes belong to the `documents` scope family, mapped to the review-queue scopes: listing the
+catalogue needs `approvals:read`, analysing a file or the classifier dry run `approvals:write`.
 
 ## Review with overlays
 

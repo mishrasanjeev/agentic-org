@@ -26,10 +26,14 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
   synthetic catalogue of banking documents by weighted rules, splits a
   bundle into one document per segment, extracts each type's fields with
   a page, a box and a per-field confidence (plus generic label-value
-  lines), extracts tables from the layout engine or aligned columns, and
+  lines), extracts tables from aligned columns, and
   routes a document to review when its type is unknown or weak, a
   required field is missing or weak, or a page could not be read
   (`core/idp/`, `GET /idp/document-types`, `POST /idp/classify-text`).
+  Uploads over 25 MB are refused while they are read and PDFs over 50
+  pages are refused rather than truncated; OCR runs off the event loop;
+  a repeated heading alone no longer splits a bundle; negative amounts
+  keep their sign; the routes need `approvals:read` / `approvals:write`.
 
 ### Added - Content services: document translation across Indian languages
 - `POST /content/translate` and `/content/translate/batch`
