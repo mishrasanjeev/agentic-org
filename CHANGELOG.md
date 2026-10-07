@@ -16,6 +16,10 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
   compares one document in two kept files: fields changed, added and
   removed with both values and boxes, page lines added and removed,
   table rows added and removed (`core/idp/compare.py`).
+- Statement checks take debit-column amounts as magnitudes, flag returned
+  items and salary credits from the full joined description, and report
+  `consistent: null` with `rows_checked: 0` when no row could be checked.
+  A table present in only one version lists all its rows as added or removed.
 
 ### Added - Document processing: reconciliation, stamps and analysis reports
 - `GET /idp/documents/{id}/reconcile` compares the fields that should

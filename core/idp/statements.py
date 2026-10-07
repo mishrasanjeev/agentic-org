@@ -94,6 +94,21 @@ def _cell(row: list[str], index: int | None) -> str:
     return str(row[index]).strip() if index is not None and index < len(row) else ""
 
 
+def _flags(description: str, credit: float | None) -> list[str]:
+    flags = []
+    if BOUNCE_RE.search(description):
+        flags.append("returned_or_bounced")
+    if SALARY_RE.search(description) and credit:
+        flags.append("salary_credit")
+    return flags
+
+
+def _extend(item: Transaction, text: str) -> None:
+    """Join a continuation line to a transaction and recompute the flags its full description carries."""
+    item.description = (item.description + " " + text).strip()
+    item.flags = _flags(item.description, item.credit)
+
+
 def rows_to_transactions(header: list[str], rows: list[list[str]]) -> list[Transaction]:
     mapping = map_header(header)
     if "date" not in mapping or "balance" not in mapping or not ({"debit", "credit"} & set(mapping)):
@@ -105,20 +120,18 @@ def rows_to_transactions(header: list[str], rows: list[list[str]]) -> list[Trans
         when = normalise_date(match.group(0)) if match else None
         description = _cell(row, mapping.get("description"))
         debit = parse_amount(_cell(row, mapping.get("debit")))
+        if debit is not None:
+            debit = abs(debit)  # a debit column holds outflows; "100 Dr" or "(100)" is a debit of 100
         credit = parse_amount(_cell(row, mapping.get("credit")))
         balance = parse_amount(_cell(row, mapping.get("balance")))
         if when is None and debit is None and credit is None and balance is None:
             if out and description:
-                out[-1].description = (out[-1].description + " " + description).strip()  # a continuation line
+                _extend(out[-1], description)  # a continuation line
             continue
         if when is None and out:
-            out[-1].description = (out[-1].description + " " + " ".join(c for c in row if c)).strip()
+            _extend(out[-1], " ".join(c for c in row if c))
             continue
-        flags = []
-        if BOUNCE_RE.search(description):
-            flags.append("returned_or_bounced")
-        if SALARY_RE.search(description) and credit:
-            flags.append("salary_credit")
+        flags = _flags(description, credit)
         out.append(
             Transaction(
                 number,
@@ -207,8 +220,17 @@ def analyse(document: dict[str, Any]) -> dict[str, Any]:
             tables_used.append(index)
     breaks = check_running_balance(transactions, opening)
     summary = summarise(transactions, opening=opening, closing=closing)
+    checked = sum(1 for t in transactions if t.consistent is not None)
     summary["balance_breaks"] = breaks
-    summary["consistent"] = breaks == 0 and (summary["closing_matches"] in (True, None))
+    summary["rows_checked"] = checked
+    # True only when at least one row was checked and nothing disagreed; None when nothing could be checked
+    # (no transactions, or no opening balance and a single row), so an empty result is never certified.
+    if breaks or summary["closing_matches"] is False:
+        summary["consistent"] = False
+    elif checked == 0:
+        summary["consistent"] = None
+    else:
+        summary["consistent"] = True
     return {
         "document_index": document.get("index"),
         "document_type": document.get("document_type"),
