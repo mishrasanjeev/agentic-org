@@ -67,6 +67,9 @@ follow each other (`core/agent_registry/approval.py`):
   after the shadow evidence, the maker-checker check on the prompt and the evaluation gate, so a
   refusal (`409`, `agent_registry`, `not_approved`) names the first thing that is missing. An
   agent with no entry is a draft and is refused.
+- **A new or cloned agent does not start active.** It has no entry yet, so nobody has approved
+  it: `POST /agents` and `POST /agents/{id}/clone` with `initial_status: "active"` are refused
+  (`409`, `agent_registry`, `not_approved`) and the agent is created in shadow.
 - **Promotion publishes.** When an `approved` agent becomes active, its entry moves to
   `published` with a recorded transition.
 - **Retirement retires.** When a `published` or `deprecated` agent is retired at runtime, its
@@ -89,9 +92,12 @@ An agent may send a share of its runs to another agent of the tenant
 With `AGENTICORG_AGENT_TRAFFIC_SPLIT_ENABLED` on, that share of the runs asked of the agent
 through `POST /agents/{id}/run` are served by the target instead. The choice is made from the
 run's `thread_id` or `correlation_id` when the request carries one, so a retry lands on the same
-agent and the share is reproducible; otherwise it is random. The target must be active and
-visible to the caller at run time; otherwise the run stays on the agent asked for and the skip is
-logged. The response carries `requested_agent_id`, the `agent_id` that served the run, and
+agent and the share is reproducible; otherwise it is random, one draw per run. The agent asked
+for is held to its own controls first (a paused or retired agent, one below its production floor
+or halted by an operator override is refused before any redirection); the target must be active,
+visible to the caller and pass the same controls at run time, otherwise the run stays on the
+agent asked for and the skip is logged. The response carries `requested_agent_id`, the
+`agent_id` that served the run, and
 `served_by` (`traffic_split:<percent>` or null). Removing the split is the rollback: one action,
 and every run returns to the agent asked for.
 

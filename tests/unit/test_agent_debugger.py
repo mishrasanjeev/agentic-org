@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import uuid
 from pathlib import Path
 from types import SimpleNamespace
@@ -456,6 +457,7 @@ class TestRoutes:
             return_value={"status": "paused", "paused_before": ["evaluate"], "thread_id": thread, "output": {"a": 1}}
         )
         monkeypatch.setattr(runner, "resume_agent", resumed)
+        monkeypatch.setattr(agent_debug, "gate_agent_run", AsyncMock(return_value=None))
 
         answer = await agent_debug.step_thread(agent.id, thread, tenant_id=str(TENANT), caller=None)
 
@@ -477,6 +479,7 @@ class TestRoutes:
         monkeypatch.setattr(
             debugger, "claim_session", AsyncMock(return_value=debugger.Claim(refusal="session_running", status=409))
         )
+        monkeypatch.setattr(agent_debug, "gate_agent_run", AsyncMock(return_value=None))
         with pytest.raises(HTTPException) as info:
             await agent_debug.continue_thread(agent.id, new_thread_id(TENANT), tenant_id=str(TENANT), caller=None)
         assert info.value.status_code == 409 and info.value.detail["error"] == "session_running"
@@ -497,3 +500,364 @@ class TestRoutes:
         )
         shown = debugger.session_dict(row)
         assert "spec" not in shown and shown["steps_taken"] == 2 and shown["paused_before"] == ["reason"]
+
+
+# ── A debug step runs under the run's policies ─────────────────────────────────
+
+
+def _ai(tokens: int, content: str = "step") -> AIMessage:
+    return AIMessage(
+        content=content, usage_metadata={"input_tokens": tokens, "output_tokens": 0, "total_tokens": tokens}
+    )
+
+
+async def _resume_debug(compiled, *, mode="step", **extra):
+    from core.langgraph import runner
+
+    graph = MagicMock()
+    graph.compile = MagicMock(return_value=compiled)
+    with (
+        patch.object(runner, "build_agent_graph", return_value=graph) as built,
+        patch.object(runner, "prefetch_llm_credential", new=AsyncMock(return_value=None)),
+    ):
+        result = await runner.resume_agent(
+            agent_id="a",
+            thread_id=extra.pop("thread_id", new_thread_id(TENANT)),
+            decision={},
+            system_prompt="s",
+            authorized_tools=[],
+            tenant_id=str(TENANT),
+            require_paused=True,
+            debug={"mode": mode, "breakpoints": ["evaluate"]},
+            **extra,
+        )
+    return result, built
+
+
+class TestDebugStepPolicies:
+    @pytest.mark.asyncio
+    async def test_a_paused_step_reports_only_the_tokens_it_spent(self):
+        before = [SystemMessage(content="s"), HumanMessage(content="h"), _ai(100, "first")]
+        compiled = MagicMock()
+        compiled.aget_state = AsyncMock(
+            side_effect=[
+                SimpleNamespace(values={"status": "running", "messages": before}, next=("reason",)),
+                SimpleNamespace(next=("execute_tools",)),
+            ]
+        )
+        compiled.ainvoke = AsyncMock(return_value={"status": "running", "messages": [*before, _ai(40)]})
+        result, _ = await _resume_debug(compiled)
+        assert result["status"] == "paused"
+        assert result["performance"]["llm_tokens_used"] == 40
+        assert 0 < result["performance"]["llm_cost_usd"] < 0.01
+
+    @pytest.mark.asyncio
+    async def test_a_finished_step_reports_only_the_tokens_it_spent(self):
+        before = [_ai(70, "first")]
+        compiled = MagicMock()
+        compiled.aget_state = AsyncMock(
+            side_effect=[
+                SimpleNamespace(values={"status": "running", "messages": before}, next=("evaluate",)),
+                SimpleNamespace(next=()),
+            ]
+        )
+        compiled.ainvoke = AsyncMock(
+            return_value={"status": "completed", "output": {"a": 1}, "messages": [*before, _ai(5)]}
+        )
+        result, _ = await _resume_debug(compiled, mode="continue")
+        assert result["status"] == "completed" and result["performance"]["llm_tokens_used"] == 5
+
+    @pytest.mark.asyncio
+    async def test_the_runs_output_schema_and_limits_are_rebuilt_into_the_graph(self):
+        compiled = MagicMock()
+        compiled.aget_state = AsyncMock(
+            side_effect=[SimpleNamespace(values={"status": "running"}, next=("evaluate",)), SimpleNamespace(next=())]
+        )
+        compiled.ainvoke = AsyncMock(return_value={"status": "completed", "output": {}, "messages": []})
+        schema = {"type": "object", "required": ["summary"]}
+        _, built = await _resume_debug(
+            compiled,
+            output_schema="invoice_summary",
+            output_schema_json=schema,
+            limits={"max_steps": 4, "max_tool_calls": 2},
+        )
+        kwargs = built.call_args.kwargs
+        assert kwargs["output_schema"] == "invoice_summary" and kwargs["output_schema_json"] == schema
+        assert kwargs["limits"] == {"max_steps": 4, "max_tool_calls": 2}
+        assert compiled.ainvoke.call_args.kwargs["config"]["recursion_limit"] > 0
+
+    @pytest.mark.asyncio
+    async def test_a_step_is_held_to_the_runs_duration_limit(self):
+        from core.langgraph import runner
+
+        async def slow(*_args, **_kwargs):
+            await asyncio.sleep(5)
+
+        compiled = MagicMock()
+        compiled.aget_state = AsyncMock(return_value=SimpleNamespace(values={"status": "running"}, next=("reason",)))
+        compiled.ainvoke = AsyncMock(side_effect=slow)
+        with patch.object(
+            runner.execution_limits, "effective", return_value=SimpleNamespace(max_duration_seconds=0.05)
+        ):
+            result, _ = await _resume_debug(compiled, limits={"max_duration_seconds": 1})
+        assert result["status"] == "failed" and result["reason"] == "duration_limit"
+
+    @pytest.mark.asyncio
+    async def test_an_approval_reached_by_a_step_is_reported_as_hitl_not_another_pause(self):
+        before = [_ai(10, "first")]
+        compiled = MagicMock()
+        compiled.aget_state = AsyncMock(
+            side_effect=[
+                SimpleNamespace(values={"status": "running", "messages": before}, next=("hitl_gate",)),
+                SimpleNamespace(next=("hitl_gate",)),
+            ]
+        )
+        compiled.ainvoke = AsyncMock(
+            return_value={
+                "status": "running",
+                "output": {"amount": 900},
+                "messages": [*before, _ai(3)],
+                "__interrupt__": [SimpleNamespace(value={"hitl_trigger": "amount above limit"})],
+            }
+        )
+        thread = new_thread_id(TENANT)
+        result, _ = await _resume_debug(compiled, thread_id=thread)
+        assert result["status"] == "hitl_triggered" and result["hitl_trigger"] == "amount above limit"
+        assert result["thread_id"] == thread and result["paused_before"] == []
+        assert result["performance"]["llm_tokens_used"] == 3
+
+
+class _ApprovalSession:
+    def __init__(self):
+        self.added = []
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, *args):
+        return False
+
+    def add(self, row):
+        self.added.append(row)
+
+
+def _step_agent(**extra):
+    base = {
+        "id": uuid.uuid4(),
+        "config": {"region": "in"},
+        "cost_controls": {},
+        "agent_type": "ap_processor",
+        "domain": "finance",
+        "name": "Payables",
+        "status": "active",
+        "visibility": "tenant",
+        "owner_user_id": None,
+    }
+    base.update(extra)
+    return SimpleNamespace(**base)
+
+
+def _wire_step(monkeypatch, agent, spec, result):
+    from api.v1 import agent_debug
+    from core.langgraph import runner
+
+    monkeypatch.setattr(settings, "runtime_debug_console_enabled", True)
+    monkeypatch.setattr(agent_debug, "get_tenant_session", lambda *_a, **_k: _Session(agent))
+    monkeypatch.setattr(agent_debug, "require_agent_mutable", lambda *_a, **_k: None)
+    monkeypatch.setattr(agent_debug, "gate_agent_run", AsyncMock(return_value=None))
+    claim = debugger.Claim(thread_id="t", breakpoints=["evaluate"], spec=spec, system_prompt="p")
+    claimed = AsyncMock(return_value=claim)
+    monkeypatch.setattr(debugger, "claim_session", claimed)
+    finished = AsyncMock(return_value={"status": "paused"})
+    monkeypatch.setattr(debugger, "finish_session", finished)
+    released = AsyncMock()
+    monkeypatch.setattr(debugger, "release_session", released)
+    resumed = AsyncMock(return_value=result)
+    monkeypatch.setattr(runner, "resume_agent", resumed)
+    ledger = AsyncMock(return_value=True)
+    monkeypatch.setattr(agent_debug, "_record_cost_ledger", ledger)
+    return SimpleNamespace(claimed=claimed, finished=finished, released=released, resumed=resumed, ledger=ledger)
+
+
+_BASE_SPEC = {"authorized_tools": ["lookup"], "confidence_floor": 0.9, "domain": "finance", "llm_model": "m"}
+
+
+class TestDebugStepRoute:
+    @pytest.mark.asyncio
+    async def test_a_step_over_the_plan_limit_is_refused_before_the_session_is_claimed(self, monkeypatch):
+        from api.v1 import agent_debug
+
+        agent = _step_agent()
+        wired = _wire_step(monkeypatch, agent, dict(_BASE_SPEC), {"status": "paused"})
+        monkeypatch.setattr(
+            agent_debug, "gate_agent_run", AsyncMock(return_value={"status": "limit_exceeded", "error": "limit"})
+        )
+        with pytest.raises(HTTPException) as info:
+            await agent_debug.step_thread(agent.id, new_thread_id(TENANT), tenant_id=str(TENANT), caller=None)
+        assert info.value.status_code == 409 and info.value.detail["error"] == "limit_exceeded"
+        wired.claimed.assert_not_awaited()
+        wired.resumed.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_a_step_over_the_agents_monthly_budget_is_refused(self, monkeypatch):
+        from api.v1 import agent_debug
+
+        agent = _step_agent(cost_controls={"monthly_cost_cap_usd": 5})
+        wired = _wire_step(monkeypatch, agent, dict(_BASE_SPEC), {"status": "paused"})
+        budget = AsyncMock(return_value={"status": "budget_exceeded", "error": {"message": "Monthly budget exceeded"}})
+        monkeypatch.setattr(agent_debug, "_monthly_budget_refusal", budget)
+        with pytest.raises(HTTPException) as info:
+            await agent_debug.continue_thread(agent.id, new_thread_id(TENANT), tenant_id=str(TENANT), caller=None)
+        assert info.value.detail["error"] == "budget_exceeded"
+        assert budget.call_args.args[2] == {"monthly_cost_cap_usd": 5}
+        wired.claimed.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_the_steps_own_usage_joins_the_cost_ledger_without_counting_a_new_task(self, monkeypatch):
+        from api.v1 import agent_debug
+
+        agent = _step_agent()
+        perf = {"total_latency_ms": 9, "llm_tokens_used": 40, "llm_cost_usd": 0.0002}
+        wired = _wire_step(monkeypatch, agent, dict(_BASE_SPEC), {"status": "paused", "performance": perf})
+        answer = await agent_debug.step_thread(agent.id, new_thread_id(TENANT), tenant_id=str(TENANT), caller=None)
+        args, kwargs = wired.ledger.call_args
+        assert args[1] == agent.id and args[2] == perf and kwargs == {"count_task": False}
+        assert answer["usage_recorded"] is True and answer["performance"] == perf
+
+    @pytest.mark.asyncio
+    async def test_connector_credentials_are_resolved_again_from_the_connector_ids(self, monkeypatch):
+        from api.v1 import agent_debug
+
+        agent = _step_agent()
+        spec = {**_BASE_SPEC, "connector_ids": ["c-1"], "connector_names": ["books"], "company_id": None}
+        wired = _wire_step(monkeypatch, agent, spec, {"status": "paused"})
+        ownership = AsyncMock(return_value=None)
+        monkeypatch.setattr(agent_debug, "_assert_connectors_ready_for_dispatch", ownership)
+        resolved = AsyncMock(return_value=({"api_key": "synthetic-test-value"}, ["books"]))
+        monkeypatch.setattr(agent_debug, "_resolve_connector_configs", resolved)
+
+        await agent_debug.step_thread(agent.id, new_thread_id(TENANT), tenant_id=str(TENANT), caller=None)
+
+        kwargs = wired.resumed.call_args.kwargs
+        assert kwargs["connector_config"] == {"api_key": "synthetic-test-value"}
+        assert kwargs["connector_names"] == ["books"]
+        assert resolved.call_args.kwargs["connector_ids"] == ["c-1"]
+        assert resolved.call_args.kwargs["agent_level_config"] == {"region": "in"}
+        assert ownership.call_args.kwargs["linked_connector_ids"] == ["c-1"]
+        # Nothing decrypted is written back into the session's spec.
+        assert "api_key" not in str(spec)
+
+    @pytest.mark.asyncio
+    async def test_a_connector_no_longer_allowed_refuses_the_step_and_leaves_the_session_paused(self, monkeypatch):
+        from api.v1 import agent_debug
+
+        agent = _step_agent()
+        spec = {**_BASE_SPEC, "connector_ids": ["c-1"]}
+        wired = _wire_step(monkeypatch, agent, spec, {"status": "paused"})
+        monkeypatch.setattr(
+            agent_debug,
+            "_assert_connectors_ready_for_dispatch",
+            AsyncMock(side_effect=HTTPException(403, detail={"error": "connector_not_available"})),
+        )
+        with pytest.raises(HTTPException) as info:
+            await agent_debug.step_thread(agent.id, new_thread_id(TENANT), tenant_id=str(TENANT), caller=None)
+        assert info.value.status_code == 403
+        wired.released.assert_awaited_once()
+        wired.resumed.assert_not_awaited()
+        wired.finished.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_the_runs_output_schema_and_limits_reach_every_resume(self, monkeypatch):
+        from api.v1 import agent_debug
+
+        agent = _step_agent()
+        schema = {"type": "object", "required": ["summary"]}
+        spec = {
+            **_BASE_SPEC,
+            "output_schema": "invoice_summary",
+            "output_schema_json": schema,
+            "limits": {"max_steps": 4},
+        }
+        wired = _wire_step(monkeypatch, agent, spec, {"status": "paused"})
+        for advance in (agent_debug.step_thread, agent_debug.continue_thread):
+            await advance(agent.id, new_thread_id(TENANT), tenant_id=str(TENANT), caller=None)
+            kwargs = wired.resumed.call_args.kwargs
+            assert kwargs["output_schema"] == "invoice_summary" and kwargs["output_schema_json"] == schema
+            assert kwargs["limits"] == {"max_steps": 4}
+
+    @pytest.mark.asyncio
+    async def test_an_approval_reached_by_a_step_opens_the_normal_approval(self, monkeypatch):
+        from api.v1 import agent_debug
+        from core.approvals.agent_run_resume import RESUME_SPEC_KEY
+        from core.push import sender
+
+        agent = _step_agent()
+        thread = new_thread_id(TENANT)
+        result = {
+            "status": "hitl_triggered",
+            "hitl_trigger": "amount above limit",
+            "thread_id": thread,
+            "confidence": 0.95,
+            "output": {"amount": 900},
+            "performance": {"llm_tokens_used": 3, "llm_cost_usd": 0.00001},
+        }
+        spec = {**_BASE_SPEC, "connector_ids": []}
+        wired = _wire_step(monkeypatch, agent, spec, result)
+        approvals = _ApprovalSession()
+        sessions = iter([_Session(agent), approvals])
+        monkeypatch.setattr(agent_debug, "get_tenant_session", lambda *_a, **_k: next(sessions))
+        notified = AsyncMock(return_value={})
+        monkeypatch.setattr(sender, "notify_approval_created", notified)
+
+        answer = await agent_debug.step_thread(agent.id, thread, tenant_id=str(TENANT), caller=None)
+
+        (item,) = approvals.added
+        assert item.checkpoint_thread_id == thread and item.agent_id == agent.id and item.workflow_run_id is None
+        assert item.context[RESUME_SPEC_KEY]["confidence_floor"] == 0.9
+        assert item.context["trigger"] == "amount above limit" and item.trigger_type == "policy_condition"
+        assert answer["status"] == "hitl_triggered" and answer["approval_id"] == str(item.id)
+        assert notified.call_args.kwargs["item_id"] == str(item.id)
+        assert wired.finished.call_args.args[3]["status"] == "hitl_triggered"
+        assert wired.ledger.await_count == 1
+
+
+class TestDebugResumeSpec:
+    def test_the_spec_keeps_policies_and_connector_ids_never_credentials(self):
+        from api.v1.agents import _debug_resume_spec
+
+        spec = _debug_resume_spec(
+            {
+                "output_schema": "invoice_summary",
+                "config": {"output_schema_json": {"type": "object"}, "limits": {"max_steps": 3}},
+            },
+            ["c-1"],
+        )
+        assert spec["output_schema"] == "invoice_summary"
+        assert spec["connector_ids"] == ["c-1"]
+        assert set(spec) == {"output_schema", "output_schema_json", "limits", "connector_ids"}
+
+    def test_the_run_route_records_the_debug_spec(self):
+        api = (ROOT / "api" / "v1" / "agents.py").read_text(encoding="utf-8")
+        assert "**_debug_resume_spec(agent_config, raw_connector_ids)," in api
+
+    @pytest.mark.asyncio
+    async def test_a_ledger_write_for_a_step_adds_usage_but_not_a_task(self, monkeypatch):
+        from api.v1 import agents
+
+        ledger = SimpleNamespace(token_count=10, cost_usd=0.5, task_count=1)
+
+        class _LedgerSession:
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, *args):
+                return False
+
+            async def execute(self, *_args, **_kw):
+                return _Result(ledger)
+
+        monkeypatch.setattr(agents, "get_tenant_session", lambda *_a, **_k: _LedgerSession())
+        ok = await agents._record_cost_ledger(
+            TENANT, uuid.uuid4(), {"llm_tokens_used": 40, "llm_cost_usd": 0.25}, count_task=False
+        )
+        assert ok is True and ledger.token_count == 50 and ledger.cost_usd == 0.75 and ledger.task_count == 1

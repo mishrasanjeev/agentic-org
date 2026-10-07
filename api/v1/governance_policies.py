@@ -51,6 +51,8 @@ class PolicyEvaluateIn(BaseModel):
     sensitivity: str | None = Field(None, max_length=32)
     business_unit: str | None = Field(None, max_length=64)
     language: str | None = Field(None, max_length=16)
+    application: str | None = Field(None, max_length=128)
+    principal: str | None = Field(None, max_length=255)
     requested_provider: str | None = Field(None, max_length=64)
     requested_model: str = Field("", max_length=128)
     stage: str | None = Field(None, max_length=16)

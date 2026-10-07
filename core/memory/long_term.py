@@ -24,12 +24,14 @@ reads or writes memory; the API still refuses with 404.
 
 from __future__ import annotations
 
+import hashlib
 import re
 import uuid
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import structlog
+from sqlalchemy.exc import SQLAlchemyError
 
 from core.config import settings
 
@@ -47,12 +49,23 @@ MAX_REMEMBER_PER_RUN = 5
 _SUBJECT = re.compile(r"[^a-z0-9_.:@-]+")
 
 
+# What an optional memory read or write may raise without failing what it serves: database errors
+# (SQLAlchemyError covers OperationalError, ProgrammingError, IntegrityError and MultipleResultsFound),
+# connection errors and refusals of malformed input.
+SIDECAR_ERRORS: tuple[type[BaseException], ...] = (SQLAlchemyError, RuntimeError, TypeError, ValueError, OSError)
+
+
 class MemoryStoreError(ValueError):
     def __init__(self, status: int, code: str, message: str) -> None:
         super().__init__(message)
         self.status = status
         self.code = code
         self.message = message
+
+
+def content_hash(text: str) -> str:
+    """SHA-256 of the stored content: the uniqueness key with the tenant, subject and agent (or shared)."""
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()
 
 
 def enabled() -> bool:
@@ -125,8 +138,13 @@ async def remember(
     actor: uuid.UUID | None = None,
     now: datetime | None = None,
 ) -> Any:
-    """Store one memory; the same content about the same subject refreshes its expiry instead of duplicating."""
-    from sqlalchemy import select
+    """Store one memory; the same content about the same subject refreshes its expiry instead of duplicating.
+
+    One atomic ``INSERT ... ON CONFLICT DO UPDATE`` against the partial unique index for shared or agent entries
+    (``content_hash``), so concurrent writers of the same content leave one entry, never two.
+    """
+    from sqlalchemy import func
+    from sqlalchemy.dialects.postgresql import insert
 
     from core.models.agent_memory import AgentMemory
 
@@ -143,39 +161,51 @@ async def remember(
     days = retention_for(kind, retention_days)
     agent_uuid = uuid.UUID(str(agent_id)) if agent_id else None
     now = now or datetime.now(UTC)
-    existing = (
-        await session.execute(
-            select(AgentMemory).where(
-                AgentMemory.tenant_id == tenant_id,
-                AgentMemory.subject == label,
-                AgentMemory.agent_id == agent_uuid if agent_uuid else AgentMemory.agent_id.is_(None),
-                AgentMemory.content == text,
-            )
-        )
-    ).scalar_one_or_none()
-    if existing is not None:
-        existing.expires_at = now + timedelta(days=days)
-        existing.retention_days = days
-        existing.importance = max(int(existing.importance or 1), importance)
-        await session.flush()
-        return existing
-    row = AgentMemory(
+    stored_source = source if source in ("api", "run") else "api"
+    statement = insert(AgentMemory).values(
+        id=uuid.uuid4(),
         tenant_id=tenant_id,
         agent_id=agent_uuid,
         subject=label,
         kind=kind,
         content=text,
+        content_hash=content_hash(text),
         importance=importance,
-        source=source if source in ("api", "run") else "api",
+        source=stored_source,
         run_id=(str(run_id)[:64] if run_id else None),
         retention_days=days,
         created_by=actor,
         created_at=now,
         expires_at=now + timedelta(days=days),
+        recall_count=0,
     )
-    session.add(row)
+    if agent_uuid is None:
+        conflict = {
+            "index_elements": [AgentMemory.tenant_id, AgentMemory.subject, AgentMemory.content_hash],
+            "index_where": AgentMemory.agent_id.is_(None),
+        }
+    else:
+        conflict = {
+            "index_elements": [
+                AgentMemory.tenant_id,
+                AgentMemory.subject,
+                AgentMemory.agent_id,
+                AgentMemory.content_hash,
+            ],
+            "index_where": AgentMemory.agent_id.is_not(None),
+        }
+    statement = statement.on_conflict_do_update(
+        **conflict,
+        set_={
+            "expires_at": statement.excluded.expires_at,
+            "retention_days": statement.excluded.retention_days,
+            "importance": func.greatest(AgentMemory.importance, statement.excluded.importance),
+        },
+    ).returning(AgentMemory)
+    result = await session.execute(statement, execution_options={"populate_existing": True})
+    row = result.scalars().one()
     await session.flush()
-    logger.info("memory_remembered", kind=kind, retention_days=days, source=row.source)
+    logger.info("memory_remembered", kind=kind, retention_days=days, source=stored_source)
     return row
 
 
@@ -336,7 +366,7 @@ async def prune_all_tenants() -> dict[str, int]:
         try:
             async with get_tenant_session(tid) as session:
                 pruned += await prune(session, tid)
-        except (RuntimeError, TypeError, ValueError, OSError) as exc:
+        except SIDECAR_ERRORS as exc:
             failed += 1
             logger.warning("memory_prune_failed", error=type(exc).__name__)
     logger.info("memory_pruned", tenants=len(tenant_ids), pruned=pruned, failed=failed)

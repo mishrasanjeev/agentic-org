@@ -12,6 +12,7 @@ rating in its context.
 
 from __future__ import annotations
 
+import hashlib
 import re
 import uuid
 from datetime import UTC, datetime
@@ -83,24 +84,48 @@ _THUMBS = {
 }
 
 
+def _phrase_re(phrase: str) -> re.Pattern[str]:
+    """A whole-word match for ``phrase``: ``helpful`` does not match inside ``unhelpful``."""
+    return re.compile(r"(?<!\w)" + re.escape(phrase) + r"(?!\w)")
+
+
+def _longest_first(entries: dict[str, Any]) -> tuple[tuple[re.Pattern[str], Any], ...]:
+    return tuple((_phrase_re(phrase), payload) for phrase, payload in sorted(entries.items(), key=lambda e: -len(e[0])))
+
+
+_LEXICON_RES = _longest_first({**_NEGATIVE, **_POSITIVE})
+_THUMBS_RES = _longest_first({phrase: value for value, phrases in _THUMBS.items() for phrase in phrases})
+
+
+def _matches(lowered: str, patterns: tuple[tuple[re.Pattern[str], Any], ...]) -> list[tuple[int, int, Any]]:
+    """Whole-word matches, longest phrase first; a shorter phrase inside a longer match is not counted again."""
+    taken: list[tuple[int, int]] = []
+    found: list[tuple[int, int, Any]] = []
+    for pattern, payload in patterns:
+        for match in pattern.finditer(lowered):
+            start, end = match.span()
+            if any(start < other_end and other_start < end for other_start, other_end in taken):
+                continue
+            taken.append((start, end))
+            found.append((start, end, payload))
+    return found
+
+
+def _negated(lowered: str, start: int) -> bool:
+    return bool(_NEGATION_RE.search(lowered[max(0, start - 24) : start]))
+
+
 def sentiment(text: str) -> dict[str, Any]:
     """The score (-1 to 1) and label of a user turn, from the lexicon with light negation."""
-    lowered = f" {text.lower()} "
+    lowered = text.lower()
     score = 0.0
     hits = 0
-    for lexicon, sign in ((_NEGATIVE, 1.0), (_POSITIVE, 1.0)):
-        for phrase, weight in lexicon.items():
-            index = lowered.find(f" {phrase}")
-            if index < 0 and not lowered.find(phrase) >= 0:
-                continue
-            if index < 0:
-                index = lowered.find(phrase)
-            before = lowered[max(0, index - 24) : index + 1]
-            value = weight * sign
-            if _NEGATION_RE.search(before):
-                value = -value * 0.6
-            score += value
-            hits += 1
+    for start, _end, weight in _matches(lowered, _LEXICON_RES):
+        value = float(weight)
+        if _negated(lowered, start):
+            value = -value * 0.6
+        score += value
+        hits += 1
     if hits == 0:
         return {"score": 0.0, "label": "neutral"}
     score = max(-1.0, min(1.0, score / max(1, hits) * (1 + 0.15 * (hits - 1))))
@@ -117,9 +142,16 @@ def rating_from_text(text: str) -> int | None:
     if len(lowered) > 40:
         return None
     for value, phrases in _THUMBS.items():
-        if any(phrase == lowered or phrase in lowered for phrase in phrases):
+        if lowered in phrases:
             return value
-    return None
+    found = _matches(lowered, _THUMBS_RES)
+    if not found:
+        return None
+    start, _end, value = max(found, key=lambda hit: (hit[1] - hit[0], -hit[0]))
+    if _negated(lowered, start):
+        # "not very good" is a poor rating; "not bad" or "not terrible" is a middling one.
+        return 2 if value >= 3 else 3
+    return int(value)
 
 
 def latest_label(scores: list[dict[str, Any]] | None) -> str | None:
@@ -127,6 +159,12 @@ def latest_label(scores: list[dict[str, Any]] | None) -> str | None:
         return None
     last = scores[-1]
     return str(last.get("label")) if isinstance(last, dict) else None
+
+
+def rating_event_id(session_key: str, rating: int, comment: str = "") -> str:
+    """The stable event key of one rating on one session: a retried request stores one feedback row, not two."""
+    digest = hashlib.sha256(f"{session_key}\x00{int(rating)}\x00{comment}".encode()).hexdigest()
+    return f"{SOURCE}:rating:{digest}"
 
 
 async def record_rating(
@@ -157,13 +195,14 @@ async def record_rating(
     from core.feedback.collector import submit_feedback
 
     try:
-        await submit_feedback(
+        result = await submit_feedback(
             agent_id=str(agent_id),
             run_id=session_key[:200],
             feedback_type="thumbs_up" if rating >= 3 else "thumbs_down",
             text=comment[:500],
             tenant_id=str(tenant_id),
             source=SOURCE,
+            source_event_id=rating_event_id(session_key, int(rating), comment[:500]),
             actor_id=str(user_id)[:255],
             context={
                 "rating": int(rating),
@@ -173,7 +212,10 @@ async def record_rating(
                 "sentiment": sentiment_label,
             },
         )
-        record["stored_with_agent"] = True
+        status = result.get("status") if isinstance(result, dict) else None
+        record["stored_with_agent"] = status == "stored"
+        if status != "stored":
+            logger.warning("conversation_feedback_not_stored", status=str(status))
     except (RuntimeError, OSError, ValueError, TypeError) as exc:
         logger.warning("conversation_feedback_store_failed", error_type=type(exc).__name__)
     return record
