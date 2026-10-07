@@ -294,7 +294,12 @@ async def import_document(tenant_id: uuid.UUID, document_id: uuid.UUID) -> dict[
         for key in totals:
             totals[key] += int(answer[key])
         accounts.update(answer["accounts"])
-    return {**totals, "accounts": sorted(accounts), "document_id": str(document_id), "statements": len(statements_found)}
+    return {
+        **totals,
+        "accounts": sorted(accounts),
+        "document_id": str(document_id),
+        "statements": len(statements_found),
+    }
 
 
 def window_start(days: int) -> datetime:

@@ -47,5 +47,8 @@ again never raises the same one twice (`core/txn/findings.py`, `txn_findings`). 
 open until a person dispositions it through `POST /txn/findings/{id}/disposition`: dismissed with a
 reason, confirmed, or escalated with the reference of the governed case opened for it; the detectors
 file and close nothing. `GET /txn/findings` lists by status, kind or entity;
-`GET /txn/findings/{id}` returns the finding with the rows that support it. The transaction routes
+`GET /txn/findings/{id}` returns the finding with the rows that support it. A disposition is a
+person's decision: an API key or an agent token holding the write scope is refused. A derived record
+reference carries the source and the row, so two identical lines of one statement are two
+movements, and an import books every row in batches. The transaction routes
 map onto enforced RBAC scopes: a read needs `audit:read`, a write `approvals:write`.

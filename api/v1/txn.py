@@ -300,7 +300,9 @@ async def disposition(
     caller = caller_from_request(request)
     if caller.is_machine or not _user_id(request):
         # A disposition is a person's decision: an API key or an agent token holding the scope does not take it.
-        raise HTTPException(403, detail={"error": "human_required", "message": "A finding is dispositioned by a signed-in person"})
+        raise HTTPException(
+            403, detail={"error": "human_required", "message": "A finding is dispositioned by a signed-in person"}
+        )
     try:
         return await findings.disposition(
             uuid.UUID(tenant_id),

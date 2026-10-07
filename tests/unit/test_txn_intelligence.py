@@ -150,6 +150,26 @@ class TestRecords:
             records.records_from_statement({"fields": [], "tables": []}, source="x")
         assert info.value.code == "account_unknown"
 
+    def test_identical_statement_lines_are_distinct_movements(self):
+        header = ["Date", "Description", "Debit", "Credit", "Balance"]
+        row = ["01-09-2026", "CASH DEP", "", "500", "1,500"]
+        document = {
+            "index": 0,
+            "document_type": "bank_statement",
+            "fields": [{"name": "account_number", "value": "X1"}],
+            "tables": [{"header": header, "rows": [row, row]}],
+        }
+        refs = [
+            records.check_record(r)["record_ref"]
+            for r in records.records_from_statement(document, source="statement:d1")
+        ]
+        assert len(refs) == 2 and len(set(refs)) == 2  # the row number tells two identical lines apart
+        same = {"account": "A", "direction": "credit", "amount": 1, "booked_at": "2026-09-01", "description": "x"}
+        assert records.check_record(same)["record_ref"] == records.check_record(dict(same))["record_ref"]
+        assert (
+            records.check_record(same)["record_ref"] != records.check_record(dict(same, source="other"))["record_ref"]
+        )
+
 
 class TestDetectors:
     def test_structuring_needs_several_cash_deposits_under_the_threshold_within_the_window(self):
@@ -432,6 +452,43 @@ class TestStore:
             await records.import_document(TENANT, document_id)
         assert info.value.status == 404
 
+    @pytest.mark.asyncio
+    async def test_a_long_statement_is_imported_in_batches(self, monkeypatch):
+        from core.idp import store
+
+        header = ["Date", "Description", "Debit", "Credit", "Balance"]
+        rows = [["01-09-2026", f"CASH DEP {i}", "", "500", "1,500"] for i in range(1200)]
+        document = {
+            "documents": [
+                {
+                    "index": 0,
+                    "document_type": "bank_statement",
+                    "fields": [{"name": "account_number", "value": "X1"}],
+                    "tables": [{"header": header, "rows": rows}],
+                }
+            ]
+        }
+        monkeypatch.setattr(store, "get_document", AsyncMock(return_value=document))
+        monkeypatch.setattr(
+            records,
+            "ingest",
+            AsyncMock(
+                side_effect=lambda tenant, batch, **kw: {
+                    "received": len(batch),
+                    "kept": len(batch),
+                    "skipped": 0,
+                    "accounts": ["X1"],
+                }
+            ),
+        )
+        out = await records.import_document(TENANT, uuid.uuid4())
+        assert (
+            out["received"] == 1200
+            and out["kept"] == 1200
+            and out["accounts"] == ["X1"]
+            and records.ingest.call_count == 3
+        )
+
 
 class TestRoutes:
     @pytest.mark.asyncio
@@ -520,3 +577,24 @@ class TestRoutes:
         assert SCOPE_FAMILIES["txn"] == ("audit:read", "approvals:write")
         assert required_scopes_for("txn.findings.sensitive.write", "POST") == ("approvals:write",)
         assert required_scopes_for("txn.records.sensitive.read", "GET") == ("audit:read",)
+
+    @pytest.mark.asyncio
+    async def test_a_machine_caller_may_not_disposition(self, monkeypatch):
+        from api.v1 import txn as api
+
+        monkeypatch.setattr(settings, "transaction_intelligence_enabled", True)
+        monkeypatch.setattr(findings, "disposition", AsyncMock(return_value={"id": "f", "status": "confirmed"}))
+        machine = SimpleNamespace(
+            state=SimpleNamespace(claims={"sub": "apikey:k1"}, auth_mode="api_key", scopes=["approvals:write"])
+        )
+        with pytest.raises(HTTPException) as info:
+            await api.disposition(uuid.uuid4(), api.DispositionIn(outcome="confirm"), machine, tenant_id=str(TENANT))
+        assert info.value.status_code == 403 and info.value.detail["error"] == "human_required"
+        assert findings.disposition.call_count == 0
+        person = SimpleNamespace(
+            state=SimpleNamespace(
+                claims={"agenticorg:user_id": str(uuid.uuid4()), "sub": "u1"}, auth_mode="session", scopes=[]
+            )
+        )
+        out = await api.disposition(uuid.uuid4(), api.DispositionIn(outcome="confirm"), person, tenant_id=str(TENANT))
+        assert out["status"] == "confirmed"
