@@ -4,6 +4,22 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
 
 ## [Unreleased] - 2026-08-29
 
+### Added - Provenance and lineage: the provenance model
+- `core/lineage/provenance.py`: a node for every kept thing (a source, a
+  document, a chunk, an embedding, a transaction record, a transcript, a
+  finding, a draft, a model use) under its kind, reference and version,
+  with its origin and when it was observed; a step between two nodes
+  naming what was done, by which tool, with which parameters. Knowledge
+  ingestion notes its chain (source, document, chunks, embeddings) after
+  the rows are committed and never fails on it; transaction ingestion
+  notes each kept record as acquired from its source.
+- `POST /lineage` notes a chain an acquisition produced; `GET
+  /lineage/nodes/{kind}/{ref}` describes one thing (versions, sources, the
+  processing history back to them); `GET /lineage/trace/{kind}/{ref}` walks
+  the graph upstream, downstream or both, bounded. Behind `lineage_enabled`
+  (default off). Migration `v6z75` adds `lineage_nodes` and `lineage_steps`
+  under forced row-level security. Docs: `docs/lineage/provenance.md`.
+
 ### Added - Transaction intelligence: narrative drafting and evidence export
 - `POST /txn/findings/{id}/narrative` drafts a suspicious-transaction
   narrative from a finding, its rows and its entity view (through the

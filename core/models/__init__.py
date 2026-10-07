@@ -101,6 +101,8 @@ from core.models.invoice import Invoice as Invoice
 from core.models.kpi_cache import KPICache as KPICache
 from core.models.lead_pipeline import EmailSequence as EmailSequence
 from core.models.lead_pipeline import LeadPipeline as LeadPipeline
+from core.models.lineage import LineageNode as LineageNode
+from core.models.lineage import LineageStep as LineageStep
 from core.models.model_access_policy import ModelAccessPolicy as ModelAccessPolicy
 from core.models.model_card import ModelCard as ModelCard
 from core.models.model_gateway_record import ModelGatewayRecord as ModelGatewayRecord

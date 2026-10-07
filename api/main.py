@@ -72,6 +72,7 @@ from api.v1 import (
     invoices,
     knowledge,
     kpis,
+    lineage,
     mcp,
     memory,
     model_gateway,
@@ -333,6 +334,7 @@ app.include_router(workbench_search.router, prefix="/api/v1")
 app.include_router(speech.router, prefix="/api/v1")
 app.include_router(speech_assist.router, prefix="/api/v1")
 app.include_router(txn.router, prefix="/api/v1")
+app.include_router(lineage.router, prefix="/api/v1")
 app.include_router(companies.router, prefix="/api/v1", tags=["Companies"])
 app.include_router(ca_operations.router, prefix="/api/v1", tags=["CA Operations"])
 app.include_router(

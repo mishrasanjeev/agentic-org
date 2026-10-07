@@ -189,13 +189,20 @@ async def ingest(tenant_id: uuid.UUID, raw_records: list[Any], *, source: str | 
         )
         kept = 0
         seen: set[str] = set()
+        kept_items: list[dict[str, Any]] = []
         for item in checked:
             if item["record_ref"] in existing or item["record_ref"] in seen:
                 continue
             seen.add(item["record_ref"])
             session.add(TxnRecord(tenant_id=tenant_id, **item))
+            kept_items.append(item)
             kept += 1
         await session.flush()
+    if kept_items:
+        # Provenance (core/lineage): each kept record acquired from its source; never fails the ingestion.
+        from core.lineage import provenance
+
+        await provenance.on_records(tenant_id, source=(source or "api")[:64], records=kept_items)
     logger.info("txn_records_ingested", kept=kept, skipped=len(checked) - kept)
     return {
         "received": len(checked),

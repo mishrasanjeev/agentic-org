@@ -396,6 +396,11 @@ class Settings(BaseSettings):
     # disposition. Off by default: off, GET /txn/status answers
     # ``enabled: false`` and every other transaction route is not found.
     transaction_intelligence_enabled: bool = False
+    # Provenance and lineage (core/lineage/): every kept thing traced to its
+    # source, version and processing steps; ingestion notes its chain. Off by
+    # default: off, GET /lineage/status answers ``enabled: false``, every other
+    # lineage route is not found and ingestion notes nothing.
+    lineage_enabled: bool = False
     # JSON object keyed provider/model with input and output USD per million
     # tokens; a negotiated rate replaces the list price.
     model_price_overrides_json: str = ""

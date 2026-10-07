@@ -151,6 +151,9 @@ SCOPE_FAMILIES: dict[str, tuple[str, str]] = {
     # same shape as speech, a read for the audit scope, a write (records in,
     # detectors run, a disposition) for the approvals write scope.
     "txn": ("audit:read", "approvals:write"),
+    # Lineage (core/lineage/): reading provenance is an audit read; noting a
+    # chain an acquisition produced is a write of record.
+    "lineage": ("audit:read", "approvals:write"),
     # A2A tasks and MCP calls run any agent type for machine callers (FINDINGS
     # A-68). No role holds these scopes: API keys and agent grants are given
     # them. Enforced only while AGENTICORG_ROUTE_SCOPE_A2A_MCP is on

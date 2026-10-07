@@ -7056,6 +7056,78 @@
     "tenant_required": true
   },
   {
+    "audit_event": "lineage.record",
+    "auth_required": true,
+    "function": "record_chain",
+    "idempotency": "idempotent-by-node-key-and-edge",
+    "key": "POST /api/v1/lineage api/v1/lineage.py:record_chain",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/lineage.py",
+    "path": "/api/v1/lineage",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "lineage.write",
+    "source_line": 79,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "lineage.describe",
+    "auth_required": true,
+    "function": "describe",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/lineage/nodes/{kind}/{ref:path} api/v1/lineage.py:describe",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/lineage.py",
+    "path": "/api/v1/lineage/nodes/{kind}/{ref:path}",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "lineage.read",
+    "source_line": 98,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "lineage.status",
+    "auth_required": true,
+    "function": "status",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/lineage/status api/v1/lineage.py:status",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/lineage.py",
+    "path": "/api/v1/lineage/status",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "lineage.read",
+    "source_line": 55,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "lineage.trace",
+    "auth_required": true,
+    "function": "trace",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/lineage/trace/{kind}/{ref:path} api/v1/lineage.py:trace",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/lineage.py",
+    "path": "/api/v1/lineage/trace/{kind}/{ref:path}",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "lineage.read",
+    "source_line": 122,
+    "tenant_required": true
+  },
+  {
     "audit_event": "mcp.call",
     "auth_required": true,
     "function": "call_tool",
