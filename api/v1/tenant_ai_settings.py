@@ -74,6 +74,7 @@ class TenantAISettingOut(BaseModel):
     embedding_dimensions: int | None = None
     chunk_size: int | None = None
     chunk_overlap: int | None = None
+    chunk_strategy: str | None = None
     ai_fallback_policy: str = "allow"
     updated_by: str | None = None
     created_at: str | None = None
@@ -91,7 +92,17 @@ class TenantAISettingUpdate(BaseModel):
     embedding_dimensions: int | None = Field(None, ge=1, le=8192)
     chunk_size: int | None = Field(None, ge=32, le=8192)
     chunk_overlap: int | None = Field(None, ge=0, le=1024)
+    chunk_strategy: str | None = None
     ai_fallback_policy: str | None = None
+
+    @field_validator("chunk_strategy")
+    @classmethod
+    def _validate_chunk_strategy(cls, v: str | None) -> str | None:
+        if v is None:
+            return None
+        from core.rag.chunking import validate_strategy
+
+        return validate_strategy(v)
 
     @field_validator("llm_routing_policy")
     @classmethod
@@ -137,6 +148,7 @@ def _to_out(row: TenantAISetting | None, tenant_id: str) -> TenantAISettingOut:
         embedding_model=row.embedding_model,
         embedding_dimensions=row.embedding_dimensions,
         chunk_size=row.chunk_size,
+        chunk_strategy=getattr(row, "chunk_strategy", None),
         chunk_overlap=row.chunk_overlap,
         ai_fallback_policy=row.ai_fallback_policy,
         updated_by=str(row.updated_by) if row.updated_by else None,
@@ -318,6 +330,7 @@ async def put_setting(
             "embedding_dimensions",
             "chunk_size",
             "chunk_overlap",
+            "chunk_strategy",
             "ai_fallback_policy",
         ):
             incoming = getattr(body, field)
