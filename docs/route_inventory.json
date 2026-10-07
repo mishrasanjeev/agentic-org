@@ -5018,7 +5018,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "governance.policies.sensitive.read",
-    "source_line": 88,
+    "source_line": 90,
     "tenant_required": true
   },
   {
@@ -5036,7 +5036,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "governance.policies.sensitive.write",
-    "source_line": 119,
+    "source_line": 121,
     "tenant_required": true
   },
   {
@@ -5054,7 +5054,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "governance.policies.sensitive.read",
-    "source_line": 187,
+    "source_line": 189,
     "tenant_required": true
   },
   {
@@ -5072,7 +5072,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "governance.policies.sensitive.write",
-    "source_line": 154,
+    "source_line": 156,
     "tenant_required": true
   },
   {

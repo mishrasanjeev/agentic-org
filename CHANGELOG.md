@@ -11,6 +11,9 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
   shape, writes and removes one through its own store's writer, and dry-runs
   a described call, text, tool or workflow across the enforcement points
   (`core/governance/policy_console.py`, `/governance/policies`).
+- The console lists disabled policies too, checks approval steps as the
+  approval policies API does, and its dry run resolves approvals, model
+  access by application and principal, and tool actions as runtime does.
 
 ### Added - AI governance: regulatory risk tiers
 - With `AGENTICORG_GOVERNANCE_RISK_TIERS_ENABLED` on (off by default), an
