@@ -1763,6 +1763,11 @@ async def create_agent(
         await prompt_activation.check_new_agent_status(_uuid.UUID(tenant_id), initial_status)
     except prompt_activation.ActivationError as exc:
         raise _activation_refused(exc) from None
+    # Registry: a new agent has no approved entry, so it cannot start in production.
+    try:
+        registry_approval.check_new_agent_status(initial_status)
+    except registry_approval.ApprovalError as exc:
+        raise _approval_refused(exc) from None
 
     # Auto-populate authorized tools based on agent type / domain when none provided.
     # When the caller supplied ``connector_ids`` but no explicit
@@ -2769,9 +2774,7 @@ async def replace_agent(
             and prompt_output_schema.enabled()
             and (body.output_schema or None) != (agent.output_schema or None)
         ):
-            raise HTTPException(
-                409, "The output schema is locked on active agents. Clone this agent to make changes."
-            )
+            raise HTTPException(409, "The output schema is locked on active agents. Clone this agent to make changes.")
 
         # Core fields
         agent.name = body.name
@@ -3040,11 +3043,11 @@ async def update_agent(
         if "prompt_variables" in update_data:
             agent.prompt_variables = update_data["prompt_variables"]
         if "authorized_tools" in update_data or (
-            "connector_ids" in update_data
-            and any(tool.startswith("mcp_") for tool in (agent.authorized_tools or []))
+            "connector_ids" in update_data and any(tool.startswith("mcp_") for tool in (agent.authorized_tools or []))
         ):
             invalid = await _validate_selected_tools(
-                update_data.get("authorized_tools", agent.authorized_tools or []), tenant_id,
+                update_data.get("authorized_tools", agent.authorized_tools or []),
+                tenant_id,
                 update_data.get("connector_ids", agent.connector_ids or []) or [],
             )
             if invalid:
@@ -3342,51 +3345,43 @@ async def run_agent(
             raise HTTPException(404, "Agent not found")
         # Bug sheet 2026-09-14 rows 19/22: domain RBAC + personal ownership.
         require_agent_visible(agent_row, effective_caller)
-        # Traffic split: a share of the runs asked of this agent are served by another active agent.
+        # The agent asked for answers for itself first: a paused, retired, halted or
+        # under-floor agent is refused before any run of it is redirected elsewhere.
+        await _refuse_unrunnable_agent(agent_row, tenant_id)
+        # Traffic split: a share of the runs asked of this agent are served by another active
+        # agent. One draw decides the run; a target that would itself be refused is skipped.
         requested_agent_id = agent_id
         served_by_split: str | None = None
         split = agent_traffic.declared(agent_row) if agent_traffic.enabled() else None
         if split is not None:
             split_cid = str(payload.get("thread_id") or payload.get("correlation_id") or "") or None
+            split_draw = agent_traffic.bucket(split_cid)
             target_row = None
-            if agent_traffic.chooses_target(split, split_cid):
+            if agent_traffic.chooses_target(split, draw=split_draw):
                 target_row = (
                     await session.execute(
-                        select(Agent).where(
-                            Agent.id == _uuid.UUID(split["to_agent_id"]), Agent.tenant_id == tid
-                        )
+                        select(Agent).where(Agent.id == _uuid.UUID(split["to_agent_id"]), Agent.tenant_id == tid)
                     )
                 ).scalar_one_or_none()
                 if target_row is not None and not can_view_agent(target_row, effective_caller):
                     target_row = None
-            chosen, served_by_split = agent_traffic.choose(agent_row, split_cid, lambda _id: target_row)
+                if target_row is not None:
+                    try:
+                        await _refuse_unrunnable_agent(target_row, tenant_id)
+                    except HTTPException as exc:
+                        logger.warning(
+                            "agent_traffic_split_target_skipped",
+                            agent_id=str(agent_row.id),
+                            reason="target_refused",
+                            status_code=exc.status_code,
+                        )
+                        target_row = None
+            chosen, served_by_split = agent_traffic.choose(
+                agent_row, split_cid, lambda _id: target_row, draw=split_draw
+            )
             if chosen is not agent_row:
                 agent_row = chosen
                 agent_id = chosen.id
-        status_refusal = agent_status_refusal(agent_row.status)
-        if status_refusal is not None:
-            raise HTTPException(409, status_refusal)
-        if _active_agent_below_production_floor(agent_row):
-            raise HTTPException(
-                409,
-                (
-                    "Active agent is below the production shadow-accuracy "
-                    f"floor ({agent_row.shadow_accuracy_current} < "
-                    f"{_effective_shadow_accuracy_floor(agent_row)}). "
-                    "Rollback to shadow and retest before running live work."
-                ),
-            )
-
-        override = await check_operator_override(tenant_id, agent_id=str(agent_id))
-        if override.blocked:
-            raise HTTPException(
-                423,
-                detail={
-                    "error": "operator_override",
-                    "message": override.reason,
-                    "override": override.override.to_dict() if override.override else None,
-                },
-            )
 
         agent_config = _agent_to_dict(agent_row)
         review_learning = agent_config["review_learning"]
@@ -4121,6 +4116,33 @@ async def run_agent(
     return response
 
 
+async def _refuse_unrunnable_agent(agent_row: Agent, tenant_id: str) -> None:
+    """The lifecycle and emergency controls a run is held to: status, production floor, operator override."""
+    status_refusal = agent_status_refusal(agent_row.status)
+    if status_refusal is not None:
+        raise HTTPException(409, status_refusal)
+    if _active_agent_below_production_floor(agent_row):
+        raise HTTPException(
+            409,
+            (
+                "Active agent is below the production shadow-accuracy "
+                f"floor ({agent_row.shadow_accuracy_current} < "
+                f"{_effective_shadow_accuracy_floor(agent_row)}). "
+                "Rollback to shadow and retest before running live work."
+            ),
+        )
+    override = await check_operator_override(tenant_id, agent_id=str(agent_row.id))
+    if override.blocked:
+        raise HTTPException(
+            423,
+            detail={
+                "error": "operator_override",
+                "message": override.reason,
+                "override": override.override.to_dict() if override.override else None,
+            },
+        )
+
+
 # ── POST /agents/{id}/pause ──────────────────────────────────────────────────
 # Bug sheet 2026-09-14 rows 19/22: owner-or-admin (require_agent_mutable).
 @router.post(
@@ -4324,9 +4346,7 @@ async def set_agent_output_schema(
             raise HTTPException(404, "Agent not found")
         require_agent_mutable(agent, _effective_caller(caller, user_domains))
         if agent.status == "active":
-            raise HTTPException(
-                409, "The output schema is locked on active agents. Clone this agent to make changes."
-            )
+            raise HTTPException(409, "The output schema is locked on active agents. Clone this agent to make changes.")
         config = dict(agent.config or {})
         if schema is None:
             config.pop(prompt_output_schema.INLINE_KEY, None)
@@ -4976,6 +4996,11 @@ async def clone_agent(
             await prompt_activation.check_new_agent_status(tid, body.initial_status or "shadow")
         except prompt_activation.ActivationError as exc:
             raise _activation_refused(exc) from None
+        # Registry: a clone has no approved entry either.
+        try:
+            registry_approval.check_new_agent_status(body.initial_status or "shadow")
+        except registry_approval.ApprovalError as exc:
+            raise _approval_refused(exc) from None
         # Admins keep the source's visibility/owner; a non-admin (who can only
         # mutate their own personal agent) always gets a personal clone they own.
         if effective_caller.is_admin:
