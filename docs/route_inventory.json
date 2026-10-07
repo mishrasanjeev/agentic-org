@@ -4874,7 +4874,43 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "finops.sensitive.read",
-    "source_line": 42,
+    "source_line": 43,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "finops.comparison.read",
+    "auth_required": true,
+    "function": "cost_comparison",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/finops/comparison api/v1/finops.py:cost_comparison",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/finops.py",
+    "path": "/api/v1/finops/comparison",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "finops.sensitive.read",
+    "source_line": 291,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "finops.forecast.read",
+    "auth_required": true,
+    "function": "cost_forecast",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/finops/forecast api/v1/finops.py:cost_forecast",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/finops.py",
+    "path": "/api/v1/finops/forecast",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "finops.sensitive.read",
+    "source_line": 260,
     "tenant_required": true
   },
   {
@@ -4892,7 +4928,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "finops.sensitive.read",
-    "source_line": 130,
+    "source_line": 131,
     "tenant_required": true
   },
   {
@@ -4910,7 +4946,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "finops.sensitive.write",
-    "source_line": 156,
+    "source_line": 157,
     "tenant_required": true
   },
   {
@@ -4928,7 +4964,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "finops.sensitive.write",
-    "source_line": 220,
+    "source_line": 221,
     "tenant_required": true
   },
   {
@@ -4946,7 +4982,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "finops.sensitive.write",
-    "source_line": 188,
+    "source_line": 189,
     "tenant_required": true
   },
   {

@@ -333,6 +333,10 @@ class Settings(BaseSettings):
     # suspends runs through the agents API. Off by default: off, no run is
     # checked, delayed or refused.
     finops_thresholds_enabled: bool = False
+    # FinOps forecast and comparison (core/finops/forecast.py): a projection
+    # per use case from the attributed ledger and a model cost comparison from
+    # the call records. Off by default: off, the endpoints are not found.
+    finops_forecast_enabled: bool = False
     # JSON object keyed provider/model with input and output USD per million
     # tokens; a negotiated rate replaces the list price.
     model_price_overrides_json: str = ""

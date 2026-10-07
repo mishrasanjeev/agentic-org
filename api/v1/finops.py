@@ -4,7 +4,8 @@
 from __future__ import annotations
 
 import uuid
-from typing import Any
+from datetime import date
+from typing import Annotated, Any
 
 import structlog
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -14,7 +15,7 @@ from api.deps import get_current_tenant, get_current_user, require_tenant_admin
 from api.route_metadata import route_meta
 from api.v1.agents import _user_uuid_from_claims
 from core.database import get_tenant_session
-from core.finops import attribution, thresholds
+from core.finops import attribution, forecast, thresholds
 
 logger = structlog.get_logger()
 router = APIRouter()
@@ -232,3 +233,71 @@ async def delete_threshold(
         await session.flush()
     logger.info("finops_threshold_deleted", threshold_id=str(threshold_id), by=str(_user_uuid_from_claims(user)))
     return None
+
+
+# ── Forecast and comparison ───────────────────────────────────────────────────
+
+
+def _forecast_off() -> HTTPException:
+    return HTTPException(
+        404,
+        detail={
+            "error": "finops_forecast_disabled",
+            "message": "Cost forecasting is off for this deployment (AGENTICORG_FINOPS_FORECAST_ENABLED).",
+        },
+    )
+
+
+@router.get("/finops/forecast", dependencies=[require_tenant_admin])
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="finops.sensitive.read",
+    rate_limit="standard",
+    idempotency="read-only",
+    audit_event="finops.forecast.read",
+)
+async def cost_forecast(
+    days: int = Query(forecast.DEFAULT_HISTORY_DAYS, ge=1, le=forecast.MAX_HISTORY_DAYS),
+    horizon_days: int = Query(forecast.DEFAULT_HORIZON_DAYS, ge=1, le=forecast.MAX_HORIZON_DAYS),
+    group_by: str = Query("use_case", max_length=32),
+    growth_monthly_pct: float | None = Query(None, ge=-100, le=forecast.MAX_GROWTH_PCT),
+    tenant_id: str = Depends(get_current_tenant),
+) -> dict[str, Any]:
+    """Projected tokens and cost per use case (or any dimension) for the horizon, from history and growth."""
+    if not forecast.enabled():
+        raise _forecast_off()
+    if group_by not in attribution.DIMENSIONS:
+        raise HTTPException(
+            422,
+            detail={"error": "unknown_dimension", "message": f"group_by is one of {', '.join(attribution.DIMENSIONS)}"},
+        )
+    tid = uuid.UUID(tenant_id)
+    async with get_tenant_session(tid) as session:
+        return await forecast.forecast(
+            session, tid, days=days, horizon_days=horizon_days, group_by=group_by, growth_monthly_pct=growth_monthly_pct
+        )
+
+
+@router.get("/finops/comparison", dependencies=[require_tenant_admin])
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="finops.sensitive.read",
+    rate_limit="standard",
+    idempotency="read-only",
+    audit_event="finops.comparison.read",
+)
+async def cost_comparison(
+    days: int = Query(30, ge=1, le=forecast.MAX_HISTORY_DAYS),
+    changed_at: Annotated[
+        date | None, Query(description="a deployment date: daily cost per model before and after it")
+    ] = None,
+    tenant_id: str = Depends(get_current_tenant),
+) -> dict[str, Any]:
+    """Per use case, the model mix and its cost over the window, the cheapest alternatives, and a before-and-after."""
+    if not forecast.enabled():
+        raise _forecast_off()
+    tid = uuid.UUID(tenant_id)
+    async with get_tenant_session(tid) as session:
+        return await forecast.comparison(session, tid, days=days, changed_at=changed_at)

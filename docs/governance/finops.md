@@ -47,5 +47,22 @@ and the strongest breached action wins.
 A breach is recorded on the threshold (period, time, spend) and the owner notified once per period
 through the threshold's channels: `email` to the tenant's earliest active administrator, `log`. A
 notification that fails never touches the run. `GET /finops/thresholds` shows every threshold with
-its spend, share and breach state. Off, no run is checked, delayed or refused. Cost comparison and
-forecasting are the last part of this package.
+its spend, share and breach state. Off, no run is checked, delayed or refused.
+
+## Cost comparison and forecasting
+
+With `AGENTICORG_FINOPS_FORECAST_ENABLED` on (`core/finops/forecast.py`):
+
+- `GET /finops/forecast?days=90&horizon_days=90&group_by=use_case&growth_monthly_pct=` projects
+  tokens and cost per use case (or any attribution dimension) for the next horizon, a quarter by
+  default: the attributed ledger's daily history over the window, fitted with a linear trend and
+  carried forward, compounded monthly by the growth assumption, never below zero, with a band from
+  the day-to-day scatter of the history and the flat baseline beside it. Missing days count as zero
+  spend. The answer carries the assumptions it was made under.
+- `GET /finops/comparison?days=30&changed_at=` folds the completed model calls over the window per
+  use case: the model mix with each model's share of cost, and what the same tokens would cost at
+  every priced catalogue model (list or negotiated price), cheapest first, with the saving. With a
+  change date, the daily cost and calls per model before and after it say what a deployment did.
+
+Both are read on request and store nothing; the figures are tokens and USD by label. Off, the
+endpoints are not found.
