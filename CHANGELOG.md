@@ -4,6 +4,20 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
 
 ## [Unreleased] - 2026-08-29
 
+### Added - Speech intelligence: agent assist and disclosure tracking
+- A catalogue of disclosure scripts (recorded line, identity verified,
+  rate and fees, cooling-off, how to complain, consent, collections
+  conduct) with the phrases that count, the call types each applies to
+  and deadlines; the business console names the ones a tenant requires.
+  `GET /speech/recordings/{id}/disclosures` checks a kept transcript.
+  Live agent assist (`POST /speech/live/sessions`, `.../turns`,
+  `.../close`): every turn comes back with the checklist, the mood, the
+  intent, the next question, the knowledge that answers the customer and
+  the flags this turn raised, a disclosure overdue the moment its
+  deadline passes unsaid among them; closing gives the compliance report
+  (`core/speech/disclosures.py`, `core/speech/assist.py`,
+  `speech_live_sessions`). The Calls page drives a live session.
+
 ### Added - Speech intelligence: call summaries and analytics
 - `POST /speech/recordings/{id}/summary` summarises a transcribed call
   into intent, key points, next actions, outcome and customer mood,

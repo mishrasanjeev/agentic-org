@@ -2,6 +2,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Helmet } from "react-helmet-async";
 import api, { extractApiError } from "@/lib/api";
+import LiveAssist from "@/components/LiveAssist";
 
 /**
  * Calls: the kept recordings with who spoke when, the transcript as turns, the summary (intent, key
@@ -140,6 +141,7 @@ export default function Calls() {
           {notice}
         </div>
       )}
+      <LiveAssist />
       <div className="grid gap-4 lg:grid-cols-12">
         <ul className="divide-y divide-slate-200 rounded-md border border-slate-200 lg:col-span-4" data-testid="calls-list" aria-label="Recordings">
           {rows.length === 0 && <li className="px-3 py-2 text-sm text-slate-500">No recordings yet.</li>}

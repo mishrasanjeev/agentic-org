@@ -87,6 +87,12 @@ def _draft_kinds() -> tuple[str, ...]:
     return tuple(KINDS)
 
 
+def _disclosure_keys() -> tuple[str, ...]:
+    from core.speech.disclosures import CATALOGUE
+
+    return tuple(item.key for item in CATALOGUE)
+
+
 def _amount_intents() -> tuple[str, ...]:
     from core.conversation.intents import CATALOGUE
 
@@ -102,6 +108,7 @@ GROUPS: tuple[tuple[str, str], ...] = (
     ("content", "Content services"),
     ("conversations", "Conversations"),
     ("queue", "Review queue"),
+    ("speech", "Speech"),
 )
 
 
@@ -193,6 +200,16 @@ def catalogue() -> tuple[Setting, ...]:
             "rules",
             [],
             "core/workbench/queue.py list_items",
+        ),
+        Setting(
+            "speech.required_disclosures",
+            "Disclosures required on calls",
+            "The scripts an agent must say; each applies to the call types it names.",
+            "speech",
+            "list",
+            ["recorded_line", "identity_verification"],
+            "core/speech/disclosures.py required_for",
+            options=_disclosure_keys(),
         ),
     )
 

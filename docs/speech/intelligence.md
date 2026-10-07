@@ -59,6 +59,28 @@ negative turns, a mood that fell). Roles come from `channel_roles` or recognisab
 else the first speaker is the agent. The figures hold no words and are kept in clear;
 `GET /speech/analytics` averages them over the latest summarised recordings.
 
+## Disclosure scripts
+
+`core/speech/disclosures.py` fixes the scripts a bank requires on calls: the recorded line (within
+60 s), identity verification (within 120 s), rate and fees, the cooling-off period, how to complain,
+consent to proceed, collections conduct; each with the phrases that count as having said it and the
+call types it applies to. The business console's `speech.required_disclosures` says which this
+tenant requires. `GET /speech/recordings/{id}/disclosures?call_type=` checks a kept transcript:
+each required disclosure said where, late, or missing.
+
+## Live agent assist
+
+`POST /speech/live/sessions` opens a call (`call_ref`, `call_type`) with the checklist its type
+requires; each turn posted to `POST /speech/live/sessions/{id}/turns` (speaker, text, seconds
+from the start) comes back with what the agent should see now: the checklist with each item said,
+pending or late, the customer's mood on the last turn and the negative streak, the banking intent
+recognised, the next question the intent still needs, the knowledge articles that answer the
+customer's turn (the tenant's knowledge search; nothing when it cannot answer), and the flags raised
+by this turn: a disclosure overdue the moment its deadline passes unsaid, two negative turns in a
+row, a request for a person or a complaint. `POST .../close` gives the compliance report. The
+turns are kept encrypted like a transcript; the flags and the report hold no words
+(`core/speech/assist.py`, `speech_live_sessions`).
+
 ## Storage
 
 `speech_recordings` keeps the audio, the segments and speakers in clear (they hold no words), and

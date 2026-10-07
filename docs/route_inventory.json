@@ -9338,7 +9338,115 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "speech.recordings.sensitive.read",
-    "source_line": 253,
+    "source_line": 259,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "speech.disclosures.list",
+    "auth_required": true,
+    "function": "list_disclosures",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/speech/disclosures api/v1/speech_assist.py:list_disclosures",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/speech_assist.py",
+    "path": "/api/v1/speech/disclosures",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "speech.read",
+    "source_line": 79,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "speech.live.list",
+    "auth_required": true,
+    "function": "list_sessions",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/speech/live/sessions api/v1/speech_assist.py:list_sessions",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/speech_assist.py",
+    "path": "/api/v1/speech/live/sessions",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "speech.live.sensitive.read",
+    "source_line": 203,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "speech.live.start",
+    "auth_required": true,
+    "function": "start_session",
+    "idempotency": "not-idempotent-create",
+    "key": "POST /api/v1/speech/live/sessions api/v1/speech_assist.py:start_session",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/speech_assist.py",
+    "path": "/api/v1/speech/live/sessions",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "speech.live.sensitive.write",
+    "source_line": 134,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "speech.live.read",
+    "auth_required": true,
+    "function": "get_session",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/speech/live/sessions/{session_id} api/v1/speech_assist.py:get_session",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/speech_assist.py",
+    "path": "/api/v1/speech/live/sessions/{session_id}",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "speech.live.sensitive.read",
+    "source_line": 226,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "speech.live.close",
+    "auth_required": true,
+    "function": "close_session",
+    "idempotency": "idempotent-lifecycle-state",
+    "key": "POST /api/v1/speech/live/sessions/{session_id}/close api/v1/speech_assist.py:close_session",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/speech_assist.py",
+    "path": "/api/v1/speech/live/sessions/{session_id}/close",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "speech.live.sensitive.write",
+    "source_line": 184,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "speech.live.turn",
+    "auth_required": true,
+    "function": "post_turn",
+    "idempotency": "not-idempotent-appends-a-turn",
+    "key": "POST /api/v1/speech/live/sessions/{session_id}/turns api/v1/speech_assist.py:post_turn",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/speech_assist.py",
+    "path": "/api/v1/speech/live/sessions/{session_id}/turns",
+    "public_exempt_reason": null,
+    "rate_limit": "chat-query",
+    "scope": "speech.live.sensitive.write",
+    "source_line": 161,
     "tenant_required": true
   },
   {
@@ -9356,7 +9464,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "speech.recordings.sensitive.read",
-    "source_line": 125,
+    "source_line": 131,
     "tenant_required": true
   },
   {
@@ -9392,7 +9500,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "speech.recordings.sensitive.read",
-    "source_line": 148,
+    "source_line": 154,
     "tenant_required": true
   },
   {
@@ -9410,7 +9518,25 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "speech.recordings.sensitive.read",
-    "source_line": 167,
+    "source_line": 173,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "speech.recordings.disclosures",
+    "auth_required": true,
+    "function": "recording_disclosures",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/speech/recordings/{recording_id}/disclosures api/v1/speech_assist.py:recording_disclosures",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/speech_assist.py",
+    "path": "/api/v1/speech/recordings/{recording_id}/disclosures",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "speech.recordings.sensitive.read",
+    "source_line": 98,
     "tenant_required": true
   },
   {
@@ -9428,7 +9554,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "speech.recordings.sensitive.read",
-    "source_line": 234,
+    "source_line": 240,
     "tenant_required": true
   },
   {
@@ -9446,7 +9572,7 @@
     "public_exempt_reason": null,
     "rate_limit": "chat-query",
     "scope": "speech.recordings.sensitive.write",
-    "source_line": 208,
+    "source_line": 214,
     "tenant_required": true
   },
   {
@@ -9464,7 +9590,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "speech.recordings.sensitive.write",
-    "source_line": 187,
+    "source_line": 193,
     "tenant_required": true
   },
   {

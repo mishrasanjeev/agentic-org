@@ -127,6 +127,7 @@ from core.models.report_schedule import ReportSchedule as ReportSchedule
 from core.models.rpa_schedule import RPASchedule as RPASchedule
 from core.models.run_span import RunSpan as RunSpan
 from core.models.schema_registry import SchemaRegistry as SchemaRegistry
+from core.models.speech_live_session import SpeechLiveSession as SpeechLiveSession
 from core.models.speech_recording import SpeechRecording as SpeechRecording
 from core.models.sso_config import SSOConfig as SSOConfig
 from core.models.synthetic_check import SyntheticCheck as SyntheticCheck
