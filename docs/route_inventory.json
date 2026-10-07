@@ -6480,6 +6480,60 @@
     "tenant_required": false
   },
   {
+    "audit_event": "idp.analyse",
+    "auth_required": true,
+    "function": "analyse",
+    "idempotency": "idempotent-pure",
+    "key": "POST /api/v1/idp/analyse api/v1/idp.py:analyse",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/idp.py",
+    "path": "/api/v1/idp/analyse",
+    "public_exempt_reason": null,
+    "rate_limit": "chat-query",
+    "scope": "documents.analyse.sensitive.write",
+    "source_line": 67,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "idp.classify_text",
+    "auth_required": true,
+    "function": "classify_text",
+    "idempotency": "idempotent-pure",
+    "key": "POST /api/v1/idp/classify-text api/v1/idp.py:classify_text",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/idp.py",
+    "path": "/api/v1/idp/classify-text",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "documents.read",
+    "source_line": 93,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "idp.document_types.list",
+    "auth_required": true,
+    "function": "document_types",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/idp/document-types api/v1/idp.py:document_types",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/idp.py",
+    "path": "/api/v1/idp/document-types",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "documents.read",
+    "source_line": 39,
+    "tenant_required": true
+  },
+  {
     "audit_event": "integrations.status.read",
     "auth_required": true,
     "function": "integrations_status",

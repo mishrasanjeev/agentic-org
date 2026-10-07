@@ -4,6 +4,18 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
 
 ## [Unreleased] - 2026-08-29
 
+### Added - Document processing: classification and extraction
+- With `AGENTICORG_IDP_ENABLED` on (off by default), `POST /idp/analyse`
+  reads a PDF or image into pages of words with bounding boxes (text layer
+  or OCR, saying when OCR is unavailable), types each page against a
+  synthetic catalogue of banking documents by weighted rules, splits a
+  bundle into one document per segment, extracts each type's fields with
+  a page, a box and a per-field confidence (plus generic label-value
+  lines), extracts tables from the layout engine or aligned columns, and
+  routes a document to review when its type is unknown or weak, a
+  required field is missing or weak, or a page could not be read
+  (`core/idp/`, `GET /idp/document-types`, `POST /idp/classify-text`).
+
 ### Added - Content services: document translation across Indian languages
 - `POST /content/translate` and `/content/translate/batch`
   (`core/content/translation.py`): a translation into Hindi, Marathi,
