@@ -39,6 +39,8 @@ def upgrade() -> None:
             next_run_at TIMESTAMPTZ NULL,
             last_run_at TIMESTAMPTZ NULL,
             last_status VARCHAR(16) NOT NULL DEFAULT '',
+            lease_owner VARCHAR(64) NOT NULL DEFAULT '',
+            lease_until TIMESTAMPTZ NULL,
             created_by VARCHAR(128) NULL,
             created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
             updated_at TIMESTAMPTZ NOT NULL DEFAULT now()

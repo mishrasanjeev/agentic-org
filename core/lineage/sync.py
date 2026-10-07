@@ -49,6 +49,7 @@ MAX_ERRORS = 20
 MAX_RUNS = 100
 FETCH_TIMEOUT_S = 30.0
 MAX_CONFIG = 4000
+LEASE_MINUTES = 60  # how long a claimed run holds its source if it never finishes
 
 
 class SyncError(Exception):
@@ -93,7 +94,9 @@ async def fetch_feed(source: dict[str, Any], cursor: str | None, *, token: str |
     headers = {"Accept": "application/json"}
     if token:
         headers["Authorization"] = f"Bearer {token}"
-    params = {"since": cursor} if cursor else {}
+    params: dict[str, Any] = {"limit": MAX_ITEMS}
+    if cursor:
+        params["since"] = cursor
     try:
         async with httpx.AsyncClient(timeout=FETCH_TIMEOUT_S, transport=_transport(), follow_redirects=False) as client:
             response = await client.get(checked.url, headers=headers, params=params)
@@ -226,7 +229,8 @@ async def process_item(tenant_id: uuid.UUID, source: dict[str, Any], item: dict[
                         "kind": "document",
                         "ref": item["ref"],
                         "source": item["ref"],
-                        "version": provenance.version_of(item["stream"]),
+                        # The version the skip check reads (the feed's own, or the content hash).
+                        "version": item["version"],
                         "observed_at": item.get("modified_at"),
                     },
                 ],
@@ -242,6 +246,22 @@ async def process_item(tenant_id: uuid.UUID, source: dict[str, Any], item: dict[
             await records.ingest(tenant_id, [item["record"]], source=source["name"][:64])
         except TxnError as exc:
             raise SyncError(exc.status, exc.code, exc.message) from None
+        if provenance.enabled():
+            # The record under the version the skip check reads, acquired from this feed.
+            await provenance.record_chain(
+                tenant_id,
+                [
+                    {"kind": "source", "ref": source["url"], "source": source["url"]},
+                    {
+                        "kind": "record",
+                        "ref": item["ref"],
+                        "source": source["name"][:64],
+                        "version": item["version"],
+                        "observed_at": item.get("modified_at"),
+                    },
+                ],
+                [{"from": 0, "to": 1, "step": "acquire", "tool": "core.lineage.sync", "details": {"run": run_id}}],
+            )
 
 
 # ---------------------------------------------------------------- sources
@@ -262,6 +282,7 @@ def _source_dict(row: Any) -> dict[str, Any]:
         "next_run_at": row.next_run_at.isoformat() if row.next_run_at else None,
         "last_run_at": row.last_run_at.isoformat() if row.last_run_at else None,
         "last_status": row.last_status or None,
+        "running": bool(row.lease_owner) and row.lease_until is not None and row.lease_until > _now(),
         "created_at": row.created_at.isoformat() if row.created_at else None,
     }
 
@@ -382,14 +403,16 @@ async def list_sources(tenant_id: uuid.UUID) -> list[dict[str, Any]]:
     return sorted((_source_dict(row) for row in rows), key=lambda s: s["name"])
 
 
-async def _source_row(session: Any, tenant_id: uuid.UUID, source_id: uuid.UUID, *, lock: bool = False) -> Any:
+async def _source_row(
+    session: Any, tenant_id: uuid.UUID, source_id: uuid.UUID, *, lock: bool = False, wait: bool = False
+) -> Any:
     from core.models.lineage_sync import LineageSyncSource
 
     statement = select(LineageSyncSource).where(
         LineageSyncSource.tenant_id == tenant_id, LineageSyncSource.id == source_id
     )
     if lock:
-        statement = statement.with_for_update(skip_locked=True)
+        statement = statement.with_for_update() if wait else statement.with_for_update(skip_locked=True)
     rows = (await session.execute(statement)).scalars().all()
     if not rows:
         raise SyncError(404, "source_unknown", "no such source")
@@ -454,13 +477,21 @@ async def list_runs(tenant_id: uuid.UUID, source_id: uuid.UUID, *, limit: int = 
 # ---------------------------------------------------------------- runs
 
 
-async def claim_due(tenant_id: uuid.UUID, *, limit: int = 50) -> list[uuid.UUID]:
-    """The enabled sources of a tenant whose time has come, each claimed under its lock and moved to its next slot."""
+def _leased(row: Any, now: datetime) -> bool:
+    return bool(row.lease_owner) and row.lease_until is not None and row.lease_until > now
+
+
+async def claim_due(tenant_id: uuid.UUID, *, limit: int = 50) -> list[tuple[uuid.UUID, str]]:
+    """The due sources of a tenant no run holds, each leased to this claim and moved to its next slot.
+
+    The lease is held from the claim until the run finishes (or runs out), so another sweeper never
+    claims a source while a run of it is still going.
+    """
     from core.database import get_tenant_session
     from core.models.lineage_sync import LineageSyncSource
 
     now = _now()
-    claimed: list[uuid.UUID] = []
+    claimed: list[tuple[uuid.UUID, str]] = []
     async with get_tenant_session(tenant_id) as session:
         rows = (
             (
@@ -470,6 +501,7 @@ async def claim_due(tenant_id: uuid.UUID, *, limit: int = 50) -> list[uuid.UUID]
                         LineageSyncSource.tenant_id == tenant_id,
                         LineageSyncSource.enabled.is_(True),
                         (LineageSyncSource.next_run_at.is_(None)) | (LineageSyncSource.next_run_at <= now),
+                        (LineageSyncSource.lease_until.is_(None)) | (LineageSyncSource.lease_until < now),
                     )
                     .limit(limit)
                     .with_for_update(skip_locked=True)
@@ -479,21 +511,40 @@ async def claim_due(tenant_id: uuid.UUID, *, limit: int = 50) -> list[uuid.UUID]
             .all()
         )
         for row in rows:
+            lease = uuid.uuid4().hex
             row.next_run_at = now + timedelta(minutes=int(row.interval_minutes or 60))
-            claimed.append(row.id)
+            row.lease_owner = lease
+            row.lease_until = now + timedelta(minutes=LEASE_MINUTES)
+            claimed.append((row.id, lease))
         await session.flush()
     return claimed
 
 
-async def run_source(tenant_id: uuid.UUID, source_id: uuid.UUID, *, trigger: str = "manual") -> dict[str, Any]:
-    """One run: fetch since the cursor, skip the unchanged, ingest the rest, record what happened."""
+async def run_source(
+    tenant_id: uuid.UUID, source_id: uuid.UUID, *, trigger: str = "manual", lease: str | None = None
+) -> dict[str, Any]:
+    """One run: fetch since the cursor, skip the unchanged, ingest the rest, record what happened.
+
+    A scheduled run carries the lease its claim took and is skipped if that lease is gone; a manual run
+    takes its own lease and is refused while another run holds the source.
+    """
     from core.database import get_tenant_session
     from core.models.lineage_sync import LineageSyncRun
 
     if not enabled():
         raise SyncError(404, "lineage_disabled", "lineage is off")
     async with get_tenant_session(tenant_id) as session:
-        row = await _source_row(session, tenant_id, source_id)
+        row = await _source_row(session, tenant_id, source_id, lock=True, wait=True)
+        now = _now()
+        if lease is not None:
+            if row.lease_owner != lease or not _leased(row, now):
+                return {"source_id": str(source_id), "status": "skipped", "reason": "lease_lost"}
+        else:
+            if _leased(row, now):
+                raise SyncError(409, "run_in_progress", "a run of this source is in progress")
+            lease = uuid.uuid4().hex
+            row.lease_owner = lease
+        row.lease_until = now + timedelta(minutes=LEASE_MINUTES)
         source = _source_dict(row)
         token = decrypt_for_tenant(row.token) if row.token else None
         run = LineageSyncRun(
@@ -546,7 +597,12 @@ async def run_source(tenant_id: uuid.UUID, source_id: uuid.UUID, *, trigger: str
                 failed += 1
                 if len(errors) < MAX_ERRORS:
                     errors.append(f"{item['ref'][:120]}: {exc.code}: {exc.message}"[:300])
-        if failed == 0:
+        if fetched.get("more"):
+            # The feed answered more than it was asked for: the cursor stays, so nothing past the cut is lost.
+            status = "partial"
+            if len(errors) < MAX_ERRORS:
+                errors.append(f"feed_truncated: the feed answered more than {MAX_ITEMS} items; the cursor was kept")
+        elif failed == 0:
             # The cursor moves only when every item went through, so a failed item is offered again.
             cursor_after = fetched.get("cursor") or latest or source["cursor"]
             status = "completed"
@@ -582,6 +638,9 @@ async def run_source(tenant_id: uuid.UUID, source_id: uuid.UUID, *, trigger: str
         row.cursor = cursor_after or ""
         row.last_run_at = run.finished_at
         row.last_status = status
+        if row.lease_owner == lease:
+            row.lease_owner = ""
+            row.lease_until = None
         if trigger == "manual" or row.next_run_at is None:
             row.next_run_at = run.finished_at + timedelta(minutes=int(row.interval_minutes or 60))
         await session.flush()
@@ -601,8 +660,8 @@ async def run_source(tenant_id: uuid.UUID, source_id: uuid.UUID, *, trigger: str
 async def run_due(tenant_id: uuid.UUID, *, limit: int = 50) -> list[dict[str, Any]]:
     """Every due source of the tenant, run in turn."""
     out = []
-    for source_id in await claim_due(tenant_id, limit=limit):
-        out.append(await run_source(tenant_id, source_id, trigger="schedule"))
+    for source_id, lease in await claim_due(tenant_id, limit=limit):
+        out.append(await run_source(tenant_id, source_id, trigger="schedule", lease=lease))
     return out
 
 
@@ -633,6 +692,6 @@ async def sweep(*, limit_per_tenant: int = 50) -> dict[str, Any]:
         if outcomes:
             tenants += 1
             runs += len(outcomes)
-            failed += sum(1 for o in outcomes if o["status"] == "failed")
+            failed += sum(1 for o in outcomes if o.get("status") == "failed")
     logger.info("lineage_sync_sweep", tenants=tenants, runs=runs, failed=failed)
     return {"tenants": tenants, "runs": runs, "failed": failed}

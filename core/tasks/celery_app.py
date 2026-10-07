@@ -50,6 +50,7 @@ app = Celery(
         "core.tasks.gateway_tasks",
         "core.tasks.health_snapshot",
         "core.tasks.invoice_tasks",
+        "core.tasks.lineage_tasks",
         "core.tasks.memory_tasks",
         "core.tasks.report_tasks",
         "core.tasks.rpa_tasks",

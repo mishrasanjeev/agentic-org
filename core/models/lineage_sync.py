@@ -37,6 +37,9 @@ class LineageSyncSource(BaseModel):
     next_run_at: Mapped[datetime | None] = mapped_column(TIMESTAMP(timezone=True), nullable=True)
     last_run_at: Mapped[datetime | None] = mapped_column(TIMESTAMP(timezone=True), nullable=True)
     last_status: Mapped[str] = mapped_column(String(16), nullable=False, default="")
+    # A run holds the source from its claim to its finish; a lease that ran out frees it for the next claim.
+    lease_owner: Mapped[str] = mapped_column(String(64), nullable=False, default="")
+    lease_until: Mapped[datetime | None] = mapped_column(TIMESTAMP(timezone=True), nullable=True)
     created_by: Mapped[str | None] = mapped_column(String(128), nullable=True)
     created_at: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), server_default=func.now(), nullable=False)
     updated_at: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), server_default=func.now(), nullable=False)

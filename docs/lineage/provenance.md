@@ -55,7 +55,7 @@ Telemetry carries counts only.
 A **sync source** (`core/lineage/sync.py`, tables `lineage_sync_sources` and `lineage_sync_runs`,
 migration `v6z76`) names a feed the tenant administrator set up: a public HTTPS endpoint
 (validated for egress, DNS pinned) that answers `{"items": [...], "cursor": "..."}` for
-`GET <url>?since=<cursor>`, with an optional bearer token kept encrypted for the tenant and never
+`GET <url>?since=<cursor>&limit=500` (a feed returns at most `limit` items and the cursor after the last), with an optional bearer token kept encrypted for the tenant and never
 returned. Each item carries a stable `ref`, a `kind` (`document` with `title`, `mime_type` and
 `text` or `content_base64`; or `record` with the transaction `record`), a `version` (or one is
 taken from the content) and `modified_at`.
@@ -66,12 +66,15 @@ rest (documents through knowledge ingestion, records through the transaction sto
 note their lineage), links each document to the feed it was acquired from with an `acquire` step
 that carries the source's `basis` and `licence` when its config names them, and records what it
 received, processed, skipped and failed with the first errors. The cursor advances only when
-nothing failed, so a failed item is offered again; the run is `completed`, `partial` or `failed`.
+nothing failed, so a failed item is offered again, and stays put when a feed answers more than it was asked
+for; the skip check reads the version the feed gave (or the content hash), which the run keeps in
+provenance. The run is `completed`, `partial` or `failed`.
 
 `GET/POST /lineage/sync/sources`, `PATCH/DELETE /lineage/sync/sources/{id}` (the cursor can be
 reset), `GET /lineage/sync/sources/{id}/runs`. The **schedule**: each source has an interval
 (five minutes to a week); a sweep claims the due sources of a tenant under a row lock and runs
-them in turn, so two sweepers never run the same source. The sweep runs from Celery beat every
+them in turn; the claim takes a lease the run holds until it finishes (an hour at most if it never
+does), so two sweepers never run the same source and a manual run is refused while one is going. The sweep runs from Celery beat every
 five minutes (`core/tasks/lineage_tasks.py`) and is a no-op unless `lineage_sync_sweep_enabled`
 is on as well. Another way of listing
 changed items (a connector) registers a fetcher under its own source kind.
