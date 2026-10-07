@@ -8,6 +8,7 @@ import importlib
 import os
 import uuid
 from contextlib import asynccontextmanager
+from datetime import UTC, datetime, timedelta
 
 import pytest
 from alembic.migration import MigrationContext
@@ -155,6 +156,60 @@ async def test_registry_first_card_write_is_serialized_and_tenant_isolated(regis
         await engine.dispose()
 
 
+@pytest.mark.asyncio
+async def test_catalogue_filters_and_visibility_precede_limit(registry_db, monkeypatch):
+    schema, role = registry_db
+    engine = create_async_engine(DB_URL, poolclass=NullPool, connect_args={"server_settings": {"search_path": schema}})
+    factory = async_sessionmaker(engine, expire_on_commit=False)
+    tid, other_tid = uuid.uuid4(), uuid.uuid4()
+    caller = Caller(uuid.uuid4(), "developer", ["finance"], False, False)
+    monkeypatch.setattr(settings, "agent_registry_enabled", True)
+    monkeypatch.setattr(lifecycle, "MAX_LISTED", 1)
+
+    @asynccontextmanager
+    async def session_for(tenant_id):
+        async with factory.begin() as session:
+            await session.execute(text(f"SET LOCAL ROLE {role}"))
+            await session.execute(
+                text("SELECT set_config('agenticorg.tenant_id', :tid, true)"), {"tid": str(tenant_id)}
+            )
+            yield session
+
+    monkeypatch.setattr(api, "get_tenant_session", session_for)
+    try:
+        async with factory.begin() as session:
+            for index, (tenant, name, domain, visibility) in enumerate(
+                [
+                    (tid, "Needle 10%_ approved", "finance", "tenant"),
+                    (tid, "Unrelated", "ops", "tenant"),
+                    (tid, "Needle 10%_ private", "finance", "personal"),
+                    (other_tid, "Needle 10%_ other tenant", "finance", "tenant"),
+                ]
+            ):
+                agent = Agent(
+                    id=uuid.uuid4(),
+                    tenant_id=tenant,
+                    name=name,
+                    agent_type="custom",
+                    domain=domain,
+                    visibility=visibility,
+                    system_prompt_ref="synthetic/v1",
+                    hitl_condition="confidence < 0.8",
+                )
+                session.add(agent)
+                await session.flush()
+                entry = lifecycle.new_entry(tenant, agent.id)
+                entry.updated_at = datetime.now(UTC) + timedelta(seconds=index)
+                session.add(entry)
+        for filters in ({"domain": "finance"}, {"q": "NEEDLE 10%_"}, {}):
+            result = await api.list_agent_registry(tenant_id=str(tid), user_domains=None, caller=caller, **filters)
+            assert [row["name"] for row in result["entries"]] == ["Needle 10%_ approved"]
+        result = await api.list_agent_registry(q="missing%_", tenant_id=str(tid), user_domains=None, caller=caller)
+        assert result["entries"] == []
+    finally:
+        await engine.dispose()
+
+
 @pytest.mark.parametrize("historical_state", ["review", "legacy_invalid"])
 def test_forward_source_state_migration_preserves_history_and_rejects_new_invalid_rows(historical_state):
     schema = f"registry_upgrade_{uuid.uuid4().hex}"
@@ -170,9 +225,7 @@ def test_forward_source_state_migration_preserves_history_and_rejects_new_invali
             with Operations.context(MigrationContext.configure(conn)):
                 source_state_migration.upgrade()
                 source_state_migration.upgrade()
-            assert (
-                conn.execute(text("SELECT from_state FROM agent_registry_events")).scalar_one() == historical_state
-            )
+            assert conn.execute(text("SELECT from_state FROM agent_registry_events")).scalar_one() == historical_state
             validated = conn.execute(
                 text(
                     "SELECT convalidated FROM pg_constraint "

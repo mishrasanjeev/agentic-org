@@ -4,6 +4,22 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
 
 ## [Unreleased] - 2026-08-29
 
+### Added - Agent registry: catalogue, templates and banking pack
+
+- Catalogue search now filters visibility and search terms before its result
+  limit, ignores superseded responses, clears failed results and supports keyboard
+  navigation. Banking workflows use the installer's supported manual format;
+  installation does not enable schedules or approve agents.
+- `GET /agent-registry` filters by state, risk tier, use case, channel,
+  domain and a search term over the card text; the console page Agent
+  catalogue shows it. `GET /agent-registry/templates` lists the agent
+  templates the industry packs offer in the card's terms. A banking pack
+  (`core/agents/packs/banking`) adds five installable templates for retail
+  and SME banking operations (loan underwriting analyst, KYC reviewer,
+  collections agent, complaint handler, bank reconciliation analyst), each
+  with a review condition, a confidence floor of at least 85% and tools the
+  platform has.
+
 ### Added - Agent registry: approval workflow, environments and traffic split
 - With `AGENTICORG_AGENT_REGISTRY_GATES_PROMOTION` on (off by default),
   promotion and resume to active need an approved or published registry

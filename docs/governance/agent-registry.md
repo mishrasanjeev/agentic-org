@@ -2,8 +2,9 @@
 
 Each agent has a card and a place in a governance lifecycle, kept apart from its runtime status;
 with the approval workflow on, production follows the lifecycle, and a traffic split can send a
-share of an agent's runs to another. The catalogue with templates, the dependency graph and the
-reliability metrics are not here yet (see the end of this page).
+share of an agent's runs to another. The catalogue lists every agent by what it is for, and the
+industry packs offer templates. The dependency graph and the reliability metrics are not here yet
+(see the end of this page).
 
 Behind `AGENTICORG_AGENT_REGISTRY_ENABLED`, off by default. Off, the endpoints answer 409 and
 nothing is written, and the runtime is not affected by the registry.
@@ -111,6 +112,45 @@ Use explicit `{"split": null}` to remove a split; an empty or misspelled request
 The split applies to runs through the agents API only; chat, voice, workflows and A2A pick their
 agent as before. It splits between two agents, not between two stored versions of one agent.
 
+## Catalogue and templates
+
+`GET /agent-registry` is the catalogue: the registry entries the caller may see, each with the
+agent's name, type, domain and runtime status beside its card fields, state and environment.
+Filters: `state`, `risk_tier`, `use_case`, `channel` (stored on the entry), `domain` (on the
+agent) and `q`, a search term matched against the name, type, description, purpose and use
+case. The console page **Agent catalogue** (`/dashboard/agent-catalogue`) shows the table with
+those filters and opens an agent's page from its keyboard-accessible name link.
+Visibility and search filters apply before the 500-result limit. Search treats
+percent signs and underscores literally. Superseded requests cannot overwrite
+the current search, and a failed request clears the previous results.
+
+`GET /agent-registry/templates?pack=` lists the agent templates the industry packs offer, in the
+card's terms: pack, type, domain, model, tools, review condition, confidence floor and the pack's
+compliance markers, with whether the pack can be installed. Installing a pack (Industry Packs)
+creates its agents in shadow mode. A card must first be saved through
+`PUT /agents/{agent_id}/card` for its registry entry to appear in the catalogue
+as a draft; installing a pack alone does not create registry entries or approvals.
+
+**Banking pack.** Five templates for retail and SME banking operations, each with a review
+condition and a confidence floor of at least 85%, using only tools the platform has:
+
+| Template | Domain | What it does | Goes to a human when |
+|---|---|---|---|
+| Loan underwriting analyst | finance | credit assessment against the credit policy in the knowledge base | any approval recommendation, exposure above the limit, any policy exception |
+| KYC reviewer | ops | document checks against the KYC checklist with a risk rating | any outcome other than a clear, low-risk file |
+| Collections agent | finance | reminders under the fair practices code with a payment link | over 60 days past due, above the amount limit, hardship indicated |
+| Complaint handler | ops | classification, acknowledgement within the redressal timelines, a draft resolution | fraud, unauthorised transactions, regulatory, an escalation request |
+| Bank reconciliation analyst | finance | statement-to-ledger matching with proposed adjustments | any unmatched item or variance |
+
+Every prompt is synthetic, names its tools, returns one JSON object and leaves the decision to a
+human. The pack is a starting point: a bank's own policies come from its knowledge base, and the
+thresholds are for an authorized administrator to review and configure. Compliance
+markers are template topics, not evidence of certification or regulatory approval.
+The collections-review and bank-reconciliation workflows install with manual
+triggers. Their names describe a potential daily process, not an enabled schedule.
+Installation does not run tools, provision credentials, approve an agent, or create
+a payment. Existing connector, runtime, shadow-mode and human-review controls apply.
+
 ## Storage
 
 `agent_registry` (one row per agent) and `agent_registry_events`, both tenant-scoped under
@@ -129,6 +169,6 @@ Downgrading v6z49 removes only this check; it does not remove events or registry
   name where an agent stands in the lifecycle, not separate infrastructure.
 - **A split is between two agents.** Splitting traffic between two stored versions of one agent
   is not available; clone the agent to compare versions.
-- **No catalogue page, templates, dependency graph or ratings.** The list endpoint is the
-  catalogue's data only.
-- **No console.** The card, the lifecycle and the split are read and changed through the API.
+- **No dependency graph or ratings.**
+- **The card, the lifecycle and the split are read and changed through the API**; the console
+  has the catalogue only.

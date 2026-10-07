@@ -44,6 +44,7 @@
     "modelGateway": "Model Gateway",
     "guardrails": "Guardrails",
     "packs": "Industry Packs",
+    "agentCatalogue": "Agent Catalogue",
     "sla": "SLA Monitor",
     "billing": "Billing",
     "settings": "Settings"

@@ -468,6 +468,24 @@
     "tenant_required": true
   },
   {
+    "audit_event": "agents.registry.templates",
+    "auth_required": true,
+    "function": "list_agent_templates",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/agent-registry/templates api/v1/agent_registry.py:list_agent_templates",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/agent_registry.py",
+    "path": "/api/v1/agent-registry/templates",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "agents.read",
+    "source_line": 260,
+    "tenant_required": true
+  },
+  {
     "audit_event": "agent_teams.list",
     "auth_required": true,
     "function": "list_teams",

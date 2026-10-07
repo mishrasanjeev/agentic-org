@@ -34,13 +34,15 @@ from datetime import UTC, datetime
 from typing import Any
 
 import structlog
-from sqlalchemy import select
+from sqlalchemy import func, select
 
 from core.config import settings
 from core.evals import gates as eval_gates
 from core.evals import runs as eval_runs
 from core.governance.guardrails.schema import RISK_TIERS
+from core.models.agent import Agent
 from core.models.agent_registry import AgentRegistryEntry, AgentRegistryEvent
+from core.ownership import Caller, agent_visibility_clause
 
 logger = structlog.get_logger()
 
@@ -232,15 +234,97 @@ async def events(session: Any, tenant_id: uuid.UUID, agent_id: uuid.UUID) -> lis
 
 
 async def list_entries(
-    session: Any, tenant_id: uuid.UUID, *, state: str | None = None, risk_tier: str | None = None
+    session: Any,
+    tenant_id: uuid.UUID,
+    *,
+    state: str | None = None,
+    risk_tier: str | None = None,
+    use_case: str | None = None,
+    channel: str | None = None,
+    domain: str | None = None,
+    q: str | None = None,
+    caller: Caller | None = None,
 ) -> list[AgentRegistryEntry]:
-    statement = select(AgentRegistryEntry).where(AgentRegistryEntry.tenant_id == tenant_id)
+    statement = (
+        select(AgentRegistryEntry)
+        .join(Agent, (Agent.id == AgentRegistryEntry.agent_id) & (Agent.tenant_id == AgentRegistryEntry.tenant_id))
+        .where(AgentRegistryEntry.tenant_id == tenant_id, Agent.tenant_id == tenant_id)
+    )
+    # Filtering after LIMIT hides valid matches behind invisible or unrelated rows.
+    if caller is not None:
+        statement = statement.where(agent_visibility_clause(Agent, caller))
+    if domain:
+        statement = statement.where(Agent.domain == domain)
+    if q and q.strip():
+        searchable = func.concat(
+            func.coalesce(Agent.name, ""),
+            " ",
+            func.coalesce(Agent.agent_type, ""),
+            " ",
+            func.coalesce(Agent.description, ""),
+            " ",
+            func.coalesce(AgentRegistryEntry.purpose, ""),
+            " ",
+            func.coalesce(AgentRegistryEntry.use_case, ""),
+        )
+        statement = statement.where(func.lower(searchable).contains(q.strip().lower(), autoescape=True))
     if state:
         statement = statement.where(AgentRegistryEntry.state == state)
     if risk_tier:
         statement = statement.where(AgentRegistryEntry.risk_tier == risk_tier)
+    if use_case:
+        statement = statement.where(AgentRegistryEntry.use_case == use_case)
+    if channel:
+        statement = statement.where(AgentRegistryEntry.channels.contains([channel]))
     statement = statement.order_by(AgentRegistryEntry.updated_at.desc()).limit(MAX_LISTED)
     return list((await session.execute(statement)).scalars().all())
+
+
+def matches_search(agent: Any, entry: AgentRegistryEntry, q: str | None) -> bool:
+    """Whether a catalogue search term appears in the agent's name, type, description, purpose or use case."""
+    if not q:
+        return True
+    needle = q.strip().lower()
+    if not needle:
+        return True
+    haystack = " ".join(
+        str(part or "")
+        for part in (
+            getattr(agent, "name", None),
+            getattr(agent, "agent_type", None),
+            getattr(agent, "description", None),
+            entry.purpose,
+            entry.use_case,
+        )
+    ).lower()
+    return needle in haystack
+
+
+def templates() -> list[dict[str, Any]]:
+    """The agent templates the industry packs offer, in the card's terms; nothing tenant-specific."""
+    from core.agents.packs.installer import list_packs
+
+    rows: list[dict[str, Any]] = []
+    for pack in list_packs():
+        for agent in pack.get("agents") or []:
+            rows.append(
+                {
+                    "pack": pack["name"],
+                    "pack_display_name": pack.get("display_name") or pack["name"],
+                    "installable": bool(pack.get("installable", True)),
+                    "install_disabled_reason": pack.get("install_disabled_reason") or "",
+                    "agent_type": agent.get("type") or agent.get("agent_type") or "",
+                    "name": agent.get("name") or str(agent.get("type") or "").replace("_", " ").title(),
+                    "domain": agent.get("domain"),
+                    "description": agent.get("description") or agent.get("system_prompt_suffix") or "",
+                    "model": agent.get("llm_model"),
+                    "tools": list(agent.get("tools") or []),
+                    "hitl_condition": agent.get("hitl_condition"),
+                    "confidence_floor": agent.get("confidence_floor"),
+                    "compliance": list(pack.get("compliance") or []),
+                }
+            )
+    return rows
 
 
 # ---------------------------------------------------------------------------
