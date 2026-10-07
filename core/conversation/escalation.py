@@ -8,6 +8,11 @@ ticketing tool (``create_ticket``, ``create_incident``) a ticket is created
 through the governed tool path with the same summary and tag, and its
 reference is kept on the session. The session is marked escalated and the
 live feed is told, so a supervisor sees it at once.
+
+The review item is only written for an agent of the tenant, and the people who
+can act on it are notified as for any approval. When neither the item nor a
+ticket could be raised, nothing has been handed over and the user is told so:
+the answer never promises a person nobody was asked to be.
 """
 
 from __future__ import annotations
@@ -122,32 +127,68 @@ async def _review_item(
     reason: str,
     context: dict[str, Any],
     requested_by: uuid.UUID | None,
+    assignee_role: str = "support",
 ) -> str | None:
-    """The review-queue item a hand-off leaves; None when no agent owns the conversation."""
+    """The review-queue item a hand-off leaves, with its notification; None when none could be written.
+
+    None when no agent owns the conversation, the agent is not one of the
+    tenant's, or the item cannot be written (logged): the caller then hands
+    nothing over. The people who can act on the item are notified as for any
+    approval, scoped by the agent's visibility.
+    """
+    from sqlalchemy import select
+
     from core.database import get_tenant_session
+    from core.models.agent import Agent
     from core.models.hitl import HITLQueue
+    from core.ownership import agent_ownership_fields
 
     try:
         agent_uuid = uuid.UUID(str(agent_id))
     except (ValueError, TypeError):
         return None
-    async with get_tenant_session(tenant_id) as session:
-        item = HITLQueue(
-            tenant_id=tenant_id,
-            agent_id=agent_uuid,
-            workflow_run_id=None,
-            requested_by_user_id=requested_by,
-            title=title,
-            trigger_type=TRIGGER,
-            priority="high" if reason in (REASON_FALLBACKS, REASON_SLOTS) else "normal",
-            assignee_role="support",
-            decision_options={"options": ["acknowledge", "resolve"]},
-            context=context,
-            expires_at=datetime.now(UTC) + timedelta(hours=EXPIRES_HOURS),
-        )
-        session.add(item)
-        await session.flush()
-        return str(item.id)
+    try:
+        async with get_tenant_session(tenant_id) as session:
+            agent_row = (
+                await session.execute(select(Agent).where(Agent.id == agent_uuid, Agent.tenant_id == tenant_id))
+            ).scalar_one_or_none()
+            if agent_row is None:
+                logger.warning("conversation_handoff_agent_not_found")
+                return None
+            item = HITLQueue(
+                id=uuid.uuid4(),
+                tenant_id=tenant_id,
+                agent_id=agent_uuid,
+                workflow_run_id=None,
+                requested_by_user_id=requested_by,
+                title=title[:500],
+                trigger_type=TRIGGER,
+                priority="high" if reason in (REASON_FALLBACKS, REASON_SLOTS) else "normal",
+                assignee_role=assignee_role or "support",
+                decision_options={"options": ["acknowledge", "resolve"]},
+                context=context,
+                expires_at=datetime.now(UTC) + timedelta(hours=EXPIRES_HOURS),
+            )
+            session.add(item)
+            await session.flush()
+            item_id = str(item.id)
+            push_scope = agent_ownership_fields(agent_row)
+            agent_name = str(getattr(agent_row, "name", "") or "")
+    # enterprise-gate: broad-except-ok reason=handoff-item-failure-is-logged-and-answered-as-not-handed-over
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("conversation_handoff_review_item_failed", error_type=type(exc).__name__)
+        return None
+    from core.push.sender import notify_approval_created
+
+    await notify_approval_created(
+        str(tenant_id),
+        item_id=item_id,
+        agent_name=agent_name,
+        action=TRIGGER,
+        agent_visibility=push_scope.get("visibility"),
+        agent_owner_user_id=push_scope.get("owner_user_id"),
+    )
+    return item_id
 
 
 async def handoff(
@@ -162,8 +203,14 @@ async def handoff(
     context: Any = None,
     intent: str | None = None,
     slots: dict[str, Any] | None = None,
+    notes: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    """Hand a conversation to a person: the review item, the ticket when a tool is bound, the session marked."""
+    """Hand a conversation to a person: the review item, the ticket when a tool is bound, the session marked.
+
+    ``notes`` is what the dialogue took before it started over
+    (``Outcome.handoff``: stage, turns and recent lines); it goes on the review
+    item with the intent and slots the hand-off is about.
+    """
     from core.conversation import runtime, supervisor
 
     tag = intent_tag(dialogue, intent)
@@ -188,21 +235,21 @@ async def handoff(
         "reason": reason,
         "handoff": {
             **dialogue_engine.handoff_summary(dialogue),
+            **(notes or {}),
             "intent": intent or dialogue.intent,
             "slots": dict(slots or dialogue.slots),
+            "reason": reason,
         },
     }
-    try:
-        record["hitl_id"] = await _review_item(
-            tenant_id,
-            agent_id=agent_id,
-            title=f"Hand-off: {INTENTS[tag].title if tag in INTENTS else 'conversation'}",
-            reason=reason,
-            context=context_payload,
-            requested_by=_requested_by(user_id),
-        )
-    except (RuntimeError, OSError, ValueError, TypeError) as exc:
-        logger.warning("conversation_handoff_review_item_failed", error_type=type(exc).__name__)
+    record["hitl_id"] = await _review_item(
+        tenant_id,
+        agent_id=agent_id,
+        title=f"Hand-off: {INTENTS[tag].title if tag in INTENTS else 'conversation'}",
+        reason=reason,
+        context=context_payload,
+        requested_by=_requested_by(user_id),
+        assignee_role=str(getattr(context, "domain", "") or "support"),
+    )
     ref = ticket_tool(getattr(context, "authorized_tools", None)) if context is not None else None
     if ref is not None:
         tool_name = runtime._bare(ref)
@@ -241,15 +288,30 @@ async def handoff(
     return record
 
 
-def handoff_answer(record: dict[str, Any]) -> str:
-    """What the user is told once the hand-off is recorded."""
+def handed_over(record: dict[str, Any]) -> bool:
+    """Whether a person was actually asked to take over: a review item written, or a ticket raised."""
     ticket = record.get("ticket") or {}
-    reference = ticket.get("reference")
+    return bool(record.get("hitl_id")) or ticket.get("status") == "executed"
+
+
+def handoff_answer(record: dict[str, Any]) -> str:
+    """What the user is told once the hand-off is recorded; nothing is promised when nothing was raised."""
+    ticket = record.get("ticket") or {}
+    reference = ticket.get("reference") if ticket.get("status") == "executed" else None
+    hitl_id = record.get("hitl_id")
     if reference:
         return f"I have handed this over to a person with a summary. Your reference is {reference}."
-    if ticket and ticket.get("status") not in (None, "executed"):
-        return (
-            "I have handed this over to a person with a summary; the ticket could not be raised, "
-            "so the team will pick it up from the review queue."
-        )
-    return "I have handed this over to a person with a summary. Someone will pick this up shortly."
+    if hitl_id:
+        queued = f"in the team's queue (reference {str(hitl_id)[:8].upper()})"
+        if ticket and ticket.get("status") != "executed":
+            return (
+                "I have handed this over to a person with a summary; the ticket could not be raised, "
+                f"so the team will pick it up from the review queue: it is {queued}."
+            )
+        return f"I have handed this over to a person with a summary, with what you have told me so far: it is {queued}."
+    if handed_over(record):
+        return "I have handed this over to a person with a summary."
+    return (
+        "I cannot pass this to a person from here, so nothing has been handed over. "
+        "Please use your usual support channel."
+    )

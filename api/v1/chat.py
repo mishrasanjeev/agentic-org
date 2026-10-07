@@ -25,6 +25,7 @@ from core.conversation import runtime as conversation_runtime
 from core.database import get_tenant_session
 from core.governance.agent_status import refusal_for as agent_status_refusal
 from core.governance.operator_override import check as check_operator_override
+from core.langgraph import limits as execution_limits
 from core.models.agent import Agent
 from core.models.hitl import HITLQueue
 from core.ownership import (
@@ -313,7 +314,7 @@ except Exception:
 def _session_key(tenant_id: str, company_id: str, agent_id: str = "", user_id: str = "") -> str:
     """Compose the Redis bucket key for chat history.
 
-    Root-cause fix for Codex 2026-04-22 isolation gap: without
+    Root-cause fix for the 2026-04-22 review isolation gap: without
     ``agent_id`` in the key, every agent you talked to under one company
     shared the same bucket — a support agent's chat would leak into the
     accounting agent's sidebar. When the caller provides an agent id,
@@ -751,7 +752,7 @@ async def _append_history(
 ) -> None:
     """Store the turn in the caller's session history (Redis-backed, BUG #22).
 
-    Root-cause fix for Codex 2026-04-22 review on chat history
+    Root-cause fix for the 2026-04-22 review on chat history
     isolation: the session key was only ``tenant_id:company_id``, so
     history from agent A leaked into agent B's sidebar when the user
     switched agents with the same company context. When the caller
@@ -803,6 +804,9 @@ async def chat_query(
     agent_connector_ids: list[str] = []
     agent_system_prompt = ""
     agent_llm_provider: str | None = None
+    # The agent's own execution limits (core/langgraph/limits.py); the
+    # runner applies them only while AGENTICORG_RUNTIME_LIMITS_ENABLED is on.
+    agent_limits: dict[str, Any] | None = None
     # Ownership of the agent that will run, for the personal-connector guard
     # in _assert_connectors_ready_for_dispatch (bug sheet 2026-09-14 rows 19/30).
     # Unknown agent: shared semantics, so any personal connector is refused.
@@ -849,6 +853,7 @@ async def chat_query(
             agent_llm_provider = _pinned_llm_provider(
                 getattr(agent, "llm_provider", None), getattr(agent, "llm_config", None)
             )
+            agent_limits = execution_limits.declared(agent)
             agent_visibility = agent_ownership_fields(agent)["visibility"]
             agent_owner_user_id = getattr(agent, "owner_user_id", None)
             agent_linked_connector_ids = list(agent_connector_ids)
@@ -880,6 +885,7 @@ async def chat_query(
                 agent_visibility = agent_ownership_fields(routed_agent)["visibility"]
                 agent_owner_user_id = getattr(routed_agent, "owner_user_id", None)
                 agent_linked_connector_ids = list(getattr(routed_agent, "connector_ids", None) or [])
+                agent_limits = execution_limits.declared(routed_agent)
     # Start without a fixed confidence — it gets set from the real
     # agent signal below. Initializing to a constant here was exactly
     # what kept user-visible confidence pinned at 60% on reopen TC_003
@@ -1138,6 +1144,7 @@ async def chat_query(
                 connector_config=connector_config,
                 connector_names=connector_names,
                 company_id=str(company_uuid),
+                limits=agent_limits,
             )
             # Bug sheet #28 (2026-09-14): every chat turn with a known agent
             # is a task for the cost ledger, even when no tokens were
@@ -1221,7 +1228,7 @@ async def chat_query(
     elif answer and not tools_used and confidence is None:
         confidence = 0.75
 
-    # Root-cause fix for TC_004 / Codex 2026-04-22 review: the old
+    # Root-cause fix for TC_004 / the 2026-04-22 review: the old
     # fallback path fabricated a "[AgentName] I've analyzed your query
     # about X..." response with a forced 0.6/0.7 confidence whenever
     # the real agent couldn't produce an answer. That was dishonest —
@@ -1286,7 +1293,7 @@ async def chat_history(
 ):
     """Return chat history for the current session (Redis-backed).
 
-    Root-cause fix for Codex 2026-04-22 chat history isolation gap:
+    Root-cause fix for the 2026-04-22 review chat history isolation gap:
     the session key was just ``tenant_id:company_id``, so switching
     between agents with the same company loaded the wrong history. The
     key now includes ``agent_id`` when provided, matching the ``POST

@@ -10,10 +10,12 @@ from types import SimpleNamespace
 
 import pytest
 from fastapi import HTTPException
+from sqlalchemy.dialects import postgresql
 
 from api.v1 import memory as api
 from core.config import settings
 from core.memory import long_term
+from core.ownership import Caller
 
 ROOT = Path(__file__).resolve().parents[2]
 NOW = datetime(2026, 10, 7, 12, 0, tzinfo=UTC)
@@ -27,6 +29,10 @@ class _Result:
     def scalar_one_or_none(self):
         return self.rows[0] if self.rows else None
 
+    def one(self):
+        assert len(self.rows) == 1, self.rows
+        return self.rows[0]
+
     def scalars(self):
         return self
 
@@ -38,6 +44,7 @@ class _Session:
     def __init__(self, *answers):
         self.answers = list(answers)
         self.statements = []
+        self.compiled = []
         self.added = []
 
     async def __aenter__(self):
@@ -46,11 +53,18 @@ class _Session:
     async def __aexit__(self, *args):
         return False
 
-    async def execute(self, statement, params=None):
+    async def execute(self, statement, params=None, execution_options=None):
         self.statements.append(str(statement))
+        compiled = statement.compile(dialect=postgresql.dialect())
+        self.compiled.append(compiled)
         answer = self.answers.pop(0) if self.answers else []
         if isinstance(answer, int):
             return _Result([], rowcount=answer)
+        if getattr(statement, "is_insert", False) and answer == []:
+            # No conflicting entry: the database returns the inserted row.
+            inserted = SimpleNamespace(**{**compiled.params, "last_recalled_at": None})
+            self.added.append(inserted)
+            return _Result([inserted])
         return _Result(answer)
 
     def add(self, row):
@@ -145,9 +159,12 @@ class TestStore:
         )
         assert session.added == [row] and row.subject == "cust-42" and row.content == "Prefers email"
         assert row.expires_at == NOW + timedelta(days=365) and row.retention_days == 365 and row.source == "api"
-        existing = _row(importance=2, expires_at=NOW + timedelta(days=3))
+        assert row.content_hash == long_term.content_hash("Prefers email") and len(row.content_hash) == 64
+        # A duplicate is refreshed by the database in the same statement: one upsert, no read first.
+        existing = _row(importance=4, expires_at=NOW + timedelta(days=10))
+        refresh = _Session([existing])
         refreshed = await long_term.remember(
-            _Session([existing]),
+            refresh,
             tid,
             subject="cust-42",
             content="Prefers email over calls.",
@@ -156,7 +173,14 @@ class TestStore:
             retention_days=10,
             now=NOW,
         )
-        assert refreshed is existing and existing.expires_at == NOW + timedelta(days=10) and existing.importance == 4
+        assert refreshed is existing and len(refresh.statements) == 1
+        sql = str(refresh.compiled[0])
+        assert sql.startswith("INSERT INTO agent_memories")
+        assert "ON CONFLICT (tenant_id, subject, content_hash) WHERE agent_id IS NULL DO UPDATE" in sql
+        assert "expires_at = excluded.expires_at" in sql and "retention_days = excluded.retention_days" in sql
+        assert "importance = greatest(agent_memories.importance, excluded.importance)" in sql
+        assert "RETURNING" in sql
+        assert refresh.compiled[0].params["expires_at"] == NOW + timedelta(days=10)
         agent = uuid.uuid4()
         scoped = await long_term.remember(
             _Session([]),
@@ -169,6 +193,33 @@ class TestStore:
             now=NOW,
         )
         assert scoped.agent_id == agent and scoped.source == "run" and len(scoped.run_id) == 64
+
+    @pytest.mark.asyncio
+    async def test_agent_entries_upsert_against_the_agent_index_and_the_hash_matches_the_backfill(self):
+        session = _Session([])
+        await long_term.remember(session, uuid.uuid4(), subject="s", content="x", agent_id=uuid.uuid4(), now=NOW)
+        sql = str(session.compiled[0])
+        assert "ON CONFLICT (tenant_id, subject, agent_id, content_hash) WHERE agent_id IS NOT NULL DO UPDATE" in sql
+        # The migration backfills with encode(sha256(convert_to(content, 'UTF8')), 'hex'): lower-case hex of UTF-8.
+        import hashlib
+
+        assert long_term.content_hash("Préfère") == hashlib.sha256("Préfère".encode()).hexdigest()
+
+    def test_the_model_declares_both_partial_unique_indexes(self):
+        from core.models.agent_memory import AgentMemory
+
+        indexes = {i.name: i for i in AgentMemory.__table__.indexes}
+        shared = indexes["uq_agent_memories_shared_content"]
+        scoped = indexes["uq_agent_memories_agent_content"]
+        assert shared.unique and [c.name for c in shared.columns] == ["tenant_id", "subject", "content_hash"]
+        assert scoped.unique and [c.name for c in scoped.columns] == [
+            "tenant_id",
+            "subject",
+            "agent_id",
+            "content_hash",
+        ]
+        assert str(shared.dialect_options["postgresql"]["where"]) == "agent_id IS NULL"
+        assert str(scoped.dialect_options["postgresql"]["where"]) == "agent_id IS NOT NULL"
 
     @pytest.mark.asyncio
     @pytest.mark.parametrize(
@@ -279,6 +330,87 @@ class TestEndpoints:
         monkeypatch.setattr(api, "get_tenant_session", lambda _tid: _Session(5))
         assert (await api.prune_memory(tenant_id=tid)) == {"pruned": 5}
 
+    @pytest.mark.asyncio
+    async def test_a_named_agent_must_be_the_tenants_and_visible_to_the_caller(self, monkeypatch):
+        monkeypatch.setattr(settings, "runtime_memory_enabled", True)
+        tid = str(uuid.uuid4())
+        agent_id = str(uuid.uuid4())
+        finance = SimpleNamespace(id=uuid.UUID(agent_id), domain="finance", visibility="tenant", owner_user_id=None)
+        hr_lead = Caller(user_id=uuid.uuid4(), role="chro", domains=["hr"], is_admin=False, is_machine=False)
+        finance_lead = Caller(user_id=uuid.uuid4(), role="cfo", domains=["finance"], is_admin=False, is_machine=False)
+
+        # Another tenant's agent (or none): the tenant-filtered lookup finds nothing, 404, nothing read or written.
+        missing = _Session([])
+        monkeypatch.setattr(api, "get_tenant_session", lambda _tid: missing)
+        with pytest.raises(HTTPException) as refused:
+            await api.recall_memory(
+                subject="cust-42", agent_id=agent_id, q=None, limit=10, tenant_id=tid, caller=finance_lead
+            )
+        assert refused.value.status_code == 404 and len(missing.statements) == 1
+        assert "agents.tenant_id" in missing.statements[0] and "agents.id" in missing.statements[0]
+        missing = _Session([])
+        monkeypatch.setattr(api, "get_tenant_session", lambda _tid: missing)
+        with pytest.raises(HTTPException) as refused:
+            await api.remember_memory(
+                api.MemoryIn(subject="s", content="x", agent_id=agent_id), tenant_id=tid, user={}, caller=finance_lead
+            )
+        assert refused.value.status_code == 404 and missing.added == [] and len(missing.statements) == 1
+
+        # Another domain's agent: 404 as for the agent itself, for recall and write.
+        hidden = _Session([finance])
+        monkeypatch.setattr(api, "get_tenant_session", lambda _tid: hidden)
+        with pytest.raises(HTTPException) as refused:
+            await api.recall_memory(
+                subject="cust-42", agent_id=agent_id, q=None, limit=10, tenant_id=tid, caller=hr_lead
+            )
+        assert refused.value.status_code == 404 and len(hidden.statements) == 1
+        hidden = _Session([finance])
+        monkeypatch.setattr(api, "get_tenant_session", lambda _tid: hidden)
+        with pytest.raises(HTTPException) as refused:
+            await api.remember_memory(
+                api.MemoryIn(subject="s", content="x", agent_id=agent_id), tenant_id=tid, user={}, caller=hr_lead
+            )
+        assert refused.value.status_code == 404 and hidden.added == []
+
+        # Someone else's personal agent: 404 too.
+        personal = SimpleNamespace(
+            id=uuid.UUID(agent_id), domain="finance", visibility="personal", owner_user_id=uuid.uuid4()
+        )
+        monkeypatch.setattr(api, "get_tenant_session", lambda _tid: _Session([personal]))
+        with pytest.raises(HTTPException) as refused:
+            await api.recall_memory(
+                subject="cust-42", agent_id=agent_id, q=None, limit=10, tenant_id=tid, caller=finance_lead
+            )
+        assert refused.value.status_code == 404
+
+        # A visible agent: recall and write go ahead for it.
+        read = _Session([finance], [_row(agent_id=uuid.UUID(agent_id))])
+        monkeypatch.setattr(api, "get_tenant_session", lambda _tid: read)
+        recalled = await api.recall_memory(
+            subject="cust-42", agent_id=agent_id, q=None, limit=10, tenant_id=tid, caller=finance_lead
+        )
+        assert recalled["total"] == 1 and recalled["entries"][0]["agent_id"] == agent_id
+        write = _Session([finance], [])
+        monkeypatch.setattr(api, "get_tenant_session", lambda _tid: write)
+        entry = await api.remember_memory(
+            api.MemoryIn(subject="s", content="x", agent_id=agent_id), tenant_id=tid, user={}, caller=finance_lead
+        )
+        assert entry["agent_id"] == agent_id and len(write.added) == 1
+
+    def test_memory_routes_are_scope_checked_and_sensitive(self):
+        from api.route_enforcement import SCOPE_FAMILIES, required_scopes_for, unmapped_scope_families
+
+        assert SCOPE_FAMILIES["memory"] == ("audit:read", "approvals:write")
+        assert required_scopes_for("memory.sensitive.read", "GET") == ("audit:read",)
+        assert required_scopes_for("memory.sensitive.write", "POST") == ("approvals:write",)
+        assert required_scopes_for("memory.sensitive.write", "DELETE") == ("approvals:write",)
+        assert "memory" not in unmapped_scope_families(["memory.sensitive.read", "memory.sensitive.write"])
+        from core.rbac import ROLE_SCOPES
+
+        # A read-only analyst holds neither; an auditor may recall but not write.
+        assert "audit:read" not in ROLE_SCOPES["analyst"] and "approvals:write" not in ROLE_SCOPES["analyst"]
+        assert ROLE_SCOPES["auditor"] == ["audit:read"]
+
     def test_the_run_recalls_and_remembers_and_the_task_is_scheduled(self):
         runner = (ROOT / "core" / "langgraph" / "runner.py").read_text(encoding="utf-8")
         assert "long_term_memory.subject_of(task_input)" in runner and "long_term_memory.prompt_block(" in runner
@@ -290,6 +422,13 @@ class TestEndpoints:
         migration = (ROOT / "migrations" / "versions" / "v6_z57_agent_memories.py").read_text(encoding="utf-8")
         assert 'down_revision = "v6z56_finops_thresholds"' in migration and "ix_agent_memories_agent_id" in migration
         assert "agent_memories_tenant_isolation" in migration
+        assert "ALTER TABLE agent_memories ENABLE ROW LEVEL SECURITY;" in migration
+        assert "ALTER TABLE agent_memories FORCE ROW LEVEL SECURITY;" in migration
+        assert migration.index("ALTER TABLE agent_memories FORCE ROW LEVEL SECURITY;") > migration.index("SET NOT NULL")
+        assert "ADD COLUMN IF NOT EXISTS content_hash" in migration and "to_regclass('agent_memories')" in migration
+        assert "encode(sha256(convert_to(content, 'UTF8')), 'hex')" in migration
+        assert "uq_agent_memories_shared_content" in migration and "WHERE agent_id IS NULL" in migration
+        assert "uq_agent_memories_agent_content" in migration and "WHERE agent_id IS NOT NULL" in migration
         from core.models.agent_memory import AgentMemory
 
         assert AgentMemory.__tablename__ == "agent_memories"

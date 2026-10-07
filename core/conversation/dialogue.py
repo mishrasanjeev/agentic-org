@@ -10,6 +10,7 @@ nothing is recognised. Nothing here calls a tool.
 
 from __future__ import annotations
 
+import copy
 import re
 from dataclasses import asdict, dataclass, field
 from datetime import UTC, date, datetime
@@ -46,6 +47,9 @@ class Outcome:
     action: str | None = None
     summary: str | None = None
     escalation: str | None = None  # why an escalate outcome hands off: requested | fallbacks | slots
+    # For ``escalate``: what a person taking over needs (``handoff_summary``),
+    # taken before the dialogue resets. The runtime raises the handoff from it.
+    handoff: dict[str, Any] | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -73,13 +77,17 @@ class Dialogue:
     turns: int = 0
     history: list[dict[str, str]] = field(default_factory=list)
     started_at: str | None = None
+    # The key of the last action this session claimed for execution
+    # (``runtime.claim_dialogue``); kept across resets so a stale confirmation
+    # can never match the stored state again.
+    execution_key: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
 
     @classmethod
     def from_dict(cls, raw: dict[str, Any] | None) -> Dialogue:
-        raw = dict(raw or {})
+        raw = copy.deepcopy(dict(raw or {}))  # never share lists or dicts with the stored row
         known = set(cls.__dataclass_fields__)
         return cls(**{key: value for key, value in raw.items() if key in known})
 
@@ -343,6 +351,7 @@ def _start(
     *,
     today: date | None = None,
 ) -> Outcome:
+    prior = handoff_summary(dialogue)  # what was in progress, for a hand-off
     dialogue.intent = intent.name
     dialogue.confidence = confidence
     merged = conversation_context.resolve(text, {**dialogue.carry, **entities}, dialogue.last_slots)
@@ -366,15 +375,19 @@ def _start(
             "transaction disputes and application status. What would you like to do?",
         )
     if intent.risk == "handoff":
+        # Whether a person is actually reached is up to the runtime, which
+        # raises the hand-off and says what happened; nothing is promised here.
         dialogue.stage = STAGE_DONE
         outcome = _outcome(
-            dialogue,
-            "escalate",
-            "I will connect you to a person. One moment.",
-            summary=None,
-            escalation=ESCALATION_REQUESTED,
+            dialogue, "escalate", "You asked for a person.", summary=None, escalation=ESCALATION_REQUESTED
         )
         outcome.options = []
+        outcome.handoff = {
+            **prior,
+            "reason": ESCALATION_REQUESTED,
+            "recent": dialogue.history[-6:],
+            "turns": dialogue.turns,
+        }
         dialogue.reset()
         return outcome
     return _next_step(dialogue, today=today)
@@ -459,16 +472,15 @@ def advance(dialogue: Dialogue, text: str, *, today: date | None = None) -> Outc
             if dialogue.retries >= MAX_RETRIES:
                 # The hand-off needs what was being asked for: snapshot it before the dialogue starts over.
                 held_intent, held_slots = intent.name, dict(dialogue.slots)
+                handoff = {**handoff_summary(dialogue), "reason": ESCALATION_SLOTS}
                 dialogue.reset()
                 outcome = _outcome(
-                    dialogue,
-                    "escalate",
-                    "I could not get what I need for that. Let me connect you to a person who can help.",
-                    escalation=ESCALATION_SLOTS,
+                    dialogue, "escalate", "I could not get what I need for that.", escalation=ESCALATION_SLOTS
                 )
                 outcome.intent = held_intent
                 outcome.slots = held_slots
                 outcome.missing = missing_slots(intent, held_slots)
+                outcome.handoff = {**handoff, "recent": dialogue.history[-6:]}
                 return outcome
             return _outcome(dialogue, "ask", problem)
         dialogue.slots[slot.name] = value
@@ -482,6 +494,8 @@ def advance(dialogue: Dialogue, text: str, *, today: date | None = None) -> Outc
         dialogue.fallbacks = 0
         outcome = _start(dialogue, INTENTS["talk_to_agent"], 0.9, entities, text, today=today)
         outcome.escalation = ESCALATION_FALLBACKS  # an accepted offer, not an unsolicited request
+        if outcome.handoff is not None:
+            outcome.handoff["reason"] = ESCALATION_FALLBACKS
         return outcome
 
     # Idle: "again" repeats the last action, confirmed afresh.

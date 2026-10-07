@@ -66,12 +66,15 @@ fallbacks in a row the offer is to connect to a person, and a yes is the hand-of
 
 A hand-off (`core/conversation/escalation.py`) happens when the user asks for a person, when a
 required detail cannot be collected, or when the user accepts the offer after repeated fallbacks.
-It leaves a review-queue item (trigger `conversation_escalation`, role `support`) carrying a
-one-paragraph summary, the intent tag, the slots collected so far and the recent turns; when the
-agent is authorised for a ticketing tool (`create_ticket`, `create_incident`) a ticket is raised
-through the governed tool path with the same summary, tag and transcript, and its reference is
-kept on the session and told to the user. The session is marked escalated and the live feed
-carries `conversation.escalated`.
+It leaves a review-queue item (trigger `conversation_escalation`, role the agent's domain or
+`support`) carrying a one-paragraph summary, the intent tag, the slots collected so far and the
+recent turns, and notifies the people who can act on it as for any approval; the item is only
+written for an agent of the tenant. When the agent is authorised for a ticketing tool
+(`create_ticket`, `create_incident`) a ticket is raised through the governed tool path with the
+same summary, tag and transcript, and its reference is kept on the session and told to the user.
+The session is marked escalated and the live feed carries `conversation.escalated`. When neither
+the item nor a ticket could be raised, the user is told that nothing has been handed over and to
+use their usual support channel; the assistant never promises a person nobody was asked to be.
 
 A supervisor (a tenant administrator) watches conversations in the Conversations page
 (`/conversation/supervisor/sessions`): every session in progress or escalated, its transcript,
