@@ -330,6 +330,8 @@ class TestStore:
         assert (
             len(listed) == 4 and listed[0]["record_ref"] == "s1" and "txn_records.account =" in session.statements[-1]
         )
+        await records.list_records(TENANT, counterparty="Ravi Traders")
+        assert "txn_records.counterparty_name =" in session.statements[-1]  # a counterparty known only by name
 
     @pytest.mark.asyncio
     async def test_detect_keeps_new_findings_once_and_a_person_dispositions_them(self, monkeypatch):

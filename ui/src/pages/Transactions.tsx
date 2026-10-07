@@ -2,6 +2,8 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Helmet } from "react-helmet-async";
 import api, { extractApiError } from "@/lib/api";
+import { useAuth } from "@/contexts/AuthContext";
+import { APPROVAL_ROLES } from "@/lib/roles";
 
 /**
  * Transactions: the findings the detectors raised with a person's disposition, and the fund-flow
@@ -56,7 +58,6 @@ interface Graph {
 }
 
 export const KINDS = ["account", "customer", "counterparty"];
-const WIDTH = 720;
 const COLUMN = 170;
 const ROW = 46;
 
@@ -84,7 +85,15 @@ export function graphHeight(nodes: Node[]): number {
   return 80 + Math.max(1, ...Object.values(counts)) * ROW;
 }
 
+/** Wide enough for the last hop: a column per hop after the root, plus the margin. */
+export function graphWidth(nodes: Node[]): number {
+  return 90 + (Math.max(0, ...nodes.map((n) => n.hop)) + 1) * COLUMN;
+}
+
 export default function Transactions() {
+  const auth = useAuth();
+  // Dispositions need approvals:write; the backend refuses everyone else, so the controls follow the same role list.
+  const canDecide = APPROVAL_ROLES.includes(auth.user?.role || "");
   const [findings, setFindings] = useState<Finding[]>([]);
   const [status, setStatus] = useState("open");
   const [selected, setSelected] = useState<Finding | null>(null);
@@ -143,6 +152,26 @@ export default function Transactions() {
       setError(extractApiError(err, "The disposition was not recorded."));
     } finally {
       setBusy(false);
+    }
+  };
+
+  const exportCsv = async () => {
+    if (!graph) return;
+    setError(null);
+    try {
+      // Through the configured API client, so the download reaches the API host with the session.
+      const { data } = await api.get(`/txn/graph/${graph.root.kind}/${encodeURIComponent(graph.root.ref)}/export`, {
+        params: { format: "csv", hops: String(graph.hops) },
+        responseType: "blob",
+      });
+      const url = URL.createObjectURL(data as Blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `fund-flow-${graph.root.ref.slice(0, 32)}.csv`;
+      link.click();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      setError(extractApiError(err, "The export did not download."));
     }
   };
 
@@ -205,7 +234,7 @@ export default function Transactions() {
                 <button type="button" className="text-xs text-indigo-700 hover:underline" onClick={() => { setKind("account"); setRef(selected.entity_ref); void loadGraph("account", selected.entity_ref, hops); }} data-testid="txn-finding-graph">
                   Show the fund flow
                 </button>
-                {selected.status === "open" && (
+                {selected.status === "open" && canDecide && (
                   <>
                     <label className="block text-sm text-slate-700">
                       Notes
@@ -262,15 +291,15 @@ export default function Transactions() {
             Build graph
           </button>
           {graph && (
-            <a className="rounded-md border border-slate-300 px-3 py-1.5 text-sm text-slate-700" href={`/api/v1/txn/graph/${graph.root.kind}/${encodeURIComponent(graph.root.ref)}/export?format=csv&hops=${graph.hops}`} data-testid="txn-export">
+            <button type="button" className="rounded-md border border-slate-300 px-3 py-1.5 text-sm text-slate-700" onClick={() => void exportCsv()} data-testid="txn-export">
               Export CSV
-            </a>
+            </button>
           )}
         </form>
         {graph && (
           <div className="grid gap-3 lg:grid-cols-12" data-testid="txn-graph">
             <div className="overflow-x-auto rounded-md border border-slate-200 bg-white lg:col-span-8">
-              <svg role="img" aria-label={`Fund flow around ${graph.root.ref}`} width={WIDTH} height={graphHeight(graph.nodes)} viewBox={`0 0 ${WIDTH} ${graphHeight(graph.nodes)}`}>
+              <svg role="img" aria-label={`Fund flow around ${graph.root.ref}`} width={graphWidth(graph.nodes)} height={graphHeight(graph.nodes)} viewBox={`0 0 ${graphWidth(graph.nodes)} ${graphHeight(graph.nodes)}`}>
                 {graph.edges.map((edge) => {
                   const a = positions[edge.from];
                   const b = positions[edge.to];

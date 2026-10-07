@@ -8,6 +8,11 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mockGet = vi.fn();
 const mockPost = vi.fn();
+let mockRole = "admin";
+
+vi.mock("@/contexts/AuthContext", () => ({
+  useAuth: () => ({ user: { role: mockRole }, logout: vi.fn(), isAuthenticated: true }),
+}));
 
 vi.mock("@/lib/api", () => ({
   default: {
@@ -18,7 +23,7 @@ vi.mock("@/lib/api", () => ({
   extractApiError: (_err: unknown, fallback: string) => fallback,
 }));
 
-import Transactions, { graphHeight, layout, money } from "@/pages/Transactions";
+import Transactions, { graphHeight, graphWidth, layout, money } from "@/pages/Transactions";
 
 const FINDING = {
   id: "f1",
@@ -51,8 +56,15 @@ const GRAPH = {
   totals: { nodes: 3, edges: 2, records: 2 },
 };
 
+const mockCreateObjectURL = vi.fn(() => "blob:fund-flow");
+const mockRevokeObjectURL = vi.fn();
+Object.defineProperty(URL, "createObjectURL", { value: mockCreateObjectURL, writable: true });
+Object.defineProperty(URL, "revokeObjectURL", { value: mockRevokeObjectURL, writable: true });
+vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => undefined);
+
 function answer(url: string) {
   if (url === "/txn/findings") return Promise.resolve({ data: { findings: [FINDING], total: 1 } });
+  if (url.endsWith("/export")) return Promise.resolve({ data: new Blob(["hop,from\r\n"], { type: "text/csv" }) });
   if (url.startsWith("/txn/graph/")) return Promise.resolve({ data: GRAPH });
   return Promise.reject(new Error(`unexpected ${url}`));
 }
@@ -70,6 +82,9 @@ describe("Transactions", () => {
     mockGet.mockReset();
     mockPost.mockReset();
     mockGet.mockImplementation((url: string) => answer(url));
+    mockRole = "admin";
+    mockCreateObjectURL.mockReset();
+    mockRevokeObjectURL.mockReset();
   });
 
   it("lays nodes out by hop and formats money", () => {
@@ -78,6 +93,9 @@ describe("Transactions", () => {
     expect(positions.Y1.x).toBe(positions.X1.x);
     expect(positions.Y1.y).not.toBe(positions.X1.y);
     expect(graphHeight(GRAPH.nodes as never)).toBeGreaterThan(100);
+    // the fourth hop sits at 90 + 4 * 170 = 770, inside the SVG
+    expect(graphWidth([...GRAPH.nodes, { ...GRAPH.nodes[1], id: "Z4", hop: 4 }] as never)).toBeGreaterThan(770);
+    expect(graphWidth([] as never)).toBe(260);
     expect(money(1250000)).toBe("12,50,000");
     expect(money(null)).toBe("—");
   });
@@ -94,7 +112,14 @@ describe("Transactions", () => {
     expect(mockGet).toHaveBeenCalledWith("/txn/graph/account/A1", { params: { hops: "2" } });
     expect(screen.getAllByTestId("txn-node")).toHaveLength(3);
     expect(screen.getByTestId("txn-paths").textContent).toContain("A1 → Y1");
-    expect(screen.getByTestId("txn-export").getAttribute("href")).toContain("/api/v1/txn/graph/account/A1/export?format=csv&hops=2");
+    fireEvent.click(screen.getByTestId("txn-export"));
+    await waitFor(() =>
+      expect(mockGet).toHaveBeenCalledWith("/txn/graph/account/A1/export", {
+        params: { format: "csv", hops: "2" },
+        responseType: "blob",
+      }),
+    );
+    await waitFor(() => expect(mockRevokeObjectURL).toHaveBeenCalledWith("blob:fund-flow"));
     fireEvent.click(screen.getByText("Confirm"));
     await waitFor(() => expect(mockPost).toHaveBeenCalledWith("/txn/findings/f1/disposition", { outcome: "confirm", notes: "" }));
     expect(await screen.findByTestId("txn-notice")).toHaveTextContent("Finding confirmed.");
@@ -110,6 +135,16 @@ describe("Transactions", () => {
     expect(mockGet).toHaveBeenCalledWith("/txn/graph/account/A1", { params: { hops: "3" } });
     fireEvent.click(screen.getAllByTestId("txn-node")[1]);
     await waitFor(() => expect(mockGet).toHaveBeenCalledWith("/txn/graph/counterparty/Y1", { params: { hops: "3" } }));
+  });
+
+  it("shows no disposition controls to a role without approvals:write", async () => {
+    mockRole = "auditor";
+    renderPage();
+    fireEvent.click(await screen.findByTestId("txn-finding"));
+    await screen.findByTestId("txn-finding-detail");
+    expect(screen.queryByText("Confirm")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("txn-dismiss")).not.toBeInTheDocument();
+    expect(screen.getByTestId("txn-finding-graph")).toBeInTheDocument();
   });
 
   it("requires a reason to dismiss and reports a failed graph", async () => {
