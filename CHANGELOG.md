@@ -88,15 +88,18 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
 - With `AGENTICORG_AGENT_REGISTRY_GATES_PROMOTION` on (off by default),
   promotion and resume to active need an approved or published registry
   entry (`core/agent_registry/approval.py`), checked after the shadow
-  evidence, the maker-checker check and the evaluation gate; promotion
+  evidence, the maker-checker check and the evaluation gate, and a new or
+  cloned agent cannot start active; promotion
   publishes an approved entry and retirement retires a published one, each
   a recorded transition. Environments (development, staging, production)
   are read from the state. `PUT /agents/{id}/traffic-split` sends a share
   of an agent's runs through the agents API to another active agent while
   `AGENTICORG_AGENT_TRAFFIC_SPLIT_ENABLED` is on (`core/agent_registry/
   traffic.py`), chosen from the run's thread or correlation id so a retry
-  lands on the same agent; the response names the agent that served the
-  run, and removing the split is the one-action rollback.
+  lands on the same agent (one draw per run otherwise); the agent asked for
+  passes its own status, floor and override controls before any redirection
+  and the target is held to the same; the response names the agent that
+  served the run, and removing the split is the one-action rollback.
 
 ### Added - Agent registry: cards and lifecycle states
 - Behind `AGENTICORG_AGENT_REGISTRY_ENABLED` (off by default), each agent
