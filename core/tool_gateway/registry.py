@@ -5,20 +5,28 @@ A tenant registers a tool by name (``connector:tool``, or a plain tool name)
 with a JSON Schema for its inputs, optionally one for its outputs, a risk
 class, and an envelope: the longest a call may take, the most output it may
 return, and whether its output is treated as untrusted content. While
-``AGENTICORG_TOOL_REGISTRY_ENABLED`` is on, the gateway checks every call to
-a registered tool against its input schema **before the call leaves the
-gateway**: inputs that fail are refused with the errors named, audited and
-never dispatched; a call that runs is held to the envelope (a timeout, an
-output cap, the output screened against its schema when one is declared),
-and with ``AGENTICORG_TOOL_REGISTRY_REQUIRE_REGISTRATION`` on, an
-unregistered tool is refused too.
+``AGENTICORG_TOOL_REGISTRY_ENABLED`` is on, every call to a registered tool
+is checked against its input schema **before it is dispatched**, at both
+dispatch boundaries: ``ToolGateway.execute`` and the shared connector
+dispatch (``core/langgraph/tool_adapter.py``) that LangGraph agents, workflow
+connector steps and remote MCP tools go through. Inputs that fail are refused
+with the errors named, audited and never dispatched; a call that runs is held
+to the envelope (a timeout, an output cap, the output screened against its
+schema when one is declared), and with
+``AGENTICORG_TOOL_REGISTRY_REQUIRE_REGISTRATION`` on, an unregistered tool is
+refused too. When the registrations cannot be read the call is refused
+(``tool_registry_unavailable``): the policy is never skipped because it could
+not be verified.
 
 Schemas are checked at registration (a valid JSON Schema, bounded, without
 ``$ref``), so a bad schema never reaches the request path. In-process
 connector code is not process-isolated by this envelope; the extraction
 worker (``core/extraction/sandbox.py``) remains the out-of-process sandbox
-for untrusted content, and the envelope marks tool output as untrusted so
-the model's guardrails treat it so.
+for untrusted content. Output declared untrusted passes the guardrails'
+``retrieval`` stage (the stage that screens retrieved content for injected
+instructions) before it is returned towards a model: a blocked output is
+withheld, a transformed one replaced, and it carries the ``_untrusted``
+marker.
 
 Off, no call is checked or enveloped, and the endpoints are not found.
 """
@@ -280,10 +288,11 @@ class Check:
     registration: Registration | None
     errors: list[str]
     unregistered: bool = False
+    unavailable: bool = False
 
     @property
     def refused(self) -> bool:
-        return bool(self.errors) or self.unregistered
+        return bool(self.errors) or self.unregistered or self.unavailable
 
 
 def check_call(entries: dict[str, Registration], connector_name: str | None, tool_name: str, params: Any) -> Check:
@@ -298,17 +307,79 @@ def check_call(entries: dict[str, Registration], connector_name: str | None, too
     return Check(registration, errors_for(registration.input_schema, params if params is not None else {}))
 
 
+async def screen_call(tenant_id: Any, connector_name: str | None, tool_name: str, params: Any) -> Check | None:
+    """The registry's check of a call at a dispatch boundary; None while the registry is off.
+
+    A call without a tenant has no registrations (refused only when
+    registration is required). A failure to read the registrations refuses
+    the call: a registered tool must never run unchecked because its
+    registration could not be read.
+    """
+    if not enabled():
+        return None
+    entries: dict[str, Registration] = {}
+    if tenant_id is not None and str(tenant_id).strip():
+        try:
+            entries = await load(tenant_id)
+        # enterprise-gate: broad-except-ok reason=registry-load-failure-fails-closed-and-logged
+        except Exception as exc:
+            logger.warning("tool_registry_load_failed", error_type=type(exc).__name__)
+            return Check(None, [], unavailable=True)
+    return check_call(entries, connector_name, tool_name, params)
+
+
 def refusal(check: Check, tool_name: str) -> dict[str, Any]:
     """The gateway's answer for a refused call, in the shape every other refusal takes."""
-    if check.unregistered:
+    if check.unavailable:
+        message = f"tool_registry_unavailable: the registration of {tool_name} could not be read, so it is not run"
+    elif check.unregistered:
         message = f"tool_unregistered: {tool_name} is not registered for this tenant"
     else:
         message = f"tool_input_invalid: {'; '.join(check.errors)}"
     return {"error": {"code": ERROR_CODE, "message": message, "tool_input_errors": list(check.errors)}}
 
 
-async def enveloped(registration: Registration, call: Any) -> dict[str, Any]:
-    """Run a dispatched call under the registration's envelope: the timeout, the output cap and the output schema."""
+async def _screen_untrusted(
+    registration: Registration, result: dict[str, Any], tenant_id: Any, agent_id: Any
+) -> dict[str, Any]:
+    """Untrusted output through the guardrails' retrieval stage: withheld when blocked, replaced when transformed."""
+    from core.governance.guardrails.hooks import guard_text
+    from core.governance.guardrails.schema import GuardrailBlocked
+
+    text = json.dumps(result, default=str, sort_keys=True, ensure_ascii=False)
+    try:
+        screened = await guard_text(
+            "retrieval",
+            text,
+            tenant_id=str(tenant_id) if tenant_id else None,
+            agent_id=str(agent_id) if agent_id else None,
+        )
+    except GuardrailBlocked as exc:
+        logger.warning("tool_output_withheld", tool=registration.name, rule=exc.rule_name)
+        return {
+            "error": {
+                "code": ERROR_CODE,
+                "message": f"tool_output_withheld: the output of {registration.name} was blocked by a guardrail",
+                "guardrail": {"stage": exc.stage, "rule_id": exc.rule_id, "rule_name": exc.rule_name},
+            }
+        }
+    if screened is not None and screened.text != text:
+        try:
+            parsed = json.loads(screened.text)
+        except ValueError:
+            parsed = None
+        result = parsed if isinstance(parsed, dict) else {"content": screened.text}
+    return {**result, "_untrusted": True}
+
+
+async def enveloped(
+    registration: Registration, call: Any, *, tenant_id: Any = None, agent_id: Any = None
+) -> dict[str, Any]:
+    """Run a dispatched call under the registration's envelope.
+
+    The timeout, the output cap and the output schema; output declared
+    untrusted then passes the guardrails' retrieval stage.
+    """
     try:
         result = await asyncio.wait_for(call(), timeout=registration.timeout_seconds)
     except TimeoutError:
@@ -343,5 +414,5 @@ async def enveloped(registration: Registration, call: Any) -> dict[str, Any]:
                 }
             }
     if registration.untrusted_output and isinstance(result, dict) and "error" not in result:
-        result = {**result, "_untrusted": True}
+        result = await _screen_untrusted(registration, result, tenant_id, agent_id)
     return result
