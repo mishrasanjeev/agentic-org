@@ -10,6 +10,7 @@ from unittest.mock import AsyncMock
 
 import pytest
 from fastapi import HTTPException
+from pydantic import ValidationError
 
 from core.config import settings
 from core.content import services, translation
@@ -90,11 +91,11 @@ class TestChecks:
             preserve=["NetBanking"],
             glossary=[{"term": "charge", "translation": "शुल्क"}],
         )
-        answer = {"translation": "The quarterly average balance must be 10000. Net banking.", "notes": []}
+        answer = {"translation": "The quarterly average balance must be ₹10000. Net banking.", "notes": []}
         run = await services.run(translation.SERVICE, TENANT, payload, complete=_completer(_Reply(answer)))
         checks = run.output["checks"]
         assert run.output["trusted"] is False
-        assert checks["missing_facts"] == ["150"] and checks["glossary_misses"] == ["charge"]
+        assert checks["missing_facts"] == ["₹150"] and checks["glossary_misses"] == ["charge"]
         assert checks["preserve_misses"] == ["NetBanking"] and checks["script_ok"] is False
 
     @pytest.mark.asyncio
@@ -110,6 +111,71 @@ class TestChecks:
         assert result["overlap"] > 0.5 and "October" in result["back_translation"]
         assert "English" in complete.calls[0][1]["content"]
 
+    def test_figures_keep_currency_and_magnitude(self):
+        lakh = translation.figures("₹5 lakh")
+        assert lakh == {"INR 500000": "₹5 lakh"}
+        assert set(translation.figures("₹5 crore")) == {"INR 50000000"}
+        assert set(translation.figures("5")) == {"5"}
+        assert set(translation.figures("5 lakh")) == {"500000"}
+        assert set(translation.figures("₹500,000")) == set(lakh)
+        assert set(translation.figures("₹५ लाख")) == set(lakh)
+        assert set(translation.figures("5 लाख रुपये")) == set(lakh)
+        assert set(translation.figures("Rs.5 lakh")) == set(lakh)
+        assert set(translation.figures("₹1.5 करोड़")) == {"INR 15000000"}
+        assert set(translation.figures("12% and 12 प्रतिशत")) == {"12%"}
+        assert set(translation.figures("5 kids, 4 hours")) == {"5", "4"}
+        assert set(translation.figures("credit of 5 crores on 02/10/2026")) == {"50000000", "02/10/2026"}
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        ("rendered", "trusted"),
+        [("₹5 करोड़ की सीमा", False), ("5 की सीमा", False), ("5 लाख की सीमा", False), ("₹५ लाख की सीमा", True)],
+    )
+    async def test_a_changed_amount_is_not_trusted(self, on, rendered, trusted):
+        payload = translation.TranslateIn(text="A limit of ₹5 lakh", target_language="hi")
+        answer = {"translation": rendered, "notes": []}
+        run = await services.run(translation.SERVICE, TENANT, payload, complete=_completer(_Reply(answer)))
+        assert run.output["trusted"] is trusted
+        assert run.output["checks"]["missing_facts"] == ([] if trusted else ["₹5 lakh"])
+
+    @pytest.mark.asyncio
+    async def test_an_output_guardrail_transform_clears_trust(self, on, monkeypatch):
+        async def guard(stage, text, *, tenant_id, service, context=None):
+            if stage == "output":
+                return {"text": text.replace("₹150", "[REDACTED]"), "findings": 1, "flagged": True, "applied": True}
+            return {"text": text, "findings": 0, "flagged": False, "applied": False}
+
+        monkeypatch.setattr(services, "guard", guard)
+        payload = translation.TranslateIn(text="A charge of ₹150 applies.", target_language="hi")
+        answer = {"translation": "₹150 का शुल्क लागू होता है।", "notes": []}
+        run = await services.run(translation.SERVICE, TENANT, payload, complete=_completer(_Reply(answer)))
+        assert run.output["translation"] == "[REDACTED] का शुल्क लागू होता है।"
+        assert run.output["trusted"] is False and run.output["checks"]["output_transformed"] is True
+
+    @pytest.mark.asyncio
+    async def test_an_untransformed_translation_says_so(self, on):
+        payload = translation.TranslateIn(text="A charge of ₹150 applies.", target_language="hi")
+        answer = {"translation": "₹150 का शुल्क लागू होता है।", "notes": []}
+        run = await services.run(translation.SERVICE, TENANT, payload, complete=_completer(_Reply(answer)))
+        assert run.output["trusted"] is True and run.output["checks"]["output_transformed"] is False
+
+    @pytest.mark.asyncio
+    async def test_the_input_bound_follows_the_completion_budget(self, on):
+        assert translation.SERVICE.max_tokens == translation.COMPLETION_BUDGET > services.MAX_TOKENS
+        assert translation.COMPLETION_BUDGET >= 2 * translation.TEXT_LIMIT
+        with pytest.raises(ValidationError):
+            translation.TranslateIn(text="x" * (translation.TEXT_LIMIT + 1), target_language="hi")
+        budgets: list[int] = []
+
+        async def complete(_tenant, _model, _messages, max_tokens):
+            budgets.append(max_tokens)
+            return _Reply({"translation": "शाखा बंद है।", "notes": []})
+
+        payload = translation.TranslateIn(text="x" * translation.TEXT_LIMIT, target_language="hi")
+        await services.run(translation.SERVICE, TENANT, payload, complete=complete)
+        await translation.back_translate(TENANT, payload, {"translation": "शाखा"}, complete=complete)
+        assert budgets == [translation.COMPLETION_BUDGET, translation.COMPLETION_BUDGET]
+
     def test_dataset_and_catalogue(self):
         described = translation.SERVICE.describe()
         assert described["name"] == "translate" and described["dataset"]["cases"] == 3
@@ -122,6 +188,7 @@ class TestRoutes:
         from api.v1 import content_translation as api
 
         listed = await api.list_languages(tenant_id=str(TENANT))
+        assert listed["max_text_chars"] == translation.TEXT_LIMIT
         assert any(item["code"] == "ta" and item["script"] == "Tamil" for item in listed["languages"])
         with pytest.raises(HTTPException) as info:
             await api.post_translate(
@@ -144,13 +211,45 @@ class TestRoutes:
         body = api.BatchIn(
             items=[{"id": "a", "text": "ok one"}, {"id": "b", "text": "fail two"}],
             target_language="hi",
-            register="odd",
-            format="plain",
+            register="neutral",
+            format="markdown",
         )
         answer = await api.post_translate_batch(body, tenant_id=str(TENANT), domains=None)
         assert answer["total"] == 2 and answer["failed"] == 1
         assert answer["results"][0]["ok"] is True and answer["results"][0]["output"]["trusted"] is True
         assert answer["results"][1] == {"id": "b", "ok": False, "error": "model_failed", "message": "no answer"}
+
+    @pytest.mark.parametrize("bad", [{"register": "friendly"}, {"format": "xml"}])
+    def test_a_batch_refuses_options_the_single_request_refuses(self, bad):
+        from api.v1 import content_translation as api
+
+        with pytest.raises(ValidationError):
+            translation.TranslateIn(text="t", target_language="hi", **bad)
+        with pytest.raises(ValidationError):
+            api.BatchIn(items=[{"id": "a", "text": "t"}], target_language="hi", **bad)
+
+    def test_a_batch_item_has_the_same_size_bound(self):
+        from api.v1 import content_translation as api
+
+        with pytest.raises(ValidationError):
+            api.BatchIn(items=[{"id": "a", "text": "x" * (translation.TEXT_LIMIT + 1)}], target_language="hi")
+
+    @pytest.mark.asyncio
+    async def test_a_batch_passes_its_options_through(self, on, monkeypatch):
+        from api.v1 import content_translation as api
+
+        seen = []
+
+        async def run(service, tenant_id, payload, *, domains=None, complete=None):
+            seen.append((payload.register, payload.format))
+            return services.Run(service="translate", output={"translation": HINDI}, sources=[], guardrails={}, model={})
+
+        monkeypatch.setattr(services, "run", run)
+        body = api.BatchIn(
+            items=[{"id": "a", "text": "t"}], target_language="hi", register="neutral", format="markdown"
+        )
+        await api.post_translate_batch(body, tenant_id=str(TENANT), domains=None)
+        assert seen == [("neutral", "markdown")]
 
     @pytest.mark.asyncio
     async def test_verify_adds_the_back_translation(self, on, monkeypatch):
