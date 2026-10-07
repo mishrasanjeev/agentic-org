@@ -88,7 +88,7 @@ class TestCatalogue:
     def test_keys_are_unique_grouped_and_defaults_pass_their_own_checks(self):
         items = console.catalogue()
         keys = [item.key for item in items]
-        assert len(keys) == len(set(keys)) and len(keys) == 9
+        assert len(keys) == len(set(keys)) and len(keys) == 8
         groups = {key for key, _ in console.GROUPS}
         for item in items:
             assert item.group in groups
@@ -100,6 +100,14 @@ class TestCatalogue:
         with pytest.raises(console.ConsoleError) as info:
             console.definition("nothing")
         assert info.value.status == 404
+
+    def test_speech_settings_appear_only_while_speech_is_on(self, monkeypatch):
+        monkeypatch.setattr(settings, "speech_intelligence_enabled", False)
+        assert not [k for k in console.definitions() if k.startswith("speech.")]
+        monkeypatch.setattr(settings, "speech_intelligence_enabled", True)
+        speech = [k for k in console.definitions() if k.startswith("speech.")]
+        assert "speech.required_disclosures" in speech
+        assert [key for key, _ in console.GROUPS][-1] == "speech"
 
     def test_values_are_checked_against_their_kind_and_bounds(self):
         assert console.check("documents.type_confidence_floor", 0.8) == 0.8
@@ -313,8 +321,7 @@ class TestRoutes:
             "content",
             "conversations",
             "queue",
-            "speech",
-        ] and listed["total"] == 9
+        ] and listed["total"] == 8
         out = await api.set_setting("conversations.slot_retries", api.ValueIn(value=4), request, tenant_id=str(TENANT))
         assert out["value"] == 4 and out["updated_by"] == "u1"
         with pytest.raises(HTTPException) as info:

@@ -22,7 +22,8 @@ ALL = [item.key for item in disclosures.CATALOGUE]
 
 
 class TestDisclosures:
-    def test_the_catalogue_and_what_a_call_type_requires(self):
+    def test_the_catalogue_and_what_a_call_type_requires(self, monkeypatch):
+        monkeypatch.setattr(settings, "speech_intelligence_enabled", True)
         keys = [item["key"] for item in disclosures.catalogue()]
         assert keys == ALL and "recorded_line" in keys
         assert [d.key for d in disclosures.required_for("service", ALL)] == ["recorded_line", "identity_verification"]
@@ -168,19 +169,25 @@ class TestLive:
         row.started_at = datetime.now(UTC) - timedelta(seconds=5)
         searched: list[str] = []
 
-        async def search(tenant_id, text, limit):
-            searched.append(text)
+        async def search(tenant_id, text, limit, domains=None):
+            searched.append((text, domains))
             return [{"document": "Loans FAQ", "text": "Home loan rates start at 8.5 per cent.", "score": 0.9}]
 
         first = await assist.append_turn(
-            TENANT, row.id, speaker="customer", text="I want a home loan for 20 lakh", at=4.0, search=search
+            TENANT,
+            row.id,
+            speaker="customer",
+            text="I want a home loan for 20 lakh",
+            at=4.0,
+            search=search,
+            domains=["finance"],
         )
         assert (
             first["turn_count"] == 1
             and first["intent"]["name"] in ("loan_enquiry", "loan_application")
             and first["suggestions"][0]["document"] == "Loans FAQ"
         )
-        assert first["new_flags"] == [] and searched == ["I want a home loan for 20 lakh"]
+        assert first["new_flags"] == [] and searched == [("I want a home loan for 20 lakh", ["finance"])]
         second = await assist.append_turn(
             TENANT,
             row.id,
@@ -229,18 +236,45 @@ class TestLive:
         assert info.value.code == "call_type_unknown"
 
     @pytest.mark.asyncio
+    async def test_a_turn_that_lost_the_race_is_retried_on_the_newer_list(self, monkeypatch):
+        session = _Session()
+        _use(monkeypatch, session)
+        opened = await assist.start(TENANT, call_ref="C-3", call_type="service", agent_id=None, required=[])
+        row = session.rows[0]
+        row.id = uuid.UUID(opened["id"])
+        real_execute = session.execute
+        bumped = {"done": False}
+
+        async def racing_execute(statement):
+            result = await real_execute(statement)
+            if "FOR UPDATE" in str(statement) and not bumped["done"]:
+                bumped["done"] = True
+                row.turn_count = 1  # another request kept a turn between the read and the lock
+                row.turns_encrypted = {
+                    "_encrypted": "enc:" + json.dumps([{"speaker": "agent", "text": "hello", "start": 0.0}])
+                }
+            return result
+
+        session.execute = racing_execute
+        out = await assist.append_turn(
+            TENANT, row.id, speaker="customer", text="hi there", at=2.0, search=AsyncMock(return_value=[])
+        )
+        assert out["turn_count"] == 2 and [t["text"] for t in assist.turns_of_row(row)] == ["hello", "hi there"]
+
+    @pytest.mark.asyncio
     async def test_the_knowledge_search_degrades_to_nothing(self, monkeypatch):
         import api.v1.knowledge as knowledge
 
         monkeypatch.setattr(knowledge, "_native_semantic_search", AsyncMock(side_effect=RuntimeError("down")))
-        assert await assist.default_search(TENANT, "rates", 3) == []
+        assert await assist.default_search(TENANT, "rates", 3, ["finance"]) == []
         monkeypatch.setattr(
             knowledge,
             "_native_semantic_search",
             AsyncMock(return_value=[SimpleNamespace(document_name="FAQ", chunk_text="x" * 500, score=0.42)]),
         )
-        found = await assist.default_search(TENANT, "rates", 3)
+        found = await assist.default_search(TENANT, "rates", 3, ["finance"])
         assert found == [{"document": "FAQ", "text": "x" * 400, "score": 0.42}]
+        assert knowledge._native_semantic_search.call_args.args[4] == ["finance"]  # the caller domains reach the search
 
     def test_unreadable_turns_are_empty(self):
         row = SimpleNamespace(turns_encrypted={"_encrypted": "enc:not json"})
@@ -272,7 +306,7 @@ class TestRoutes:
         for call in (
             api.recording_disclosures(uuid.uuid4(), call_type="service", tenant_id=str(TENANT)),
             api.start_session(api.SessionIn(call_ref="C-1"), request, tenant_id=str(TENANT)),
-            api.post_turn(uuid.uuid4(), api.TurnIn(text="hi"), tenant_id=str(TENANT)),
+            api.post_turn(uuid.uuid4(), api.TurnIn(text="hi"), tenant_id=str(TENANT), domains=None),
             api.close_session(uuid.uuid4(), tenant_id=str(TENANT)),
             api.list_sessions(status=None, limit=10, tenant_id=str(TENANT)),
             api.get_session(uuid.uuid4(), tenant_id=str(TENANT)),
@@ -313,9 +347,15 @@ class TestRoutes:
             and assist.start.call_args.kwargs["required"] == ALL
         )
         assert (
-            await api.post_turn(uuid.uuid4(), api.TurnIn(speaker="customer", text="hi", at=3.0), tenant_id=str(TENANT))
+            await api.post_turn(
+                uuid.uuid4(),
+                api.TurnIn(speaker="customer", text="hi", at=3.0),
+                tenant_id=str(TENANT),
+                domains=["finance"],
+            )
         )["id"] == "s"
         assert assist.append_turn.call_args.kwargs["at"] == 3.0
+        assert assist.append_turn.call_args.kwargs["domains"] == ["finance"]
         assert (await api.close_session(uuid.uuid4(), tenant_id=str(TENANT)))["status"] == "closed"
         assert (await api.list_sessions(status="open", limit=10, tenant_id=str(TENANT)))["total"] == 1
         with pytest.raises(HTTPException) as info:
@@ -328,7 +368,7 @@ class TestRoutes:
         assert info.value.status_code == 404
         monkeypatch.setattr(assist, "append_turn", AsyncMock(side_effect=SpeechError(409, "closed", "no")))
         with pytest.raises(HTTPException) as info:
-            await api.post_turn(uuid.uuid4(), api.TurnIn(text="hi"), tenant_id=str(TENANT))
+            await api.post_turn(uuid.uuid4(), api.TurnIn(text="hi"), tenant_id=str(TENANT), domains=None)
         assert info.value.status_code == 409
         monkeypatch.setattr(store, "get_recording", AsyncMock(return_value=None))
         with pytest.raises(HTTPException) as info:

@@ -74,6 +74,8 @@ describe("LiveAssist", () => {
     fireEvent.click(screen.getByTestId("live-close"));
     expect(await screen.findByTestId("live-report")).toHaveTextContent("1 missing, 1 late");
     await waitFor(() => expect(screen.queryByTestId("live-send")).toBeNull());
+    fireEvent.click(screen.getByTestId("live-new"));
+    expect(await screen.findByTestId("live-start")).toBeTruthy();
   });
 
   it("reports a session that cannot be opened", async () => {

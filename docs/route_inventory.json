@@ -9374,7 +9374,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "speech.live.sensitive.read",
-    "source_line": 203,
+    "source_line": 206,
     "tenant_required": true
   },
   {
@@ -9410,7 +9410,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "speech.live.sensitive.read",
-    "source_line": 226,
+    "source_line": 229,
     "tenant_required": true
   },
   {
@@ -9428,7 +9428,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "speech.live.sensitive.write",
-    "source_line": 184,
+    "source_line": 187,
     "tenant_required": true
   },
   {
@@ -10400,7 +10400,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "workbench.console.sensitive.write",
-    "source_line": 102,
+    "source_line": 104,
     "tenant_required": true
   },
   {
@@ -10418,7 +10418,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "workbench.console.sensitive.write",
-    "source_line": 81,
+    "source_line": 83,
     "tenant_required": true
   },
   {

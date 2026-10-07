@@ -112,9 +112,13 @@ GROUPS: tuple[tuple[str, str], ...] = (
 )
 
 
+def _speech_on() -> bool:
+    return bool(getattr(settings, "speech_intelligence_enabled", False))
+
+
 def catalogue() -> tuple[Setting, ...]:
     """The settings, built on demand so the catalogues they draw options from load lazily."""
-    return (
+    base: tuple[Setting, ...] = (
         Setting(
             "documents.type_confidence_floor",
             "Document type confidence floor",
@@ -201,17 +205,23 @@ def catalogue() -> tuple[Setting, ...]:
             [],
             "core/workbench/queue.py list_items",
         ),
-        Setting(
-            "speech.required_disclosures",
-            "Disclosures required on calls",
-            "The scripts an agent must say; each applies to the call types it names.",
-            "speech",
-            "list",
-            ["recorded_line", "identity_verification"],
-            "core/speech/disclosures.py required_for",
-            options=_disclosure_keys(),
-        ),
     )
+    if _speech_on():
+        # Speech settings exist only while speech intelligence is on, so the console of a
+        # deployment without it is unchanged.
+        base = base + (
+            Setting(
+                "speech.required_disclosures",
+                "Disclosures required on calls",
+                "The scripts an agent must say; each applies to the call types it names.",
+                "speech",
+                "list",
+                ["recorded_line", "identity_verification"],
+                "core/speech/disclosures.py required_for",
+                options=_disclosure_keys(),
+            ),
+        )
+    return base
 
 
 def definitions() -> dict[str, Setting]:
