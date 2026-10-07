@@ -962,6 +962,15 @@ class WorkflowEngine:
         return match.group(1) if match else None
 
     @staticmethod
+    def _fallback_sources(step_id: Any, steps: list[dict]) -> list[str]:
+        """The steps that name ``step_id`` as their fallback, in definition order."""
+        return [
+            s["id"]
+            for s in steps
+            if isinstance(s, dict) and s.get("id") != step_id and WorkflowEngine._fallback_target(s) == step_id
+        ]
+
+    @staticmethod
     def _build_step_index(steps: list[dict]) -> dict[str, dict]:
         """Return a mapping from step_id -> step definition."""
         return {step["id"]: step for step in steps}
@@ -983,6 +992,11 @@ class WorkflowEngine:
                 if dep in step_set:
                     graph[dep].append(step["id"])
                     in_degree[step["id"]] += 1
+            # A fallback runs after the step it falls back from, declared dependency or not.
+            fallback = WorkflowEngine._fallback_target(step)
+            if fallback is not None and fallback in step_set and fallback != step["id"]:
+                graph[step["id"]].append(fallback)
+                in_degree[fallback] += 1
 
         # Seed queue with zero-in-degree nodes in definition order.
         queue: deque[str] = deque()
@@ -1024,17 +1038,28 @@ class WorkflowEngine:
     def _check_dependencies(step: dict, state: dict) -> str | None:
         """Return an error message if any dependency has not succeeded, else None."""
         step_results = state.get("step_results", {})
+        sid = step.get("id")
+        # A fallback runs only when a step it falls back from failed. The sources come from the
+        # definition, so a fallback without a declared dependency on its source is still gated.
+        definition_steps = (state.get("definition") or {}).get("steps") or []
+        sources = WorkflowEngine._fallback_sources(sid, definition_steps)
         for dep_id in step.get("depends_on", []):
+            if dep_id not in sources and (step_results.get(dep_id) or {}).get("fallback_target") == sid:
+                sources.append(dep_id)
+        if sources:
+            for source in sources:
+                if source not in step_results:
+                    return f"Fallback source '{source}' has not been executed"
+            if not any(step_results[source].get("status") == "failed" for source in sources):
+                return "fallback_not_needed"
+        for dep_id in step.get("depends_on", []):
+            if dep_id in sources:
+                continue
             dep_result = step_results.get(dep_id)
             if dep_result is None:
                 return f"Dependency '{dep_id}' has not been executed"
             if dep_result.get("status") == "skipped" and dep_result.get("reason") == "branch_not_taken":
                 return "branch_not_taken"
-            if dep_result.get("fallback_target") == step.get("id"):
-                # A fallback runs only when the step it falls back from failed.
-                if dep_result.get("status") == "failed":
-                    continue
-                return "fallback_not_needed"
             if dep_result.get("status") not in ("completed",):
                 return f"Dependency '{dep_id}' did not complete successfully (status={dep_result.get('status')})"
         return None
