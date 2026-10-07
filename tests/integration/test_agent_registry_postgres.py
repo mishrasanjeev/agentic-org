@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import asyncio
+import importlib
 import os
 import uuid
 from contextlib import asynccontextmanager
@@ -24,9 +25,9 @@ from core.models.agent import Agent
 from core.models.agent_registry import AgentRegistryEntry, AgentRegistryEvent
 from core.ownership import Caller
 from core.schemas.api import AgentCardIn
-from migrations.versions import v6_z48_agent_registry as migration
 
 DB_URL = os.getenv("AGENTICORG_DB_URL", "")
+migration = importlib.import_module("migrations.versions.v6_z48_agent_registry")
 pytestmark = pytest.mark.skipif(not DB_URL, reason="Requires local PostgreSQL")
 
 
