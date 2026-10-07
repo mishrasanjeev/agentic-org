@@ -345,3 +345,88 @@ class TestRoutes:
         assert 'event.type !== "conversation.message"' in panel
         app = (ROOT / "ui" / "src" / "App.tsx").read_text(encoding="utf-8")
         assert 'path="/dashboard/conversations"' in app
+
+
+class TestConsoleRoutes:
+    @pytest.mark.asyncio
+    async def test_the_console_lists_opens_takes_over_replies_and_releases(self, monkeypatch):
+        from api.v1 import conversation_supervisor as api
+
+        monkeypatch.setattr(settings, "conversation_v2_enabled", True)
+        session_id = uuid.uuid4()
+        view = {"id": str(session_id), "session_key": "k", "taken_over_by": "sup"}
+        monkeypatch.setattr(supervisor, "list_live", AsyncMock(return_value=[view]))
+        monkeypatch.setattr(supervisor, "transcript", AsyncMock(return_value={**view, "history": []}))
+        monkeypatch.setattr(supervisor, "takeover", AsyncMock(return_value=view))
+        monkeypatch.setattr(supervisor, "reply", AsyncMock(return_value=view))
+        monkeypatch.setattr(supervisor, "release", AsyncMock(return_value={**view, "taken_over_by": None}))
+        request = SimpleNamespace(state=SimpleNamespace(claims={"agenticorg:user_id": "sup"}))
+
+        listed = await api.list_sessions(limit=10, include_idle=True, tenant_id=str(TENANT))
+        assert listed == {"sessions": [view], "total": 1}
+        assert (await api.get_session(session_id, tenant_id=str(TENANT)))["history"] == []
+        assert (await api.take_over(session_id, request, tenant_id=str(TENANT)))["taken_over_by"] == "sup"
+        assert (await api.send_reply(session_id, api.ReplyIn(text="hello"), request, tenant_id=str(TENANT)))[
+            "id"
+        ] == str(session_id)
+        assert (await api.release_session(session_id, request, tenant_id=str(TENANT)))["taken_over_by"] is None
+        assert supervisor.reply.call_args.args[2:] == ("sup", "hello")
+
+    @pytest.mark.asyncio
+    async def test_an_unknown_session_is_not_found_on_every_route(self, monkeypatch):
+        from api.v1 import conversation_supervisor as api
+
+        monkeypatch.setattr(settings, "conversation_v2_enabled", True)
+        for name in ("transcript", "takeover", "reply", "release"):
+            monkeypatch.setattr(supervisor, name, AsyncMock(return_value=None))
+        request = SimpleNamespace(state=SimpleNamespace(claims={"agenticorg:user_id": "sup"}))
+        session_id = uuid.uuid4()
+        for call in (
+            api.get_session(session_id, tenant_id=str(TENANT)),
+            api.take_over(session_id, request, tenant_id=str(TENANT)),
+            api.send_reply(session_id, api.ReplyIn(text="x"), request, tenant_id=str(TENANT)),
+            api.release_session(session_id, request, tenant_id=str(TENANT)),
+        ):
+            with pytest.raises(HTTPException) as info:
+                await call
+            assert info.value.status_code == 404 and info.value.detail["error"] == "not_found"
+
+    @pytest.mark.asyncio
+    async def test_the_review_item_of_a_handoff_is_written_for_the_agent(self, monkeypatch):
+        import core.database as database
+
+        added: list = []
+
+        class _Session:
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, *args):
+                return False
+
+            def add(self, row):
+                added.append(row)
+
+            async def flush(self):
+                return None
+
+        monkeypatch.setattr(database, "get_tenant_session", lambda *_a, **_k: _Session())
+        agent = uuid.uuid4()
+        item_id = await escalation._review_item(
+            TENANT,
+            agent_id=str(agent),
+            title="Hand-off: Fund transfer",
+            reason=escalation.REASON_FALLBACKS,
+            context={"summary": "s"},
+            requested_by=None,
+        )
+        assert (
+            item_id
+            and added[0].agent_id == agent
+            and added[0].priority == "high"
+            and added[0].trigger_type == escalation.TRIGGER
+        )
+        assert (
+            await escalation._review_item(TENANT, agent_id="", title="t", reason="r", context={}, requested_by=None)
+            is None
+        )
