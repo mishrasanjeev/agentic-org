@@ -87,6 +87,43 @@ class TestStatements:
             == 0
         )
 
+    def test_signed_debit_cells_are_debited_as_magnitudes(self):
+        rows = [
+            ["02/09/2026", "Card payment", "100 Dr", "", "900"],
+            ["03/09/2026", "Transfer", "(200)", "", "700"],
+            ["04/09/2026", "Fee", "-50", "", "650"],
+        ]
+        result = statements.analyse(_statement(rows=rows, opening="1000", closing="650"))
+        assert [t["debit"] for t in result["transactions"]] == [100.0, 200.0, 50.0]
+        assert [t["expected_balance"] for t in result["transactions"]] == [900.0, 700.0, 650.0]
+        summary = result["summary"]
+        assert summary["balance_breaks"] == 0 and summary["total_debits"] == 350.0 and summary["consistent"] is True
+
+    def test_flags_are_recomputed_after_continuation_text_is_joined(self):
+        rows = [
+            ["02/09/2026", "Cheque 123", "500", "", "9,500"],
+            ["", "RETURNED insufficient funds", "", "", ""],
+            ["05/09/2026", "NEFT from Example Ltd", "", "40,000", "49,500"],
+            ["", "SALARY SEP 2026", "", "", ""],
+        ]
+        result = statements.analyse(_statement(rows=rows, opening="10000", closing="49500"))
+        first, second = result["transactions"]
+        assert first["description"] == "Cheque 123 RETURNED insufficient funds"
+        assert first["flags"] == ["returned_or_bounced"] and second["flags"] == ["salary_credit"]
+        summary = result["summary"]
+        assert summary["returned_or_bounced"] == 1 and [s["amount"] for s in summary["salary_credits"]] == [40000.0]
+
+    def test_a_statement_with_no_checked_rows_is_indeterminate(self):
+        empty = statements.analyse({"index": 1, "document_type": "bank_statement", "fields": [], "tables": []})
+        assert empty["summary"]["consistent"] is None and empty["summary"]["rows_checked"] == 0
+        single = statements.analyse(_statement(rows=ROWS[:1], opening="", closing=""))
+        assert single["transactions"][0]["consistent"] is None
+        assert single["summary"]["consistent"] is None and single["summary"]["rows_checked"] == 0
+        no_opening = statements.analyse(_statement(rows=ROWS[:4], opening="", closing=""))
+        assert no_opening["summary"]["rows_checked"] == 2 and no_opening["summary"]["consistent"] is True
+        mismatch = statements.analyse(_statement(rows=ROWS[:1], opening="", closing="1"))
+        assert mismatch["summary"]["closing_matches"] is False and mismatch["summary"]["consistent"] is False
+
 
 def _detail(doc_id, fields, lines, rows):
     return {
@@ -154,6 +191,19 @@ class TestCompare:
         same = compare.compare(before, before)
         assert same["identical"] is True and same["summary"]["fields_changed"] == 0
         assert compare.compare(before, after, document_index=3)["comparable"] is False
+
+    def test_a_table_on_one_side_only_returns_its_rows(self, monkeypatch):
+        before = {"tables": [{"header": ["a"], "rows": [["x", "1"], ["y", "2"]]}]}
+        after: dict = {"tables": []}
+        [removed] = compare.compare_tables(before, after)
+        assert removed["present_after"] is False and removed["changed"] is True
+        assert removed["rows_removed"] == ["x | 1", "y | 2"] and removed["rows_added"] == []
+        [added] = compare.compare_tables(after, before)
+        assert added["present_before"] is False and added["rows_added"] == ["x | 1", "y | 2"]
+        assert added["rows_removed"] == []
+        monkeypatch.setattr(compare, "MAX_LINE_CHANGES", 1)
+        [limited] = compare.compare_tables(before, after)
+        assert limited["rows_removed"] == ["x | 1"]
 
 
 class TestRoutes:
