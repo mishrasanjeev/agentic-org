@@ -62,6 +62,7 @@ const ALL_NAV: Array<{ path: string; labelKey: string; label: string; roles: rea
   { path: "/dashboard/settings/model-gateway", labelKey: "nav.modelGateway", label: "Model Gateway", roles: ["admin"] },
   { path: "/dashboard/settings/guardrails", labelKey: "nav.guardrails", label: "Guardrails", roles: ["admin"] },
   { path: "/dashboard/packs", labelKey: "nav.packs", label: "Industry Packs", roles: ["admin"] },
+  { path: "/dashboard/agent-catalogue", labelKey: "nav.agentCatalogue", label: "Agent Catalogue", roles: ["admin"] },
   { path: "/dashboard/sla", labelKey: "nav.sla", label: "SLA Monitor", roles: ["admin"] },
   { path: "/dashboard/billing", labelKey: "nav.billing", label: "Billing", roles: ["admin"] },
   { path: "/dashboard/settings", labelKey: "nav.settings", label: "Settings", roles: ["admin"] },

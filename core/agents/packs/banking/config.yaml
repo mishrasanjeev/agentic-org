@@ -1,0 +1,78 @@
+name: banking
+display_name: Banking Pack
+description: Agent templates for retail and SME banking operations - loan underwriting support, KYC review, collections, complaint handling and reconciliation - each held to a review condition and a confidence floor
+version: "1.0.0"
+installable: true
+pricing:
+  inr_monthly_per_client: 9999
+  usd_monthly_per_client: 120
+  type: paid_addon
+  trial_days: 14
+  max_trial_clients: 3
+compliance:
+  - KYC_AML
+  - fair_practices_code
+  - grievance_redressal
+  - data_localisation
+agents:
+  - type: loan_underwriting_analyst
+    domain: finance
+    tools: [knowledge_base_search, check_account_balance, fetch_bank_statement]
+    llm_model: gpt-4o
+    hitl_condition: "recommendation != 'decline' OR exposure_inr > 500000 OR policy_exceptions > 0"
+    confidence_floor: 0.90
+    prompt_file: prompts/loan_underwriting_analyst.prompt.txt
+    system_prompt_suffix: >
+      Assess credit applications against the credit policy in the knowledge base.
+      Every approval recommendation and every policy exception goes to a human underwriter.
+      Never state an approval as final: the decision belongs to the credit committee.
+  - type: kyc_reviewer
+    domain: ops
+    tools: [knowledge_base_search]
+    llm_model: gpt-4o
+    hitl_condition: "outcome != 'clear' OR risk_rating != 'low'"
+    confidence_floor: 0.92
+    prompt_file: prompts/kyc_reviewer.prompt.txt
+    system_prompt_suffix: >
+      Check submitted customer documents against the KYC checklist in the knowledge base.
+      Every unclear, mismatched or high-risk case goes to a compliance officer.
+      Never approve onboarding; recommend only.
+  - type: collections_agent
+    domain: finance
+    tools: [knowledge_base_search, list_invoices, get_invoice_by_id, create_payment_link, send_email]
+    llm_model: gpt-4o-mini
+    hitl_condition: "days_past_due > 60 OR amount_inr > 100000 OR hardship_indicated == True"
+    confidence_floor: 0.88
+    prompt_file: prompts/collections_agent.prompt.txt
+    system_prompt_suffix: >
+      Follow the fair practices code in every reminder: no threats, no contact outside permitted hours, no third parties.
+      A customer who indicates hardship is routed to a human, never pressed.
+  - type: complaint_handler
+    domain: ops
+    tools: [knowledge_base_search, send_email]
+    llm_model: gpt-4o-mini
+    hitl_condition: "category in ['fraud', 'unauthorised_transaction', 'regulatory'] OR escalation_requested == True"
+    confidence_floor: 0.85
+    prompt_file: prompts/complaint_handler.prompt.txt
+    system_prompt_suffix: >
+      Acknowledge every complaint within the grievance redressal timelines in the knowledge base.
+      Fraud, unauthorised transactions and anything addressed to a regulator go to a human at once.
+  - type: bank_reconciliation_analyst
+    domain: finance
+    tools: [fetch_bank_statement, get_transaction_list, check_account_balance, list_invoices]
+    llm_model: gpt-4o-mini
+    hitl_condition: "unmatched_count > 0 OR variance_inr != 0"
+    confidence_floor: 0.90
+    prompt_file: prompts/bank_reconciliation_analyst.prompt.txt
+    system_prompt_suffix: >
+      Match statement lines to ledger entries and report every unmatched item and variance.
+      Never post an adjusting entry: propose it for a human to book.
+workflows:
+  - name: daily_collections_review
+    schedule: "0 9 * * 1-5"
+    agents: [collections_agent]
+    description: Weekday review of overdue accounts with reminders drafted for human approval above the thresholds
+  - name: daily_bank_reconciliation
+    schedule: "0 6 * * *"
+    agents: [bank_reconciliation_analyst]
+    description: Daily statement-to-ledger match with exceptions listed for a human
