@@ -1067,12 +1067,14 @@ class TestDocumentedRoutes:
 
         from api.main import app
 
-        # Every content route the application serves, whichever router declares it.
+        # Every content route the application serves, whichever router declares it. The OpenAPI paths
+        # hold the full path whether FastAPI includes routers eagerly or lazily (_IncludedRouter).
         paths = {
-            (method, route.path.removeprefix("/api/v1"))
-            for route in app.routes
-            if getattr(route, "path", "").startswith("/api/v1/content")
-            for method in getattr(route, "methods", set())
+            (method.upper(), path.removeprefix("/api/v1"))
+            for path, operations in app.openapi()["paths"].items()
+            if path.startswith("/api/v1/content")
+            for method in operations
+            if method in ("get", "post", "put", "patch", "delete")
         }
         doc = (Path(__file__).resolve().parents[2] / "docs" / "content" / "services.md").read_text(encoding="utf-8")
         documented = set(re.findall(r"`(GET|POST|PUT|DELETE) (/content/[^`\s]+)`", doc))
