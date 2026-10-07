@@ -13,11 +13,11 @@ from sqlalchemy import select
 from api.deps import get_current_tenant, get_current_user, get_user_domains
 from api.route_metadata import route_meta
 from api.v1.agents import _effective_caller, _user_uuid_from_claims
-from core.agent_registry import dependencies, lifecycle
+from core.agent_registry import dependencies, lifecycle, reliability
 from core.database import get_tenant_session
 from core.models.agent import Agent
 from core.ownership import Caller, caller_from_request, can_view_agent, require_agent_mutable, require_agent_visible
-from core.schemas.api import AgentCardIn, AgentLifecycleIn
+from core.schemas.api import AgentCardIn, AgentLifecycleIn, AgentRatingIn
 
 logger = structlog.get_logger()
 
@@ -205,6 +205,81 @@ async def get_agent_dependencies(
 
         result = await dependencies.graph(session, tid, agent, load_agent=_load)
         return {"id": str(agent_id), "kinds": list(dependencies.KINDS), **result}
+
+
+@router.get("/agents/{agent_id}/reliability")
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="agents.read",
+    rate_limit="standard",
+    idempotency="read-only",
+    audit_event="agents.reliability.read",
+)
+async def get_agent_reliability(
+    agent_id: UUID,
+    days: int | None = None,
+    tenant_id: str = Depends(get_current_tenant),
+    user_domains: list[str] | None = Depends(get_user_domains),
+    caller: Caller | None = Depends(caller_from_request),
+) -> dict:
+    """Reliability metrics over the window (30 days by default, at most 365) and the rating summary."""
+    _require_enabled()
+    try:
+        window = reliability.validate_window(days)
+    except reliability.RatingError as exc:
+        raise HTTPException(422, str(exc)) from None
+    tid = _uuid.UUID(tenant_id)
+    async with get_tenant_session(tid) as session:
+        agent = await _agent(session, tid, agent_id)
+        require_agent_visible(agent, _effective_caller(caller, user_domains))
+        return {
+            "id": str(agent_id),
+            "reliability": await reliability.metrics(session, tid, agent, days=window),
+            "rating": await reliability.rating_summary(session, tid, agent_id),
+        }
+
+
+@router.post("/agents/{agent_id}/rating")
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="agents.read",
+    rate_limit="standard",
+    idempotency="idempotent-one-rating-per-user",
+    audit_event="agents.rating.set",
+)
+async def rate_agent(
+    agent_id: UUID,
+    body: AgentRatingIn,
+    tenant_id: str = Depends(get_current_tenant),
+    user: dict = Depends(get_current_user),
+    user_domains: list[str] | None = Depends(get_user_domains),
+    caller: Caller | None = Depends(caller_from_request),
+) -> dict:
+    """Rate an agent 1 to 5 with a short comment; a new rating by the same person replaces the old.
+
+    Anyone who may see the agent may rate it; a request without a local user (an API key) cannot.
+    """
+    _require_enabled()
+    user_id = _user_uuid_from_claims(user)
+    if user_id is None:
+        raise HTTPException(403, "A rating needs a signed-in user")
+    tid = _uuid.UUID(tenant_id)
+    async with get_tenant_session(tid) as session:
+        agent = await _agent(session, tid, agent_id)
+        require_agent_visible(agent, _effective_caller(caller, user_domains))
+        try:
+            rating = await reliability.rate(session, tid, agent_id, user_id, body.score, body.comment)
+        except reliability.RatingError as exc:
+            raise HTTPException(422, str(exc)) from None
+        await session.flush()
+        return {
+            "id": str(agent_id),
+            "score": rating.score,
+            "comment": rating.comment,
+            "rating": await reliability.rating_summary(session, tid, agent_id),
+        }
 
 
 @router.get("/agent-registry")

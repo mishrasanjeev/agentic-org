@@ -365,6 +365,11 @@ class AgentTrafficSplitIn(BaseModel):
     split: dict[str, Any] | None = None
 
 
+class AgentRatingIn(BaseModel):
+    score: int = Field(..., ge=1, le=5)
+    comment: str | None = Field(None, max_length=500)
+
+
 class AgentLifecycleIn(BaseModel):
     model_config = {"extra": "forbid"}
 

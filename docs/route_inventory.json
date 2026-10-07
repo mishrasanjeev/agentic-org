@@ -464,7 +464,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "agents.read",
-    "source_line": 219,
+    "source_line": 294,
     "tenant_required": true
   },
   {
@@ -482,7 +482,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "agents.read",
-    "source_line": 283,
+    "source_line": 358,
     "tenant_required": true
   },
   {
@@ -1077,6 +1077,42 @@
     "rate_limit": "standard",
     "scope": "agents.sensitive.prompt_history",
     "source_line": 5140,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "agents.rating.set",
+    "auth_required": true,
+    "function": "rate_agent",
+    "idempotency": "idempotent-one-rating-per-user",
+    "key": "POST /api/v1/agents/{agent_id}/rating api/v1/agent_registry.py:rate_agent",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/agent_registry.py",
+    "path": "/api/v1/agents/{agent_id}/rating",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "agents.read",
+    "source_line": 252,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "agents.reliability.read",
+    "auth_required": true,
+    "function": "get_agent_reliability",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/agents/{agent_id}/reliability api/v1/agent_registry.py:get_agent_reliability",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/agent_registry.py",
+    "path": "/api/v1/agents/{agent_id}/reliability",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "agents.read",
+    "source_line": 219,
     "tenant_required": true
   },
   {

@@ -229,6 +229,20 @@ class TestCard:
             return gates.Verdict(declared=False, enforced=False, ok=True, code="no_gate", message="No evaluation gate")
 
         monkeypatch.setattr(gates, "evaluate", _no_gate)
+        from core.agent_registry import reliability
+
+        async def _metrics(_session, _tenant, _agent, days=30):
+            return {"window_days": days, "runs": 0}
+
+        async def _summary(_session, _tenant, _agent_id):
+            return {"count": 0, "average": None}
+
+        async def _certification(_session, _tenant, _agent, *, registry_state, gate_verdict):
+            return {"registry_state": registry_state, "trust_registry": {"attached": False}}
+
+        monkeypatch.setattr(reliability, "metrics", _metrics)
+        monkeypatch.setattr(reliability, "rating_summary", _summary)
+        monkeypatch.setattr(reliability, "certification", _certification)
         agent = _agent()
         entry = _entry(
             agent, "review", purpose="Decide simple claims.", risk_tier="high", channels=["chat"], submitted_by=MAKER
@@ -255,6 +269,8 @@ class TestCard:
             "amendments": 1,
         }
         assert card["controls"]["confidence_floor"] == 0.8 and card["evaluation_gate"]["verdict"]["code"] == "no_gate"
+        assert card["rating"] == {"count": 0, "average": None} and card["reliability"]["window_days"] == 30
+        assert card["certification"]["registry_state"] == "review"
         assert "Decide the claim." not in str(card)
 
     def test_an_agent_without_an_entry_is_a_draft(self, monkeypatch):
@@ -262,6 +278,20 @@ class TestCard:
             return gates.Verdict(declared=False, enforced=False, ok=True, code="no_gate")
 
         monkeypatch.setattr(gates, "evaluate", _no_gate)
+        from core.agent_registry import reliability
+
+        async def _metrics(_session, _tenant, _agent, days=30):
+            return {"window_days": days, "runs": 0}
+
+        async def _summary(_session, _tenant, _agent_id):
+            return {"count": 0, "average": None}
+
+        async def _certification(_session, _tenant, _agent, *, registry_state, gate_verdict):
+            return {"registry_state": registry_state, "trust_registry": {"attached": False}}
+
+        monkeypatch.setattr(reliability, "metrics", _metrics)
+        monkeypatch.setattr(reliability, "rating_summary", _summary)
+        monkeypatch.setattr(reliability, "certification", _certification)
         card = asyncio.run(lifecycle.card(_Session(None), TENANT, _agent(system_prompt_text=None)))
         assert card["registry"]["state"] == "draft" and card["registry"]["next_states"] == ["review"]
         assert card["prompt"]["hash"] is None
@@ -283,6 +313,20 @@ class TestEndpoints:
         monkeypatch.setattr(api, "require_agent_mutable", lambda _agent, _caller: None)
         monkeypatch.setattr(api, "require_agent_visible", lambda _agent, _caller: None)
         monkeypatch.setattr(gates, "evaluate", _no_gate)
+        from core.agent_registry import reliability
+
+        async def _metrics(_session, _tenant, _agent, days=30):
+            return {"window_days": days, "runs": 0}
+
+        async def _summary(_session, _tenant, _agent_id):
+            return {"count": 0, "average": None}
+
+        async def _certification(_session, _tenant, _agent, *, registry_state, gate_verdict):
+            return {"registry_state": registry_state, "trust_registry": {"attached": False}}
+
+        monkeypatch.setattr(reliability, "metrics", _metrics)
+        monkeypatch.setattr(reliability, "rating_summary", _summary)
+        monkeypatch.setattr(reliability, "certification", _certification)
 
         def install(*answers):
             holder["session"] = _Session(*answers)
