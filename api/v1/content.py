@@ -13,6 +13,7 @@ from pydantic import BaseModel, Field
 from api.deps import get_current_tenant, get_user_domains, require_tenant_admin
 from api.route_metadata import route_meta
 from core.content import drafting, drafts, extraction, services, summarisation
+from core.workbench import console
 
 logger = structlog.get_logger()
 router = APIRouter(prefix="/content", tags=["Content"])
@@ -138,7 +139,7 @@ async def post_draft(
 ) -> dict[str, Any]:
     """Draft a document from points and approved sources; notices and circulars wait in the drafts queue."""
     run = await _run(drafting.SERVICE, body, tenant_id, domains)
-    needs = drafting.requires_approval(body)
+    needs = drafting.requires_approval(body, kinds=await console.approval_kinds(tenant_id))
     try:
         draft = await drafts.record(
             uuid.UUID(tenant_id),

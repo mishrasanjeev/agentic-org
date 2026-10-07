@@ -23,6 +23,7 @@ from typing import Any
 import structlog
 from sqlalchemy import select
 
+from core.workbench import console
 from core.workbench.access import ADMIN, WORKBENCHES, approval_filter, holds, tabs_for
 
 logger = structlog.get_logger()
@@ -76,6 +77,7 @@ def approval_item(row: Any, now: datetime) -> dict[str, Any]:
         "kind": "approval",
         "id": str(row.id),
         "title": row.title,
+        "facts": {k: v for k, v in context.items() if isinstance(v, str | int | float) and not k.startswith("_")},
         "summary": summary or row.trigger_type,
         "priority": str(row.priority or "normal"),
         "status": row.status,
@@ -97,6 +99,7 @@ def document_item(row: Any, now: datetime) -> dict[str, Any]:
         "kind": "document",
         "id": str(row.id),
         "title": row.filename or "document",
+        "facts": {"document_types": types, "reasons": len(reasons), "filename": row.filename or ""},
         "summary": "; ".join(reasons)[:300] or ", ".join(types),
         "priority": "high" if any("not recognised" in r or "not read" in r for r in reasons) else "normal",
         "status": row.status,
@@ -115,6 +118,7 @@ def draft_item(row: Any, now: datetime) -> dict[str, Any]:
         "kind": "draft",
         "id": str(row.id),
         "title": row.title or row.kind,
+        "facts": {"service": row.service, "draft_kind": row.kind},
         "summary": f"{row.service} {row.kind}"[:300],
         "priority": "normal",
         "status": row.status,
@@ -133,6 +137,7 @@ def case_item(row: Any, now: datetime) -> dict[str, Any]:
         "kind": "case",
         "id": str(row.id),
         "title": f"Case {row.case_ref}",
+        "facts": {"purpose": row.purpose, "provider": row.provider, "decision_requests": len(requests)},
         "summary": f"{row.purpose} via {row.provider}; {len(requests)} decision request(s)"[:300],
         "priority": "high",
         "status": row.state,
@@ -225,6 +230,7 @@ async def list_items(tenant_id: uuid.UUID, kinds: list[str], *, limit: int = 50,
             found = [case_item(r, now) for r in rows]
             counts["case"] = len(found)
             items.extend(found)
+    items = console.apply_priority_rules(items, await console.value(tenant_id, "queue.priority_rules"))
     items.sort(key=_rank)
     return {"items": items[:per_kind], "counts": counts, "kinds": wanted}
 

@@ -36,6 +36,7 @@ from core.models.bridge import BridgeRegistration as BridgeRegistration
 from core.models.bridge import BridgeRequest as BridgeRequest
 from core.models.bridge import BridgeSession as BridgeSession
 from core.models.budget_alert import BudgetAlert as BudgetAlert
+from core.models.business_setting import BusinessSetting as BusinessSetting
 from core.models.ca_client_billing import CAClientInvoice as CAClientInvoice
 from core.models.ca_client_billing import CAClientPayment as CAClientPayment
 from core.models.ca_client_billing import CAServicePlan as CAServicePlan

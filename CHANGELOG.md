@@ -4,6 +4,20 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
 
 ## [Unreleased] - 2026-08-29
 
+### Added - Workbenches: the business console for rules, thresholds and routing
+- `GET /workbench/console` lists the settings a tenant may change without a
+  release, with bounds, options, the tenant's value and the default;
+  `PUT` and `DELETE /workbench/console/{key}` set a value within the
+  bounds or restore the default, keeping the previous value and writing
+  an audit row (`core/workbench/console.py`, `business_settings`). The
+  values take effect in document review routing (confidence floors,
+  types always reviewed), the draft kinds that wait for approval, the
+  banking dialogue (answers tried before handing over, negative turns
+  before offering a person, amount ceilings by intent) and the review
+  queue's priority rules; with the flag off or the store unreadable the
+  defaults apply, which are the values the code had. The supervisor's
+  workbench shows the console as a tab (`ui/src/components/BusinessConsole.tsx`).
+
 ### Added - Workbenches: the unified review queue with edit before approval
 - `GET /workbench/queue` lists everything waiting for a person in one
   shape and one order (priority, then age): approvals pending, documents

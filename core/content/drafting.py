@@ -75,11 +75,12 @@ OUTPUT_SCHEMA: dict[str, Any] = {
 }
 
 
-def requires_approval(payload: DraftIn) -> bool:
-    """Policy: notices and circulars always, anything the caller marks, nothing else."""
+def requires_approval(payload: DraftIn, kinds: tuple[str, ...] | list[str] = APPROVAL_KINDS) -> bool:
+    """Policy: the approval kinds (notices and circulars unless the console says otherwise) always,
+    anything the caller marks, nothing else."""
     if payload.require_approval is not None:
-        return bool(payload.require_approval) or payload.kind in APPROVAL_KINDS
-    return payload.kind in APPROVAL_KINDS
+        return bool(payload.require_approval) or payload.kind in kinds
+    return payload.kind in kinds
 
 
 def messages(payload: DraftIn, sources: list[Source]) -> list[dict[str, str]]:

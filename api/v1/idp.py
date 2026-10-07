@@ -13,6 +13,7 @@ from api.deps import get_current_tenant
 from api.route_metadata import route_meta
 from core.idp import classify, fields, pipeline
 from core.idp.pages import MAX_BYTES, MAX_PAGES, DocumentError, ocr_available
+from core.workbench import console
 
 logger = structlog.get_logger()
 router = APIRouter(prefix="/idp", tags=["Documents"])
@@ -39,6 +40,7 @@ def _off() -> HTTPException:
 )
 async def document_types(tenant_id: str = Depends(get_current_tenant)) -> dict[str, Any]:
     """The document types the classifier knows, the fields each one yields, and whether OCR is installed."""
+    rules = await console.document_rules(tenant_id)
     return {
         "enabled": pipeline.enabled(),
         "ocr_available": ocr_available(),
@@ -52,7 +54,11 @@ async def document_types(tenant_id: str = Depends(get_current_tenant)) -> dict[s
             }
             for item in classify.catalogue()
         ],
-        "floors": {"document_type": pipeline.TYPE_FLOOR, "field": pipeline.FIELD_FLOOR},
+        "floors": {
+            "document_type": rules.type_floor,
+            "field": rules.field_floor,
+            "always_review": list(rules.always_review),
+        },
     }
 
 
@@ -78,7 +84,8 @@ async def analyse(
         raise _off()
     stream = await file.read()
     try:
-        result = pipeline.process(stream, file.content_type or "", ocr=ocr, with_words=with_words)
+        rules = await console.document_rules(tenant_id)
+        result = pipeline.process(stream, file.content_type or "", ocr=ocr, with_words=with_words, rules=rules)
     except DocumentError as exc:
         raise HTTPException(exc.status, detail={"error": exc.code, "message": exc.message}) from None
     answer: dict[str, Any] = {"filename": file.filename, **result}

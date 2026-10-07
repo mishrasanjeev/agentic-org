@@ -63,6 +63,26 @@ hierarchy, delegation, expiry, policy steps); a governed case is decided on its 
 queue says so. The review officer's and the supervisor's workbenches show the queue as a tab, with
 the sum of the four counters behind it.
 
+## The business console
+
+`GET /workbench/console` lists the rules, thresholds and routing a tenant may change without a
+release, each with its bounds, options, the tenant's value where one is set and the default
+(`core/workbench/console.py`, table `business_settings`). An administrator sets a value
+(`PUT /workbench/console/{key}`) within the catalogue's bounds or removes it so the default applies
+again (`DELETE`); every change keeps the previous value and who made it and writes an audit row.
+The supervisor's workbench shows the console as a tab for administrators.
+
+| Setting | Takes effect in |
+| --- | --- |
+| Document type and field confidence floors; document types always reviewed | the review decision of document processing (`core/idp/pipeline.py`) and the floors `GET /idp/document-types` reports |
+| Draft kinds that wait for approval | whether a new draft waits in the drafts queue (`core/content/drafting.py`) |
+| Answers tried before handing over; negative turns before offering a person; amount ceilings by intent | the banking dialogue (`core/conversation/dialogue.py`, `runtime.py`) |
+| Review queue priority rules | the priority of each item in the review queue, from its facts (kind, field, operator, value) |
+
+Readers take the effective value: the tenant's where one is set and the workbench flag is on, the
+catalogue's default otherwise, and the default again when the store cannot be read, so a
+deployment with the console off behaves exactly as before.
+
 ## The shell
 
 The index lists the held workbenches with how each is held (by role or by assignment). A workbench

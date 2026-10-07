@@ -4496,7 +4496,7 @@
     "public_exempt_reason": null,
     "rate_limit": "chat-query",
     "scope": "content.draft.sensitive.write",
-    "source_line": 133,
+    "source_line": 134,
     "tenant_required": true
   },
   {
@@ -4514,7 +4514,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "content.drafts.sensitive.read",
-    "source_line": 205,
+    "source_line": 206,
     "tenant_required": true
   },
   {
@@ -4532,7 +4532,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "content.drafts.sensitive.read",
-    "source_line": 228,
+    "source_line": 229,
     "tenant_required": true
   },
   {
@@ -4550,7 +4550,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "content.drafts.sensitive.write",
-    "source_line": 247,
+    "source_line": 248,
     "tenant_required": true
   },
   {
@@ -4568,7 +4568,7 @@
     "public_exempt_reason": null,
     "rate_limit": "chat-query",
     "scope": "content.extract.sensitive.write",
-    "source_line": 187,
+    "source_line": 188,
     "tenant_required": true
   },
   {
@@ -4622,7 +4622,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "content.read",
-    "source_line": 70,
+    "source_line": 71,
     "tenant_required": true
   },
   {
@@ -4640,7 +4640,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "content.datasets.sensitive.write",
-    "source_line": 84,
+    "source_line": 85,
     "tenant_required": true
   },
   {
@@ -4676,7 +4676,7 @@
     "public_exempt_reason": null,
     "rate_limit": "chat-query",
     "scope": "content.summarise.sensitive.write",
-    "source_line": 169,
+    "source_line": 170,
     "tenant_required": true
   },
   {
@@ -6494,7 +6494,7 @@
     "public_exempt_reason": null,
     "rate_limit": "chat-query",
     "scope": "documents.analyse.sensitive.write",
-    "source_line": 68,
+    "source_line": 74,
     "tenant_required": true
   },
   {
@@ -6512,7 +6512,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "documents.read",
-    "source_line": 116,
+    "source_line": 123,
     "tenant_required": true
   },
   {
@@ -6530,7 +6530,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "documents.read",
-    "source_line": 40,
+    "source_line": 41,
     "tenant_required": true
   },
   {
@@ -10077,6 +10077,60 @@
     "rate_limit": "standard",
     "scope": "workbench.catalogue.read",
     "source_line": 83,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "workbench.console.list",
+    "auth_required": true,
+    "function": "list_settings",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/workbench/console api/v1/workbench_console.py:list_settings",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/workbench_console.py",
+    "path": "/api/v1/workbench/console",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "workbench.console.sensitive.read",
+    "source_line": 60,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "workbench.console.reset",
+    "auth_required": true,
+    "function": "reset_setting",
+    "idempotency": "idempotent-lifecycle-state",
+    "key": "DELETE /api/v1/workbench/console/{key} api/v1/workbench_console.py:reset_setting",
+    "metadata_present": true,
+    "methods": [
+      "DELETE"
+    ],
+    "module": "api/v1/workbench_console.py",
+    "path": "/api/v1/workbench/console/{key}",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "workbench.console.sensitive.write",
+    "source_line": 102,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "workbench.console.set",
+    "auth_required": true,
+    "function": "set_setting",
+    "idempotency": "idempotent-lifecycle-state",
+    "key": "PUT /api/v1/workbench/console/{key} api/v1/workbench_console.py:set_setting",
+    "metadata_present": true,
+    "methods": [
+      "PUT"
+    ],
+    "module": "api/v1/workbench_console.py",
+    "path": "/api/v1/workbench/console/{key}",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "workbench.console.sensitive.write",
+    "source_line": 81,
     "tenant_required": true
   },
   {

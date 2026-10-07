@@ -26,6 +26,15 @@ TYPE_FLOOR = 0.6
 FIELD_FLOOR = 0.7
 
 
+@dataclass(frozen=True)
+class ReviewRules:
+    """What routes a document to review; the business console may set a tenant's own values."""
+
+    type_floor: float = TYPE_FLOOR
+    field_floor: float = FIELD_FLOOR
+    always_review: tuple[str, ...] = ()
+
+
 def enabled() -> bool:
     return bool(getattr(settings, "idp_enabled", False))
 
@@ -55,26 +64,41 @@ class Document:
 
 
 def review_of(
-    document_type: str, confidence: float, found: list[field_extraction.Field], pages: list[Page]
+    document_type: str,
+    confidence: float,
+    found: list[field_extraction.Field],
+    pages: list[Page],
+    *,
+    rules: ReviewRules | None = None,
 ) -> dict[str, Any]:
     """Whether a person must look, and why."""
+    rules = rules or ReviewRules()
     reasons: list[str] = []
     if document_type == classify.UNKNOWN:
         reasons.append("document type not recognised")
-    elif confidence < TYPE_FLOOR:
-        reasons.append(f"document type confidence {confidence:.2f} below {TYPE_FLOOR}")
+    elif confidence < rules.type_floor:
+        reasons.append(f"document type confidence {confidence:.2f} below {rules.type_floor}")
+    elif document_type in rules.always_review:
+        reasons.append(f"document type {document_type} is always reviewed")
     for item in found:
         if item.required and item.status == "missing":
             reasons.append(f"required field {item.name} not found")
-        elif item.required and item.confidence < FIELD_FLOOR:
-            reasons.append(f"field {item.name} confidence {item.confidence:.2f} below {FIELD_FLOOR}")
+        elif item.required and item.confidence < rules.field_floor:
+            reasons.append(f"field {item.name} confidence {item.confidence:.2f} below {rules.field_floor}")
     unread = [p.number for p in pages if p.source == "empty"]
     if unread:
         reasons.append(f"pages not read: {', '.join(str(n) for n in unread)}")
     return {"needed": bool(reasons), "reasons": reasons}
 
 
-def process(stream: bytes, mime_type: str, *, ocr: bool = True, with_words: bool = False) -> dict[str, Any]:
+def process(
+    stream: bytes,
+    mime_type: str,
+    *,
+    ocr: bool = True,
+    with_words: bool = False,
+    rules: ReviewRules | None = None,
+) -> dict[str, Any]:
     """Pages, segments and documents from one file, with the review decision per document."""
     pages = load_pages(stream, mime_type, ocr=ocr)
     segments = bundle.split(pages)
@@ -93,7 +117,7 @@ def process(stream: bytes, mime_type: str, *, ocr: bool = True, with_words: bool
                 fields=found,
                 extra_fields=extra,
                 tables=own_tables,
-                review=review_of(segment.document_type, segment.confidence, found, own_pages),
+                review=review_of(segment.document_type, segment.confidence, found, own_pages, rules=rules),
             )
         )
     needs_review = any(d.review["needed"] for d in documents)

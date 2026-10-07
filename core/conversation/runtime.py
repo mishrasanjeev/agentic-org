@@ -374,6 +374,13 @@ def _recognised(text: str) -> bool:
 HELD_ANSWER = "A colleague has joined this conversation and will reply here."
 
 
+async def business_rules(tid: uuid.UUID) -> Any:
+    """The tenant's conversation rules from the business console; the catalogue's defaults when it is off."""
+    from core.workbench import console
+
+    return await console.conversation_rules(tid)
+
+
 async def held_turn(tid: uuid.UUID, key: str, text: str, dialogue: Dialogue) -> dict[str, Any] | None:
     """While a supervisor holds the session, the user's message goes to them, not to the runtime."""
     from core.conversation import supervisor
@@ -430,7 +437,7 @@ async def finish_turn(
             dialogue.offer = offer.to_dict()
             tail = " " + offer.text
     if (
-        dialogue.negative_turns >= feedback.NEGATIVE_STREAK
+        dialogue.negative_turns >= (await business_rules(tid)).negative_turns
         and dialogue.stage in (dialogue_engine.STAGE_IDLE, dialogue_engine.STAGE_COLLECTING)
         and outcome.kind not in ("escalate", "execute")
     ):
@@ -532,7 +539,10 @@ async def chat_turn(
         if top and top[0].intent.risk == "read" and context is not None:
             if resolve_binding(top[0].intent.name, context.authorized_tools, context.bindings) is None:
                 return None
-    outcome = dialogue_engine.advance(dialogue, text)
+    rules = await business_rules(tid)
+    outcome = dialogue_engine.advance(
+        dialogue, text, rules=dialogue_engine.Rules(retries=rules.retries, amount_limits=rules.amount_limits)
+    )
     execution: dict[str, Any] | None = None
     if outcome.kind == "execute":
         if context is None:
