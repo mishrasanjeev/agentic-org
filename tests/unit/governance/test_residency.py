@@ -263,7 +263,9 @@ class TestEnforcementPoints:
             patch.object(knowledge, "_db_chunk_count", AsyncMock(return_value=0)),
             patch("core.database.get_tenant_session", side_effect=RuntimeError("no database in this test")),
         ):
-            listed = asyncio.run(knowledge.list_documents(page=1, per_page=20, tenant_id=str(TENANT)))
+            listed = asyncio.run(
+                knowledge.list_documents(page=1, per_page=20, tenant_id=str(TENANT), user_domains=None)
+            )
             stats = asyncio.run(knowledge.knowledge_stats(tenant_id=str(TENANT)))
         assert listed.total == 0 and stats.total_chunks == 0
         reads["list"].assert_not_called()

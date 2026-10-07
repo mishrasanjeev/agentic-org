@@ -127,7 +127,9 @@ async def test_the_excerpt_returns_the_whole_chunk_its_place_and_its_neighbours(
     doc_id = uuid.UUID(ROW[0])
     previous = ("22222222-2222-2222-2222-222222222222",)
     sessions["session"] = _Session([ROW], [previous], [])
-    excerpt = await knowledge.knowledge_excerpt(doc_id, q="exposure capped", tenant_id=str(uuid.uuid4()))
+    excerpt = await knowledge.knowledge_excerpt(
+        doc_id, q="exposure capped", tenant_id=str(uuid.uuid4()), user_domains=None
+    )
     assert excerpt.document_id == ROW[0] and excerpt.content == "Exposure is capped."
     assert excerpt.citation is not None and excerpt.citation.heading == "Exposure limits"
     assert [excerpt.content[a:b] for a, b in excerpt.highlights] == ["Exposure", "capped"]
@@ -145,7 +147,7 @@ async def test_the_excerpt_returns_the_whole_chunk_its_place_and_its_neighbours(
 async def test_a_missing_or_withheld_chunk_is_not_found(sessions, monkeypatch):
     sessions["session"] = _Session([])
     with pytest.raises(HTTPException) as missing:
-        await knowledge.knowledge_excerpt(uuid.uuid4(), q=None, tenant_id=str(uuid.uuid4()))
+        await knowledge.knowledge_excerpt(uuid.uuid4(), q=None, tenant_id=str(uuid.uuid4()), user_domains=None)
     assert missing.value.status_code == 404
 
     async def withhold(_tenant, _results):
@@ -154,5 +156,5 @@ async def test_a_missing_or_withheld_chunk_is_not_found(sessions, monkeypatch):
     monkeypatch.setattr(knowledge, "_guard_results", withhold)
     sessions["session"] = _Session([ROW], [], [])
     with pytest.raises(HTTPException) as withheld:
-        await knowledge.knowledge_excerpt(uuid.UUID(ROW[0]), q=None, tenant_id=str(uuid.uuid4()))
+        await knowledge.knowledge_excerpt(uuid.UUID(ROW[0]), q=None, tenant_id=str(uuid.uuid4()), user_domains=None)
     assert withheld.value.status_code == 404
