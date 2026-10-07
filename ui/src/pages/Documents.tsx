@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Helmet } from "react-helmet-async";
 import api, { extractApiError } from "@/lib/api";
 
@@ -89,6 +89,8 @@ export default function Documents() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  // The id of the latest detail request; a response for any other id is stale and dropped.
+  const wantedDetail = useRef<string | null>(null);
 
   const loadList = useCallback(async () => {
     setError(null);
@@ -103,14 +105,17 @@ export default function Documents() {
   }, [status]);
 
   const loadDetail = useCallback(async (id: string) => {
+    wantedDetail.current = id;
     setError(null);
     try {
       const { data } = await api.get(`/idp/documents/${id}`);
+      if (wantedDetail.current !== id || (data as Detail).id !== id) return;
       setDetail(data as Detail);
       setPage(1);
       setEdits({});
       setFocus(null);
     } catch (err) {
+      if (wantedDetail.current !== id) return;
       setDetail(null);
       setError(extractApiError(err, "Failed to load the document."));
     }
@@ -121,7 +126,10 @@ export default function Documents() {
   }, [loadList]);
 
   useEffect(() => {
-    if (selected) void loadDetail(selected);
+    if (!selected) return;
+    // Until the new selection loads, no action may target the previously shown document.
+    setDetail((current) => (current && current.id === selected ? current : null));
+    void loadDetail(selected);
   }, [selected, loadDetail]);
 
   useEffect(() => {
@@ -153,8 +161,9 @@ export default function Documents() {
       const { data } = await api.post(`/idp/documents/${detail.id}/fields`, {
         document_index: part.index,
         field: field.name,
-        value: edits[key] ?? "",
+        value: edits[key] ?? field.value ?? "",
       });
+      if (wantedDetail.current !== (data as Detail).id) return;
       setDetail(data as Detail);
       setNotice(`Saved ${field.name}.`);
     } catch (err) {

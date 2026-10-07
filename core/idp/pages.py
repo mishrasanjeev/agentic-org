@@ -222,13 +222,23 @@ def render_pdf_page(raw_page: Any, *, dpi: int) -> Any:
     return raw_page.render(scale=dpi / 72.0).to_pil()
 
 
-def pdf_pages(stream: bytes, *, ocr: bool = True, max_pages: int = MAX_PAGES) -> list[Page]:
-    """The pages of a PDF: the text layer's words where there is one, OCR where there is not."""
+def pdf_pages(stream: bytes, *, ocr: bool = True, max_pages: int | None = None) -> list[Page]:
+    """The pages of a PDF: the text layer's words where there is one, OCR where there is not.
+
+    A PDF with more pages than the limit is refused, never read in part: a
+    result covering only the first pages would silently drop the rest.
+    """
+    limit = MAX_PAGES if max_pages is None else max_pages
     document = open_pdf(stream)
     pages: list[Page] = []
-    engine = ocr_available()
     try:
-        for index in range(min(len(document), max_pages)):
+        count = len(document)
+        if count > limit:
+            raise DocumentError(
+                413, "too_many_pages", f"The PDF has {count} pages; at most {limit} pages are processed per file"
+            )
+        engine = ocr_available()
+        for index in range(count):
             raw = document[index]
             width, height = raw.get_size()
             page = Page(number=index + 1, width=float(width), height=float(height))

@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import re
 import uuid
+from decimal import Decimal
 from typing import Any, Literal
 
 from pydantic import BaseModel, Field
@@ -19,10 +20,53 @@ from core.content.services import GuardrailProfile, Service
 from core.content.sources import Source
 
 _FACT_RE = re.compile(
-    r"\b\d{1,2}[/-]\d{1,2}[/-]\d{2,4}\b|\b\d{4}-\d{2}-\d{2}\b"
-    r"|(?:₹|rs\.?\s?|inr\s?)?\d[\d,]*(?:\.\d+)?\s?(?:%|percent|lakh|crore|k)?",
+    r"(?P<date>\b\d{1,2}[/-]\d{1,2}[/-]\d{2,4}\b|\b\d{4}-\d{2}-\d{2}\b)"
+    r"|(?:(?P<cur>[₹$€£]|\b(?:rs\.?|inr|usd|eur|gbp)(?=\s?\d))\s?)?"
+    r"(?P<num>\d[\d,]*(?:\.\d+)?)"
+    r"(?:\s?(?P<unit>%|per\s?cent\b|percent\b|lakhs?\b|lacs?\b|crores?\b|cr\b|thousand\b|k\b"
+    r"|millions?\b|mn\b|billions?\b|bn\b))?"
+    r"(?:\s?(?P<cur_after>rupees?\b|dollars?\b|euros?\b|pounds?\b|inr\b|usd\b|eur\b|gbp\b))?",
     re.I,
 )
+# Every spelling of a currency maps to one symbol, so a rewrite may spell it differently but not change it.
+_CURRENCIES = {
+    "₹": "₹",
+    "rs": "₹",
+    "rs.": "₹",
+    "inr": "₹",
+    "rupee": "₹",
+    "rupees": "₹",
+    "$": "$",
+    "usd": "$",
+    "dollar": "$",
+    "dollars": "$",
+    "€": "€",
+    "eur": "€",
+    "euro": "€",
+    "euros": "€",
+    "£": "£",
+    "gbp": "£",
+    "pound": "£",
+    "pounds": "£",
+}
+# Magnitude words scale the figure, so 10 lakh and 10,00,000 are the same amount and 10 lakh and 10 are not.
+_MAGNITUDES = {
+    "lakh": 100_000,
+    "lakhs": 100_000,
+    "lac": 100_000,
+    "lacs": 100_000,
+    "crore": 10_000_000,
+    "crores": 10_000_000,
+    "cr": 10_000_000,
+    "thousand": 1_000,
+    "k": 1_000,
+    "million": 1_000_000,
+    "millions": 1_000_000,
+    "mn": 1_000_000,
+    "billion": 1_000_000_000,
+    "billions": 1_000_000_000,
+    "bn": 1_000_000_000,
+}
 
 
 class AdaptIn(BaseModel):
@@ -55,17 +99,32 @@ _LEVELS = {
 }
 
 
-def facts_in(text: str) -> list[str]:
-    """The figures a rewrite must keep: numbers, amounts, dates and percentages, normalised."""
-    found = []
+def _fact_key(match: re.Match[str]) -> str:
+    """One figure as a comparable key: currency symbol, value with its magnitude applied, and percent."""
+    if match.group("date"):
+        return match.group("date")
+    value = Decimal(match.group("num").replace(",", ""))
+    unit = re.sub(r"\s", "", (match.group("unit") or "").lower())
+    percent = unit in ("%", "percent")
+    if unit in _MAGNITUDES:
+        value *= _MAGNITUDES[unit]
+    currency = _CURRENCIES.get((match.group("cur") or match.group("cur_after") or "").lower(), "")
+    number = format(value.normalize(), "f")
+    return f"{currency}{number}{'%' if percent else ''}"
+
+
+def fact_map(text: str) -> dict[str, str]:
+    """The figures a rewrite must keep, by comparable key, each with the text it was found as."""
+    found: dict[str, str] = {}
     for match in _FACT_RE.finditer(text):
-        token = (
-            re.sub(r"[\s,]", "", match.group(0).lower()).replace("rs.", "rs").replace("inr", "rs").replace("₹", "rs")
-        )
-        digits = re.sub(r"[^\d.%/-]", "", token)
-        if digits and any(ch.isdigit() for ch in digits) and digits not in found:
-            found.append(digits)
+        key = _fact_key(match)
+        found.setdefault(key, re.sub(r"\s+", " ", match.group(0).strip()))
     return found
+
+
+def facts_in(text: str) -> list[str]:
+    """The figures a rewrite must keep: numbers, amounts, dates and percentages, with currency and magnitude."""
+    return list(fact_map(text))
 
 
 def messages(payload: AdaptIn, sources: list[Source]) -> list[dict[str, str]]:
@@ -84,9 +143,9 @@ def messages(payload: AdaptIn, sources: list[Source]) -> list[dict[str, str]]:
 
 def finish(payload: AdaptIn, sources: list[Source], answer: dict[str, Any]) -> dict[str, Any]:
     text = str(answer.get("text") or "")
-    original = facts_in(payload.text)
-    rewritten = facts_in(text)
-    missing = [fact for fact in original if fact not in rewritten]
+    original = fact_map(payload.text)
+    rewritten = fact_map(text)
+    missing = [found_as for key, found_as in original.items() if key not in rewritten]
     kept_terms_missing = [term for term in payload.keep if term.lower() not in text.lower()]
     return {
         "text": text,
