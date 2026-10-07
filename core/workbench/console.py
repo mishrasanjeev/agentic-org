@@ -116,11 +116,16 @@ GROUPS: tuple[tuple[str, str], ...] = (
     ("queue", "Review queue"),
     ("speech", "Speech"),
     ("transactions", "Transaction intelligence"),
+    ("personalisation", "Personalisation"),
 )
 
 
 def _txn_on() -> bool:
     return bool(getattr(settings, "transaction_intelligence_enabled", False))
+
+
+def _personalisation_on() -> bool:
+    return bool(getattr(settings, "personalisation_enabled", False))
 
 
 def _speech_on() -> bool:
@@ -321,6 +326,19 @@ def catalogue() -> tuple[Setting, ...]:
                 minimum=1,
                 maximum=1000000000,
                 unit="INR",
+            ),
+        )
+    if _personalisation_on():
+        # The allow-list for a caller's own template exists only while personalisation is on.
+        base = base + (
+            Setting(
+                "personalisation.template_attributes",
+                "Attributes a caller's template may use",
+                "Profile attributes a template sent with a render request may name; any other placeholder is refused.",
+                "personalisation",
+                "list",
+                [],
+                "core/personalisation/service.py render",
             ),
         )
     return base

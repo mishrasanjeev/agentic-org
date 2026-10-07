@@ -8208,6 +8208,222 @@
     "tenant_required": true
   },
   {
+    "audit_event": "personalisation.consents.list",
+    "auth_required": true,
+    "function": "list_consents",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/personalisation/consents api/v1/personalisation.py:list_consents",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/personalisation.py",
+    "path": "/api/v1/personalisation/consents",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "personalisation.read",
+    "source_line": 204,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "personalisation.consents.grant",
+    "auth_required": true,
+    "function": "grant_consent",
+    "idempotency": "idempotent-upsert-by-subject-and-purpose",
+    "key": "PUT /api/v1/personalisation/consents api/v1/personalisation.py:grant_consent",
+    "metadata_present": true,
+    "methods": [
+      "PUT"
+    ],
+    "module": "api/v1/personalisation.py",
+    "path": "/api/v1/personalisation/consents",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "personalisation.write",
+    "source_line": 155,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "personalisation.consents.withdraw",
+    "auth_required": true,
+    "function": "withdraw_consent",
+    "idempotency": "idempotent-withdrawal",
+    "key": "POST /api/v1/personalisation/consents/withdraw api/v1/personalisation.py:withdraw_consent",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/personalisation.py",
+    "path": "/api/v1/personalisation/consents/withdraw",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "personalisation.write",
+    "source_line": 183,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "personalisation.events.list",
+    "auth_required": true,
+    "function": "list_events",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/personalisation/events api/v1/personalisation.py:list_events",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/personalisation.py",
+    "path": "/api/v1/personalisation/events",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "personalisation.read",
+    "source_line": 401,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "personalisation.profiles.get",
+    "auth_required": true,
+    "function": "get_profile",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/personalisation/profiles api/v1/personalisation.py:get_profile",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/personalisation.py",
+    "path": "/api/v1/personalisation/profiles",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "personalisation.read",
+    "source_line": 251,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "personalisation.profiles.put",
+    "auth_required": true,
+    "function": "put_profile",
+    "idempotency": "idempotent-replace-by-subject",
+    "key": "PUT /api/v1/personalisation/profiles api/v1/personalisation.py:put_profile",
+    "metadata_present": true,
+    "methods": [
+      "PUT"
+    ],
+    "module": "api/v1/personalisation.py",
+    "path": "/api/v1/personalisation/profiles",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "personalisation.write",
+    "source_line": 230,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "personalisation.render",
+    "auth_required": true,
+    "function": "render",
+    "idempotency": "not_idempotent-each-render-is-recorded",
+    "key": "POST /api/v1/personalisation/render api/v1/personalisation.py:render",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/personalisation.py",
+    "path": "/api/v1/personalisation/render",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "personalisation.write",
+    "source_line": 371,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "personalisation.rules.list",
+    "auth_required": true,
+    "function": "list_rules",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/personalisation/rules api/v1/personalisation.py:list_rules",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/personalisation.py",
+    "path": "/api/v1/personalisation/rules",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "personalisation.read",
+    "source_line": 276,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "personalisation.rules.create",
+    "auth_required": true,
+    "function": "create_rule",
+    "idempotency": "conflict-on-duplicate-name",
+    "key": "POST /api/v1/personalisation/rules api/v1/personalisation.py:create_rule",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/personalisation.py",
+    "path": "/api/v1/personalisation/rules",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "personalisation.write",
+    "source_line": 299,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "personalisation.rules.delete",
+    "auth_required": true,
+    "function": "delete_rule",
+    "idempotency": "idempotent-delete",
+    "key": "DELETE /api/v1/personalisation/rules/{rule_id} api/v1/personalisation.py:delete_rule",
+    "metadata_present": true,
+    "methods": [
+      "DELETE"
+    ],
+    "module": "api/v1/personalisation.py",
+    "path": "/api/v1/personalisation/rules/{rule_id}",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "personalisation.write",
+    "source_line": 346,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "personalisation.rules.update",
+    "auth_required": true,
+    "function": "update_rule",
+    "idempotency": "idempotent-update",
+    "key": "PATCH /api/v1/personalisation/rules/{rule_id} api/v1/personalisation.py:update_rule",
+    "metadata_present": true,
+    "methods": [
+      "PATCH"
+    ],
+    "module": "api/v1/personalisation.py",
+    "path": "/api/v1/personalisation/rules/{rule_id}",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "personalisation.write",
+    "source_line": 320,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "personalisation.status",
+    "auth_required": true,
+    "function": "status",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/personalisation/status api/v1/personalisation.py:status",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/personalisation.py",
+    "path": "/api/v1/personalisation/status",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "personalisation.read",
+    "source_line": 123,
+    "tenant_required": true
+  },
+  {
     "audit_event": "none-public-product-facts",
     "auth_required": false,
     "function": "product_facts",

@@ -154,6 +154,10 @@ SCOPE_FAMILIES: dict[str, tuple[str, str]] = {
     # Lineage (core/lineage/): reading provenance is an audit read; noting a
     # chain an acquisition produced is a write of record.
     "lineage": ("audit:read", "approvals:write"),
+    # Personalisation (core/personalisation/): consents, profiles and what was
+    # rendered for a customer are audit-grade reads; granting consent, editing
+    # profiles and rules, and rendering take the approvals write scope.
+    "personalisation": ("audit:read", "approvals:write"),
     # Long-term memory holds what is remembered about customers and cases:
     # recall is an audit-grade read and a write changes what runs are told,
     # so it takes the approver scope (the sensitive-subsystem precedent).

@@ -407,6 +407,11 @@ class Settings(BaseSettings):
     # (core/tasks/lineage_tasks.py). Off by default: a manual run and the
     # cron trigger still work while lineage itself is on.
     lineage_sync_sweep_enabled: bool = False
+    # Personalisation (core/personalisation/): content rendered from a
+    # subject's profile only under a valid consent for the purpose, with the
+    # attributes used recorded. Off by default: off, GET /personalisation/status
+    # answers ``enabled: false`` and every other personalisation route is not found.
+    personalisation_enabled: bool = False
     # JSON object keyed provider/model with input and output USD per million
     # tokens; a negotiated rate replaces the list price.
     model_price_overrides_json: str = ""

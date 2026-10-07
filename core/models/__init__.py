@@ -121,6 +121,10 @@ from core.models.oacp_retention_disposition_decision import (
 from core.models.operator_override import OperatorOverride as OperatorOverride
 from core.models.organization import CostCenter as CostCenter
 from core.models.organization import Department as Department
+from core.models.personalisation import PersonalisationConsent as PersonalisationConsent
+from core.models.personalisation import PersonalisationEvent as PersonalisationEvent
+from core.models.personalisation import PersonalisationProfile as PersonalisationProfile
+from core.models.personalisation import PersonalisationRule as PersonalisationRule
 from core.models.professional_tax import ProfessionalTaxRegistration as ProfessionalTaxRegistration
 from core.models.professional_tax import ProfessionalTaxReturn as ProfessionalTaxReturn
 from core.models.prompt_template import PromptChangeRequest as PromptChangeRequest

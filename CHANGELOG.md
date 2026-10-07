@@ -4,6 +4,28 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
 
 ## [Unreleased] - 2026-08-29
 
+### Added - Personalisation: a consent-checked service for personalised content
+- `core/personalisation/`: content for a subject and purpose is rendered
+  only under a valid consent (granted, not withdrawn, not expired; one
+  current record per subject and purpose, kept with its evidence when
+  withdrawn). Profiles are encrypted for the tenant before any row lock.
+  Rules pick a variant for a purpose by priority and conditions (`eq`,
+  `ne`, `in`, `gte`, `lte`, `exists`) and declare every attribute they
+  read; a placeholder that is not allowed or not in the profile is
+  refused, never rendered blank. Every render and refusal is recorded with
+  the consent, the rule, the attribute names used (never values) and a
+  hash of the content; a preview records nothing.
+- `PUT /personalisation/consents`, `POST /personalisation/consents/withdraw`,
+  `GET /personalisation/consents`, `PUT/GET /personalisation/profiles`,
+  `GET/POST /personalisation/rules`, `PATCH/DELETE /personalisation/rules/{id}`,
+  `POST /personalisation/render`, `GET /personalisation/events`; scope
+  family `personalisation`. A caller's own template may use only the
+  attributes in the business console setting
+  `personalisation.template_attributes`. Behind `personalisation_enabled`
+  (default off). Migration `v6z77` adds `personalisation_consents`,
+  `personalisation_profiles`, `personalisation_rules` and
+  `personalisation_events` under forced row-level security.
+
 ### Added - Provenance and lineage: the lineage graph in the console
 - The Lineage page finds nodes by kind and reference (`GET /lineage/nodes`),
   traces one upstream, downstream or both and draws it from origin to use,
