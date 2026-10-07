@@ -26,9 +26,9 @@ logger = structlog.get_logger()
 
 TRIGGER = "conversation_escalation"
 TICKET_TOOLS: tuple[str, ...] = ("create_ticket", "create_incident")
-REASON_REQUESTED = "requested"  # the user asked for a person
-REASON_FALLBACKS = "fallbacks"  # the runtime could not help after repeated turns
-REASON_SLOTS = "slots"  # a slot could not be collected
+REASON_REQUESTED = dialogue_engine.ESCALATION_REQUESTED  # the user asked for a person
+REASON_FALLBACKS = dialogue_engine.ESCALATION_FALLBACKS  # the runtime could not help after repeated turns
+REASON_SLOTS = dialogue_engine.ESCALATION_SLOTS  # a slot could not be collected
 EXPIRES_HOURS = 24
 TRANSCRIPT_TURNS = 12
 
@@ -39,11 +39,17 @@ def intent_tag(dialogue: Dialogue, intent: str | None = None) -> str:
     return name if name in INTENTS else "general"
 
 
-def summary_text(dialogue: Dialogue, *, reason: str, intent: str | None = None) -> str:
-    """One paragraph a person reads first: what the user wanted, what was collected, why it is here."""
+def summary_text(
+    dialogue: Dialogue, *, reason: str, intent: str | None = None, slots: dict[str, Any] | None = None
+) -> str:
+    """One paragraph a person reads first: what the user wanted, what was collected, why it is here.
+
+    ``intent`` and ``slots`` are what the escalating turn carried; the dialogue
+    itself may already have started over.
+    """
     tag = intent_tag(dialogue, intent)
     title = INTENTS[tag].title if tag in INTENTS else "General enquiry"
-    slots = dialogue.slots or dialogue.last_slots or {}
+    slots = slots or dialogue.slots or dialogue.last_slots or {}
     parts = [f"Hand-off from chat: {title.lower()}"]
     if slots:
         parts.append(
@@ -155,12 +161,14 @@ async def handoff(
     reason: str,
     context: Any = None,
     intent: str | None = None,
+    slots: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Hand a conversation to a person: the review item, the ticket when a tool is bound, the session marked."""
     from core.conversation import runtime, supervisor
 
     tag = intent_tag(dialogue, intent)
-    summary = summary_text(dialogue, reason=reason, intent=intent)
+    collected = dict(slots or dialogue.slots or dialogue.last_slots or {})
+    summary = summary_text(dialogue, reason=reason, intent=intent, slots=collected)
     lines = transcript(dialogue)
     record: dict[str, Any] = {
         "reason": reason,
@@ -173,12 +181,16 @@ async def handoff(
     context_payload = {
         "summary": summary,
         "intent": tag,
-        "slots": dict(dialogue.slots or dialogue.last_slots or {}),
+        "slots": collected,
         "transcript": lines,
         "session_key": session_key,
         "channel": channel,
         "reason": reason,
-        "handoff": dialogue_engine.handoff_summary(dialogue),
+        "handoff": {
+            **dialogue_engine.handoff_summary(dialogue),
+            "intent": intent or dialogue.intent,
+            "slots": dict(slots or dialogue.slots),
+        },
     }
     try:
         record["hitl_id"] = await _review_item(

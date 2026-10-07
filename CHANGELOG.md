@@ -12,10 +12,19 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
   (`core/conversation/escalation.py`). A supervisor lists live and
   escalated conversations, reads a transcript, takes a conversation over
   (the assistant stops answering and the user's messages reach the
-  supervisor), replies through the live feed into the user's chat, and
+  supervisor), replies into the user's chat, and
   releases it (`core/conversation/supervisor.py`,
   `/conversation/supervisor/sessions`, the Conversations page; migration
   `v6z61_conversation_supervision`).
+- The tenant-wide live feed announces conversation turns and messages
+  without their text; the console reads the transcript through its
+  tenant-admin route and the user's chat reads supervisor replies from the
+  user's own session (`GET /conversation/session` returns `messages`), so
+  replies sent while the chat was closed appear when it reopens. A reply
+  from a supervisor who does not hold the conversation is refused before
+  anything is written, and a hand-off keeps the intent and slots collected
+  before the dialogue gave up; accepting the offer of a person after
+  repeated fallbacks is recorded as a fallback hand-off with high priority.
 
 ### Added - Conversational services: multi-turn context, clarification and graceful fallbacks
 - With `AGENTICORG_CONVERSATION_V2_ENABLED` on, the recent turns of a chat

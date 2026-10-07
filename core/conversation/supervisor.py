@@ -4,9 +4,13 @@
 A supervisor sees every conversation in progress or escalated, opens its
 transcript, and can take it over: from then on the user's messages are not
 handled by the runtime but shown to the supervisor, whose replies reach the
-user's chat through the live feed (``api/websocket/feed.py``). Releasing a
-session hands it back to the runtime. Every turn and change is announced on
-the feed so the view updates without polling.
+user's chat. Releasing a session hands it back to the runtime. Every turn and
+change is announced on the live feed (``api/websocket/feed.py``) so the views
+update without polling, but the feed is tenant-wide, so an announcement never
+carries what was said: the console reads the text through its tenant-admin
+transcript route, and the user's chat reads the supervisor's messages from the
+user's own session (``GET /conversation/session``), which also replays any that
+arrived while the chat was closed.
 """
 
 from __future__ import annotations
@@ -23,8 +27,9 @@ from core.conversation.dialogue import Dialogue
 logger = structlog.get_logger()
 
 LIVE_STATUSES = ("active", "escalated")
-EXCERPT = 240
 HISTORY_KEEP = 40
+REPLAY_ROLES = ("supervisor", "system")  # what the user's chat replays from the session's transcript
+NOT_HOLDER = "not_taken_over"
 
 
 def session_view(row: Any) -> dict[str, Any]:
@@ -61,18 +66,9 @@ async def announce(tenant_id: uuid.UUID, session_key: str, *, event: str, **fiel
         logger.warning("conversation_feed_announce_failed", feed_event=event, error_type=type(exc).__name__)
 
 
-async def announce_turn(
-    tenant_id: uuid.UUID, session_key: str, *, role: str, text: str, intent: str | None, stage: str
-) -> None:
-    await announce(
-        tenant_id,
-        session_key,
-        event="conversation.turn",
-        role=role,
-        text=text[:EXCERPT],
-        intent=intent,
-        stage=stage,
-    )
+async def announce_turn(tenant_id: uuid.UUID, session_key: str, *, role: str, intent: str | None, stage: str) -> None:
+    """A turn happened: who spoke and where the dialogue is, never the text (the feed reaches every tenant user)."""
+    await announce(tenant_id, session_key, event="conversation.turn", role=role, intent=intent, stage=stage)
 
 
 async def _row(
@@ -136,18 +132,52 @@ async def taken_over(tenant_id: uuid.UUID, key: str) -> str | None:
         return getattr(row, "taken_over_by", None) if row is not None else None
 
 
+async def replay(tenant_id: uuid.UUID, key: str) -> list[dict[str, Any]]:
+    """The supervisor's messages and notices on one session, oldest first, for the user's own chat to show.
+
+    ``key`` is the caller's own session key (the route derives it from the
+    authenticated user), so a user only ever reads their own conversation.
+    """
+    from core.database import get_tenant_session
+
+    async with get_tenant_session(tenant_id) as session:
+        row = await _row(session, tenant_id, key=key)
+        if row is None:
+            return []
+        history = list(dict(row.state or {}).get("history") or [])
+    return [
+        {"role": turn.get("role"), "text": str(turn.get("text") or ""), "at": turn.get("at")}
+        for turn in history
+        if isinstance(turn, dict) and turn.get("role") in REPLAY_ROLES
+    ]
+
+
 async def _append(
-    tenant_id: uuid.UUID, *, session_id: uuid.UUID | None, key: str | None, role: str, text: str
+    tenant_id: uuid.UUID,
+    *,
+    session_id: uuid.UUID | None,
+    key: str | None,
+    role: str,
+    text: str,
+    holder: str | None = None,
 ) -> dict[str, Any] | None:
+    """Add a turn to the session's transcript under a row lock.
+
+    With ``holder``, the session must be held by that supervisor: the check is
+    made on the locked row in the same transaction, before anything is
+    written, so a refused message leaves the transcript as it was.
+    """
     from core.database import get_tenant_session
 
     async with get_tenant_session(tenant_id) as session:
         row = await _row(session, tenant_id, session_id=session_id, key=key, lock=True)
         if row is None:
             return None
+        if holder is not None and getattr(row, "taken_over_by", None) != holder:
+            return {**session_view(row), "refused": NOT_HOLDER}
         state = dict(row.state or Dialogue().to_dict())
         history = list(state.get("history") or [])
-        history.append({"role": role, "text": text[:500]})
+        history.append({"role": role, "text": text[:500], "at": datetime.now(UTC).isoformat()})
         state["history"] = history[-HISTORY_KEEP:]
         row.state = state
         row.updated_at = datetime.now(UTC)
@@ -158,7 +188,7 @@ async def user_message(tenant_id: uuid.UUID, key: str, text: str) -> dict[str, A
     """A user's message while a supervisor holds the session: stored and announced, not handled by the runtime."""
     view = await _append(tenant_id, session_id=None, key=key, role="user", text=text)
     if view is not None:
-        await announce(tenant_id, key, event="conversation.message", role="user", text=text[:EXCERPT])
+        await announce(tenant_id, key, event="conversation.message", role="user")
     return view
 
 
@@ -185,13 +215,17 @@ async def takeover(tenant_id: uuid.UUID, session_id: uuid.UUID, supervisor_id: s
 
 
 async def reply(tenant_id: uuid.UUID, session_id: uuid.UUID, supervisor_id: str, text: str) -> dict[str, Any] | None:
-    """A supervisor's message to the user: stored on the transcript and delivered through the live feed."""
-    view = await _append(tenant_id, session_id=session_id, key=None, role="supervisor", text=text)
-    if view is None:
-        return None
-    if view.get("taken_over_by") != str(supervisor_id)[:128]:
-        return {**view, "refused": "not_taken_over"}
-    await announce(tenant_id, view["session_key"], event="conversation.message", role="supervisor", text=text[:EXCERPT])
+    """A supervisor's message to the user, stored on the transcript; only the holder may send one.
+
+    The feed is told that a message arrived (not what it says); the user's chat
+    then reads it from the user's own session.
+    """
+    view = await _append(
+        tenant_id, session_id=session_id, key=None, role="supervisor", text=text, holder=str(supervisor_id)[:128]
+    )
+    if view is None or view.get("refused"):
+        return view
+    await announce(tenant_id, view["session_key"], event="conversation.message", role="supervisor")
     return view
 
 

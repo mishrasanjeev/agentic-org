@@ -45,9 +45,15 @@ class Outcome:
     options: list[dict[str, Any]] = field(default_factory=list)
     action: str | None = None
     summary: str | None = None
+    escalation: str | None = None  # why an escalate outcome hands off: requested | fallbacks | slots
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
+
+
+ESCALATION_REQUESTED = "requested"  # the user asked for a person
+ESCALATION_FALLBACKS = "fallbacks"  # the user accepted the offer of a person after repeated fallbacks
+ESCALATION_SLOTS = "slots"  # a required detail could not be collected
 
 
 @dataclass
@@ -361,7 +367,13 @@ def _start(
         )
     if intent.risk == "handoff":
         dialogue.stage = STAGE_DONE
-        outcome = _outcome(dialogue, "escalate", "I will connect you to a person. One moment.", summary=None)
+        outcome = _outcome(
+            dialogue,
+            "escalate",
+            "I will connect you to a person. One moment.",
+            summary=None,
+            escalation=ESCALATION_REQUESTED,
+        )
         outcome.options = []
         dialogue.reset()
         return outcome
@@ -445,12 +457,19 @@ def advance(dialogue: Dialogue, text: str, *, today: date | None = None) -> Outc
         if problem:
             dialogue.retries += 1
             if dialogue.retries >= MAX_RETRIES:
+                # The hand-off needs what was being asked for: snapshot it before the dialogue starts over.
+                held_intent, held_slots = intent.name, dict(dialogue.slots)
                 dialogue.reset()
-                return _outcome(
+                outcome = _outcome(
                     dialogue,
                     "escalate",
                     "I could not get what I need for that. Let me connect you to a person who can help.",
+                    escalation=ESCALATION_SLOTS,
                 )
+                outcome.intent = held_intent
+                outcome.slots = held_slots
+                outcome.missing = missing_slots(intent, held_slots)
+                return outcome
             return _outcome(dialogue, "ask", problem)
         dialogue.slots[slot.name] = value
         dialogue.slots = fill_from_entities(
@@ -461,7 +480,9 @@ def advance(dialogue: Dialogue, text: str, *, today: date | None = None) -> Outc
     # A yes after the offer of a person is the hand-off.
     if dialogue.stage == STAGE_IDLE and dialogue.fallbacks >= 2 and _YES_RE.match(text):
         dialogue.fallbacks = 0
-        return _start(dialogue, INTENTS["talk_to_agent"], 0.9, entities, text, today=today)
+        outcome = _start(dialogue, INTENTS["talk_to_agent"], 0.9, entities, text, today=today)
+        outcome.escalation = ESCALATION_FALLBACKS  # an accepted offer, not an unsolicited request
+        return outcome
 
     # Idle: "again" repeats the last action, confirmed afresh.
     if conversation_context.repeats_last(text) and dialogue.last_intent and dialogue.last_intent in INTENTS:
