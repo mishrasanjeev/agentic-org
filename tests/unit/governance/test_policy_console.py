@@ -450,6 +450,72 @@ class TestEndpoints:
             and written[0][2] == "user:1"
         )
 
+    @pytest.mark.asyncio
+    async def test_on_the_list_delete_and_dry_run_answer_through_the_console_and_map_refusals(self, monkeypatch):
+        monkeypatch.setattr(settings, "governance_policy_console_enabled", True)
+        monkeypatch.setattr(api.gateway_api, "_actor", lambda request, caller: "user:1")
+        monkeypatch.setattr(api, "get_tenant_session", lambda _tid: _Session())
+        tid = str(uuid.uuid4())
+
+        async def _list(session, tid, *, kind=None):
+            return [{"kind": kind or "guardrail", "name": "pii"}]
+
+        monkeypatch.setattr(console, "list_policies", _list)
+        listed = await api.list_policies(kind="guardrail", tenant_id=tid)
+        assert listed["total"] == 1 and listed["kinds"] == list(console.KINDS) and listed["enforcement_points"]
+        with pytest.raises(HTTPException) as refused:
+            await api.list_policies(kind="weather", tenant_id=tid)
+        assert refused.value.status_code == 422 and refused.value.detail["error"] == "unknown_kind"
+
+        removed: list[tuple] = []
+
+        async def _delete(session, tid, kind, policy_id, *, actor_id):
+            removed.append((kind, actor_id))
+            return kind != "model_limit"
+
+        monkeypatch.setattr(console, "delete_policy", _delete)
+        policy_id = uuid.uuid4()
+        assert await api.delete_policy("guardrail", policy_id, request=None, tenant_id=tid, caller=None) is None
+        assert removed == [("guardrail", "user:1")]
+        with pytest.raises(HTTPException) as refused:
+            await api.delete_policy("model_limit", policy_id, request=None, tenant_id=tid, caller=None)
+        assert refused.value.status_code == 404 and refused.value.detail["error"] == "not_found"
+        with pytest.raises(HTTPException) as refused:
+            await api.delete_policy("action", policy_id, request=None, tenant_id=tid, caller=None)
+        assert refused.value.detail["error"] == "unknown_kind"
+
+        async def _refuse(*args, **kwargs):
+            raise console.PolicyConsoleError(409, "policy_exists", "a policy of this name exists")
+
+        monkeypatch.setattr(console, "delete_policy", _refuse)
+        with pytest.raises(HTTPException) as refused:
+            await api.delete_policy("guardrail", policy_id, request=None, tenant_id=tid, caller=None)
+        assert refused.value.status_code == 409 and refused.value.detail["error"] == "policy_exists"
+        monkeypatch.setattr(console, "write_policy", _refuse)
+        with pytest.raises(HTTPException) as refused:
+            await api.write_policy(
+                api.PolicyWriteIn(
+                    kind="guardrail", policy={"name": "pii", "stage": "output", "detector": "sensitive_data"}
+                ),
+                request=None,
+                tenant_id=tid,
+                caller=None,
+            )
+        assert refused.value.status_code == 409
+
+        async def _evaluate(session, tid, request):
+            return {"verdict": "allowed", "request": request}
+
+        monkeypatch.setattr(console, "evaluate", _evaluate)
+        verdict = await api.evaluate_policies(
+            api.PolicyEvaluateIn(tool="initiate_payment", domain="finance"), tenant_id=tid
+        )
+        assert verdict["verdict"] == "allowed" and verdict["request"]["tool"] == "initiate_payment"
+        monkeypatch.setattr(console, "evaluate", _refuse)
+        with pytest.raises(HTTPException) as refused:
+            await api.evaluate_policies(api.PolicyEvaluateIn(), tenant_id=tid)
+        assert refused.value.status_code == 409
+
     def test_the_router_is_registered_behind_admin_and_the_policy_scopes(self):
         main = (ROOT / "api" / "main.py").read_text(encoding="utf-8")
         assert "governance_policies," in main and "app.include_router(governance_policies.router" in main
