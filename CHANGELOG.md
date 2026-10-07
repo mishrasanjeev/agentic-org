@@ -4,6 +4,16 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
 
 ## [Unreleased] - 2026-08-29
 
+### Added - Knowledge retrieval: search filters and a re-ranking stage
+- `POST /knowledge/search` takes `filters` (`category`, `source`,
+  `file_type`, a `created_from`/`created_to` window; `core/rag/filters.py`)
+  applied inside the dense and sparse rankings alike, so a narrowed
+  search never widens past what was asked. Behind
+  `AGENTICORG_KNOWLEDGE_RERANK_ENABLED` (off by default), the fused
+  candidates of a hybrid search are re-scored on the query's own terms
+  (coverage, phrase, proximity, title, fused score; `core/rag/rerank.py`)
+  with no model call; off, the fused order is returned as it was.
+
 ### Added - Knowledge retrieval: layout-preserving extraction and chunking strategies
 - PDF pages are split into numbered paragraphs with headings recognised
   from line shape, Word documents keep their heading styles and attach

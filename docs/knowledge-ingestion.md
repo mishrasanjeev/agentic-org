@@ -51,6 +51,25 @@ re-chunked (re-indexing is a later part of this package). Heading detection on P
 heuristic over line shape; a document whose titles end with a full stop or run to several lines
 is read as paragraphs only, which the `sentence` and `paragraph` strategies handle as before.
 
+## Search: filters and re-ranking
+
+`POST /knowledge/search` takes optional `filters` (`core/rag/filters.py`): `category`, `source`
+and `file_type` (lists; a document matches any value), and a `created_from` / `created_to` date
+window. Every filter is an `AND` condition on the knowledge documents, applied inside the dense
+and the sparse rankings alike, so the fused result only ever holds documents that pass. A bank's
+branch, product line or business segment is recorded in `category` at upload, which is what the
+filters narrow on. A narrowed search answers from the knowledge base only: the upload-metadata
+fallback carries nothing to filter on and is not consulted.
+
+With `AGENTICORG_KNOWLEDGE_HYBRID_SEARCH` on, a search fuses the dense (pgvector) and sparse
+(PostgreSQL full text) rankings by reciprocal rank. With `AGENTICORG_KNOWLEDGE_RERANK_ENABLED` on
+as well (`core/rag/rerank.py`), the fused pool (four times `top_k`, at most 200) is re-scored on
+the query's own terms: coverage of the query terms, the query as a phrase, how close the terms
+sit, a title match, and the fused score as the tie-breaker, weighted into one score from 0 to 1.
+The re-ranker reads the texts only and calls no model; it knows no synonyms and no meaning, which
+is why it sits behind a switch and why its scores are explainable. Off, the fused order is
+returned as it was.
+
 ## OCR flow
 
 ```mermaid

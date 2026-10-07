@@ -282,6 +282,10 @@ class Settings(BaseSettings):
     # Native dense + full-text rank fusion. Off until tenant retrieval quality
     # and index rollout have been verified; RAGFlow precedence is unchanged.
     knowledge_hybrid_search: bool = False
+    # Re-ranking stage over the fused candidates of a knowledge search
+    # (core/rag/rerank.py): the query's own terms decide the final order.
+    # Off by default: off, the fused order is returned as it was.
+    knowledge_rerank_enabled: bool = False
     # JSON object keyed provider/model with input and output USD per million
     # tokens; a negotiated rate replaces the list price.
     model_price_overrides_json: str = ""
