@@ -138,13 +138,19 @@ thresholds are the agent's to change.
 `GET /agents/{id}/dependencies` returns the agent's dependency graph as nodes and edges
 (`core/agent_registry/dependencies.py`): the model it calls and its fallback, its prompt (the
 template reference and, where it has one, its own text as a hash), its tools and the connectors
-behind them (a `connector:tool` name points at its connector; the knowledge base search points at
-the tenant's knowledge base for the agent's domain), the policies that govern it (the guardrail
-rules that apply by agent, use case, risk tier or to every agent; its review condition; its
-output schema; its evaluation gate's dataset), the agent it was cloned from, the agent its traffic
+behind them (a tool reference names its connector the way execution reads it, in every persisted
+spelling: `gmail:send_email`, `gmail.send_email`, `gmail__send_email` or the Grantex scope
+`tool:gmail:<permission>:send_email`; the knowledge base search points at the tenant's knowledge
+base for the agent's domain), the policies that govern it (the guardrail rules execution selects
+for it: rules for every agent, for this agent, or for the use case a run binds, `agent_run` or
+`agent_resume`; its review condition; its output schema; its evaluation gate's dataset), the agent
+it was cloned from, the agent its traffic
 split sends runs to, and the teams it belongs to. Labels are names and references, never prompt
 text or rule reasons; a related agent the caller may not see is named by its id only. The graph
-is assembled from configuration, not from runs, and has no console view yet.
+is assembled from configuration, not from runs, and has no console view yet. Execution names
+no risk tier and binds its own use case, so a rule scoped to the card's use case or risk tier is
+shown with the relation `scoped_to_card` and `applied_at_runtime: false` rather than as governing
+the agent.
 
 ## Ratings, reliability and certification
 
@@ -158,11 +164,16 @@ The card carries three more sections (`core/agent_registry/reliability.py`), and
   a run's content.
 - **rating**: the average and the count of user ratings. `POST /agents/{id}/rating` records one
   score from 1 to 5 with a short comment per user and agent; a new rating by the same person
-  replaces the old. Anyone who may see the agent may rate it; an API key cannot. The card never
-  says who rated.
+  replaces the old, in one atomic insert-or-update on the agent and the user, so two first
+  ratings sent at once leave one row. Anyone who may see the agent may rate it: the route belongs
+  to the `agent_ratings` scope family, which needs `agents:read` for this write, and the agent
+  must be visible to the caller. An API key cannot rate. The card never says who rated.
 - **certification**: whether the registry has approved the agent (`approved` or `published`),
-  the evaluation gate verdict, and the tenant's attestation for the agent's model provider
-  (region, no training on tenant data, valid or expired). Grantex trust-registry attestations and
+  the evaluation gate verdict, the tenant's governed data region, and the tenant's attestation
+  for the agent's model provider in that region (in-region processing, no training on tenant
+  data, valid or expired, and whether it qualifies). The attestation is chosen as residency
+  enforcement chooses it: one for another region is never shown, and a qualifying one comes
+  before a newer one that does not qualify. Grantex trust-registry attestations and
   passports are not attached; the card says so rather than implying a certification it cannot
   show.
 

@@ -112,6 +112,8 @@ async def set_agent_card(
                     actor=_user_uuid_from_claims(user),
                     owner_user_id=getattr(agent, "owner_user_id", None),
                 )
+                # An active agent meets no promotion again: the new tier's controls are enforced now, before saving.
+                await risk_tiers.check_active_tier_change(session, tid, agent, entry, fields.get("risk_tier"))
             except risk_tiers.TierError as exc:
                 raise HTTPException(
                     exc.status, detail={"error": risk_tiers.TRIGGER, "code": exc.code, "message": exc.message}
@@ -262,7 +264,8 @@ async def get_agent_reliability(
 @route_meta(
     auth_required=True,
     tenant_required=True,
-    scope="agents.read",
+    # The agent_ratings family maps this POST to agents:read (api/route_enforcement.py), so a viewer can rate.
+    scope="agent_ratings.write",
     rate_limit="standard",
     idempotency="idempotent-one-rating-per-user",
     audit_event="agents.rating.set",
@@ -277,7 +280,9 @@ async def rate_agent(
 ) -> dict:
     """Rate an agent 1 to 5 with a short comment; a new rating by the same person replaces the old.
 
-    Anyone who may see the agent may rate it; a request without a local user (an API key) cannot.
+    Anyone who may see the agent may rate it: the route needs the agents:read scope only (the
+    ``agent_ratings`` scope family), and the agent must be visible to the caller. A request without
+    a local user (an API key) cannot rate.
     """
     _require_enabled()
     user_id = _user_uuid_from_claims(user)

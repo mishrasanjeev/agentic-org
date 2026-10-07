@@ -136,6 +136,11 @@ SCOPE_FAMILIES: dict[str, tuple[str, str]] = {
     # sweep): the family was unmapped, so any authenticated tenant user could
     # create or read routing teams. Same scopes as the agents they contain.
     "agent_teams": ("agents:read", "agents:write"),
+    # A person's own rating of an agent they may see (POST /agents/{id}/rating):
+    # the write is the viewer's opinion, one row per person, so it needs the
+    # read scope only; the handler still requires a signed-in user and checks
+    # the agent is visible to them.
+    "agent_ratings": ("agents:read", "agents:read"),
     "workflows": ("workflows:read", "workflows:write"),
     "workflow_variants": ("workflows:read", "workflows:write"),
     "approvals": ("approvals:read", "approvals:write"),

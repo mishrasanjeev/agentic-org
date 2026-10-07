@@ -8,18 +8,25 @@ what must be true before the agent runs in production, and what its owner may ch
 |---|---|
 | `low` | nothing beyond the platform's own checks |
 | `medium` | the registry has approved the agent (a second person's decision) |
-| `high` | the above, plus an evaluation gate declared and passed, a human oversight condition (the HITL condition is set and not `never`), and at least 50 human-scored shadow samples |
-| `critical` | the above with at least 200 scored samples, plus maker-checker on prompt changes for the tenant |
+| `high` | the above, plus an evaluation gate declared and passed, a human oversight condition (the HITL condition is set and not `never`), and at least 50 human-reviewed shadow samples |
+| `critical` | the above with at least 200 human-reviewed samples, plus maker-checker on prompt changes for the tenant |
 
 The checks run whatever the separate registry, evaluation and maker-checker switches say, so an
 agent owner cannot bypass them by leaving a gate unconfigured: a promotion or resume that fails one
 is refused (`409`, `risk_tier`, `<requirement>_required`) and names the requirement and what was
-found.
+found. Shadow evidence counts terminal human reviews of shadow runs (approve, reject or override
+decisions, `shadow_feedback_count`); runs the model scored with its own confidence do not count.
+
+A tier change on an agent that is already `active` is checked against the new tier's requirements
+before it is saved, because the agent meets no promotion or resume again: while a requirement is
+unmet the change is refused (`409`, `<requirement>_required`) and the agent keeps its tier. Pause
+the agent, change the tier, and resume it once the controls hold.
 
 Tier changes are a tenant administrator's: an owner who is not an administrator cannot change a
 tier (`403`, `admin_only`), and lowering a `high` or `critical` tier needs an administrator other
 than the agent's owner (`403`, `second_person`). On a `high` or `critical` agent, an update that
-sets the HITL condition to `never` and a request that removes the evaluation gate are refused
+sets the HITL condition to `never` or empty (`PATCH` or a `PUT` full replacement) and a request
+that removes the evaluation gate are refused
 (`human_oversight_required`, `eval_gate_required`).
 
 `GET /governance/risk-tiers` (tenant-admin only) returns the policy, every agent with its tier,
