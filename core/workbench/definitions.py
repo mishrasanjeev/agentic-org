@@ -62,6 +62,13 @@ CATALOGUE: tuple[Workbench, ...] = (
         "Review officer",
         "Items that wait for a decision: approvals, documents in review, content drafts and governed cases.",
         (
+            Tab(
+                "queue",
+                "Review queue",
+                "/dashboard/workbench/review_officer/queue",
+                "queue",
+                actions=("decide", "edit"),
+            ),
             Tab("approvals", "Approvals", "/dashboard/approvals", "approvals", actions=("decide", "edit")),
             Tab("documents", "Documents", "/dashboard/documents", "documents", actions=("correct", "decide")),
             Tab(
@@ -115,6 +122,14 @@ CATALOGUE: tuple[Workbench, ...] = (
                 roles=("admin", "coo"),
                 sensitive=True,
                 actions=("takeover", "reply"),
+            ),
+            Tab(
+                "queue",
+                "Review queue",
+                "/dashboard/workbench/supervisor/queue",
+                "queue",
+                roles=("admin", "coo"),
+                actions=("decide", "edit"),
             ),
             Tab("approvals", "Approvals", "/dashboard/approvals", "approvals", actions=("decide",)),
             Tab(

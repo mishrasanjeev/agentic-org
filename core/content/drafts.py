@@ -27,6 +27,7 @@ def draft_dict(row: Any, *, with_output: bool = True) -> dict[str, Any]:
         "title": row.title,
         "sources": list(row.sources or []),
         "guardrails": dict(row.guardrails or {}),
+        "edits": dict(row.edits or {}) if getattr(row, "edits", None) else None,
         "created_by": row.created_by,
         "decided_by": row.decided_by,
         "decision_notes": row.decision_notes,
@@ -96,6 +97,52 @@ async def get_draft(tenant_id: uuid.UUID, draft_id: uuid.UUID) -> dict[str, Any]
             )
         ).scalar_one_or_none()
         return draft_dict(row) if row is not None else None
+
+
+EDIT_VALUE_MAX = 20000
+
+
+async def edit(tenant_id: uuid.UUID, draft_id: uuid.UUID, *, user_id: str, fields: dict[str, str]) -> dict[str, Any]:
+    """A reviewer's amendments to a waiting draft: its title or any text field of its output, originals kept."""
+    from core.database import get_tenant_session
+    from core.models.content_draft import ContentDraft
+
+    if not fields:
+        raise ContentError(422, "edits_empty", "No field to edit")
+    async with get_tenant_session(tenant_id) as session:
+        row = (
+            await session.execute(
+                select(ContentDraft)
+                .where(ContentDraft.tenant_id == tenant_id, ContentDraft.id == draft_id)
+                .with_for_update()
+            )
+        ).scalar_one_or_none()
+        if row is None:
+            raise ContentError(404, "not_found", "No such draft")
+        if row.status != "pending_approval":
+            raise ContentError(409, "not_pending", f"The draft is {row.status}, not awaiting approval")
+        output = dict(row.output or {})
+        edits = dict(row.edits or {})
+        recorded = dict(edits.get("fields") or {})
+        for name, value in fields.items():
+            text = str(value)[:EDIT_VALUE_MAX]
+            if name == "title":
+                original = row.title
+                row.title = text[:300]
+            elif name in output and isinstance(output[name], str):
+                original = output[name]
+                output[name] = text
+            else:
+                raise ContentError(422, "field_not_editable", f"{name!r} is not a text field of this draft")
+            entry = dict(recorded.get(name) or {"original": original})
+            entry["value"] = text[:300] if name == "title" else text
+            recorded[name] = entry
+        row.output = output
+        row.edits = {"by": str(user_id)[:128] or None, "at": datetime.now(UTC).isoformat(), "fields": recorded}
+        row.updated_at = datetime.now(UTC)
+        answer = draft_dict(row)
+    logger.info("content_draft_edited", fields=len(fields))
+    return answer
 
 
 async def decide(

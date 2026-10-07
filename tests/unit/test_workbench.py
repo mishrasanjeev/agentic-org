@@ -107,15 +107,18 @@ class TestAccess:
     @pytest.mark.asyncio
     async def test_a_summary_holds_the_tabs_counts_and_total_and_refuses_an_unheld_workbench(self, monkeypatch):
         monkeypatch.setattr(
-            access, "counts", AsyncMock(return_value={"approvals": 2, "documents": 5, "drafts": None, "cases": None})
+            access,
+            "counts",
+            AsyncMock(return_value={"queue": 7, "approvals": 2, "documents": 5, "drafts": None, "cases": None}),
         )
         found = await access.summary(TENANT, "review_officer", "cfo")
         assert (
             found is not None
             and found["waiting"] == 7
-            and found["counts"] == {"approvals": 2, "documents": 5, "drafts": None, "cases": None}
+            and found["counts"] == {"queue": 7, "approvals": 2, "documents": 5, "drafts": None, "cases": None}
         )
         assert found["held_by"] == "role" and [t["key"] for t in found["tabs"]] == [
+            "queue",
             "approvals",
             "documents",
             "drafts",

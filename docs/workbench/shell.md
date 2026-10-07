@@ -40,6 +40,27 @@ escalated. A tab without a counter, or a
 store that cannot be read, reports `null` rather than zero, and `waiting` sums only the counts that
 were read.
 
+## The review queue
+
+`GET /workbench/queue` is one list of everything waiting for a person: approvals pending in the
+human-in-the-loop queue (not yet expired), documents in review, content drafts pending approval and
+governed cases awaiting a decision, each normalised to one shape (kind, title, summary, priority,
+age, due date where there is one, the page that shows it and the actions it allows) and ordered by
+priority then age. A caller sees the kinds a held workbench shows; `kind` narrows the list.
+`GET /workbench/queue/{kind}/{id}` returns the item in full with the fields a reviewer may edit
+before deciding.
+
+`POST /workbench/queue/{kind}/{id}/decide` takes the decision, notes and a list of edits, applies
+the edits first and then decides through the store that owns the item, so that store's rules apply
+unchanged: a draft's title and text fields are edited with the originals kept (`content_drafts.edits`)
+and decided under maker-checker with the administrator scope; a document's extracted fields are
+corrected with the original beside and decided through the review store; an approval's amendments
+are recorded on the item (`context.review_edits`) and summarised in the decision notes, which a
+resumed run receives, and the decision goes through the approvals route's own function (role
+hierarchy, delegation, expiry, policy steps); a governed case is decided on its own page, and the
+queue says so. The review officer's and the supervisor's workbenches show the queue as a tab, with
+the sum of the four counters behind it.
+
 ## The shell
 
 The index lists the held workbenches with how each is held (by role or by assignment). A workbench
