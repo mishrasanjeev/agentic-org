@@ -21,6 +21,7 @@ from pydantic import BaseModel, Field
 
 from api.deps import get_current_tenant
 from api.route_metadata import route_meta
+from core.ownership import caller_from_request
 from core.txn import aggregate, detectors, findings, records
 from core.txn.records import TxnError
 
@@ -296,6 +297,10 @@ async def disposition(
     """A person's decision on a finding: dismiss with a reason, confirm, or escalate to a governed case."""
     if not records.enabled():
         raise _off()
+    caller = caller_from_request(request)
+    if caller.is_machine or not _user_id(request):
+        # A disposition is a person's decision: an API key or an agent token holding the scope does not take it.
+        raise HTTPException(403, detail={"error": "human_required", "message": "A finding is dispositioned by a signed-in person"})
     try:
         return await findings.disposition(
             uuid.UUID(tenant_id),

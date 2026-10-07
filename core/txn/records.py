@@ -111,8 +111,21 @@ def check_record(raw: Any) -> dict[str, Any]:
     booked_at = parse_when(raw.get("booked_at"))
     description = _text(raw.get("description"), 500)
     record_ref = _text(raw.get("record_ref"), 128)
+    attributes = dict(raw.get("attributes") or {}) if isinstance(raw.get("attributes"), dict) else {}
     if not record_ref:
-        seed = "|".join([account, direction, f"{amount:.2f}", booked_at.isoformat(), description])
+        # Two identical lines of one statement are two movements: the source and the row number tell them apart.
+        seed = "|".join(
+            [
+                account,
+                direction,
+                f"{amount:.2f}",
+                booked_at.isoformat(),
+                description,
+                _text(raw.get("source"), 64),
+                str(attributes.get("row") or ""),
+                str(attributes.get("reference") or ""),
+            ]
+        )
         record_ref = "r-" + hashlib.sha256(seed.encode("utf-8")).hexdigest()[:24]
     return {
         "record_ref": record_ref,
@@ -128,7 +141,7 @@ def check_record(raw: Any) -> dict[str, Any]:
         "booked_at": booked_at,
         "description": description,
         "source": _text(raw.get("source"), 64) or "api",
-        "attributes": dict(raw.get("attributes") or {}) if isinstance(raw.get("attributes"), dict) else {},
+        "attributes": attributes,
     }
 
 
@@ -274,8 +287,14 @@ async def import_document(tenant_id: uuid.UUID, document_id: uuid.UUID) -> dict[
         records.extend(records_from_statement(document, source=f"statement:{document_id}"))
     if not records:
         raise TxnError(422, "no_transactions", "The statement has no line items to book")
-    answer = await ingest(tenant_id, records[:MAX_BATCH])
-    return {**answer, "document_id": str(document_id), "statements": len(statements_found)}
+    totals = {"received": 0, "kept": 0, "skipped": 0}
+    accounts: set[str] = set()
+    for start in range(0, len(records), MAX_BATCH):
+        answer = await ingest(tenant_id, records[start : start + MAX_BATCH])
+        for key in totals:
+            totals[key] += int(answer[key])
+        accounts.update(answer["accounts"])
+    return {**totals, "accounts": sorted(accounts), "document_id": str(document_id), "statements": len(statements_found)}
 
 
 def window_start(days: int) -> datetime:
