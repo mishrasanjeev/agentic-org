@@ -13,6 +13,7 @@ from __future__ import annotations
 import re
 import unicodedata
 import uuid
+from decimal import Decimal, InvalidOperation
 from typing import Any, Literal
 
 from pydantic import BaseModel, Field
@@ -20,7 +21,6 @@ from pydantic import BaseModel, Field
 from core.content import services
 from core.content.services import GuardrailProfile, Service
 from core.content.sources import Source
-from core.content.tone import facts_in
 
 LANGUAGES: dict[str, dict[str, Any]] = {
     "en": {"name": "English", "script": "Latin", "ranges": ((0x0041, 0x024F),)},
@@ -40,6 +40,13 @@ LANGUAGES: dict[str, dict[str, Any]] = {
 LANGUAGE_CODES = tuple(LANGUAGES)
 SCRIPT_FLOOR = 0.5  # the share of letters that must be in the target script
 MAX_BATCH = 20
+# The output of a translation grows with its input, so the input bound follows the completion budget:
+# Indian scripts can take up to about two tokens per source character, plus the JSON around the answer.
+COMPLETION_BUDGET = 8_000
+TEXT_LIMIT = 4_000
+
+Register = Literal["formal", "neutral"]
+TextFormat = Literal["plain", "markdown"]
 
 
 class GlossaryEntry(BaseModel):
@@ -52,13 +59,13 @@ class GlossaryEntry(BaseModel):
 class TranslateIn(BaseModel):
     model_config = {"extra": "forbid"}
 
-    text: str = Field(..., min_length=1, max_length=20_000)
+    text: str = Field(..., min_length=1, max_length=TEXT_LIMIT)
     target_language: str = Field(..., min_length=2, max_length=5)
     source_language: str = Field("auto", min_length=2, max_length=5)
     glossary: list[GlossaryEntry] = Field(default_factory=list, max_length=50)
     preserve: list[str] = Field(default_factory=list, max_length=50)
-    register: Literal["formal", "neutral"] = "formal"
-    format: Literal["plain", "markdown"] = "plain"
+    register: Register = "formal"
+    format: TextFormat = "plain"
     verify: bool = False
 
 
@@ -67,13 +74,176 @@ OUTPUT_SCHEMA: dict[str, Any] = {
     "additionalProperties": False,
     "required": ["translation"],
     "properties": {
-        "translation": {"type": "string", "minLength": 1, "maxLength": 40_000},
+        "translation": {"type": "string", "minLength": 1, "maxLength": 4 * TEXT_LIMIT},
         "detected_source_language": {"type": ["string", "null"], "maxLength": 5},
         "notes": {"type": "array", "maxItems": 20, "items": {"type": "string", "maxLength": 300}},
     },
 }
 
 _WORD_RE = re.compile(r"[^\W\d_]{2,}", re.UNICODE)
+
+
+def _alternation(words: list[str], *, latin_boundary: bool = True) -> str:
+    """A regex alternation of ``words``, longest first; a Latin word may not be part of a longer word."""
+    parts = []
+    for word in sorted({unicodedata.normalize("NFC", w) for w in words}, key=len, reverse=True):
+        escaped = re.escape(word)
+        if latin_boundary and word.isascii() and word[0].isalpha():
+            escaped = f"(?<![a-z]){escaped}"
+        if latin_boundary and word.isascii() and word[-1].isalpha():
+            escaped = f"{escaped}(?![a-z])"
+        parts.append(escaped)
+    return "|".join(parts)
+
+
+# The magnitude words of the supported languages and what each multiplies by.
+_MAGNITUDES: dict[int, list[str]] = {
+    1_000: [
+        "thousand",
+        "k",
+        "हज़ार",
+        "हजार",
+        "হাজার",
+        "હજાર",
+        "ਹਜ਼ਾਰ",
+        "ਹਜਾਰ",
+        "ହଜାର",
+        "ஆயிரம்",
+        "వేలు",
+        "వెయ్యి",
+        "ಸಾವಿರ",
+        "ആയിരം",
+        "ہزار",
+    ],
+    100_000: [
+        "lakhs",
+        "lakh",
+        "lacs",
+        "lac",
+        "लाख",
+        "লাখ",
+        "লক্ষ",
+        "લાખ",
+        "ਲੱਖ",
+        "ଲକ୍ଷ",
+        "லட்சம்",
+        "லட்ச",
+        "లక్షలు",
+        "లక్ష",
+        "ಲಕ್ಷ",
+        "ലക്ഷം",
+        "ലക്ഷ",
+        "لاکھ",
+    ],
+    1_000_000: ["million", "mn"],
+    10_000_000: [
+        "crores",
+        "crore",
+        "cr",
+        "करोड़",
+        "करोड",
+        "कोटी",
+        "কোটি",
+        "કરોડ",
+        "ਕਰੋੜ",
+        "କୋଟି",
+        "கோடி",
+        "కోట్లు",
+        "కోటి",
+        "ಕೋಟಿ",
+        "കോടി",
+        "کروڑ",
+    ],
+    1_000_000_000: ["billion", "bn"],
+}
+_MAGNITUDE_OF = {
+    unicodedata.normalize("NFC", word).lower(): factor for factor, words in _MAGNITUDES.items() for word in words
+}
+_CURRENCY_BEFORE = ["₹", "rs.", "rs", "inr", "रु.", "रु", "रू.", "रू", "ரூ.", "రూ.", "ರೂ.", "രൂ."]
+_CURRENCY_AFTER = [
+    "rupees",
+    "rupee",
+    "inr",
+    "रुपये",
+    "रुपए",
+    "रुपया",
+    "रुपयों",
+    "টাকা",
+    "রুপি",
+    "રૂપિયા",
+    "ਰੁਪਏ",
+    "ଟଙ୍କା",
+    "ரூபாய்",
+    "రూపాయలు",
+    "రూపాయి",
+    "ರೂಪಾಯಿ",
+    "രൂപ",
+    "روپے",
+    "روپیہ",
+]
+_PERCENT = [
+    "%",
+    "percent",
+    "per cent",
+    "pct",
+    "प्रतिशत",
+    "फ़ीसदी",
+    "फीसदी",
+    "टक्के",
+    "टक्का",
+    "শতাংশ",
+    "ટકા",
+    "ਪ੍ਰਤੀਸ਼ਤ",
+    "ପ୍ରତିଶତ",
+    "சதவீதம்",
+    "శాతం",
+    "ಶೇಕಡಾ",
+    "ശതമാനം",
+    "فیصد",
+]
+_PERCENT_WORDS = {unicodedata.normalize("NFC", w).lower() for w in _PERCENT}
+_FIGURE_RE = re.compile(
+    r"(?P<date>\b[0-9]{1,2}[/-][0-9]{1,2}[/-][0-9]{2,4}\b|\b[0-9]{4}-[0-9]{2}-[0-9]{2}\b)"
+    rf"|(?:(?P<before>{_alternation(_CURRENCY_BEFORE)})\s?)?"
+    r"(?P<number>(?<![0-9,])(?<![0-9]\.)[0-9]+(?:,[0-9]+)*(?:\.[0-9]+)?)"
+    rf"(?:\s?(?P<magnitude>{_alternation([w for words in _MAGNITUDES.values() for w in words])}))?"
+    rf"(?:\s?(?P<after>{_alternation(_PERCENT + _CURRENCY_AFTER)}))?",
+    re.I,
+)
+
+
+def _ascii_digits(text: str) -> str:
+    """The text with the digits of every script (Devanagari, Bengali, Tamil and the rest) written as 0-9."""
+    return "".join(str(unicodedata.decimal(ch)) if ch.isdecimal() else ch for ch in text)
+
+
+def figures(text: str) -> dict[str, str]:
+    """The figures of ``text``: a canonical key (currency, full value with its magnitude, percent) to the text.
+
+    ``₹5 lakh``, ``₹5 crore`` and a bare ``5`` are three different figures; ``₹5 lakh`` and ``₹500,000``
+    are the same amount. Dates are kept as written.
+    """
+    found: dict[str, str] = {}
+    for match in _FIGURE_RE.finditer(_ascii_digits(unicodedata.normalize("NFC", text))):
+        if match.group("date"):
+            key = match.group("date")
+        else:
+            try:
+                value = Decimal(match.group("number").replace(",", ""))
+            except InvalidOperation:  # pragma: no cover - the pattern only admits digits
+                continue
+            magnitude = (match.group("magnitude") or "").lower()
+            value *= _MAGNITUDE_OF.get(magnitude, 1)
+            after = (match.group("after") or "").lower()
+            amount = format(value.normalize(), "f")
+            if after in _PERCENT_WORDS:
+                key = f"{amount}%"
+            elif match.group("before") or after:
+                key = f"INR {amount}"
+            else:
+                key = amount
+        found.setdefault(key, match.group(0).strip())
+    return found
 
 
 def language_name(code: str) -> str:
@@ -151,7 +321,8 @@ def finish(payload: TranslateIn, sources: list[Source], answer: dict[str, Any]) 
     preserve_misses = [
         term for term in payload.preserve if term.lower() in lowered_source and term.lower() not in lowered_out
     ]
-    missing_facts = [fact for fact in facts_in(payload.text) if fact not in facts_in(translation)]
+    kept = figures(translation)
+    missing_facts = [shown for key, shown in figures(payload.text).items() if key not in kept]
     share = script_share(
         translation,
         target,
@@ -167,6 +338,7 @@ def finish(payload: TranslateIn, sources: list[Source], answer: dict[str, Any]) 
         "preserve_misses": preserve_misses,
         "script_ok": script_ok,
         "script_share": round(share, 2),
+        "output_transformed": False,
     }
     return {
         "translation": translation,
@@ -186,7 +358,9 @@ def rendered(output: dict[str, Any]) -> str:
 
 
 def apply_text(output: dict[str, Any], text: str) -> dict[str, Any]:
-    return {**output, "translation": text}
+    """An output guardrail changed the translation after the checks ran, so the checks no longer hold."""
+    checks = {**(output.get("checks") or {}), "output_transformed": True}
+    return {**output, "translation": text, "checks": checks, "trusted": False}
 
 
 async def resolve_sources(tenant_id: uuid.UUID, payload: TranslateIn, domains: list[str] | None) -> list[Source]:
@@ -220,6 +394,7 @@ async def back_translate(
         messages_back,
         {"type": "object", "required": ["translation"], "properties": {"translation": {"type": "string"}}},
         complete=complete,
+        max_tokens=COMPLETION_BUDGET,
     )
     back = str(answer.get("translation") or "")
     overlap = word_overlap(payload.text, back)
@@ -262,5 +437,6 @@ SERVICE = services.register(
         rendered=rendered,
         apply_text=apply_text,
         resolve_sources=resolve_sources,
+        max_tokens=COMPLETION_BUDGET,
     )
 )

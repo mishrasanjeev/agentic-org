@@ -75,6 +75,7 @@ class Service:
     rendered: Callable[[dict[str, Any]], str]
     apply_text: Callable[[dict[str, Any], str], dict[str, Any]]
     resolve_sources: Callable[[uuid.UUID, BaseModel, list[str] | None], Awaitable[list[Source]]]
+    max_tokens: int = MAX_TOKENS  # the completion budget; a service whose output scales with its input sets its own
 
     def describe(self) -> dict[str, Any]:
         return {
@@ -277,7 +278,9 @@ async def run(
             if k != "text"
         }
     messages = service.messages(payload, sources)
-    answer, usage = await ask_model(tenant_id, messages, service.output_schema, complete=complete)
+    answer, usage = await ask_model(
+        tenant_id, messages, service.output_schema, complete=complete, max_tokens=service.max_tokens
+    )
     output = service.finish(payload, sources, answer)
     if service.guardrails.output:
         context = [source.text for source in sources] if service.guardrails.grounded and sources else None

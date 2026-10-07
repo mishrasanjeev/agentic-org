@@ -78,9 +78,13 @@ document is complete.
 English (`GET /content/languages`), formal or neutral register, plain text or Markdown, with a
 glossary (term to translation) and terms to keep verbatim (product names, identifiers). The model
 translates; the service checks deterministically that every number, amount, date and percentage of
-the source is still there, that each glossary term present in the source has its translation in the
+the source is still there, with its currency and magnitude (`₹5 lakh`, `₹5 crore` and a bare `5`
+are different figures; native digits count), that each glossary term present in the source has its translation in the
 output, that the verbatim terms were kept, and that at least half the letters are in the target
-script; `trusted` is true only when all four hold, and the `checks` say which did not. `verify`
+script; `trusted` is true only when all four hold, and the `checks` say which did not. When an
+output guardrail changes the translation after the checks, `trusted` is false and
+`checks.output_transformed` is true. A text is at most 4,000 characters, so the translation fits
+the completion budget. `verify`
 adds a second model call that translates back to the source language and the word overlap with
 the source, so a reviewer sees how much came through. A batch of up to twenty texts is translated
 one by one with the same settings; an item's failure is reported in place.

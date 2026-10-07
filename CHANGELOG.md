@@ -14,6 +14,11 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
   the target script, and marks the translation trusted only when all
   hold; `verify` adds a back-translation with its word overlap for review.
   `GET /content/languages` lists the languages and scripts.
+- Figures are compared with their currency and magnitude (lakh, crore,
+  thousand, million, in each supported language and in native digits), a
+  translation changed by an output guardrail is no longer marked trusted,
+  a text is at most 4,000 characters (the completion budget is sized to
+  match), and a batch refuses a register or format the single request refuses.
 
 ### Added - Content services: narrative to payload, grounded responses, tone adaptation and clause assembly
 - Four more content services under `/content`: narrative to payload

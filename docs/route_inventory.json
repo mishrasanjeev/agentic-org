@@ -4694,7 +4694,7 @@
     "public_exempt_reason": null,
     "rate_limit": "chat-query",
     "scope": "content.translate.sensitive.write",
-    "source_line": 82,
+    "source_line": 83,
     "tenant_required": true
   },
   {
@@ -4712,7 +4712,7 @@
     "public_exempt_reason": null,
     "rate_limit": "chat-query",
     "scope": "content.translate.sensitive.write",
-    "source_line": 105,
+    "source_line": 106,
     "tenant_required": true
   },
   {
