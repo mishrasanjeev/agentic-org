@@ -4,6 +4,21 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
 
 ## [Unreleased] - 2026-08-29
 
+### Added - Agent registry: cards and lifecycle states
+- Behind `AGENTICORG_AGENT_REGISTRY_ENABLED` (off by default), each agent
+  has a card (`GET /agents/{id}/card`: identity, purpose, risk tier, use
+  case and channels, models, tools, permissions, schemas, a prompt summary
+  without the text, controls, the evaluation gate verdict and the
+  lifecycle state) with the written fields set by `PUT /agents/{id}/card`,
+  and a governance lifecycle (draft, review, approved, published,
+  deprecated, retired) moved by `POST /agents/{id}/lifecycle` under a
+  transition table: the submitter cannot approve and only an active agent
+  is published. Every transition is recorded (`agent_registry`,
+  `agent_registry_events`, migration `v6z48_agent_registry`);
+  `GET /agent-registry` lists entries by state and risk tier. The
+  lifecycle does not yet gate promotion. See
+  `docs/governance/agent-registry.md`.
+
 ### Added - Evaluation framework: promotion gate and model comparison
 - An agent may declare an evaluation gate (`PUT /agents/{id}/eval-gate`;
   `core/evals/gates.py`): a dataset, optionally a version, a minimum pass

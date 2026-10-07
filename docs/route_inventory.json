@@ -450,6 +450,24 @@
     "tenant_required": true
   },
   {
+    "audit_event": "agents.registry.list",
+    "auth_required": true,
+    "function": "list_agent_registry",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/agent-registry api/v1/agent_registry.py:list_agent_registry",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/agent_registry.py",
+    "path": "/api/v1/agent-registry",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "agents.read",
+    "source_line": 177,
+    "tenant_required": true
+  },
+  {
     "audit_event": "agent_teams.list",
     "auth_required": true,
     "function": "list_teams",
@@ -738,6 +756,42 @@
     "tenant_required": true
   },
   {
+    "audit_event": "agents.card.read",
+    "auth_required": true,
+    "function": "get_agent_card",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/agents/{agent_id}/card api/v1/agent_registry.py:get_agent_card",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/agent_registry.py",
+    "path": "/api/v1/agents/{agent_id}/card",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "agents.read",
+    "source_line": 55,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "agents.card.set",
+    "auth_required": true,
+    "function": "set_agent_card",
+    "idempotency": "idempotent-partial-update",
+    "key": "PUT /api/v1/agents/{agent_id}/card api/v1/agent_registry.py:set_agent_card",
+    "metadata_present": true,
+    "methods": [
+      "PUT"
+    ],
+    "module": "api/v1/agent_registry.py",
+    "path": "/api/v1/agents/{agent_id}/card",
+    "public_exempt_reason": null,
+    "rate_limit": "agent-write",
+    "scope": "agents.write",
+    "source_line": 80,
+    "tenant_required": true
+  },
+  {
     "audit_event": "agents.clone",
     "auth_required": true,
     "function": "clone_agent",
@@ -879,6 +933,42 @@
     "rate_limit": "agent-control",
     "scope": "agents.feedback.analyze",
     "source_line": 5315,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "agents.lifecycle.read",
+    "auth_required": true,
+    "function": "get_agent_lifecycle",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/agents/{agent_id}/lifecycle api/v1/agent_registry.py:get_agent_lifecycle",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/agent_registry.py",
+    "path": "/api/v1/agents/{agent_id}/lifecycle",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "agents.read",
+    "source_line": 145,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "agents.lifecycle.transition",
+    "auth_required": true,
+    "function": "transition_agent_lifecycle",
+    "idempotency": "not-idempotent-state-transition",
+    "key": "POST /api/v1/agents/{agent_id}/lifecycle api/v1/agent_registry.py:transition_agent_lifecycle",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/agent_registry.py",
+    "path": "/api/v1/agents/{agent_id}/lifecycle",
+    "public_exempt_reason": null,
+    "rate_limit": "agent-write",
+    "scope": "agents.write",
+    "source_line": 113,
     "tenant_required": true
   },
   {
