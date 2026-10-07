@@ -11,6 +11,10 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
   `GET /finops/comparison` folds the model calls per use case with the
   cheapest catalogue alternatives and a before-and-after around a change
   date (`core/finops/forecast.py`).
+  The forecast totals cover every label; the listed rows are the highest
+  projected spend first, with `total_rows` and `truncated` when the list is
+  cut. Calls without an input and output split are priced at the blended rate
+  alongside the split calls in the comparison.
 
 ### Added - FinOps: thresholds and actions
 - With `AGENTICORG_FINOPS_THRESHOLDS_ENABLED` on (off by default), a
