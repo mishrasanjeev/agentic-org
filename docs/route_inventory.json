@@ -4370,7 +4370,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "chat.read",
-    "source_line": 179,
+    "source_line": 182,
     "tenant_required": true
   },
   {
@@ -4388,7 +4388,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "chat.write",
-    "source_line": 222,
+    "source_line": 225,
     "tenant_required": true
   },
   {
@@ -4406,7 +4406,97 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "chat.read",
-    "source_line": 198,
+    "source_line": 201,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "conversation.supervisor.sessions.list",
+    "auth_required": true,
+    "function": "list_sessions",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/conversation/supervisor/sessions api/v1/conversation_supervisor.py:list_sessions",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/conversation_supervisor.py",
+    "path": "/api/v1/conversation/supervisor/sessions",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "conversation.supervisor.sensitive.read",
+    "source_line": 54,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "conversation.supervisor.session.read",
+    "auth_required": true,
+    "function": "get_session",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/conversation/supervisor/sessions/{session_id} api/v1/conversation_supervisor.py:get_session",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/conversation_supervisor.py",
+    "path": "/api/v1/conversation/supervisor/sessions/{session_id}",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "conversation.supervisor.sensitive.read",
+    "source_line": 75,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "conversation.supervisor.release",
+    "auth_required": true,
+    "function": "release_session",
+    "idempotency": "idempotent-lifecycle-state",
+    "key": "POST /api/v1/conversation/supervisor/sessions/{session_id}/release api/v1/conversation_supervisor.py:release_session",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/conversation_supervisor.py",
+    "path": "/api/v1/conversation/supervisor/sessions/{session_id}/release",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "conversation.supervisor.sensitive.write",
+    "source_line": 140,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "conversation.supervisor.reply",
+    "auth_required": true,
+    "function": "send_reply",
+    "idempotency": "not-idempotent-create",
+    "key": "POST /api/v1/conversation/supervisor/sessions/{session_id}/reply api/v1/conversation_supervisor.py:send_reply",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/conversation_supervisor.py",
+    "path": "/api/v1/conversation/supervisor/sessions/{session_id}/reply",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "conversation.supervisor.sensitive.write",
+    "source_line": 115,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "conversation.supervisor.takeover",
+    "auth_required": true,
+    "function": "take_over",
+    "idempotency": "idempotent-lifecycle-state",
+    "key": "POST /api/v1/conversation/supervisor/sessions/{session_id}/takeover api/v1/conversation_supervisor.py:take_over",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/conversation_supervisor.py",
+    "path": "/api/v1/conversation/supervisor/sessions/{session_id}/takeover",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "conversation.supervisor.sensitive.write",
+    "source_line": 94,
     "tenant_required": true
   },
   {

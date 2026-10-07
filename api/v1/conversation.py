@@ -144,6 +144,9 @@ async def post_turn(body: TurnIn, request: Request, tenant_id: str = Depends(get
     tid = uuid.UUID(tenant_id)
     key = runtime.session_key(channel, body.company_id, body.agent_id, user_id)
     dialogue = await runtime.load_dialogue(tid, key)
+    held = await runtime.held_turn(tid, key, body.text, dialogue)
+    if held is not None:
+        return held
     from core.conversation import dialogue as engine
 
     outcome = engine.advance(dialogue, body.text)
@@ -153,18 +156,18 @@ async def post_turn(body: TurnIn, request: Request, tenant_id: str = Depends(get
             execution = {"status": "unbound", "intent": outcome.intent, "message": "Choose an agent to run this."}
         else:
             execution = await runtime.execute(outcome, context)
-    await runtime.save_dialogue(tid, key, dialogue, user_id=user_id, agent_id=body.agent_id or None, channel=channel)
-    payload = outcome.to_dict()
-    if execution is not None:
-        payload["execution"] = {k: v for k, v in execution.items() if k != "result"}
-    tool_call = (execution or {}).get("tool_call")
-    return {
-        "session_key": key,
-        "answer": runtime.answer_for(outcome, execution),
-        "outcome": payload,
-        "dialogue": runtime.dialogue_view(dialogue),
-        "tool_calls": [tool_call] if tool_call else None,
-    }
+    return await runtime.finish_turn(
+        tid,
+        key,
+        dialogue,
+        outcome,
+        execution,
+        text=body.text,
+        user_id=user_id,
+        agent_id=body.agent_id,
+        channel=channel,
+        context=context,
+    )
 
 
 @router.get("/intents")

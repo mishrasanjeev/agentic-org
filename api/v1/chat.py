@@ -1088,7 +1088,7 @@ async def chat_query(
                 confidence=handled["confidence"],
                 domain=domain,
                 tool_calls=handled.get("tool_calls"),
-                conversation=handled["outcome"],
+                conversation={**handled["outcome"], "session_key": handled.get("session_key")},
             )
 
     # Conversational services: the recent turns reach the agent as the run's

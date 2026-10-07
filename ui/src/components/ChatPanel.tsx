@@ -1,6 +1,8 @@
 import { useState, useRef, useEffect } from "react";
 import api, { extractApiError } from "../lib/api";
 import { extractReadableAgentOutput } from "@/lib/agent-output";
+import { AgenticOrgWS, type FeedMessage } from "@/lib/websocket";
+import { useAuth } from "../contexts/AuthContext";
 
 interface Message {
   id: string;
@@ -19,6 +21,7 @@ interface ChatQueryResponse {
   confidence: number;
   domain: string;
   hitl_trigger?: string | null;
+  conversation?: { session_key?: string | null; kind?: string } | null;
 }
 
 export default function ChatPanel({
@@ -35,6 +38,9 @@ export default function ChatPanel({
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
+  const [sessionKey, setSessionKey] = useState<string | null>(null);
+  const auth = useAuth();
+  const tenantId = auth.user?.tenant_id ?? "";
   const listRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -46,6 +52,24 @@ export default function ChatPanel({
       listRef.current.scrollTop = listRef.current.scrollHeight;
     }
   }, [messages]);
+
+  // A supervisor who has taken the conversation over replies through the live feed.
+  useEffect(() => {
+    if (!open || !sessionKey || !tenantId) return;
+    const ws = new AgenticOrgWS();
+    const unsubscribe = ws.subscribe((event: FeedMessage) => {
+      if (event.type !== "conversation.message" || event.session_key !== sessionKey || event.role !== "supervisor") return;
+      setMessages((prev) => [
+        ...prev,
+        { id: crypto.randomUUID(), role: "agent", text: String(event.text ?? ""), agent: "Supervisor", timestamp: new Date() },
+      ]);
+    });
+    ws.connect(tenantId);
+    return () => {
+      unsubscribe();
+      ws.disconnect();
+    };
+  }, [open, sessionKey, tenantId]);
 
   // Load chat history on open
   useEffect(() => {
@@ -117,6 +141,7 @@ export default function ChatPanel({
         timestamp: new Date(),
       };
       setMessages((prev) => [...prev, agentMsg]);
+      if (res.data.conversation?.session_key) setSessionKey(res.data.conversation.session_key);
     } catch (err) {
       const errMsg: Message = {
         id: crypto.randomUUID(),

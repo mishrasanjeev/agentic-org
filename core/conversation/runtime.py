@@ -236,23 +236,19 @@ class ExecutionContext:
     bindings: dict[str, str] = field(default_factory=dict)
 
 
-async def execute(outcome: Outcome, context: ExecutionContext) -> dict[str, Any]:
-    """Run a confirmed action: the bound tool, under the grant, with the collected slots. Never before confirmation."""
+async def run_tool(context: ExecutionContext, ref: str, params: dict[str, Any], *, label: str = "") -> dict[str, Any]:
+    """Run one authorised tool under the grant with ``params``: the governed path every conversational action takes."""
     from auth.run_grants import direct_tool_call_permitted
     from core.langgraph.tool_adapter import _build_tool_index, _parse_authorized_tool_ref, build_tools_for_agent
 
-    intent_name = outcome.intent or ""
-    ref = resolve_binding(intent_name, context.authorized_tools, context.bindings)
-    if ref is None:
-        return {"status": "unbound", "intent": intent_name, "message": "No tool is bound for this request."}
     parsed = _parse_authorized_tool_ref(ref)
     if parsed is None:
-        return {"status": "unbound", "intent": intent_name, "message": "The bound tool reference is malformed."}
+        return {"status": "unbound", "intent": label, "message": "The bound tool reference is malformed."}
     connector_hint, tool_name = parsed
     index = _build_tool_index(context.connector_config, context.connector_names, include_connector_aliases=True)
     match = index.get(f"{connector_hint}:{tool_name}" if connector_hint else tool_name)
     if not match:
-        return {"status": "unbound", "intent": intent_name, "message": "The bound tool is not available to this agent."}
+        return {"status": "unbound", "intent": label, "message": "The bound tool is not available to this agent."}
     connector_name = match[0]
     if context.run_grant is None or not await direct_tool_call_permitted(
         context.run_grant,
@@ -263,12 +259,10 @@ async def execute(outcome: Outcome, context: ExecutionContext) -> dict[str, Any]
         agent_type=context.agent_type,
         runtime=RUNTIME,
     ):
-        logger.warning(
-            "conversation_action_refused_grant", intent=intent_name, connector=connector_name, tool=tool_name
-        )
+        logger.warning("conversation_action_refused_grant", intent=label, connector=connector_name, tool=tool_name)
         return {
             "status": "refused",
-            "intent": intent_name,
+            "intent": label,
             "message": "This action is not permitted under the current grant.",
             "tool_call": {"connector": connector_name, "tool": tool_name, "status": "refused"},
         }
@@ -282,29 +276,28 @@ async def execute(outcome: Outcome, context: ExecutionContext) -> dict[str, Any]
         agent_id=context.agent_id,
     )
     if not tools:
-        return {"status": "unbound", "intent": intent_name, "message": "The bound tool could not be built."}
-    params = params_for(intent_name, outcome.slots)
+        return {"status": "unbound", "intent": label, "message": "The bound tool could not be built."}
     try:
         result = await tools[0].ainvoke(params)
     except (RuntimeError, TypeError, ValueError, OSError) as exc:
-        logger.warning("conversation_action_failed", intent=intent_name, error_type=type(exc).__name__)
+        logger.warning("conversation_action_failed", intent=label, error_type=type(exc).__name__)
         return {
             "status": "failed",
-            "intent": intent_name,
+            "intent": label,
             "message": "The action could not be completed.",
             "tool_call": {"connector": connector_name, "tool": tool_name, "status": "error"},
         }
     failed = isinstance(result, dict) and bool(result.get("error"))
     logger.info(
         "conversation_action_executed",
-        intent=intent_name,
+        intent=label,
         connector=connector_name,
         tool=tool_name,
         outcome="error" if failed else "ok",
     )
     return {
         "status": "failed" if failed else "executed",
-        "intent": intent_name,
+        "intent": label,
         "message": str(result.get("message") or result.get("error"))
         if failed and isinstance(result, dict)
         else "Done.",
@@ -316,6 +309,15 @@ async def execute(outcome: Outcome, context: ExecutionContext) -> dict[str, Any]
             "status": "error" if failed else "success",
         },
     }
+
+
+async def execute(outcome: Outcome, context: ExecutionContext) -> dict[str, Any]:
+    """Run a confirmed action: the bound tool, under the grant, with the collected slots. Never before confirmation."""
+    intent_name = outcome.intent or ""
+    ref = resolve_binding(intent_name, context.authorized_tools, context.bindings)
+    if ref is None:
+        return {"status": "unbound", "intent": intent_name, "message": "No tool is bound for this request."}
+    return await run_tool(context, ref, params_for(intent_name, outcome.slots), label=intent_name)
 
 
 def answer_for(outcome: Outcome, execution: dict[str, Any] | None) -> str:
@@ -362,6 +364,80 @@ def _recognised(text: str) -> bool:
     return bool(matches and matches[0].confidence >= MIN_CONFIDENCE) or len(catalogue.split_requests(text)) > 1
 
 
+HELD_ANSWER = "A colleague has joined this conversation and will reply here."
+
+
+async def held_turn(tid: uuid.UUID, key: str, text: str, dialogue: Dialogue) -> dict[str, Any] | None:
+    """While a supervisor holds the session, the user's message goes to them, not to the runtime."""
+    from core.conversation import supervisor
+
+    holder = await supervisor.taken_over(tid, key)
+    if not holder:
+        return None
+    await supervisor.user_message(tid, key, text)
+    return {
+        "answer": HELD_ANSWER,
+        "confidence": 1.0,
+        "outcome": {"kind": "handed_over", "text": HELD_ANSWER, "intent": dialogue.intent, "slots": {}, "missing": []},
+        "dialogue": dialogue_view(dialogue),
+        "tool_calls": None,
+        "session_key": key,
+    }
+
+
+async def finish_turn(
+    tid: uuid.UUID,
+    key: str,
+    dialogue: Dialogue,
+    outcome: Outcome,
+    execution: dict[str, Any] | None,
+    *,
+    text: str,
+    user_id: str,
+    agent_id: str,
+    channel: str,
+    context: ExecutionContext | None,
+) -> dict[str, Any]:
+    """Save the turn, hand off when the outcome says so, announce it, and shape the answer."""
+    from core.conversation import escalation, supervisor
+
+    handoff: dict[str, Any] | None = None
+    reason = escalation.REASON_REQUESTED if outcome.intent == "talk_to_agent" else escalation.REASON_SLOTS
+    await save_dialogue(tid, key, dialogue, user_id=user_id, agent_id=agent_id or None, channel=channel)
+    if outcome.kind == "escalate":
+        handoff = await escalation.handoff(
+            tid,
+            session_key=key,
+            dialogue=dialogue,
+            user_id=user_id,
+            agent_id=agent_id,
+            channel=channel,
+            reason=reason,
+            context=context,
+            intent=outcome.intent,
+        )
+    answer = escalation.handoff_answer(handoff) if handoff is not None else answer_for(outcome, execution)
+    payload = outcome.to_dict()
+    if execution is not None:
+        payload["execution"] = {k: v for k, v in execution.items() if k != "result"}
+    if handoff is not None:
+        payload["handoff"] = {k: handoff.get(k) for k in ("reason", "intent", "hitl_id", "ticket")}
+    stage = dialogue.stage
+    await supervisor.announce_turn(tid, key, role="user", text=text, intent=dialogue.intent, stage=stage)
+    await supervisor.announce_turn(tid, key, role="assistant", text=answer, intent=dialogue.intent, stage=stage)
+    tool_call = (execution or {}).get("tool_call")
+    return {
+        "answer": answer,
+        "confidence": round(outcome.confidence, 3)
+        if outcome.confidence
+        else (0.9 if outcome.kind in ("execute", "confirm") else 0.6),
+        "outcome": payload,
+        "dialogue": dialogue_view(dialogue),
+        "tool_calls": [tool_call] if tool_call else None,
+        "session_key": key,
+    }
+
+
 async def chat_turn(
     *,
     tenant_id: str,
@@ -377,12 +453,16 @@ async def chat_turn(
     A turn is handled when a dialogue is in progress for this session, or when
     the message names a banking intent. A read intent with no tool bound is
     left to the agent, which can answer it from its own tools and knowledge.
+    While a supervisor holds the session, every message goes to them.
     """
     if not enabled():
         return None
     tid = uuid.UUID(str(tenant_id))
     key = session_key(channel, company_id, agent_id, user_id)
     dialogue = await load_dialogue(tid, key)
+    held = await held_turn(tid, key, text, dialogue)
+    if held is not None:
+        return held
     active = dialogue.stage not in (dialogue_engine.STAGE_IDLE, dialogue_engine.STAGE_DONE)
     if not active:
         if not _recognised(text):
@@ -398,22 +478,18 @@ async def chat_turn(
             execution = {"status": "unbound", "intent": outcome.intent, "message": "No agent is available to run this."}
         else:
             execution = await execute(outcome, context)
-    await save_dialogue(tid, key, dialogue, user_id=user_id, agent_id=agent_id or None, channel=channel)
-    answer = answer_for(outcome, execution)
-    payload = outcome.to_dict()
-    if execution is not None:
-        payload["execution"] = {k: v for k, v in execution.items() if k != "result"}
-    tool_call = (execution or {}).get("tool_call")
-    return {
-        "answer": answer,
-        "confidence": round(outcome.confidence, 3)
-        if outcome.confidence
-        else (0.9 if outcome.kind in ("execute", "confirm") else 0.6),
-        "outcome": payload,
-        "dialogue": dialogue_view(dialogue),
-        "tool_calls": [tool_call] if tool_call else None,
-        "session_key": key,
-    }
+    return await finish_turn(
+        tid,
+        key,
+        dialogue,
+        outcome,
+        execution,
+        text=text,
+        user_id=user_id,
+        agent_id=agent_id,
+        channel=channel,
+        context=context,
+    )
 
 
 async def agent_bindings(tenant_id: str, agent_id: str) -> dict[str, str]:

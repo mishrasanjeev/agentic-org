@@ -4,6 +4,19 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
 
 ## [Unreleased] - 2026-08-29
 
+### Added - Conversational services: escalation hand-off and the supervisor console
+- A hand-off leaves a review-queue item (`conversation_escalation`) with
+  the summary, the intent tag, the slots and the recent turns, raises a
+  ticket through the agent's ticketing tool when one is authorised, marks
+  the session escalated and tells the live feed
+  (`core/conversation/escalation.py`). A supervisor lists live and
+  escalated conversations, reads a transcript, takes a conversation over
+  (the assistant stops answering and the user's messages reach the
+  supervisor), replies through the live feed into the user's chat, and
+  releases it (`core/conversation/supervisor.py`,
+  `/conversation/supervisor/sessions`, the Conversations page; migration
+  `v6z61_conversation_supervision`).
+
 ### Added - Conversational services: multi-turn context, clarification and graceful fallbacks
 - With `AGENTICORG_CONVERSATION_V2_ENABLED` on, the recent turns of a chat
   reach the agent as the run's context so follow-ups resolve earlier

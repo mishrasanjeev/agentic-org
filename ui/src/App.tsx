@@ -6,7 +6,7 @@ import Analytics from "./components/Analytics";
 import Layout from "./components/Layout";
 import ProtectedRoute from "./components/ProtectedRoute";
 import RouteSeo from "./components/RouteSeo";
-import { AGENT_CREATOR_ROLES, APPROVAL_ROLES, CONNECTOR_ROLES } from "./lib/roles";
+import { AGENT_CREATOR_ROLES, APPROVAL_ROLES, CONNECTOR_ROLES, SUPERVISOR_ROLES } from "./lib/roles";
 
 /* -- Critical path: Landing page loaded eagerly -- */
 import Landing from "./pages/Landing";
@@ -52,6 +52,7 @@ const WorkflowCreate = lazyRetry(() => import("./pages/WorkflowCreate"));
 const WorkflowDetail = lazyRetry(() => import("./pages/WorkflowDetail"));
 const WorkflowRun = lazyRetry(() => import("./pages/WorkflowRun"));
 const Approvals = lazyRetry(() => import("./pages/Approvals"));
+const Conversations = lazyRetry(() => import("./pages/Conversations"));
 const GovernedCases = lazyRetry(() => import("./pages/GovernedCases"));
 const GovernedCaseDetail = lazyRetry(() => import("./pages/GovernedCaseDetail"));
 const Connectors = lazyRetry(() => import("./pages/Connectors"));
@@ -518,6 +519,16 @@ export default function App() {
           <ProtectedRoute allowedRoles={APPROVAL_ROLES}>
             <Layout>
               <Approvals />
+            </Layout>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/dashboard/conversations"
+        element={
+          <ProtectedRoute allowedRoles={SUPERVISOR_ROLES}>
+            <Layout>
+              <Conversations />
             </Layout>
           </ProtectedRoute>
         }

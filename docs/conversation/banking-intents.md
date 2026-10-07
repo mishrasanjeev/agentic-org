@@ -62,6 +62,25 @@ changed, and what to do next (`core/conversation/fallbacks.py`): a timeout, an u
 system, no answer, a held-back low-confidence answer, a failed action or a refusal. After two
 fallbacks in a row the offer is to connect to a person, and a yes is the hand-off.
 
+## Escalation hand-off and the supervisor console
+
+A hand-off (`core/conversation/escalation.py`) happens when the user asks for a person, when a
+required detail cannot be collected, or when the user accepts the offer after repeated fallbacks.
+It leaves a review-queue item (trigger `conversation_escalation`, role `support`) carrying a
+one-paragraph summary, the intent tag, the slots collected so far and the recent turns; when the
+agent is authorised for a ticketing tool (`create_ticket`, `create_incident`) a ticket is raised
+through the governed tool path with the same summary, tag and transcript, and its reference is
+kept on the session and told to the user. The session is marked escalated and the live feed
+carries `conversation.escalated`.
+
+A supervisor (a tenant administrator) watches conversations in the Conversations page
+(`/conversation/supervisor/sessions`): every session in progress or escalated, its transcript,
+slots and hand-off record, updated through the live feed (`conversation.turn`). Taking a
+conversation over stops the assistant: the user's messages are stored and announced to the
+supervisor, the user is told a colleague has joined, and the supervisor's replies reach the
+user's chat through the live feed (`conversation.message`). Releasing hands the conversation
+back to the assistant. Only the holder may reply.
+
 ## Execution under the grant
 
 A confirmed action runs through the agent's own governed tools (`core/conversation/runtime.py`).
