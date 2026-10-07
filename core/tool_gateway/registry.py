@@ -234,6 +234,7 @@ class _Cache:
     entries: dict[str, Registration] = field(default_factory=dict)
 
 
+# enterprise-gate: process-local-ok reason=bounded-short-ttl-db-backed-tool-registration-cache
 _CACHE: dict[str, _Cache] = {}
 
 
