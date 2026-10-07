@@ -34,6 +34,11 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
   report: documents and key fields with corrections, reconciliation,
   stamps, review reasons and a narrative built from them, never from a
   model (`core/idp/report.py`).
+- Reconciliation requires every pair of values to agree, resolves
+  two-digit birth years to the latest century not in the future, and
+  keeps the sign of amounts; the report no longer lists corrected fields
+  as missing or weak; the stamp check reads the kept file once and
+  renders every page from that copy.
 
 ### Added - Document processing: review with overlays and corrections
 - `POST /idp/analyse?store=true` keeps the file and the result
@@ -45,6 +50,10 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
   approves or rejects. The Documents page draws every field on the page
   it came from, coloured by confidence, with the reviewer's edits and
   decision (`core/idp/store.py`, `api/v1/idp_review.py`).
+- Corrections to extra fields show in the served document, PDF page
+  images are rendered with a scale capped at 2400 pixels a side, and the
+  Documents page ignores a detail that arrives for a document no longer
+  selected.
 
 ### Added - Document processing: classification and extraction
 - With `AGENTICORG_IDP_ENABLED` on (off by default), `POST /idp/analyse`
@@ -53,10 +62,14 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
   synthetic catalogue of banking documents by weighted rules, splits a
   bundle into one document per segment, extracts each type's fields with
   a page, a box and a per-field confidence (plus generic label-value
-  lines), extracts tables from the layout engine or aligned columns, and
+  lines), extracts tables from aligned columns, and
   routes a document to review when its type is unknown or weak, a
   required field is missing or weak, or a page could not be read
   (`core/idp/`, `GET /idp/document-types`, `POST /idp/classify-text`).
+  Uploads over 25 MB are refused while they are read and PDFs over 50
+  pages are refused rather than truncated; OCR runs off the event loop;
+  a repeated heading alone no longer splits a bundle; negative amounts
+  keep their sign; the routes need `approvals:read` / `approvals:write`.
 
 ### Added - Content services: document translation across Indian languages
 - `POST /content/translate` and `/content/translate/batch`

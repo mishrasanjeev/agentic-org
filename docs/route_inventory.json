@@ -6494,7 +6494,7 @@
     "public_exempt_reason": null,
     "rate_limit": "chat-query",
     "scope": "documents.analyse.sensitive.write",
-    "source_line": 68,
+    "source_line": 90,
     "tenant_required": true
   },
   {
@@ -6512,7 +6512,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "documents.read",
-    "source_line": 116,
+    "source_line": 141,
     "tenant_required": true
   },
   {
@@ -6530,7 +6530,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "documents.read",
-    "source_line": 40,
+    "source_line": 62,
     "tenant_required": true
   },
   {
@@ -6656,7 +6656,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "documents.review.sensitive.read",
-    "source_line": 76,
+    "source_line": 79,
     "tenant_required": true
   },
   {
@@ -6674,7 +6674,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "documents.review.sensitive.read",
-    "source_line": 106,
+    "source_line": 109,
     "tenant_required": true
   },
   {
@@ -6692,7 +6692,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "documents.review.sensitive.read",
-    "source_line": 91,
+    "source_line": 94,
     "tenant_required": true
   },
   {

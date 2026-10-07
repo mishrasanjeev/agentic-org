@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
-"""Table extraction: ruled tables from a PDF's own layout where the library finds them, else columns from word gaps.
+"""Table extraction: columns from the gaps between words, for text-layer and OCR pages alike.
 
-The fallback groups a page's lines into a table when several consecutive
+The extractor groups a page's lines into a table when several consecutive
 lines share column positions (words aligned at the same x), which is how a
 statement's transaction list or a slip's earnings block reads on a scanned
 page. Every table keeps its page and box.
@@ -29,7 +29,7 @@ class Table:
     page: int
     bbox: tuple[float, float, float, float]
     rows: list[list[str]]
-    method: str  # layout | words
+    method: str  # words (columns found from word alignment)
     header: list[str] = field(default_factory=list)
 
     def to_dict(self) -> dict[str, Any]:
