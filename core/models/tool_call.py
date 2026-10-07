@@ -18,9 +18,7 @@ class ToolCall(BaseModel):
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     tenant_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
     step_exec_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
-    agent_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("agents.id"), nullable=False
-    )
+    agent_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("agents.id"), nullable=False)
     tool_name: Mapped[str] = mapped_column(String(100), nullable=False)
     connector_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
     input_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
@@ -31,4 +29,7 @@ class ToolCall(BaseModel):
     idempotency_key: Mapped[str | None] = mapped_column(String(255), nullable=True)
     latency_ms: Mapped[int | None] = mapped_column(Integer, nullable=True)
     llm_tokens: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # FinOps attribution of the run the call was made in (core/finops/attribution.py); nullable.
+    use_case: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    application: Mapped[str | None] = mapped_column(String(64), nullable=True)
     called_at: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), server_default=func.now())

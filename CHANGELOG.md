@@ -4,6 +4,18 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
 
 ## [Unreleased] - 2026-08-29
 
+### Added - FinOps: use-case attribution
+- With `AGENTICORG_FINOPS_ATTRIBUTION_ENABLED` on (off by default), a run
+  binds its use case, application, business unit, department and cost
+  centre (`core/finops/attribution.py`); its cost write adds a row per day,
+  agent and attribution to `finops_cost_ledger` (migration
+  `v6z55_finops_attribution`), each model call record carries the business
+  unit and application, and `GET /finops/attribution` folds the ledger by
+  any dimension with the unattributed share.
+- The ledger's row-level policy is forced, its unique key includes the
+  department and cost centre (a mid-day change starts a new row), and the
+  legacy-table column additions skip a table that is missing.
+
 ### Added - AI governance: policy console
 - With `AGENTICORG_GOVERNANCE_POLICY_CONSOLE_ENABLED` on (off by default),
   a tenant administrator sees every policy (model routing, access and

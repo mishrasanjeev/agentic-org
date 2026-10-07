@@ -1,0 +1,31 @@
+# FinOps
+
+## Use-case attribution
+
+With `AGENTICORG_FINOPS_ATTRIBUTION_ENABLED` on, every cost a run incurs carries where it came
+from (`core/finops/attribution.py`). A run binds its attribution for its whole span:
+
+| Dimension | Taken from, in order |
+|---|---|
+| `use_case` | the caller's `use_case`, the agent's configuration, the agent's type; `unattributed` otherwise |
+| `application` | the surface the run came through: `agents`, `chat`, `voice`, `workflows`, `a2a`, `api`, `console` |
+| `business_unit` | the caller's `business_unit`, the agent's configuration, the agent's domain |
+| `department_id`, `cost_center_id` | the cost centre the agent is charged to and its department |
+
+The labels are bounded, lower-cased identifiers, never a user, a prompt or a document. While the
+switch is on:
+
+- the run's cost write adds one row per day, agent and attribution to `finops_cost_ledger`
+  (tokens, cost, calls), beside the per-agent ledger that exists today;
+- each model call record carries the business unit and application of the run it was made in,
+  beside the use case and agent it already carries;
+- each tool call row carries the use case and application.
+
+`GET /finops/attribution?days=30&group_by=use_case` (tenant-admin only) folds the ledger by one
+dimension (`use_case`, `application`, `business_unit`, `department_id`, `cost_center_id`,
+`agent_id`) over the window: tokens, cost, calls and distinct agents per value, the totals, and the
+share of cost that is unattributed, so the gap is visible.
+
+Off, nothing here runs: the ledger is not written, the records and tool calls carry what they
+carried before, and the endpoint is not found. Thresholds with alerts, throttling and suspension,
+cost comparison and forecasting are the next parts of this package.

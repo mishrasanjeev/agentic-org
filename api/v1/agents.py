@@ -39,6 +39,7 @@ from core.commerce.sales_guardrails import GRANTEX_COMMERCE_DEFAULT_TOOLS
 from core.database import get_tenant_session
 from core.evals import gates as eval_gates
 from core.file_ingestion.limits import cleanup_tempfile, stream_to_tempfile
+from core.finops import attribution as cost_attribution
 from core.governance import risk_tiers
 from core.governance.agent_status import refusal_for as agent_status_refusal
 from core.governance.operator_override import check as check_operator_override
@@ -1068,6 +1069,10 @@ async def _record_cost_ledger(
                         period_date=today,
                     )
                 )
+            # FinOps: the same cost, attributed (core/finops/attribution.py).
+            bound = cost_attribution.current() if cost_attribution.enabled() else None
+            if bound is not None:
+                await cost_attribution.ledger_add(session, tid, bound, tokens=tokens_used, cost_usd=cost_usd)
     except (OSError, RuntimeError, SQLAlchemyError, TypeError, ValueError) as exc:
         logger.error(
             "cost_ledger_write_failed",
@@ -3396,6 +3401,18 @@ async def run_agent(
         dispatch_connector_ids = _required_connector_ids_for_agent(agent_row)
         run_agent_visibility = str(getattr(agent_row, "visibility", None) or AGENT_VISIBILITY_TENANT)
         run_agent_owner_user_id = getattr(agent_row, "owner_user_id", None)
+        # FinOps: the run's attribution (use case, application, business unit, department, cost centre).
+        attribution_token = None
+        if cost_attribution.enabled():
+            attribution_token = cost_attribution.bind(
+                await cost_attribution.resolve_for_agent(
+                    session,
+                    agent_row,
+                    use_case=payload.get("use_case"),
+                    application="agents",
+                    business_unit=payload.get("business_unit"),
+                )
+            )
 
     # 2. Prepare execution config
     authorized_tools = agent_config.get("authorized_tools", []) or []
@@ -4080,7 +4097,10 @@ async def run_agent(
             await session.commit()
 
     # 6d. Record cost in ledger (upsert — unique on tenant+agent+date)
-    if not await _record_cost_ledger(tid, agent_id, perf):
+    recorded_cost = await _record_cost_ledger(tid, agent_id, perf)
+    if attribution_token is not None:
+        cost_attribution.reset(attribution_token)
+    if not recorded_cost:
         # AGENT-BUDGET-014: Cost ledger failures must not be silently ignored.
         # Flag the result so downstream consumers (HITL, dashboards) know
         # that budget tracking is unreliable for this run.

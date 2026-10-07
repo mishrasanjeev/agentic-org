@@ -239,6 +239,9 @@ class ModelCallRecord:
     created_at: datetime
     prompt_digest: str | None = None
     request_digest: str | None = None
+    # The FinOps attribution of the run (core/finops/attribution.py); not part of the signature.
+    business_unit: str | None = None
+    application: str | None = None
     response_digest: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
@@ -385,6 +388,8 @@ async def _write(record: ModelCallRecord) -> bool:
             id=uuid.uuid4(),
             tenant_id=uuid.UUID(str(tid)),
             signature=signature,
+            business_unit=record.business_unit,
+            application=record.application,
             **{name: getattr(record, name) for name in SIGNED_FIELDS if name != "tenant_id"},
             **{name: getattr(record, name) for name in DIGEST_FIELDS},
         )
@@ -431,6 +436,9 @@ async def record_model_call(
     if context is not None:
         use_case = use_case or context.use_case
         agent_id = agent_id or context.agent_id
+    from core.finops import attribution as cost_attribution
+
+    bound = cost_attribution.current() if cost_attribution.enabled() else None
     provider_name = (provider or getattr(decision, "provider", None) or "unknown").strip().lower()
     if cost_usd is None:
         cost_usd = estimate_cost_usd(
@@ -462,6 +470,8 @@ async def record_model_call(
         cost_usd=float(cost_usd or 0.0),
         tokens_per_second=tokens_per_second,
         created_at=datetime.now(UTC),
+        business_unit=(bound.business_unit or None) if bound is not None else None,
+        application=bound.application if bound is not None else None,
         prompt_digest=prompt_digest,
         request_digest=request_digest,
         response_digest=response_digest,
