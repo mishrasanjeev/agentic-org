@@ -323,6 +323,11 @@ class Settings(BaseSettings):
     # list, written through its own store and dry-run across the enforcement
     # points. Off by default: off, the endpoints are not found.
     governance_policy_console_enabled: bool = False
+    # FinOps attribution (core/finops/attribution.py): a run binds its use
+    # case, application, business unit, department and cost centre; the cost
+    # write adds a row to finops_cost_ledger and the model call records carry
+    # the labels. Off by default: off, nothing is written or tagged.
+    finops_attribution_enabled: bool = False
     # JSON object keyed provider/model with input and output USD per million
     # tokens; a negotiated rate replaces the list price.
     model_price_overrides_json: str = ""

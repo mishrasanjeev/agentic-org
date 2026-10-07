@@ -36,6 +36,9 @@ class ModelGatewayRecord(BaseModel):
     correlation_id: Mapped[str] = mapped_column(String(128), nullable=False)
     use_case: Mapped[str] = mapped_column(String(64), nullable=False, default="")
     agent_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    # FinOps attribution of the run the call was made in (core/finops/attribution.py); unsigned, nullable.
+    business_unit: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    application: Mapped[str | None] = mapped_column(String(64), nullable=True)
     policy_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
     access_policy_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
     requested_provider: Mapped[str | None] = mapped_column(String(64), nullable=True)
