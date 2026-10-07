@@ -19,6 +19,12 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
   (`POST /conversation/feedback`) and kept with the agent's feedback;
   sentiment is read on every user turn and two negative turns in a row
   offer a person (`core/conversation/feedback.py`).
+- Feedback for an agent is accepted only when the agent belongs to the
+  caller's tenant and company and is visible to the caller, a retried
+  rating stores one feedback row, and `stored_with_agent` is true only when
+  the row was stored. Ratings and sentiment match whole words, prefer the
+  longest phrase and read negation ("not helpful" is a 2), and an amount
+  too large to be a number is asked for again.
 
 ### Added - Conversational services: escalation hand-off and the supervisor console
 - A hand-off leaves a review-queue item (`conversation_escalation`) with

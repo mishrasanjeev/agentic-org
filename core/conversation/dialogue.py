@@ -10,6 +10,7 @@ nothing is recognised. Nothing here calls a tool.
 
 from __future__ import annotations
 
+import math
 import re
 from dataclasses import asdict, dataclass, field
 from datetime import UTC, date, datetime
@@ -106,6 +107,15 @@ class Dialogue:
 # ── Formatting ────────────────────────────────────────────────────────────────
 
 
+def _finite_amount(value: Any) -> bool:
+    """A positive, finite number; checked whether or not the intent has a business cap."""
+    try:
+        amount = float(value)
+    except (TypeError, ValueError):
+        return False
+    return math.isfinite(amount) and amount > 0
+
+
 def rupees(value: Any) -> str:
     try:
         amount = float(value)
@@ -188,6 +198,8 @@ def parse_slot(
         if amount is None:
             amount = catalogue.parse_amount(stripped)
         if amount is None:
+            return None, "Please give the amount as a number, for example 2500 or ₹2,500."
+        if not _finite_amount(amount):
             return None, "Please give the amount as a number, for example 2500 or ₹2,500."
         if max_amount is not None and amount > max_amount:
             return (
@@ -283,6 +295,8 @@ def fill_from_entities(
         elif slot.kind == "text":
             value = entities.get(slot.name)
         if value not in (None, ""):
+            if slot.kind == "amount" and not _finite_amount(value):
+                continue
             if slot.kind == "amount" and intent.max_amount is not None and float(value) > intent.max_amount:
                 continue
             filled[slot.name] = value

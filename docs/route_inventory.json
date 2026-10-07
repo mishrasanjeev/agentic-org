@@ -4359,7 +4359,7 @@
     "audit_event": "conversation.feedback",
     "auth_required": true,
     "function": "post_feedback",
-    "idempotency": "idempotent-full-replace",
+    "idempotency": "idempotent-full-replace-session-rating-event-key",
     "key": "POST /api/v1/conversation/feedback api/v1/conversation.py:post_feedback",
     "metadata_present": true,
     "methods": [
@@ -4370,7 +4370,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "chat.write",
-    "source_line": 211,
+    "source_line": 232,
     "tenant_required": true
   },
   {
@@ -4388,7 +4388,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "chat.read",
-    "source_line": 192,
+    "source_line": 213,
     "tenant_required": true
   },
   {
@@ -4406,7 +4406,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "chat.write",
-    "source_line": 300,
+    "source_line": 327,
     "tenant_required": true
   },
   {
@@ -4424,7 +4424,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "chat.read",
-    "source_line": 276,
+    "source_line": 303,
     "tenant_required": true
   },
   {
@@ -4442,7 +4442,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "chat.read",
-    "source_line": 250,
+    "source_line": 277,
     "tenant_required": true
   },
   {
@@ -4550,7 +4550,7 @@
     "public_exempt_reason": null,
     "rate_limit": "chat-query",
     "scope": "chat.agent_execution.external_tool_sensitive.write",
-    "source_line": 147,
+    "source_line": 168,
     "tenant_required": true
   },
   {

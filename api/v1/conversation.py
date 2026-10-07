@@ -68,6 +68,27 @@ def _user_id(request: Request) -> str:
     return _session_user_id(request)
 
 
+async def _require_visible_agent(request: Request, tenant_id: str, company_id: str, agent_id: str) -> None:
+    """The agent must exist under the caller's tenant and company and be visible to the caller; 404 otherwise."""
+    from api.v1.agents import _require_company_for_tenant
+
+    try:
+        aid = uuid.UUID(agent_id)
+    except ValueError:
+        raise HTTPException(404, "Agent not found") from None
+    company_uuid = await _require_company_for_tenant(tenant_id, company_id)
+    tid = uuid.UUID(tenant_id)
+    async with get_tenant_session(tid, company_uuid) as session:
+        agent = (
+            await session.execute(
+                select(Agent).where(Agent.id == aid, Agent.tenant_id == tid, Agent.company_id == company_uuid)
+            )
+        ).scalar_one_or_none()
+        if agent is None:
+            raise HTTPException(404, "Agent not found")
+        require_agent_visible(agent, caller_from_request(request))
+
+
 async def _execution_context(
     request: Request, tenant_id: str, company_id: str, agent_id: str
 ) -> runtime.ExecutionContext | None:
@@ -205,19 +226,25 @@ async def list_intents(tenant_id: str = Depends(get_current_tenant)) -> dict[str
     tenant_required=True,
     scope="chat.write",
     rate_limit="standard",
-    idempotency="idempotent-full-replace",
+    idempotency="idempotent-full-replace-session-rating-event-key",
     audit_event="conversation.feedback",
 )
 async def post_feedback(
     body: FeedbackIn, request: Request, tenant_id: str = Depends(get_current_tenant)
 ) -> dict[str, Any]:
-    """A rating from 1 to 5 for the caller's conversation, kept on the session and with the agent's feedback."""
+    """A rating from 1 to 5 for the caller's conversation, kept on the session and with the agent's feedback.
+
+    The session's rating is replaced, and the agent feedback row carries a stable event key derived from
+    the session, rating and comment, so a retried request stores one row.
+    """
     from core.conversation import feedback
 
     if not runtime.enabled():
         raise _off()
     channel = _channel(body.channel)
     user_id = _user_id(request)
+    if body.agent_id:
+        await _require_visible_agent(request, tenant_id, body.company_id, body.agent_id)
     tid = uuid.UUID(tenant_id)
     key = runtime.session_key(channel, body.company_id, body.agent_id, user_id)
     dialogue = await runtime.load_dialogue(tid, key)

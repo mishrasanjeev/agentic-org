@@ -13,6 +13,7 @@ The catalogue is synthetic and generic: no institution's products or names.
 
 from __future__ import annotations
 
+import math
 import re
 from dataclasses import dataclass, field
 from datetime import UTC, date, datetime, timedelta
@@ -388,7 +389,7 @@ def _bare_amount(text: str) -> float | None:
             value = float(match.group(1).replace(",", ""))
         except ValueError:
             continue
-        if value > 0:
+        if math.isfinite(value) and value > 0:
             return value
     return None
 
@@ -407,7 +408,7 @@ def parse_amount(text: str) -> float | None:
         return None
     unit = unit.rstrip("s") if unit not in _MULTIPLIERS else unit
     value *= _MULTIPLIERS.get(unit, _MULTIPLIERS.get(unit + "s", 1))
-    return value if value > 0 else None
+    return value if math.isfinite(value) and value > 0 else None
 
 
 def parse_date(text: str, *, today: date | None = None) -> str | None:
@@ -544,7 +545,7 @@ def parse_amounts(text: str) -> list[float]:
                 value = float(match.group(1).replace(",", ""))
             except ValueError:
                 continue
-            if value > 0 and value not in amounts:
+            if math.isfinite(value) and value > 0 and value not in amounts:
                 amounts.append(value)
     return amounts
 
