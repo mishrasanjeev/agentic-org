@@ -91,20 +91,21 @@ def compare_tables(before: dict[str, Any], after: dict[str, Any]) -> list[dict[s
     for index in range(max(len(left), len(right))):
         a = left[index] if index < len(left) else None
         b = right[index] if index < len(right) else None
+        rows_a = [" | ".join(r) for r in a.get("rows", [])] if a is not None else []
+        rows_b = [" | ".join(r) for r in b.get("rows", [])] if b is not None else []
         if a is None or b is None:
+            # a table present on one side only: every row it holds was added or removed
             out.append(
                 {
                     "table": index,
                     "present_before": a is not None,
                     "present_after": b is not None,
                     "changed": True,
-                    "rows_added": [],
-                    "rows_removed": [],
+                    "rows_added": rows_b[:MAX_LINE_CHANGES],
+                    "rows_removed": rows_a[:MAX_LINE_CHANGES],
                 }
             )
             continue
-        rows_a = [" | ".join(r) for r in a.get("rows", [])]
-        rows_b = [" | ".join(r) for r in b.get("rows", [])]
         matcher = difflib.SequenceMatcher(a=rows_a, b=rows_b, autojunk=False)
         added, removed = [], []
         for tag, i1, i2, j1, j2 in matcher.get_opcodes():

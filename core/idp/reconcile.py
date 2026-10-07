@@ -13,7 +13,8 @@ from __future__ import annotations
 import re
 import unicodedata
 from dataclasses import dataclass, field
-from datetime import date
+from datetime import UTC, date, datetime
+from itertools import combinations
 from typing import Any
 
 # Which field of which document type feeds each reconciled item.
@@ -55,6 +56,7 @@ _DATE_RES = (
     (re.compile(r"^(\d{4})-(\d{2})-(\d{2})$"), ("y", "m", "d")),
     (re.compile(r"^(\d{1,2})[/-](\d{1,2})[/-](\d{2})$"), ("d", "m", "yy")),
 )
+_AMOUNT_RE = re.compile(r"^\s*([+-]?)\s*(\d+(?:\.\d+)?)\s*$")
 _MONTHS = ("jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec")
 
 
@@ -78,15 +80,33 @@ def names_agree(a: str, b: str) -> bool:
     return all(w in expanded or (len(w) == 1 and any(x.startswith(w) for x in big)) for w in small)
 
 
-def normalise_date(value: str) -> str | None:
+def _birth_century(two_digit: int, month: int, day: int, today: date) -> int:
+    """The full year of a two-digit year on a date of birth: the latest century that keeps the date not in the future.
+
+    ``01/01/90`` is 1990 and ``01/01/05`` is 2005; a two-digit year above the
+    current one, or equal to it with a later day, is in the 1900s. The only
+    reconciled date is a date of birth, which can never lie ahead of today.
+    """
+    year = (today.year // 100) * 100 + two_digit
+    if (year, month, day) > (today.year, today.month, today.day):
+        year -= 100
+    return year
+
+
+def normalise_date(value: str, *, today: date | None = None) -> str | None:
+    """An ISO date, or None when the value is not a date. Two-digit years resolve as dates of birth (see above)."""
     text = str(value or "").strip()
     for pattern, order in _DATE_RES:
         match = pattern.match(text)
         if match:
             parts = dict(zip(order, match.groups(), strict=False))
-            year = int(parts.get("y") or 0) or 2000 + int(parts.get("yy") or 0)
+            month, day = int(parts["m"]), int(parts["d"])
+            if parts.get("yy") is not None:
+                year = _birth_century(int(parts["yy"]), month, day, today or datetime.now(UTC).date())
+            else:
+                year = int(parts["y"])
             try:
-                return date(year, int(parts["m"]), int(parts["d"])).isoformat()
+                return date(year, month, day).isoformat()
             except ValueError:
                 return None
     match = re.match(r"^(\d{1,2})\s+([A-Za-z]{3,9})\s+(\d{4})$", text)
@@ -105,10 +125,19 @@ def normalise_id(value: str) -> str:
 
 
 def normalise_amount(value: str) -> float | None:
-    try:
-        return float(re.sub(r"[^\d.]", "", str(value or "").replace(",", "")))
-    except ValueError:
+    """The signed number in an amount, without currency marks, separators or a trailing ``/-``; None if unclear.
+
+    A leading minus (ASCII or the Unicode minus sign), before or after the
+    currency mark, is kept, so ``-1000`` and ``1000`` never compare equal.
+    """
+    text = str(value or "").replace(",", "").replace("\u2212", "-").strip()
+    text = re.sub(r"/-$", "", text)
+    text = re.sub(r"(?i)\u20b9|inr|rs\.?", " ", text)
+    match = _AMOUNT_RE.match(text)
+    if not match:
         return None
+    number = float(match.group(2))
+    return -number if match.group(1) == "-" else number
 
 
 def agree(kind: str, a: str, b: str) -> bool:
@@ -204,8 +233,9 @@ def reconcile(documents: list[dict[str, Any]]) -> dict[str, Any]:
         elif len(seen) == 1:
             outcomes.append(Outcome(item, kind, SEVERITY[item], "single", seen))
         else:
-            first = seen[0]
-            status = "agree" if all(agree(kind, first.value, other.value) for other in seen[1:]) else "disagree"
+            # Every pair must agree: names_agree accepts initials and left-out words, so it is not transitive
+            # ("A Example" matches both "Anil Example" and "Arun Example", which do not match each other).
+            status = "agree" if all(agree(kind, a.value, b.value) for a, b in combinations(seen, 2)) else "disagree"
             outcomes.append(Outcome(item, kind, SEVERITY[item], status, seen))
     disagreements = [o for o in outcomes if o.status == "disagree"]
     return {

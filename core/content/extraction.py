@@ -1,7 +1,10 @@
 # SPDX-License-Identifier: Apache-2.0
 """Obligation and deadline extraction: who must do what by when, each item quoting the text it comes from.
 
-An item whose quote is not in its source is dropped and counted, so nothing
+An item is kept only when its quote is a meaningful span of its source (at
+least MIN_QUOTE_CHARS characters and MIN_QUOTE_WORDS words, found in the
+source) and the quote supports the obligation (most of the obligation's
+content words appear in it); anything else is dropped and counted, so nothing
 is reported that the documents do not say. Deadlines are ISO dates or null
 with the basis the document gives ("within 30 days of notice").
 """
@@ -21,6 +24,16 @@ from core.content.services import GuardrailProfile, Service
 from core.content.sources import Source, by_id, combined_sources
 
 _ISO_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+_WORD_RE = re.compile(r"[a-z0-9]+")
+MIN_QUOTE_CHARS = 12
+MIN_QUOTE_WORDS = 3
+# Share of the obligation's content words its quote must contain.
+MIN_SUPPORT = 0.5
+_STOPWORDS = frozenset(
+    "a an the and or of to in on at by for from with within into upon as is are be been being was were will "
+    "shall must should may can could would has have had its it this that these those their there any all each "
+    "every such not no nor than then per under over after before".split()
+)
 
 
 class ExtractIn(BaseModel):
@@ -50,6 +63,7 @@ OUTPUT_SCHEMA: dict[str, Any] = {
                     "deadline": {"type": ["string", "null"], "maxLength": 40},
                     "deadline_basis": {"type": ["string", "null"], "maxLength": 300},
                     "source_id": {"type": "string", "maxLength": 64},
+                    # A short quote drops its item in finish() rather than failing the whole answer here.
                     "quote": {"type": "string", "minLength": 1, "maxLength": 400},
                     "severity": {"type": "string", "enum": ["low", "medium", "high"]},
                 },
@@ -63,7 +77,8 @@ def messages(payload: ExtractIn, sources: list[Source]) -> list[dict[str, str]]:
     system = (
         "You extract obligations and deadlines from documents for a bank. For each obligation give the party that "
         "owes it, what must be done, the deadline as an ISO date when the document states one (else null) and the "
-        "basis the document gives for it, the source id, a short exact quote copied from the source, and a "
+        "basis the document gives for it, the source id, the exact sentence or clause from the source that "
+        "states the obligation (copied word for word, at least a few words), and a "
         "severity (low, medium, high). Never invent an obligation; if unsure, leave it out. Answer with one JSON "
         "object and nothing else: {obligations: [{party, obligation, deadline, deadline_basis, source_id, quote, "
         "severity}]}."
@@ -83,21 +98,47 @@ def _deadline(value: Any) -> str | None:
         return None
 
 
+def _stems(text: str) -> set[str]:
+    """Content words, cut to a common stem so "invoices" meets "invoice" and "delivery" meets "deliver"."""
+    return {word[:5] for word in _WORD_RE.findall(str(text or "").lower()) if word not in _STOPWORDS}
+
+
+def meaningful_quote(quote: str) -> bool:
+    """A quote long enough to be evidence: not a character or a stray word."""
+    normalised = services.normalise(quote)
+    return len(normalised) >= MIN_QUOTE_CHARS and len(_WORD_RE.findall(normalised)) >= MIN_QUOTE_WORDS
+
+
+def supports(quote: str, obligation: str) -> bool:
+    """Whether ``quote`` states ``obligation``: most of the obligation's content words are in the quote."""
+    wanted = _stems(obligation)
+    if not wanted:
+        return False
+    return len(wanted & _stems(quote)) / len(wanted) >= MIN_SUPPORT
+
+
 def finish(payload: ExtractIn, sources: list[Source], answer: dict[str, Any]) -> dict[str, Any]:
-    """Keep only items whose quote is in their source; normalise deadlines; sort by deadline."""
+    """Keep only items with a meaningful quote that is in their source and supports the obligation;
+    normalise deadlines; sort by deadline."""
     known = by_id(sources)
     kept: list[dict[str, Any]] = []
     dropped = 0
     for item in answer.get("obligations") or []:
         source = known.get(str(item.get("source_id")))
         quote = str(item.get("quote") or "")
-        if source is None or not services.quote_in(quote, source.text):
+        obligation = str(item.get("obligation") or "")
+        if (
+            source is None
+            or not meaningful_quote(quote)
+            or not services.quote_in(quote, source.text)
+            or not supports(quote, obligation)
+        ):
             dropped += 1
             continue
         kept.append(
             {
                 "party": str(item.get("party") or ""),
-                "obligation": str(item.get("obligation") or ""),
+                "obligation": obligation,
                 "deadline": _deadline(item.get("deadline")),
                 "deadline_basis": str(item.get("deadline_basis") or "") or None,
                 "source_id": source.id,
