@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import json
 import uuid
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from typing import Any
@@ -49,7 +50,11 @@ ACTIONS: dict[str, tuple[str, ...]] = {
     ),
     "card_block": ("block_card", "card_block", "freeze_card", "hotlist_card"),
     "fund_transfer": ("transfer_funds", "fund_transfer", "initiate_transfer", "make_transfer", "create_transfer"),
-    "bill_payment": ("pay_bill", "bill_payment", "create_payment", "create_payment_intent"),
+    # Only tools that pay a biller. A generic payment or payment-intent primitive
+    # (a provider's ``create_payment_intent``) ignores the biller and reads the
+    # amount in its own currency unit, so it is never bound by alias; an agent
+    # that really pays bills through one declares the binding explicitly.
+    "bill_payment": ("pay_bill", "bill_payment"),
     "loan_enquiry": ("loan_enquiry", "get_loan_offers", "loan_eligibility", "check_loan_eligibility"),
     "dispute_transaction": ("raise_dispute", "create_dispute", "dispute_transaction"),
     "application_status": ("application_status", "get_application_status", "track_application"),
@@ -84,24 +89,64 @@ def _bare(ref: str) -> str:
     return name.lower()
 
 
+def _ref_parts(ref: str) -> tuple[str | None, str]:
+    """``(connector | None, tool)`` of a tool ref in any spelling, lower-cased, as the tool adapter reads it."""
+    from core.langgraph.tool_adapter import _parse_authorized_tool_ref
+
+    parsed = _parse_authorized_tool_ref(ref)
+    if parsed is None:
+        return None, _bare(ref)
+    connector, tool = parsed
+    return (connector.lower() if connector else None), _bare(tool)
+
+
+def _only(candidates: list[str], intent_name: str) -> str | None:
+    """The single candidate, or None (logged) when there are several: an ambiguous name never picks one."""
+    if len(candidates) == 1:
+        return candidates[0]
+    if candidates:
+        logger.warning("conversation_binding_ambiguous", intent=intent_name, candidates=len(candidates))
+    return None
+
+
 def resolve_binding(
     intent_name: str, authorized_tools: list[str] | None, bindings: dict[str, str] | None
 ) -> str | None:
-    """The authorised tool ref an intent runs through: the agent's binding first, then the action's aliases."""
+    """The authorised tool ref an intent runs through: the agent's binding first, then the action's aliases.
+
+    A binding is matched exactly first: the same ref, or the same connector and
+    tool in another spelling. A bare-name match is only a fallback, and only
+    when it is unambiguous: one authorised tool of that name, not qualified with
+    a different connector than the binding names. Two connectors exposing the
+    same tool name (``fetch_bank_statement``) never silently pick one.
+    """
     tools = [str(t) for t in (authorized_tools or [])]
     bound = (bindings or {}).get(intent_name)
     if bound:
-        match = next((t for t in tools if t == bound or _bare(t) == _bare(bound)), None)
-        if match is not None:
-            return match
-        logger.warning("conversation_binding_not_authorised", intent=intent_name)
-        return None
+        if bound in tools:
+            return bound
+        connector, name = _ref_parts(bound)
+        parts = {tool: _ref_parts(tool) for tool in tools}
+        if connector:
+            exact = [tool for tool, (c, n) in parts.items() if c == connector and n == name]
+            if exact:
+                return exact[0]
+        same_name = [tool for tool, (c, n) in parts.items() if n == name]
+        if connector:
+            # A qualified binding never falls back to another connector's tool.
+            if any(parts[tool][0] not in (None, connector) for tool in same_name):
+                logger.warning("conversation_binding_ambiguous", intent=intent_name, candidates=len(same_name))
+                return None
+        match = _only(same_name, intent_name)
+        if match is None and not same_name:
+            logger.warning("conversation_binding_not_authorised", intent=intent_name)
+        return match
     intent = INTENTS.get(intent_name)
     aliases = ACTIONS.get(intent.action or "", ()) if intent else ()
     for alias in aliases:
-        match = next((t for t in tools if _bare(t) == alias), None)
-        if match is not None:
-            return match
+        candidates = [t for t in tools if _bare(t) == alias]
+        if candidates:
+            return _only(candidates, intent_name)
     return None
 
 
@@ -157,12 +202,6 @@ async def save_dialogue(
     from core.database import get_tenant_session
     from core.models.conversation_session import ConversationSession
 
-    status = "active" if dialogue.stage not in (dialogue_engine.STAGE_IDLE, dialogue_engine.STAGE_DONE) else "idle"
-    agent_uuid: uuid.UUID | None = None
-    try:
-        agent_uuid = uuid.UUID(str(agent_id)) if agent_id else None
-    except ValueError:
-        agent_uuid = None
     async with get_tenant_session(tenant_id) as session:
         row = (
             await session.execute(
@@ -174,12 +213,78 @@ async def save_dialogue(
         if row is None:
             row = ConversationSession(tenant_id=tenant_id, session_key=key, user_id=user_id[:128], channel=channel[:16])
             session.add(row)
-        row.agent_id = agent_uuid
-        row.status = status
-        row.intent = dialogue.intent
-        row.state = dialogue.to_dict()
-        row.turns = dialogue.turns
-        row.updated_at = datetime.now(UTC)
+        _store(row, dialogue, agent_id)
+
+
+def _store(row: Any, dialogue: Dialogue, agent_id: str | None) -> None:
+    agent_uuid: uuid.UUID | None = None
+    try:
+        agent_uuid = uuid.UUID(str(agent_id)) if agent_id else None
+    except ValueError:
+        agent_uuid = None
+    row.agent_id = agent_uuid
+    row.status = "active" if dialogue.stage not in (dialogue_engine.STAGE_IDLE, dialogue_engine.STAGE_DONE) else "idle"
+    row.intent = dialogue.intent
+    row.state = dialogue.to_dict()
+    row.turns = dialogue.turns
+    row.updated_at = datetime.now(UTC)
+
+
+async def claim_dialogue(
+    tenant_id: uuid.UUID,
+    key: str,
+    expected: dict[str, Any],
+    dialogue: Dialogue,
+    *,
+    user_id: str,
+    agent_id: str | None,
+    channel: str,
+) -> str | None:
+    """Claim a confirmed action for execution, atomically with the session state; None when it cannot be claimed.
+
+    Under a row lock, the stored dialogue must still be ``expected`` (the state
+    the turn was advanced from, read exactly as ``load_dialogue`` reads it). The
+    advanced dialogue, which no longer confirms anything, is then written with a
+    fresh execution key and committed before the tool is called. Two overlapping
+    confirmations of one action therefore claim it once: the second sees a
+    changed state and is refused. A failure after the claim (the tool, or the
+    process) leaves a session that has nothing left to confirm, so a retry
+    cannot run the action again. The key goes to the tool as its idempotency key.
+    """
+    from sqlalchemy.exc import IntegrityError
+
+    from core.database import get_tenant_session
+    from core.models.conversation_session import ConversationSession
+
+    execution_key = str(uuid.uuid4())
+    try:
+        async with get_tenant_session(tenant_id) as session:
+            row = (
+                await session.execute(
+                    select(ConversationSession)
+                    .where(ConversationSession.tenant_id == tenant_id, ConversationSession.session_key == key)
+                    .with_for_update()
+                )
+            ).scalar_one_or_none()
+            current = (
+                Dialogue() if row is None or _expired(row.updated_at) else Dialogue.from_dict(row.state)
+            ).to_dict()
+            if current != expected:
+                logger.warning("conversation_claim_superseded", intent=dialogue.intent)
+                return None
+            if row is None:
+                row = ConversationSession(
+                    tenant_id=tenant_id, session_key=key, user_id=user_id[:128], channel=channel[:16]
+                )
+                session.add(row)
+            dialogue.execution_key = execution_key
+            _store(row, dialogue, agent_id)
+    except IntegrityError:
+        # Another turn created the session first.
+        dialogue.execution_key = None
+        logger.warning("conversation_claim_superseded", intent=dialogue.intent)
+        return None
+    return execution_key
 
 
 async def reset_dialogue(tenant_id: uuid.UUID, key: str) -> bool:
@@ -236,9 +341,21 @@ class ExecutionContext:
     bindings: dict[str, str] = field(default_factory=dict)
 
 
-async def execute(outcome: Outcome, context: ExecutionContext) -> dict[str, Any]:
-    """Run a confirmed action: the bound tool, under the grant, with the collected slots. Never before confirmation."""
+Claim = Callable[[], Awaitable[str | None]]
+
+
+async def execute(outcome: Outcome, context: ExecutionContext, claim: Claim | None = None) -> dict[str, Any]:
+    """Run a confirmed action: the bound tool, under the grant, with the collected slots. Never before confirmation.
+
+    In order: the binding, the grant, the operator overrides on the agent (a
+    halt, or an ``agent`` / ``all_agents`` throttle, which is consumed here once
+    per action as the agent runner consumes it once per run), the tool build,
+    and then ``claim``, which must return an execution key before the tool is
+    called (``claim_dialogue``). The key is passed to the tool as
+    ``idempotency_key``. Without ``claim`` the tool is called unclaimed.
+    """
     from auth.run_grants import direct_tool_call_permitted
+    from core.governance.operator_override import check as check_operator_override
     from core.langgraph.tool_adapter import _build_tool_index, _parse_authorized_tool_ref, build_tools_for_agent
 
     intent_name = outcome.intent or ""
@@ -272,6 +389,17 @@ async def execute(outcome: Outcome, context: ExecutionContext) -> dict[str, Any]
             "message": "This action is not permitted under the current grant.",
             "tool_call": {"connector": connector_name, "tool": tool_name, "status": "refused"},
         }
+    override = await check_operator_override(
+        context.tenant_id, agent_id=context.agent_id or None, throttle_unit="agent"
+    )
+    if override.blocked:
+        logger.warning("conversation_action_refused_operator_override", intent=intent_name, tool=tool_name)
+        return {
+            "status": "held",
+            "intent": intent_name,
+            "message": override.reason or "An operator has paused or limited this agent.",
+            "tool_call": {"connector": connector_name, "tool": tool_name, "status": "operator_override"},
+        }
     tools = build_tools_for_agent(
         [ref],
         context.connector_config,
@@ -284,8 +412,18 @@ async def execute(outcome: Outcome, context: ExecutionContext) -> dict[str, Any]
     if not tools:
         return {"status": "unbound", "intent": intent_name, "message": "The bound tool could not be built."}
     params = params_for(intent_name, outcome.slots)
+    execution_key: str | None = None
+    if claim is not None:
+        execution_key = await claim()
+        if execution_key is None:
+            return {
+                "status": "superseded",
+                "intent": intent_name,
+                "message": "This confirmation is no longer current.",
+            }
+    invoked = {**params, "idempotency_key": execution_key} if execution_key else params
     try:
-        result = await tools[0].ainvoke(params)
+        result = await tools[0].ainvoke(invoked)
     except (RuntimeError, TypeError, ValueError, OSError) as exc:
         logger.warning("conversation_action_failed", intent=intent_name, error_type=type(exc).__name__)
         return {
@@ -293,6 +431,7 @@ async def execute(outcome: Outcome, context: ExecutionContext) -> dict[str, Any]
             "intent": intent_name,
             "message": "The action could not be completed.",
             "tool_call": {"connector": connector_name, "tool": tool_name, "status": "error"},
+            **({"execution_key": execution_key} if execution_key else {}),
         }
     failed = isinstance(result, dict) and bool(result.get("error"))
     logger.info(
@@ -315,11 +454,22 @@ async def execute(outcome: Outcome, context: ExecutionContext) -> dict[str, Any]
             "params": {k: v for k, v in params.items() if k != "intent"},
             "status": "error" if failed else "success",
         },
+        **({"execution_key": execution_key} if execution_key else {}),
     }
 
 
 def answer_for(outcome: Outcome, execution: dict[str, Any] | None) -> str:
-    """The text the user sees for an outcome, with the result of an executed action."""
+    """The text the user sees for an outcome, with the result of an executed action or of a hand-off."""
+    if outcome.kind == "escalate":
+        if execution is not None and execution.get("status") == "handed_off":
+            return (
+                f"{outcome.text} I have put a request for a person to take this over in the team's queue, "
+                f"with what you have told me so far (reference {execution.get('reference')})."
+            )
+        return (
+            f"{outcome.text} I cannot pass this to a person from here, so nothing has been handed over. "
+            "Please use your usual support channel."
+        )
     if outcome.kind != "execute" or execution is None:
         return outcome.text
     status = execution.get("status")
@@ -340,6 +490,13 @@ def answer_for(outcome: Outcome, execution: dict[str, Any] | None) -> str:
         return "I cannot do that from here: the action is not permitted under the current grant. Nothing has been done."
     if status == "unbound":
         return "I cannot complete that from chat yet: no tool is set up for it. Nothing has been done."
+    if status == "held":
+        return f"That cannot run right now: {execution.get('message')} Nothing has been done."
+    if status == "superseded":
+        return (
+            "This confirmation is no longer current: the request was already acted on or changed in another "
+            "window, so nothing more has been done."
+        )
     return f"That did not go through: {execution.get('message') or 'the action failed'}. Nothing has been changed."
 
 
@@ -355,6 +512,133 @@ def _read_answer(intent: str, result: dict[str, Any]) -> str:
 
 
 # ── The chat hook ─────────────────────────────────────────────────────────────
+
+
+HANDOFF_TRIGGER = "conversation_handoff"
+HANDOFF_HOURS = 24
+
+
+async def request_handoff(
+    outcome: Outcome, context: ExecutionContext | None, *, user_id: str, channel: str
+) -> dict[str, Any]:
+    """Raise a real hand-off for an ``escalate`` outcome: an item in the approvals queue and its notification.
+
+    The item carries what a person taking over needs (``Outcome.handoff``). It
+    needs the agent the conversation is with; without one, or when the item
+    cannot be written, nothing is handed over and the answer says so.
+    """
+    if context is None or not context.agent_id:
+        return {"status": "handoff_unavailable", "intent": outcome.intent}
+    try:
+        tid = uuid.UUID(str(context.tenant_id))
+        aid = uuid.UUID(str(context.agent_id))
+    except ValueError:
+        return {"status": "handoff_unavailable", "intent": outcome.intent}
+    try:
+        requester: uuid.UUID | None = uuid.UUID(str(user_id))
+    except ValueError:
+        requester = None
+    from core.database import get_tenant_session
+    from core.models.agent import Agent
+    from core.models.hitl import HITLQueue
+    from core.ownership import agent_ownership_fields
+
+    handoff = dict(outcome.handoff or {})
+    intent = INTENTS.get(str(handoff.get("intent") or ""))
+    topic = intent.title if intent is not None else "a conversation"
+    try:
+        async with get_tenant_session(tid) as session:
+            agent_row = (
+                await session.execute(select(Agent).where(Agent.id == aid, Agent.tenant_id == tid))
+            ).scalar_one_or_none()
+            if agent_row is None:
+                return {"status": "handoff_unavailable", "intent": outcome.intent}
+            item = HITLQueue(
+                id=uuid.uuid4(),
+                tenant_id=tid,
+                agent_id=aid,
+                workflow_run_id=None,
+                title=f"Conversation hand-off: {topic}"[:500],
+                trigger_type=HANDOFF_TRIGGER,
+                priority="high",
+                assignee_role=context.domain or "admin",
+                requested_by_user_id=requester,
+                decision_options={"options": ["approve", "reject"]},
+                context={"source": RUNTIME, "channel": channel, "handoff": handoff},
+                expires_at=datetime.now(UTC) + timedelta(hours=HANDOFF_HOURS),
+            )
+            session.add(item)
+            await session.flush()
+            item_id = str(item.id)
+            push_scope = agent_ownership_fields(agent_row)
+        from core.push.sender import notify_approval_created
+
+        await notify_approval_created(
+            str(tid),
+            item_id=item_id,
+            agent_name=str(getattr(agent_row, "name", "") or context.agent_type or ""),
+            action=HANDOFF_TRIGGER,
+            agent_visibility=push_scope.get("visibility"),
+            agent_owner_user_id=push_scope.get("owner_user_id"),
+        )
+    # enterprise-gate: broad-except-ok reason=handoff-failure-is-logged-and-answered-as-not-handed-over
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("conversation_handoff_failed", error_type=type(exc).__name__)
+        return {"status": "handoff_unavailable", "intent": outcome.intent}
+    logger.info("conversation_handoff_raised", reason=handoff.get("reason"))
+    return {"status": "handed_off", "intent": outcome.intent, "reference": item_id[:8].upper(), "item_id": item_id}
+
+
+async def run_turn(
+    tenant_id: uuid.UUID,
+    key: str,
+    dialogue: Dialogue,
+    text: str,
+    context: ExecutionContext | None,
+    *,
+    user_id: str,
+    agent_id: str | None,
+    channel: str,
+    no_agent_message: str,
+) -> tuple[Outcome, dict[str, Any] | None]:
+    """Advance a loaded dialogue by one turn, run or hand off what it produces, and keep the session.
+
+    A confirmed action is claimed atomically with the session state before its
+    tool is called (``claim_dialogue``); once claimed, the session is already
+    stored and is not written again, so a later failure cannot leave it
+    confirmable. A turn that runs nothing is saved as before.
+    """
+    expected = dialogue.to_dict()
+    outcome = dialogue_engine.advance(dialogue, text)
+    execution: dict[str, Any] | None = None
+    claimed = False
+
+    async def _claim() -> str | None:
+        nonlocal claimed
+        claimed = True
+        return await claim_dialogue(
+            tenant_id, key, expected, dialogue, user_id=user_id, agent_id=agent_id, channel=channel
+        )
+
+    if outcome.kind == "execute":
+        if context is None:
+            execution = {"status": "unbound", "intent": outcome.intent, "message": no_agent_message}
+        else:
+            execution = await execute(outcome, context, claim=_claim)
+    elif outcome.kind == "escalate":
+        execution = await request_handoff(outcome, context, user_id=user_id, channel=channel)
+    if not claimed:
+        await save_dialogue(tenant_id, key, dialogue, user_id=user_id, agent_id=agent_id, channel=channel)
+    return outcome, execution
+
+
+def outcome_payload(outcome: Outcome, execution: dict[str, Any] | None) -> dict[str, Any]:
+    """The outcome as a response carries it: without the hand-off notes, with the execution minus its result."""
+    payload = outcome.to_dict()
+    payload.pop("handoff", None)
+    if execution is not None:
+        payload["execution"] = {k: v for k, v in execution.items() if k not in ("result", "item_id")}
+    return payload
 
 
 def _recognised(text: str) -> bool:
@@ -391,18 +675,19 @@ async def chat_turn(
         if top and top[0].intent.risk == "read" and context is not None:
             if resolve_binding(top[0].intent.name, context.authorized_tools, context.bindings) is None:
                 return None
-    outcome = dialogue_engine.advance(dialogue, text)
-    execution: dict[str, Any] | None = None
-    if outcome.kind == "execute":
-        if context is None:
-            execution = {"status": "unbound", "intent": outcome.intent, "message": "No agent is available to run this."}
-        else:
-            execution = await execute(outcome, context)
-    await save_dialogue(tid, key, dialogue, user_id=user_id, agent_id=agent_id or None, channel=channel)
+    outcome, execution = await run_turn(
+        tid,
+        key,
+        dialogue,
+        text,
+        context,
+        user_id=user_id,
+        agent_id=agent_id or None,
+        channel=channel,
+        no_agent_message="No agent is available to run this.",
+    )
     answer = answer_for(outcome, execution)
-    payload = outcome.to_dict()
-    if execution is not None:
-        payload["execution"] = {k: v for k, v in execution.items() if k != "result"}
+    payload = outcome_payload(outcome, execution)
     tool_call = (execution or {}).get("tool_call")
     return {
         "answer": answer,

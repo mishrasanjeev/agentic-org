@@ -10,6 +10,7 @@ nothing is recognised. Nothing here calls a tool.
 
 from __future__ import annotations
 
+import copy
 import re
 from dataclasses import asdict, dataclass, field
 from datetime import UTC, date, datetime
@@ -44,6 +45,9 @@ class Outcome:
     options: list[dict[str, Any]] = field(default_factory=list)
     action: str | None = None
     summary: str | None = None
+    # For ``escalate``: what a person taking over needs (``handoff_summary``),
+    # taken before the dialogue resets. The runtime raises the handoff from it.
+    handoff: dict[str, Any] | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -62,13 +66,17 @@ class Dialogue:
     turns: int = 0
     history: list[dict[str, str]] = field(default_factory=list)
     started_at: str | None = None
+    # The key of the last action this session claimed for execution
+    # (``runtime.claim_dialogue``); kept across resets so a stale confirmation
+    # can never match the stored state again.
+    execution_key: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
 
     @classmethod
     def from_dict(cls, raw: dict[str, Any] | None) -> Dialogue:
-        raw = dict(raw or {})
+        raw = copy.deepcopy(dict(raw or {}))  # never share lists or dicts with the stored row
         known = set(cls.__dataclass_fields__)
         return cls(**{key: value for key, value in raw.items() if key in known})
 
@@ -318,6 +326,7 @@ def _start(
     *,
     today: date | None = None,
 ) -> Outcome:
+    prior = handoff_summary(dialogue)  # what was in progress, for a hand-off
     dialogue.intent = intent.name
     dialogue.confidence = confidence
     dialogue.slots = fill_from_entities(intent, {}, {**dialogue.carry, **entities}, text)
@@ -335,9 +344,12 @@ def _start(
             "transaction disputes and application status. What would you like to do?",
         )
     if intent.risk == "handoff":
+        # Whether a person is actually reached is up to the runtime, which
+        # raises the hand-off and says what happened; nothing is promised here.
         dialogue.stage = STAGE_DONE
-        outcome = _outcome(dialogue, "escalate", "I will connect you to a person. One moment.", summary=None)
+        outcome = _outcome(dialogue, "escalate", "You asked for a person.", summary=None)
         outcome.options = []
+        outcome.handoff = {**prior, "reason": "requested", "recent": dialogue.history[-6:], "turns": dialogue.turns}
         dialogue.reset()
         return outcome
     return _next_step(dialogue, today=today)
@@ -411,12 +423,11 @@ def advance(dialogue: Dialogue, text: str, *, today: date | None = None) -> Outc
         if problem:
             dialogue.retries += 1
             if dialogue.retries >= MAX_RETRIES:
+                handoff = {**handoff_summary(dialogue), "reason": "retries_exhausted"}
                 dialogue.reset()
-                return _outcome(
-                    dialogue,
-                    "escalate",
-                    "I could not get what I need for that. Let me connect you to a person who can help.",
-                )
+                outcome = _outcome(dialogue, "escalate", "I could not get what I need for that.")
+                outcome.handoff = {**handoff, "recent": dialogue.history[-6:]}
+                return outcome
             return _outcome(dialogue, "ask", problem)
         dialogue.slots[slot.name] = value
         dialogue.slots = fill_from_entities(

@@ -311,7 +311,7 @@ except Exception:
 def _session_key(tenant_id: str, company_id: str, agent_id: str = "", user_id: str = "") -> str:
     """Compose the Redis bucket key for chat history.
 
-    Root-cause fix for Codex 2026-04-22 isolation gap: without
+    Root-cause fix for the 2026-04-22 review isolation gap: without
     ``agent_id`` in the key, every agent you talked to under one company
     shared the same bucket — a support agent's chat would leak into the
     accounting agent's sidebar. When the caller provides an agent id,
@@ -748,7 +748,7 @@ async def _append_history(
 ) -> None:
     """Store the turn in the caller's session history (Redis-backed, BUG #22).
 
-    Root-cause fix for Codex 2026-04-22 review on chat history
+    Root-cause fix for the 2026-04-22 review on chat history
     isolation: the session key was only ``tenant_id:company_id``, so
     history from agent A leaked into agent B's sidebar when the user
     switched agents with the same company context. When the caller
@@ -1204,7 +1204,7 @@ async def chat_query(
     elif answer and not tools_used and confidence is None:
         confidence = 0.75
 
-    # Root-cause fix for TC_004 / Codex 2026-04-22 review: the old
+    # Root-cause fix for TC_004 / the 2026-04-22 review: the old
     # fallback path fabricated a "[AgentName] I've analyzed your query
     # about X..." response with a forced 0.6/0.7 confidence whenever
     # the real agent couldn't produce an answer. That was dishonest —
@@ -1253,7 +1253,7 @@ async def chat_history(
 ):
     """Return chat history for the current session (Redis-backed).
 
-    Root-cause fix for Codex 2026-04-22 chat history isolation gap:
+    Root-cause fix for the 2026-04-22 review chat history isolation gap:
     the session key was just ``tenant_id:company_id``, so switching
     between agents with the same company loaded the wrong history. The
     key now includes ``agent_id`` when provided, matching the ``POST
