@@ -23,7 +23,7 @@ from typing import Any
 import structlog
 from sqlalchemy import select
 
-from core.workbench.access import ADMIN, WORKBENCHES, holds, tabs_for
+from core.workbench.access import ADMIN, WORKBENCHES, approval_filter, holds, tabs_for
 
 logger = structlog.get_logger()
 
@@ -154,8 +154,11 @@ async def _rows(session: Any, statement: Any) -> list[Any]:
     return list((await session.execute(statement)).scalars().all())
 
 
-async def list_items(tenant_id: uuid.UUID, kinds: list[str], *, limit: int = 50) -> dict[str, Any]:
-    """The waiting items of the given kinds, ordered by priority then age, with a count per kind."""
+async def list_items(tenant_id: uuid.UUID, kinds: list[str], *, limit: int = 50, caller: Any = None) -> dict[str, Any]:
+    """The waiting items of the given kinds, ordered by priority then age, with a count per kind.
+
+    Approvals are those of the agents the caller may see (``access.approval_filter``); none without a caller.
+    """
     from core.database import get_tenant_session
 
     now = datetime.now(UTC)
@@ -170,7 +173,12 @@ async def list_items(tenant_id: uuid.UUID, kinds: list[str], *, limit: int = 50)
             rows = await _rows(
                 session,
                 select(HITLQueue)
-                .where(HITLQueue.tenant_id == tenant_id, HITLQueue.status == "pending", HITLQueue.expires_at > now)
+                .where(
+                    HITLQueue.tenant_id == tenant_id,
+                    HITLQueue.status == "pending",
+                    HITLQueue.expires_at > now,
+                    *approval_filter(tenant_id, caller),
+                )
                 .order_by(HITLQueue.created_at)
                 .limit(per_kind),
             )

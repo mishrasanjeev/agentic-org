@@ -20,6 +20,7 @@ from pydantic import BaseModel, Field
 
 from api.deps import get_current_tenant, get_current_user, get_user_domains, get_user_role, has_admin_scope
 from api.route_metadata import route_meta
+from core.ownership import caller_from_request
 from core.workbench import access, assignments, queue
 
 router = APIRouter(prefix="/workbench/queue", tags=["Workbench"])
@@ -95,7 +96,7 @@ async def list_queue(
         wanted = [k for k in kind if k in allowed]
     else:
         wanted = allowed
-    found = await queue.list_items(uuid.UUID(tenant_id), wanted, limit=limit)
+    found = await queue.list_items(uuid.UUID(tenant_id), wanted, limit=limit, caller=caller_from_request(request))
     return {**found, "allowed_kinds": allowed, "total": len(found["items"])}
 
 

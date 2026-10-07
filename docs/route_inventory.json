@@ -10022,7 +10022,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "workbench.read",
-    "source_line": 63,
+    "source_line": 64,
     "tenant_required": true
   },
   {
@@ -10040,7 +10040,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "workbench.assignments.sensitive.read",
-    "source_line": 98,
+    "source_line": 99,
     "tenant_required": true
   },
   {
@@ -10058,7 +10058,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "workbench.assignments.sensitive.write",
-    "source_line": 115,
+    "source_line": 116,
     "tenant_required": true
   },
   {
@@ -10076,7 +10076,61 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "workbench.catalogue.read",
-    "source_line": 82,
+    "source_line": 83,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "workbench.queue.list",
+    "auth_required": true,
+    "function": "list_queue",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/workbench/queue api/v1/workbench_queue.py:list_queue",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/workbench_queue.py",
+    "path": "/api/v1/workbench/queue",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "workbench.queue.sensitive.read",
+    "source_line": 79,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "workbench.queue.read",
+    "auth_required": true,
+    "function": "get_item",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/workbench/queue/{kind}/{item_id} api/v1/workbench_queue.py:get_item",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/workbench_queue.py",
+    "path": "/api/v1/workbench/queue/{kind}/{item_id}",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "workbench.queue.sensitive.read",
+    "source_line": 112,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "workbench.queue.decide",
+    "auth_required": true,
+    "function": "decide",
+    "idempotency": "terminal-state-conflict-prevents-duplicate-decision",
+    "key": "POST /api/v1/workbench/queue/{kind}/{item_id}/decide api/v1/workbench_queue.py:decide",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/workbench_queue.py",
+    "path": "/api/v1/workbench/queue/{kind}/{item_id}/decide",
+    "public_exempt_reason": null,
+    "rate_limit": "approval-decision",
+    "scope": "workbench.queue.sensitive.write",
+    "source_line": 139,
     "tenant_required": true
   },
   {
@@ -10094,7 +10148,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "workbench.read",
-    "source_line": 141,
+    "source_line": 142,
     "tenant_required": true
   },
   {

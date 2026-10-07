@@ -13,9 +13,11 @@ from fastapi import HTTPException
 
 from core.config import settings
 from core.content import drafts, services
+from core.ownership import Caller
 from core.workbench import access, assignments, queue
 
 TENANT = uuid.uuid4()
+ADMIN = Caller(user_id=uuid.uuid4(), role="admin", domains=None, is_admin=True, is_machine=False)
 NOW = datetime.now(UTC)
 
 
@@ -101,10 +103,12 @@ class _Session:
     def __init__(self, rows_by_table):
         self.rows_by_table = rows_by_table
         self.seen: list[str] = []
+        self.statements: list[str] = []
 
     async def execute(self, statement):
         table = statement.get_final_froms()[0].name
         self.seen.append(table)
+        self.statements.append(str(statement.compile(compile_kwargs={"literal_binds": False})))
         return _Result(self.rows_by_table.get(table, []))
 
     async def __aenter__(self):
@@ -124,8 +128,8 @@ class TestKinds:
     def test_a_role_sees_the_kinds_its_workbenches_show_and_the_queue_tab_opens_all(self):
         assert queue.kinds_for("admin") == ["approval", "document", "draft", "case"]
         assert queue.kinds_for("cfo") == ["approval", "document", "draft", "case"]  # review officer holds the queue tab
-        assert queue.kinds_for("analyst") == ["document", "case"]  # investigator: documents and cases
         assert queue.kinds_for("cmo") == ["case"]  # relationship manager: cases only
+        assert queue.kinds_for("analyst") == [] and queue.kinds_for("auditor") == []  # no tab of theirs shows a kind
         assert queue.kinds_for("merchant") == []
         assert queue.kinds_for("cmo", {"investigator"}) == ["document", "case"]
 
@@ -142,7 +146,7 @@ class TestItems:
             }
         )
         _use(monkeypatch, session)
-        found = await queue.list_items(TENANT, ["approval", "document", "draft", "case"], limit=10)
+        found = await queue.list_items(TENANT, ["approval", "document", "draft", "case"], limit=10, caller=ADMIN)
         assert found["counts"] == {"approval": 1, "document": 1, "draft": 1, "case": 1}
         kinds = [item["kind"] for item in found["items"]]
         # high priority first (the approval and the case, older first), then normal priority by age
@@ -170,9 +174,22 @@ class TestItems:
     async def test_only_the_wanted_kinds_are_read(self, monkeypatch):
         session = _Session({"content_drafts": [_draft()]})
         _use(monkeypatch, session)
-        found = await queue.list_items(TENANT, ["draft", "nothing"], limit=5)
+        found = await queue.list_items(TENANT, ["draft", "nothing"], limit=5, caller=ADMIN)
         assert session.seen == ["content_drafts"] and found["kinds"] == ["draft"]
         assert found["items"][0]["title"] == "Welcome letter" and found["items"][0]["priority"] == "normal"
+
+    @pytest.mark.asyncio
+    async def test_approvals_are_scoped_to_the_callers_visible_agents(self, monkeypatch):
+        session = _Session({"hitl_queue": [_approval()]})
+        _use(monkeypatch, session)
+        cfo = Caller(user_id=uuid.uuid4(), role="cfo", domains=["finance"], is_admin=False, is_machine=False)
+        found = await queue.list_items(TENANT, ["approval"], limit=5, caller=cfo)
+        assert found["counts"] == {"approval": 1}
+        assert "agents" in session.statements[-1] and "domain IN" in session.statements[-1]
+        await queue.list_items(TENANT, ["approval"], limit=5, caller=ADMIN)
+        assert "agents" not in session.statements[-1]
+        await queue.list_items(TENANT, ["approval"], limit=5)
+        assert "false" in session.statements[-1].lower()  # no caller: nothing
 
     @pytest.mark.asyncio
     async def test_an_item_in_full_with_its_editable_fields(self, monkeypatch):
@@ -386,7 +403,9 @@ class TestCounts:
 
 class TestRoutes:
     def _request(self, scopes=("agenticorg:admin",)):
-        return SimpleNamespace(state=SimpleNamespace(claims={"agenticorg:user_id": "u1"}, scopes=list(scopes)))
+        return SimpleNamespace(
+            state=SimpleNamespace(claims={"agenticorg:user_id": "u1", "role": "domain_lead"}, scopes=list(scopes))
+        )
 
     @pytest.mark.asyncio
     async def test_the_routes_are_not_found_while_off(self, monkeypatch):
@@ -418,20 +437,21 @@ class TestRoutes:
         from api.v1 import workbench_queue as api
 
         monkeypatch.setattr(settings, "workbench_v2_enabled", True)
-        monkeypatch.setattr(assignments, "assigned_to", AsyncMock(return_value=set()))
+        monkeypatch.setattr(assignments, "assigned_to", AsyncMock(return_value={"investigator"}))
         monkeypatch.setattr(
             queue,
             "list_items",
             AsyncMock(return_value={"items": [{"kind": "document"}], "counts": {"document": 1}, "kinds": ["document"]}),
         )
         request = self._request()
-        found = await api.list_queue(request, kind=None, limit=10, role="analyst", tenant_id=str(TENANT))
+        found = await api.list_queue(request, kind=None, limit=10, role="cmo", tenant_id=str(TENANT))
         assert found["allowed_kinds"] == ["document", "case"] and found["total"] == 1
         assert queue.list_items.call_args.args[1] == ["document", "case"]
-        await api.list_queue(request, kind=["draft", "document"], limit=10, role="analyst", tenant_id=str(TENANT))
-        assert queue.list_items.call_args.args[1] == ["document"]  # drafts are not the analyst's
+        assert queue.list_items.call_args.kwargs["caller"].role == "domain_lead"
+        await api.list_queue(request, kind=["draft", "document"], limit=10, role="cmo", tenant_id=str(TENANT))
+        assert queue.list_items.call_args.args[1] == ["document"]  # drafts are not the relationship manager's
         with pytest.raises(HTTPException) as info:
-            await api.list_queue(request, kind=["nothing"], limit=10, role="analyst", tenant_id=str(TENANT))
+            await api.list_queue(request, kind=["nothing"], limit=10, role="cmo", tenant_id=str(TENANT))
         assert info.value.status_code == 422
 
         monkeypatch.setattr(
@@ -439,15 +459,13 @@ class TestRoutes:
             "get_item",
             AsyncMock(return_value={"kind": "document", "item": {}, "editable": [], "decidable": True}),
         )
-        assert (await api.get_item("document", "x", request, role="analyst", tenant_id=str(TENANT)))[
-            "kind"
-        ] == "document"
+        assert (await api.get_item("document", "x", request, role="cmo", tenant_id=str(TENANT)))["kind"] == "document"
         with pytest.raises(HTTPException) as info:
-            await api.get_item("draft", "x", request, role="analyst", tenant_id=str(TENANT))
+            await api.get_item("draft", "x", request, role="cmo", tenant_id=str(TENANT))
         assert info.value.status_code == 404
         monkeypatch.setattr(queue, "get_item", AsyncMock(side_effect=queue.QueueError(404, "not_found", "no")))
         with pytest.raises(HTTPException) as info:
-            await api.get_item("document", "x", request, role="analyst", tenant_id=str(TENANT))
+            await api.get_item("document", "x", request, role="cmo", tenant_id=str(TENANT))
         assert info.value.detail["error"] == "not_found"
 
     @pytest.mark.asyncio

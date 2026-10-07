@@ -75,15 +75,8 @@ class TestDefinitions:
         found = definitions.catalogue()
         assert [item["name"] for item in found] == list(definitions.NAMES)
         review = next(item for item in found if item["name"] == "review_officer")
-        assert "cfo" in review["default_roles"] and review["tabs"][0]["roles"] == [
-            "admin",
-            "cfo",
-            "chro",
-            "cmo",
-            "coo",
-            "domain_lead",
-            "developer",
-        ]
+        assert "cfo" in review["default_roles"] and review["tabs"][0]["roles"] == []  # the queue tab
+        assert review["tabs"][1]["roles"] == ["admin", "cfo", "chro", "cmo", "coo", "domain_lead", "developer"]
         assert definitions.WORKBENCHES["supervisor"].to_dict()["tabs"][0]["sensitive"] is True
 
 
