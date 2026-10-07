@@ -2774,9 +2774,7 @@ async def replace_agent(
             and prompt_output_schema.enabled()
             and (body.output_schema or None) != (agent.output_schema or None)
         ):
-            raise HTTPException(
-                409, "The output schema is locked on active agents. Clone this agent to make changes."
-            )
+            raise HTTPException(409, "The output schema is locked on active agents. Clone this agent to make changes.")
 
         # Core fields
         agent.name = body.name
@@ -3045,11 +3043,11 @@ async def update_agent(
         if "prompt_variables" in update_data:
             agent.prompt_variables = update_data["prompt_variables"]
         if "authorized_tools" in update_data or (
-            "connector_ids" in update_data
-            and any(tool.startswith("mcp_") for tool in (agent.authorized_tools or []))
+            "connector_ids" in update_data and any(tool.startswith("mcp_") for tool in (agent.authorized_tools or []))
         ):
             invalid = await _validate_selected_tools(
-                update_data.get("authorized_tools", agent.authorized_tools or []), tenant_id,
+                update_data.get("authorized_tools", agent.authorized_tools or []),
+                tenant_id,
                 update_data.get("connector_ids", agent.connector_ids or []) or [],
             )
             if invalid:
@@ -3314,33 +3312,6 @@ async def _push_grantex_scopes(
     agent.config = cfg
 
 
-async def _refuse_unrunnable_agent(agent_row: Agent, tenant_id: str) -> None:
-    """The lifecycle and emergency controls a run is held to: status, production floor, operator override."""
-    status_refusal = agent_status_refusal(agent_row.status)
-    if status_refusal is not None:
-        raise HTTPException(409, status_refusal)
-    if _active_agent_below_production_floor(agent_row):
-        raise HTTPException(
-            409,
-            (
-                "Active agent is below the production shadow-accuracy "
-                f"floor ({agent_row.shadow_accuracy_current} < "
-                f"{_effective_shadow_accuracy_floor(agent_row)}). "
-                "Rollback to shadow and retest before running live work."
-            ),
-        )
-    override = await check_operator_override(tenant_id, agent_id=str(agent_row.id))
-    if override.blocked:
-        raise HTTPException(
-            423,
-            detail={
-                "error": "operator_override",
-                "message": override.reason,
-                "override": override.override.to_dict() if override.override else None,
-            },
-        )
-
-
 # ── POST /agents/{id}/run ────────────────────────────────────────────────────
 @router.post("/agents/{agent_id}/run")
 @route_meta(
@@ -3389,9 +3360,7 @@ async def run_agent(
             if agent_traffic.chooses_target(split, draw=split_draw):
                 target_row = (
                     await session.execute(
-                        select(Agent).where(
-                            Agent.id == _uuid.UUID(split["to_agent_id"]), Agent.tenant_id == tid
-                        )
+                        select(Agent).where(Agent.id == _uuid.UUID(split["to_agent_id"]), Agent.tenant_id == tid)
                     )
                 ).scalar_one_or_none()
                 if target_row is not None and not can_view_agent(target_row, effective_caller):
@@ -4147,6 +4116,33 @@ async def run_agent(
     return response
 
 
+async def _refuse_unrunnable_agent(agent_row: Agent, tenant_id: str) -> None:
+    """The lifecycle and emergency controls a run is held to: status, production floor, operator override."""
+    status_refusal = agent_status_refusal(agent_row.status)
+    if status_refusal is not None:
+        raise HTTPException(409, status_refusal)
+    if _active_agent_below_production_floor(agent_row):
+        raise HTTPException(
+            409,
+            (
+                "Active agent is below the production shadow-accuracy "
+                f"floor ({agent_row.shadow_accuracy_current} < "
+                f"{_effective_shadow_accuracy_floor(agent_row)}). "
+                "Rollback to shadow and retest before running live work."
+            ),
+        )
+    override = await check_operator_override(tenant_id, agent_id=str(agent_row.id))
+    if override.blocked:
+        raise HTTPException(
+            423,
+            detail={
+                "error": "operator_override",
+                "message": override.reason,
+                "override": override.override.to_dict() if override.override else None,
+            },
+        )
+
+
 # ── POST /agents/{id}/pause ──────────────────────────────────────────────────
 # Bug sheet 2026-09-14 rows 19/22: owner-or-admin (require_agent_mutable).
 @router.post(
@@ -4350,9 +4346,7 @@ async def set_agent_output_schema(
             raise HTTPException(404, "Agent not found")
         require_agent_mutable(agent, _effective_caller(caller, user_domains))
         if agent.status == "active":
-            raise HTTPException(
-                409, "The output schema is locked on active agents. Clone this agent to make changes."
-            )
+            raise HTTPException(409, "The output schema is locked on active agents. Clone this agent to make changes.")
         config = dict(agent.config or {})
         if schema is None:
             config.pop(prompt_output_schema.INLINE_KEY, None)

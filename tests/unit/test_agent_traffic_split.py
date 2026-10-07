@@ -146,9 +146,8 @@ class TestRunPath:
         assert "Agent.tenant_id == tid" in between
         assert "can_view_agent(target_row, effective_caller)" in between
         assert "_refuse_unrunnable_agent(target_row, tenant_id)" in between and "target_row = None" in between
-        helper = src[
-            src.index("async def _refuse_unrunnable_agent(") : src.index('@router.post("/agents/{agent_id}/run")')
-        ]
+        helper_start = src.index("async def _refuse_unrunnable_agent(")
+        helper = src[helper_start : src.index("@router.", helper_start)]
         for control in (
             "agent_status_refusal(agent_row.status)",
             "_active_agent_below_production_floor(agent_row)",
