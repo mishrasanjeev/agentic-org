@@ -3,7 +3,9 @@
 
 from __future__ import annotations
 
+import re
 import uuid
+from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
@@ -14,6 +16,7 @@ from core.config import settings
 from core.workbench import access, assignments, definitions
 
 TENANT = uuid.uuid4()
+UI_ROUTES = set(re.findall(r'path="(/dashboard/[^"]*)"', Path("ui/src/App.tsx").read_text(encoding="utf-8")))
 
 
 class TestDefinitions:
@@ -26,6 +29,7 @@ class TestDefinitions:
             for tab in bench.tabs:
                 assert set(tab.roles) <= set(definitions.ALL_ROLES)
                 assert tab.path.startswith("/dashboard/")
+                assert tab.path in UI_ROUTES or tab.path.startswith("/dashboard/workbench/"), tab.path
                 if tab.sensitive:
                     assert tab.roles, "a sensitive tab names the roles that may see it"
 
@@ -89,12 +93,14 @@ class TestAccess:
         import core.database
 
         monkeypatch.setattr(core.database, "get_tenant_session", lambda tenant_id: Session())
-        found = await access.counts(TENANT, {"approvals", "documents", "drafts", "conversations", "knowledge"})
-        assert set(seen) == {"hitl_queue", "idp_documents", "content_drafts", "conversation_sessions"}
+        found = await access.counts(TENANT, {"approvals", "documents", "drafts", "cases", "conversations", "knowledge"})
+        assert set(seen) == {"hitl_queue", "idp_documents", "content_drafts", "governed_cases", "conversation_sessions"}
+        assert found["knowledge"] is None
         assert {k for k, v in found.items() if isinstance(v, int)} == {
             "approvals",
             "documents",
             "drafts",
+            "cases",
             "conversations",
         }
 

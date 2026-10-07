@@ -9,7 +9,8 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
   officer, relationship manager, investigator, supervisor) with the tabs
   their role may see; `GET /workbench/{name}/summary` adds the number of
   items waiting behind each tab (approvals pending, documents in review,
-  content drafts pending approval, conversations active or escalated).
+  content drafts pending approval, governed cases awaiting a decision,
+  conversations active or escalated).
   Administrators read the catalogue and assign workbenches to users
   (`PUT /workbench/assignments/{user_id}`, `workbench_assignments`,
   tenant-scoped under row-level security). The UI shows the shell at

@@ -35,7 +35,8 @@ that is not listed is not reachable by typing its path either.
 
 `GET /workbench/{name}/summary` returns the workbench with the caller's tabs and the number of
 items waiting behind each: approvals pending in the human-in-the-loop queue, documents in review,
-content drafts pending approval, conversations active or escalated. A tab without a counter, or a
+content drafts pending approval, governed cases awaiting a decision, conversations active or
+escalated. A tab without a counter, or a
 store that cannot be read, reports `null` rather than zero, and `waiting` sums only the counts that
 were read.
 
