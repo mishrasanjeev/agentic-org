@@ -386,6 +386,11 @@ class Settings(BaseSettings):
     # assignments. Off by default: off, GET /workbench answers
     # ``enabled: false`` and every other workbench route is not found.
     workbench_v2_enabled: bool = False
+    # Speech and conversation intelligence (core/speech/): recordings split
+    # by speaker, transcribed and kept with the transcript encrypted. Off by
+    # default: off, GET /speech/status answers ``enabled: false`` and every
+    # other speech route is not found.
+    speech_intelligence_enabled: bool = False
     # JSON object keyed provider/model with input and output USD per million
     # tokens; a negotiated rate replaces the list price.
     model_price_overrides_json: str = ""

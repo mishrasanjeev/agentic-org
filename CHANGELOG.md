@@ -4,6 +4,20 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
 
 ## [Unreleased] - 2026-08-29
 
+### Added - Speech intelligence: batch transcription and diarisation
+- `POST /speech/recordings` takes a PCM WAV call recording, finds who
+  spoke when (by channel for a stereo call with `channel_roles`, by
+  sound for a mono one with a deterministic two-speaker clustering over
+  energy-detected segments), transcribes it through a local
+  faster-whisper model where installed or the tenant's Deepgram
+  credential, or takes words transcribed elsewhere
+  (`POST /speech/recordings/{id}/transcript`), aligns every word to a
+  speaker and groups them into turns, and keeps the recording with the
+  transcript encrypted under the tenant's key (`core/speech/`,
+  `speech_recordings`, `docs/speech/intelligence.md`). Off by default
+  (`AGENTICORG_SPEECH_INTELLIGENCE_ENABLED`): off, the status route
+  answers `enabled: false` and the rest is not found.
+
 ### Added - Workbenches: search across cases, documents, customers and accounts; accessibility suite
 - `GET /workbench/search` searches cases, documents, customers and accounts
   in one query: words and quoted phrases that must all match, a leading
