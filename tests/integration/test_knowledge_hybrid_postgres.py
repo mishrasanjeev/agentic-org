@@ -62,7 +62,16 @@ async def test_hybrid_rank_tenant_status_missing_vector_and_literal_query(monkey
             await conn.execute(text(
                 "CREATE TEMP TABLE knowledge_documents ("
                 "id uuid PRIMARY KEY, tenant_id uuid NOT NULL, title text NOT NULL, "
-                "content text NOT NULL, status text NOT NULL, embedding vector(3)) "
+                "content text NOT NULL, status text NOT NULL, source text, domain varchar(50), "
+                "embedding vector(3)) "
+                "ON COMMIT PRESERVE ROWS"
+            ))
+            # The provenance table the search joins for citations (core/rag/citations.py); empty here.
+            await conn.execute(text(
+                "CREATE TEMP TABLE knowledge_chunk_sources ("
+                "id uuid PRIMARY KEY DEFAULT gen_random_uuid(), tenant_id uuid NOT NULL, "
+                "chunk_source text NOT NULL, page integer, sheet text, cell_range text, "
+                "frame_timestamp_s double precision, paragraph integer, heading text) "
                 "ON COMMIT PRESERVE ROWS"
             ))
             await conn.execute(text(
