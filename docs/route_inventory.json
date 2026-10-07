@@ -5468,7 +5468,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "knowledge.sensitive.documents.list",
-    "source_line": 1010,
+    "source_line": 1013,
     "tenant_required": true
   },
   {
@@ -5486,7 +5486,7 @@
     "public_exempt_reason": null,
     "rate_limit": "knowledge-write",
     "scope": "knowledge.documents.delete",
-    "source_line": 1123,
+    "source_line": 1126,
     "tenant_required": true
   },
   {
@@ -5504,7 +5504,7 @@
     "public_exempt_reason": null,
     "rate_limit": "knowledge-search",
     "scope": "knowledge.sensitive.search",
-    "source_line": 1621,
+    "source_line": 1772,
     "tenant_required": true
   },
   {
@@ -5522,7 +5522,7 @@
     "public_exempt_reason": null,
     "rate_limit": "knowledge-search",
     "scope": "knowledge.sensitive.search",
-    "source_line": 1572,
+    "source_line": 1723,
     "tenant_required": true
   },
   {
@@ -5540,8 +5540,62 @@
     "public_exempt_reason": "deployment-smoke-test-no-tenant-data",
     "rate_limit": "healthcheck",
     "scope": "knowledge.health.public",
-    "source_line": 1883,
+    "source_line": 2080,
     "tenant_required": false
+  },
+  {
+    "audit_event": "knowledge.metrics",
+    "auth_required": true,
+    "function": "knowledge_metrics",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/knowledge/metrics api/v1/knowledge.py:knowledge_metrics",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/knowledge.py",
+    "path": "/api/v1/knowledge/metrics",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "knowledge.sensitive.stats",
+    "source_line": 1612,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "knowledge.grounding",
+    "auth_required": true,
+    "function": "knowledge_grounding",
+    "idempotency": "read-only",
+    "key": "POST /api/v1/knowledge/metrics/grounding api/v1/knowledge.py:knowledge_grounding",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/knowledge.py",
+    "path": "/api/v1/knowledge/metrics/grounding",
+    "public_exempt_reason": null,
+    "rate_limit": "knowledge-search",
+    "scope": "knowledge.sensitive.search",
+    "source_line": 1634,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "knowledge.reindex",
+    "auth_required": true,
+    "function": "knowledge_reindex",
+    "idempotency": "bounded-batch-repeat-until-zero-candidates",
+    "key": "POST /api/v1/knowledge/reindex api/v1/knowledge.py:knowledge_reindex",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/knowledge.py",
+    "path": "/api/v1/knowledge/reindex",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "knowledge.upload",
+    "source_line": 1655,
+    "tenant_required": true
   },
   {
     "audit_event": "knowledge.search",
@@ -5558,7 +5612,7 @@
     "public_exempt_reason": null,
     "rate_limit": "knowledge-search",
     "scope": "knowledge.sensitive.search",
-    "source_line": 1709,
+    "source_line": 1860,
     "tenant_required": true
   },
   {
@@ -5576,7 +5630,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "knowledge.sensitive.stats",
-    "source_line": 1996,
+    "source_line": 2193,
     "tenant_required": true
   },
   {
@@ -5594,7 +5648,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "knowledge.upload.types.read",
-    "source_line": 583,
+    "source_line": 586,
     "tenant_required": true
   },
   {
@@ -5612,7 +5666,7 @@
     "public_exempt_reason": null,
     "rate_limit": "file-upload",
     "scope": "knowledge.upload",
-    "source_line": 609,
+    "source_line": 612,
     "tenant_required": true
   },
   {

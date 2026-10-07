@@ -4,6 +4,18 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
 
 ## [Unreleased] - 2026-08-29
 
+### Added - Knowledge retrieval: quality metrics, grounding indicator and re-indexing
+- With `AGENTICORG_KNOWLEDGE_METRICS_ENABLED` on (off by default), every
+  knowledge search leaves a figures-only sample (`core/rag/metrics.py`,
+  table `knowledge_retrieval_metrics`, migration
+  `v6z53_knowledge_retrieval_metrics`) and feeds Prometheus series by
+  retrieval path; `GET /knowledge/metrics` folds a tenant's window and
+  `POST /knowledge/metrics/grounding` returns the share of an answer's
+  sentences the given chunks support. With
+  `AGENTICORG_KNOWLEDGE_REINDEX_ENABLED` on, `POST /knowledge/reindex`
+  re-embeds chunks made by a stale model and records missing entities,
+  bounded per call (`core/rag/reindex.py`).
+
 ### Added - Knowledge retrieval: graph retrieval over extracted entities
 - With `AGENTICORG_KNOWLEDGE_GRAPH_RETRIEVAL_ENABLED` on (off by default),
   ingestion records the names, codes, amounts and dates each chunk mentions
