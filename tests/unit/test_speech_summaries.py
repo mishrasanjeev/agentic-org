@@ -298,6 +298,21 @@ class TestStore:
         assert overview["averages"]["empathy"] == row.analytics["scores"]["empathy"]
 
     @pytest.mark.asyncio
+    async def test_roles_follow_the_labels_not_the_channel_order(self, monkeypatch):
+        row = _row(channel_roles=["customer", "agent"], speakers={"customer": {"turns": 3}, "agent": {"turns": 3}})
+        assert store._roles(row) == ("agent", "customer")
+        row = _row(channel_roles=["left", "right"], speakers={"left": {"turns": 1}, "right": {"turns": 1}})
+        assert store._roles(row) == ("left", "right")
+
+    @pytest.mark.asyncio
+    async def test_a_replaced_transcript_drops_the_old_summary_and_analytics(self, monkeypatch):
+        row = _row(summary_encrypted={"_encrypted": "enc:{}"}, analytics={"scores": {"empathy": 1}})
+        session = _Session([row])
+        _use(monkeypatch, session)
+        await store.attach_transcript(TENANT, row.id, [{"text": "Hello", "start": 0.3, "end": 0.6}])
+        assert row.summary_encrypted == {} and row.analytics == {} and row.status == "transcribed"
+
+    @pytest.mark.asyncio
     async def test_a_recording_without_a_transcript_or_a_bad_method_is_refused(self, monkeypatch):
         row = _row(transcript_encrypted={}, status="received")
         _use(monkeypatch, _Session([row]))

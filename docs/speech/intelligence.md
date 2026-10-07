@@ -56,7 +56,9 @@ with one (a 0 to 100 empathy score), the interaction figures (talk ratio, words 
 interruptions as overlapping segments of different speakers, silences over three seconds, the
 longest monologue) and escalation signals (a phrase asking for a person or a complaint, a run of
 negative turns, a mood that fell). Roles come from `channel_roles` or recognisable speaker names,
-else the first speaker is the agent. The figures hold no words and are kept in clear;
+else the first speaker is the agent (a recognisable label wins over channel order). A transcript
+attached later replaces the summary and the analytics of the old one. The figures hold no words and
+are kept in clear;
 `GET /speech/analytics` averages them over the latest summarised recordings.
 
 ## Storage
