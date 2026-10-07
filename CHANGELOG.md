@@ -4,6 +4,16 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
 
 ## [Unreleased] - 2026-08-29
 
+### Added - AI governance: model cards
+- With `AGENTICORG_GOVERNANCE_MODEL_CARDS_ENABLED` on (off by default),
+  every model a tenant uses has one standard card
+  (`core/governance/model_cards.py`): catalogue facts, use and risk tier
+  from the inventory, the policies and limits that name it, the residency
+  decision, price, health, the newest evaluation run, and the part an
+  administrator writes (table `model_cards`, migration `v6z54_model_cards`)
+  with approval by a second person; `GET /governance/model-cards` lists the
+  cards with what each still lacks.
+
 ### Added - AI governance: asset inventory and bill-of-materials export
 - With `AGENTICORG_GOVERNANCE_INVENTORY_ENABLED` on (off by default), a
   tenant administrator reads a live inventory of the tenant's agents,

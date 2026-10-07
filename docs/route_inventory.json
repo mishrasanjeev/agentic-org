@@ -4932,6 +4932,78 @@
     "tenant_required": true
   },
   {
+    "audit_event": "governance.model_cards.list",
+    "auth_required": true,
+    "function": "list_model_cards",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/governance/model-cards api/v1/governance_model_cards.py:list_model_cards",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/governance_model_cards.py",
+    "path": "/api/v1/governance/model-cards",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "governance.inventory.sensitive.read",
+    "source_line": 56,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "governance.model_cards.read",
+    "auth_required": true,
+    "function": "get_model_card",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/governance/model-cards/{provider}/{model:path} api/v1/governance_model_cards.py:get_model_card",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/governance_model_cards.py",
+    "path": "/api/v1/governance/model-cards/{provider}/{model:path}",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "governance.inventory.sensitive.read",
+    "source_line": 75,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "governance.model_cards.write",
+    "auth_required": true,
+    "function": "write_model_card",
+    "idempotency": "idempotent-upsert-by-tenant-provider-model",
+    "key": "PUT /api/v1/governance/model-cards/{provider}/{model:path} api/v1/governance_model_cards.py:write_model_card",
+    "metadata_present": true,
+    "methods": [
+      "PUT"
+    ],
+    "module": "api/v1/governance_model_cards.py",
+    "path": "/api/v1/governance/model-cards/{provider}/{model:path}",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "governance.inventory.sensitive.write",
+    "source_line": 100,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "governance.model_cards.approve",
+    "auth_required": true,
+    "function": "approve_model_card",
+    "idempotency": "idempotent-approval-by-second-person",
+    "key": "POST /api/v1/governance/model-cards/{provider}/{model:path}/approve api/v1/governance_model_cards.py:approve_model_card",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/governance_model_cards.py",
+    "path": "/api/v1/governance/model-cards/{provider}/{model:path}/approve",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "governance.inventory.sensitive.write",
+    "source_line": 130,
+    "tenant_required": true
+  },
+  {
     "audit_event": null,
     "auth_required": true,
     "function": "list_governed_cases",
