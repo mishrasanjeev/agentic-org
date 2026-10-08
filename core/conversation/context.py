@@ -26,7 +26,7 @@ _SAME_PAYEE_RE = re.compile(
     r"\b(the )?(same|that) (person|payee|beneficiary|recipient)\b|\bto (him|her|them) again\b", re.I
 )
 _SAME_ACCOUNT_RE = re.compile(r"\b(the )?(same|that) account\b", re.I)
-_AGAIN_RE = re.compile(r"^\s*(do (that|it) again|repeat (that|it)|same again|once more|again)\s*[.!]?\s*$", re.I)
+_AGAIN_RE = re.compile(r"(do (that|it) again|repeat (that|it)|same again|once more|again)\s*+[.!]?", re.I)
 
 
 def recent_turns(
@@ -72,7 +72,7 @@ def references(text: str) -> set[str]:
 
 def repeats_last(text: str) -> bool:
     """Whether the text asks for the last action again, unchanged."""
-    return bool(_AGAIN_RE.match(text))
+    return bool(_AGAIN_RE.fullmatch(text.strip()))
 
 
 def resolve(text: str, entities: dict[str, Any], last_slots: dict[str, Any] | None) -> dict[str, Any]:
