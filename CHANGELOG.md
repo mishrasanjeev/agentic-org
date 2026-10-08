@@ -4,6 +4,21 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
 
 ## [Unreleased] - 2026-08-29
 
+### Added - Workbenches: the unified review queue with edit before approval
+- `GET /workbench/queue` lists everything waiting for a person in one
+  shape and one order (priority, then age): approvals pending, documents
+  in review, content drafts pending approval and governed cases awaiting
+  a decision, narrowed to the kinds the caller's workbenches show.
+  `GET /workbench/queue/{kind}/{id}` adds the fields a reviewer may edit;
+  `POST /workbench/queue/{kind}/{id}/decide` applies the edits and then
+  decides through the store that owns the item, so its rules apply
+  unchanged (a draft's text with originals kept in `content_drafts.edits`,
+  a document's fields as corrections, an approval's amendments recorded
+  on the item and in the decision notes; a governed case is decided on
+  its own page). The review officer's and supervisor's workbenches show
+  the queue as a tab with the four counters summed
+  (`core/workbench/queue.py`, `ui/src/components/ReviewQueue.tsx`).
+
 ### Added - Workbenches: the shell and who holds which
 - `GET /workbench` lists the role-shaped consoles the caller holds (review
   officer, relationship manager, investigator, supervisor) with the tabs

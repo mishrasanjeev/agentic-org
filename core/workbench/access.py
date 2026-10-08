@@ -77,52 +77,59 @@ async def _count(session: Any, model: Any, *conditions: Any) -> int:
     return int(value or 0)
 
 
+QUEUE_SOURCES: tuple[str, ...] = ("approvals", "documents", "drafts", "cases")
+
+
 async def counts(tenant_id: uuid.UUID, sources: set[str], *, caller: Any = None) -> dict[str, int | None]:
-    """The number of items waiting behind each source; None when a source has no counter or cannot be read."""
+    """The number of items waiting behind each source; None when a source has no counter or cannot be read.
+
+    ``queue`` is the review queue's total: the sum of the four stores it reads, None when none could be read.
+    """
     from core.database import get_tenant_session
 
-    out: dict[str, int | None] = {}
+    wanted = set(sources) | (set(QUEUE_SOURCES) if "queue" in sources else set())
+    found: dict[str, int | None] = {}
     try:
         async with get_tenant_session(tenant_id) as session:
-            if "approvals" in sources:
+            if "approvals" in wanted:
                 from core.models.hitl import HITLQueue
 
-                out["approvals"] = await _count(
+                found["approvals"] = await _count(
                     session,
                     HITLQueue,
                     HITLQueue.tenant_id == tenant_id,
                     HITLQueue.status == "pending",
                     *approval_filter(tenant_id, caller),
                 )
-            if "documents" in sources:
+            if "documents" in wanted:
                 from core.models.idp_document import IdpDocument
 
-                out["documents"] = await _count(
+                found["documents"] = await _count(
                     session, IdpDocument, IdpDocument.tenant_id == tenant_id, IdpDocument.status == "review"
                 )
-            if "drafts" in sources:
+            if "drafts" in wanted:
                 from core.models.content_draft import ContentDraft
 
-                out["drafts"] = await _count(
+                found["drafts"] = await _count(
                     session,
                     ContentDraft,
                     ContentDraft.tenant_id == tenant_id,
                     ContentDraft.status == "pending_approval",
                 )
-            if "cases" in sources:
+            if "cases" in wanted:
                 from core.cases.states import CaseState
                 from core.models.governed_case import GovernedCase
 
-                out["cases"] = await _count(
+                found["cases"] = await _count(
                     session,
                     GovernedCase,
                     GovernedCase.tenant_id == tenant_id,
                     GovernedCase.state == CaseState.AWAITING_DECISION.value,
                 )
-            if "conversations" in sources:
+            if "conversations" in wanted:
                 from core.models.conversation_session import ConversationSession
 
-                out["conversations"] = await _count(
+                found["conversations"] = await _count(
                     session,
                     ConversationSession,
                     ConversationSession.tenant_id == tenant_id,
@@ -130,9 +137,11 @@ async def counts(tenant_id: uuid.UUID, sources: set[str], *, caller: Any = None)
                 )
     except (RuntimeError, OSError) as exc:
         logger.warning("workbench_counts_unavailable", error_type=type(exc).__name__)
-    for source in sources:
-        out.setdefault(source, None)
-    return out
+    if "queue" in sources:
+        parts = [found.get(source) for source in QUEUE_SOURCES]
+        read_parts = [p for p in parts if isinstance(p, int)]
+        found["queue"] = sum(read_parts) if read_parts else None
+    return {source: found.get(source) for source in sources}
 
 
 async def summary(
@@ -148,5 +157,5 @@ async def summary(
         **workbench.to_dict(tabs),
         "held_by": "assignment" if workbench_name in (assigned or set()) else "role",
         "counts": {tab.key: found.get(tab.source) for tab in tabs},
-        "waiting": sum(v for v in found.values() if isinstance(v, int)),
+        "waiting": sum(v for k, v in found.items() if isinstance(v, int) and k != "queue"),
     }
