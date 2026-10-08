@@ -19,6 +19,7 @@ import pytest
         "context.repeats_last('again' + ' ' * 100_000 + '?')",
         "feedback.rating_from_text('rating' + ' ' * 100_000 + '?')",
         "feedback.rating_from_text('4' + ' ' * 100_000 + '?')",
+        "intents.extract_entities('reference' + ' ' * 100_000 + '!')",
     ],
 )
 def test_hostile_turn_completes_without_backtracking(expression: str) -> None:
@@ -44,7 +45,9 @@ def test_rating_whitespace_and_punctuation(text: str) -> None:
     assert rating_from_text(text) == 4
 
 
-@pytest.mark.parametrize("text", ["999x", "account 1234", "reference AB12345", "2026/10/08"])
+@pytest.mark.parametrize(
+    "text", ["999x", "999.99x", "999.99.99", "rs 999x", "rs 999.99x", "account 1234", "reference AB12345", "2026/10/08"]
+)
 def test_non_amount_tokens_are_not_salvaged_as_amounts(text: str) -> None:
     from core.conversation.intents import parse_amount, parse_amounts
 
