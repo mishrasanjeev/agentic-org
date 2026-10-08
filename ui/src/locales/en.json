@@ -25,6 +25,7 @@
     "approvals": "Approvals",
     "conversations": "Conversations",
     "documents": "Documents",
+    "workbenches": "Workbenches",
     "connectors": "Connectors",
     "commerceRuntime": "Commerce Runtime",
     "promptTemplates": "Prompt Templates",

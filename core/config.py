@@ -383,6 +383,11 @@ class Settings(BaseSettings):
     # confidence. Off by default: off, the document-type catalogue answers and
     # every other route is not found.
     idp_enabled: bool = False
+    # Workbenches (core/workbench/): role-shaped consoles over the review,
+    # conversation, document and governance pages, with per-user
+    # assignments. Off by default: off, GET /workbench answers
+    # ``enabled: false`` and every other workbench route is not found.
+    workbench_v2_enabled: bool = False
     # JSON object keyed provider/model with input and output USD per million
     # tokens; a negotiated rate replaces the list price.
     model_price_overrides_json: str = ""

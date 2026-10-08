@@ -139,6 +139,7 @@ from core.models.voice_call import VoiceCall as VoiceCall
 from core.models.weekly_report_pilot_proof import (
     WeeklyReportPilotProof as WeeklyReportPilotProof,
 )
+from core.models.workbench_assignment import WorkbenchAssignment as WorkbenchAssignment
 from core.models.workflow import StepExecution as StepExecution
 from core.models.workflow import WorkflowDefinition as WorkflowDefinition
 from core.models.workflow import WorkflowEventWait as WorkflowEventWait

@@ -10008,6 +10008,96 @@
     "tenant_required": true
   },
   {
+    "audit_event": "workbench.list",
+    "auth_required": true,
+    "function": "list_workbenches",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/workbench api/v1/workbench.py:list_workbenches",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/workbench.py",
+    "path": "/api/v1/workbench",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "workbench.read",
+    "source_line": 64,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "workbench.assignments.list",
+    "auth_required": true,
+    "function": "list_assignments",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/workbench/assignments api/v1/workbench.py:list_assignments",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/workbench.py",
+    "path": "/api/v1/workbench/assignments",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "workbench.assignments.sensitive.read",
+    "source_line": 99,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "workbench.assignments.set",
+    "auth_required": true,
+    "function": "set_assignments",
+    "idempotency": "idempotent-lifecycle-state",
+    "key": "PUT /api/v1/workbench/assignments/{user_id} api/v1/workbench.py:set_assignments",
+    "metadata_present": true,
+    "methods": [
+      "PUT"
+    ],
+    "module": "api/v1/workbench.py",
+    "path": "/api/v1/workbench/assignments/{user_id}",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "workbench.assignments.sensitive.write",
+    "source_line": 116,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "workbench.catalogue.read",
+    "auth_required": true,
+    "function": "catalogue",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/workbench/catalogue api/v1/workbench.py:catalogue",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/workbench.py",
+    "path": "/api/v1/workbench/catalogue",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "workbench.catalogue.read",
+    "source_line": 83,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "workbench.summary.read",
+    "auth_required": true,
+    "function": "summary",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/workbench/{name}/summary api/v1/workbench.py:summary",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/workbench.py",
+    "path": "/api/v1/workbench/{name}/summary",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "workbench.read",
+    "source_line": 142,
+    "tenant_required": true
+  },
+  {
     "audit_event": "workflows.list",
     "auth_required": true,
     "function": "list_workflows",
