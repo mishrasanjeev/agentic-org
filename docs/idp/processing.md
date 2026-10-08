@@ -67,6 +67,29 @@ every field drawn where it came from (green at or above the field floor, amber b
 missing required field, indigo once corrected; tables dashed), lets the reviewer click a field to
 find its box and page, edit its value and save, and approve or reject the file.
 
+## Reconciliation, stamps and reports
+
+`GET /idp/documents/{id}/reconcile` (`core/idp/reconcile.py`) compares the fields that should
+agree across the documents of one file: the name on the identity document, the salary slip, the
+application form, the address proof, the KYC form and the statement; the date of birth on the
+identity document and the KYC form; the PAN on the identity document and the tax return. Names are
+compared after normalisation (case, accents, honorifics, word order; an initial matches the name it
+starts), dates after parsing, identifiers without spaces, amounts within two percent. Every
+disagreement names every value with its document, page and box; items seen once are reported as
+unverified, items seen nowhere as absent.
+
+`GET /idp/documents/{id}/stamps` (`core/idp/stamps.py`) renders each page and finds regions of
+saturated ink (blue, purple, red, green) that are not text: the page is downscaled, saturated
+pixels are counted per grid cell, dense cells are grouped, and each region becomes a candidate with
+its box, colour, coverage, density and a confidence. The document type on the page says whether a
+stamp was expected (cheque, agreement, property document, KYC form, loan application). What is
+checked is presence, colour and size, never authenticity.
+
+`GET /idp/documents/{id}/report` (`core/idp/report.py`, JSON or `?format=markdown`) assembles the
+analysis report: each document with its key fields (corrections applied), missing and weak fields
+and tables; the reconciliation; the stamp check; the review reasons; and a narrative of a few
+sentences built from those parts by fixed rules, never from a model.
+
 ## Confidence routing
 
 `core/idp/pipeline.py` decides what needs a person and why: a document whose type is unknown or

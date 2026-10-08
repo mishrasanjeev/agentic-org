@@ -4,6 +4,25 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
 
 ## [Unreleased] - 2026-08-29
 
+### Added - Document processing: reconciliation, stamps and analysis reports
+- `GET /idp/documents/{id}/reconcile` compares the fields that should
+  agree across the documents of a file (names after normalisation,
+  dates, identifiers, amounts within tolerance) and names every value of
+  a disagreement with its document, page and box
+  (`core/idp/reconcile.py`). `GET /idp/documents/{id}/stamps` finds ink
+  regions consistent with a stamp or seal on each rendered page (colour,
+  size, density; presence, not authenticity) and says whether the
+  document type expected one (`core/idp/stamps.py`). `GET
+  /idp/documents/{id}/report` (JSON or Markdown) assembles the analysis
+  report: documents and key fields with corrections, reconciliation,
+  stamps, review reasons and a narrative built from them, never from a
+  model (`core/idp/report.py`).
+- Reconciliation requires every pair of values to agree, resolves
+  two-digit birth years to the latest century not in the future, and
+  keeps the sign of amounts; the report no longer lists corrected fields
+  as missing or weak; the stamp check reads the kept file once and
+  renders every page from that copy.
+
 ### Added - Document processing: review with overlays and corrections
 - `POST /idp/analyse?store=true` keeps the file and the result
   (`idp_documents`, migration `v6z64_idp_documents`); a document the
