@@ -55,20 +55,23 @@ async def history(
     session: Any, tenant_id: uuid.UUID, *, days: int = DEFAULT_HISTORY_DAYS, group_by: str = "use_case"
 ) -> dict[str, list[tuple[date, int, float]]]:
     """Daily tokens and cost per key over the window, from the attributed ledger."""
-    from sqlalchemy import text as sqltext
+    from sqlalchemy import bindparam, func, select
+
+    from core.models.finops_ledger import FinopsCostLedger
 
     if group_by not in attribution.DIMENSIONS:
         raise ValueError(f"group_by is one of {', '.join(attribution.DIMENSIONS)}")
     window = max(1, min(int(days), MAX_HISTORY_DAYS))
     since = datetime.now(UTC).date() - timedelta(days=window - 1)
+    ledger = FinopsCostLedger.__table__
+    dimension = ledger.c[group_by]
     rows = (
         await session.execute(
-            sqltext(
-                f"SELECT {group_by}, period_date, SUM(tokens), SUM(cost_usd) "  # noqa: S608  # nosec B608 — group_by is one of the fixed dimension names checked above
-                "FROM finops_cost_ledger WHERE tenant_id = :tid AND period_date >= :since "
-                f"GROUP BY {group_by}, period_date ORDER BY {group_by}, period_date"
-            ),
-            {"tid": str(tenant_id), "since": since},
+            select(dimension, ledger.c.period_date, func.sum(ledger.c.tokens), func.sum(ledger.c.cost_usd))
+            .where(ledger.c.tenant_id == bindparam("tid"), ledger.c.period_date >= bindparam("since"))
+            .group_by(dimension, ledger.c.period_date)
+            .order_by(dimension, ledger.c.period_date),
+            {"tid": tenant_id, "since": since},
         )
     ).fetchall()
     series: dict[str, list[tuple[date, int, float]]] = {}

@@ -87,7 +87,9 @@ async def test_history_reads_daily_rows_per_key_and_the_forecast_assembles_them(
     series = await forecast.history(session, tid, days=30, group_by="use_case")
     assert set(series) == {"kyc", "loans"} and len(series["kyc"]) == 2
     sql, params = session.calls[0]
-    assert sql.startswith("SELECT use_case, period_date, SUM(tokens), SUM(cost_usd)") and params["tid"] == str(tid)
+    assert sql.startswith("SELECT finops_cost_ledger.use_case, finops_cost_ledger.period_date, sum(")
+    assert "GROUP BY finops_cost_ledger.use_case, finops_cost_ledger.period_date" in sql
+    assert "finops_cost_ledger.tenant_id = :tid" in sql and params["tid"] == tid
     with pytest.raises(ValueError):
         await forecast.history(_Session(), tid, group_by="password")
     answer = await forecast.forecast(

@@ -320,6 +320,14 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
   schema resolves to the requested or latest version; clause writes need a
   signed-in tenant administrator, and an update that changes nothing keeps the
   version and approval.
+### Security - Reporting queries and conversation parsing
+- Attribution and forecast dimensions now select SQLAlchemy columns instead of
+  interpolating SQL identifiers. Tenant filters and reporting limits remain bound.
+- Amount, repeat-request and rating parsers avoid polynomial regex backtracking;
+  subprocess regressions replay long hostile turns, and PostgreSQL tests exercise
+  every reporting dimension across two tenants.
+- Update the UI source-map dependency, MCP proxy address dependency and MCP SDK
+  to patched versions. No security alerts are dismissed or checks disabled.
 
 ### Added - Content services: governed drafting, structured summarisation and obligation extraction
 - With `AGENTICORG_CONTENT_SERVICES_ENABLED` on (off by default), three
