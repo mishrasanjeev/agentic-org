@@ -39,6 +39,7 @@ class ContentDraft(BaseModel):
     output: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False, default=dict)
     sources: Mapped[list[Any]] = mapped_column(JSONB, nullable=False, default=list)
     guardrails: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False, default=dict)
+    edits: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
     created_by: Mapped[str | None] = mapped_column(String(128), nullable=True)
     decided_by: Mapped[str | None] = mapped_column(String(128), nullable=True)
     decision_notes: Mapped[str | None] = mapped_column(Text, nullable=True)

@@ -24,6 +24,10 @@
     "workflows": "Workflows",
     "approvals": "Approvals",
     "conversations": "Conversations",
+    "documents": "Documents",
+    "workbenches": "Workbenches",
+    "calls": "Calls",
+    "transactions": "Transactions",
     "connectors": "Connectors",
     "commerceRuntime": "Commerce Runtime",
     "promptTemplates": "Prompt Templates",
@@ -48,7 +52,8 @@
     "agentCatalogue": "Agent Catalogue",
     "sla": "SLA Monitor",
     "billing": "Billing",
-    "settings": "Settings"
+    "settings": "Settings",
+    "lineage": "Lineage"
   },
   "roles": {
     "cfo": "CFO",

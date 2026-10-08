@@ -30,6 +30,7 @@ from typing import Any
 import structlog
 from sqlalchemy import text as sqltext
 
+from core.lineage import provenance
 from core.rag import chunking, entities
 from core.rag.extractors import (
     ExtractedContent,
@@ -304,6 +305,9 @@ async def ingest_document(
 
     indexed = 0
     total_tokens = 0
+    # Provenance (core/lineage): the chunks noted after the rows are committed, when lineage is on.
+    lineage_on = provenance.enabled()
+    chain_chunks: list[tuple[str, str]] = []
     async with async_session_factory() as session:
         # Parent document row — one per artifact. This is the row the
         # knowledge_documents.embedding column has existed on since
@@ -318,6 +322,8 @@ async def ingest_document(
             # Encode chunk provenance into source so dedup is stable.
             dedup_key = _content_hash(chunk_text)[:12]
             canonical_source = f"{chunk_source}#chunk{idx + 1}-{dedup_key}"
+            if lineage_on:
+                chain_chunks.append((canonical_source[:500], dedup_key))
 
             # Column name + model swap honour the RAG_USE_BGE_M3 flag
             # so the request path stays atomic with the search side.
@@ -396,6 +402,18 @@ async def ingest_document(
         # ingestion is a silent no-op even though we increment
         # chunks_indexed and log success. Commit explicitly.
         await session.commit()
+
+    if lineage_on:
+        await provenance.on_ingest(
+            tid,
+            source=(source or f"upload://{filename}")[:500],
+            stream=stream,
+            extraction_method=content.extraction_method,
+            mime_type=content.mime_type,
+            chunks=chain_chunks,
+            embedding_model=f"{provider}/{model}"[:80],
+            dimensions=dimensions,
+        )
 
     logger.info(
         "rag_ingest_complete",

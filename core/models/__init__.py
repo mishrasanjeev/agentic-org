@@ -36,6 +36,7 @@ from core.models.bridge import BridgeRegistration as BridgeRegistration
 from core.models.bridge import BridgeRequest as BridgeRequest
 from core.models.bridge import BridgeSession as BridgeSession
 from core.models.budget_alert import BudgetAlert as BudgetAlert
+from core.models.business_setting import BusinessSetting as BusinessSetting
 from core.models.ca_client_billing import CAClientInvoice as CAClientInvoice
 from core.models.ca_client_billing import CAClientPayment as CAClientPayment
 from core.models.ca_client_billing import CAServicePlan as CAServicePlan
@@ -72,6 +73,7 @@ from core.models.company import Company as Company
 from core.models.compliance_deadline import ComplianceDeadline as ComplianceDeadline
 from core.models.connector import Connector as Connector
 from core.models.connector_config import ConnectorConfig as ConnectorConfig
+from core.models.content_clause import ContentClause as ContentClause
 from core.models.content_draft import ContentDraft as ContentDraft
 from core.models.conversation_session import ConversationSession as ConversationSession
 from core.models.delegation import UserDelegation as UserDelegation
@@ -93,11 +95,16 @@ from core.models.gstn_credential import GSTNCredential as GSTNCredential
 from core.models.gstn_upload import GSTNUpload as GSTNUpload
 from core.models.guardrail_rule import GuardrailRule as GuardrailRule
 from core.models.hitl import HITLQueue as HITLQueue
+from core.models.idp_document import IdpDocument as IdpDocument
 from core.models.industry_pack_install import IndustryPackInstall as IndustryPackInstall
 from core.models.invoice import Invoice as Invoice
 from core.models.kpi_cache import KPICache as KPICache
 from core.models.lead_pipeline import EmailSequence as EmailSequence
 from core.models.lead_pipeline import LeadPipeline as LeadPipeline
+from core.models.lineage import LineageNode as LineageNode
+from core.models.lineage import LineageStep as LineageStep
+from core.models.lineage_sync import LineageSyncRun as LineageSyncRun
+from core.models.lineage_sync import LineageSyncSource as LineageSyncSource
 from core.models.model_access_policy import ModelAccessPolicy as ModelAccessPolicy
 from core.models.model_card import ModelCard as ModelCard
 from core.models.model_gateway_record import ModelGatewayRecord as ModelGatewayRecord
@@ -114,6 +121,10 @@ from core.models.oacp_retention_disposition_decision import (
 from core.models.operator_override import OperatorOverride as OperatorOverride
 from core.models.organization import CostCenter as CostCenter
 from core.models.organization import Department as Department
+from core.models.personalisation import PersonalisationConsent as PersonalisationConsent
+from core.models.personalisation import PersonalisationEvent as PersonalisationEvent
+from core.models.personalisation import PersonalisationProfile as PersonalisationProfile
+from core.models.personalisation import PersonalisationRule as PersonalisationRule
 from core.models.professional_tax import ProfessionalTaxRegistration as ProfessionalTaxRegistration
 from core.models.professional_tax import ProfessionalTaxReturn as ProfessionalTaxReturn
 from core.models.prompt_template import PromptChangeRequest as PromptChangeRequest
@@ -124,6 +135,8 @@ from core.models.report_schedule import ReportSchedule as ReportSchedule
 from core.models.rpa_schedule import RPASchedule as RPASchedule
 from core.models.run_span import RunSpan as RunSpan
 from core.models.schema_registry import SchemaRegistry as SchemaRegistry
+from core.models.speech_live_session import SpeechLiveSession as SpeechLiveSession
+from core.models.speech_recording import SpeechRecording as SpeechRecording
 from core.models.sso_config import SSOConfig as SSOConfig
 from core.models.synthetic_check import SyntheticCheck as SyntheticCheck
 from core.models.synthetic_check import SyntheticCheckResult as SyntheticCheckResult
@@ -132,11 +145,14 @@ from core.models.tenant_ai_credential import TenantAICredential as TenantAICrede
 from core.models.tenant_ai_setting import TenantAISetting as TenantAISetting
 from core.models.tool_call import ToolCall as ToolCall
 from core.models.tool_registration import ToolRegistration as ToolRegistration
+from core.models.txn_finding import TxnFinding as TxnFinding
+from core.models.txn_record import TxnRecord as TxnRecord
 from core.models.user import User as User
 from core.models.voice_call import VoiceCall as VoiceCall
 from core.models.weekly_report_pilot_proof import (
     WeeklyReportPilotProof as WeeklyReportPilotProof,
 )
+from core.models.workbench_assignment import WorkbenchAssignment as WorkbenchAssignment
 from core.models.workflow import StepExecution as StepExecution
 from core.models.workflow import WorkflowDefinition as WorkflowDefinition
 from core.models.workflow import WorkflowEventWait as WorkflowEventWait

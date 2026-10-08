@@ -24,6 +24,10 @@
     "workflows": "वर्कफ़्लो",
     "approvals": "अनुमोदन",
     "conversations": "बातचीत",
+    "documents": "दस्तावेज़",
+    "workbenches": "कार्यपटल",
+    "calls": "कॉल",
+    "transactions": "लेनदेन",
     "connectors": "कनेक्टर",
     "commerceRuntime": "Commerce Runtime",
     "promptTemplates": "प्रॉम्प्ट टेम्पलेट",
@@ -48,7 +52,8 @@
     "agentCatalogue": "एजेंट कैटलॉग",
     "sla": "SLA मॉनिटर",
     "billing": "बिलिंग",
-    "settings": "सेटिंग्स"
+    "settings": "सेटिंग्स",
+    "lineage": "वंशावली"
   },
   "roles": {
     "cfo": "CFO",

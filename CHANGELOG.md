@@ -4,6 +4,323 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
 
 ## [Unreleased] - 2026-08-29
 
+### Added - Personalisation: a consent-checked service for personalised content
+- `core/personalisation/`: content for a subject and purpose is rendered
+  only under a valid consent (granted, not withdrawn, not expired; one
+  current record per subject and purpose, kept with its evidence when
+  withdrawn). Profiles are encrypted for the tenant before any row lock.
+  Rules pick a variant for a purpose by priority and conditions (`eq`,
+  `ne`, `in`, `gte`, `lte`, `exists`) and declare every attribute they
+  read; a placeholder that is not allowed or not in the profile is
+  refused, never rendered blank. Every render and refusal is recorded with
+  the consent, the rule, the attribute names used (never values) and a
+  hash of the content; a preview records nothing.
+- `PUT /personalisation/consents`, `POST /personalisation/consents/withdraw`,
+  `GET /personalisation/consents`, `PUT/GET /personalisation/profiles`,
+  `GET/POST /personalisation/rules`, `PATCH/DELETE /personalisation/rules/{id}`,
+  `POST /personalisation/render`, `GET /personalisation/events`; scope
+  family `personalisation`. A caller's own template may use only the
+  attributes in the business console setting
+  `personalisation.template_attributes`. Behind `personalisation_enabled`
+  (default off). Migration `v6z77` adds `personalisation_consents`,
+  `personalisation_profiles`, `personalisation_rules` and
+  `personalisation_events` under forced row-level security.
+
+### Added - Provenance and lineage: the lineage graph in the console
+- The Lineage page finds nodes by kind and reference (`GET /lineage/nodes`),
+  traces one upstream, downstream or both and draws it from origin to use,
+  shows a node's sources, processing history and versions, and lists the
+  sync sources with their recent runs; a role that holds approvals:write
+  can run a source now. The navigation entry appears only while lineage is
+  on (`lineage_enabled`, default off).
+
+### Added - Provenance and lineage: incremental synchronisation
+- `core/lineage/sync.py`: a sync source names a feed (public HTTPS,
+  egress validated, optional bearer token kept encrypted) polled on an
+  interval for what changed since its cursor; a run skips every item
+  whose version provenance already keeps, ingests the rest (documents
+  through knowledge ingestion, records through the transaction store),
+  links each document to the feed it was acquired from, and records what
+  it received, processed, skipped and failed; the cursor advances only
+  when nothing failed. Sources are claimed under a row lock.
+- `GET/POST /lineage/sync/sources`, `PATCH/DELETE /lineage/sync/sources/{id}`,
+  `POST /lineage/sync/sources/{id}/run`, `GET /lineage/sync/sources/{id}/runs`;
+  the sweep from Celery beat, behind `lineage_sync_sweep_enabled` (default
+  off). Migration `v6z76` adds
+  `lineage_sync_sources` and `lineage_sync_runs` under forced row-level
+  security.
+
+### Added - Provenance and lineage: the provenance model
+- `core/lineage/provenance.py`: a node for every kept thing (a source, a
+  document, a chunk, an embedding, a transaction record, a transcript, a
+  finding, a draft, a model use) under its kind, reference and version,
+  with its origin and when it was observed; a step between two nodes
+  naming what was done, by which tool, with which parameters. Knowledge
+  ingestion notes its chain (source, document, chunks, embeddings) after
+  the rows are committed and never fails on it; transaction ingestion
+  notes each kept record as acquired from its source.
+- `POST /lineage` notes a chain an acquisition produced; `GET
+  /lineage/nodes/{kind}/{ref}` describes one thing (versions, sources, the
+  processing history back to them); `GET /lineage/trace/{kind}/{ref}` walks
+  the graph upstream, downstream or both, bounded. Behind `lineage_enabled`
+  (default off). Migration `v6z75` adds `lineage_nodes` and `lineage_steps`
+  under forced row-level security. Docs: `docs/lineage/provenance.md`.
+
+### Added - Transaction intelligence: narrative drafting and evidence export
+- `POST /txn/findings/{id}/narrative` drafts a suspicious-transaction
+  narrative from a finding, its rows and its entity view (through the
+  content services' checked model call or from the facts alone): what
+  was seen, when, on which accounts, through whom, why, a timeline, the
+  parties, the basis, a recommendation and the gaps to check; the draft
+  stays on the open finding for a person to review in the investigator
+  queue and nothing is filed. `GET /txn/findings/{id}/evidence` exports
+  the finding, narrative, rows, entity view and fund flow with a digest
+  (`core/txn/narrative.py`). Open findings join the workbench review
+  queue as the finding kind (approve confirms, reject dismisses with a
+  reason). The Transactions page drafts the narrative and downloads the
+  evidence.
+
+### Added - Transaction intelligence: fund-flow graphs across hops
+- `GET /txn/graph/{kind}/{ref}` builds the fund-flow graph around an
+  account, customer or counterparty: counterparties as nodes expanded hop
+  by hop from their own records (up to four hops, two hundred nodes),
+  edges with totals, counts, first and last movement and channels, the
+  heaviest outward paths, and the findings on every node;
+  `GET /txn/graph/{kind}/{ref}/export` carries the graph, the records
+  behind every edge and the findings as JSON or CSV for the case file
+  (`core/txn/graph.py`). The Transactions page draws it, expands a node on
+  click, lists the paths and the findings with their disposition, and
+  downloads the export (`ui/src/pages/Transactions.tsx`).
+
+### Added - Transaction intelligence: records, entity aggregation and detectors
+- `POST /txn/records` keeps movements on accounts in batches, idempotent
+  under each record's reference, and `POST /txn/import/document/{id}`
+  books a kept bank statement's line items. `GET /txn/entities` and
+  `GET /txn/entities/{kind}/{ref}` give the entity-centric view (totals,
+  channels, branches, counterparties, a daily series, the findings).
+  `POST /txn/detect` runs the structuring detector (cash deposits under
+  the threshold, several within the window, together at or above it,
+  graver across branches) and the pass-through detector (an inflow
+  mostly gone within the window) over the recent records and keeps
+  every new finding once under its fingerprint; a person dispositions a
+  finding (dismiss with a reason, confirm, escalate to a case) and the
+  detectors file nothing. Thresholds come from the business console.
+  (`core/txn/`, `txn_records`, `txn_findings`, `docs/txn/intelligence.md`).
+  Off by default (`AGENTICORG_TRANSACTION_INTELLIGENCE_ENABLED`).
+
+### Added - Speech intelligence: spoken sensitive data redacted from the recording and the transcript
+- `POST /speech/recordings/{id}/redact` finds spoken card numbers (Luhn
+  over runs of spoken digits, number words, double and triple), one-time
+  codes, CVVs and PINs after their cues, cuts them from the transcript
+  with a marker (a card keeps its last four) and silences them in the
+  audio, drops the summary made from the old transcript and records what
+  was cut as kinds and times only; `dry_run` reports without changing.
+  The business console chooses the kinds and can cut them at
+  transcription; a live session masks each turn before keeping it
+  (`core/speech/redaction.py`, `speech_recordings.redactions`).
+
+### Added - Speech intelligence: agent assist and disclosure tracking
+- A catalogue of disclosure scripts (recorded line, identity verified,
+  rate and fees, cooling-off, how to complain, consent, collections
+  conduct) with the phrases that count, the call types each applies to
+  and deadlines; the business console names the ones a tenant requires.
+  `GET /speech/recordings/{id}/disclosures` checks a kept transcript.
+  Live agent assist (`POST /speech/live/sessions`, `.../turns`,
+  `.../close`): every turn comes back with the checklist, the mood, the
+  intent, the next question, the knowledge that answers the customer and
+  the flags this turn raised, a disclosure overdue the moment its
+  deadline passes unsaid among them; closing gives the compliance report
+  (`core/speech/disclosures.py`, `core/speech/assist.py`,
+  `speech_live_sessions`). The Calls page drives a live session.
+
+### Added - Speech intelligence: call summaries and analytics
+- `POST /speech/recordings/{id}/summary` summarises a transcribed call
+  into intent, key points, next actions, outcome and customer mood,
+  through the content services' checked model call or from the words
+  alone (the banking intent catalogue, the most informative turns, the
+  turns that commit to something, the closing turns), and computes the
+  call's analytics: customer sentiment by turn and by thirds, the
+  agent's empathy markers and a 0 to 100 score for answering negative
+  turns with one, talk ratio, pace, interruptions, silences, the longest
+  monologue and escalation signals. `GET /speech/analytics` averages
+  them over the latest recordings (`core/speech/summary.py`,
+  `core/speech/analytics.py`). The summary is kept encrypted like the
+  transcript; the figures hold no words.
+
+### Added - Speech intelligence: batch transcription and diarisation
+- `POST /speech/recordings` takes a PCM WAV call recording, finds who
+  spoke when (by channel for a stereo call with `channel_roles`, by
+  sound for a mono one with a deterministic two-speaker clustering over
+  energy-detected segments), transcribes it through a local
+  faster-whisper model where installed or the tenant's Deepgram
+  credential, or takes words transcribed elsewhere
+  (`POST /speech/recordings/{id}/transcript`), aligns every word to a
+  speaker and groups them into turns, and keeps the recording with the
+  transcript encrypted under the tenant's key (`core/speech/`,
+  `speech_recordings`, `docs/speech/intelligence.md`). Off by default
+  (`AGENTICORG_SPEECH_INTELLIGENCE_ENABLED`): off, the status route
+  answers `enabled: false` and the rest is not found.
+
+### Added - Workbenches: search across cases, documents, customers and accounts; accessibility suite
+- `GET /workbench/search` searches cases, documents, customers and accounts
+  in one query: words and quoted phrases that must all match, a leading
+  minus to exclude, facet filters as repeated parameters, and the facet
+  values present with counts in the answer; every read tenant scoped and
+  bounded, each kind searched only where a held workbench shows it
+  (`core/workbench/search.py`, `ui/src/components/WorkbenchSearch.tsx`,
+  a Search tab in the review officer's and investigator's workbenches).
+  `ui/src/__tests__/workbench_accessibility.test.tsx` runs axe-core over
+  every workbench page and panel; a violation fails the suite.
+
+### Added - Workbenches: the business console for rules, thresholds and routing
+- `GET /workbench/console` lists the settings a tenant may change without a
+  release, with bounds, options, the tenant's value and the default;
+  `PUT` and `DELETE /workbench/console/{key}` set a value within the
+  bounds or restore the default, keeping the previous value and writing
+  an audit row (`core/workbench/console.py`, `business_settings`). The
+  values take effect in document review routing (confidence floors,
+  types always reviewed), the draft kinds that wait for approval, the
+  banking dialogue (answers tried before handing over, negative turns
+  before offering a person, amount ceilings by intent) and the review
+  queue's priority rules; with the flag off or the store unreadable the
+  defaults apply, which are the values the code had. The supervisor's
+  workbench shows the console as a tab (`ui/src/components/BusinessConsole.tsx`).
+
+### Added - Workbenches: the unified review queue with edit before approval
+- `GET /workbench/queue` lists everything waiting for a person in one
+  shape and one order (priority, then age): approvals pending, documents
+  in review, content drafts pending approval and governed cases awaiting
+  a decision, narrowed to the kinds the caller's workbenches show.
+  `GET /workbench/queue/{kind}/{id}` adds the fields a reviewer may edit;
+  `POST /workbench/queue/{kind}/{id}/decide` applies the edits and then
+  decides through the store that owns the item, so its rules apply
+  unchanged (a draft's text with originals kept in `content_drafts.edits`,
+  a document's fields as corrections, an approval's amendments recorded
+  on the item and in the decision notes; a governed case is decided on
+  its own page). The review officer's and supervisor's workbenches show
+  the queue as a tab with the four counters summed
+  (`core/workbench/queue.py`, `ui/src/components/ReviewQueue.tsx`).
+
+### Added - Workbenches: the shell and who holds which
+- `GET /workbench` lists the role-shaped consoles the caller holds (review
+  officer, relationship manager, investigator, supervisor) with the tabs
+  their role may see; `GET /workbench/{name}/summary` adds the number of
+  items waiting behind each tab (approvals pending, documents in review,
+  content drafts pending approval, governed cases awaiting a decision,
+  conversations active or escalated).
+  Administrators read the catalogue and assign workbenches to users
+  (`PUT /workbench/assignments/{user_id}`, `workbench_assignments`,
+  tenant-scoped under row-level security). The UI shows the shell at
+  `/dashboard/workbench`: the held workbenches, a workbench's tabs with
+  counts, and the review officer's content drafts decided in place
+  (`core/workbench/`, `ui/src/pages/Workbench.tsx`, `docs/workbench/shell.md`).
+  Off by default (`AGENTICORG_WORKBENCH_V2_ENABLED`): off, the index
+  answers `enabled: false` and the other routes are not found.
+
+### Added - Document processing: statement line items and version comparison
+- `GET /idp/documents/{id}/statement` reads the transactions of a kept
+  bank statement from its extracted table (date, description, debit,
+  credit, balance in whatever order the header gives), joins
+  continuation lines, flags salary credits and returned items, checks the
+  running balance row by row against the opening balance and every
+  debit and credit, and summarises totals, months, average and minimum
+  balance and whether the closing balance agrees
+  (`core/idp/statements.py`). `GET /idp/documents/{id}/compare/{other}`
+  compares one document in two kept files: fields changed, added and
+  removed with both values and boxes, page lines added and removed,
+  table rows added and removed (`core/idp/compare.py`).
+- Statement checks take debit-column amounts as magnitudes, flag returned
+  items and salary credits from the full joined description, and report
+  `consistent: null` with `rows_checked: 0` when no row could be checked.
+  A table present in only one version lists all its rows as added or removed.
+
+### Added - Document processing: reconciliation, stamps and analysis reports
+- `GET /idp/documents/{id}/reconcile` compares the fields that should
+  agree across the documents of a file (names after normalisation,
+  dates, identifiers, amounts within tolerance) and names every value of
+  a disagreement with its document, page and box
+  (`core/idp/reconcile.py`). `GET /idp/documents/{id}/stamps` finds ink
+  regions consistent with a stamp or seal on each rendered page (colour,
+  size, density; presence, not authenticity) and says whether the
+  document type expected one (`core/idp/stamps.py`). `GET
+  /idp/documents/{id}/report` (JSON or Markdown) assembles the analysis
+  report: documents and key fields with corrections, reconciliation,
+  stamps, review reasons and a narrative built from them, never from a
+  model (`core/idp/report.py`).
+- Reconciliation requires every pair of values to agree, resolves
+  two-digit birth years to the latest century not in the future, and
+  keeps the sign of amounts; the report no longer lists corrected fields
+  as missing or weak; the stamp check reads the kept file once and
+  renders every page from that copy.
+
+### Added - Document processing: review with overlays and corrections
+- `POST /idp/analyse?store=true` keeps the file and the result
+  (`idp_documents`, migration `v6z64_idp_documents`); a document the
+  pipeline routed to review waits in `review`. `/idp/documents` lists
+  kept documents by status, serves a document with its fields and
+  corrections, renders a page as PNG for the overlay, takes a
+  reviewer's value for a field (the extracted value stays beside it) and
+  approves or rejects. The Documents page draws every field on the page
+  it came from, coloured by confidence, with the reviewer's edits and
+  decision (`core/idp/store.py`, `api/v1/idp_review.py`).
+- Corrections to extra fields show in the served document, PDF page
+  images are rendered with a scale capped at 2400 pixels a side, and the
+  Documents page ignores a detail that arrives for a document no longer
+  selected.
+
+### Added - Document processing: classification and extraction
+- With `AGENTICORG_IDP_ENABLED` on (off by default), `POST /idp/analyse`
+  reads a PDF or image into pages of words with bounding boxes (text layer
+  or OCR, saying when OCR is unavailable), types each page against a
+  synthetic catalogue of banking documents by weighted rules, splits a
+  bundle into one document per segment, extracts each type's fields with
+  a page, a box and a per-field confidence (plus generic label-value
+  lines), extracts tables from aligned columns, and
+  routes a document to review when its type is unknown or weak, a
+  required field is missing or weak, or a page could not be read
+  (`core/idp/`, `GET /idp/document-types`, `POST /idp/classify-text`).
+  Uploads over 25 MB are refused while they are read and PDFs over 50
+  pages are refused rather than truncated; OCR runs off the event loop;
+  a repeated heading alone no longer splits a bundle; negative amounts
+  keep their sign; the routes need `approvals:read` / `approvals:write`.
+
+### Added - Content services: document translation across Indian languages
+- `POST /content/translate` and `/content/translate/batch`
+  (`core/content/translation.py`): a translation into Hindi, Marathi,
+  Bengali, Assamese, Gujarati, Punjabi, Odia, Tamil, Telugu, Kannada,
+  Malayalam, Urdu or English with a glossary and terms kept verbatim;
+  the service checks that every figure is still there, that the glossary
+  was applied, that the verbatim terms were kept and that the text is in
+  the target script, and marks the translation trusted only when all
+  hold; `verify` adds a back-translation with its word overlap for review.
+  `GET /content/languages` lists the languages and scripts.
+- Figures are compared with their currency and magnitude (lakh, crore,
+  thousand, million, in each supported language and in native digits), a
+  translation changed by an output guardrail is no longer marked trusted,
+  a text is at most 4,000 characters (the completion budget is sized to
+  match), and a batch refuses a register or format the single request refuses.
+
+### Added - Content services: narrative to payload, grounded responses, tone adaptation and clause assembly
+- Four more content services under `/content`: narrative to payload
+  (`structure`: a schema-shaped JSON object from free text, validated
+  against an inline, registered or built-in schema, rendered as XML on
+  request, with what the text says but the schema cannot hold listed),
+  policy-grounded responses (`respond`: an answer from an approved source
+  set with a cited quote per claim, or an honest statement that the
+  sources do not cover the question), audience-adaptive tone (`adapt`:
+  a rewrite for an audience, tone and reading level with every figure
+  checked to be still there), and rule-driven clause assembly
+  (`assemble`: a document from approved clauses whose conditions hold for
+  the facts, placeholders filled and the gaps named, no model involved;
+  clause library with versions and second-person approval, table
+  `content_clauses`, migration `v6z63_content_clauses`).
+- A grounded response is withheld when any of its claims is not covered by a
+  verified citation; tone fact checks keep currency, lakh and crore, and
+  percent; a payload changed by output guardrails is validated again; a named
+  schema resolves to the requested or latest version; clause writes need a
+  signed-in tenant administrator, and an update that changes nothing keeps the
+  version and approval.
+
 ### Added - Content services: governed drafting, structured summarisation and obligation extraction
 - With `AGENTICORG_CONTENT_SERVICES_ENABLED` on (off by default), three
   reusable capability APIs under `/content` (`core/content/`), each with
