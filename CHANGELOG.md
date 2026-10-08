@@ -4,6 +4,18 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
 
 ## [Unreleased] - 2026-08-29
 
+### Added - FinOps: cost comparison and forecasting
+- With `AGENTICORG_FINOPS_FORECAST_ENABLED` on (off by default),
+  `GET /finops/forecast` projects tokens and cost per use case for the next
+  quarter from the attributed ledger's history and a growth assumption, and
+  `GET /finops/comparison` folds the model calls per use case with the
+  cheapest catalogue alternatives and a before-and-after around a change
+  date (`core/finops/forecast.py`).
+  The forecast totals cover every label; the listed rows are the highest
+  projected spend first, with `total_rows` and `truncated` when the list is
+  cut. Calls without an input and output split are priced at the blended rate
+  alongside the split calls in the comparison.
+
 ### Added - FinOps: thresholds and actions
 - With `AGENTICORG_FINOPS_THRESHOLDS_ENABLED` on (off by default), a
   tenant administrator sets organisation, application, use-case or
