@@ -25,6 +25,12 @@ task_latency = Histogram(
     ["domain", "agent_type"],
 )
 
+agent_runs_stopped_total = Counter(
+    "agenticorg_agent_runs_stopped_total",
+    "Agent runs stopped by an execution limit, by reason (step_limit, duration_limit, tool_call_limit, loop_detected)",
+    ["reason"],
+)
+
 # ── HITL ────────────────────────────────────────────────────────────
 
 hitl_rate = Gauge(
@@ -115,6 +121,26 @@ audit_chain_verifications_total = Counter(
     ["result"],
 )
 
+# ── Knowledge retrieval quality (core/rag/metrics.py) ──────────────
+
+knowledge_searches_total = Counter(
+    "agenticorg_knowledge_searches_total",
+    "Knowledge searches by retrieval path (ragflow, hybrid, vector_keyword) and outcome (hits, empty)",
+    ["path", "outcome"],
+)
+knowledge_search_relevance = Histogram(
+    "agenticorg_knowledge_search_relevance",
+    "Mean share of the query terms the returned chunks carry, by retrieval path",
+    ["path"],
+    buckets=(0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0),
+)
+knowledge_search_latency_seconds = Histogram(
+    "agenticorg_knowledge_search_latency_seconds",
+    "Knowledge search latency by retrieval path",
+    ["path"],
+    buckets=(0.05, 0.1, 0.25, 0.5, 1.0, 2.0, 5.0, 10.0),
+)
+
 # ── Synthetic checks (observability/synthetic.py) ──────────────────
 
 synthetic_checks_total = Counter(
@@ -170,8 +196,7 @@ model_admission_wait_seconds = Histogram(
 )
 output_schema_checks_total = Counter(
     "agenticorg_output_schema_checks_total",
-    "Agent answers checked against a declared output schema, by result "
-    "(valid, repaired, retry, escalated, unusable)",
+    "Agent answers checked against a declared output schema, by result (valid, repaired, retry, escalated, unusable)",
     ["result"],
 )
 context_window_trims_total = Counter(

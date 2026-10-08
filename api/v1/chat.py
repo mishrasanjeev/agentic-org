@@ -19,9 +19,13 @@ from api.route_metadata import route_meta
 from api.v1.agents import _pinned_llm_provider, _record_cost_ledger
 from auth.run_grants import direct_tool_call_permitted, resolve_run_grant
 from core.config import is_strict_runtime_env, redis_socket_timeout_kwargs, redis_url_from_env, settings
+from core.conversation import context as conversation_context
+from core.conversation import fallbacks as conversation_fallbacks
+from core.conversation import runtime as conversation_runtime
 from core.database import get_tenant_session
 from core.governance.agent_status import refusal_for as agent_status_refusal
 from core.governance.operator_override import check as check_operator_override
+from core.langgraph import limits as execution_limits
 from core.models.agent import Agent
 from core.models.hitl import HITLQueue
 from core.ownership import (
@@ -43,41 +47,139 @@ _log = structlog.get_logger()
 
 _DOMAIN_KEYWORDS: dict[str, list[str]] = {
     "finance": [
-        "invoice", "payment", "revenue", "expense", "profit", "loss",
-        "tax", "gst", "tds", "balance sheet", "p&l", "ledger", "accounts",
-        "receivable", "payable", "cash flow", "audit", "billing", "salary",
-        "reimbursement", "budget", "forecast", "reconciliation", "bank",
+        "invoice",
+        "payment",
+        "revenue",
+        "expense",
+        "profit",
+        "loss",
+        "tax",
+        "gst",
+        "tds",
+        "balance sheet",
+        "p&l",
+        "ledger",
+        "accounts",
+        "receivable",
+        "payable",
+        "cash flow",
+        "audit",
+        "billing",
+        "salary",
+        "reimbursement",
+        "budget",
+        "forecast",
+        "reconciliation",
+        "bank",
         # TC_004: a CFO-sense query like "what is our cash runway" never
         # matched because "cash flow" is a distinct bigram from "cash" and
         # "runway". Adding the standalone finance lexicon so the common
         # metrics questions route to the CFO agent.
-        "cash", "runway", "burn", "burn rate", "liquidity", "working capital",
-        "receivables", "payables", "arr", "mrr", "ebitda", "gross margin",
-        "net income", "financials",
+        "cash",
+        "runway",
+        "burn",
+        "burn rate",
+        "liquidity",
+        "working capital",
+        "receivables",
+        "payables",
+        "arr",
+        "mrr",
+        "ebitda",
+        "gross margin",
+        "net income",
+        "financials",
     ],
     "hr": [
-        "employee", "leave", "attendance", "payroll", "hiring", "recruit",
-        "onboarding", "performance", "appraisal", "resign", "termination",
-        "headcount", "attrition", "training", "compliance", "policy", "hr",
+        "employee",
+        "leave",
+        "attendance",
+        "payroll",
+        "hiring",
+        "recruit",
+        "onboarding",
+        "performance",
+        "appraisal",
+        "resign",
+        "termination",
+        "headcount",
+        "attrition",
+        "training",
+        "compliance",
+        "policy",
+        "hr",
     ],
     "marketing": [
-        "campaign", "lead", "seo", "social media", "content", "brand",
-        "advertising", "conversion", "funnel", "email marketing", "analytics",
-        "engagement", "traffic", "impression", "click", "ctr", "ad spend",
+        "campaign",
+        "lead",
+        "seo",
+        "social media",
+        "content",
+        "brand",
+        "advertising",
+        "conversion",
+        "funnel",
+        "email marketing",
+        "analytics",
+        "engagement",
+        "traffic",
+        "impression",
+        "click",
+        "ctr",
+        "ad spend",
     ],
     "operations": [
-        "inventory", "supply chain", "logistics", "warehouse", "shipping",
-        "vendor", "procurement", "order", "fulfillment", "delivery", "sla",
-        "ops", "operations", "workflow", "process", "ticket",
+        "inventory",
+        "supply chain",
+        "logistics",
+        "warehouse",
+        "shipping",
+        "vendor",
+        "procurement",
+        "order",
+        "fulfillment",
+        "delivery",
+        "sla",
+        "ops",
+        "operations",
+        "workflow",
+        "process",
+        "ticket",
     ],
     "sales": [
-        "deal", "pipeline", "quota", "crm", "prospect", "close", "opportunity",
-        "commission", "territory", "forecast", "customer", "client", "contract",
+        "deal",
+        "pipeline",
+        "quota",
+        "crm",
+        "prospect",
+        "close",
+        "opportunity",
+        "commission",
+        "territory",
+        "forecast",
+        "customer",
+        "client",
+        "contract",
     ],
     "communications": [
-        "email", "gmail", "inbox", "outbox", "mail", "slack", "notification",
-        "message", "announcement", "memo", "newsletter", "whatsapp", "sms",
-        "calendar", "meeting", "schedule", "send email", "read email",
+        "email",
+        "gmail",
+        "inbox",
+        "outbox",
+        "mail",
+        "slack",
+        "notification",
+        "message",
+        "announcement",
+        "memo",
+        "newsletter",
+        "whatsapp",
+        "sms",
+        "calendar",
+        "meeting",
+        "schedule",
+        "send email",
+        "read email",
     ],
 }
 
@@ -191,6 +293,7 @@ def _chat_sessions_strict() -> bool:
     runtime_env = env if isinstance(env, str) else "development"
     return is_strict_runtime_env(runtime_env)
 
+
 try:
     import redis.asyncio as _aioredis
 
@@ -211,7 +314,7 @@ except Exception:
 def _session_key(tenant_id: str, company_id: str, agent_id: str = "", user_id: str = "") -> str:
     """Compose the Redis bucket key for chat history.
 
-    Root-cause fix for Codex 2026-04-22 isolation gap: without
+    Root-cause fix for the 2026-04-22 review isolation gap: without
     ``agent_id`` in the key, every agent you talked to under one company
     shared the same bucket — a support agent's chat would leak into the
     accounting agent's sidebar. When the caller provides an agent id,
@@ -274,25 +377,55 @@ async def _save_session(key: str, entries: list[dict]) -> None:
         raise RuntimeError("Chat sessions require Redis in strict runtime")
     _sessions[key] = entries
 
+
 # ---------------------------------------------------------------------------
 # Output formatting helper (BUG TC-002)
 # ---------------------------------------------------------------------------
 
 # Internal/security fields that should never appear in chat output
 _INTERNAL_FIELDS = {
-    "status", "confidence", "trace", "tool_calls", "signature",
-    "sig_hash", "hash", "hmac", "token", "access_token", "refresh_token",
-    "secret", "password", "api_key", "correlation_id", "thread_id",
-    "trace_id", "request_id", "tenant_id", "agent_id", "extras",
-    "metadata", "debug", "debug_info", "debugging_information",
-    "internal_id", "internal_ids", "tool_outputs", "tool_results",
+    "status",
+    "confidence",
+    "trace",
+    "tool_calls",
+    "signature",
+    "sig_hash",
+    "hash",
+    "hmac",
+    "token",
+    "access_token",
+    "refresh_token",
+    "secret",
+    "password",
+    "api_key",
+    "correlation_id",
+    "thread_id",
+    "trace_id",
+    "request_id",
+    "tenant_id",
+    "agent_id",
+    "extras",
+    "metadata",
+    "debug",
+    "debug_info",
+    "debugging_information",
+    "internal_id",
+    "internal_ids",
+    "tool_outputs",
+    "tool_results",
     "tool_calls_log",
 }
 
 
 _READABLE_KEYS = (
-    "text", "content", "answer", "response", "message", "summary",
-    "result", "raw_output",
+    "text",
+    "content",
+    "answer",
+    "response",
+    "message",
+    "summary",
+    "result",
+    "raw_output",
 )
 
 
@@ -454,6 +587,9 @@ class ChatQueryResponse(BaseModel):
     # invocation happened. ``None`` means "LLM path was used" — that
     # path persists tool_calls in the langgraph_run result instead.
     tool_calls: list[dict] | None = None
+    # Conversational services (core/conversation/): the outcome of a banking
+    # turn (ask, clarify, confirm, execute, escalate) when the message was one.
+    conversation: dict | None = None
 
 
 async def _record_chat_hitl(
@@ -503,19 +639,19 @@ async def _record_chat_hitl(
                 await session.execute(select(Agent).where(Agent.id == aid, Agent.tenant_id == tid))
             ).scalar_one_or_none()
             hitl_item = HITLQueue(
-                    tenant_id=tid,
-                    agent_id=aid,
-                    workflow_run_id=None,
-                    title=f"HITL: {agent_type or agent_name} — {hitl_trigger}",
-                    trigger_type="chat_policy",
-                    priority="high",
-                    assignee_role=domain or "admin",
-                    requested_by_user_id=requested_by_user_id,
-                    # Bug sheet #44 (2026-09-14): context is stored once, in
-                    # ``context`` (which carries ``output``), not duplicated here.
-                    decision_options={"options": ["approve", "reject", "override"]},
-                    context=context,
-                    expires_at=datetime.now(UTC) + timedelta(hours=4),
+                tenant_id=tid,
+                agent_id=aid,
+                workflow_run_id=None,
+                title=f"HITL: {agent_type or agent_name} — {hitl_trigger}",
+                trigger_type="chat_policy",
+                priority="high",
+                assignee_role=domain or "admin",
+                requested_by_user_id=requested_by_user_id,
+                # Bug sheet #44 (2026-09-14): context is stored once, in
+                # ``context`` (which carries ``output``), not duplicated here.
+                decision_options={"options": ["approve", "reject", "override"]},
+                context=context,
+                expires_at=datetime.now(UTC) + timedelta(hours=4),
             )
             session.add(hitl_item)
         from core.push.sender import notify_approval_created
@@ -603,6 +739,48 @@ async def _load_routed_agent(
         ) from exc
 
 
+async def _append_history(
+    tenant_id: str,
+    company_uuid: Any,
+    body: ChatQueryRequest,
+    request: Request,
+    answer: str,
+    agent_name: str,
+    domain: str,
+    confidence: float | None,
+    fallback: str | None = None,
+) -> None:
+    """Store the turn in the caller's session history (Redis-backed, BUG #22).
+
+    Root-cause fix for the 2026-04-22 review on chat history
+    isolation: the session key was only ``tenant_id:company_id``, so
+    history from agent A leaked into agent B's sidebar when the user
+    switched agents with the same company context. When the caller
+    scopes the query to a specific ``agent_id``, scope the history
+    bucket to it too. The ``agent_id`` suffix is opaque to Redis and
+    costs nothing; callers that don't pass ``agent_id`` keep the old
+    bucket layout.
+    """
+    session_key = _session_key(tenant_id, str(company_uuid), body.agent_id, _session_user_id(request))
+    entries = await _load_session(session_key)
+    now = datetime.now(UTC).isoformat()
+    entries.append({"id": str(_uuid.uuid4()), "role": "user", "text": body.query, "timestamp": now})
+    agent_entry: dict[str, Any] = {
+        "id": str(_uuid.uuid4()),
+        "role": "agent",
+        "text": answer,
+        "agent": agent_name,
+        "domain": domain,
+        "confidence": confidence,
+        "timestamp": now,
+    }
+    if fallback:
+        # The fallback streak is read back from the history on the next query.
+        agent_entry[conversation_fallbacks.FALLBACK_KEY] = fallback
+    entries.append(agent_entry)
+    await _save_session(session_key, entries)
+
+
 @router.post("/chat/query", response_model=ChatQueryResponse)
 @route_meta(
     auth_required=True,
@@ -626,6 +804,9 @@ async def chat_query(
     agent_connector_ids: list[str] = []
     agent_system_prompt = ""
     agent_llm_provider: str | None = None
+    # The agent's own execution limits (core/langgraph/limits.py); the
+    # runner applies them only while AGENTICORG_RUNTIME_LIMITS_ENABLED is on.
+    agent_limits: dict[str, Any] | None = None
     # Ownership of the agent that will run, for the personal-connector guard
     # in _assert_connectors_ready_for_dispatch (bug sheet 2026-09-14 rows 19/30).
     # Unknown agent: shared semantics, so any personal connector is refused.
@@ -643,13 +824,15 @@ async def chat_query(
             raise HTTPException(404, "Agent not found") from None
         tid = _uuid.UUID(tenant_id)
         async with get_tenant_session(tid, company_uuid) as session:
-            agent = (await session.execute(
-                select(Agent).where(
-                    Agent.id == aid,
-                    Agent.tenant_id == tid,
-                    Agent.company_id == company_uuid,
+            agent = (
+                await session.execute(
+                    select(Agent).where(
+                        Agent.id == aid,
+                        Agent.tenant_id == tid,
+                        Agent.company_id == company_uuid,
+                    )
                 )
-            )).scalar_one_or_none()
+            ).scalar_one_or_none()
             if agent is None:
                 raise HTTPException(404, "Agent not found")
             # Domain RBAC for shared agents, owner/admin for personal ones
@@ -670,6 +853,7 @@ async def chat_query(
             agent_llm_provider = _pinned_llm_provider(
                 getattr(agent, "llm_provider", None), getattr(agent, "llm_config", None)
             )
+            agent_limits = execution_limits.declared(agent)
             agent_visibility = agent_ownership_fields(agent)["visibility"]
             agent_owner_user_id = getattr(agent, "owner_user_id", None)
             agent_linked_connector_ids = list(agent_connector_ids)
@@ -701,6 +885,7 @@ async def chat_query(
                 agent_visibility = agent_ownership_fields(routed_agent)["visibility"]
                 agent_owner_user_id = getattr(routed_agent, "owner_user_id", None)
                 agent_linked_connector_ids = list(getattr(routed_agent, "connector_ids", None) or [])
+                agent_limits = execution_limits.declared(routed_agent)
     # Start without a fixed confidence — it gets set from the real
     # agent signal below. Initializing to a constant here was exactly
     # what kept user-visible confidence pinned at 60% on reopen TC_003
@@ -877,6 +1062,55 @@ async def chat_query(
     # runs with none (bug sheet #46, 2026-09-14).
     resolved_tools = list(agent_tools or [])
 
+    # Conversational services (core/conversation/): a banking message is a
+    # dialogue turn (slots, clarification, confirmation) and a confirmed action
+    # runs the bound tool under the grant; any other message goes on to the agent.
+    if conversation_runtime.enabled():
+        handled = await conversation_runtime.chat_turn(
+            tenant_id=tenant_id,
+            company_id=str(company_uuid),
+            user_id=_session_user_id(request),
+            agent_id=agent_id or "",
+            text=body.query,
+            context=conversation_runtime.ExecutionContext(
+                tenant_id=tenant_id,
+                agent_id=agent_id or "",
+                agent_type=str(resolved_agent_type or ""),
+                domain=_DOMAIN_TO_DB_DOMAIN.get(domain, domain),
+                authorized_tools=resolved_tools,
+                connector_config=connector_config,
+                connector_names=connector_names,
+                company_id=str(company_uuid),
+                run_grant=run_grant,
+                bindings=await conversation_runtime.agent_bindings(tenant_id, agent_id or ""),
+            )
+            if agent_id
+            else None,
+        )
+        if handled is not None:
+            await _append_history(
+                tenant_id, company_uuid, body, request, handled["answer"], agent_name, domain, handled["confidence"]
+            )
+            return ChatQueryResponse(
+                answer=handled["answer"],
+                agent=agent_name,
+                confidence=handled["confidence"],
+                domain=domain,
+                tool_calls=handled.get("tool_calls"),
+                conversation={**handled["outcome"], "session_key": handled.get("session_key")},
+            )
+
+    # Conversational services: the recent turns reach the agent as the run's
+    # context, so a follow-up is answered against what was said (CONV-02).
+    run_context: dict[str, Any] = {}
+    context_note: str = ""
+    history_entries: list[dict] = []
+    if conversation_runtime.enabled():
+        history_entries = await _load_session(
+            _session_key(tenant_id, str(company_uuid), body.agent_id, _session_user_id(request))
+        )
+        run_context = conversation_context.context_block(history_entries)
+        context_note = conversation_context.with_context_note("", history_entries).strip()
     # Try to execute via LangGraph if an agent was found in DB
     answer: str | None = None
     if agent_id:
@@ -898,9 +1132,10 @@ async def chat_query(
                         "and filing details already present before asking "
                         "for clarification."
                     )
-                ),
+                )
+                + (f"\n\n{context_note}" if context_note else ""),
                 authorized_tools=resolved_tools,
-                task_input={"action": "query", "inputs": {"query": body.query}, "context": {}},
+                task_input={"action": "query", "inputs": {"query": body.query}, "context": run_context},
                 llm_model="",
                 llm_provider=agent_llm_provider,
                 confidence_floor=0.88,
@@ -909,6 +1144,7 @@ async def chat_query(
                 connector_config=connector_config,
                 connector_names=connector_names,
                 company_id=str(company_uuid),
+                limits=agent_limits,
             )
             # Bug sheet #28 (2026-09-14): every chat turn with a known agent
             # is a task for the cost ledger, even when no tokens were
@@ -930,9 +1166,7 @@ async def chat_query(
                 raw_confidence = lg_result.get("confidence")
                 if isinstance(raw_confidence, (int, float)):
                     confidence = float(raw_confidence)
-                tools_used = bool(
-                    lg_result.get("tool_calls") or lg_result.get("tool_calls_log")
-                )
+                tools_used = bool(lg_result.get("tool_calls") or lg_result.get("tool_calls_log"))
             if hitl_trigger:
                 confidence_for_hitl = (
                     float(confidence)
@@ -994,7 +1228,7 @@ async def chat_query(
     elif answer and not tools_used and confidence is None:
         confidence = 0.75
 
-    # Root-cause fix for TC_004 / Codex 2026-04-22 review: the old
+    # Root-cause fix for TC_004 / the 2026-04-22 review: the old
     # fallback path fabricated a "[AgentName] I've analyzed your query
     # about X..." response with a forced 0.6/0.7 confidence whenever
     # the real agent couldn't produce an answer. That was dishonest —
@@ -1004,6 +1238,20 @@ async def chat_query(
     # this data source" state instead of a phantom response. The
     # confidence drops to the minimum because the system genuinely
     # has no grounded answer.
+    fallback_kind: str | None = None
+    if conversation_runtime.enabled():
+        # A graceful fallback (CONV-06): every run is classified with its
+        # computed confidence before the answer is accepted, so an empty,
+        # failed or low-confidence answer is held back. The streak of
+        # fallbacks is carried across queries through the session history,
+        # so the second in a row offers to connect a person.
+        fallback_kind = conversation_fallbacks.hold_back(
+            lg_result if agent_id else None, answer=answer, confidence=confidence, hitl=bool(hitl_trigger)
+        )
+        if fallback_kind is not None:
+            consecutive = conversation_fallbacks.streak(history_entries) + 1
+            answer = conversation_fallbacks.message(fallback_kind, consecutive=consecutive)
+            confidence = 0.0
     if not answer:
         answer = (
             "No agent was able to answer that query. "
@@ -1015,34 +1263,9 @@ async def chat_query(
         )
         confidence = 0.0
 
-    # Store in session history (Redis-backed, BUG #22).
-    #
-    # Root-cause fix for Codex 2026-04-22 review on chat history
-    # isolation: the session key was only ``tenant_id:company_id``, so
-    # history from agent A leaked into agent B's sidebar when the user
-    # switched agents with the same company context. When the caller
-    # scopes the query to a specific ``agent_id``, scope the history
-    # bucket to it too. The ``agent_id`` suffix is opaque to Redis and
-    # costs nothing; callers that don't pass ``agent_id`` keep the old
-    # bucket layout.
-    session_key = _session_key(tenant_id, str(company_uuid), body.agent_id, _session_user_id(request))
-    entries = await _load_session(session_key)
-    now = datetime.now(UTC).isoformat()
-    entries.append(
-        {"id": str(_uuid.uuid4()), "role": "user", "text": body.query, "timestamp": now}
+    await _append_history(
+        tenant_id, company_uuid, body, request, answer, agent_name, domain, confidence, fallback=fallback_kind
     )
-    entries.append(
-        {
-            "id": str(_uuid.uuid4()),
-            "role": "agent",
-            "text": answer,
-            "agent": agent_name,
-            "domain": domain,
-            "confidence": confidence,
-            "timestamp": now,
-        }
-    )
-    await _save_session(session_key, entries)
 
     return ChatQueryResponse(
         answer=answer,
@@ -1070,7 +1293,7 @@ async def chat_history(
 ):
     """Return chat history for the current session (Redis-backed).
 
-    Root-cause fix for Codex 2026-04-22 chat history isolation gap:
+    Root-cause fix for the 2026-04-22 review chat history isolation gap:
     the session key was just ``tenant_id:company_id``, so switching
     between agents with the same company loaded the wrong history. The
     key now includes ``agent_id`` when provided, matching the ``POST

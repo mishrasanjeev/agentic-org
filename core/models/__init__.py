@@ -17,6 +17,9 @@ from core.models.agent import AgentTeam as AgentTeam
 from core.models.agent import AgentTeamMember as AgentTeamMember
 from core.models.agent import AgentVersion as AgentVersion
 from core.models.agent import ShadowComparison as ShadowComparison
+from core.models.agent_debug_session import AgentDebugSession as AgentDebugSession
+from core.models.agent_memory import AgentMemory as AgentMemory
+from core.models.agent_rating import AgentRating as AgentRating
 from core.models.agent_registry import AgentRegistryEntry as AgentRegistryEntry
 from core.models.agent_registry import AgentRegistryEvent as AgentRegistryEvent
 from core.models.agent_task_result import AgentTaskResult as AgentTaskResult
@@ -69,6 +72,8 @@ from core.models.company import Company as Company
 from core.models.compliance_deadline import ComplianceDeadline as ComplianceDeadline
 from core.models.connector import Connector as Connector
 from core.models.connector_config import ConnectorConfig as ConnectorConfig
+from core.models.content_draft import ContentDraft as ContentDraft
+from core.models.conversation_session import ConversationSession as ConversationSession
 from core.models.delegation import UserDelegation as UserDelegation
 from core.models.document import Document as Document
 from core.models.dsar import DSARRequestRecord as DSARRequestRecord
@@ -79,6 +84,8 @@ from core.models.feature_flag import FeatureFlag as FeatureFlag
 from core.models.feed import FeedEvent as FeedEvent
 from core.models.feedback import AgentFeedback as AgentFeedback
 from core.models.filing_approval import FilingApproval as FilingApproval
+from core.models.finops_ledger import FinopsCostLedger as FinopsCostLedger
+from core.models.finops_threshold import FinopsThreshold as FinopsThreshold
 from core.models.governance_config import GovernanceConfig as GovernanceConfig
 from core.models.governed_case import GovernedCase as GovernedCase
 from core.models.governed_case import GovernedCaseTransition as GovernedCaseTransition
@@ -92,6 +99,7 @@ from core.models.kpi_cache import KPICache as KPICache
 from core.models.lead_pipeline import EmailSequence as EmailSequence
 from core.models.lead_pipeline import LeadPipeline as LeadPipeline
 from core.models.model_access_policy import ModelAccessPolicy as ModelAccessPolicy
+from core.models.model_card import ModelCard as ModelCard
 from core.models.model_gateway_record import ModelGatewayRecord as ModelGatewayRecord
 from core.models.model_limit import ModelLimit as ModelLimit
 from core.models.model_routing_policy import ModelRoutingPolicy as ModelRoutingPolicy
@@ -123,6 +131,7 @@ from core.models.tenant import Tenant as Tenant
 from core.models.tenant_ai_credential import TenantAICredential as TenantAICredential
 from core.models.tenant_ai_setting import TenantAISetting as TenantAISetting
 from core.models.tool_call import ToolCall as ToolCall
+from core.models.tool_registration import ToolRegistration as ToolRegistration
 from core.models.user import User as User
 from core.models.voice_call import VoiceCall as VoiceCall
 from core.models.weekly_report_pilot_proof import (

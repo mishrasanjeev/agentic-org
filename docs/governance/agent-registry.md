@@ -152,10 +152,44 @@ triggers. Their names describe a potential daily process, not an enabled schedul
 Installation does not run tools, provision credentials, approve an agent, or create
 a payment. Existing connector, runtime, shadow-mode and human-review controls apply.
 
+## Dependency graph
+
+`GET /agents/{id}/dependencies` returns the agent's dependency graph as nodes and edges
+(`core/agent_registry/dependencies.py`): the model it calls and its fallback, its prompt (the
+template reference and, where it has one, its own text as a hash), its tools and the connectors
+behind them (a `connector:tool` name points at its connector; the knowledge base search points at
+the tenant's knowledge base for the agent's domain), the policies that govern it (the guardrail
+rules that apply by agent, use case, risk tier or to every agent; its review condition; its
+output schema; its evaluation gate's dataset), the agent it was cloned from, the agent its traffic
+split sends runs to, and the teams it belongs to. Labels are names and references, never prompt
+text or rule reasons; a related agent the caller may not see is named by its id only. The graph
+is assembled from configuration, not from runs, and has no console view yet.
+
+## Ratings, reliability and certification
+
+The card carries three more sections (`core/agent_registry/reliability.py`), and
+`GET /agents/{id}/reliability?days=` returns the first two for any window up to a year:
+
+- **reliability**: over the window (30 days by default), the agent's runs by status, its
+  completion, failure and human-review rates, average and 95th-percentile duration, tokens and
+  cost per run, average confidence, the feedback recorded against it by type, and its shadow
+  accuracy. Counts and sums over the task results the agent already leaves; nothing is read from
+  a run's content.
+- **rating**: the average and the count of user ratings. `POST /agents/{id}/rating` records one
+  score from 1 to 5 with a short comment per user and agent; a new rating by the same person
+  replaces the old. Anyone who may see the agent may rate it; an API key cannot. The card never
+  says who rated.
+- **certification**: whether the registry has approved the agent (`approved` or `published`),
+  the evaluation gate verdict, and the tenant's attestation for the agent's model provider
+  (region, no training on tenant data, valid or expired). Grantex trust-registry attestations and
+  passports are not attached; the card says so rather than implying a certification it cannot
+  show.
+
 ## Storage
 
-`agent_registry` (one row per agent) and `agent_registry_events`, both tenant-scoped under
-row-level security (`v6z48_agent_registry`); both are removed with the agent.
+`agent_registry` (one row per agent) and `agent_registry_events` (`v6z48_agent_registry`), and
+`agent_ratings` (one row per user and agent, `v6z49_agent_ratings`), all tenant-scoped under
+row-level security and removed with the agent.
 
 `v6z49_registry_from_state` adds the event source-state constraint even when a
 database already applied v6z48. It is repeatable and never rewrites audit rows.
@@ -170,6 +204,8 @@ Downgrading v6z49 removes only this check; it does not remove events or registry
   name where an agent stands in the lifecycle, not separate infrastructure.
 - **A split is between two agents.** Splitting traffic between two stored versions of one agent
   is not available; clone the agent to compare versions.
-- **No dependency graph or ratings.**
+- **No console view of the dependency graph, the reliability metrics or the ratings.**
+- **No trust-registry attestation on the card.** Certification is what the registry, the
+  evaluation gate and the provider attestation can say.
 - **The card, the lifecycle and the split are read and changed through the API**; the console
   has the catalogue only.

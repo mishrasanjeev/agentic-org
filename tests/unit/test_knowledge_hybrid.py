@@ -48,9 +48,7 @@ class _Session:
         sql = str(stmt)
         self.calls.append((sql, params))
         channel = (
-            "vector" if "CAST(:vector AS vector)" in sql
-            else "lexical" if "websearch_to_tsquery" in sql
-            else "keyword"
+            "vector" if "CAST(:vector AS vector)" in sql else "lexical" if "websearch_to_tsquery" in sql else "keyword"
         )
         if channel in self.errors:
             raise SQLAlchemyError(f"{channel} unavailable")
@@ -96,7 +94,7 @@ async def test_hybrid_queries_bind_tenant_and_user_text(scoped_session, monkeypa
         assert params["tid"] == str(tenant)
     assert session.calls[0][1]["query"] == query
     assert session.calls[1][1]["query"] == query
-    assert "strpos(lower(title), lower(:query))" in session.calls[1][0]
+    assert "strpos(lower(d.title), lower(:query))" in session.calls[1][0]
     assert session.calls[2][1]["vector"] == "[0.100000,0.200000,0.300000]"
 
 
@@ -206,8 +204,11 @@ async def test_search_response_contract_is_unchanged(monkeypatch) -> None:
     monkeypatch.setattr(knowledge, "_native_semantic_search", native)
     monkeypatch.setattr(knowledge, "_guard_results", guard)
     response = await knowledge._search_knowledge(knowledge.SearchRequest(query="alpha"), str(uuid.uuid4()))
+    # The three original fields are unchanged; ``citation`` was added with the retrieval package and is
+    # None for a source that keeps no provenance.
     assert response.model_dump() == {
-        "results": [{"chunk_text": "alpha", "score": 0.5, "document_name": "Synthetic"}]
+        "results": [{"chunk_text": "alpha", "score": 0.5, "document_name": "Synthetic", "citation": None}],
+        "trace": None,
     }
 
 

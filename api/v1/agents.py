@@ -39,8 +39,13 @@ from core.commerce.sales_guardrails import GRANTEX_COMMERCE_DEFAULT_TOOLS
 from core.database import get_tenant_session
 from core.evals import gates as eval_gates
 from core.file_ingestion.limits import cleanup_tempfile, stream_to_tempfile
+from core.finops import attribution as cost_attribution
+from core.finops import thresholds as finops_thresholds
+from core.governance import risk_tiers
 from core.governance.agent_status import refusal_for as agent_status_refusal
 from core.governance.operator_override import check as check_operator_override
+from core.langgraph import debugger as run_debugger
+from core.langgraph import limits as execution_limits
 from core.models.agent import Agent, AgentCostLedger, AgentLifecycleEvent, AgentVersion
 from core.models.approval_policy import ApprovalPolicy
 from core.models.audit import AuditLog
@@ -75,6 +80,7 @@ from core.schemas.api import (
     AgentCreate,
     AgentEvalGateIn,
     AgentFeedbackSubmit,
+    AgentLimitsIn,
     AgentOutputSchemaIn,
     AgentTrafficSplitIn,
     AgentUpdate,
@@ -694,6 +700,48 @@ def _shadow_metric_update_decision(
     }
 
 
+def _run_resume_spec(
+    agent_config: dict[str, Any],
+    review_learning: dict[str, Any],
+    authorized_tools: Any,
+    connector_names_for_tools: Any,
+) -> dict[str, Any]:
+    """The graph parameters of a run, so a resume (after approval, or a debug step) re-enters it as it ran.
+
+    Server-only: stripped from every approval API response and never returned
+    by the console. The caller's grant marker is added by the caller (PRD F-1).
+    """
+    return {
+        # Same expressions as the langgraph_run call in run_agent_task.
+        "confidence_floor": float(review_learning["effective_confidence_floor"]),
+        "hitl_condition": (
+            "" if review_learning["confidence_condition_suppressed"] else agent_config.get("hitl_condition", "")
+        ),
+        "authorized_tools": list(authorized_tools or []),
+        "connector_names": connector_names_for_tools,
+        "llm_model": agent_config.get("llm_model", ""),
+        "llm_provider": _pinned_llm_provider(agent_config.get("llm_provider"), agent_config.get("llm_config")),
+        "company_id": str(agent_config["company_id"]) if agent_config.get("company_id") else None,
+        "domain": agent_config.get("domain", "ops"),
+    }
+
+
+def _debug_resume_spec(agent_config: dict[str, Any], connector_ids: Any) -> dict[str, Any]:
+    """What a debug step needs beyond the approval resume spec to re-enter the run under its own policies.
+
+    The output schema, inline schema and execution limits are rebuilt into
+    the graph on every step. Connectors are kept as server-side ids and their
+    credentials are resolved again at step time; nothing decrypted is stored.
+    """
+    config = agent_config.get("config") or {}
+    return {
+        "output_schema": agent_config.get("output_schema"),
+        "output_schema_json": config.get(prompt_output_schema.INLINE_KEY),
+        "limits": config.get(execution_limits.LIMITS_KEY),
+        "connector_ids": [str(cid) for cid in (connector_ids or [])],
+    }
+
+
 def _user_uuid_from_claims(user: dict | None) -> _uuid.UUID | None:
     """Extract a user UUID from JWT claims for audit-log ``edited_by``.
 
@@ -1019,6 +1067,7 @@ async def _record_cost_ledger(
     perf: dict,
     *,
     count_zero_usage_task: bool = False,
+    count_task: bool = True,
 ) -> bool:
     """Upsert today's ``AgentCostLedger`` row (unique on tenant+agent+date).
 
@@ -1030,6 +1079,8 @@ async def _record_cost_ledger(
     to surface that (run flags ``budget_tracking_failed``, chat continues).
     With ``count_zero_usage_task`` a turn that reported no tokens still
     counts as a task; otherwise zero-usage runs write nothing (legacy).
+    ``count_task=False`` adds usage to a task already counted (a debug step
+    of a run paused at a breakpoint).
     """
     try:
         perf = perf if isinstance(perf, dict) else {}
@@ -1055,7 +1106,7 @@ async def _record_cost_ledger(
             if ledger:
                 ledger.token_count = (ledger.token_count or 0) + tokens_used
                 ledger.cost_usd = float(ledger.cost_usd or 0) + cost_usd
-                ledger.task_count = (ledger.task_count or 0) + 1
+                ledger.task_count = (ledger.task_count or 0) + (1 if count_task else 0)
             else:
                 session.add(
                     AgentCostLedger(
@@ -1063,10 +1114,14 @@ async def _record_cost_ledger(
                         tenant_id=tid,
                         cost_usd=cost_usd,
                         token_count=tokens_used,
-                        task_count=1,
+                        task_count=1 if count_task else 0,
                         period_date=today,
                     )
                 )
+            # FinOps: the same cost, attributed (core/finops/attribution.py).
+            bound = cost_attribution.current() if cost_attribution.enabled() else None
+            if bound is not None:
+                await cost_attribution.ledger_add(session, tid, bound, tokens=tokens_used, cost_usd=cost_usd)
     except (OSError, RuntimeError, SQLAlchemyError, TypeError, ValueError) as exc:
         logger.error(
             "cost_ledger_write_failed",
@@ -1083,6 +1138,51 @@ async def _record_cost_ledger(
 # MCP, and A2A which previously called langgraph_run with no
 # connector_config and reproduced the same shadow-accuracy 40%.
 # ──────────────────────────────────────────────────────────────────
+
+
+async def _monthly_budget_refusal(tid: _uuid.UUID, agent_id: _uuid.UUID, cost_controls: Any) -> dict | None:
+    """The ``budget_exceeded`` result when the agent's monthly cost cap is spent, else ``None``.
+
+    The debugging console's steps check the cap a run checks (the run route
+    keeps its own copy of this check, with the same lock and window).
+    """
+    monthly_cap = cost_controls.get("monthly_cost_cap_usd", 0) if isinstance(cost_controls, dict) else 0
+    if not monthly_cap or monthly_cap <= 0:
+        return None
+    # P3.1: Use a Postgres advisory lock keyed on agent_id to serialize
+    # concurrent budget checks. Without this, two requests could both see
+    # spend < cap and both proceed, causing overspend.
+    async with get_tenant_session(tid) as session:
+        from sqlalchemy import func as sqlfunc
+        from sqlalchemy import text as sqltext
+
+        # Acquire advisory lock for this agent (auto-released at txn end)
+        # pg_advisory_xact_lock(int8) — use hash of UUID as the key
+        lock_key = abs(hash(str(agent_id))) % (2**31)
+        await session.execute(sqltext("SELECT pg_advisory_xact_lock(:k)"), {"k": lock_key})
+
+        month_start = datetime.now(UTC).replace(day=1, hour=0, minute=0, second=0, microsecond=0, tzinfo=None)
+        spent_result = await session.execute(
+            select(sqlfunc.coalesce(sqlfunc.sum(AgentCostLedger.cost_usd), 0)).where(
+                AgentCostLedger.agent_id == agent_id,
+                AgentCostLedger.period_date >= month_start,
+            )
+        )
+        monthly_spent = float(spent_result.scalar() or 0)
+        if monthly_spent >= monthly_cap:
+            return {
+                "task_id": f"msg_{_uuid.uuid4().hex[:12]}",
+                "agent_id": str(agent_id),
+                "status": "budget_exceeded",
+                "error": {
+                    "code": "E1008",
+                    "message": f"Monthly budget exceeded: ${monthly_spent:.2f} / ${monthly_cap:.2f}",
+                },
+                "output": {},
+                "confidence": 0,
+                "reasoning_trace": [f"Budget check: ${monthly_spent:.2f} >= cap ${monthly_cap:.2f}"],
+            }
+    return None
 
 
 async def _resolve_agent_connector_ids_for_type(
@@ -2994,6 +3094,13 @@ async def update_agent(
                 )
         if isinstance(update_data.get("hitl_policy"), dict):
             _enforce_hitl_condition_on_save(update_data["hitl_policy"].get("condition"), surface="agents_update")
+        if risk_tiers.enabled():
+            from core.agent_registry import lifecycle as registry_lifecycle
+
+            try:
+                risk_tiers.check_update(await registry_lifecycle.get_entry(session, tid, agent.id), update_data)
+            except risk_tiers.TierError as exc:
+                raise _tier_refused(exc) from None
         if "domain" in update_data:
             check_agent_domain_change(agent, update_data["domain"], effective_caller)
         # Rows 19/22: only an admin may change visibility; 'tenant' clears the
@@ -3402,6 +3509,22 @@ async def run_agent(
         dispatch_connector_ids = _required_connector_ids_for_agent(agent_row)
         run_agent_visibility = str(getattr(agent_row, "visibility", None) or AGENT_VISIBILITY_TENANT)
         run_agent_owner_user_id = getattr(agent_row, "owner_user_id", None)
+        # FinOps: the run's attribution (use case, application, business unit, department, cost centre).
+        # While thresholds are enforced the labels are server-owned (the agent's configuration, type and
+        # domain): a caller's use_case or business_unit would let it relabel the run, and its ledger row,
+        # out of a scoped throttle or suspension.
+        attribution_token = None
+        if cost_attribution.enabled():
+            caller_labels = not finops_thresholds.enabled()
+            attribution_token = cost_attribution.bind(
+                await cost_attribution.resolve_for_agent(
+                    session,
+                    agent_row,
+                    use_case=payload.get("use_case") if caller_labels else None,
+                    application="agents",
+                    business_unit=payload.get("business_unit") if caller_labels else None,
+                )
+            )
 
     # 2. Prepare execution config
     authorized_tools = agent_config.get("authorized_tools", []) or []
@@ -3603,6 +3726,19 @@ async def run_agent(
                     "reasoning_trace": [f"Budget check: ${monthly_spent:.2f} >= cap ${monthly_cap:.2f}"],
                 }
 
+    # 5a'. FinOps thresholds: a breached organisation, application, use-case or business-unit
+    # threshold alerts, throttles (a short delay) or suspends (refuses) the run.
+    finops_action = None
+    if finops_thresholds.enabled():
+        async with get_tenant_session(tid) as session:
+            decision = await finops_thresholds.check_run(session, tid, cost_attribution.current())
+        if decision.action == "suspend":
+            if attribution_token is not None:
+                cost_attribution.reset(attribution_token)
+            return finops_thresholds.refusal(decision, agent_id=str(agent_id))
+        if decision.action == "throttle":
+            await asyncio.sleep(decision.delay_seconds)
+        finops_action = decision.as_dict() if decision.action else None
     # 5b. Execute via LangGraph runner
     from core.langgraph.checkpointer import CheckpointerUnavailableError
     from core.langgraph.runner import run_agent as langgraph_run
@@ -3858,6 +3994,10 @@ async def run_agent(
                 # Structured output: the schema the agent declares (its own, or a registered name).
                 output_schema=agent_config.get("output_schema"),
                 output_schema_json=(agent_config.get("config") or {}).get(prompt_output_schema.INLINE_KEY),
+                # Execution limits and the loop rule the agent declares (core/langgraph/limits.py).
+                limits=(agent_config.get("config") or {}).get(execution_limits.LIMITS_KEY),
+                # Breakpoints (core/langgraph/debugger.py): nodes the run pauses before, while the console is on.
+                breakpoints=run_debugger.breakpoints_for_run(agent_config.get("config") or {}),
             )
     except CheckpointerUnavailableError as exc:
         # Postgres checkpoint store configured but unusable: refuse the run
@@ -3942,10 +4082,31 @@ async def run_agent(
                 "runtime": "langgraph",
                 "has_hitl": bool(hitl_trigger),
                 **({"grant_denial": lg_result["grant_denial"]} if lg_result.get("grant_denial") else {}),
+                **({"limit": lg_result["limit"]} if lg_result.get("limit") else {}),
             },
         )
         session.add(audit_entry)
 
+    # 6a. A run paused at a breakpoint: record the debug session the console steps (api/v1/agent_debug.py).
+    if task_status == run_debugger.STATUS_PAUSED and lg_result.get("thread_id") == run_thread_id:
+        try:
+            await run_debugger.open_session(
+                tid,
+                agent_id,
+                thread_id=run_thread_id,
+                paused_before=list(lg_result.get("paused_before") or []),
+                breakpoints=run_debugger.declared({"config": agent_config.get("config") or {}}),
+                spec={
+                    **_run_resume_spec(agent_config, review_learning, authorized_tools, connector_names_for_tools),
+                    # Output schema, limits and connector ids (credentials are resolved again per step).
+                    **_debug_resume_spec(agent_config, raw_connector_ids),
+                    # A run bound to a caller token stays bound when stepped (PRD F-1).
+                    **({CALLER_GRANT_KEY: run_caller.marker()} if run_caller.marker() is not None else {}),
+                },
+                created_by=effective_caller.user_id,
+            )
+        except (RuntimeError, TypeError, ValueError, OSError) as exc:
+            logger.warning("agent_debug_session_record_failed", agent_id=str(agent_id), error_type=type(exc).__name__)
     # 6b. Create HITL queue entry if HITL was triggered
     if hitl_trigger:
         # The runner echoes the thread only when the graph is paused on it.
@@ -3959,19 +4120,9 @@ async def run_agent(
         if paused_thread_id is not None:
             from core.approvals.agent_run_resume import RESUME_SPEC_KEY
 
-            resume_spec[RESUME_SPEC_KEY] = {
-                # Same expressions as the langgraph_run call above.
-                "confidence_floor": float(review_learning["effective_confidence_floor"]),
-                "hitl_condition": (
-                    "" if review_learning["confidence_condition_suppressed"] else agent_config.get("hitl_condition", "")
-                ),
-                "authorized_tools": list(authorized_tools or []),
-                "connector_names": connector_names_for_tools,
-                "llm_model": agent_config.get("llm_model", ""),
-                "llm_provider": _pinned_llm_provider(agent_config.get("llm_provider"), agent_config.get("llm_config")),
-                "company_id": str(agent_config["company_id"]) if agent_config.get("company_id") else None,
-                "domain": agent_config.get("domain", "ops"),
-            }
+            resume_spec[RESUME_SPEC_KEY] = _run_resume_spec(
+                agent_config, review_learning, authorized_tools, connector_names_for_tools
+            )
             # A run bound to a caller token stays bound after approval: the
             # resume has no token, so its tool calls are refused (PRD F-1).
             caller_marker = run_caller.marker()
@@ -4086,7 +4237,10 @@ async def run_agent(
             await session.commit()
 
     # 6d. Record cost in ledger (upsert — unique on tenant+agent+date)
-    if not await _record_cost_ledger(tid, agent_id, perf):
+    recorded_cost = await _record_cost_ledger(tid, agent_id, perf)
+    if attribution_token is not None:
+        cost_attribution.reset(attribution_token)
+    if not recorded_cost:
         # AGENT-BUDGET-014: Cost ledger failures must not be silently ignored.
         # Flag the result so downstream consumers (HITL, dashboards) know
         # that budget tracking is unreliable for this run.
@@ -4103,6 +4257,7 @@ async def run_agent(
         # The agent asked for and, when a traffic split sent the run elsewhere, why.
         "requested_agent_id": str(requested_agent_id),
         "served_by": served_by_split,
+        "finops_action": finops_action,
         "agent_type": None,  # this endpoint invokes by id; type path is /a2a/tasks
         "correlation_id": correlation_id,
         "trace_id": tracing.current_trace_id() or None,
@@ -4125,6 +4280,13 @@ async def run_agent(
     if lg_result.get("grant_denial"):
         # PRD F-1 deny: the reason code for the refused tool call.
         response["grant_denial"] = lg_result["grant_denial"]
+    if lg_result.get("limit"):
+        # An execution limit or the loop rule stopped the run: the reason and the detail.
+        response["limit"] = lg_result["limit"]
+    if task_status == run_debugger.STATUS_PAUSED:
+        # Paused at a breakpoint: the console steps the thread (api/v1/agent_debug.py).
+        response["thread_id"] = lg_result.get("thread_id")
+        response["paused_before"] = list(lg_result.get("paused_before") or [])
     if incoming_action == "shadow_sample":
         response["shadow_metrics"] = shadow_metrics
     return response
@@ -4268,6 +4430,11 @@ async def resume_agent(
                 await registry_approval.check_promotion(session, tid, agent)
             except registry_approval.ApprovalError as exc:
                 raise _approval_refused(exc) from None
+            # Risk tier: the controls the tier forces, whatever the switches above say.
+            try:
+                await risk_tiers.check_promotion(session, tid, agent)
+            except risk_tiers.TierError as exc:
+                raise _tier_refused(exc) from None
             async with get_tenant_session(tid, agent.company_id) as connector_session:
                 await _assert_connectors_ready_for_activation(
                     connector_session,
@@ -4347,6 +4514,19 @@ async def set_agent_output_schema(
         "output_schema": schema,
         "enforced": prompt_output_schema.enabled(),
     }
+
+
+def _tier_refused(exc: risk_tiers.TierError) -> HTTPException:
+    return HTTPException(
+        exc.status,
+        detail={
+            "error": risk_tiers.TRIGGER,
+            "code": exc.code,
+            "message": exc.message,
+            "tier": exc.tier,
+            "requirement": exc.requirement,
+        },
+    )
 
 
 def _approval_refused(exc: registry_approval.ApprovalError) -> HTTPException:
@@ -4449,6 +4629,95 @@ def _gate_refused(exc: eval_gates.GateError) -> HTTPException:
     return HTTPException(409, detail=detail)
 
 
+def _limits_refused(exc: execution_limits.LimitError) -> HTTPException:
+    return HTTPException(422, detail={"error": "runtime_limits", "message": str(exc)})
+
+
+# ── PUT /agents/{id}/limits ───────────────────────────────────────────────────
+@router.put("/agents/{agent_id}/limits")
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="agents.write",
+    rate_limit="agent-write",
+    idempotency="idempotent-full-replace",
+    audit_event="agents.limits.set",
+)
+async def set_agent_limits(
+    agent_id: UUID,
+    body: AgentLimitsIn,
+    tenant_id: str = Depends(get_current_tenant),
+    user_domains: list[str] | None = Depends(get_user_domains),
+    caller: Caller | None = Depends(caller_from_request),
+):
+    """Give an agent its execution limits (steps, duration, tool calls, loop rule), or remove them.
+
+    They are enforced while ``AGENTICORG_RUNTIME_LIMITS_ENABLED`` is on, bounded by the platform's maxima.
+    """
+    tid = _uuid.UUID(tenant_id)
+    parsed = None
+    if body.limits is not None:
+        try:
+            parsed = execution_limits.parse_limits(body.limits)
+        except execution_limits.LimitError as exc:
+            raise _limits_refused(exc) from None
+    async with get_tenant_session(tid) as session:
+        result = await session.execute(
+            select(Agent).where(Agent.id == agent_id, Agent.tenant_id == tid).with_for_update()
+        )
+        agent = result.scalar_one_or_none()
+        if not agent:
+            raise HTTPException(404, "Agent not found")
+        require_agent_mutable(agent, _effective_caller(caller, user_domains))
+        config = dict(agent.config or {})
+        if parsed is None:
+            config.pop(execution_limits.LIMITS_KEY, None)
+        else:
+            config[execution_limits.LIMITS_KEY] = parsed
+        agent.config = config
+    return {
+        "id": str(agent_id),
+        "limits": parsed,
+        "effective": execution_limits.effective(parsed).to_dict(),
+        "platform": execution_limits.platform().to_dict(),
+        "enforced": execution_limits.enabled(),
+    }
+
+
+# ── GET /agents/{id}/limits ───────────────────────────────────────────────────
+@router.get("/agents/{agent_id}/limits")
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="agents.read",
+    rate_limit="standard",
+    idempotency="read-only",
+    audit_event="agents.limits.read",
+)
+async def get_agent_limits(
+    agent_id: UUID,
+    tenant_id: str = Depends(get_current_tenant),
+    user_domains: list[str] | None = Depends(get_user_domains),
+    caller: Caller | None = Depends(caller_from_request),
+):
+    """An agent's declared limits, the limits a run is held to, the platform's maxima and whether they are enforced."""
+    tid = _uuid.UUID(tenant_id)
+    async with get_tenant_session(tid) as session:
+        result = await session.execute(select(Agent).where(Agent.id == agent_id, Agent.tenant_id == tid))
+        agent = result.scalar_one_or_none()
+        if not agent:
+            raise HTTPException(404, "Agent not found")
+        require_agent_visible(agent, _effective_caller(caller, user_domains))
+        declared = execution_limits.declared(agent)
+    return {
+        "id": str(agent_id),
+        "limits": declared,
+        "effective": execution_limits.effective(declared).to_dict(),
+        "platform": execution_limits.platform().to_dict(),
+        "enforced": execution_limits.enabled(),
+    }
+
+
 # ── PUT /agents/{id}/eval-gate ────────────────────────────────────────────────
 @router.put("/agents/{agent_id}/eval-gate")
 @route_meta(
@@ -4488,6 +4757,13 @@ async def set_agent_eval_gate(
         if not agent:
             raise HTTPException(404, "Agent not found")
         require_agent_mutable(agent, _effective_caller(caller, user_domains))
+        if risk_tiers.enabled():
+            from core.agent_registry import lifecycle as registry_lifecycle
+
+            try:
+                risk_tiers.check_gate_removal(await registry_lifecycle.get_entry(session, tid, agent.id), gate)
+            except risk_tiers.TierError as exc:
+                raise _tier_refused(exc) from None
         if gate is not None:
             try:
                 await eval_gates.datasets.get_version(session, tid, _uuid.UUID(gate["dataset_id"]), gate["version"])
@@ -4646,6 +4922,11 @@ async def promote_agent(
                 await registry_approval.check_promotion(session, tid, agent)
             except registry_approval.ApprovalError as exc:
                 raise _approval_refused(exc) from None
+            # Risk tier: the controls the tier forces, whatever the switches above say.
+            try:
+                await risk_tiers.check_promotion(session, tid, agent)
+            except risk_tiers.TierError as exc:
+                raise _tier_refused(exc) from None
         old_status = agent.status
         old_version = agent.version or "1.0.0"
         new_version = _next_agent_version(old_version)

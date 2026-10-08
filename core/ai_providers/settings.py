@@ -44,6 +44,8 @@ class EffectiveAISetting:
     chunk_overlap: int | None
     ai_fallback_policy: str
     source: str
+    # How uploads are chunked (core/rag/chunking.py): sentence, paragraph or heading.
+    chunk_strategy: str = "sentence"
 
 
 _PLATFORM_DEFAULTS = EffectiveAISetting(
@@ -161,6 +163,7 @@ async def get_effective_ai_setting(
             chunk_overlap=row.chunk_overlap or _PLATFORM_DEFAULTS.chunk_overlap,
             ai_fallback_policy=row.ai_fallback_policy or "allow",
             source="tenant",
+            chunk_strategy=getattr(row, "chunk_strategy", None) or "sentence",
         )
 
     _store_cache(key, effective)

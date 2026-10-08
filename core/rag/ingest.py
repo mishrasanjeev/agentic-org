@@ -30,6 +30,7 @@ from typing import Any
 import structlog
 from sqlalchemy import text as sqltext
 
+from core.rag import chunking, entities
 from core.rag.extractors import (
     ExtractedContent,
     ExtractedSpan,
@@ -138,6 +139,26 @@ async def _resolve_embedding_profile(
     )
 
 
+def _document_domain(metadata: dict[str, Any] | None) -> str | None:
+    value = (metadata or {}).get("domain")
+    if not isinstance(value, str) or not value.strip():
+        return None
+    return value.strip().lower()[:50]
+
+
+async def _resolve_chunk_plan(tenant_id: _uuid.UUID | str | None) -> chunking.ChunkPlan:
+    """The tenant's chunking strategy and size band; an unreadable setting chunks as before."""
+    from core.ai_providers import get_effective_ai_setting
+
+    try:
+        effective = await get_effective_ai_setting(tenant_id)
+    # enterprise-gate: broad-except-ok reason=chunk-plan-read-failure-keeps-the-default-strategy-logged
+    except Exception as exc:
+        logger.warning("rag_chunk_plan_fallback", error=str(exc))
+        return chunking.ChunkPlan()
+    return chunking.ChunkPlan.from_settings(getattr(effective, "chunk_strategy", None), effective.chunk_size)
+
+
 async def _embed_chunks(texts: list[str], model: str | None = None) -> list[list[float]]:
     """Batch-embed via ``core.embeddings`` without blocking the event loop.
 
@@ -234,7 +255,10 @@ async def ingest_document(
         )
 
     # 2. Chunk with provenance
-    chunks = _chunk_spans(content.spans)
+    plan = await _resolve_chunk_plan(tenant_id)
+    # The domain the upload named, or None for a document shared with the tenant (core/rag/access.py).
+    document_domain = _document_domain(metadata)
+    chunks = chunking.chunk(content.spans, plan)
     if not chunks:
         return IngestResult(
             document_id="",
@@ -307,17 +331,18 @@ async def ingest_document(
                     "   file_type, mime_type, embedding_model, "
                     "   embedding_dimensions, token_count, "
                     "   source_object_id, source_object_type, "
-                    f"   status, {target_column}, created_at) "
+                    f"   status, {target_column}, domain, created_at) "
                     "VALUES "
                     "  (gen_random_uuid(), :tid, :title, :content, "
                     "   :category, :source, 'rag', :mime_type, "
                     "   :embedding_model, :embedding_dims, :token_count, "
                     "   :src_obj_id, :src_obj_type, 'ready', "
-                    "   CAST(:vector AS vector), now()) "
+                    "   CAST(:vector AS vector), :domain, now()) "
                     "ON CONFLICT DO NOTHING"
                 ),
                 {
                     "tid": str(tid),
+                    "domain": document_domain,
                     "title": chunk_title[:480],
                     "content": chunk_text[:4000],
                     "category": object_type,
@@ -333,15 +358,22 @@ async def ingest_document(
             )
             # Per-chunk provenance row (knowledge_chunk_sources) so
             # retrieval can surface "page 42 of invoice.pdf".
-            if span.page or span.sheet or span.cell_range or span.frame_timestamp_s is not None:
+            if (
+                span.page
+                or span.sheet
+                or span.cell_range
+                or span.frame_timestamp_s is not None
+                or span.paragraph is not None
+                or span.heading
+            ):
                 await session.execute(
                     sqltext(
                         "INSERT INTO knowledge_chunk_sources "
                         "  (id, tenant_id, chunk_source, page, sheet, "
-                        "   cell_range, frame_timestamp_s, created_at) "
+                        "   cell_range, frame_timestamp_s, paragraph, heading, created_at) "
                         "VALUES "
                         "  (gen_random_uuid(), :tid, :source, :page, :sheet, "
-                        "   :cell_range, :frame_ts, now())"
+                        "   :cell_range, :frame_ts, :paragraph, :heading, now())"
                     ),
                     {
                         "tid": str(tid),
@@ -350,8 +382,13 @@ async def ingest_document(
                         "sheet": (span.sheet or "")[:64],
                         "cell_range": (span.cell_range or "")[:128],
                         "frame_ts": span.frame_timestamp_s,
+                        "paragraph": span.paragraph,
+                        "heading": (span.heading or "")[:200] or None,
                     },
                 )
+            # Graph retrieval: the entities this chunk mentions (core/rag/entities.py).
+            if entities.enabled():
+                await entities.index_chunk(session, tid, canonical_source, chunk_text)
             indexed += 1
         # Codex PR #304 review P1: the AsyncSession from
         # async_session_factory does NOT auto-commit on context exit.

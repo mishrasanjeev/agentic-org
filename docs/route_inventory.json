@@ -464,7 +464,43 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "agents.read",
-    "source_line": 186,
+    "source_line": 314,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "agents.registry.list",
+    "auth_required": true,
+    "function": "list_agent_registry",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/agent-registry api/v1/agent_registry.py:list_agent_registry",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/agent_registry.py",
+    "path": "/api/v1/agent-registry",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "agents.read",
+    "source_line": 314,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "agents.registry.list",
+    "auth_required": true,
+    "function": "list_agent_registry",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/agent-registry api/v1/agent_registry.py:list_agent_registry",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/agent_registry.py",
+    "path": "/api/v1/agent-registry",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "agents.read",
+    "source_line": 314,
     "tenant_required": true
   },
   {
@@ -482,7 +518,43 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "agents.read",
-    "source_line": 252,
+    "source_line": 378,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "agents.registry.templates",
+    "auth_required": true,
+    "function": "list_agent_templates",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/agent-registry/templates api/v1/agent_registry.py:list_agent_templates",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/agent_registry.py",
+    "path": "/api/v1/agent-registry/templates",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "agents.read",
+    "source_line": 378,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "agents.registry.templates",
+    "auth_required": true,
+    "function": "list_agent_templates",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/agent-registry/templates api/v1/agent_registry.py:list_agent_templates",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/agent_registry.py",
+    "path": "/api/v1/agent-registry/templates",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "agents.read",
+    "source_line": 378,
     "tenant_required": true
   },
   {
@@ -554,7 +626,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "agents.sensitive.list",
-    "source_line": 2039,
+    "source_line": 2139,
     "tenant_required": true
   },
   {
@@ -572,7 +644,7 @@
     "public_exempt_reason": null,
     "rate_limit": "agent-write",
     "scope": "agents.write",
-    "source_line": 1744,
+    "source_line": 1844,
     "tenant_required": true
   },
   {
@@ -590,7 +662,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "agents.tools.sensitive.read",
-    "source_line": 1698,
+    "source_line": 1798,
     "tenant_required": true
   },
   {
@@ -608,7 +680,7 @@
     "public_exempt_reason": null,
     "rate_limit": "ai-generation",
     "scope": "agents.generate",
-    "source_line": 2490,
+    "source_line": 2590,
     "tenant_required": true
   },
   {
@@ -626,7 +698,7 @@
     "public_exempt_reason": null,
     "rate_limit": "file-upload",
     "scope": "agents.import",
-    "source_line": 2302,
+    "source_line": 2402,
     "tenant_required": true
   },
   {
@@ -644,7 +716,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "agents.sensitive.org_tree",
-    "source_line": 2157,
+    "source_line": 2257,
     "tenant_required": true
   },
   {
@@ -662,7 +734,7 @@
     "public_exempt_reason": null,
     "rate_limit": "agent-write",
     "scope": "agents.write",
-    "source_line": 5543,
+    "source_line": 5824,
     "tenant_required": true
   },
   {
@@ -680,7 +752,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "agents.sensitive.read",
-    "source_line": 2668,
+    "source_line": 2768,
     "tenant_required": true
   },
   {
@@ -698,7 +770,7 @@
     "public_exempt_reason": null,
     "rate_limit": "agent-write",
     "scope": "agents.write",
-    "source_line": 2896,
+    "source_line": 2996,
     "tenant_required": true
   },
   {
@@ -716,7 +788,7 @@
     "public_exempt_reason": null,
     "rate_limit": "agent-write",
     "scope": "agents.write",
-    "source_line": 2698,
+    "source_line": 2798,
     "tenant_required": true
   },
   {
@@ -734,7 +806,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "agents.sensitive.amendments.read",
-    "source_line": 5501,
+    "source_line": 5782,
     "tenant_required": true
   },
   {
@@ -752,7 +824,7 @@
     "public_exempt_reason": null,
     "rate_limit": "agent-write",
     "scope": "agents.sensitive.amendments.write",
-    "source_line": 5667,
+    "source_line": 5948,
     "tenant_required": true
   },
   {
@@ -770,7 +842,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "agents.sensitive.budget.read",
-    "source_line": 5187,
+    "source_line": 5468,
     "tenant_required": true
   },
   {
@@ -788,7 +860,43 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "agents.read",
-    "source_line": 55,
+    "source_line": 56,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "agents.card.read",
+    "auth_required": true,
+    "function": "get_agent_card",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/agents/{agent_id}/card api/v1/agent_registry.py:get_agent_card",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/agent_registry.py",
+    "path": "/api/v1/agents/{agent_id}/card",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "agents.read",
+    "source_line": 56,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "agents.card.read",
+    "auth_required": true,
+    "function": "get_agent_card",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/agents/{agent_id}/card api/v1/agent_registry.py:get_agent_card",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/agent_registry.py",
+    "path": "/api/v1/agents/{agent_id}/card",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "agents.read",
+    "source_line": 56,
     "tenant_required": true
   },
   {
@@ -806,7 +914,43 @@
     "public_exempt_reason": null,
     "rate_limit": "agent-write",
     "scope": "agents.write",
-    "source_line": 80,
+    "source_line": 81,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "agents.card.set",
+    "auth_required": true,
+    "function": "set_agent_card",
+    "idempotency": "idempotent-partial-update",
+    "key": "PUT /api/v1/agents/{agent_id}/card api/v1/agent_registry.py:set_agent_card",
+    "metadata_present": true,
+    "methods": [
+      "PUT"
+    ],
+    "module": "api/v1/agent_registry.py",
+    "path": "/api/v1/agents/{agent_id}/card",
+    "public_exempt_reason": null,
+    "rate_limit": "agent-write",
+    "scope": "agents.write",
+    "source_line": 81,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "agents.card.set",
+    "auth_required": true,
+    "function": "set_agent_card",
+    "idempotency": "idempotent-partial-update",
+    "key": "PUT /api/v1/agents/{agent_id}/card api/v1/agent_registry.py:set_agent_card",
+    "metadata_present": true,
+    "methods": [
+      "PUT"
+    ],
+    "module": "api/v1/agent_registry.py",
+    "path": "/api/v1/agents/{agent_id}/card",
+    "public_exempt_reason": null,
+    "rate_limit": "agent-write",
+    "scope": "agents.write",
+    "source_line": 81,
     "tenant_required": true
   },
   {
@@ -824,7 +968,133 @@
     "public_exempt_reason": null,
     "rate_limit": "agent-write",
     "scope": "agents.write",
-    "source_line": 4972,
+    "source_line": 5253,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "agents.debug.read",
+    "auth_required": true,
+    "function": "get_breakpoints",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/agents/{agent_id}/debug api/v1/agent_debug.py:get_breakpoints",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/agent_debug.py",
+    "path": "/api/v1/agents/{agent_id}/debug",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "agents.debug.sensitive.read",
+    "source_line": 85,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "agents.debug.set",
+    "auth_required": true,
+    "function": "set_breakpoints",
+    "idempotency": "idempotent-full-replace",
+    "key": "PUT /api/v1/agents/{agent_id}/debug api/v1/agent_debug.py:set_breakpoints",
+    "metadata_present": true,
+    "methods": [
+      "PUT"
+    ],
+    "module": "api/v1/agent_debug.py",
+    "path": "/api/v1/agents/{agent_id}/debug",
+    "public_exempt_reason": null,
+    "rate_limit": "agent-write",
+    "scope": "agents.debug.sensitive.write",
+    "source_line": 109,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "agents.debug.sessions.list",
+    "auth_required": true,
+    "function": "list_sessions",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/agents/{agent_id}/debug/sessions api/v1/agent_debug.py:list_sessions",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/agent_debug.py",
+    "path": "/api/v1/agents/{agent_id}/debug/sessions",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "agents.debug.sensitive.read",
+    "source_line": 153,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "agents.debug.steps",
+    "auth_required": true,
+    "function": "thread_steps",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/agents/{agent_id}/debug/threads/{thread_id:path} api/v1/agent_debug.py:thread_steps",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/agent_debug.py",
+    "path": "/api/v1/agents/{agent_id}/debug/threads/{thread_id:path}",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "agents.debug.sensitive.read",
+    "source_line": 211,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "agents.debug.continue",
+    "auth_required": true,
+    "function": "continue_thread",
+    "idempotency": "not-idempotent-create",
+    "key": "POST /api/v1/agents/{agent_id}/debug/threads/{thread_id:path}/continue api/v1/agent_debug.py:continue_thread",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/agent_debug.py",
+    "path": "/api/v1/agents/{agent_id}/debug/threads/{thread_id:path}/continue",
+    "public_exempt_reason": null,
+    "rate_limit": "agent-control",
+    "scope": "agents.debug.sensitive.write",
+    "source_line": 477,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "agents.debug.step",
+    "auth_required": true,
+    "function": "step_thread",
+    "idempotency": "not-idempotent-create",
+    "key": "POST /api/v1/agents/{agent_id}/debug/threads/{thread_id:path}/step api/v1/agent_debug.py:step_thread",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/agent_debug.py",
+    "path": "/api/v1/agents/{agent_id}/debug/threads/{thread_id:path}/step",
+    "public_exempt_reason": null,
+    "rate_limit": "agent-control",
+    "scope": "agents.debug.sensitive.write",
+    "source_line": 458,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "agents.debug.inspect",
+    "auth_required": true,
+    "function": "inspect_step",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/agents/{agent_id}/debug/threads/{thread_id:path}/steps/{checkpoint_id} api/v1/agent_debug.py:inspect_step",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/agent_debug.py",
+    "path": "/api/v1/agents/{agent_id}/debug/threads/{thread_id:path}/steps/{checkpoint_id}",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "agents.debug.sensitive.read",
+    "source_line": 180,
     "tenant_required": true
   },
   {
@@ -842,7 +1112,61 @@
     "public_exempt_reason": null,
     "rate_limit": "agent-write",
     "scope": "agents.delegate",
-    "source_line": 2223,
+    "source_line": 2323,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "agents.dependencies.read",
+    "auth_required": true,
+    "function": "get_agent_dependencies",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/agents/{agent_id}/dependencies api/v1/agent_registry.py:get_agent_dependencies",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/agent_registry.py",
+    "path": "/api/v1/agents/{agent_id}/dependencies",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "agents.read",
+    "source_line": 204,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "agents.dependencies.read",
+    "auth_required": true,
+    "function": "get_agent_dependencies",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/agents/{agent_id}/dependencies api/v1/agent_registry.py:get_agent_dependencies",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/agent_registry.py",
+    "path": "/api/v1/agents/{agent_id}/dependencies",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "agents.read",
+    "source_line": 204,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "agents.dependencies.read",
+    "auth_required": true,
+    "function": "get_agent_dependencies",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/agents/{agent_id}/dependencies api/v1/agent_registry.py:get_agent_dependencies",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/agent_registry.py",
+    "path": "/api/v1/agents/{agent_id}/dependencies",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "agents.read",
+    "source_line": 204,
     "tenant_required": true
   },
   {
@@ -860,7 +1184,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "agents.read",
-    "source_line": 4516,
+    "source_line": 4792,
     "tenant_required": true
   },
   {
@@ -878,7 +1202,7 @@
     "public_exempt_reason": null,
     "rate_limit": "agent-write",
     "scope": "agents.write",
-    "source_line": 4462,
+    "source_line": 4731,
     "tenant_required": true
   },
   {
@@ -896,7 +1220,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "agents.sensitive.explanation.read",
-    "source_line": 5349,
+    "source_line": 5630,
     "tenant_required": true
   },
   {
@@ -914,7 +1238,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "agents.sensitive.feedback.list",
-    "source_line": 5310,
+    "source_line": 5591,
     "tenant_required": true
   },
   {
@@ -932,7 +1256,7 @@
     "public_exempt_reason": null,
     "rate_limit": "agent-feedback",
     "scope": "agents.feedback.write",
-    "source_line": 5259,
+    "source_line": 5540,
     "tenant_required": true
   },
   {
@@ -950,7 +1274,7 @@
     "public_exempt_reason": null,
     "rate_limit": "agent-control",
     "scope": "agents.feedback.analyze",
-    "source_line": 5466,
+    "source_line": 5747,
     "tenant_required": true
   },
   {
@@ -968,7 +1292,43 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "agents.read",
-    "source_line": 154,
+    "source_line": 172,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "agents.lifecycle.read",
+    "auth_required": true,
+    "function": "get_agent_lifecycle",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/agents/{agent_id}/lifecycle api/v1/agent_registry.py:get_agent_lifecycle",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/agent_registry.py",
+    "path": "/api/v1/agents/{agent_id}/lifecycle",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "agents.read",
+    "source_line": 172,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "agents.lifecycle.read",
+    "auth_required": true,
+    "function": "get_agent_lifecycle",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/agents/{agent_id}/lifecycle api/v1/agent_registry.py:get_agent_lifecycle",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/agent_registry.py",
+    "path": "/api/v1/agents/{agent_id}/lifecycle",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "agents.read",
+    "source_line": 172,
     "tenant_required": true
   },
   {
@@ -986,7 +1346,79 @@
     "public_exempt_reason": null,
     "rate_limit": "agent-write",
     "scope": "agents.write",
-    "source_line": 114,
+    "source_line": 132,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "agents.lifecycle.transition",
+    "auth_required": true,
+    "function": "transition_agent_lifecycle",
+    "idempotency": "not-idempotent-state-transition",
+    "key": "POST /api/v1/agents/{agent_id}/lifecycle api/v1/agent_registry.py:transition_agent_lifecycle",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/agent_registry.py",
+    "path": "/api/v1/agents/{agent_id}/lifecycle",
+    "public_exempt_reason": null,
+    "rate_limit": "agent-write",
+    "scope": "agents.write",
+    "source_line": 132,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "agents.lifecycle.transition",
+    "auth_required": true,
+    "function": "transition_agent_lifecycle",
+    "idempotency": "not-idempotent-state-transition",
+    "key": "POST /api/v1/agents/{agent_id}/lifecycle api/v1/agent_registry.py:transition_agent_lifecycle",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/agent_registry.py",
+    "path": "/api/v1/agents/{agent_id}/lifecycle",
+    "public_exempt_reason": null,
+    "rate_limit": "agent-write",
+    "scope": "agents.write",
+    "source_line": 132,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "agents.limits.read",
+    "auth_required": true,
+    "function": "get_agent_limits",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/agents/{agent_id}/limits api/v1/agents.py:get_agent_limits",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/agents.py",
+    "path": "/api/v1/agents/{agent_id}/limits",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "agents.read",
+    "source_line": 4697,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "agents.limits.set",
+    "auth_required": true,
+    "function": "set_agent_limits",
+    "idempotency": "idempotent-full-replace",
+    "key": "PUT /api/v1/agents/{agent_id}/limits api/v1/agents.py:set_agent_limits",
+    "metadata_present": true,
+    "methods": [
+      "PUT"
+    ],
+    "module": "api/v1/agents.py",
+    "path": "/api/v1/agents/{agent_id}/limits",
+    "public_exempt_reason": null,
+    "rate_limit": "agent-write",
+    "scope": "agents.write",
+    "source_line": 4646,
     "tenant_required": true
   },
   {
@@ -1004,7 +1436,7 @@
     "public_exempt_reason": null,
     "rate_limit": "agent-write",
     "scope": "agents.write",
-    "source_line": 4306,
+    "source_line": 4473,
     "tenant_required": true
   },
   {
@@ -1022,7 +1454,7 @@
     "public_exempt_reason": null,
     "rate_limit": "agent-control",
     "scope": "agents.lifecycle",
-    "source_line": 4146,
+    "source_line": 4308,
     "tenant_required": true
   },
   {
@@ -1040,7 +1472,7 @@
     "public_exempt_reason": null,
     "rate_limit": "agent-control",
     "scope": "agents.lifecycle",
-    "source_line": 4556,
+    "source_line": 4832,
     "tenant_required": true
   },
   {
@@ -1058,7 +1490,115 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "agents.sensitive.prompt_history",
-    "source_line": 5131,
+    "source_line": 5412,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "agents.rating.set",
+    "auth_required": true,
+    "function": "rate_agent",
+    "idempotency": "idempotent-one-rating-per-user",
+    "key": "POST /api/v1/agents/{agent_id}/rating api/v1/agent_registry.py:rate_agent",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/agent_registry.py",
+    "path": "/api/v1/agents/{agent_id}/rating",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "agents.read",
+    "source_line": 272,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "agents.rating.set",
+    "auth_required": true,
+    "function": "rate_agent",
+    "idempotency": "idempotent-one-rating-per-user",
+    "key": "POST /api/v1/agents/{agent_id}/rating api/v1/agent_registry.py:rate_agent",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/agent_registry.py",
+    "path": "/api/v1/agents/{agent_id}/rating",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "agents.read",
+    "source_line": 272,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "agents.rating.set",
+    "auth_required": true,
+    "function": "rate_agent",
+    "idempotency": "idempotent-one-rating-per-user",
+    "key": "POST /api/v1/agents/{agent_id}/rating api/v1/agent_registry.py:rate_agent",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/agent_registry.py",
+    "path": "/api/v1/agents/{agent_id}/rating",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "agents.read",
+    "source_line": 272,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "agents.reliability.read",
+    "auth_required": true,
+    "function": "get_agent_reliability",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/agents/{agent_id}/reliability api/v1/agent_registry.py:get_agent_reliability",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/agent_registry.py",
+    "path": "/api/v1/agents/{agent_id}/reliability",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "agents.read",
+    "source_line": 239,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "agents.reliability.read",
+    "auth_required": true,
+    "function": "get_agent_reliability",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/agents/{agent_id}/reliability api/v1/agent_registry.py:get_agent_reliability",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/agent_registry.py",
+    "path": "/api/v1/agents/{agent_id}/reliability",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "agents.read",
+    "source_line": 239,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "agents.reliability.read",
+    "auth_required": true,
+    "function": "get_agent_reliability",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/agents/{agent_id}/reliability api/v1/agent_registry.py:get_agent_reliability",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/agent_registry.py",
+    "path": "/api/v1/agents/{agent_id}/reliability",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "agents.read",
+    "source_line": 239,
     "tenant_required": true
   },
   {
@@ -1076,7 +1616,7 @@
     "public_exempt_reason": null,
     "rate_limit": "agent-control",
     "scope": "agents.lifecycle",
-    "source_line": 4197,
+    "source_line": 4359,
     "tenant_required": true
   },
   {
@@ -1094,7 +1634,7 @@
     "public_exempt_reason": null,
     "rate_limit": "agent-control",
     "scope": "agents.lifecycle",
-    "source_line": 4784,
+    "source_line": 5065,
     "tenant_required": true
   },
   {
@@ -1112,7 +1652,7 @@
     "public_exempt_reason": null,
     "rate_limit": "agent-control",
     "scope": "agents.lifecycle",
-    "source_line": 4727,
+    "source_line": 5008,
     "tenant_required": true
   },
   {
@@ -1130,7 +1670,7 @@
     "public_exempt_reason": null,
     "rate_limit": "agent-control",
     "scope": "agents.lifecycle",
-    "source_line": 4849,
+    "source_line": 5130,
     "tenant_required": true
   },
   {
@@ -1148,7 +1688,7 @@
     "public_exempt_reason": null,
     "rate_limit": "agent-execution",
     "scope": "agents.execute",
-    "source_line": 3353,
+    "source_line": 3460,
     "tenant_required": true
   },
   {
@@ -1166,7 +1706,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "agents.read",
-    "source_line": 4429,
+    "source_line": 4609,
     "tenant_required": true
   },
   {
@@ -1184,7 +1724,7 @@
     "public_exempt_reason": null,
     "rate_limit": "agent-write",
     "scope": "agents.write",
-    "source_line": 4369,
+    "source_line": 4549,
     "tenant_required": true
   },
   {
@@ -2480,7 +3020,7 @@
     "public_exempt_reason": null,
     "rate_limit": "chat-history-read",
     "scope": "chat.history.sensitive.read",
-    "source_line": 1065,
+    "source_line": 1288,
     "tenant_required": true
   },
   {
@@ -2498,7 +3038,7 @@
     "public_exempt_reason": null,
     "rate_limit": "chat-query",
     "scope": "chat.agent_execution.external_tool_sensitive.write",
-    "source_line": 615,
+    "source_line": 793,
     "tenant_required": true
   },
   {
@@ -4140,6 +4680,348 @@
     "tenant_required": true
   },
   {
+    "audit_event": "content.draft",
+    "auth_required": true,
+    "function": "post_draft",
+    "idempotency": "not-idempotent-create",
+    "key": "POST /api/v1/content/draft api/v1/content.py:post_draft",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/content.py",
+    "path": "/api/v1/content/draft",
+    "public_exempt_reason": null,
+    "rate_limit": "chat-query",
+    "scope": "content.draft.sensitive.write",
+    "source_line": 146,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "content.drafts.list",
+    "auth_required": true,
+    "function": "list_drafts",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/content/drafts api/v1/content.py:list_drafts",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/content.py",
+    "path": "/api/v1/content/drafts",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "content.drafts.sensitive.read",
+    "source_line": 230,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "content.drafts.read",
+    "auth_required": true,
+    "function": "get_draft",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/content/drafts/{draft_id} api/v1/content.py:get_draft",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/content.py",
+    "path": "/api/v1/content/drafts/{draft_id}",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "content.drafts.sensitive.read",
+    "source_line": 253,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "content.drafts.decide",
+    "auth_required": true,
+    "function": "decide_draft",
+    "idempotency": "idempotent-lifecycle-state",
+    "key": "POST /api/v1/content/drafts/{draft_id}/decide api/v1/content.py:decide_draft",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/content.py",
+    "path": "/api/v1/content/drafts/{draft_id}/decide",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "content.drafts.sensitive.write",
+    "source_line": 272,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "content.extract",
+    "auth_required": true,
+    "function": "post_extract",
+    "idempotency": "idempotent-pure",
+    "key": "POST /api/v1/content/extract api/v1/content.py:post_extract",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/content.py",
+    "path": "/api/v1/content/extract",
+    "public_exempt_reason": null,
+    "rate_limit": "chat-query",
+    "scope": "content.extract.sensitive.write",
+    "source_line": 212,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "content.services.list",
+    "auth_required": true,
+    "function": "list_services",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/content/services api/v1/content.py:list_services",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/content.py",
+    "path": "/api/v1/content/services",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "content.read",
+    "source_line": 83,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "content.services.dataset.install",
+    "auth_required": true,
+    "function": "install_service_dataset",
+    "idempotency": "idempotent-create-by-name",
+    "key": "POST /api/v1/content/services/{name}/dataset api/v1/content.py:install_service_dataset",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/content.py",
+    "path": "/api/v1/content/services/{name}/dataset",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "content.datasets.sensitive.write",
+    "source_line": 97,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "content.summarise",
+    "auth_required": true,
+    "function": "post_summarise",
+    "idempotency": "idempotent-pure",
+    "key": "POST /api/v1/content/summarise api/v1/content.py:post_summarise",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/content.py",
+    "path": "/api/v1/content/summarise",
+    "public_exempt_reason": null,
+    "rate_limit": "chat-query",
+    "scope": "content.summarise.sensitive.write",
+    "source_line": 194,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "conversation.feedback",
+    "auth_required": true,
+    "function": "post_feedback",
+    "idempotency": "idempotent-full-replace-session-rating-event-key",
+    "key": "POST /api/v1/conversation/feedback api/v1/conversation.py:post_feedback",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/conversation.py",
+    "path": "/api/v1/conversation/feedback",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "chat.write",
+    "source_line": 234,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "conversation.intents.list",
+    "auth_required": true,
+    "function": "list_intents",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/conversation/intents api/v1/conversation.py:list_intents",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/conversation.py",
+    "path": "/api/v1/conversation/intents",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "chat.read",
+    "source_line": 215,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "conversation.session.reset",
+    "auth_required": true,
+    "function": "reset_session",
+    "idempotency": "idempotent-delete",
+    "key": "DELETE /api/v1/conversation/session api/v1/conversation.py:reset_session",
+    "metadata_present": true,
+    "methods": [
+      "DELETE"
+    ],
+    "module": "api/v1/conversation.py",
+    "path": "/api/v1/conversation/session",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "chat.write",
+    "source_line": 341,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "conversation.session.read",
+    "auth_required": true,
+    "function": "get_session",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/conversation/session api/v1/conversation.py:get_session",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/conversation.py",
+    "path": "/api/v1/conversation/session",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "chat.read",
+    "source_line": 305,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "conversation.session.summary",
+    "auth_required": true,
+    "function": "get_summary",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/conversation/session/summary api/v1/conversation.py:get_summary",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/conversation.py",
+    "path": "/api/v1/conversation/session/summary",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "chat.read",
+    "source_line": 279,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "conversation.supervisor.sessions.list",
+    "auth_required": true,
+    "function": "list_sessions",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/conversation/supervisor/sessions api/v1/conversation_supervisor.py:list_sessions",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/conversation_supervisor.py",
+    "path": "/api/v1/conversation/supervisor/sessions",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "conversation.supervisor.sensitive.read",
+    "source_line": 54,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "conversation.supervisor.session.read",
+    "auth_required": true,
+    "function": "get_session",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/conversation/supervisor/sessions/{session_id} api/v1/conversation_supervisor.py:get_session",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/conversation_supervisor.py",
+    "path": "/api/v1/conversation/supervisor/sessions/{session_id}",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "conversation.supervisor.sensitive.read",
+    "source_line": 75,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "conversation.supervisor.release",
+    "auth_required": true,
+    "function": "release_session",
+    "idempotency": "idempotent-lifecycle-state",
+    "key": "POST /api/v1/conversation/supervisor/sessions/{session_id}/release api/v1/conversation_supervisor.py:release_session",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/conversation_supervisor.py",
+    "path": "/api/v1/conversation/supervisor/sessions/{session_id}/release",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "conversation.supervisor.sensitive.write",
+    "source_line": 140,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "conversation.supervisor.reply",
+    "auth_required": true,
+    "function": "send_reply",
+    "idempotency": "not-idempotent-create",
+    "key": "POST /api/v1/conversation/supervisor/sessions/{session_id}/reply api/v1/conversation_supervisor.py:send_reply",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/conversation_supervisor.py",
+    "path": "/api/v1/conversation/supervisor/sessions/{session_id}/reply",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "conversation.supervisor.sensitive.write",
+    "source_line": 115,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "conversation.supervisor.takeover",
+    "auth_required": true,
+    "function": "take_over",
+    "idempotency": "idempotent-lifecycle-state",
+    "key": "POST /api/v1/conversation/supervisor/sessions/{session_id}/takeover api/v1/conversation_supervisor.py:take_over",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/conversation_supervisor.py",
+    "path": "/api/v1/conversation/supervisor/sessions/{session_id}/takeover",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "conversation.supervisor.sensitive.write",
+    "source_line": 94,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "conversation.turn",
+    "auth_required": true,
+    "function": "post_turn",
+    "idempotency": "not_idempotent-advances-the-dialogue-and-may-run-a-confirmed-action",
+    "key": "POST /api/v1/conversation/turns api/v1/conversation.py:post_turn",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/conversation.py",
+    "path": "/api/v1/conversation/turns",
+    "public_exempt_reason": null,
+    "rate_limit": "chat-query",
+    "scope": "chat.agent_execution.external_tool_sensitive.write",
+    "source_line": 168,
+    "tenant_required": true
+  },
+  {
     "audit_event": "cost_centers.list",
     "auth_required": true,
     "function": "list_cost_centers",
@@ -4806,6 +5688,132 @@
     "tenant_required": true
   },
   {
+    "audit_event": "finops.attribution.read",
+    "auth_required": true,
+    "function": "cost_attribution",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/finops/attribution api/v1/finops.py:cost_attribution",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/finops.py",
+    "path": "/api/v1/finops/attribution",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "finops.sensitive.read",
+    "source_line": 43,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "finops.comparison.read",
+    "auth_required": true,
+    "function": "cost_comparison",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/finops/comparison api/v1/finops.py:cost_comparison",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/finops.py",
+    "path": "/api/v1/finops/comparison",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "finops.sensitive.read",
+    "source_line": 314,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "finops.forecast.read",
+    "auth_required": true,
+    "function": "cost_forecast",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/finops/forecast api/v1/finops.py:cost_forecast",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/finops.py",
+    "path": "/api/v1/finops/forecast",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "finops.sensitive.read",
+    "source_line": 283,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "finops.thresholds.list",
+    "auth_required": true,
+    "function": "list_thresholds",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/finops/thresholds api/v1/finops.py:list_thresholds",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/finops.py",
+    "path": "/api/v1/finops/thresholds",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "finops.sensitive.read",
+    "source_line": 146,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "finops.thresholds.create",
+    "auth_required": true,
+    "function": "create_threshold",
+    "idempotency": "not-idempotent-create",
+    "key": "POST /api/v1/finops/thresholds api/v1/finops.py:create_threshold",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/finops.py",
+    "path": "/api/v1/finops/thresholds",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "finops.sensitive.write",
+    "source_line": 172,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "finops.thresholds.delete",
+    "auth_required": true,
+    "function": "delete_threshold",
+    "idempotency": "idempotent-delete",
+    "key": "DELETE /api/v1/finops/thresholds/{threshold_id} api/v1/finops.py:delete_threshold",
+    "metadata_present": true,
+    "methods": [
+      "DELETE"
+    ],
+    "module": "api/v1/finops.py",
+    "path": "/api/v1/finops/thresholds/{threshold_id}",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "finops.sensitive.write",
+    "source_line": 244,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "finops.thresholds.update",
+    "auth_required": true,
+    "function": "update_threshold",
+    "idempotency": "idempotent-partial-update",
+    "key": "PUT /api/v1/finops/thresholds/{threshold_id} api/v1/finops.py:update_threshold",
+    "metadata_present": true,
+    "methods": [
+      "PUT"
+    ],
+    "module": "api/v1/finops.py",
+    "path": "/api/v1/finops/thresholds/{threshold_id}",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "finops.sensitive.write",
+    "source_line": 212,
+    "tenant_required": true
+  },
+  {
     "audit_event": "governance.config.read",
     "auth_required": true,
     "function": "get_config",
@@ -4839,6 +5847,204 @@
     "rate_limit": "governance-write",
     "scope": "governance.policy.enterprise_critical.write",
     "source_line": 100,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "governance.inventory.read",
+    "auth_required": true,
+    "function": "list_inventory",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/governance/inventory api/v1/governance_inventory.py:list_inventory",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/governance_inventory.py",
+    "path": "/api/v1/governance/inventory",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "governance.inventory.sensitive.read",
+    "source_line": 46,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "governance.inventory.export",
+    "auth_required": true,
+    "function": "export_inventory",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/governance/inventory/export api/v1/governance_inventory.py:export_inventory",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/governance_inventory.py",
+    "path": "/api/v1/governance/inventory/export",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "governance.inventory.sensitive.read",
+    "source_line": 80,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "governance.model_cards.list",
+    "auth_required": true,
+    "function": "list_model_cards",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/governance/model-cards api/v1/governance_model_cards.py:list_model_cards",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/governance_model_cards.py",
+    "path": "/api/v1/governance/model-cards",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "governance.inventory.sensitive.read",
+    "source_line": 56,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "governance.model_cards.read",
+    "auth_required": true,
+    "function": "get_model_card",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/governance/model-cards/{provider}/{model:path} api/v1/governance_model_cards.py:get_model_card",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/governance_model_cards.py",
+    "path": "/api/v1/governance/model-cards/{provider}/{model:path}",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "governance.inventory.sensitive.read",
+    "source_line": 75,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "governance.model_cards.write",
+    "auth_required": true,
+    "function": "write_model_card",
+    "idempotency": "idempotent-upsert-by-tenant-provider-model",
+    "key": "PUT /api/v1/governance/model-cards/{provider}/{model:path} api/v1/governance_model_cards.py:write_model_card",
+    "metadata_present": true,
+    "methods": [
+      "PUT"
+    ],
+    "module": "api/v1/governance_model_cards.py",
+    "path": "/api/v1/governance/model-cards/{provider}/{model:path}",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "governance.inventory.sensitive.write",
+    "source_line": 100,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "governance.model_cards.approve",
+    "auth_required": true,
+    "function": "approve_model_card",
+    "idempotency": "idempotent-approval-by-second-person",
+    "key": "POST /api/v1/governance/model-cards/{provider}/{model:path}/approve api/v1/governance_model_cards.py:approve_model_card",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/governance_model_cards.py",
+    "path": "/api/v1/governance/model-cards/{provider}/{model:path}/approve",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "governance.inventory.sensitive.write",
+    "source_line": 130,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "governance.policies.list",
+    "auth_required": true,
+    "function": "list_policies",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/governance/policies api/v1/governance_policies.py:list_policies",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/governance_policies.py",
+    "path": "/api/v1/governance/policies",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "governance.policies.sensitive.read",
+    "source_line": 90,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "governance.policies.write",
+    "auth_required": true,
+    "function": "write_policy",
+    "idempotency": "not-idempotent-create",
+    "key": "POST /api/v1/governance/policies api/v1/governance_policies.py:write_policy",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/governance_policies.py",
+    "path": "/api/v1/governance/policies",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "governance.policies.sensitive.write",
+    "source_line": 121,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "governance.policies.evaluate",
+    "auth_required": true,
+    "function": "evaluate_policies",
+    "idempotency": "read-only",
+    "key": "POST /api/v1/governance/policies/evaluate api/v1/governance_policies.py:evaluate_policies",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/governance_policies.py",
+    "path": "/api/v1/governance/policies/evaluate",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "governance.policies.sensitive.read",
+    "source_line": 189,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "governance.policies.delete",
+    "auth_required": true,
+    "function": "delete_policy",
+    "idempotency": "idempotent-delete",
+    "key": "DELETE /api/v1/governance/policies/{kind}/{policy_id} api/v1/governance_policies.py:delete_policy",
+    "metadata_present": true,
+    "methods": [
+      "DELETE"
+    ],
+    "module": "api/v1/governance_policies.py",
+    "path": "/api/v1/governance/policies/{kind}/{policy_id}",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "governance.policies.sensitive.write",
+    "source_line": 156,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "governance.risk_tiers.read",
+    "auth_required": true,
+    "function": "risk_tier_overview",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/governance/risk-tiers api/v1/governance_risk_tiers.py:risk_tier_overview",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/governance_risk_tiers.py",
+    "path": "/api/v1/governance/risk-tiers",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "governance.inventory.sensitive.read",
+    "source_line": 30,
     "tenant_required": true
   },
   {
@@ -5414,7 +6620,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "knowledge.sensitive.documents.list",
-    "source_line": 965,
+    "source_line": 1013,
     "tenant_required": true
   },
   {
@@ -5432,7 +6638,43 @@
     "public_exempt_reason": null,
     "rate_limit": "knowledge-write",
     "scope": "knowledge.documents.delete",
-    "source_line": 1064,
+    "source_line": 1126,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "knowledge.excerpt",
+    "auth_required": true,
+    "function": "knowledge_excerpt",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/knowledge/documents/{doc_id}/excerpt api/v1/knowledge.py:knowledge_excerpt",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/knowledge.py",
+    "path": "/api/v1/knowledge/documents/{doc_id}/excerpt",
+    "public_exempt_reason": null,
+    "rate_limit": "knowledge-search",
+    "scope": "knowledge.sensitive.search",
+    "source_line": 1772,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "knowledge.graph",
+    "auth_required": true,
+    "function": "knowledge_graph",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/knowledge/graph api/v1/knowledge.py:knowledge_graph",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/knowledge.py",
+    "path": "/api/v1/knowledge/graph",
+    "public_exempt_reason": null,
+    "rate_limit": "knowledge-search",
+    "scope": "knowledge.sensitive.search",
+    "source_line": 1723,
     "tenant_required": true
   },
   {
@@ -5450,8 +6692,62 @@
     "public_exempt_reason": "deployment-smoke-test-no-tenant-data",
     "rate_limit": "healthcheck",
     "scope": "knowledge.health.public",
-    "source_line": 1500,
+    "source_line": 2080,
     "tenant_required": false
+  },
+  {
+    "audit_event": "knowledge.metrics",
+    "auth_required": true,
+    "function": "knowledge_metrics",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/knowledge/metrics api/v1/knowledge.py:knowledge_metrics",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/knowledge.py",
+    "path": "/api/v1/knowledge/metrics",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "knowledge.sensitive.stats",
+    "source_line": 1612,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "knowledge.grounding",
+    "auth_required": true,
+    "function": "knowledge_grounding",
+    "idempotency": "read-only",
+    "key": "POST /api/v1/knowledge/metrics/grounding api/v1/knowledge.py:knowledge_grounding",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/knowledge.py",
+    "path": "/api/v1/knowledge/metrics/grounding",
+    "public_exempt_reason": null,
+    "rate_limit": "knowledge-search",
+    "scope": "knowledge.sensitive.search",
+    "source_line": 1634,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "knowledge.reindex",
+    "auth_required": true,
+    "function": "knowledge_reindex",
+    "idempotency": "bounded-batch-repeat-until-zero-candidates",
+    "key": "POST /api/v1/knowledge/reindex api/v1/knowledge.py:knowledge_reindex",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/knowledge.py",
+    "path": "/api/v1/knowledge/reindex",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "knowledge.upload",
+    "source_line": 1655,
+    "tenant_required": true
   },
   {
     "audit_event": "knowledge.search",
@@ -5468,7 +6764,7 @@
     "public_exempt_reason": null,
     "rate_limit": "knowledge-search",
     "scope": "knowledge.sensitive.search",
-    "source_line": 1436,
+    "source_line": 1860,
     "tenant_required": true
   },
   {
@@ -5486,7 +6782,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "knowledge.sensitive.stats",
-    "source_line": 1613,
+    "source_line": 2193,
     "tenant_required": true
   },
   {
@@ -5504,7 +6800,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "knowledge.upload.types.read",
-    "source_line": 552,
+    "source_line": 586,
     "tenant_required": true
   },
   {
@@ -5522,7 +6818,7 @@
     "public_exempt_reason": null,
     "rate_limit": "file-upload",
     "scope": "knowledge.upload",
-    "source_line": 578,
+    "source_line": 612,
     "tenant_required": true
   },
   {
@@ -5668,6 +6964,96 @@
     "scope": "public:mcp.tool_discovery.read",
     "source_line": 44,
     "tenant_required": false
+  },
+  {
+    "audit_event": "memory.erase",
+    "auth_required": true,
+    "function": "erase_memory",
+    "idempotency": "idempotent-erasure",
+    "key": "DELETE /api/v1/memory api/v1/memory.py:erase_memory",
+    "metadata_present": true,
+    "methods": [
+      "DELETE"
+    ],
+    "module": "api/v1/memory.py",
+    "path": "/api/v1/memory",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "memory.sensitive.write",
+    "source_line": 168,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "memory.recall",
+    "auth_required": true,
+    "function": "recall_memory",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/memory api/v1/memory.py:recall_memory",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/memory.py",
+    "path": "/api/v1/memory",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "memory.sensitive.read",
+    "source_line": 97,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "memory.remember",
+    "auth_required": true,
+    "function": "remember_memory",
+    "idempotency": "idempotent-same-content-refreshes-expiry",
+    "key": "POST /api/v1/memory api/v1/memory.py:remember_memory",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/memory.py",
+    "path": "/api/v1/memory",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "memory.sensitive.write",
+    "source_line": 127,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "memory.policy.read",
+    "auth_required": true,
+    "function": "memory_policy",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/memory/policy api/v1/memory.py:memory_policy",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/memory.py",
+    "path": "/api/v1/memory/policy",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "memory.sensitive.read",
+    "source_line": 83,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "memory.prune",
+    "auth_required": true,
+    "function": "prune_memory",
+    "idempotency": "idempotent-prune",
+    "key": "POST /api/v1/memory/prune api/v1/memory.py:prune_memory",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/memory.py",
+    "path": "/api/v1/memory/prune",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "memory.sensitive.write",
+    "source_line": 194,
+    "tenant_required": true
   },
   {
     "audit_event": "model_gateway.access_policies.list",
@@ -8006,7 +9392,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "tenant_ai_settings.sensitive.read",
-    "source_line": 204,
+    "source_line": 216,
     "tenant_required": true
   },
   {
@@ -8024,7 +9410,7 @@
     "public_exempt_reason": null,
     "rate_limit": "security-admin-write",
     "scope": "tenant_ai_settings.control_plane.write",
-    "source_line": 225,
+    "source_line": 237,
     "tenant_required": true
   },
   {
@@ -8042,7 +9428,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "tenant_ai_settings.registry.read",
-    "source_line": 160,
+    "source_line": 172,
     "tenant_required": false
   },
   {
@@ -8061,6 +9447,96 @@
     "rate_limit": "standard",
     "scope": "connectors.tools.read",
     "source_line": 889,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "tools.registry.list",
+    "auth_required": true,
+    "function": "list_registrations",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/tools/registry api/v1/tool_registry.py:list_registrations",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/tool_registry.py",
+    "path": "/api/v1/tools/registry",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "tools.registry.sensitive.read",
+    "source_line": 101,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "tools.registry.register",
+    "auth_required": true,
+    "function": "register_tool",
+    "idempotency": "not-idempotent-create",
+    "key": "POST /api/v1/tools/registry api/v1/tool_registry.py:register_tool",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/tool_registry.py",
+    "path": "/api/v1/tools/registry",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "tools.registry.sensitive.write",
+    "source_line": 133,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "tools.registry.check",
+    "auth_required": true,
+    "function": "check_inputs",
+    "idempotency": "read-only",
+    "key": "POST /api/v1/tools/registry/check api/v1/tool_registry.py:check_inputs",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/tool_registry.py",
+    "path": "/api/v1/tools/registry/check",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "tools.registry.sensitive.read",
+    "source_line": 235,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "tools.registry.delete",
+    "auth_required": true,
+    "function": "delete_registration",
+    "idempotency": "idempotent-delete",
+    "key": "DELETE /api/v1/tools/registry/{name:path} api/v1/tool_registry.py:delete_registration",
+    "metadata_present": true,
+    "methods": [
+      "DELETE"
+    ],
+    "module": "api/v1/tool_registry.py",
+    "path": "/api/v1/tools/registry/{name:path}",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "tools.registry.sensitive.write",
+    "source_line": 209,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "tools.registry.update",
+    "auth_required": true,
+    "function": "update_registration",
+    "idempotency": "idempotent-partial-update",
+    "key": "PUT /api/v1/tools/registry/{name:path} api/v1/tool_registry.py:update_registration",
+    "metadata_present": true,
+    "methods": [
+      "PUT"
+    ],
+    "module": "api/v1/tool_registry.py",
+    "path": "/api/v1/tools/registry/{name:path}",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "tools.registry.sensitive.write",
+    "source_line": 174,
     "tenant_required": true
   },
   {
@@ -8420,7 +9896,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "workflows.sensitive.list",
-    "source_line": 407,
+    "source_line": 472,
     "tenant_required": true
   },
   {
@@ -8438,7 +9914,25 @@
     "public_exempt_reason": null,
     "rate_limit": "workflow-write",
     "scope": "workflows.write",
-    "source_line": 554,
+    "source_line": 605,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "workflows.builder.read",
+    "auth_required": true,
+    "function": "workflow_builder_status",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/workflows/builder api/v1/workflows.py:workflow_builder_status",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/workflows.py",
+    "path": "/api/v1/workflows/builder",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "workflows.read",
+    "source_line": 404,
     "tenant_required": true
   },
   {
@@ -8456,7 +9950,7 @@
     "public_exempt_reason": null,
     "rate_limit": "ai-generation",
     "scope": "workflows.generate",
-    "source_line": 297,
+    "source_line": 298,
     "tenant_required": true
   },
   {
@@ -8474,7 +9968,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "workflows.runs.sensitive.read",
-    "source_line": 1000,
+    "source_line": 1042,
     "tenant_required": true
   },
   {
@@ -8492,7 +9986,7 @@
     "public_exempt_reason": null,
     "rate_limit": "workflow-control",
     "scope": "workflows.runs.cancel",
-    "source_line": 1090,
+    "source_line": 1128,
     "tenant_required": true
   },
   {
@@ -8510,7 +10004,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "workflows.runs.sensitive.replan-history",
-    "source_line": 1046,
+    "source_line": 1086,
     "tenant_required": true
   },
   {
@@ -8528,8 +10022,26 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "workflows.templates.read",
-    "source_line": 382,
+    "source_line": 447,
     "tenant_required": false
+  },
+  {
+    "audit_event": "workflows.validate",
+    "auth_required": true,
+    "function": "validate_workflow",
+    "idempotency": "read-only",
+    "key": "POST /api/v1/workflows/validate api/v1/workflows.py:validate_workflow",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/workflows.py",
+    "path": "/api/v1/workflows/validate",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "workflows.write",
+    "source_line": 389,
+    "tenant_required": true
   },
   {
     "audit_event": "workflows.delete",
@@ -8546,7 +10058,7 @@
     "public_exempt_reason": null,
     "rate_limit": "workflow-write",
     "scope": "workflows.write",
-    "source_line": 619,
+    "source_line": 673,
     "tenant_required": true
   },
   {
@@ -8564,7 +10076,25 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "workflows.sensitive.read",
-    "source_line": 466,
+    "source_line": 523,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "workflows.graph.read",
+    "auth_required": true,
+    "function": "workflow_graph_view",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/workflows/{wf_id}/graph api/v1/workflows.py:workflow_graph_view",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/workflows.py",
+    "path": "/api/v1/workflows/{wf_id}/graph",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "workflows.read",
+    "source_line": 418,
     "tenant_required": true
   },
   {
@@ -8582,7 +10112,7 @@
     "public_exempt_reason": null,
     "rate_limit": "workflow-write",
     "scope": "workflows.write",
-    "source_line": 1193,
+    "source_line": 1231,
     "tenant_required": true
   },
   {
@@ -8600,7 +10130,7 @@
     "public_exempt_reason": null,
     "rate_limit": "workflow-execution",
     "scope": "workflows.run",
-    "source_line": 874,
+    "source_line": 916,
     "tenant_required": true
   },
   {
@@ -8618,7 +10148,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "workflows.runs.sensitive.list",
-    "source_line": 492,
+    "source_line": 547,
     "tenant_required": true
   },
   {

@@ -282,6 +282,102 @@ class Settings(BaseSettings):
     # Native dense + full-text rank fusion. Off until tenant retrieval quality
     # and index rollout have been verified; RAGFlow precedence is unchanged.
     knowledge_hybrid_search: bool = False
+    # Re-ranking stage over the fused candidates of a knowledge search
+    # (core/rag/rerank.py): the query's own terms decide the final order.
+    # Off by default: off, the fused order is returned as it was.
+    knowledge_rerank_enabled: bool = False
+    # Query transformation and agentic retrieval (core/rag/query.py): a query
+    # is normalised, decomposed and rewritten, a weak first pass is expanded
+    # to the variants and fused, and the response can carry the trace.
+    # Off by default: off, a search runs exactly as before.
+    knowledge_query_transform_enabled: bool = False
+    # A model (provider/model) that proposes alternative queries for the plan;
+    # empty, the plan is deterministic only.
+    knowledge_query_rewrite_model: str = ""
+    # Graph retrieval (core/rag/entities.py): ingestion records the entities
+    # each chunk mentions and a search fuses in the chunks the graph reaches
+    # from the query. Off by default: off, ingestion writes no entity rows
+    # and a search runs exactly as before.
+    knowledge_graph_retrieval_enabled: bool = False
+    # Retrieval quality metrics (core/rag/metrics.py): one figures-only row
+    # and the Prometheus series per knowledge search, GET /knowledge/metrics
+    # and the grounding indicator. Off by default: off, nothing is recorded.
+    knowledge_metrics_enabled: bool = False
+    # Incremental re-indexing (core/rag/reindex.py): POST /knowledge/reindex
+    # re-embeds stale chunks and records missing entities, bounded per call.
+    # Off by default: off, the endpoint is not found.
+    knowledge_reindex_enabled: bool = False
+    # AI asset inventory (core/governance/inventory.py): GET /governance/inventory
+    # and its bill-of-materials export, tenant-admin only. Off by default: off,
+    # the endpoints are not found and nothing is read.
+    governance_inventory_enabled: bool = False
+    # Model cards (core/governance/model_cards.py): one standard card per model
+    # the tenant uses, with the administrator's part written and approved by a
+    # second person. Off by default: off, the endpoints are not found.
+    governance_model_cards_enabled: bool = False
+    # Regulatory risk tiers (core/governance/risk_tiers.py): the controls a
+    # tier forces at promotion, resume, tier change, update and gate removal,
+    # and GET /governance/risk-tiers. Off by default: off, nothing runs.
+    governance_risk_tiers_enabled: bool = False
+    # Policy console (core/governance/policy_console.py): every policy in one
+    # list, written through its own store and dry-run across the enforcement
+    # points. Off by default: off, the endpoints are not found.
+    governance_policy_console_enabled: bool = False
+    # FinOps attribution (core/finops/attribution.py): a run binds its use
+    # case, application, business unit, department and cost centre; the cost
+    # write adds a row to finops_cost_ledger and the model call records carry
+    # the labels. Off by default: off, nothing is written or tagged.
+    finops_attribution_enabled: bool = False
+    # FinOps thresholds (core/finops/thresholds.py): a breached organisation,
+    # application, use-case or business-unit threshold alerts, throttles or
+    # suspends runs through the agents API. Off by default: off, no run is
+    # checked, delayed or refused. Thresholds read the attributed ledger, so
+    # this needs finops_attribution_enabled; on without it, settings refuse
+    # to load (validate_finops_flags).
+    finops_thresholds_enabled: bool = False
+    # FinOps forecast and comparison (core/finops/forecast.py): a projection
+    # per use case from the attributed ledger and a model cost comparison from
+    # the call records. Off by default: off, the endpoints are not found.
+    finops_forecast_enabled: bool = False
+    # Per-agent execution limits and loop detection (core/langgraph/limits.py):
+    # an agent's own step, duration and tool-call limits and its loop rule are
+    # enforced in the graph and the runner. Off by default: off, the platform
+    # maxima alone apply, as today.
+    runtime_limits_enabled: bool = False
+    # Visual workflow builder (core/workflows/graph.py): POST /workflows refuses
+    # a definition with problems (missing paths, checkpoints without options,
+    # a failure directive outside the grammar). Off by default: off, creation
+    # accepts what it accepted before; validate and graph answer regardless.
+    workflow_builder_v2_enabled: bool = False
+    # Long-term memory (core/memory/long_term.py): a run that names a subject
+    # recalls what is remembered about it and stores what it asks to keep;
+    # entries expire by their kind's retention and can be erased per subject.
+    # Off by default: off, no run reads or writes memory.
+    runtime_memory_enabled: bool = False
+    # Tool registry (core/tool_gateway/registry.py): a registered tool's inputs
+    # are checked against its schema before a call leaves the gateway, and the
+    # call is held to its envelope. Off by default: off, no call is checked.
+    tool_registry_enabled: bool = False
+    # With the registry on, refuse calls to tools no registration covers.
+    tool_registry_require_registration: bool = False
+    # Debugging console (core/langgraph/debugger.py): an agent's breakpoints
+    # pause its runs before a node; the console steps a paused run and reads
+    # a run's checkpoints back step by step. Off by default: off, no run
+    # pauses and the console endpoints are not found.
+    runtime_debug_console_enabled: bool = False
+    # Conversational services (core/conversation/): a chat message that names
+    # a banking intent is handled as a dialogue turn (slots, clarification,
+    # confirmation) and a confirmed action runs the bound tool under the
+    # grant. Off by default: off, every message reaches the agent as before.
+    conversation_v2_enabled: bool = False
+    # Content services (core/content/): governed drafting, structured
+    # summarisation and obligation extraction as APIs, each with a schema, a
+    # guardrail profile and an evaluation dataset. Off by default: off, the
+    # catalogue answers and every other route is not found.
+    content_services_enabled: bool = False
+    # The model the content services call through the direct router; empty
+    # means the router's default.
+    content_services_model: str = ""
     # JSON object keyed provider/model with input and output USD per million
     # tokens; a negotiated rate replaces the list price.
     model_price_overrides_json: str = ""
@@ -472,6 +568,21 @@ class Settings(BaseSettings):
     # incidents when staging has production-like integrations.
     _STRICT_ENVS = STRICT_ENVS
     _RELAXED_ENVS = RELAXED_ENVS
+
+    @model_validator(mode="after")
+    def validate_finops_flags(self) -> Settings:
+        """Refuse thresholds without attribution: the ledger they read would never be written.
+
+        With only ``AGENTICORG_FINOPS_THRESHOLDS_ENABLED`` on, every spend
+        query reads zero and a suspend threshold would never refuse a run;
+        the deployment fails closed at start instead, in every environment.
+        """
+        if self.finops_thresholds_enabled and not self.finops_attribution_enabled:
+            raise ValueError(
+                "AGENTICORG_FINOPS_THRESHOLDS_ENABLED needs AGENTICORG_FINOPS_ATTRIBUTION_ENABLED: "
+                "thresholds compare the attributed cost ledger, which is written only while attribution is on"
+            )
+        return self
 
     @model_validator(mode="after")
     def validate_production_secret(self) -> Settings:

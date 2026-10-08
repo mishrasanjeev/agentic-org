@@ -133,6 +133,27 @@ describe("Observability page", () => {
     expect(mockGet).toHaveBeenCalledWith("/observability/runs", { params: { limit: "50" } });
   });
 
+  it("opens the debugging console from a run whose root span names its thread", async () => {
+    const thread = "tenant:22222222-2222-4222-8222-222222222222:run:abc";
+    const detail = {
+      ...DETAIL,
+      spans: [{ ...DETAIL.spans[0], attributes: { ...DETAIL.spans[0].attributes, "agent.id": "a1", "agent.thread_id": thread } }, DETAIL.spans[1]],
+    };
+    const steps = { thread_id: thread, total: 1, paused: false, next: [], pseudonymised: false, steps: [] };
+    mockGet.mockImplementation((url: string) => {
+      if (url.includes("/debug/threads/")) return Promise.resolve({ data: steps });
+      if (url.startsWith("/observability/runs/")) return Promise.resolve({ data: detail });
+      if (url === "/observability/runs") return Promise.resolve({ data: RUNS });
+      return Promise.resolve({ data: WORKLOAD });
+    });
+    render(<Observability />);
+    fireEvent.click(await screen.findByTestId(`trace-row-${RUN}`));
+    fireEvent.click(await screen.findByTestId("debugger-open"));
+    await screen.findByTestId("run-debugger");
+    expect(mockGet).toHaveBeenCalledWith(`/agents/a1/debug/threads/${encodeURIComponent(thread)}`);
+    expect(screen.getByTestId("debugger-thread").textContent).toBe(thread);
+  });
+
   it("shows the waterfall of the selected run with nested spans, bars and events", async () => {
     renderPage();
     fireEvent.click(await screen.findByTestId(`trace-row-${RUN}`));

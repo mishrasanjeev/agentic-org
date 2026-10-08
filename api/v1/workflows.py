@@ -32,6 +32,7 @@ from core.models.company import Company
 from core.models.workflow import StepExecution, WorkflowDefinition, WorkflowRun
 from core.ownership import Caller, caller_from_request, can_view_agent
 from core.schemas.api import PaginatedResponse, WorkflowCreate, WorkflowRunTrigger
+from core.workflows import graph as workflow_graph
 
 router = APIRouter()
 _log = structlog.get_logger()
@@ -217,8 +218,8 @@ async def _require_definition_agents_visible(session, tid: _uuid.UUID, definitio
     if not agent_ids:
         return
     agents = (
-        await session.execute(select(Agent).where(Agent.tenant_id == tid, Agent.id.in_(agent_ids)))
-    ).scalars().all()
+        (await session.execute(select(Agent).where(Agent.tenant_id == tid, Agent.id.in_(agent_ids)))).scalars().all()
+    )
     if any(not can_view_agent(agent, caller) for agent in agents):
         raise HTTPException(403, "Workflow references an agent you do not have access to")
 
@@ -278,7 +279,7 @@ async def _upsert_step_execution(
         _step_completed_at(step_status, row.completed_at)
         if step_status != "waiting_hitl"
         else None
-    )
+    )  # fmt: skip
     if row.started_at is None:
         row.started_at = now
     return row, created
@@ -370,6 +371,70 @@ async def generate_workflow_endpoint(
 
 
 # ── GET /workflows/templates ────────────────────────────────────────────────
+class WorkflowValidateIn(BaseModel):
+    model_config = {"extra": "forbid"}
+
+    definition: dict[str, Any]
+
+
+@router.post("/workflows/validate")
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="workflows.write",
+    rate_limit="standard",
+    idempotency="read-only",
+    audit_event="workflows.validate",
+)
+async def validate_workflow(body: WorkflowValidateIn, tenant_id: str = Depends(get_current_tenant)) -> dict[str, Any]:
+    """Whether a definition can be drawn and run, every problem in plain words, and the graph the console draws."""
+    problems = workflow_graph.validate(body.definition)
+    return {"valid": not problems, "errors": problems, "graph": workflow_graph.to_graph(body.definition)}
+
+
+@router.get("/workflows/builder")
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="workflows.read",
+    rate_limit="standard",
+    idempotency="read-only",
+    audit_event="workflows.builder.read",
+)
+async def workflow_builder_status(tenant_id: str = Depends(get_current_tenant)) -> dict[str, Any]:
+    """Whether the visual builder is on; the console shows the builder and the stored-workflow graph only then."""
+    return {"enabled": workflow_graph.enabled()}
+
+
+@router.get("/workflows/{wf_id}/graph")
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="workflows.read",
+    rate_limit="standard",
+    idempotency="read-only",
+    audit_event="workflows.graph.read",
+)
+async def workflow_graph_view(wf_id: UUID, tenant_id: str = Depends(get_current_tenant)) -> dict[str, Any]:
+    """A stored workflow as the graph the console draws, with any problems its definition has."""
+    tid = _uuid.UUID(tenant_id)
+    async with get_tenant_session(tid) as session:
+        row = (
+            await session.execute(
+                select(WorkflowDefinition).where(WorkflowDefinition.id == wf_id, WorkflowDefinition.tenant_id == tid)
+            )
+        ).scalar_one_or_none()
+        if row is None:
+            raise HTTPException(404, "Workflow not found")
+        definition = dict(row.definition or {})
+    return {
+        "workflow_id": str(wf_id),
+        "enabled": workflow_graph.enabled(),
+        "graph": workflow_graph.to_graph(definition),
+        "errors": workflow_graph.validate(definition),
+    }
+
+
 @router.get("/workflows/templates")
 @route_meta(
     auth_required=True,
@@ -417,11 +482,7 @@ async def list_workflows(
     tid = _uuid.UUID(tenant_id)
     company_uuid = _parse_company_id(company_id)
     async with get_tenant_session(tid) as session:
-        count_q = (
-            select(func.count())
-            .select_from(WorkflowDefinition)
-            .where(WorkflowDefinition.tenant_id == tid)
-        )
+        count_q = select(func.count()).select_from(WorkflowDefinition).where(WorkflowDefinition.tenant_id == tid)
 
         query = select(WorkflowDefinition).where(WorkflowDefinition.tenant_id == tid)
 
@@ -435,11 +496,7 @@ async def list_workflows(
 
         total = (await session.execute(count_q)).scalar() or 0
 
-        query = (
-            query.order_by(WorkflowDefinition.created_at.desc())
-            .offset((page - 1) * per_page)
-            .limit(per_page)
-        )
+        query = query.order_by(WorkflowDefinition.created_at.desc()).offset((page - 1) * per_page).limit(per_page)
         result = await session.execute(query)
         workflows = result.scalars().all()
 
@@ -470,9 +527,7 @@ async def get_workflow(
     tid = _uuid.UUID(tenant_id)
     async with get_tenant_session(tid) as session:
         result = await session.execute(
-            select(WorkflowDefinition).where(
-                WorkflowDefinition.id == wf_id, WorkflowDefinition.tenant_id == tid
-            )
+            select(WorkflowDefinition).where(WorkflowDefinition.id == wf_id, WorkflowDefinition.tenant_id == tid)
         )
         wf = result.scalar_one_or_none()
     if not wf:
@@ -517,11 +572,7 @@ async def list_workflow_runs(
             WorkflowRun.workflow_def_id == wf_id,
             WorkflowRun.tenant_id == tid,
         )
-        total = (
-            await session.execute(
-                select(func.count()).select_from(WorkflowRun).where(*filters)
-            )
-        ).scalar() or 0
+        total = (await session.execute(select(func.count()).select_from(WorkflowRun).where(*filters))).scalar() or 0
         result = await session.execute(
             select(WorkflowRun)
             .where(*filters)
@@ -559,11 +610,14 @@ async def create_workflow(
 ):
     # Validate definition structure
     if not body.definition or not isinstance(body.definition.get("steps"), list):
-        raise HTTPException(
-            400, "Workflow definition must contain a 'steps' array"
-        )
+        raise HTTPException(400, "Workflow definition must contain a 'steps' array")
     if len(body.definition["steps"]) == 0:
         raise HTTPException(400, "Workflow must have at least one step")
+    # Visual builder: a definition that cannot be drawn and run is refused with every problem named.
+    if workflow_graph.enabled():
+        problems = workflow_graph.validate(body.definition)
+        if problems:
+            raise HTTPException(422, detail={"error": "workflow_definition", "errors": problems})
 
     tid = _uuid.UUID(tenant_id)
     company_uuid = _parse_company_id(body.company_id)
@@ -699,9 +753,7 @@ async def _execute_workflow_bg(
 
         # Persist engine_run_id so HITL resume can find it later
         async with get_tenant_session(tenant_id) as session:
-            db_run = (
-                await session.execute(select(WorkflowRun).where(WorkflowRun.id == run_id))
-            ).scalar_one()
+            db_run = (await session.execute(select(WorkflowRun).where(WorkflowRun.id == run_id))).scalar_one()
             db_run.context = {**(db_run.context or {}), "_engine_run_id": engine_run_id}
 
         steps_def = {s["id"]: s for s in definition.get("steps", [])}
@@ -735,11 +787,7 @@ async def _execute_workflow_bg(
 
             # ---- sync new step results to DB ----
             async with get_tenant_session(tenant_id) as session:
-                db_run = (
-                    await session.execute(
-                        select(WorkflowRun).where(WorkflowRun.id == run_id)
-                    )
-                ).scalar_one()
+                db_run = (await session.execute(select(WorkflowRun).where(WorkflowRun.id == run_id))).scalar_one()
 
                 for step_id, step_result in state.get("step_results", {}).items():
                     step_def = steps_def.get(step_id, {})
@@ -776,27 +824,27 @@ async def _execute_workflow_bg(
                             push_scope = {"agent_visibility": AGENT_VISIBILITY_TENANT, "agent_owner_user_id": None}
                         if hitl_agent_id:
                             hitl_item = HITLQueue(
-                                    tenant_id=tenant_id,
-                                    workflow_run_id=run_id,
-                                    agent_id=hitl_agent_id,
-                                    title=f"Approval required: {step_def.get('title', step_id)}",
-                                    trigger_type="workflow_step",
-                                    priority=step_def.get("priority", "normal"),
-                                    requested_by_user_id=workflow_run_initiator(db_run),
-                                    assignee_role=step_result.get(
-                                        "assignee_role",
-                                        step_def.get("assignee_role", "admin"),
-                                    ),
-                                    decision_options=step_def.get(
-                                        "decision_options",
-                                        {"options": ["approve", "reject"]},
-                                    ),
-                                    context={
-                                        "workflow_run_id": str(run_id),
-                                        "step_id": step_id,
-                                        "engine_run_id": engine_run_id,
-                                    },
-                                    expires_at=hitl_expires_at,
+                                tenant_id=tenant_id,
+                                workflow_run_id=run_id,
+                                agent_id=hitl_agent_id,
+                                title=f"Approval required: {step_def.get('title', step_id)}",
+                                trigger_type="workflow_step",
+                                priority=step_def.get("priority", "normal"),
+                                requested_by_user_id=workflow_run_initiator(db_run),
+                                assignee_role=step_result.get(
+                                    "assignee_role",
+                                    step_def.get("assignee_role", "admin"),
+                                ),
+                                decision_options=step_def.get(
+                                    "decision_options",
+                                    {"options": ["approve", "reject"]},
+                                ),
+                                context={
+                                    "workflow_run_id": str(run_id),
+                                    "step_id": step_id,
+                                    "engine_run_id": engine_run_id,
+                                },
+                                expires_at=hitl_expires_at,
                             )
                             session.add(hitl_item)
                             # HITLQueue.id is a Python-side default applied at
@@ -827,11 +875,7 @@ async def _execute_workflow_bg(
         _log.error("workflow_bg_failed", run_id=str(run_id), error=str(exc))
         try:
             async with get_tenant_session(tenant_id) as session:
-                db_run = (
-                    await session.execute(
-                        select(WorkflowRun).where(WorkflowRun.id == run_id)
-                    )
-                ).scalar_one()
+                db_run = (await session.execute(select(WorkflowRun).where(WorkflowRun.id == run_id))).scalar_one()
                 if db_run.status not in TERMINAL_WORKFLOW_STATUSES:
                     db_run.status = "failed"
                     db_run.error = {"message": str(exc)}
@@ -851,9 +895,7 @@ async def _execute_workflow_bg(
 
             async with get_tenant_session(tenant_id) as session:
                 db_run = (
-                    await session.execute(
-                        select(WorkflowRun).where(WorkflowRun.id == run_id)
-                    )
+                    await session.execute(select(WorkflowRun).where(WorkflowRun.id == run_id))
                 ).scalar_one_or_none()
                 await record_ab_outcome_if_terminal(db_run)
         # enterprise-gate: broad-except-ok reason=ab-outcome-recording-is-best-effort-after-run-terminal
@@ -1019,9 +1061,7 @@ async def get_workflow_run(
     try:
         async with get_tenant_session(tid) as session:
             wf_result = await session.execute(
-                select(WorkflowDefinition.name).where(
-                    WorkflowDefinition.id == run.workflow_def_id
-                )
+                select(WorkflowDefinition.name).where(WorkflowDefinition.id == run.workflow_def_id)
             )
             wf_name = wf_result.scalar_one_or_none()
             if wf_name:
@@ -1051,9 +1091,7 @@ async def get_replan_history(
     tid = _uuid.UUID(tenant_id)
     async with get_tenant_session(tid) as session:
         result = await session.execute(
-            select(WorkflowRun).where(
-                WorkflowRun.id == run_id, WorkflowRun.tenant_id == tid
-            )
+            select(WorkflowRun).where(WorkflowRun.id == run_id, WorkflowRun.tenant_id == tid)
         )
         run = result.scalar_one_or_none()
 
@@ -1200,9 +1238,7 @@ async def update_replan_config(
     tid = _uuid.UUID(tenant_id)
     async with get_tenant_session(tid) as session:
         result = await session.execute(
-            select(WorkflowDefinition).where(
-                WorkflowDefinition.id == wf_id, WorkflowDefinition.tenant_id == tid
-            )
+            select(WorkflowDefinition).where(WorkflowDefinition.id == wf_id, WorkflowDefinition.tenant_id == tid)
         )
         wf = result.scalar_one_or_none()
         if not wf:

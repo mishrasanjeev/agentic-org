@@ -4,6 +4,349 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
 
 ## [Unreleased] - 2026-08-29
 
+### Added - Content services: governed drafting, structured summarisation and obligation extraction
+- With `AGENTICORG_CONTENT_SERVICES_ENABLED` on (off by default), three
+  reusable capability APIs under `/content` (`core/content/`), each with
+  an input schema, an output schema, a guardrail profile and an
+  evaluation dataset the tenant can install through the evaluation
+  framework: drafting (notices, circulars, letters, emails, memos, FAQs
+  from points and approved sources, naming the sources used and the
+  placeholders for what is not known; notices and circulars wait in the
+  drafts queue for a second person, table `content_drafts`, migration
+  `v6z62_content_drafts`), summarisation across documents with key points
+  that cite their documents, and obligation and deadline extraction where
+  every item quotes its source and unsupported items are dropped and
+  counted. Inputs pass the input guardrails, the model answers in JSON
+  checked against the schema with one retry, and outputs pass the output
+  guardrails with the sources as grounding context.
+- Content services hardening: the `/content` routes need `audit:read` to
+  read and `approvals:write` to act; drafting and draft decisions need an
+  active human administrator (never an API key); a masked input is what
+  the model sees; knowledge-base sources pass the retrieval guardrails;
+  every output field passes the output guardrails; pre-model
+  pseudonymisation applies to every content model call; extracted
+  obligations need a quote of at least three words that supports them.
+
+### Added - Conversational services: scenario templates, summaries, feedback and sentiment
+- Multi-step scenarios chain intents without a model: a raised dispute
+  offers to track its reference, a loan enquiry offers to start the
+  application (a new `loan_application` intent with tenure) and the
+  application offers tracking, a blocked card offers a replacement (a new
+  `card_replacement` intent), and an application that needs something
+  from the user offers a person (`core/conversation/scenarios.py`). A
+  deterministic summary of requests, actions, pending items, hand-off,
+  rating and sentiment is available to the caller
+  (`GET /conversation/session/summary`), the supervisor and the hand-off
+  (`core/conversation/summary.py`). A rating from 1 to 5 is asked once
+  after an action or a hand-off or sent from the interface
+  (`POST /conversation/feedback`) and kept with the agent's feedback;
+  sentiment is read on every user turn and two negative turns in a row
+  offer a person (`core/conversation/feedback.py`).
+- Feedback for an agent is accepted only when the agent belongs to the
+  caller's tenant and company and is visible to the caller, a retried
+  rating stores one feedback row, and `stored_with_agent` is true only when
+  the row was stored. Ratings and sentiment match whole words, prefer the
+  longest phrase and read negation ("not helpful" is a 2), and an amount
+  too large to be a number is asked for again.
+
+### Added - Conversational services: escalation hand-off and the supervisor console
+- A hand-off leaves a review-queue item (`conversation_escalation`) with
+  the summary, the intent tag, the slots and the recent turns, raises a
+  ticket through the agent's ticketing tool when one is authorised, marks
+  the session escalated and tells the live feed
+  (`core/conversation/escalation.py`). A supervisor lists live and
+  escalated conversations, reads a transcript, takes a conversation over
+  (the assistant stops answering and the user's messages reach the
+  supervisor), replies into the user's chat, and
+  releases it (`core/conversation/supervisor.py`,
+  `/conversation/supervisor/sessions`, the Conversations page; migration
+  `v6z61_conversation_supervision`).
+- The tenant-wide live feed announces conversation turns and messages
+  without their text; the console reads the transcript through its
+  tenant-admin route and the user's chat reads supervisor replies from the
+  user's own session (`GET /conversation/session` returns `messages`), so
+  replies sent while the chat was closed appear when it reopens. A reply
+  from a supervisor who does not hold the conversation is refused before
+  anything is written, and a hand-off keeps the intent and slots collected
+  before the dialogue gave up; accepting the offer of a person after
+  repeated fallbacks is recorded as a fallback hand-off with high priority.
+- The hand-off is the one path for every escalation: the review item is
+  written only for an agent of the tenant and notifies its approvers, and
+  when neither the item nor a ticket could be raised the user is told that
+  nothing has been handed over instead of being promised a person.
+
+### Added - Conversational services: multi-turn context, clarification and graceful fallbacks
+- With `AGENTICORG_CONVERSATION_V2_ENABLED` on, the recent turns of a chat
+  reach the agent as the run's context so follow-ups resolve earlier
+  references (`core/conversation/context.py`); in the banking dialogue
+  "the same amount", "that account" and "again" resolve from the last
+  action, a message naming two amounts or two payees is asked about
+  instead of acted on, and a failed, empty or low-confidence answer is a
+  graceful fallback that says what happened and what is known about the
+  outcome (a timeout says the outcome is unknown and asks the user to
+  check before retrying), and offers a person after two in a row, counted
+  across chat queries from the session history
+  (`core/conversation/fallbacks.py`). An amount marked with a currency and
+  a bare alternative ("₹500 or 600") are both offered as choices.
+
+### Added - Conversational services: banking intents, slot filling and confirmed execution
+- With `AGENTICORG_CONVERSATION_V2_ENABLED` on (off by default), a chat
+  message that names a banking intent (balance, statement, card block,
+  transfer, bill payment, loan, dispute, application status, talk to a
+  person) is a dialogue turn: parameters are extracted and collected turn
+  by turn, an ambiguous message is clarified, a transaction is summarised
+  and confirmed, and only then the bound tool runs under the grant through
+  the agent's governed tools (`core/conversation/`, `/conversation/turns`,
+  table `conversation_sessions`, migration `v6z60_conversation_sessions`).
+  `POST /chat/query` returns the outcome in `conversation`; other messages
+  reach the agent as before.
+- A confirmed action is claimed with the session state under a row lock,
+  with an idempotency key, before its tool is called, so it runs once; the
+  agent's operator halts and throttles apply to it; a request for a person
+  raises a hand-off item in the approvals queue, or says honestly that none
+  was raised; bindings prefer the exact connector-qualified tool.
+
+### Added - Agent runtime: debugging console with breakpoints and step-through
+- With `AGENTICORG_RUNTIME_DEBUG_CONSOLE_ENABLED` on (off by default), a
+  tenant administrator reads a run's checkpoints back as steps (the node
+  that ran, what it changed, the bounded and redacted state, what is next)
+  and inspects one value of one step by its path
+  (`core/langgraph/debugger.py`, `/agents/{id}/debug/threads/{thread_id}`).
+  An agent's breakpoints pause its runs before a node (`PUT
+  /agents/{id}/debug`); a paused run is a debug session (table
+  `agent_debug_sessions`, migration `v6z59_agent_debug_sessions`) the
+  console steps one node at a time or continues to the next breakpoint.
+  The console opens a run's thread from its timeline (`agent.thread_id`).
+  A step passes the plan, budget and cost-threshold gates a run passes, adds
+  what it spent to the agent's cost ledger, resolves the run's connector
+  credentials again, keeps the run's output schema and limits, and an
+  approval it reaches opens the normal approval flow.
+
+### Added - Agent runtime: schema-validated tool registration and the execution envelope
+- With `AGENTICORG_TOOL_REGISTRY_ENABLED` on (off by default), a tenant
+  registers tools with JSON Schemas for their inputs and outputs, a risk
+  class and an envelope (`core/tool_gateway/registry.py`, table
+  `tool_registrations`, migration `v6z58_tool_registrations`,
+  `/tools/registry`); the gateway refuses inputs that fail the schema
+  before any call leaves it, audits the refusal, and holds a call to its
+  timeout, output cap and output schema, marking the output untrusted.
+- The check and the envelope also hold at the shared connector dispatch
+  that LangGraph agents, workflow connector steps and remote MCP tools use;
+  a registry that cannot be read refuses the call
+  (`tool_registry_unavailable`); untrusted output passes the guardrails'
+  retrieval stage and is withheld when a rule blocks it; the table's
+  row-level policy is forced for the table owner.
+
+### Added - Agent runtime: long-term memory with retention and erasure
+- With `AGENTICORG_RUNTIME_MEMORY_ENABLED` on (off by default), a run that
+  names a subject recalls what is remembered about it into its prompt and
+  stores what it asks to keep (`core/memory/long_term.py`, table
+  `agent_memories`, migration `v6z57_agent_memories`); entries expire by
+  their kind's retention and are pruned nightly; `/memory` recalls,
+  remembers and erases every entry about a subject, with the count.
+- Recall needs `audit:read` and writes need `approvals:write`; an `agent_id`
+  must name an agent of the tenant the caller can see (404 otherwise).
+  Recalled entries are redacted with the task before the model sees them,
+  a memory database error never fails a run, and the same content is one
+  entry under a unique index written by an atomic upsert.
+
+### Added - Agent runtime: visual workflow builder with branching and fallback
+- The console's Build visually tab draws a workflow as a graph of steps,
+  dependencies, condition paths and fallbacks, adds and connects agent
+  steps, human checkpoints and conditions, and validates the definition
+  through `POST /workflows/validate`, which names every problem
+  (`core/workflows/graph.py`); `GET /workflows/{id}/graph` draws a stored
+  one. The engine gains `on_failure: fallback(step)`. With
+  `AGENTICORG_WORKFLOW_BUILDER_V2_ENABLED` on (off by default),
+  `POST /workflows` refuses a definition with problems.
+- The Build visually tab and the workflow page graph show only while
+  `GET /workflows/builder` reports the flag on. A fallback step runs only
+  when its source failed, with or without a declared dependency; validation
+  refuses entries without a text id and conditions with `rules`, which the
+  engine does not branch on yet.
+
+### Added - Agent runtime: execution limits and loop detection
+- With `AGENTICORG_RUNTIME_LIMITS_ENABLED` on (off by default), an agent's
+  own limits (`PUT /agents/{id}/limits`: model steps, duration, tool calls,
+  and the loop rule) are enforced in the graph and the runner, bounded by
+  the platform's maxima (`core/langgraph/limits.py`): a run over a limit, or
+  repeating a tool call pattern, is stopped with the reason in its error and
+  a `limit` block that the run's audit entry and a Prometheus counter carry.
+- The step limit is checked before every model call, chat runs carry the
+  agent's limits too, `POST /agents/{id}/run` returns the `limit` block, a
+  run may make exactly `max_tool_calls` tool calls, and with the switch off
+  a run that reaches the platform ceiling fails as it did before.
+
+### Added - FinOps: cost comparison and forecasting
+- With `AGENTICORG_FINOPS_FORECAST_ENABLED` on (off by default),
+  `GET /finops/forecast` projects tokens and cost per use case for the next
+  quarter from the attributed ledger's history and a growth assumption, and
+  `GET /finops/comparison` folds the model calls per use case with the
+  cheapest catalogue alternatives and a before-and-after around a change
+  date (`core/finops/forecast.py`).
+  The forecast totals cover every label; the listed rows are the highest
+  projected spend first, with `total_rows` and `truncated` when the list is
+  cut. Calls without an input and output split are priced at the blended rate
+  alongside the split calls in the comparison.
+
+### Added - FinOps: thresholds and actions
+- With `AGENTICORG_FINOPS_THRESHOLDS_ENABLED` on (off by default), a
+  tenant administrator sets organisation, application, use-case or
+  business-unit thresholds per day or month with an action
+  (`core/finops/thresholds.py`, table `finops_thresholds`, migration
+  `v6z56_finops_thresholds`, `/finops/thresholds`): a breached threshold
+  alerts the owner once per period, throttles the run with a short delay,
+  or suspends runs until the period resets or an administrator lifts it.
+  Thresholds need `AGENTICORG_FINOPS_ATTRIBUTION_ENABLED` (settings refuse
+  to load without it), match runs on the agent's own use case and business
+  unit rather than the caller's labels, notify once per period under
+  concurrent runs, cap a tenant at 200 thresholds and answer a duplicate
+  name with 409.
+
+### Added - FinOps: use-case attribution
+- With `AGENTICORG_FINOPS_ATTRIBUTION_ENABLED` on (off by default), a run
+  binds its use case, application, business unit, department and cost
+  centre (`core/finops/attribution.py`); its cost write adds a row per day,
+  agent and attribution to `finops_cost_ledger` (migration
+  `v6z55_finops_attribution`), each model call record carries the business
+  unit and application, and `GET /finops/attribution` folds the ledger by
+  any dimension with the unattributed share.
+- The ledger's row-level policy is forced, its unique key includes the
+  department and cost centre (a mid-day change starts a new row), and the
+  legacy-table column additions skip a table that is missing.
+
+### Added - AI governance: policy console
+- With `AGENTICORG_GOVERNANCE_POLICY_CONSOLE_ENABLED` on (off by default),
+  a tenant administrator sees every policy (model routing, access and
+  limits, guardrail rules, approval policies, the action taxonomy) in one
+  shape, writes and removes one through its own store's writer, and dry-runs
+  a described call, text, tool or workflow across the enforcement points
+  (`core/governance/policy_console.py`, `/governance/policies`).
+- The console lists disabled policies too, checks approval steps as the
+  approval policies API does, and its dry run resolves approvals, model
+  access by application and principal, and tool actions as runtime does.
+
+### Added - AI governance: regulatory risk tiers
+- With `AGENTICORG_GOVERNANCE_RISK_TIERS_ENABLED` on (off by default), an
+  agent's risk tier forces controls whatever the separate switches say
+  (`core/governance/risk_tiers.py`): medium needs registry approval; high
+  adds a passed evaluation gate, a human oversight condition and 50 scored
+  shadow samples; critical adds 200 samples and maker-checker. Promotion and
+  resume refuse an unmet requirement; a tier is changed by an administrator
+  and lowered by a second person; a regulated agent keeps its oversight and
+  its gate. `GET /governance/risk-tiers` shows the policy and compliance.
+
+### Added - AI governance: model cards
+- With `AGENTICORG_GOVERNANCE_MODEL_CARDS_ENABLED` on (off by default),
+  every model a tenant uses has one standard card
+  (`core/governance/model_cards.py`): catalogue facts, use and risk tier
+  from the inventory, the policies and limits that name it, the residency
+  decision, price, health, the newest evaluation run, and the part an
+  administrator writes (table `model_cards`, migration `v6z54_model_cards`)
+  with approval by a second person; `GET /governance/model-cards` lists the
+  cards with what each still lacks.
+
+### Added - AI governance: asset inventory and bill-of-materials export
+- With `AGENTICORG_GOVERNANCE_INVENTORY_ENABLED` on (off by default), a
+  tenant administrator reads a live inventory of the tenant's agents,
+  models, prompts (as hashes), knowledge bases, tools and connectors with
+  owner, version, risk tier, status and dependencies
+  (`core/governance/inventory.py`, `GET /governance/inventory`), and
+  exports it as a bill-of-materials document
+  (`GET /governance/inventory/export`); the summary counts unowned assets
+  and untiered agents.
+
+### Added - Knowledge retrieval: quality metrics, grounding indicator and re-indexing
+- With `AGENTICORG_KNOWLEDGE_METRICS_ENABLED` on (off by default), every
+  knowledge search leaves a figures-only sample (`core/rag/metrics.py`,
+  table `knowledge_retrieval_metrics`, migration
+  `v6z53_knowledge_retrieval_metrics`) and feeds Prometheus series by
+  retrieval path; `GET /knowledge/metrics` folds a tenant's window and
+  `POST /knowledge/metrics/grounding` returns the share of an answer's
+  sentences the given chunks support. With
+  `AGENTICORG_KNOWLEDGE_REINDEX_ENABLED` on, `POST /knowledge/reindex`
+  re-embeds chunks made by a stale model and records missing entities,
+  bounded per call (`core/rag/reindex.py`).
+
+### Added - Knowledge retrieval: graph retrieval over extracted entities
+- With `AGENTICORG_KNOWLEDGE_GRAPH_RETRIEVAL_ENABLED` on (off by default),
+  ingestion records the names, codes, amounts and dates each chunk mentions
+  (`core/rag/entities.py`, table `knowledge_entities`, migration
+  `v6z52_knowledge_entities`; identity numbers are never recorded), a search
+  fuses in the chunks the graph reaches from the query (matched entities,
+  their neighbours, the chunks that mention them) with a `graph` step in the
+  trace, and `GET /knowledge/graph?q=` shows the matched entities, their
+  neighbours and the links between them.
+
+### Added - Knowledge retrieval: query transformation and retrieval traces
+- With `AGENTICORG_KNOWLEDGE_QUERY_TRANSFORM_ENABLED` on (off by default),
+  a knowledge search is planned before it runs (`core/rag/query.py`): the
+  query is normalised, a compound question decomposed by named rules and a
+  keyword form added, with a model proposing further queries when
+  `AGENTICORG_KNOWLEDGE_QUERY_REWRITE_MODEL` names one. A weak first pass is
+  expanded to the variants and fused by reciprocal rank; `"trace": true` on
+  `POST /knowledge/search` returns every step with its counts, and the
+  console shows them under the results.
+
+### Added - Knowledge retrieval: document access control
+- A knowledge document belongs to a domain or to the tenant as a whole
+  (`knowledge_documents.domain`, migration
+  `v6z51_knowledge_document_domain`; the upload names it with `?domain=`).
+  A caller limited to some domains is shown chunks of documents in those
+  domains and of shared documents only, in search results, citations,
+  excerpts and the document list (`core/rag/access.py`); an unrestricted
+  caller sees the tenant's documents as before, and existing documents stay
+  shared.
+
+### Added - Knowledge retrieval: citations and excerpt navigation
+- Every knowledge search hit carries a `citation` (chunk id, source,
+  chunk number, page, paragraph, heading, sheet, cell range;
+  `core/rag/citations.py`) read through a join on the chunk provenance;
+  older chunks carry `null` and the original fields are unchanged.
+  `GET /knowledge/documents/{id}/excerpt?q=` returns the cited chunk
+  whole with the query terms located and the neighbouring chunks, under
+  the retrieval guardrails. The Knowledge Base page shows the citation
+  beside each hit and opens the excerpt with the terms marked and
+  previous/next links.
+
+### Added - Knowledge retrieval: search filters and a re-ranking stage
+- `POST /knowledge/search` takes `filters` (`category`, `source`,
+  `file_type`, a `created_from`/`created_to` window; `core/rag/filters.py`)
+  applied inside the dense and sparse rankings alike, so a narrowed
+  search never widens past what was asked. Behind
+  `AGENTICORG_KNOWLEDGE_RERANK_ENABLED` (off by default), the fused
+  candidates of a hybrid search are re-scored on the query's own terms
+  (coverage, phrase, proximity, title, fused score; `core/rag/rerank.py`)
+  with no model call; off, the fused order is returned as it was.
+
+### Added - Knowledge retrieval: layout-preserving extraction and chunking strategies
+- PDF pages are split into numbered paragraphs with headings recognised
+  from line shape, Word documents keep their heading styles and attach
+  table rows to their section, and every chunk records its paragraph and
+  nearest heading beside its page (`knowledge_chunk_sources.paragraph`,
+  `.heading`; migration `v6z50_chunk_layout`). A tenant chooses how spans
+  become chunks with `chunk_strategy` in the tenant AI settings
+  (`core/rag/chunking.py`): `sentence` (the default, unchanged), `paragraph`
+  or `heading`, sized by `chunk_size`. Existing chunks are not re-chunked.
+
+### Added - Agent registry: ratings, reliability and certification
+- The card carries reliability metrics over a window (runs by status,
+  completion, failure and human-review rates, average and 95th-percentile
+  duration, tokens and cost per run, feedback by type, shadow accuracy;
+  `GET /agents/{id}/reliability?days=`), the rating summary
+  (`POST /agents/{id}/rating`, one score per user and agent, table
+  `agent_ratings`, migration `v6z49_agent_ratings`) and a certification
+  section: registry approval, the evaluation gate verdict and the model
+  provider attestation, with a plain statement that trust-registry
+  attestations and passports are not attached.
+
+### Added - Agent registry: dependency graph
+- `GET /agents/{id}/dependencies` (`core/agent_registry/dependencies.py`)
+  returns an agent's models, prompt, tools and connectors, knowledge base,
+  governing policies (guardrail rules, review condition, output schema,
+  evaluation gate dataset), related agents and teams as nodes and edges,
+  with names and references only.
+
 ### Added - Agent registry: catalogue, templates and banking pack
 
 - Catalogue search now filters visibility and search terms before its result

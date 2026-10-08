@@ -69,9 +69,7 @@ class AgentCreate(BaseModel):
     system_prompt_text: str | None = None
     prompt_variables: dict[str, str] = {}
     authorized_tools: list[str] = []
-    hitl_policy: HITLPolicyConfig = Field(
-        default_factory=lambda: HITLPolicyConfig(condition="confidence < 0.88")
-    )
+    hitl_policy: HITLPolicyConfig = Field(default_factory=lambda: HITLPolicyConfig(condition="confidence < 0.88"))
     confidence_floor: float = Field(0.88, ge=0.0, le=1.0)
     max_retries: int = 3
     # Per-agent LLM routing override (auto | tier1 | tier2 | tier3 | disabled).
@@ -284,23 +282,17 @@ class SchemaCreate(BaseModel):
         """
         if not isinstance(v, dict) or not v:
             raise ValueError(
-                "json_schema must be a non-empty JSON Schema object "
-                "with at least 'type' and 'properties' fields"
+                "json_schema must be a non-empty JSON Schema object with at least 'type' and 'properties' fields"
             )
         if "$ref" in v:
             return v
         schema_type = v.get("type")
         if not schema_type:
-            raise ValueError(
-                "json_schema must declare a 'type' field (e.g. 'object')"
-            )
+            raise ValueError("json_schema must declare a 'type' field (e.g. 'object')")
         if schema_type == "object":
             properties = v.get("properties")
             if not isinstance(properties, dict) or not properties:
-                raise ValueError(
-                    "json_schema with type='object' must declare a "
-                    "non-empty 'properties' map"
-                )
+                raise ValueError("json_schema with type='object' must declare a non-empty 'properties' map")
         return v
 
 
@@ -369,6 +361,11 @@ class AgentTrafficSplitIn(BaseModel):
     split: dict[str, Any] | None
 
 
+class AgentRatingIn(BaseModel):
+    score: int = Field(..., ge=1, le=5)
+    comment: str | None = Field(None, max_length=500)
+
+
 class AgentLifecycleIn(BaseModel):
     model_config = {"extra": "forbid"}
 
@@ -380,6 +377,14 @@ class AgentEvalGateIn(BaseModel):
     """An agent's evaluation gate for promotion, or null to remove it."""
 
     gate: dict[str, Any] | None = None
+
+
+class AgentLimitsIn(BaseModel):
+    """An agent's execution limits (core/langgraph/limits.py), or null to remove them."""
+
+    model_config = {"extra": "forbid"}
+
+    limits: dict[str, Any] | None = None
 
 
 class AgentOutputSchemaIn(BaseModel):

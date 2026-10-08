@@ -1,8 +1,10 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import api, { extractApiError } from "../lib/api";
 import { extractReadableAgentOutput } from "@/lib/agent-output";
+import { AgenticOrgWS, type FeedMessage } from "@/lib/websocket";
+import { useAuth } from "../contexts/AuthContext";
 
-interface Message {
+export interface Message {
   id: string;
   role: "user" | "agent";
   text: string;
@@ -19,6 +21,41 @@ interface ChatQueryResponse {
   confidence: number;
   domain: string;
   hitl_trigger?: string | null;
+  conversation?: { session_key?: string | null; kind?: string } | null;
+}
+
+/** A supervisor's reply or notice as the caller's own session returns it (GET /conversation/session). */
+export interface SupervisorTurn {
+  role?: string | null;
+  text?: string | null;
+  at?: string | null;
+}
+
+/**
+ * Merge the supervisor's replies and notices from the persisted session into the chat, once each.
+ * The live feed only says that a message arrived, so this is how replies reach the chat, including
+ * the ones sent while the panel was closed or offline.
+ */
+export function mergeSupervisorTurns(prev: Message[], turns: SupervisorTurn[]): Message[] {
+  const known = new Set(prev.map((m) => m.id));
+  const fresh: Message[] = [];
+  for (const turn of turns) {
+    if (turn.role !== "supervisor" && turn.role !== "system") continue;
+    const text = String(turn.text ?? "");
+    const id = `conversation:${turn.role}:${turn.at ?? ""}:${text}`;
+    if (!text || known.has(id)) continue;
+    known.add(id);
+    const at = turn.at ? new Date(turn.at) : new Date();
+    fresh.push({
+      id,
+      role: "agent",
+      text,
+      agent: turn.role === "supervisor" ? "Supervisor" : "System",
+      timestamp: Number.isNaN(at.getTime()) ? new Date() : at,
+    });
+  }
+  if (fresh.length === 0) return prev;
+  return [...prev, ...fresh].sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime());
 }
 
 export default function ChatPanel({
@@ -35,6 +72,9 @@ export default function ChatPanel({
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
+  const [sessionKey, setSessionKey] = useState<string | null>(null);
+  const auth = useAuth();
+  const tenantId = auth.user?.tenant_id ?? "";
   const listRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -46,6 +86,38 @@ export default function ChatPanel({
       listRef.current.scrollTop = listRef.current.scrollHeight;
     }
   }, [messages]);
+
+  // A supervisor's replies are read from the caller's own session; the feed never carries their text.
+  const replaySupervisor = useCallback(async () => {
+    const qs = new URLSearchParams();
+    if (agentId) qs.set("agent_id", agentId);
+    if (companyId) qs.set("company_id", companyId);
+    try {
+      const { data } = await api.get(`/conversation/session?${qs.toString()}`);
+      if (typeof data?.session_key === "string") setSessionKey((current) => current ?? data.session_key);
+      const turns: SupervisorTurn[] = Array.isArray(data?.messages) ? data.messages : [];
+      setMessages((prev) => mergeSupervisorTurns(prev, turns));
+    } catch {
+      // conversational services off or unavailable: nothing to replay
+    }
+  }, [agentId, companyId]);
+
+  // A supervisor who has taken the conversation over: the live feed says a message arrived, then it is read.
+  useEffect(() => {
+    if (!open || !sessionKey || !tenantId) return;
+    const ws = new AgenticOrgWS();
+    const unsubscribe = ws.subscribe((event: FeedMessage) => {
+      if (event.session_key !== sessionKey) return;
+      if (event.type !== "conversation.message" && event.type !== "conversation.takeover" && event.type !== "conversation.release") return;
+      if (event.role === "user") return;
+      void replaySupervisor();
+    });
+    ws.connect(tenantId);
+    return () => {
+      unsubscribe();
+      ws.disconnect();
+    };
+  }, [open, sessionKey, tenantId, replaySupervisor]);
 
   // Load chat history on open
   useEffect(() => {
@@ -75,8 +147,11 @@ export default function ChatPanel({
       if (loaded.length > 0) setMessages(loaded);
     }).catch(() => {
       // history endpoint unavailable — start fresh
+    }).finally(() => {
+      // Supervisor replies sent while the chat was closed are not in the chat history: replay them.
+      void replaySupervisor();
     });
-  }, [open, agentId, companyId]);
+  }, [open, agentId, companyId, replaySupervisor]);
 
   // Focus input when panel opens
   useEffect(() => {
@@ -117,6 +192,7 @@ export default function ChatPanel({
         timestamp: new Date(),
       };
       setMessages((prev) => [...prev, agentMsg]);
+      if (res.data.conversation?.session_key) setSessionKey(res.data.conversation.session_key);
     } catch (err) {
       const errMsg: Message = {
         id: crypto.randomUUID(),

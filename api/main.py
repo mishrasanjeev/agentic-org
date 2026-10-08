@@ -17,6 +17,7 @@ from api.v1 import (
     a2a_interop,
     aa_callback,
     abm,
+    agent_debug,
     agent_registry,
     agent_teams,
     agents,
@@ -41,7 +42,10 @@ from api.v1 import (
     composio,
     config,
     connectors,
+    content,
     content_safety,
+    conversation,
+    conversation_supervisor,
     costs,
     cron,
     delegations,
@@ -49,7 +53,12 @@ from api.v1 import (
     eval_datasets,
     evals,
     feature_flags,
+    finops,
     governance,
+    governance_inventory,
+    governance_model_cards,
+    governance_policies,
+    governance_risk_tiers,
     governed_cases,
     guardrails,
     health,
@@ -58,6 +67,7 @@ from api.v1 import (
     knowledge,
     kpis,
     mcp,
+    memory,
     model_gateway,
     oauth_connector,
     observability,
@@ -78,6 +88,7 @@ from api.v1 import (
     sso,
     tenant_ai_credentials,
     tenant_ai_settings,
+    tool_registry,
     voice,
     voice_runtime,
     webhooks,
@@ -283,8 +294,19 @@ app.include_router(api_keys.router, prefix="/api/v1", tags=["API Keys"])
 app.include_router(evals.router, prefix="/api/v1", tags=["Evals"])
 app.include_router(eval_datasets.router, prefix="/api/v1", tags=["Evals"])
 app.include_router(agent_registry.router, prefix="/api/v1", tags=["Agent Registry"])
+app.include_router(agent_debug.router, prefix="/api/v1", tags=["Agents"])
+app.include_router(governance_inventory.router, prefix="/api/v1", tags=["Governance"])
+app.include_router(governance_model_cards.router, prefix="/api/v1", tags=["Governance"])
+app.include_router(governance_risk_tiers.router, prefix="/api/v1", tags=["Governance"])
+app.include_router(governance_policies.router, prefix="/api/v1", tags=["Governance"])
+app.include_router(finops.router, prefix="/api/v1", tags=["FinOps"])
+app.include_router(memory.router, prefix="/api/v1", tags=["Memory"])
+app.include_router(tool_registry.router, prefix="/api/v1", tags=["Tools"])
 app.include_router(kpis.router, prefix="/api/v1", tags=["KPIs"])
 app.include_router(chat.router, prefix="/api/v1", tags=["Chat"])
+app.include_router(conversation.router, prefix="/api/v1")
+app.include_router(conversation_supervisor.router, prefix="/api/v1")
+app.include_router(content.router, prefix="/api/v1")
 app.include_router(companies.router, prefix="/api/v1", tags=["Companies"])
 app.include_router(ca_operations.router, prefix="/api/v1", tags=["CA Operations"])
 app.include_router(

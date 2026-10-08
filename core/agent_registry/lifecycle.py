@@ -388,6 +388,7 @@ def _permissions(agent: Any) -> dict[str, Any]:
 
 async def card(session: Any, tenant_id: uuid.UUID, agent: Any) -> dict[str, Any]:
     """The agent's card: configuration, registry fields, prompt summary and the evaluation verdict."""
+    from core.agent_registry import reliability
     from core.prompts import output_schema as prompt_output_schema
 
     entry = await get_entry(session, tenant_id, agent.id)
@@ -395,6 +396,7 @@ async def card(session: Any, tenant_id: uuid.UUID, agent: Any) -> dict[str, Any]
     config = getattr(agent, "config", None) or {}
     llm_config = getattr(agent, "llm_config", None) or {}
     verdict = await eval_gates.evaluate(session, tenant_id, agent)
+    state = entry.state if entry is not None else "draft"
     return {
         "id": str(agent.id),
         "name": agent.name,
@@ -435,6 +437,11 @@ async def card(session: Any, tenant_id: uuid.UUID, agent: Any) -> dict[str, Any]
             "cost_controls": dict(getattr(agent, "cost_controls", None) or {}),
         },
         "evaluation_gate": {"gate": eval_gates.declared(agent), "verdict": verdict.to_dict()},
+        "rating": await reliability.rating_summary(session, tenant_id, agent.id),
+        "reliability": await reliability.metrics(session, tenant_id, agent),
+        "certification": await reliability.certification(
+            session, tenant_id, agent, registry_state=state, gate_verdict=verdict.to_dict()
+        ),
         "created_at": agent.created_at.isoformat() if getattr(agent, "created_at", None) else None,
         "updated_at": agent.updated_at.isoformat() if getattr(agent, "updated_at", None) else None,
     }

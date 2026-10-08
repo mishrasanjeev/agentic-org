@@ -8,8 +8,9 @@ with basic keyword search (no vector embeddings).
 from __future__ import annotations
 
 import os
+import time
 import uuid
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from typing import Any
 
 import structlog
@@ -17,9 +18,24 @@ from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile
 from pydantic import BaseModel, Field
 from sqlalchemy.exc import SQLAlchemyError
 
-from api.deps import get_current_tenant
+from api.deps import get_current_tenant, get_user_domains
 from api.route_metadata import route_meta
 from core.config import settings
+from core.rag import access as knowledge_access
+from core.rag import entities as knowledge_entities
+from core.rag import metrics as rag_metrics
+from core.rag import query as query_transform
+from core.rag import reindex as rag_reindex
+from core.rag import rerank
+from core.rag.citations import (
+    PROVENANCE_COLUMNS,
+    PROVENANCE_JOIN,
+    Citation,
+    citation_from_row,
+    highlights,
+    source_prefix,
+)
+from core.rag.filters import SearchFilters, sql_clauses
 from core.runtime_capacity import AsyncCapacityGate, CapacityLimitError
 from observability import tracing
 
@@ -131,16 +147,34 @@ async def _ragflow_ensure_dataset(dataset_id: str) -> None:
 class SearchRequest(BaseModel):
     query: str
     top_k: int = Field(default=5, ge=1, le=100)
+    # Narrow the documents a query may match (core/rag/filters.py); every field is an AND condition.
+    filters: SearchFilters | None = None
+    # Carry the retrieval trace (core/rag/query.py) in the response; nothing without the transform switch.
+    trace: bool = False
+
+
+class TraceStep(BaseModel):
+    stage: str
+    elapsed_ms: int = 0
+    detail: dict[str, Any] = Field(default_factory=dict)
+
+
+class RetrievalTrace(BaseModel):
+    steps: list[TraceStep]
 
 
 class SearchResult(BaseModel):
     chunk_text: str
     score: float
     document_name: str
+    # Where the chunk came from (core/rag/citations.py); None for sources that keep no provenance.
+    citation: Citation | None = None
 
 
 class SearchResponse(BaseModel):
     results: list[SearchResult]
+    # The steps that produced the results, when asked for and the transform is on.
+    trace: RetrievalTrace | None = None
 
 
 # Canonical status values surfaced to the UI. "ready" was a legacy
@@ -578,6 +612,15 @@ async def supported_document_types() -> dict[str, Any]:
 async def upload_document(
     file: UploadFile,
     tenant_id: str = Depends(get_current_tenant),
+    domain: str | None = Query(
+        default=None,
+        max_length=50,
+        pattern=r"^[a-z][a-z0-9_-]*$",
+        description=(
+            "The domain the document belongs to (finance, hr, ops and so on). Omitted, the document is shared "
+            "with the tenant. A caller limited to some domains may upload into those only."
+        ),
+    ),
     allow_duplicate: bool = Query(
         default=False,
         description=(
@@ -806,6 +849,10 @@ async def upload_document(
             "extraction_details": extracted_content.extra,
         }
     )
+    # A domain reaches here as a validated string from the query; anything else is no domain.
+    domain = domain if isinstance(domain, str) and domain else None
+    if domain:
+        doc_metadata["domain"] = domain
 
     doc: dict[str, Any] = {
         "document_id": doc_id,
@@ -877,6 +924,7 @@ async def upload_document(
             source_object_id=doc["document_id"],
             source_object_type="upload",
             extracted_content=extracted_content,
+            metadata={"domain": domain} if domain else None,
         )
         logger.info(
             "kb_ingest_multimodal",
@@ -966,6 +1014,7 @@ async def list_documents(
     page: int = Query(1, ge=1),
     per_page: int = Query(20, ge=1, le=100),
     tenant_id: str = Depends(get_current_tenant),
+    user_domains: list[str] | None = Depends(get_user_domains),
 ):
     """List documents in the knowledge base."""
     # Session 5 TC-013: merge the RAGFlow list with the DB mirror so a
@@ -985,6 +1034,19 @@ async def list_documents(
         db_docs = await _db_list_docs(tenant_id)
     except _DB_READ_ERRORS as exc:
         logger.debug("knowledge_db_list_failed", error=str(exc))
+    # Document-level access: a limited caller sees shared documents and those of its domains.
+    domains = knowledge_access.normalise_domains(user_domains)
+    if domains is not None:
+        db_docs = [
+            record
+            for record in db_docs
+            if knowledge_access.may_see((record.get("metadata") or {}).get("domain"), domains)
+        ]
+        rf_docs = [
+            record
+            for record in rf_docs
+            if knowledge_access.may_see((record.get("metadata") or {}).get("domain"), domains)
+        ]
 
     # Merge on document_id — prefer the RAGFlow record when both have it,
     # since RAGFlow carries the current chunk/index status.
@@ -1126,6 +1188,8 @@ async def _native_semantic_search(
     tenant_id: str,
     query: str,
     top_k: int,
+    filters: SearchFilters | None = None,
+    domains: list[str] | None = None,
 ) -> list[SearchResult]:
     """Search tenant knowledge, then fall back to uploaded document metadata.
 
@@ -1145,24 +1209,29 @@ async def _native_semantic_search(
     if hybrid_enabled:
         if not query.strip():
             return []
-        results = await _native_hybrid_search(tid, query, top_k)
+        results = await _native_hybrid_search(tid, query, top_k, filters, domains)
     else:
-        results = await _native_vector_or_keyword_search(tid, query, top_k)
+        results = await _native_vector_or_keyword_search(tid, query, top_k, filters, domains)
     if results:
         return results
+    if filters is not None and not filters.is_empty():
+        # A narrowed search answers from the knowledge base only: the upload-metadata fallback carries no
+        # category, source or type to filter on and would widen the answer past what was asked.
+        return []
 
     # The `documents` upload path stores extracted plain-text in metadata for
     # text/markdown uploads. Keyword-match that layer before the pure
     # filename last-resort so text files actually retrieve on content.
     try:
+        acl_sql, acl_params = knowledge_access.metadata_clause(domains)
         content_sql = (
-            "SELECT filename, COALESCE(metadata->>'content_text', '') AS content_text "
-            "FROM documents WHERE tenant_id = :tid AND status = 'indexed' "
+            "SELECT filename, COALESCE(metadata->>'content_text', '') AS content_text "  # nosec B608 — clauses from core/rag (fixed column names, bound parameters), nothing from the request
+            f"FROM documents WHERE tenant_id = :tid AND status = 'indexed'{acl_sql} "
             "AND metadata->>'content_text' IS NOT NULL "
             "AND strpos(lower(metadata->>'content_text'), lower(:query)) > 0 LIMIT :k"
-            if hybrid_enabled else
-            "SELECT filename, COALESCE(metadata->>'content_text', '') AS content_text "
-            "FROM documents WHERE tenant_id = :tid AND status = 'indexed' "
+            if hybrid_enabled
+            else "SELECT filename, COALESCE(metadata->>'content_text', '') AS content_text "  # nosec B608 — clauses from core/rag (fixed column names, bound parameters), nothing from the request
+            f"FROM documents WHERE tenant_id = :tid AND status = 'indexed'{acl_sql} "
             "AND metadata->>'content_text' IS NOT NULL "
             "AND metadata->>'content_text' ILIKE :like LIMIT :k"
         )
@@ -1170,7 +1239,7 @@ async def _native_semantic_search(
             rows = (
                 await session.execute(
                     _sqtext(content_sql),
-                    {"tid": str(tid), "query": query, "like": f"%{query}%", "k": top_k},
+                    {"tid": str(tid), "query": query, "like": f"%{query}%", "k": top_k, **acl_params},
                 )
             ).fetchall()
         results = [
@@ -1194,30 +1263,27 @@ async def _native_semantic_search(
     # an empty chunk gives the UI enough signal to say "we found
     # alpha.pdf but haven't indexed it yet".
     try:
+        from sqlalchemy import or_ as _or
         from sqlalchemy import select as _select
 
         from core.models.document import Document
 
         filename_match = (
             _func.strpos(_func.lower(Document.filename), _func.lower(query)) > 0
-            if hybrid_enabled else Document.filename.ilike(f"%{query}%")
+            if hybrid_enabled
+            else Document.filename.ilike(f"%{query}%")
         )
-        async with get_tenant_session(tid) as session:
-            match_rows = (
-                (
-                    await session.execute(
-                        _select(Document)
-                        .where(
-                            Document.tenant_id == tid,
-                            Document.status != "deleted",
-                            filename_match,
-                        )
-                        .limit(top_k)
-                    )
-                )
-                .scalars()
-                .all()
+        clauses = [Document.tenant_id == tid, Document.status != "deleted", filename_match]
+        if domains is not None:
+            # Document-level access: shared uploads and those of the caller's domains.
+            document_domain = Document.metadata_["domain"].astext
+            clauses.append(
+                document_domain.is_(None)
+                if not domains
+                else _or(document_domain.is_(None), document_domain.in_(domains))
             )
+        async with get_tenant_session(tid) as session:
+            match_rows = (await session.execute(_select(Document).where(*clauses).limit(top_k))).scalars().all()
             return [
                 SearchResult(
                     chunk_text=(
@@ -1234,12 +1300,22 @@ async def _native_semantic_search(
         raise RuntimeError("knowledge filename fallback failed") from exc
 
 
-async def _native_vector_or_keyword_search(tid: uuid.UUID, query: str, top_k: int) -> list[SearchResult]:
+async def _native_vector_or_keyword_search(
+    tid: uuid.UUID,
+    query: str,
+    top_k: int,
+    filters: SearchFilters | None = None,
+    domains: list[str] | None = None,
+) -> list[SearchResult]:
     """Preserve the default native retrieval behavior during hybrid rollout."""
     from sqlalchemy import text as _sqtext
 
     from core.database import get_tenant_session
 
+    where_filters, filter_params = sql_clauses(filters)
+    acl_sql, acl_params = knowledge_access.sql_clause(domains)
+    where_filters += acl_sql
+    filter_params = {**filter_params, **acl_params}
     # Try the vector path first. Column + model swap honour the
     # RAG_USE_BGE_M3 flag — both sides flip atomically.
     try:
@@ -1252,14 +1328,14 @@ async def _native_vector_or_keyword_search(tid: uuid.UUID, query: str, top_k: in
             rows = (
                 await session.execute(
                     _sqtext(
-                        "SELECT title, content, "  # nosec B608 — `col` is a module-level constant name, not user input
-                        f"1 - ({col} <=> CAST(:q AS vector)) AS score "
-                        "FROM knowledge_documents "
-                        f"WHERE tenant_id = :tid AND status = 'ready' AND {col} IS NOT NULL "
-                        f"ORDER BY {col} <=> CAST(:q AS vector) "
+                        "SELECT d.title, d.content, "  # nosec B608 — `col` is a module-level constant name, not user input
+                        f"1 - (d.{col} <=> CAST(:q AS vector)) AS score, d.id, d.source, {PROVENANCE_COLUMNS} "
+                        f"FROM knowledge_documents d{PROVENANCE_JOIN} "
+                        f"WHERE d.tenant_id = :tid AND d.status = 'ready' AND d.{col} IS NOT NULL{where_filters} "
+                        f"ORDER BY d.{col} <=> CAST(:q AS vector) "
                         "LIMIT :k"
                     ),
-                    {"q": vector_literal, "tid": str(tid), "k": top_k},
+                    {"q": vector_literal, "tid": str(tid), "k": top_k, **filter_params},
                 )
             ).fetchall()
         if rows:
@@ -1268,6 +1344,7 @@ async def _native_vector_or_keyword_search(tid: uuid.UUID, query: str, top_k: in
                     chunk_text=(r[1] or "")[:300],
                     score=round(float(r[2] or 0.0), 4),
                     document_name=r[0] or "",
+                    citation=_citation_of(r, 3, 4),
                 )
                 for r in rows
             ]
@@ -1281,12 +1358,13 @@ async def _native_vector_or_keyword_search(tid: uuid.UUID, query: str, top_k: in
             rows = (
                 await session.execute(
                     _sqtext(
-                        "SELECT title, content FROM knowledge_documents "
-                        "WHERE tenant_id = :tid AND status = 'ready' AND "
-                        "(title ILIKE :like OR content ILIKE :like) "
+                        f"SELECT d.title, d.content, d.id, d.source, {PROVENANCE_COLUMNS} "  # nosec B608 — clauses from core/rag (fixed column names, bound parameters), nothing from the request
+                        f"FROM knowledge_documents d{PROVENANCE_JOIN} "
+                        "WHERE d.tenant_id = :tid AND d.status = 'ready' AND "
+                        f"(d.title ILIKE :like OR d.content ILIKE :like){where_filters} "
                         "LIMIT :k"
                     ),
-                    {"tid": str(tid), "like": f"%{query}%", "k": top_k},
+                    {"tid": str(tid), "like": f"%{query}%", "k": top_k, **filter_params},
                 )
             ).fetchall()
         results = [
@@ -1294,6 +1372,7 @@ async def _native_vector_or_keyword_search(tid: uuid.UUID, query: str, top_k: in
                 chunk_text=(r[1] or "")[:300],
                 score=0.0,
                 document_name=r[0] or "",
+                citation=_citation_of(r, 2, 3),
             )
             for r in rows
         ]
@@ -1304,31 +1383,53 @@ async def _native_vector_or_keyword_search(tid: uuid.UUID, query: str, top_k: in
     return []
 
 
+def _citation_of(row: Any, id_index: int, source_index: int) -> Citation | None:
+    """The citation of a search row: the id at ``id_index``, the source at ``source_index`` and the five
+    provenance columns (page, paragraph, heading, sheet, cell range) right after the source."""
+    if len(row) <= source_index:
+        return None
+    rest = list(row[source_index + 1 : source_index + 6]) + [None] * 5
+    return citation_from_row(row[id_index], row[source_index], *rest[:5])
+
+
 def _fuse_native_hits(
-    vector_rows: list[tuple[str, str, str]],
-    lexical_rows: list[tuple[str, str, str]],
+    vector_rows: list[tuple[Any, ...]],
+    lexical_rows: list[tuple[Any, ...]],
     top_k: int,
 ) -> list[SearchResult]:
-    """Fuse bounded candidate lists by reciprocal rank, then stable row ID."""
+    """Fuse bounded candidate lists by reciprocal rank, then stable row ID.
+
+    A row is ``(id, title, content)`` with, when the search joined provenance,
+    the citation as a fourth element.
+    """
     scores: dict[str, float] = {}
-    hits: dict[str, tuple[str, str]] = {}
+    hits: dict[str, tuple[str, str, Citation | None]] = {}
     for rows in (vector_rows, lexical_rows):
-        for rank, (row_id, title, content) in enumerate(rows, start=1):
+        for rank, row in enumerate(rows, start=1):
+            row_id, title, content = row[0], row[1], row[2]
+            citation = row[3] if len(row) > 3 else None
             scores[row_id] = scores.get(row_id, 0.0) + 1.0 / (60 + rank)
-            hits.setdefault(row_id, (title, content))
+            hits.setdefault(row_id, (title, content, citation))
     ordered_ids = sorted(scores, key=lambda row_id: (-scores[row_id], row_id))[:top_k]
     return [
         SearchResult(
             chunk_text=hits[row_id][1][:300],
             score=round(scores[row_id] / (2.0 / 61), 4),
             document_name=hits[row_id][0],
+            citation=hits[row_id][2],
         )
         for row_id in ordered_ids
     ]
 
 
-async def _native_hybrid_search(tid: uuid.UUID, query: str, top_k: int) -> list[SearchResult]:
-    """Rank tenant-ready rows through PostgreSQL text and pgvector independently."""
+async def _native_hybrid_search(
+    tid: uuid.UUID,
+    query: str,
+    top_k: int,
+    filters: SearchFilters | None = None,
+    domains: list[str] | None = None,
+) -> list[SearchResult]:
+    """Rank tenant-ready rows through PostgreSQL text and pgvector independently, then fuse and re-rank."""
     from sqlalchemy import text as _sqtext
 
     from core.database import get_tenant_session
@@ -1336,25 +1437,30 @@ async def _native_hybrid_search(tid: uuid.UUID, query: str, top_k: int) -> list[
     if not query.strip():
         return []
     limit = min(top_k * 4, 200)
-    params = {"tid": str(tid), "query": query, "limit": limit}
+    where_filters, filter_params = sql_clauses(filters)
+    acl_sql, acl_params = knowledge_access.sql_clause(domains)
+    where_filters += acl_sql
+    filter_params = {**filter_params, **acl_params}
+    params = {"tid": str(tid), "query": query, "limit": limit, **filter_params}
     lexical_rows: list[tuple[str, str, str]] = []
     try:
         async with get_tenant_session(tid) as session:
             rows = (
                 await session.execute(
                     _sqtext(
-                        "SELECT id, title, content FROM knowledge_documents "
-                        "WHERE tenant_id = :tid AND status = 'ready' "
-                        "AND to_tsvector('english', title || ' ' || content) "
+                        f"SELECT d.id, d.title, d.content, d.source, {PROVENANCE_COLUMNS} "  # nosec B608 — clauses from core/rag (fixed column names, bound parameters), nothing from the request
+                        f"FROM knowledge_documents d{PROVENANCE_JOIN} "
+                        f"WHERE d.tenant_id = :tid AND d.status = 'ready'{where_filters} "
+                        "AND to_tsvector('english', d.title || ' ' || d.content) "
                         "@@ websearch_to_tsquery('english', :query) "
-                        "ORDER BY ts_rank_cd(to_tsvector('english', title || ' ' || content), "
-                        "websearch_to_tsquery('english', :query)) DESC, id ASC "
+                        "ORDER BY ts_rank_cd(to_tsvector('english', d.title || ' ' || d.content), "
+                        "websearch_to_tsquery('english', :query)) DESC, d.id ASC "
                         "LIMIT :limit"
                     ),
                     params,
                 )
             ).fetchall()
-        lexical_rows = [(str(r[0]), r[1] or "", r[2] or "") for r in rows]
+        lexical_rows = [_hit_row(r) for r in rows]
     except _DB_READ_ERRORS as exc:
         logger.debug("native_full_text_search_skipped", error_type=type(exc).__name__)
 
@@ -1364,17 +1470,18 @@ async def _native_hybrid_search(tid: uuid.UUID, query: str, top_k: int) -> list[
                 rows = (
                     await session.execute(
                         _sqtext(
-                            "SELECT id, title, content FROM knowledge_documents "
-                            "WHERE tenant_id = :tid AND status = 'ready' "
-                            "AND (strpos(lower(title), lower(:query)) > 0 "
-                            "OR strpos(lower(content), lower(:query)) > 0) "
-                            "ORDER BY CASE WHEN strpos(lower(title), lower(:query)) > 0 "
-                            "THEN 0 ELSE 1 END, id ASC LIMIT :limit"
+                            f"SELECT d.id, d.title, d.content, d.source, {PROVENANCE_COLUMNS} "  # nosec B608 — clauses from core/rag (fixed column names, bound parameters), nothing from the request
+                            f"FROM knowledge_documents d{PROVENANCE_JOIN} "
+                            f"WHERE d.tenant_id = :tid AND d.status = 'ready'{where_filters} "
+                            "AND (strpos(lower(d.title), lower(:query)) > 0 "
+                            "OR strpos(lower(d.content), lower(:query)) > 0) "
+                            "ORDER BY CASE WHEN strpos(lower(d.title), lower(:query)) > 0 "
+                            "THEN 0 ELSE 1 END, d.id ASC LIMIT :limit"
                         ),
                         params,
                     )
                 ).fetchall()
-            lexical_rows = [(str(r[0]), r[1] or "", r[2] or "") for r in rows]
+            lexical_rows = [_hit_row(r) for r in rows]
         except _DB_READ_ERRORS as exc:
             logger.debug("native_keyword_search_skipped", error_type=type(exc).__name__)
 
@@ -1386,13 +1493,15 @@ async def _native_hybrid_search(tid: uuid.UUID, query: str, top_k: int) -> list[
         if col not in {"embedding", "embedding_bge_m3"}:
             raise ValueError("unsupported embedding column")
         vector_sql = (
-            "SELECT id, title, content FROM knowledge_documents "
-            "WHERE tenant_id = :tid AND status = 'ready' AND embedding IS NOT NULL "
-            "ORDER BY embedding <=> CAST(:vector AS vector), id ASC LIMIT :limit"
-            if col == "embedding" else
-            "SELECT id, title, content FROM knowledge_documents "
-            "WHERE tenant_id = :tid AND status = 'ready' AND embedding_bge_m3 IS NOT NULL "
-            "ORDER BY embedding_bge_m3 <=> CAST(:vector AS vector), id ASC LIMIT :limit"
+            f"SELECT d.id, d.title, d.content, d.source, {PROVENANCE_COLUMNS} "  # nosec B608 — clauses from core/rag (fixed column names, bound parameters), nothing from the request
+            f"FROM knowledge_documents d{PROVENANCE_JOIN} "
+            f"WHERE d.tenant_id = :tid AND d.status = 'ready' AND d.embedding IS NOT NULL{where_filters} "
+            "ORDER BY d.embedding <=> CAST(:vector AS vector), d.id ASC LIMIT :limit"
+            if col == "embedding"
+            else f"SELECT d.id, d.title, d.content, d.source, {PROVENANCE_COLUMNS} "  # nosec B608 — clauses from core/rag (fixed column names, bound parameters), nothing from the request
+            f"FROM knowledge_documents d{PROVENANCE_JOIN} "
+            f"WHERE d.tenant_id = :tid AND d.status = 'ready' AND d.embedding_bge_m3 IS NOT NULL{where_filters} "
+            "ORDER BY d.embedding_bge_m3 <=> CAST(:vector AS vector), d.id ASC LIMIT :limit"
         )
         qvec = await embed_one_async(query)
         vector_literal = "[" + ",".join(f"{x:.6f}" for x in qvec) + "]"
@@ -1400,14 +1509,329 @@ async def _native_hybrid_search(tid: uuid.UUID, query: str, top_k: int) -> list[
             rows = (
                 await session.execute(
                     _sqtext(vector_sql),
-                    {"tid": str(tid), "vector": vector_literal, "limit": limit},
+                    {"tid": str(tid), "vector": vector_literal, "limit": limit, **filter_params},
                 )
             ).fetchall()
-        vector_rows = [(str(r[0]), r[1] or "", r[2] or "") for r in rows]
+        vector_rows = [_hit_row(r) for r in rows]
     except _NATIVE_VECTOR_ERRORS as exc:
         logger.debug("native_vector_search_skipped", error_type=type(exc).__name__)
 
-    return _fuse_native_hits(vector_rows, lexical_rows, top_k)
+    if not rerank.enabled():
+        return _fuse_native_hits(vector_rows, lexical_rows, top_k)
+    # Re-ranking stage: the fused pool, re-scored on the query's own terms, cut to top_k.
+    fused = _fuse_native_hits(vector_rows, lexical_rows, limit)
+    candidates = [
+        rerank.Candidate(key=str(index), title=hit.document_name, text=hit.chunk_text, fused=hit.score)
+        for index, hit in enumerate(fused)
+    ]
+    ordered = rerank.rerank(query, candidates, top_k)
+    tracing.set_attributes(**{"search.reranked": len(candidates)})
+    by_key = {str(index): hit for index, hit in enumerate(fused)}
+    return [
+        SearchResult(
+            chunk_text=candidate.text,
+            score=new_score,
+            document_name=candidate.title,
+            citation=by_key[candidate.key].citation,
+        )
+        for candidate, new_score in ordered
+    ]
+
+
+def _hit_row(r: Any) -> tuple[Any, ...]:
+    """A hybrid candidate row ``(id, title, content, citation)`` from a joined search row."""
+    return (str(r[0]), r[1] or "", r[2] or "", _citation_of(r, 0, 3) if len(r) > 3 else None)
+
+
+class MetricsResponse(BaseModel):
+    window_hours: int
+    searches: int
+    empty_share: float | None = None
+    mean_relevance: float | None = None
+    mean_covered_share: float | None = None
+    p50_latency_ms: float | None = None
+    p95_latency_ms: float | None = None
+    expanded_share: float | None = None
+    graph_share: float | None = None
+    withheld: int = 0
+    paths: dict[str, int] = Field(default_factory=dict)
+
+
+class GroundingRequest(BaseModel):
+    model_config = {"extra": "forbid"}
+
+    answer: str = Field(..., min_length=1, max_length=20000)
+    chunks: list[str] = Field(default_factory=list, max_length=50)
+
+
+class GroundingResponse(BaseModel):
+    sentences: int
+    supported: int
+    score: float | None = None
+    unsupported: list[str] = Field(default_factory=list)
+    hallucination_risk: str
+
+
+class ReindexRequest(BaseModel):
+    model_config = {"extra": "forbid"}
+
+    dry_run: bool = True
+    limit: int = Field(100, ge=1, le=rag_reindex.MAX_LIMIT)
+    since: date | None = None
+
+
+class ReindexResponse(BaseModel):
+    dry_run: bool
+    model: str
+    candidates: int
+    stale_embeddings: int
+    missing_entities: int
+    re_embedded: int = 0
+    entities_indexed: int = 0
+
+
+def _metrics_off() -> HTTPException:
+    return HTTPException(
+        404,
+        detail={
+            "error": "knowledge_metrics_disabled",
+            "message": "Retrieval quality metrics are off for this deployment (AGENTICORG_KNOWLEDGE_METRICS_ENABLED).",
+        },
+    )
+
+
+@router.get("/knowledge/metrics", response_model=MetricsResponse)
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="knowledge.sensitive.stats",
+    rate_limit="standard",
+    idempotency="read-only",
+    audit_event="knowledge.metrics",
+)
+async def knowledge_metrics(
+    hours: int = Query(24, ge=1, le=rag_metrics.MAX_WINDOW_HOURS),
+    tenant_id: str = Depends(get_current_tenant),
+) -> MetricsResponse:
+    """The tenant's retrieval quality over the window: searches, relevance, latency percentiles and the path mix."""
+    if not rag_metrics.enabled():
+        raise _metrics_off()
+    tid = uuid.UUID(tenant_id)
+    async with _graph_session(tid) as session:
+        folded = await rag_metrics.summary(session, tid, hours)
+    return MetricsResponse(**folded)
+
+
+@router.post("/knowledge/metrics/grounding", response_model=GroundingResponse)
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="knowledge.sensitive.search",
+    rate_limit="knowledge-search",
+    idempotency="read-only",
+    audit_event="knowledge.grounding",
+)
+async def knowledge_grounding(
+    body: GroundingRequest,
+    tenant_id: str = Depends(get_current_tenant),
+) -> GroundingResponse:
+    """How much of an answer the given chunks support: the hallucination indicator, computed without a model."""
+    if not rag_metrics.enabled():
+        raise _metrics_off()
+    if any(len(chunk) > 8000 for chunk in body.chunks):
+        raise HTTPException(422, detail={"error": "chunk_too_long", "message": "A chunk is at most 8000 characters."})
+    return GroundingResponse(**rag_metrics.grounding(body.answer, body.chunks))
+
+
+@router.post("/knowledge/reindex", response_model=ReindexResponse)
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="knowledge.upload",
+    rate_limit="standard",
+    idempotency="bounded-batch-repeat-until-zero-candidates",
+    audit_event="knowledge.reindex",
+)
+async def knowledge_reindex(
+    body: ReindexRequest,
+    tenant_id: str = Depends(get_current_tenant),
+) -> ReindexResponse:
+    """List the tenant's stale chunks and, unless a dry run, re-embed them and record their missing entities."""
+    if not rag_reindex.enabled():
+        raise HTTPException(
+            404,
+            detail={
+                "error": "knowledge_reindex_disabled",
+                "message": "Re-indexing is off for this deployment (AGENTICORG_KNOWLEDGE_REINDEX_ENABLED).",
+            },
+        )
+    from core.embeddings import rag_embedding_column
+    from core.rag import ingest as knowledge_ingest
+
+    tid = uuid.UUID(tenant_id)
+    provider, model, _dimensions = await knowledge_ingest._resolve_embedding_profile(tid)
+    model_name = f"{provider}/{model}"[:128]
+    want_entities = knowledge_entities.enabled()
+    async with _graph_session(tid) as session:
+        rows = await rag_reindex.stale_chunks(
+            session, tid, model_name=model_name, since=body.since, limit=body.limit, want_entities=want_entities
+        )
+        counted = rag_reindex.counts(rows, model_name=model_name, want_entities=want_entities)
+        done = {"re_embedded": 0, "entities_indexed": 0}
+        if not body.dry_run and rows:
+            done = await rag_reindex.reindex(
+                session,
+                tid,
+                rows,
+                model_name=model_name,
+                column=rag_embedding_column(),
+                embed=knowledge_ingest._embed_chunks,
+                want_entities=want_entities,
+            )
+    return ReindexResponse(dry_run=body.dry_run, model=model_name, **counted, **done)
+
+
+class GraphEntity(BaseModel):
+    entity: str
+    kind: str
+    chunks: int
+    mentions: int
+    matched: bool
+
+
+class GraphEdge(BaseModel):
+    source: str
+    target: str
+    weight: int
+
+
+class GraphResponse(BaseModel):
+    query: str
+    entities: list[GraphEntity]
+    edges: list[GraphEdge]
+
+
+@router.get("/knowledge/graph", response_model=GraphResponse)
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="knowledge.sensitive.search",
+    rate_limit="knowledge-search",
+    idempotency="read-only",
+    audit_event="knowledge.graph",
+)
+async def knowledge_graph(
+    q: str = Query(..., min_length=1, max_length=500),
+    limit: int = Query(20, ge=1, le=50),
+    tenant_id: str = Depends(get_current_tenant),
+    user_domains: list[str] | None = Depends(get_user_domains),
+) -> GraphResponse:
+    """The entities a query names or touches, the entities that share a chunk with them, and the links between."""
+    if not knowledge_entities.enabled():
+        raise HTTPException(
+            404,
+            detail={
+                "error": "knowledge_graph_disabled",
+                "message": "Graph retrieval is off for this deployment (AGENTICORG_KNOWLEDGE_GRAPH_RETRIEVAL_ENABLED).",
+            },
+        )
+    tid = uuid.UUID(tenant_id)
+    domains = knowledge_access.normalise_domains(user_domains)
+    async with _graph_session(tid) as session:
+        matched = await knowledge_entities.matched_entities(session, tid, q, domains, limit=limit)
+        related, edges = await knowledge_entities.neighbours(
+            session, tid, [m["entity"] for m in matched], domains, limit=limit
+        )
+    return GraphResponse(
+        query=q,
+        entities=[GraphEntity(**m) for m in matched + related],
+        edges=[GraphEdge(**e) for e in edges],
+    )
+
+
+class ExcerptResponse(BaseModel):
+    document_id: str
+    document_name: str
+    content: str
+    citation: Citation | None = None
+    # Character spans of the query terms in the content, for the console to mark.
+    highlights: list[tuple[int, int]] = Field(default_factory=list)
+    previous_id: str | None = None
+    next_id: str | None = None
+
+
+@router.get("/knowledge/documents/{doc_id}/excerpt", response_model=ExcerptResponse)
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="knowledge.sensitive.search",
+    rate_limit="knowledge-search",
+    idempotency="read-only",
+    audit_event="knowledge.excerpt",
+)
+async def knowledge_excerpt(
+    doc_id: uuid.UUID,
+    q: str | None = None,
+    tenant_id: str = Depends(get_current_tenant),
+    user_domains: list[str] | None = Depends(get_user_domains),
+) -> ExcerptResponse:
+    """The chunk a search cited, whole, with the query's terms located and the chunks either side.
+
+    The text passes the retrieval guardrails as a search result does; a chunk
+    they withhold is answered with 404.
+    """
+    from sqlalchemy import text as _sqtext
+
+    from core.database import get_tenant_session
+
+    tid = uuid.UUID(tenant_id)
+    acl_sql, acl_params = knowledge_access.sql_clause(knowledge_access.normalise_domains(user_domains))
+    async with get_tenant_session(tid) as session:
+        row = (
+            await session.execute(
+                _sqtext(
+                    f"SELECT d.id, d.title, d.content, d.source, {PROVENANCE_COLUMNS} "  # nosec B608 — clauses from core/rag (fixed column names, bound parameters), nothing from the request
+                    f"FROM knowledge_documents d{PROVENANCE_JOIN} "
+                    f"WHERE d.id = :id AND d.tenant_id = :tid AND d.status = 'ready'{acl_sql} LIMIT 1"
+                ),
+                {"id": str(doc_id), "tid": str(tid), **acl_params},
+            )
+        ).fetchone()
+        if row is None:
+            raise HTTPException(404, "Knowledge chunk not found")
+        citation = _citation_of(row, 0, 3)
+        previous_id = next_id = None
+        prefix = source_prefix(row[3])
+        if prefix and citation is not None and citation.chunk_index is not None:
+            for offset, slot in ((-1, "previous"), (1, "next")):
+                neighbour = (
+                    await session.execute(
+                        _sqtext(
+                            "SELECT d.id FROM knowledge_documents d WHERE d.tenant_id = :tid AND d.status = 'ready' "  # nosec B608 — clauses from core/rag (fixed column names, bound parameters), nothing from the request
+                            f"AND d.source LIKE :pattern{acl_sql} LIMIT 1"
+                        ),
+                        {"tid": str(tid), "pattern": f"{prefix}#chunk{citation.chunk_index + offset}-%", **acl_params},
+                    )
+                ).fetchone()
+                if neighbour is not None:
+                    if slot == "previous":
+                        previous_id = str(neighbour[0])
+                    else:
+                        next_id = str(neighbour[0])
+    content = row[2] or ""
+    kept = await _guard_results(tenant_id, [SearchResult(chunk_text=content, score=1.0, document_name=row[1] or "")])
+    if not kept:
+        raise HTTPException(404, "Knowledge chunk not found")
+    content = kept[0].chunk_text
+    return ExcerptResponse(
+        document_id=str(row[0]),
+        document_name=row[1] or "",
+        content=content,
+        citation=citation,
+        highlights=highlights(content, q or ""),
+        previous_id=previous_id,
+        next_id=next_id,
+    )
 
 
 async def _guard_results(tenant_id: str, results: list[SearchResult]) -> list[SearchResult]:
@@ -1436,6 +1860,7 @@ async def _guard_results(tenant_id: str, results: list[SearchResult]) -> list[Se
 async def search_knowledge(
     req: SearchRequest,
     tenant_id: str = Depends(get_current_tenant),
+    user_domains: list[str] | None = Depends(get_user_domains),
 ):
     """Search the knowledge base using vector similarity.
 
@@ -1448,21 +1873,176 @@ async def search_knowledge(
     knows how to render as "Something went wrong".
     """
     with tracing.span("agenticorg.knowledge.search", tenant=tenant_id, **{"search.top_k": req.top_k}):
-        return await _search_knowledge(req, tenant_id)
+        return await _search_knowledge(req, tenant_id, knowledge_access.normalise_domains(user_domains))
 
 
-async def _search_knowledge(req: SearchRequest, tenant_id: str) -> SearchResponse:
+async def _agentic_search(
+    req: SearchRequest, tenant_id: str, domains: list[str] | None
+) -> tuple[list[SearchResult], query_transform.Trace]:
+    """Plan the query, search it, expand to its variants when the first pass is weak; every step traced."""
+    trace = query_transform.Trace()
+    planned = query_transform.plan(req.query)
+    model = str(settings.knowledge_query_rewrite_model or "").strip()
+    if model:
+        proposals, reason = await query_transform.model_variants(uuid.UUID(tenant_id), req.query)
+        added = sum(1 for proposal in proposals if planned.add_variant(proposal, "model"))
+        trace.add("rewrite", model=model, added=added, reason=reason)
+
+    async def _search(text: str) -> list[SearchResult]:
+        return await _native_semantic_search(tenant_id, text, req.top_k, req.filters, domains)
+
+    results, trace = await query_transform.retrieve(
+        planned,
+        req.top_k,
+        _search,
+        key=lambda hit: (hit.document_name, hit.chunk_text),
+        score_of=lambda hit: hit.score,
+        rescore=lambda hit, score: hit.model_copy(update={"score": score}),
+        trace=trace,
+    )
+    logger.info(
+        "knowledge_retrieval_traced",
+        steps=len(trace.steps),
+        variants=len(planned.variants),
+        expanded=any(step.get("action") == "expand" for step in trace.steps),
+    )
+    return results, trace
+
+
+def _graph_session(tid: uuid.UUID) -> Any:
+    """The tenant session graph lookups run in (the seam the tests replace)."""
+    from core.database import get_tenant_session
+
+    return get_tenant_session(tid)
+
+
+async def _graph_results(
+    req: SearchRequest, tenant_id: str, domains: list[str] | None
+) -> tuple[list[SearchResult], dict[str, Any]]:
+    """The chunks the entity graph reaches from the query, scored by how many matched entities they link."""
+    tid = uuid.UUID(tenant_id)
+    async with _graph_session(tid) as session:
+        rows, detail = await knowledge_entities.expand(session, tid, req.query, domains, limit=req.top_k * 2)
+    top = max((int(r[-1] or 0) for r in rows), default=0) or 1
+    hits = [
+        SearchResult(
+            chunk_text=(r[2] or "")[:300],
+            score=round(int(r[-1] or 0) / top, 4),
+            document_name=r[1] or "",
+            citation=_citation_of(r, 0, 3),
+        )
+        for r in rows
+    ]
+    return hits, detail
+
+
+async def _with_graph(
+    req: SearchRequest,
+    tenant_id: str,
+    domains: list[str] | None,
+    results: list[SearchResult],
+    trace: query_transform.Trace | None,
+) -> list[SearchResult]:
+    """Fuse the graph's chunks into the search results; a graph that fails leaves the results as they were."""
+    try:
+        hits, detail = await _graph_results(req, tenant_id, domains)
+    except (RuntimeError, SQLAlchemyError, TypeError, ValueError) as exc:
+        logger.warning("knowledge_graph_expand_failed", error=type(exc).__name__)
+        if trace is not None:
+            trace.add("graph", error=type(exc).__name__)
+        return results
+    if trace is not None:
+        trace.add("graph", **detail)
+    if not hits:
+        return results
+    return query_transform.fuse(
+        [results, hits],
+        req.top_k,
+        key=lambda hit: (hit.document_name, hit.chunk_text),
+        rescore=lambda hit, score: hit.model_copy(update={"score": score}),
+    )
+
+
+def _trace_out(trace: query_transform.Trace) -> RetrievalTrace:
+    return RetrievalTrace(
+        steps=[
+            TraceStep(
+                stage=str(step["stage"]),
+                elapsed_ms=int(step.get("elapsed_ms", 0)),
+                detail={key: value for key, value in step.items() if key not in ("stage", "elapsed_ms")},
+            )
+            for step in trace.steps
+        ]
+    )
+
+
+async def _record_quality(
+    req: SearchRequest,
+    tenant_id: str,
+    results: list[SearchResult],
+    kept: list[SearchResult],
+    *,
+    path: str,
+    started: float,
+    trace: query_transform.Trace | None,
+) -> None:
+    """One figures-only sample per search while the metrics switch is on; a failure never touches the answer."""
+    if not rag_metrics.enabled():
+        return
+    try:
+        s = rag_metrics.sample(
+            req.query,
+            [r.chunk_text for r in kept],
+            [r.score for r in kept],
+            path=path,
+            latency_ms=int((time.monotonic() - started) * 1000),
+            expanded=any(step.get("action") == "expand" for step in trace.steps) if trace is not None else False,
+            graph=knowledge_entities.enabled(),
+            withheld=len(results) - len(kept),
+        )
+        rag_metrics.observe(s)
+        tid = uuid.UUID(tenant_id)
+        async with _graph_session(tid) as session:
+            await rag_metrics.record(session, tid, s)
+    except (RuntimeError, SQLAlchemyError, TypeError, ValueError) as exc:
+        logger.warning("knowledge_metrics_record_failed", error=type(exc).__name__)
+
+
+async def _search_knowledge(req: SearchRequest, tenant_id: str, domains: list[str] | None = None) -> SearchResponse:
     """The search itself: RAGFlow when configured, else native semantic search; both pass the retrieval guardrails."""
+    started = time.monotonic()
     if _ragflow_available() and await _ragflow_allowed(tenant_id):
         try:
             chunks = await _ragflow_search(tenant_id, req.query, req.top_k)
-            return SearchResponse(results=await _guard_results(tenant_id, [SearchResult(**c) for c in chunks]))
+            hits = [SearchResult(**c) for c in chunks]
+            kept = await _guard_results(tenant_id, hits)
+            await _record_quality(req, tenant_id, hits, kept, path="ragflow", started=started, trace=None)
+            return SearchResponse(results=kept)
         except _RAGFLOW_ERRORS as exc:
             logger.warning("ragflow_search_failed", error=str(exc))
 
     try:
-        results = await _native_semantic_search(tenant_id, req.query, req.top_k)
-        return SearchResponse(results=await _guard_results(tenant_id, results))
+        trace: query_transform.Trace | None = None
+        if query_transform.enabled():
+            results, trace = await _agentic_search(req, tenant_id, domains)
+        else:
+            results = await _native_semantic_search(tenant_id, req.query, req.top_k, req.filters, domains)
+        if knowledge_entities.enabled():
+            results = await _with_graph(req, tenant_id, domains, results, trace)
+        kept = await _guard_results(tenant_id, results)
+        await _record_quality(
+            req,
+            tenant_id,
+            results,
+            kept,
+            path="hybrid" if settings.knowledge_hybrid_search else "vector_keyword",
+            started=started,
+            trace=trace,
+        )
+        return SearchResponse(
+            results=kept,
+            trace=_trace_out(trace) if req.trace and trace is not None else None,
+        )
     except HTTPException:
         raise
     except (RuntimeError, SQLAlchemyError, TypeError, ValueError) as exc:
