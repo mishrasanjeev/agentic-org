@@ -4,6 +4,21 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
 
 ## [Unreleased] - 2026-08-29
 
+### Added - Agent runtime: schema-validated tool registration and the execution envelope
+- With `AGENTICORG_TOOL_REGISTRY_ENABLED` on (off by default), a tenant
+  registers tools with JSON Schemas for their inputs and outputs, a risk
+  class and an envelope (`core/tool_gateway/registry.py`, table
+  `tool_registrations`, migration `v6z58_tool_registrations`,
+  `/tools/registry`); the gateway refuses inputs that fail the schema
+  before any call leaves it, audits the refusal, and holds a call to its
+  timeout, output cap and output schema, marking the output untrusted.
+- The check and the envelope also hold at the shared connector dispatch
+  that LangGraph agents, workflow connector steps and remote MCP tools use;
+  a registry that cannot be read refuses the call
+  (`tool_registry_unavailable`); untrusted output passes the guardrails'
+  retrieval stage and is withheld when a rule blocks it; the table's
+  row-level policy is forced for the table owner.
+
 ### Added - Agent runtime: long-term memory with retention and erasure
 - With `AGENTICORG_RUNTIME_MEMORY_ENABLED` on (off by default), a run that
   names a subject recalls what is remembered about it into its prompt and

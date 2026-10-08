@@ -8658,6 +8658,96 @@
     "tenant_required": true
   },
   {
+    "audit_event": "tools.registry.list",
+    "auth_required": true,
+    "function": "list_registrations",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/tools/registry api/v1/tool_registry.py:list_registrations",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/tool_registry.py",
+    "path": "/api/v1/tools/registry",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "tools.registry.sensitive.read",
+    "source_line": 101,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "tools.registry.register",
+    "auth_required": true,
+    "function": "register_tool",
+    "idempotency": "not-idempotent-create",
+    "key": "POST /api/v1/tools/registry api/v1/tool_registry.py:register_tool",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/tool_registry.py",
+    "path": "/api/v1/tools/registry",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "tools.registry.sensitive.write",
+    "source_line": 133,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "tools.registry.check",
+    "auth_required": true,
+    "function": "check_inputs",
+    "idempotency": "read-only",
+    "key": "POST /api/v1/tools/registry/check api/v1/tool_registry.py:check_inputs",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/tool_registry.py",
+    "path": "/api/v1/tools/registry/check",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "tools.registry.sensitive.read",
+    "source_line": 235,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "tools.registry.delete",
+    "auth_required": true,
+    "function": "delete_registration",
+    "idempotency": "idempotent-delete",
+    "key": "DELETE /api/v1/tools/registry/{name:path} api/v1/tool_registry.py:delete_registration",
+    "metadata_present": true,
+    "methods": [
+      "DELETE"
+    ],
+    "module": "api/v1/tool_registry.py",
+    "path": "/api/v1/tools/registry/{name:path}",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "tools.registry.sensitive.write",
+    "source_line": 209,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "tools.registry.update",
+    "auth_required": true,
+    "function": "update_registration",
+    "idempotency": "idempotent-partial-update",
+    "key": "PUT /api/v1/tools/registry/{name:path} api/v1/tool_registry.py:update_registration",
+    "metadata_present": true,
+    "methods": [
+      "PUT"
+    ],
+    "module": "api/v1/tool_registry.py",
+    "path": "/api/v1/tools/registry/{name:path}",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "tools.registry.sensitive.write",
+    "source_line": 174,
+    "tenant_required": true
+  },
+  {
     "audit_event": "voice.calls.list",
     "auth_required": true,
     "function": "list_voice_calls",

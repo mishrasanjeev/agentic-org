@@ -22,6 +22,7 @@ from core.governance.action_policy import (
     evaluate_action,
 )
 from core.pii.pseudonymiser import PseudonymisationError, PseudonymSession, refusal
+from core.tool_gateway import registry as tool_registry
 from core.tool_gateway.audit_logger import AuditLogger
 from core.tool_gateway.idempotency import IdempotencyStore
 from core.tool_gateway.pii_masker import mask_pii
@@ -163,9 +164,18 @@ class ToolGateway:
                 if not permitted:
                     return {"error": {"code": "E1007", "message": "MCP tool scope is missing"}}
             result = await execute_agent_tool(
-                connector_name, tool_name, params, tenant_id=tenant_id, company_id=company_id, domain=domain,
-                authorized_tools=remote_agent.authorized_tools, grant_token=effective_token,
-                run_grant=run_grant, agent_id=agent_id, runtime="tool_gateway", agent_type=agent_type,
+                connector_name,
+                tool_name,
+                params,
+                tenant_id=tenant_id,
+                company_id=company_id,
+                domain=domain,
+                authorized_tools=remote_agent.authorized_tools,
+                grant_token=effective_token,
+                run_grant=run_grant,
+                agent_id=agent_id,
+                runtime="tool_gateway",
+                agent_type=agent_type,
             )
             if pseudonymiser is not None:
                 return await pseudonymiser.pseudonymise_value(result)
@@ -349,9 +359,7 @@ class ToolGateway:
         # 3. Reserve the idempotency key (SET NX) so two concurrent calls with
         # the same key cannot both pass a check-then-store race and execute
         # the side effect twice. The reservation is released on any failure.
-        scoped_idempotency_key = (
-            f"{company_id or '_global'}:{idempotency_key}" if idempotency_key else None
-        )
+        scoped_idempotency_key = f"{company_id or '_global'}:{idempotency_key}" if idempotency_key else None
         reserved = False
         if scoped_idempotency_key and self.idempotency:
             reserved, cached = await self.idempotency.reserve(tenant_id, scoped_idempotency_key)
@@ -371,6 +379,26 @@ class ToolGateway:
 
         # 4. Resolve connector — tenant-scoped + global fallback
         connector = self._connectors.get((tenant_id, company_id, connector_name))
+        # Tool registry: a registered tool's inputs are checked against its schema before the call
+        # leaves the gateway; a refused call (including one whose registrations could not be read)
+        # is audited and never dispatched.
+        registry_check = await tool_registry.screen_call(tenant_id, connector_name, tool_name, params)
+        if registry_check is not None and registry_check.refused:
+            await _release_reservation()
+            if self.audit:
+                await self.audit.log(
+                    tenant_id=tenant_id,
+                    agent_id=agent_id,
+                    tool_name=tool_name,
+                    action="input_rejected",
+                    outcome="blocked",
+                    details={
+                        "errors": registry_check.errors[:5],
+                        "unregistered": registry_check.unregistered,
+                        "unavailable": registry_check.unavailable,
+                    },
+                )
+            return tool_registry.refusal(registry_check, tool_name)
         if connector is None and company_id is None:
             connector = self._connectors.get(("_global", None, connector_name))
         if not connector:
@@ -383,7 +411,16 @@ class ToolGateway:
         # (account numbers, emails, identifiers) to perform the business
         # action. PII is masked ONLY for audit logging below.
         try:
-            result = await connector.execute_tool(tool_name, params)
+            if registry_check is not None and registry_check.registration is not None:
+                # The registered envelope: a timeout, an output cap, the output schema, untrusted output.
+                result = await tool_registry.enveloped(
+                    registry_check.registration,
+                    lambda: connector.execute_tool(tool_name, params),
+                    tenant_id=tenant_id,
+                    agent_id=agent_id,
+                )
+            else:
+                result = await connector.execute_tool(tool_name, params)
             latency_ms = int((time.monotonic() - start_time) * 1000)
 
             # 5. Mask PII in params + result for audit/logging ONLY —

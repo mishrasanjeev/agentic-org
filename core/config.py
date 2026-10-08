@@ -354,6 +354,12 @@ class Settings(BaseSettings):
     # entries expire by their kind's retention and can be erased per subject.
     # Off by default: off, no run reads or writes memory.
     runtime_memory_enabled: bool = False
+    # Tool registry (core/tool_gateway/registry.py): a registered tool's inputs
+    # are checked against its schema before a call leaves the gateway, and the
+    # call is held to its envelope. Off by default: off, no call is checked.
+    tool_registry_enabled: bool = False
+    # With the registry on, refuse calls to tools no registration covers.
+    tool_registry_require_registration: bool = False
     # JSON object keyed provider/model with input and output USD per million
     # tokens; a negotiated rate replaces the list price.
     model_price_overrides_json: str = ""
