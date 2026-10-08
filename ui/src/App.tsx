@@ -53,6 +53,7 @@ const WorkflowDetail = lazyRetry(() => import("./pages/WorkflowDetail"));
 const WorkflowRun = lazyRetry(() => import("./pages/WorkflowRun"));
 const Approvals = lazyRetry(() => import("./pages/Approvals"));
 const Conversations = lazyRetry(() => import("./pages/Conversations"));
+const Documents = lazyRetry(() => import("./pages/Documents"));
 const GovernedCases = lazyRetry(() => import("./pages/GovernedCases"));
 const GovernedCaseDetail = lazyRetry(() => import("./pages/GovernedCaseDetail"));
 const Connectors = lazyRetry(() => import("./pages/Connectors"));
@@ -529,6 +530,16 @@ export default function App() {
           <ProtectedRoute allowedRoles={SUPERVISOR_ROLES}>
             <Layout>
               <Conversations />
+            </Layout>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/dashboard/documents"
+        element={
+          <ProtectedRoute allowedRoles={APPROVAL_ROLES}>
+            <Layout>
+              <Documents />
             </Layout>
           </ProtectedRoute>
         }

@@ -239,6 +239,10 @@ class TestPipeline:
         }
 
 
+def _request():
+    return SimpleNamespace(state=SimpleNamespace(claims={}))
+
+
 class TestRoutes:
     @pytest.mark.asyncio
     async def test_document_types_answer_and_the_rest_is_not_found_while_off(self, monkeypatch):
@@ -253,7 +257,7 @@ class TestRoutes:
             filename="x.pdf", content_type="application/pdf", read=AsyncMock(return_value=_pdf(STATEMENT))
         )
         with pytest.raises(HTTPException) as info:
-            await api.analyse(upload, ocr=True, with_words=False, tenant_id="t")
+            await api.analyse(upload, _request(), ocr=True, with_words=False, store=False, tenant_id="t")
         assert info.value.status_code == 404
 
     @pytest.mark.asyncio
@@ -264,11 +268,11 @@ class TestRoutes:
         upload = SimpleNamespace(
             filename="bundle.pdf", content_type="application/pdf", read=AsyncMock(return_value=_pdf(SLIP))
         )
-        answer = await api.analyse(upload, ocr=True, with_words=False, tenant_id="t")
+        answer = await api.analyse(upload, _request(), ocr=True, with_words=False, store=False, tenant_id="t")
         assert answer["filename"] == "bundle.pdf" and answer["documents"][0]["document_type"] == "salary_slip"
         bad = SimpleNamespace(filename="x.txt", content_type="text/plain", read=AsyncMock(return_value=b"hello"))
         with pytest.raises(HTTPException) as info:
-            await api.analyse(bad, ocr=True, with_words=False, tenant_id="t")
+            await api.analyse(bad, _request(), ocr=True, with_words=False, store=False, tenant_id="t")
         assert info.value.status_code == 415
         assert (await api.classify_text({"text": "\n".join(SLIP)}, tenant_id="t"))["document_type"] == "salary_slip"
         with pytest.raises(HTTPException):
@@ -348,7 +352,7 @@ class TestReviewHardening:
 
         upload = SimpleNamespace(filename="big.pdf", content_type="application/pdf", read=read)
         with pytest.raises(HTTPException) as info:
-            await api.analyse(upload, ocr=True, with_words=False, tenant_id="t")
+            await api.analyse(upload, _request(), ocr=True, with_words=False, store=False, tenant_id="t")
         assert info.value.status_code == 413 and info.value.detail["error"] == "too_large"
         assert asked == [pages.MAX_BYTES + 1]
 
@@ -356,7 +360,7 @@ class TestReviewHardening:
             filename="big.pdf", content_type="application/pdf", size=pages.MAX_BYTES + 1, read=AsyncMock()
         )
         with pytest.raises(HTTPException) as info:
-            await api.analyse(declared, ocr=True, with_words=False, tenant_id="t")
+            await api.analyse(declared, _request(), ocr=True, with_words=False, store=False, tenant_id="t")
         assert info.value.status_code == 413
         declared.read.assert_not_awaited()
 
@@ -378,7 +382,7 @@ class TestReviewHardening:
         upload = SimpleNamespace(
             filename="a.pdf", content_type="application/pdf", read=AsyncMock(return_value=b"%PDF-1")
         )
-        answer = await api.analyse(upload, ocr=False, with_words=True, tenant_id="t")
+        answer = await api.analyse(upload, _request(), ocr=False, with_words=True, store=False, tenant_id="t")
         assert answer == {"filename": "a.pdf", "documents": []}
         assert seen["thread"] is not threading.main_thread() and seen["args"] == (
             b"%PDF-1",

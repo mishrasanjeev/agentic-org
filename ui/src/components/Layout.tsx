@@ -42,6 +42,7 @@ const ALL_NAV: Array<{ path: string; labelKey: string; label: string; roles: rea
   { path: "/dashboard/workflows", labelKey: "nav.workflows", label: "Workflows", roles: ["admin", "cfo", "chro", "cmo", "coo"] },
   { path: "/dashboard/approvals", labelKey: "nav.approvals", label: "Approvals", roles: APPROVAL_ROLES },
   { path: "/dashboard/conversations", labelKey: "nav.conversations", label: "Conversations", roles: SUPERVISOR_ROLES },
+  { path: "/dashboard/documents", labelKey: "nav.documents", label: "Documents", roles: APPROVAL_ROLES },
   { path: "/dashboard/connectors", labelKey: "nav.connectors", label: "Connectors", roles: CONNECTOR_ROLES },
   { path: "/dashboard/commerce-runtime", labelKey: "nav.commerceRuntime", label: "Commerce Runtime", roles: ["admin", "merchant"] },
   { path: "/dashboard/prompt-templates", labelKey: "nav.promptTemplates", label: "Prompt Templates", roles: ["admin"] },

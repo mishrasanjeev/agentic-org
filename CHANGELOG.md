@@ -4,6 +4,21 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
 
 ## [Unreleased] - 2026-08-29
 
+### Added - Document processing: review with overlays and corrections
+- `POST /idp/analyse?store=true` keeps the file and the result
+  (`idp_documents`, migration `v6z64_idp_documents`); a document the
+  pipeline routed to review waits in `review`. `/idp/documents` lists
+  kept documents by status, serves a document with its fields and
+  corrections, renders a page as PNG for the overlay, takes a
+  reviewer's value for a field (the extracted value stays beside it) and
+  approves or rejects. The Documents page draws every field on the page
+  it came from, coloured by confidence, with the reviewer's edits and
+  decision (`core/idp/store.py`, `api/v1/idp_review.py`).
+- Corrections to extra fields show in the served document, PDF page
+  images are rendered with a scale capped at 2400 pixels a side, and the
+  Documents page ignores a detail that arrives for a document no longer
+  selected.
+
 ### Added - Document processing: classification and extraction
 - With `AGENTICORG_IDP_ENABLED` on (off by default), `POST /idp/analyse`
   reads a PDF or image into pages of words with bounding boxes (text layer
