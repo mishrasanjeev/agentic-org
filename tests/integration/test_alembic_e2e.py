@@ -36,6 +36,7 @@ from datetime import UTC, datetime, timedelta
 import pytest
 from alembic import command
 from alembic.config import Config
+from alembic.script import ScriptDirectory
 from sqlalchemy import create_engine, inspect, text
 from sqlalchemy.exc import DBAPIError
 
@@ -1445,7 +1446,11 @@ def test_head_revision_downgrades_one_step_and_upgrades_again_without_orm_drift(
     head = _current_head()
     assert _version_num() == head
 
-    command.downgrade(cfg, "-1")
+    revision = ScriptDirectory.from_config(cfg).get_revision(head)
+    assert revision is not None and revision.down_revision is not None
+    # Relative -1 is ambiguous at a merge head; name the retained parent.
+    parent = revision.down_revision[-1] if isinstance(revision.down_revision, tuple) else revision.down_revision
+    command.downgrade(cfg, parent)
     assert _version_num() != head
 
     command.upgrade(cfg, "head")

@@ -39,6 +39,15 @@ be dismissed as a substitute for that scan.
 - Lineage ignores late responses for superseded selections, labels truncated
   source traversal accurately, and provides native keyboard node controls.
   The three new UI regressions failed before the fixes and pass afterward.
+- The isolated registry PostgreSQL fixture includes the rating and execution
+  history tables read by the current card response. Concurrency and tenant
+  isolation assertions remain intact, with empty-history response assertions.
+- Migration round-trip verification names the retained parent at a merge head
+  instead of using an ambiguous relative downgrade. Existing migration
+  identifiers and production rollout policy are unchanged.
+- The reviewed personalisation configuration-rule deletion raises the bounded
+  route guard by one. A PostgreSQL regression proves existing render evidence
+  survives with its content hash and a cleared rule reference.
 
 ## Measured Validation
 
@@ -46,11 +55,13 @@ be dismissed as a substitute for that scan.
 | --- | --- |
 | First security preflight | Passed: 12,183 backend tests; 18 skipped; 5 expected failures; 81.78% coverage |
 | First security UI run | Passed: 443 tests in 69 files; lint, types and build passed |
-| Final security parser expansion | Focused conversation suites: 120 passed; full preflight pending |
+| Final security parser expansion | Focused conversation suites: 120 passed; full preflight passed before the concurrent main merge; refreshed run pending |
 | Combined static checks | `make check RUNNER=local` passed inside the Docker test container |
 | Focused personalisation suite | 32 passed |
 | PostgreSQL reporting and duplicate-rule regressions | 2 passed |
 | Focused lineage UI suite | 8 passed |
+| Registry concurrency and merge-head round trip | 7 passed on a dedicated local PostgreSQL database |
+| First combined unit and contract run | 10,138 passed; integration fixture and merge-head test corrections required; final replay pending |
 | Delayed dashboard-response sign-in browser regression | Passed against the existing local stack; not a final-image release result |
 | Final rebuilt Docker runtime, complete suites and browser replay | Pending |
 | Remote final candidate CI and main CI | Pending |

@@ -24,12 +24,15 @@ from core.agent_registry import lifecycle
 from core.config import settings
 from core.models.agent import Agent
 from core.models.agent_registry import AgentRegistryEntry, AgentRegistryEvent
+from core.models.agent_task_result import AgentTaskResult
+from core.models.feedback import AgentFeedback
 from core.ownership import Caller
 from core.schemas.api import AgentCardIn
 
 DB_URL = os.getenv("AGENTICORG_DB_URL", "")
 migration = importlib.import_module("migrations.versions.v6_z48_agent_registry")
 source_state_migration = importlib.import_module("migrations.versions.v6_z49_registry_from_state")
+ratings_migration = importlib.import_module("migrations.versions.v6_z49_agent_ratings")
 pytestmark = pytest.mark.skipif(not DB_URL, reason="Requires local PostgreSQL")
 
 
@@ -44,8 +47,10 @@ def registry_db(request):
             conn.execute(text(f'CREATE SCHEMA "{schema}"'))
             conn.execute(text(f"CREATE ROLE {role} NOLOGIN NOSUPERUSER NOBYPASSRLS"))
             conn.execute(text(f'SET LOCAL search_path TO "{schema}"'))
-            # Only the agent and registry tables are relevant to this isolated schema.
+            # Include the empty history tables read by the full card response.
             conn.execute(CreateTable(Agent.__table__, include_foreign_key_constraints=[]))
+            for model in (AgentTaskResult, AgentFeedback):
+                conn.execute(CreateTable(model.__table__, include_foreign_key_constraints=[]))
             if request.param == "bootstrap":
                 AgentRegistryEntry.__table__.create(conn)
                 AgentRegistryEvent.__table__.create(conn)
@@ -62,6 +67,8 @@ def registry_db(request):
                 migration.upgrade()
                 source_state_migration.upgrade()
                 source_state_migration.upgrade()
+                # The full card includes its tenant-scoped ratings summary.
+                ratings_migration.upgrade()
             conn.execute(text(f'GRANT USAGE ON SCHEMA "{schema}" TO {role}'))
             conn.execute(text(f'GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA "{schema}" TO {role}'))
         yield schema, role
@@ -124,6 +131,8 @@ async def test_registry_first_card_write_is_serialized_and_tenant_isolated(regis
             asyncio.gather(write({"purpose": "Synthetic purpose"}), write({"risk_tier": "high"})), timeout=10
         )
         assert all(card["registry"]["state"] == "draft" for card in cards)
+        assert all(card["rating"] == {"count": 0, "average": None} for card in cards)
+        assert all(card["reliability"]["runs"] == 0 for card in cards)
         async with session_for(tid) as session:
             entries = list((await session.execute(select(AgentRegistryEntry))).scalars())
             assert len(entries) == 1
