@@ -4,6 +4,23 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
 
 ## [Unreleased] - 2026-08-29
 
+### Added - Conversational services: banking intents, slot filling and confirmed execution
+- With `AGENTICORG_CONVERSATION_V2_ENABLED` on (off by default), a chat
+  message that names a banking intent (balance, statement, card block,
+  transfer, bill payment, loan, dispute, application status, talk to a
+  person) is a dialogue turn: parameters are extracted and collected turn
+  by turn, an ambiguous message is clarified, a transaction is summarised
+  and confirmed, and only then the bound tool runs under the grant through
+  the agent's governed tools (`core/conversation/`, `/conversation/turns`,
+  table `conversation_sessions`, migration `v6z60_conversation_sessions`).
+  `POST /chat/query` returns the outcome in `conversation`; other messages
+  reach the agent as before.
+- A confirmed action is claimed with the session state under a row lock,
+  with an idempotency key, before its tool is called, so it runs once; the
+  agent's operator halts and throttles apply to it; a request for a person
+  raises a hand-off item in the approvals queue, or says honestly that none
+  was raised; bindings prefer the exact connector-qualified tool.
+
 ### Added - Agent runtime: debugging console with breakpoints and step-through
 - With `AGENTICORG_RUNTIME_DEBUG_CONSOLE_ENABLED` on (off by default), a
   tenant administrator reads a run's checkpoints back as steps (the node

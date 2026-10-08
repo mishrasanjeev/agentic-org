@@ -2696,7 +2696,7 @@
     "public_exempt_reason": null,
     "rate_limit": "chat-history-read",
     "scope": "chat.history.sensitive.read",
-    "source_line": 1072,
+    "source_line": 1255,
     "tenant_required": true
   },
   {
@@ -2714,7 +2714,7 @@
     "public_exempt_reason": null,
     "rate_limit": "chat-query",
     "scope": "chat.agent_execution.external_tool_sensitive.write",
-    "source_line": 616,
+    "source_line": 788,
     "tenant_required": true
   },
   {
@@ -4353,6 +4353,78 @@
     "rate_limit": "content-safety-check",
     "scope": "content_safety.external_input.sensitive.write",
     "source_line": 53,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "conversation.intents.list",
+    "auth_required": true,
+    "function": "list_intents",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/conversation/intents api/v1/conversation.py:list_intents",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/conversation.py",
+    "path": "/api/v1/conversation/intents",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "chat.read",
+    "source_line": 177,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "conversation.session.reset",
+    "auth_required": true,
+    "function": "reset_session",
+    "idempotency": "idempotent-delete",
+    "key": "DELETE /api/v1/conversation/session api/v1/conversation.py:reset_session",
+    "metadata_present": true,
+    "methods": [
+      "DELETE"
+    ],
+    "module": "api/v1/conversation.py",
+    "path": "/api/v1/conversation/session",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "chat.write",
+    "source_line": 220,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "conversation.session.read",
+    "auth_required": true,
+    "function": "get_session",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/conversation/session api/v1/conversation.py:get_session",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/conversation.py",
+    "path": "/api/v1/conversation/session",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "chat.read",
+    "source_line": 196,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "conversation.turn",
+    "auth_required": true,
+    "function": "post_turn",
+    "idempotency": "not_idempotent-advances-the-dialogue-and-may-run-a-confirmed-action",
+    "key": "POST /api/v1/conversation/turns api/v1/conversation.py:post_turn",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/conversation.py",
+    "path": "/api/v1/conversation/turns",
+    "public_exempt_reason": null,
+    "rate_limit": "chat-query",
+    "scope": "chat.agent_execution.external_tool_sensitive.write",
+    "source_line": 137,
     "tenant_required": true
   },
   {

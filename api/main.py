@@ -43,6 +43,7 @@ from api.v1 import (
     config,
     connectors,
     content_safety,
+    conversation,
     costs,
     cron,
     delegations,
@@ -301,6 +302,7 @@ app.include_router(memory.router, prefix="/api/v1", tags=["Memory"])
 app.include_router(tool_registry.router, prefix="/api/v1", tags=["Tools"])
 app.include_router(kpis.router, prefix="/api/v1", tags=["KPIs"])
 app.include_router(chat.router, prefix="/api/v1", tags=["Chat"])
+app.include_router(conversation.router, prefix="/api/v1")
 app.include_router(companies.router, prefix="/api/v1", tags=["Companies"])
 app.include_router(ca_operations.router, prefix="/api/v1", tags=["CA Operations"])
 app.include_router(

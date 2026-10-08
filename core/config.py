@@ -365,6 +365,11 @@ class Settings(BaseSettings):
     # a run's checkpoints back step by step. Off by default: off, no run
     # pauses and the console endpoints are not found.
     runtime_debug_console_enabled: bool = False
+    # Conversational services (core/conversation/): a chat message that names
+    # a banking intent is handled as a dialogue turn (slots, clarification,
+    # confirmation) and a confirmed action runs the bound tool under the
+    # grant. Off by default: off, every message reaches the agent as before.
+    conversation_v2_enabled: bool = False
     # JSON object keyed provider/model with input and output USD per million
     # tokens; a negotiated rate replaces the list price.
     model_price_overrides_json: str = ""
