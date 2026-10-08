@@ -50,6 +50,8 @@ def session_view(row: Any) -> dict[str, Any]:
         "escalation": {k: escalation.get(k) for k in ("reason", "intent", "at", "hitl_id", "ticket")}
         if escalation
         else None,
+        "rating": state.get("rating"),
+        "sentiment": (state.get("sentiment") or [{}])[-1].get("label") if state.get("sentiment") else None,
         "updated_at": row.updated_at.isoformat() if row.updated_at else None,
     }
 
@@ -120,6 +122,12 @@ async def transcript(tenant_id: uuid.UUID, session_id: uuid.UUID) -> dict[str, A
         view["history"] = list(state.get("history") or [])
         view["slots"] = dict(state.get("slots") or {})
         view["escalation_summary"] = (row.escalation or {}).get("summary") if getattr(row, "escalation", None) else None
+        from core.conversation import summary as conversation_summary
+
+        view["summary"] = conversation_summary.summarise(
+            Dialogue.from_dict(state),
+            escalation=dict(row.escalation or {}) if getattr(row, "escalation", None) else None,
+        )
     return view
 
 

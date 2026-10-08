@@ -11,12 +11,14 @@ nothing is recognised. Nothing here calls a tool.
 from __future__ import annotations
 
 import copy
+import math
 import re
 from dataclasses import asdict, dataclass, field
 from datetime import UTC, date, datetime
 from typing import Any
 
 from core.conversation import context as conversation_context
+from core.conversation import feedback as conversation_feedback
 from core.conversation import intents as catalogue
 from core.conversation.intents import CLARIFY_MARGIN, INTENTS, MAX_AMOUNT, MIN_CONFIDENCE, Intent, Slot
 
@@ -27,6 +29,9 @@ STAGE_COLLECTING = "collecting"
 STAGE_CONFIRMING = "confirming"
 STAGE_CLARIFYING = "clarifying"
 STAGE_DONE = "done"
+STAGE_OFFERING = "offering"  # a scenario's next step, or a person, offered; yes or no
+STAGE_RATING = "rating"  # a rating from 1 to 5 asked once
+MAX_ACTIONS = 10
 
 _YES_RE = re.compile(
     r"^\s*(yes|y|yeah|yep|yup|sure|ok|okay|confirm(ed)?|proceed|go ahead|do it|please do|correct|right|haan|ha)\b", re.I
@@ -74,6 +79,12 @@ class Dialogue:
     last_intent: str | None = None  # the last action that ran, for "the same amount" and "again"
     last_slots: dict[str, Any] = field(default_factory=dict)
     fallbacks: int = 0  # fallbacks in a row; after two the offer is a person
+    offer: dict[str, Any] | None = None  # the scenario step or person offered (core/conversation/scenarios.py)
+    actions: list[dict[str, Any]] = field(default_factory=list)  # what ran, for the summary
+    rating: int | None = None
+    rating_asked: bool = False
+    sentiment: list[dict[str, Any]] = field(default_factory=list)  # the last user turns' scores
+    negative_turns: int = 0  # negative turns in a row; two offer a person
     turns: int = 0
     history: list[dict[str, str]] = field(default_factory=list)
     started_at: str | None = None
@@ -104,9 +115,19 @@ class Dialogue:
         self.options = []
         self.carry = {}
         self.ambiguous = {}
+        self.offer = None
 
 
 # ── Formatting ────────────────────────────────────────────────────────────────
+
+
+def _finite_amount(value: Any) -> bool:
+    """A positive, finite number; checked whether or not the intent has a business cap."""
+    try:
+        amount = float(value)
+    except (TypeError, ValueError):
+        return False
+    return math.isfinite(amount) and amount > 0
 
 
 def rupees(value: Any) -> str:
@@ -145,6 +166,12 @@ def summary_of(intent: Intent, slots: dict[str, Any]) -> str:
         if s.get("consumer_id"):
             text += f" for consumer number {s['consumer_id']}"
         return text + "."
+    if intent.name == "loan_application":
+        return (
+            f"Apply for a {s.get('loan_type')} loan of {rupees(s.get('amount'))} over {s.get('tenure_months')} months."
+        )
+    if intent.name == "card_replacement":
+        return f"Send a replacement for the card ending {s.get('card')} to the registered address."
     if intent.name == "dispute_transaction":
         text = f"Raise a dispute for {rupees(s.get('amount'))}"
         if s.get("transaction_date"):
@@ -170,7 +197,14 @@ def handoff_summary(dialogue: Dialogue) -> dict[str, Any]:
 # ── Slot answers ──────────────────────────────────────────────────────────────
 
 
-def parse_slot(slot: Slot, text: str, entities: dict[str, Any], *, today: date | None = None) -> tuple[Any, str | None]:
+def parse_slot(
+    slot: Slot,
+    text: str,
+    entities: dict[str, Any],
+    *,
+    today: date | None = None,
+    max_amount: float | None = MAX_AMOUNT,
+) -> tuple[Any, str | None]:
     """The value of ``slot`` in an answer, or (None, why it was refused)."""
     stripped = text.strip()
     if slot.kind == "amount":
@@ -179,10 +213,12 @@ def parse_slot(slot: Slot, text: str, entities: dict[str, Any], *, today: date |
             amount = catalogue.parse_amount(stripped)
         if amount is None:
             return None, "Please give the amount as a number, for example 2500 or ₹2,500."
-        if amount > MAX_AMOUNT:
+        if not _finite_amount(amount):
+            return None, "Please give the amount as a number, for example 2500 or ₹2,500."
+        if max_amount is not None and amount > max_amount:
             return (
                 None,
-                f"The most a conversational transaction can move is {rupees(MAX_AMOUNT)}. "
+                f"The most a conversational transaction can move is {rupees(max_amount)}. "
                 "Please give a smaller amount.",
             )
         return amount, None
@@ -215,6 +251,13 @@ def parse_slot(slot: Slot, text: str, entities: dict[str, Any], *, today: date |
             value = token.upper() if 5 <= len(token) <= 40 else None
         if value is None:
             return None, "Please give the reference number as it appears on your acknowledgement."
+        return value, None
+    if slot.kind == "tenure":
+        value = entities.get("tenure") or catalogue.parse_tenure(stripped)
+        if value is None and stripped.isdigit() and 1 <= int(stripped) <= 600:
+            value = int(stripped)
+        if value is None:
+            return None, "Please give the tenure in months or years, for example 24 months or 3 years."
         return value, None
     if slot.kind == "period":
         value = entities.get("period") or catalogue.parse_period(stripped)
@@ -259,12 +302,16 @@ def fill_from_entities(
             value = entities.get("reference")
         elif slot.kind == "period":
             value = entities.get("period")
+        elif slot.kind == "tenure":
+            value = entities.get("tenure")
         elif slot.kind == "choice":
             value = entities.get(slot.name) or (catalogue.parse_reason(text, slot.choices) if text else None)
         elif slot.kind == "text":
             value = entities.get(slot.name)
         if value not in (None, ""):
-            if slot.kind == "amount" and float(value) > MAX_AMOUNT:
+            if slot.kind == "amount" and not _finite_amount(value):
+                continue
+            if slot.kind == "amount" and intent.max_amount is not None and float(value) > intent.max_amount:
                 continue
             filled[slot.name] = value
     return filled
@@ -350,12 +397,13 @@ def _start(
     text: str = "",
     *,
     today: date | None = None,
+    prefill: dict[str, Any] | None = None,
 ) -> Outcome:
     prior = handoff_summary(dialogue)  # what was in progress, for a hand-off
     dialogue.intent = intent.name
     dialogue.confidence = confidence
     merged = conversation_context.resolve(text, {**dialogue.carry, **entities}, dialogue.last_slots)
-    dialogue.slots = fill_from_entities(intent, {}, merged, text)
+    dialogue.slots = fill_from_entities(intent, dict(prefill or {}), merged, text)
     dialogue.ambiguous = {
         slot.name: list(merged[f"{slot.kind}_options"])
         for slot in intent.slots
@@ -417,6 +465,30 @@ def advance(dialogue: Dialogue, text: str, *, today: date | None = None) -> Outc
     _note(dialogue, "user", text)
     entities = catalogue.extract_entities(text, today=today)
     intent = dialogue.current()
+    mood = conversation_feedback.sentiment(text)
+    dialogue.sentiment = (dialogue.sentiment + [mood])[-5:]
+    dialogue.negative_turns = dialogue.negative_turns + 1 if mood["label"] == "negative" else 0
+
+    # Rating: a 1 to 5 is kept; anything else is a new message.
+    if dialogue.stage == STAGE_RATING:
+        dialogue.stage = STAGE_IDLE
+        rating = conversation_feedback.rating_from_text(text)
+        if rating is not None:
+            dialogue.rating = rating
+            return _outcome(dialogue, "rated", "Thank you for the feedback. Is there anything else I can help with?")
+
+    # Offering: yes starts the next step with what is already known; no ends the flow.
+    if dialogue.stage == STAGE_OFFERING and isinstance(dialogue.offer, dict):
+        offer = dict(dialogue.offer)
+        dialogue.offer = None
+        dialogue.stage = STAGE_IDLE
+        if _YES_RE.match(text):
+            next_intent = INTENTS.get(str(offer.get("intent") or ""))
+            if next_intent is not None:
+                dialogue.negative_turns = 0
+                return _start(dialogue, next_intent, 0.9, entities, text, today=today, prefill=offer.get("prefill"))
+        elif _NO_RE.match(text):
+            return _outcome(dialogue, "declined", "Alright. Is there anything else I can help with?")
 
     # Clarifying: the user picks one of the intents offered (by name, title or number).
     if dialogue.stage == STAGE_CLARIFYING and dialogue.options:
@@ -466,7 +538,7 @@ def advance(dialogue: Dialogue, text: str, *, today: date | None = None) -> Outc
         )
         if switched:
             return _start(dialogue, other[0].intent, other[0].confidence, entities, text, today=today)
-        value, problem = parse_slot(slot, text, entities, today=today)
+        value, problem = parse_slot(slot, text, entities, today=today, max_amount=intent.max_amount)
         if problem:
             dialogue.retries += 1
             if dialogue.retries >= MAX_RETRIES:

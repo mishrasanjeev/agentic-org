@@ -240,6 +240,7 @@ async def handoff(
             "slots": dict(slots or dialogue.slots),
             "reason": reason,
         },
+        "conversation_summary": _conversation_summary(dialogue),
     }
     record["hitl_id"] = await _review_item(
         tenant_id,
@@ -286,6 +287,12 @@ async def handoff(
         "conversation_handoff", intent=tag, reason=reason, ticket=bool(record["ticket"]), review=bool(record["hitl_id"])
     )
     return record
+
+
+def _conversation_summary(dialogue: Dialogue) -> dict[str, Any]:
+    from core.conversation import summary as conversation_summary
+
+    return conversation_summary.summarise(dialogue)
 
 
 def handed_over(record: dict[str, Any]) -> bool:

@@ -58,6 +58,8 @@ ACTIONS: dict[str, tuple[str, ...]] = {
     "loan_enquiry": ("loan_enquiry", "get_loan_offers", "loan_eligibility", "check_loan_eligibility"),
     "dispute_transaction": ("raise_dispute", "create_dispute", "dispute_transaction"),
     "application_status": ("application_status", "get_application_status", "track_application"),
+    "loan_application": ("apply_loan", "create_loan_application", "submit_loan_application", "loan_application"),
+    "card_replacement": ("request_replacement_card", "replace_card", "card_replacement", "reissue_card"),
 }
 
 
@@ -310,7 +312,12 @@ async def reset_dialogue(tenant_id: uuid.UUID, key: str) -> bool:
 
 def dialogue_view(dialogue: Dialogue) -> dict[str, Any]:
     intent = dialogue.current()
+    from core.conversation import feedback
+
     return {
+        "rating": dialogue.rating,
+        "sentiment": feedback.latest_label(dialogue.sentiment),
+        "offer": dict(dialogue.offer) if isinstance(dialogue.offer, dict) else None,
         "stage": dialogue.stage,
         "intent": dialogue.intent,
         "confidence": round(dialogue.confidence, 3),
@@ -624,18 +631,79 @@ async def finish_turn(
     channel: str,
     context: ExecutionContext | None,
 ) -> dict[str, Any]:
-    """Hand off when the outcome says so, announce the turn, and shape the answer.
+    """Offer the next step, hand off when the outcome says so, announce the turn, and shape the answer.
 
-    The session is already stored (``run_turn`` saves it, or claimed it with a
-    confirmed action) and is not written again here.
+    The session is already stored: ``run_turn`` saves it, or claimed it with a
+    confirmed action before the tool ran. What this turn adds afterwards (the
+    action record, a scenario's next step, an offer of a person, the rating
+    prompt) is written on top; the stored dialogue confirms nothing either way.
+    A confirmation that was superseded writes nothing more, so it never
+    overwrites the turn that did claim the action.
     """
-    from core.conversation import escalation, supervisor
+    from core.conversation import escalation, feedback, scenarios, supervisor
 
     handoff: dict[str, Any] | None = None
     # The dialogue says why it escalated (an accepted offer after fallbacks is not an unsolicited request).
     reason = outcome.escalation or (
         escalation.REASON_REQUESTED if outcome.intent == "talk_to_agent" else escalation.REASON_SLOTS
     )
+    tail = ""
+    superseded = (execution or {}).get("status") == "superseded"
+    if outcome.kind == "execute" and not superseded:
+        # The record of what ran, for the summary; then the scenario's next step, if any.
+        dialogue.actions = (
+            dialogue.actions
+            + [
+                {
+                    "intent": outcome.intent,
+                    "status": (execution or {}).get("status"),
+                    "reference": scenarios.reference_of(execution),
+                    "at": datetime.now(UTC).isoformat(),
+                }
+            ]
+        )[-dialogue_engine.MAX_ACTIONS :]
+        offer = scenarios.follow_up(outcome.intent, outcome.slots, execution)
+        if offer is not None:
+            dialogue.stage = dialogue_engine.STAGE_OFFERING
+            dialogue.offer = offer.to_dict()
+            tail = " " + offer.text
+    if (
+        not superseded
+        and dialogue.negative_turns >= feedback.NEGATIVE_STREAK
+        and dialogue.stage in (dialogue_engine.STAGE_IDLE, dialogue_engine.STAGE_COLLECTING)
+        and outcome.kind not in ("escalate", "execute")
+    ):
+        # Two negative turns in a row: offer a person (FE-06), whatever the dialogue was doing.
+        offer = scenarios.person_offer(
+            "I am sorry this has been frustrating. Would you like me to connect you to a person? Reply yes or no."
+        )
+        dialogue.stage = dialogue_engine.STAGE_OFFERING
+        dialogue.offer = offer.to_dict()
+        dialogue.negative_turns = 0
+        tail = " " + offer.text
+    elif (
+        not superseded
+        and not tail
+        and outcome.kind in ("execute", "escalate")
+        and not dialogue.rating_asked
+        and dialogue.stage == dialogue_engine.STAGE_IDLE
+    ):
+        dialogue.stage = dialogue_engine.STAGE_RATING
+        dialogue.rating_asked = True
+        tail = " " + feedback.RATING_PROMPT
+    if outcome.kind == "rated" and dialogue.rating is not None:
+        await feedback.record_rating(
+            tid,
+            session_key=key,
+            agent_id=agent_id or None,
+            user_id=user_id,
+            rating=dialogue.rating,
+            channel=channel,
+            intent=dialogue.last_intent,
+            sentiment_label=feedback.latest_label(dialogue.sentiment),
+        )
+    if not superseded and (tail or outcome.kind == "execute"):
+        await save_dialogue(tid, key, dialogue, user_id=user_id, agent_id=agent_id or None, channel=channel)
     if outcome.kind == "escalate":
         # The dialogue has started over by now; the outcome's snapshot carries what was in
         # progress (a transfer the user left for a person), else the intent and slots it had.
@@ -653,8 +721,10 @@ async def finish_turn(
             slots=notes.get("slots") or outcome.slots,
             notes=notes,
         )
-    answer = answer_for(outcome, execution, handoff)
+    answer = answer_for(outcome, execution, handoff) + tail
     payload = outcome_payload(outcome, execution, handoff)
+    if dialogue.offer is not None:
+        payload["offer"] = dict(dialogue.offer)
     stage = dialogue.stage
     await supervisor.announce_turn(tid, key, role="user", intent=dialogue.intent, stage=stage)
     await supervisor.announce_turn(tid, key, role="assistant", intent=dialogue.intent, stage=stage)

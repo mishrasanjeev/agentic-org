@@ -13,6 +13,7 @@ The catalogue is synthetic and generic: no institution's products or names.
 
 from __future__ import annotations
 
+import math
 import re
 from dataclasses import dataclass, field
 from datetime import UTC, date, datetime, timedelta
@@ -42,6 +43,7 @@ class Intent:
     slots: tuple[Slot, ...] = ()
     confirm: bool = False
     action: str | None = None  # the tool action an agent binds (runtime.ACTIONS)
+    max_amount: float | None = MAX_AMOUNT  # the most an amount slot accepts; None for enquiries and disputes
 
     def slot(self, name: str) -> Slot | None:
         return next((slot for slot in self.slots if slot.name == name), None)
@@ -155,7 +157,7 @@ CATALOGUE: tuple[Intent, ...] = (
         "Loan enquiry",
         "read",
         (
-            (r"\bloan\b(?![^.?!]*\b(status|application|track(ing)?)\b)", 0.6),
+            (r"^(?![\s\S]*\b(apply|application|status|track(ing)?)\b)[\s\S]*\bloan\b", 0.6),
             (r"\b(emi|interest rate|eligib(le|ility)|tenure)\b", 0.4),
             (r"\bborrow\b", 0.4),
         ),
@@ -170,6 +172,42 @@ CATALOGUE: tuple[Intent, ...] = (
             Slot("amount", "amount", "Roughly how much would you like to borrow?", required=False),
         ),
         action="loan_enquiry",
+        max_amount=None,
+    ),
+    Intent(
+        "loan_application",
+        "Loan application",
+        "transact",
+        (
+            (r"^(?![\s\S]*\b(status|track(ing)?)\b)[\s\S]*\b(apply|application)\b[\s\S]*\bloan\b", 0.8),
+            (r"^(?![\s\S]*\b(status|track(ing)?)\b)[\s\S]*\bloan application\b", 0.7),
+            (r"\bstart (a |my )?(loan )?application\b", 0.6),
+        ),
+        (
+            Slot(
+                "loan_type",
+                "choice",
+                "Which kind of loan: personal, home, car, education, business or gold?",
+                choices=("personal", "home", "car", "education", "business", "gold"),
+            ),
+            Slot("amount", "amount", "How much would you like to borrow?"),
+            Slot("tenure_months", "tenure", "Over how many months or years would you repay it?"),
+        ),
+        confirm=True,
+        action="loan_application",
+        max_amount=None,
+    ),
+    Intent(
+        "card_replacement",
+        "Card replacement",
+        "transact",
+        (
+            (r"\b(replace(ment)?|reissue|new)\b.*\bcard\b", 0.6),
+            (r"\bcard\b.*\b(replace(ment|d)?|reissued?)\b", 0.6),
+        ),
+        (Slot("card", "card", "Which card should be replaced? Tell me the last four digits."),),
+        confirm=True,
+        action="card_replacement",
     ),
     Intent(
         "dispute_transaction",
@@ -197,6 +235,7 @@ CATALOGUE: tuple[Intent, ...] = (
         ),
         confirm=True,
         action="dispute_transaction",
+        max_amount=None,
     ),
     Intent(
         "application_status",
@@ -310,6 +349,7 @@ _PERIOD_RE = re.compile(
 )
 _PAYEE_OR_RE = re.compile(r"\bto\s+([A-Z][\w.'-]*)\s+or\s+([A-Z][\w.'-]*)\b")
 _MERCHANT_RE = re.compile(r"\b(?:at|from|by)\s+((?:[A-Z][\w&.'-]*)(?:\s+[A-Z][\w&.'-]*){0,2})")
+_TENURE_RE = re.compile(r"\b(\d{1,3})\s*(months?|mos?|years?|yrs?)\b", re.I)
 _LOAN_TYPE_RE = re.compile(r"\b(personal|home|housing|car|vehicle|auto|education|student|business|gold)\b", re.I)
 _LOAN_TYPES = {"housing": "home", "vehicle": "car", "auto": "car", "student": "education"}
 _REASON_WORDS = {
@@ -354,7 +394,7 @@ def _bare_amount(text: str) -> float | None:
             value = float(match.group(1).replace(",", ""))
         except ValueError:
             continue
-        if value > 0:
+        if math.isfinite(value) and value > 0:
             return value
     return None
 
@@ -373,7 +413,7 @@ def parse_amount(text: str) -> float | None:
         return None
     unit = unit.rstrip("s") if unit not in _MULTIPLIERS else unit
     value *= _MULTIPLIERS.get(unit, _MULTIPLIERS.get(unit + "s", 1))
-    return value if value > 0 else None
+    return value if math.isfinite(value) and value > 0 else None
 
 
 def parse_date(text: str, *, today: date | None = None) -> str | None:
@@ -470,6 +510,9 @@ def extract_entities(text: str, *, today: date | None = None) -> dict[str, Any]:
     if loan:
         kind = loan.group(1).lower()
         found["loan_type"] = _LOAN_TYPES.get(kind, kind)
+    tenure = parse_tenure(text)
+    if tenure is not None:
+        found["tenure"] = tenure
     merchant = _MERCHANT_RE.search(text)
     if merchant and merchant.group(1).lower() not in _PAYEE_STOP:
         found["merchant"] = merchant.group(1).strip(" .,")[:80]
@@ -477,6 +520,17 @@ def extract_entities(text: str, *, today: date | None = None) -> dict[str, Any]:
     if either and not {either.group(1).lower(), either.group(2).lower()} & _PAYEE_STOP:
         found["payee_options"] = [either.group(1), either.group(2)]
     return found
+
+
+def parse_tenure(text: str) -> int | None:
+    """A repayment tenure in months (``24 months``, ``3 years``), or None."""
+    match = _TENURE_RE.search(text)
+    if not match:
+        return None
+    value = int(match.group(1))
+    unit = match.group(2).lower()
+    months = value * 12 if unit.startswith("y") else value
+    return months if 1 <= months <= 600 else None
 
 
 def parse_amounts(text: str) -> list[float]:
@@ -505,7 +559,7 @@ def parse_amounts(text: str) -> list[float]:
             value = float(match.group(1).replace(",", ""))
         except ValueError:
             continue
-        if value > 0:
+        if math.isfinite(value) and value > 0:
             found.append((start, value))
     amounts: list[float] = []
     for _, value in sorted(found, key=lambda item: item[0]):
