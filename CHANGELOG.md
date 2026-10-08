@@ -4,6 +4,18 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
 
 ## [Unreleased] - 2026-08-29
 
+### Fixed - Combined security and feature release regressions
+- Lineage details ignore superseded node requests, distinguish traversal limits
+  from absent sources, and expose native keyboard-accessible node controls.
+- Personalisation resolves tenant keys asynchronously and offloads profile
+  encryption/decryption from the request event loop. Concurrent creation of a
+  duplicate rule returns the documented tenant-scoped `409 rule_exists`.
+- The personalisation route-registration regression checks OpenAPI paths,
+  including lazily included FastAPI routers.
+- A no-op merge revision joins the registry compatibility and feature schema
+  branches without renumbering existing migrations. Feature flags remain off
+  by default; the merge does not activate optional features.
+
 ### Added - Personalisation: a consent-checked service for personalised content
 - `core/personalisation/`: content for a subject and purpose is rendered
   only under a valid consent (granted, not withdrawn, not expired; one

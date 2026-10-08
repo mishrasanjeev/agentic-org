@@ -332,10 +332,10 @@ export default function Lineage() {
             <ul aria-label="Graph nodes" className="max-h-48 divide-y divide-slate-200 overflow-auto border-t border-slate-200">
               {trace.nodes.map((node) => (
                 <li key={node.id} className="flex items-center gap-2 px-3 py-1">
-                  <button type="button" aria-label={`Inspect ${node.kind} ${node.ref}`} aria-pressed={selected?.id === node.id} className="min-w-0 flex-1 break-all text-left text-xs text-slate-800 hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-indigo-600" onClick={() => void describe(node)}>
+                  <button type="button" aria-label={`Inspect ${node.kind} ${node.ref}`} aria-pressed={selected?.id === node.id} className="min-h-11 min-w-0 flex-1 break-all text-left text-xs text-slate-800 hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-indigo-600" onClick={() => void describe(node)}>
                     {node.kind} · {node.ref}
                   </button>
-                  <button type="button" aria-label={`Trace from ${node.kind} ${node.ref}`} title={`Trace from ${node.kind} ${node.ref}`} disabled={busy} className="flex h-8 w-8 shrink-0 items-center justify-center rounded border border-slate-300 text-indigo-700 disabled:opacity-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-indigo-600" onClick={() => void traceFrom(node)}>
+                  <button type="button" aria-label={`Trace from ${node.kind} ${node.ref}`} title={`Trace from ${node.kind} ${node.ref}`} disabled={busy} className="flex h-11 w-11 shrink-0 items-center justify-center rounded border border-slate-300 text-indigo-700 disabled:opacity-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-indigo-600" onClick={() => void traceFrom(node)}>
                     <ScanSearch size={16} aria-hidden="true" />
                   </button>
                 </li>
