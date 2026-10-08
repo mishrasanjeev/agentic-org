@@ -17,6 +17,7 @@ from api.v1 import (
     a2a_interop,
     aa_callback,
     abm,
+    agent_debug,
     agent_registry,
     agent_teams,
     agents,
@@ -290,6 +291,7 @@ app.include_router(api_keys.router, prefix="/api/v1", tags=["API Keys"])
 app.include_router(evals.router, prefix="/api/v1", tags=["Evals"])
 app.include_router(eval_datasets.router, prefix="/api/v1", tags=["Evals"])
 app.include_router(agent_registry.router, prefix="/api/v1", tags=["Agent Registry"])
+app.include_router(agent_debug.router, prefix="/api/v1", tags=["Agents"])
 app.include_router(governance_inventory.router, prefix="/api/v1", tags=["Governance"])
 app.include_router(governance_model_cards.router, prefix="/api/v1", tags=["Governance"])
 app.include_router(governance_risk_tiers.router, prefix="/api/v1", tags=["Governance"])

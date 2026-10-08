@@ -360,6 +360,11 @@ class Settings(BaseSettings):
     tool_registry_enabled: bool = False
     # With the registry on, refuse calls to tools no registration covers.
     tool_registry_require_registration: bool = False
+    # Debugging console (core/langgraph/debugger.py): an agent's breakpoints
+    # pause its runs before a node; the console steps a paused run and reads
+    # a run's checkpoints back step by step. Off by default: off, no run
+    # pauses and the console endpoints are not found.
+    runtime_debug_console_enabled: bool = False
     # JSON object keyed provider/model with input and output USD per million
     # tokens; a negotiated rate replaces the list price.
     model_price_overrides_json: str = ""

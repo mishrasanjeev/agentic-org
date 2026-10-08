@@ -3,6 +3,7 @@ import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
 import { Helmet } from "react-helmet-async";
 import api, { extractApiError } from "@/lib/api";
 import SyntheticChecksPanel from "@/components/observability/SyntheticChecksPanel";
+import RunDebugger from "@/components/RunDebugger";
 
 /** Run timelines (the waterfall of one agent run) and the live workload. Reads only. */
 
@@ -53,6 +54,16 @@ interface RunDetail {
   started_at: string | null;
   duration_ms: number;
   spans: SpanRow[];
+}
+
+/** The checkpoint thread and agent a recorded run names on its root span (while the debugging console is on). */
+export function debugTarget(detail: RunDetail): { agentId: string; threadId: string } | null {
+  const root = detail.spans.find((span) => !span.parent_span_id) ?? detail.spans[0];
+  if (!root) return null;
+  const threadId = root.attributes["agent.thread_id"];
+  const agentId = root.attributes["agent.id"] ?? root.agent_id;
+  if (typeof threadId !== "string" || !threadId || typeof agentId !== "string" || !agentId) return null;
+  return { agentId, threadId };
 }
 
 interface Workload {
@@ -178,6 +189,7 @@ export default function Observability() {
   const [selected, setSelected] = useState<string | null>(null);
   const [detail, setDetail] = useState<RunDetail | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
+  const [debugging, setDebugging] = useState(false);
 
   const [workload, setWorkload] = useState<Workload | null>(null);
   const [workloadLoading, setWorkloadLoading] = useState(false);
@@ -218,6 +230,7 @@ export default function Observability() {
 
   const loadDetail = useCallback(async (runId: string) => {
     setSelected(runId);
+    setDebugging(false);
     setDetailLoading(true);
     setError(null);
     try {
@@ -388,8 +401,23 @@ export default function Observability() {
                 </span>
                 <span className="text-slate-600">
                   {detail.spans.length} spans · {formatMs(detail.duration_ms)}
+                  {debugTarget(detail) && (
+                    <button
+                      type="button"
+                      className="ml-2 rounded-md border border-slate-300 px-2 py-0.5 text-xs hover:bg-slate-50"
+                      onClick={() => setDebugging((open) => !open)}
+                      data-testid="debugger-open"
+                    >
+                      {debugging ? "Hide steps" : "Step through"}
+                    </button>
+                  )}
                 </span>
               </div>
+              {debugging && debugTarget(detail) && (
+                <div className="mb-3">
+                  <RunDebugger agentId={debugTarget(detail)!.agentId} threadId={debugTarget(detail)!.threadId} />
+                </div>
+              )}
               <div className="space-y-1">
                 {detail.spans.map((span) => {
                   const depth = depths.get(span.span_id) ?? 0;
