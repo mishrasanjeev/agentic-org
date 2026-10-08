@@ -19,6 +19,8 @@ from api.route_metadata import route_meta
 from api.v1.agents import _pinned_llm_provider, _record_cost_ledger
 from auth.run_grants import direct_tool_call_permitted, resolve_run_grant
 from core.config import is_strict_runtime_env, redis_socket_timeout_kwargs, redis_url_from_env, settings
+from core.conversation import context as conversation_context
+from core.conversation import fallbacks as conversation_fallbacks
 from core.conversation import runtime as conversation_runtime
 from core.database import get_tenant_session
 from core.governance.agent_status import refusal_for as agent_status_refusal
@@ -746,6 +748,7 @@ async def _append_history(
     agent_name: str,
     domain: str,
     confidence: float | None,
+    fallback: str | None = None,
 ) -> None:
     """Store the turn in the caller's session history (Redis-backed, BUG #22).
 
@@ -762,17 +765,19 @@ async def _append_history(
     entries = await _load_session(session_key)
     now = datetime.now(UTC).isoformat()
     entries.append({"id": str(_uuid.uuid4()), "role": "user", "text": body.query, "timestamp": now})
-    entries.append(
-        {
-            "id": str(_uuid.uuid4()),
-            "role": "agent",
-            "text": answer,
-            "agent": agent_name,
-            "domain": domain,
-            "confidence": confidence,
-            "timestamp": now,
-        }
-    )
+    agent_entry: dict[str, Any] = {
+        "id": str(_uuid.uuid4()),
+        "role": "agent",
+        "text": answer,
+        "agent": agent_name,
+        "domain": domain,
+        "confidence": confidence,
+        "timestamp": now,
+    }
+    if fallback:
+        # The fallback streak is read back from the history on the next query.
+        agent_entry[conversation_fallbacks.FALLBACK_KEY] = fallback
+    entries.append(agent_entry)
     await _save_session(session_key, entries)
 
 
@@ -1095,6 +1100,17 @@ async def chat_query(
                 conversation=handled["outcome"],
             )
 
+    # Conversational services: the recent turns reach the agent as the run's
+    # context, so a follow-up is answered against what was said (CONV-02).
+    run_context: dict[str, Any] = {}
+    context_note: str = ""
+    history_entries: list[dict] = []
+    if conversation_runtime.enabled():
+        history_entries = await _load_session(
+            _session_key(tenant_id, str(company_uuid), body.agent_id, _session_user_id(request))
+        )
+        run_context = conversation_context.context_block(history_entries)
+        context_note = conversation_context.with_context_note("", history_entries).strip()
     # Try to execute via LangGraph if an agent was found in DB
     answer: str | None = None
     if agent_id:
@@ -1116,9 +1132,10 @@ async def chat_query(
                         "and filing details already present before asking "
                         "for clarification."
                     )
-                ),
+                )
+                + (f"\n\n{context_note}" if context_note else ""),
                 authorized_tools=resolved_tools,
-                task_input={"action": "query", "inputs": {"query": body.query}, "context": {}},
+                task_input={"action": "query", "inputs": {"query": body.query}, "context": run_context},
                 llm_model="",
                 llm_provider=agent_llm_provider,
                 confidence_floor=0.88,
@@ -1221,6 +1238,20 @@ async def chat_query(
     # this data source" state instead of a phantom response. The
     # confidence drops to the minimum because the system genuinely
     # has no grounded answer.
+    fallback_kind: str | None = None
+    if conversation_runtime.enabled():
+        # A graceful fallback (CONV-06): every run is classified with its
+        # computed confidence before the answer is accepted, so an empty,
+        # failed or low-confidence answer is held back. The streak of
+        # fallbacks is carried across queries through the session history,
+        # so the second in a row offers to connect a person.
+        fallback_kind = conversation_fallbacks.hold_back(
+            lg_result if agent_id else None, answer=answer, confidence=confidence, hitl=bool(hitl_trigger)
+        )
+        if fallback_kind is not None:
+            consecutive = conversation_fallbacks.streak(history_entries) + 1
+            answer = conversation_fallbacks.message(fallback_kind, consecutive=consecutive)
+            confidence = 0.0
     if not answer:
         answer = (
             "No agent was able to answer that query. "
@@ -1232,7 +1263,9 @@ async def chat_query(
         )
         confidence = 0.0
 
-    await _append_history(tenant_id, company_uuid, body, request, answer, agent_name, domain, confidence)
+    await _append_history(
+        tenant_id, company_uuid, body, request, answer, agent_name, domain, confidence, fallback=fallback_kind
+    )
 
     return ChatQueryResponse(
         answer=answer,

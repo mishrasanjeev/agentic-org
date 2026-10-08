@@ -16,6 +16,7 @@ from dataclasses import asdict, dataclass, field
 from datetime import UTC, date, datetime
 from typing import Any
 
+from core.conversation import context as conversation_context
 from core.conversation import intents as catalogue
 from core.conversation.intents import CLARIFY_MARGIN, INTENTS, MAX_AMOUNT, MIN_CONFIDENCE, Intent, Slot
 
@@ -63,6 +64,10 @@ class Dialogue:
     retries: int = 0
     options: list[str] = field(default_factory=list)
     carry: dict[str, Any] = field(default_factory=dict)  # entities of a message awaiting clarification
+    ambiguous: dict[str, list[Any]] = field(default_factory=dict)  # slot -> the values a message offered
+    last_intent: str | None = None  # the last action that ran, for "the same amount" and "again"
+    last_slots: dict[str, Any] = field(default_factory=dict)
+    fallbacks: int = 0  # fallbacks in a row; after two the offer is a person
     turns: int = 0
     history: list[dict[str, str]] = field(default_factory=list)
     started_at: str | None = None
@@ -92,6 +97,7 @@ class Dialogue:
         self.retries = 0
         self.options = []
         self.carry = {}
+        self.ambiguous = {}
 
 
 # ── Formatting ────────────────────────────────────────────────────────────────
@@ -233,14 +239,14 @@ def fill_from_entities(
             continue
         value: Any = None
         if slot.kind == "amount":
-            value = entities.get("amount")
+            value = None if entities.get("amount_options") else entities.get("amount")
         elif slot.kind in ("account", "card"):
             value = entities.get(slot.kind)
             if value is None and entities.get("ending") and not ending_used:
                 value = entities["ending"]
                 ending_used = True
         elif slot.kind == "payee":
-            value = entities.get("payee")
+            value = None if entities.get("payee_options") else entities.get("payee")
         elif slot.kind == "date":
             value = entities.get("date")
         elif slot.kind == "reference":
@@ -295,6 +301,16 @@ def _next_step(dialogue: Dialogue, *, today: date | None = None) -> Outcome:
         dialogue.stage = STAGE_COLLECTING
         dialogue.pending = slot.name
         dialogue.retries = 0
+        offered = dialogue.ambiguous.pop(slot.name, None)
+        if offered:
+            # The message named more than one value: ask which, instead of acting on a guess.
+            shown = [rupees(v) if slot.kind == "amount" else str(v) for v in offered]
+            return _outcome(
+                dialogue,
+                "ask",
+                f"I see more than one {slot.name.replace('_', ' ')}: {' or '.join(shown)}. Which one?",
+                options=[{"value": v, "label": label} for v, label in zip(offered, shown, strict=True)],
+            )
         return _outcome(dialogue, "ask", slot.prompt)
     dialogue.pending = None
     if intent.confirm:
@@ -313,6 +329,9 @@ def _execute(dialogue: Dialogue) -> Outcome:
     dialogue.stage = STAGE_DONE
     outcome = _outcome(dialogue, "execute", summary, action=action, summary=summary)
     outcome.slots = slots
+    dialogue.last_intent = intent.name
+    dialogue.last_slots = slots
+    dialogue.fallbacks = 0
     dialogue.reset()
     return outcome
 
@@ -329,7 +348,13 @@ def _start(
     prior = handoff_summary(dialogue)  # what was in progress, for a hand-off
     dialogue.intent = intent.name
     dialogue.confidence = confidence
-    dialogue.slots = fill_from_entities(intent, {}, {**dialogue.carry, **entities}, text)
+    merged = conversation_context.resolve(text, {**dialogue.carry, **entities}, dialogue.last_slots)
+    dialogue.slots = fill_from_entities(intent, {}, merged, text)
+    dialogue.ambiguous = {
+        slot.name: list(merged[f"{slot.kind}_options"])
+        for slot in intent.slots
+        if merged.get(f"{slot.kind}_options") and dialogue.slots.get(slot.name) in (None, "")
+    }
     dialogue.carry = {}
     dialogue.pending = None
     dialogue.retries = 0
@@ -356,6 +381,15 @@ def _start(
 
 
 def _fallback(dialogue: Dialogue) -> Outcome:
+    dialogue.fallbacks += 1
+    if dialogue.fallbacks >= 2:
+        return _outcome(
+            dialogue,
+            "fallback",
+            "I still did not catch that. Would you like me to connect you to a person? Reply yes and I will "
+            "hand this over with a summary.",
+            options=[{"intent": "talk_to_agent", "title": "Talk to a person"}],
+        )
     return _outcome(
         dialogue,
         "fallback",
@@ -433,6 +467,25 @@ def advance(dialogue: Dialogue, text: str, *, today: date | None = None) -> Outc
         dialogue.slots = fill_from_entities(
             intent, dialogue.slots, {k: v for k, v in entities.items() if k != slot.kind}, text
         )
+        return _next_step(dialogue, today=today)
+
+    # A yes after the offer of a person is the hand-off.
+    if dialogue.stage == STAGE_IDLE and dialogue.fallbacks >= 2 and _YES_RE.match(text):
+        dialogue.fallbacks = 0
+        return _start(dialogue, INTENTS["talk_to_agent"], 0.9, entities, text, today=today)
+
+    # Idle: "again" repeats the last action, confirmed afresh.
+    if conversation_context.repeats_last(text) and dialogue.last_intent and dialogue.last_intent in INTENTS:
+        repeated = INTENTS[dialogue.last_intent]
+        dialogue.intent = repeated.name
+        dialogue.confidence = 0.9
+        dialogue.slots = dict(dialogue.last_slots)
+        dialogue.pending = None
+        dialogue.retries = 0
+        dialogue.options = []
+        dialogue.carry = {}
+        dialogue.ambiguous = {}
+        dialogue.started_at = datetime.now(UTC).isoformat()
         return _next_step(dialogue, today=today)
 
     # Idle: recognise the turn.

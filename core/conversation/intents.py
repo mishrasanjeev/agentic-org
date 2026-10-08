@@ -120,7 +120,7 @@ CATALOGUE: tuple[Intent, ...] = (
         "Fund transfer",
         "transact",
         (
-            (r"\b(transfer|send|remit|move)\b.*\b(money|funds|rs\.?|rupees|inr|₹|\d)", 0.6),
+            (r"\b(transfer|send|remit|move)\b.*\b(money|funds|amount|sum|rs\.?|rupees|inr|₹|\d)", 0.6),
             (r"\bpay\b.*\bto\b", 0.4),
             (r"\b(neft|imps|rtgs|upi)\b", 0.3),
         ),
@@ -308,6 +308,7 @@ _PERIOD_RE = re.compile(
     r"|\b(\d{1,3})\s+(days?|transactions?)\b",
     re.I,
 )
+_PAYEE_OR_RE = re.compile(r"\bto\s+([A-Z][\w.'-]*)\s+or\s+([A-Z][\w.'-]*)\b")
 _MERCHANT_RE = re.compile(r"\b(?:at|from|by)\s+((?:[A-Z][\w&.'-]*)(?:\s+[A-Z][\w&.'-]*){0,2})")
 _LOAN_TYPE_RE = re.compile(r"\b(personal|home|housing|car|vehicle|auto|education|student|business|gold)\b", re.I)
 _LOAN_TYPES = {"housing": "home", "vehicle": "car", "auto": "car", "student": "education"}
@@ -335,6 +336,11 @@ _NOT_AMOUNT_BEFORE_RE = re.compile(
     r"(ending(?: in| with)?|last four(?: digits)?|account|a/c|acct|card|no\.?|number|ref(?:erence)?|id|#|x+|\*+|"
     r"last|past|previous|first)\s*$",
     re.I,
+)
+
+
+_NOT_AMOUNT_AFTER_RE = re.compile(
+    r"\s*(?:(?:days?|weeks?|months?|years?|hours?|minutes?|transactions?|times|am|pm)\b|%)", re.I
 )
 
 
@@ -435,6 +441,9 @@ def extract_entities(text: str, *, today: date | None = None) -> dict[str, Any]:
     amount = parse_amount(text)
     if amount is not None:
         found["amount"] = amount
+        amounts = parse_amounts(text)
+        if len(amounts) > 1:
+            found["amount_options"] = amounts  # "500 or 600": ambiguous, the dialogue asks which
     account = _ACCOUNT_RE.search(text)
     card = _CARD_RE.search(text)
     if account:
@@ -464,7 +473,45 @@ def extract_entities(text: str, *, today: date | None = None) -> dict[str, Any]:
     merchant = _MERCHANT_RE.search(text)
     if merchant and merchant.group(1).lower() not in _PAYEE_STOP:
         found["merchant"] = merchant.group(1).strip(" .,")[:80]
+    either = _PAYEE_OR_RE.search(text)
+    if either and not {either.group(1).lower(), either.group(2).lower()} & _PAYEE_STOP:
+        found["payee_options"] = [either.group(1), either.group(2)]
     return found
+
+
+def parse_amounts(text: str) -> list[float]:
+    """Every distinct amount in ``text``, in order ("500 or 600" and "₹500 or 600" both name two).
+
+    Currency-marked amounts and bare numbers are merged by position: a bare
+    number counts unless it lies inside a marked amount, what precedes it says
+    it is not an amount (an account ending, a reference), or what follows it
+    is a unit of time or count ("in 2 days").
+    """
+    found: list[tuple[int, float]] = []
+    marked_spans: list[tuple[int, int]] = []
+    for match in _AMOUNT_RE.finditer(text):
+        value = parse_amount(match.group(0))
+        if value is not None:
+            found.append((match.start(), value))
+            marked_spans.append(match.span())
+    for match in _BARE_IN_TEXT_RE.finditer(text):
+        start, end = match.span()
+        if any(start < span_end and end > span_start for span_start, span_end in marked_spans):
+            continue
+        before = text[max(0, start - 24) : start]
+        if _NOT_AMOUNT_BEFORE_RE.search(before) or _NOT_AMOUNT_AFTER_RE.match(text, end):
+            continue
+        try:
+            value = float(match.group(1).replace(",", ""))
+        except ValueError:
+            continue
+        if value > 0:
+            found.append((start, value))
+    amounts: list[float] = []
+    for _, value in sorted(found, key=lambda item: item[0]):
+        if value not in amounts:
+            amounts.append(value)
+    return amounts
 
 
 # ── Recognition ───────────────────────────────────────────────────────────────

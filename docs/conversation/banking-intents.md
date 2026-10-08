@@ -47,6 +47,21 @@ account ending 1234" fills three slots across two turns.
 
 The most a conversational transaction may move is ₹10,00,000; a larger amount is refused at the slot.
 
+## Context, references and fallbacks
+
+With the runtime on, the recent turns of the chat (the last eight, bounded) travel to the agent
+as the run's context (`Context.conversation`) with a note to resolve references from them and to
+ask when one is ambiguous, so "and for last month?" is answered against the earlier question
+(`core/conversation/context.py`). In the banking dialogue, "the same amount", "that person" and
+"that account" take their values from the last action that ran, and "again" repeats it, confirmed
+afresh. A message that names two amounts ("500 or 600") or two payees ("to Ravi or Priya") is
+asked about ("I see more than one amount: ₹500 or ₹600. Which one?") instead of acted on.
+
+When no answer can be given, the user is told what happened in plain words, that nothing was
+changed, and what to do next (`core/conversation/fallbacks.py`): a timeout, an unavailable
+system, no answer, a held-back low-confidence answer, a failed action or a refusal. After two
+fallbacks in a row the offer is to connect to a person, and a yes is the hand-off.
+
 ## Execution under the grant
 
 A confirmed action runs through the agent's own governed tools (`core/conversation/runtime.py`).
