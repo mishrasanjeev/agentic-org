@@ -404,7 +404,8 @@ services:
     environment:
       BASE_URL: http://ui
       CI: "true"
-      AGENTICORG_DEV_SEED_PASSWORD: "${AGENTICORG_DEV_SEED_PASSWORD:-}"
+      AGENTICORG_SEED_PASSWORD: "${AGENTICORG_SEED_PASSWORD:-}"
+      AGENTICORG_E2E_NATIVE_CONNECTOR_PREFILL_ENABLED: "${AGENTICORG_DEV_NATIVE_CONNECTOR_PREFILL_ENABLED:-false}"
     volumes:
       - .:/src
       # Container-only dependencies, kept apart from any host ui/node_modules.

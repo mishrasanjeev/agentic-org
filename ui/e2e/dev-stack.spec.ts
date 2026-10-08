@@ -7,7 +7,7 @@ import { expect, test } from "@playwright/test";
 
 test.describe("local dev stack @dev-stack", () => {
   test("catalogue follows the registry flag and supports real banking pack cards", async ({ page }) => {
-    const password = process.env.AGENTICORG_DEV_SEED_PASSWORD;
+    const password = process.env.AGENTICORG_SEED_PASSWORD;
     const registryEnabled = process.env.AGENTICORG_E2E_REGISTRY_ENABLED === "true";
     const email = registryEnabled ? process.env.AGENTICORG_E2E_REGISTRY_ADMIN_EMAIL : "approver.a@example.com";
     expect(password, "Local seed password is required").toBeTruthy();
@@ -116,13 +116,22 @@ test.describe("local dev stack @dev-stack", () => {
     await expect(page).toHaveURL(/\/login/);
   });
 
-  test("native catalog registration persists the registry identity", async ({ page }) => {
-    test.skip(!process.env.AGENTICORG_DEV_SEED_PASSWORD, "Local seed password is required");
+  test("native connector registration respects rollout and persists registry identity", async ({ page }) => {
+    const password = process.env.AGENTICORG_SEED_PASSWORD;
+    expect(password, "Local seed password is required").toBeTruthy();
     await page.goto("/login");
     await page.fill('input[type="email"]', "approver.a@example.com");
-    await page.fill('input[type="password"]', process.env.AGENTICORG_DEV_SEED_PASSWORD!);
+    await page.fill('input[type="password"]', password!);
     await page.locator('button[type="submit"]').click();
     await expect(page).toHaveURL(/\/dashboard/, { timeout: 15_000 });
+
+    if (process.env.AGENTICORG_E2E_NATIVE_CONNECTOR_PREFILL_ENABLED !== "true") {
+      await page.goto("/dashboard/connectors/new?type=whatsapp");
+      await expect(page.getByTestId("provider-select")).toHaveValue("custom");
+      await expect(page.getByPlaceholder("e.g. zoho_books, Slack, SAP S/4HANA")).toBeEditable();
+      await expect(page.getByPlaceholder("e.g. zoho_books, Slack, SAP S/4HANA")).toHaveValue("");
+      return;
+    }
 
     await page.goto("/dashboard/connectors");
     const card = page.getByTestId("catalog-item-whatsapp");
