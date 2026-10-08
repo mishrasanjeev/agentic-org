@@ -44,6 +44,7 @@ from core.finops import thresholds as finops_thresholds
 from core.governance import risk_tiers
 from core.governance.agent_status import refusal_for as agent_status_refusal
 from core.governance.operator_override import check as check_operator_override
+from core.langgraph import limits as execution_limits
 from core.models.agent import Agent, AgentCostLedger, AgentLifecycleEvent, AgentVersion
 from core.models.approval_policy import ApprovalPolicy
 from core.models.audit import AuditLog
@@ -78,6 +79,7 @@ from core.schemas.api import (
     AgentCreate,
     AgentEvalGateIn,
     AgentFeedbackSubmit,
+    AgentLimitsIn,
     AgentOutputSchemaIn,
     AgentTrafficSplitIn,
     AgentUpdate,
@@ -3887,6 +3889,8 @@ async def run_agent(
                 # Structured output: the schema the agent declares (its own, or a registered name).
                 output_schema=agent_config.get("output_schema"),
                 output_schema_json=(agent_config.get("config") or {}).get(prompt_output_schema.INLINE_KEY),
+                # Execution limits and the loop rule the agent declares (core/langgraph/limits.py).
+                limits=(agent_config.get("config") or {}).get(execution_limits.LIMITS_KEY),
             )
     except CheckpointerUnavailableError as exc:
         # Postgres checkpoint store configured but unusable: refuse the run
@@ -3971,6 +3975,7 @@ async def run_agent(
                 "runtime": "langgraph",
                 "has_hitl": bool(hitl_trigger),
                 **({"grant_denial": lg_result["grant_denial"]} if lg_result.get("grant_denial") else {}),
+                **({"limit": lg_result["limit"]} if lg_result.get("limit") else {}),
             },
         )
         session.add(audit_entry)
@@ -4158,6 +4163,9 @@ async def run_agent(
     if lg_result.get("grant_denial"):
         # PRD F-1 deny: the reason code for the refused tool call.
         response["grant_denial"] = lg_result["grant_denial"]
+    if lg_result.get("limit"):
+        # An execution limit or the loop rule stopped the run: the reason and the detail.
+        response["limit"] = lg_result["limit"]
     if incoming_action == "shadow_sample":
         response["shadow_metrics"] = shadow_metrics
     return response
@@ -4520,6 +4528,95 @@ async def get_agent_traffic_split(
 def _gate_refused(exc: eval_gates.GateError) -> HTTPException:
     detail = {"error": eval_gates.TRIGGER, "code": exc.code, "message": exc.message, **exc.detail}
     return HTTPException(409, detail=detail)
+
+
+def _limits_refused(exc: execution_limits.LimitError) -> HTTPException:
+    return HTTPException(422, detail={"error": "runtime_limits", "message": str(exc)})
+
+
+# ── PUT /agents/{id}/limits ───────────────────────────────────────────────────
+@router.put("/agents/{agent_id}/limits")
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="agents.write",
+    rate_limit="agent-write",
+    idempotency="idempotent-full-replace",
+    audit_event="agents.limits.set",
+)
+async def set_agent_limits(
+    agent_id: UUID,
+    body: AgentLimitsIn,
+    tenant_id: str = Depends(get_current_tenant),
+    user_domains: list[str] | None = Depends(get_user_domains),
+    caller: Caller | None = Depends(caller_from_request),
+):
+    """Give an agent its execution limits (steps, duration, tool calls, loop rule), or remove them.
+
+    They are enforced while ``AGENTICORG_RUNTIME_LIMITS_ENABLED`` is on, bounded by the platform's maxima.
+    """
+    tid = _uuid.UUID(tenant_id)
+    parsed = None
+    if body.limits is not None:
+        try:
+            parsed = execution_limits.parse_limits(body.limits)
+        except execution_limits.LimitError as exc:
+            raise _limits_refused(exc) from None
+    async with get_tenant_session(tid) as session:
+        result = await session.execute(
+            select(Agent).where(Agent.id == agent_id, Agent.tenant_id == tid).with_for_update()
+        )
+        agent = result.scalar_one_or_none()
+        if not agent:
+            raise HTTPException(404, "Agent not found")
+        require_agent_mutable(agent, _effective_caller(caller, user_domains))
+        config = dict(agent.config or {})
+        if parsed is None:
+            config.pop(execution_limits.LIMITS_KEY, None)
+        else:
+            config[execution_limits.LIMITS_KEY] = parsed
+        agent.config = config
+    return {
+        "id": str(agent_id),
+        "limits": parsed,
+        "effective": execution_limits.effective(parsed).to_dict(),
+        "platform": execution_limits.platform().to_dict(),
+        "enforced": execution_limits.enabled(),
+    }
+
+
+# ── GET /agents/{id}/limits ───────────────────────────────────────────────────
+@router.get("/agents/{agent_id}/limits")
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="agents.read",
+    rate_limit="standard",
+    idempotency="read-only",
+    audit_event="agents.limits.read",
+)
+async def get_agent_limits(
+    agent_id: UUID,
+    tenant_id: str = Depends(get_current_tenant),
+    user_domains: list[str] | None = Depends(get_user_domains),
+    caller: Caller | None = Depends(caller_from_request),
+):
+    """An agent's declared limits, the limits a run is held to, the platform's maxima and whether they are enforced."""
+    tid = _uuid.UUID(tenant_id)
+    async with get_tenant_session(tid) as session:
+        result = await session.execute(select(Agent).where(Agent.id == agent_id, Agent.tenant_id == tid))
+        agent = result.scalar_one_or_none()
+        if not agent:
+            raise HTTPException(404, "Agent not found")
+        require_agent_visible(agent, _effective_caller(caller, user_domains))
+        declared = execution_limits.declared(agent)
+    return {
+        "id": str(agent_id),
+        "limits": declared,
+        "effective": execution_limits.effective(declared).to_dict(),
+        "platform": execution_limits.platform().to_dict(),
+        "enforced": execution_limits.enabled(),
+    }
 
 
 # ── PUT /agents/{id}/eval-gate ────────────────────────────────────────────────

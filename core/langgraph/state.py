@@ -48,6 +48,8 @@ class AgentState(TypedDict):
     error: str
     pseudonym_case_id: NotRequired[str]
     grant_denial: NotRequired[dict[str, str]]
+    # Set when an execution limit or the loop rule stopped the run (core/langgraph/limits.py).
+    limit_stop: NotRequired[dict[str, Any]]
     # Structured-output enforcement (core/prompts/output_schema.py): how many
     # times the answer was sent back to be corrected, whether a correction is
     # pending, and the escalation trigger when it never became valid.

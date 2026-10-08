@@ -19,7 +19,7 @@ from typing import Any
 
 import structlog
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
-from langgraph.errors import GraphInterrupt
+from langgraph.errors import GraphInterrupt, GraphRecursionError
 
 from auth.grant_enforcement import EnforcementMode
 from auth.run_grants import RunGrant, resolve_run_grant
@@ -34,6 +34,7 @@ from core.governance.model_gateway import (
     reset_route,
     route_for_agent,
 )
+from core.langgraph import limits as execution_limits
 from core.langgraph.agent_graph import build_agent_graph
 from core.langgraph.checkpointer import (
     BACKEND_POSTGRES,
@@ -64,6 +65,15 @@ install_trace_redaction()
 # see docs/PERFORMANCE.md for baselines.
 MAX_AGENT_DURATION_SEC = int(os.getenv("AGENTICORG_MAX_AGENT_DURATION_SEC", "1800"))  # 30 min
 MAX_AGENT_STEPS = int(os.getenv("AGENTICORG_MAX_AGENT_STEPS", "200"))
+
+
+def _limit_stop_errors() -> tuple[type[BaseException], ...]:
+    """The exceptions the runner reports as a limit stop: the step ceiling, only while execution limits are on.
+
+    Off, the tuple is empty, so the platform ceiling fails through the generic handler as it always has.
+    """
+    return (GraphRecursionError,) if execution_limits.enabled() else ()
+
 
 # Blended per-token estimate (Gemini 2.5 Flash list price, $0.15/1M input +
 # $0.60/1M output averaged). Not per-provider pricing — an estimate only.
@@ -235,6 +245,7 @@ async def run_agent(
     run_grant: RunGrant | None = None,
     output_schema: str | None = None,
     output_schema_json: dict[str, Any] | None = None,
+    limits: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Run a LangGraph agent and return the result.
 
@@ -439,9 +450,12 @@ async def run_agent(
             output_schema=output_schema,
             output_schema_json=output_schema_json,
             pseudonymiser=pseudonymiser,
+            limits=limits,
         )
     finally:
         reset_prefetched_llm_credential(credential_token)
+    # The agent's own limits, bounded by the platform's (core/langgraph/limits.py).
+    run_limits = execution_limits.effective(limits)
 
     # Compile with checkpointer
     # The configured store (core/langgraph/checkpointer.py); raises rather
@@ -461,6 +475,8 @@ async def run_agent(
         # A reused thread (voice ``voice:{call_sid}``) must not inherit a
         # denial from an earlier turn.
         "grant_denial": {},
+        # Nor an earlier turn's limit stop.
+        "limit_stop": {},
         # Nor an earlier turn's output-schema corrections.
         "output_repairs": 0,
         "output_repair": False,
@@ -501,7 +517,7 @@ async def run_agent(
         invoke_config = {**config, "recursion_limit": MAX_AGENT_STEPS}
         result = await asyncio.wait_for(
             compiled.ainvoke(initial_state, config=invoke_config),  # type: ignore[call-overload]
-            timeout=MAX_AGENT_DURATION_SEC,
+            timeout=run_limits.max_duration_seconds,
         )
         latency_ms = int((time.perf_counter() - t0) * 1000)
         await meter_agent_run(tenant_id)  # billing usage counter; best-effort
@@ -643,6 +659,8 @@ async def run_agent(
             response["thread_id"] = config["configurable"]["thread_id"]
         if result.get("grant_denial"):
             response["grant_denial"] = result["grant_denial"]
+        if result.get("limit_stop"):
+            response["limit"] = result["limit_stop"]
         return _traced_result(run_span, response)
 
     except GraphInterrupt as gi:
@@ -705,13 +723,38 @@ async def run_agent(
     except GuardrailBlocked as exc:
         logger.warning("agent_run_blocked_guardrail", agent_id=agent_id, rule=exc.rule_name, stage=exc.stage)
         return _traced_result(run_span, guardrail_blocked_result(exc))
+    except _limit_stop_errors():
+        # The platform's step ceiling while execution limits are on: the graph ran
+        # MAX_AGENT_STEPS nodes without finishing. Off, it fails as any other error.
+        run_span.set(**{"agent.run.status": "stopped"})
+        latency_ms = int((time.perf_counter() - t0) * 1000)
+        execution_limits.meter("step_limit")
+        logger.warning("langgraph_agent_step_limit", agent_id=agent_id, max_steps=MAX_AGENT_STEPS)
+        return {
+            "status": "failed",
+            "output": {},
+            "confidence": 0.0,
+            "reasoning_trace": [
+                f"STOPPED (step_limit): the run reached the platform ceiling of {MAX_AGENT_STEPS} graph steps"
+            ],
+            "tool_calls_log": [],
+            "tool_calls": [],
+            "hitl_trigger": "",
+            "error": f"stopped: the run reached the platform ceiling of {MAX_AGENT_STEPS} graph steps",
+            "limit": {"reason": "step_limit", "detail": f"platform ceiling of {MAX_AGENT_STEPS} graph steps"},
+            "explanation": {},
+            "performance": {"total_latency_ms": latency_ms, "llm_tokens_used": 0, "llm_cost_usd": 0},
+        }
     except TimeoutError:
         run_span.set(**{"agent.run.status": "timeout"})
         latency_ms = int((time.perf_counter() - t0) * 1000)
+        limits_on = execution_limits.enabled()
+        if limits_on:
+            execution_limits.meter("duration_limit")
         logger.warning(
             "langgraph_agent_timeout",
             agent_id=agent_id,
-            max_duration_sec=MAX_AGENT_DURATION_SEC,
+            max_duration_sec=run_limits.max_duration_seconds,
         )
         return {
             "status": "failed",
@@ -721,7 +764,17 @@ async def run_agent(
             "tool_calls_log": [],
             "tool_calls": [],  # BUG-11 dual-emit
             "hitl_trigger": "",
-            "error": f"timeout: agent exceeded {MAX_AGENT_DURATION_SEC}s",
+            "error": f"timeout: agent exceeded {run_limits.max_duration_seconds}s",
+            **(
+                {
+                    "limit": {
+                        "reason": "duration_limit",
+                        "detail": f"the run exceeded its limit of {run_limits.max_duration_seconds} seconds",
+                    }
+                }
+                if limits_on
+                else {}
+            ),
             "explanation": {},
             "performance": {
                 "total_latency_ms": latency_ms,
