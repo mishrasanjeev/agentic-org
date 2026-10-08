@@ -4,6 +4,29 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
 
 ## [Unreleased] - 2026-08-29
 
+### Added - Content services: governed drafting, structured summarisation and obligation extraction
+- With `AGENTICORG_CONTENT_SERVICES_ENABLED` on (off by default), three
+  reusable capability APIs under `/content` (`core/content/`), each with
+  an input schema, an output schema, a guardrail profile and an
+  evaluation dataset the tenant can install through the evaluation
+  framework: drafting (notices, circulars, letters, emails, memos, FAQs
+  from points and approved sources, naming the sources used and the
+  placeholders for what is not known; notices and circulars wait in the
+  drafts queue for a second person, table `content_drafts`, migration
+  `v6z62_content_drafts`), summarisation across documents with key points
+  that cite their documents, and obligation and deadline extraction where
+  every item quotes its source and unsupported items are dropped and
+  counted. Inputs pass the input guardrails, the model answers in JSON
+  checked against the schema with one retry, and outputs pass the output
+  guardrails with the sources as grounding context.
+- Content services hardening: the `/content` routes need `audit:read` to
+  read and `approvals:write` to act; drafting and draft decisions need an
+  active human administrator (never an API key); a masked input is what
+  the model sees; knowledge-base sources pass the retrieval guardrails;
+  every output field passes the output guardrails; pre-model
+  pseudonymisation applies to every content model call; extracted
+  obligations need a quote of at least three words that supports them.
+
 ### Added - Conversational services: scenario templates, summaries, feedback and sentiment
 - Multi-step scenarios chain intents without a model: a raised dispute
   offers to track its reference, a loan enquiry offers to start the

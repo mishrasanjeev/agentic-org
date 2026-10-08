@@ -4356,6 +4356,150 @@
     "tenant_required": true
   },
   {
+    "audit_event": "content.draft",
+    "auth_required": true,
+    "function": "post_draft",
+    "idempotency": "not-idempotent-create",
+    "key": "POST /api/v1/content/draft api/v1/content.py:post_draft",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/content.py",
+    "path": "/api/v1/content/draft",
+    "public_exempt_reason": null,
+    "rate_limit": "chat-query",
+    "scope": "content.draft.sensitive.write",
+    "source_line": 146,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "content.drafts.list",
+    "auth_required": true,
+    "function": "list_drafts",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/content/drafts api/v1/content.py:list_drafts",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/content.py",
+    "path": "/api/v1/content/drafts",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "content.drafts.sensitive.read",
+    "source_line": 230,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "content.drafts.read",
+    "auth_required": true,
+    "function": "get_draft",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/content/drafts/{draft_id} api/v1/content.py:get_draft",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/content.py",
+    "path": "/api/v1/content/drafts/{draft_id}",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "content.drafts.sensitive.read",
+    "source_line": 253,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "content.drafts.decide",
+    "auth_required": true,
+    "function": "decide_draft",
+    "idempotency": "idempotent-lifecycle-state",
+    "key": "POST /api/v1/content/drafts/{draft_id}/decide api/v1/content.py:decide_draft",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/content.py",
+    "path": "/api/v1/content/drafts/{draft_id}/decide",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "content.drafts.sensitive.write",
+    "source_line": 272,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "content.extract",
+    "auth_required": true,
+    "function": "post_extract",
+    "idempotency": "idempotent-pure",
+    "key": "POST /api/v1/content/extract api/v1/content.py:post_extract",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/content.py",
+    "path": "/api/v1/content/extract",
+    "public_exempt_reason": null,
+    "rate_limit": "chat-query",
+    "scope": "content.extract.sensitive.write",
+    "source_line": 212,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "content.services.list",
+    "auth_required": true,
+    "function": "list_services",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/content/services api/v1/content.py:list_services",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/content.py",
+    "path": "/api/v1/content/services",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "content.read",
+    "source_line": 83,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "content.services.dataset.install",
+    "auth_required": true,
+    "function": "install_service_dataset",
+    "idempotency": "idempotent-create-by-name",
+    "key": "POST /api/v1/content/services/{name}/dataset api/v1/content.py:install_service_dataset",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/content.py",
+    "path": "/api/v1/content/services/{name}/dataset",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "content.datasets.sensitive.write",
+    "source_line": 97,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "content.summarise",
+    "auth_required": true,
+    "function": "post_summarise",
+    "idempotency": "idempotent-pure",
+    "key": "POST /api/v1/content/summarise api/v1/content.py:post_summarise",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/content.py",
+    "path": "/api/v1/content/summarise",
+    "public_exempt_reason": null,
+    "rate_limit": "chat-query",
+    "scope": "content.summarise.sensitive.write",
+    "source_line": 194,
+    "tenant_required": true
+  },
+  {
     "audit_event": "conversation.feedback",
     "auth_required": true,
     "function": "post_feedback",
