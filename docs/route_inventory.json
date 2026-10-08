@@ -4608,6 +4608,24 @@
     "tenant_required": true
   },
   {
+    "audit_event": "content.respond",
+    "auth_required": true,
+    "function": "post_respond",
+    "idempotency": "idempotent-pure",
+    "key": "POST /api/v1/content/respond api/v1/content_structuring.py:post_respond",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/content_structuring.py",
+    "path": "/api/v1/content/respond",
+    "public_exempt_reason": null,
+    "rate_limit": "chat-query",
+    "scope": "content.respond.sensitive.write",
+    "source_line": 87,
+    "tenant_required": true
+  },
+  {
     "audit_event": "content.services.list",
     "auth_required": true,
     "function": "list_services",
@@ -4641,6 +4659,24 @@
     "rate_limit": "standard",
     "scope": "content.datasets.sensitive.write",
     "source_line": 98,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "content.structure",
+    "auth_required": true,
+    "function": "post_structure",
+    "idempotency": "idempotent-pure",
+    "key": "POST /api/v1/content/structure api/v1/content_structuring.py:post_structure",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/content_structuring.py",
+    "path": "/api/v1/content/structure",
+    "public_exempt_reason": null,
+    "rate_limit": "chat-query",
+    "scope": "content.structure.sensitive.write",
+    "source_line": 69,
     "tenant_required": true
   },
   {
