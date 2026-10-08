@@ -1,6 +1,8 @@
 # Security and Combined Release Validation
 
-Date: 2026-10-08. Status: local validation in progress; not production sign-off.
+Date: 2026-10-08. Local validation record, not production sign-off.
+Current candidate, CI and rollout status is tracked in
+[the combined release PR](https://github.com/mishrasanjeev/agentic-org/pull/1548).
 
 ## Scope
 
@@ -48,6 +50,11 @@ be dismissed as a substitute for that scan.
 - The reviewed personalisation configuration-rule deletion raises the bounded
   route guard by one. A PostgreSQL regression proves existing render evidence
   survives with its content hash and a cleared rule reference.
+- The bounded amount parser preserves conventional rupee `/-` suffixes across
+  single amounts, multiple choices and entity extraction. Seven focused
+  assertions reproduced the suffix and currency-marked malformed-decimal bugs
+  before correction; all focused conversation/security suites pass afterward.
+  The hostile-input replay includes a long malformed suffix.
 
 ## Measured Validation
 
@@ -55,7 +62,7 @@ be dismissed as a substitute for that scan.
 | --- | --- |
 | First security preflight | Passed: 12,183 backend tests; 18 skipped; 5 expected failures; 81.78% coverage |
 | First security UI run | Passed: 443 tests in 69 files; lint, types and build passed |
-| Final security parser expansion | Focused conversation suites: 120 passed; refreshed security preflight passed: 12,215 backend tests, 18 skipped, 5 expected failures, 81.85% coverage |
+| Final security parser expansion | Focused conversation/security suites after suffix correction: 132 passed. Before that correction, refreshed security preflight passed: 12,215 backend tests, 18 skipped, 5 expected failures, 81.85% coverage |
 | Combined static checks | `make check RUNNER=local` passed inside the Docker test container |
 | Focused personalisation suite | 32 passed |
 | PostgreSQL reporting and duplicate-rule regressions | 2 passed |
@@ -64,7 +71,7 @@ be dismissed as a substitute for that scan.
 | Final combined unit, security, connector and contract run | 10,138 passed; 7 skipped |
 | Final combined integration and regression replay | 2,681 passed; 13 skipped; 5 expected failures |
 | Changed-line and new-module coverage | 96% over 7,622 changed lines; every new module meets the 75% floor |
-| Full combined preflight | Earlier combined run passed: 12,570 backend tests, 18 skipped, 5 expected failures; 502 UI tests in 80 files. Final refreshed gate pending after the timing replay described below |
+| Full combined preflight | Earlier combined run passed: 12,570 backend tests, 18 skipped, 5 expected failures; 502 UI tests in 80 files. The final-head refreshed gate is mandatory; its result is recorded on the release PR |
 | Final rebuilt Docker runtime browser suite | 17 passed against the final API/UI images |
 | Final signed-decision browser suite | 3 passed, including delayed dashboard-response hydration and changed-case refusal; grant-leak watcher unchanged and enabled |
 | Final catalogue opt-in browser replay | Passed: banking-pack installation, search, keyboard navigation and mobile overflow checks |
@@ -72,8 +79,8 @@ be dismissed as a substitute for that scan.
 | Final lineage and personalisation runtime checks | 14 passed, including concurrent duplicate 201/409, retained audit evidence on rule deletion, consent withdrawal refusal, keyboard controls and mobile layout |
 | Final worker entrypoint | Health check and isolated-queue task/result round trip passed; canary stopped afterward |
 | Local migration-first rollout | Passed to the single merge head, with PostgreSQL concurrency and merge-head round-trip tests passing |
-| Remote final candidate CI and main CI | Pending; no main merge or deployment permitted before green required checks |
-| Production rollout and verification | Not performed |
+| Remote final candidate CI and main CI | See the release PR for exact-head check results; no main merge or deployment permitted before green required checks |
+| Production rollout and verification | See the release PR for rollout state; local evidence alone is not deployed evidence |
 
 ## UI Review
 
