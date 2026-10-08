@@ -49,27 +49,29 @@ class _Session:
 
 class TestProject:
     def test_a_flat_history_projects_the_same_daily_cost_with_no_band(self):
-        out = forecast.project(_days([2.0] * 30), history_days=30, horizon_days=90)
+        out = forecast.project(_days([2.0] * 30), history_days=30, horizon_days=90, end=END)
         assert out["projected_cost_usd"] == 180.0 and out["baseline_cost_usd"] == 180.0
         assert out["projected_cost_low_usd"] == 180.0 and out["projected_cost_high_usd"] == 180.0
         assert out["trend_cost_usd_per_day"] == 0.0 and out["daily_mean_cost_usd"] == 2.0
         assert out["projected_tokens"] == 2000 * 90 and out["history_tokens"] == 60000
 
     def test_a_rising_history_projects_the_trend_and_growth_compounds(self):
-        rising = forecast.project(_days([float(i) for i in range(1, 31)]), history_days=30, horizon_days=10)
+        rising = forecast.project(_days([float(i) for i in range(1, 31)]), history_days=30, horizon_days=10, end=END)
         assert rising["trend_cost_usd_per_day"] == 1.0
         assert rising["projected_cost_usd"] == sum(float(30 + s) for s in range(1, 11))
-        grown = forecast.project(_days([1.0] * 30), history_days=30, horizon_days=30, growth_monthly_pct=100.0)
+        grown = forecast.project(_days([1.0] * 30), history_days=30, horizon_days=30, growth_monthly_pct=100.0, end=END)
         assert 30.0 < grown["projected_cost_usd"] < 60.0 and grown["projected_cost_usd"] > 43.0
-        shrinking = forecast.project(_days([float(30 - i) for i in range(30)]), history_days=30, horizon_days=60)
+        shrinking = forecast.project(
+            _days([float(30 - i) for i in range(30)]), history_days=30, horizon_days=60, end=END
+        )
         assert shrinking["projected_cost_usd"] == 0.0 and shrinking["projected_cost_low_usd"] == 0.0
 
     def test_missing_days_count_as_zero_and_scatter_widens_the_band(self):
-        sparse = forecast.project(_days([10.0])[:1], history_days=10, horizon_days=10)
+        sparse = forecast.project(_days([10.0])[:1], history_days=10, horizon_days=10, end=END)
         assert sparse["history_cost_usd"] == 10.0 and sparse["daily_mean_cost_usd"] == 1.0
-        noisy = forecast.project(_days([0.0, 4.0] * 15), history_days=30, horizon_days=30)
+        noisy = forecast.project(_days([0.0, 4.0] * 15), history_days=30, horizon_days=30, end=END)
         assert noisy["projected_cost_high_usd"] > noisy["projected_cost_usd"] > noisy["projected_cost_low_usd"] >= 0.0
-        empty = forecast.project([], history_days=30, horizon_days=30)
+        empty = forecast.project([], history_days=30, horizon_days=30, end=END)
         assert empty["projected_cost_usd"] == 0.0 and empty["history_tokens"] == 0
 
     def test_off_by_default(self):

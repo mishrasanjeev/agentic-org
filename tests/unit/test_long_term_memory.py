@@ -432,3 +432,60 @@ class TestEndpoints:
         from core.models.agent_memory import AgentMemory
 
         assert AgentMemory.__tablename__ == "agent_memories"
+
+
+class TestPruneTask:
+    def test_off_the_nightly_task_reads_and_deletes_nothing(self, monkeypatch):
+        from core.tasks import memory_tasks
+
+        monkeypatch.setattr(settings, "runtime_memory_enabled", False)
+        assert memory_tasks.prune_expired_memories() == {"tenants": 0, "pruned": 0, "failed": 0, "skipped": "disabled"}
+
+    def test_on_the_nightly_task_prunes_every_tenant(self, monkeypatch):
+        from core.memory import long_term
+        from core.tasks import memory_tasks
+
+        monkeypatch.setattr(settings, "runtime_memory_enabled", True)
+
+        async def _all():
+            return {"tenants": 2, "pruned": 5, "failed": 0}
+
+        monkeypatch.setattr(long_term, "prune_all_tenants", _all)
+        assert memory_tasks.prune_expired_memories() == {"tenants": 2, "pruned": 5, "failed": 0}
+
+    @pytest.mark.asyncio
+    async def test_a_tenant_that_fails_is_logged_and_skipped(self, monkeypatch):
+        import core.database
+        from core.memory import long_term
+
+        good, bad = uuid.uuid4(), uuid.uuid4()
+
+        class _Rows:
+            def scalars(self):
+                return self
+
+            def all(self):
+                return [good, bad]
+
+        class _Session:
+            def __init__(self, tid=None):
+                self.tid = tid
+
+            async def execute(self, statement):
+                return _Rows()
+
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, *args):
+                return False
+
+        async def _prune(session, tid, *, now=None):
+            if tid == bad:
+                raise RuntimeError("store down")
+            return 3
+
+        monkeypatch.setattr(core.database, "async_session_factory", lambda: _Session())
+        monkeypatch.setattr(core.database, "get_tenant_session", lambda tid: _Session(tid))
+        monkeypatch.setattr(long_term, "prune", _prune)
+        assert await long_term.prune_all_tenants() == {"tenants": 2, "pruned": 3, "failed": 1}
