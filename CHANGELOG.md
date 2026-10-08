@@ -4,6 +4,23 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
 
 ## [Unreleased] - 2026-08-29
 
+### Added - Document processing: statement line items and version comparison
+- `GET /idp/documents/{id}/statement` reads the transactions of a kept
+  bank statement from its extracted table (date, description, debit,
+  credit, balance in whatever order the header gives), joins
+  continuation lines, flags salary credits and returned items, checks the
+  running balance row by row against the opening balance and every
+  debit and credit, and summarises totals, months, average and minimum
+  balance and whether the closing balance agrees
+  (`core/idp/statements.py`). `GET /idp/documents/{id}/compare/{other}`
+  compares one document in two kept files: fields changed, added and
+  removed with both values and boxes, page lines added and removed,
+  table rows added and removed (`core/idp/compare.py`).
+- Statement checks take debit-column amounts as magnitudes, flag returned
+  items and salary credits from the full joined description, and report
+  `consistent: null` with `rows_checked: 0` when no row could be checked.
+  A table present in only one version lists all its rows as added or removed.
+
 ### Added - Document processing: reconciliation, stamps and analysis reports
 - `GET /idp/documents/{id}/reconcile` compares the fields that should
   agree across the documents of a file (names after normalisation,

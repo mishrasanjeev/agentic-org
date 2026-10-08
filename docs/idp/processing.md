@@ -90,6 +90,23 @@ analysis report: each document with its key fields (corrections applied), missin
 and tables; the reconciliation; the stamp check; the review reasons; and a narrative of a few
 sentences built from those parts by fixed rules, never from a model.
 
+## Statement line items and version comparison
+
+`GET /idp/documents/{id}/statement` (`core/idp/statements.py`) reads the transactions of a kept
+bank statement from its extracted table: the header says which column is the date, the
+description, the debit, the credit and the balance; amounts are parsed (brackets and Dr as
+negative); a row with no date continues the description above it; salary credits and returned or
+bounced items are flagged. The running balance is checked row by row against the opening balance
+and every debit and credit, so a misread amount shows up as a break rather than a wrong total. The
+summary names totals, months covered, first and last dates, average and minimum balance, salary
+credits, returned items and whether the closing balance on the statement agrees with the rows.
+
+`GET /idp/documents/{id}/compare/{other}` (`core/idp/compare.py`) compares one document (by index)
+in two kept files: fields changed, added and removed with both values and their boxes (names,
+dates, identifiers and amounts compared as the reconciliation does), lines of page text added and
+removed with a similarity per page, and table rows added and removed. The result says whether the
+versions are identical and counts what changed.
+
 ## Confidence routing
 
 `core/idp/pipeline.py` decides what needs a person and why: a document whose type is unknown or
