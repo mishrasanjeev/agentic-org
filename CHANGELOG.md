@@ -552,6 +552,10 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
   resume refuse an unmet requirement; a tier is changed by an administrator
   and lowered by a second person; a regulated agent keeps its oversight and
   its gate. `GET /governance/risk-tiers` shows the policy and compliance.
+- Shadow evidence for a tier counts terminal human reviews, not runs the
+  model scored itself; a tier change on an active agent is refused while the
+  new tier's controls are unmet; a `PUT /agents/{id}` replacement cannot drop
+  a regulated agent's oversight condition.
 
 ### Added - AI governance: model cards
 - With `AGENTICORG_GOVERNANCE_MODEL_CARDS_ENABLED` on (off by default),
@@ -656,6 +660,9 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
   section: registry approval, the evaluation gate verdict and the model
   provider attestation, with a plain statement that trust-registry
   attestations and passports are not attached.
+- The certification shows the provider attestation for the tenant's governed
+  data region, as residency enforcement chooses it; a first rating is one
+  atomic insert-or-update; a viewer with `agents:read` can rate.
 
 ### Added - Agent registry: dependency graph
 - `GET /agents/{id}/dependencies` (`core/agent_registry/dependencies.py`)
@@ -663,6 +670,9 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
   governing policies (guardrail rules, review condition, output schema,
   evaluation gate dataset), related agents and teams as nodes and edges,
   with names and references only.
+- Governing rules are the ones execution selects (the run use case, no risk
+  tier); card-scoped rules are marked as not applied at run time. Connector
+  nodes use the runtime tool-reference parser.
 
 ### Added - Agent registry: catalogue, templates and banking pack
 

@@ -156,3 +156,69 @@ class TestGraph:
         result, _ = _graph(_agent())
         assert {node["kind"] for node in result["nodes"]} <= set(dependencies.KINDS)
         assert all(set(edge) == {"source", "relation", "target"} for edge in result["edges"])
+
+
+class TestRuntimeScope:
+    def test_only_rules_execution_selects_govern_the_agent(self, rules):
+        agent = _agent()
+        entry = SimpleNamespace(state="approved", use_case="claims", risk_tier="high")
+        rules["rules"] = [
+            _rule("everyone"),
+            _rule("runs", use_case="agent_run"),
+            _rule("resumes", use_case="agent_resume", stage="output"),
+            _rule("this agent on runs", agent_id=str(agent.id), use_case="agent_run"),
+            _rule("card use case", use_case="claims"),
+            _rule("card tier", risk_tier="high"),
+            _rule("tier on runs", use_case="agent_run", risk_tier="high"),
+            _rule("completions", use_case="completion"),
+        ]
+        result, _ = _graph(agent, entry)
+        root = f"agent:{agent.id}"
+        policies = {node["label"]: node for node in result["nodes"] if node["kind"] == "policy" and "stage" in node}
+        relation = {edge["target"]: edge["relation"] for edge in result["edges"] if edge["source"] == root}
+        governing = {label for label, node in policies.items() if relation[node["id"]] == "governed_by"}
+        assert governing == {"everyone", "runs", "resumes", "this agent on runs"}
+        assert all(policies[label]["applied_at_runtime"] for label in governing)
+        card_only = {label for label, node in policies.items() if relation[node["id"]] == "scoped_to_card"}
+        # Execution names no risk tier, so a rule that needs one is never selected for a run.
+        assert card_only == {"card use case", "card tier", "tier on runs"}
+        assert not any(policies[label]["applied_at_runtime"] for label in card_only)
+        assert "completions" not in policies
+
+    def test_without_a_card_scope_nothing_is_reported_as_card_scoped(self, rules):
+        agent = _agent()
+        rules["rules"] = [_rule("card use case", use_case="claims"), _rule("card tier", risk_tier="high")]
+        result, _ = _graph(agent, None)
+        assert not [node for node in result["nodes"] if node["kind"] == "policy" and "stage" in node]
+
+    def test_the_runtime_use_cases_are_the_ones_the_runner_binds(self):
+        from pathlib import Path
+
+        runner = (Path(__file__).resolve().parents[2] / "core" / "langgraph" / "runner.py").read_text(encoding="utf-8")
+        for use_case in dependencies.RUNTIME_USE_CASES:
+            assert f'bind_route(route, use_case="{use_case}"' in runner
+
+
+class TestConnectorParsing:
+    @pytest.mark.parametrize(
+        ("tool", "connector"),
+        [
+            ("gmail:send_email", "gmail"),
+            ("gmail.send_email", "gmail"),
+            ("gmail__send_email", "gmail"),
+            ("tool:gmail:write:send_email", "gmail"),
+            ("registry-hubspot:list_contacts", "hubspot"),
+            ("composio:salesforce:get_claim", "salesforce"),
+            ("send_email", None),
+            ("knowledge_base_search", None),
+            ("tool:gmail", None),
+        ],
+    )
+    def test_every_persisted_spelling_names_the_connector_execution_uses(self, tool, connector):
+        assert dependencies._connector_of(tool) == connector
+
+    def test_a_grantex_scope_does_not_invent_a_tool_connector(self, rules):
+        agent = _agent(authorized_tools=["tool:gmail:write:send_email", "gmail__send_email"])
+        result, _ = _graph(agent)
+        connectors = {node["id"] for node in result["nodes"] if node["kind"] == "connector"}
+        assert connectors == {"connector:gmail"}

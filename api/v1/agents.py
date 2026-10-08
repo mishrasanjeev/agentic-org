@@ -2838,6 +2838,17 @@ async def replace_agent(
         # admin may change it (a non-admin cannot publish via PUT).
         requested_visibility = body.visibility if isinstance(getattr(body, "visibility", None), str) else None
         check_agent_visibility_change(agent, requested_visibility, effective_caller)
+        # A full replacement is held to the same oversight rule as PATCH: a regulated agent keeps its HITL condition.
+        if "hitl_policy" in body.model_fields_set and risk_tiers.enabled():
+            from core.agent_registry import lifecycle as registry_lifecycle
+
+            try:
+                risk_tiers.check_update(
+                    await registry_lifecycle.get_entry(session, tid, agent.id),
+                    {"hitl_policy": {"condition": body.hitl_policy.condition}},
+                )
+            except risk_tiers.TierError as exc:
+                raise _tier_refused(exc) from None
         _apply_agent_visibility(agent, requested_visibility)
         replacement_connector_ids = getattr(body, "connector_ids", None)
         remote_tools = [tool for tool in body.authorized_tools if tool.startswith("mcp_")]

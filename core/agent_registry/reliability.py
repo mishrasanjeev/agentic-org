@@ -9,13 +9,18 @@ run's content; the figures are counts and sums over rows the agent already
 leaves. Shadow accuracy is the agent's own.
 
 **Ratings** are one score from 1 to 5 per user and agent, with a short
-comment; a new rating by the same user replaces the old. The card carries
-the average and the count, never who rated.
+comment; a new rating by the same user replaces the old, as one atomic
+insert-or-update on ``(agent_id, user_id)``, so two first ratings sent at
+once leave one row. The card carries the average and the count, never who
+rated.
 
 **Certification** is what the registry and the attestations can say: the
 registry state (approved or published means a second person approved it),
 the evaluation gate verdict, and the tenant's attestation for the agent's
-model provider (region, no training on tenant data, valid or expired).
+model provider in the tenant's governed data region (in-region processing, no
+training on tenant data, valid or expired), chosen the way residency
+enforcement (``core/governance/residency.py``) chooses it: an attestation for
+another region never certifies the provider.
 Grantex trust-registry attestations and passports are not attached here;
 the card says so.
 """
@@ -26,8 +31,10 @@ import uuid
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
-from sqlalchemy import Integer, cast, func, select
+from sqlalchemy import Integer, cast, func, or_, select
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 
+from core.config import settings
 from core.models.agent_rating import AgentRating
 from core.models.agent_task_result import AgentTaskResult
 from core.models.feedback import AgentFeedback
@@ -138,30 +145,33 @@ async def rate(
     if comment is not None and (not isinstance(comment, str) or len(comment) > MAX_COMMENT):
         raise RatingError(f"comment is text of at most {MAX_COMMENT} characters")
     clean = comment.strip() if isinstance(comment, str) and comment.strip() else None
-    existing = (
-        await session.execute(
-            select(AgentRating)
-            .where(AgentRating.agent_id == agent_id, AgentRating.tenant_id == tenant_id, AgentRating.user_id == user_id)
-            .with_for_update()
-        )
-    ).scalar_one_or_none()
     now = datetime.now(UTC)
-    if existing is not None:
-        existing.score = score
-        existing.comment = clean
-        existing.updated_at = now
-        return existing
-    rating = AgentRating(
-        id=uuid.uuid4(),
-        tenant_id=tenant_id,
-        agent_id=agent_id,
-        user_id=user_id,
-        score=score,
-        comment=clean,
-        created_at=now,
-        updated_at=now,
+    # One statement: concurrent first ratings by the same person meet on the unique (agent_id, user_id)
+    # index and the second becomes the update, never a uniqueness error.
+    statement = (
+        pg_insert(AgentRating)
+        .values(
+            id=uuid.uuid4(),
+            tenant_id=tenant_id,
+            agent_id=agent_id,
+            user_id=user_id,
+            score=score,
+            comment=clean,
+            created_at=now,
+            updated_at=now,
+        )
+        .on_conflict_do_update(
+            index_elements=[AgentRating.agent_id, AgentRating.user_id],
+            set_={"score": score, "comment": clean, "updated_at": now},
+            where=AgentRating.tenant_id == tenant_id,
+        )
+        .returning(AgentRating)
+        .execution_options(populate_existing=True)
     )
-    session.add(rating)
+    rating = (await session.execute(statement)).scalar_one_or_none()
+    if rating is None:
+        # The conflicting row belongs to another tenant: the agent id is not this tenant's.
+        raise RatingError("the agent cannot be rated")
     return rating
 
 
@@ -169,21 +179,41 @@ async def certification(
     session: Any, tenant_id: uuid.UUID, agent: Any, *, registry_state: str, gate_verdict: dict
 ) -> dict[str, Any]:
     """What the registry and the attestations can say about the agent being fit for production."""
+    from core.governance.residency import normalise_region
+    from core.models.governance_config import GovernanceConfig
     from core.models.provider_attestation import ProviderAttestation
 
-    provider = str(getattr(agent, "llm_provider", None) or "")
+    provider = str(getattr(agent, "llm_provider", None) or "").strip()
     attestation = None
+    region = None
     if provider:
+        # The tenant's governed region, as residency enforcement reads it.
+        config = await session.get(GovernanceConfig, tenant_id)
+        region = normalise_region(config.data_region if config is not None else settings.data_region)
+        now = datetime.now(UTC)
         row = (
             await session.execute(
                 select(ProviderAttestation)
-                .where(ProviderAttestation.tenant_id == tenant_id, ProviderAttestation.provider == provider)
-                .order_by(ProviderAttestation.attested_at.desc())
+                .where(
+                    ProviderAttestation.tenant_id == tenant_id,
+                    func.lower(ProviderAttestation.provider) == provider.lower(),
+                    ProviderAttestation.data_region == region,
+                )
+                # The attestation residency would accept comes first: unrevoked, unexpired, in region and
+                # without training; otherwise the newest for the region, reported as not qualifying.
+                .order_by(
+                    (
+                        ProviderAttestation.revoked_at.is_(None)
+                        & or_(ProviderAttestation.expires_at.is_(None), ProviderAttestation.expires_at > now)
+                        & ProviderAttestation.in_region.is_(True)
+                        & ProviderAttestation.no_training.is_(True)
+                    ).desc(),
+                    ProviderAttestation.attested_at.desc(),
+                )
                 .limit(1)
             )
         ).scalar_one_or_none()
         if row is not None:
-            now = datetime.now(UTC)
             valid = row.revoked_at is None and (row.expires_at is None or row.expires_at > now)
             attestation = {
                 "provider": row.provider,
@@ -191,6 +221,7 @@ async def certification(
                 "in_region": bool(row.in_region),
                 "no_training": bool(row.no_training),
                 "valid": valid,
+                "qualifies": bool(valid and row.in_region and row.no_training),
                 "attested_at": row.attested_at.isoformat() if row.attested_at else None,
                 "expires_at": row.expires_at.isoformat() if row.expires_at else None,
             }
@@ -198,6 +229,7 @@ async def certification(
         "registry_approved": registry_state in ("approved", "published"),
         "registry_state": registry_state,
         "evaluation_gate": gate_verdict,
+        "tenant_data_region": region,
         "provider_attestation": attestation,
         # Honest about what is not here: the card does not carry a trust-registry attestation or a passport.
         "trust_registry": {

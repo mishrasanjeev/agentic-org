@@ -8,9 +8,12 @@ Assembled from the agent's configuration and the registry, never from a run:
 * **tools** and the **connectors** behind them (a ``connector:tool`` name
   points at its connector; the knowledge base search points at the
   tenant's knowledge base for the agent's domain);
-* **policies**: the guardrail rules that apply to it (by agent, use case or
-  risk tier, or to every agent), its evaluation gate's dataset, its output
-  schema and its review condition;
+* **policies**: the guardrail rules that apply to it, its evaluation gate's
+  dataset, its output schema and its review condition. A rule ``governs``
+  the agent only when execution selects it: the runner scopes guardrails to
+  the agent and to the run's use case (``agent_run`` or ``agent_resume``),
+  and names no risk tier, so a rule scoped to the card's use case or risk
+  tier is shown as ``scoped_to_card`` and marked as not applied at run time;
 * **agents**: the agent it was cloned from, the agent its traffic split
   sends runs to, and the teams it belongs to.
 
@@ -32,6 +35,9 @@ from core.models.agent import AgentTeam, AgentTeamMember
 
 KINDS: tuple[str, ...] = ("agent", "model", "prompt", "tool", "connector", "knowledge", "policy", "dataset", "team")
 KNOWLEDGE_TOOLS: frozenset[str] = frozenset({"knowledge_base_search", "search_knowledge", "knowledge_search"})
+# The guardrail use cases an agent's execution binds (core/langgraph/runner.py: a run and a resume).
+# Execution names no risk tier, so a risk-tier-scoped rule is never selected for an agent run.
+RUNTIME_USE_CASES: tuple[str, ...] = ("agent_run", "agent_resume")
 
 
 class Graph:
@@ -55,29 +61,51 @@ class Graph:
 
 
 def _connector_of(tool: str) -> str | None:
-    if ":" not in tool:
+    """The connector behind a tool reference, read the way execution reads it.
+
+    Uses the runtime's own normaliser, so every persisted spelling
+    (``gmail:send_email``, ``gmail.send_email``, ``gmail__send_email`` and the
+    Grantex scope ``tool:gmail:<permission>:send_email``) names the same
+    connector here as at run time. A Composio reference
+    (``composio:<app>:<action>``) names its app.
+    """
+    from core.langgraph.tool_adapter import _parse_authorized_tool_ref
+
+    ref = str(tool or "").strip()
+    head, _, rest = ref.partition(":")
+    if head.lower() == "composio" and ":" in rest:
+        return rest.split(":", 1)[0].strip().lower() or None
+    parsed = _parse_authorized_tool_ref(ref)
+    if parsed is None:
         return None
-    connector, _, name = tool.partition(":")
-    if connector.lower() == "composio" and ":" in name:
-        connector = name.split(":", 1)[0]
-    return connector.lower() or None
+    connector, _name = parsed
+    return connector or None
 
 
-async def _rules_for(tenant_id: uuid.UUID, agent: Any, entry: Any) -> list[Any]:
+def _selected_at_runtime(rule: Any, agent_id: str) -> bool:
+    """Whether execution selects ``rule`` for the agent: its scope as the runner binds it."""
+    return any(
+        rule.matches(rule.stage, agent_id=agent_id, use_case=use_case, risk_tier=None) for use_case in RUNTIME_USE_CASES
+    )
+
+
+async def _rules_for(tenant_id: uuid.UUID, agent: Any, entry: Any) -> list[tuple[Any, bool]]:
+    """The rules execution selects for the agent (True), then those that name only its card's scope (False)."""
     from core.governance.guardrails.engine import active_rules
 
     rules = await active_rules(tenant_id)
+    agent_id = str(agent.id)
     use_case = getattr(entry, "use_case", None) if entry is not None else None
     risk_tier = getattr(entry, "risk_tier", None) if entry is not None else None
-    applying = []
+    applying: list[tuple[Any, bool]] = []
     for rule in rules:
-        if rule.agent_id and rule.agent_id != str(agent.id):
-            continue
-        if rule.use_case and rule.use_case != use_case:
-            continue
-        if rule.risk_tier and rule.risk_tier != risk_tier:
-            continue
-        applying.append(rule)
+        if _selected_at_runtime(rule, agent_id):
+            applying.append((rule, True))
+        elif (use_case or risk_tier) and any(
+            rule.matches(rule.stage, agent_id=agent_id, use_case=candidate, risk_tier=risk_tier)
+            for candidate in (use_case, *RUNTIME_USE_CASES)
+        ):
+            applying.append((rule, False))
     return applying
 
 
@@ -128,12 +156,20 @@ async def graph(session: Any, tenant_id: uuid.UUID, agent: Any, *, load_agent: A
     for connector_id in getattr(agent, "connector_ids", None) or []:
         g.edge(root, "linked_to", g.node("connector", str(connector_id), str(connector_id), linked=True))
 
-    for rule in await _rules_for(tenant_id, agent, entry):
+    for rule, at_runtime in await _rules_for(tenant_id, agent, entry):
         scope = "agent" if rule.agent_id else "use_case" if rule.use_case else "risk_tier" if rule.risk_tier else "all"
         g.edge(
             root,
-            "governed_by",
-            g.node("policy", f"rule-{rule.id}", rule.name, stage=rule.stage, action=rule.action, scope=scope),
+            "governed_by" if at_runtime else "scoped_to_card",
+            g.node(
+                "policy",
+                f"rule-{rule.id}",
+                rule.name,
+                stage=rule.stage,
+                action=rule.action,
+                scope=scope,
+                applied_at_runtime=at_runtime,
+            ),
         )
     hitl = getattr(agent, "hitl_condition", None)
     if hitl:
