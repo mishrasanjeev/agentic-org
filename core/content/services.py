@@ -81,6 +81,7 @@ class Service:
     rendered: Callable[[dict[str, Any]], str]
     apply_text: Callable[[dict[str, Any], str], dict[str, Any]]
     resolve_sources: Callable[[uuid.UUID, BaseModel, list[str] | None], Awaitable[list[Source]]]
+    max_tokens: int = MAX_TOKENS  # the completion budget; a service whose output scales with its input sets its own
     # Called with the output when the output guardrails changed it, so a service whose output carries
     # derived parts (a validation result, a rendering) recomputes them from what will be returned.
     after_output_guard: Callable[[dict[str, Any]], dict[str, Any]] | None = None
@@ -458,7 +459,12 @@ async def run(
     pseudonymiser = await open_pseudonymiser(tenant_id, service.name)
     messages = with_pseudonym_guidance(service.messages(payload, sources), pseudonymiser)
     answer, usage = await ask_model(
-        tenant_id, messages, service.output_schema, complete=complete, pseudonymiser=pseudonymiser
+        tenant_id,
+        messages,
+        service.output_schema,
+        complete=complete,
+        max_tokens=service.max_tokens,
+        pseudonymiser=pseudonymiser,
     )
     output = service.finish(payload, sources, answer)
     if service.guardrails.output:
