@@ -378,6 +378,11 @@ class Settings(BaseSettings):
     # The model the content services call through the direct router; empty
     # means the router's default.
     content_services_model: str = ""
+    # Intelligent document processing (core/idp/): a PDF or image split into
+    # typed documents with fields, tables and boxes, routed to review by
+    # confidence. Off by default: off, the document-type catalogue answers and
+    # every other route is not found.
+    idp_enabled: bool = False
     # JSON object keyed provider/model with input and output USD per million
     # tokens; a negotiated rate replaces the list price.
     model_price_overrides_json: str = ""

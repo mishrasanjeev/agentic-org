@@ -153,6 +153,13 @@ SCOPE_FAMILIES: dict[str, tuple[str, str]] = {
     # holds neither. Drafting, draft decisions and the dataset install also
     # need an administrator at the route.
     "content": ("audit:read", "approvals:write"),
+    # Document processing reads customer documents (statements, identity
+    # documents, salary slips) and runs OCR: the same roles that work the
+    # review queue, which are the roles the UI admits to the documents page.
+    # Listing the catalogue needs approvals:read; analysing a file (and the
+    # classifier dry run, a POST) needs approvals:write. Auditors hold
+    # neither scope and analysts only the read, so neither submits documents.
+    "documents": ("approvals:read", "approvals:write"),
     # A2A tasks and MCP calls run any agent type for machine callers (FINDINGS
     # A-68). No role holds these scopes: API keys and agent grants are given
     # them. Enforced only while AGENTICORG_ROUTE_SCOPE_A2A_MCP is on
