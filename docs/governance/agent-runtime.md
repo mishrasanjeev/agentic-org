@@ -29,6 +29,40 @@ source whether or not the fallback also lists it in `depends_on`. With `AGENTICO
 refuses a definition with problems (`422`, `workflow_definition`, the problems listed); off,
 creation accepts what it accepted before, and the validate and graph endpoints answer regardless.
 
+## Long-term memory with retention
+
+A run already has a short-term memory: its thread, kept by the checkpointer for the span of the
+conversation. With `AGENTICORG_RUNTIME_MEMORY_ENABLED` on, there is a long-term store beside it
+(`core/memory/long_term.py`, table `agent_memories`): what an agent, or an administrator, chose to
+remember about a **subject**, a customer, user, account or case reference the caller names as a
+bounded identifier. Every entry has a kind, a bounded content, an importance and an expiry:
+
+| Kind | Default retention |
+|---|---|
+| `fact`, `preference` | 365 days |
+| `summary` | 90 days |
+| `event` | 30 days |
+
+A writer may ask for a shorter or longer retention, up to 730 days; nothing is recalled past its
+expiry; the nightly task (`core/tasks/memory_tasks.py`) and `POST /memory/prune` remove what
+expired. A run whose task input names a subject (`context.subject`) recalls what is remembered
+about it into its system prompt, marked as context to verify before acting; what the agent asks to
+keep in its output under `remember` (up to five entries) is stored after the run, scoped to the
+agent, with the run id as its source. `GET /memory?subject=` recalls (the agent's own entries and
+the shared ones, most important and recent first, optionally matching a query), `POST /memory`
+remembers (the same content about the same subject refreshes its expiry), and
+`DELETE /memory?subject=` erases every entry about a subject, for one agent or for all, answering
+with the count, so a request to be forgotten is one audited call. `GET /memory/policy` states the
+kinds, retentions and bounds. Off, no run reads or writes memory and the endpoints are not found.
+
+Recall needs `audit:read` and writes need `approvals:write` (the `memory` scope family); an
+`agent_id` must name an agent of the caller's tenant that the caller may see, or the request is not
+found. The table is under a forced tenant row-level policy. Recalled entries are model input: they
+are pseudonymised or redacted with the task before they join the prompt. Memory is a sidecar: a
+database error while recalling leaves the run without memory and one while storing leaves the run's
+outcome as it was, both logged. The same content about the same subject, for an agent or shared, is
+one entry under a unique index (`content_hash`), written by a single atomic upsert.
+
 ## Execution limits and loop detection
 
 Every run is held to the platform's maxima: `AGENTICORG_MAX_AGENT_STEPS` graph steps (200 by

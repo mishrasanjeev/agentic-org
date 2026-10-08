@@ -50,6 +50,7 @@ from core.langgraph.thread_ids import (
     scoped_thread_id,
     thread_belongs_to_tenant,
 )
+from core.memory import long_term as long_term_memory
 from core.pii import pseudonymiser as pseudonymisation
 from core.pii.redactor import PIIRedactor
 from observability import timeline, tracing
@@ -209,6 +210,18 @@ that ambiguity instead of guessing.
 """.strip()
 
 
+def _redacted_memory_block(block: str, pii_mode: str, redactor: PIIRedactor, token_map: dict[str, str]) -> str:
+    """Recalled long-term memory as model input: redacted like the task under ``before_llm``/``before_log``.
+
+    The tokens join the run's map, so tool arguments that carry them are restored as for the task's own.
+    """
+    if not block or pii_mode not in ("before_llm", "before_log"):
+        return block
+    redacted, tokens = redactor.redact(block)
+    token_map.update(tokens)
+    return redacted
+
+
 def _with_reference_resolution_guidance(system_prompt: str) -> str:
     prompt = system_prompt or ""
     if "<tool_reference_resolution>" in prompt:
@@ -345,6 +358,22 @@ async def run_agent(
         amended_prompt = amendments_block + system_prompt
         logger.info("prompt_amendments_applied", agent_id=agent_id, count=len(prompt_amendments))
     amended_prompt = _with_reference_resolution_guidance(amended_prompt)
+    # Long-term memory: what is remembered about the subject the run names, as context. It joins
+    # the prompt only after the PII step below, which treats it as model input like the task.
+    memory_subject = long_term_memory.subject_of(task_input) if long_term_memory.enabled() else ""
+    memory_block = ""
+    if memory_subject:
+        try:
+            from core.database import get_tenant_session as _memory_session
+
+            async with _memory_session(uuid.UUID(str(tenant_id))) as memory_db:
+                remembered = await long_term_memory.recall(
+                    memory_db, uuid.UUID(str(tenant_id)), subject=memory_subject, agent_id=agent_id
+                )
+                memory_block = long_term_memory.prompt_block(remembered)
+        except long_term_memory.SIDECAR_ERRORS as exc:
+            memory_block = ""
+            logger.warning("memory_recall_failed", error=type(exc).__name__)
 
     # P1.2: PII redaction MUST happen before any LLM input. Raise loud error
     # if production has redaction disabled — never silently send PII to LLMs.
@@ -385,7 +414,10 @@ async def run_agent(
         try:
             masked_input = await pseudonymiser.pseudonymise_value(task_input)
             user_message, amended_prompt = await pseudonymiser.pseudonymise_texts(
-                [_build_user_message(masked_input), pseudonymisation.with_model_guidance(amended_prompt)]
+                [
+                    _build_user_message(masked_input),
+                    pseudonymisation.with_model_guidance(memory_block + amended_prompt),
+                ]
             )
         except pseudonymisation.PseudonymisationError as exc:
             return _pseudonymisation_failed(exc)
@@ -410,6 +442,9 @@ async def run_agent(
         if trusted_shadow_fixture_prompt and pii_mode in ("before_llm", "before_log"):
             logger.info("pii_redaction_skipped_for_shadow_fixture", agent_id=agent_id)
         user_message = _build_user_message(task_input)
+    if memory_block and pseudonymiser is None:
+        # Recalled memory is never a trusted fixture: redacted under the mode whatever the task.
+        amended_prompt = _redacted_memory_block(memory_block, pii_mode, pii_redactor, pii_token_map) + amended_prompt
 
     # The model gateway applies the tenant's routing policy to the agent's
     # model before the credential is resolved; a refusal ends the run here.
@@ -661,6 +696,22 @@ async def run_agent(
             response["grant_denial"] = result["grant_denial"]
         if result.get("limit_stop"):
             response["limit"] = result["limit_stop"]
+        # Long-term memory: what the run asked to keep about its subject.
+        if memory_subject and isinstance(response.get("output"), dict) and response["output"].get("remember"):
+            try:
+                from core.database import get_tenant_session as _memory_session
+
+                async with _memory_session(uuid.UUID(str(tenant_id))) as memory_db:
+                    response["remembered"] = await long_term_memory.remember_from_output(
+                        memory_db,
+                        uuid.UUID(str(tenant_id)),
+                        subject=memory_subject,
+                        agent_id=agent_id,
+                        output=response["output"],
+                        run_id=str(response.get("correlation_id") or response.get("task_id") or "") or None,
+                    )
+            except long_term_memory.SIDECAR_ERRORS as exc:
+                logger.warning("memory_store_failed", error=type(exc).__name__)
         return _traced_result(run_span, response)
 
     except GraphInterrupt as gi:

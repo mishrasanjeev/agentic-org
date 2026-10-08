@@ -63,6 +63,7 @@ from api.v1 import (
     knowledge,
     kpis,
     mcp,
+    memory,
     model_gateway,
     oauth_connector,
     observability,
@@ -293,6 +294,7 @@ app.include_router(governance_model_cards.router, prefix="/api/v1", tags=["Gover
 app.include_router(governance_risk_tiers.router, prefix="/api/v1", tags=["Governance"])
 app.include_router(governance_policies.router, prefix="/api/v1", tags=["Governance"])
 app.include_router(finops.router, prefix="/api/v1", tags=["FinOps"])
+app.include_router(memory.router, prefix="/api/v1", tags=["Memory"])
 app.include_router(kpis.router, prefix="/api/v1", tags=["KPIs"])
 app.include_router(chat.router, prefix="/api/v1", tags=["Chat"])
 app.include_router(companies.router, prefix="/api/v1", tags=["Companies"])

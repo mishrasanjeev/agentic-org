@@ -349,6 +349,11 @@ class Settings(BaseSettings):
     # a failure directive outside the grammar). Off by default: off, creation
     # accepts what it accepted before; validate and graph answer regardless.
     workflow_builder_v2_enabled: bool = False
+    # Long-term memory (core/memory/long_term.py): a run that names a subject
+    # recalls what is remembered about it and stores what it asks to keep;
+    # entries expire by their kind's retention and can be erased per subject.
+    # Off by default: off, no run reads or writes memory.
+    runtime_memory_enabled: bool = False
     # JSON object keyed provider/model with input and output USD per million
     # tokens; a negotiated rate replaces the list price.
     model_price_overrides_json: str = ""

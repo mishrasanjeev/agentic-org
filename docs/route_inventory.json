@@ -6174,6 +6174,96 @@
     "tenant_required": false
   },
   {
+    "audit_event": "memory.erase",
+    "auth_required": true,
+    "function": "erase_memory",
+    "idempotency": "idempotent-erasure",
+    "key": "DELETE /api/v1/memory api/v1/memory.py:erase_memory",
+    "metadata_present": true,
+    "methods": [
+      "DELETE"
+    ],
+    "module": "api/v1/memory.py",
+    "path": "/api/v1/memory",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "memory.sensitive.write",
+    "source_line": 168,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "memory.recall",
+    "auth_required": true,
+    "function": "recall_memory",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/memory api/v1/memory.py:recall_memory",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/memory.py",
+    "path": "/api/v1/memory",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "memory.sensitive.read",
+    "source_line": 97,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "memory.remember",
+    "auth_required": true,
+    "function": "remember_memory",
+    "idempotency": "idempotent-same-content-refreshes-expiry",
+    "key": "POST /api/v1/memory api/v1/memory.py:remember_memory",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/memory.py",
+    "path": "/api/v1/memory",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "memory.sensitive.write",
+    "source_line": 127,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "memory.policy.read",
+    "auth_required": true,
+    "function": "memory_policy",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/memory/policy api/v1/memory.py:memory_policy",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/memory.py",
+    "path": "/api/v1/memory/policy",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "memory.sensitive.read",
+    "source_line": 83,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "memory.prune",
+    "auth_required": true,
+    "function": "prune_memory",
+    "idempotency": "idempotent-prune",
+    "key": "POST /api/v1/memory/prune api/v1/memory.py:prune_memory",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/memory.py",
+    "path": "/api/v1/memory/prune",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "memory.sensitive.write",
+    "source_line": 194,
+    "tenant_required": true
+  },
+  {
     "audit_event": "model_gateway.access_policies.list",
     "auth_required": true,
     "function": "list_access_policies",
