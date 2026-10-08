@@ -20,6 +20,7 @@ import pytest
         "feedback.rating_from_text('rating' + ' ' * 100_000 + '?')",
         "feedback.rating_from_text('4' + ' ' * 100_000 + '?')",
         "intents.extract_entities('reference' + ' ' * 100_000 + '!')",
+        "intents.parse_amounts('9' * 100_000 + '/-x')",
     ],
 )
 def test_hostile_turn_completes_without_backtracking(expression: str) -> None:
@@ -49,6 +50,31 @@ def test_rating_whitespace_and_punctuation(text: str) -> None:
     "text", ["999x", "999.99x", "999.99.99", "rs 999x", "rs 999.99x", "account 1234", "reference AB12345", "2026/10/08"]
 )
 def test_non_amount_tokens_are_not_salvaged_as_amounts(text: str) -> None:
+    from core.conversation.intents import parse_amount, parse_amounts
+
+    assert parse_amount(text) is None
+    assert parse_amounts(text) == []
+
+
+@pytest.mark.parametrize("text", ["\u20b91,000/-", "Rs 1,000/-", "Rs. 1,000/-", "INR 1,000/-", "1,000/-"])
+def test_conventional_rupee_suffix_is_preserved(text: str) -> None:
+    from core.conversation.intents import extract_entities, parse_amount, parse_amounts
+
+    assert parse_amount(text) == 1000
+    assert parse_amounts(text) == [1000]
+    assert extract_entities("transfer " + text + " to Ravi")["amount"] == 1000
+
+
+def test_conventional_rupee_suffix_preserves_ambiguous_choices() -> None:
+    from core.conversation.intents import extract_entities
+
+    result = extract_entities("transfer Rs 1,000/- or Rs 2,000/- to Ravi")
+    assert result["amount"] == 1000
+    assert result["amount_options"] == [1000, 2000]
+
+
+@pytest.mark.parametrize("text", ["Rs 999.99.99", "Rs 1000/-x", "Rs 1000/-123", "1000/-x", "1000/-123"])
+def test_malformed_suffixes_are_not_salvaged(text: str) -> None:
     from core.conversation.intents import parse_amount, parse_amounts
 
     assert parse_amount(text) is None
