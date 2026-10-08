@@ -4,6 +4,32 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
 
 ## [Unreleased] - 2026-08-29
 
+### Added - Conversational services: escalation hand-off and the supervisor console
+- A hand-off leaves a review-queue item (`conversation_escalation`) with
+  the summary, the intent tag, the slots and the recent turns, raises a
+  ticket through the agent's ticketing tool when one is authorised, marks
+  the session escalated and tells the live feed
+  (`core/conversation/escalation.py`). A supervisor lists live and
+  escalated conversations, reads a transcript, takes a conversation over
+  (the assistant stops answering and the user's messages reach the
+  supervisor), replies into the user's chat, and
+  releases it (`core/conversation/supervisor.py`,
+  `/conversation/supervisor/sessions`, the Conversations page; migration
+  `v6z61_conversation_supervision`).
+- The tenant-wide live feed announces conversation turns and messages
+  without their text; the console reads the transcript through its
+  tenant-admin route and the user's chat reads supervisor replies from the
+  user's own session (`GET /conversation/session` returns `messages`), so
+  replies sent while the chat was closed appear when it reopens. A reply
+  from a supervisor who does not hold the conversation is refused before
+  anything is written, and a hand-off keeps the intent and slots collected
+  before the dialogue gave up; accepting the offer of a person after
+  repeated fallbacks is recorded as a fallback hand-off with high priority.
+- The hand-off is the one path for every escalation: the review item is
+  written only for an agent of the tenant and notifies its approvers, and
+  when neither the item nor a ticket could be raised the user is told that
+  nothing has been handed over instead of being promised a person.
+
 ### Added - Conversational services: multi-turn context, clarification and graceful fallbacks
 - With `AGENTICORG_CONVERSATION_V2_ENABLED` on, the recent turns of a chat
   reach the agent as the run's context so follow-ups resolve earlier

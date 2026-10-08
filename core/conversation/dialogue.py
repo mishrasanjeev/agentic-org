@@ -46,12 +46,18 @@ class Outcome:
     options: list[dict[str, Any]] = field(default_factory=list)
     action: str | None = None
     summary: str | None = None
+    escalation: str | None = None  # why an escalate outcome hands off: requested | fallbacks | slots
     # For ``escalate``: what a person taking over needs (``handoff_summary``),
     # taken before the dialogue resets. The runtime raises the handoff from it.
     handoff: dict[str, Any] | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
+
+
+ESCALATION_REQUESTED = "requested"  # the user asked for a person
+ESCALATION_FALLBACKS = "fallbacks"  # the user accepted the offer of a person after repeated fallbacks
+ESCALATION_SLOTS = "slots"  # a required detail could not be collected
 
 
 @dataclass
@@ -372,9 +378,16 @@ def _start(
         # Whether a person is actually reached is up to the runtime, which
         # raises the hand-off and says what happened; nothing is promised here.
         dialogue.stage = STAGE_DONE
-        outcome = _outcome(dialogue, "escalate", "You asked for a person.", summary=None)
+        outcome = _outcome(
+            dialogue, "escalate", "You asked for a person.", summary=None, escalation=ESCALATION_REQUESTED
+        )
         outcome.options = []
-        outcome.handoff = {**prior, "reason": "requested", "recent": dialogue.history[-6:], "turns": dialogue.turns}
+        outcome.handoff = {
+            **prior,
+            "reason": ESCALATION_REQUESTED,
+            "recent": dialogue.history[-6:],
+            "turns": dialogue.turns,
+        }
         dialogue.reset()
         return outcome
     return _next_step(dialogue, today=today)
@@ -457,9 +470,16 @@ def advance(dialogue: Dialogue, text: str, *, today: date | None = None) -> Outc
         if problem:
             dialogue.retries += 1
             if dialogue.retries >= MAX_RETRIES:
-                handoff = {**handoff_summary(dialogue), "reason": "retries_exhausted"}
+                # The hand-off needs what was being asked for: snapshot it before the dialogue starts over.
+                held_intent, held_slots = intent.name, dict(dialogue.slots)
+                handoff = {**handoff_summary(dialogue), "reason": ESCALATION_SLOTS}
                 dialogue.reset()
-                outcome = _outcome(dialogue, "escalate", "I could not get what I need for that.")
+                outcome = _outcome(
+                    dialogue, "escalate", "I could not get what I need for that.", escalation=ESCALATION_SLOTS
+                )
+                outcome.intent = held_intent
+                outcome.slots = held_slots
+                outcome.missing = missing_slots(intent, held_slots)
                 outcome.handoff = {**handoff, "recent": dialogue.history[-6:]}
                 return outcome
             return _outcome(dialogue, "ask", problem)
@@ -472,7 +492,11 @@ def advance(dialogue: Dialogue, text: str, *, today: date | None = None) -> Outc
     # A yes after the offer of a person is the hand-off.
     if dialogue.stage == STAGE_IDLE and dialogue.fallbacks >= 2 and _YES_RE.match(text):
         dialogue.fallbacks = 0
-        return _start(dialogue, INTENTS["talk_to_agent"], 0.9, entities, text, today=today)
+        outcome = _start(dialogue, INTENTS["talk_to_agent"], 0.9, entities, text, today=today)
+        outcome.escalation = ESCALATION_FALLBACKS  # an accepted offer, not an unsolicited request
+        if outcome.handoff is not None:
+            outcome.handoff["reason"] = ESCALATION_FALLBACKS
+        return outcome
 
     # Idle: "again" repeats the last action, confirmed afresh.
     if conversation_context.repeats_last(text) and dialogue.last_intent and dialogue.last_intent in INTENTS:

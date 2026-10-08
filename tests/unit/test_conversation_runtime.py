@@ -15,7 +15,7 @@ from fastapi import HTTPException
 from core.config import settings
 from core.conversation import dialogue as engine
 from core.conversation import intents as catalogue
-from core.conversation import runtime
+from core.conversation import runtime, supervisor
 from core.conversation.dialogue import Dialogue
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -181,7 +181,8 @@ class TestDialogue:
         assert "connect you" not in outcomes[1].text and "One moment" not in outcomes[1].text
         _, outcomes = _turns("send money to Ravi", "lots", "a bit", "dunno")
         assert (
-            outcomes[-1].handoff["reason"] == "retries_exhausted" and outcomes[-1].handoff["intent"] == "fund_transfer"
+            outcomes[-1].handoff["reason"] == engine.ESCALATION_SLOTS
+            and outcomes[-1].handoff["intent"] == "fund_transfer"
         )
         assert "connect you" not in outcomes[-1].text
 
@@ -418,6 +419,8 @@ class TestRuntime:
 
         monkeypatch.setattr(runtime, "load_dialogue", load)
         monkeypatch.setattr(runtime, "save_dialogue", save)
+        monkeypatch.setattr(supervisor, "taken_over", AsyncMock(return_value=None))
+        monkeypatch.setattr(supervisor, "announce_turn", AsyncMock())
         executed = AsyncMock(
             return_value={"status": "executed", "intent": "fund_transfer", "result": {}, "tool_call": {"tool": "t"}}
         )
@@ -441,6 +444,7 @@ class TestRuntime:
     async def test_a_read_intent_with_no_bound_tool_is_left_to_the_agent(self, monkeypatch):
         monkeypatch.setattr(settings, "conversation_v2_enabled", True)
         monkeypatch.setattr(runtime, "load_dialogue", AsyncMock(return_value=Dialogue()))
+        monkeypatch.setattr(supervisor, "taken_over", AsyncMock(return_value=None))
         context = runtime.ExecutionContext(tenant_id=str(TENANT), agent_id="a1", authorized_tools=["send_email"])
         assert (
             await runtime.chat_turn(
@@ -523,6 +527,8 @@ class TestRoutes:
 
         monkeypatch.setattr(runtime, "load_dialogue", load)
         monkeypatch.setattr(runtime, "save_dialogue", save)
+        monkeypatch.setattr(supervisor, "taken_over", AsyncMock(return_value=None))
+        monkeypatch.setattr(supervisor, "announce_turn", AsyncMock())
         request = SimpleNamespace(state=SimpleNamespace(claims={"agenticorg:user_id": "u1"}))
 
         first = await api.post_turn(

@@ -41,5 +41,9 @@ class ConversationSession(BaseModel):
     intent: Mapped[str | None] = mapped_column(String(40), nullable=True)
     state: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False, default=dict)
     turns: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    # The hand-off record and who holds the session (``v6z61_conversation_supervision``).
+    escalation: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
+    taken_over_by: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    taken_over_at: Mapped[datetime | None] = mapped_column(TIMESTAMP(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), server_default=func.now(), nullable=False)
     updated_at: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), server_default=func.now(), nullable=False)

@@ -144,6 +144,9 @@ async def post_turn(body: TurnIn, request: Request, tenant_id: str = Depends(get
     tid = uuid.UUID(tenant_id)
     key = runtime.session_key(channel, body.company_id, body.agent_id, user_id)
     dialogue = await runtime.load_dialogue(tid, key)
+    held = await runtime.held_turn(tid, key, body.text, dialogue)
+    if held is not None:
+        return held
     outcome, execution = await runtime.run_turn(
         tid,
         key,
@@ -155,14 +158,18 @@ async def post_turn(body: TurnIn, request: Request, tenant_id: str = Depends(get
         channel=channel,
         no_agent_message="Choose an agent to run this.",
     )
-    tool_call = (execution or {}).get("tool_call")
-    return {
-        "session_key": key,
-        "answer": runtime.answer_for(outcome, execution),
-        "outcome": runtime.outcome_payload(outcome, execution),
-        "dialogue": runtime.dialogue_view(dialogue),
-        "tool_calls": [tool_call] if tool_call else None,
-    }
+    return await runtime.finish_turn(
+        tid,
+        key,
+        dialogue,
+        outcome,
+        execution,
+        text=body.text,
+        user_id=user_id,
+        agent_id=body.agent_id,
+        channel=channel,
+        context=context,
+    )
 
 
 @router.get("/intents")
@@ -200,12 +207,24 @@ async def get_session(
     channel: Annotated[str, Query(max_length=16)] = "web",
     tenant_id: str = Depends(get_current_tenant),
 ) -> dict[str, Any]:
-    """The caller's own dialogue for a channel, company and agent: stage, intent, slots and what is missing."""
+    """The caller's own dialogue for a channel, company and agent: stage, intent, slots and what is missing.
+
+    ``messages`` are the supervisor's replies and notices on the caller's own
+    session, so a chat that was closed when they arrived shows them on reopening
+    (the live feed only says that a message arrived, never what it says).
+    """
+    from core.conversation import supervisor
+
     if not runtime.enabled():
         raise _off()
     key = runtime.session_key(_channel(channel), company_id, agent_id, _user_id(request))
-    dialogue = await runtime.load_dialogue(uuid.UUID(tenant_id), key)
-    return {"session_key": key, "dialogue": runtime.dialogue_view(dialogue)}
+    tid = uuid.UUID(tenant_id)
+    dialogue = await runtime.load_dialogue(tid, key)
+    return {
+        "session_key": key,
+        "dialogue": runtime.dialogue_view(dialogue),
+        "messages": await supervisor.replay(tid, key),
+    }
 
 
 @router.delete("/session")

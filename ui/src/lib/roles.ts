@@ -42,6 +42,9 @@ export const APPROVAL_ROLES: readonly string[] = [
   "developer",
 ];
 
+/** Roles that may watch live conversations and take them over (the backend requires a tenant admin). */
+export const SUPERVISOR_ROLES: readonly string[] = ["admin"];
+
 /** Agent domains offered by the create and edit forms. */
 export const AGENT_DOMAINS: readonly string[] = ["finance", "hr", "marketing", "ops", "backoffice", "comms"];
 

@@ -14,7 +14,7 @@ from fastapi import HTTPException
 
 from core.config import settings
 from core.conversation import dialogue as engine
-from core.conversation import runtime
+from core.conversation import runtime, supervisor
 from core.conversation.dialogue import Dialogue, Outcome
 
 TENANT = uuid.uuid4()
@@ -340,76 +340,114 @@ class _HandoffSession(_Session):
 
 
 class TestHandoff:
+    """One hand-off path (``escalation.handoff``): the review item with the context, its notification, and honesty."""
+
     @staticmethod
     def _escalation():
         dialogue = Dialogue()
         engine.advance(dialogue, "send money to Ravi")
-        return engine.advance(dialogue, "connect me with a human agent")
+        return dialogue, engine.advance(dialogue, "connect me with a human agent")
+
+    @staticmethod
+    def _quiet_supervisor(monkeypatch):
+        monkeypatch.setattr(supervisor, "mark_escalated", AsyncMock())
+        monkeypatch.setattr(supervisor, "announce", AsyncMock())
+        monkeypatch.setattr(supervisor, "announce_turn", AsyncMock())
 
     @pytest.mark.asyncio
     async def test_asking_for_a_person_queues_a_handoff_with_the_context_and_notifies(self, monkeypatch):
         import core.database as database
         import core.push.sender as sender
+        from core.conversation import escalation
 
         agent = SimpleNamespace(name="Branch assistant", visibility="tenant", owner_user_id=None)
         session = _HandoffSession(agent)
         monkeypatch.setattr(database, "get_tenant_session", lambda *_a, **_k: session)
         notify = AsyncMock(return_value={})
         monkeypatch.setattr(sender, "notify_approval_created", notify)
+        self._quiet_supervisor(monkeypatch)
         user = uuid.uuid4()
         context = runtime.ExecutionContext(tenant_id=str(TENANT), agent_id=str(uuid.uuid4()), domain="ops")
-        outcome = self._escalation()
+        dialogue, outcome = self._escalation()
 
-        handoff = await runtime.request_handoff(outcome, context, user_id=str(user), channel="web")
+        answer = await runtime.finish_turn(
+            TENANT,
+            "k",
+            dialogue,
+            outcome,
+            None,
+            text="connect me with a human agent",
+            user_id=str(user),
+            agent_id=context.agent_id,
+            channel="web",
+            context=context,
+        )
 
-        assert handoff["status"] == "handed_off" and len(session.added) == 1
+        assert len(session.added) == 1
         item = session.added[0]
-        assert item.trigger_type == runtime.HANDOFF_TRIGGER and item.assignee_role == "ops"
+        assert item.trigger_type == escalation.TRIGGER and item.assignee_role == "ops"
         assert item.requested_by_user_id == user and str(item.agent_id) == context.agent_id
         assert item.context["handoff"]["intent"] == "fund_transfer"
         assert item.context["handoff"]["slots"] == {"payee": "Ravi"}
-        assert notify.call_args.kwargs["item_id"] == str(item.id) == handoff["item_id"]
-        answer = runtime.answer_for(outcome, handoff)
-        assert handoff["reference"] in answer and "queue" in answer
-        assert "item_id" not in runtime.outcome_payload(outcome, handoff)["execution"]
-        assert "handoff" not in runtime.outcome_payload(outcome, handoff)
+        handoff = answer["outcome"]["handoff"]
+        assert notify.call_args.kwargs["item_id"] == str(item.id) == handoff["hitl_id"]
+        assert str(item.id)[:8].upper() in answer["answer"] and "queue" in answer["answer"]
+        # The response never carries the dialogue's hand-off notes (slots, recent turns).
+        assert set(handoff) == {"reason", "intent", "hitl_id", "ticket"} and "execution" not in answer["outcome"]
+        assert "handoff" not in runtime.outcome_payload(outcome, None)
 
     @pytest.mark.asyncio
     async def test_without_an_agent_or_a_written_item_nothing_is_promised(self, monkeypatch):
         import core.database as database
+        from core.conversation import escalation
 
-        outcome = self._escalation()
-        none = await runtime.request_handoff(outcome, None, user_id="u1", channel="web")
-        assert none["status"] == "handoff_unavailable"
-        answer = runtime.answer_for(outcome, none)
+        self._quiet_supervisor(monkeypatch)
+        dialogue, outcome = self._escalation()
+
+        async def _handoff(agent_id: str) -> dict:
+            return await escalation.handoff(
+                TENANT,
+                session_key="k",
+                dialogue=dialogue,
+                user_id="u1",
+                agent_id=agent_id,
+                channel="web",
+                reason=escalation.REASON_REQUESTED,
+                notes=outcome.handoff,
+            )
+
+        none = await _handoff("")
+        assert none["hitl_id"] is None and not escalation.handed_over(none)
+        answer = runtime.answer_for(outcome, None, none)
         assert "nothing has been handed over" in answer and "connect you" not in answer
+        assert "nothing has been handed over" in runtime.answer_for(outcome, None)
 
-        context = runtime.ExecutionContext(tenant_id=str(TENANT), agent_id=str(uuid.uuid4()))
         failing = _HandoffSession(SimpleNamespace(name="x"), fail=True)
         monkeypatch.setattr(database, "get_tenant_session", lambda *_a, **_k: failing)
-        assert (await runtime.request_handoff(outcome, context, user_id="u1", channel="web"))[
-            "status"
-        ] == "handoff_unavailable"
+        assert not escalation.handed_over(await _handoff(str(uuid.uuid4())))
         monkeypatch.setattr(database, "get_tenant_session", lambda *_a, **_k: _HandoffSession(None))
-        assert (await runtime.request_handoff(outcome, context, user_id="u1", channel="web"))[
-            "status"
-        ] == "handoff_unavailable"
+        assert not escalation.handed_over(await _handoff(str(uuid.uuid4())))
 
     @pytest.mark.asyncio
     async def test_the_turn_route_raises_the_handoff_for_an_escalation(self, monkeypatch):
         from api.v1 import conversation as api
+        from core.conversation import escalation
 
         monkeypatch.setattr(settings, "conversation_v2_enabled", True)
         monkeypatch.setattr(runtime, "load_dialogue", AsyncMock(return_value=Dialogue()))
         monkeypatch.setattr(runtime, "save_dialogue", AsyncMock())
-        raised = AsyncMock(return_value={"status": "handed_off", "reference": "AB12CD34", "item_id": "x"})
-        monkeypatch.setattr(runtime, "request_handoff", raised)
+        monkeypatch.setattr(supervisor, "taken_over", AsyncMock(return_value=None))
+        monkeypatch.setattr(supervisor, "announce_turn", AsyncMock())
+        raised = AsyncMock(
+            return_value={"reason": "requested", "intent": "talk_to_agent", "hitl_id": "ab12cd34-0000", "ticket": None}
+        )
+        monkeypatch.setattr(escalation, "handoff", raised)
         request = SimpleNamespace(state=SimpleNamespace(claims={"agenticorg:user_id": "u1"}))
 
         answer = await api.post_turn(api.TurnIn(text="I want to talk to a human"), request, tenant_id=str(TENANT))
 
         assert raised.await_count == 1 and answer["outcome"]["kind"] == "escalate"
-        assert "AB12CD34" in answer["answer"] and answer["outcome"]["execution"]["status"] == "handed_off"
+        assert "AB12CD34" in answer["answer"] and answer["outcome"]["handoff"]["hitl_id"] == "ab12cd34-0000"
 
 
 class TestAgentContext:
@@ -495,6 +533,7 @@ class TestSessionRoutes:
             stage=engine.STAGE_COLLECTING, intent="fund_transfer", pending="amount", slots={"payee": "Ravi"}
         )
         monkeypatch.setattr(runtime, "load_dialogue", AsyncMock(return_value=dialogue))
+        monkeypatch.setattr(supervisor, "replay", AsyncMock(return_value=[]))
         reset = AsyncMock(return_value=True)
         monkeypatch.setattr(runtime, "reset_dialogue", reset)
         request = SimpleNamespace(state=SimpleNamespace(claims={"agenticorg:user_id": "u1"}))

@@ -344,10 +344,17 @@ class ExecutionContext:
 Claim = Callable[[], Awaitable[str | None]]
 
 
-async def execute(outcome: Outcome, context: ExecutionContext, claim: Claim | None = None) -> dict[str, Any]:
-    """Run a confirmed action: the bound tool, under the grant, with the collected slots. Never before confirmation.
+async def run_tool(
+    context: ExecutionContext,
+    ref: str,
+    params: dict[str, Any],
+    *,
+    label: str = "",
+    claim: Claim | None = None,
+) -> dict[str, Any]:
+    """Run one authorised tool under the grant with ``params``: the governed path every conversational action takes.
 
-    In order: the binding, the grant, the operator overrides on the agent (a
+    In order: the tool index, the grant, the operator overrides on the agent (a
     halt, or an ``agent`` / ``all_agents`` throttle, which is consumed here once
     per action as the agent runner consumes it once per run), the tool build,
     and then ``claim``, which must return an execution key before the tool is
@@ -358,18 +365,14 @@ async def execute(outcome: Outcome, context: ExecutionContext, claim: Claim | No
     from core.governance.operator_override import check as check_operator_override
     from core.langgraph.tool_adapter import _build_tool_index, _parse_authorized_tool_ref, build_tools_for_agent
 
-    intent_name = outcome.intent or ""
-    ref = resolve_binding(intent_name, context.authorized_tools, context.bindings)
-    if ref is None:
-        return {"status": "unbound", "intent": intent_name, "message": "No tool is bound for this request."}
     parsed = _parse_authorized_tool_ref(ref)
     if parsed is None:
-        return {"status": "unbound", "intent": intent_name, "message": "The bound tool reference is malformed."}
+        return {"status": "unbound", "intent": label, "message": "The bound tool reference is malformed."}
     connector_hint, tool_name = parsed
     index = _build_tool_index(context.connector_config, context.connector_names, include_connector_aliases=True)
     match = index.get(f"{connector_hint}:{tool_name}" if connector_hint else tool_name)
     if not match:
-        return {"status": "unbound", "intent": intent_name, "message": "The bound tool is not available to this agent."}
+        return {"status": "unbound", "intent": label, "message": "The bound tool is not available to this agent."}
     connector_name = match[0]
     if context.run_grant is None or not await direct_tool_call_permitted(
         context.run_grant,
@@ -380,12 +383,10 @@ async def execute(outcome: Outcome, context: ExecutionContext, claim: Claim | No
         agent_type=context.agent_type,
         runtime=RUNTIME,
     ):
-        logger.warning(
-            "conversation_action_refused_grant", intent=intent_name, connector=connector_name, tool=tool_name
-        )
+        logger.warning("conversation_action_refused_grant", intent=label, connector=connector_name, tool=tool_name)
         return {
             "status": "refused",
-            "intent": intent_name,
+            "intent": label,
             "message": "This action is not permitted under the current grant.",
             "tool_call": {"connector": connector_name, "tool": tool_name, "status": "refused"},
         }
@@ -393,10 +394,10 @@ async def execute(outcome: Outcome, context: ExecutionContext, claim: Claim | No
         context.tenant_id, agent_id=context.agent_id or None, throttle_unit="agent"
     )
     if override.blocked:
-        logger.warning("conversation_action_refused_operator_override", intent=intent_name, tool=tool_name)
+        logger.warning("conversation_action_refused_operator_override", intent=label, tool=tool_name)
         return {
             "status": "held",
-            "intent": intent_name,
+            "intent": label,
             "message": override.reason or "An operator has paused or limited this agent.",
             "tool_call": {"connector": connector_name, "tool": tool_name, "status": "operator_override"},
         }
@@ -410,25 +411,24 @@ async def execute(outcome: Outcome, context: ExecutionContext, claim: Claim | No
         agent_id=context.agent_id,
     )
     if not tools:
-        return {"status": "unbound", "intent": intent_name, "message": "The bound tool could not be built."}
-    params = params_for(intent_name, outcome.slots)
+        return {"status": "unbound", "intent": label, "message": "The bound tool could not be built."}
     execution_key: str | None = None
     if claim is not None:
         execution_key = await claim()
         if execution_key is None:
             return {
                 "status": "superseded",
-                "intent": intent_name,
+                "intent": label,
                 "message": "This confirmation is no longer current.",
             }
     invoked = {**params, "idempotency_key": execution_key} if execution_key else params
     try:
         result = await tools[0].ainvoke(invoked)
     except (RuntimeError, TypeError, ValueError, OSError) as exc:
-        logger.warning("conversation_action_failed", intent=intent_name, error_type=type(exc).__name__)
+        logger.warning("conversation_action_failed", intent=label, error_type=type(exc).__name__)
         return {
             "status": "failed",
-            "intent": intent_name,
+            "intent": label,
             "message": "The action could not be completed.",
             "tool_call": {"connector": connector_name, "tool": tool_name, "status": "error"},
             **({"execution_key": execution_key} if execution_key else {}),
@@ -436,14 +436,14 @@ async def execute(outcome: Outcome, context: ExecutionContext, claim: Claim | No
     failed = isinstance(result, dict) and bool(result.get("error"))
     logger.info(
         "conversation_action_executed",
-        intent=intent_name,
+        intent=label,
         connector=connector_name,
         tool=tool_name,
         outcome="error" if failed else "ok",
     )
     return {
         "status": "failed" if failed else "executed",
-        "intent": intent_name,
+        "intent": label,
         "message": str(result.get("message") or result.get("error"))
         if failed and isinstance(result, dict)
         else "Done.",
@@ -458,18 +458,29 @@ async def execute(outcome: Outcome, context: ExecutionContext, claim: Claim | No
     }
 
 
-def answer_for(outcome: Outcome, execution: dict[str, Any] | None) -> str:
-    """The text the user sees for an outcome, with the result of an executed action or of a hand-off."""
+async def execute(outcome: Outcome, context: ExecutionContext, claim: Claim | None = None) -> dict[str, Any]:
+    """Run a confirmed action: the bound tool, under the grant, with the collected slots. Never before confirmation.
+
+    The binding is resolved here; ``run_tool`` checks the grant and the operator
+    overrides, builds the tool and claims the action (``claim``) before calling it.
+    """
+    intent_name = outcome.intent or ""
+    ref = resolve_binding(intent_name, context.authorized_tools, context.bindings)
+    if ref is None:
+        return {"status": "unbound", "intent": intent_name, "message": "No tool is bound for this request."}
+    return await run_tool(context, ref, params_for(intent_name, outcome.slots), label=intent_name, claim=claim)
+
+
+def answer_for(outcome: Outcome, execution: dict[str, Any] | None, handoff: dict[str, Any] | None = None) -> str:
+    """The text the user sees for an outcome, with the result of an executed action or of a hand-off.
+
+    An escalation says what the hand-off actually did (``escalation.handoff_answer``):
+    without a recorded hand-off it promises nobody.
+    """
     if outcome.kind == "escalate":
-        if execution is not None and execution.get("status") == "handed_off":
-            return (
-                f"{outcome.text} I have put a request for a person to take this over in the team's queue, "
-                f"with what you have told me so far (reference {execution.get('reference')})."
-            )
-        return (
-            f"{outcome.text} I cannot pass this to a person from here, so nothing has been handed over. "
-            "Please use your usual support channel."
-        )
+        from core.conversation import escalation
+
+        return f"{outcome.text} {escalation.handoff_answer(handoff or {})}"
     if outcome.kind != "execute" or execution is None:
         return outcome.text
     status = execution.get("status")
@@ -514,81 +525,6 @@ def _read_answer(intent: str, result: dict[str, Any]) -> str:
 # ── The chat hook ─────────────────────────────────────────────────────────────
 
 
-HANDOFF_TRIGGER = "conversation_handoff"
-HANDOFF_HOURS = 24
-
-
-async def request_handoff(
-    outcome: Outcome, context: ExecutionContext | None, *, user_id: str, channel: str
-) -> dict[str, Any]:
-    """Raise a real hand-off for an ``escalate`` outcome: an item in the approvals queue and its notification.
-
-    The item carries what a person taking over needs (``Outcome.handoff``). It
-    needs the agent the conversation is with; without one, or when the item
-    cannot be written, nothing is handed over and the answer says so.
-    """
-    if context is None or not context.agent_id:
-        return {"status": "handoff_unavailable", "intent": outcome.intent}
-    try:
-        tid = uuid.UUID(str(context.tenant_id))
-        aid = uuid.UUID(str(context.agent_id))
-    except ValueError:
-        return {"status": "handoff_unavailable", "intent": outcome.intent}
-    try:
-        requester: uuid.UUID | None = uuid.UUID(str(user_id))
-    except ValueError:
-        requester = None
-    from core.database import get_tenant_session
-    from core.models.agent import Agent
-    from core.models.hitl import HITLQueue
-    from core.ownership import agent_ownership_fields
-
-    handoff = dict(outcome.handoff or {})
-    intent = INTENTS.get(str(handoff.get("intent") or ""))
-    topic = intent.title if intent is not None else "a conversation"
-    try:
-        async with get_tenant_session(tid) as session:
-            agent_row = (
-                await session.execute(select(Agent).where(Agent.id == aid, Agent.tenant_id == tid))
-            ).scalar_one_or_none()
-            if agent_row is None:
-                return {"status": "handoff_unavailable", "intent": outcome.intent}
-            item = HITLQueue(
-                id=uuid.uuid4(),
-                tenant_id=tid,
-                agent_id=aid,
-                workflow_run_id=None,
-                title=f"Conversation hand-off: {topic}"[:500],
-                trigger_type=HANDOFF_TRIGGER,
-                priority="high",
-                assignee_role=context.domain or "admin",
-                requested_by_user_id=requester,
-                decision_options={"options": ["approve", "reject"]},
-                context={"source": RUNTIME, "channel": channel, "handoff": handoff},
-                expires_at=datetime.now(UTC) + timedelta(hours=HANDOFF_HOURS),
-            )
-            session.add(item)
-            await session.flush()
-            item_id = str(item.id)
-            push_scope = agent_ownership_fields(agent_row)
-        from core.push.sender import notify_approval_created
-
-        await notify_approval_created(
-            str(tid),
-            item_id=item_id,
-            agent_name=str(getattr(agent_row, "name", "") or context.agent_type or ""),
-            action=HANDOFF_TRIGGER,
-            agent_visibility=push_scope.get("visibility"),
-            agent_owner_user_id=push_scope.get("owner_user_id"),
-        )
-    # enterprise-gate: broad-except-ok reason=handoff-failure-is-logged-and-answered-as-not-handed-over
-    except Exception as exc:  # noqa: BLE001
-        logger.warning("conversation_handoff_failed", error_type=type(exc).__name__)
-        return {"status": "handoff_unavailable", "intent": outcome.intent}
-    logger.info("conversation_handoff_raised", reason=handoff.get("reason"))
-    return {"status": "handed_off", "intent": outcome.intent, "reference": item_id[:8].upper(), "item_id": item_id}
-
-
 async def run_turn(
     tenant_id: uuid.UUID,
     key: str,
@@ -601,12 +537,13 @@ async def run_turn(
     channel: str,
     no_agent_message: str,
 ) -> tuple[Outcome, dict[str, Any] | None]:
-    """Advance a loaded dialogue by one turn, run or hand off what it produces, and keep the session.
+    """Advance a loaded dialogue by one turn, run what it produces, and keep the session.
 
     A confirmed action is claimed atomically with the session state before its
     tool is called (``claim_dialogue``); once claimed, the session is already
     stored and is not written again, so a later failure cannot leave it
-    confirmable. A turn that runs nothing is saved as before.
+    confirmable. A turn that runs nothing is saved as before. An escalation is
+    handed off afterwards by ``finish_turn``, once the session is stored.
     """
     expected = dialogue.to_dict()
     outcome = dialogue_engine.advance(dialogue, text)
@@ -625,25 +562,113 @@ async def run_turn(
             execution = {"status": "unbound", "intent": outcome.intent, "message": no_agent_message}
         else:
             execution = await execute(outcome, context, claim=_claim)
-    elif outcome.kind == "escalate":
-        execution = await request_handoff(outcome, context, user_id=user_id, channel=channel)
     if not claimed:
         await save_dialogue(tenant_id, key, dialogue, user_id=user_id, agent_id=agent_id, channel=channel)
     return outcome, execution
 
 
-def outcome_payload(outcome: Outcome, execution: dict[str, Any] | None) -> dict[str, Any]:
-    """The outcome as a response carries it: without the hand-off notes, with the execution minus its result."""
+def outcome_payload(
+    outcome: Outcome, execution: dict[str, Any] | None, handoff: dict[str, Any] | None = None
+) -> dict[str, Any]:
+    """The outcome as a response carries it.
+
+    Never the hand-off notes the dialogue took (``Outcome.handoff``: slots and
+    recent turns); the execution without its result; for a hand-off only its
+    reason, intent tag, review item and ticket.
+    """
     payload = outcome.to_dict()
     payload.pop("handoff", None)
     if execution is not None:
         payload["execution"] = {k: v for k, v in execution.items() if k not in ("result", "item_id")}
+    if handoff is not None:
+        payload["handoff"] = {k: handoff.get(k) for k in ("reason", "intent", "hitl_id", "ticket")}
     return payload
 
 
 def _recognised(text: str) -> bool:
     matches = catalogue.recognise(text)
     return bool(matches and matches[0].confidence >= MIN_CONFIDENCE) or len(catalogue.split_requests(text)) > 1
+
+
+HELD_ANSWER = "A colleague has joined this conversation and will reply here."
+
+
+async def held_turn(tid: uuid.UUID, key: str, text: str, dialogue: Dialogue) -> dict[str, Any] | None:
+    """While a supervisor holds the session, the user's message goes to them, not to the runtime."""
+    from core.conversation import supervisor
+
+    holder = await supervisor.taken_over(tid, key)
+    if not holder:
+        return None
+    await supervisor.user_message(tid, key, text)
+    return {
+        "answer": HELD_ANSWER,
+        "confidence": 1.0,
+        "outcome": {"kind": "handed_over", "text": HELD_ANSWER, "intent": dialogue.intent, "slots": {}, "missing": []},
+        "dialogue": dialogue_view(dialogue),
+        "tool_calls": None,
+        "session_key": key,
+    }
+
+
+async def finish_turn(
+    tid: uuid.UUID,
+    key: str,
+    dialogue: Dialogue,
+    outcome: Outcome,
+    execution: dict[str, Any] | None,
+    *,
+    text: str,
+    user_id: str,
+    agent_id: str,
+    channel: str,
+    context: ExecutionContext | None,
+) -> dict[str, Any]:
+    """Hand off when the outcome says so, announce the turn, and shape the answer.
+
+    The session is already stored (``run_turn`` saves it, or claimed it with a
+    confirmed action) and is not written again here.
+    """
+    from core.conversation import escalation, supervisor
+
+    handoff: dict[str, Any] | None = None
+    # The dialogue says why it escalated (an accepted offer after fallbacks is not an unsolicited request).
+    reason = outcome.escalation or (
+        escalation.REASON_REQUESTED if outcome.intent == "talk_to_agent" else escalation.REASON_SLOTS
+    )
+    if outcome.kind == "escalate":
+        # The dialogue has started over by now; the outcome's snapshot carries what was in
+        # progress (a transfer the user left for a person), else the intent and slots it had.
+        notes = dict(outcome.handoff or {})
+        handoff = await escalation.handoff(
+            tid,
+            session_key=key,
+            dialogue=dialogue,
+            user_id=user_id,
+            agent_id=agent_id,
+            channel=channel,
+            reason=reason,
+            context=context,
+            intent=notes.get("intent") or outcome.intent,
+            slots=notes.get("slots") or outcome.slots,
+            notes=notes,
+        )
+    answer = answer_for(outcome, execution, handoff)
+    payload = outcome_payload(outcome, execution, handoff)
+    stage = dialogue.stage
+    await supervisor.announce_turn(tid, key, role="user", intent=dialogue.intent, stage=stage)
+    await supervisor.announce_turn(tid, key, role="assistant", intent=dialogue.intent, stage=stage)
+    tool_call = (execution or {}).get("tool_call")
+    return {
+        "answer": answer,
+        "confidence": round(outcome.confidence, 3)
+        if outcome.confidence
+        else (0.9 if outcome.kind in ("execute", "confirm") else 0.6),
+        "outcome": payload,
+        "dialogue": dialogue_view(dialogue),
+        "tool_calls": [tool_call] if tool_call else None,
+        "session_key": key,
+    }
 
 
 async def chat_turn(
@@ -661,12 +686,16 @@ async def chat_turn(
     A turn is handled when a dialogue is in progress for this session, or when
     the message names a banking intent. A read intent with no tool bound is
     left to the agent, which can answer it from its own tools and knowledge.
+    While a supervisor holds the session, every message goes to them.
     """
     if not enabled():
         return None
     tid = uuid.UUID(str(tenant_id))
     key = session_key(channel, company_id, agent_id, user_id)
     dialogue = await load_dialogue(tid, key)
+    held = await held_turn(tid, key, text, dialogue)
+    if held is not None:
+        return held
     active = dialogue.stage not in (dialogue_engine.STAGE_IDLE, dialogue_engine.STAGE_DONE)
     if not active:
         if not _recognised(text):
@@ -686,19 +715,18 @@ async def chat_turn(
         channel=channel,
         no_agent_message="No agent is available to run this.",
     )
-    answer = answer_for(outcome, execution)
-    payload = outcome_payload(outcome, execution)
-    tool_call = (execution or {}).get("tool_call")
-    return {
-        "answer": answer,
-        "confidence": round(outcome.confidence, 3)
-        if outcome.confidence
-        else (0.9 if outcome.kind in ("execute", "confirm") else 0.6),
-        "outcome": payload,
-        "dialogue": dialogue_view(dialogue),
-        "tool_calls": [tool_call] if tool_call else None,
-        "session_key": key,
-    }
+    return await finish_turn(
+        tid,
+        key,
+        dialogue,
+        outcome,
+        execution,
+        text=text,
+        user_id=user_id,
+        agent_id=agent_id,
+        channel=channel,
+        context=context,
+    )
 
 
 async def agent_bindings(tenant_id: str, agent_id: str) -> dict[str, str]:
