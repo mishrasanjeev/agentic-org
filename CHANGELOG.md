@@ -13,6 +13,27 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
 - Update the UI source-map dependency, MCP proxy address dependency and MCP SDK
   to patched versions. No security alerts are dismissed or checks disabled.
 
+### Added - Content services: narrative to payload, grounded responses, tone adaptation and clause assembly
+- Four more content services under `/content`: narrative to payload
+  (`structure`: a schema-shaped JSON object from free text, validated
+  against an inline, registered or built-in schema, rendered as XML on
+  request, with what the text says but the schema cannot hold listed),
+  policy-grounded responses (`respond`: an answer from an approved source
+  set with a cited quote per claim, or an honest statement that the
+  sources do not cover the question), audience-adaptive tone (`adapt`:
+  a rewrite for an audience, tone and reading level with every figure
+  checked to be still there), and rule-driven clause assembly
+  (`assemble`: a document from approved clauses whose conditions hold for
+  the facts, placeholders filled and the gaps named, no model involved;
+  clause library with versions and second-person approval, table
+  `content_clauses`, migration `v6z63_content_clauses`).
+- A grounded response is withheld when any of its claims is not covered by a
+  verified citation; tone fact checks keep currency, lakh and crore, and
+  percent; a payload changed by output guardrails is validated again; a named
+  schema resolves to the requested or latest version; clause writes need a
+  signed-in tenant administrator, and an update that changes nothing keeps the
+  version and approval.
+
 ### Added - Content services: governed drafting, structured summarisation and obligation extraction
 - With `AGENTICORG_CONTENT_SERVICES_ENABLED` on (off by default), three
   reusable capability APIs under `/content` (`core/content/`), each with

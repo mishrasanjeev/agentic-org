@@ -4356,6 +4356,132 @@
     "tenant_required": true
   },
   {
+    "audit_event": "content.adapt",
+    "auth_required": true,
+    "function": "post_adapt",
+    "idempotency": "idempotent-pure",
+    "key": "POST /api/v1/content/adapt api/v1/content_structuring.py:post_adapt",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/content_structuring.py",
+    "path": "/api/v1/content/adapt",
+    "public_exempt_reason": null,
+    "rate_limit": "chat-query",
+    "scope": "content.adapt.sensitive.write",
+    "source_line": 105,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "content.assemble",
+    "auth_required": true,
+    "function": "post_assemble",
+    "idempotency": "idempotent-pure",
+    "key": "POST /api/v1/content/assemble api/v1/content_structuring.py:post_assemble",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/content_structuring.py",
+    "path": "/api/v1/content/assemble",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "content.assemble.sensitive.write",
+    "source_line": 123,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "content.clauses.list",
+    "auth_required": true,
+    "function": "list_clauses",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/content/clauses api/v1/content_structuring.py:list_clauses",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/content_structuring.py",
+    "path": "/api/v1/content/clauses",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "content.clauses.sensitive.read",
+    "source_line": 139,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "content.clauses.create",
+    "auth_required": true,
+    "function": "create_clause",
+    "idempotency": "not-idempotent-create",
+    "key": "POST /api/v1/content/clauses api/v1/content_structuring.py:create_clause",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/content_structuring.py",
+    "path": "/api/v1/content/clauses",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "content.clauses.sensitive.write",
+    "source_line": 160,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "content.clauses.update",
+    "auth_required": true,
+    "function": "update_clause",
+    "idempotency": "idempotent-partial-update",
+    "key": "PUT /api/v1/content/clauses/{clause_id} api/v1/content_structuring.py:update_clause",
+    "metadata_present": true,
+    "methods": [
+      "PUT"
+    ],
+    "module": "api/v1/content_structuring.py",
+    "path": "/api/v1/content/clauses/{clause_id}",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "content.clauses.sensitive.write",
+    "source_line": 184,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "content.clauses.approve",
+    "auth_required": true,
+    "function": "approve_clause",
+    "idempotency": "idempotent-lifecycle-state",
+    "key": "POST /api/v1/content/clauses/{clause_id}/approve api/v1/content_structuring.py:approve_clause",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/content_structuring.py",
+    "path": "/api/v1/content/clauses/{clause_id}/approve",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "content.clauses.sensitive.write",
+    "source_line": 209,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "content.clauses.retire",
+    "auth_required": true,
+    "function": "retire_clause",
+    "idempotency": "idempotent-lifecycle-state",
+    "key": "POST /api/v1/content/clauses/{clause_id}/retire api/v1/content_structuring.py:retire_clause",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/content_structuring.py",
+    "path": "/api/v1/content/clauses/{clause_id}/retire",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "content.clauses.sensitive.write",
+    "source_line": 232,
+    "tenant_required": true
+  },
+  {
     "audit_event": "content.draft",
     "auth_required": true,
     "function": "post_draft",
@@ -4446,6 +4572,24 @@
     "tenant_required": true
   },
   {
+    "audit_event": "content.respond",
+    "auth_required": true,
+    "function": "post_respond",
+    "idempotency": "idempotent-pure",
+    "key": "POST /api/v1/content/respond api/v1/content_structuring.py:post_respond",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/content_structuring.py",
+    "path": "/api/v1/content/respond",
+    "public_exempt_reason": null,
+    "rate_limit": "chat-query",
+    "scope": "content.respond.sensitive.write",
+    "source_line": 87,
+    "tenant_required": true
+  },
+  {
     "audit_event": "content.services.list",
     "auth_required": true,
     "function": "list_services",
@@ -4479,6 +4623,24 @@
     "rate_limit": "standard",
     "scope": "content.datasets.sensitive.write",
     "source_line": 97,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "content.structure",
+    "auth_required": true,
+    "function": "post_structure",
+    "idempotency": "idempotent-pure",
+    "key": "POST /api/v1/content/structure api/v1/content_structuring.py:post_structure",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/content_structuring.py",
+    "path": "/api/v1/content/structure",
+    "public_exempt_reason": null,
+    "rate_limit": "chat-query",
+    "scope": "content.structure.sensitive.write",
+    "source_line": 69,
     "tenant_required": true
   },
   {

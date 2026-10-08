@@ -81,6 +81,9 @@ class Service:
     rendered: Callable[[dict[str, Any]], str]
     apply_text: Callable[[dict[str, Any], str], dict[str, Any]]
     resolve_sources: Callable[[uuid.UUID, BaseModel, list[str] | None], Awaitable[list[Source]]]
+    # Called with the output when the output guardrails changed it, so a service whose output carries
+    # derived parts (a validation result, a rendering) recomputes them from what will be returned.
+    after_output_guard: Callable[[dict[str, Any]], dict[str, Any]] | None = None
 
     def describe(self) -> dict[str, Any]:
         return {
@@ -460,9 +463,12 @@ async def run(
     output = service.finish(payload, sources, answer)
     if service.guardrails.output:
         context = [source.text for source in sources] if service.guardrails.grounded and sources else None
-        output, screened = await guard_structure(
+        guarded, screened = await guard_structure(
             "output", output, tenant_id=tenant_id, service=service.name, context=context
         )
+        if guarded is not output and service.after_output_guard is not None:
+            guarded = service.after_output_guard(guarded)
+        output = guarded
         guardrails["output"] = {k: v for k, v in screened.items() if k != "text"}
     return Run(
         service=service.name,

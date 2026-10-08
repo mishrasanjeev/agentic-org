@@ -475,7 +475,9 @@ class TestRoutes:
 
         monkeypatch.setattr(settings, "content_services_enabled", False)
         listed = await api.list_services(tenant_id=str(TENANT))
-        assert listed["enabled"] is False and len(listed["services"]) == 3
+        assert listed["enabled"] is False and {"draft", "summarise", "extract"} <= {
+            s["name"] for s in listed["services"]
+        }
         request = SimpleNamespace(state=SimpleNamespace(claims={"agenticorg:user_id": "u1"}))
         for call in (
             api.post_draft(
@@ -1063,9 +1065,17 @@ class TestDocumentedRoutes:
     def test_every_documented_content_route_exists(self):
         from pathlib import Path
 
-        from api.v1 import content as api
+        from api.main import app
 
-        paths = {(method, route.path) for route in api.router.routes for method in route.methods}
+        # Every content route the application serves, whichever router declares it. The OpenAPI paths
+        # hold the full path whether FastAPI includes routers eagerly or lazily (_IncludedRouter).
+        paths = {
+            (method.upper(), path.removeprefix("/api/v1"))
+            for path, operations in app.openapi()["paths"].items()
+            if path.startswith("/api/v1/content")
+            for method in operations
+            if method in ("get", "post", "put", "patch", "delete")
+        }
         doc = (Path(__file__).resolve().parents[2] / "docs" / "content" / "services.md").read_text(encoding="utf-8")
         documented = set(re.findall(r"`(GET|POST|PUT|DELETE) (/content/[^`\s]+)`", doc))
         assert documented, "no routes found in the document"
