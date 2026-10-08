@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { ScanSearch } from "lucide-react";
 import { Helmet } from "react-helmet-async";
 import api, { extractApiError } from "@/lib/api";
 import { useAuth } from "@/contexts/AuthContext";
@@ -121,6 +122,7 @@ export default function Lineage() {
   const [trace, setTrace] = useState<Trace | null>(null);
   const [selected, setSelected] = useState<LineageNode | null>(null);
   const [description, setDescription] = useState<Description | null>(null);
+  const descriptionRequest = useRef(0);
   const [sources, setSources] = useState<SyncSource[]>([]);
   const [runs, setRuns] = useState<{ sourceId: string; runs: SyncRun[] } | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -166,15 +168,16 @@ export default function Lineage() {
   }, []);
 
   const describe = useCallback(async (node: LineageNode) => {
+    const request = ++descriptionRequest.current;
     setSelected(node);
     setDescription(null);
     try {
       const { data } = await api.get(`/lineage/nodes/${encodeURIComponent(node.kind)}/${encodeURIComponent(node.ref)}`, {
         params: node.version ? { version: node.version } : {},
       });
-      setDescription(data as Description);
+      if (request === descriptionRequest.current) setDescription(data as Description);
     } catch (err) {
-      setError(extractApiError(err, "Failed to describe the node."));
+      if (request === descriptionRequest.current) setError(extractApiError(err, "Failed to describe the node."));
     }
   }, []);
 
@@ -326,7 +329,18 @@ export default function Lineage() {
                 );
               })}
             </svg>
-            <p className="px-3 pb-2 text-xs text-slate-500">Click a node for its provenance; double-click to trace from it.</p>
+            <ul aria-label="Graph nodes" className="max-h-48 divide-y divide-slate-200 overflow-auto border-t border-slate-200">
+              {trace.nodes.map((node) => (
+                <li key={node.id} className="flex items-center gap-2 px-3 py-1">
+                  <button type="button" aria-label={`Inspect ${node.kind} ${node.ref}`} aria-pressed={selected?.id === node.id} className="min-w-0 flex-1 break-all text-left text-xs text-slate-800 hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-indigo-600" onClick={() => void describe(node)}>
+                    {node.kind} · {node.ref}
+                  </button>
+                  <button type="button" aria-label={`Trace from ${node.kind} ${node.ref}`} title={`Trace from ${node.kind} ${node.ref}`} disabled={busy} className="flex h-8 w-8 shrink-0 items-center justify-center rounded border border-slate-300 text-indigo-700 disabled:opacity-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-indigo-600" onClick={() => void traceFrom(node)}>
+                    <ScanSearch size={16} aria-hidden="true" />
+                  </button>
+                </li>
+              ))}
+            </ul>
           </div>
           <div className="space-y-2 rounded-md border border-slate-200 bg-white p-3 text-sm lg:col-span-4" data-testid="lineage-detail">
             {selected ? (
@@ -340,7 +354,7 @@ export default function Lineage() {
                 {description && (
                   <>
                     <p className={`text-xs ${description.complete ? "text-emerald-800" : "text-amber-800"}`} data-testid="lineage-complete">
-                      {description.complete ? "Traced to its source." : "No source recorded; the origin shown is the one it declared."}
+                      {description.truncated ? "Source tracing is incomplete at the traversal limit." : description.complete ? "Traced to its source." : "No source recorded; the origin shown is the one it declared."}
                     </p>
                     <div>
                       <p className="text-xs font-semibold text-slate-700">Sources</p>

@@ -2,7 +2,8 @@
 /**
  * Lineage: find a node, trace it, describe it, and the sync sources with their runs.
  */
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { HelmetProvider } from "react-helmet-async";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -110,6 +111,45 @@ describe("Lineage", () => {
     fireEvent.change(screen.getByTestId("lineage-query"), { target: { value: "a.pdf" } });
     fireEvent.click(screen.getByTestId("lineage-search"));
     await waitFor(() => expect(mockGet).toHaveBeenCalledWith("/lineage/nodes", { params: { limit: "50", kind: "chunk", q: "a.pdf" } }));
+  });
+
+  it("does not call a bounded trace an absent source", async () => {
+    mockGet.mockImplementation((url: string) => url.startsWith("/lineage/nodes/")
+      ? Promise.resolve({ data: { ...DESCRIPTION, complete: false, truncated: true } }) : answer(url));
+    renderPage();
+    fireEvent.click(await screen.findByTestId("lineage-found-node"));
+    await waitFor(() => expect(screen.getByTestId("lineage-complete")).toHaveTextContent("Source tracing is incomplete at the traversal limit."));
+    expect(screen.queryByText(/No source recorded/)).not.toBeInTheDocument();
+  });
+
+  it("keeps a late node response from replacing the current selection", async () => {
+    renderPage();
+    fireEvent.click(await screen.findByTestId("lineage-found-node"));
+    await screen.findByTestId("lineage-complete");
+    let resolveFirst!: (value: { data: typeof DESCRIPTION }) => void;
+    const first = new Promise<{ data: typeof DESCRIPTION }>((resolve) => { resolveFirst = resolve; });
+    mockGet.mockImplementation((url: string) => url.includes("/nodes/source/") ? first : answer(url));
+    fireEvent.click(screen.getByRole("button", { name: `Inspect source ${SOURCE.ref}` }));
+    fireEvent.click(screen.getByRole("button", { name: `Inspect chunk ${CHUNK.ref}` }));
+    await screen.findByTestId("lineage-complete");
+    await act(async () => { resolveFirst({ data: { ...DESCRIPTION, sources: [{ kind: "source", ref: "https://stale.example.com", version: "old" }] } }); });
+    expect(screen.getByTestId("lineage-detail")).toHaveTextContent(CHUNK.ref);
+    expect(screen.getByTestId("lineage-detail")).not.toHaveTextContent("https://stale.example.com");
+  });
+
+  it("offers keyboard inspection and tracing for every graph node", async () => {
+    const user = userEvent.setup();
+    renderPage();
+    fireEvent.click(await screen.findByTestId("lineage-found-node"));
+    await screen.findByTestId("lineage-graph");
+    const inspect = screen.getByRole("button", { name: `Inspect source ${SOURCE.ref}` });
+    inspect.focus();
+    await user.keyboard("{Enter}");
+    await waitFor(() => expect(mockGet).toHaveBeenCalledWith(`/lineage/nodes/source/${encodeURIComponent(SOURCE.ref)}`, { params: { version: SOURCE.version } }));
+    const traceButton = screen.getByRole("button", { name: `Trace from source ${SOURCE.ref}` });
+    traceButton.focus();
+    await user.keyboard(" ");
+    await waitFor(() => expect(mockGet).toHaveBeenCalledWith(`/lineage/trace/source/${encodeURIComponent(SOURCE.ref)}`, { params: { direction: "both", hops: "4", version: SOURCE.version } }));
   });
 
   it("lists sync sources, shows their runs and runs one for a writer", async () => {

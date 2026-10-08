@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import threading
 import uuid
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -39,6 +40,9 @@ class _Result:
     def all(self):
         return list(self.rows)
 
+    def scalar_one_or_none(self):
+        return self.rows[0] if self.rows else None
+
 
 def _matches(clause, row) -> bool:
     if clause is None:
@@ -55,6 +59,7 @@ def _matches(clause, row) -> bool:
 _KEYS = {
     "personalisation_consents": ("tenant_id", "subject_ref", "purpose"),
     "personalisation_profiles": ("tenant_id", "subject_ref"),
+    "personalisation_rules": ("tenant_id", "name"),
 }
 
 
@@ -66,18 +71,22 @@ class _Session:
     async def execute(self, statement):
         self.log.append("execute")
         if isinstance(statement, Insert):
-            from core.models.personalisation import PersonalisationConsent, PersonalisationProfile
+            from core.models.personalisation import PersonalisationConsent, PersonalisationProfile, PersonalisationRule
 
             table = statement.table.name
             values = statement.compile(dialect=postgresql.dialect()).params
             model = {
                 "personalisation_consents": PersonalisationConsent,
                 "personalisation_profiles": PersonalisationProfile,
+                "personalisation_rules": PersonalisationRule,
             }[table]
             assert statement._post_values_clause is not None  # on_conflict_do_nothing
             key = _KEYS[table]
             if not any(r.__tablename__ == table and all(getattr(r, c) == values[c] for c in key) for r in self.rows):
-                self.rows.append(model(**values))
+                row = model(**values)
+                self.rows.append(row)
+                if table == "personalisation_rules":
+                    return _Result([row])
             return _Result([])
         table = statement.get_final_froms()[0].name
         return _Result([r for r in self.rows if r.__tablename__ == table and _matches(statement.whereclause, r)])
@@ -107,15 +116,22 @@ def session(monkeypatch):
     import core.database
 
     store = _Session()
+    store.crypto_threads = []
     monkeypatch.setattr(core.database, "get_tenant_session", lambda tenant_id: store)
     monkeypatch.setattr(settings, "personalisation_enabled", True)
 
-    async def encrypt(text, tenant_id):
+    def encrypt_sync(text, kek):
+        store.crypto_threads.append(threading.get_ident())
         store.log.append("encrypt")
         return "enc:" + text[::-1]
 
-    monkeypatch.setattr(service, "encrypt_for_tenant", encrypt)
-    monkeypatch.setattr(service, "decrypt_for_tenant", lambda text: text[4:][::-1])
+    def decrypt(text):
+        store.crypto_threads.append(threading.get_ident())
+        return text[4:][::-1]
+
+    monkeypatch.setattr(service, "resolve_tenant_kek", AsyncMock(return_value=""))
+    monkeypatch.setattr(service, "encrypt_with_kek", encrypt_sync)
+    monkeypatch.setattr(service, "decrypt_for_tenant", decrypt)
     return store
 
 
@@ -397,6 +413,17 @@ class TestConsents:
 
 class TestProfiles:
     @pytest.mark.asyncio
+    async def test_profile_crypto_never_runs_on_the_request_event_loop(self, session):
+        event_loop_thread = threading.get_ident()
+        await service.put_profile(TENANT, SUBJECT, PROFILE, actor=ACTOR)
+        await service.get_profile(TENANT, SUBJECT)
+        await _grant()
+        await service.create_rule(TENANT, _rule("welcome"), actor=ACTOR)
+        await service.render(TENANT, SUBJECT, "marketing", channel="email", actor=ACTOR)
+        assert len(session.crypto_threads) == 3
+        assert all(thread != event_loop_thread for thread in session.crypto_threads)
+
+    @pytest.mark.asyncio
     async def test_attributes_are_encrypted_at_rest_before_any_lock(self, session):
         kept = await service.put_profile(TENANT, SUBJECT, PROFILE, actor=ACTOR)
         assert kept["attributes"] == sorted(PROFILE) and "Asha" not in json.dumps(kept)
@@ -445,6 +472,22 @@ class TestProfiles:
 
 
 class TestRules:
+    @pytest.mark.asyncio
+    async def test_duplicate_insert_after_the_precheck_returns_conflict(self, session, monkeypatch):
+        await service.create_rule(TENANT, _rule("welcome"), actor=ACTOR)
+        execute = session.execute
+
+        async def stale_read(statement):
+            if not isinstance(statement, Insert):
+                return _Result([])
+            return await execute(statement)
+
+        monkeypatch.setattr(session, "execute", stale_read)
+        with pytest.raises(PersonalisationError) as info:
+            await service.create_rule(TENANT, _rule("welcome"), actor=ACTOR)
+        assert info.value.status == 409 and info.value.code == "rule_exists"
+        assert len(session.of("personalisation_rules")) == 1
+
     @pytest.mark.asyncio
     async def test_rules_are_kept_listed_changed_and_removed(self, session, monkeypatch):
         made = await service.create_rule(TENANT, _rule("welcome", priority=20), actor=ACTOR)

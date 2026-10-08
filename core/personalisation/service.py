@@ -21,6 +21,7 @@ nothing. Tenant scoped under row-level security; behind
 
 from __future__ import annotations
 
+import asyncio
 import json
 import uuid
 from datetime import UTC, datetime
@@ -31,7 +32,7 @@ from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from core.config import settings
-from core.crypto.tenant_secrets import decrypt_for_tenant, encrypt_for_tenant
+from core.crypto.tenant_secrets import decrypt_for_tenant, encrypt_with_kek, resolve_tenant_kek
 from core.personalisation import rules as checks
 from core.personalisation.rules import PersonalisationError
 
@@ -244,7 +245,8 @@ async def put_profile(tenant_id: uuid.UUID, subject_ref: Any, attributes: Any, *
     who = _actor(actor)
     subject = checks.check_subject(subject_ref)
     checked = checks.check_attributes(attributes)
-    stored = {"_encrypted": await encrypt_for_tenant(json.dumps(checked, sort_keys=True), tenant_id)}
+    kek = await resolve_tenant_kek(tenant_id)
+    stored = {"_encrypted": await asyncio.to_thread(encrypt_with_kek, json.dumps(checked, sort_keys=True), kek)}
     now = _now()
     async with get_tenant_session(tenant_id) as session:
         await session.execute(
@@ -279,7 +281,7 @@ async def get_profile(tenant_id: uuid.UUID, subject_ref: Any) -> dict[str, Any]:
         raise PersonalisationError(404, "profile_unknown", "no profile is kept for this subject")
     return {
         "subject_ref": subject,
-        "attributes": _decrypt(row),
+        "attributes": await asyncio.to_thread(_decrypt, row),
         "updated_by": row.updated_by or "",
         "updated_at": _iso(row.updated_at),
     }
@@ -357,9 +359,16 @@ async def create_rule(tenant_id: uuid.UUID, raw: Any, *, actor: str | None) -> d
             raise PersonalisationError(409, "rule_exists", "a rule of this name exists")
         if len(rows) >= checks.MAX_RULES:
             raise PersonalisationError(409, "rules_full", f"a tenant keeps at most {checks.MAX_RULES} rules")
-        row = PersonalisationRule(tenant_id=tenant_id, updated_by=who, updated_at=_now(), **fields)
-        session.add(row)
-        await session.flush()
+        row = (
+            await session.execute(
+                pg_insert(PersonalisationRule)
+                .values(id=uuid.uuid4(), tenant_id=tenant_id, updated_by=who, updated_at=_now(), **fields)
+                .on_conflict_do_nothing(index_elements=["tenant_id", "name"])
+                .returning(PersonalisationRule)
+            )
+        ).scalar_one_or_none()
+        if row is None:
+            raise PersonalisationError(409, "rule_exists", "a rule of this name exists")
         out = _rule_dict(row)
     logger.info("personalisation_rule_created", purpose=out["purpose"])
     return out
@@ -467,7 +476,7 @@ async def render(
             if not consent_valid(consent, now):
                 raise PersonalisationError(403, "consent_required", "the subject has no valid consent for this purpose")
             profile = await _profile_row(session, tenant_id, subject)
-            attributes = _decrypt(profile) if profile is not None else {}
+            attributes = await asyncio.to_thread(_decrypt, profile) if profile is not None else {}
             if caller_template is not None:
                 content, used = checks.render_template(caller_template, attributes, allow_list)
             else:
