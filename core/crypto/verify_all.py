@@ -148,7 +148,7 @@ def parse_jsonb_credentials(value: dict | str | None) -> KeyRef | None:
 def parse_encrypted_container(value: dict | str | None) -> KeyRef | None:
     """Parse a JSONB ``{"_encrypted": ...}`` encrypted-column value."""
 
-    if isinstance(value, dict):
+    if isinstance(value, dict) and "_encrypted" in value:
         value = value.get("_encrypted")
     elif isinstance(value, str):
         try:
@@ -190,6 +190,11 @@ _SCANNERS: list[tuple[str, str]] = [
         "case_pseudonym_maps.mapping_encrypted",
         "core.models.case_pseudonym_map:CasePseudonymMap:mapping_encrypted",
     ),
+    ("speech_recordings.transcript_encrypted", "core.models.speech_recording:SpeechRecording:transcript_encrypted"),
+    ("speech_recordings.summary_encrypted", "core.models.speech_recording:SpeechRecording:summary_encrypted"),
+    ("speech_live_sessions.turns_encrypted", "core.models.speech_live_session:SpeechLiveSession:turns_encrypted"),
+    ("personalisation_profiles.attributes", "core.models.personalisation:PersonalisationProfile:attributes"),
+    ("lineage_sync_sources.token", "core.models.lineage_sync:LineageSyncSource:token"),
 ]
 
 
@@ -322,7 +327,7 @@ def _collect_key_refs(
     values: Iterable,
 ) -> None:
     for raw in values:
-        kr = parse_encrypted_container(raw) if label.endswith("_encrypted") else parse_ciphertext(raw)
+        kr = parse_encrypted_container(raw)
         if kr is not None:
             refs.setdefault(label, set()).add(kr)
 

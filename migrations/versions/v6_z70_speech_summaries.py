@@ -11,6 +11,9 @@ figures computed from the transcript (sentiment, empathy, interaction,
 signals), which hold no words (``core/speech/analytics.py``).
 """
 
+# ENCRYPTED_MIGRATION_HELPER_EXEMPT: adds an empty JSONB column with no ciphertext
+# transformation or backfill; reruns leave existing summaries unchanged.
+# PostgreSQL preservation coverage: test_speech_migration_security.py.
 from alembic import op
 
 revision = "v6z70_speech_summaries"

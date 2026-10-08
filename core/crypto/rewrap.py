@@ -172,11 +172,25 @@ def _fire_cache_invalidators(label: str) -> None:
 # can stay column-shape-agnostic.
 
 
+_JSONB_ENCRYPTED_COLUMNS = frozenset(
+    {
+        "connector_configs.credentials_encrypted",
+        "tenant_ai_credentials.credentials_encrypted",
+        "voice_calls.transcript_encrypted",
+        "case_pseudonym_maps.mapping_encrypted",
+        "speech_recordings.transcript_encrypted",
+        "speech_recordings.summary_encrypted",
+        "speech_live_sessions.turns_encrypted",
+        "personalisation_profiles.attributes",
+    }
+)
+
+
 def _extract_ciphertext(label: str, raw: Any) -> str | None:
     """Pull the actual vault ciphertext string out of the column value."""
     if raw is None:
         return None
-    if label.endswith("credentials_encrypted"):
+    if label in _JSONB_ENCRYPTED_COLUMNS:
         if isinstance(raw, str):
             try:
                 raw = json.loads(raw)
@@ -191,7 +205,7 @@ def _extract_ciphertext(label: str, raw: Any) -> str | None:
 
 def _wrap_ciphertext_for_column(label: str, ct: str) -> Any:
     """Reverse of ``_extract_ciphertext`` — wrap rewrapped ciphertext for UPDATE."""
-    if label.endswith("credentials_encrypted"):
+    if label in _JSONB_ENCRYPTED_COLUMNS:
         return {"_encrypted": ct}
     return ct
 
@@ -315,7 +329,7 @@ async def _update_row(
     """
     table, column = _split_column_label(label)
     scope_sql, scope_params = _scope_sql(scope, exact_company_scope=exact_company_scope)
-    if label.endswith("credentials_encrypted"):
+    if label in _JSONB_ENCRYPTED_COLUMNS:
         params = {"v": json.dumps(new_value), "id": str(row_id), **scope_params}
         result = await session.execute(
             text(

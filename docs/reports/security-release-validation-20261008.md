@@ -55,6 +55,14 @@ be dismissed as a substitute for that scan.
   assertions reproduced the suffix and currency-marked malformed-decimal bugs
   before correction; all focused conversation/security suites pass afterward.
   The hostile-input replay includes a long malformed suffix.
+- The remote encrypted-migration guard identified three additive speech-schema
+  migrations. Documented schema-only exemptions are backed by an additive-DDL
+  regression and a PostgreSQL populated-table/repeated-upgrade preservation
+  test. They do not bypass ciphertext transformation checks. Local preflight
+  now runs the same guard as CI before a push.
+- Key-reference scanning includes speech, personalisation and lineage-sync
+  encrypted fields. JSONB vault rotation preserves the encrypted container;
+  KMS envelopes are tracked by KEK and are not rewritten as vault ciphertext.
 
 ## Measured Validation
 
@@ -66,6 +74,7 @@ be dismissed as a substitute for that scan.
 | Combined static checks | `make check RUNNER=local` passed inside the Docker test container |
 | Focused personalisation suite | 32 passed |
 | PostgreSQL reporting and duplicate-rule regressions | 2 passed |
+| Encrypted-column and rotation regressions | 51 passed, 5 expected failures; dedicated PostgreSQL speech preservation replay passed |
 | Focused lineage UI suite | 8 passed |
 | Registry concurrency and merge-head round trip | 7 passed on a dedicated local PostgreSQL database |
 | Final combined unit, security, connector and contract run | 10,138 passed; 7 skipped |

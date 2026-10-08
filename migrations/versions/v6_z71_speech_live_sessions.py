@@ -11,6 +11,9 @@ compliance report (``core/speech/assist.py``). Tenant scoped under a
 forced row-level policy.
 """
 
+# ENCRYPTED_MIGRATION_HELPER_EXEMPT: additive schema only; upgrade never reads,
+# rewrites or deletes ciphertext. Idempotent reruns preserve existing rows.
+# PostgreSQL preservation coverage: test_speech_migration_security.py.
 from alembic import op
 
 revision = "v6z71_speech_live_sessions"

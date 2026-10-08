@@ -11,6 +11,9 @@ tenant's key (``core/speech/store.py``). Tenant scoped under a row-level
 policy, forced.
 """
 
+# ENCRYPTED_MIGRATION_HELPER_EXEMPT: additive schema only; upgrade never reads,
+# rewrites or deletes ciphertext. Idempotent reruns preserve existing rows.
+# PostgreSQL preservation coverage: test_speech_migration_security.py.
 from alembic import op
 
 revision = "v6z69_speech_recordings"

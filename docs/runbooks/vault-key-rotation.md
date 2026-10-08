@@ -712,7 +712,16 @@ docker rm -f vault-rehearsal-pg
 Registered columns (`_SCANNERS` in `core/crypto/verify_all.py`):
 `connector_configs.credentials_encrypted`, `gstn_credentials.password_encrypted`,
 `tenant_ai_credentials.credentials_encrypted`, `voice_calls.transcript_encrypted`
-and `case_pseudonym_maps.mapping_encrypted`.
+`case_pseudonym_maps.mapping_encrypted`, `speech_recordings.transcript_encrypted`,
+`speech_recordings.summary_encrypted`, `speech_live_sessions.turns_encrypted`,
+`personalisation_profiles.attributes` and `lineage_sync_sources.token`.
+
+The JSONB encrypted containers retain their `_encrypted` shape during vault
+rewrap. Key-reference scanning also recognises direct KMS envelopes and `env1:`
+containers so a referenced KEK cannot appear safe to retire. Vault rewrap does
+not rotate KMS envelopes: an envelope cannot be decrypted as Fernet and stops
+the batch rather than being downgraded or overwritten. Use the separate KMS
+procedure for that format; do not treat a vault-only check as KMS rotation proof.
 
 | Command | What it does | Exit codes |
 | --- | --- | --- |
