@@ -87,10 +87,10 @@ be dismissed as a substitute for that scan.
 | Encrypted-column and rotation regressions | 51 passed, 5 expected failures; dedicated PostgreSQL speech preservation replay passed |
 | Focused lineage UI suite | 8 passed |
 | Registry concurrency and merge-head round trip | 7 passed on a dedicated local PostgreSQL database |
-| Final combined unit, security, connector and contract run | 10,138 passed; 7 skipped |
-| Final combined integration and regression replay | 2,681 passed; 13 skipped; 5 expected failures |
-| Changed-line and new-module coverage | 96% over 7,622 changed lines; every new module meets the 75% floor |
-| Full combined preflight | Earlier combined run passed: 12,570 backend tests, 18 skipped, 5 expected failures; 502 UI tests in 80 files. The final-head refreshed gate is mandatory; its result is recorded on the release PR |
+| Final combined unit, security, connector and contract run | 10,171 passed; 7 skipped |
+| Final combined integration and regression replay | 2,682 passed; 13 skipped; 5 expected failures |
+| Changed-line and new-module coverage | 96% over 6,802 changed lines at the reconciled baseline; every new module meets the 75% floor |
+| Full combined preflight | Refreshed gate passed: 12,604 backend tests, 18 skipped, 5 expected failures, 82.66% coverage; 502 UI tests in 80 files. Exact-head remote and rollout evidence is recorded on the release PR |
 | Final rebuilt Docker runtime browser suite | 17 passed against the final API/UI images |
 | Final signed-decision browser suite | 3 passed, including delayed dashboard-response hydration and changed-case refusal; grant-leak watcher unchanged and enabled |
 | Final catalogue opt-in browser replay | Passed: banking-pack installation, search, keyboard navigation and mobile overflow checks |
@@ -123,6 +123,16 @@ gate or production code was relaxed. The complete refreshed preflight must
 still pass before the candidate is pushed.
 
 ## Release Limits
+
+### Late Dependency Follow-Up
+
+Two UI build-tool updates opened after the original release snapshot: PostCSS
+8.5.29 and the React Vite plugin 6.1.2. They are prepared on a separate follow-up
+branch, not silently added to the previously validated candidate. The lockfile
+retains source-map-js 1.2.2. Their release requires a fresh dependency install,
+audit, full local preflight, rebuilt UI browser checks and exact-head CI.
+Completion evidence is recorded on the follow-up PR; preparation alone is not
+validation or deployment.
 
 Optional features remain default off. No real payment, paid phone call or
 external email is part of local verification. Real-provider acceptance is not
