@@ -1,5 +1,34 @@
 # Agent runtime: limits, memory, tools and debugging
 
+## Visual workflow builder
+
+A workflow definition is a list of steps: each has an id, a type (`agent`, `human_in_loop`,
+`condition`, `wait`, `notify`, `collaboration` and the others the engine runs), what it depends
+on (`depends_on`), and, by type, an agent and action, a condition with its `true_path` and
+`false_path` (rule-based conditions draw, but the engine does not branch on `rules` yet, so
+validation refuses them), a human checkpoint with who decides and its
+`decision_options`, and a failure directive (`on_failure`: `halt`, `continue`, `retry(N)`,
+`retry(N) then continue`, or `fallback(step)`). The console's **Build visually** tab
+(`ui/src/components/WorkflowBuilder.tsx`) draws the definition as a graph, one node per step and
+one edge per dependency, condition path and fallback, each coloured and labelled by kind; a step
+is added from the palette, connected by dragging to the step that follows it, edited in the side
+panel, and removed with every reference cleared. **Validate** asks `POST /workflows/validate`,
+which names every problem in plain words (`core/workflows/graph.py`): an entry that is not a
+step with a text id (the runtime parser needs both), a dependency, path or fallback that points
+nowhere, a condition without an expression and paths, a condition with `rules`, a human
+checkpoint without decision options or without who decides, an agent step without its agent type, a failure directive outside
+the grammar, a cycle (a fallback counts as following its source). **Use these steps** carries the drawn steps into the form that names,
+schedules and creates the workflow; `GET /workflows/{id}/graph` draws a stored one, and the
+workflow page shows it. The tab and the workflow page graph appear only while
+`GET /workflows/builder` reports the flag below on; if the flag cannot be read they stay hidden.
+
+`fallback(step)` is new in the engine: a step that fails with it does not fail the run; the named
+step runs instead of what followed, and it is skipped (`fallback_not_needed`) when the step it
+falls back from succeeded. The engine orders the fallback after its source and gates it on that
+source whether or not the fallback also lists it in `depends_on`. With `AGENTICORG_WORKFLOW_BUILDER_V2_ENABLED` on, `POST /workflows`
+refuses a definition with problems (`422`, `workflow_definition`, the problems listed); off,
+creation accepts what it accepted before, and the validate and graph endpoints answer regardless.
+
 ## Execution limits and loop detection
 
 Every run is held to the platform's maxima: `AGENTICORG_MAX_AGENT_STEPS` graph steps (200 by

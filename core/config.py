@@ -344,6 +344,11 @@ class Settings(BaseSettings):
     # enforced in the graph and the runner. Off by default: off, the platform
     # maxima alone apply, as today.
     runtime_limits_enabled: bool = False
+    # Visual workflow builder (core/workflows/graph.py): POST /workflows refuses
+    # a definition with problems (missing paths, checkpoints without options,
+    # a failure directive outside the grammar). Off by default: off, creation
+    # accepts what it accepted before; validate and graph answer regardless.
+    workflow_builder_v2_enabled: bool = False
     # JSON object keyed provider/model with input and output USD per million
     # tokens; a negotiated rate replaces the list price.
     model_price_overrides_json: str = ""

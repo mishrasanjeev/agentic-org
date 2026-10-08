@@ -4,6 +4,21 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
 
 ## [Unreleased] - 2026-08-29
 
+### Added - Agent runtime: visual workflow builder with branching and fallback
+- The console's Build visually tab draws a workflow as a graph of steps,
+  dependencies, condition paths and fallbacks, adds and connects agent
+  steps, human checkpoints and conditions, and validates the definition
+  through `POST /workflows/validate`, which names every problem
+  (`core/workflows/graph.py`); `GET /workflows/{id}/graph` draws a stored
+  one. The engine gains `on_failure: fallback(step)`. With
+  `AGENTICORG_WORKFLOW_BUILDER_V2_ENABLED` on (off by default),
+  `POST /workflows` refuses a definition with problems.
+- The Build visually tab and the workflow page graph show only while
+  `GET /workflows/builder` reports the flag on. A fallback step runs only
+  when its source failed, with or without a declared dependency; validation
+  refuses entries without a text id and conditions with `rules`, which the
+  engine does not branch on yet.
+
 ### Added - Agent runtime: execution limits and loop detection
 - With `AGENTICORG_RUNTIME_LIMITS_ENABLED` on (off by default), an agent's
   own limits (`PUT /agents/{id}/limits`: model steps, duration, tool calls,
