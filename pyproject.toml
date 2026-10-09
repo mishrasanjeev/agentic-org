@@ -112,7 +112,7 @@ dependencies = [
     # of these versions and refuses to start the Postgres store with any other.
     "langgraph-checkpoint-postgres==3.1.2",
     "langgraph-checkpoint==4.2.0",
-    "grantex>=0.7.1",
+    "grantex>=0.7.2",
     "langsmith>=0.14.1",
     "pypdf>=6.19.0",
     # Canonical document extraction. The production image below ships the
