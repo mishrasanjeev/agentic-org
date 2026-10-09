@@ -52,6 +52,12 @@ priority then age. A caller sees the kinds a held workbench shows; `kind` narrow
 `GET /workbench/queue/{kind}/{id}` returns the item in full with the fields a reviewer may edit
 before deciding.
 
+Queue visibility does not grant write authority. Every actionable queue kind
+requires `approvals:write` (or its dot alias), or the administrator scope,
+before any edit is applied. Draft decisions also require administrator scope;
+finding dispositions require a signed-in human. Read-only auditors can inspect
+findings but cannot confirm or dismiss them through the queue.
+
 `POST /workbench/queue/{kind}/{id}/decide` takes the decision, notes and a list of edits, applies
 the edits first and then decides through the store that owns the item, so that store's rules apply
 unchanged: a draft's title and text fields are edited with the originals kept (`content_drafts.edits`)

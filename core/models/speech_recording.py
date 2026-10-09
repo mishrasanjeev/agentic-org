@@ -28,6 +28,7 @@ class SpeechRecording(BaseModel):
     filename: Mapped[str] = mapped_column(String(255), nullable=False, default="")
     mime_type: Mapped[str] = mapped_column(String(100), nullable=False, default="audio/wav")
     size_bytes: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    # UTF-8 tenant-encrypted envelope bytes, never a plaintext recording.
     content: Mapped[bytes] = mapped_column(LargeBinary, nullable=False)
     duration_seconds: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
     sample_rate: Mapped[int] = mapped_column(Integer, nullable=False, default=0)

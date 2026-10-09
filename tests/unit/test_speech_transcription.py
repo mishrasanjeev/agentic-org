@@ -14,7 +14,7 @@ import pytest
 from fastapi import HTTPException
 
 from core.config import settings
-from core.speech import audio, segments, store, transcribe
+from core.speech import audio, audio_crypto, segments, store, transcribe
 from core.speech.audio import SpeechError
 
 TENANT = uuid.uuid4()
@@ -299,6 +299,7 @@ def _use(monkeypatch, session):
     monkeypatch.setattr(core.database, "get_tenant_session", lambda tenant_id: session)
     monkeypatch.setattr(store, "encrypt_for_tenant", AsyncMock(side_effect=lambda text, tenant: "enc:" + text))
     monkeypatch.setattr(store, "decrypt_for_tenant", lambda text: text[4:])
+    monkeypatch.setattr(audio_crypto, "resolve_tenant_kek", AsyncMock(return_value=""))
 
 
 class TestStore:
@@ -324,7 +325,8 @@ class TestStore:
         )
         assert kept["speakers"]["agent"]["turns"] == 2 and kept["channel_roles"] == ["agent", "customer"]
         row = session.rows[0]
-        assert row.transcript_encrypted == {} and row.content == stereo_call()
+        assert row.transcript_encrypted == {} and row.content != stereo_call()
+        assert not row.content.startswith(b"RIFF")
         attached = await store.attach_transcript(
             TENANT, row.id, [{"text": "Hello", "start": 0.3, "end": 0.6}, {"text": "Hi", "start": 1.5, "end": 1.7}]
         )

@@ -21,6 +21,7 @@ from typing import Any
 
 import structlog
 from sqlalchemy import select
+from sqlalchemy.dialects.postgresql import insert
 
 from core.config import settings
 
@@ -176,28 +177,25 @@ async def ingest(tenant_id: uuid.UUID, raw_records: list[Any], *, source: str | 
     if source:
         for item in checked:
             item["source"] = source[:64]
-    refs = [item["record_ref"] for item in checked]
+    by_ref: dict[str, dict[str, Any]] = {}
+    for item in checked:
+        by_ref.setdefault(item["record_ref"], item)
     async with get_tenant_session(tenant_id) as session:
-        existing = set(
+        inserted_refs = set(
             (
                 await session.execute(
-                    select(TxnRecord.record_ref).where(TxnRecord.tenant_id == tenant_id, TxnRecord.record_ref.in_(refs))
+                    insert(TxnRecord)
+                    # A consistent conflict-lock order also protects overlapping batches.
+                    .values([dict(tenant_id=tenant_id, **by_ref[ref]) for ref in sorted(by_ref)])
+                    .on_conflict_do_nothing(index_elements=[TxnRecord.tenant_id, TxnRecord.record_ref])
+                    .returning(TxnRecord.record_ref)
                 )
             )
             .scalars()
             .all()
         )
-        kept = 0
-        seen: set[str] = set()
-        kept_items: list[dict[str, Any]] = []
-        for item in checked:
-            if item["record_ref"] in existing or item["record_ref"] in seen:
-                continue
-            seen.add(item["record_ref"])
-            session.add(TxnRecord(tenant_id=tenant_id, **item))
-            kept_items.append(item)
-            kept += 1
-        await session.flush()
+    kept_items = [item for ref, item in by_ref.items() if ref in inserted_refs]
+    kept = len(kept_items)
     if kept_items:
         # Provenance (core/lineage): each kept record acquired from its own source; never fails the ingestion.
         from core.lineage import provenance

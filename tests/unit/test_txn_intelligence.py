@@ -10,6 +10,7 @@ from unittest.mock import AsyncMock
 
 import pytest
 from fastapi import HTTPException
+from sqlalchemy.sql.dml import Insert
 
 from core.config import settings
 from core.txn import aggregate, detectors, findings, records
@@ -287,6 +288,31 @@ class _Session:
     async def execute(self, statement):
         text = str(statement)
         self.statements.append(text)
+        if isinstance(statement, Insert):
+            from core.models.txn_finding import TxnFinding
+            from core.models.txn_record import TxnRecord
+
+            model, key = (
+                (TxnRecord, "record_ref") if statement.table.name == "txn_records" else (TxnFinding, "fingerprint")
+            )
+            params = statement.compile().params
+            inserted = []
+            index = 0
+            while f"{key}_m{index}" in params:
+                values = {
+                    column.name: params[f"{column.name}_m{index}"]
+                    for column in model.__table__.columns
+                    if f"{column.name}_m{index}" in params
+                }
+                if not any(
+                    row.tenant_id == values["tenant_id"] and getattr(row, key) == values[key]
+                    for row in self.rows
+                    if row.__tablename__ == model.__tablename__
+                ):
+                    self.add(model(**values))
+                    inserted.append(values[key])
+                index += 1
+            return _Result(inserted)
         table = statement.get_final_froms()[0].name
         if text.startswith("SELECT txn_records.record_ref") or text.startswith("SELECT txn_findings.fingerprint"):
             attr = "record_ref" if "record_ref" in text[:40] else "fingerprint"
@@ -334,6 +360,59 @@ class TestStore:
         assert "txn_records.counterparty_name =" in session.statements[-1]  # a counterparty known only by name
 
     @pytest.mark.asyncio
+    async def test_ingest_counts_and_provenance_follow_inserted_refs_not_attempted_rows(self, monkeypatch):
+        from core.lineage import provenance
+
+        session = _Session()
+        session.execute = AsyncMock(return_value=_Result(["new"]))
+        _use(monkeypatch, session)
+        noted = AsyncMock()
+        monkeypatch.setattr(provenance, "on_records", noted)
+        existing = dict(STRUCTURED[0], record_ref="already-kept")
+        fresh = dict(STRUCTURED[0], record_ref="new", source="statement:synthetic")
+        duplicate = dict(fresh, amount=1, source="not-kept")
+        out = await records.ingest(TENANT, [existing, fresh, duplicate])
+        assert out == {"received": 3, "kept": 1, "skipped": 2, "accounts": ["A1"]}
+        session.execute.assert_awaited_once()
+        statement = session.execute.call_args.args[0]
+        assert "ON CONFLICT (tenant_id, record_ref) DO NOTHING RETURNING txn_records.record_ref" in str(statement)
+        params = statement.compile().params
+        assert params["tenant_id_m0"] == params["tenant_id_m1"] == TENANT
+        assert params["record_ref_m0"] == "already-kept" and params["record_ref_m1"] == "new"
+        assert params["amount_m1"] == fresh["amount"]
+        noted.assert_awaited_once_with(TENANT, source="statement:synthetic", records=[records.check_record(fresh)])
+
+    @pytest.mark.asyncio
+    async def test_invalid_duplicate_is_validated_before_opening_a_session(self, monkeypatch):
+        import core.database
+        from core.lineage import provenance
+
+        opened = AsyncMock()
+        noted = AsyncMock()
+        monkeypatch.setattr(core.database, "get_tenant_session", opened)
+        monkeypatch.setattr(provenance, "on_records", noted)
+        with pytest.raises(TxnError) as refused:
+            await records.ingest(TENANT, [STRUCTURED[0], dict(STRUCTURED[0], amount=-1)])
+        assert refused.value.status == 422 and refused.value.code == "record_invalid"
+        opened.assert_not_called()
+        noted.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_no_provenance_is_recorded_when_commit_fails(self, monkeypatch):
+        from core.lineage import provenance
+
+        class FailedCommitSession(_Session):
+            async def __aexit__(self, *args):
+                raise RuntimeError("synthetic commit failure")
+
+        _use(monkeypatch, FailedCommitSession())
+        noted = AsyncMock()
+        monkeypatch.setattr(provenance, "on_records", noted)
+        with pytest.raises(RuntimeError, match="synthetic commit failure"):
+            await records.ingest(TENANT, STRUCTURED)
+        noted.assert_not_awaited()
+
+    @pytest.mark.asyncio
     async def test_detect_keeps_new_findings_once_and_a_person_dispositions_them(self, monkeypatch):
         session = _Session()
         _use(monkeypatch, session)
@@ -369,6 +448,29 @@ class TestStore:
         with pytest.raises(TxnError) as info:
             await findings.disposition(TENANT, uuid.uuid4(), outcome="confirm", notes="", user_id="u1")
         assert info.value.status == 404
+
+    @pytest.mark.asyncio
+    async def test_detect_reports_only_findings_actually_inserted_and_keeps_first_duplicate(self, monkeypatch):
+        detected = detectors.run_all(STRUCTURED + PASSTHROUGH, detectors.Thresholds())
+        duplicate = dict(detected[1], summary="Ignored duplicate")
+        session = _Session()
+        session.execute = AsyncMock(return_value=_Result([detected[1]["fingerprint"]]))
+        _use(monkeypatch, session)
+        monkeypatch.setattr(records, "list_records", AsyncMock(return_value=STRUCTURED + PASSTHROUGH))
+        monkeypatch.setattr(findings, "thresholds_for", AsyncMock(return_value=detectors.Thresholds()))
+        monkeypatch.setattr(detectors, "run_all", lambda *args, **kwargs: [*detected, duplicate])
+        out = await findings.detect(TENANT)
+        assert out["new"] == 1 and out["known"] == 2 and out["findings"] == [detected[1]]
+        session.execute.assert_awaited_once()
+        statement = session.execute.call_args.args[0]
+        assert "ON CONFLICT (tenant_id, fingerprint) DO NOTHING RETURNING txn_findings.fingerprint" in str(statement)
+        params = statement.compile().params
+        expected = sorted(detected, key=lambda item: item["fingerprint"])
+        for index, item in enumerate(expected):
+            assert params[f"tenant_id_m{index}"] == TENANT
+            assert params[f"fingerprint_m{index}"] == item["fingerprint"]
+            assert params[f"summary_m{index}"] == item["summary"]
+        assert "fingerprint_m2" not in params
 
     @pytest.mark.asyncio
     async def test_thresholds_come_from_the_console_with_defaults(self, monkeypatch):

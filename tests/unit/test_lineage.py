@@ -485,7 +485,8 @@ class TestHooks:
                 self.rows = []
 
             async def execute(self, statement):
-                return _Result([])
+                params = statement.compile().params
+                return _Result([value for key, value in params.items() if key.startswith("record_ref_m")])
 
             def add(self, row):
                 self.rows.append(row)

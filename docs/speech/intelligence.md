@@ -2,7 +2,7 @@
 
 With `AGENTICORG_SPEECH_INTELLIGENCE_ENABLED` on, `POST /speech/recordings` takes a call recording,
 finds who spoke when, transcribes it where an engine is available and keeps it with the transcript
-encrypted (`core/speech/`). Off, `GET /speech/status` answers `enabled: false` and the rest is not
+and audio encrypted (`core/speech/`). Off, `GET /speech/status` answers `enabled: false` and the rest is not
 found.
 
 ## Recordings
@@ -10,8 +10,9 @@ found.
 `core/speech/audio.py` reads PCM WAV (8 to 32-bit, one or two channels) through the standard
 library, so a deployment needs no media binaries; a compressed recording is refused with a clear
 message and is converted to WAV at the edge. A file is at most 50 MB and two hours. The audio is
-kept as uploaded (`speech_recordings.content`) so the later parts (summaries, agent assist,
-redaction) work from the same bytes; the redaction part rewrites it.
+kept in a tenant-bound encrypted envelope in the existing BYTEA column
+(`speech_recordings.content`). Authorized playback recovers the uploaded bytes;
+redaction replaces the envelope with encrypted, silenced audio.
 
 ## Who spoke when
 
@@ -45,7 +46,9 @@ services' checked JSON call (schema, one retry); the extractive path needs no mo
 from the banking intent catalogue over the customer's turns, the key points as the most informative
 turns, the next actions as the turns that commit to something, the outcome from the closing turns.
 `method=auto` takes the model and falls back to the words, saying so; `model` and `extractive` insist.
-The summary is kept encrypted like the transcript.
+The summary is kept encrypted like the transcript. If the transcript changes while
+a summary is being computed, the write returns `409 transcript_conflict`; it cannot
+restore a summary derived from words a concurrent redaction removed.
 
 ## Analytics
 
@@ -106,13 +109,18 @@ session masks each turn the same way before keeping it.
 
 ## Storage
 
-`speech_recordings` keeps the audio, the segments and speakers in clear (they hold no words), and
-the transcript under the tenant's key as the voice runtime keeps call transcripts
+`speech_recordings` keeps audio and transcripts under the tenant's key. Only segments
+and speakers are in clear (they hold no words). Transcripts use the same envelope as voice call transcripts
 (`{"_encrypted": ...}`, `core/crypto/tenant_secrets.py`), so a database read never yields speech in
 clear. Tenant scoped under a forced row-level policy. `GET /speech/recordings` lists without
 transcripts; `GET /speech/recordings/{id}` returns the segments, speakers and transcript;
 `GET /speech/recordings/{id}/audio` returns the audio as kept. The speech routes map onto enforced
 RBAC scopes (`api/route_enforcement.py`): a read needs `audit:read`, a write `approvals:write`;
 administrators pass. An upload is read one byte past the limit at most and refused beyond it; the
-decoding, the signal work and local inference run in worker threads so the event loop keeps
-serving; a transcript is encrypted before the row is locked.
+decoding, signal work, audio encryption/decryption and local inference run in worker
+threads so the event loop keeps serving. Supplied-transcript redaction performs
+its audio work before taking the write lock and refuses a changed source rather
+than restoring old audio. Legacy plaintext audio is not accepted as an encryption
+fallback: existing deployments with such rows must complete an approved encrypted
+backfill before enabling playback. There is no new column or automatic raw-audio
+backfill in this release. The normal migration-first rollout remains required.

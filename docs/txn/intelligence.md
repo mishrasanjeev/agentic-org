@@ -10,7 +10,9 @@ A record is one movement on one account: a reference that makes it idempotent (o
 none is given), the account, the customer where known, the counterparty, the direction and amount,
 the channel (cash, transfer, upi, cheque, card, atm, other; read from the description when not
 named), the branch, when it was booked and a description. `POST /txn/records` takes a batch of up
-to 500; a record already kept under its reference is skipped. `POST /txn/import/document/{id}`
+to 500; a record already kept under its reference is skipped. Concurrent imports
+are resolved atomically on the tenant/reference constraint: only inserted rows
+count as kept and produce provenance. `POST /txn/import/document/{id}`
 books the line items of a bank statement kept by document processing as records on the
 statement's account, with the statement's checks beside each (`core/txn/records.py`,
 `txn_records`, tenant scoped under a forced row-level policy with a leading index on every lookup).
@@ -69,7 +71,9 @@ same sections from the facts, so a draft exists without a model; `auto` takes th
 back to the facts, saying so. The draft is kept on the finding, which stays open in the investigator
 queue for a person to review; nothing is filed. In the queue a finding is listed only for the
 roles the Transactions tab admits (admin, COO, auditor, CFO), whatever another workbench opens;
-it is decided by a signed-in person, and rejecting it needs a reason in the notes. `GET /txn/findings/{id}/evidence?format=json|csv`
+it is decided by a signed-in person with `approvals:write` or administrator
+authority, and rejecting it needs a reason in the notes. Read-only auditors
+cannot use the queue to bypass this write check. `GET /txn/findings/{id}/evidence?format=json|csv`
 is the evidence package: the finding with its narrative, the supporting rows, the entity view, the
 fund-flow graph and rows, exported with a digest over the whole so a reviewer can tell it was not
 altered; the digest is recorded on the finding. Open findings appear in the workbench review queue as
@@ -80,7 +84,9 @@ reason, and escalation is taken on the Transactions page with the case reference
 
 `POST /txn/detect` runs the detectors over the recent records (one account or all, `since_days`)
 and keeps every new finding under its fingerprint (kind, entity, the rows behind it), so running
-again never raises the same one twice (`core/txn/findings.py`, `txn_findings`). A finding stays
+again never raises the same one twice (`core/txn/findings.py`, `txn_findings`).
+Concurrent detector runs use atomic tenant/fingerprint inserts in bounded
+batches; replays never overwrite an existing disposition or narrative. A finding stays
 open until a person dispositions it through `POST /txn/findings/{id}/disposition`: dismissed with a
 reason, confirmed, or escalated with the reference of the governed case opened for it; the detectors
 file and close nothing. `GET /txn/findings` lists by status, kind or entity;

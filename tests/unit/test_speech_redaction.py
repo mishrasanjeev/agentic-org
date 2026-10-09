@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import base64
 import io
 import json
 import uuid
@@ -14,7 +15,8 @@ import pytest
 from fastapi import HTTPException
 
 from core.config import settings
-from core.speech import assist, audio, redaction, store, transcribe
+from core.crypto.tenant_secrets import encrypt_with_kek
+from core.speech import assist, audio, audio_crypto, redaction, store, transcribe
 from core.speech.audio import SpeechError
 from core.workbench import console
 
@@ -218,6 +220,7 @@ def _use(monkeypatch, session, *, auto=False):
     monkeypatch.setattr(core.database, "get_tenant_session", lambda tenant_id: session)
     monkeypatch.setattr(store, "encrypt_for_tenant", AsyncMock(side_effect=lambda text, tenant: "enc:" + text))
     monkeypatch.setattr(store, "decrypt_for_tenant", lambda text: text[4:])
+    monkeypatch.setattr(audio_crypto, "resolve_tenant_kek", AsyncMock(return_value=""))
     values = {"speech.redaction_kinds": list(redaction.KINDS), "speech.redact_on_transcription": auto}
     monkeypatch.setattr(console, "value", AsyncMock(side_effect=lambda tenant, key: values[key]))
 
@@ -253,6 +256,9 @@ def _row(**kw):
         "redacted_at": None,
     }
     base.update(kw)
+    base["content"] = encrypt_with_kek(
+        json.dumps({"tenant_id": str(TENANT), "data": base64.b64encode(base["content"]).decode("ascii")}), ""
+    ).encode("utf-8")
     row = SpeechRecording(**base)
     row.id = uuid.uuid4()
     return row
@@ -272,9 +278,10 @@ class TestStore:
         assert done["changed"] is True and row.redactions[0]["kind"] == "card" and row.redacted_at is not None
         assert row.summary_encrypted == {} and "4111" not in row.transcript_encrypted["_encrypted"]
         assert "[CARD ****1111]" in row.transcript_encrypted["_encrypted"]
-        silenced = audio.decode_wav(bytes(row.content))
+        played, _ = await store.audio_of(TENANT, row.id)
+        silenced = audio.decode_wav(played)
         assert silenced.channels[0][int(1.5 * RATE)] == 0.0 and silenced.channels[0][int(0.3 * RATE)] > 0.4
-        assert row.size_bytes == len(row.content)
+        assert row.size_bytes == len(played) and row.content != played
         detail = await store.get_recording(TENANT, row.id)
         assert (
             detail["redactions"][0]["kind"] == "card"
@@ -339,7 +346,7 @@ class TestStore:
             and row.redactions[0]["kind"] == "card"
             and "4111" not in row.transcript_encrypted["_encrypted"]
         )
-        assert audio.decode_wav(bytes(row.content)).channels[0][int(1.5 * RATE)] == 0.0
+        assert audio.decode_wav((await store.audio_of(TENANT, row.id))[0]).channels[0][int(1.5 * RATE)] == 0.0
         plain = _row(transcript_encrypted={}, status="received", content=_wav())
         session.rows = [plain]
         attached = await store.attach_transcript(TENANT, plain.id, [dict(w, speaker=None) for w in TRANSCRIPT_WORDS])
@@ -347,7 +354,7 @@ class TestStore:
             attached["redactions"][0]["kind"] == "card"
             and "[CARD ****1111]" in plain.transcript_encrypted["_encrypted"]
         )
-        assert audio.decode_wav(bytes(plain.content)).channels[0][int(1.5 * RATE)] == 0.0
+        assert audio.decode_wav((await store.audio_of(TENANT, plain.id))[0]).channels[0][int(1.5 * RATE)] == 0.0
         _use(monkeypatch, session, auto=False)
         untouched = _row(transcript_encrypted={}, status="received", content=_wav())
         session.rows = [untouched]

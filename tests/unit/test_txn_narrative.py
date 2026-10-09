@@ -354,8 +354,29 @@ class TestQueue:
         monkeypatch.setattr(assignments, "assigned_to", AsyncMock(return_value=set()))
         monkeypatch.setattr(queue, "apply_edits", AsyncMock(return_value=None))
         monkeypatch.setattr(findings, "disposition", AsyncMock(return_value={"id": str(row.id), "status": "dismissed"}))
+        auditor = SimpleNamespace(
+            state=SimpleNamespace(claims={"agenticorg:user_id": "u1", "role": "auditor"}, scopes=["audit:read"])
+        )
+        for decision in ("approve", "reject"):
+            with pytest.raises(HTTPException) as refused:
+                await api.decide(
+                    "finding",
+                    str(row.id),
+                    api.DecisionIn(decision=decision, edits=[api.EditIn(name="title", value="Not authorized")]),
+                    SimpleNamespace(),
+                    auditor,
+                    role="auditor",
+                    tenant_id=str(TENANT),
+                    user_claims={},
+                    user_domains=None,
+                )
+            assert refused.value.status_code == 403
+            assert "approvals:write" in refused.value.detail["message"]
+            queue.apply_edits.assert_not_awaited()
+            findings.disposition.assert_not_awaited()
+
         request = SimpleNamespace(
-            state=SimpleNamespace(claims={"agenticorg:user_id": "u1", "role": "auditor"}, scopes=[])
+            state=SimpleNamespace(claims={"agenticorg:user_id": "u1", "role": "cfo"}, scopes=["approvals:write"])
         )
         out = await api.decide(
             "finding",
@@ -363,7 +384,7 @@ class TestQueue:
             api.DecisionIn(decision="reject", notes="a known payroll run"),
             SimpleNamespace(),
             request,
-            role="auditor",
+            role="cfo",
             tenant_id=str(TENANT),
             user_claims={},
             user_domains=None,
@@ -376,15 +397,21 @@ class TestQueue:
             api.DecisionIn(decision="approve"),
             SimpleNamespace(),
             request,
-            role="auditor",
+            role="cfo",
             tenant_id=str(TENANT),
             user_claims={},
             user_domains=None,
         )
         assert findings.disposition.call_args.kwargs["outcome"] == "confirm"
+        queue.apply_edits.reset_mock()
+        findings.disposition.reset_mock()
         for state in (
-            SimpleNamespace(claims={"role": "auditor"}, scopes=[]),  # no signed-in person
-            SimpleNamespace(claims={"agenticorg:user_id": "u1", "sub": "apikey:k1"}, scopes=[], auth_mode="api_key"),
+            SimpleNamespace(claims={"role": "cfo"}, scopes=["approvals:write"]),  # no signed-in person
+            SimpleNamespace(
+                claims={"agenticorg:user_id": "u1", "sub": "apikey:k1", "role": "cfo"},
+                scopes=["approvals:write"],
+                auth_mode="api_key",
+            ),
         ):
             with pytest.raises(HTTPException) as refused:
                 await api.decide(
@@ -393,12 +420,14 @@ class TestQueue:
                     api.DecisionIn(decision="approve"),
                     SimpleNamespace(),
                     SimpleNamespace(state=state),
-                    role="auditor",
+                    role="cfo",
                     tenant_id=str(TENANT),
                     user_claims={},
                     user_domains=None,
                 )
             assert refused.value.status_code == 403 and refused.value.detail["error"] == "human_required"
+            queue.apply_edits.assert_not_awaited()
+            findings.disposition.assert_not_awaited()
         monkeypatch.setattr(findings, "disposition", AsyncMock(side_effect=TxnError(409, "decided", "no")))
         with pytest.raises(HTTPException) as info:
             await api.decide(
@@ -407,7 +436,7 @@ class TestQueue:
                 api.DecisionIn(decision="approve"),
                 SimpleNamespace(),
                 request,
-                role="auditor",
+                role="cfo",
                 tenant_id=str(TENANT),
                 user_claims={},
                 user_domains=None,

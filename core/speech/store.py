@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
-"""Kept recordings: the audio, its segments and speakers, and the transcript encrypted at rest.
+"""Kept recordings: tenant-encrypted audio and transcript with segments and speakers.
 
-A recording row keeps the WAV, what the diariser found (segments and
+A recording row keeps an encrypted WAV, what the diariser found (segments and
 speakers, plain, as they hold no words) and the transcript under the
 tenant's key as the voice runtime keeps call transcripts
 (``{"_encrypted": ...}``), so a database read never yields speech in
@@ -27,6 +27,7 @@ from core.speech import segments as diarisation
 from core.speech import summary as summaries
 from core.speech import transcribe as engines
 from core.speech.audio import Recording, SpeechError, encode_wav, load
+from core.speech.audio_crypto import decrypt_audio, encrypt_audio
 
 logger = structlog.get_logger()
 
@@ -129,7 +130,7 @@ async def save(
         filename=(filename or "recording.wav")[:255],
         mime_type=(mime_type or "audio/wav")[:100],
         size_bytes=len(data),
-        content=data,
+        content=b"",
         duration_seconds=round(recording.duration, 3),
         sample_rate=recording.sample_rate,
         channels=len(recording.channels),
@@ -150,8 +151,7 @@ async def save(
             transcript = engines.transcript_of(words, found)
             transcript, spans, recording = await _auto_redact(tenant_id, transcript, recording)
             if spans:
-                data = encode_wav(recording)
-                row.content = data
+                data = await asyncio.to_thread(encode_wav, recording)
                 row.size_bytes = len(data)
                 row.redactions = [span.to_dict() for span in spans]
                 row.redacted_at = datetime.now(UTC)
@@ -161,6 +161,7 @@ async def save(
             row.status = "failed"
             row.last_error = f"{exc.code}: {exc.message}"[:500]
             logger.warning("speech_transcription_failed", engine=engine, code=exc.code)
+    row.content = await encrypt_audio(tenant_id, data)
     async with get_tenant_session(tenant_id) as session:
         session.add(row)
         await session.flush()
@@ -217,6 +218,9 @@ async def attach_transcript(tenant_id: uuid.UUID, recording_id: uuid.UUID, raw_w
         if row is None:
             raise SpeechError(404, "not_found", "No such recording")
         kept_segments = list(row.segments or [])
+        content = bytes(row.content)
+        mime = row.mime_type
+        version = (dict(row.transcript_encrypted or {}), len(row.redactions or []))
     found = [
         diarisation.Segment(
             speaker=s["speaker"], start=float(s["start"]), end=float(s["end"]), channel=int(s.get("channel", 0))
@@ -228,16 +232,24 @@ async def attach_transcript(tenant_id: uuid.UUID, recording_id: uuid.UUID, raw_w
     if await _redact_on_transcription(tenant_id):
         transcript, spans = redaction.redact_transcript(transcript, kinds=await _redaction_kinds(tenant_id))
     envelope = await _encrypt(tenant_id, transcript)
+    encrypted_audio = None
+    if spans:
+        plain = await decrypt_audio(tenant_id, content)
+        data = await asyncio.to_thread(_redacted_audio, plain, mime, spans)
+        encrypted_audio = await encrypt_audio(tenant_id, data)
     async with get_tenant_session(tenant_id) as session:
         row = await _row(session, tenant_id, recording_id, lock=True)
         if row is None:
             raise SpeechError(404, "not_found", "No such recording")
+        if (
+            (dict(row.transcript_encrypted or {}), len(row.redactions or [])) != version
+            or bytes(row.content) != content
+        ):
+            raise SpeechError(409, "transcript_conflict", "The recording changed; attach the transcript again")
         row.transcript_encrypted = envelope
-        if spans:
+        if encrypted_audio is not None:
             # The words are cut from the audio too, so the recording and the transcript agree.
-            silenced = redaction.silence(load(bytes(row.content), row.mime_type), spans)
-            data = encode_wav(silenced)
-            row.content = data
+            row.content = encrypted_audio
             row.size_bytes = len(data)
             row.redactions = list(row.redactions or []) + [span.to_dict() for span in spans]
             row.redacted_at = datetime.now(UTC)
@@ -260,7 +272,8 @@ async def audio_of(tenant_id: uuid.UUID, recording_id: uuid.UUID) -> tuple[bytes
         row = await _row(session, tenant_id, recording_id)
         if row is None:
             raise SpeechError(404, "not_found", "No such recording")
-        return bytes(row.content), row.mime_type or "audio/wav"
+        content, mime = bytes(row.content), row.mime_type or "audio/wav"
+    return await decrypt_audio(tenant_id, content), mime
 
 
 def _roles(row: Any) -> tuple[str | None, str | None]:
@@ -293,6 +306,7 @@ async def summarise(
         if row is None:
             raise SpeechError(404, "not_found", "No such recording")
         transcript = transcript_of_row(row)
+        transcript_version = dict(row.transcript_encrypted or {})
         kept_segments = list(row.segments or [])
         duration = float(row.duration_seconds or 0.0)
         agent, customer = _roles(row)
@@ -314,6 +328,8 @@ async def summarise(
         row = await _row(session, tenant_id, recording_id, lock=True)
         if row is None:
             raise SpeechError(404, "not_found", "No such recording")
+        if dict(row.transcript_encrypted or {}) != transcript_version:
+            raise SpeechError(409, "transcript_conflict", "The transcript changed; summarise it again")
         row.summary_encrypted = envelope
         row.analytics = analytics
         row.updated_at = datetime.now(UTC)
@@ -389,6 +405,11 @@ async def _auto_redact(
     return cleaned, spans, await asyncio.to_thread(redaction.silence, recording, spans)
 
 
+def _redacted_audio(data: bytes, mime: str, spans: list[redaction.Span]) -> bytes:
+    """Run decoding, silencing and encoding together on a worker thread."""
+    return encode_wav(redaction.silence(load(data, mime), spans))
+
+
 async def redact(
     tenant_id: uuid.UUID,
     recording_id: uuid.UUID,
@@ -416,6 +437,7 @@ async def redact(
         content = bytes(row.content)
         mime = row.mime_type
         version = len(row.redactions or [])
+        transcript_version = dict(row.transcript_encrypted or {})
     if not transcript or not transcript.get("words"):
         raise SpeechError(409, "not_transcribed", "The recording has no transcript to redact from")
     if not wanted:
@@ -424,22 +446,28 @@ async def redact(
     report = {"id": str(recording_id), "kinds": list(wanted), "spans": [s.to_dict() for s in spans], "dry_run": dry_run}
     if dry_run or not spans:
         return {**report, "changed": False}
-    silenced = await asyncio.to_thread(redaction.silence, load(content, mime), spans)
-    data = await asyncio.to_thread(encode_wav, silenced)
+    plain = await decrypt_audio(tenant_id, content)
+    data = await asyncio.to_thread(_redacted_audio, plain, mime, spans)
+    encrypted_audio = await encrypt_audio(tenant_id, data)
     envelope = await _encrypt(tenant_id, cleaned)
     async with get_tenant_session(tenant_id) as session:
         row = await _row(session, tenant_id, recording_id, lock=True)
         if row is None:
             raise SpeechError(404, "not_found", "No such recording")
-        if len(row.redactions or []) != version:
+        if (
+            len(row.redactions or []) != version
+            or dict(row.transcript_encrypted or {}) != transcript_version
+            or bytes(row.content) != content
+        ):
             # Another redaction landed since this one read the audio: writing now would restore what it cut.
             raise SpeechError(
                 409, "redaction_conflict", "The recording was redacted meanwhile; run the redaction again"
             )
-        row.content = data
+        row.content = encrypted_audio
         row.size_bytes = len(data)
         row.transcript_encrypted = envelope
         row.summary_encrypted = {}
+        row.analytics = {}
         row.redactions = list(row.redactions or []) + [s.to_dict() for s in spans]
         row.redacted_at = datetime.now(UTC)
         row.updated_at = row.redacted_at

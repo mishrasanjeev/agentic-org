@@ -1,6 +1,6 @@
 # Security and Combined Release Validation
 
-Date: 2026-10-08. Local validation record, not production sign-off.
+Date: 2026-10-08; refreshed 2026-10-09. Local validation record, not production sign-off.
 Current candidate, CI and rollout status is tracked in
 [the combined release PR](https://github.com/mishrasanjeev/agentic-org/pull/1548).
 
@@ -26,6 +26,20 @@ be dismissed as a substitute for that scan.
 
 ## Combined-Branch Corrections
 
+- Fresh review reproduced five additional release findings. Queue decisions
+  now enforce the owning resource's write authority before edits, including
+  human-only disposition checks. Audio is encrypted before persistence, with
+  authenticated tenant binding and no raw-audio playback fallback. Summaries
+  compare their source transcript under the final write lock. Ingestion uses
+  an atomic conflict-aware insert and reports only the rows actually inserted.
+  Audio decode, silence and encode run off the event loop before write locks;
+  transcript and redaction writes refuse a concurrently changed source.
+  Redaction invalidates both the old summary and derived analytics. These
+  corrections require refreshed combined gates before release.
+- The sibling detector path reproduced the same concurrent uniqueness race.
+  Finding creation now uses bounded atomic inserts without overwriting prior
+  dispositions or narratives. Actual PostgreSQL tests cover concurrent calls,
+  overlapping batches, tenant isolation and the maximum 5,000-record window.
 - The standalone proprietary observability SDK bump is excluded under the
   repository's open-source-only dependency policy. Its existing baseline is
   retained; no hosted observability service or credentials are enabled.
@@ -86,6 +100,10 @@ be dismissed as a substitute for that scan.
 | Final security parser expansion | Focused conversation/security suites after suffix correction: 132 passed. Before that correction, refreshed security preflight passed: 12,215 backend tests, 18 skipped, 5 expected failures, 81.85% coverage |
 | Combined static checks | `make check RUNNER=local` passed inside the Docker test container |
 | Focused personalisation suite | 32 passed |
+| Queue authorization replay | 105 passed; read-only and machine callers refused before edits |
+| Speech storage and stale-source replay | 43 passed; encrypted playback, stale-summary refusal, off-thread processing and derived-analytics invalidation |
+| Audio crypto and key-maintenance replay | 147 passed, 5 existing expected failures; 132 additional sibling/startup tests passed. Actual PostgreSQL BYTEA rotation, tenant binding and key-retirement replay passed; KMS wrapping simulated locally |
+| Transaction ingestion and sibling detector replay | 63 passed, including actual PostgreSQL concurrency, tenant isolation, replay and maximum-size finding insertion |
 | PostgreSQL reporting and duplicate-rule regressions | 2 passed |
 | Encrypted-column and rotation regressions | 51 passed, 5 expected failures; dedicated PostgreSQL speech preservation replay passed |
 | Focused lineage UI suite | 8 passed |
