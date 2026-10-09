@@ -51,7 +51,7 @@ jsonschema==4.26.0
 cryptography>=50.0.2
 PyJWT[crypto]==2.15.1
 passlib[bcrypt]==1.7.4
-grantex==0.7.1
+grantex==0.7.2
 
 # ─── HTTP Client & DNS ───────────────────────────────────────────────────────
 httpx==0.28.1
