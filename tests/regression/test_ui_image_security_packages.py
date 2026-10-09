@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """Both nginx runtime stages must install the security-fixed libraries."""
 
 from pathlib import Path
