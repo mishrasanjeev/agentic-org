@@ -375,9 +375,10 @@ _REASON_WORDS = {
 
 # Do not retry inside a failed number, or backtrack over digits/whitespace in a user turn.
 _BARE_IN_TEXT_RE = re.compile(r"(?<![\w,./:-])(\d[\d,]*+(?:\.\d++)?+)(?:/-)?+(?![\w/:-]|\.\d)")
+# Both callers inspect 24 characters; bound every repeated prefix here too.
 _NOT_AMOUNT_BEFORE_RE = re.compile(
-    r"(ending(?: in| with)?|last four(?: digits)?|account|a/c|acct|card|no\.?|number|ref(?:erence)?|id|#|x+|\*+|"
-    r"last|past|previous|first)\s*$",
+    r"(ending(?: in| with)?|last four(?: digits)?|account|a/c|acct|card|no\.?|number|ref(?:erence)?|id|#|"
+    r"x{1,24}+|\*{1,24}+|last|past|previous|first)\s{0,24}+$",
     re.I,
 )
 

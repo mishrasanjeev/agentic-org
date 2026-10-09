@@ -21,6 +21,8 @@ import pytest
         "feedback.rating_from_text('4' + ' ' * 100_000 + '?')",
         "intents.extract_entities('reference' + ' ' * 100_000 + '!')",
         "intents.parse_amounts('9' * 100_000 + '/-x')",
+        "intents._NOT_AMOUNT_BEFORE_RE.search('x' * 100_000 + '!')",
+        "intents._NOT_AMOUNT_BEFORE_RE.search('*' * 100_000 + '!')",
     ],
 )
 def test_hostile_turn_completes_without_backtracking(expression: str) -> None:
@@ -77,5 +79,17 @@ def test_conventional_rupee_suffix_preserves_ambiguous_choices() -> None:
 def test_malformed_suffixes_are_not_salvaged(text: str) -> None:
     from core.conversation.intents import parse_amount, parse_amounts
 
+    assert parse_amount(text) is None
+    assert parse_amounts(text) == []
+
+
+@pytest.mark.parametrize(
+    "marker",
+    ["account", "A/C", "acct", "card", "no.", "number", "ref", "reference", "id", "#", "x" * 30, "*" * 30],
+)
+def test_bounded_non_amount_prefix_keeps_identifier_semantics(marker: str) -> None:
+    from core.conversation.intents import parse_amount, parse_amounts
+
+    text = f"{marker} 1234"
     assert parse_amount(text) is None
     assert parse_amounts(text) == []

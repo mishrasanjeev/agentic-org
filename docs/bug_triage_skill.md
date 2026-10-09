@@ -151,6 +151,7 @@ If the answer is "probably", the fix is a hypothesis. Tighten it until the answe
 - [ ] Sibling routes / pages audited.
 - [ ] At least one test replays the tester's steps.
 - [ ] PR body states "Fixed in commit X; deploy state: Y".
+- [ ] Security releases inspect open code-scanning and dependency alerts after the exact final-main analyses complete. A successful analysis job means the scan ran, not that findings are cleared. Reconcile new and retained findings before deployment; never dismiss alerts to substitute for a fix.
 - [ ] Summary xlsx uses honest verdicts with explicit residuals.
 - [ ] Migrations (if any) guard existence and are idempotent.
 - [ ] Reopens are verified against the production URL — not "reads correctly in main".
