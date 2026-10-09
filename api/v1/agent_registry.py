@@ -112,6 +112,8 @@ async def set_agent_card(
                     actor=_user_uuid_from_claims(user),
                     owner_user_id=getattr(agent, "owner_user_id", None),
                 )
+                # An active agent meets no promotion again: the new tier's controls are enforced now, before saving.
+                await risk_tiers.check_active_tier_change(session, tid, agent, entry, fields.get("risk_tier"))
             except risk_tiers.TierError as exc:
                 raise HTTPException(
                     exc.status, detail={"error": risk_tiers.TRIGGER, "code": exc.code, "message": exc.message}
@@ -144,15 +146,17 @@ async def transition_agent_lifecycle(
     and the same-person rule holds.
     """
     _require_enabled()
-    actor = _user_uuid_from_claims(user)
-    if actor is None:
+    effective = _effective_caller(caller, user_domains)
+    if not effective.is_human:
         raise HTTPException(403, "A lifecycle transition needs a signed-in user")
     tid = _uuid.UUID(tenant_id)
     async with get_tenant_session(tid) as session:
         agent = await _agent(session, tid, agent_id, lock=True)
-        require_agent_mutable(agent, _effective_caller(caller, user_domains))
+        require_agent_mutable(agent, effective)
         try:
-            entry, event = await lifecycle.transition(session, tid, agent, body.to, actor=actor, note=body.note)
+            entry, event = await lifecycle.transition(
+                session, tid, agent, body.to, actor=effective.user_id, note=body.note
+            )
         except lifecycle.RegistryError as exc:
             raise _refused(exc) from None
         return {"id": str(agent_id), "registry": lifecycle.entry_dict(entry), "event": lifecycle.event_dict(event)}
@@ -262,7 +266,8 @@ async def get_agent_reliability(
 @route_meta(
     auth_required=True,
     tenant_required=True,
-    scope="agents.read",
+    # The agent_ratings family maps this POST to agents:read (api/route_enforcement.py), so a viewer can rate.
+    scope="agent_ratings.write",
     rate_limit="standard",
     idempotency="idempotent-one-rating-per-user",
     audit_event="agents.rating.set",
@@ -277,7 +282,9 @@ async def rate_agent(
 ) -> dict:
     """Rate an agent 1 to 5 with a short comment; a new rating by the same person replaces the old.
 
-    Anyone who may see the agent may rate it; a request without a local user (an API key) cannot.
+    Anyone who may see the agent may rate it: the route needs the agents:read scope only (the
+    ``agent_ratings`` scope family), and the agent must be visible to the caller. A request without
+    a local user (an API key) cannot rate.
     """
     _require_enabled()
     user_id = _user_uuid_from_claims(user)
@@ -326,19 +333,19 @@ async def list_agent_registry(
     tid = _uuid.UUID(tenant_id)
     effective = _effective_caller(caller, user_domains)
     async with get_tenant_session(tid) as session:
-        entries = await lifecycle.list_entries(
-            session, tid, state=state, risk_tier=risk_tier, use_case=use_case, channel=channel
+        entries = await lifecycle.list_catalogue(
+            session,
+            tid,
+            state=state,
+            risk_tier=risk_tier,
+            use_case=use_case,
+            channel=channel,
+            domain=domain,
+            q=q,
+            caller=effective,
         )
-        ids = [entry.agent_id for entry in entries]
-        agents = {}
-        if ids:
-            rows = (
-                (await session.execute(select(Agent).where(Agent.id.in_(ids), Agent.tenant_id == tid))).scalars().all()
-            )
-            agents = {agent.id: agent for agent in rows}
         listed = []
-        for entry in entries:
-            agent = agents.get(entry.agent_id)
+        for agent, entry in entries:
             if agent is None or not can_view_agent(agent, effective):
                 continue
             if domain and agent.domain != domain:

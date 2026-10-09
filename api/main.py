@@ -72,6 +72,7 @@ from api.v1 import (
     invoices,
     knowledge,
     kpis,
+    lineage,
     mcp,
     memory,
     model_gateway,
@@ -79,6 +80,7 @@ from api.v1 import (
     observability,
     operator_overrides,
     packs,
+    personalisation,
     product_facts,
     professional_tax,
     prompt_templates,
@@ -91,15 +93,20 @@ from api.v1 import (
     sales,
     schemas,
     sop,
+    speech,
+    speech_assist,
     sso,
     tenant_ai_credentials,
     tenant_ai_settings,
     tool_registry,
+    txn,
     voice,
     voice_runtime,
     webhooks,
     workbench,
+    workbench_console,
     workbench_queue,
+    workbench_search,
     workflow_variants,
     workflows,
 )
@@ -323,6 +330,13 @@ app.include_router(idp_analysis.router, prefix="/api/v1")
 app.include_router(idp_statements.router, prefix="/api/v1")
 app.include_router(workbench.router, prefix="/api/v1")
 app.include_router(workbench_queue.router, prefix="/api/v1")
+app.include_router(workbench_console.router, prefix="/api/v1")
+app.include_router(workbench_search.router, prefix="/api/v1")
+app.include_router(speech.router, prefix="/api/v1")
+app.include_router(speech_assist.router, prefix="/api/v1")
+app.include_router(txn.router, prefix="/api/v1")
+app.include_router(lineage.router, prefix="/api/v1")
+app.include_router(personalisation.router, prefix="/api/v1")
 app.include_router(companies.router, prefix="/api/v1", tags=["Companies"])
 app.include_router(ca_operations.router, prefix="/api/v1", tags=["CA Operations"])
 app.include_router(

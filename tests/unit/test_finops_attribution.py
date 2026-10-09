@@ -149,7 +149,9 @@ async def test_summary_folds_by_a_dimension_with_totals_and_the_unattributed_sha
     assert folded["totals"] == {"tokens": 1200, "cost_usd": 0.75, "calls": 14, "unattributed_share": 0.3333}
     assert folded["days"] == 7 and folded["group_by"] == "use_case"
     sql, params = session.calls[0]
-    assert sql.startswith("SELECT use_case, SUM(tokens)") and "GROUP BY use_case" in sql and params["tid"] == str(tid)
+    assert sql.startswith("SELECT finops_cost_ledger.use_case, sum(finops_cost_ledger.tokens)")
+    assert "GROUP BY finops_cost_ledger.use_case" in sql and params["tid"] == tid
+    assert "finops_cost_ledger.tenant_id = :tid" in sql and "LIMIT :limit" in sql
     with pytest.raises(ValueError):
         await attribution.summary(_Session(), tid, group_by="name; DROP TABLE")
     empty = await attribution.summary(

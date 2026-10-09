@@ -239,6 +239,26 @@ def test_ci_fails_rather_than_skips_when_the_governed_case_prerequisites_do_not_
     assert "throw new Error(" in body.group(1), "a required but missing prerequisite must throw, not skip"
 
 
+def test_catalogue_and_connector_replays_use_the_password_generated_by_ci() -> None:
+    compose = yaml.safe_load(COMPOSE.read_text(encoding="utf-8"))
+    runner = compose["services"]["e2e"]["environment"]
+    assert runner["AGENTICORG_SEED_PASSWORD"] == "${AGENTICORG_SEED_PASSWORD:-}"
+    assert runner["AGENTICORG_E2E_NATIVE_CONNECTOR_PREFILL_ENABLED"] == (
+        "${AGENTICORG_DEV_NATIVE_CONNECTOR_PREFILL_ENABLED:-false}"
+    )
+    job = _workflow()["jobs"]["dev-and-test"]
+    assert str(job["env"]["AGENTICORG_DEV_NATIVE_CONNECTOR_PREFILL_ENABLED"]).lower() == "true"
+    assert "-e AGENTICORG_SEED_PASSWORD" in _e2e_recipe()
+    browser = (REPO / "ui" / "e2e" / "dev-stack.spec.ts").read_text(encoding="utf-8")
+    assert "AGENTICORG_DEV_SEED_PASSWORD" not in browser
+    assert browser.count("const password = process.env.AGENTICORG_SEED_PASSWORD;") == 2
+    assert browser.count('expect(password, "Local seed password is required").toBeTruthy();') == 2
+    native = browser.split('test("native connector registration respects rollout and persists registry identity"', 1)[1]
+    assert "test.skip(" not in native, "missing seed credentials must fail instead of skipping registration"
+    assert 'process.env.AGENTICORG_E2E_NATIVE_CONNECTOR_PREFILL_ENABLED !== "true"' in native
+    assert 'toHaveValue("custom")' in native
+
+
 def test_the_dev_postgres_healthcheck_waits_for_the_tcp_listener() -> None:
     """On a fresh volume the image's init-time server listens on the Unix socket only, so a socket
     ``pg_isready`` reports healthy before grantex-db and migrate can connect over TCP."""

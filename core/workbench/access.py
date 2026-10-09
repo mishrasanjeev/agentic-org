@@ -15,6 +15,7 @@ from typing import Any
 
 import structlog
 from sqlalchemy import false, func, select
+from sqlalchemy.exc import SQLAlchemyError
 
 from core.config import settings
 from core.workbench.definitions import ADMIN, WORKBENCHES, Tab, Workbench
@@ -135,7 +136,7 @@ async def counts(tenant_id: uuid.UUID, sources: set[str], *, caller: Any = None)
                     ConversationSession.tenant_id == tenant_id,
                     ConversationSession.status.in_(("active", "escalated")),
                 )
-    except (RuntimeError, OSError) as exc:
+    except (RuntimeError, OSError, SQLAlchemyError) as exc:
         logger.warning("workbench_counts_unavailable", error_type=type(exc).__name__)
     if "queue" in sources:
         parts = [found.get(source) for source in QUEUE_SOURCES]

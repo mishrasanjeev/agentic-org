@@ -23,12 +23,19 @@ from typing import Any
 import structlog
 from sqlalchemy import select
 
+from core.workbench import console
 from core.workbench.access import ADMIN, WORKBENCHES, approval_filter, holds, tabs_for
 
 logger = structlog.get_logger()
 
 # kind -> the tab source that shows it; a caller sees a kind when a held workbench shows that source.
-KINDS: dict[str, str] = {"approval": "approvals", "document": "documents", "draft": "drafts", "case": "cases"}
+KINDS: dict[str, str] = {
+    "approval": "approvals",
+    "document": "documents",
+    "draft": "drafts",
+    "case": "cases",
+    "finding": "transactions",
+}
 PRIORITY_RANK = {"critical": 0, "urgent": 0, "high": 1, "normal": 2, "medium": 2, "low": 3}
 MAX_ITEMS = 200
 MAX_EDITS = 50
@@ -53,11 +60,31 @@ def enabled_kinds() -> list[str]:
         out.remove("document")
     if not services.enabled():
         out.remove("draft")
+    from core.txn import records as txn_records
+
+    if not txn_records.enabled():
+        out.remove("finding")
     return out
 
 
+def sensitive_roles(source: str) -> set[str] | None:
+    """The roles a sensitive tab showing this source admits; None when no tab showing it is sensitive."""
+    roles: set[str] = set()
+    sensitive = False
+    for workbench in WORKBENCHES.values():
+        for tab in workbench.tabs:
+            if tab.source == source and tab.sensitive:
+                sensitive = True
+                roles |= set(tab.roles)
+    return roles if sensitive else None
+
+
 def kinds_for(role: str, assigned: set[str] | None = None) -> list[str]:
-    """The kinds a role may see: those shown by a tab of a workbench it holds, whose subsystem is on."""
+    """The kinds a role may see: those shown by a tab of a workbench it holds, whose subsystem is on.
+
+    A kind shown by a sensitive tab (transaction findings) is seen only by the roles that tab
+    admits, whatever the queue tab of another workbench opens.
+    """
     available = enabled_kinds()
     if role == ADMIN:
         return available
@@ -66,8 +93,15 @@ def kinds_for(role: str, assigned: set[str] | None = None) -> list[str]:
         if holds(workbench, role, assigned or set()):
             sources |= {tab.source for tab in tabs_for(workbench, role)}
     if "queue" in sources:
-        return available
-    return [kind for kind, source in KINDS.items() if source in sources and kind in available]
+        wanted = list(available)
+    else:
+        wanted = [kind for kind, source in KINDS.items() if source in sources and kind in available]
+    out: list[str] = []
+    for kind in wanted:
+        admitted = sensitive_roles(KINDS[kind])
+        if admitted is None or role in admitted:
+            out.append(kind)
+    return out
 
 
 def _age(created_at: datetime | None, now: datetime) -> int | None:
@@ -90,6 +124,7 @@ def approval_item(row: Any, now: datetime) -> dict[str, Any]:
         "kind": "approval",
         "id": str(row.id),
         "title": row.title,
+        "facts": {k: v for k, v in context.items() if isinstance(v, str | int | float) and not k.startswith("_")},
         "summary": summary or row.trigger_type,
         "priority": str(row.priority or "normal"),
         "status": row.status,
@@ -111,6 +146,7 @@ def document_item(row: Any, now: datetime) -> dict[str, Any]:
         "kind": "document",
         "id": str(row.id),
         "title": row.filename or "document",
+        "facts": {"document_types": types, "reasons": len(reasons), "filename": row.filename or ""},
         "summary": "; ".join(reasons)[:300] or ", ".join(types),
         "priority": "high" if any("not recognised" in r or "not read" in r for r in reasons) else "normal",
         "status": row.status,
@@ -129,6 +165,7 @@ def draft_item(row: Any, now: datetime) -> dict[str, Any]:
         "kind": "draft",
         "id": str(row.id),
         "title": row.title or row.kind,
+        "facts": {"service": row.service, "draft_kind": row.kind},
         "summary": f"{row.service} {row.kind}"[:300],
         "priority": "normal",
         "status": row.status,
@@ -147,6 +184,7 @@ def case_item(row: Any, now: datetime) -> dict[str, Any]:
         "kind": "case",
         "id": str(row.id),
         "title": f"Case {row.case_ref}",
+        "facts": {"purpose": row.purpose, "provider": row.provider, "decision_requests": len(requests)},
         "summary": f"{row.purpose} via {row.provider}; {len(requests)} decision request(s)"[:300],
         "priority": "high",
         "status": row.state,
@@ -157,6 +195,26 @@ def case_item(row: Any, now: datetime) -> dict[str, Any]:
         "age_seconds": _age(row.created_at, now),
         "path": f"/dashboard/approvals/cases/{row.case_ref}",
         "actions": ["open"],
+    }
+
+
+def finding_item(row: Any, now: datetime) -> dict[str, Any]:
+    facts = row.facts if isinstance(row.facts, dict) else {}
+    return {
+        "kind": "finding",
+        "id": str(row.id),
+        "title": f"{str(row.kind).replace('_', ' ').capitalize()} on {row.entity_kind} {row.entity_ref}",
+        "facts": {k: v for k, v in facts.items() if isinstance(v, str | int | float)},
+        "summary": str(row.summary or "")[:300],
+        "priority": "high" if row.severity == "high" else "normal",
+        "status": row.status,
+        "requested_by": None,
+        "narrative": bool(row.narrative),
+        "created_at": _iso(row.detected_at),
+        "due_at": None,
+        "age_seconds": _age(row.detected_at, now),
+        "path": "/dashboard/transactions",
+        "actions": ["approve", "reject", "note"],
     }
 
 
@@ -239,6 +297,20 @@ async def list_items(tenant_id: uuid.UUID, kinds: list[str], *, limit: int = 50,
             found = [case_item(r, now) for r in rows]
             counts["case"] = len(found)
             items.extend(found)
+        if "finding" in wanted:
+            from core.models.txn_finding import TxnFinding
+
+            rows = await _rows(
+                session,
+                select(TxnFinding)
+                .where(TxnFinding.tenant_id == tenant_id, TxnFinding.status == "open")
+                .order_by(TxnFinding.detected_at)
+                .limit(per_kind),
+            )
+            found = [finding_item(r, now) for r in rows]
+            counts["finding"] = len(found)
+            items.extend(found)
+    items = console.apply_priority_rules(items, await console.value(tenant_id, "queue.priority_rules"))
     items.sort(key=_rank)
     return {"items": items[:per_kind], "counts": counts, "kinds": wanted}
 
@@ -275,6 +347,17 @@ async def get_item(tenant_id: uuid.UUID, kind: str, item_id: str, *, caller: Any
     if kind not in KINDS:
         raise QueueError(404, "kind_unknown", f"kind is one of {', '.join(KINDS)}")
     now = datetime.now(UTC)
+    if kind == "finding":
+        from core.txn import findings as txn_findings
+
+        try:
+            finding_id = uuid.UUID(item_id)
+        except ValueError:
+            raise QueueError(404, "not_found", "No such item") from None
+        detail = await txn_findings.get_finding(tenant_id, finding_id, with_records=True)
+        if detail is None:
+            raise QueueError(404, "not_found", "No such item")
+        return {"kind": kind, "item": detail, "editable": [], "decidable": detail["status"] == "open"}
     if kind == "draft":
         from core.content import drafts
 

@@ -67,8 +67,8 @@ export function seededCase(key: string): SeededCase {
   return found;
 }
 
-export async function signIn(page: Page, email = APPROVER_A): Promise<void> {
-  await page.goto("/login");
+export async function signIn(page: Page, email = APPROVER_A, nextPath?: string): Promise<void> {
+  await page.goto(nextPath ? `/login?next=${encodeURIComponent(nextPath)}` : "/login");
   await page.fill('input[type="email"]', email);
   await page.fill('input[type="password"]', SEED_PASSWORD);
   await Promise.all([
@@ -76,6 +76,10 @@ export async function signIn(page: Page, email = APPROVER_A): Promise<void> {
     page.locator('button[type="submit"]').click(),
   ]);
   await expect(page).not.toHaveURL(/\/login/, { timeout: 15_000 });
+  if (nextPath) await expect(page).toHaveURL(new RegExp(`${nextPath.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`));
+  // A URL change precedes protected-route hydration. Do not abort /auth/me
+  // with the next hard navigation; its body must reach the grant-leak watcher.
+  await expect(page.locator("#main-content")).toBeVisible();
 }
 
 export async function openCase(page: Page, caseRef: string): Promise<void> {

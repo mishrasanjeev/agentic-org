@@ -145,10 +145,16 @@ def parse_jsonb_credentials(value: dict | str | None) -> KeyRef | None:
     return None
 
 
-def parse_encrypted_container(value: dict | str | None) -> KeyRef | None:
-    """Parse a JSONB ``{"_encrypted": ...}`` encrypted-column value."""
+def parse_encrypted_container(value: dict | str | bytes | bytearray | memoryview | None) -> KeyRef | None:
+    """Parse JSONB containers or UTF-8 vault/envelope ciphertext in BYTEA."""
 
-    if isinstance(value, dict):
+    if isinstance(value, (bytes, bytearray, memoryview)):
+        try:
+            value = bytes(value).decode("utf-8")
+        except UnicodeDecodeError:
+            raise ValueError("Encrypted container is not UTF-8 ciphertext; refusing key-reference scan") from None
+
+    if isinstance(value, dict) and "_encrypted" in value:
         value = value.get("_encrypted")
     elif isinstance(value, str):
         try:
@@ -158,8 +164,25 @@ def parse_encrypted_container(value: dict | str | None) -> KeyRef | None:
         if isinstance(decoded, dict) and "_encrypted" in decoded:
             value = decoded.get("_encrypted")
 
+    if isinstance(value, (bytes, bytearray, memoryview)):
+        try:
+            value = bytes(value).decode("utf-8")
+        except UnicodeDecodeError:
+            raise ValueError("Encrypted container is not UTF-8 ciphertext; refusing key-reference scan") from None
     if isinstance(value, str) and value.startswith("env1:"):
-        value = value.removeprefix("env1:")
+        try:
+            envelope = json.loads(value.removeprefix("env1:"))
+        except json.JSONDecodeError:
+            raise ValueError("Malformed KMS envelope; refusing key-reference scan") from None
+        if (
+            not isinstance(envelope, dict)
+            or not isinstance(envelope.get("kek"), str)
+            or not envelope["kek"].strip()
+            or not isinstance(envelope.get("wrapped_dek"), str)
+            or not envelope["wrapped_dek"].strip()
+        ):
+            raise ValueError("Malformed KMS envelope; refusing key-reference scan")
+        value = envelope
     return parse_ciphertext(value)
 
 
@@ -190,6 +213,12 @@ _SCANNERS: list[tuple[str, str]] = [
         "case_pseudonym_maps.mapping_encrypted",
         "core.models.case_pseudonym_map:CasePseudonymMap:mapping_encrypted",
     ),
+    ("speech_recordings.content", "core.models.speech_recording:SpeechRecording:content"),
+    ("speech_recordings.transcript_encrypted", "core.models.speech_recording:SpeechRecording:transcript_encrypted"),
+    ("speech_recordings.summary_encrypted", "core.models.speech_recording:SpeechRecording:summary_encrypted"),
+    ("speech_live_sessions.turns_encrypted", "core.models.speech_live_session:SpeechLiveSession:turns_encrypted"),
+    ("personalisation_profiles.attributes", "core.models.personalisation:PersonalisationProfile:attributes"),
+    ("lineage_sync_sources.token", "core.models.lineage_sync:LineageSyncSource:token"),
 ]
 
 
@@ -322,7 +351,7 @@ def _collect_key_refs(
     values: Iterable,
 ) -> None:
     for raw in values:
-        kr = parse_encrypted_container(raw) if label.endswith("_encrypted") else parse_ciphertext(raw)
+        kr = parse_encrypted_container(raw)
         if kr is not None:
             refs.setdefault(label, set()).add(kr)
 

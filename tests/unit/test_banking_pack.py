@@ -64,3 +64,17 @@ def test_the_pack_installs_its_agents_in_shadow_and_uninstalls_cleanly():
     assert all(agent["mode"] == "shadow" for agent in result["agents_created"])
     removed = uninstall_pack("banking", "tenant-banking-001")
     assert removed["status"] == "uninstalled" and len(removed["agents_removed"]) == 5
+
+
+def test_banking_workflows_use_supported_manual_install_contract():
+    from core.agents.packs.installer import _build_workflow_definition
+
+    detail = get_pack_detail("banking")
+    assert detail is not None
+    assert detail["workflows"] == ["daily_collections_review", "daily_bank_reconciliation"]
+    for key in detail["workflows"]:
+        definition = _build_workflow_definition("banking", detail, key, [])
+        assert definition["metadata"]["workflow_key"] == key
+        assert definition["trigger_type"] == "manual"
+        assert "cron" not in definition["trigger_config"]
+        assert len(definition["name"]) < 100

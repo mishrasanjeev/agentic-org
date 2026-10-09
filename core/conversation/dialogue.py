@@ -23,6 +23,23 @@ from core.conversation import intents as catalogue
 from core.conversation.intents import CLARIFY_MARGIN, INTENTS, MAX_AMOUNT, MIN_CONFIDENCE, Intent, Slot
 
 MAX_RETRIES = 3  # answers for one slot that fail validation before the dialogue gives up
+
+
+@dataclass(frozen=True)
+class Rules:
+    """The rules the business console may change per tenant; the defaults are the catalogue's."""
+
+    retries: int = MAX_RETRIES
+    amount_limits: dict[str, float] = field(default_factory=dict)
+
+    def ceiling(self, intent: Intent) -> float | None:
+        """The most an amount slot of ``intent`` accepts: the console's limit, else the catalogue's."""
+        if intent.max_amount is None:
+            return None
+        limit = self.amount_limits.get(intent.name)
+        return float(limit) if limit is not None else intent.max_amount
+
+
 MAX_HISTORY = 20
 STAGE_IDLE = "idle"
 STAGE_COLLECTING = "collecting"
@@ -278,7 +295,7 @@ def parse_slot(
 
 
 def fill_from_entities(
-    intent: Intent, slots: dict[str, Any], entities: dict[str, Any], text: str = ""
+    intent: Intent, slots: dict[str, Any], entities: dict[str, Any], text: str = "", *, max_amount: float | None = None
 ) -> dict[str, Any]:
     """Slots the turn's entities (and, for choices and free text, the message itself) fill, never overwriting."""
     filled = dict(slots)
@@ -311,7 +328,8 @@ def fill_from_entities(
         if value not in (None, ""):
             if slot.kind == "amount" and not _finite_amount(value):
                 continue
-            if slot.kind == "amount" and intent.max_amount is not None and float(value) > intent.max_amount:
+            ceiling = max_amount if max_amount is not None else intent.max_amount
+            if slot.kind == "amount" and ceiling is not None and float(value) > ceiling:
                 continue
             filled[slot.name] = value
     return filled
@@ -398,12 +416,14 @@ def _start(
     *,
     today: date | None = None,
     prefill: dict[str, Any] | None = None,
+    rules: Rules | None = None,
 ) -> Outcome:
+    rules = rules or Rules()
     prior = handoff_summary(dialogue)  # what was in progress, for a hand-off
     dialogue.intent = intent.name
     dialogue.confidence = confidence
     merged = conversation_context.resolve(text, {**dialogue.carry, **entities}, dialogue.last_slots)
-    dialogue.slots = fill_from_entities(intent, dict(prefill or {}), merged, text)
+    dialogue.slots = fill_from_entities(intent, dict(prefill or {}), merged, text, max_amount=rules.ceiling(intent))
     dialogue.ambiguous = {
         slot.name: list(merged[f"{slot.kind}_options"])
         for slot in intent.slots
@@ -459,8 +479,9 @@ def _fallback(dialogue: Dialogue) -> Outcome:
     )
 
 
-def advance(dialogue: Dialogue, text: str, *, today: date | None = None) -> Outcome:
+def advance(dialogue: Dialogue, text: str, *, today: date | None = None, rules: Rules | None = None) -> Outcome:
     """One user turn: fill or ask, clarify, confirm, execute, escalate or fall back."""
+    rules = rules or Rules()
     dialogue.turns += 1
     _note(dialogue, "user", text)
     entities = catalogue.extract_entities(text, today=today)
@@ -486,7 +507,9 @@ def advance(dialogue: Dialogue, text: str, *, today: date | None = None) -> Outc
             next_intent = INTENTS.get(str(offer.get("intent") or ""))
             if next_intent is not None:
                 dialogue.negative_turns = 0
-                return _start(dialogue, next_intent, 0.9, entities, text, today=today, prefill=offer.get("prefill"))
+                return _start(
+                    dialogue, next_intent, 0.9, entities, text, today=today, prefill=offer.get("prefill"), rules=rules
+                )
         elif _NO_RE.match(text):
             return _outcome(dialogue, "declined", "Alright. Is there anything else I can help with?")
 
@@ -506,7 +529,7 @@ def advance(dialogue: Dialogue, text: str, *, today: date | None = None) -> Outc
                 return _outcome(dialogue, "cancelled", "Alright, nothing has been done. What would you like to do?")
             options = [{"intent": name, "title": INTENTS[name].title} for name in dialogue.options]
             return _outcome(dialogue, "clarify", _clarify_text(dialogue.options), options=options)
-        return _start(dialogue, INTENTS[choice], 0.9, entities, text, today=today)
+        return _start(dialogue, INTENTS[choice], 0.9, entities, text, today=today, rules=rules)
 
     # Confirming: yes runs it, no cancels it, a change re-confirms it.
     if dialogue.stage == STAGE_CONFIRMING and intent is not None:
@@ -515,7 +538,7 @@ def advance(dialogue: Dialogue, text: str, *, today: date | None = None) -> Outc
         if _NO_RE.match(text):
             dialogue.reset()
             return _outcome(dialogue, "cancelled", "Cancelled. Nothing has been done. What would you like to do?")
-        changed = fill_from_entities(intent, {}, entities, text)
+        changed = fill_from_entities(intent, {}, entities, text, max_amount=rules.ceiling(intent))
         if changed:
             dialogue.slots.update(changed)
             return _next_step(dialogue, today=today)
@@ -537,11 +560,11 @@ def advance(dialogue: Dialogue, text: str, *, today: date | None = None) -> Outc
             and not entities
         )
         if switched:
-            return _start(dialogue, other[0].intent, other[0].confidence, entities, text, today=today)
-        value, problem = parse_slot(slot, text, entities, today=today, max_amount=intent.max_amount)
+            return _start(dialogue, other[0].intent, other[0].confidence, entities, text, today=today, rules=rules)
+        value, problem = parse_slot(slot, text, entities, today=today, max_amount=rules.ceiling(intent))
         if problem:
             dialogue.retries += 1
-            if dialogue.retries >= MAX_RETRIES:
+            if dialogue.retries >= rules.retries:
                 # The hand-off needs what was being asked for: snapshot it before the dialogue starts over.
                 held_intent, held_slots = intent.name, dict(dialogue.slots)
                 handoff = {**handoff_summary(dialogue), "reason": ESCALATION_SLOTS}
@@ -557,14 +580,18 @@ def advance(dialogue: Dialogue, text: str, *, today: date | None = None) -> Outc
             return _outcome(dialogue, "ask", problem)
         dialogue.slots[slot.name] = value
         dialogue.slots = fill_from_entities(
-            intent, dialogue.slots, {k: v for k, v in entities.items() if k != slot.kind}, text
+            intent,
+            dialogue.slots,
+            {k: v for k, v in entities.items() if k != slot.kind},
+            text,
+            max_amount=rules.ceiling(intent),
         )
         return _next_step(dialogue, today=today)
 
     # A yes after the offer of a person is the hand-off.
     if dialogue.stage == STAGE_IDLE and dialogue.fallbacks >= 2 and _YES_RE.match(text):
         dialogue.fallbacks = 0
-        outcome = _start(dialogue, INTENTS["talk_to_agent"], 0.9, entities, text, today=today)
+        outcome = _start(dialogue, INTENTS["talk_to_agent"], 0.9, entities, text, today=today, rules=rules)
         outcome.escalation = ESCALATION_FALLBACKS  # an accepted offer, not an unsolicited request
         if outcome.handoff is not None:
             outcome.handoff["reason"] = ESCALATION_FALLBACKS
@@ -612,7 +639,7 @@ def advance(dialogue: Dialogue, text: str, *, today: date | None = None) -> Outc
         dialogue.carry = entities
         options = [{"intent": name, "title": INTENTS[name].title} for name in names]
         return _outcome(dialogue, "clarify", _clarify_text(names), options=options)
-    return _start(dialogue, top.intent, top.confidence, entities, text, today=today)
+    return _start(dialogue, top.intent, top.confidence, entities, text, today=today, rules=rules)
 
 
 def _clarify_text(names: list[str]) -> str:

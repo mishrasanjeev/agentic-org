@@ -23,8 +23,8 @@ submitted the agent for review.
 
 Every transition is recorded with who made it and a note. Behind
 ``AGENTICORG_AGENT_REGISTRY_ENABLED`` (off by default): off, the endpoints
-answer 409 and nothing is written; the runtime is not affected by the
-registry either way in this release.
+answer 409 and nothing is written. The separate, default-off promotion
+gate in ``approval.py`` links registry approval to runtime activation.
 """
 
 from __future__ import annotations
@@ -34,13 +34,15 @@ from datetime import UTC, datetime
 from typing import Any
 
 import structlog
-from sqlalchemy import select
+from sqlalchemy import func, select
 
 from core.config import settings
 from core.evals import gates as eval_gates
 from core.evals import runs as eval_runs
 from core.governance.guardrails.schema import RISK_TIERS
+from core.models.agent import Agent
 from core.models.agent_registry import AgentRegistryEntry, AgentRegistryEvent
+from core.ownership import Caller, agent_visibility_clause
 
 logger = structlog.get_logger()
 
@@ -186,15 +188,18 @@ async def transition(
     """
     if to_state not in STATES:
         raise RegistryError(422, "invalid", f"state must be one of {', '.join(STATES)}")
-    if require_actor and actor is None:
+    if (require_actor or to_state == "review") and actor is None:
         raise RegistryError(403, "no_actor", "A lifecycle transition needs a signed-in user")
     clean_note = _text(note, "note", MAX_NOTE)
     entry = await ensure_entry(session, tenant_id, agent.id, lock=True)
     if to_state not in TRANSITIONS[entry.state]:
         allowed = ", ".join(TRANSITIONS[entry.state]) or "none"
         raise RegistryError(409, "transition", f"An agent in {entry.state} can move to: {allowed}")
-    if to_state == "approved" and (actor is None or entry.submitted_by == actor):
-        raise RegistryError(409, "same_person", "The person who submitted the agent for review cannot approve it")
+    if to_state == "approved":
+        if actor is None or entry.submitted_by == actor:
+            raise RegistryError(409, "same_person", "An unidentified user or the submitter cannot approve the agent")
+        if entry.submitted_by is None:
+            raise RegistryError(409, "submitter_required", "Resubmit the agent for review with an identified human")
     if to_state == "published" and str(getattr(agent, "status", "")) != "active":
         raise RegistryError(409, "not_active", "Only an active agent can be published; promote it first")
     event = AgentRegistryEvent(
@@ -228,7 +233,7 @@ async def events(session: Any, tenant_id: uuid.UUID, agent_id: uuid.UUID) -> lis
     return list((await session.execute(statement)).scalars().all())
 
 
-async def list_entries(
+async def list_catalogue(
     session: Any,
     tenant_id: uuid.UUID,
     *,
@@ -236,21 +241,51 @@ async def list_entries(
     risk_tier: str | None = None,
     use_case: str | None = None,
     channel: str | None = None,
-) -> list[AgentRegistryEntry]:
-    statement = select(AgentRegistryEntry).where(AgentRegistryEntry.tenant_id == tenant_id)
+    domain: str | None = None,
+    q: str | None = None,
+    caller: Caller | None = None,
+) -> list[tuple[Agent, AgentRegistryEntry | None]]:
+    statement = (
+        select(Agent, AgentRegistryEntry)
+        .outerjoin(
+            AgentRegistryEntry,
+            (Agent.id == AgentRegistryEntry.agent_id) & (Agent.tenant_id == AgentRegistryEntry.tenant_id),
+        )
+        .where(Agent.tenant_id == tenant_id, Agent.status != "deleted")
+    )
+    # Filtering after LIMIT hides valid matches behind invisible or unrelated rows.
+    if caller is not None:
+        statement = statement.where(agent_visibility_clause(Agent, caller))
+    if domain:
+        statement = statement.where(Agent.domain == domain)
+    if q and q.strip():
+        searchable = func.concat(
+            func.coalesce(Agent.name, ""),
+            " ",
+            func.coalesce(Agent.agent_type, ""),
+            " ",
+            func.coalesce(Agent.description, ""),
+            " ",
+            func.coalesce(AgentRegistryEntry.purpose, ""),
+            " ",
+            func.coalesce(AgentRegistryEntry.use_case, ""),
+        )
+        statement = statement.where(func.lower(searchable).contains(q.strip().lower(), autoescape=True))
     if state:
-        statement = statement.where(AgentRegistryEntry.state == state)
+        statement = statement.where(func.coalesce(AgentRegistryEntry.state, "draft") == state)
     if risk_tier:
         statement = statement.where(AgentRegistryEntry.risk_tier == risk_tier)
     if use_case:
         statement = statement.where(AgentRegistryEntry.use_case == use_case)
     if channel:
         statement = statement.where(AgentRegistryEntry.channels.contains([channel]))
-    statement = statement.order_by(AgentRegistryEntry.updated_at.desc()).limit(MAX_LISTED)
-    return list((await session.execute(statement)).scalars().all())
+    statement = statement.order_by(
+        func.coalesce(AgentRegistryEntry.updated_at, Agent.updated_at).desc(), Agent.id
+    ).limit(MAX_LISTED)
+    return [(agent, entry) for agent, entry in (await session.execute(statement)).all()]
 
 
-def matches_search(agent: Any, entry: AgentRegistryEntry, q: str | None) -> bool:
+def matches_search(agent: Any, entry: AgentRegistryEntry | None, q: str | None) -> bool:
     """Whether a catalogue search term appears in the agent's name, type, description, purpose or use case."""
     if not q:
         return True
@@ -263,8 +298,8 @@ def matches_search(agent: Any, entry: AgentRegistryEntry, q: str | None) -> bool
             getattr(agent, "name", None),
             getattr(agent, "agent_type", None),
             getattr(agent, "description", None),
-            entry.purpose,
-            entry.use_case,
+            entry.purpose if entry else None,
+            entry.use_case if entry else None,
         )
     ).lower()
     return needle in haystack

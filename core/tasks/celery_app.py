@@ -50,6 +50,7 @@ app = Celery(
         "core.tasks.gateway_tasks",
         "core.tasks.health_snapshot",
         "core.tasks.invoice_tasks",
+        "core.tasks.lineage_tasks",
         "core.tasks.memory_tasks",
         "core.tasks.report_tasks",
         "core.tasks.rpa_tasks",
@@ -110,6 +111,13 @@ app.conf.beat_schedule = {
         "task": "core.tasks.workflow_tasks.recover_halted_workflows",
         "schedule": 60.0,
         "options": {"queue": "workflows"},
+    },
+    "sweep-lineage-sync-sources": {
+        # Every tenant's due sync sources (core/tasks/lineage_tasks.py). A no-op
+        # unless AGENTICORG_LINEAGE_ENABLED and AGENTICORG_LINEAGE_SYNC_SWEEP_ENABLED.
+        "task": "core.tasks.lineage_tasks.sweep_sync_sources",
+        "schedule": 300.0,
+        "options": {"queue": "maintenance"},
     },
     "generate-scheduled-reports": {
         "task": "core.tasks.report_tasks.generate_scheduled_reports",

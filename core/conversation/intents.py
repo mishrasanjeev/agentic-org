@@ -277,12 +277,14 @@ _MULTIPLIERS = {
     "crores": 10_000_000,
 }
 _AMOUNT_RE = re.compile(
-    r"(?:₹|rs\.?|inr|rupees?)\s*([\d,]+(?:\.\d+)?)\s*(k|thousand|lakhs?|lacs?|crores?)?"
-    r"|([\d,]+(?:\.\d+)?)\s*(k|thousand|lakhs?|lacs?|crores?|rupees|rs\.?|inr|₹)\b",
+    r"(?:₹|rs\.?|inr|rupees?)\s*+([\d,]++(?:\.\d++)?+)(?:\s*+(k|thousand|lakhs?|lacs?|crores?))?"
+    r"(?:/-)?+(?![\w/:-]|\.\d)"
+    r"|(?<![\w,./:-])([\d,]++(?:\.\d++)?+)\s*+(k|thousand|lakhs?|lacs?|crores?|rupees|rs\.?|inr|₹)\b"
+    r"(?:/-)?+(?![\w/:-]|\.\d)",
     re.I,
 )
 _BARE_NUMBER_RE = re.compile(
-    r"^\s*(?:₹|rs\.?|inr)?\s*([\d,]+(?:\.\d+)?)\s*(k|thousand|lakhs?|lacs?|crores?)?\s*$", re.I
+    r"^\s*+(?:₹|rs\.?|inr)?\s*+([\d,]++(?:\.\d++)?+)\s*+(k|thousand|lakhs?|lacs?|crores?)?(?:/-)?+\s*+$", re.I
 )
 _ACCOUNT_RE = re.compile(
     r"\b(?:account|a/c|acct|savings|current)\b[^\d]{0,24}?"
@@ -337,7 +339,7 @@ _DATE_WORDS_RE = re.compile(
 )
 _RELATIVE_DATES = {"today": 0, "yesterday": -1, "tomorrow": 1, "day before yesterday": -2}
 _REFERENCE_RE = re.compile(
-    r"\b(?:ref(?:erence)?|application|app|request|ticket|claim|consumer|customer)\s*(?:no\.?|number|id|#)?\s*[:#-]?\s*([A-Za-z0-9][A-Za-z0-9/-]{4,})\b"
+    r"\b(?:ref(?:erence)?|application|app|request|ticket|claim|consumer|customer)\s*+(?:no\.?|number|id|#)?\s*+[:#-]?\s*+([A-Za-z0-9][A-Za-z0-9/-]{4,})\b"
     r"|\b([A-Z]{2,6}[-/]?\d{5,})\b",
     re.I,
 )
@@ -371,7 +373,8 @@ _REASON_WORDS = {
 }
 
 
-_BARE_IN_TEXT_RE = re.compile(r"(?<![\w/:-])(\d[\d,]*(?:\.\d+)?)(?![\w/:-])")
+# Do not retry inside a failed number, or backtrack over digits/whitespace in a user turn.
+_BARE_IN_TEXT_RE = re.compile(r"(?<![\w,./:-])(\d[\d,]*+(?:\.\d++)?+)(?:/-)?+(?![\w/:-]|\.\d)")
 _NOT_AMOUNT_BEFORE_RE = re.compile(
     r"(ending(?: in| with)?|last four(?: digits)?|account|a/c|acct|card|no\.?|number|ref(?:erence)?|id|#|x+|\*+|"
     r"last|past|previous|first)\s*$",
@@ -380,7 +383,7 @@ _NOT_AMOUNT_BEFORE_RE = re.compile(
 
 
 _NOT_AMOUNT_AFTER_RE = re.compile(
-    r"\s*(?:(?:days?|weeks?|months?|years?|hours?|minutes?|transactions?|times|am|pm)\b|%)", re.I
+    r"\s*+(?:(?:days?|weeks?|months?|years?|hours?|minutes?|transactions?|times|am|pm)\b|%)", re.I
 )
 
 

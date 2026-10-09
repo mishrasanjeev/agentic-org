@@ -3,12 +3,6 @@ display_name: Banking Pack
 description: Agent templates for retail and SME banking operations - loan underwriting support, KYC review, collections, complaint handling and reconciliation - each held to a review condition and a confidence floor
 version: "1.0.0"
 installable: true
-pricing:
-  inr_monthly_per_client: 9999
-  usd_monthly_per_client: 120
-  type: paid_addon
-  trial_days: 14
-  max_trial_clients: 3
 compliance:
   - KYC_AML
   - fair_practices_code
@@ -68,11 +62,6 @@ agents:
       Match statement lines to ledger entries and report every unmatched item and variance.
       Never post an adjusting entry: propose it for a human to book.
 workflows:
-  - name: daily_collections_review
-    schedule: "0 9 * * 1-5"
-    agents: [collections_agent]
-    description: Weekday review of overdue accounts with reminders drafted for human approval above the thresholds
-  - name: daily_bank_reconciliation
-    schedule: "0 6 * * *"
-    agents: [bank_reconciliation_analyst]
-    description: Daily statement-to-ledger match with exceptions listed for a human
+  # Manual on installation; an administrator reviews any later scheduling.
+  - daily_collections_review
+  - daily_bank_reconciliation

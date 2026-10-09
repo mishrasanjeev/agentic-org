@@ -43,6 +43,12 @@ RUN apt-get update && apt-get upgrade -y && apt-get install -y --no-install-reco
     tesseract-ocr-tel tesseract-ocr-urd poppler-utils \
     libreoffice-core libreoffice-writer libreoffice-calc libreoffice-impress \
     fonts-dejavu-core \
+    && dpkg --compare-versions "$(dpkg-query -W -f='${Version}' libpcre2-8-0)" ge '10.46-1~deb13u3' \
+    && dpkg --compare-versions "$(dpkg-query -W -f='${Version}' libssl3t64)" ge '3.5.7-1~deb13u3' \
+    && dpkg --compare-versions "$(dpkg-query -W -f='${Version}' openssl)" ge '3.5.7-1~deb13u3' \
+    && dpkg --compare-versions "$(dpkg-query -W -f='${Version}' openssl-provider-legacy)" ge '3.5.7-1~deb13u3' \
+    && dpkg --compare-versions "$(dpkg-query -W -f='${Version}' libreoffice-core)" ge '4:25.2.3-2+deb13u8' \
+    && dpkg --compare-versions "$(dpkg-query -W -f='${Version}' fonts-opensymbol)" ge '4:102.12+LibO25.2.3-2+deb13u8' \
     && apt-get autoremove -y \
     && rm -rf /var/lib/apt/lists/*
 RUN useradd -m agenticorg

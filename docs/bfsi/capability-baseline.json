@@ -3531,9 +3531,11 @@
         "evidence": [
           "core/prompts/compare.py",
           "core/evals/datasets.py",
-          "api/v1/eval_datasets.py"
+          "api/v1/eval_datasets.py",
+          "core/evals/runs.py",
+          "observability/synthetic.py"
         ],
-        "note": "Up to three prompt variants scored with a chosen model against a reference dataset, and tenant datasets kept as immutable hashed versions and run in slices. Expectations are deterministic (contains, equals, pattern), runs are not stored and nothing gates a release on a result."
+        "note": "Up to three prompt variants can be compared against reference cases. Tenant datasets have immutable hashed versions, stored run summaries, deterministic scoring and optional model judges. Opt-in synthetic checks evaluate dataset slices on a schedule. An opt-in agent promotion gate requires full, error-free model-bound evidence and supports an explicitly selected regression baseline. Flags remain off by default. Full agent/tool/workflow evaluation and aggregation of partial slices are not implemented."
       },
       "grantex": {
         "status": "none",

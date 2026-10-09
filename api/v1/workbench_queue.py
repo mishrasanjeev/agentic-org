@@ -156,17 +156,27 @@ async def decide(
         raise HTTPException(
             422, detail={"error": "case_decided_on_its_page", "message": "A governed case is decided on its own page"}
         )
+    # Queue visibility is not write authority. All actionable backing resources
+    # require approvals:write; check it here before edits, even in route log mode.
+    scopes = getattr(request.state, "scopes", None) or []
+    if not has_admin_scope(scopes) and not any(scope in ("approvals:write", "approvals.write") for scope in scopes):
+        raise HTTPException(403, detail={"error": "forbidden", "message": "Missing scope: approvals:write"})
+    if kind == "draft" and not has_admin_scope(scopes):
+        raise HTTPException(
+            403, detail={"error": "forbidden", "message": "Deciding a draft needs the administrator scope"}
+        )
     user_id = _user_id(request)
+    if kind == "finding" and (caller_from_request(request).is_machine or not user_id):
+        # A disposition is a person's decision, here as on the finding's own route (api/v1/txn.py).
+        raise HTTPException(
+            403, detail={"error": "human_required", "message": "A finding is dispositioned by a signed-in person"}
+        )
     tenant = uuid.UUID(tenant_id)
     edits = [e.model_dump() for e in body.edits]
     try:
         queue.check_edits(edits)
     except queue.QueueError as exc:
         raise _refused(exc) from None
-    if kind == "draft" and not has_admin_scope(getattr(request.state, "scopes", []) or []):
-        raise HTTPException(
-            403, detail={"error": "forbidden", "message": "Deciding a draft needs the administrator scope"}
-        )
     try:
         edited = await queue.apply_edits(tenant, kind, item_id[:128], edits, user_id=user_id)
     except queue.QueueError as exc:
@@ -195,6 +205,22 @@ async def decide(
             edited = await queue.record_approval_edits(tenant, item_id[:128], edits, user_id=user_id)
         except queue.QueueError as exc:
             raise _refused(exc) from None
+    elif kind == "finding":
+        from core.txn import findings as txn_findings
+        from core.txn.records import TxnError
+
+        try:
+            outcome = await txn_findings.disposition(
+                tenant,
+                uuid.UUID(item_id),
+                outcome="confirm" if body.decision == "approve" else "dismiss",
+                notes=notes,
+                user_id=user_id,
+            )
+        except TxnError as exc:
+            raise HTTPException(exc.status, detail={"error": exc.code, "message": exc.message}) from None
+        except ValueError:
+            raise HTTPException(404, detail={"error": "not_found", "message": "No such item"}) from None
     elif kind == "document":
         from core.idp import store
         from core.idp.pages import DocumentError

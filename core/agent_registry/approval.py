@@ -57,21 +57,14 @@ def environment_of(state: str) -> str | None:
     return ENVIRONMENTS.get(state)
 
 
-def check_new_agent_status(initial_status: str) -> None:
-    """A new or cloned agent does not start active while the registry gates promotion.
-
-    It has no registry entry yet, so nobody has approved it: it is created in
-    shadow and promoted once a second person approves its entry.
-    """
-    if initial_status != "active" or not gates_promotion():
-        return
-    logger.warning("agent_registry_direct_activation_refused")
-    raise ApprovalError(
-        "not_approved",
-        "While the registry gates promotion an agent is created in shadow; it is promoted to active "
-        "after a second person approves its registry entry.",
-        "draft",
-    )
+def check_new_agent_status(status: str) -> None:
+    """New agents and clones have no independent registry approval to inherit."""
+    if gates_promotion() and status == "active":
+        raise ApprovalError(
+            "not_approved",
+            "Create the agent in shadow, submit it for independent registry review, then promote it.",
+            "draft",
+        )
 
 
 async def check_promotion(session: Any, tenant_id: uuid.UUID, agent: Any) -> str | None:

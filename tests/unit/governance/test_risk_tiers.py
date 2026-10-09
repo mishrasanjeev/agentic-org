@@ -32,6 +32,7 @@ def _agent(**over):
         "config": {"eval_gate": {"dataset_id": str(uuid.uuid4()), "min_pass_rate": 90}},
         "shadow_scored_sample_count": 60,
         "shadow_sample_count": 60,
+        "shadow_feedback_count": 60,
     }
     base.update(over)
     return SimpleNamespace(**base)
@@ -109,7 +110,7 @@ class TestAssess:
             "human_oversight",
             "shadow_evidence",
         }
-        assert assessment["requirements"]["shadow_evidence"]["detail"] == "60 of 50 scored samples"
+        assert assessment["requirements"]["shadow_evidence"]["detail"] == "60 of 50 human-reviewed samples"
 
     @pytest.mark.asyncio
     async def test_each_missing_control_is_named(self, seams, monkeypatch):
@@ -126,19 +127,249 @@ class TestAssess:
         no_human = await risk_tiers.assess(None, tid, _agent(hitl_condition=""), _entry("high"))
         assert no_human["requirements"]["human_oversight"] == {"met": False, "detail": "hitl condition unset"}
         thin = await risk_tiers.assess(
-            None, tid, _agent(shadow_scored_sample_count=10, shadow_sample_count=10), _entry("critical")
+            None,
+            tid,
+            _agent(shadow_scored_sample_count=10, shadow_sample_count=10, shadow_feedback_count=10),
+            _entry("critical"),
         )
-        assert thin["requirements"]["shadow_evidence"] == {"met": False, "detail": "10 of 200 scored samples"}
+        assert thin["requirements"]["shadow_evidence"] == {"met": False, "detail": "10 of 200 human-reviewed samples"}
         assert thin["requirements"]["maker_checker"] == {"met": False, "detail": "maker-checker off"}
         monkeypatch.setattr(settings, "prompts_maker_checker", True)
         strict = await risk_tiers.assess(
-            None, tid, _agent(shadow_scored_sample_count=300, shadow_sample_count=300), _entry("critical")
+            None,
+            tid,
+            _agent(shadow_scored_sample_count=300, shadow_sample_count=300, shadow_feedback_count=300),
+            _entry("critical"),
         )
         assert strict["compliant"]
         draft = await risk_tiers.assess(None, tid, _agent(), _entry("medium", state="review"))
         assert draft["requirements"] == {"registry_approval": {"met": False, "detail": "registry state review"}}
         assert (await risk_tiers.assess(None, tid, _agent(), _entry("low")))["requirements"] == {}
         assert (await risk_tiers.assess(None, tid, _agent(), None))["tier"] is None
+
+
+class TestShadowEvidence:
+    @pytest.mark.asyncio
+    async def test_self_scored_runs_are_not_human_evidence(self, seams):
+        tid = uuid.uuid4()
+        self_scored = _agent(shadow_scored_sample_count=500, shadow_sample_count=500, shadow_feedback_count=0)
+        assessment = await risk_tiers.assess(None, tid, self_scored, _entry("high"))
+        assert assessment["requirements"]["shadow_evidence"] == {
+            "met": False,
+            "detail": "0 of 50 human-reviewed samples",
+        }
+        assert not assessment["compliant"]
+        reviewed = _agent(shadow_scored_sample_count=0, shadow_sample_count=0, shadow_feedback_count=50)
+        assert (await risk_tiers.assess(None, tid, reviewed, _entry("high")))["requirements"]["shadow_evidence"]["met"]
+
+    def test_only_a_whole_review_count_is_read(self):
+        assert risk_tiers.human_reviewed_samples(SimpleNamespace(shadow_feedback_count=7)) == 7
+        for odd in (None, True, "50", -3):
+            assert risk_tiers.human_reviewed_samples(SimpleNamespace(shadow_feedback_count=odd)) == 0
+        assert risk_tiers.human_reviewed_samples(SimpleNamespace()) == 0
+
+    @pytest.mark.asyncio
+    async def test_a_high_agent_without_human_reviews_is_not_promoted(self, seams, monkeypatch):
+        from core.agent_registry import lifecycle
+
+        async def _entry_of(_session, _tid, _agent_id):
+            return _entry("high")
+
+        monkeypatch.setattr(lifecycle, "get_entry", _entry_of)
+        monkeypatch.setattr(settings, "governance_risk_tiers_enabled", True)
+        with pytest.raises(risk_tiers.TierError) as refused:
+            await risk_tiers.check_promotion(None, uuid.uuid4(), _agent(shadow_feedback_count=0))
+        assert refused.value.code == "shadow_evidence_required"
+
+
+class TestActiveTierChange:
+    @pytest.mark.asyncio
+    async def test_raising_an_active_agent_needs_the_new_tier_controls(self, seams, on):
+        tid = uuid.uuid4()
+        bare = _agent(status="active", config={}, hitl_condition="never", shadow_feedback_count=0)
+        with pytest.raises(risk_tiers.TierError) as refused:
+            await risk_tiers.check_active_tier_change(None, tid, bare, _entry("low"), "high")
+        assert refused.value.code == "eval_gate_required" and refused.value.tier == "high"
+        assert "Pause the agent first" in refused.value.message and refused.value.status == 409
+        no_reviews = _agent(status="active", shadow_feedback_count=0)
+        with pytest.raises(risk_tiers.TierError) as refused:
+            await risk_tiers.check_active_tier_change(None, tid, no_reviews, None, "high")
+        # Unset tier, no registry entry: the registry approval of the new tier is checked first.
+        assert refused.value.code == "registry_approval_required"
+        with pytest.raises(risk_tiers.TierError) as refused:
+            await risk_tiers.check_active_tier_change(None, tid, no_reviews, _entry("medium"), "high")
+        assert refused.value.code == "shadow_evidence_required"
+        ready = await risk_tiers.check_active_tier_change(None, tid, _agent(status="active"), _entry("low"), "high")
+        assert ready is not None and ready["tier"] == "high" and ready["compliant"]
+
+    @pytest.mark.asyncio
+    async def test_only_an_active_agent_and_a_real_change_are_checked(self, seams, on):
+        tid = uuid.uuid4()
+        bare = _agent(config={}, hitl_condition="never", shadow_feedback_count=0)
+        # A paused or shadow agent is checked when it is resumed or promoted.
+        for status in ("shadow", "paused", "draft"):
+            bare.status = status
+            assert await risk_tiers.check_active_tier_change(None, tid, bare, _entry("low"), "critical") is None
+        bare.status = "active"
+        assert await risk_tiers.check_active_tier_change(None, tid, bare, _entry("high"), "high") is None
+        assert await risk_tiers.check_active_tier_change(None, tid, bare, _entry("high"), None) is None
+        # Moving to a tier with no requirements never fails on controls.
+        lowered = await risk_tiers.check_active_tier_change(None, tid, bare, _entry("medium", "draft"), "low")
+        assert lowered == {"tier": "low", "requirements": {}, "compliant": True}
+
+    @pytest.mark.asyncio
+    async def test_off_nothing_is_checked(self, seams):
+        bare = _agent(status="active", config={}, hitl_condition="never", shadow_feedback_count=0)
+        assert await risk_tiers.check_active_tier_change(None, uuid.uuid4(), bare, _entry("low"), "critical") is None
+
+
+class _CardSession:
+    def __init__(self, agent):
+        self.agent = agent
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, exc_type, exc, tb):
+        return False
+
+    async def execute(self, _statement):
+        return SimpleNamespace(scalar_one_or_none=lambda: self.agent)
+
+
+class TestCardEndpoint:
+    @pytest.fixture
+    def card(self, monkeypatch, seams, on):
+        from core.agent_registry import lifecycle
+
+        monkeypatch.setattr(settings, "agent_registry_enabled", True)
+        monkeypatch.setattr(registry_api, "require_agent_mutable", lambda _agent, _caller: None)
+        monkeypatch.setattr(registry_api, "_effective_caller", lambda _c, _d: SimpleNamespace(is_admin=True))
+        saved: list[dict] = []
+
+        async def _entry_of(_session, _tid, _agent_id):
+            return _entry("low")
+
+        async def _set(_session, _tid, _agent_id, fields):
+            saved.append(fields)
+            return _entry(fields.get("risk_tier", "low"))
+
+        async def _card(_session, _tid, agent):
+            return {"id": str(agent.id)}
+
+        monkeypatch.setattr(lifecycle, "get_entry", _entry_of)
+        monkeypatch.setattr(lifecycle, "set_card_fields", _set)
+        monkeypatch.setattr(lifecycle, "card", _card)
+
+        def run(agent, tier):
+            from core.schemas.api import AgentCardIn
+
+            monkeypatch.setattr(registry_api, "get_tenant_session", lambda _tid: _CardSession(agent))
+            return registry_api.set_agent_card(
+                agent.id,
+                AgentCardIn(risk_tier=tier),
+                tenant_id=str(uuid.uuid4()),
+                user_domains=None,
+                caller=None,
+                user={"agenticorg:user_id": str(ADMIN)},
+            )
+
+        return run, saved
+
+    @pytest.mark.asyncio
+    async def test_raising_an_active_agent_without_the_controls_is_refused_and_nothing_is_saved(self, card):
+        run, saved = card
+        with pytest.raises(HTTPException) as refused:
+            await run(_agent(status="active", config={}), "high")
+        assert refused.value.status_code == 409
+        assert refused.value.detail["error"] == "risk_tier" and refused.value.detail["code"] == "eval_gate_required"
+        assert saved == []
+
+    @pytest.mark.asyncio
+    async def test_a_paused_agent_or_a_compliant_active_one_takes_the_new_tier(self, card):
+        run, saved = card
+        await run(_agent(status="paused", config={}), "high")
+        await run(_agent(status="active"), "high")
+        assert saved == [{"risk_tier": "high"}, {"risk_tier": "high"}]
+
+
+class _ReachedError(Exception):
+    pass
+
+
+class TestFullReplacement:
+    @pytest.fixture
+    def replace(self, monkeypatch):
+        from contextlib import asynccontextmanager
+
+        from core.agent_registry import lifecycle
+
+        agent = _agent(status="active", hitl_condition="confidence < 0.9", visibility="tenant", domain="finance")
+        reads: list[uuid.UUID] = []
+
+        async def _entry_of(_session, _tid, agent_id):
+            reads.append(agent_id)
+            return _entry("high")
+
+        @asynccontextmanager
+        async def _session(_tid):
+            yield SimpleNamespace(execute=_execute)
+
+        async def _execute(_statement):
+            return SimpleNamespace(scalar_one_or_none=lambda: agent)
+
+        def _reached(_agent, _visibility):
+            raise _ReachedError
+
+        monkeypatch.setattr(lifecycle, "get_entry", _entry_of)
+        monkeypatch.setattr(agents_api, "get_tenant_session", _session)
+        monkeypatch.setattr(agents_api, "_effective_caller", lambda _c, _d: SimpleNamespace(is_admin=True))
+        monkeypatch.setattr(agents_api, "require_agent_mutable", lambda _agent, _caller: None)
+        monkeypatch.setattr(agents_api, "check_agent_domain_change", lambda _agent, _domain, _caller: None)
+        monkeypatch.setattr(agents_api, "check_agent_visibility_change", lambda _agent, _vis, _caller: None)
+        monkeypatch.setattr(agents_api, "_apply_agent_visibility", _reached)
+
+        def run(**body):
+            from core.schemas.api import AgentCreate
+
+            payload = {"name": "Collections", "agent_type": "collections", "domain": "finance", **body}
+            return agents_api.replace_agent(
+                agent_id=agent.id,
+                body=AgentCreate(**payload),
+                tenant_id=str(uuid.uuid4()),
+                user_domains=None,
+                user={},
+                caller=None,
+            )
+
+        return run, agent, reads
+
+    @pytest.mark.asyncio
+    async def test_a_put_cannot_drop_oversight_on_a_regulated_agent(self, replace, on):
+        run, agent, _reads = replace
+        for condition in ("", "never"):
+            with pytest.raises(HTTPException) as refused:
+                await run(hitl_policy={"condition": condition})
+            assert refused.value.status_code == 409
+            assert refused.value.detail["code"] == "human_oversight_required"
+            assert agent.hitl_condition == "confidence < 0.9"
+
+    @pytest.mark.asyncio
+    async def test_a_put_that_keeps_oversight_or_omits_it_goes_on(self, replace, on):
+        run, _agent_row, reads = replace
+        with pytest.raises(_ReachedError):
+            await run(hitl_policy={"condition": "confidence < 0.5"})
+        assert len(reads) == 1
+        with pytest.raises(_ReachedError):
+            await run()
+        assert len(reads) == 1
+
+    @pytest.mark.asyncio
+    async def test_off_the_put_is_not_checked(self, replace):
+        run, _agent_row, reads = replace
+        with pytest.raises(_ReachedError):
+            await run(hitl_policy={"condition": ""})
+        assert reads == []
 
 
 class TestChecks:
@@ -280,8 +511,14 @@ class TestEndpointsAndHooks:
         promote = src[src.index('@router.post(\n    "/agents/{agent_id}/promote",') :]
         assert promote.index("risk_tiers.check_promotion(") < promote.index("agent.status = new_status")
         assert "risk_tiers.check_update(" in src and "risk_tiers.check_gate_removal(" in src
+        # The oversight guard covers both mutation paths: PATCH and the PUT full replacement.
+        assert src.count("risk_tiers.check_update(") == 2
+        replace = src[src.index("async def replace_agent(") : src.index("async def update_agent(")]
+        assert replace.index("risk_tiers.check_update(") < replace.index("agent.hitl_condition = body.hitl_policy")
         registry = (ROOT / "api" / "v1" / "agent_registry.py").read_text(encoding="utf-8")
         assert "risk_tiers.check_tier_change(" in registry
+        card = registry[registry.index("async def set_agent_card(") :]
+        assert card.index("risk_tiers.check_active_tier_change(") < card.index("lifecycle.set_card_fields(")
         assert 'if "risk_tier" in fields and risk_tiers.enabled():' in registry
         main = (ROOT / "api" / "main.py").read_text(encoding="utf-8")
         assert "app.include_router(governance_risk_tiers.router" in main

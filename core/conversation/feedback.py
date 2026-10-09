@@ -75,7 +75,7 @@ _POSITIVE = {
     "love": 0.7,
 }
 _NEGATION_RE = re.compile(r"\b(not|never|no|isn'?t|wasn'?t|don'?t|didn'?t|doesn'?t)\s+(\w+\s+){0,2}$")
-_RATING_RE = re.compile(r"^\s*(?:rating\s*[:=]?\s*)?([1-5])\s*(?:/\s*5|out of 5|stars?)?\s*[.!]?\s*$", re.I)
+_RATING_RE = re.compile(r"(?:rating\s*+[:=]?\s*+)?([1-5])\s*+(?:/\s*+5|out of 5|stars?)?\s*+[.!]?", re.I)
 _THUMBS = {
     5: ("thumbs up", "👍", "excellent", "very helpful", "perfect"),
     4: ("good", "helpful", "well done", "great"),
@@ -135,7 +135,7 @@ def sentiment(text: str) -> dict[str, Any]:
 
 def rating_from_text(text: str) -> int | None:
     """A rating the user typed: 1 to 5, "4/5", thumbs or a few plain words; None when it is not one."""
-    match = _RATING_RE.match(text)
+    match = _RATING_RE.fullmatch(text.strip())
     if match:
         return int(match.group(1))
     lowered = text.lower().strip(" .!")

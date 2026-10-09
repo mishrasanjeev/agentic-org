@@ -3,7 +3,8 @@ import { Link, useLocation, useNavigate } from "react-router";
 import { useTranslation } from "react-i18next";
 import HITLBadge from "./HITLBadge";
 import { useAuth } from "../contexts/AuthContext";
-import { AGENT_CREATOR_ROLES, APPROVAL_ROLES, CONNECTOR_ROLES, SUPERVISOR_ROLES, WORKBENCH_ROLES } from "../lib/roles";
+import { AGENT_CREATOR_ROLES, APPROVAL_ROLES, CONNECTOR_ROLES, LINEAGE_ROLES, SUPERVISOR_ROLES, WORKBENCH_ROLES } from "../lib/roles";
+import api from "../lib/api";
 
 const LANGUAGES = [
   { code: "en", label: "EN" },
@@ -21,7 +22,9 @@ const NotificationBell = lazy(() => import("./NotificationBell"));
 // See ui/src/locales/en.json and hi.json for translations.
 // Agents, Org Chart, Approvals and Connectors follow the shared role lists in
 // lib/roles.ts so nav and route guards cannot drift (bug sheet 2026-09-14).
-const ALL_NAV: Array<{ path: string; labelKey: string; label: string; roles: readonly string[] }> = [
+// An entry with a statusPath belongs to a subsystem behind a default-off flag: it is shown only once
+// that status answers enabled, so a disabled deployment never offers a page that cannot work.
+const ALL_NAV: Array<{ path: string; labelKey: string; label: string; roles: readonly string[]; statusPath?: string }> = [
   { path: "/dashboard", labelKey: "nav.dashboard", label: "Dashboard", roles: ["admin", "cfo", "chro", "cmo", "coo", "auditor"] },
   { path: "/dashboard/partner", labelKey: "nav.partner", label: "Partner Dashboard", roles: ["admin", "cfo", "coo", "auditor"] },
   { path: "/dashboard/companies", labelKey: "nav.companies", label: "Companies", roles: ["admin", "cfo", "coo", "auditor"] },
@@ -44,6 +47,9 @@ const ALL_NAV: Array<{ path: string; labelKey: string; label: string; roles: rea
   { path: "/dashboard/conversations", labelKey: "nav.conversations", label: "Conversations", roles: SUPERVISOR_ROLES },
   { path: "/dashboard/documents", labelKey: "nav.documents", label: "Documents", roles: APPROVAL_ROLES },
   { path: "/dashboard/workbench", labelKey: "nav.workbenches", label: "Workbenches", roles: WORKBENCH_ROLES },
+  { path: "/dashboard/calls", labelKey: "nav.calls", label: "Calls", roles: ["admin", "coo", "auditor"], statusPath: "/speech/status" },
+  { path: "/dashboard/transactions", labelKey: "nav.transactions", label: "Transactions", roles: ["admin", "coo", "auditor", "cfo"], statusPath: "/txn/status" },
+  { path: "/dashboard/lineage", labelKey: "nav.lineage", label: "Lineage", roles: LINEAGE_ROLES, statusPath: "/lineage/status" },
   { path: "/dashboard/connectors", labelKey: "nav.connectors", label: "Connectors", roles: CONNECTOR_ROLES },
   { path: "/dashboard/commerce-runtime", labelKey: "nav.commerceRuntime", label: "Commerce Runtime", roles: ["admin", "merchant"] },
   { path: "/dashboard/prompt-templates", labelKey: "nav.promptTemplates", label: "Prompt Templates", roles: ["admin"] },
@@ -91,6 +97,28 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   const [langKey, setLangKey] = useState(0);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [chatOpen, setChatOpen] = useState(false);
+  // Gated entries start hidden and appear once their subsystem says it is on (fail closed).
+  const [subsystemsOn, setSubsystemsOn] = useState<ReadonlySet<string>>(() => new Set());
+
+  useEffect(() => {
+    let live = true;
+    const gated = ALL_NAV.filter((item) => item.statusPath);
+    void Promise.all(
+      gated.map(async (item) => {
+        try {
+          const { data } = await api.get(item.statusPath as string);
+          return (data as { enabled?: unknown } | null)?.enabled === true ? item.path : null;
+        } catch {
+          return null; // off, or unreachable: the entry stays hidden
+        }
+      }),
+    ).then((paths) => {
+      if (live) setSubsystemsOn(new Set(paths.filter((p): p is string => p !== null)));
+    });
+    return () => {
+      live = false;
+    };
+  }, []);
 
   useEffect(() => {
     const handler = (lng: string) => {
@@ -115,7 +143,9 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   // (api/route_enforcement.py SCOPE_FAMILIES["chat"], bug sheet 2026-09-14
   // #53). Keep this list aligned with core/rbac.py ROLE_SCOPES.
   const canChat = CHAT_ROLES.includes(userRole);
-  const filteredNav = ALL_NAV.filter(item => item.roles.includes(userRole));
+  const filteredNav = ALL_NAV.filter(
+    (item) => item.roles.includes(userRole) && (!item.statusPath || subsystemsOn.has(item.path)),
+  );
   const roleLabel = ROLE_LABELS[userRole];
 
   const sidebar = (

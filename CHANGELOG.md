@@ -4,6 +4,200 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
 
 ## [Unreleased] - 2026-08-29
 
+### Fixed - Combined security and feature release regressions
+- Lineage details ignore superseded node requests, distinguish traversal limits
+  from absent sources, and expose native keyboard-accessible node controls.
+- Personalisation resolves tenant keys asynchronously and offloads profile
+  encryption/decryption from the request event loop. Concurrent creation of a
+  duplicate rule returns the documented tenant-scoped `409 rule_exists`.
+- The personalisation route-registration regression checks OpenAPI paths,
+  including lazily included FastAPI routers.
+- A no-op merge revision joins the registry compatibility and feature schema
+  branches without renumbering existing migrations. Feature flags remain off
+  by default; the merge does not activate optional features.
+
+### Added - Personalisation: a consent-checked service for personalised content
+- `core/personalisation/`: content for a subject and purpose is rendered
+  only under a valid consent (granted, not withdrawn, not expired; one
+  current record per subject and purpose, kept with its evidence when
+  withdrawn). Profiles are encrypted for the tenant before any row lock.
+  Rules pick a variant for a purpose by priority and conditions (`eq`,
+  `ne`, `in`, `gte`, `lte`, `exists`) and declare every attribute they
+  read; a placeholder that is not allowed or not in the profile is
+  refused, never rendered blank. Every render and refusal is recorded with
+  the consent, the rule, the attribute names used (never values) and a
+  hash of the content; a preview records nothing.
+- `PUT /personalisation/consents`, `POST /personalisation/consents/withdraw`,
+  `GET /personalisation/consents`, `PUT/GET /personalisation/profiles`,
+  `GET/POST /personalisation/rules`, `PATCH/DELETE /personalisation/rules/{id}`,
+  `POST /personalisation/render`, `GET /personalisation/events`; scope
+  family `personalisation`. A caller's own template may use only the
+  attributes in the business console setting
+  `personalisation.template_attributes`. Behind `personalisation_enabled`
+  (default off). Migration `v6z77` adds `personalisation_consents`,
+  `personalisation_profiles`, `personalisation_rules` and
+  `personalisation_events` under forced row-level security.
+
+### Added - Provenance and lineage: the lineage graph in the console
+- The Lineage page finds nodes by kind and reference (`GET /lineage/nodes`),
+  traces one upstream, downstream or both and draws it from origin to use,
+  shows a node's sources, processing history and versions, and lists the
+  sync sources with their recent runs; a role that holds approvals:write
+  can run a source now. The navigation entry appears only while lineage is
+  on (`lineage_enabled`, default off).
+
+### Added - Provenance and lineage: incremental synchronisation
+- `core/lineage/sync.py`: a sync source names a feed (public HTTPS,
+  egress validated, optional bearer token kept encrypted) polled on an
+  interval for what changed since its cursor; a run skips every item
+  whose version provenance already keeps, ingests the rest (documents
+  through knowledge ingestion, records through the transaction store),
+  links each document to the feed it was acquired from, and records what
+  it received, processed, skipped and failed; the cursor advances only
+  when nothing failed. Sources are claimed under a row lock.
+- `GET/POST /lineage/sync/sources`, `PATCH/DELETE /lineage/sync/sources/{id}`,
+  `POST /lineage/sync/sources/{id}/run`, `GET /lineage/sync/sources/{id}/runs`;
+  the sweep from Celery beat, behind `lineage_sync_sweep_enabled` (default
+  off). Migration `v6z76` adds
+  `lineage_sync_sources` and `lineage_sync_runs` under forced row-level
+  security.
+
+### Added - Provenance and lineage: the provenance model
+- `core/lineage/provenance.py`: a node for every kept thing (a source, a
+  document, a chunk, an embedding, a transaction record, a transcript, a
+  finding, a draft, a model use) under its kind, reference and version,
+  with its origin and when it was observed; a step between two nodes
+  naming what was done, by which tool, with which parameters. Knowledge
+  ingestion notes its chain (source, document, chunks, embeddings) after
+  the rows are committed and never fails on it; transaction ingestion
+  notes each kept record as acquired from its source.
+- `POST /lineage` notes a chain an acquisition produced; `GET
+  /lineage/nodes/{kind}/{ref}` describes one thing (versions, sources, the
+  processing history back to them); `GET /lineage/trace/{kind}/{ref}` walks
+  the graph upstream, downstream or both, bounded. Behind `lineage_enabled`
+  (default off). Migration `v6z75` adds `lineage_nodes` and `lineage_steps`
+  under forced row-level security. Docs: `docs/lineage/provenance.md`.
+
+### Added - Transaction intelligence: narrative drafting and evidence export
+- `POST /txn/findings/{id}/narrative` drafts a suspicious-transaction
+  narrative from a finding, its rows and its entity view (through the
+  content services' checked model call or from the facts alone): what
+  was seen, when, on which accounts, through whom, why, a timeline, the
+  parties, the basis, a recommendation and the gaps to check; the draft
+  stays on the open finding for a person to review in the investigator
+  queue and nothing is filed. `GET /txn/findings/{id}/evidence` exports
+  the finding, narrative, rows, entity view and fund flow with a digest
+  (`core/txn/narrative.py`). Open findings join the workbench review
+  queue as the finding kind (approve confirms, reject dismisses with a
+  reason). The Transactions page drafts the narrative and downloads the
+  evidence.
+
+### Added - Transaction intelligence: fund-flow graphs across hops
+- `GET /txn/graph/{kind}/{ref}` builds the fund-flow graph around an
+  account, customer or counterparty: counterparties as nodes expanded hop
+  by hop from their own records (up to four hops, two hundred nodes),
+  edges with totals, counts, first and last movement and channels, the
+  heaviest outward paths, and the findings on every node;
+  `GET /txn/graph/{kind}/{ref}/export` carries the graph, the records
+  behind every edge and the findings as JSON or CSV for the case file
+  (`core/txn/graph.py`). The Transactions page draws it, expands a node on
+  click, lists the paths and the findings with their disposition, and
+  downloads the export (`ui/src/pages/Transactions.tsx`).
+
+### Added - Transaction intelligence: records, entity aggregation and detectors
+- `POST /txn/records` keeps movements on accounts in batches, idempotent
+  under each record's reference, and `POST /txn/import/document/{id}`
+  books a kept bank statement's line items. `GET /txn/entities` and
+  `GET /txn/entities/{kind}/{ref}` give the entity-centric view (totals,
+  channels, branches, counterparties, a daily series, the findings).
+  `POST /txn/detect` runs the structuring detector (cash deposits under
+  the threshold, several within the window, together at or above it,
+  graver across branches) and the pass-through detector (an inflow
+  mostly gone within the window) over the recent records and keeps
+  every new finding once under its fingerprint; a person dispositions a
+  finding (dismiss with a reason, confirm, escalate to a case) and the
+  detectors file nothing. Thresholds come from the business console.
+  (`core/txn/`, `txn_records`, `txn_findings`, `docs/txn/intelligence.md`).
+  Off by default (`AGENTICORG_TRANSACTION_INTELLIGENCE_ENABLED`).
+
+### Added - Speech intelligence: spoken sensitive data redacted from the recording and the transcript
+- `POST /speech/recordings/{id}/redact` finds spoken card numbers (Luhn
+  over runs of spoken digits, number words, double and triple), one-time
+  codes, CVVs and PINs after their cues, cuts them from the transcript
+  with a marker (a card keeps its last four) and silences them in the
+  audio, drops the summary made from the old transcript and records what
+  was cut as kinds and times only; `dry_run` reports without changing.
+  The business console chooses the kinds and can cut them at
+  transcription; a live session masks each turn before keeping it
+  (`core/speech/redaction.py`, `speech_recordings.redactions`).
+
+### Added - Speech intelligence: agent assist and disclosure tracking
+- A catalogue of disclosure scripts (recorded line, identity verified,
+  rate and fees, cooling-off, how to complain, consent, collections
+  conduct) with the phrases that count, the call types each applies to
+  and deadlines; the business console names the ones a tenant requires.
+  `GET /speech/recordings/{id}/disclosures` checks a kept transcript.
+  Live agent assist (`POST /speech/live/sessions`, `.../turns`,
+  `.../close`): every turn comes back with the checklist, the mood, the
+  intent, the next question, the knowledge that answers the customer and
+  the flags this turn raised, a disclosure overdue the moment its
+  deadline passes unsaid among them; closing gives the compliance report
+  (`core/speech/disclosures.py`, `core/speech/assist.py`,
+  `speech_live_sessions`). The Calls page drives a live session.
+
+### Added - Speech intelligence: call summaries and analytics
+- `POST /speech/recordings/{id}/summary` summarises a transcribed call
+  into intent, key points, next actions, outcome and customer mood,
+  through the content services' checked model call or from the words
+  alone (the banking intent catalogue, the most informative turns, the
+  turns that commit to something, the closing turns), and computes the
+  call's analytics: customer sentiment by turn and by thirds, the
+  agent's empathy markers and a 0 to 100 score for answering negative
+  turns with one, talk ratio, pace, interruptions, silences, the longest
+  monologue and escalation signals. `GET /speech/analytics` averages
+  them over the latest recordings (`core/speech/summary.py`,
+  `core/speech/analytics.py`). The summary is kept encrypted like the
+  transcript; the figures hold no words.
+
+### Added - Speech intelligence: batch transcription and diarisation
+- `POST /speech/recordings` takes a PCM WAV call recording, finds who
+  spoke when (by channel for a stereo call with `channel_roles`, by
+  sound for a mono one with a deterministic two-speaker clustering over
+  energy-detected segments), transcribes it through a local
+  faster-whisper model where installed or the tenant's Deepgram
+  credential, or takes words transcribed elsewhere
+  (`POST /speech/recordings/{id}/transcript`), aligns every word to a
+  speaker and groups them into turns, and keeps the recording with the
+  transcript encrypted under the tenant's key (`core/speech/`,
+  `speech_recordings`, `docs/speech/intelligence.md`). Off by default
+  (`AGENTICORG_SPEECH_INTELLIGENCE_ENABLED`): off, the status route
+  answers `enabled: false` and the rest is not found.
+
+### Added - Workbenches: search across cases, documents, customers and accounts; accessibility suite
+- `GET /workbench/search` searches cases, documents, customers and accounts
+  in one query: words and quoted phrases that must all match, a leading
+  minus to exclude, facet filters as repeated parameters, and the facet
+  values present with counts in the answer; every read tenant scoped and
+  bounded, each kind searched only where a held workbench shows it
+  (`core/workbench/search.py`, `ui/src/components/WorkbenchSearch.tsx`,
+  a Search tab in the review officer's and investigator's workbenches).
+  `ui/src/__tests__/workbench_accessibility.test.tsx` runs axe-core over
+  every workbench page and panel; a violation fails the suite.
+
+### Added - Workbenches: the business console for rules, thresholds and routing
+- `GET /workbench/console` lists the settings a tenant may change without a
+  release, with bounds, options, the tenant's value and the default;
+  `PUT` and `DELETE /workbench/console/{key}` set a value within the
+  bounds or restore the default, keeping the previous value and writing
+  an audit row (`core/workbench/console.py`, `business_settings`). The
+  values take effect in document review routing (confidence floors,
+  types always reviewed), the draft kinds that wait for approval, the
+  banking dialogue (answers tried before handing over, negative turns
+  before offering a person, amount ceilings by intent) and the review
+  queue's priority rules; with the flag off or the store unreadable the
+  defaults apply, which are the values the code had. The supervisor's
+  workbench shows the console as a tab (`ui/src/components/BusinessConsole.tsx`).
+
 ### Added - Workbenches: the unified review queue with edit before approval
 - `GET /workbench/queue` lists everything waiting for a person in one
   shape and one order (priority, then age): approvals pending, documents
@@ -138,6 +332,14 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
   schema resolves to the requested or latest version; clause writes need a
   signed-in tenant administrator, and an update that changes nothing keeps the
   version and approval.
+### Security - Reporting queries and conversation parsing
+- Attribution and forecast dimensions now select SQLAlchemy columns instead of
+  interpolating SQL identifiers. Tenant filters and reporting limits remain bound.
+- Amount, repeat-request and rating parsers avoid polynomial regex backtracking;
+  subprocess regressions replay long hostile turns, and PostgreSQL tests exercise
+  every reporting dimension across two tenants.
+- Update the UI source-map dependency, MCP proxy address dependency and MCP SDK
+  to patched versions. No security alerts are dismissed or checks disabled.
 
 ### Added - Content services: governed drafting, structured summarisation and obligation extraction
 - With `AGENTICORG_CONTENT_SERVICES_ENABLED` on (off by default), three
@@ -370,6 +572,10 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
   resume refuse an unmet requirement; a tier is changed by an administrator
   and lowered by a second person; a regulated agent keeps its oversight and
   its gate. `GET /governance/risk-tiers` shows the policy and compliance.
+- Shadow evidence for a tier counts terminal human reviews, not runs the
+  model scored itself; a tier change on an active agent is refused while the
+  new tier's controls are unmet; a `PUT /agents/{id}` replacement cannot drop
+  a regulated agent's oversight condition.
 
 ### Added - AI governance: model cards
 - With `AGENTICORG_GOVERNANCE_MODEL_CARDS_ENABLED` on (off by default),
@@ -474,6 +680,9 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
   section: registry approval, the evaluation gate verdict and the model
   provider attestation, with a plain statement that trust-registry
   attestations and passports are not attached.
+- The certification shows the provider attestation for the tenant's governed
+  data region, as residency enforcement chooses it; a first rating is one
+  atomic insert-or-update; a viewer with `agents:read` can rate.
 
 ### Added - Agent registry: dependency graph
 - `GET /agents/{id}/dependencies` (`core/agent_registry/dependencies.py`)
@@ -481,8 +690,16 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
   governing policies (guardrail rules, review condition, output schema,
   evaluation gate dataset), related agents and teams as nodes and edges,
   with names and references only.
+- Governing rules are the ones execution selects (the run use case, no risk
+  tier); card-scoped rules are marked as not applied at run time. Connector
+  nodes use the runtime tool-reference parser.
 
 ### Added - Agent registry: catalogue, templates and banking pack
+
+- Catalogue search now filters visibility and search terms before its result
+  limit, ignores superseded responses, clears failed results and supports keyboard
+  navigation. Banking workflows use the installer's supported manual format;
+  installation does not enable schedules or approve agents.
 - `GET /agent-registry` filters by state, risk tier, use case, channel,
   domain and a search term over the card text; the console page Agent
   catalogue shows it. `GET /agent-registry/templates` lists the agent
@@ -497,18 +714,15 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
 - With `AGENTICORG_AGENT_REGISTRY_GATES_PROMOTION` on (off by default),
   promotion and resume to active need an approved or published registry
   entry (`core/agent_registry/approval.py`), checked after the shadow
-  evidence, the maker-checker check and the evaluation gate, and a new or
-  cloned agent cannot start active; promotion
+  evidence, the maker-checker check and the evaluation gate; promotion
   publishes an approved entry and retirement retires a published one, each
   a recorded transition. Environments (development, staging, production)
   are read from the state. `PUT /agents/{id}/traffic-split` sends a share
   of an agent's runs through the agents API to another active agent while
   `AGENTICORG_AGENT_TRAFFIC_SPLIT_ENABLED` is on (`core/agent_registry/
   traffic.py`), chosen from the run's thread or correlation id so a retry
-  lands on the same agent (one draw per run otherwise); the agent asked for
-  passes its own status, floor and override controls before any redirection
-  and the target is held to the same; the response names the agent that
-  served the run, and removing the split is the one-action rollback.
+  lands on the same agent; the response names the agent that served the
+  run, and removing the split is the one-action rollback.
 
 ### Added - Agent registry: cards and lifecycle states
 - Behind `AGENTICORG_AGENT_REGISTRY_ENABLED` (off by default), each agent
@@ -531,8 +745,10 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
   rate and a regression allowance. Behind
   `AGENTICORG_EVAL_PROMOTION_GATE_ENABLED` (off by default), promotion and
   resume to active refuse, after the maker-checker check, a prompt whose
-  newest stored run of that version is missing, below the minimum, or
-  regressed against the prompt it replaces; `GET /agents/{id}/eval-gate`
+  newest model-bound stored run is missing, incomplete, contains answer or
+  judge errors, is below the minimum, or regresses against an explicitly
+  selected `baseline_run_id`. Runtime fallback models require independent
+  passing evidence. `GET /agents/{id}/eval-gate`
   reports the verdict either way. `POST /eval-datasets/{id}/run` takes
   `agent_id` to run an agent's prompt text so the gate can match it.
   `GET /eval-datasets/{id}/compare` ranks the models that ran a version from
@@ -590,6 +806,13 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
   live provider speech, messaging or payment actions are not verified by this release.
 - Added SDK protocol, Docker API/database and browser regressions, including the
   reported speech-tool names, tenant isolation and refusal paths.
+
+### Fixed - Worker startup and readiness
+- Initialize multiprocess metrics before vault imports create DB instruments.
+- Bind the worker startup listener only after Celery reports ready, so import,
+  vault, metrics and initial broker failures cannot present a healthy worker.
+- Add fresh-process regressions for both development and production settings;
+  missing vault keys still refuse startup.
 
 ### Added - Prompt governance: structured-output enforcement
 - Behind `AGENTICORG_OUTPUT_SCHEMA_ENFORCED` (off by default), an agent's

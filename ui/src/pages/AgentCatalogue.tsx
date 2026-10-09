@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { Helmet } from "react-helmet-async";
-import { useNavigate } from "react-router";
+import { Link } from "react-router";
 import api, { extractApiError } from "@/lib/api";
 
 interface Entry {
@@ -58,11 +58,11 @@ function stateClass(state: string): string {
  * templates the industry packs offer. Absent where the registry is off.
  */
 export default function AgentCatalogue() {
-  const navigate = useNavigate();
   const [data, setData] = useState<CatalogueOut | null>(null);
   const [templates, setTemplates] = useState<Template[]>([]);
   const [off, setOff] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
   const [q, setQ] = useState("");
   const [domain, setDomain] = useState("");
   const [state, setState] = useState("");
@@ -71,8 +71,10 @@ export default function AgentCatalogue() {
   const [useCase, setUseCase] = useState("");
   const [showTemplates, setShowTemplates] = useState(false);
 
-  const load = useCallback(async () => {
+  useEffect(() => {
+    let current = true;
     setError(null);
+    setLoading(true);
     const params: Record<string, string> = {};
     if (q.trim()) params.q = q.trim();
     if (domain) params.domain = domain;
@@ -80,42 +82,50 @@ export default function AgentCatalogue() {
     if (riskTier) params.risk_tier = riskTier;
     if (channel) params.channel = channel;
     if (useCase.trim()) params.use_case = useCase.trim();
-    try {
-      const response = await api.get("/agent-registry", { params });
-      setData(response.data as CatalogueOut);
-      setOff(false);
-    } catch (err) {
-      const status = (err as { response?: { status?: number } })?.response?.status;
-      if (status === 409) {
-        setOff(true);
+    const load = async () => {
+      try {
+        const response = await api.get("/agent-registry", { params });
+        if (!current) return;
+        setData(response.data as CatalogueOut);
+        setOff(false);
+      } catch (err) {
+        if (!current) return;
         setData(null);
-        return;
+        const status = (err as { response?: { status?: number } })?.response?.status;
+        if (status === 409) {
+          setOff(true);
+          return;
+        }
+        setError(extractApiError(err, "The catalogue could not be loaded."));
+      } finally {
+        if (current) setLoading(false);
       }
-      setError(extractApiError(err, "The catalogue could not be loaded."));
-    }
+    };
+    void load();
+    return () => { current = false; };
   }, [q, domain, state, riskTier, channel, useCase]);
 
   useEffect(() => {
-    void load();
-  }, [load]);
-
-  useEffect(() => {
-    if (!showTemplates || templates.length > 0) return;
+    if (off || !showTemplates || templates.length > 0) return;
+    let current = true;
     api
       .get("/agent-registry/templates")
-      .then((response) => setTemplates(response.data.templates as Template[]))
-      .catch((err) => setError(extractApiError(err, "The templates could not be loaded.")));
-  }, [showTemplates, templates.length]);
+      .then((response) => { if (current) setTemplates(response.data.templates as Template[]); })
+      .catch((err) => { if (current) setError(extractApiError(err, "The templates could not be loaded.")); });
+    return () => { current = false; };
+  }, [off, showTemplates, templates.length]);
 
   return (
-    <div className="space-y-4">
+    <div className="min-w-0 space-y-4">
       <Helmet>
         <title>Agent catalogue</title>
       </Helmet>
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-2">
         <h2 className="text-2xl font-bold">Agent catalogue</h2>
         <button
           type="button"
+          disabled={off}
+          aria-expanded={showTemplates && !off}
           className="rounded-md border border-slate-300 px-3 py-1.5 text-sm text-slate-700"
           onClick={() => setShowTemplates((current) => !current)}
           data-testid="catalogue-templates-toggle"
@@ -136,13 +146,14 @@ export default function AgentCatalogue() {
       {!off && (
         <div className="flex flex-wrap gap-2" data-testid="catalogue-filters">
           <input
+            aria-label="Search agents"
             className="w-56 rounded-md border border-slate-300 px-2 py-1 text-sm"
             placeholder="Search name, type, purpose"
             value={q}
             onChange={(e) => setQ(e.target.value)}
             data-testid="catalogue-q"
           />
-          <select className="rounded-md border border-slate-300 px-2 py-1 text-sm" value={domain} onChange={(e) => setDomain(e.target.value)} data-testid="catalogue-domain">
+          <select aria-label="Domain" className="rounded-md border border-slate-300 px-2 py-1 text-sm" value={domain} onChange={(e) => setDomain(e.target.value)} data-testid="catalogue-domain">
             <option value="">All domains</option>
             {DOMAINS.map((item) => (
               <option key={item} value={item}>
@@ -150,7 +161,7 @@ export default function AgentCatalogue() {
               </option>
             ))}
           </select>
-          <select className="rounded-md border border-slate-300 px-2 py-1 text-sm" value={state} onChange={(e) => setState(e.target.value)} data-testid="catalogue-state">
+          <select aria-label="Approval state" className="rounded-md border border-slate-300 px-2 py-1 text-sm" value={state} onChange={(e) => setState(e.target.value)} data-testid="catalogue-state">
             <option value="">All states</option>
             {(data?.states ?? []).map((item) => (
               <option key={item} value={item}>
@@ -158,7 +169,7 @@ export default function AgentCatalogue() {
               </option>
             ))}
           </select>
-          <select className="rounded-md border border-slate-300 px-2 py-1 text-sm" value={riskTier} onChange={(e) => setRiskTier(e.target.value)} data-testid="catalogue-risk">
+          <select aria-label="Risk tier" className="rounded-md border border-slate-300 px-2 py-1 text-sm" value={riskTier} onChange={(e) => setRiskTier(e.target.value)} data-testid="catalogue-risk">
             <option value="">All risk tiers</option>
             {(data?.risk_tiers ?? []).map((item) => (
               <option key={item} value={item}>
@@ -166,7 +177,7 @@ export default function AgentCatalogue() {
               </option>
             ))}
           </select>
-          <select className="rounded-md border border-slate-300 px-2 py-1 text-sm" value={channel} onChange={(e) => setChannel(e.target.value)} data-testid="catalogue-channel">
+          <select aria-label="Channel" className="rounded-md border border-slate-300 px-2 py-1 text-sm" value={channel} onChange={(e) => setChannel(e.target.value)} data-testid="catalogue-channel">
             <option value="">All channels</option>
             {(data?.channels ?? []).map((item) => (
               <option key={item} value={item}>
@@ -175,6 +186,7 @@ export default function AgentCatalogue() {
             ))}
           </select>
           <input
+            aria-label="Use case"
             className="w-40 rounded-md border border-slate-300 px-2 py-1 text-sm"
             placeholder="Use case"
             value={useCase}
@@ -183,8 +195,10 @@ export default function AgentCatalogue() {
           />
         </div>
       )}
-      {data && (
-        <table className="w-full text-left text-sm" data-testid="catalogue-table">
+      {loading && <p role="status" className="text-sm text-slate-600">Loading catalogue...</p>}
+      {data && !loading && (
+        <div className="overflow-x-auto">
+        <table aria-label="Agent catalogue" className="w-full min-w-[640px] text-left text-sm" data-testid="catalogue-table">
           <thead className="text-xs uppercase text-slate-500">
             <tr>
               <th className="py-1">Agent</th>
@@ -207,12 +221,11 @@ export default function AgentCatalogue() {
             {data.entries.map((entry) => (
               <tr
                 key={entry.agent_id}
-                className="cursor-pointer border-t border-slate-100 hover:bg-slate-50"
-                onClick={() => navigate(`/dashboard/agents/${entry.agent_id}`)}
+                className="border-t border-slate-100 hover:bg-slate-50"
                 data-testid={`catalogue-row-${entry.agent_id}`}
               >
                 <td className="py-1.5">
-                  <span className="font-medium text-slate-800">{entry.name}</span>
+                  <Link className="font-medium text-slate-800 underline focus-visible:outline-2" to={`/dashboard/agents/${entry.agent_id}`}>{entry.name}</Link>
                   <span className="ml-2 text-xs text-slate-500">{entry.agent_type}</span>
                   {entry.purpose && <p className="text-xs text-slate-500">{entry.purpose}</p>}
                 </td>
@@ -229,8 +242,9 @@ export default function AgentCatalogue() {
             ))}
           </tbody>
         </table>
+        </div>
       )}
-      {showTemplates && templates.length > 0 && (
+      {!off && showTemplates && templates.length > 0 && (
         <div data-testid="catalogue-templates">
           <h3 className="text-sm font-semibold text-slate-800">Templates from the industry packs</h3>
           <p className="text-xs text-slate-500">Install a pack from Industry Packs to create its agents in shadow mode.</p>

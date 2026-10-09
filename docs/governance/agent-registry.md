@@ -29,6 +29,8 @@ The fields an administrator writes come from `PUT /agents/{id}/card`: `purpose` 
 characters), `risk_tier` (`low`, `medium`, `high`, `critical`, the guardrail tiers), `use_case`
 and `channels` (`api`, `chat`, `voice`, `email`, `workflow`, `a2a`). Only the fields sent are
 changed; the registry entry is created as `draft` on first use. The agent's edit rules apply.
+Unknown card, lifecycle and traffic-split fields are rejected, rather than ignored. Card writes
+lock the parent agent so two first-time updates cannot race to create the same registry entry.
 
 ## Lifecycle
 
@@ -46,6 +48,9 @@ and records who moved it. Two rules hold at the transition:
 
 - **The submitter cannot approve.** The person who moved the agent into `review` is recorded, and
   `approved` is refused to that person (`same_person`).
+  The lifecycle API requires an authenticated human identity, not an API key or agent token.
+  A review with no recorded human submitter must be resubmitted before approval. Supplying a
+  user-id claim on a machine credential does not turn it into a human approval.
 - **Only an active agent is published.** `published` says the agent is in production; it is
   refused while the agent's runtime status is not `active` (`not_active`). Promotion to active has
   its own checks (shadow evidence, maker-checker on the prompt, the evaluation gate).
@@ -67,9 +72,8 @@ follow each other (`core/agent_registry/approval.py`):
   after the shadow evidence, the maker-checker check on the prompt and the evaluation gate, so a
   refusal (`409`, `agent_registry`, `not_approved`) names the first thing that is missing. An
   agent with no entry is a draft and is refused.
-- **A new or cloned agent does not start active.** It has no entry yet, so nobody has approved
-  it: `POST /agents` and `POST /agents/{id}/clone` with `initial_status: "active"` are refused
-  (`409`, `agent_registry`, `not_approved`) and the agent is created in shadow.
+- **Creation and cloning cannot start active.** With the registry gate on, create in shadow,
+  review the new agent independently, then promote. Clones do not inherit the source approval.
 - **Promotion publishes.** When an `approved` agent becomes active, its entry moves to
   `published` with a recorded transition.
 - **Retirement retires.** When a `published` or `deprecated` agent is retired at runtime, its
@@ -86,20 +90,24 @@ has none. The card, the lifecycle and the list carry `environment`.
 
 An agent may send a share of its runs to another agent of the tenant
 (`core/agent_registry/traffic.py`): `PUT /agents/{id}/traffic-split` with
-`{"split": {"to_agent_id": ..., "percent": 1-100}}`, which requires the target to be active;
+`{"split": {"to_agent_id": ..., "percent": 1-100}}`, which requires both agents to be active
+and the target to be visible to the caller;
 `{"split": null}` removes it. `GET /agents/{id}/traffic-split` reads it.
 
 With `AGENTICORG_AGENT_TRAFFIC_SPLIT_ENABLED` on, that share of the runs asked of the agent
 through `POST /agents/{id}/run` are served by the target instead. The choice is made from the
 run's `thread_id` or `correlation_id` when the request carries one, so a retry lands on the same
-agent and the share is reproducible; otherwise it is random, one draw per run. The agent asked
-for is held to its own controls first (a paused or retired agent, one below its production floor
-or halted by an operator override is refused before any redirection); the target must be active,
-visible to the caller and pass the same controls at run time, otherwise the run stays on the
-agent asked for and the skip is logged. The response carries `requested_agent_id`, the
-`agent_id` that served the run, and
+agent and the share is reproducible; otherwise one random draw is made per request. The target must be active and
+visible to the caller at run time; otherwise the run stays on the agent asked for and the skip is
+logged. The response carries `requested_agent_id`, the `agent_id` that served the run, and
 `served_by` (`traffic_split:<percent>` or null). Removing the split is the rollback: one action,
 and every run returns to the agent asked for.
+
+The requested agent's status, production accuracy floor and operator override are checked
+before allocation. A selected target gets the same controls before execution. A shadow source
+never redirects to a live target; a malformed stored split is ignored with a warning. Paused
+agent refusal still follows `AGENTICORG_PAUSED_AGENTS_REFUSED`; splitting does not override it.
+Use explicit `{"split": null}` to remove a split; an empty or misspelled request is rejected.
 
 The split applies to runs through the agents API only; chat, voice, workflows and A2A pick their
 agent as before. It splits between two agents, not between two stored versions of one agent.
@@ -111,12 +119,18 @@ agent's name, type, domain and runtime status beside its card fields, state and 
 Filters: `state`, `risk_tier`, `use_case`, `channel` (stored on the entry), `domain` (on the
 agent) and `q`, a search term matched against the name, type, description, purpose and use
 case. The console page **Agent catalogue** (`/dashboard/agent-catalogue`) shows the table with
-those filters and opens an agent's page from a row.
+those filters and opens an agent's page from its keyboard-accessible name link.
+Visibility and search filters apply before the 500-result limit. Search treats
+percent signs and underscores literally. Superseded requests cannot overwrite
+the current search, and a failed request clears the previous results.
 
 `GET /agent-registry/templates?pack=` lists the agent templates the industry packs offer, in the
 card's terms: pack, type, domain, model, tools, review condition, confidence floor and the pack's
 compliance markers, with whether the pack can be installed. Installing a pack (Industry Packs)
-creates its agents in shadow mode; the catalogue then lists them as drafts.
+creates its agents in shadow mode. Agents without a saved registry card appear
+as drafts with empty card fields and no transition timestamp. Catalogue reads
+do not insert registry rows or create approvals. Save card fields through
+`PUT /agents/{agent_id}/card` before submitting an agent for review.
 
 **Banking pack.** Five templates for retail and SME banking operations, each with a review
 condition and a confidence floor of at least 85%, using only tools the platform has:
@@ -131,20 +145,31 @@ condition and a confidence floor of at least 85%, using only tools the platform 
 
 Every prompt is synthetic, names its tools, returns one JSON object and leaves the decision to a
 human. The pack is a starting point: a bank's own policies come from its knowledge base, and the
-thresholds are the agent's to change.
+thresholds are for an authorized administrator to review and configure. Compliance
+markers are template topics, not evidence of certification or regulatory approval.
+The collections-review and bank-reconciliation workflows install with manual
+triggers. Their names describe a potential daily process, not an enabled schedule.
+Installation does not run tools, provision credentials, approve an agent, or create
+a payment. Existing connector, runtime, shadow-mode and human-review controls apply.
 
 ## Dependency graph
 
 `GET /agents/{id}/dependencies` returns the agent's dependency graph as nodes and edges
 (`core/agent_registry/dependencies.py`): the model it calls and its fallback, its prompt (the
 template reference and, where it has one, its own text as a hash), its tools and the connectors
-behind them (a `connector:tool` name points at its connector; the knowledge base search points at
-the tenant's knowledge base for the agent's domain), the policies that govern it (the guardrail
-rules that apply by agent, use case, risk tier or to every agent; its review condition; its
-output schema; its evaluation gate's dataset), the agent it was cloned from, the agent its traffic
+behind them (a tool reference names its connector the way execution reads it, in every persisted
+spelling: `gmail:send_email`, `gmail.send_email`, `gmail__send_email` or the Grantex scope
+`tool:gmail:<permission>:send_email`; the knowledge base search points at the tenant's knowledge
+base for the agent's domain), the policies that govern it (the guardrail rules execution selects
+for it: rules for every agent, for this agent, or for the use case a run binds, `agent_run` or
+`agent_resume`; its review condition; its output schema; its evaluation gate's dataset), the agent
+it was cloned from, the agent its traffic
 split sends runs to, and the teams it belongs to. Labels are names and references, never prompt
 text or rule reasons; a related agent the caller may not see is named by its id only. The graph
-is assembled from configuration, not from runs, and has no console view yet.
+is assembled from configuration, not from runs, and has no console view yet. Execution names
+no risk tier and binds its own use case, so a rule scoped to the card's use case or risk tier is
+shown with the relation `scoped_to_card` and `applied_at_runtime: false` rather than as governing
+the agent.
 
 ## Ratings, reliability and certification
 
@@ -158,11 +183,16 @@ The card carries three more sections (`core/agent_registry/reliability.py`), and
   a run's content.
 - **rating**: the average and the count of user ratings. `POST /agents/{id}/rating` records one
   score from 1 to 5 with a short comment per user and agent; a new rating by the same person
-  replaces the old. Anyone who may see the agent may rate it; an API key cannot. The card never
-  says who rated.
+  replaces the old, in one atomic insert-or-update on the agent and the user, so two first
+  ratings sent at once leave one row. Anyone who may see the agent may rate it: the route belongs
+  to the `agent_ratings` scope family, which needs `agents:read` for this write, and the agent
+  must be visible to the caller. An API key cannot rate. The card never says who rated.
 - **certification**: whether the registry has approved the agent (`approved` or `published`),
-  the evaluation gate verdict, and the tenant's attestation for the agent's model provider
-  (region, no training on tenant data, valid or expired). Grantex trust-registry attestations and
+  the evaluation gate verdict, the tenant's governed data region, and the tenant's attestation
+  for the agent's model provider in that region (in-region processing, no training on tenant
+  data, valid or expired, and whether it qualifies). The attestation is chosen as residency
+  enforcement chooses it: one for another region is never shown, and a qualifying one comes
+  before a newer one that does not qualify. Grantex trust-registry attestations and
   passports are not attached; the card says so rather than implying a certification it cannot
   show.
 
@@ -171,6 +201,13 @@ The card carries three more sections (`core/agent_registry/reliability.py`), and
 `agent_registry` (one row per agent) and `agent_registry_events` (`v6z48_agent_registry`), and
 `agent_ratings` (one row per user and agent, `v6z49_agent_ratings`), all tenant-scoped under
 row-level security and removed with the agent.
+
+`v6z49_registry_from_state` adds the event source-state constraint even when a
+database already applied v6z48. It is repeatable and never rewrites audit rows.
+If legacy rows contain invalid source states, new writes are still constrained
+but the constraint remains `NOT VALID` until an operator reviews that history.
+Rollout checks must inspect constraint validation, not just the Alembic version.
+Downgrading v6z49 removes only this check; it does not remove events or registry data.
 
 ## What is not here yet
 

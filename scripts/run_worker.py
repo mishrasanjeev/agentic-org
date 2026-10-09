@@ -45,10 +45,11 @@ def _enable_multiprocess_metrics() -> None:
 
 
 class _HealthHandler(BaseHTTPRequestHandler):
-    """Minimal health probe — only ever returns 200 once the process is
-    up. The worker's actual readiness (broker connection, task imports)
-    is logged by Celery; we don't need to expose it on /health because
-    Cloud Run revives the container if the process exits."""
+    """Startup probe, bound only after Celery connects and signals readiness.
+
+    This is not a continuous broker health check. Process termination closes
+    the listener; broker reconnects remain Celery's responsibility.
+    """
 
     def do_GET(self):  # noqa: N802 — BaseHTTPRequestHandler convention
         self.send_response(200)
@@ -119,6 +120,10 @@ def _vault_key_problem() -> str | None:
 
 
 def main() -> int:
+    # Vault imports transitively create DB instruments. Select their value
+    # class first, before any application imports, in every environment.
+    _enable_multiprocess_metrics()
+
     # Before the health server, so Cloud Run sees a failed start rather than
     # a healthy container whose tasks all fail on the vault.
     problem = _vault_key_problem()
@@ -131,10 +136,13 @@ def main() -> int:
     # signals (SIGTERM from Cloud Run scale-down) reach Celery directly
     # and it shuts down gracefully — partially-processed tasks are NACK'd
     # back to the broker.
-    threading.Thread(target=_serve_health, daemon=True).start()
+    from celery.signals import worker_ready  # noqa: PLC0415
+
+    @worker_ready.connect(weak=False)
+    def _start_health(**_kwargs: object) -> None:
+        threading.Thread(target=_serve_health, daemon=True).start()
 
     # Metrics on their own port, scraped inside the instance and routed from nowhere.
-    _enable_multiprocess_metrics()
     from observability.metrics_export import start_metrics_server  # noqa: PLC0415
 
     start_metrics_server()

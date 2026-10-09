@@ -29,13 +29,16 @@ USER = uuid.uuid4()
 class _Session:
     """Answers each query from a script: ``all()`` rows, ``one()`` tuples or a scalar row."""
 
-    def __init__(self, *answers: Any) -> None:
+    def __init__(self, *answers: Any, region: str | None = None) -> None:
         self.answers = list(answers)
         self.statements: list[str] = []
+        self.raw: list[Any] = []
         self.added: list[Any] = []
+        self.region = region
 
     async def execute(self, statement):
         self.statements.append(str(statement))
+        self.raw.append(statement)
         value = self.answers.pop(0)
         return SimpleNamespace(
             all=lambda: list(value) if isinstance(value, list) else [],
@@ -46,6 +49,9 @@ class _Session:
 
     def add(self, row):
         self.added.append(row)
+
+    async def get(self, _model, _key):
+        return SimpleNamespace(data_region=self.region) if self.region is not None else None
 
     async def flush(self):
         return None
@@ -96,13 +102,28 @@ class TestMetrics:
 class TestRatings:
     def test_a_first_rating_is_added_and_a_second_by_the_same_person_replaces_it(self):
         agent_id = uuid.uuid4()
-        session = _Session(None)
+        stored = AgentRating(
+            id=uuid.uuid4(), tenant_id=TENANT, agent_id=agent_id, user_id=USER, score=4, comment="good"
+        )
+        session = _Session(stored)
         first = asyncio.run(reliability.rate(session, TENANT, agent_id, USER, 4, " good "))
-        assert session.added == [first] and (first.score, first.comment, first.user_id) == (4, "good", USER)
-        assert "FOR UPDATE" in session.statements[0] and "agent_ratings.user_id" in session.statements[0]
-        session = _Session(first)
+        assert first is stored and session.added == []
+        [sql] = session.statements
+        # One atomic statement: a second, concurrent first rating becomes the update, never a uniqueness error.
+        assert sql.startswith("INSERT INTO agent_ratings")
+        assert "ON CONFLICT (agent_id, user_id) DO UPDATE SET score" in sql and "RETURNING agent_ratings.id" in sql
+        assert "WHERE agent_ratings.tenant_id" in sql
+        params = session.raw[0].compile().params
+        assert (params["score"], params["comment"], params["user_id"], params["tenant_id"]) == (4, "good", USER, TENANT)
+        assert (params["param_1"], params["param_2"]) == (4, "good")
+        session = _Session(stored)
         again = asyncio.run(reliability.rate(session, TENANT, agent_id, USER, 2, None))
-        assert again is first and first.score == 2 and first.comment is None and session.added == []
+        params = session.raw[0].compile().params
+        assert again is stored and (params["param_1"], params["param_2"]) == (2, None)
+
+    def test_a_conflicting_row_of_another_tenant_is_never_updated(self):
+        with pytest.raises(reliability.RatingError):
+            asyncio.run(reliability.rate(_Session(None), TENANT, uuid.uuid4(), USER, 3, None))
 
     def test_refused_scores_and_comments(self):
         for score, comment in ((0, None), (6, None), (True, None), (3, "c" * 501), ("4", None)):
@@ -132,11 +153,12 @@ class TestCertification:
         )
         result = asyncio.run(
             reliability.certification(
-                _Session(attestation), TENANT, agent, registry_state="published", gate_verdict={"ok": True}
+                _Session(attestation, region="in"), TENANT, agent, registry_state="published", gate_verdict={"ok": True}
             )
         )
         assert result["registry_approved"] is True and result["registry_state"] == "published"
         assert result["provider_attestation"]["valid"] is True and result["provider_attestation"]["in_region"] is True
+        assert result["provider_attestation"]["qualifies"] is True and result["tenant_data_region"] == "IN"
         assert result["trust_registry"] == {
             "attached": False,
             "note": "Grantex trust-registry attestations and passports are not attached",
@@ -151,7 +173,48 @@ class TestCertification:
                 _Session(), TENANT, _agent(llm_provider=None), registry_state="review", gate_verdict={}
             )
         )
-        assert result["provider_attestation"] is None
+        assert result["provider_attestation"] is None and result["tenant_data_region"] is None
+
+    def test_the_attestation_is_the_one_for_the_tenant_governed_region(self, monkeypatch):
+        session = _Session(None, region="EU")
+        result = asyncio.run(
+            reliability.certification(session, TENANT, _agent(), registry_state="published", gate_verdict={})
+        )
+        # An EU tenant whose only attestations are for another region has none to show.
+        assert result["tenant_data_region"] == "EU" and result["provider_attestation"] is None
+        [sql] = session.statements
+        assert "provider_residency_attestations.data_region = " in sql
+        assert "lower(provider_residency_attestations.provider) = " in sql
+        params = session.raw[0].compile().params
+        assert "EU" in params.values() and "openai" in params.values()
+        # The attestation residency would accept is ordered first, then the newest.
+        order = sql[sql.index("ORDER BY") :]
+        assert order.index("revoked_at IS NULL") < order.index("attested_at DESC")
+        assert "in_region IS true" in order and "no_training IS true" in order
+        # Without a governance configuration the deployment default region applies, as residency reads it.
+        monkeypatch.setattr(settings, "data_region", "us")
+        session = _Session(None)
+        result = asyncio.run(
+            reliability.certification(session, TENANT, _agent(), registry_state="draft", gate_verdict={})
+        )
+        assert result["tenant_data_region"] == "US" and "US" in session.raw[0].compile().params.values()
+
+    def test_an_attestation_without_a_no_training_commitment_does_not_qualify(self):
+        attestation = SimpleNamespace(
+            provider="openai",
+            data_region="EU",
+            in_region=True,
+            no_training=False,
+            revoked_at=None,
+            expires_at=None,
+            attested_at=datetime(2026, 10, 1, tzinfo=UTC),
+        )
+        result = asyncio.run(
+            reliability.certification(
+                _Session(attestation, region="EU"), TENANT, _agent(), registry_state="published", gate_verdict={}
+            )
+        )
+        assert result["provider_attestation"]["valid"] is True and result["provider_attestation"]["qualifies"] is False
 
 
 class TestEndpoints:
@@ -197,7 +260,8 @@ class TestEndpoints:
 
     def test_a_signed_in_user_rates_and_an_api_key_cannot(self, store):
         agent = _agent()
-        session = store(agent, None)
+        stored = AgentRating(id=uuid.uuid4(), tenant_id=TENANT, agent_id=agent.id, user_id=USER, score=5)
+        session = store(agent, stored)
         result = asyncio.run(
             api.rate_agent(
                 agent.id,
@@ -208,8 +272,8 @@ class TestEndpoints:
                 caller=None,
             )
         )
-        [rating] = session.added
-        assert isinstance(rating, AgentRating) and rating.user_id == USER and result["score"] == 5
+        assert "ON CONFLICT (agent_id, user_id) DO UPDATE" in session.statements[1]
+        assert session.raw[1].compile().params["user_id"] == USER and result["score"] == 5
         assert result["rating"] == {"count": 1, "average": 4.0}
         store(agent)
         with pytest.raises(HTTPException) as refused:
@@ -219,6 +283,18 @@ class TestEndpoints:
                 )
             )
         assert refused.value.status_code == 403
+
+    def test_the_rating_route_needs_the_read_scope_the_enforcer_honours(self):
+        from api.route_enforcement import required_scopes_for
+        from api.route_metadata import ROUTE_METADATA_ATTR
+
+        meta = getattr(api.rate_agent, ROUTE_METADATA_ATTR)
+        declared = meta["scope"] if isinstance(meta, dict) else meta.scope
+        # A viewer holding agents:read passes the route check for this POST; agents:write is not required.
+        assert required_scopes_for(declared, "POST") == ("agents:read",)
+        # Every other agents POST still needs the write scope.
+        assert required_scopes_for("agents.write", "POST") == ("agents:write",)
+        assert required_scopes_for("agents.read", "POST") == ("agents:write",)
 
     def test_off(self, monkeypatch):
         assert settings.agent_registry_enabled is False

@@ -21,14 +21,14 @@
 # ==============================================================================
 
 # ─── Web Framework ───────────────────────────────────────────────────────────
-fastapi==0.141.1
+fastapi==0.142.2
 uvicorn[standard]==0.54.0
 # starlette pulled by fastapi (>=0.49.1 required for CVE-2025-54121, CVE-2025-62727)
 python-multipart==0.0.32
 websockets==15.0.1
 
 # ─── Database & ORM ──────────────────────────────────────────────────────────
-sqlalchemy[asyncio]==2.1.1
+sqlalchemy[asyncio]==2.1.2
 asyncpg==0.31.0
 # psycopg 3 is the driver langgraph-checkpoint-postgres uses for the agent
 # checkpoint store (core/langgraph/checkpoint_postgres.py). The binary extra
@@ -48,7 +48,7 @@ pydantic-settings==2.15.0
 jsonschema==4.26.0
 
 # ─── Authentication & Security ───────────────────────────────────────────────
-cryptography>=50.0.1
+cryptography>=50.0.2
 PyJWT[crypto]==2.15.1
 passlib[bcrypt]==1.7.4
 grantex==0.7.1
@@ -65,7 +65,7 @@ twilio==9.11.2
 stripe==15.6.1
 
 # ─── LLM Providers ──────────────────────────────────────────────────────────
-google-genai==2.25.0
+google-genai==2.27.0
 anthropic==0.125.0
 openai==2.54.0
 
@@ -74,8 +74,8 @@ langgraph==1.2.12
 langchain==1.4.3
 langchain-core==1.6.6
 langchain-google-genai==4.4.0
-langchain-anthropic==1.7.4
-langchain-openai==1.6.6
+langchain-anthropic==1.7.5
+langchain-openai==1.6.7
 # Exact pins, kept in step with pyproject: the sealed checkpoint saver
 # (core/langgraph/checkpoint_postgres.py) is verified against these versions.
 langgraph-checkpoint-postgres==3.1.2
@@ -86,7 +86,7 @@ langsmith==0.14.1
 google-cloud-storage==2.19.0
 google-cloud-secret-manager==2.30.0
 google-api-python-client==2.200.0
-google-auth==2.59.0
+google-auth==2.59.1
 
 # ─── Observability & Monitoring ──────────────────────────────────────────────
 structlog==25.5.0

@@ -19,6 +19,7 @@ from api.deps import (
 )
 from api.route_metadata import route_meta
 from core.content import drafting, drafts, extraction, services, summarisation
+from core.workbench import console
 
 logger = structlog.get_logger()
 router = APIRouter(prefix="/content", tags=["Content"])
@@ -160,7 +161,7 @@ async def post_draft(
     author = _human(principal)
     run = await _run(drafting.SERVICE, body, tenant_id, domains)
     kept = run.input if isinstance(run.input, drafting.DraftIn) else body
-    needs = drafting.requires_approval(kept)
+    needs = drafting.requires_approval(kept, kinds=await console.approval_kinds(tenant_id))
     try:
         draft = await drafts.record(
             uuid.UUID(tenant_id),

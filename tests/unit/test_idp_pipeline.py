@@ -373,9 +373,10 @@ class TestReviewHardening:
         monkeypatch.setattr(settings, "idp_enabled", True)
         seen: dict[str, object] = {}
 
-        def fake_process(stream, mime, *, ocr, with_words):
+        def fake_process(stream, mime, *, ocr, with_words, rules=None):
             seen["thread"] = threading.current_thread()
             seen["args"] = (stream, mime, ocr, with_words)
+            seen["rules"] = rules
             return {"documents": []}
 
         monkeypatch.setattr(pipeline, "process", fake_process)
@@ -390,6 +391,7 @@ class TestReviewHardening:
             False,
             True,
         )
+        assert seen["rules"] is not None  # the tenant review rules travel to the worker thread
 
 
 class TestDocumentScopes:

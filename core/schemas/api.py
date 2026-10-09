@@ -345,6 +345,8 @@ class AgentCardIn(BaseModel):
 
     model_config = {"extra": "forbid"}
 
+    model_config = {"extra": "forbid"}
+
     purpose: str | None = Field(None, max_length=2000)
     risk_tier: str | None = Field(None, max_length=16)
     use_case: str | None = Field(None, max_length=120)
@@ -354,7 +356,9 @@ class AgentCardIn(BaseModel):
 class AgentTrafficSplitIn(BaseModel):
     """A share of an agent's runs served by another agent, or null to remove the split."""
 
-    split: dict[str, Any] | None = None
+    model_config = {"extra": "forbid"}
+
+    split: dict[str, Any] | None
 
 
 class AgentRatingIn(BaseModel):

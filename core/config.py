@@ -388,6 +388,30 @@ class Settings(BaseSettings):
     # assignments. Off by default: off, GET /workbench answers
     # ``enabled: false`` and every other workbench route is not found.
     workbench_v2_enabled: bool = False
+    # Speech and conversation intelligence (core/speech/): recordings split
+    # by speaker, transcribed and kept with the transcript encrypted. Off by
+    # default: off, GET /speech/status answers ``enabled: false`` and every
+    # other speech route is not found.
+    speech_intelligence_enabled: bool = False
+    # Transaction intelligence (core/txn/): movements aggregated by entity,
+    # structuring and pass-through detectors, findings under human
+    # disposition. Off by default: off, GET /txn/status answers
+    # ``enabled: false`` and every other transaction route is not found.
+    transaction_intelligence_enabled: bool = False
+    # Provenance and lineage (core/lineage/): every kept thing traced to its
+    # source, version and processing steps; ingestion notes its chain. Off by
+    # default: off, GET /lineage/status answers ``enabled: false``, every other
+    # lineage route is not found and ingestion notes nothing.
+    lineage_enabled: bool = False
+    # The periodic sweep that runs every tenant's due sync sources
+    # (core/tasks/lineage_tasks.py). Off by default: a manual run and the
+    # cron trigger still work while lineage itself is on.
+    lineage_sync_sweep_enabled: bool = False
+    # Personalisation (core/personalisation/): content rendered from a
+    # subject's profile only under a valid consent for the purpose, with the
+    # attributes used recorded. Off by default: off, GET /personalisation/status
+    # answers ``enabled: false`` and every other personalisation route is not found.
+    personalisation_enabled: bool = False
     # JSON object keyed provider/model with input and output USD per million
     # tokens; a negotiated rate replaces the list price.
     model_price_overrides_json: str = ""

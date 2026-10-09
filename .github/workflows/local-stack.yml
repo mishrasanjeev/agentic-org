@@ -65,6 +65,8 @@ jobs:
       # missing; here that fails the run instead, so a wiring change that
       # stops them reaching the runner cannot leave this job green.
       AGENTICORG_E2E_REQUIRE_GOVERNED_CASES: "true"
+      # Exercise the opt-in native registration path; the product default stays off.
+      AGENTICORG_DEV_NATIVE_CONNECTOR_PREFILL_ENABLED: "true"
     steps:
       - uses: actions/checkout@v7
         with:

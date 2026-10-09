@@ -39,7 +39,8 @@ def _ensure_check(table: str, name: str, expression: str) -> None:
     # The table, name and expression are the module constants above, never request data.
     statement = (
         "DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = "  # noqa: S608
-        f"'{name}') THEN ALTER TABLE {table} ADD CONSTRAINT {name} CHECK ({expression}); END IF; END $$;"  # noqa: S608
+        f"'{name}' AND conrelid = '{table}'::regclass) "
+        f"THEN ALTER TABLE {table} ADD CONSTRAINT {name} CHECK ({expression}); END IF; END $$;"  # noqa: S608
     )
     op.execute(statement)
 

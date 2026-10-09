@@ -136,12 +136,33 @@ SCOPE_FAMILIES: dict[str, tuple[str, str]] = {
     # sweep): the family was unmapped, so any authenticated tenant user could
     # create or read routing teams. Same scopes as the agents they contain.
     "agent_teams": ("agents:read", "agents:write"),
+    # A person's own rating of an agent they may see (POST /agents/{id}/rating):
+    # the write is the viewer's opinion, one row per person, so it needs the
+    # read scope only; the handler still requires a signed-in user and checks
+    # the agent is visible to them.
+    "agent_ratings": ("agents:read", "agents:read"),
     "workflows": ("workflows:read", "workflows:write"),
     "workflow_variants": ("workflows:read", "workflows:write"),
     "approvals": ("approvals:read", "approvals:write"),
     "audit": ("audit:read", "audit:read"),
     "connectors": ("connectors.read", "connectors.read"),
     "report_schedules": ("report_schedules.read", "report_schedules.write"),
+    # Call recordings and their transcripts are customer speech: a read
+    # needs the audit scope the domain roles and the auditor hold, a write
+    # (an upload, a transcript, a summary) the approvals write scope the
+    # domain roles hold. Administrators pass as everywhere.
+    "speech": ("audit:read", "approvals:write"),
+    # Transaction records and findings are customer money movements: the
+    # same shape as speech, a read for the audit scope, a write (records in,
+    # detectors run, a disposition) for the approvals write scope.
+    "txn": ("audit:read", "approvals:write"),
+    # Lineage (core/lineage/): reading provenance is an audit read; noting a
+    # chain an acquisition produced is a write of record.
+    "lineage": ("audit:read", "approvals:write"),
+    # Personalisation (core/personalisation/): consents, profiles and what was
+    # rendered for a customer are audit-grade reads; granting consent, editing
+    # profiles and rules, and rendering take the approvals write scope.
+    "personalisation": ("audit:read", "approvals:write"),
     # Long-term memory holds what is remembered about customers and cases:
     # recall is an audit-grade read and a write changes what runs are told,
     # so it takes the approver scope (the sensitive-subsystem precedent).
@@ -192,9 +213,7 @@ KNOWN_AUTH_MODES = frozenset({"api_key", "grantex", "legacy", "commerce_buyer"})
 # canonical family scopes: never ``agenticorg:admin``, legacy aliases or any
 # scope outside SCOPE_FAMILIES. The A2A and MCP scopes are included even while
 # their setting is off, so an agent can hold them before they are required.
-GRANTABLE_ROUTE_SCOPES: frozenset[str] = frozenset(
-    scope for pair in SCOPE_FAMILIES.values() for scope in pair
-)
+GRANTABLE_ROUTE_SCOPES: frozenset[str] = frozenset(scope for pair in SCOPE_FAMILIES.values() for scope in pair)
 
 
 def validate_route_scopes(scopes: object) -> list[str]:
@@ -208,8 +227,7 @@ def validate_route_scopes(scopes: object) -> list[str]:
     unknown = sorted({s for s in scopes if s not in GRANTABLE_ROUTE_SCOPES})
     if unknown:
         raise ValueError(
-            f"route_scopes {unknown} cannot be granted to an agent; "
-            f"allowed: {sorted(GRANTABLE_ROUTE_SCOPES)}"
+            f"route_scopes {unknown} cannot be granted to an agent; allowed: {sorted(GRANTABLE_ROUTE_SCOPES)}"
         )
     return sorted(set(scopes))
 
@@ -289,8 +307,11 @@ async def _check_rate_limit(request: Request, meta: dict[str, Any]) -> None:
     tenant_id = getattr(request.state, "tenant_id", None)
     buyer_access_id = getattr(request.state, "buyer_access_id", None)
     principal = (
-        f"buyer:{buyer_access_id}" if buyer_access_id else
-        f"t:{tenant_id}" if (meta.get("auth_required") and tenant_id) else f"ip:{_client_ip(request)}"
+        f"buyer:{buyer_access_id}"
+        if buyer_access_id
+        else f"t:{tenant_id}"
+        if (meta.get("auth_required") and tenant_id)
+        else f"ip:{_client_ip(request)}"
     )
 
     from core.auth_state import check_window_rate

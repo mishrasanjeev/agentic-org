@@ -20,6 +20,7 @@ from core.agent_registry import lifecycle
 from core.config import settings
 from core.evals import gates, runs
 from core.models.agent_registry import AgentRegistryEntry, AgentRegistryEvent
+from core.ownership import Caller
 from core.schemas.api import AgentCardIn, AgentLifecycleIn
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -38,7 +39,9 @@ class _Session:
         self.statements.append(str(statement))
         value = self.answers.pop(0)
         return SimpleNamespace(
-            scalar_one_or_none=lambda: value, scalars=lambda: SimpleNamespace(all=lambda: list(value))
+            scalar_one_or_none=lambda: value,
+            scalars=lambda: SimpleNamespace(all=lambda: list(value)),
+            all=lambda: list(value),
         )
 
     def add(self, row):
@@ -149,6 +152,21 @@ class TestCardFields:
 
 
 class TestTransitions:
+    @pytest.mark.parametrize(
+        "state,to,actor,submitter",
+        [
+            ("draft", "review", None, None),
+            ("review", "approved", None, MAKER),
+            ("review", "approved", CHECKER, None),
+        ],
+    )
+    def test_missing_human_or_submitter_cannot_bypass_review(self, state, to, actor, submitter):
+        agent = _agent()
+        entry = _entry(agent, state, submitted_by=submitter)
+        with pytest.raises(lifecycle.RegistryError):
+            self._move(agent, entry, to, actor=actor)
+        assert entry.state == state
+
     def _move(self, agent, entry, to, actor=CHECKER, note=None):
         session = _Session(entry)
         result = asyncio.run(lifecycle.transition(session, TENANT, agent, to, actor=actor, note=note))
@@ -298,6 +316,24 @@ class TestCard:
 
 
 class TestEndpoints:
+    @pytest.mark.parametrize("caller", [None, Caller(MAKER, "admin", None, True, True)])
+    def test_machine_or_missing_caller_cannot_supply_a_human_claim(self, on, store, caller):
+        agent = _agent()
+        session = store(agent, _entry(agent))
+        with pytest.raises(HTTPException) as refused:
+            asyncio.run(
+                api.transition_agent_lifecycle(
+                    agent.id,
+                    AgentLifecycleIn(to="review"),
+                    tenant_id=str(TENANT),
+                    user={"agenticorg:user_id": str(MAKER)},
+                    user_domains=None,
+                    caller=caller,
+                )
+            )
+        assert refused.value.status_code == 403
+        assert not session.added
+
     @pytest.fixture
     def store(self, monkeypatch):
         holder: dict[str, _Session] = {}
@@ -398,7 +434,7 @@ class TestEndpoints:
                 tenant_id=str(TENANT),
                 user={"agenticorg:user_id": str(MAKER)},
                 user_domains=None,
-                caller=None,
+                caller=Caller(MAKER, "admin", None, True, False),
             )
         )
         assert "FOR UPDATE" in session.statements[0] and "agents.tenant_id" in session.statements[0]
@@ -414,7 +450,7 @@ class TestEndpoints:
                     tenant_id=str(TENANT),
                     user={"agenticorg:user_id": str(MAKER)},
                     user_domains=None,
-                    caller=None,
+                    caller=Caller(MAKER, "admin", None, True, False),
                 )
             )
         assert refused.value.status_code == 409 and refused.value.detail["error"] == "same_person"
@@ -427,7 +463,7 @@ class TestEndpoints:
                     tenant_id=str(TENANT),
                     user={"agenticorg:user_id": str(MAKER)},
                     user_domains=None,
-                    caller=None,
+                    caller=Caller(MAKER, "admin", None, True, False),
                 )
             )
         assert missing.value.status_code == 404
@@ -466,14 +502,15 @@ class TestEndpoints:
             "approved"
         ]
         assert result["transitions"]["approved"] == ["draft", "review", "published"]
-        session = store([entry], [agent])
+        session = store([(agent, entry)])
         listed = asyncio.run(
             api.list_agent_registry(state="approved", tenant_id=str(TENANT), user_domains=None, caller=None)
         )
         assert [row["agent_id"] for row in listed["entries"]] == [str(agent.id)]
         assert listed["entries"][0]["name"] == "Claims decider" and listed["entries"][0]["state"] == "approved"
         assert (
-            "agent_registry.state = " in session.statements[0] and "agent_registry.tenant_id" in session.statements[0]
+            "coalesce(agent_registry.state" in session.statements[0]
+            and "agent_registry.tenant_id" in session.statements[0]
         )
         assert listed["risk_tiers"] == ["low", "medium", "high", "critical"]
 

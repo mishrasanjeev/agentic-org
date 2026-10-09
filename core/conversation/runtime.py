@@ -553,7 +553,11 @@ async def run_turn(
     handed off afterwards by ``finish_turn``, once the session is stored.
     """
     expected = dialogue.to_dict()
-    outcome = dialogue_engine.advance(dialogue, text)
+    # The tenant business rules (retries, amount ceilings) apply on every entry point.
+    rules = await business_rules(tenant_id)
+    outcome = dialogue_engine.advance(
+        dialogue, text, rules=dialogue_engine.Rules(retries=rules.retries, amount_limits=rules.amount_limits)
+    )
     execution: dict[str, Any] | None = None
     claimed = False
 
@@ -598,6 +602,13 @@ def _recognised(text: str) -> bool:
 
 
 HELD_ANSWER = "A colleague has joined this conversation and will reply here."
+
+
+async def business_rules(tid: uuid.UUID) -> Any:
+    """The tenant's conversation rules from the business console; the catalogue's defaults when it is off."""
+    from core.workbench import console
+
+    return await console.conversation_rules(tid)
 
 
 async def held_turn(tid: uuid.UUID, key: str, text: str, dialogue: Dialogue) -> dict[str, Any] | None:
@@ -669,7 +680,7 @@ async def finish_turn(
             tail = " " + offer.text
     if (
         not superseded
-        and dialogue.negative_turns >= feedback.NEGATIVE_STREAK
+        and dialogue.negative_turns >= (await business_rules(tid)).negative_turns
         and dialogue.stage in (dialogue_engine.STAGE_IDLE, dialogue_engine.STAGE_COLLECTING)
         and outcome.kind not in ("escalate", "execute")
     ):

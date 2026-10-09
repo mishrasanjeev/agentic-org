@@ -181,20 +181,32 @@ async def ledger_add(
 
 async def summary(session: Any, tenant_id: uuid.UUID, *, days: int = 30, group_by: str = "use_case") -> dict[str, Any]:
     """The ledger folded by one dimension over the window, with totals and the unattributed share."""
+    from sqlalchemy import bindparam, distinct, func, select
     from sqlalchemy import text as sqltext
+
+    from core.models.finops_ledger import FinopsCostLedger
 
     if group_by not in DIMENSIONS:
         raise ValueError(f"group_by is one of {', '.join(DIMENSIONS)}")
     window = max(1, min(int(days), MAX_DAYS))
     since = datetime.now(UTC).date() - timedelta(days=window - 1)
-    params = {"tid": str(tenant_id), "since": since, "limit": MAX_ROWS}
+    params = {"tid": tenant_id, "since": since, "limit": MAX_ROWS}
+    ledger = FinopsCostLedger.__table__
+    dimension = ledger.c[group_by]
+    cost = func.sum(ledger.c.cost_usd)
     rows = (
         await session.execute(
-            sqltext(
-                f"SELECT {group_by}, SUM(tokens), SUM(cost_usd), SUM(calls), COUNT(DISTINCT agent_id) "  # noqa: S608  # nosec B608 — group_by is one of the fixed dimension names checked above
-                "FROM finops_cost_ledger WHERE tenant_id = :tid AND period_date >= :since "
-                f"GROUP BY {group_by} ORDER BY 3 DESC, 1 ASC LIMIT :limit"
-            ),
+            select(
+                dimension,
+                func.sum(ledger.c.tokens),
+                cost,
+                func.sum(ledger.c.calls),
+                func.count(distinct(ledger.c.agent_id)),
+            )
+            .where(ledger.c.tenant_id == bindparam("tid"), ledger.c.period_date >= bindparam("since"))
+            .group_by(dimension)
+            .order_by(cost.desc(), dimension.asc())
+            .limit(bindparam("limit")),
             params,
         )
     ).fetchall()

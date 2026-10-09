@@ -362,14 +362,11 @@ whose stamp is not the active id. Run it outside busy hours and just after a
 token refresh cycle (every 15 minutes): it can overwrite a credential that
 changes while it runs (FINDINGS A-83).
 
-Check the baseline first. If `verify_all` listed an `[envelope]` key under
-`connector_configs.credentials_encrypted`, `gstn_credentials.password_encrypted`
-or `tenant_ai_credentials.credentials_encrypted`, those columns hold KMS rows
-(`env1:`), which rewrap counts as `legacy` and cannot decrypt (FINDINGS A-30).
-Then add `--key-id="$OLD_ID"` to the dry run and the rewrap below, so they move
-only rows stamped `$OLD_ID`. With `OLD_ID=legacy` that does not separate them:
-the rewrap stops at the first KMS row, so stop after step 3 and keep the old key
-as a decrypt-only entry.
+Check the baseline first. Valid KMS envelopes, including `env1:` containers,
+are skipped by vault rewrap and remain visible in `verify_all`. They are not
+legacy vault rows. `--key-id="$OLD_ID"` can limit the operation to one vault
+key, but is not a KMS rotation mechanism. A malformed envelope stops the batch
+rather than being downgraded or overwritten.
 
 ```bash
 python -m core.crypto.rewrap --dry-run
@@ -399,9 +396,9 @@ which also lists the key ids it tried; the `rewrap_decrypt_failed` log line adds
 the tenant and company. Running it again fails on the same row and never reaches
 the rows after it, so do not rerun it as it is:
 
-- A KMS row (the value starts with `env1:`) when you did not pass `--key-id`:
-  rerun with `--key-id="$OLD_ID"` as above, or, with `OLD_ID=legacy`, stop after
-  step 3 and keep the old key.
+- A malformed KMS container: stop, retain every referenced key and repair the
+  damaged envelope through the separate KMS procedure. Valid KMS rows are
+  skipped without changing their bytes.
 - Anything else: stop the rotation here. Keep `$OLD_ID` and every other entry in
   the keyring, do not continue to step 5 or 6, and investigate that row. No key
   in the keyring opens it: its stamp names a key the keyring does not hold (the
@@ -429,8 +426,9 @@ secret.
 python -m core.crypto.rewrap --verify
 ```
 
-Exits 0 when every row rewrap can move is on the active key. KMS rows keep it at
-1 (FINDINGS A-30); step 5 is the check that decides.
+Exits 0 when every vault row rewrap can move is on the active key. Valid KMS
+rows are excluded from this vault-only result; step 5 still checks all key
+references before retirement.
 
 ### 5. Confirm nothing references the old key
 
@@ -638,14 +636,10 @@ under it.
 - **Checkpoints (FINDINGS A-21).** Neither tool reads the checkpoint tables, so
   `verify_all` can call a key unreferenced while paused runs still need it, and
   rewrap never moves checkpoints. Use the step 5 checkpoint query.
-- **JSONB and KMS rows (FINDINGS A-30).** Rewrap skips
-  `voice_calls.transcript_encrypted` and `case_pseudonym_maps.mapping_encrypted`
-  without counting them, while `verify_all` reports their key, so an old key
-  referenced only there cannot be retired. It treats KMS envelope rows (`env1:`)
-  in the other columns as unstamped `legacy` rows: a plain rewrap stops at the
-  first one and `--verify` always reports them. When tenants have KMS keys, run
-  `python -m core.crypto.rewrap --key-id="$OLD_ID"`, which skips them (unless
-  `OLD_ID` is `legacy`), and rely on `verify_all --check`.
+- **KMS rotation is separate.** Registered JSONB vault containers and encrypted
+  speech BYTEA are covered by vault rewrap. Valid KMS envelopes are skipped,
+  not re-encrypted under a vault key. `verify_all --check` continues to refuse
+  retirement of a referenced KMS key. Malformed envelopes fail the operation.
 - **Secret-key fallback (FINDINGS A-71).** Without a keyring the vault derives its
   key from `AGENTICORG_SECRET_KEY`, which also signs tokens, and a service
   without the keyring mount uses a different key from the others. Mount the
@@ -711,8 +705,19 @@ docker rm -f vault-rehearsal-pg
 
 Registered columns (`_SCANNERS` in `core/crypto/verify_all.py`):
 `connector_configs.credentials_encrypted`, `gstn_credentials.password_encrypted`,
-`tenant_ai_credentials.credentials_encrypted`, `voice_calls.transcript_encrypted`
-and `case_pseudonym_maps.mapping_encrypted`.
+`tenant_ai_credentials.credentials_encrypted`, `voice_calls.transcript_encrypted`,
+`case_pseudonym_maps.mapping_encrypted`, `speech_recordings.content`, `speech_recordings.transcript_encrypted`,
+`speech_recordings.summary_encrypted`, `speech_live_sessions.turns_encrypted`,
+`personalisation_profiles.attributes` and `lineage_sync_sources.token`.
+
+The JSONB encrypted containers retain their `_encrypted` shape during vault
+rewrap; encrypted speech audio retains its BYTEA storage. Audio plaintext contains
+an authenticated tenant binding and is never returned as a raw compatibility fallback.
+Key-reference scanning also recognises direct KMS envelopes and `env1:`
+containers so a referenced KEK cannot appear safe to retire. Vault rewrap does
+not rotate KMS envelopes: valid envelopes are skipped, while malformed
+containers stop the batch rather than being downgraded or overwritten. Use the separate KMS
+procedure for that format; do not treat a vault-only check as KMS rotation proof.
 
 | Command | What it does | Exit codes |
 | --- | --- | --- |

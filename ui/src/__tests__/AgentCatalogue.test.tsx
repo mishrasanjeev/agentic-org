@@ -2,7 +2,7 @@
 /**
  * Agent catalogue: the filters it sends, the rows it shows, the templates and the off state.
  */
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { HelmetProvider } from "react-helmet-async";
 import { MemoryRouter } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -102,6 +102,34 @@ describe("AgentCatalogue", () => {
     mockGet.mockRejectedValue({ response: { status: 409 } });
     renderPage();
     expect(await screen.findByTestId("catalogue-off")).toHaveTextContent("off in this deployment");
+    expect(screen.queryByTestId("catalogue-table")).not.toBeInTheDocument();
+    expect(screen.getByTestId("catalogue-templates-toggle")).toBeDisabled();
+  });
+
+  it("ignores earlier searches that finish after the current search", async () => {
+    let resolveEarlier!: (value: unknown) => void;
+    mockGet.mockResolvedValue({ data: { entries: [ENTRY], ...LISTS } });
+    renderPage();
+    await screen.findByTestId("catalogue-row-a1");
+    mockGet.mockImplementationOnce(() => new Promise((resolve) => { resolveEarlier = resolve; }));
+    fireEvent.change(screen.getByTestId("catalogue-q"), { target: { value: "old" } });
+    mockGet.mockResolvedValue({ data: { entries: [], ...LISTS } });
+    fireEvent.change(screen.getByTestId("catalogue-q"), { target: { value: "latest" } });
+    await screen.findByText("No agents match.");
+    await act(async () => resolveEarlier({ data: { entries: [ENTRY], ...LISTS } }));
+    expect(screen.queryByTestId("catalogue-row-a1")).not.toBeInTheDocument();
+    expect(screen.getByText("No agents match.")).toBeInTheDocument();
+  });
+
+  it("clears previous results on a failed search and provides labelled controls and a link", async () => {
+    mockGet.mockResolvedValue({ data: { entries: [ENTRY], ...LISTS } });
+    renderPage();
+    await screen.findByTestId("catalogue-row-a1");
+    expect(screen.getByRole("link", { name: "Claims decider" })).toHaveAttribute("href", "/dashboard/agents/a1");
+    expect(screen.getByRole("combobox", { name: "Domain" })).toBeInTheDocument();
+    mockGet.mockRejectedValue(new Error("unavailable"));
+    fireEvent.change(screen.getByRole("textbox", { name: "Search agents" }), { target: { value: "new" } });
+    await screen.findByRole("alert");
     expect(screen.queryByTestId("catalogue-table")).not.toBeInTheDocument();
   });
 });

@@ -52,6 +52,12 @@ priority then age. A caller sees the kinds a held workbench shows; `kind` narrow
 `GET /workbench/queue/{kind}/{id}` returns the item in full with the fields a reviewer may edit
 before deciding.
 
+Queue visibility does not grant write authority. Every actionable queue kind
+requires `approvals:write` (or its dot alias), or the administrator scope,
+before any edit is applied. Draft decisions also require administrator scope;
+finding dispositions require a signed-in human. Read-only auditors can inspect
+findings but cannot confirm or dismiss them through the queue.
+
 `POST /workbench/queue/{kind}/{id}/decide` takes the decision, notes and a list of edits, applies
 the edits first and then decides through the store that owns the item, so that store's rules apply
 unchanged: a draft's title and text fields are edited with the originals kept (`content_drafts.edits`)
@@ -64,6 +70,51 @@ nothing behind; a governed case is decided on its own page, and the queue says s
 subsystem is off (document processing, content services) is not offered, as its own routes are not
 found. The review officer's and the supervisor's workbenches show the queue as a tab, with
 the sum of the four counters behind it.
+
+## The business console
+
+`GET /workbench/console` lists the rules, thresholds and routing a tenant may change without a
+release, each with its bounds, options, the tenant's value where one is set and the default
+(`core/workbench/console.py`, table `business_settings`). An administrator sets a value
+(`PUT /workbench/console/{key}`) within the catalogue's bounds or removes it so the default applies
+again (`DELETE`); every change keeps the previous value and who made it and writes an audit row.
+The supervisor's workbench shows the console as a tab for administrators.
+
+| Setting | Takes effect in |
+| --- | --- |
+| Document type and field confidence floors; document types always reviewed | the review decision of document processing (`core/idp/pipeline.py`) and the floors `GET /idp/document-types` reports |
+| Draft kinds that wait for approval | whether a new draft waits in the drafts queue (`core/content/drafting.py`) |
+| Answers tried before handing over; negative turns before offering a person; amount ceilings by intent | the banking dialogue (`core/conversation/dialogue.py`, `runtime.py`) |
+| Review queue priority rules | the priority of each item in the review queue, from its facts (kind, field, operator, value) |
+
+Readers take the effective value: the tenant's where one is set and the workbench flag is on, the
+catalogue's default otherwise, and the default again when the store cannot be read, so a
+deployment with the console off behaves exactly as before.
+
+## Search
+
+`GET /workbench/search` searches cases, documents, customers and accounts in one query
+(`core/workbench/search.py`). The query is words and quoted phrases, every one of which must match
+(a word with a leading minus must not), over the text of each kind: a governed case's reference,
+purpose, provider, state, subject and parties; a kept document's name, status and extracted result,
+corrections first; a customer's name, identifiers, industry, address and signatory; an account as
+the account numbers and bank codes found in kept documents with the holder's name beside. Facet
+filters are repeated query parameters named after the facet (a case's `state`, `purpose`,
+`provider`; a document's `status`, `document_type`; a customer's `industry`, `state_code`,
+`active`, which is `true` or `false`) and the response counts the values present so the person can
+narrow further. A document type narrows the query itself, before the row limit, and an excluded term
+is judged per account for account hits. Every read
+is tenant scoped, bounded per kind, and a kind is searched only where the caller holds a workbench
+tab that shows it (customers where the companies page admits the role). The review officer's and
+the investigator's workbenches show the search as a tab.
+
+## Accessibility
+
+`ui/src/__tests__/workbench_accessibility.test.tsx` renders every workbench page and panel (the
+index, a workbench with its tabs, the review queue with an item open, the business console, the
+search with results) and runs axe-core over each; a violation fails the suite. Colour contrast and
+page regions are judged by the browser suite, since a component renders without the layout. Every
+control carries a name, results regions announce their count, and tabs mark the current page.
 
 ## The shell
 

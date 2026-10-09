@@ -75,6 +75,10 @@ class AgentRegistryEvent(BaseModel):
         # Leads with the foreign key: the transitions of one agent, in order.
         Index("ix_agent_registry_events_agent_created", "agent_id", "created_at"),
         Index("ix_agent_registry_events_tenant_created", "tenant_id", "created_at"),
+        CheckConstraint(
+            "from_state IN ('draft','review','approved','published','deprecated','retired')",
+            name="ck_agent_registry_events_from",
+        ),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)

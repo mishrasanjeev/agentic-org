@@ -383,6 +383,16 @@ class TestScheduledEvaluation:
         }
         assert "fine" not in str(detail) and "Decide." not in str(detail)
 
+        async def _judge_error(tenant_id, **kwargs):
+            report = await _run_version(tenant_id, **kwargs)
+            report.update(errors=0, pass_rate=1.0)
+            report["scores"]["relevance"]["errors"] = 1
+            return report
+
+        monkeypatch.setattr(runs, "run_version", _judge_error)
+        reasons, _ = asyncio.run(synthetic._probe_eval_dataset(TENANT, config))
+        assert reasons == ["eval_judges_not_completed"]
+
     def test_the_dataset_probe_is_an_error_while_evaluation_is_off(self):
         assert settings.evals_v2_enabled is False
         with pytest.raises(RuntimeError, match="off"):
@@ -395,6 +405,39 @@ class TestScheduledEvaluation:
 
 
 class TestRun:
+    def test_dataset_deadline_scales_with_serial_work_and_stays_below_schedule_interval(self):
+        assert synthetic.probe_timeout_seconds("model", {}) == 60
+        assert synthetic.probe_timeout_seconds("eval_dataset", {"limit": 1}) == 70
+        assert synthetic.probe_timeout_seconds("eval_dataset", {"limit": 5, "judges": ["relevance"]}) == 160
+        assert synthetic.probe_timeout_seconds("eval_dataset", {"limit": 25}) == 240
+        assert synthetic.probe_timeout_seconds("eval_dataset", {"limit": 25, "judges": ["relevance"]}) == 240
+        assert synthetic.MAX_EVAL_PROBE_TIMEOUT_SECONDS < synthetic.MIN_INTERVAL_MINUTES * 60
+
+    def test_dataset_outlives_single_probe_deadline_but_keeps_latency_failure(self, monkeypatch):
+        async def _dataset(_tenant, _config):
+            await asyncio.sleep(0.03)
+            return [], {"run_id": "synthetic-run"}
+
+        monkeypatch.setattr(synthetic, "PROBE_TIMEOUT_SECONDS", 0.001)
+        monkeypatch.setattr(synthetic, "EVAL_CALL_BUDGET_SECONDS", 0.1)
+        monkeypatch.setattr(synthetic, "_probe_eval_dataset", _dataset)
+        check = _check(
+            "eval_dataset",
+            config={
+                "dataset_id": str(uuid.uuid4()),
+                "system": "Synthetic prompt",
+                "model": "m",
+                "limit": 1,
+            },
+        )
+        check.config["max_latency_ms"] = 1
+        result = asyncio.run(synthetic.probe(check))
+        assert result.status == "failed" and result.reasons == ["too_slow"]
+        assert result.detail == {"run_id": "synthetic-run"}
+        monkeypatch.setattr(synthetic, "MAX_EVAL_PROBE_TIMEOUT_SECONDS", 0.001)
+        expired = asyncio.run(synthetic.probe(check))
+        assert expired.status == "error" and expired.detail == {"error_type": "TimeoutError"}
+
     def test_ok_failed_and_error_results(self, monkeypatch):
         monkeypatch.setattr(synthetic, "_probe_model", AsyncMock(return_value=([], {"model": "m", "tokens": 3})))
         ok = asyncio.run(synthetic.probe(_check()))

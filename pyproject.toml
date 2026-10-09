@@ -59,12 +59,12 @@ classifiers = [
     "Topic :: Scientific/Engineering :: Artificial Intelligence",
 ]
 dependencies = [
-    "fastapi>=0.141.1",
+    "fastapi>=0.142.2",
     "uvicorn[standard]>=0.54.0",
     # Held to the 2.1 series to match requirements.txt: the tools image installs
     # these ranges, and 2.1.0's typing changes failed mypy until the code was
     # annotated for them (FINDINGS A-70), so the next minor moves deliberately.
-    "sqlalchemy[asyncio]>=2.1.1,<2.2",
+    "sqlalchemy[asyncio]>=2.1.2,<2.2",
     "asyncpg>=0.30.0",
     "psycopg2-binary>=2.9.13",
     # Agent checkpoint store driver (langgraph-checkpoint-postgres); the binary
@@ -75,7 +75,7 @@ dependencies = [
     "redis[hiredis]>=5.2.0",
     "pydantic>=2.13.5",
     "pydantic-settings>=2.15.0",
-    "cryptography>=50.0.1",
+    "cryptography>=50.0.2",
     "PyJWT[crypto]>=2.15.1",
     "passlib[bcrypt]>=1.7.4",
     "httpx>=0.28.0",
@@ -88,13 +88,13 @@ dependencies = [
     # Sessions when STRIPE_SECRET_KEY and price IDs are configured.
     "stripe>=15.6.1",
     # langchain-google-genai 4.4.x requires the google-genai 2.x API line.
-    "google-genai>=2.25.0",
+    "google-genai>=2.27.0",
     "anthropic>=0.125.0",
     "openai>=2.54.0",
     "google-cloud-storage>=2.18.0",
     "google-cloud-secret-manager>=2.30.0",
     "google-api-python-client>=2.200.0",
-    "google-auth>=2.59.0",
+    "google-auth>=2.59.1",
     "dnspython>=2.7.0",
     "structlog>=24.4.0",
     "opentelemetry-api>=1.45.0",
@@ -106,8 +106,8 @@ dependencies = [
     "langgraph>=1.2.12",
     "langchain>=1.4.3",
     "langchain-google-genai>=4.4.0",
-    "langchain-anthropic>=1.7.4",
-    "langchain-openai>=1.6.6",
+    "langchain-anthropic>=1.7.5",
+    "langchain-openai>=1.6.7",
     # Exact pins: core/langgraph/checkpoint_postgres.py overrides saver internals
     # of these versions and refuses to start the Postgres store with any other.
     "langgraph-checkpoint-postgres==3.1.2",
@@ -140,7 +140,7 @@ dependencies = [
     "pywebpush>=2.5.0",
     "authlib>=1.8.0",
     "reportlab>=4.5.1",
-    "google-cloud-kms>=3.17.0",
+    "google-cloud-kms>=3.18.0",
     "fastembed>=0.8.1",
     # SECURITY 2026-06-13: Pillow is transitively required by fastembed.
     # Keep the patched floor direct so dependency resolution cannot drift
@@ -178,7 +178,7 @@ dev = [
     # supported redis transport requires redis<6.5.
     "testcontainers[postgres]>=4.15.0,<4.16.0",
     "factory-boy>=3.3.3",
-    "ruff>=0.16.9",
+    "ruff>=0.16.10",
     "mypy>=1.20.2",
     "bandit>=1.9.4",
     "pre-commit>=4.6.2",

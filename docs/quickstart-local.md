@@ -158,6 +158,16 @@ service. It checks that the console serves the sign-in page and proxies the
 API, that a signed-out visitor is sent to sign-in and that unknown credentials
 are rejected. It refuses to start when the stack is not healthy.
 
+Authenticated catalogue and connector-registration checks use the same
+`AGENTICORG_SEED_PASSWORD` as `make seed` and CI. Set it before seeding and
+keep it set for `make e2e`; no separate development-password variable is
+needed. Missing credentials fail these checks rather than silently skipping
+connector coverage. The registry remains off unless explicitly enabled.
+The default connector-prefill-off build is checked as a generic form. To
+exercise native registration, build with
+`AGENTICORG_DEV_NATIVE_CONNECTOR_PREFILL_ENABLED=true make dev`; Compose
+passes the matching browser expectation, and CI opts into this build explicitly.
+
 The same config also runs the governed-case suites
 (`ui/e2e/governed-cases*.spec.ts`), which sign in as the seeded approvers and
 open the cases `make seed-cases` created. Without `AGENTICORG_SEED_PASSWORD`

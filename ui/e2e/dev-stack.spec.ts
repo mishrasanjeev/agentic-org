@@ -6,6 +6,82 @@ import { expect, test } from "@playwright/test";
 // the database behind it.
 
 test.describe("local dev stack @dev-stack", () => {
+  test("catalogue follows the registry flag and supports real banking pack cards", async ({ page }) => {
+    const password = process.env.AGENTICORG_SEED_PASSWORD;
+    const registryEnabled = process.env.AGENTICORG_E2E_REGISTRY_ENABLED === "true";
+    const email = registryEnabled ? process.env.AGENTICORG_E2E_REGISTRY_ADMIN_EMAIL : "approver.a@example.com";
+    expect(password, "Local seed password is required").toBeTruthy();
+    expect(email, "An isolated local admin fixture is required for the opt-in registry replay").toBeTruthy();
+    await page.goto("/login?next=/dashboard/agent-catalogue");
+    await page.fill('input[type="email"]', email!);
+    await page.fill('input[type="password"]', password!);
+    await page.locator('button[type="submit"]').click();
+    await expect(page).toHaveURL((url) => url.pathname === "/dashboard/agent-catalogue", { timeout: 15_000 });
+    const request = page.context().request;
+    const catalogue = await request.get("/api/v1/agent-registry");
+    if (!registryEnabled) {
+      expect(catalogue.status()).toBe(409);
+      await expect(page.getByTestId("catalogue-off")).toBeVisible();
+      await expect(page.getByTestId("catalogue-templates-toggle")).toBeDisabled();
+      return;
+    }
+    expect(catalogue.status()).toBe(200);
+    const csrf = (await page.context().cookies()).find((cookie) => cookie.name === "agenticorg_csrf");
+    expect(csrf).toBeTruthy();
+    const headers = { "X-CSRF-Token": csrf!.value };
+    const installedBefore = await request.get("/api/v1/packs/installed");
+    expect(installedBefore.status()).toBe(200);
+    expect(JSON.stringify(await installedBefore.json())).not.toContain('"banking"');
+    const install = await request.post("/api/v1/packs/banking/install", { headers });
+    expect(install.status()).toBe(200);
+    const pack = await install.json();
+    try {
+      expect(pack.agents_created).toHaveLength(5);
+      expect(pack.agents_created.every((a: { mode: string }) => a.mode === "shadow")).toBeTruthy();
+      expect(pack.workflows_created).toHaveLength(2);
+      for (const workflow of pack.workflows_created) {
+        expect(workflow.name.length).toBeLessThan(100);
+        const details = await request.get(`/api/v1/workflows/${workflow.id}`);
+        expect(details.status()).toBe(200);
+        expect((await details.json()).trigger_type).toBe("manual");
+      }
+      const agent = pack.agents_created.find((a: { type: string }) => a.type === "kyc_reviewer");
+      expect(agent).toBeTruthy();
+      const initial = await request.get(`/api/v1/agent-registry?q=${encodeURIComponent(agent.name)}&state=draft`);
+      expect(initial.status()).toBe(200);
+      expect((await initial.json()).entries).toEqual(expect.arrayContaining([
+        expect.objectContaining({ agent_id: agent.id, state: "draft", state_changed_at: null }),
+      ]));
+      const card = await request.put(`/api/v1/agents/${agent.id}/card`, {
+        headers,
+        data: { purpose: "Synthetic catalogue browser regression", risk_tier: "high", use_case: "review", channels: ["chat"] },
+      });
+      expect(card.status()).toBe(200);
+      await page.reload();
+      await page.getByRole("textbox", { name: "Search agents" }).fill("Synthetic catalogue browser regression");
+      await page.getByRole("combobox", { name: "Domain" }).selectOption("ops");
+      const row = page.getByTestId(`catalogue-row-${agent.id}`);
+      await expect(row).toBeVisible();
+      await expect(row).toContainText("draft");
+      await expect(row).toContainText("shadow");
+      await expect(page.getByTestId("catalogue-table").locator("tbody tr")).toHaveCount(1);
+      await page.getByTestId("catalogue-templates-toggle").click();
+      await expect(page.getByTestId("template-banking-kyc_reviewer")).toBeVisible();
+      await page.setViewportSize({ width: 390, height: 844 });
+      await expect(row.getByRole("link", { name: agent.name })).toBeVisible();
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBeTruthy();
+      await page.screenshot({ path: "test-results/catalogue-mobile.png", fullPage: true });
+      await page.setViewportSize({ width: 1440, height: 1000 });
+      await page.screenshot({ path: "test-results/catalogue-desktop.png", fullPage: true });
+      await row.getByRole("link", { name: agent.name }).focus();
+      await page.keyboard.press("Enter");
+      await expect(page).toHaveURL(new RegExp(`/dashboard/agents/${agent.id}$`));
+    } finally {
+      const removed = await request.delete("/api/v1/packs/banking", { headers });
+      expect(removed.status()).toBe(200);
+    }
+  });
+
   test("console proxies the API and the API reports healthy", async ({ request }) => {
     const liveness = await request.get("/api/v1/health/liveness");
     expect(liveness.status()).toBe(200);
@@ -40,13 +116,22 @@ test.describe("local dev stack @dev-stack", () => {
     await expect(page).toHaveURL(/\/login/);
   });
 
-  test("native catalog registration persists the registry identity", async ({ page }) => {
-    test.skip(!process.env.AGENTICORG_DEV_SEED_PASSWORD, "Local seed password is required");
+  test("native connector registration respects rollout and persists registry identity", async ({ page }) => {
+    const password = process.env.AGENTICORG_SEED_PASSWORD;
+    expect(password, "Local seed password is required").toBeTruthy();
     await page.goto("/login");
     await page.fill('input[type="email"]', "approver.a@example.com");
-    await page.fill('input[type="password"]', process.env.AGENTICORG_DEV_SEED_PASSWORD!);
+    await page.fill('input[type="password"]', password!);
     await page.locator('button[type="submit"]').click();
     await expect(page).toHaveURL(/\/dashboard/, { timeout: 15_000 });
+
+    if (process.env.AGENTICORG_E2E_NATIVE_CONNECTOR_PREFILL_ENABLED !== "true") {
+      await page.goto("/dashboard/connectors/new?type=whatsapp");
+      await expect(page.getByTestId("provider-select")).toHaveValue("custom");
+      await expect(page.getByPlaceholder("e.g. zoho_books, Slack, SAP S/4HANA")).toBeEditable();
+      await expect(page.getByPlaceholder("e.g. zoho_books, Slack, SAP S/4HANA")).toHaveValue("");
+      return;
+    }
 
     await page.goto("/dashboard/connectors");
     const card = page.getByTestId("catalog-item-whatsapp");

@@ -251,7 +251,10 @@ def test_mistake_5_localstorage_auth_bypass_count_below_cap() -> None:
 # new ones fail unless the cap is raised here (forcing review of
 # whether the new endpoint is genuinely a hard delete or should
 # soft-delete).
-DELETE_HANDLER_CAP = 35
+# Reviewed addition: personalisation deletes tenant-scoped rule configuration,
+# not consents, encrypted profiles or audit events. The event FK uses SET NULL;
+# test_personalisation_rule_conflicts verifies event retention in PostgreSQL.
+DELETE_HANDLER_CAP = 36
 
 DELETE_DECORATOR = re.compile(r'^@router\.delete\(', re.MULTILINE)
 

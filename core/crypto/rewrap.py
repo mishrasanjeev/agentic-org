@@ -73,6 +73,7 @@ from core.crypto.verify_all import (
     _SCANNERS,
     TenantCompanyScope,
     discover_tenant_company_scopes,
+    parse_encrypted_container,
     scopes_for_scanner,
 )
 from core.database import get_tenant_session
@@ -104,6 +105,14 @@ def _stamp_kid(ciphertext: str | None) -> str | None:
     """
     if not isinstance(ciphertext, str) or not ciphertext.strip():
         return None
+    try:
+        key_ref = parse_encrypted_container(ciphertext)
+    except ValueError:
+        raise _RewrapRowError("Malformed KMS envelope; refusing vault rotation") from None
+    if ciphertext.startswith("env1:") and (key_ref is None or key_ref.kind != "envelope"):
+        raise _RewrapRowError("Malformed KMS envelope; refusing vault rotation")
+    if key_ref is not None and key_ref.kind == "envelope":
+        return None  # KMS key references are tracked by verify-all, not vault rotation.
     m = _PREFIX_RE.match(ciphertext)
     if m:
         return m.group(1)
@@ -172,11 +181,34 @@ def _fire_cache_invalidators(label: str) -> None:
 # can stay column-shape-agnostic.
 
 
+_JSONB_ENCRYPTED_COLUMNS = frozenset(
+    {
+        "connector_configs.credentials_encrypted",
+        "tenant_ai_credentials.credentials_encrypted",
+        "voice_calls.transcript_encrypted",
+        "case_pseudonym_maps.mapping_encrypted",
+        "speech_recordings.transcript_encrypted",
+        "speech_recordings.summary_encrypted",
+        "speech_live_sessions.turns_encrypted",
+        "personalisation_profiles.attributes",
+    }
+)
+
+_BYTEA_ENCRYPTED_COLUMNS = frozenset({"speech_recordings.content"})
+
+
 def _extract_ciphertext(label: str, raw: Any) -> str | None:
     """Pull the actual vault ciphertext string out of the column value."""
     if raw is None:
         return None
-    if label.endswith("credentials_encrypted"):
+    if label in _BYTEA_ENCRYPTED_COLUMNS:
+        if not isinstance(raw, (bytes, bytearray, memoryview)):
+            raise _RewrapRowError("Encrypted audio must retain BYTEA storage")
+        try:
+            return bytes(raw).decode("utf-8")
+        except UnicodeDecodeError:
+            raise _RewrapRowError("Encrypted audio is not UTF-8 ciphertext; refusing vault rotation") from None
+    if label in _JSONB_ENCRYPTED_COLUMNS:
         if isinstance(raw, str):
             try:
                 raw = json.loads(raw)
@@ -191,8 +223,10 @@ def _extract_ciphertext(label: str, raw: Any) -> str | None:
 
 def _wrap_ciphertext_for_column(label: str, ct: str) -> Any:
     """Reverse of ``_extract_ciphertext`` — wrap rewrapped ciphertext for UPDATE."""
-    if label.endswith("credentials_encrypted"):
+    if label in _JSONB_ENCRYPTED_COLUMNS:
         return {"_encrypted": ct}
+    if label in _BYTEA_ENCRYPTED_COLUMNS:
+        return ct.encode("utf-8")
     return ct
 
 
@@ -309,13 +343,15 @@ async def _update_row(
 ) -> None:
     """Persist ``new_value`` on the named column for ``row_id``.
 
-    JSONB columns get cast to JSON; TEXT columns pass through. We
+    JSONB columns get cast to JSON; BYTEA retains bytes; TEXT passes through. We
     serialize the new_value to JSON for the JSONB path so SQLAlchemy
     binds the parameter correctly across asyncpg versions.
     """
     table, column = _split_column_label(label)
     scope_sql, scope_params = _scope_sql(scope, exact_company_scope=exact_company_scope)
-    if label.endswith("credentials_encrypted"):
+    if label in _BYTEA_ENCRYPTED_COLUMNS and not isinstance(new_value, bytes):
+        raise _RewrapRowError("Encrypted audio UPDATE requires bytes")
+    if label in _JSONB_ENCRYPTED_COLUMNS:
         params = {"v": json.dumps(new_value), "id": str(row_id), **scope_params}
         result = await session.execute(
             text(
@@ -561,7 +597,7 @@ async def verify(only_column: str | None) -> int:
         )
         return 1
     if not pending:
-        print(f"verify: every row is on active key {active_kid!r} (OK)")
+        print(f"verify: every vault row is on active key {active_kid!r} (OK)")
         return 0
     for label, n in pending.items():
         print(

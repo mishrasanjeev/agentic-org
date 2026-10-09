@@ -1,0 +1,176 @@
+# Security and Combined Release Validation
+
+Date: 2026-10-08; refreshed 2026-10-09. Local validation record, not production sign-off.
+Current candidate, CI and rollout status is tracked in
+[the combined release PR](https://github.com/mishrasanjeev/agentic-org/pull/1548).
+
+## Scope
+
+The release candidate integrates the 42 open pull-request heads captured for
+this release, plus the security remediation. Validation applies to their
+combined result, not merely to each isolated branch. Unrelated workspaces and
+Docker projects are outside scope.
+
+## Security Remediation
+
+| Finding | Change | Regression evidence |
+| --- | --- | --- |
+| Code scanning 125-126: reporting query construction | SQLAlchemy column expressions selected from a fixed dimension allow-list; values remain bound | Actual PostgreSQL queries across all six dimensions and two tenants; hostile dimensions refused |
+| Code scanning 127-137: conversation parser complexity | Bounded token matching and possessive quantifiers; adjacent reference and malformed decimal paths covered | Hostile 100,000-character inputs run in timeout-limited subprocesses; valid conversations retained |
+| Dependabot 119: source-map-js | UI lockfile resolves 1.2.2 | UI npm audit: zero vulnerabilities |
+| Dependabot 118: proxy-addr | MCP lockfile resolves 2.0.8 | MCP npm audit: zero vulnerabilities |
+| Additional MCP SDK advisory | SDK resolves 1.32.1 | MCP build and five-call smoke passed; npm audit clean |
+
+GitHub alert closure requires a scan of the final main commit. Alerts must not
+be dismissed as a substitute for that scan.
+
+## Combined-Branch Corrections
+
+- Fresh review reproduced five additional release findings. Queue decisions
+  now enforce the owning resource's write authority before edits, including
+  human-only disposition checks. Audio is encrypted before persistence, with
+  authenticated tenant binding and no raw-audio playback fallback. Summaries
+  compare their source transcript under the final write lock. Ingestion uses
+  an atomic conflict-aware insert and reports only the rows actually inserted.
+  Audio decode, silence and encode run off the event loop before write locks;
+  transcript and redaction writes refuse a concurrently changed source.
+  Redaction invalidates both the old summary and derived analytics. These
+  corrections require refreshed combined gates before release.
+- A cached API runtime layer reproduced 28 fixable high-severity OS findings
+  even though a cache-free build was clean. The API Dockerfile now checks
+  minimum patched versions of PCRE2, OpenSSL, LibreOffice and its symbol fonts
+  in the package-install layer. Six new regression cases failed before the
+  correction. No scanner exception or security gate was relaxed.
+- The sibling detector path reproduced the same concurrent uniqueness race.
+  Finding creation now uses bounded atomic inserts without overwriting prior
+  dispositions or narratives. Actual PostgreSQL tests cover concurrent calls,
+  overlapping batches, tenant isolation and the maximum 5,000-record window.
+- The standalone proprietary observability SDK bump is excluded under the
+  repository's open-source-only dependency policy. Its existing baseline is
+  retained; no hosted observability service or credentials are enabled.
+- Registry/catalogue enforcement fixes from the earlier release are preserved
+  while incorporating the newer registry and risk-tier follow-ups.
+- A single no-op Alembic merge revision joins the registry compatibility head
+  and the latest feature migration. Existing migration identifiers stay intact.
+- The personalisation registration test uses OpenAPI rather than assuming
+  every lazily included router exposes a `path` attribute.
+- Profile encryption and decryption run off the request event loop. A
+  thread-identity regression failed before the fix and passes afterward across
+  profile write/read and content rendering.
+- Duplicate-rule insertion is atomic. The precheck-race regression failed
+  before the fix; actual concurrent PostgreSQL requests now produce one
+  success and one `409 rule_exists`. Another tenant can use the same name.
+- Lineage ignores late responses for superseded selections, labels truncated
+  source traversal accurately, and provides native keyboard node controls.
+  The three new UI regressions failed before the fixes and pass afterward.
+- The isolated registry PostgreSQL fixture includes the rating and execution
+  history tables read by the current card response. Concurrency and tenant
+  isolation assertions remain intact, with empty-history response assertions.
+- Migration round-trip verification names the retained parent at a merge head
+  instead of using an ambiguous relative downgrade. Existing migration
+  identifiers and production rollout policy are unchanged.
+- The reviewed personalisation configuration-rule deletion raises the bounded
+  route guard by one. A PostgreSQL regression proves existing render evidence
+  survives with its content hash and a cleared rule reference.
+- The bounded amount parser preserves conventional rupee `/-` suffixes across
+  single amounts, multiple choices and entity extraction. Seven focused
+  assertions reproduced the suffix and currency-marked malformed-decimal bugs
+  before correction; all focused conversation/security suites pass afterward.
+  The hostile-input replay includes a long malformed suffix.
+- The remote encrypted-migration guard identified three additive speech-schema
+  migrations. Documented schema-only exemptions are backed by an additive-DDL
+  regression and a PostgreSQL populated-table/repeated-upgrade preservation
+  test. They do not bypass ciphertext transformation checks. Local preflight
+  now runs the same guard as CI before a push.
+- Key-reference scanning includes speech, personalisation and lineage-sync
+  encrypted fields. JSONB vault rotation preserves the encrypted container;
+  KMS envelopes are tracked by KEK and are not rewritten as vault ciphertext.
+- The remote Local Stack browser gate exposed a seed-variable mismatch:
+  catalogue and connector tests read a development-only variable instead of
+  the per-run password generated by CI. Replaying with only the canonical
+  password reproduced one failure and one silently skipped registration
+  test. Both tests and Compose now use `AGENTICORG_SEED_PASSWORD`, and missing
+  registration credentials fail explicitly. A wiring regression pins the
+  workflow/Makefile/Compose/browser contract; the actual browser replay
+  remains mandatory. CI explicitly opts into native connector prefill to
+  exercise registration, while the default-off browser branch checks that
+  the generic form ignores the deep link. No product default was changed.
+
+## Measured Validation
+
+| Check | Observed result |
+| --- | --- |
+| First security preflight | Passed: 12,183 backend tests; 18 skipped; 5 expected failures; 81.78% coverage |
+| First security UI run | Passed: 443 tests in 69 files; lint, types and build passed |
+| Final security parser expansion | Focused conversation/security suites after suffix correction: 132 passed. Before that correction, refreshed security preflight passed: 12,215 backend tests, 18 skipped, 5 expected failures, 81.85% coverage |
+| Combined static checks | `make check RUNNER=local` passed inside the Docker test container |
+| Focused personalisation suite | 32 passed |
+| Queue authorization replay | 105 passed; read-only and machine callers refused before edits |
+| Speech storage and stale-source replay | 43 passed; encrypted playback, stale-summary refusal, off-thread processing and derived-analytics invalidation |
+| Audio crypto and key-maintenance replay | 147 passed, 5 existing expected failures; 132 additional sibling/startup tests passed. Actual PostgreSQL BYTEA rotation, tenant binding and key-retirement replay passed; KMS wrapping simulated locally |
+| Transaction ingestion and sibling detector replay | 63 passed, including actual PostgreSQL concurrency, tenant isolation, replay and maximum-size finding insertion |
+| PostgreSQL reporting and duplicate-rule regressions | 2 passed |
+| Encrypted-column and rotation regressions | 51 passed, 5 expected failures; dedicated PostgreSQL speech preservation replay passed |
+| Focused lineage UI suite | 8 passed |
+| Registry concurrency and merge-head round trip | 7 passed on a dedicated local PostgreSQL database |
+| Final combined unit, security, connector and contract run | 10,171 passed; 7 skipped |
+| Final combined integration and regression replay | 2,682 passed; 13 skipped; 5 expected failures |
+| Changed-line and new-module coverage | 96% over 6,802 changed lines at the reconciled baseline; every new module meets the 75% floor |
+| Full combined preflight | Refreshed gate passed: 12,604 backend tests, 18 skipped, 5 expected failures, 82.66% coverage; 502 UI tests in 80 files. Exact-head remote and rollout evidence is recorded on the release PR |
+| Review-fix candidate preflight | Candidate `657bbcc8` passed: 12,724 backend tests, 18 skipped, 5 existing expected failures, 82.59% coverage; 502 UI tests. The subsequent API package-floor correction requires another complete gate |
+| Final rebuilt Docker runtime browser suite | 17 passed against the final API/UI images |
+| Refreshed UI container security | Both nginx images rebuilt with tiff 4.7.2-r0; local Trivy 0.74.0 found zero fixable high/critical vulnerabilities. Both security-floor regressions failed before the patch and pass afterward |
+| Refreshed production UI browser replay | 17 passed with the reviewed late UI dependency updates and patched nginx runtime |
+| Final signed-decision browser suite | 3 passed, including delayed dashboard-response hydration and changed-case refusal; grant-leak watcher unchanged and enabled |
+| Final catalogue opt-in browser replay | Passed: banking-pack installation, search, keyboard navigation and mobile overflow checks |
+| Final registry HTTP checks | 12 passed, including maker/checker refusal, lifecycle history, paused-agent refusal and invalid traffic splits |
+| Final lineage and personalisation runtime checks | 14 passed, including concurrent duplicate 201/409, retained audit evidence on rule deletion, consent withdrawal refusal, keyboard controls and mobile layout |
+| Final worker entrypoint | Health check and isolated-queue task/result round trip passed; canary stopped afterward |
+| Local migration-first rollout | Passed to the single merge head, with PostgreSQL concurrency and merge-head round-trip tests passing |
+| Remote final candidate CI and main CI | See the release PR for exact-head check results; no main merge or deployment permitted before green required checks |
+| Production rollout and verification | See the release PR for rollout state; local evidence alone is not deployed evidence |
+
+## UI Review
+
+Audit: graph-only mouse actions and missing traversal-state distinctions were
+confirmed. Critique: provenance must not present an incomplete traversal as
+proof of no source. Polish: native focusable controls, explicit accessible
+names, visible focus outlines, 44-pixel targets, bounded scrolling and wrapping
+references preserve the existing console hierarchy. The optional design-command
+pack is not installed; this is a manual review, not a claim that those commands
+ran. Final desktop/mobile screenshots were inspected; keyboard controls,
+wrapping and document-overflow checks passed.
+
+## Timing Replay
+
+One refreshed preflight, while concurrent Docker builds, suites and a worker
+canary were running, measured 500 mocked workflow starts at 2.075 seconds
+against the existing 2-second limit. The unchanged performance suite passed in
+isolation, and the exact test passed three consecutive coverage-enabled
+replays after the competing jobs completed. No timeout, assertion, security
+gate or production code was relaxed. The complete refreshed preflight must
+still pass before the candidate is pushed.
+
+## Release Limits
+
+### Late Dependency Follow-Up
+
+Two UI build-tool updates opened after the original release snapshot: PostCSS
+8.5.29 and the React Vite plugin 6.1.2. They were initially prepared separately;
+a subsequent container scan blocked the release on CVE-2026-4775 in both nginx
+images. The refreshed combined candidate includes these reviewed updates and
+requires tiff 4.7.2-r0 in both runtime stages. No scanner exception or severity
+gate was relaxed. The lockfile retains source-map-js 1.2.2. Release requires a
+fresh dependency install, audit, full local preflight, rebuilt UI browser
+checks, container scans and exact-head CI. Current completion evidence is
+recorded on the combined release PR; preparation alone is not deployment.
+
+Optional features remain default off. No real payment, paid phone call or
+external email is part of local verification. Real-provider acceptance is not
+inferred from synthetic fixtures. Production rollout requires the combined
+local Docker tests, green candidate CI, and green final-main checks first.
+
+The MCP server is a separately installed npm package. Repository lockfile and
+build fixes do not update already installed clients. No npm publication has
+been performed by this release; existing clients need a separately verified
+package release before claiming that they received the dependency fixes.

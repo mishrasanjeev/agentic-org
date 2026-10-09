@@ -48,11 +48,11 @@ const RULE = {
   reason: "card numbers never leave",
 };
 
-function route(status: Record<string, unknown>, rules = [RULE]) {
+function route(status: Record<string, unknown>, rules = [RULE], checksEnabled: boolean | undefined = true) {
   mockGet.mockImplementation((url: string) => {
     if (url === "/guardrails/status") return Promise.resolve({ data: { ...LISTS, ...status } });
     if (url === "/guardrails/rules") return Promise.resolve({ data: rules });
-    if (url === "/observability/checks") return Promise.resolve({ data: { checks: scheduledChecks } });
+    if (url === "/observability/checks") return Promise.resolve({ data: { enabled: checksEnabled, checks: scheduledChecks } });
     if (url === "/observability/checks/chk-1/results")
       return Promise.resolve({
         data: {
@@ -83,6 +83,7 @@ function renderPage() {
 describe("Guardrails console", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    scheduledChecks = [];
     mockPost.mockResolvedValue({ data: {} });
     mockPatch.mockResolvedValue({ data: {} });
     mockDelete.mockResolvedValue({ data: null });
@@ -218,6 +219,20 @@ describe("Guardrails console", () => {
     expect(block).toHaveTextContent("weekly attacks every 1440 min, paused: not run yet");
     expect(block).not.toHaveTextContent("nightly model");
     scheduledChecks = [];
+  });
+
+  it.each([false, null])("hides persisted checks and does not fetch results when enabled is %s", async (enabled) => {
+    scheduledChecks = [{ id: "chk-1", name: "persisted", kind: "adversarial", enabled: true }];
+    route({});
+    const original = mockGet.getMockImplementation()!;
+    mockGet.mockImplementation((url: string) => url === "/observability/checks"
+      ? Promise.resolve({ data: { ...(enabled === null ? {} : { enabled }), checks: scheduledChecks } })
+      : original(url));
+    renderPage();
+    await screen.findByTestId("adversarial");
+    await waitFor(() => expect(mockGet).toHaveBeenCalledWith("/observability/checks"));
+    expect(screen.queryByTestId("suite-scheduled")).not.toBeInTheDocument();
+    expect(mockGet).not.toHaveBeenCalledWith("/observability/checks/chk-1/results", expect.anything());
   });
 
   it("is unchanged where the checks cannot be read", async () => {

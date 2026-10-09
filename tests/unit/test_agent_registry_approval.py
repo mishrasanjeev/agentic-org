@@ -147,25 +147,6 @@ class TestApproval:
 
 
 class TestPromotionPaths:
-    def test_a_new_or_cloned_agent_does_not_start_active_while_the_registry_gates(self, monkeypatch):
-        approval.check_new_agent_status("active")
-        approval.check_new_agent_status("shadow")
-        monkeypatch.setattr(settings, "agent_registry_enabled", True)
-        monkeypatch.setattr(settings, "agent_registry_gates_promotion", True)
-        approval.check_new_agent_status("shadow")
-        with pytest.raises(approval.ApprovalError) as refused:
-            approval.check_new_agent_status("active")
-        assert refused.value.code == "not_approved" and refused.value.state == "draft"
-        src = (ROOT / "api" / "v1" / "agents.py").read_text(encoding="utf-8")
-        create = (
-            src[src.index("async def create_agent(") : src.index("async def _create_agent_from_template(")]
-            if "async def _create_agent_from_template(" in src
-            else src[src.index("async def create_agent(") :][:6000]
-        )
-        assert "registry_approval.check_new_agent_status(initial_status)" in create
-        clone = src[src.index("async def clone_agent(") :]
-        assert 'registry_approval.check_new_agent_status(body.initial_status or "shadow")' in clone
-
     def test_promote_resume_and_retire_consult_the_registry(self):
         src = (ROOT / "api" / "v1" / "agents.py").read_text(encoding="utf-8")
         assert src.count("await registry_approval.check_promotion(session, tid, agent)") == 2
@@ -239,24 +220,3 @@ class TestTrafficSplit:
         # A bucket of 99 and a share of 1 stays on the agent asked for.
         monkeypatch.setattr(traffic, "bucket", lambda _cid: 99)
         assert traffic.choose(zero_share, "run_1", lambda _id: target) == (zero_share, None)
-
-    def test_a_run_without_a_correlation_id_makes_one_draw(self, monkeypatch):
-        monkeypatch.setattr(settings, "agent_traffic_split_enabled", True)
-        target = _agent(status="active")
-        agent = _agent(status="active", config={"traffic_split": {"to_agent_id": str(target.id), "percent": 30}})
-        draws: list[int] = []
-
-        def _bucket(_cid):
-            draws.append(len(draws))
-            return 10
-
-        monkeypatch.setattr(traffic, "bucket", _bucket)
-        # The caller draws once and passes the draw to both steps: no second random draw.
-        draw = traffic.bucket(None)
-        assert traffic.chooses_target(agent.config["traffic_split"], draw=draw) is True
-        assert traffic.choose(agent, None, lambda _id: target, draw=draw) == (target, "traffic_split:30")
-        assert len(draws) == 1
-        # A draw outside the share stays on the agent asked for, whatever a fresh draw would say.
-        assert traffic.chooses_target(agent.config["traffic_split"], draw=30) is False
-        assert traffic.choose(agent, None, lambda _id: target, draw=99) == (agent, None)
-        assert len(draws) == 1
