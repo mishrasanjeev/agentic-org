@@ -52,6 +52,6 @@ async def decrypt_audio(tenant_id: UUID, content: bytes) -> bytes:
     """
     try:
         return await asyncio.to_thread(_decrypt_audio, tenant_id, content)
-    # enterprise-gate: broad-except-ok reason=unreadable-or-cross-tenant-audio-refused-without-raw-fallback
+    # enterprise-gate: broad-except-ok reason=audio-decryption-failure-returns-explicit-error-without-raw-fallback
     except Exception:
         raise SpeechError(500, "audio_decryption_failed", "The recording could not be decrypted") from None
