@@ -5,7 +5,10 @@ Quickstart:
 
     client = AgenticOrg(api_key="your-key")
     agents = client.agents.list()
-    result = client.agents.run("ap_processor", inputs={"invoice_id": "INV-001"})
+    result = client.agents.run(
+        "ap_processor", inputs={"invoice_id": "INV-001"},
+        company_id="00000000-0000-0000-0000-000000000001",
+    )
     workflow = client.workflows.generate("Review vendor renewal risk")
 """
 

@@ -55,7 +55,7 @@ def test_mcp_server_release_metadata_is_lockstep_and_runtime_truthful() -> None:
     server_json = _read_json("mcp-server/server.json")
     readme = (ROOT / "mcp-server" / "README.md").read_text(encoding="utf-8")
 
-    assert package_json["version"] == "4.0.5"
+    assert package_json["version"] == "5.0.0"
     assert package_lock["version"] == package_json["version"]
     assert package_lock["packages"][""]["version"] == package_json["version"]
     assert server_json["version"] == package_json["version"]

@@ -17,11 +17,26 @@ also be valid at runtime.
 
 ## Install and verify
 
-When the package is available from the configured npm registry:
+Pin the reviewed release after confirming it exists in your npm registry:
 
 ```bash
-npm install -g agenticorg-mcp-server
+npm install -g agenticorg-mcp-server@5.0.0
 AGENTICORG_API_KEY=your-key agenticorg-mcp
+```
+
+### Upgrade from 4.x
+
+Version 5 requires `company_id` for `run_agent` and `deploy_agent`. Update
+saved tool arguments with a company that the authenticated tenant can access;
+never substitute a tenant ID. SOP submission produces a shadow candidate and
+does not bypass review or promotion. The new seller tools read cached facts
+only and do not authorize purchases or payments.
+
+An npm release does not update the MCP registry or an installed client.
+Confirm both stores and restart the client after upgrading:
+
+```bash
+npm view agenticorg-mcp-server@5.0.0 version
 ```
 
 For repository verification:
@@ -45,7 +60,7 @@ stdio entry is:
   "mcpServers": {
     "agenticorg": {
       "command": "npx",
-      "args": ["agenticorg-mcp-server"],
+      "args": ["--yes", "agenticorg-mcp-server@5.0.0"],
       "env": {
         "AGENTICORG_API_KEY": "your-api-key",
         "AGENTICORG_BASE_URL": "https://your-reviewed-endpoint.example"
