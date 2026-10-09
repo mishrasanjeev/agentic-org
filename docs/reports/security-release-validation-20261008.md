@@ -24,6 +24,45 @@ Docker projects are outside scope.
 GitHub alert closure requires a scan of the final main commit. Alerts must not
 be dismissed as a substitute for that scan.
 
+### Final-Main Security Reconciliation
+
+The first combined main commit, `cb267d2b`, completed CodeQL analysis
+successfully, but alert enumeration still found five findings: the retained
+masked-identifier prefix matcher alerts 128/135 and three personalisation
+template-parser alerts 138-140. All three dependency alerts closed
+automatically. Production rollout stayed blocked on the five code findings.
+
+The prefix matcher's public callers already inspected only 24 characters,
+but the compiled matcher itself still had unbounded repeated branches. Two
+direct 100,000-character regression probes exceeded the five-second deadline
+before correction. Explicit 24-character quantifier bounds preserve caller
+semantics and remove the unsafe reusable matcher. The corrected parser and
+nearby conversation suites passed 193 tests, including both timeout replays.
+
+The personalisation placeholder regex reproduced a two-second timeout at
+all three original sinks. A forward-only scanner now shares parsed spans
+between validation and rendering, bounds every entry point to the existing
+4,000-character template limit, and stops output expansion at its existing
+limit. The same hostile template rejects in approximately 0.1 milliseconds
+per call locally. A 292,143-case old/new comparison preserved valid DSL
+behavior and error contracts; 220 focused tests passed, including 79 new
+regressions covering malformed input, authorization, substitution and limits.
+Sibling parser paths were checked for equivalent unbounded matching.
+
+The rebuilt local API also passed an authenticated browser/HTTP replay:
+five hostile templates returned 422 within two seconds, none was persisted,
+and liveness remained healthy after each rejection. Normal consented
+rendering, duplicate-rule 201/409 behavior, retained audit evidence, consent
+withdrawal refusal, lineage keyboard controls and mobile layout passed in
+the same session. Full follow-up gates and exact-main scanning still gate
+production; these measurements are local runtime evidence only.
+
+A successful scan job is not a zero-finding verdict. The permanent bug-fix
+checklist now requires exact-final-main alert reconciliation before a
+security release. Follow-up source validation, main alert closure and the
+eventual rollout state are recorded on the release PR; no alert dismissal is
+accepted as a substitute.
+
 ## Combined-Branch Corrections
 
 - Fresh review reproduced five additional release findings. Queue decisions

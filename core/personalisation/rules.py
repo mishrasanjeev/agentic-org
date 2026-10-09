@@ -40,7 +40,6 @@ MAX_LABEL = 100
 
 NAME_RE = re.compile(r"[a-z][a-z0-9_]{0,63}")
 SUBJECT_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9._:\-]{0,127}")
-PLACEHOLDER_RE = re.compile(r"\{\{\s*([^{}]*?)\s*\}\}")
 
 
 class PersonalisationError(Exception):
@@ -122,26 +121,58 @@ def check_attributes(raw: Any) -> dict[str, Any]:
 # ---------------------------------------------------------------- templates
 
 
-def placeholders(template: str) -> list[str]:
-    """The attribute names a template names, in order of first use; a malformed placeholder is refused."""
+def _parse_template(template: str) -> tuple[list[tuple[int, int, str]], list[str]]:
+    """Scan once for placeholder spans and names; never backtrack over an unclosed token."""
+    if not isinstance(template, str):
+        raise PersonalisationError(422, "template_invalid", "template is non-empty text")
+    if len(template) > MAX_TEMPLATE:
+        raise PersonalisationError(422, "template_too_long", f"template is at most {MAX_TEMPLATE} characters")
+    spans: list[tuple[int, int, str]] = []
     names: list[str] = []
-    for match in PLACEHOLDER_RE.finditer(template):
-        inner = match.group(1)
-        if not NAME_RE.fullmatch(inner):
-            raise PersonalisationError(422, "placeholder_invalid", f"{{{{{inner[:70]}}}}} is not an attribute name")
-        if inner not in names:
-            names.append(inner)
-    rest = PLACEHOLDER_RE.sub("", template)
+    seen: set[str] = set()
+    literals: list[str] = []
+    cursor = 0
+    opening: int | None = None
+    for index, char in enumerate(template):
+        if char == "{":
+            # Only the last two braces in a run can open a brace-free placeholder.
+            opening = index - 1 if index and template[index - 1] == "{" else None
+        elif char == "}":
+            if opening is not None and template.startswith("}}", index):
+                inner = template[opening + 2 : index].strip()
+                if not NAME_RE.fullmatch(inner):
+                    raise PersonalisationError(
+                        422, "placeholder_invalid", f"{{{{{inner[:70]}}}}} is not an attribute name"
+                    )
+                end = index + 2
+                spans.append((opening, end, inner))
+                literals.append(template[cursor:opening])
+                cursor = end
+                if inner not in seen:
+                    seen.add(inner)
+                    names.append(inner)
+            opening = None
+    literals.append(template[cursor:])
+    # Preserve refusal of double braces left after removing all valid placeholders.
+    rest = "".join(literals)
     if "{{" in rest or "}}" in rest:
         raise PersonalisationError(422, "template_invalid", "a placeholder is opened or closed without its pair")
+    return spans, names
+
+
+def placeholders(template: str) -> list[str]:
+    """The attribute names a template names, in order of first use; a malformed placeholder is refused."""
+    _, names = _parse_template(template)
     return names
 
 
 def check_template(raw: Any) -> str:
-    if not isinstance(raw, str) or not raw.strip():
+    if not isinstance(raw, str):
         raise PersonalisationError(422, "template_invalid", "template is non-empty text")
     if len(raw) > MAX_TEMPLATE:
         raise PersonalisationError(422, "template_too_long", f"template is at most {MAX_TEMPLATE} characters")
+    if not raw.strip():
+        raise PersonalisationError(422, "template_invalid", "template is non-empty text")
     placeholders(raw)
     return raw
 
@@ -156,7 +187,7 @@ def _show(value: Any) -> str:
 
 def render_template(template: str, attributes: dict[str, Any], allowed: Any) -> tuple[str, list[str]]:
     """The content and the attribute names it used; any placeholder not allowed or not present refuses it."""
-    names = placeholders(template)
+    spans, names = _parse_template(template)
     allowed_set = set(allowed or ())
     refused = [name for name in names if name not in allowed_set]
     if refused:
@@ -166,10 +197,21 @@ def render_template(template: str, attributes: dict[str, Any], allowed: Any) -> 
         raise PersonalisationError(
             422, "placeholder_unresolved", f"the profile does not hold: {', '.join(missing[:10])}"
         )
-    content = PLACEHOLDER_RE.sub(lambda match: _show(attributes[match.group(1)]), template)
-    if len(content) > MAX_OUTPUT:
+    parts: list[str] = []
+    cursor = 0
+    size = 0
+    for start, end, name in spans:
+        value = _show(attributes[name])
+        size += start - cursor + len(value)
+        if size > MAX_OUTPUT:
+            raise PersonalisationError(422, "output_too_long", f"the content is at most {MAX_OUTPUT} characters")
+        parts.extend((template[cursor:start], value))
+        cursor = end
+    size += len(template) - cursor
+    if size > MAX_OUTPUT:
         raise PersonalisationError(422, "output_too_long", f"the content is at most {MAX_OUTPUT} characters")
-    return content, names
+    parts.append(template[cursor:])
+    return "".join(parts), names
 
 
 def content_hash(content: str) -> str:
