@@ -26,6 +26,9 @@ be dismissed as a substitute for that scan.
 
 ## Combined-Branch Corrections
 
+- The standalone proprietary observability SDK bump is excluded under the
+  repository's open-source-only dependency policy. Its existing baseline is
+  retained; no hosted observability service or credentials are enabled.
 - Registry/catalogue enforcement fixes from the earlier release are preserved
   while incorporating the newer registry and risk-tier follow-ups.
 - A single no-op Alembic merge revision joins the registry compatibility head
@@ -92,6 +95,8 @@ be dismissed as a substitute for that scan.
 | Changed-line and new-module coverage | 96% over 6,802 changed lines at the reconciled baseline; every new module meets the 75% floor |
 | Full combined preflight | Refreshed gate passed: 12,604 backend tests, 18 skipped, 5 expected failures, 82.66% coverage; 502 UI tests in 80 files. Exact-head remote and rollout evidence is recorded on the release PR |
 | Final rebuilt Docker runtime browser suite | 17 passed against the final API/UI images |
+| Refreshed UI container security | Both nginx images rebuilt with tiff 4.7.2-r0; local Trivy 0.74.0 found zero fixable high/critical vulnerabilities. Both security-floor regressions failed before the patch and pass afterward |
+| Refreshed production UI browser replay | 17 passed with the reviewed late UI dependency updates and patched nginx runtime |
 | Final signed-decision browser suite | 3 passed, including delayed dashboard-response hydration and changed-case refusal; grant-leak watcher unchanged and enabled |
 | Final catalogue opt-in browser replay | Passed: banking-pack installation, search, keyboard navigation and mobile overflow checks |
 | Final registry HTTP checks | 12 passed, including maker/checker refusal, lifecycle history, paused-agent refusal and invalid traffic splits |
@@ -127,12 +132,14 @@ still pass before the candidate is pushed.
 ### Late Dependency Follow-Up
 
 Two UI build-tool updates opened after the original release snapshot: PostCSS
-8.5.29 and the React Vite plugin 6.1.2. They are prepared on a separate follow-up
-branch, not silently added to the previously validated candidate. The lockfile
-retains source-map-js 1.2.2. Their release requires a fresh dependency install,
-audit, full local preflight, rebuilt UI browser checks and exact-head CI.
-Completion evidence is recorded on the follow-up PR; preparation alone is not
-validation or deployment.
+8.5.29 and the React Vite plugin 6.1.2. They were initially prepared separately;
+a subsequent container scan blocked the release on CVE-2026-4775 in both nginx
+images. The refreshed combined candidate includes these reviewed updates and
+requires tiff 4.7.2-r0 in both runtime stages. No scanner exception or severity
+gate was relaxed. The lockfile retains source-map-js 1.2.2. Release requires a
+fresh dependency install, audit, full local preflight, rebuilt UI browser
+checks, container scans and exact-head CI. Current completion evidence is
+recorded on the combined release PR; preparation alone is not deployment.
 
 Optional features remain default off. No real payment, paid phone call or
 external email is part of local verification. Real-provider acceptance is not
