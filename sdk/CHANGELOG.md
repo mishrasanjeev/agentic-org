@@ -1,16 +1,15 @@
 # AgenticOrg Python SDK changelog
 
-## Unreleased
-
-- Add `client.cases` for machine-safe submit, list, read and investigation
-  scheduling. Human-only case decisions and reviews remain unavailable to
-  API-key and agent-token clients.
-
-## 0.4.0 - 2026-08-29
+## 0.4.0 - 2026-10-09
 
 Runtime surface release.
 
 ### Added
+- `client.cases` for machine-safe submit, list, read and investigation
+  scheduling. Human-only decisions and reviews remain unavailable to
+  API-key and agent-token clients.
+- A2A v1 seller access, standard/extended cards, message sending, and
+  administrator-controlled buyer access creation and revocation.
 - Knowledge/OCR supported-type discovery, multipart upload, document listing,
   deletion, health, and statistics.
 - Voice configuration/status, runtime health, call history, and explicitly

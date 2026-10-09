@@ -1,5 +1,25 @@
 # agenticorg-mcp-server changelog
 
+## 5.0.0 - 2026-10-09
+
+### Breaking
+- `run_agent` and `deploy_agent` require an explicit `company_id` belonging
+  to the authenticated tenant. Agent execution forwards it in both request
+  data and A2A context; SOP submission creates a shadow candidate, not a
+  live agent. Update saved tool arguments before upgrading from 4.x.
+
+### Added
+- Read-only seller commerce tools over cached product, offer, inventory and
+  mandate-capability artifacts, with source/freshness labels and no
+  transaction authority.
+- `AGENTICORG_MCP_COMMERCE_ONLY` restricts the advertised tool surface to
+  seller commerce reads without broad agent execution tools.
+
+### Security
+- Updated the MCP protocol dependency and transitive security floors.
+- Aligned package, lockfile, protocol identity and registry metadata. npm
+  publication and MCP registry publication must still be verified separately.
+
 ## 4.0.5 - 2026-06-14
 
 MCP registry metadata alignment.

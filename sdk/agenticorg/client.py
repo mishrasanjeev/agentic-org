@@ -90,7 +90,10 @@ class AgenticOrg:
 
     Usage:
         client = AgenticOrg(api_key="your-key")
-        result = client.agents.run("ap_processor", inputs={"invoice_id": "INV-001"})
+        result = client.agents.run(
+            "ap_processor", inputs={"invoice_id": "INV-001"},
+            company_id="00000000-0000-0000-0000-000000000001",
+        )
     """
 
     def __init__(

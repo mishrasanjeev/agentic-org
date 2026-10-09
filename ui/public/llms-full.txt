@@ -2290,7 +2290,13 @@ client = AgenticOrg(
 agents = client.agents.list()
 ```
 
-Verify the installed package methods before copying examples. The repository contains newer client resources than the currently published Python wheel documented in its README; build/publish version and server deployment must be checked separately.
+Pin the reviewed Python `agenticorg==0.4.0` or TypeScript
+`agenticorg-sdk@0.4.0` release after checking registry availability. These
+versions include the runtime resources, A2A v1 seller access and machine-safe
+case methods absent from `0.3.0`. The MCP adapter release target is
+`agenticorg-mcp-server@5.0.0`; its execution and SOP submission tools require
+`company_id`. Verify publication, installed version and backend deployment
+separately; a repository merge alone does not update an installed client.
 
 #### Connect MCP
 

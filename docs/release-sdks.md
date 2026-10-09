@@ -15,8 +15,12 @@ credentials, should not live in CI without a release-gating flow).
   package name.
 - TypeScript SDK release target: `agenticorg-sdk@0.4.0`. The scoped package
   `@agenticorg/sdk` is not currently published.
-- MCP server npm package: `agenticorg-mcp-server@4.0.5`.
-- MCP registry server: `io.github.mishrasanjeev/agenticorg@4.0.5`.
+- MCP server npm package: `agenticorg-mcp-server@5.0.0`.
+- MCP registry server: `io.github.mishrasanjeev/agenticorg@5.0.0`.
+
+These are source release targets, not evidence of publication. Verify each
+registry independently. The MCP major bump is required because `run_agent`
+and `deploy_agent` now require `company_id`; 4.x saved arguments need updating.
 
 ## Python SDK (PyPI)
 
@@ -147,7 +151,9 @@ sweep fails if any drifts.
 
 SDK versions track the server's wire contract, not the app version.
 Release `0.4.0` adds the current knowledge/OCR, voice, RPA, local bridge,
-and commerce runtime resources without changing the existing agent APIs.
+commerce runtime resources, A2A v1 seller access and machine-safe case methods.
+Agent-type execution requires an explicit company context accepted by the
+backend. MCP `5.0.0` also introduces that requirement in its tool input schemas.
 What matters is that the SDK can parse what the deployed server emits.
 
 ## Drift guard

@@ -9,15 +9,15 @@ TypeScript SDK for AgenticOrg - run AI agents, generate agents from plain
 English or SOPs, discover A2A/MCP tools, search knowledge, and create/run
 workflows.
 
-The npm registry currently publishes `agenticorg-sdk@0.3.0`. The `0.4.0`
-source in this repository adds runtime resources, including `client.cases`;
-build this checkout for evaluation until a newer package is published. A
-matching backend deployment is required.
+Version `0.4.0` adds runtime resources, A2A v1 seller access and `client.cases`.
+These methods are not available in `0.3.0`. Confirm that the reviewed release
+exists in your npm registry before installing it; publication is separate
+from a repository merge. A matching backend deployment is required.
 
 ## Install
 
 ```bash
-npm install agenticorg-sdk
+npm install agenticorg-sdk@0.4.0
 ```
 
 ## Quickstart
@@ -60,7 +60,12 @@ const sopDraft = await client.sop.parseText(`
   Step 4: If amount > 5L, escalate to CFO
 `, "finance");
 
-const agent = await client.sop.deploy(sopDraft.config);
+const reviewedConfig = {
+  ...(sopDraft.config as Record<string, unknown>),
+  company_id: "00000000-0000-0000-0000-000000000001",
+};
+// Submit only after review; the result is a shadow candidate, not a live agent.
+const agent = await client.sop.deploy(reviewedConfig);
 
 // MCP tools (for ChatGPT/Claude integration)
 const tools = await client.mcp.tools();
@@ -116,7 +121,7 @@ keeps working, but not `a2a:write`, so a run by agent type gets `403` until the
 key is replaced. `client.a2a` and `client.mcp.tools()` read public discovery
 routes and need no scope. The new `extendedAgentCard()` is private.
 
-### A2A v1 seller access (repository source)
+### A2A v1 seller access (0.4.0)
 
 ```typescript
 import { AgenticOrg } from "agenticorg-sdk";
@@ -136,7 +141,7 @@ await admin.a2a.revokeBuyerAccess(approval.id as string);
 `standardAgentCard()` is public. `sendMessage(text, { agentType,
 companyId })` runs a non-commerce agent only with an explicit `a2a:write`
 tenant credential. These methods need the matching server migration and
-ingress release and are not in the currently published `0.3.0` package. See
+ingress release and are not included in the `0.3.0` package. See
 the [A2A guide](../docs/a2a-interoperability.md).
 
 ## Resources
@@ -146,9 +151,9 @@ the [A2A guide](../docs/a2a-interoperability.md).
 | `client.agents` | `list()`, `get(id)`, `run(type, opts)`, `create(data)`, `generate(description, opts?)` |
 | `client.connectors` | `list(category?)`, `get(id)` |
 | `client.sop` | `parseText(text, domain?)`, `deploy(config)` |
-| `client.a2a` | Legacy `agentCard()`, `agents()`; source-only `standardAgentCard()`, `extendedAgentCard()`, `sendMessage()`, `createBuyerAccess()`, `revokeBuyerAccess()` |
+| `client.a2a` | `agentCard()`, `agents()`, `standardAgentCard()`, `extendedAgentCard()`, `sendMessage()`, `createBuyerAccess()`, `revokeBuyerAccess()` |
 | `client.mcp` | `tools()`, `call(name, args?)` |
-| `client.cases` | `submit(application, purpose, policyId?)`, `list({state?, limit?})`, `get(caseRef)`, `investigate(caseRef)`; repository source only |
+| `client.cases` | `submit(application, purpose, policyId?)`, `list({state?, limit?})`, `get(caseRef)`, `investigate(caseRef)` |
 | `client.workflows` | `templates()`, `list()`, `generate(description)`, `create(opts)`, `get(id)`, `run(id, opts?)`, `getRun(id)` |
 | `client.knowledge` | `search()`, `supportedTypes()`, `upload()`, `documents()`, `delete()`, `health()`, `stats()` |
 | `client.voice` | `status()`, `saveConfig()`, `testConnection()`, `runtimeHealth()`, `calls()`, `placeOutboundCall()` |
@@ -191,7 +196,7 @@ const current = await client.cases.get(record.case_ref as string);
 `investigate()` schedules work; it does not certify a completed investigation.
 The backend checks tenant enablement, role registration, the local case-purpose
 allowlist and delegated tool grants before provider calls. The currently
-published Python Grantex SDK `0.5.1` does not enforce token-level case purpose
+legacy Python Grantex SDK `0.5.1` does not enforce token-level case purpose
 or per-case caps. Human-only decisions, withdrawal, screening review and
 information-request approval are not exposed through this API-key/agent-token
 client or the MCP agent catalog. See the [case lifecycle](../docs/governance/case-lifecycle.md)

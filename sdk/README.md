@@ -11,17 +11,18 @@ authentication, tenant/company access, grants, and backend deployment. Examples
 below are integration candidates, not evidence of production availability or a
 successful provider action.
 
-The registry currently publishes `agenticorg==0.3.0`; the `0.4.0` source in
-this repository has additional resource methods, including `client.cases`.
-Build from this checkout to evaluate those methods until a newer wheel is
-published. The server also needs the matching governed-case routes deployed.
+Version `0.4.0` adds runtime resources, A2A v1 seller access and `client.cases`.
+These methods are not available in `0.3.0`. Confirm that the reviewed release
+exists in your package registry before installing it; publication is separate
+from a repository merge. Matching backend routes, migrations and authorization
+are still required.
 
 ## Install
 
 When the package is available from the configured Python package registry:
 
 ```bash
-pip install agenticorg
+pip install agenticorg==0.4.0
 ```
 
 Pin and review the package version used by your application.
@@ -64,14 +65,13 @@ keeps working, but not `a2a:write`, so a run by agent type gets `403` until the
 key is replaced. `client.a2a` and `client.mcp.tools` read public discovery
 routes and need no scope. The new `extended_agent_card` is private.
 
-### A2A v1 seller access (repository source)
+### A2A v1 seller access (0.4.0)
 
 The tenant admin issues a one-time buyer credential, then hands it to the
 approved buyer agent using a protected channel. An external agent can run on
 any platform that sends A2A v1 HTTP+JSON; vendor-specific client enrollment
-is separate. The SDK method is available in repository source and requires
-the matching server migration and ingress release; it is not in the currently
-published `0.3.0` wheel.
+is separate. These SDK methods require the matching server migration and
+ingress release; they are not included in the `0.3.0` wheel.
 
 ```python
 from agenticorg import AgenticOrg
@@ -210,7 +210,7 @@ scheduled, not that it succeeded; inspect the later case state and failure
 reason. This SDK intentionally has no decision, withdrawal, screening-review,
 or information-request approval helper: those actions require a signed-in
 human, which an API key or agent token does not represent. MCP discovery does
-not expose the governed-case roles as agent tools. The currently published
+not expose the governed-case roles as agent tools. The legacy
 `grantex==0.5.1` does not enforce purpose in the token or per-case caps. See
 [case lifecycle](../docs/governance/case-lifecycle.md) and the
 [tested client contract](../tests/regression/test_sdk_governed_cases.py).

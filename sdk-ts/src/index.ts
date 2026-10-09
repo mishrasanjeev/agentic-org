@@ -6,7 +6,10 @@
  * import { AgenticOrg } from "agenticorg-sdk";
  *
  * const client = new AgenticOrg({ apiKey: "your-key" });
- * const result = await client.agents.run("ap_processor", { inputs: { invoice_id: "INV-001" } });
+ * const result = await client.agents.run("ap_processor", {
+ *   inputs: { invoice_id: "INV-001" },
+ *   companyId: "00000000-0000-0000-0000-000000000001",
+ * });
  * ```
  */
 
