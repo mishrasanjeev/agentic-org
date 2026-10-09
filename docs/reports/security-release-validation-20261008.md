@@ -36,6 +36,11 @@ be dismissed as a substitute for that scan.
   transcript and redaction writes refuse a concurrently changed source.
   Redaction invalidates both the old summary and derived analytics. These
   corrections require refreshed combined gates before release.
+- A cached API runtime layer reproduced 28 fixable high-severity OS findings
+  even though a cache-free build was clean. The API Dockerfile now checks
+  minimum patched versions of PCRE2, OpenSSL, LibreOffice and its symbol fonts
+  in the package-install layer. Six new regression cases failed before the
+  correction. No scanner exception or security gate was relaxed.
 - The sibling detector path reproduced the same concurrent uniqueness race.
   Finding creation now uses bounded atomic inserts without overwriting prior
   dispositions or narratives. Actual PostgreSQL tests cover concurrent calls,
@@ -112,6 +117,7 @@ be dismissed as a substitute for that scan.
 | Final combined integration and regression replay | 2,682 passed; 13 skipped; 5 expected failures |
 | Changed-line and new-module coverage | 96% over 6,802 changed lines at the reconciled baseline; every new module meets the 75% floor |
 | Full combined preflight | Refreshed gate passed: 12,604 backend tests, 18 skipped, 5 expected failures, 82.66% coverage; 502 UI tests in 80 files. Exact-head remote and rollout evidence is recorded on the release PR |
+| Review-fix candidate preflight | Candidate `657bbcc8` passed: 12,724 backend tests, 18 skipped, 5 existing expected failures, 82.59% coverage; 502 UI tests. The subsequent API package-floor correction requires another complete gate |
 | Final rebuilt Docker runtime browser suite | 17 passed against the final API/UI images |
 | Refreshed UI container security | Both nginx images rebuilt with tiff 4.7.2-r0; local Trivy 0.74.0 found zero fixable high/critical vulnerabilities. Both security-floor regressions failed before the patch and pass afterward |
 | Refreshed production UI browser replay | 17 passed with the reviewed late UI dependency updates and patched nginx runtime |
