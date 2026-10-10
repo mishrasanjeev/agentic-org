@@ -1683,6 +1683,7 @@ class TestAuditEndpoints:
         from api.v1.audit import query_audit
 
         mock_session.execute.side_effect = [
+            _make_result(scalar_value=False),  # the tenant keeps no spend rate cards or commitments
             _make_result(scalar_value=1),
             _make_result(scalars_list=[_make_audit_entry()]),
         ]
@@ -1705,6 +1706,7 @@ class TestAuditEndpoints:
         from api.v1.audit import query_audit
 
         mock_session.execute.side_effect = [
+            _make_result(scalar_value=False),  # the tenant keeps no spend rate cards or commitments
             _make_result(scalar_value=10),
             _make_result(scalars_list=[_make_audit_entry()] * 10),
         ]

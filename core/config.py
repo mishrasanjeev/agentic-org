@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import json
 import os
 from typing import Literal
 from urllib.parse import urlsplit, urlunsplit
+from zoneinfo import ZoneInfo
 
 from pydantic import Field, model_validator
 from pydantic_settings import BaseSettings
@@ -46,6 +48,17 @@ def is_strict_runtime_env(env: str | None) -> bool:
 def is_published_placeholder_secret(value: str) -> bool:
     """Return True when *value* is a secret written in this repository."""
     return value.strip().casefold() in PUBLISHED_PLACEHOLDER_SECRETS
+
+
+def _loadable_zone(name: object) -> bool:
+    """True when ``name`` is an IANA time zone this runtime can load."""
+    if not isinstance(name, str) or not name.strip():
+        return False
+    try:
+        ZoneInfo(name.strip())
+    except (KeyError, ValueError, OSError):
+        return False
+    return True
 
 
 def _redis_url_with_default_db(url: str, default_db: int) -> str:
@@ -412,6 +425,22 @@ class Settings(BaseSettings):
     # attributes used recorded. Off by default: off, GET /personalisation/status
     # answers ``enabled: false`` and every other personalisation route is not found.
     personalisation_enabled: bool = False
+    # AI spend intelligence (core/spend/): an organisation tree, rate cards,
+    # commitments and FX rates; a usage record with its attribution for every
+    # model call and metered service, priced in the card's currency and in INR;
+    # invoice reconciliation and the Gate 1 status. Off by default: off,
+    # GET /spend/status answers ``enabled: false``, every other spend route is
+    # not found and nothing is metered or written.
+    spend_intelligence_enabled: bool = False
+    # The calendar spend is reported in (an IANA zone): a record's event date,
+    # the rollup day, the FX date and the Gate 1 attribution month.
+    spend_reporting_timezone: str = "Asia/Kolkata"
+    # JSON object provider -> IANA zone the provider closes its billing day and
+    # month in. Unlisted providers use core/spend/vocab.py defaults, then UTC.
+    spend_provider_billing_timezones_json: str = ""
+    # The spend beat jobs (partitions, FX settlement, commitment recompute,
+    # storage samples, GPU allocation). Only effective while spend is on.
+    spend_sweeps_enabled: bool = True
     # JSON object keyed provider/model with input and output USD per million
     # tokens; a negotiated rate replaces the list price.
     model_price_overrides_json: str = ""
@@ -616,6 +645,32 @@ class Settings(BaseSettings):
                 "AGENTICORG_FINOPS_THRESHOLDS_ENABLED needs AGENTICORG_FINOPS_ATTRIBUTION_ENABLED: "
                 "thresholds compare the attributed cost ledger, which is written only while attribution is on"
             )
+        return self
+
+    @model_validator(mode="after")
+    def validate_spend_settings(self) -> Settings:
+        """Refuse spend calendars that cannot load, only while spend intelligence is on.
+
+        Off, nothing here is read, so the settings are not checked and nothing
+        about start-up changes.
+        """
+        if not self.spend_intelligence_enabled:
+            return self
+        if not _loadable_zone(self.spend_reporting_timezone):
+            raise ValueError("spend_reporting_timezone: not a loadable IANA time zone")
+        raw = (self.spend_provider_billing_timezones_json or "").strip()
+        if raw:
+            try:
+                zones = json.loads(raw)
+            except ValueError as exc:
+                raise ValueError("spend_provider_billing_timezones_json: not valid JSON") from exc
+            if not isinstance(zones, dict):
+                raise ValueError("spend_provider_billing_timezones_json: must be a JSON object of provider to zone")
+            for provider, zone in zones.items():
+                if not isinstance(provider, str) or not provider.strip() or not _loadable_zone(zone):
+                    raise ValueError(
+                        "spend_provider_billing_timezones_json: every provider maps to a loadable IANA time zone"
+                    )
         return self
 
     @model_validator(mode="after")

@@ -17,6 +17,7 @@ from core.models.agent import Agent
 from core.models.audit import AuditLog
 from core.ownership import Caller, agent_visibility_clause, caller_from_request
 from core.schemas.api import PaginatedResponse
+from core.spend import access as spend_access
 
 router = APIRouter()
 
@@ -110,6 +111,17 @@ async def query_audit(
             base = base.where(domain_filter)
             count_base = count_base.where(domain_filter)
 
+        # Spend rate-card and commitment rows carry contract prices and
+        # committed amounts: only a human administrator or auditor reads
+        # them, as on the spend routes themselves. Applied whatever
+        # spend_intelligence_enabled says, because the rows outlive the flag;
+        # a tenant that has never kept a rate card or commitment has no such
+        # rows, and its query is the one it ran before.
+        commercial_filter = spend_access.commercial_audit_clause(caller, AuditLog.event_type)
+        if commercial_filter is not None and await spend_access.commercial_rows_kept(session, tid):
+            base = base.where(commercial_filter)
+            count_base = count_base.where(commercial_filter)
+
         if event_type:
             # Support partial matching: use ILIKE for substring search
             pattern = f"%{event_type}%"
@@ -149,6 +161,10 @@ async def query_audit(
         query = base.order_by(AuditLog.created_at.desc()).offset((page - 1) * per_page).limit(per_page)
         result = await session.execute(query)
         entries = result.scalars().all()
+        if commercial_filter is not None:
+            # A tenant's first rate card, committed between the check and the
+            # page query, is still not shown.
+            entries = [e for e in entries if not spend_access.is_commercial_audit_event(e.event_type)]
 
     pages = max(1, (total + per_page - 1) // per_page)
     return PaginatedResponse(
