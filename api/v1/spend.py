@@ -19,7 +19,10 @@ settlement and commitment recomputes are jobs (202 with a job id) read
 through ``/spend/jobs``.
 
 Reads need ``audit:read``; rate cards, commitments and prices are for a
-human administrator or auditor only. Every write needs a tenant
+human administrator or auditor only. Usage records, rollups (every
+grouping) and the ledger comparison apply the caller's agent visibility;
+coverage, gaps and jobs, which sum every agent's usage, are for an
+administrator or auditor only. Every write needs a tenant
 administrator signed in as a person and is audited. Off
 (``spend_intelligence_enabled``), the status route says so and every other
 route is not found.
@@ -1040,7 +1043,9 @@ async def list_rollups(
     caller: Caller = Depends(caller_from_request),
     tenant_id: str = Depends(get_current_tenant),
 ) -> dict[str, Any]:
-    """Daily rollups summed per a dimension or per day (at most 366 days); amounts per currency and in INR."""
+    """Daily rollups summed per a dimension or per day (at most 366 days); amounts per currency and in INR.
+
+    Every grouping applies the caller's agent visibility, as ``GET /spend/usage`` does."""
     spend_on()
     try:
         filters = {
@@ -1071,10 +1076,19 @@ async def list_rollups(
     idempotency="read-only",
     audit_event="spend.coverage.get",
 )
-async def spend_coverage(start: date, end: date, tenant_id: str = Depends(get_current_tenant)) -> dict[str, Any]:
-    """Attribution coverage per day and for the period (at most 366 days): the Gate 1 attribution measure."""
+async def spend_coverage(
+    start: date,
+    end: date,
+    caller: Caller = Depends(caller_from_request),
+    tenant_id: str = Depends(get_current_tenant),
+) -> dict[str, Any]:
+    """Attribution coverage per day and for the period (at most 366 days): the Gate 1 attribution measure.
+
+    A tenant-wide figure (every agent's usage, and gaps that carry no agent): an administrator or auditor
+    only, 403 ``tenant_wide_read_refused`` otherwise."""
     spend_on()
     try:
+        access.require_tenant_wide(caller)
         return await rollups.coverage(_tenant(tenant_id), start=start, end=end, now=clock.now_utc())
     except SpendError as exc:
         raise _refused(exc) from None
@@ -1096,7 +1110,7 @@ async def ledger_comparison(
     tenant_id: str = Depends(get_current_tenant),
 ) -> dict[str, Any]:
     """Usage tokens and amounts per day beside the existing cost ledgers (at most 31 days), with the expected
-    differences."""
+    differences. Every source carries an agent id, so each is filtered by the caller's agent visibility."""
     spend_on()
     try:
         return await ledgers.compare(_tenant(tenant_id), start=start, end=end, view=access.read_view(caller))
@@ -1113,10 +1127,19 @@ async def ledger_comparison(
     idempotency="read-only",
     audit_event="spend.gaps.list",
 )
-async def list_gaps(start: date, end: date, tenant_id: str = Depends(get_current_tenant)) -> dict[str, Any]:
-    """Usage that could not be metered (at most 92 days), by day, usage type, reason and detail."""
+async def list_gaps(
+    start: date,
+    end: date,
+    caller: Caller = Depends(caller_from_request),
+    tenant_id: str = Depends(get_current_tenant),
+) -> dict[str, Any]:
+    """Usage that could not be metered (at most 92 days), by day, usage type, reason and detail.
+
+    Gaps carry no agent, so they cannot be filtered by agent visibility: an administrator or auditor only,
+    403 ``tenant_wide_read_refused`` otherwise."""
     spend_on()
     try:
+        access.require_tenant_wide(caller)
         return await rollups.list_gaps(_tenant(tenant_id), start=start, end=end)
     except SpendError as exc:
         raise _refused(exc) from None
@@ -1313,11 +1336,16 @@ async def recompute_commitments(
 async def list_jobs(
     kind: JobKindQuery | None = None,
     limit: Annotated[int, Query(ge=1, le=50)] = 50,
+    caller: Caller = Depends(caller_from_request),
     tenant_id: str = Depends(get_current_tenant),
 ) -> dict[str, Any]:
-    """Spend maintenance jobs, newest first."""
+    """Spend maintenance jobs, newest first.
+
+    A job's result counts every agent's records and its parameters carry a correction's reason and card ids:
+    an administrator or auditor only, 403 ``tenant_wide_read_refused`` otherwise."""
     spend_on()
     try:
+        access.require_tenant_wide(caller)
         return await jobs.list_jobs(_tenant(tenant_id), kind=kind, limit=limit)
     except SpendError as exc:
         raise _refused(exc) from None
@@ -1332,10 +1360,16 @@ async def list_jobs(
     idempotency="read-only",
     audit_event="spend.jobs.get",
 )
-async def get_job(job_id: uuid.UUID, tenant_id: str = Depends(get_current_tenant)) -> dict[str, Any]:
-    """One spend maintenance job: its parameters, status, result and error code."""
+async def get_job(
+    job_id: uuid.UUID,
+    caller: Caller = Depends(caller_from_request),
+    tenant_id: str = Depends(get_current_tenant),
+) -> dict[str, Any]:
+    """One spend maintenance job: its parameters, status, result and error code (an administrator or auditor
+    only, refused before the job is looked up)."""
     spend_on()
     try:
+        access.require_tenant_wide(caller)
         return await jobs.get_job(_tenant(tenant_id), job_id)
     except SpendError as exc:
         raise _refused(exc) from None

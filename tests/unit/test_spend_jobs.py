@@ -192,6 +192,194 @@ class TestMerge:
             assert job(store, q["job_id"]).params["provider"] == q["provider"]
 
 
+# ---------------------------------------------------------------- a change and its job commit together
+
+
+def transactional(monkeypatch, store) -> None:
+    """The tenant session as the database runs it: committed on exit, every row restored on an error."""
+    import core.database
+
+    class Transaction:
+        async def __aenter__(self):
+            self.snapshot = store.snapshot()
+            return store
+
+        async def __aexit__(self, exc_type, exc, tb) -> bool:
+            if exc_type is not None:
+                store.restore(self.snapshot)
+            return False
+
+    monkeypatch.setattr(core.database, "get_tenant_session", lambda tenant_id: Transaction())
+
+
+def database_down_on_job_insert(monkeypatch) -> dict[str, bool]:
+    """While ``down["on"]``, inserting a job row fails as a dropped connection would."""
+    real = jobs._new_job
+    down = {"on": True}
+
+    def maybe(*args, **kwargs):
+        if down["on"]:
+            raise OperationalError("INSERT INTO spend_jobs", {}, Exception("connection reset"))
+        return real(*args, **kwargs)
+
+    monkeypatch.setattr(jobs, "_new_job", maybe)
+    return down
+
+
+def broker_down(monkeypatch) -> None:
+    def refuse(tenant_id, job_id, **options):
+        raise ConnectionError("broker down")
+
+    monkeypatch.setattr(jobs, "_dispatch", refuse)
+
+
+async def resent_by_the_sweep(monkeypatch) -> list[str]:
+    resent: list[str] = []
+    monkeypatch.setattr(jobs, "_dispatch", lambda tenant_id, job_id, **options: resent.append(str(job_id)))
+    assert await jobs.sweep(TENANT, now=NOW) == {"requeued": 0, "sent": 1}
+    return resent
+
+
+class TestFollowupAtomicity:
+    """The finding: a correction committed, then its restatement was queued in another transaction; a crash
+    or a database failure there left the correction reported as done with no job for the sweep to find, and
+    the correction could not be sent again (its card was retired)."""
+
+    @pytest.mark.asyncio
+    async def test_a_failure_while_queuing_the_restatement_rolls_the_correction_back(self, store, monkeypatch):
+        transactional(monkeypatch, store)
+        used = card(effective_to=date(2026, 12, 1))
+        store.add(used)
+        await meter.write_events(store, TENANT, [event()], now=T0)
+        audits_before = len(store.of("audit_log"))
+        down = database_down_on_job_insert(monkeypatch)
+        with pytest.raises(OperationalError):
+            await rates.correct_card(
+                TENANT, used.id, {"unit_price": "3"}, reason="Contract price was wrong", actor=ACTOR, now=T0
+            )
+        assert used.status == "active" and used.retired_at is None  # not retired
+        assert store.of("spend_rate_cards") == [used]  # no replacement card
+        assert len(store.of("audit_log")) == audits_before  # no audit row
+        assert not [r for r in store.of("audit_log") if r.event_type.startswith("spend.rate_cards.")]
+        assert store.of("spend_jobs") == []
+        # Nothing was retired, so the same correction is accepted once the database is back.
+        down["on"] = False
+        out = await rates.correct_card(
+            TENANT, used.id, {"unit_price": "3"}, reason="Contract price was wrong", actor=ACTOR, now=T0
+        )
+        row = job(store, out["restate_job_id"])
+        assert used.status == "retired" and row.kind == "restate" and row.params["card_ids"] == [str(used.id)]
+
+    @pytest.mark.asyncio
+    async def test_every_rate_card_change_that_cuts_history_rolls_back_when_queuing_fails(self, store, monkeypatch):
+        transactional(monkeypatch, store)
+        store.add(card(source="list"))
+        await meter.write_events(store, TENANT, [event()], now=T0)
+        before = store.snapshot()
+        database_down_on_job_insert(monkeypatch)
+        backdated = {"provider": "openai", "usage_type": "llm_tokens", "model_sku": "gpt-4o",
+                     "unit": "1m_input_tokens", "unit_price": "3", "currency": "USD", "effective_from": "2026-09-01",
+                     "source": "list", "supersede": True, "restate": True}  # fmt: skip
+        with pytest.raises(OperationalError):
+            await rates.create_card(TENANT, backdated, actor=ACTOR, now=T0)
+        with pytest.raises(OperationalError):
+            await rates.update_card(
+                TENANT, store.of("spend_rate_cards")[0].id, {"effective_to": "2026-09-15", "restate": True},
+                actor=ACTOR, now=T0,
+            )  # fmt: skip
+        row = {k: str(v).lower() if isinstance(v, bool) else v for k, v in backdated.items()}
+        with pytest.raises(OperationalError):
+            await rates.import_cards(TENANT, [row], actor=ACTOR, dry_run=False, file_sha256="0" * 64, now=T0)
+        assert store.snapshot() == before  # no card, no end moved, no audit row, no job
+
+    @pytest.mark.asyncio
+    async def test_a_dispatch_failure_after_the_correction_commits_leaves_the_restatement_queued(
+        self, store, monkeypatch
+    ):
+        transactional(monkeypatch, store)
+        used = card(effective_to=date(2026, 12, 1))
+        store.add(used)
+        await meter.write_events(store, TENANT, [event()], now=T0)
+        store.locks.clear()
+        broker_down(monkeypatch)
+        out = await rates.correct_card(
+            TENANT, used.id, {"unit_price": "3"}, reason="Contract price was wrong", actor=ACTOR, now=T0
+        )
+        row = job(store, out["restate_job_id"])
+        assert used.status == "retired" and row.kind == "restate" and row.status == "queued"
+        assert [r.event_type for r in store.of("audit_log")][-2:] == ["spend.rate_cards.correct", "spend.job.enqueue"]
+        # One lock order: the card key's lock, then the job kind's, in the correction's transaction.
+        key = locks.rate_card(TENANT, used.provider, used.usage_type, used.model_sku, used.unit, used.source)
+        assert store.locks == [key, locks.job_kind(TENANT, "restate")]
+        assert await resent_by_the_sweep(monkeypatch) == [out["restate_job_id"]]
+
+    @pytest.mark.asyncio
+    async def test_an_fx_rate_and_its_settlement_commit_or_roll_back_together(self, store, monkeypatch):
+        transactional(monkeypatch, store)
+        down = database_down_on_job_insert(monkeypatch)
+        body = {"rate_date": "2026-10-01", "currency": "USD", "rate_to_inr": "83"}
+        with pytest.raises(OperationalError):
+            await fx.put_rate(TENANT, body, actor=ACTOR, now=T0)
+        imported = [{"rate_date": "2026-10-02", "currency": "USD", "rate_to_inr": "83.1"}]
+        with pytest.raises(OperationalError):
+            await fx.import_rates(TENANT, imported, actor=ACTOR, dry_run=False, file_sha256="0" * 64, now=T0)
+        assert store.of("spend_fx_rates") == [] and store.of("audit_log") == [] and store.of("spend_jobs") == []
+        down["on"] = False
+        store.locks.clear()
+        broker_down(monkeypatch)
+        out = await fx.put_rate(TENANT, body, actor=ACTOR, now=T0)
+        row = job(store, out["settle_job_id"])
+        assert row.kind == "settle_fx" and row.status == "queued" and len(store.of("spend_fx_rates")) == 1
+        assert store.locks == [locks.fx_rate(TENANT, "USD"), locks.job_kind(TENANT, "settle_fx")]
+        assert await resent_by_the_sweep(monkeypatch) == [out["settle_job_id"]]
+
+    @pytest.mark.asyncio
+    async def test_a_commitment_and_its_recompute_commit_or_roll_back_together(self, store, monkeypatch):
+        from core.spend import commitments
+
+        transactional(monkeypatch, store)
+        down = database_down_on_job_insert(monkeypatch)
+        body = {"provider": "openai", "kind": "money", "committed_amount": "100", "currency": "USD",
+                "period_start": "2026-10-01", "period_end": "2026-11-01"}  # fmt: skip
+        with pytest.raises(OperationalError):
+            await commitments.create_commitment(TENANT, body, actor=ACTOR, now=T0)
+        assert store.of("spend_commitments") == [] and store.of("audit_log") == [] and store.of("spend_jobs") == []
+        down["on"] = False
+        store.locks.clear()
+        broker_down(monkeypatch)
+        created = await commitments.create_commitment(TENANT, body, actor=ACTOR, now=T0)
+        row = store.of("spend_jobs")[0]
+        assert row.kind == "recompute_commitments" and row.status == "queued" and row.params == {"provider": "openai"}
+        key = locks.commitment(TENANT, "openai", None, "", None, "money")
+        assert store.locks == [key, locks.job_kind(TENANT, "recompute_commitments")]
+        assert await resent_by_the_sweep(monkeypatch) == [str(row.id)]
+        # An update rolls back with a failed recompute too: its period end and audit row are not kept.
+        row.status = "succeeded"
+        down["on"] = True
+        audits = len(store.of("audit_log"))
+        with pytest.raises(OperationalError):
+            await commitments.update_commitment(
+                TENANT, uuid.UUID(created["id"]), {"period_end": "2026-12-01"}, actor=ACTOR, now=T0
+            )
+        kept = store.of("spend_commitments")[0]
+        assert kept.period_end == date(2026, 11, 1) and len(store.of("audit_log")) == audits
+        assert len(store.of("spend_jobs")) == 1
+
+    @pytest.mark.asyncio
+    async def test_queue_followup_merges_inside_the_callers_transaction_and_raises_on_a_bad_kind(self, store):
+        from core.spend.errors import SpendError
+
+        first = await jobs.queue_followup(store, TENANT, kind="settle_fx", params={**SPAN, "force_dates": []},
+                                          actor=ACTOR)  # fmt: skip
+        assert first["merged"] is False and job(store, first["job_id"]).status == "queued"
+        wider = {"start": "2026-09-30", "end": "2026-10-01", "force_dates": [["USD", "2026-09-30"]]}
+        second = await jobs.queue_followup(store, TENANT, kind="settle_fx", params=wider, actor=ACTOR)
+        assert second == {**first, "merged": True} and job(store, first["job_id"]).params["start"] == "2026-09-30"
+        with pytest.raises(SpendError):
+            await jobs.queue_followup(store, TENANT, kind="nonsense", params={}, actor=ACTOR)
+        jobs.dispatch(TENANT, None)  # nothing queued: nothing sent
+
+
 # ---------------------------------------------------------------- one running job per kind
 
 

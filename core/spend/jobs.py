@@ -8,13 +8,16 @@ tenant (the partial unique index ``ux_spend_jobs_running``).
 * A route request is refused with 409 ``job_running``, naming the job, while
   a job of the kind is queued or running (checked under a per-tenant,
   per-kind advisory lock, so two requests cannot both pass).
-* A job a committed reference-data change calls for (a restatement after a
-  rate-card correction, an FX settlement after a new or corrected rate, a
-  commitment recompute) is never dropped and never reported as covered by a
-  job that does not cover it. It is merged into a queued job of the kind
-  whose parameters can be widened to cover both (the range joined, the cards
-  and forced dates added; a restatement only for the same provider), or it is
-  queued as a job of its own, which runs after the one running.
+* A job a reference-data change calls for (a restatement after a rate-card
+  correction, an FX settlement after a new or corrected rate, a commitment
+  recompute) is queued in the change's own transaction (``queue_followup``),
+  so the change and its job commit or roll back together, and sent to a
+  worker after the commit (``dispatch``). It is never dropped and never
+  reported as covered by a job that does not cover it. It is merged into a
+  queued job of the kind whose parameters can be widened to cover both (the
+  range joined, the cards and forced dates added; a restatement only for the
+  same provider), or it is queued as a job of its own, which runs after the
+  one running.
 
 A worker claims a job atomically, and only while no other job of its kind is
 running. A running job writes a heartbeat every minute. When a job ends, the
@@ -296,69 +299,109 @@ def merge_params(kind: str, queued: dict[str, Any], new: dict[str, Any]) -> dict
     return dict(queued) if queued == new else None
 
 
+async def queue_followup(
+    session: Any,
+    tenant_id: uuid.UUID,
+    *,
+    kind: str,
+    params: dict[str, Any],
+    actor: str,
+    now: datetime | None = None,
+) -> dict[str, Any]:
+    """Queue the job a change calls for, inside the change's own transaction (``session``).
+
+    The change and its job commit or roll back together: a change can never
+    commit without the job that revises the records it affects, and any
+    failure here raises, so the change fails with it. Send the job with
+    ``dispatch`` once the transaction has committed.
+
+    Lock order (every path, one global order): the caller has already taken
+    its resource's lock (a rate card's key, a currency, a commitment); this
+    takes the kind's lock (``locks.job_kind``) and then the kind's queued job
+    rows (``FOR UPDATE``, in ``(created_at, id)`` order, the sweep's order).
+    Nothing that holds a job-kind lock or a job row ever waits for a resource
+    lock: the claim, the sweep, the runner's status writes and the route's
+    ``enqueue`` take no resource lock.
+
+    The work is merged into a queued job of the kind that can cover it
+    (audited as ``spend.job.merge``), or inserted as a queued job of its own
+    (audited as ``spend.job.enqueue``), to run after a running one. Returns
+    ``{"job_id", "status": "queued", "kind", "merged"}``.
+    """
+    kind = vocab.choice(kind, vocab.JOB_KINDS, field="kind")
+    who = _actor(actor)
+    stamp = now or clock.now_utc()
+    clean = audit.jsonable(params)
+    await locks.xact_lock(session, locks.job_kind(tenant_id, kind))
+    for job in await _queued(session, tenant_id, kind, lock=True):
+        merged = merge_params(kind, dict(job.params or {}), clean)
+        if merged is None:
+            continue
+        before = dict(job.params or {})
+        if merged != before:
+            job.params = merged
+            session.add(
+                audit.audit_entry(
+                    tenant_id,
+                    actor_id=who,
+                    action="job.merge",
+                    resource_type="spend_job",
+                    resource_id=str(job.id),
+                    details={"kind": kind, "added": clean, "before": before, "after": merged},
+                    now=stamp,
+                )
+            )
+            await session.flush()
+        return {"job_id": str(job.id), "status": "queued", "kind": kind, "merged": True}
+    job_id = _new_job(session, tenant_id, kind=kind, params=clean, who=who, stamp=stamp)
+    await session.flush()
+    _audit_enqueue(session, tenant_id, job_id, kind=kind, params=clean, who=who, stamp=stamp)
+    return {"job_id": str(job_id), "status": "queued", "kind": kind, "merged": False}
+
+
+def dispatch(tenant_id: uuid.UUID, queued: dict[str, Any] | None) -> None:
+    """Send a job ``queue_followup`` queued to a worker, after its transaction has committed. Never raises.
+
+    A job merged into a queued one is not sent again: that job is sent when
+    the job before it ends, or by the sweep. A failed send is logged and the
+    job stays queued; the sweep (every 15 minutes) resends queued jobs nothing
+    of their kind is running for. A job of the kind may be running: then the
+    claim waits, and that job's end sends this one.
+    """
+    if not queued:
+        return
+    kind = str(queued.get("kind") or "")
+    if queued.get("merged"):
+        logger.info("spend_job_merged", kind=kind)
+        return
+    if _send(tenant_id, uuid.UUID(str(queued["job_id"])), kind):
+        logger.info("spend_job_enqueued", kind=kind)
+
+
 async def enqueue_followup(
     tenant_id: uuid.UUID, *, kind: str, params: dict[str, Any], actor: str, now: datetime | None = None
 ) -> dict[str, Any] | None:
-    """Queue the job a committed change calls for. Never raises.
+    """Queue a job in a transaction of its own and send it (the beats, which change nothing else). Never raises.
 
-    The work is merged into a queued job of the kind that can cover it, or
-    queued as its own job (to run after a running one). Returns
-    ``{"job_id", "status", "kind", "merged"}``, or ``None`` when nothing could
-    be queued (logged).
+    ``queue_followup`` then ``dispatch``. Returns ``{"job_id", "status",
+    "kind", "merged"}``, or ``None`` when nothing could be queued (logged; the
+    next beat queues the work again). A change to reference data never uses
+    this: it queues its job in its own transaction with ``queue_followup``.
     """
     from core.database import get_tenant_session
 
-    target: Any = None
-    job_id: uuid.UUID | None = None
     try:
-        kind = vocab.choice(kind, vocab.JOB_KINDS, field="kind")
-        who = _actor(actor)
-        stamp = now or clock.now_utc()
-        clean = audit.jsonable(params)
         async with get_tenant_session(tenant_id) as session:
-            await locks.xact_lock(session, locks.job_kind(tenant_id, kind))
-            merged: dict[str, Any] | None = None
-            for job in await _queued(session, tenant_id, kind, lock=True):
-                merged = merge_params(kind, dict(job.params or {}), clean)
-                if merged is not None:
-                    target = job
-                    break
-            if target is not None and merged is not None:
-                job_id = target.id
-                before = dict(target.params or {})
-                if merged != before:
-                    target.params = merged
-                    session.add(
-                        audit.audit_entry(
-                            tenant_id,
-                            actor_id=who,
-                            action="job.merge",
-                            resource_type="spend_job",
-                            resource_id=str(job_id),
-                            details={"kind": kind, "added": clean, "before": before, "after": merged},
-                            now=stamp,
-                        )
-                    )
-            else:
-                job_id = _new_job(session, tenant_id, kind=kind, params=clean, who=who, stamp=stamp)
-                await session.flush()
-                _audit_enqueue(session, tenant_id, job_id, kind=kind, params=clean, who=who, stamp=stamp)
+            queued = await queue_followup(session, tenant_id, kind=kind, params=params, actor=actor, now=now)
     except SpendError as exc:
         logger.warning("spend_followup_refused", kind=kind, code=exc.code)
         return None
-    # enterprise-gate: broad-except-ok reason=a-followup-job-failure-is-logged-the-committed-change-keeps
+    # enterprise-gate: broad-except-ok reason=a-beat-followup-failure-is-logged-the-next-beat-queues-it-again
     except Exception as exc:
         logger.warning("spend_followup_failed", kind=kind, error_type=type(exc).__name__)
         return None
-    if job_id is None:
-        return None
-    if target is not None:
-        logger.info("spend_job_merged", kind=kind)
-        return {"job_id": str(job_id), "status": "queued", "kind": kind, "merged": True}
-    # A job of the kind may be running: then the claim waits, and that job's end sends this one.
-    _send(tenant_id, job_id, kind)
-    logger.info("spend_job_enqueued", kind=kind)
-    return {"job_id": str(job_id), "status": "queued", "kind": kind, "merged": False}
+    dispatch(tenant_id, queued)
+    return queued
 
 
 async def get_job(tenant_id: uuid.UUID, job_id: uuid.UUID) -> dict[str, Any]:

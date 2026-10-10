@@ -11,8 +11,16 @@ from the general audit read for the same callers.
 Usage reads apply the existing agent visibility rule (``core/ownership.py``)
 to everyone but administrators: a record of a personal agent is visible to
 its owner and to administrators, a record of a shared agent within the
-caller's domains, a record with no agent to every reader. The initiating
+caller's domains, a record with no agent to every reader. That holds for
+every read that carries an agent: the records, every rollup grouping (not
+only the grouping by agent) and the ledger comparison. The initiating
 user's id is shown to administrators and auditors only.
+
+Tenant-wide usage figures that carry no agent to filter by (coverage, the
+Gate 1 attribution measure; meter gaps; maintenance jobs, their parameters
+and their record counts) are for an administrator, who reads every record
+anyway, or a person whose domains are unrestricted (an auditor); anyone
+else is refused with 403 ``tenant_wide_read_refused``.
 """
 
 from __future__ import annotations
@@ -53,6 +61,28 @@ def require_commercial(caller: Caller) -> None:
     if not is_commercial_reader(caller):
         raise SpendError(
             403, "commercial_read_refused", "rate cards, commitments and prices are for an administrator or auditor"
+        )
+
+
+def is_tenant_wide_reader(caller: Caller) -> bool:
+    """An administrator (who reads every record unfiltered) or a person whose domains are unrestricted (an
+    auditor): the readers of usage figures that sum every agent's usage and cannot be filtered by agent.
+
+    Only the administrator and auditor roles have unrestricted domains, so these are the callers
+    ``GET /audit`` shows every row to (``api/v1/audit.py``). A machine credential without the
+    administrator scope, and every domain role, is refused.
+    """
+    return caller.is_admin or is_commercial_reader(caller)
+
+
+def require_tenant_wide(caller: Caller) -> None:
+    """403 ``tenant_wide_read_refused`` for a reader whose agent visibility or domains are restricted."""
+    if not is_tenant_wide_reader(caller):
+        raise SpendError(
+            403,
+            "tenant_wide_read_refused",
+            "coverage, meter gaps and maintenance jobs sum every agent's usage: they are for an administrator or "
+            "auditor",
         )
 
 

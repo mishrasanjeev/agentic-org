@@ -154,7 +154,7 @@ FX rates are kept per `(currency, rate_date)` as the rate to INR, with a source 
 - with no rate at all, the INR amount is empty and the record is marked `unconverted`.
 
 `PUT /spend/fx-rates` upserts a rate and answers the rate it replaced and the FX settlement it
-queued (`settle_job_id`). Writes of a currency's rates (a `PUT` and an import) take that
+queued (`settle_job_id`), in the rate's own transaction. Writes of a currency's rates (a `PUT` and an import) take that
 currency's lock first, so two writers of the same new rate never both insert it. Settlement of
 estimated and unconverted records, and the `fx_in_use` rule for a rate settled records use, are
 described under [Maintenance jobs](#maintenance-jobs).
@@ -169,7 +169,7 @@ commitments of the same provider, usage type, model, unit and kind may not overl
 on every change of the end or the status. Storage commitments are entered in `gb_day` (a GB-month
 has no fixed number of GB-days). Drawdown is counted in record units from usage records by the
 commitment recompute job (see [Maintenance jobs](#maintenance-jobs)); every create or change marks
-the commitment for a full recompute and queues the job.
+the commitment for a full recompute and queues the job in the same transaction.
 
 ## Imports
 
@@ -231,12 +231,12 @@ deleted, and their audit rows commit with them); every other tenant's audit quer
 | `PUT /spend/fx-rates`, `POST /spend/fx-rates/import` | administrator | |
 | `GET /spend/price` | administrator or auditor | the price of a usage at a date |
 | `GET /spend/usage` | `audit:read` | records of at most 31 days, a page at a time (`cursor`); filters `usage_type`, `provider`, `org_node_id`, `agent_id`, `unattributed`, `unpriced`; other people's personal agents hidden, user ids shown to administrators and auditors only |
-| `GET /spend/rollups` | `audit:read` | sums per a dimension or per `day` (at most 366 days), amounts per currency and in INR; grouping by agent applies the agent visibility rule |
-| `GET /spend/coverage` | `audit:read` | the Gate 1 attribution measure (at most 366 days) |
-| `GET /spend/coverage/ledgers` | `audit:read` | usage beside the existing ledgers (at most 31 days) |
-| `GET /spend/gaps` | `audit:read` | meter gaps (at most 92 days) |
+| `GET /spend/rollups` | `audit:read` | sums per a dimension or per `day` (at most 366 days), amounts per currency and in INR; every grouping applies the agent visibility rule |
+| `GET /spend/coverage` | administrator or auditor | the Gate 1 attribution measure (at most 366 days); tenant-wide |
+| `GET /spend/coverage/ledgers` | `audit:read` | usage beside the existing ledgers (at most 31 days); every source filtered by the agent visibility rule |
+| `GET /spend/gaps` | administrator or auditor | meter gaps (at most 92 days); tenant-wide |
 | `POST /spend/rollups/rebuild`, `POST /spend/usage/backfill`, `POST /spend/usage/restate`, `POST /spend/usage/reattribute`, `POST /spend/fx-rates/settle`, `POST /spend/commitments/recompute` | administrator | `202` with a job id |
-| `GET /spend/jobs`, `GET /spend/jobs/{job_id}` | `audit:read` | |
+| `GET /spend/jobs`, `GET /spend/jobs/{job_id}` | administrator or auditor | tenant-wide (record counts of every agent; a correction's reason) |
 
 `GET /spend/status` also reports the usage limits (`usage_window_days` 31, `rebuild_days` 31,
 `restate_days` 92), `backfill_source`, `partition_horizon` and this process's writer
@@ -415,7 +415,8 @@ count in the count share only and are reported beside it, so unpriced and unconv
 visible; a day whose records are all unpriced or unconverted has no INR amount. Shares are shown
 to six decimals rounded so they never look better than they are: attributed shares toward zero,
 unattributed shares away from it. The finops `unattributed_share` is a different measure and is
-not used here.
+not used here. Coverage sums every agent's usage (and gaps, which carry no agent), so it is answered
+to an administrator or auditor only (see [Who reads usage](#who-reads-usage)).
 
 ## Meter gaps
 
@@ -423,18 +424,23 @@ Usage that could not be metered is counted per tenant, reporting day, usage type
 detail in `spend_meter_gaps` (`GET /spend/gaps`, at most 92 days): `queue_full`, `spill_failed`,
 `shutdown_lost`, `paused`, `tenant_mismatch`, `failed_no_usage` (the detail names the provider,
 or `cancelled:<provider>`), `timeout_estimated` and `unpriced_tool`. The detail never carries text
-from a call.
+from a call. Gaps carry no agent, so they are answered to an administrator or auditor only.
 
 ## Maintenance jobs
 
 Long operations are jobs: a route answers `202 {"job_id", "status"}` and a worker runs the job on
-the `maintenance` queue; `GET /spend/jobs` and `GET /spend/jobs/{job_id}` read them. One job of a
+the `maintenance` queue; `GET /spend/jobs` and `GET /spend/jobs/{job_id}` read them (an
+administrator or auditor: a job's result counts every agent's records). One job of a
 kind runs at a time per tenant. An administrator's request is refused with 409 `job_running`,
 naming the job, while one of its kind is queued or running.
 
 A job started by a reference-data change (a restatement after a correction, a settlement after a
-new or corrected rate, a recompute after a commitment change) is never dropped, and the change's
-response (`restate_job_id`, `settle_job_id`) names a job that covers it:
+new or corrected rate, a recompute after a commitment change) is queued in the change's own
+transaction: the change and its job commit or roll back together, so a change never commits
+without the job that revises the records it affects, and a failure while queuing fails the change
+(nothing is retired, written or audited, and it can be sent again). The job is sent to a worker
+after the commit; a failed send leaves it queued, and the job sweep resends it. The job is never
+dropped, and the change's response (`restate_job_id`, `settle_job_id`) names a job that covers it:
 
 - it is merged into a queued job of its kind when one job can cover both: a settlement joins the
   ranges and adds the forced dates; a restatement of the same provider joins the ranges, adds the
@@ -445,6 +451,12 @@ response (`restate_job_id`, `settle_job_id`) names a job that covers it:
 - otherwise it is queued as its own job (a restatement of another provider, or while the job of
   its kind is running) and runs after the one before it: a job's end sends the next queued job of
   its kind to a worker.
+
+Locks are taken in one order on every path: the resource's own lock first (a rate card's key, a
+currency, a commitment), then the job kind's lock, then the kind's queued jobs (row locks in
+creation order, the order the sweep locks them in). Nothing that holds a job-kind lock or a job
+row waits for a resource lock: the claim, the sweep, a job's status writes and an
+administrator's job request take none.
 
 A running job writes a heartbeat every minute. A job whose heartbeat has stopped for ten minutes
 (its worker was lost) can be taken over by a redelivered task, and the job sweep (every 15 minutes)
@@ -539,9 +551,10 @@ second line of defence, not the first.
 output half of a blended price within the card's own dates); a card in use can be retired only by
 a correction and its price changed only by one. A correction of a card in use, a backdated
 supersede over priced records sent with `restate`, and an earlier `effective_to` over priced
-records sent with `restate` each queue the restatement of the affected billing days once the
-change has committed, and answer its `restate_job_id`; a rate-card import queues one restatement
-per provider for the rows that call for one (`restate_jobs` in its report). A mapping, alias or
+records sent with `restate` each queue the restatement of the affected billing days in the
+change's own transaction, and answer its `restate_job_id`; a rate-card import queues one
+restatement per provider for the rows that call for one (`restate_jobs` in its report), in the
+import's transaction. A mapping, alias or
 tree change drops this process's attribution and alias caches.
 
 ## Scopes, administrators and commercial reads
@@ -559,3 +572,25 @@ spend), and `GET /spend/rollups` grouped by `rate_card_id` or `commitment_id` is
 `commercial_read_refused` for them. Every table is tenant
 scoped under forced row-level security, and spend-to-spend foreign keys are composite on
 `(tenant_id, id)`.
+
+### Who reads usage
+
+Every usage read either applies the agent visibility rule or is answered to tenant-wide readers
+only:
+
+| Read | Rule |
+|---|---|
+| `GET /spend/usage` | agent visibility |
+| `GET /spend/rollups`, every grouping | agent visibility (the agent is a rollup dimension, so a total per use case, provider, node or day sums only the agents the reader may see) |
+| `GET /spend/coverage/ledgers` | agent visibility, on the usage side and on every ledger (each carries an agent id) |
+| `GET /spend/coverage` | tenant-wide readers only (the Gate 1 measure sums every agent's usage; gaps carry no agent) |
+| `GET /spend/gaps` | tenant-wide readers only (gaps carry no agent) |
+| `GET /spend/jobs`, `GET /spend/jobs/{job_id}` | tenant-wide readers only (results count every agent's records; parameters carry a correction's reason) |
+| `GET /spend/status` | `audit:read` (no usage figure: the bounds, the backfill source, the partition horizon and this process's writer) |
+
+Under the agent visibility rule an administrator reads every record; anyone else reads the records
+with no agent, the records of shared agents in their domains and of their own personal agents (an
+auditor's domains are unrestricted, so every shared agent, but not another person's personal
+agent). A tenant-wide reader is an administrator (who reads every record anyway) or a person whose
+domains are unrestricted (an auditor); a domain role, or a machine credential without the
+administrator scope, gets 403 `tenant_wide_read_refused`, checked before a job is looked up.
