@@ -74,8 +74,7 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
   by agent) and the ledger comparison apply the agent visibility rule, and
   coverage, gaps and jobs, which sum every agent's usage, are refused (403
   `tenant_wide_read_refused`). User ids, rate cards, unit prices and
-  commitments are shown to administrators and auditors only, as are the
-  writer's process-wide pending count on `GET /spend/status` and, on
+  commitments are shown to administrators and auditors only, as are, on
   `GET /audit`, the audit rows of spend jobs (`spend.job.*`, `spend.usage.*`,
   `spend.fx.*`, `spend.rollups.*`: parameters, amounts moved and counts),
   for a tenant that keeps a spend job. Celery tasks

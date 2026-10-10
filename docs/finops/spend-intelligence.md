@@ -244,9 +244,9 @@ tenant's audit query is unchanged.
 | `GET /spend/jobs`, `GET /spend/jobs/{job_id}` | administrator or auditor | tenant-wide (record counts of every agent; a correction's reason) |
 
 `GET /spend/status` also reports the usage limits (`usage_window_days` 31, `rebuild_days` 31,
-`restate_days` 92), `backfill_source`, `partition_horizon` and this process's writer
-(`started`, and for an administrator or auditor `pending`: the events queued in the process, which
-are every tenant's).
+`restate_days` 92), `backfill_source`, `partition_horizon` and whether this process's writer
+`started`. The writer's pending count spans every tenant in the process, so it is not in the route;
+operators read it from the `agenticorg_spend_usage_pending` gauge.
 
 ## Usage records
 
