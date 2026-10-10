@@ -36,8 +36,11 @@ UUID_SOURCE_TYPES = ("agent", "workflow", "cost_center", "department")
 
 
 def _on_change(tenant_id: uuid.UUID) -> None:
-    """Called after every mapping write; later parts drop the attribution cache here."""
-    return None
+    """Called after every mapping or alias write: drop this process's attribution and alias caches."""
+    from core.spend import resolver
+
+    resolver.invalidate(tenant_id)
+    pricing.invalidate_aliases(tenant_id)
 
 
 def check_source_ref(source_type: str, source_ref: str) -> str:

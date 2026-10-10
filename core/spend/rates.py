@@ -18,15 +18,21 @@ the referencing records are restated. Retired means "replaced by a
 correction"; a contract ends with ``effective_to``. A retired card prices
 nothing.
 
-In this part no usage record exists yet, so ``card_in_use`` answers ``None``
-and no restatement job is enqueued (``restate_job_id`` is ``null``).
+``card_in_use`` answers the latest billing date of a usage record the card
+priced (directly, or as the output half of a blended price). A change that
+cuts priced history (a backdated supersede, an earlier ``effective_to``, a
+correction) queues a restatement job for the affected billing days in its
+own transaction, so the change and the job commit or roll back together; the
+job is sent to a worker after the commit (a failed send leaves it queued for
+the job sweep). ``restate_job_id`` names it (or the queued restatement of the
+same provider it was merged into, widened to cover it).
 """
 
 from __future__ import annotations
 
 import json
 import uuid
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from decimal import Decimal
 from typing import Any, NamedTuple
 
@@ -252,8 +258,100 @@ def card_dict(row: Any) -> dict[str, Any]:
 
 
 async def card_in_use(session: Any, tenant_id: uuid.UUID, card_id: uuid.UUID) -> date | None:
-    """The latest billing date of a record the card priced; ``None`` while no usage records exist (this part)."""
-    return None
+    """The latest billing date of a usage record the card priced, directly or as a blend's output card.
+
+    The direct references use ``ix_spend_usage_records_rate_card``; blend
+    references are looked up only inside the card's own date range (the
+    tenant-time index), the only days a blend could have used it.
+    """
+    from core.models.spend import SpendRateCard
+    from core.models.spend_usage import SpendUsageRecord as R
+
+    direct = (
+        await session.execute(
+            select(func.max(R.billing_date)).where(R.tenant_id == tenant_id, R.rate_card_id == card_id)
+        )
+    ).scalar()
+    found = [direct] if direct is not None else []
+    cards = (
+        await session.execute(
+            select(SpendRateCard.provider, SpendRateCard.effective_from, SpendRateCard.effective_to).where(
+                SpendRateCard.tenant_id == tenant_id, SpendRateCard.id == card_id
+            )
+        )
+    ).all()
+    if cards:
+        provider, start, end = cards[0]
+        zone = clock.billing_zone(provider)
+        conditions = [
+            R.tenant_id == tenant_id,
+            R.unit == "token",
+            R.blend_card_id == card_id,
+            R.event_time >= clock.day_bounds(start, zone)[0],
+        ]
+        if end is not None:
+            conditions.append(R.event_time < clock.day_bounds(end, zone)[0])
+        blend = (await session.execute(select(func.max(R.billing_date)).where(*conditions))).scalar()
+        if blend is not None:
+            found.append(blend)
+    return max(found) if found else None
+
+
+RestatePlan = tuple[str, date, date, uuid.UUID]
+
+
+async def _queue_restate(
+    session: Any,
+    tenant_id: uuid.UUID,
+    plan: RestatePlan | None,
+    *,
+    reason: str,
+    actor: str,
+    now: datetime,
+    card_ids: list[uuid.UUID] | None = None,
+) -> dict[str, Any] | None:
+    """Queue, in the change's transaction, the restatement the change calls for (``None`` when it calls for none).
+
+    The caller holds the card key's lock, which comes before the job-kind lock
+    in the one lock order. A failure raises, so the change rolls back with it.
+    """
+    if plan is None:
+        return None
+    from core.spend import jobs
+
+    provider, start, end, card_id = plan
+    return await jobs.queue_followup(
+        session,
+        tenant_id,
+        kind="restate",
+        params={
+            "provider": provider,
+            "start": start.isoformat(),
+            "end": max(start, end).isoformat(),
+            "card_ids": sorted({str(c) for c in (card_ids or [card_id])}),
+            "include_unpriced": True,
+            "reason": reason,
+        },
+        actor=actor,
+        now=now,
+    )
+
+
+def _sent(tenant_id: uuid.UUID, queued: dict[str, Any] | None) -> str | None:
+    """Send a committed change's restatement to a worker; its job id (or the queued one it joined)."""
+    from core.spend import jobs
+
+    jobs.dispatch(tenant_id, queued)
+    return str(queued["job_id"]) if queued else None
+
+
+def _merge_plans(plans: list[RestatePlan]) -> list[tuple[RestatePlan, list[uuid.UUID]]]:
+    """One restatement per provider covering every planned range and card of an import."""
+    merged: dict[str, tuple[date, date, list[uuid.UUID]]] = {}
+    for provider, start, end, card_id in plans:
+        low, high, cards = merged.get(provider, (start, end, []))
+        merged[provider] = (min(low, start), max(high, end), [*cards, card_id])
+    return [((p, low, high, cards[0]), cards) for p, (low, high, cards) in sorted(merged.items())]
 
 
 async def _lock(session: Any, tenant_id: uuid.UUID, key: CardKey) -> None:
@@ -511,6 +609,11 @@ async def create_card(
         row, changes, superseded = await _create_in(
             session, tenant_id, fields, supersede=supersede, restate=restate, who=who, now=stamp
         )
+        plan: RestatePlan | None = None
+        if superseded is not None and restate:
+            used_until = await card_in_use(session, tenant_id, superseded)
+            if used_until is not None and used_until >= fields["effective_from"]:
+                plan = (key.provider, fields["effective_from"], _today(key.provider, stamp), superseded)
         session.add(
             audit.audit_change(
                 tenant_id,
@@ -522,10 +625,14 @@ async def create_card(
                 now=stamp,
             )
         )
+        queued = await _queue_restate(
+            session, tenant_id, plan, reason="a backdated card superseded priced records", actor=who, now=stamp
+        )
         out = card_dict(row)
     _on_change(tenant_id)
     logger.info("spend_rate_card_created", usage_type=key.usage_type, source=key.source)
-    return {**out, "superseded_id": str(superseded) if superseded else None, "restate_job_id": None}
+    job = _sent(tenant_id, queued)
+    return {**out, "superseded_id": str(superseded) if superseded else None, "restate_job_id": job}
 
 
 async def update_card(
@@ -538,7 +645,15 @@ async def update_card(
     stamp = now or clock.now_utc()
     async with get_tenant_session(tenant_id) as session:
         row = await _locked_card(session, tenant_id, card_id)
+        previous_end = row.effective_to
         changes = await _update_in(session, tenant_id, row, body, restate=bool(body.get("restate")), who=who, now=stamp)
+        plan: RestatePlan | None = None
+        today = _today(row.provider, stamp)
+        end = row.effective_to
+        if changes and body.get("restate") and end != previous_end and end is not None and end <= today:
+            used_until = await card_in_use(session, tenant_id, row.id)
+            if used_until is not None and used_until >= end:
+                plan = (row.provider, end, today, row.id)
         if changes:
             session.add(
                 audit.audit_change(
@@ -551,10 +666,13 @@ async def update_card(
                     now=stamp,
                 )
             )
+        queued = await _queue_restate(
+            session, tenant_id, plan, reason="a card's end moved over priced records", actor=who, now=stamp
+        )
         out = card_dict(row)
     if changes:
         _on_change(tenant_id)
-    return {**out, "restate_job_id": None}
+    return {**out, "restate_job_id": _sent(tenant_id, queued)}
 
 
 async def correct_card(
@@ -578,6 +696,12 @@ async def correct_card(
         if old.status != "active":
             raise SpendError(409, "card_in_use", "the card is already retired; correct its replacement")
         key = _key_of(old)
+        plan: RestatePlan | None = None
+        if await card_in_use(session, tenant_id, old.id) is not None:
+            last_day = _today(old.provider, stamp)
+            if old.effective_to is not None:
+                last_day = min(old.effective_to - timedelta(days=1), last_day)
+            plan = (old.provider, old.effective_from, last_day, old.id)
         merged = {name: getattr(old, name) for name in CORRECTABLE_FIELDS}
         merged["currency"] = str(old.currency).strip()
         for name in CORRECTABLE_FIELDS:
@@ -647,11 +771,14 @@ async def correct_card(
             now=stamp,
         ):
             session.add(entry)
+        # The restatement commits with the correction: a correction never commits without the job that
+        # re-prices what the retired card priced (a retry would be refused, the card being retired).
+        queued = await _queue_restate(session, tenant_id, plan, reason=why, actor=who, now=stamp)
         out = card_dict(new)
         retired_id = str(old.id)
     _on_change(tenant_id)
     logger.info("spend_rate_card_corrected", usage_type=key.usage_type)
-    return {"card": out, "retired_id": retired_id, "restate_job_id": None}
+    return {"card": out, "retired_id": retired_id, "restate_job_id": _sent(tenant_id, queued)}
 
 
 def _import_row(raw: dict[str, str]) -> tuple[dict[str, Any], bool, bool]:
@@ -697,6 +824,8 @@ async def import_cards(
         seen.add((key, fields["effective_from"]))
         checked.append((index, fields, set(raw), supersede, restate))
     changes: list[audit.Change] = []
+    plans: list[RestatePlan] = []
+    queued: list[tuple[str, dict[str, Any] | None]] = []
     async with get_tenant_session(tenant_id) as session:
         keys = sorted({k for k, _start in seen})
         for key in keys:
@@ -720,15 +849,28 @@ async def import_cards(
                             for name in (*PRICE_FIELDS, "effective_to", "reference")
                             if name in IMPORT_REQUIRED or name in present
                         }
+                        previous_end = same[0].effective_to
                         row_changes = await _update_in(
                             session, tenant_id, same[0], body, restate=restate, who=who, now=stamp
                         )
                         report["updated" if row_changes else "unchanged"] += 1
+                        end = same[0].effective_to
+                        today = _today(key.provider, stamp)
+                        if row_changes and restate and end != previous_end and end is not None and end <= today:
+                            used_until = await card_in_use(session, tenant_id, same[0].id)
+                            if used_until is not None and used_until >= end:
+                                plans.append((key.provider, end, today, same[0].id))
                     else:
-                        _row, row_changes, _superseded = await _create_in(
+                        _row, row_changes, superseded = await _create_in(
                             session, tenant_id, fields, supersede=supersede, restate=restate, who=who, now=stamp
                         )
                         report["created"] += 1
+                        if superseded is not None and restate:
+                            used_until = await card_in_use(session, tenant_id, superseded)
+                            if used_until is not None and used_until >= fields["effective_from"]:
+                                plans.append(
+                                    (key.provider, fields["effective_from"], _today(key.provider, stamp), superseded)
+                                )
             except SpendError as exc:
                 imports.reject(report, row=index, key=label, reason=exc.code)
                 continue
@@ -748,8 +890,23 @@ async def import_cards(
                 now=stamp,
             ):
                 session.add(entry)
+            # One restatement per provider, in the import's transaction (after every key lock it took).
+            for plan, cards in _merge_plans(plans):
+                restatement = await _queue_restate(
+                    session,
+                    tenant_id,
+                    plan,
+                    reason="a rate-card import cut priced history",
+                    actor=who,
+                    now=stamp,
+                    card_ids=cards,
+                )
+                queued.append((plan[0], restatement))
     if changes and not dry_run:
         _on_change(tenant_id)
+        restate_jobs = [{"provider": provider, "job_id": _sent(tenant_id, q)} for provider, q in queued]
+        if restate_jobs:
+            report["restate_jobs"] = restate_jobs
     return report
 
 

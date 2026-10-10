@@ -54,6 +54,7 @@ app = Celery(
         "core.tasks.memory_tasks",
         "core.tasks.report_tasks",
         "core.tasks.rpa_tasks",
+        "core.tasks.spend_tasks",
         "core.tasks.synthetic_tasks",
         "core.tasks.timeline_tasks",
         "core.tasks.token_refresh",
@@ -117,6 +118,38 @@ app.conf.beat_schedule = {
         # unless AGENTICORG_LINEAGE_ENABLED and AGENTICORG_LINEAGE_SYNC_SWEEP_ENABLED.
         "task": "core.tasks.lineage_tasks.sweep_sync_sources",
         "schedule": 300.0,
+        "options": {"queue": "maintenance"},
+    },
+    "spend-check-partitions": {
+        # AI spend usage partitions (core/tasks/spend_tasks.py): warns when fewer
+        # than six named months remain. 01:10 IST. A no-op unless
+        # AGENTICORG_SPEND_INTELLIGENCE_ENABLED and AGENTICORG_SPEND_SWEEPS_ENABLED.
+        "task": "core.tasks.spend_tasks.check_partitions",
+        "schedule": crontab(hour=1, minute=10),
+        "options": {"queue": "maintenance"},
+    },
+    "spend-settle-fx": {
+        # Settles the last seven days' pending FX conversions of every tenant that
+        # has any, after the day's reference rate is published (19:30 IST). A no-op
+        # unless spend intelligence and its sweeps are on.
+        "task": "core.tasks.spend_tasks.settle_fx_daily",
+        "schedule": crontab(hour=19, minute=30),
+        "options": {"queue": "maintenance"},
+    },
+    "spend-recompute-commitments": {
+        # Queues a commitment drawdown recompute for each tenant with an active
+        # commitment (merged into a queued one; one runs at a time). A no-op
+        # unless spend intelligence and its sweeps are on.
+        "task": "core.tasks.spend_tasks.recompute_commitments",
+        "schedule": 900.0,
+        "options": {"queue": "maintenance"},
+    },
+    "spend-sweep-jobs": {
+        # Queues again the spend jobs a lost worker left running (no heartbeat
+        # for ten minutes) and resends queued jobs nothing of their kind is
+        # running for. A no-op unless spend intelligence and its sweeps are on.
+        "task": "core.tasks.spend_tasks.sweep_jobs",
+        "schedule": 900.0,
         "options": {"queue": "maintenance"},
     },
     "generate-scheduled-reports": {
@@ -345,6 +378,18 @@ def _load_plugins_in_worker(**_kwargs: Any) -> None:
     load_configured_plugins()
 
 
+@worker_process_init.connect
+def _prewarm_spend_meter(**_kwargs: Any) -> None:
+    """While spend metering is on, load its code in this child so the first metered call does not.
+
+    Nothing at all while off; ``prewarm`` never raises (a failure is logged and
+    the first metered call imports the code itself).
+    """
+    from core import spend
+
+    spend.prewarm()
+
+
 # The agent checkpoint store is deliberately NOT opened in worker_process_init:
 # Celery prefork kills a child that has not reported ready within a few
 # seconds, so a slow or unreachable checkpoint database would respawn-loop
@@ -364,6 +409,18 @@ def _close_checkpointer_in_worker(**_kwargs: Any) -> None:
     # enterprise-gate: broad-except-ok reason=process-exit-cleanup-only-connections-die-with-the-worker
     except Exception as exc:
         structlog.get_logger().warning("langgraph_checkpointer_worker_close_failed", error_type=type(exc).__name__)
+
+
+@worker_process_shutdown.connect
+def _drain_spend_writer(**_kwargs: Any) -> None:
+    """Stop this worker's spend usage writer, if metering started one, and spill what is left."""
+    try:
+        from core import spend
+
+        spend.drain_blocking(5.0)
+    # enterprise-gate: broad-except-ok reason=process-exit-spend-drain-failure-is-logged
+    except Exception as exc:
+        structlog.get_logger().warning("spend_writer_worker_drain_failed", error_type=type(exc).__name__)
 
 
 @before_task_publish.connect

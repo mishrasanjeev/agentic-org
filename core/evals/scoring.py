@@ -32,6 +32,7 @@ from typing import Any
 import structlog
 
 from core.prompts import compare as prompt_compare
+from core.spend import context as spend_context
 
 logger = structlog.get_logger()
 
@@ -157,12 +158,13 @@ async def judge_one(
     async with gate:
         started = time.monotonic()
         try:
-            if pseudonymiser is not None:
-                response = await prompt_compare._complete(
-                    tenant_id, judge_model, messages, JUDGE_MAX_TOKENS, pseudonymiser=pseudonymiser
-                )
-            else:
-                response = await prompt_compare._complete(tenant_id, judge_model, messages, JUDGE_MAX_TOKENS)
+            with spend_context.scope(application="console", default_use_case="evals.judge"):
+                if pseudonymiser is not None:
+                    response = await prompt_compare._complete(
+                        tenant_id, judge_model, messages, JUDGE_MAX_TOKENS, pseudonymiser=pseudonymiser
+                    )
+                else:
+                    response = await prompt_compare._complete(tenant_id, judge_model, messages, JUDGE_MAX_TOKENS)
         # enterprise-gate: broad-except-ok reason=one-judge-failure-is-its-own-error-and-is-logged
         except Exception as exc:
             logger.warning(

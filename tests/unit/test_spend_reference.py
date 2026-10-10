@@ -19,7 +19,7 @@ from sqlalchemy.schema import CreateIndex, CreateTable
 from sqlalchemy.sql.elements import TextClause
 
 from core.config import Settings, settings
-from core.spend import audit, clock, commitments, fx, imports, locks, mappings, org, pricing, rates, vocab
+from core.spend import audit, clock, commitments, fx, imports, jobs, locks, mappings, org, pricing, rates, vocab
 from core.spend.errors import SpendError, require_actor
 from core.tool_gateway.audit_logger import verify_audit_row
 from tests.unit.spend_fakes import FakeSession
@@ -42,6 +42,7 @@ def session(monkeypatch):
     monkeypatch.setattr(settings, "spend_provider_billing_timezones_json", "")
     monkeypatch.setattr(settings, "model_price_overrides_json", "")
     monkeypatch.setattr(clock, "now_utc", lambda: T0)  # a service called without now reads T0
+    monkeypatch.setattr(jobs, "_dispatch", lambda tenant_id, job_id: None)  # follow-up jobs stay queued
     pricing._ALIAS_CACHE.clear()
     return store
 
@@ -492,7 +493,12 @@ class TestRateCards:
             await rates.create_card(TENANT, backdated, actor=ACTOR, now=T0)
         assert info.value.code == "restate_required" and "2026-09-01" in info.value.message
         out = await rates.create_card(TENANT, {**backdated, "restate": True}, actor=ACTOR, now=T0)
-        assert out["superseded_id"] and out["restate_job_id"] is None
+        # The supersede cut priced history, so a restatement of the predecessor's records is queued.
+        assert out["superseded_id"] and out["restate_job_id"]
+        job = next(r for r in session.of("spend_jobs") if str(r.id) == out["restate_job_id"])
+        assert job.kind == "restate" and job.status == "queued"
+        assert job.params["card_ids"] == [out["superseded_id"]] and job.params["provider"] == "openai"
+        assert (job.params["start"], job.params["end"]) == ("2026-09-01", "2026-10-01")
 
     @pytest.mark.asyncio
     async def test_price_edit_refused_when_card_in_use(self, session, monkeypatch):
@@ -808,9 +814,9 @@ class TestCommitmentsAndFx:
             actor=ACTOR,
             now=T0,
         )
-        assert (
-            second["previous_rate"] == "83.1" and second["rate_to_inr"] == "83.25" and second["settle_job_id"] is None
-        )
+        # Each change queues an FX settlement; the second folds into the one still queued.
+        assert first["settle_job_id"] and second["settle_job_id"] == first["settle_job_id"]
+        assert second["previous_rate"] == "83.1" and second["rate_to_inr"] == "83.25"
         same = await fx.put_rate(
             TENANT,
             {"rate_date": "2026-10-01", "currency": "USD", "rate_to_inr": "83.25", "source": "reference"},
@@ -840,7 +846,9 @@ class TestCommitmentsAndFx:
     @pytest.mark.asyncio
     async def test_fx_writes_take_the_currency_lock_before_reading_the_rate(self, session):
         """``FOR UPDATE`` locks nothing while a new rate's row does not exist, so two writers of the same new
-        rate are serialised by the currency's advisory lock instead of both inserting it."""
+        rate are serialised by the currency's advisory lock instead of both inserting it. The settlement the
+        rate calls for is queued in the same transaction, under the job-kind lock taken after the currency's
+        (the one lock order: resource first, then the job kind)."""
 
         def first(predicate) -> int:
             return next(i for i, s in enumerate(session.statements) if predicate(s))
@@ -851,8 +859,9 @@ class TestCommitmentsAndFx:
         def reads_rates(statement) -> bool:
             return not isinstance(statement, TextClause) and "spend_fx_rates" in str(statement)
 
+        settle = locks.job_kind(TENANT, "settle_fx")
         await fx.put_rate(TENANT, {"rate_date": "2026-10-01", "currency": "USD", "rate_to_inr": "83"}, actor=ACTOR)
-        assert session.locks == [locks.fx_rate(TENANT, "USD")]
+        assert session.locks == [locks.fx_rate(TENANT, "USD"), settle]
         assert first(is_lock) < first(reads_rates)
         for dry_run in (True, False):
             session.statements.clear()
@@ -870,10 +879,13 @@ class TestCommitmentsAndFx:
                 now=T0,
             )
             assert report["created"] == 3
-            # Every currency of the file is locked once, in sorted order, before the first rate is read.
-            assert session.locks == [locks.fx_rate(TENANT, "EUR"), locks.fx_rate(TENANT, "USD")]
-            last_lock = max(i for i, s in enumerate(session.statements) if is_lock(s))
-            assert last_lock < first(reads_rates)
+            # Every currency of the file is locked once, in sorted order, before the first rate is read;
+            # a real import then queues its settlement under the job-kind lock (a dry run queues nothing).
+            currencies = [locks.fx_rate(TENANT, "EUR"), locks.fx_rate(TENANT, "USD")]
+            assert session.locks == (currencies if dry_run else [*currencies, settle])
+            taken = [i for i, s in enumerate(session.statements) if is_lock(s)]
+            assert taken[1] < first(reads_rates)  # both currency locks before the first read of a rate
+            assert dry_run or taken[2] > first(reads_rates)  # the job-kind lock last
         assert len(session.of("spend_fx_rates")) == 4
 
 
@@ -1331,7 +1343,9 @@ class TestAudit:
             "spend.rate_cards.create",
             "spend.rate_cards.update",
             "spend.commitments.create",
+            "spend.job.enqueue",  # the commitment's drawdown recompute
             "spend.fx_rates.create",
+            "spend.job.enqueue",  # the new rate's FX settlement
         ]
         for row in rows:
             assert row.tenant_id == TENANT and row.actor_id == ACTOR and row.actor_type == "user"

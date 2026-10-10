@@ -374,6 +374,21 @@ def _meter(record: ModelCallRecord) -> None:
         logger.debug("model_call_metrics_skipped", provider=record.provider, model=record.model)
 
 
+def _meter_spend(record: ModelCallRecord, decision: Any, spend_usage: Any) -> None:
+    """Hand the finished call to spend metering while it is on; never raises, never waits."""
+    try:
+        from core import spend
+
+        if not spend.enabled():
+            return
+        from core.spend import meter as spend_meter
+
+        spend_meter.meter_model_call(record, decision=decision, usage=spend_usage)
+    # enterprise-gate: broad-except-ok reason=spend-metering-failure-is-logged-and-counted-the-call-proceeds
+    except Exception as exc:
+        logger.warning("spend_usage_hook_failed", error_type=type(exc).__name__)
+
+
 async def _write(record: ModelCallRecord) -> bool:
     """Write the signed row while the gateway is on for the tenant; a failure is logged, never raised."""
     tid = record.tenant_id
@@ -425,11 +440,16 @@ async def record_model_call(
     prompt_digest: str | None = None,
     request_digest: str | None = None,
     response_digest: str | None = None,
+    spend_usage: Any = None,
 ) -> ModelCallRecord:
     """Meter one finished model call and, for a routed call, write its signed record.
 
     ``route`` is the decision the call was made under; when omitted, the
     decision bound for the current run (``model_gateway.bind_route``) is used.
+    ``spend_usage`` (a ``core.spend.context.CallUsage``, ``None`` while spend
+    intelligence is off) is handed to the spend meter after the record is
+    written, also when that write is cancelled; it is not a record field and
+    never changes the record or the call.
     """
     context = current_route() if route is None else None
     decision = route if route is not None else (context.decision if context else None)
@@ -490,6 +510,10 @@ async def record_model_call(
         fallback_from=record.fallback_from,
         error_type=record.error_type,
     )
-    if decision is not None and getattr(decision, "gated", False):
-        await _write(record)
+    try:
+        if decision is not None and getattr(decision, "gated", False):
+            await _write(record)
+    finally:
+        # A cancellation while the signed row is written must not lose the finished call's usage.
+        _meter_spend(record, decision, spend_usage)
     return record

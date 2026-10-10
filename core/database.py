@@ -8,8 +8,8 @@ import asyncio
 import logging
 import os
 import weakref
-from collections.abc import AsyncGenerator, Awaitable, Callable, MutableMapping, Sequence
-from contextlib import asynccontextmanager
+from collections.abc import AsyncGenerator, Awaitable, Callable, Iterator, MutableMapping, Sequence
+from contextlib import asynccontextmanager, contextmanager
 from contextvars import ContextVar
 from dataclasses import dataclass
 from pathlib import Path
@@ -307,6 +307,21 @@ def current_session_factory() -> async_sessionmaker[AsyncSession]:
     # The module-level factory, so a test that replaces it is honoured. In
     # production that is the guarded wrapper, which does the loop check.
     return async_session_factory
+
+
+@contextmanager
+def session_factory_scope(provider: Callable[[], async_sessionmaker[AsyncSession]]) -> Iterator[None]:
+    """Use ``provider``'s session factory for the session helpers within this block.
+
+    A background thread with its own loop and engine (the spend usage writer)
+    wraps its work in this, so ``get_tenant_session`` there opens sessions on
+    its engine and never takes a connection from the shared pool.
+    """
+    token = _session_factory_override.set(provider)
+    try:
+        yield
+    finally:
+        _session_factory_override.reset(token)
 
 
 def run_db_coroutine_sync[T](make_coroutine: Callable[[], Awaitable[T]]) -> T:

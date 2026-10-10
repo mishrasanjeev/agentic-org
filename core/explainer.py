@@ -12,6 +12,8 @@ from typing import Any
 
 import structlog
 
+from core import spend
+
 logger = structlog.get_logger()
 
 # ---------------------------------------------------------------------------
@@ -129,6 +131,8 @@ async def _call_llm_for_summary(
         )
 
         response = await llm.ainvoke(prompt)
+        if spend.enabled():
+            spend.note("message", tenant_id, message=response, llm=llm, default_use_case="run.explanation")
         content = response.content if hasattr(response, "content") else str(response)
 
         # Parse JSON from response

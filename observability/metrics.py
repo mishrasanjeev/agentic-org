@@ -277,3 +277,57 @@ hitl_condition_parse_failures_total = Counter(
     "HITL conditions outside the supported grammar, by stage, reason code and outcome",
     ["stage", "reason", "outcome"],
 )
+
+# ── AI spend intelligence (core/spend/) ─────────────────────────────
+# Usage-type and reason labels only: never a tenant, user, agent, tool or email.
+
+spend_usage_submitted_total = Counter(
+    "agenticorg_spend_usage_submitted_total",
+    "Usage events handed to the writer queue",
+    ["usage_type"],
+)
+spend_usage_records_total = Counter(
+    "agenticorg_spend_usage_records_total",
+    "Usage records by type and outcome (written, duplicate, skipped)",
+    ["usage_type", "outcome"],
+)
+spend_usage_write_failures_total = Counter(
+    "agenticorg_spend_usage_write_failures_total",
+    "Usage events not written by the writer, by reason (queue_full, db_error, spilled, spill_failed, "
+    "shutdown_lost, paused, no_tenant (a tenant id that is not a UUID), hook_error, tenant_mismatch)",
+    ["usage_type", "reason"],
+)
+# A call with no tenant at all (a tenantless router call) is routine and counted here as no_tenant,
+# not as a write failure, so it never holds the write-failure alert open.
+spend_unmetered_calls_total = Counter(
+    "agenticorg_spend_unmetered_calls_total",
+    "Calls that produced no usage quantity or had no tenant to meter (failed_no_usage, timeout_estimated, "
+    "cancelled, no_tenant)",
+    ["usage_type", "reason"],
+)
+# Gap counts (usage already counted above when it went unmetered) that a shutdown dropped before
+# they reached spend_meter_gaps. Kept apart from the write failures: the loss was counted once already.
+spend_meter_gaps_lost_total = Counter(
+    "agenticorg_spend_meter_gaps_lost_total",
+    "Meter gap counts dropped at shutdown before they were written, by the gap's reason",
+    ["usage_type", "reason"],
+)
+# livemax: a Celery child that dies with a backlog leaves no series behind (mark_process_dead
+# removes live* gauge files), and the backlog alert reads max() across processes.
+spend_usage_pending = Gauge(
+    "agenticorg_spend_usage_pending",
+    "Usage events queued or awaiting retry in this process",
+    multiprocess_mode="livemax",
+)
+spend_hook_seconds = Histogram(
+    "agenticorg_spend_hook_seconds",
+    "Time the spend hook adds to a metered call (event build and queue put)",
+    ["usage_type"],
+    buckets=(0.00005, 0.0001, 0.0005, 0.001, 0.002, 0.005, 0.01, 0.05, 0.25, 1.0),
+)
+spend_writer_flush_seconds = Histogram(
+    "agenticorg_spend_writer_flush_seconds",
+    "Duration of one writer flush",
+    [],
+    buckets=(0.01, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0),
+)

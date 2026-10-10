@@ -7,14 +7,21 @@ new rate never both insert it) and audit the before and after rate and
 source. INR is
 the reporting currency and has no row. ``rate_on`` answers the rate of the
 date, else the latest earlier one; the pricing engine marks the second
-``fx_estimated`` (``core/spend/pricing.py``). Settlement of records that used
-an earlier rate is a later part of the feature.
+``fx_estimated`` (``core/spend/pricing.py``).
+
+Every new or changed rate queues an FX settlement for the days it governs
+(from its date to the day before the next rate, or 31 days without one), so
+records that used an earlier rate, or none, are converted with it. The job
+is queued in the rate's own transaction (the rate and its settlement commit
+or roll back together) and sent to a worker after the commit. Changing
+the value of a rate that settled records already use (``fx_in_use``) needs
+``restate``; the settlement then re-converts those records too.
 """
 
 from __future__ import annotations
 
 import uuid
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from typing import Any
 
 import structlog
@@ -126,18 +133,127 @@ async def _upsert(
     return "updated", row, audit.Change(key, before, _audit_fields(row)), previous
 
 
+SETTLE_DAYS_WITHOUT_NEXT = 31
+
+
+async def fx_in_use(session: Any, tenant_id: uuid.UUID, currency: str, rate_date: date) -> bool:
+    """Whether settled usage records (converted at this exact date's rate) use the rate."""
+    from core.models.spend_usage import SpendUsageRecord as R
+    from core.spend.rollups import day_window
+
+    start, end = day_window(rate_date)
+    rows = (
+        await session.execute(
+            select(R.id)
+            .where(
+                R.tenant_id == tenant_id,
+                R.currency == currency,
+                R.fx_rate_date == rate_date,
+                R.fx_estimated.is_(False),
+                R.event_time >= start,
+                R.event_time < end,
+            )
+            .limit(1)
+        )
+    ).all()
+    return bool(rows)
+
+
+async def settle_window(session: Any, tenant_id: uuid.UUID, currency: str, rate_date: date) -> tuple[date, date]:
+    """The reporting days a rate governs: its date to the day before the next rate (31 days without one)."""
+    from core.models.spend import SpendFxRate
+
+    following = (
+        await session.execute(
+            select(func.min(SpendFxRate.rate_date)).where(
+                SpendFxRate.tenant_id == tenant_id,
+                SpendFxRate.currency == currency,
+                SpendFxRate.rate_date > rate_date,
+            )
+        )
+    ).scalar()
+    if following is None:
+        return rate_date, rate_date + timedelta(days=SETTLE_DAYS_WITHOUT_NEXT)
+    return rate_date, max(rate_date, following - timedelta(days=1))
+
+
+async def _queue_settle(
+    session: Any,
+    tenant_id: uuid.UUID,
+    window: tuple[date, date] | None,
+    forced: list[tuple[str, date]],
+    *,
+    actor: str,
+    now: datetime,
+) -> dict[str, Any] | None:
+    """Queue, in the rate change's transaction, the settlement it calls for (``None`` when it calls for none).
+
+    The caller holds the currencies' locks, which come before the job-kind
+    lock in the one lock order. A failure raises, so the change rolls back
+    with it.
+    """
+    if window is None:
+        return None
+    from core.spend import jobs
+
+    return await jobs.queue_followup(
+        session,
+        tenant_id,
+        kind="settle_fx",
+        params={
+            "start": window[0].isoformat(),
+            "end": window[1].isoformat(),
+            "force_dates": [[c, d.isoformat()] for c, d in forced],
+        },
+        actor=actor,
+        now=now,
+    )
+
+
+def _sent(tenant_id: uuid.UUID, queued: dict[str, Any] | None) -> str | None:
+    """Send a committed rate change's settlement to a worker; its job id (or the queued one it joined)."""
+    from core.spend import jobs
+
+    jobs.dispatch(tenant_id, queued)
+    return str(queued["job_id"]) if queued else None
+
+
 async def put_rate(
     tenant_id: uuid.UUID, body: dict[str, Any], *, actor: str, now: datetime | None = None
 ) -> dict[str, Any]:
-    """Upsert the rate of ``(currency, rate_date)``; answers the row with the rate it replaced."""
+    """Upsert the rate of ``(currency, rate_date)``; answers the row with the rate it replaced.
+
+    A new or changed rate queues an FX settlement for the days it governs.
+    Changing a rate settled records use needs ``restate`` (409 ``fx_in_use``
+    otherwise); its settlement then re-converts them.
+    """
     from core.database import get_tenant_session
 
     who = require_actor(actor)
     fields = check_rate(body)
+    restate = bool(body.get("restate"))
     stamp = now or clock.now_utc()
+    window: tuple[date, date] | None = None
+    forced: list[tuple[str, date]] = []
+    queued: dict[str, Any] | None = None
     async with get_tenant_session(tenant_id) as session:
         await _lock_currencies(session, tenant_id, {fields["currency"]})
+        existing = await _row(session, tenant_id, fields["currency"], fields["rate_date"])
+        if (
+            existing is not None
+            and existing.rate_to_inr != fields["rate_to_inr"]
+            and await fx_in_use(session, tenant_id, fields["currency"], fields["rate_date"])
+        ):
+            if not restate:
+                raise SpendError(
+                    409,
+                    "fx_in_use",
+                    "settled usage records use this rate; send restate=true to change it and re-convert them",
+                )
+            forced = [(fields["currency"], fields["rate_date"])]
         outcome, row, change, previous = await _upsert(session, tenant_id, fields, who=who, now=stamp)
+        if outcome != "unchanged":
+            window = await settle_window(session, tenant_id, fields["currency"], fields["rate_date"])
         if change is not None:
             session.add(
                 audit.audit_change(
@@ -150,9 +266,11 @@ async def put_rate(
                     now=stamp,
                 )
             )
+        queued = await _queue_settle(session, tenant_id, window, forced, actor=who, now=stamp)
         out = _rate_dict(row)
     logger.info("spend_fx_rate_kept", outcome=outcome, currency=fields["currency"])
-    return {**out, "previous_rate": vocab.dec_str(previous), "outcome": outcome, "settle_job_id": None}
+    job = _sent(tenant_id, queued)
+    return {**out, "previous_rate": vocab.dec_str(previous), "outcome": outcome, "settle_job_id": job}
 
 
 async def import_rates(
@@ -185,14 +303,27 @@ async def import_rates(
         seen.add((fields["currency"], fields["rate_date"]))
         checked.append((index, fields))
     changes: list[audit.Change] = []
+    windows: list[tuple[date, date]] = []
+    queued: dict[str, Any] | None = None
     async with get_tenant_session(tenant_id) as session:
         await _lock_currencies(session, tenant_id, {fields["currency"] for _index, fields in checked})
         outer = await session.begin_nested() if dry_run else None
-        for _index, fields in checked:
+        for index, fields in checked:
+            existing = await _row(session, tenant_id, fields["currency"], fields["rate_date"])
+            if (
+                existing is not None
+                and existing.rate_to_inr != fields["rate_to_inr"]
+                and await fx_in_use(session, tenant_id, fields["currency"], fields["rate_date"])
+            ):
+                key = f"{fields['currency']}:{fields['rate_date'].isoformat()}"
+                imports.reject(report, row=index, key=key, reason="fx_in_use")
+                continue
             outcome, _row_obj, change, _previous = await _upsert(session, tenant_id, fields, who=who, now=stamp)
             report[outcome] += 1
             if change is not None:
                 changes.append(change)
+                windows.append(await settle_window(session, tenant_id, fields["currency"], fields["rate_date"]))
+        report["rejected"].sort(key=lambda item: item["row"])
         if outer is not None:
             await outer.rollback()
         elif changes:
@@ -207,6 +338,17 @@ async def import_rates(
                 now=stamp,
             ):
                 session.add(entry)
+            if windows:
+                from core.spend.maintenance import JOB_MAX_DAYS
+
+                # One settlement from the earliest changed rate to the end of the latest one's window,
+                # as long as a job may run (ten years), so no imported rate is left unsettled. It is
+                # queued in the import's transaction, after every currency lock the import took.
+                start = min(w[0] for w in windows)
+                end = min(max(w[1] for w in windows), start + timedelta(days=JOB_MAX_DAYS - 1))
+                queued = await _queue_settle(session, tenant_id, (start, end), [], actor=who, now=stamp)
+    if queued is not None:
+        report["settle_job_id"] = _sent(tenant_id, queued)
     return report
 
 

@@ -4,6 +4,92 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
 
 ## [Unreleased] - 2026-08-29
 
+### Added - AI spend intelligence: usage records, attribution and the model-call meter
+- Every metered model call becomes usage records (uncached input, cached
+  input and output tokens, or one estimated token record when the split is
+  unknown), priced at the card in force on the provider's billing date and
+  converted to INR on the reporting date, with every attribution dimension:
+  agent and version, organisation node and business unit, product line, use
+  case, application, region, workflow, run, initiating user id, environment,
+  risk tier and billing account (tenant key, platform key or in-house).
+  Records hold identifiers, counts and amounts only, and are never deleted.
+- Attribution is resolved on the server from the agent's configuration, the
+  registry, source mappings and the organisation tree, never from request
+  labels; each record stores the rule that matched. A legacy cost-centre or
+  department label that names no node leaves the record unattributed as
+  `unknown_label`; every unattributed record is kept and counted by reason.
+  An agent hint naming a missing or retired agent is ignored on the metering
+  path. Entry points (agent runs, chat, A2A, MCP, voice, workflows, content,
+  speech, transaction narratives, console tools) bind their application.
+- The hook in `record_model_call` is synchronous and failure-isolated: it
+  builds events in memory and queues them for one writer thread per process,
+  which writes them in batches on its own two-connection engine, retries a
+  transient error once, waits out a rollup rebuild without blocking other
+  tenants, and spills what it cannot write to the `persist_usage` task.
+  Drops, spills and pauses are counted globally and per tenant; a call with
+  no tenant is counted as unmetered, never as a write failure; a feature
+  flag (`spend.metering_paused`) pauses metering per tenant or for all
+  without a restart; the writer drains at shutdown, counting what it cannot
+  hand on (late usage, unflushed gaps) as lost. While spend is on, the API
+  and each worker process load the metering code at startup. Four direct
+  model callers outside the router are metered too.
+- A daily rollup kept in the writer's transaction and rebuildable per day;
+  coverage (the attributed share of INR spend, by amount and by count, with
+  unpriced, unconverted and FX-pending volume, gaps, reasons and attribution
+  paths); a read-only comparison with the existing cost ledgers; meter gaps.
+  Audited maintenance jobs revise derived fields only: FX settlement (also
+  queued by every new or changed rate, and `fx_in_use` for a rate settled
+  records use), restatement (queued by corrections and backdated cards),
+  re-attribution of unattributed records, and commitment drawdown and
+  overage in event order. Each job locks the records it revises and audits
+  every transaction that revises any, so concurrent jobs never move a rollup
+  twice and a job that stops part-way leaves nothing unaudited. Backfill
+  recreates model-call records from `model_gateway_records` with the hook's
+  own keys.
+- Jobs a reference-data change calls for are never dropped: they are queued
+  in the change's own transaction (a rate-card correction, supersede, end
+  change or import; an FX rate or import; a commitment create or update), so
+  the change and its job commit or roll back together, and sent to a worker
+  after the commit (a failed send leaves the job queued for the sweep). They
+  are merged into a queued job of the kind that can cover them, or queued to
+  run after the running one, never into a job queued again after a
+  transient failure. An administrator's job whose send fails answers
+  `failed`, unless a change's job was merged into it meanwhile: then it stays
+  queued for the sweep. Locks are taken in one order: the resource's lock,
+  then the job kind's, then the kind's queued jobs (skipping, never waiting
+  for, a row another transaction holds); commitment rows are locked in id
+  order on the write path as in the recompute. One job of a kind runs at a
+  time; a running job beats a heartbeat, a sweep every 15 minutes requeues a
+  lost worker's job and resends queued jobs, and a transient database
+  failure is retried twice before the job fails.
+- `GET /spend/usage`, `GET /spend/rollups`, `GET /spend/coverage`,
+  `GET /spend/coverage/ledgers`, `GET /spend/gaps`, `GET /spend/jobs`,
+  `GET /spend/jobs/{job_id}`, and the job routes `POST /spend/rollups/rebuild`,
+  `POST /spend/usage/{backfill,restate,reattribute}`,
+  `POST /spend/fx-rates/settle` and `POST /spend/commitments/recompute`
+  (202 with a job id, one active job of a kind per tenant). One read rule,
+  as on `GET /audit`: administrators and auditors read every usage record,
+  rollup, coverage figure, gap, job and ledger comparison unfiltered; for
+  anyone else usage records, rollups (every grouping, not only the grouping
+  by agent) and the ledger comparison apply the agent visibility rule, and
+  coverage, gaps and jobs, which sum every agent's usage, are refused (403
+  `tenant_wide_read_refused`). User ids, rate cards, unit prices and
+  commitments are shown to administrators and auditors only, as are, on
+  `GET /audit`, the audit rows of spend jobs (`spend.job.*`, `spend.usage.*`,
+  `spend.fx.*`, `spend.rollups.*`: parameters, amounts moved and counts),
+  for a tenant that keeps a spend job. Celery tasks
+  `core.tasks.spend_tasks.*` with beats for the partition horizon, FX
+  settlement, commitment recompute and the job sweep. Alerts
+  `AgenticOrgSpendWriteFailures` and `AgenticOrgSpendWriterBacklog`.
+- Behind `spend_intelligence_enabled` (default off): off, the hook returns
+  at its first statement, no writer starts, scopes and credential notes do
+  nothing, the router's responses are unchanged, the tasks skip and the new
+  routes are not found. Migration `v6z80_spend_usage` adds
+  `spend_usage_records` (range-partitioned by month, July 2026 to December
+  2028 plus a default partition), `spend_usage_rollups`, `spend_meter_gaps`
+  and `spend_jobs` under forced row-level security on every table and
+  partition, with tenant-composite foreign keys and their leading indexes.
+
 ### Added - AI spend intelligence: reference data and rupee pricing
 - `core/spend/`: the reference data AI spend is measured against. An
   organisation tree (group, business unit, department, team, cost centre)

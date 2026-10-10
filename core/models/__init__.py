@@ -143,6 +143,10 @@ from core.models.spend import SpendModelAlias as SpendModelAlias
 from core.models.spend import SpendOrgNode as SpendOrgNode
 from core.models.spend import SpendRateCard as SpendRateCard
 from core.models.spend import SpendSourceMapping as SpendSourceMapping
+from core.models.spend_usage import SpendJob as SpendJob
+from core.models.spend_usage import SpendMeterGap as SpendMeterGap
+from core.models.spend_usage import SpendUsageRecord as SpendUsageRecord
+from core.models.spend_usage import SpendUsageRollup as SpendUsageRollup
 from core.models.sso_config import SSOConfig as SSOConfig
 from core.models.synthetic_check import SyntheticCheck as SyntheticCheck
 from core.models.synthetic_check import SyntheticCheckResult as SyntheticCheckResult
