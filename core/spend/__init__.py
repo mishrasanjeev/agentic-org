@@ -7,13 +7,15 @@ off. Behind ``spend_intelligence_enabled`` (default off).
 
 ``note`` is the one entry point for call sites outside ``record_model_call``
 (direct model calls; embeddings, OCR pages, speech minutes and priced tool
-calls); ``drain`` stops this process's usage writer at shutdown and hands what
-is left to a worker.
+calls); ``prewarm`` loads the metering code at process start while the
+feature is on; ``drain`` stops this process's usage writer at shutdown and
+hands what is left to a worker.
 """
 
 from __future__ import annotations
 
 import asyncio
+import importlib
 import logging
 import sys
 
@@ -21,6 +23,16 @@ from core.config import settings
 
 _log = logging.getLogger(__name__)
 _WRITER_MODULE = "core.spend.writer"
+# What the model-call hook and ``note`` import on first use, in dependency order.
+_HOOK_MODULES = (
+    "observability.metrics",
+    "core.finops.attribution",  # vocab.label
+    "core.spend.tokens",
+    "core.spend.clock",
+    "core.spend.meter",
+    _WRITER_MODULE,
+    "core.spend.metering",
+)
 
 
 def enabled() -> bool:
@@ -52,6 +64,27 @@ def note(kind: str, tenant_id: object, /, **raw: object) -> None:
         # enterprise-gate: broad-except-ok reason=metrics-outage-degrades-to-a-logged-note-failure
         except Exception:
             _log.debug("spend_note_failure_not_counted")
+
+
+def prewarm() -> bool:
+    """Load the metering code now, at process start, so the first metered call does not pay for it.
+
+    Does nothing at all while off. Never raises: a failure is logged and the
+    first metered call imports the code itself, as it would without this. A
+    process that drained its writer (an earlier API lifespan) may start one
+    again. Returns whether the code is loaded.
+    """
+    if not enabled():
+        return False
+    try:
+        for name in _HOOK_MODULES:
+            importlib.import_module(name)
+        sys.modules[_WRITER_MODULE].reopen()
+    # enterprise-gate: broad-except-ok reason=spend-prewarm-failure-is-logged-the-first-call-imports-lazily
+    except Exception as exc:
+        _log.warning("spend_prewarm_failed error_type=%s", type(exc).__name__)
+        return False
+    return True
 
 
 def drain_blocking(timeout: float = 5.0) -> int:

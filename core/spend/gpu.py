@@ -14,13 +14,20 @@ its start, so the writer and its spill have caught up):
 1. **Claim** the hour (``pending``, or ``allocating`` with a claim older than
    an hour, so a crashed run is resumed) and freeze it: records created after
    ``frozen_at`` are never counted, so the totals stay stable on a rerun.
-2. **Tokens per tenant**: the hour's in-house-priced token records of the
-   pool's models. A call a tenant's own card priced already carries its cost
-   and is counted as skipped, so in-house cost is never counted twice. Each
-   tenant with tokens gets a ``frozen`` allocation row.
-3. **Shares** by largest remainder: the tenants' node hours sum to the hour's
-   exactly. An hour no tenant used is ``idle``: idle capacity stays with the
-   platform, never on a tenant's attribution.
+2. **Tokens per tenant**: every token record of the pool's models in the
+   hour, whatever priced it, so the hour is spread over everything the pool
+   served and no tenant's own rate card can move its share onto other
+   tenants. Calls priced at zero (in-house, or a card at zero) are charged
+   their share; a call a card priced above zero already carries its cost, so
+   its share stays with the platform (``skipped_node_hours``) and it is
+   counted in ``priced_calls_skipped``: in-house cost is never counted twice.
+   The calls of a tenant deleted since the hour began count too, and their
+   share also stays with the platform. Each active tenant with charged
+   tokens gets a ``frozen`` allocation row.
+3. **Shares** by largest remainder over the tenants and the platform's part:
+   they sum to the hour's node hours exactly. An hour no call used is
+   ``idle``: idle capacity stays with the platform, never on a tenant's
+   attribution.
 4. **Per tenant**, in one transaction: the share is priced once with the
    tenant's ``gpu_hours`` card (``gpu_node_hour``, the pool as model, or the
    provider default; unpriced without one), then its node hours, amount and
@@ -28,11 +35,14 @@ its start, so the writer and its spill have caught up):
    conserved as well as hours; each call's share is a record flagged
    ``allocated`` with the call's attribution, keyed
    ``gpu:{pool_hour_id}:{call}``; the allocation row becomes ``written``.
+   A tenant whose share rounds to nothing is marked ``written`` with no
+   hours and no records.
 5. **Close** the hour with its totals.
 
 Re-running is idempotent: ``written`` allocations are not rewritten and the
 record keys drop any repeat. In-house calls written after their hour was
-frozen are not reallocated.
+frozen are not reallocated. Fresh hours are allocated before resumed ones,
+so an hour that keeps failing never holds back newer hours.
 """
 
 from __future__ import annotations
@@ -46,6 +56,7 @@ from typing import Any
 
 import structlog
 
+from core.config import SPEND_GPU_POOL_MAX_CHARS
 from core.spend import vocab
 from core.spend.errors import SpendError
 
@@ -64,6 +75,10 @@ SOURCES = ("config", "metrics", "manual")
 USAGE_TYPE = "gpu_hours"
 UNIT = "gpu_node_hour"
 INSERT_CHUNK = 500
+POOL_MAX_CHARS = SPEND_GPU_POOL_MAX_CHARS
+# The platform's part of an hour in the largest-remainder split. It sorts before every tenant id,
+# so a leftover unit tied between the platform and a tenant stays with the platform.
+PLATFORM_KEY = "-platform"
 
 
 @dataclass(frozen=True)
@@ -182,20 +197,36 @@ async def materialise_config_hours(*, now: datetime) -> int:
     return created
 
 
+def _claimable() -> Any:
+    """A pool hour a run may take: pending, or a claim the database clock says is over an hour old."""
+    from sqlalchemy import and_, func, or_
+
+    from core.models.spend_gpu import SpendGpuPoolHour as H
+
+    return or_(H.status == "pending", and_(H.status == "allocating", H.claimed_at < func.now() - STALE_CLAIM))
+
+
 async def _claim(pool_hour_id: uuid.UUID, now: datetime) -> PoolHour | None:
-    """Take the hour for this run (pending, or a claim older than an hour) and freeze its token window."""
-    from sqlalchemy import and_, func, or_, update
+    """Take the hour for this run (pending, or a claim older than an hour) and freeze its token window.
+
+    ``claimed_at`` is the database clock at the claim, not the run's start, so
+    a run that spends more than an hour on earlier hours never makes a later
+    claim look stale to the next run.
+    """
+    from sqlalchemy import func, update
 
     from core.database import async_session_factory
     from core.models.spend_gpu import SpendGpuPoolHour as H
 
     statement = (
         update(H)
-        .where(
-            H.id == pool_hour_id,
-            or_(H.status == "pending", and_(H.status == "allocating", H.claimed_at < now - STALE_CLAIM)),
+        .where(H.id == pool_hour_id, _claimable())
+        .values(
+            status="allocating",
+            claimed_at=func.now(),
+            frozen_at=func.coalesce(H.frozen_at, func.now()),
+            updated_at=now,
         )
-        .values(status="allocating", claimed_at=now, frozen_at=func.coalesce(H.frozen_at, func.now()), updated_at=now)
         .returning(H.provider, H.node_pool, H.models, H.hour_start, H.node_hours, H.frozen_at)
         .execution_options(synchronize_session=False)
     )
@@ -232,6 +263,7 @@ async def _close(pool_hour_id: uuid.UUID, values: dict[str, Any]) -> None:
 
 
 def _call_filter(tenant_id: uuid.UUID, hour: PoolHour) -> list[Any]:
+    """The token records of the pool's models in the hour, as they stood when the hour was frozen."""
     from core.models.spend_usage import SpendUsageRecord as R
 
     return [
@@ -246,13 +278,54 @@ def _call_filter(tenant_id: uuid.UUID, hour: PoolHour) -> list[Any]:
     ]
 
 
-async def _freeze_tenant(tenant_id: uuid.UUID, hour: PoolHour, *, now: datetime) -> tuple[Decimal, int, str | None]:
-    """Pass 1 for one tenant: ``(in-house tokens, card-priced calls skipped, allocation status)``.
+def _priced_above_zero() -> Any:
+    """A record a card (or the deployment's price override) priced above zero: it carries its own cost."""
+    from sqlalchemy import func
 
-    A tenant with tokens gets a ``frozen`` allocation row; a ``written`` one
-    keeps the tokens it was written with.
+    from core.models.spend_usage import SpendUsageRecord as R
+
+    return func.coalesce(R.amount, 0) > 0
+
+
+def _charged() -> Any:
+    """A record priced at zero (in-house, or a card at zero): its call is charged a share of the hour."""
+    from sqlalchemy import func
+
+    from core.models.spend_usage import SpendUsageRecord as R
+
+    return func.coalesce(R.amount, 0) <= 0
+
+
+@dataclass(frozen=True)
+class TenantTokens:
+    """One tenant's calls in a pool hour (pass 1)."""
+
+    charged: Decimal  # tokens of calls priced at zero: they share the hour (a written row: the tokens it kept)
+    own_cost: Decimal  # tokens of calls a card priced above zero: their share stays with the platform
+    own_cost_calls: int  # those calls, counted in ``priced_calls_skipped``
+    status: str | None  # the tenant's allocation row: None, "frozen" or "written"
+    written_hours: Decimal  # the node hours a written row carries
+
+
+def _settle(allocation: Any, *, now: datetime) -> None:
+    """Mark an allocation row done with no share: no node hours, no records."""
+    allocation.status = "written"
+    allocation.node_hours = Decimal(0)
+    allocation.amount = None
+    allocation.currency = None
+    allocation.records = 0
+    allocation.updated_at = now
+
+
+async def _freeze_tenant(tenant_id: uuid.UUID, hour: PoolHour, *, now: datetime, active: bool) -> TenantTokens:
+    """Pass 1 for one tenant: its charged and card-priced tokens, and its allocation row.
+
+    An active tenant with charged tokens gets a ``frozen`` allocation row; a
+    ``written`` one keeps the tokens and hours it was written with. A tenant
+    deleted since the hour gets no share: a row left ``frozen`` by an earlier
+    run is settled with none.
     """
-    from sqlalchemy import func, select
+    from sqlalchemy import case, func, select
 
     from core.database import get_tenant_session
     from core.models.spend_gpu import SpendGpuAllocation as A
@@ -260,24 +333,35 @@ async def _freeze_tenant(tenant_id: uuid.UUID, hour: PoolHour, *, now: datetime)
 
     async with get_tenant_session(tenant_id) as session:
         conditions = _call_filter(tenant_id, hour)
-        summed = (
-            await session.execute(select(func.sum(R.quantity)).where(*conditions, R.price_source == "in_house"))
-        ).scalar()
-        tokens = Decimal(summed or 0)
-        skipped = len(
-            (
-                await session.execute(select(R.source_ref).where(*conditions, R.price_source != "in_house").distinct())
-            ).all()
-        )
+        above = _priced_above_zero()
+        sums = (
+            await session.execute(
+                select(
+                    func.sum(case((above, 0), else_=R.quantity)),
+                    func.sum(case((above, R.quantity), else_=0)),
+                ).where(*conditions)
+            )
+        ).first()
+        charged = Decimal((sums[0] if sums else None) or 0)
+        own_cost = Decimal((sums[1] if sums else None) or 0)
+        own_cost_calls = len((await session.execute(select(R.source_ref).where(*conditions, above).distinct())).all())
         allocation = (
             await session.execute(select(A).where(A.tenant_id == tenant_id, A.pool_hour_id == hour.id))
         ).scalar_one_or_none()
         if allocation is not None and allocation.status == "written":
-            return Decimal(allocation.tokens), skipped, "written"
+            return TenantTokens(
+                Decimal(allocation.tokens), own_cost, own_cost_calls, "written", Decimal(allocation.node_hours or 0)
+            )
+        if not active:
+            if allocation is not None:
+                _settle(allocation, now=now)
+            return TenantTokens(charged, own_cost, own_cost_calls, None, Decimal(0))
         if allocation is not None:
-            allocation.tokens = tokens
+            allocation.tokens = charged
             allocation.updated_at = now
-        elif tokens > 0:
+            if charged <= 0:
+                _settle(allocation, now=now)
+        elif charged > 0:
             session.add(
                 A(
                     id=uuid.uuid4(),
@@ -286,12 +370,12 @@ async def _freeze_tenant(tenant_id: uuid.UUID, hour: PoolHour, *, now: datetime)
                     provider=hour.provider,
                     node_pool=hour.node_pool,
                     hour_start=hour.hour_start,
-                    tokens=tokens,
+                    tokens=charged,
                     status="frozen",
                     records=0,
                 )
             )
-    return tokens, skipped, ("frozen" if tokens > 0 else None)
+    return TenantTokens(charged, own_cost, own_cost_calls, "frozen" if charged > 0 else None, Decimal(0))
 
 
 _ATTRIBUTION = (
@@ -365,95 +449,114 @@ def split_share(share: Decimal, calls: Sequence[tuple[str, Decimal]], priced: An
     ]
 
 
-async def _write_tenant(tenant_id: uuid.UUID, hour: PoolHour, share: Decimal, *, now: datetime) -> int:
-    """Pass 2 for one tenant: price its share once, split it over its calls, write the records. One transaction."""
+async def _share_events(session: Any, tenant_id: uuid.UUID, hour: PoolHour, share: Decimal) -> tuple[list[Any], Any]:
+    """The tenant's share priced once and split over its charged calls: ``(events, priced share)``."""
     from sqlalchemy import func, select
 
-    from core.database import get_tenant_session
-    from core.models.spend_gpu import SpendGpuAllocation as A
     from core.models.spend_usage import SpendUsageRecord as R
     from core.spend import clock, meter, pricing
 
-    async with get_tenant_session(tenant_id) as session:
-        conditions = _call_filter(tenant_id, hour)
-        grouped = (
-            await session.execute(
-                select(R.source_ref, func.sum(R.quantity))
-                .where(*conditions, R.price_source == "in_house")
-                .group_by(R.source_ref)
-                .order_by(R.source_ref)
+    grouped = (
+        await session.execute(
+            select(R.source_ref, func.sum(R.quantity))
+            .where(*_call_filter(tenant_id, hour), _charged())
+            .group_by(R.source_ref)
+            .order_by(R.source_ref)
+        )
+    ).all()
+    calls = sorted((str(row[0]), Decimal(row[1] or 0)) for row in grouped)
+    calls = [(ref, tokens) for ref, tokens in calls if tokens > 0]
+    refs = [ref for ref, _tokens in calls]
+    columns = [getattr(R, name) for name in _ATTRIBUTION]
+    found = (
+        await session.execute(
+            select(R.source_ref, *columns)
+            .where(
+                R.tenant_id == tenant_id,
+                R.usage_type == "llm_tokens",
+                R.source_ref.in_(refs),
+                R.event_time >= hour.hour_start,
+                R.event_time < hour.hour_start + HOUR,
             )
-        ).all()
-        calls = sorted((str(row[0]), Decimal(row[1] or 0)) for row in grouped)
-        calls = [(ref, tokens) for ref, tokens in calls if tokens > 0]
-        refs = [ref for ref, _tokens in calls]
-        columns = [getattr(R, name) for name in _ATTRIBUTION]
-        found = (
-            await session.execute(
-                select(R.source_ref, *columns)
-                .where(
-                    R.tenant_id == tenant_id,
-                    R.usage_type == "llm_tokens",
-                    R.source_ref.in_(refs),
-                    R.event_time >= hour.hour_start,
-                    R.event_time < hour.hour_start + HOUR,
-                )
-                .order_by(R.source_ref, R.id)
-            )
-        ).all()
-        attribution: dict[str, Any] = {}
-        for row in found:
-            attribution.setdefault(str(row[0]), _resolved_of(row[1:]))
-        priced = await pricing.price(
-            session,
-            tenant_id,
-            pricing.Usage(
-                provider=hour.provider,
+            .order_by(R.source_ref, R.id)
+        )
+    ).all()
+    attribution: dict[str, Any] = {}
+    for row in found:
+        attribution.setdefault(str(row[0]), _resolved_of(row[1:]))
+    priced = await pricing.price(
+        session,
+        tenant_id,
+        pricing.Usage(
+            provider=hour.provider,
+            usage_type=USAGE_TYPE,
+            unit=UNIT,
+            quantity=share,
+            model=hour.node_pool,
+            on=clock.billing_date_of(hour.provider, hour.hour_start),
+            fx_on=clock.event_date_of(hour.hour_start),
+        ),
+    )
+    events = []
+    for ref, quantity, call_priced in split_share(share, calls, priced):
+        resolved = attribution.get(ref)
+        if resolved is None:
+            continue
+        events.append(
+            meter.UsageEvent(
+                tenant_id=str(tenant_id),
                 usage_type=USAGE_TYPE,
                 unit=UNIT,
-                quantity=share,
+                quantity=quantity,
+                provider=hour.provider,
                 model=hour.node_pool,
-                on=clock.billing_date_of(hour.provider, hour.hour_start),
-                fx_on=clock.event_date_of(hour.hour_start),
-            ),
-        )
-        events = []
-        for ref, quantity, call_priced in split_share(share, calls, priced):
-            resolved = attribution.get(ref)
-            if resolved is None:
-                continue
-            events.append(
-                meter.UsageEvent(
-                    tenant_id=str(tenant_id),
-                    usage_type=USAGE_TYPE,
-                    unit=UNIT,
-                    quantity=quantity,
-                    provider=hour.provider,
-                    model=hour.node_pool,
-                    event_time=hour.hour_start,
-                    idempotency_key=f"gpu:{hour.id}:{ref}",
-                    source_ref=ref,
-                    correlation_ref="",
-                    hints=_hints_of(resolved),
-                    allocated=True,
-                    allocated_from=ref,
-                    billing_account="in_house",
-                    resolved=resolved,
-                    priced=call_priced,
-                )
+                event_time=hour.hour_start,
+                idempotency_key=f"gpu:{hour.id}:{ref}",
+                source_ref=ref,
+                correlation_ref="",
+                hints=_hints_of(resolved),
+                allocated=True,
+                allocated_from=ref,
+                billing_account="in_house",
+                resolved=resolved,
+                priced=call_priced,
             )
+        )
+    return events, priced
+
+
+async def _write_tenant(tenant_id: uuid.UUID, hour: PoolHour, share: Decimal, *, now: datetime) -> int:
+    """Pass 2 for one tenant, in one transaction: write its share's records and mark its row ``written``.
+
+    A share that rounds to nothing writes no record and settles the row with
+    no hours, so no row is left ``frozen`` once the hour closes.
+    """
+    from sqlalchemy import select
+
+    from core.database import get_tenant_session
+    from core.models.spend_gpu import SpendGpuAllocation as A
+    from core.spend import meter
+
+    async with get_tenant_session(tenant_id) as session:
+        events: list[Any] = []
+        priced = None
+        if share > 0:
+            events, priced = await _share_events(session, tenant_id, hour, share)
         if events:
             await meter.write_events(session, tenant_id, events, lock="wait", now=now)
         allocation = (
             await session.execute(select(A).where(A.tenant_id == tenant_id, A.pool_hour_id == hour.id))
         ).scalar_one_or_none()
         if allocation is not None:
-            allocation.status = "written"
-            allocation.node_hours = share
-            allocation.amount = priced.amount
-            allocation.currency = priced.currency
-            allocation.records = len(events)
-            allocation.updated_at = now
+            if priced is None:
+                _settle(allocation, now=now)
+            else:
+                allocation.status = "written"
+                allocation.node_hours = share
+                allocation.amount = priced.amount
+                allocation.currency = priced.currency
+                allocation.records = len(events)
+                allocation.updated_at = now
     return len(events)
 
 
@@ -461,51 +564,68 @@ async def _write_tenant(tenant_id: uuid.UUID, hour: PoolHour, share: Decimal, *,
 
 
 async def allocate_hour(pool_hour_id: uuid.UUID, *, now: datetime) -> dict[str, Any]:
-    """Spread one closed pool hour across every tenant's in-house calls of the pool's models."""
+    """Spread one closed pool hour over every call of the pool's models; charge the zero-priced calls' tenants."""
     from core.spend import tenants
 
     hour = await _claim(pool_hour_id, now)
     if hour is None:
         return {"id": str(pool_hour_id), "claimed": False}
-    frozen: dict[uuid.UUID, tuple[Decimal, str | None]] = {}
+    charged: dict[uuid.UUID, Decimal] = {}  # tenant -> tokens charged a share of the hour
+    written: dict[uuid.UUID, Decimal] = {}  # tenant -> node hours an earlier run already wrote
+    kept = Decimal(0)  # tokens whose share stays with the platform
     skipped = 0
-    for tenant_id in await tenants.active_tenant_ids():
-        tokens, priced_calls, status = await _freeze_tenant(tenant_id, hour, now=now)
-        skipped += priced_calls
-        if tokens > 0:
-            frozen[tenant_id] = (tokens, status)
-    total = sum((tokens for tokens, _status in frozen.values()), Decimal(0))
+    for tenant_id, active in await tenants.tenants_since(hour.hour_start):
+        found = await _freeze_tenant(tenant_id, hour, now=now, active=active)
+        skipped += found.own_cost_calls
+        kept += found.own_cost
+        if found.status == "written":
+            charged[tenant_id] = found.charged
+            written[tenant_id] = found.written_hours
+        elif not active:
+            kept += found.charged
+        elif found.charged > 0:
+            charged[tenant_id] = found.charged
+    total = sum(charged.values(), Decimal(0)) + kept
     out: dict[str, Any] = {
         "id": str(pool_hour_id),
         "claimed": True,
-        "tenants": len(frozen),
+        "tenants": len(charged),
         "total_tokens": vocab.dec_str(total),
         "priced_calls_skipped": skipped,
         "records": 0,
         "failed": 0,
         "idle": total == 0,
     }
+    carried = Decimal(0)  # node hours tenant records carry
     if total > 0:
-        weights = sorted((str(tenant_id), tokens) for tenant_id, (tokens, _status) in frozen.items())
-        for key, share in largest_remainder(hour.node_hours, weights, vocab.QTY_QUANT):
+        weights = sorted((str(tenant_id), tokens) for tenant_id, tokens in charged.items())
+        for key, share in largest_remainder(hour.node_hours, [*weights, (PLATFORM_KEY, kept)], vocab.QTY_QUANT):
+            if key == PLATFORM_KEY:
+                continue
             tenant_id = uuid.UUID(key)
-            if share <= 0 or frozen[tenant_id][1] == "written":
+            if tenant_id in written:
+                carried += written[tenant_id]
                 continue
             try:
                 out["records"] += await _write_tenant(tenant_id, hour, share, now=now)
+                carried += share
             # enterprise-gate: broad-except-ok reason=gpu-allocation-isolates-a-tenant-failure-logged-hour-resumed-later
             except Exception as exc:
                 logger.warning("spend_gpu_allocation_failed", error_type=type(exc).__name__)
                 out["failed"] += 1
     if out["failed"]:
         return out
+    # Exact for one run; a resumed run keeps the hours its first run wrote, so bound it to the hour.
+    platform_hours = min(hour.node_hours, max(Decimal(0), Decimal(hour.node_hours) - carried))
+    out["skipped_node_hours"] = vocab.dec_str(platform_hours)
     await _close(
         pool_hour_id,
         {
             "status": "allocated",
             "total_tokens": total,
-            "tenant_count": len(frozen),
+            "tenant_count": len(charged),
             "priced_calls_skipped": skipped,
+            "skipped_node_hours": platform_hours,
             "idle": total == 0,
             "allocated_at": now,
             "updated_at": now,
@@ -515,26 +635,28 @@ async def allocate_hour(pool_hour_id: uuid.UUID, *, now: datetime) -> dict[str, 
 
 
 async def allocate_pending(*, now: datetime) -> dict[str, Any]:
-    """Materialise configured hours, then spread the closed pending hours, oldest first, at most 48 per run."""
-    from sqlalchemy import and_, or_, select
+    """Materialise configured hours, then spread the closed hours, fresh before resumed, at most 48 per run."""
+    from sqlalchemy import case, select
 
     from core.database import async_session_factory
     from core.models.spend_gpu import SpendGpuPoolHour as H
 
-    materialised = await materialise_config_hours(now=now)
+    totals: dict[str, Any] = {"materialised": 0, "hours": 0, "idle": 0, "records": 0, "failed": 0}
+    try:
+        totals["materialised"] = await materialise_config_hours(now=now)
+    # enterprise-gate: broad-except-ok reason=gpu-config-hours-failure-is-logged-recorded-hours-still-allocated
+    except Exception as exc:
+        logger.warning("spend_gpu_config_hours_failed", error_type=type(exc).__name__)
+        totals["failed"] += 1
     async with async_session_factory() as session:
         due = (
             await session.execute(
                 select(H.id)
-                .where(
-                    or_(H.status == "pending", and_(H.status == "allocating", H.claimed_at < now - STALE_CLAIM)),
-                    H.hour_start <= now - ALLOCATION_DELAY,
-                )
-                .order_by(H.hour_start, H.id)
+                .where(_claimable(), H.hour_start <= now - ALLOCATION_DELAY)
+                .order_by(case((H.status == "pending", 0), else_=1), H.hour_start, H.id)
                 .limit(MAX_HOURS_PER_RUN)
             )
         ).all()
-    totals: dict[str, Any] = {"materialised": materialised, "hours": 0, "idle": 0, "records": 0, "failed": 0}
     for row in due:
         try:
             out = await allocate_hour(row[0], now=now)
@@ -617,8 +739,8 @@ def check_record(
     provider_id = vocab.choice(provider, PROVIDERS, field="provider", code="invalid_reference")
     source_id = vocab.choice(source, ("metrics", "manual"), field="source", code="invalid_value")
     pool = vocab.norm_sku(node_pool)
-    if len(pool) > 64:
-        raise SpendError(422, "invalid_sku", "a node pool is at most 64 characters")
+    if len(pool) > POOL_MAX_CHARS:
+        raise SpendError(422, "invalid_sku", f"a node pool is at most {POOL_MAX_CHARS} characters")
     names = tuple(dict.fromkeys(vocab.norm_sku(m) for m in models))
     if not 1 <= len(names) <= 50:
         raise SpendError(422, "invalid_sku", "models are 1 to 50 model names")
@@ -710,6 +832,7 @@ def pool_hour_dict(row: Any) -> dict[str, Any]:
         "tenant_count": row.tenant_count,
         "total_tokens": vocab.dec_str(row.total_tokens),
         "priced_calls_skipped": row.priced_calls_skipped,
+        "skipped_node_hours": vocab.dec_str(row.skipped_node_hours),
         "recorded_by": row.recorded_by,
     }
 

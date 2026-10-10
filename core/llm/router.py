@@ -652,6 +652,8 @@ class LLMRouter:
         }.get(provider)
         if not env_secret:
             raise LLMProviderConfigurationError(f"{provider.title()} provider is not configured")
+        # The platform's key paid: noted too, so an earlier tenant-key note in this task is not inherited.
+        spend_context.note_credential(provider, "platform_env")
         return env_secret
 
     async def complete(
@@ -719,7 +721,10 @@ class LLMRouter:
             prompt_digest = prompt_digest_of(messages)
             request_digest = messages_digest(messages)
 
+            # Whether the call in flight was recorded, and which model it is: a call the
+            # outer timeout cancels skips _record, and spend counts it as cancelled.
             recorded = False
+            in_flight = model
 
             async def _record(
                 called: str,
@@ -784,6 +789,8 @@ class LLMRouter:
                     raise
                 logger.info("llm_falling_back", fallback=self.fallback_model)
                 started = time.monotonic()
+                recorded = False
+                in_flight = self.fallback_model
                 try:
                     response = await self._call_model(self.fallback_model, messages, temp, max_tokens, **scope)
                 # enterprise-gate: broad-except-ok reason=a-failed-fallback-is-recorded-then-raised-unchanged
@@ -794,7 +801,7 @@ class LLMRouter:
                 return response
             finally:
                 if not recorded and tenant_id:
-                    spend.note("cancelled", tenant_id, provider=_model_provider(model))
+                    spend.note("cancelled", tenant_id, provider=_model_provider(in_flight))
                 await gateway_release(lease)
 
     async def _call_model(

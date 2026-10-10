@@ -24,13 +24,16 @@ is missing. A day missing between the tenant's first sampled day in that
 window and today (a missed beat) is written with the same measurement and
 flagged ``quantity_estimated``; days before the first sample are never filled,
 so a new tenant or a newly enabled deployment is not charged for days nothing
-sampled. Only the scheduled job writes: the route measures and audits a
+sampled. A day on which every store is empty is marked with one zero-quantity
+record (while a card prices storage), so a later fill never mistakes it for a
+missed beat. Only the scheduled job writes: the route measures and audits a
 preview, so a manual run cannot pre-empt the day's scheduled figure.
 """
 
 from __future__ import annotations
 
 import uuid
+from collections.abc import Mapping, Sequence
 from datetime import date, datetime, timedelta
 from decimal import Decimal
 from types import MappingProxyType
@@ -180,6 +183,57 @@ def storage_event(tenant_id: uuid.UUID, store: str, day: date, quantity: Decimal
     )
 
 
+async def empty_day_markers(
+    session: Any,
+    tenant_id: uuid.UUID,
+    stores: Mapping[str, Decimal],
+    targets: Sequence[date],
+    *,
+    day: date,
+    existing: set[str],
+) -> list[Any]:
+    """Zero-quantity records that mark days sampled empty, so a later gap fill never charges them.
+
+    A day on which every store is empty writes no storage record, so without
+    a marker it would look like a missed beat, and the next non-empty sample
+    would fill it with that sample's figure. Only a tenant that already has a
+    storage record in the window gets markers (a tenant that never kept
+    anything writes nothing), one per day under the first measured store, and
+    only while a card prices storage: a marker priced at zero needs a card,
+    and an unpriced one would count against the unpriced limit for nothing
+    (without a card, a fill is unpriced too and charges no money).
+    """
+    from dataclasses import replace
+
+    from core.spend import clock, pricing
+
+    store = next(s for s in STORES if s in stores)
+    markers = [
+        storage_event(tenant_id, store, target, Decimal(0), estimated=target != day)
+        for target in targets
+        if storage_key(target, store) not in existing
+    ]
+    if not markers:
+        return []
+    priced = await pricing.price_many(
+        session,
+        tenant_id,
+        [
+            pricing.Usage(
+                provider=m.provider,
+                usage_type=m.usage_type,
+                unit=m.unit,
+                quantity=m.quantity,
+                model=m.model,
+                on=clock.billing_date_of(m.provider, m.event_time),
+                fx_on=clock.event_date_of(m.event_time),
+            )
+            for m in markers
+        ],
+    )
+    return [replace(m, priced=p) for m, p in zip(markers, priced, strict=True) if not p.unpriced]
+
+
 async def sample_tenant(
     tenant_id: uuid.UUID, *, day: date, now: datetime, write: bool, actor: str | None = None
 ) -> dict[str, Any]:
@@ -219,12 +273,15 @@ async def sample_tenant(
                     )
                 )
             return {"day": day.isoformat(), "measured": True, "stores": shown, "written": 0}
+        targets = ([] if done else [day]) + gaps
         events = [
             storage_event(tenant_id, store, target, quantity, estimated=target != day)
-            for target in ([] if done else [day]) + gaps
+            for target in targets
             for store, quantity in stores.items()
             if quantity > 0 and storage_key(target, store) not in existing
         ]
+        if existing and stores and not any(quantity > 0 for quantity in stores.values()):
+            events += await empty_day_markers(session, tenant_id, stores, targets, day=day, existing=existing)
         written = (await meter.write_events(session, tenant_id, events, lock="wait", now=now)).written if events else 0
     return {
         "day": day.isoformat(),

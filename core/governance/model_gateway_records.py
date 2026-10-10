@@ -448,7 +448,8 @@ async def record_model_call(
     decision bound for the current run (``model_gateway.bind_route``) is used.
     ``spend_usage`` (a ``core.spend.context.CallUsage``, ``None`` while spend
     intelligence is off) is handed to the spend meter after the record is
-    written; it is not a record field and never changes the record or the call.
+    written, also when that write is cancelled; it is not a record field and
+    never changes the record or the call.
     """
     context = current_route() if route is None else None
     decision = route if route is not None else (context.decision if context else None)
@@ -509,7 +510,10 @@ async def record_model_call(
         fallback_from=record.fallback_from,
         error_type=record.error_type,
     )
-    if decision is not None and getattr(decision, "gated", False):
-        await _write(record)
-    _meter_spend(record, decision, spend_usage)
+    try:
+        if decision is not None and getattr(decision, "gated", False):
+            await _write(record)
+    finally:
+        # A cancellation while the signed row is written must not lose the finished call's usage.
+        _meter_spend(record, decision, spend_usage)
     return record

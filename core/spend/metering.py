@@ -228,7 +228,7 @@ def handle_cancelled(tenant_id: object, raw: Mapping[str, Any]) -> None:
     if not tenant:
         return
     provider = vocab.label(normalise_provider(raw.get("provider")) or "") or "unknown"
-    writer.add_gap(
+    writer.note_gap(
         tenant_text(tenant), clock.event_date_of(clock.now_utc()), LLM, "failed_no_usage", f"cancelled:{provider}"
     )
 
@@ -567,14 +567,18 @@ def cached_priced_tools(tenant_id: uuid.UUID | str) -> frozenset[tuple[str, str]
 
 
 async def priced_tool_set(session: Any, tenant_id: uuid.UUID, *, now: datetime) -> frozenset[tuple[str, str]]:
-    """``(provider, model_sku)`` of the tenant's active tool cards in force around ``now``.
+    """``(provider, name)`` of every tool a tenant's active tool card in force around ``now`` may price.
 
+    The names are the cards' SKUs and the tenant's aliases of them, because
+    the writer prices a call through the aliases (``pricing.price_many``): a
+    tool called by an alias of a priced SKU is queued, not dropped as a gap.
     A day either side covers every provider's billing zone, so the set never
     misses a priced tool; the writer still prices each call at its own date.
     """
     from sqlalchemy import or_, select
 
     from core.models.spend import SpendRateCard as C
+    from core.spend import pricing
 
     today = now.astimezone(UTC).date()
     start, end = today - timedelta(days=1), today + timedelta(days=1)
@@ -589,7 +593,12 @@ async def priced_tool_set(session: Any, tenant_id: uuid.UUID, *, now: datetime) 
             )
         )
     ).all()
-    return frozenset((str(row[0]), str(row[1] or "")) for row in rows)
+    skus = {(str(row[0]), str(row[1] or "")) for row in rows}
+    if not skus:
+        return frozenset()
+    aliases = await pricing.cached_aliases(session, tenant_id)
+    named = {(provider, alias) for (provider, alias), sku in aliases.items() if (provider, sku) in skus}
+    return frozenset(skus | named)
 
 
 async def refresh_priced_tools(session: Any, tenant_id: uuid.UUID, *, now: datetime) -> None:
@@ -616,8 +625,8 @@ def handle_tool_call(tenant_id: object, raw: Mapping[str, Any]) -> None:
     sku = vocab.norm_sku(raw.get("tool"))
     priced = cached_priced_tools(tenant)
     if priced is not None and (provider, sku) not in priced and (provider, "") not in priced:
-        writer.add_gap(tenant, clock.event_date_of(clock.now_utc()), TOOLS, "unpriced_tool", f"{provider}:{sku}")
-        writer.start_for_gaps()
+        # note_gap starts the writer so the gap is flushed, and counts it as lost once a drain has begun.
+        writer.note_gap(tenant, clock.event_date_of(clock.now_utc()), TOOLS, "unpriced_tool", f"{provider}:{sku}")
         return
     agent = raw.get("agent_id")
     _queue(

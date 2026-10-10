@@ -62,17 +62,21 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
 - Storage GB-days: a daily job (23:30 IST) samples each tenant's knowledge,
   document, document-processing and recording storage in GiB, one record per
   store and day; a delayed run still records its day, missed days after the
-  first sample are filled as estimates, and `POST /spend/storage/sample`
+  first sample are filled as estimates (a day sampled empty is marked, so it
+  is never filled), and `POST /spend/storage/sample`
   previews the sample without writing (audited).
 - GPU node hours of in-house serving: standing pools from
   `AGENTICORG_SPEND_GPU_POOLS_JSON` and metered or manual hours from the
   operator command `python -m core.spend.gpu_cli`, held in a platform table;
-  an hourly job spreads each closed pool hour across every tenant's
-  in-house calls of the pool's models by tokens (shares by largest remainder,
-  each tenant's share priced once and split so hours and money are both
-  conserved, records flagged `allocated` with the call's attribution). Calls
-  a tenant's own card priced are skipped and counted; idle hours stay with
-  the platform. `GET /spend/gpu-allocations` lists a tenant's own shares.
+  an hourly job spreads each closed pool hour over every call of the pool's
+  models by tokens and charges the zero-priced calls' tenants (shares by
+  largest remainder, each tenant's share priced once and split so hours and
+  money are both conserved, records flagged `allocated` with the call's
+  attribution). Calls a tenant's own card priced above zero are skipped and
+  counted, and their share, the share of tenants deleted since the hour and
+  idle hours stay with the platform (`skipped_node_hours`), so no tenant's
+  card or alias moves cost onto another; in-house providers take no model
+  alias. `GET /spend/gpu-allocations` lists a tenant's own shares.
 - Celery tasks `core.tasks.spend_tasks.sample_storage` and
   `allocate_gpu_hours` with their beats. Behind `spend_intelligence_enabled`
   (default off): off, every site is a bool read, the Deepgram credential note
@@ -105,10 +109,13 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
   which writes them in batches on its own two-connection engine, retries a
   transient error once, waits out a rollup rebuild without blocking other
   tenants, and spills what it cannot write to the `persist_usage` task.
-  Drops, spills and pauses are counted globally and per tenant; a feature
+  Drops, spills and pauses are counted globally and per tenant; a call with
+  no tenant is counted as unmetered, never as a write failure; a feature
   flag (`spend.metering_paused`) pauses metering per tenant or for all
-  without a restart; the writer drains at shutdown. Four direct model callers
-  outside the router are metered too.
+  without a restart; the writer drains at shutdown, counting what it cannot
+  hand on (late usage, unflushed gaps) as lost. While spend is on, the API
+  and each worker process load the metering code at startup. Four direct
+  model callers outside the router are metered too.
 - A daily rollup kept in the writer's transaction and rebuildable per day;
   coverage (the attributed share of INR spend, by amount and by count, with
   unpriced, unconverted and FX-pending volume, gaps, reasons and attribution

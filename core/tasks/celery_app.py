@@ -395,6 +395,18 @@ def _load_plugins_in_worker(**_kwargs: Any) -> None:
     load_configured_plugins()
 
 
+@worker_process_init.connect
+def _prewarm_spend_meter(**_kwargs: Any) -> None:
+    """While spend metering is on, load its code in this child so the first metered call does not.
+
+    Nothing at all while off; ``prewarm`` never raises (a failure is logged and
+    the first metered call imports the code itself).
+    """
+    from core import spend
+
+    spend.prewarm()
+
+
 # The agent checkpoint store is deliberately NOT opened in worker_process_init:
 # Celery prefork kills a child that has not reported ready within a few
 # seconds, so a slow or unreachable checkpoint database would respawn-loop

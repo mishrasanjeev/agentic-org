@@ -6,9 +6,9 @@ database is built from these models, so every default, CHECK constraint and
 index of the migration is declared here with the same text and name.
 
 ``spend_gpu_pool_hours`` is a platform table: one in-house endpoint serves
-every tenant, so its node hours are a deployment cost; it holds node hours and
-an aggregate token total, no tenant data, and has no ``tenant_id`` and no
-row-level policy. ``spend_gpu_allocations`` holds each tenant's share of a
+every tenant, so its node hours are a deployment cost; it holds node hours,
+an aggregate token total and the node hours no tenant carries, no tenant data,
+and has no ``tenant_id`` and no row-level policy. ``spend_gpu_allocations`` holds each tenant's share of a
 pool hour under forced row-level security.
 """
 
@@ -50,6 +50,9 @@ class SpendGpuPoolHour(BaseModel):
         CheckConstraint("node_hours > 0 AND node_hours <= 10000", name="ck_spend_gpu_pool_hours_hours"),
         CheckConstraint("source IN ('config','metrics','manual')", name="ck_spend_gpu_pool_hours_source"),
         CheckConstraint("status IN ('pending','allocating','allocated')", name="ck_spend_gpu_pool_hours_status"),
+        CheckConstraint(
+            "skipped_node_hours >= 0 AND skipped_node_hours <= node_hours", name="ck_spend_gpu_pool_hours_skipped"
+        ),
         CheckConstraint(WHOLE_HOUR_CHECK, name="ck_spend_gpu_pool_hours_whole_hour"),
         Index("ux_spend_gpu_pool_hours_key", "provider", "node_pool", "hour_start", unique=True),
         Index("ix_spend_gpu_pool_hours_status", "status", "hour_start"),
@@ -71,6 +74,11 @@ class SpendGpuPoolHour(BaseModel):
     tenant_count: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text("0"), default=0)
     idle: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("false"), default=False)
     priced_calls_skipped: Mapped[int] = mapped_column(BigInteger, nullable=False, server_default=text("0"), default=0)
+    # The node hours no tenant record carries: an idle hour, and the share of calls a card priced above zero
+    # or of tenants deleted since the hour.
+    skipped_node_hours: Mapped[Decimal] = mapped_column(
+        Numeric(18, 6), nullable=False, server_default=text("0"), default=Decimal(0)
+    )
     allocated_at: Mapped[datetime | None] = mapped_column(TIMESTAMP(timezone=True), nullable=True)
     recorded_by: Mapped[str] = mapped_column(String(128), nullable=False, server_default=text("''"), default="")
     created_at: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), server_default=func.now(), nullable=False)

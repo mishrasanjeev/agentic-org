@@ -85,3 +85,12 @@ def tenant_ids(*ids: uuid.UUID) -> Any:
         return list(ids)
 
     return active
+
+
+def tenants_since(*ids: uuid.UUID, deleted: tuple[uuid.UUID, ...] = ()) -> Any:
+    """A stand-in for ``tenants.tenants_since`` answering ``(id, active)`` for ``ids``; ``deleted`` are not active."""
+
+    async def since(moment: Any) -> list[tuple[uuid.UUID, bool]]:
+        return [(tenant, tenant not in deleted) for tenant in ids]
+
+    return since

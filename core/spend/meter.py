@@ -430,13 +430,15 @@ def submit_plan(plan: MeterPlan, *, usage_type: str = LLM, on: datetime | None =
     from observability import metrics as m
 
     if plan.tenant_id is None:
-        _count_failure(usage_type, "no_tenant")
+        # A call with no tenant (a tenantless router call) is routine: unmetered, not a write failure.
+        m.spend_unmetered_calls_total.labels(usage_type=usage_type, reason="no_tenant").inc()
         return
     if plan.unmetered:
         m.spend_unmetered_calls_total.labels(usage_type=usage_type, reason=plan.unmetered).inc()
     if plan.gap is not None:
         moment = on or (plan.events[0].event_time if plan.events else clock.now_utc())
-        writer.add_gap(plan.tenant_id, clock.event_date_of(moment), usage_type, plan.gap[0], plan.gap[1])
+        # note_gap starts the writer, so a process that only sees failed calls still flushes its gaps.
+        writer.note_gap(plan.tenant_id, clock.event_date_of(moment), usage_type, plan.gap[0], plan.gap[1])
     if plan.events:
         writer.submit(plan.events)
 

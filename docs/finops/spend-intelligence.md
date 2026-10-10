@@ -75,6 +75,10 @@ rate cards and invoices use, per provider. Pricing applies it before choosing a 
 called alias prices with the SKU's card. With no card for the SKU, the list fallback tries the
 SKU and then the name as called, so an alias never leaves unpriced a call the list prices.
 Aliases do not chain: an alias may not name another alias, and a SKU may not itself be an alias.
+In-house providers (`ollama`, `vllm`, `local_embeddings`, `tei`, `tesseract`, `faster_whisper`)
+take no alias (422 `invalid_reference`): their models are named by the deployment, not by an
+invoice, and GPU allocation matches in-house calls to a pool by the name they carry, so an alias
+would take a tenant's calls out of the pool's hours and move their share onto other tenants.
 
 ## Rate cards
 
@@ -339,17 +343,22 @@ failure is logged and counted (`hook_error`); the call proceeds unchanged. The t
 measured (`agenticorg_spend_hook_seconds`). A call with no tokens is counted as a gap
 (`failed_no_usage`); a router call whose primary attempt timed out with no response gets one
 estimated input record from the prompt's length (`timeout_estimated`); a router call cancelled by
-its outer timeout is counted, never estimated. Four direct model callers that bypass the router
-(the run explainer, the feedback analyser, the SOP parser, the workflow re-planner) are metered
-through `spend.note`.
+its outer timeout (the primary attempt or the fallback) is counted, never estimated. A call with
+no tenant at all (a tenantless router call outside any tenant scope) cannot be attributed to
+anyone: it is counted in `agenticorg_spend_unmetered_calls_total{reason="no_tenant"}`, not as a
+write failure. Four direct model callers that bypass the router (the run explainer, the feedback
+analyser, the SOP parser, the workflow re-planner) are metered through `spend.note`. While spend
+is on, the API and each Celery worker process load the metering code at startup, so the first
+metered call does not pay for the imports.
 
 One writer thread per process, with its own event loop and a two-connection engine, flushes the
 queue every 200 ms in batches of up to 500 events, tenant by tenant, so it never competes with
 request handlers for the shared pool:
 
 - a **paused** tenant (the feature flag `spend.metering_paused`, a tenant row or the global row,
-  with `enabled = true` and `rollout_percentage = 100`; read by the writer, never on the call path)
-  has its events dropped and counted, taking effect within 30 seconds without a restart;
+  with `enabled = true` and `rollout_percentage = 100`; read by the writer through its own
+  30-second cache, never on the call path) has its events dropped and counted, taking effect
+  within 30 seconds without a restart;
 - a rollup day held by a **rebuild** makes that tenant's events wait for the next backoff step
   while other tenants are written; after two minutes they are spilled;
 - a **transient** database error (a dropped connection, a pool timeout, a deadlock) is retried
@@ -361,9 +370,16 @@ writes them idempotently with the same keys, one tenant per transaction. A trans
 there (a lock or statement timeout and a deadlock included) is retried with backoff up to eight
 times, each retry carrying only the tenants not yet written; events it finally cannot write are
 counted (`spill_failed`) and recorded as gaps per tenant. At shutdown (the API lifespan, a worker's exit) the
-writer stops, waits up to 5 seconds and spills what is left; what cannot be spilled is counted
-as `shutdown_lost`. The only loss on the call path is a full queue (5,000 events), counted
-globally and per tenant (`queue_full`).
+writer stops, waits up to 5 seconds and spills what is left, including the batch it was still
+writing when the wait ran out (records are keyed, so a batch the writer still finishes is not
+written twice); what cannot be spilled is counted as `shutdown_lost`. Once the drain has begun
+the process starts no new writer: usage that arrives later is counted as `shutdown_lost`. Gap
+counts the writer had not yet flushed, and gaps that arrive after the drain began, are counted in
+`agenticorg_spend_meter_gaps_lost_total` under the gap's own reason, not as write failures: the
+usage behind each gap was already counted when it went unmetered.
+A gap seen on a call path starts the writer, so a process whose calls only fail still flushes its
+gaps. The only loss on the call path is a full queue (5,000 events), counted globally and per
+tenant (`queue_full`).
 
 ### Writer alerts
 
@@ -547,9 +563,9 @@ supersede over priced records sent with `restate`, and an earlier `effective_to`
 records sent with `restate` each queue the restatement of the affected billing days once the
 change has committed, and answer its `restate_job_id`; a rate-card import queues one restatement
 per provider for the rows that call for one (`restate_jobs` in its report). A mapping, alias or
-tree change drops this process's attribution and alias caches; a rate-card write drops this
-process's set of priced tools, so a new tool card applies at once (other processes within 60
-seconds).
+tree change drops this process's attribution and alias caches, and an alias change also its set of
+priced tools; a rate-card write drops this process's set of priced tools, so a new tool card
+applies at once (other processes within 60 seconds).
 
 ## Non-token metering
 
@@ -630,12 +646,13 @@ the platform's, `platform_key`), and the record carries it; otherwise the writer
 A successful connector tool call (outcome `ok`; an error or a governance refusal is never
 metered) is metered only when a tool is **priced**: a `tool_calls` card exists for the connector
 and the tool, or for the connector with no model. No field is added to the tool registry. Each
-process keeps a 60-second set of the tenant's priced tools, refreshed by the writer: a call the
+process keeps a 60-second set of the tenant's priced tools (the cards' tools and the tenant's
+aliases of them, since a call is priced through the aliases), refreshed by the writer: a call the
 set says is unpriced is not queued and is counted as an `unpriced_tool` gap with the detail
 `<connector>:<tool>`; otherwise it is queued, and the writer drops it as an `unpriced_tool` gap
 if no card prices it on its billing date. The gaps (`GET /spend/gaps`) show what a new card would
-have priced. A rate-card write drops the set in this process; other processes refresh within 60
-seconds.
+have priced. A rate-card or alias write drops the set in this process; other processes refresh
+within 60 seconds.
 
 ### Storage GB-days
 
@@ -655,6 +672,12 @@ the spec's name, `gb_day`. A store whose table does not exist is skipped.
   missed beat) is written with today's measurement and flagged `quantity_estimated`. Days before
   the first sample are never filled, so a new tenant or a newly enabled deployment is not charged
   for days nothing sampled.
+- **Empty days.** A day on which every store is empty writes no storage figure, so it would look
+  like a missed beat. When the tenant already has a storage record in the window and a card
+  prices storage, the day gets one zero-quantity record (under the first store, priced at zero),
+  so a later fill never charges it. A tenant that never kept anything writes nothing, and without
+  a card no marker is written: an unpriced zero would count against the unpriced limit, and a
+  fill without a card is unpriced too, so it charges no money.
 - **Only the job writes.** `POST /spend/storage/sample` (administrator) measures and returns GiB
   per store with `written: 0` and an audit row (`spend.storage.preview`); it writes no record, so
   a manual run cannot pre-empt the day's scheduled figure.
@@ -668,8 +691,8 @@ each tenant's share is in the tenant-scoped `spend_gpu_allocations`. There is no
 platform-operator guard exists, and a tenant administrator must not set a shared cost.
 
 - **Standing pools** come from `spend_gpu_pools_json` (`AGENTICORG_SPEND_GPU_POOLS_JSON`), a JSON
-  list of `{provider: "ollama" | "vllm", node_pool, models: [1 to 50 model names as usage records
-  carry them], nodes: above 0 and at most 10000, from: a whole UTC hour, to: a whole UTC hour or
+  list of `{provider: "ollama" | "vllm", node_pool (at most 64 characters), models: [1 to 50 model
+  names as usage records carry them, every name the endpoint is called by], nodes: above 0 and at most 10000, from: a whole UTC hour, to: a whole UTC hour or
   null}`. Two entries for one pool may not cover the same hour. With the feature on, a deployment
   refuses to start when the setting does not parse. Each run adds a pending row for every closed
   hour of the last seven days that has none, never overwriting a metered or allocated one.
@@ -689,17 +712,26 @@ platform-operator guard exists, and a tenant administrator must not set a shared
 - **Allocation** (the beat `spend-allocate-gpu-hours`, hourly at :20, at most 48 hours a run,
   oldest first) spreads each pool hour once it has closed (75 minutes after its start, so the
   writer and its spill have caught up). It claims the hour (a claim older than an hour is
-  resumed) and freezes it: records created after that instant are not counted, so a rerun sees
-  the same totals. Only in-house-priced token records of the pool's models in that hour share it:
-  a call a tenant's own card priced already carries its cost, is counted in
-  `priced_calls_skipped`, and never pays twice. The tenants' shares follow their tokens by
-  largest remainder, so they sum to the hour's node hours exactly and none is negative. Each
+  resumed; the claim and its age run on the database clock) and freezes it: records created
+  after that instant are not counted, so a rerun sees the same totals. The hour is spread over
+  every token record of the pool's models in that hour, whatever priced it, so no tenant's own
+  card or alias can move its share onto other tenants. Calls priced at zero (in-house, or a
+  tenant's card at zero) are charged their share. A call a card priced above zero already carries
+  its cost: it is counted in `priced_calls_skipped`, gets no GPU record and never pays twice, and
+  its share stays with the platform. So does the share of a tenant deleted since the hour began.
+  The shares follow the tokens by largest remainder, so they sum to the hour's node hours exactly
+  and none is negative; `skipped_node_hours` on the pool hour is the part no tenant carries. Each
   tenant's share is priced once with its `gpu_hours` card (`gpu_node_hour`, the pool as model or
   the provider default; unpriced without one), then its node hours, amount and INR amount are
   split over its calls by tokens, so money is conserved as well as hours; each call's share is a
-  record flagged `allocated`, with `allocated_from` naming the call and the call's attribution.
-- **Idle hours stay with the platform.** An hour no tenant used is closed as `idle` and charged
-  to no tenant.
+  record flagged `allocated`, with `allocated_from` naming the call and the call's attribution. A
+  share that rounds to nothing is recorded as written with no hours.
+- **Idle hours stay with the platform.** An hour no call used is closed as `idle` and charged to
+  no tenant.
+- **Failures.** A failing configuration (for example a pool name the tables cannot hold, which
+  start-up refuses anyway) is logged and recorded hours are still allocated. An hour whose
+  allocation fails for a tenant stays claimed and is resumed after an hour; fresh hours are
+  allocated before resumed ones, so an hour that keeps failing never holds back newer hours.
 - **Late calls.** An in-house call written after its hour was frozen is not reallocated.
 - `GET /spend/gpu-allocations` lists the tenant's own shares; another tenant's share is never
   shown.

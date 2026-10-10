@@ -28,11 +28,18 @@ If the publish fails, the loss is counted (``spill_failed``) per tenant.
 
 **Gaps** (usage that could not be metered) are aggregated in memory per
 tenant, day, usage type, reason and detail, and flushed by the writer with
-additive upserts into ``spend_meter_gaps``.
+additive upserts into ``spend_meter_gaps``. A gap seen on a call path
+(``note_gap``) starts the writer too, so a process that only ever sees
+failed or cancelled calls still flushes its gaps.
 
 **Drain** at shutdown (the API lifespan, a Celery worker's exit) stops the
 thread, waits up to its timeout and spills whatever is still queued or
 waiting for a retry, counting what cannot be spilled as ``shutdown_lost``.
+Gap counts nothing flushed are counted as ``shutdown_lost`` too. Once a
+drain has begun, the process starts no new writer: a late submit or gap,
+and a batch the stopping thread tries to requeue after the drain collected
+the queue, are counted as ``shutdown_lost`` rather than left to die
+uncounted.
 """
 
 from __future__ import annotations
@@ -61,9 +68,12 @@ BUSY_SPILL_AFTER_S = 120.0
 WRITER_POOL_SIZE = 2
 MAX_GAP_KEYS = 10_000
 PAUSE_FLAG = "spend.metering_paused"
+PAUSE_CACHE_TTL_S = 30.0  # the feature flag module's TTL
+PAUSE_CACHE_MAX = 1024  # tenants; cleared when full
+SHUTDOWN_LOST = "shutdown_lost"
 
 # enterprise-gate: process-local-ok reason=one-writer-thread-per-process-bounded-queue-drained-at-shutdown-and-counted
-_WRITER: dict[str, Any] = {"writer": None, "pid": None}
+_WRITER: dict[str, Any] = {"writer": None, "pid": None, "closed_pid": None}
 # enterprise-gate: process-local-ok reason=gap-counts-aggregated-per-tenant-flushed-by-the-writer-bounded-10k-keys
 _GAPS: dict[tuple[str, date, str, str, str], int] = {}
 # enterprise-gate: process-local-ok reason=guards-the-writer-holder-and-gap-aggregator-keeps-no-tenant-data
@@ -89,13 +99,58 @@ def _transient(exc: BaseException) -> bool:
 # ---------------------------------------------------------------- gaps
 
 
+def _add_gap_locked(key: tuple[str, date, str, str, str], count: int) -> None:
+    if key not in _GAPS and len(_GAPS) >= MAX_GAP_KEYS:
+        return
+    _GAPS[key] = _GAPS.get(key, 0) + int(count)
+
+
+def _gap_key(tenant_id: str, day: date, usage_type: str, reason: str, detail: str) -> tuple[str, date, str, str, str]:
+    return (str(tenant_id), day, usage_type, reason, str(detail or "")[:160])
+
+
+def _closed_locked() -> bool:
+    """Whether a drain has begun in this process (callers hold ``_LOCK``)."""
+    return _WRITER.get("closed_pid") == os.getpid()
+
+
 def add_gap(tenant_id: str, day: date, usage_type: str, reason: str, detail: str = "", count: int = 1) -> None:
     """Count usage that could not be metered; flushed by the writer. Never raises; bounded at 10 000 keys."""
-    key = (str(tenant_id), day, usage_type, reason, str(detail or "")[:160])
+    key = _gap_key(tenant_id, day, usage_type, reason, detail)
     with _LOCK:
-        if key not in _GAPS and len(_GAPS) >= MAX_GAP_KEYS:
-            return
-        _GAPS[key] = _GAPS.get(key, 0) + int(count)
+        _add_gap_locked(key, count)
+
+
+def _gaps_lost(gaps: dict[tuple[str, date, str, str, str], int]) -> None:
+    """Count gap counts nothing will write now, under the gap's own reason, and log them.
+
+    Not a write failure: the usage behind each gap was counted when it went
+    unmetered (a write failure, or an unmetered call), so counting it again
+    there would double the loss and could hold the write-failure alert open.
+    """
+    if not gaps:
+        return
+    counter = _metrics().spend_meter_gaps_lost_total
+    for (_tenant, _day, usage_type, reason, _detail), count in gaps.items():
+        counter.labels(usage_type=usage_type, reason=reason).inc(count)
+    logger.warning("spend_gaps_lost_at_shutdown", keys=len(gaps), count=sum(gaps.values()))
+
+
+def note_gap(tenant_id: str, day: date, usage_type: str, reason: str, detail: str = "", count: int = 1) -> None:
+    """A gap seen on a call path: aggregated, and this process's writer started so it gets flushed.
+
+    Once a drain has begun nothing would flush it, so it is counted as a lost
+    gap instead. No I/O.
+    """
+    key = _gap_key(tenant_id, day, usage_type, reason, detail)
+    with _LOCK:
+        closed = _closed_locked()
+        if not closed:
+            _add_gap_locked(key, count)
+    if closed:
+        _gaps_lost({key: int(count)})
+        return
+    start_for_gaps()
 
 
 def pop_gaps(tenant_id: str | None = None) -> dict[tuple[str, date, str, str, str], int]:
@@ -164,6 +219,13 @@ class _Writer:
         self._retries: list[_Retry] = []
         self._stop = threading.Event()
         self._thread: threading.Thread | None = None
+        self._closed = False  # set when the drain collects what is left; guarded by _cond
+        # The events of the flush in progress, so a drain whose join times out can still spill them;
+        # once handed over, the outliving thread's requeue of them is not a loss. Guarded by _cond.
+        self._inflight: list[UsageEvent] = []
+        self._handed_over = False
+        # The pause flag per tenant: (paused, expires_at). Read and written on the writer thread only.
+        self._pause_cache: dict[str, tuple[bool, float]] = {}
 
     # -- the call path
 
@@ -171,15 +233,17 @@ class _Writer:
         with self._cond:
             return len(self._queue) + sum(len(r.events) for r in self._retries)
 
-    def put(self, events: Sequence[UsageEvent]) -> bool:
-        """Queue ``events`` unless that would pass ``MAX_PENDING``; never blocks."""
+    def put(self, events: Sequence[UsageEvent]) -> str | None:
+        """Queue ``events``; never blocks. Returns why they were refused (``queue_full``, ``shutdown_lost``) or None."""
         with self._cond:
+            if self._closed:
+                return SHUTDOWN_LOST
             waiting = len(self._queue) + sum(len(r.events) for r in self._retries)
             if waiting + len(events) > MAX_PENDING:
-                return False
+                return "queue_full"
             self._queue.extend(events)
             self._cond.notify()
-        return True
+        return None
 
     def start(self) -> None:
         self._thread = threading.Thread(target=self._run, name="spend-usage-writer", daemon=True)
@@ -218,8 +282,27 @@ class _Writer:
         return due
 
     def _requeue(self, retry: _Retry) -> None:
+        """Keep a batch for a later attempt; after the drain collected what was left, count it lost.
+
+        A batch that was in flight when the drain's join timed out was already
+        handed to the drain's spill, so its requeue is dropped without a count.
+        """
         with self._cond:
-            self._retries.append(retry)
+            closed = self._closed
+            handed_over = self._handed_over
+            if not closed:
+                self._retries.append(retry)
+        if closed and not handed_over:
+            for event in retry.events:
+                _count(event.usage_type, SHUTDOWN_LOST)
+
+    def _restore_gaps(self, gaps: dict[tuple[str, date, str, str, str], int]) -> None:
+        """Put back gaps a failed write took; after the drain counted the leftovers, count them lost."""
+        with self._cond:
+            if not self._closed:
+                restore_gaps(gaps)
+                return
+        _gaps_lost(gaps)
 
     async def _main(self) -> None:
         from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
@@ -241,7 +324,13 @@ class _Writer:
                     batch = self._take(max_events=MAX_BATCH, wait=FLUSH_INTERVAL_S)
                     retries = self._due_retries()
                     if batch or retries:
-                        await self._flush(batch, retries)
+                        with self._cond:
+                            self._inflight = list(batch) + [e for r in retries for e in r.events]
+                        try:
+                            await self._flush(batch, retries)
+                        finally:
+                            with self._cond:
+                                self._inflight = []
                     await self._flush_gaps()
                     _metrics().spend_usage_pending.set(self.pending())
                 await self._flush_gaps()
@@ -249,16 +338,33 @@ class _Writer:
             await engine.dispose()
 
     async def _paused(self, tenant_id: str) -> bool:
+        """Whether ``spend.metering_paused`` holds for the tenant (its row, else the global row).
+
+        The flag module's cache is a plain dict that request handlers share,
+        so this thread never touches it: it runs the module's own lookup and
+        evaluation and keeps the answer in its own cache for 30 seconds. A
+        failed read keeps metering on, logged, and is cached the same way.
+        """
         import uuid
 
         from core import feature_flags
 
+        now = time.monotonic()
+        cached = self._pause_cache.get(tenant_id)
+        if cached is not None and cached[1] > now:
+            return cached[0]
         try:
-            return bool(await feature_flags.is_enabled(PAUSE_FLAG, tenant_id=uuid.UUID(tenant_id)))
+            tenant_uuid = uuid.UUID(tenant_id)
+            row = await feature_flags._query_flag(tenant_uuid, PAUSE_FLAG)
+            paused = bool(feature_flags._evaluate(row, PAUSE_FLAG, tenant_uuid, None, False))
         # enterprise-gate: broad-except-ok reason=pause-flag-read-failure-keeps-metering-on-and-logs
         except Exception as exc:
             logger.warning("spend_pause_flag_unreadable", error_type=type(exc).__name__)
-            return False
+            paused = False
+        if tenant_id not in self._pause_cache and len(self._pause_cache) >= PAUSE_CACHE_MAX:
+            self._pause_cache.clear()
+        self._pause_cache[tenant_id] = (paused, now + PAUSE_CACHE_TTL_S)
+        return paused
 
     async def _flush(self, batch: Sequence[UsageEvent], retries: Sequence[_Retry] = ()) -> None:
         """Write a batch tenant by tenant; requeue, spill or count what cannot be written."""
@@ -298,7 +404,7 @@ class _Writer:
                 )
         # enterprise-gate: broad-except-ok reason=usage-write-failure-is-logged-counted-and-spilled-off-the-call-path
         except Exception as exc:
-            restore_gaps(gaps)
+            self._restore_gaps(gaps)
             if _transient(exc) and item.transient_tries == 0:
                 self._requeue(_Retry(time.monotonic() + RETRY_BACKOFF_S[0], item.tenant_id, item.events, 0, None, 1))
                 return
@@ -313,7 +419,7 @@ class _Writer:
             spill(item.events, reason="spilled")
             return
         if result.busy:
-            restore_gaps(gaps)
+            self._restore_gaps(gaps)
             now = time.monotonic()
             since = item.busy_since if item.busy_since is not None else now
             if now - since >= BUSY_SPILL_AFTER_S:
@@ -345,19 +451,32 @@ class _Writer:
             # enterprise-gate: broad-except-ok reason=gap-flush-failure-keeps-the-counts-for-the-next-pass-and-logs
             except Exception as exc:
                 logger.warning("spend_gap_flush_failed", error_type=type(exc).__name__)
-                restore_gaps(gaps)
+                self._restore_gaps(gaps)
 
     # -- shutdown
 
     def stop_and_collect(self, timeout: float) -> list[UsageEvent]:
-        """Stop the thread, wait up to ``timeout``, and return every event still queued or awaiting a retry."""
+        """Stop the thread, wait up to ``timeout``, and return every event still queued or awaiting a retry.
+
+        When the thread outlives the join mid-flush, the batch it is writing is
+        returned too, so the drain spills it: records are keyed and inserted
+        with ``ON CONFLICT DO NOTHING``, so a batch that the thread still
+        finishes writing is not counted twice.
+        """
         self._stop.set()
         with self._cond:
             self._cond.notify_all()
         if self._thread is not None:
             self._thread.join(timeout=max(0.0, timeout))
+        outlived = self._thread is not None and self._thread.is_alive()
         with self._cond:
+            # From here a thread that outlived the join can no longer requeue into a queue nobody reads.
+            self._closed = True
             left = list(self._queue) + [e for r in self._retries for e in r.events]
+            if outlived and self._inflight:
+                left.extend(self._inflight)
+                self._handed_over = True
+            self._inflight = []
             self._queue.clear()
             self._retries = []
         return left
@@ -368,7 +487,7 @@ def _writer(create: bool) -> _Writer | None:
         current = _WRITER.get("writer")
         if current is not None and _WRITER.get("pid") == os.getpid():
             return current
-        if not create:
+        if not create or _closed_locked():
             return None
         writer = _Writer()
         _WRITER["writer"] = writer
@@ -383,12 +502,15 @@ def submit(events: Sequence[UsageEvent]) -> None:
         return
     try:
         writer = _writer(create=True)
-        if writer is None or not writer.put(events):
+        # No writer means a drain has begun in this process: nothing would write the events.
+        refused = writer.put(events) if writer is not None else SHUTDOWN_LOST
+        if refused is not None:
             from core.spend import clock
 
             for event in events:
-                _count(event.usage_type, "queue_full")
-                add_gap(event.tenant_id, clock.event_date_of(event.event_time), event.usage_type, "queue_full")
+                _count(event.usage_type, refused)
+                if refused == "queue_full":
+                    add_gap(event.tenant_id, clock.event_date_of(event.event_time), event.usage_type, refused)
             return
         metrics = _metrics()
         for event in events:
@@ -410,6 +532,13 @@ def start_for_gaps() -> None:
         logger.warning("spend_usage_writer_start_failed", error_type=type(exc).__name__)
 
 
+def reopen() -> None:
+    """Let this process start a writer again after a drain (a new API lifespan in the same process)."""
+    with _LOCK:
+        if _closed_locked():
+            _WRITER["closed_pid"] = None
+
+
 def started() -> bool:
     """Whether this process has a writer."""
     return _writer(create=False) is not None
@@ -421,20 +550,30 @@ def pending() -> int:
     return writer.pending() if writer is not None else 0
 
 
-def drain_blocking(timeout: float) -> int:
-    """Stop the writer and spill what is left; 0 at once when the writer never started.
+def _count_lost_gaps() -> None:
+    """Count the gap counts nothing will flush now (as lost gaps, not write failures) and drop them."""
+    _gaps_lost(pop_gaps())
 
-    Returns the number of events that were still queued or awaiting a retry.
-    Events whose spill fails are counted as ``shutdown_lost``.
+
+def drain_blocking(timeout: float) -> int:
+    """Stop the writer and spill what is left; 0 when the writer never started.
+
+    Returns the number of events that were still queued, awaiting a retry, or
+    in flight when the join timed out. Events whose spill fails are counted as
+    ``shutdown_lost``; gap counts the writer did not flush are counted on
+    ``spend_meter_gaps_lost_total``. From here this process starts no new writer.
     """
     with _LOCK:
         writer = _WRITER.get("writer") if _WRITER.get("pid") == os.getpid() else None
         _WRITER["writer"] = None
         _WRITER["pid"] = None
+        _WRITER["closed_pid"] = os.getpid()
+    left = writer.stop_and_collect(timeout) if writer is not None else []
+    # Before the spill below, whose failures are gapped (and counted) on their own.
+    _count_lost_gaps()
     if writer is None:
         return 0
-    left = writer.stop_and_collect(timeout)
     if left:
-        spill(left, reason="spilled", failed_reason="shutdown_lost")
+        spill(left, reason="spilled", failed_reason=SHUTDOWN_LOST)
     _metrics().spend_usage_pending.set(0)
     return len(left)

@@ -50,6 +50,8 @@ def on(monkeypatch):
     got: dict[str, list] = {"events": [], "gaps": []}
     monkeypatch.setattr(writer, "submit", lambda events: got["events"].extend(events))
     monkeypatch.setattr(writer, "add_gap", lambda *args, **kw: got["gaps"].append(args))
+    # Call-path gaps go through note_gap, which also starts the writer.
+    monkeypatch.setattr(writer, "note_gap", lambda *args, **kw: got["gaps"].append(args))
     monkeypatch.setattr(writer, "start_for_gaps", lambda: None)
     monkeypatch.setattr(embeddings_module, "serving_identity", lambda: ("local_embeddings", "BAAI/bge-small-en-v1.5"))
     metering._PRICED_TOOLS_CACHE.clear()
@@ -153,11 +155,24 @@ class TestIsolation:
 # ---------------------------------------------------------------- embeddings
 
 
-async def _ingest(monkeypatch, *, extracted=True, extracted_method="text"):
+def _content(extracted_method="text"):
+    from core.rag.extractors import ExtractedContent, ExtractedSpan
+
+    text = "The quick brown fox jumps over the lazy dog. " * 12
+    return ExtractedContent(
+        spans=[ExtractedSpan(text=text, page=1)],
+        mime_type="image/png" if extracted_method == "tesseract-ocr" else "text/plain",
+        extraction_method=extracted_method,
+        total_chars=len(text),
+        extra={"page_count": 3, "ocr_pages": [1]} if extracted_method == "tesseract-ocr" else {},
+    )
+
+
+def _prepare_ingest(monkeypatch, content):
+    """Ingestion with in-memory storage and embeddings, extracting ``content``."""
     import core.database
     from core.rag import ingest
     from core.rag.chunking import ChunkPlan
-    from core.rag.extractors import ExtractedContent, ExtractedSpan
 
     class _IngestSession:
         async def execute(self, statement, params=None):
@@ -172,12 +187,6 @@ async def _ingest(monkeypatch, *, extracted=True, extracted_method="text"):
         async def __aexit__(self, *args):
             return False
 
-    content = ExtractedContent(
-        spans=[ExtractedSpan(text="The quick brown fox jumps over the lazy dog. " * 12, page=1)],
-        mime_type="image/png" if extracted_method == "tesseract-ocr" else "text/plain",
-        extraction_method=extracted_method,
-        extra={"page_count": 3, "ocr_pages": [1]} if extracted_method == "tesseract-ocr" else {},
-    )
     monkeypatch.setattr(core.database, "async_session_factory", lambda: _IngestSession())
     monkeypatch.setattr(ingest, "_resolve_embedding_profile", AsyncMock(return_value=("openai", "small", 3)))
     monkeypatch.setattr(ingest, "_resolve_chunk_plan", AsyncMock(return_value=ChunkPlan()))
@@ -187,6 +196,12 @@ async def _ingest(monkeypatch, *, extracted=True, extracted_method="text"):
     monkeypatch.setattr(ingest.entities, "enabled", lambda: False)
     monkeypatch.setattr(ingest.provenance, "enabled", lambda: False)
     monkeypatch.setattr(ingest, "extract", lambda stream, mime_type, filename: content)
+    return ingest
+
+
+async def _ingest(monkeypatch, *, extracted=True, extracted_method="text"):
+    content = _content(extracted_method)
+    ingest = _prepare_ingest(monkeypatch, content)
     return await ingest.ingest_document(
         tenant_id=TENANT,
         title="Fox",
@@ -405,6 +420,48 @@ class TestOcr:
         assert on["events"][0].hints.default_use_case == "knowledge.ocr"
 
     @pytest.mark.asyncio
+    async def test_upload_route_meters_its_ocr_once(self, monkeypatch, on):
+        import io
+
+        from api.v1 import knowledge
+
+        content = _content("tesseract-ocr")
+        _prepare_ingest(monkeypatch, content)
+
+        class _Gate:
+            async def run_blocking(self, fn, *args, **kwargs):
+                return content
+
+        class _Upload:
+            filename = "scan.txt"
+            content_type = "text/plain"
+            size = None
+
+            def __init__(self):
+                self._file = io.BytesIO(b"scanned page bytes")
+
+            async def read(self, size=-1):
+                return self._file.read(size)
+
+        monkeypatch.setattr(knowledge, "_DOCUMENT_EXTRACTION_CAPACITY", _Gate())
+        monkeypatch.setattr(knowledge, "_ragflow_available", lambda: False)
+        monkeypatch.setattr(knowledge, "_db_find_existing_by_filename", AsyncMock(return_value=None))
+        monkeypatch.setattr(knowledge, "_db_store_doc", AsyncMock(return_value=None))
+        monkeypatch.setattr(knowledge, "_db_set_doc_status", AsyncMock(return_value=None))
+        out = await knowledge.upload_document(
+            file=_Upload(), tenant_id=TID, domain=None, allow_duplicate=False, replace=False
+        )
+        assert out.ingestion_status == "indexed" and out.extraction_method == "tesseract-ocr"
+        ocr = [e for e in on["events"] if e.usage_type == "ocr_pages"]
+        # One record for the upload's OCR, keyed by the route's document; ingestion was handed the
+        # extraction, so it meters no OCR of its own.
+        assert [(e.idempotency_key, e.source_ref, e.quantity) for e in ocr] == [
+            (f"ocr:upload:{out.document_id}", out.document_id, 3)
+        ]
+        assert ocr[0].hints.application == "knowledge" and ocr[0].tenant_id == TID
+        assert [e.usage_type for e in on["events"]] == ["ocr_pages", "embedding_tokens"]
+
+    @pytest.mark.asyncio
     async def test_ingest_counts_ocr_only_when_it_extracted_itself(self, monkeypatch, on):
         await _ingest(monkeypatch, extracted=True, extracted_method="tesseract-ocr")
         assert [e.usage_type for e in on["events"]] == ["embedding_tokens"]  # the route meters the upload's OCR
@@ -617,6 +674,49 @@ class TestTools:
         assert len(store.statements) == selects
 
     @pytest.mark.asyncio
+    async def test_priced_tool_cache_follows_the_tenants_aliases(self, store, on):
+        from core.spend import mappings
+
+        store.add(tool_card())
+        await metering.refresh_priced_tools(store, TENANT, now=T0)
+        assert metering.cached_priced_tools(TENANT) == frozenset({("chatops", "post_message")})
+        await mappings.put_alias(
+            TENANT, {"provider": "chatops", "alias": "send_message", "model_sku": "post_message"}, actor=ACTOR, now=T0
+        )
+        assert metering.cached_priced_tools(TENANT) is None  # an alias write drops the set
+        await metering.refresh_priced_tools(store, TENANT, now=T0)
+        assert metering.cached_priced_tools(TENANT) == frozenset(
+            {("chatops", "post_message"), ("chatops", "send_message")}
+        )
+        metering.handle("tool_call", TID, {"connector": "chatops", "tool": "send_message", "result": {}})
+        assert on["gaps"] == [] and [(e.provider, e.model) for e in on["events"]] == [("chatops", "send_message")]
+        assert (await meter.write_events(store, TENANT, on["events"], now=T0)).written == 1
+        (record,) = [r for r in store.of("spend_usage_records") if r.usage_type == "tool_calls"]
+        assert record.model == "post_message" and record.amount == Decimal("0.01")  # priced through the alias
+        metering.handle("tool_call", TID, {"connector": "chatops", "tool": "unrelated", "result": {}})
+        assert [g[2:] for g in on["gaps"]] == [("tool_calls", "unpriced_tool", "chatops:unrelated")]
+
+    @pytest.mark.asyncio
+    async def test_in_house_models_take_no_alias(self, store):
+        from fastapi import HTTPException
+
+        from core.spend import mappings
+        from core.spend.errors import SpendError
+
+        for provider in ("vllm", "Ollama", "tesseract"):
+            with pytest.raises(SpendError) as info:
+                await mappings.put_alias(
+                    TENANT, {"provider": provider, "alias": "inhouse-70b", "model_sku": "other"}, actor=ACTOR, now=T0
+                )
+            assert (info.value.status, info.value.code) == (422, "invalid_reference")
+        with pytest.raises(HTTPException) as refused:
+            await api.put_model_alias(
+                api.AliasIn(provider="vllm", alias="inhouse-70b", model_sku="other"), ADMIN, tenant_id=TID
+            )
+        assert refused.value.status_code == 422 and refused.value.detail["error"] == "invalid_reference"
+        assert store.of("spend_model_aliases") == []
+
+    @pytest.mark.asyncio
     async def test_card_write_invalidates_the_priced_tool_cache(self, store, on):
         await metering.refresh_priced_tools(store, TENANT, now=T0)
         assert metering.cached_priced_tools(TENANT) == frozenset()
@@ -748,6 +848,49 @@ class TestStorage:
             "2026-09-30": {True},
             "2026-10-01": {False},
         }
+
+    @pytest.mark.asyncio
+    async def test_storage_empty_days_are_marked_and_never_filled(self, store):
+        store.add(storage_card())
+        _bytes(store, knowledge=GIB)
+        await storage.sample_tenant(TENANT, day=date(2026, 9, 27), now=T0, write=True)
+        _bytes(store, knowledge=0)
+        for day in (date(2026, 9, 28), date(2026, 9, 29)):
+            out = await storage.sample_tenant(TENANT, day=day, now=T0, write=True)
+            assert out["written"] == 1  # one zero record marks the day sampled
+        _bytes(store, knowledge=GIB)
+        out = await storage.sample_tenant(TENANT, day=DAY, now=T0, write=True)
+        assert out["filled"] == ["2026-09-30"]  # the missed beat only: the empty days are not filled
+        found = {(r.event_date.isoformat(), r.quantity, r.quantity_estimated) for r in store.of("spend_usage_records")}
+        assert found == {
+            ("2026-09-27", Decimal(1), False),
+            ("2026-09-28", Decimal(0), False),
+            ("2026-09-29", Decimal(0), False),
+            ("2026-09-30", Decimal(1), True),
+            ("2026-10-01", Decimal(1), False),
+        }
+        markers = [r for r in store.of("spend_usage_records") if r.quantity == 0]
+        assert {(r.model, r.amount, r.unpriced, r.price_source) for r in markers} == {
+            ("knowledge", Decimal(0), False, "contract")
+        }
+        assert {r.idempotency_key for r in markers} == {"storage:2026-09-28:knowledge", "storage:2026-09-29:knowledge"}
+
+    @pytest.mark.asyncio
+    async def test_storage_empty_day_without_a_card_or_a_history_writes_nothing(self, store):
+        _bytes(store, knowledge=GIB)
+        await storage.sample_tenant(TENANT, day=date(2026, 9, 30), now=T0, write=True)  # no card: unpriced
+        _bytes(store, knowledge=0)
+        out = await storage.sample_tenant(TENANT, day=DAY, now=T0, write=True)
+        assert out["written"] == 0  # an unpriced zero record would only count against the unpriced limit
+        store.add(storage_card(tenant_id=OTHER_TENANT))
+        out = await storage.sample_tenant(OTHER_TENANT, day=DAY, now=T0, write=True)
+        assert out["written"] == 0  # a tenant that never kept anything writes nothing
+        assert [r.tenant_id for r in store.of("spend_usage_records")] == [TENANT]
+        marked = {storage.storage_key(DAY, "speech")}  # a day already marked is not marked twice
+        assert (
+            await storage.empty_day_markers(store, TENANT, {"speech": Decimal(0)}, [DAY], day=DAY, existing=marked)
+            == []
+        )
 
     def test_storage_plan_days(self):
         keys = {storage.storage_key(date(2026, 9, 25), "speech"), storage.storage_key(DAY, "knowledge")}
