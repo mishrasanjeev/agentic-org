@@ -71,8 +71,8 @@ class TestRoutes:
             with pytest.raises(HTTPException) as info:
                 await call
             assert info.value.status_code == 404 and info.value.detail["error"] == "spend_disabled"
-        out = await api.spend_status(caller=ADMIN_CALLER, tenant_id=TID)
-        assert out["enabled"] is False and out["writer"] == {"started": False, "pending": 0}
+        out = await api.spend_status(tenant_id=TID)
+        assert out["enabled"] is False and out["writer"] == {"started": False}
 
     @pytest.mark.asyncio
     async def test_usage_route_flow_while_on(self, store):
@@ -112,7 +112,7 @@ class TestRoutes:
         with pytest.raises(HTTPException) as info:
             await api.list_usage(DAY, DAY, cursor="nonsense", caller=ADMIN_CALLER, tenant_id=TID)
         assert info.value.status_code == 422
-        status = await api.spend_status(caller=ADMIN_CALLER, tenant_id=TID)
+        status = await api.spend_status(tenant_id=TID)
         assert status["partition_horizon"] == {"last_month": "2028-12", "months_ahead": 26, "low": False}
 
     @pytest.mark.asyncio
@@ -473,20 +473,19 @@ class TestReadVisibility:
                 assert _refused_tenant_wide(info)
 
     @pytest.mark.asyncio
-    async def test_the_writers_pending_count_is_for_tenant_wide_readers_only(self, store, monkeypatch):
-        """The pending count is process-wide (every tenant's queued events): only an administrator or auditor
-        gets it from GET /spend/status."""
+    async def test_status_never_gives_the_process_wide_pending_count(self, store, monkeypatch):
+        """The pending count is every tenant's queued events in the process, so no tenant's reader gets it."""
         import sys
         from types import SimpleNamespace
 
-        fake = SimpleNamespace(started=lambda: True, pending=lambda: 7)
+        def refuse() -> int:
+            raise AssertionError("the status route must not read the process-wide pending count")
+
+        fake = SimpleNamespace(started=lambda: True, pending=refuse)
         monkeypatch.setitem(sys.modules, "core.spend.writer", fake)
-        for reader, caller in READERS.items():
-            writer = (await api.spend_status(caller=caller, tenant_id=TID))["writer"]
-            expected = {"started": True, "pending": 7} if reader in TENANT_WIDE else {"started": True}
-            assert writer == expected, reader
+        assert (await api.spend_status(tenant_id=TID))["writer"] == {"started": True}
         monkeypatch.delitem(sys.modules, "core.spend.writer")
-        assert (await api.spend_status(caller=READERS["machine"], tenant_id=TID))["writer"] == {"started": False}
+        assert (await api.spend_status(tenant_id=TID))["writer"] == {"started": False}
 
     @pytest.mark.asyncio
     async def test_usage_filters_bind_the_tenant_and_never_correlate_on_the_outer_table(self, store):

@@ -439,6 +439,78 @@ class TestFollowupAtomicity:
         assert out["status"] == "queued" and job(store, out["job_id"]).status == "running"
 
     @pytest.mark.asyncio
+    async def test_a_merge_then_a_runners_requeue_keeps_the_undispatched_job_queued(self, store, monkeypatch):
+        """A runner's requeue rewrites ``result`` (dropping ``merges``): the job is still not as enqueue wrote it."""
+        from core.spend import maintenance
+
+        transactional(monkeypatch, store)
+        broker_down(monkeypatch)
+        real_mark = jobs._mark_undispatched
+        seen: dict = {}
+
+        async def busy(*args, **kwargs):
+            raise lock_timeout()
+
+        async def meanwhile(tenant_id, job_id, **kwargs):
+            # A change merges a follow-up the queued job already covers (the parameters stay the same) ...
+            seen["merge"] = await jobs.queue_followup(
+                store, TENANT, kind="settle_fx", params={**SPAN, "force_dates": []}, actor=ACTOR
+            )
+            # ... the sweep resends the job, a worker claims it, and it fails transiently: queued again.
+            monkeypatch.setattr(jobs, "_dispatch", lambda *a, **k: None)
+            monkeypatch.setattr(maintenance, "settle_fx", busy)
+            await jobs.run(TENANT, job_id)
+            assert "merges" not in job(store, job_id).result and job(store, job_id).status == "queued"
+            # The administrator's slow send finally fails.
+            return await real_mark(tenant_id, job_id, **kwargs)
+
+        monkeypatch.setattr(jobs, "_mark_undispatched", meanwhile)
+        out = await jobs.enqueue(TENANT, kind="settle_fx", params={**SPAN, "force_dates": []}, actor=ACTOR)
+        assert seen["merge"]["merged"] is True
+        assert out["status"] == "queued" and job(store, out["job_id"]).status == "queued"  # not failed
+
+    @pytest.mark.asyncio
+    async def test_a_claim_racing_the_mark_is_answered_queued_not_failed(self, store, monkeypatch):
+        from sqlalchemy.sql.dml import Update
+
+        broker_down(monkeypatch)
+        real_execute = store.execute
+        state: dict = {}
+
+        async def execute(statement, *args, **kwargs):
+            if isinstance(statement, Update) and "spend_jobs" in str(statement) and state.get("id"):
+                job(store, state["id"]).status = "running"  # a worker claimed it just before the update
+            return await real_execute(statement, *args, **kwargs)
+
+        real_mark = jobs._mark_undispatched
+
+        async def mark(tenant_id, job_id, **kwargs):
+            state["id"] = job_id
+            monkeypatch.setattr(store, "execute", execute)
+            return await real_mark(tenant_id, job_id, **kwargs)
+
+        monkeypatch.setattr(jobs, "_mark_undispatched", mark)
+        out = await jobs.enqueue(TENANT, kind="reattribute", params=SPAN, actor=ACTOR)
+        assert out["status"] == "queued" and job(store, out["job_id"]).status == "running"
+
+    @pytest.mark.asyncio
+    async def test_the_undispatched_job_is_read_under_a_row_lock(self, store, monkeypatch):
+        from sqlalchemy.sql.selectable import Select
+
+        broker_down(monkeypatch)
+        real_execute = store.execute
+        locked: list[bool] = []
+
+        async def execute(statement, *args, **kwargs):
+            if isinstance(statement, Select) and "spend_jobs" in str(statement):
+                locked.append(statement._for_update_arg is not None)
+            return await real_execute(statement, *args, **kwargs)
+
+        monkeypatch.setattr(store, "execute", execute)
+        out = await jobs.enqueue(TENANT, kind="reattribute", params=SPAN, actor=ACTOR)
+        assert out["status"] == "failed" and locked and locked[-1] is True
+
+    @pytest.mark.asyncio
     async def test_queue_followup_merges_inside_the_callers_transaction_and_raises_on_a_bad_kind(self, store):
         from core.spend.errors import SpendError
 
@@ -474,11 +546,14 @@ class TestMergeTargets:
 
     @pytest.mark.asyncio
     async def test_a_queued_job_another_transaction_holds_is_skipped_and_the_work_queued_on_its_own(self, store):
+        # Distinct creation times: the oldest-first order must not hang on two jobs created in one clock tick.
         held = await jobs.queue_followup(store, TENANT, kind="settle_fx", params={**SPAN, "force_dates": []},
-                                         actor=ACTOR)  # fmt: skip
+                                         actor=ACTOR, now=T0)  # fmt: skip
         store.held_elsewhere.add(uuid.UUID(held["job_id"]))  # the sweep or a claim holds its row
         forced = {**SPAN, "force_dates": [["USD", "2026-10-01"]]}
-        own = await jobs.queue_followup(store, TENANT, kind="settle_fx", params=forced, actor=ACTOR)
+        own = await jobs.queue_followup(
+            store, TENANT, kind="settle_fx", params=forced, actor=ACTOR, now=T0 + timedelta(seconds=1)
+        )
         assert own["merged"] is False and own["job_id"] != held["job_id"]
         assert job(store, held["job_id"]).params["force_dates"] == []  # not changed under another's lock
         assert job(store, own["job_id"]).params["force_dates"] == [["USD", "2026-10-01"]]  # never dropped

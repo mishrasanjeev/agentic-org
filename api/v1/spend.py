@@ -284,19 +284,17 @@ async def _upload_rows(
 # ---------------------------------------------------------------- status
 
 
-def _writer_state(*, with_pending: bool) -> dict[str, Any]:
-    """This process's usage writer: started or not (no import while it never started), and events pending.
+def _writer_state() -> dict[str, Any]:
+    """Whether this process's usage writer started (no import while it never started).
 
-    The pending count is process-wide (every tenant's queued events), so it is
-    given to tenant-wide readers (administrators and auditors) only.
+    The pending count is not given: it counts every tenant's queued events in
+    the process, so it is no tenant's figure. Operators read it from the
+    ``agenticorg_spend_usage_pending`` gauge.
     """
     import sys
 
     module = sys.modules.get("core.spend.writer")
-    state: dict[str, Any] = {"started": bool(module.started()) if module is not None else False}
-    if with_pending:
-        state["pending"] = int(module.pending()) if module is not None else 0
-    return state
+    return {"started": bool(module.started()) if module is not None else False}
 
 
 @router.get("/status")
@@ -309,13 +307,9 @@ def _writer_state(*, with_pending: bool) -> dict[str, Any]:
     audit_event="spend.status",
 )
 async def spend_status(
-    caller: Caller = Depends(caller_from_request),
     tenant_id: str = Depends(get_current_tenant),
 ) -> dict[str, Any]:
-    """Whether spend intelligence is on, the reporting currency and calendar, the vocabularies and the bounds.
-
-    The writer's pending count (every tenant's queued events in this process) is for an administrator or
-    auditor only; anyone else gets whether the writer started."""
+    """Whether spend intelligence is on, the reporting currency and calendar, the vocabularies and the bounds."""
     return {
         "enabled": spend.enabled(),
         "reporting_currency": vocab.REPORTING_CURRENCY,
@@ -337,7 +331,7 @@ async def spend_status(
         },
         "backfill_source": ledgers.backfill_source(),
         "partition_horizon": await partitions.horizon(clock.now_utc()),
-        "writer": _writer_state(with_pending=access.is_tenant_wide_reader(caller)),
+        "writer": _writer_state(),
     }
 
 

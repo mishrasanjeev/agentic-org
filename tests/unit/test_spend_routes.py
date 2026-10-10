@@ -150,7 +150,7 @@ class TestFlag:
     @pytest.mark.asyncio
     async def test_status_answers_enabled_false_while_off(self, monkeypatch):
         monkeypatch.setattr(settings, "spend_intelligence_enabled", False)
-        out = await api.spend_status(caller=ADMIN_CALLER, tenant_id=TID)
+        out = await api.spend_status(tenant_id=TID)
         assert out["enabled"] is False and out["reporting_currency"] == "INR"
         assert out["usage_types"] == list(vocab.USAGE_TYPES) and out["limits"] == {
             "import_rows": 5000,
@@ -160,10 +160,10 @@ class TestFlag:
             "restate_days": 92,
         }
         assert out["backfill_source"] in ("model_gateway_records", "none")
-        assert out["partition_horizon"]["last_month"] == "2028-12" and set(out["writer"]) == {"started", "pending"}
+        assert out["partition_horizon"]["last_month"] == "2028-12" and out["writer"] == {"started": False}
         assert out["record_units"]["llm_tokens"][0] == "input_token" and "gb_month" in out["card_units"]["storage"]
         monkeypatch.setattr(settings, "spend_intelligence_enabled", True)
-        assert (await api.spend_status(caller=ADMIN_CALLER, tenant_id=TID))["enabled"] is True
+        assert (await api.spend_status(tenant_id=TID))["enabled"] is True
 
     @pytest.mark.asyncio
     async def test_spend_admin_needs_an_active_human_administrator_once_on(self, monkeypatch):

@@ -166,15 +166,17 @@ def _send(tenant_id: uuid.UUID, job_id: uuid.UUID, kind: str, **options: Any) ->
 async def _mark_undispatched(tenant_id: uuid.UUID, job_id: uuid.UUID, *, kind: str, params: dict[str, Any]) -> bool:
     """Mark an administrator's job whose dispatch failed as failed; ``False`` when it is left queued instead.
 
-    Under the kind's lock, which ``queue_followup`` merges under: while the
-    broker was slow to fail, a change may have merged its follow-up into this
-    still-queued job and committed, reporting this job's id, and the change
-    may not be repeatable (its card retired). So the job is failed only when
-    its parameters are still the ones ``enqueue`` wrote and no follow-up was
-    merged into it (``result.merges``, which also counts a merge that left
-    the parameters as they were); otherwise it stays queued and the sweep
-    resends it. A job no longer queued (the sweep resent it already) is left
-    alone too.
+    Under the kind's lock, which ``queue_followup`` merges under, and with the
+    job row locked, so no claim slips in between: while the broker was slow
+    to fail, a change may have merged its follow-up into this still-queued
+    job and committed, reporting this job's id, and the change may not be
+    repeatable (its card retired); or the sweep may have resent the job, and
+    a worker run it and queued it again. So the job is failed only when it is
+    exactly as ``enqueue`` wrote it: its parameters unchanged and its
+    ``result`` still empty (a merge adds ``merges``, a runner's requeue adds
+    ``attempts``). Otherwise it stays queued and the sweep resends it. A job
+    no longer queued is left alone too, and ``False`` is returned whenever
+    no row was marked.
     """
     from core.database import get_tenant_session
     from core.models.spend_usage import SpendJob
@@ -184,22 +186,23 @@ async def _mark_undispatched(tenant_id: uuid.UUID, job_id: uuid.UUID, *, kind: s
         rows = (
             (
                 await session.execute(
-                    select(SpendJob).where(
-                        SpendJob.tenant_id == tenant_id, SpendJob.id == job_id, SpendJob.status == "queued"
-                    )
+                    select(SpendJob)
+                    .where(SpendJob.tenant_id == tenant_id, SpendJob.id == job_id, SpendJob.status == "queued")
+                    .with_for_update()
                 )
             )
             .scalars()
             .all()
         )
-        if not rows or dict(rows[0].params or {}) != params or dict(rows[0].result or {}).get("merges"):
+        if not rows or dict(rows[0].params or {}) != params or dict(rows[0].result or {}):
             return False
-        await session.execute(
+        marked = await session.execute(
             update(SpendJob)
             .where(SpendJob.tenant_id == tenant_id, SpendJob.id == job_id, SpendJob.status == "queued")
             .values(status="failed", error_code="dispatch_failed", finished_at=func.now())
+            .returning(SpendJob.id)
         )
-    return True
+        return marked.first() is not None
 
 
 def _new_job(

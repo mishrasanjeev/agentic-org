@@ -223,7 +223,7 @@ tenant's audit query is unchanged.
 
 | Method and path | Who | Notes |
 |---|---|---|
-| `GET /spend/status` | `audit:read` | `enabled`, the reporting currency and zone, the vocabularies, the import bounds; the writer's pending count for an administrator or auditor only |
+| `GET /spend/status` | `audit:read` | `enabled`, the reporting currency and zone, the vocabularies, the import bounds, whether the writer started |
 | `GET /spend/org-nodes`, `GET /spend/org-nodes/{node_id}` | `audit:read` | a node with its ancestors and business unit |
 | `POST /spend/org-nodes`, `PATCH /spend/org-nodes/{node_id}`, `POST /spend/org-nodes/import` | administrator | |
 | `GET /spend/mappings`, `GET /spend/model-aliases` | `audit:read` | |
@@ -606,7 +606,7 @@ difference two views:
 | `GET /spend/coverage` | the whole tenant | 403 `tenant_wide_read_refused` (the Gate 1 measure sums every agent's usage; gaps carry no agent) |
 | `GET /spend/gaps` | the whole tenant | 403 `tenant_wide_read_refused` (gaps carry no agent) |
 | `GET /spend/jobs`, `GET /spend/jobs/{job_id}` | every job | 403 `tenant_wide_read_refused`, checked before a job is looked up (results count every agent's records; parameters carry a correction's reason) |
-| `GET /spend/status` | with the writer's pending count | without it (the count is every tenant's queued events in the process) |
+| `GET /spend/status` | whether the writer started | the same (the pending count is every tenant's queued events in the process: it is on the `agenticorg_spend_usage_pending` gauge, not in the route) |
 
 Under the agent visibility rule a reader sees the records with no agent, the records of shared
 agents in their domains (every shared agent for a machine credential) and of their own personal

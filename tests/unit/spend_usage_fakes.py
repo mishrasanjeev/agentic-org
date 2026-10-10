@@ -334,6 +334,8 @@ class UsageSession(FakeSession):
             for column, expr in statement._values.items():
                 name = column if isinstance(column, str) else column.key
                 setattr(row, name, evaluator.value(expr, row))
+        if getattr(statement, "_returning", None):
+            return Result([tuple(getattr(r, c.key) for c in statement._returning) for r in rows])
         return Result([])
 
     def _delete(self, statement: Delete) -> Result:
