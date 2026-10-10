@@ -19,10 +19,12 @@ can be a client's request id) is stored only as a hash.
 for another tenant are refused; the rollup days are locked shared (a
 non-blocking try in the writer); each distinct attribution hint is resolved
 once; billing accounts are inferred where the call site had none; events are
-priced at their billing date with the tenant's model aliases; records are
-inserted in chunks with ``ON CONFLICT DO NOTHING RETURNING``; only the rows
-returned add to the rollup, so nothing is counted twice; late events mark
-the provider's commitments for a full recompute.
+priced at their billing date with the tenant's model aliases; a tool call
+no card prices is dropped as an ``unpriced_tool`` gap (and the process's set
+of priced tools is refreshed); records are inserted in chunks with
+``ON CONFLICT DO NOTHING RETURNING``; only the rows returned add to the
+rollup, so nothing is counted twice; late events mark the provider's
+commitments for a full recompute.
 """
 
 from __future__ import annotations
@@ -606,6 +608,21 @@ def _gap_key(day: date, usage_type: str, reason: str, detail: str) -> tuple[date
     return day, usage_type, reason, detail
 
 
+async def _refresh_priced_tools(session: Any, tenant_id: uuid.UUID, now: datetime) -> None:
+    """Refresh this process's set of the tenant's priced tools (``core/spend/metering.py``) when it is stale.
+
+    Read in a savepoint, so a failed read never aborts the write it rides on.
+    """
+    from core.spend import metering
+
+    try:
+        async with session.begin_nested():
+            await metering.refresh_priced_tools(session, tenant_id, now=now)
+    # enterprise-gate: broad-except-ok reason=priced-tool-set-refresh-failure-is-logged-the-write-keeps-going
+    except Exception as exc:
+        logger.warning("spend_priced_tools_refresh_failed", error_type=type(exc).__name__)
+
+
 async def write_events(
     session: Any,
     tenant_id: uuid.UUID,
@@ -676,6 +693,8 @@ async def write_events(
         ],
     )
     priced_by_key = {id(e): p for e, p in zip(to_price, priced_list, strict=True)}
+    if any(e.skip_if_unpriced for e in own):
+        await _refresh_priced_tools(session, tenant_id, stamp)
     rows: list[dict[str, Any]] = []
     skipped = 0
     for event in own:

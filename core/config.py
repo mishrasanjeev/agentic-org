@@ -4,7 +4,11 @@ from __future__ import annotations
 
 import json
 import os
-from typing import Literal
+import re
+from dataclasses import dataclass
+from datetime import UTC, datetime
+from decimal import Decimal, DecimalException
+from typing import Any, Literal
 from urllib.parse import urlsplit, urlunsplit
 from zoneinfo import ZoneInfo
 
@@ -59,6 +63,115 @@ def _loadable_zone(name: object) -> bool:
     except (KeyError, ValueError, OSError):
         return False
     return True
+
+
+# The SKU pattern of core/spend/vocab.py (``SKU_PATTERN``), repeated here because settings are
+# checked before core.spend can be imported (it imports these settings); a test keeps them equal.
+SPEND_SKU_PATTERN = r"^[A-Za-z0-9][A-Za-z0-9 ._:/@-]{0,127}$"
+SPEND_GPU_PROVIDERS = ("ollama", "vllm")
+SPEND_GPU_MAX_MODELS = 50
+SPEND_GPU_MAX_NODES = Decimal("10000")
+_SPEND_GPU_POOL_KEYS = frozenset({"provider", "node_pool", "models", "nodes", "from", "to"})
+_SPEND_SKU_RE = re.compile(SPEND_SKU_PATTERN)
+
+
+@dataclass(frozen=True)
+class SpendGpuPool:
+    """One in-house GPU pool of ``spend_gpu_pools_json``, whose node hours core/spend/gpu.py spreads.
+
+    ``models`` are the pool's model names as usage records carry them
+    (lower-cased); ``nodes`` is the node count each hour of ``[start, end)``
+    costs (``end`` ``None``: still running). Both bounds are whole UTC hours.
+    """
+
+    provider: str
+    node_pool: str
+    models: tuple[str, ...]
+    nodes: Decimal
+    start: datetime
+    end: datetime | None
+
+
+def _gpu_pool_sku(value: Any, field: str) -> str:
+    text = value.strip() if isinstance(value, str) else ""
+    if not _SPEND_SKU_RE.fullmatch(text):
+        raise ValueError(f"spend_gpu_pools_json: {field} is 1 to 128 of A-Z a-z 0-9 space . _ : / @ -")
+    return text.lower()
+
+
+def _gpu_pool_hour(value: Any, field: str) -> datetime:
+    """A whole UTC hour from ISO text (an instant without an offset is read as UTC)."""
+    try:
+        moment = datetime.fromisoformat(str(value).strip())
+    except (TypeError, ValueError):
+        raise ValueError(f"spend_gpu_pools_json: {field} is an ISO instant") from None
+    moment = moment.replace(tzinfo=UTC) if moment.tzinfo is None else moment.astimezone(UTC)
+    if moment.minute or moment.second or moment.microsecond:
+        raise ValueError(f"spend_gpu_pools_json: {field} is a whole UTC hour")
+    return moment
+
+
+def _gpu_pool_nodes(value: Any) -> Decimal:
+    if isinstance(value, bool) or value is None:
+        raise ValueError("spend_gpu_pools_json: nodes is a number")
+    try:
+        nodes = Decimal(str(value).strip())
+    except (DecimalException, ValueError):
+        raise ValueError("spend_gpu_pools_json: nodes is a number") from None
+    if not nodes.is_finite() or nodes <= 0 or nodes > SPEND_GPU_MAX_NODES:
+        raise ValueError("spend_gpu_pools_json: nodes is above 0 and at most 10000")
+    if nodes != nodes.quantize(Decimal("0.0001")):
+        raise ValueError("spend_gpu_pools_json: nodes has at most 4 decimals")
+    return nodes
+
+
+def _gpu_pool(item: Any) -> SpendGpuPool:
+    if not isinstance(item, dict):
+        raise ValueError("spend_gpu_pools_json: every pool is a JSON object")
+    unknown = set(item) - _SPEND_GPU_POOL_KEYS
+    if unknown:
+        raise ValueError(f"spend_gpu_pools_json: unknown key {sorted(unknown)[0]!r}")
+    provider = str(item.get("provider") or "").strip().lower()
+    if provider not in SPEND_GPU_PROVIDERS:
+        raise ValueError("spend_gpu_pools_json: provider is ollama or vllm")
+    models = item.get("models")
+    if not isinstance(models, list) or not 1 <= len(models) <= SPEND_GPU_MAX_MODELS:
+        raise ValueError("spend_gpu_pools_json: models is a list of 1 to 50 model names")
+    start = _gpu_pool_hour(item.get("from"), "from")
+    end = _gpu_pool_hour(item["to"], "to") if item.get("to") is not None else None
+    if end is not None and end <= start:
+        raise ValueError("spend_gpu_pools_json: to is after from")
+    return SpendGpuPool(
+        provider=provider,
+        node_pool=_gpu_pool_sku(item.get("node_pool"), "node_pool"),
+        models=tuple(dict.fromkeys(_gpu_pool_sku(m, "every model") for m in models)),
+        nodes=_gpu_pool_nodes(item.get("nodes")),
+        start=start,
+        end=end,
+    )
+
+
+def parse_spend_gpu_pools(raw: str | None) -> tuple[SpendGpuPool, ...]:
+    """The pools of ``spend_gpu_pools_json`` (none for an empty setting); ``ValueError`` naming the problem.
+
+    Two entries for one pool may not cover the same hour.
+    """
+    text = (raw or "").strip()
+    if not text:
+        return ()
+    try:
+        data = json.loads(text)
+    except ValueError as exc:
+        raise ValueError("spend_gpu_pools_json: not valid JSON") from exc
+    if not isinstance(data, list):
+        raise ValueError("spend_gpu_pools_json: must be a JSON list of pools")
+    pools = tuple(_gpu_pool(item) for item in data)
+    ordered = sorted(pools, key=lambda p: (p.provider, p.node_pool, p.start))
+    for before, after in zip(ordered, ordered[1:], strict=False):
+        same = (before.provider, before.node_pool) == (after.provider, after.node_pool)
+        if same and (before.end is None or before.end > after.start):
+            raise ValueError(f"spend_gpu_pools_json: two entries for pool {after.node_pool!r} cover the same hour")
+    return pools
 
 
 def _redis_url_with_default_db(url: str, default_db: int) -> str:
@@ -441,6 +554,11 @@ class Settings(BaseSettings):
     # The spend beat jobs (partitions, FX settlement, commitment recompute,
     # storage samples, GPU allocation). Only effective while spend is on.
     spend_sweeps_enabled: bool = True
+    # In-house GPU pools whose node hours spend spreads over the pool's calls
+    # (core/spend/gpu.py): a JSON list of {provider, node_pool, models, nodes,
+    # from, to}. Empty: no standing node hours (an operator can still record
+    # metered hours with python -m core.spend.gpu_cli).
+    spend_gpu_pools_json: str = ""
     # JSON object keyed provider/model with input and output USD per million
     # tokens; a negotiated rate replaces the list price.
     model_price_overrides_json: str = ""
@@ -649,7 +767,7 @@ class Settings(BaseSettings):
 
     @model_validator(mode="after")
     def validate_spend_settings(self) -> Settings:
-        """Refuse spend calendars that cannot load, only while spend intelligence is on.
+        """Refuse spend calendars that cannot load and GPU pools that do not parse, only while spend is on.
 
         Off, nothing here is read, so the settings are not checked and nothing
         about start-up changes.
@@ -671,6 +789,7 @@ class Settings(BaseSettings):
                     raise ValueError(
                         "spend_provider_billing_timezones_json: every provider maps to a loadable IANA time zone"
                     )
+        parse_spend_gpu_pools(self.spend_gpu_pools_json)
         return self
 
     @model_validator(mode="after")

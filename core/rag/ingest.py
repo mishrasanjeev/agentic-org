@@ -30,6 +30,7 @@ from typing import Any
 import structlog
 from sqlalchemy import text as sqltext
 
+from core import spend
 from core.lineage import provenance
 from core.rag import chunking, entities
 from core.rag.extractors import (
@@ -301,6 +302,12 @@ async def ingest_document(
 
     tid = tenant_id if isinstance(tenant_id, _uuid.UUID) else _uuid.UUID(str(tenant_id))
     document_id = _uuid.uuid4()
+    # AI spend (core/spend/metering.py): the chunks just embedded and, when this call extracted the
+    # file itself, the pages OCR read (an upload passes its extraction and is metered at the route).
+    if spend.enabled():
+        spend.note("embeddings", tid, items=chunks, purpose="ingest", ref=document_id)
+        if extracted_content is None:
+            spend.note("ocr", tid, extracted=content, purpose="ingest", ref=document_id)
     object_type = source_object_type or _default_object_type_for_mime(content.mime_type)
 
     indexed = 0

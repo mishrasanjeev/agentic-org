@@ -12,6 +12,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request, UploadFil
 
 from api.deps import get_current_tenant
 from api.route_metadata import route_meta
+from core import spend
 from core.idp import classify, fields, pipeline
 from core.idp.pages import MAX_BYTES, MAX_PAGES, DocumentError, ocr_available
 from core.workbench import console
@@ -113,6 +114,9 @@ async def analyse(
         )
     except DocumentError as exc:
         raise HTTPException(exc.status, detail={"error": exc.code, "message": exc.message}) from None
+    # AI spend (core/spend/metering.py): the pages whose OCR ran.
+    if spend.enabled():
+        spend.note("ocr", tenant_id, result=result, purpose="idp")
     answer: dict[str, Any] = {"filename": file.filename, **result}
     if store:
         # Kept for review: the file, the result, and who sent it (core/idp/store.py).

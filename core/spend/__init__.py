@@ -6,8 +6,9 @@ nothing else, so a guarded call site costs a bool read while the feature is
 off. Behind ``spend_intelligence_enabled`` (default off).
 
 ``note`` is the one entry point for call sites outside ``record_model_call``
-(direct model calls today, non-token metering later); ``drain`` stops this
-process's usage writer at shutdown and hands what is left to a worker.
+(direct model calls; embeddings, OCR pages, speech minutes and priced tool
+calls); ``drain`` stops this process's usage writer at shutdown and hands what
+is left to a worker.
 """
 
 from __future__ import annotations
@@ -43,9 +44,11 @@ def note(kind: str, tenant_id: object, /, **raw: object) -> None:
     except Exception as exc:
         _log.warning("spend_note_failed kind=%s error_type=%s", str(kind)[:32], type(exc).__name__)
         try:
+            from core.spend.metering import KIND_USAGE_TYPES
             from observability import metrics
 
-            metrics.spend_usage_write_failures_total.labels(usage_type="llm_tokens", reason="hook_error").inc()
+            usage_type = KIND_USAGE_TYPES.get(str(kind), "llm_tokens")
+            metrics.spend_usage_write_failures_total.labels(usage_type=usage_type, reason="hook_error").inc()
         # enterprise-gate: broad-except-ok reason=metrics-outage-degrades-to-a-logged-note-failure
         except Exception:
             _log.debug("spend_note_failure_not_counted")

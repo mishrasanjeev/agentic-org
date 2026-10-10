@@ -6494,7 +6494,7 @@
     "public_exempt_reason": null,
     "rate_limit": "chat-query",
     "scope": "documents.analyse.sensitive.write",
-    "source_line": 96,
+    "source_line": 97,
     "tenant_required": true
   },
   {
@@ -6512,7 +6512,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "documents.read",
-    "source_line": 148,
+    "source_line": 152,
     "tenant_required": true
   },
   {
@@ -6530,7 +6530,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "documents.read",
-    "source_line": 63,
+    "source_line": 64,
     "tenant_required": true
   },
   {
@@ -6746,7 +6746,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "knowledge.sensitive.documents.list",
-    "source_line": 1013,
+    "source_line": 1017,
     "tenant_required": true
   },
   {
@@ -6764,7 +6764,7 @@
     "public_exempt_reason": null,
     "rate_limit": "knowledge-write",
     "scope": "knowledge.documents.delete",
-    "source_line": 1126,
+    "source_line": 1130,
     "tenant_required": true
   },
   {
@@ -6782,7 +6782,7 @@
     "public_exempt_reason": null,
     "rate_limit": "knowledge-search",
     "scope": "knowledge.sensitive.search",
-    "source_line": 1772,
+    "source_line": 1780,
     "tenant_required": true
   },
   {
@@ -6800,7 +6800,7 @@
     "public_exempt_reason": null,
     "rate_limit": "knowledge-search",
     "scope": "knowledge.sensitive.search",
-    "source_line": 1723,
+    "source_line": 1731,
     "tenant_required": true
   },
   {
@@ -6818,7 +6818,7 @@
     "public_exempt_reason": "deployment-smoke-test-no-tenant-data",
     "rate_limit": "healthcheck",
     "scope": "knowledge.health.public",
-    "source_line": 2080,
+    "source_line": 2088,
     "tenant_required": false
   },
   {
@@ -6836,7 +6836,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "knowledge.sensitive.stats",
-    "source_line": 1612,
+    "source_line": 1620,
     "tenant_required": true
   },
   {
@@ -6854,7 +6854,7 @@
     "public_exempt_reason": null,
     "rate_limit": "knowledge-search",
     "scope": "knowledge.sensitive.search",
-    "source_line": 1634,
+    "source_line": 1642,
     "tenant_required": true
   },
   {
@@ -6872,7 +6872,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "knowledge.upload",
-    "source_line": 1655,
+    "source_line": 1663,
     "tenant_required": true
   },
   {
@@ -6890,7 +6890,7 @@
     "public_exempt_reason": null,
     "rate_limit": "knowledge-search",
     "scope": "knowledge.sensitive.search",
-    "source_line": 1860,
+    "source_line": 1868,
     "tenant_required": true
   },
   {
@@ -6908,7 +6908,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "knowledge.sensitive.stats",
-    "source_line": 2193,
+    "source_line": 2201,
     "tenant_required": true
   },
   {
@@ -6926,7 +6926,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "knowledge.upload.types.read",
-    "source_line": 586,
+    "source_line": 587,
     "tenant_required": true
   },
   {
@@ -6944,7 +6944,7 @@
     "public_exempt_reason": null,
     "rate_limit": "file-upload",
     "scope": "knowledge.upload",
-    "source_line": 612,
+    "source_line": 613,
     "tenant_required": true
   },
   {
@@ -10076,7 +10076,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "spend.commitments.read",
-    "source_line": 718,
+    "source_line": 727,
     "tenant_required": true
   },
   {
@@ -10094,7 +10094,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "spend.commitments.sensitive.write",
-    "source_line": 746,
+    "source_line": 755,
     "tenant_required": true
   },
   {
@@ -10112,7 +10112,7 @@
     "public_exempt_reason": null,
     "rate_limit": null,
     "scope": "spend.commitments.sensitive.write",
-    "source_line": 1287,
+    "source_line": 1296,
     "tenant_required": true
   },
   {
@@ -10130,7 +10130,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "spend.commitments.sensitive.write",
-    "source_line": 768,
+    "source_line": 777,
     "tenant_required": true
   },
   {
@@ -10148,7 +10148,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "spend.usage.read",
-    "source_line": 1074,
+    "source_line": 1083,
     "tenant_required": true
   },
   {
@@ -10166,7 +10166,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "spend.usage.read",
-    "source_line": 1092,
+    "source_line": 1101,
     "tenant_required": true
   },
   {
@@ -10184,7 +10184,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "spend.fx.read",
-    "source_line": 796,
+    "source_line": 805,
     "tenant_required": true
   },
   {
@@ -10202,7 +10202,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "spend.fx.sensitive.write",
-    "source_line": 823,
+    "source_line": 832,
     "tenant_required": true
   },
   {
@@ -10220,7 +10220,7 @@
     "public_exempt_reason": null,
     "rate_limit": "bulk-import",
     "scope": "spend.fx.sensitive.write",
-    "source_line": 845,
+    "source_line": 854,
     "tenant_required": true
   },
   {
@@ -10238,7 +10238,7 @@
     "public_exempt_reason": null,
     "rate_limit": null,
     "scope": "spend.fx.sensitive.write",
-    "source_line": 1258,
+    "source_line": 1267,
     "tenant_required": true
   },
   {
@@ -10256,7 +10256,25 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "spend.usage.read",
-    "source_line": 1116,
+    "source_line": 1125,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "spend.gpu_allocations.list",
+    "auth_required": true,
+    "function": "list_gpu_allocations",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/spend/gpu-allocations api/v1/spend.py:list_gpu_allocations",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/spend.py",
+    "path": "/api/v1/spend/gpu-allocations",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "spend.gpu.read",
+    "source_line": 1365,
     "tenant_required": true
   },
   {
@@ -10274,7 +10292,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "spend.jobs.read",
-    "source_line": 1313,
+    "source_line": 1322,
     "tenant_required": true
   },
   {
@@ -10292,7 +10310,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "spend.jobs.read",
-    "source_line": 1335,
+    "source_line": 1344,
     "tenant_required": true
   },
   {
@@ -10310,7 +10328,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "spend.mappings.read",
-    "source_line": 458,
+    "source_line": 467,
     "tenant_required": true
   },
   {
@@ -10328,7 +10346,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "spend.mappings.sensitive.write",
-    "source_line": 484,
+    "source_line": 493,
     "tenant_required": true
   },
   {
@@ -10346,7 +10364,7 @@
     "public_exempt_reason": null,
     "rate_limit": "bulk-import",
     "scope": "spend.mappings.sensitive.write",
-    "source_line": 506,
+    "source_line": 515,
     "tenant_required": true
   },
   {
@@ -10364,7 +10382,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "spend.mappings.read",
-    "source_line": 532,
+    "source_line": 541,
     "tenant_required": true
   },
   {
@@ -10382,7 +10400,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "spend.mappings.sensitive.write",
-    "source_line": 553,
+    "source_line": 562,
     "tenant_required": true
   },
   {
@@ -10400,7 +10418,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "spend.org.read",
-    "source_line": 340,
+    "source_line": 349,
     "tenant_required": true
   },
   {
@@ -10418,7 +10436,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "spend.org.sensitive.write",
-    "source_line": 408,
+    "source_line": 417,
     "tenant_required": true
   },
   {
@@ -10436,7 +10454,7 @@
     "public_exempt_reason": null,
     "rate_limit": "bulk-import",
     "scope": "spend.org.sensitive.write",
-    "source_line": 364,
+    "source_line": 373,
     "tenant_required": true
   },
   {
@@ -10454,7 +10472,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "spend.org.read",
-    "source_line": 390,
+    "source_line": 399,
     "tenant_required": true
   },
   {
@@ -10472,7 +10490,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "spend.org.sensitive.write",
-    "source_line": 430,
+    "source_line": 439,
     "tenant_required": true
   },
   {
@@ -10490,7 +10508,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "spend.read",
-    "source_line": 874,
+    "source_line": 883,
     "tenant_required": true
   },
   {
@@ -10508,7 +10526,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "spend.rate_cards.read",
-    "source_line": 578,
+    "source_line": 587,
     "tenant_required": true
   },
   {
@@ -10526,7 +10544,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "spend.rate_cards.sensitive.write",
-    "source_line": 643,
+    "source_line": 652,
     "tenant_required": true
   },
   {
@@ -10544,7 +10562,7 @@
     "public_exempt_reason": null,
     "rate_limit": "bulk-import",
     "scope": "spend.rate_cards.sensitive.write",
-    "source_line": 617,
+    "source_line": 626,
     "tenant_required": true
   },
   {
@@ -10562,7 +10580,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "spend.rate_cards.sensitive.write",
-    "source_line": 665,
+    "source_line": 674,
     "tenant_required": true
   },
   {
@@ -10580,7 +10598,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "spend.rate_cards.sensitive.write",
-    "source_line": 690,
+    "source_line": 699,
     "tenant_required": true
   },
   {
@@ -10598,7 +10616,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "spend.usage.read",
-    "source_line": 1031,
+    "source_line": 1040,
     "tenant_required": true
   },
   {
@@ -10616,7 +10634,7 @@
     "public_exempt_reason": null,
     "rate_limit": null,
     "scope": "spend.rollups.sensitive.write",
-    "source_line": 1134,
+    "source_line": 1143,
     "tenant_required": true
   },
   {
@@ -10634,7 +10652,25 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "spend.read",
-    "source_line": 301,
+    "source_line": 309,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "spend.storage.preview",
+    "auth_required": true,
+    "function": "preview_storage_sample",
+    "idempotency": "preview-writes-no-usage",
+    "key": "POST /api/v1/spend/storage/sample api/v1/spend.py:preview_storage_sample",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/spend.py",
+    "path": "/api/v1/spend/storage/sample",
+    "public_exempt_reason": null,
+    "rate_limit": null,
+    "scope": "spend.storage.sensitive.write",
+    "source_line": 1385,
     "tenant_required": true
   },
   {
@@ -10652,7 +10688,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "spend.usage.read",
-    "source_line": 987,
+    "source_line": 996,
     "tenant_required": true
   },
   {
@@ -10670,7 +10706,7 @@
     "public_exempt_reason": null,
     "rate_limit": null,
     "scope": "spend.usage.sensitive.write",
-    "source_line": 1163,
+    "source_line": 1172,
     "tenant_required": true
   },
   {
@@ -10688,7 +10724,7 @@
     "public_exempt_reason": null,
     "rate_limit": null,
     "scope": "spend.usage.sensitive.write",
-    "source_line": 1229,
+    "source_line": 1238,
     "tenant_required": true
   },
   {
@@ -10706,7 +10742,7 @@
     "public_exempt_reason": null,
     "rate_limit": null,
     "scope": "spend.usage.sensitive.write",
-    "source_line": 1192,
+    "source_line": 1201,
     "tenant_required": true
   },
   {

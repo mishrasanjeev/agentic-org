@@ -367,5 +367,7 @@ class TestMeteringHandlers:
         metering.handle("cancelled", TID, {"provider": "claude"})
         assert on["gaps"] == [(TID, date(2026, 10, 1), "llm_tokens", "failed_no_usage", "cancelled:anthropic")]
         metering.handle("cancelled", None, {"provider": "gpt"})  # no tenant: metric only
-        metering.handle("embeddings", TID, {})  # a later part's kind: ignored here
+        metering.handle("embeddings", TID, {})  # no purpose and no items: nothing is metered
+        metering.handle("not_a_kind", TID, {})  # an unknown kind: ignored
+        assert on["events"] == []
         assert metering._int_or_none("x") is None and metering._int_or_none(True) is None

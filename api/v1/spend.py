@@ -18,6 +18,12 @@ not be metered. Rebuilds, backfills, restatements, re-attribution, FX
 settlement and commitment recomputes are jobs (202 with a job id) read
 through ``/spend/jobs``.
 
+``/spend/gpu-allocations`` lists the caller's tenant's shares of in-house GPU
+pool hours (node hours are a platform input, entered by configuration or the
+operator command, never through this API), and ``POST /spend/storage/sample``
+previews today's storage sample without writing a record (the daily job
+writes it).
+
 Reads need ``audit:read``; rate cards, commitments and prices are for a
 human administrator or auditor only. Every write needs a tenant
 administrator signed in as a person and is audited. Off
@@ -29,7 +35,7 @@ from __future__ import annotations
 
 import asyncio
 import uuid
-from datetime import date
+from datetime import date, datetime
 from decimal import Decimal
 from typing import Annotated, Any, Literal
 
@@ -47,6 +53,7 @@ from core.spend import (
     clock,
     commitments,
     fx,
+    gpu,
     imports,
     jobs,
     ledgers,
@@ -57,6 +64,7 @@ from core.spend import (
     pricing,
     rates,
     rollups,
+    storage,
     vocab,
 )
 from core.spend.errors import SpendError
@@ -318,6 +326,7 @@ async def spend_status(tenant_id: str = Depends(get_current_tenant)) -> dict[str
             "usage_window_days": rollups.MAX_USAGE_DAYS,
             "rebuild_days": rollups.MAX_REBUILD_DAYS,
             "restate_days": maintenance.MAX_DAYS,
+            "gpu_allocation_days": gpu.MAX_WINDOW_DAYS,
         },
         "backfill_source": ledgers.backfill_source(),
         "partition_horizon": await partitions.horizon(clock.now_utc()),
@@ -1339,3 +1348,48 @@ async def get_job(job_id: uuid.UUID, tenant_id: str = Depends(get_current_tenant
         return await jobs.get_job(_tenant(tenant_id), job_id)
     except SpendError as exc:
         raise _refused(exc) from None
+
+
+# ---------------------------------------------------------------- GPU allocations and storage
+
+
+@router.get("/gpu-allocations")
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="spend.gpu.read",
+    rate_limit="standard",
+    idempotency="read-only",
+    audit_event="spend.gpu_allocations.list",
+)
+async def list_gpu_allocations(
+    start: datetime, end: datetime, tenant_id: str = Depends(get_current_tenant)
+) -> dict[str, Any]:
+    """The tenant's own shares of in-house GPU pool hours starting in ``[start, end)`` (at most 31 days)."""
+    spend_on()
+    try:
+        return await gpu.list_allocations(_tenant(tenant_id), start=start, end=end)
+    except SpendError as exc:
+        raise _refused(exc) from None
+
+
+@router.post("/storage/sample", dependencies=[require_tenant_admin])
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="spend.storage.sensitive.write",
+    rate_limit=JOB_RATE_LIMIT,
+    idempotency="preview-writes-no-usage",
+    audit_event="spend.storage.preview",
+)
+async def preview_storage_sample(
+    admin: ActiveHumanAdmin = Depends(spend_admin),
+    tenant_id: str = Depends(get_current_tenant),
+) -> dict[str, Any]:
+    """Measure the tenant's storage per store in GiB as the daily sample would, writing no record (audited)."""
+    spend_on()
+    now = clock.now_utc()
+    out = await storage.sample_tenant(
+        _tenant(tenant_id), day=storage.intended_day(now), now=now, write=False, actor=str(admin.user_id)
+    )
+    return {"day": out["day"], "stores": out["stores"], "written": 0}

@@ -24,6 +24,7 @@ from typing import Any
 
 import structlog
 
+from core import spend
 from core.config import settings
 from core.rag import entities
 
@@ -96,9 +97,12 @@ async def reindex(
         raise ValueError("unknown embedding column")
     stale = [r for r in rows if (r[3] or "") != model_name]
     re_embedded = 0
+    run_ref = uuid.uuid4().hex  # keys this call's embedding usage, one record per batch (core/spend/metering.py)
     for start in range(0, len(stale), EMBED_BATCH):
         batch = stale[start : start + EMBED_BATCH]
         vectors = await embed([str(r[1] or "") for r in batch])
+        if spend.enabled():
+            spend.note("embeddings", tenant_id, items=batch, purpose="reindex", run_ref=run_ref, start=start)
         if len(vectors) != len(batch):
             raise RuntimeError("the embedder returned a different number of vectors than chunks")
         for row, vector in zip(batch, vectors, strict=True):

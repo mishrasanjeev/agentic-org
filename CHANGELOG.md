@@ -4,6 +4,42 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
 
 ## [Unreleased] - 2026-08-29
 
+### Added - AI spend intelligence: embeddings, OCR, speech, priced tools, storage and GPU metering
+- Non-token usage becomes usage records with the same pricing, attribution,
+  writer, keys and rollups as model calls: embedding tokens (knowledge
+  ingestion, re-indexing, search and RPA ingestion; estimated from
+  characters and capped at the model's input limit), OCR pages (document
+  processing, knowledge uploads, ingestion that extracted for itself),
+  speech minutes (a recording Whisper or Deepgram transcribed, with the
+  Deepgram credential's billing account) and connector tool calls for tools
+  a rate card prices (an unpriced call is counted as an `unpriced_tool` gap,
+  never recorded). Every site is guarded and failure-isolated: a malformed
+  object can never fail the ingestion, search, speech save or tool call.
+  In-house embeddings, OCR and Whisper price at zero unless a card exists.
+- Storage GB-days: a daily job (23:30 IST) samples each tenant's knowledge,
+  document, document-processing and recording storage in GiB, one record per
+  store and day; a delayed run still records its day, missed days after the
+  first sample are filled as estimates, and `POST /spend/storage/sample`
+  previews the sample without writing (audited).
+- GPU node hours of in-house serving: standing pools from
+  `AGENTICORG_SPEND_GPU_POOLS_JSON` and metered or manual hours from the
+  operator command `python -m core.spend.gpu_cli`, held in a platform table;
+  an hourly job spreads each closed pool hour across every tenant's
+  in-house calls of the pool's models by tokens (shares by largest remainder,
+  each tenant's share priced once and split so hours and money are both
+  conserved, records flagged `allocated` with the call's attribution). Calls
+  a tenant's own card priced are skipped and counted; idle hours stay with
+  the platform. `GET /spend/gpu-allocations` lists a tenant's own shares.
+- Celery tasks `core.tasks.spend_tasks.sample_storage` and
+  `allocate_gpu_hours` with their beats. Behind `spend_intelligence_enabled`
+  (default off): off, every site is a bool read, the Deepgram credential note
+  does nothing, the tasks skip, the operator command refuses and the two new
+  routes are not found. Migration `v6z81_spend_gpu` adds
+  `spend_gpu_pool_hours` (a platform table without tenant data, so without
+  `tenant_id` or a row-level policy) and `spend_gpu_allocations` (tenant
+  scoped under forced row-level security), with a leading index on its
+  foreign key and a whole-UTC-hour check.
+
 ### Added - AI spend intelligence: usage records, attribution and the model-call meter
 - Every metered model call becomes usage records (uncached input, cached
   input and output tokens, or one estimated token record when the split is

@@ -152,6 +152,23 @@ app.conf.beat_schedule = {
         "schedule": 900.0,
         "options": {"queue": "maintenance"},
     },
+    "spend-sample-storage": {
+        # Samples every tenant's knowledge, document and recording storage as
+        # GB-day usage records for the day (23:30 IST; a run up to six hours late
+        # still records its day, missed days are filled as estimates). A no-op
+        # unless spend intelligence and its sweeps are on.
+        "task": "core.tasks.spend_tasks.sample_storage",
+        "schedule": crontab(hour=23, minute=30),
+        "options": {"queue": "maintenance"},
+    },
+    "spend-allocate-gpu-hours": {
+        # Spreads each closed in-house GPU pool hour (75 minutes after it starts)
+        # across the tenants' calls it served, by tokens. Hourly at :20. A no-op
+        # unless spend intelligence and its sweeps are on.
+        "task": "core.tasks.spend_tasks.allocate_gpu_hours",
+        "schedule": crontab(minute=20),
+        "options": {"queue": "maintenance"},
+    },
     "generate-scheduled-reports": {
         "task": "core.tasks.report_tasks.generate_scheduled_reports",
         "schedule": 300.0,  # every 5 minutes

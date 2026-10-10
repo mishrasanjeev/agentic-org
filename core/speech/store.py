@@ -19,6 +19,7 @@ from typing import Any
 import structlog
 from sqlalchemy import select
 
+from core import spend
 from core.config import settings
 from core.crypto.tenant_secrets import decrypt_for_tenant, encrypt_for_tenant
 from core.speech import analytics as call_analytics
@@ -166,6 +167,9 @@ async def save(
         session.add(row)
         await session.flush()
         answer = detail_dict(row)
+    # AI spend (core/spend/metering.py): the audio minutes a metered engine transcribed.
+    if spend.enabled():
+        spend.note("speech", tenant_id, row=row, engine=engine, user_id=created_by)
     logger.info(
         "speech_recording_kept", status=answer["status"], channels=answer["channels"], segments=answer["segments"]
     )

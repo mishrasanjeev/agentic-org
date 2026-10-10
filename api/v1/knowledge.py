@@ -20,6 +20,7 @@ from sqlalchemy.exc import SQLAlchemyError
 
 from api.deps import get_current_tenant, get_user_domains
 from api.route_metadata import route_meta
+from core import spend
 from core.config import settings
 from core.rag import access as knowledge_access
 from core.rag import entities as knowledge_entities
@@ -863,6 +864,9 @@ async def upload_document(
         "created_at": _now_iso(),
         "metadata": doc_metadata,
     }
+    # AI spend (core/spend/metering.py): the pages OCR read while extracting this upload.
+    if spend.enabled():
+        spend.note("ocr", tenant_id, extracted=extracted_content, purpose="upload", ref=doc_id)
 
     if _ragflow_available() and await _ragflow_allowed(tenant_id):
         try:
@@ -1322,6 +1326,8 @@ async def _native_vector_or_keyword_search(
         from core.embeddings import embed_one_async, rag_embedding_column
 
         qvec = await embed_one_async(query)
+        if spend.enabled():
+            spend.note("embeddings", tid, items=(query,), purpose="search")
         vector_literal = "[" + ",".join(f"{x:.6f}" for x in qvec) + "]"
         col = rag_embedding_column()
         async with get_tenant_session(tid) as session:
@@ -1504,6 +1510,8 @@ async def _native_hybrid_search(
             "ORDER BY d.embedding_bge_m3 <=> CAST(:vector AS vector), d.id ASC LIMIT :limit"
         )
         qvec = await embed_one_async(query)
+        if spend.enabled():
+            spend.note("embeddings", tid, items=(query,), purpose="search")
         vector_literal = "[" + ",".join(f"{x:.6f}" for x in qvec) + "]"
         async with get_tenant_session(tid) as session:
             rows = (
