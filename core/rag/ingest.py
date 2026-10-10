@@ -238,9 +238,16 @@ async def ingest_document(
         Shape documented on the dataclass.
     """
     metadata = metadata or {}
+    # The id of the document this call indexes, drawn before extracting so the OCR usage is keyed by it.
+    document_id = _uuid.uuid4()
 
     # 1. Extract
     content = extracted_content or extract(stream, mime_type=mime_type, filename=filename)
+    # AI spend (core/spend/metering.py): when this call extracted the file itself, the pages OCR read,
+    # noted before any early return below (an upload passes its extraction and is metered at the route).
+    if spend.enabled():
+        if extracted_content is None:
+            spend.note("ocr", tenant_id, extracted=content, purpose="ingest", ref=document_id)
     if not content.spans:
         return IngestResult(
             document_id="",
@@ -301,13 +308,9 @@ async def ingest_document(
     from core.database import async_session_factory
 
     tid = tenant_id if isinstance(tenant_id, _uuid.UUID) else _uuid.UUID(str(tenant_id))
-    document_id = _uuid.uuid4()
-    # AI spend (core/spend/metering.py): the chunks just embedded and, when this call extracted the
-    # file itself, the pages OCR read (an upload passes its extraction and is metered at the route).
+    # AI spend (core/spend/metering.py): the chunks just embedded.
     if spend.enabled():
         spend.note("embeddings", tid, items=chunks, purpose="ingest", ref=document_id)
-        if extracted_content is None:
-            spend.note("ocr", tid, extracted=content, purpose="ingest", ref=document_id)
     object_type = source_object_type or _default_object_type_for_mime(content.mime_type)
 
     indexed = 0

@@ -2,10 +2,12 @@
 """An in-memory session for the non-token metering services (storage samples, GPU allocation).
 
 It extends the usage fake (``tests/unit/spend_usage_fakes.py``) with what
-those services add: ``UPDATE ... RETURNING`` (the pool-hour claim), commits
-on a plain session, the uniqueness of the GPU tables, and the text queries of
-the storage sample (``to_regclass`` and the bytes per store), answered from
-per-tenant figures a test sets.
+those services add: ``UPDATE ... RETURNING`` (the pool-hour claim), a guarded
+upsert (``ON CONFLICT DO UPDATE ... WHERE ... RETURNING``, the operator
+command), commits on a plain session, the uniqueness of the GPU tables, and
+the text queries of the storage sample (``to_regclass`` and the bytes per
+store), answered from per-tenant figures a test sets. ``spend.metering_paused``
+reads as no flag row unless a test sets one.
 """
 
 from __future__ import annotations
@@ -13,11 +15,12 @@ from __future__ import annotations
 import uuid
 from typing import Any
 
-from sqlalchemy.sql.dml import Update
+from sqlalchemy.sql.dml import Insert, Update
+from sqlalchemy.sql.elements import BindParameter, ClauseElement
 
 from tests.unit import spend_usage_fakes
 from tests.unit.spend_fakes import Result
-from tests.unit.spend_usage_fakes import UsageSession, install
+from tests.unit.spend_usage_fakes import Evaluator, UsageSession, _model_for, install
 
 GPU_UNIQUE = {
     "spend_gpu_pool_hours": ("provider", "node_pool", "hour_start"),
@@ -44,6 +47,36 @@ class MeteringSession(UsageSession):
     async def commit(self) -> None:
         self.commits += 1
 
+    def _usage_insert(self, statement: Insert) -> Result:
+        """A guarded single-row upsert as PostgreSQL runs it; any other insert is the usage fake's.
+
+        On a conflict the update applies only where its ``WHERE`` holds, and
+        ``RETURNING`` answers the row inserted or updated, or nothing.
+        """
+        conflict = getattr(statement, "_post_values_clause", None)
+        if type(conflict).__name__ != "OnConflictDoUpdate" or conflict.update_whereclause is None:
+            return super()._usage_insert(statement)
+        table = statement.table.name
+        values = {
+            (k if isinstance(k, str) else k.key): (v.effective_value if isinstance(v, BindParameter) else v)
+            for k, v in (statement._values or {}).items()
+        }
+        key = spend_usage_fakes.UNIQUE[table]
+        row = next((r for r in self.of(table) if all(getattr(r, k) == values.get(k) for k in key)), None)
+        if row is None:
+            row = _model_for(table)(**values)
+            self.add(row)
+        else:
+            evaluator = Evaluator(self, excluded=values)
+            if not evaluator.value(conflict.update_whereclause, row):
+                return Result([])
+            to_set = conflict.update_values_to_set  # pairs in SQLAlchemy 2.0, a dict in 2.1
+            for name, expr in to_set.items() if isinstance(to_set, dict) else to_set:
+                value = evaluator.value(expr, row) if isinstance(expr, ClauseElement) else expr  # a plain value
+                setattr(row, name if isinstance(name, str) else name.key, value)
+        returning = statement._returning or ()
+        return Result([tuple(getattr(row, c.key) for c in returning)] if returning else [(row.id,)])
+
     def _update(self, statement: Update) -> Result:
         rows = self._matching(statement.table.name, statement.whereclause)
         super()._update(statement)
@@ -63,12 +96,19 @@ class MeteringSession(UsageSession):
         return super()._usage_text(sql, params)
 
 
+async def _no_flag_row(tenant_id: Any, flag_key: str) -> None:
+    return None
+
+
 def install_metering(monkeypatch: Any) -> MeteringSession:
-    """``install`` with a metering session for tenant and plain sessions, and the GPU tables' unique keys."""
+    """``install`` with a metering session for tenant and plain sessions, the GPU tables' unique keys, and
+    no ``spend.metering_paused`` row (a test pauses a tenant by answering one)."""
     import core.database
+    from core import feature_flags
     from core.spend import metering
 
     install(monkeypatch)
+    monkeypatch.setattr(feature_flags, "_query_flag", _no_flag_row)
     store = MeteringSession()
     monkeypatch.setattr(core.database, "get_tenant_session", lambda tenant_id: store)
     monkeypatch.setattr(core.database, "async_session_factory", lambda: store)

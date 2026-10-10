@@ -49,6 +49,7 @@ import collections
 import os
 import threading
 import time
+import uuid
 from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import date
@@ -112,6 +113,26 @@ def _gap_key(tenant_id: str, day: date, usage_type: str, reason: str, detail: st
 def _closed_locked() -> bool:
     """Whether a drain has begun in this process (callers hold ``_LOCK``)."""
     return _WRITER.get("closed_pid") == os.getpid()
+
+
+async def metering_paused(tenant_id: str | uuid.UUID) -> bool:
+    """Whether ``spend.metering_paused`` holds for the tenant (its row, else the global row), read now.
+
+    It runs the flag module's own lookup and evaluation, never the module's
+    cache, a plain dict request handlers share. A failed read keeps metering
+    on, logged. The writer caches the answer for 30 seconds; the storage and
+    GPU jobs, which write without the writer, read it once per tenant.
+    """
+    from core import feature_flags
+
+    try:
+        tenant_uuid = tenant_id if isinstance(tenant_id, uuid.UUID) else uuid.UUID(str(tenant_id))
+        row = await feature_flags._query_flag(tenant_uuid, PAUSE_FLAG)
+        return bool(feature_flags._evaluate(row, PAUSE_FLAG, tenant_uuid, None, False))
+    # enterprise-gate: broad-except-ok reason=pause-flag-read-failure-keeps-metering-on-and-logs
+    except Exception as exc:
+        logger.warning("spend_pause_flag_unreadable", error_type=type(exc).__name__)
+        return False
 
 
 def add_gap(tenant_id: str, day: date, usage_type: str, reason: str, detail: str = "", count: int = 1) -> None:
@@ -341,26 +362,16 @@ class _Writer:
         """Whether ``spend.metering_paused`` holds for the tenant (its row, else the global row).
 
         The flag module's cache is a plain dict that request handlers share,
-        so this thread never touches it: it runs the module's own lookup and
-        evaluation and keeps the answer in its own cache for 30 seconds. A
-        failed read keeps metering on, logged, and is cached the same way.
+        so this thread never touches it: ``metering_paused`` runs the module's
+        own lookup and evaluation and the answer is kept in this thread's own
+        cache for 30 seconds. A failed read keeps metering on, logged, and is
+        cached the same way.
         """
-        import uuid
-
-        from core import feature_flags
-
         now = time.monotonic()
         cached = self._pause_cache.get(tenant_id)
         if cached is not None and cached[1] > now:
             return cached[0]
-        try:
-            tenant_uuid = uuid.UUID(tenant_id)
-            row = await feature_flags._query_flag(tenant_uuid, PAUSE_FLAG)
-            paused = bool(feature_flags._evaluate(row, PAUSE_FLAG, tenant_uuid, None, False))
-        # enterprise-gate: broad-except-ok reason=pause-flag-read-failure-keeps-metering-on-and-logs
-        except Exception as exc:
-            logger.warning("spend_pause_flag_unreadable", error_type=type(exc).__name__)
-            paused = False
+        paused = await metering_paused(tenant_id)
         if tenant_id not in self._pause_cache and len(self._pause_cache) >= PAUSE_CACHE_MAX:
             self._pause_cache.clear()
         self._pause_cache[tenant_id] = (paused, now + PAUSE_CACHE_TTL_S)

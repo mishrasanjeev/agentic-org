@@ -383,8 +383,11 @@ async def query(
     """Rollups summed per ``group_by`` (a dimension or ``day``) over ``[start, end]`` (at most 366 days).
 
     Amounts are kept per currency (they are never added across currencies);
-    INR is the one sum across all of them. Grouping by agent applies the
-    caller's agent visibility.
+    INR is the one sum across all of them. Every grouping applies the caller's
+    agent visibility (``agent_id`` is a rollup dimension): a reader who is not
+    a tenant-wide reader (an administrator or auditor) sums only the rows of
+    agents they may see and the rows with no agent, whatever they group by, as
+    ``GET /spend/usage`` lists them.
     """
     from core.database import get_tenant_session
     from core.models.agent import Agent
@@ -404,8 +407,10 @@ async def query(
         value = filters.get(name)
         if value not in (None, ""):
             conditions.append(getattr(U, name) == value)
-    if group_by == "agent_id":
-        conditions.append(access.usage_filter(view, U.__table__, Agent.__table__))
+    if view.agent_clause is not None:
+        # Every grouping, not only agent_id: a use-case, provider or node total would otherwise
+        # carry the usage of personal or out-of-domain agents the record list hides.
+        conditions.append(access.usage_filter(view, U.__table__, Agent.__table__, tenant_id=tenant_id))
     statement = (
         select(
             group,
@@ -546,7 +551,11 @@ def _tally_json(tally: _Tally) -> dict[str, Any]:
 
 
 async def coverage(tenant_id: uuid.UUID, *, start: date, end: date, now: datetime) -> dict[str, Any]:
-    """Attribution coverage per reporting day and for ``[start, end]`` (at most 366 days)."""
+    """Attribution coverage per reporting day and for ``[start, end]`` (at most 366 days).
+
+    A tenant-wide figure (the Gate 1 measure sums every agent's usage, and gaps carry no agent): the route
+    answers it to tenant-wide readers only (``access.require_tenant_wide``).
+    """
     from core.database import get_tenant_session
     from core.models.spend import SpendOrgNode as N
     from core.models.spend_usage import SpendMeterGap as G
@@ -822,7 +831,7 @@ async def list_records(
         R.tenant_id == tenant_id,
         R.event_time >= clock.day_bounds(start, zone)[0],
         R.event_time < clock.day_bounds(end, zone)[1],
-        access.usage_filter(view, R.__table__, Agent.__table__),
+        access.usage_filter(view, R.__table__, Agent.__table__, tenant_id=tenant_id),
     ]
     if usage_type:
         conditions.append(R.usage_type == vocab.choice(usage_type, vocab.USAGE_TYPES, field="usage_type"))
@@ -850,7 +859,10 @@ async def list_records(
 
 
 async def list_gaps(tenant_id: uuid.UUID, *, start: date, end: date) -> dict[str, Any]:
-    """Meter gaps of ``[start, end]`` (at most 92 days) by day, usage type, reason and detail."""
+    """Meter gaps of ``[start, end]`` (at most 92 days) by day, usage type, reason and detail.
+
+    Gaps carry no agent: the route answers them to tenant-wide readers only (``access.require_tenant_wide``).
+    """
     from core.database import get_tenant_session
     from core.models.spend_usage import SpendMeterGap as G
 

@@ -45,9 +45,9 @@ def _usage_calls():
     return [
         api.list_usage(DAY, DAY, caller=ADMIN_CALLER, tenant_id=TID),
         api.list_rollups(DAY, DAY, caller=ADMIN_CALLER, tenant_id=TID),
-        api.spend_coverage(DAY, DAY, tenant_id=TID),
+        api.spend_coverage(DAY, DAY, caller=ADMIN_CALLER, tenant_id=TID),
         api.ledger_comparison(DAY, DAY, caller=ADMIN_CALLER, tenant_id=TID),
-        api.list_gaps(DAY, DAY, tenant_id=TID),
+        api.list_gaps(DAY, DAY, caller=ADMIN_CALLER, tenant_id=TID),
         api.rebuild_rollups(api.RebuildIn(start=DAY, end=DAY), ADMIN, tenant_id=TID),
         api.backfill_usage(api.BackfillIn(start=DAY, end=DAY), ADMIN, tenant_id=TID),
         api.restate_usage(
@@ -56,8 +56,8 @@ def _usage_calls():
         api.reattribute_usage(api.ReattributeIn(start=DAY, end=DAY), ADMIN, tenant_id=TID),
         api.settle_fx_rates(api.SettleIn(start=DAY, end=DAY), ADMIN, tenant_id=TID),
         api.recompute_commitments(api.RecomputeIn(), ADMIN, tenant_id=TID),
-        api.list_jobs(tenant_id=TID),
-        api.get_job(job, tenant_id=TID),
+        api.list_jobs(caller=ADMIN_CALLER, tenant_id=TID),
+        api.get_job(job, caller=ADMIN_CALLER, tenant_id=TID),
     ]
 
 
@@ -72,7 +72,7 @@ class TestRoutes:
                 await call
             assert info.value.status_code == 404 and info.value.detail["error"] == "spend_disabled"
         out = await api.spend_status(tenant_id=TID)
-        assert out["enabled"] is False and out["writer"] == {"started": False, "pending": 0}
+        assert out["enabled"] is False and out["writer"] == {"started": False}
 
     @pytest.mark.asyncio
     async def test_usage_route_flow_while_on(self, store):
@@ -96,13 +96,13 @@ class TestRoutes:
             DAY, DAY, group_by="provider", provider="openai", caller=ADMIN_CALLER, tenant_id=TID
         )
         assert [r["provider"] for r in rolled["rows"]] == ["openai"]
-        coverage = await api.spend_coverage(DAY, DAY, tenant_id=TID)
+        coverage = await api.spend_coverage(DAY, DAY, caller=ADMIN_CALLER, tenant_id=TID)
         assert coverage["period"]["records"] == 2
         assert (await api.ledger_comparison(DAY, DAY, caller=ADMIN_CALLER, tenant_id=TID))["days"][0]["usage"][
             "calls"
         ] == 2
         await meter.upsert_gaps(store, TENANT, {(DAY, "llm_tokens", "queue_full", ""): 2})
-        gaps = await api.list_gaps(DAY, DAY, tenant_id=TID)
+        gaps = await api.list_gaps(DAY, DAY, caller=ADMIN_CALLER, tenant_id=TID)
         assert gaps["items"] == [
             {"day": "2026-10-01", "usage_type": "llm_tokens", "reason": "queue_full", "detail": "", "count": 2}
         ]
@@ -203,13 +203,14 @@ class TestRoutes:
             api.recompute_commitments(api.RecomputeIn(provider="openai"), ADMIN, tenant_id=TID),
         ):
             assert (await call)["status"] == "queued"
-        listed = await api.list_jobs(tenant_id=TID)
+        listed = await api.list_jobs(caller=ADMIN_CALLER, tenant_id=TID)
         assert len(listed["items"]) == 6
-        assert (await api.list_jobs(kind="rebuild", tenant_id=TID))["items"][0]["kind"] == "rebuild"
-        one = await api.get_job(uuid.UUID(rebuild["job_id"]), tenant_id=TID)
+        rebuilds = await api.list_jobs(kind="rebuild", caller=ADMIN_CALLER, tenant_id=TID)
+        assert rebuilds["items"][0]["kind"] == "rebuild"
+        one = await api.get_job(uuid.UUID(rebuild["job_id"]), caller=ADMIN_CALLER, tenant_id=TID)
         assert one["params"] == {"start": "2026-10-01", "end": "2026-10-01"} and one["requested_by"] == ACTOR
         with pytest.raises(HTTPException) as info:
-            await api.get_job(uuid.uuid4(), tenant_id=TID)
+            await api.get_job(uuid.uuid4(), caller=ADMIN_CALLER, tenant_id=TID)
         assert info.value.status_code == 404
         audits = [r.event_type for r in store.of("audit_log")]
         assert audits.count("spend.job.enqueue") == 6
@@ -253,6 +254,412 @@ class TestRoutes:
                 api.RestateIn(**bad)
         with pytest.raises(ValidationError):
             api.RebuildIn(start=DAY, end=DAY, extra=1)
+
+
+# ---------------------------------------------------------------- who reads which usage figures
+
+OWNER = uuid.UUID("44444444-4444-4444-8444-444444444444")
+# Each record's quantity is 1,000 times a distinct power of two, so a total names exactly the records it summed.
+NO_AGENT, SHARED_FINANCE, SHARED_HR, PERSONAL = 1000, 2000, 4000, 8000
+READERS = {
+    # A tenant administrator: every record.
+    "admin": Caller(user_id=uuid.UUID(ACTOR), role="admin", domains=None, is_admin=True, is_machine=False),
+    # A domain-scoped reader: shared agents of finance, and records with no agent.
+    "domain": Caller(user_id=uuid.uuid4(), role="cfo", domains=["finance"], is_admin=False, is_machine=False),
+    # An auditor (unrestricted domains), who does not own the personal agent: every record, as on GET /audit.
+    "auditor": Caller(user_id=uuid.uuid4(), role="auditor", domains=None, is_admin=False, is_machine=False),
+    # The personal agent's owner, a domain-scoped reader too.
+    "owner": Caller(user_id=OWNER, role="cfo", domains=["finance"], is_admin=False, is_machine=False),
+    # A machine credential with audit:read: shared agents only.
+    "machine": Caller(user_id=None, role="", domains=None, is_admin=False, is_machine=True),
+}
+VISIBLE = {
+    "admin": NO_AGENT + SHARED_FINANCE + SHARED_HR + PERSONAL,
+    "domain": NO_AGENT + SHARED_FINANCE,
+    "auditor": NO_AGENT + SHARED_FINANCE + SHARED_HR + PERSONAL,
+    "owner": NO_AGENT + SHARED_FINANCE + PERSONAL,
+    "machine": NO_AGENT + SHARED_FINANCE + SHARED_HR,
+}
+TENANT_WIDE = {"admin", "auditor"}  # unrestricted domains: an administrator or an auditor
+
+
+async def agents_usage(store) -> dict[str, uuid.UUID]:
+    """Four records: no agent, a shared finance agent, a shared HR agent and a personal agent; each agent with an
+    agent ledger row of a tenth of its tokens."""
+    from core.models.agent import Agent, AgentCostLedger
+
+    made = {}
+    for name, domain, visibility, owner in (
+        ("shared_finance", "finance", "tenant", None),
+        ("shared_hr", "hr", "tenant", None),
+        ("personal", "finance", "personal", OWNER),
+    ):
+        agent_id = uuid.uuid4()
+        store.add(
+            Agent(id=agent_id, tenant_id=TENANT, name=name, agent_type="t", domain=domain, visibility=visibility,
+                  owner_user_id=owner)
+        )  # fmt: skip
+        store.agents[str(agent_id)] = ("1", "t", "active", None, None, None, None, None)
+        made[name] = agent_id
+    store.add(card())
+    quantities = {None: NO_AGENT, "shared_finance": SHARED_FINANCE, "shared_hr": SHARED_HR, "personal": PERSONAL}
+    events = [
+        event(quantity=Decimal(q), hints=hints(agent_id=str(made[n]) if n else None)) for n, q in quantities.items()
+    ]
+    await meter.write_events(store, TENANT, events, now=T0)
+    for name, agent_id in made.items():
+        store.add(
+            AgentCostLedger(id=uuid.uuid4(), tenant_id=TENANT, agent_id=agent_id, period_date=DAY,
+                            token_count=quantities[name] // 10, cost_usd=Decimal("0.1"), task_count=1)
+        )  # fmt: skip
+    await meter.upsert_gaps(store, TENANT, {(DAY, "llm_tokens", "queue_full", ""): 2})
+    await jobs.enqueue(TENANT, kind="rebuild", params={"start": DAY, "end": DAY}, actor=ACTOR)
+    return made
+
+
+def _refused_tenant_wide(info) -> bool:
+    return info.value.status_code == 403 and info.value.detail["error"] == "tenant_wide_read_refused"
+
+
+def _sql(clause, *, literal: bool = False) -> str:
+    kwargs = {"compile_kwargs": {"literal_binds": True}} if literal else {}
+    return " ".join(str(clause.compile(dialect=postgresql.dialect(), **kwargs)).split())
+
+
+def _subquery(sql: str) -> str:
+    """The agent visibility subquery of a compiled statement: the parenthesised text from ``(SELECT agents.id``."""
+    start = sql.index("(SELECT agents.id")
+    depth = 0
+    for index in range(start, len(sql)):
+        depth += {"(": 1, ")": -1}.get(sql[index], 0)
+        if depth == 0:
+            return sql[start : index + 1]
+    raise AssertionError(sql)
+
+
+class TestReadVisibility:
+    """The finding: the agent visibility clause applied only to rollups grouped by agent, so a domain-scoped
+    reader or a non-owner grouping by use case, provider or node got the usage of agents /spend/usage hides."""
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("reader", sorted(READERS))
+    async def test_usage_lists_the_records_the_reader_may_see(self, store, reader):
+        await agents_usage(store)
+        items = (await api.list_usage(DAY, DAY, caller=READERS[reader], tenant_id=TID))["items"]
+        assert sum(Decimal(i["quantity"]) for i in items) == VISIBLE[reader]
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("reader", sorted(READERS))
+    async def test_every_rollup_grouping_applies_the_readers_agent_visibility(self, store, reader):
+        made = await agents_usage(store)
+        caller = READERS[reader]
+        groupings = [g for g in rollups.GROUP_BYS if g not in rollups.COMMERCIAL_GROUP_BYS]
+        assert {"use_case", "provider", "org_node_id", "day", "agent_id"} <= set(groupings)
+        for group_by in groupings:
+            out = await api.list_rollups(DAY, DAY, group_by=group_by, caller=caller, tenant_id=TID)
+            assert Decimal(out["totals"]["quantity"]) == VISIBLE[reader], group_by
+            assert sum(Decimal(r["quantity"]) for r in out["rows"]) == VISIBLE[reader], group_by
+        by_agent = await api.list_rollups(DAY, DAY, group_by="agent_id", caller=caller, tenant_id=TID)
+        shown = {r["agent_id"] for r in by_agent["rows"]}
+        assert None in shown  # records with no agent stay visible to every reader
+        assert (str(made["personal"]) in shown) is (reader in ("admin", "auditor", "owner"))
+        assert (str(made["shared_hr"]) in shown) is (reader in ("admin", "auditor", "machine"))
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("reader", sorted(READERS))
+    async def test_the_ledger_comparison_filters_every_source_by_agent_visibility(self, store, reader):
+        await agents_usage(store)
+        day = (await api.ledger_comparison(DAY, DAY, caller=READERS[reader], tenant_id=TID))["days"][0]
+        assert sum(Decimal(v) for v in day["usage"]["tokens"].values()) == VISIBLE[reader]
+        assert day["agent_cost_ledger"]["tokens"] == (VISIBLE[reader] - NO_AGENT) // 10
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("reader", sorted(READERS))
+    async def test_coverage_is_for_tenant_wide_readers_only(self, store, reader):
+        await agents_usage(store)
+        if reader not in TENANT_WIDE:
+            with pytest.raises(HTTPException) as info:
+                await api.spend_coverage(DAY, DAY, caller=READERS[reader], tenant_id=TID)
+            assert _refused_tenant_wide(info)
+            return
+        out = await api.spend_coverage(DAY, DAY, caller=READERS[reader], tenant_id=TID)
+        assert out["period"]["records"] == 4 and out["period"]["gaps"] == {"queue_full": 2}  # the whole tenant
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("reader", sorted(READERS))
+    async def test_gaps_are_for_tenant_wide_readers_only(self, store, reader):
+        await agents_usage(store)
+        if reader not in TENANT_WIDE:
+            with pytest.raises(HTTPException) as info:
+                await api.list_gaps(DAY, DAY, caller=READERS[reader], tenant_id=TID)
+            assert _refused_tenant_wide(info)
+            return
+        items = (await api.list_gaps(DAY, DAY, caller=READERS[reader], tenant_id=TID))["items"]
+        assert [i["count"] for i in items] == [2]
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("reader", sorted(READERS))
+    async def test_jobs_are_for_tenant_wide_readers_only(self, store, reader):
+        await agents_usage(store)
+        queued = store.of("spend_jobs")[0]
+        caller = READERS[reader]
+        if reader not in TENANT_WIDE:
+            for call in (
+                api.list_jobs(caller=caller, tenant_id=TID),
+                api.get_job(queued.id, caller=caller, tenant_id=TID),
+                api.get_job(uuid.uuid4(), caller=caller, tenant_id=TID),  # refused before the lookup: no 404
+            ):
+                with pytest.raises(HTTPException) as info:
+                    await call
+                assert _refused_tenant_wide(info)
+            return
+        assert [j["id"] for j in (await api.list_jobs(caller=caller, tenant_id=TID))["items"]] == [str(queued.id)]
+        assert (await api.get_job(queued.id, caller=caller, tenant_id=TID))["kind"] == "rebuild"
+
+    def test_an_administrator_credential_is_a_tenant_wide_reader_and_a_domain_role_is_not(self):
+        from core.spend import access
+
+        machine_admin = Caller(user_id=None, role="", domains=None, is_admin=True, is_machine=True)
+        assert access.is_tenant_wide_reader(machine_admin)  # it reads every record unfiltered anyway
+        assert access.read_view(machine_admin).agent_clause is None
+        assert sorted(name for name, caller in READERS.items() if access.is_tenant_wide_reader(caller)) == sorted(
+            TENANT_WIDE
+        )
+        with pytest.raises(SpendError) as info:
+            access.require_tenant_wide(READERS["domain"])
+        assert info.value.status == 403 and info.value.code == "tenant_wide_read_refused"
+
+    def test_unfiltered_readers_and_tenant_wide_readers_are_one_set(self):
+        """The finding: an auditor read coverage, gaps and jobs (every agent's usage) but had the personal agent
+        filtered out of the records and rollups, so two views of one tenant disagreed. One rule now: a reader of
+        tenant-wide figures reads every record; anyone filtered by agent is refused tenant-wide figures."""
+        from core.spend import access
+
+        callers = [
+            *READERS.values(),
+            Caller(user_id=None, role="", domains=None, is_admin=True, is_machine=True),
+            Caller(user_id=uuid.uuid4(), role="analyst", domains=[], is_admin=False, is_machine=False),
+            Caller(user_id=None, role="auditor", domains=None, is_admin=False, is_machine=False),  # no user id
+        ]
+        for caller in callers:
+            assert (access.read_view(caller).agent_clause is None) is access.is_tenant_wide_reader(caller), caller
+        auditor = access.read_view(READERS["auditor"])
+        assert auditor.show_user_ids and auditor.commercial  # unchanged: user ids and contract terms
+        machine_admin = access.read_view(callers[len(READERS)])
+        assert not machine_admin.show_user_ids and not machine_admin.commercial
+
+    @pytest.mark.asyncio
+    async def test_the_auditor_reads_the_personal_agent_everywhere_and_a_domain_reader_nowhere(self, store):
+        made = await agents_usage(store)
+        personal = str(made["personal"])
+        for reader, sees in (("auditor", True), ("domain", False)):
+            caller = READERS[reader]
+            items = (await api.list_usage(DAY, DAY, caller=caller, tenant_id=TID, agent_id=made["personal"]))["items"]
+            assert (len(items) == 1) is sees
+            rows = await api.list_rollups(DAY, DAY, group_by="agent_id", caller=caller, tenant_id=TID)
+            assert (personal in {r["agent_id"] for r in rows["rows"]}) is sees
+            day = (await api.ledger_comparison(DAY, DAY, caller=caller, tenant_id=TID))["days"][0]
+            assert (day["agent_cost_ledger"]["tokens"] >= PERSONAL // 10) is sees
+            for figure in (
+                api.spend_coverage(DAY, DAY, caller=caller, tenant_id=TID),
+                api.list_gaps(DAY, DAY, caller=caller, tenant_id=TID),
+                api.list_jobs(caller=caller, tenant_id=TID),
+            ):
+                if sees:
+                    assert await figure
+                    continue
+                with pytest.raises(HTTPException) as info:
+                    await figure
+                assert _refused_tenant_wide(info)
+
+    @pytest.mark.asyncio
+    async def test_status_never_gives_the_process_wide_pending_count(self, store, monkeypatch):
+        """The pending count is every tenant's queued events in the process, so no tenant's reader gets it."""
+        import sys
+        from types import SimpleNamespace
+
+        def refuse() -> int:
+            raise AssertionError("the status route must not read the process-wide pending count")
+
+        fake = SimpleNamespace(started=lambda: True, pending=refuse)
+        monkeypatch.setitem(sys.modules, "core.spend.writer", fake)
+        assert (await api.spend_status(tenant_id=TID))["writer"] == {"started": True}
+        monkeypatch.delitem(sys.modules, "core.spend.writer")
+        assert (await api.spend_status(tenant_id=TID))["writer"] == {"started": False}
+
+    @pytest.mark.asyncio
+    async def test_usage_filters_bind_the_tenant_and_never_correlate_on_the_outer_table(self, store):
+        """The finding: the visibility subquery compared agents.tenant_id with the outer table's tenant_id, so
+        the database re-ran it for every rollup row (43.6 s on 219,600 rows against 0.165 s with the tenant
+        bound)."""
+        from sqlalchemy.sql.selectable import Select
+
+        from core.models.agent import Agent
+        from core.spend import access
+
+        await agents_usage(store)
+        view = access.read_view(READERS["domain"])
+        for model in (SpendUsageRollup, SpendUsageRecord):
+            sql = _sql(access.usage_filter(view, model.__table__, Agent.__table__, tenant_id=TENANT))
+            subquery = _subquery(sql)
+            assert "FROM agents" in subquery and model.__tablename__ not in subquery, model
+            assert "agents.tenant_id = %(tenant_id_1)s::UUID" in subquery
+        store.statements.clear()
+        await api.list_rollups(DAY, DAY, group_by="use_case", caller=READERS["domain"], tenant_id=TID)
+        await api.list_usage(DAY, DAY, caller=READERS["domain"], tenant_id=TID)
+        selects = [s for s in store.statements if isinstance(s, Select)]
+        tables = [s.get_final_froms()[0].name for s in selects]
+        assert tables == ["spend_usage_rollups", "spend_usage_records"]
+        for select_statement, table in zip(selects, tables, strict=True):
+            subquery = _subquery(_sql(select_statement))
+            assert table not in subquery and "agents.tenant_id = " in subquery, table
+
+
+# ---------------------------------------------------------------- job audit rows in GET /audit
+
+JOB_AUDIT_PREFIXES = ("spend.job.", "spend.usage.", "spend.fx.", "spend.rollups.")
+
+
+def _audit_request(role, *, user_id=True, auth_mode="legacy", scopes=None, domains=None):
+    from types import SimpleNamespace
+
+    claims = {"sub": f"{role}@example.com", "role": role}
+    if user_id:
+        claims["agenticorg:user_id"] = str(uuid.uuid4())
+    if domains is not None:
+        claims["agenticorg:domains"] = domains
+    scopes = scopes or (["agenticorg:admin"] if role == "admin" else ["agents:read", "audit:read"])
+    return SimpleNamespace(state=SimpleNamespace(claims=claims, scopes=scopes, auth_mode=auth_mode))
+
+
+class _AuditSession:
+    """The audit route's session: the spend-rows check answers ``kept``; the count and page answer ``entries``."""
+
+    def __init__(self, *, kept: bool, entries=()):
+        self.statements: list = []
+        self.kept = kept
+        self.entries = list(entries)
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, *args):
+        return False
+
+    async def execute(self, statement):
+        from types import SimpleNamespace
+
+        self.statements.append(statement)
+        if "audit_log" not in _sql(statement, literal=True):
+            return SimpleNamespace(scalar=lambda: self.kept)
+        entries = self.entries
+        return SimpleNamespace(scalar=lambda: len(entries), scalars=lambda: SimpleNamespace(all=lambda: entries))
+
+
+class TestJobAuditRows:
+    """The finding: spend job audit rows carry no agent and only rate-card and commitment rows were hidden, so
+    any audit:read holder read through GET /audit a job's parameters (reasons, card ids, ranges), restated and
+    re-attributed amounts per billing date and card, settled INR totals per currency, and rebuild and backfill
+    counts."""
+
+    @pytest.mark.asyncio
+    async def test_every_audit_row_a_job_writes_is_hidden_from_readers_refused_commercial_reads(self, store):
+        from sqlalchemy import Column, MetaData, String, Table, create_engine, insert, select
+
+        from core.spend import access
+
+        store.add(card(effective_to=date(2026, 12, 1)))
+        await meter.write_events(store, TENANT, [event()], now=T0)
+        span = {"start": "2026-10-01", "end": "2026-10-01"}
+        restate = {**span, "provider": "openai", "card_ids": [], "include_unpriced": False, "reason": "A new contract"}
+        for kind, params in (
+            ("rebuild", span),
+            ("backfill", span),
+            ("reattribute", span),
+            ("settle_fx", {**span, "force_dates": []}),
+            ("restate", restate),
+        ):
+            queued = await jobs.enqueue(TENANT, kind=kind, params=params, actor=ACTOR)
+            assert (await jobs.run(TENANT, uuid.UUID(queued["job_id"]), now=T0))["status"] == "succeeded", kind
+        await jobs.queue_followup(store, TENANT, kind="settle_fx", params={**span, "force_dates": []}, actor=ACTOR)
+        await jobs.queue_followup(
+            store, TENANT, kind="settle_fx", params={**span, "force_dates": [["USD", "2026-10-01"]]}, actor=ACTOR
+        )
+        written = {row.event_type for row in store.of("audit_log")}
+        assert written == {
+            "spend.job.enqueue", "spend.job.merge", "spend.rollups.rebuild", "spend.usage.backfill",
+            "spend.usage.reattribute", "spend.fx.settle", "spend.usage.restate",
+        }  # fmt: skip
+        assert all(access.is_commercial_audit_event(event_type) for event_type in written)
+        # Every action core/spend writes from a job, chunks included; FX reference data stays visible.
+        hidden = sorted(
+            written | {"spend.usage.restate.chunk", "spend.usage.reattribute.chunk", "spend.fx.settle.chunk"}
+        )
+        kept = ["spend.fx_rates.create", "spend.fx_rates.import", "spend.org_node.create", "spend.mappings.import",
+                "spend.jobXenqueue", "agent.run"]  # fmt: skip
+        rows = Table("audit_rows", MetaData(), Column("event_type", String(100)))
+        engine = create_engine("sqlite://")
+        rows.metadata.create_all(engine)
+        with engine.begin() as connection:
+            connection.execute(insert(rows), [{"event_type": name} for name in kept + hidden])
+        for reader in ("domain", "owner", "machine"):
+            clause = access.commercial_audit_clause(READERS[reader], rows.c.event_type)
+            with engine.begin() as connection:
+                seen = [r[0] for r in connection.execute(select(rows.c.event_type).where(clause))]
+            assert sorted(seen) == sorted(kept), reader
+            assert not [e for e in kept if access.is_commercial_audit_event(e)]
+        for reader in ("admin", "auditor"):
+            assert access.commercial_audit_clause(READERS[reader], rows.c.event_type) is None
+        assert set(JOB_AUDIT_PREFIXES) <= set(access.COMMERCIAL_AUDIT_PREFIXES)  # every job prefix is hidden
+
+    @pytest.mark.asyncio
+    async def test_general_audit_read_hides_job_rows_from_a_domain_reader_and_a_machine_credential(self, monkeypatch):
+        from types import SimpleNamespace
+
+        from api.v1 import audit as audit_api
+
+        job_rows = [
+            SimpleNamespace(event_type=name)
+            for name in ("spend.job.enqueue", "spend.job.merge", "spend.usage.restate", "spend.usage.reattribute.chunk",
+                         "spend.fx.settle", "spend.rollups.rebuild", "spend.usage.backfill")
+        ]  # fmt: skip
+        others = [SimpleNamespace(event_type="spend.fx_rates.create"), SimpleNamespace(event_type="agent.run.resumed")]
+        monkeypatch.setattr(audit_api, "_audit_to_dict", lambda entry: {"event_type": entry.event_type})
+        assert settings.spend_intelligence_enabled is False  # the filter does not depend on the flag
+        refused = [
+            (_audit_request("cfo", domains=["finance"]), "cfo"),
+            (_audit_request("", user_id=False, auth_mode="grantex", scopes=["audit:read"]), ""),
+            (_audit_request("admin", user_id=False, auth_mode="api_key"), "admin"),
+        ]
+        for req, role in refused:
+            session = _AuditSession(kept=True, entries=job_rows + others)
+            monkeypatch.setattr(audit_api, "get_tenant_session", lambda tenant_id, s=session: s)
+            out = await audit_api.query_audit(request=req, tenant_id=TID, user_role=role)
+            assert [item["event_type"] for item in out.items] == ["spend.fx_rates.create", "agent.run.resumed"], role
+            kept_sql = _sql(session.statements[0], literal=True)
+            assert "audit_log" not in kept_sql and f"tenant_id = '{TID}'" in kept_sql
+            assert [kept_sql.count(f"FROM {t}") for t in ("spend_rate_cards", "spend_commitments", "spend_jobs")] == [
+                1, 1, 1,
+            ]  # fmt: skip
+            for statement in session.statements[1:]:  # the count and the page
+                sql = _sql(statement, literal=True)
+                for prefix in JOB_AUDIT_PREFIXES:
+                    assert f"NOT LIKE '{prefix}'" in sql, (role, prefix)
+                assert "NOT LIKE 'spend.fx/_rates.'" not in sql
+        for req, role in (
+            (_audit_request("admin"), "admin"),
+            (_audit_request("auditor", scopes=["audit:read"]), "auditor"),
+        ):
+            session = _AuditSession(kept=True, entries=job_rows + others)
+            monkeypatch.setattr(audit_api, "get_tenant_session", lambda tenant_id, s=session: s)
+            out = await audit_api.query_audit(request=req, tenant_id=TID, user_role=role)
+            assert len(out.items) == len(job_rows) + len(others) and len(session.statements) == 2, role
+        # A tenant with no rate card, commitment or spend job runs the audit query it ran before.
+        before = _AuditSession(kept=False, entries=others)
+        monkeypatch.setattr(audit_api, "get_tenant_session", lambda tenant_id, s=before: s)
+        out = await audit_api.query_audit(request=refused[0][0], tenant_id=TID, user_role="cfo")
+        assert len(before.statements) == 3 and len(out.items) == 2
+        assert all("NOT LIKE" not in _sql(s, literal=True) for s in before.statements[1:])
 
 
 # ---------------------------------------------------------------- jobs

@@ -1526,7 +1526,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "audit.sensitive.read",
-    "source_line": 349,
+    "source_line": 350,
     "tenant_required": true
   },
   {
@@ -1544,7 +1544,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "audit.sensitive.read",
-    "source_line": 363,
+    "source_line": 364,
     "tenant_required": true
   },
   {
@@ -1562,7 +1562,7 @@
     "public_exempt_reason": null,
     "rate_limit": "audit-read",
     "scope": "audit.enforcement.sensitive.read",
-    "source_line": 237,
+    "source_line": 238,
     "tenant_required": true
   },
   {
@@ -6746,7 +6746,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "knowledge.sensitive.documents.list",
-    "source_line": 1017,
+    "source_line": 1034,
     "tenant_required": true
   },
   {
@@ -6764,7 +6764,7 @@
     "public_exempt_reason": null,
     "rate_limit": "knowledge-write",
     "scope": "knowledge.documents.delete",
-    "source_line": 1130,
+    "source_line": 1147,
     "tenant_required": true
   },
   {
@@ -6782,7 +6782,7 @@
     "public_exempt_reason": null,
     "rate_limit": "knowledge-search",
     "scope": "knowledge.sensitive.search",
-    "source_line": 1780,
+    "source_line": 1797,
     "tenant_required": true
   },
   {
@@ -6800,7 +6800,7 @@
     "public_exempt_reason": null,
     "rate_limit": "knowledge-search",
     "scope": "knowledge.sensitive.search",
-    "source_line": 1731,
+    "source_line": 1748,
     "tenant_required": true
   },
   {
@@ -6818,7 +6818,7 @@
     "public_exempt_reason": "deployment-smoke-test-no-tenant-data",
     "rate_limit": "healthcheck",
     "scope": "knowledge.health.public",
-    "source_line": 2088,
+    "source_line": 2105,
     "tenant_required": false
   },
   {
@@ -6836,7 +6836,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "knowledge.sensitive.stats",
-    "source_line": 1620,
+    "source_line": 1637,
     "tenant_required": true
   },
   {
@@ -6854,7 +6854,7 @@
     "public_exempt_reason": null,
     "rate_limit": "knowledge-search",
     "scope": "knowledge.sensitive.search",
-    "source_line": 1642,
+    "source_line": 1659,
     "tenant_required": true
   },
   {
@@ -6872,7 +6872,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "knowledge.upload",
-    "source_line": 1663,
+    "source_line": 1680,
     "tenant_required": true
   },
   {
@@ -6890,7 +6890,7 @@
     "public_exempt_reason": null,
     "rate_limit": "knowledge-search",
     "scope": "knowledge.sensitive.search",
-    "source_line": 1868,
+    "source_line": 1885,
     "tenant_required": true
   },
   {
@@ -6908,7 +6908,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "knowledge.sensitive.stats",
-    "source_line": 2201,
+    "source_line": 2218,
     "tenant_required": true
   },
   {
@@ -6944,7 +6944,7 @@
     "public_exempt_reason": null,
     "rate_limit": "file-upload",
     "scope": "knowledge.upload",
-    "source_line": 613,
+    "source_line": 621,
     "tenant_required": true
   },
   {
@@ -10076,7 +10076,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "spend.commitments.read",
-    "source_line": 741,
+    "source_line": 752,
     "tenant_required": true
   },
   {
@@ -10094,7 +10094,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "spend.commitments.sensitive.write",
-    "source_line": 769,
+    "source_line": 780,
     "tenant_required": true
   },
   {
@@ -10112,7 +10112,7 @@
     "public_exempt_reason": null,
     "rate_limit": null,
     "scope": "spend.commitments.sensitive.write",
-    "source_line": 1310,
+    "source_line": 1346,
     "tenant_required": true
   },
   {
@@ -10130,7 +10130,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "spend.commitments.sensitive.write",
-    "source_line": 791,
+    "source_line": 802,
     "tenant_required": true
   },
   {
@@ -10148,7 +10148,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "spend.usage.read",
-    "source_line": 1097,
+    "source_line": 1114,
     "tenant_required": true
   },
   {
@@ -10166,7 +10166,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "spend.usage.read",
-    "source_line": 1115,
+    "source_line": 1141,
     "tenant_required": true
   },
   {
@@ -10184,7 +10184,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "spend.fx.read",
-    "source_line": 819,
+    "source_line": 830,
     "tenant_required": true
   },
   {
@@ -10202,7 +10202,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "spend.fx.sensitive.write",
-    "source_line": 846,
+    "source_line": 857,
     "tenant_required": true
   },
   {
@@ -10220,7 +10220,7 @@
     "public_exempt_reason": null,
     "rate_limit": "bulk-import",
     "scope": "spend.fx.sensitive.write",
-    "source_line": 868,
+    "source_line": 879,
     "tenant_required": true
   },
   {
@@ -10238,7 +10238,7 @@
     "public_exempt_reason": null,
     "rate_limit": null,
     "scope": "spend.fx.sensitive.write",
-    "source_line": 1281,
+    "source_line": 1317,
     "tenant_required": true
   },
   {
@@ -10256,7 +10256,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "spend.usage.read",
-    "source_line": 1139,
+    "source_line": 1166,
     "tenant_required": true
   },
   {
@@ -10274,7 +10274,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "spend.gate.read",
-    "source_line": 1669,
+    "source_line": 1716,
     "tenant_required": true
   },
   {
@@ -10292,7 +10292,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "spend.gpu.read",
-    "source_line": 1379,
+    "source_line": 1426,
     "tenant_required": true
   },
   {
@@ -10310,7 +10310,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "spend.invoices.read",
-    "source_line": 1488,
+    "source_line": 1535,
     "tenant_required": true
   },
   {
@@ -10328,7 +10328,7 @@
     "public_exempt_reason": null,
     "rate_limit": "bulk-import",
     "scope": "spend.invoices.sensitive.write",
-    "source_line": 1440,
+    "source_line": 1487,
     "tenant_required": true
   },
   {
@@ -10346,7 +10346,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "spend.invoices.read",
-    "source_line": 1512,
+    "source_line": 1559,
     "tenant_required": true
   },
   {
@@ -10364,7 +10364,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "spend.jobs.read",
-    "source_line": 1336,
+    "source_line": 1372,
     "tenant_required": true
   },
   {
@@ -10382,7 +10382,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "spend.jobs.read",
-    "source_line": 1358,
+    "source_line": 1399,
     "tenant_required": true
   },
   {
@@ -10400,7 +10400,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "spend.mappings.read",
-    "source_line": 481,
+    "source_line": 492,
     "tenant_required": true
   },
   {
@@ -10418,7 +10418,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "spend.mappings.sensitive.write",
-    "source_line": 507,
+    "source_line": 518,
     "tenant_required": true
   },
   {
@@ -10436,7 +10436,7 @@
     "public_exempt_reason": null,
     "rate_limit": "bulk-import",
     "scope": "spend.mappings.sensitive.write",
-    "source_line": 529,
+    "source_line": 540,
     "tenant_required": true
   },
   {
@@ -10454,7 +10454,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "spend.mappings.read",
-    "source_line": 555,
+    "source_line": 566,
     "tenant_required": true
   },
   {
@@ -10472,7 +10472,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "spend.mappings.sensitive.write",
-    "source_line": 576,
+    "source_line": 587,
     "tenant_required": true
   },
   {
@@ -10490,7 +10490,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "spend.org.read",
-    "source_line": 363,
+    "source_line": 374,
     "tenant_required": true
   },
   {
@@ -10508,7 +10508,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "spend.org.sensitive.write",
-    "source_line": 431,
+    "source_line": 442,
     "tenant_required": true
   },
   {
@@ -10526,7 +10526,7 @@
     "public_exempt_reason": null,
     "rate_limit": "bulk-import",
     "scope": "spend.org.sensitive.write",
-    "source_line": 387,
+    "source_line": 398,
     "tenant_required": true
   },
   {
@@ -10544,7 +10544,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "spend.org.read",
-    "source_line": 413,
+    "source_line": 424,
     "tenant_required": true
   },
   {
@@ -10562,7 +10562,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "spend.org.sensitive.write",
-    "source_line": 453,
+    "source_line": 464,
     "tenant_required": true
   },
   {
@@ -10580,7 +10580,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "spend.read",
-    "source_line": 897,
+    "source_line": 908,
     "tenant_required": true
   },
   {
@@ -10598,7 +10598,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "spend.rate_cards.read",
-    "source_line": 601,
+    "source_line": 612,
     "tenant_required": true
   },
   {
@@ -10616,7 +10616,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "spend.rate_cards.sensitive.write",
-    "source_line": 666,
+    "source_line": 677,
     "tenant_required": true
   },
   {
@@ -10634,7 +10634,7 @@
     "public_exempt_reason": null,
     "rate_limit": "bulk-import",
     "scope": "spend.rate_cards.sensitive.write",
-    "source_line": 640,
+    "source_line": 651,
     "tenant_required": true
   },
   {
@@ -10652,7 +10652,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "spend.rate_cards.sensitive.write",
-    "source_line": 688,
+    "source_line": 699,
     "tenant_required": true
   },
   {
@@ -10670,7 +10670,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "spend.rate_cards.sensitive.write",
-    "source_line": 713,
+    "source_line": 724,
     "tenant_required": true
   },
   {
@@ -10688,7 +10688,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "spend.reconciliations.read",
-    "source_line": 1563,
+    "source_line": 1610,
     "tenant_required": true
   },
   {
@@ -10706,7 +10706,7 @@
     "public_exempt_reason": null,
     "rate_limit": "bulk-import",
     "scope": "spend.reconciliations.sensitive.write",
-    "source_line": 1535,
+    "source_line": 1582,
     "tenant_required": true
   },
   {
@@ -10724,7 +10724,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "spend.reconciliations.read",
-    "source_line": 1590,
+    "source_line": 1637,
     "tenant_required": true
   },
   {
@@ -10742,7 +10742,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "spend.reconciliations.sensitive.write",
-    "source_line": 1613,
+    "source_line": 1660,
     "tenant_required": true
   },
   {
@@ -10760,7 +10760,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "spend.reconciliations.sensitive.write",
-    "source_line": 1638,
+    "source_line": 1685,
     "tenant_required": true
   },
   {
@@ -10778,7 +10778,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "spend.usage.read",
-    "source_line": 1054,
+    "source_line": 1068,
     "tenant_required": true
   },
   {
@@ -10796,7 +10796,7 @@
     "public_exempt_reason": null,
     "rate_limit": null,
     "scope": "spend.rollups.sensitive.write",
-    "source_line": 1157,
+    "source_line": 1193,
     "tenant_required": true
   },
   {
@@ -10814,7 +10814,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "spend.read",
-    "source_line": 323,
+    "source_line": 332,
     "tenant_required": true
   },
   {
@@ -10832,7 +10832,7 @@
     "public_exempt_reason": null,
     "rate_limit": null,
     "scope": "spend.storage.sensitive.write",
-    "source_line": 1399,
+    "source_line": 1446,
     "tenant_required": true
   },
   {
@@ -10850,7 +10850,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "spend.usage.read",
-    "source_line": 1010,
+    "source_line": 1021,
     "tenant_required": true
   },
   {
@@ -10868,7 +10868,7 @@
     "public_exempt_reason": null,
     "rate_limit": null,
     "scope": "spend.usage.sensitive.write",
-    "source_line": 1186,
+    "source_line": 1222,
     "tenant_required": true
   },
   {
@@ -10886,7 +10886,7 @@
     "public_exempt_reason": null,
     "rate_limit": null,
     "scope": "spend.usage.sensitive.write",
-    "source_line": 1252,
+    "source_line": 1288,
     "tenant_required": true
   },
   {
@@ -10904,7 +10904,7 @@
     "public_exempt_reason": null,
     "rate_limit": null,
     "scope": "spend.usage.sensitive.write",
-    "source_line": 1215,
+    "source_line": 1251,
     "tenant_required": true
   },
   {
