@@ -9,13 +9,13 @@ Output: docs/AgenticOrg_Complete_User_Guide_v4.0.0.pdf
 
 from __future__ import annotations
 
-import datetime
+import datetime as dt
 import os
 
 from fpdf import FPDF
 
 VERSION = "4.0.0"
-DATE = datetime.datetime.now(tz=datetime.UTC).strftime("%B %d, %Y")
+DATE = dt.datetime.now(tz=dt.UTC).strftime("%B %d, %Y")
 
 # Colors
 NAVY = (20, 40, 80)
