@@ -50,6 +50,8 @@ def on(monkeypatch):
     got: dict[str, list] = {"events": [], "gaps": []}
     monkeypatch.setattr(writer, "submit", lambda events: got["events"].extend(events))
     monkeypatch.setattr(writer, "add_gap", lambda *args, **kw: got["gaps"].append(args))
+    # Call-path gaps go through note_gap, which also starts the writer.
+    monkeypatch.setattr(writer, "note_gap", lambda *args, **kw: got["gaps"].append(args))
     monkeypatch.setattr(writer, "start_for_gaps", lambda: None)
     monkeypatch.setattr(embeddings_module, "serving_identity", lambda: ("local_embeddings", "BAAI/bge-small-en-v1.5"))
     metering._PRICED_TOOLS_CACHE.clear()

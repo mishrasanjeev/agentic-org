@@ -294,12 +294,22 @@ spend_usage_records_total = Counter(
 spend_usage_write_failures_total = Counter(
     "agenticorg_spend_usage_write_failures_total",
     "Usage events not written by the writer, by reason (queue_full, db_error, spilled, spill_failed, "
-    "shutdown_lost, paused, no_tenant, hook_error, tenant_mismatch)",
+    "shutdown_lost, paused, no_tenant (a tenant id that is not a UUID), hook_error, tenant_mismatch)",
     ["usage_type", "reason"],
 )
+# A call with no tenant at all (a tenantless router call) is routine and counted here as no_tenant,
+# not as a write failure, so it never holds the write-failure alert open.
 spend_unmetered_calls_total = Counter(
     "agenticorg_spend_unmetered_calls_total",
-    "Calls that produced no usage quantity (failed_no_usage, timeout_estimated, cancelled)",
+    "Calls that produced no usage quantity or had no tenant to meter (failed_no_usage, timeout_estimated, "
+    "cancelled, no_tenant)",
+    ["usage_type", "reason"],
+)
+# Gap counts (usage already counted above when it went unmetered) that a shutdown dropped before
+# they reached spend_meter_gaps. Kept apart from the write failures: the loss was counted once already.
+spend_meter_gaps_lost_total = Counter(
+    "agenticorg_spend_meter_gaps_lost_total",
+    "Meter gap counts dropped at shutdown before they were written, by the gap's reason",
     ["usage_type", "reason"],
 )
 # livemax: a Celery child that dies with a backlog leaves no series behind (mark_process_dead

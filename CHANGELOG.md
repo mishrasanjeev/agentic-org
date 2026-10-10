@@ -66,10 +66,13 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
   which writes them in batches on its own two-connection engine, retries a
   transient error once, waits out a rollup rebuild without blocking other
   tenants, and spills what it cannot write to the `persist_usage` task.
-  Drops, spills and pauses are counted globally and per tenant; a feature
+  Drops, spills and pauses are counted globally and per tenant; a call with
+  no tenant is counted as unmetered, never as a write failure; a feature
   flag (`spend.metering_paused`) pauses metering per tenant or for all
-  without a restart; the writer drains at shutdown. Four direct model callers
-  outside the router are metered too.
+  without a restart; the writer drains at shutdown, counting what it cannot
+  hand on (late usage, unflushed gaps) as lost. While spend is on, the API
+  and each worker process load the metering code at startup. Four direct
+  model callers outside the router are metered too.
 - A daily rollup kept in the writer's transaction and rebuildable per day;
   coverage (the attributed share of INR spend, by amount and by count, with
   unpriced, unconverted and FX-pending volume, gaps, reasons and attribution

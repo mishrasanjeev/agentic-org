@@ -228,7 +228,7 @@ def handle_cancelled(tenant_id: object, raw: Mapping[str, Any]) -> None:
     if not tenant:
         return
     provider = vocab.label(normalise_provider(raw.get("provider")) or "") or "unknown"
-    writer.add_gap(
+    writer.note_gap(
         tenant_text(tenant), clock.event_date_of(clock.now_utc()), LLM, "failed_no_usage", f"cancelled:{provider}"
     )
 
@@ -625,8 +625,8 @@ def handle_tool_call(tenant_id: object, raw: Mapping[str, Any]) -> None:
     sku = vocab.norm_sku(raw.get("tool"))
     priced = cached_priced_tools(tenant)
     if priced is not None and (provider, sku) not in priced and (provider, "") not in priced:
-        writer.add_gap(tenant, clock.event_date_of(clock.now_utc()), TOOLS, "unpriced_tool", f"{provider}:{sku}")
-        writer.start_for_gaps()
+        # note_gap starts the writer so the gap is flushed, and counts it as lost once a drain has begun.
+        writer.note_gap(tenant, clock.event_date_of(clock.now_utc()), TOOLS, "unpriced_tool", f"{provider}:{sku}")
         return
     agent = raw.get("agent_id")
     _queue(

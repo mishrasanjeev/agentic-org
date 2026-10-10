@@ -213,6 +213,18 @@ tests:
         alertname: AgenticOrgSpendWriteFailures
         exp_alerts: []
 
+  # Routine tenantless model calls are unmetered calls, not write failures, so they never hold the
+  # spend write alert open.
+  - interval: 1m
+    name: tenantless model calls do not fire the spend write alert
+    input_series:
+      - series: 'agenticorg_spend_unmetered_calls_total{usage_type="llm_tokens",reason="no_tenant"}'
+        values: "0+50x60"
+    alert_rule_test:
+      - eval_time: 45m
+        alertname: AgenticOrgSpendWriteFailures
+        exp_alerts: []
+
   - interval: 1m
     name: a sustained spend writer backlog fires the backlog alert
     input_series:

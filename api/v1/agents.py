@@ -3974,12 +3974,13 @@ async def run_agent(
                 incoming_inputs["shadow_expected_tool"] = str(fixture["expected_tool"])
 
     # Spend metering (off by default): the run's server-owned attribution for its model calls.
+    # The user comes from effective_caller: a direct Python caller passes the Depends default.
     spend_token = spend_context.bind_scope(
         application="agents",
         agent_id=str(agent_id),
         agent_version=getattr(agent_row, "version", None),
         run_id=correlation_id,
-        initiating_user_id=str(caller.user_id) if caller is not None and caller.user_id else None,
+        initiating_user_id=str(effective_caller.user_id) if effective_caller.user_id else None,
     )
     try:
         if locals().get("_shadow_route_taken"):

@@ -6,11 +6,16 @@ from __future__ import annotations
 import asyncio
 import decimal
 import inspect
+import os
+import sys
 import uuid
+from contextlib import asynccontextmanager
+from contextvars import ContextVar
 from dataclasses import asdict
 from datetime import date
 from pathlib import Path
 from types import SimpleNamespace
+from unittest.mock import AsyncMock
 
 import pytest
 
@@ -38,6 +43,8 @@ def on(monkeypatch):
     got: dict[str, list] = {"events": [], "gaps": []}
     monkeypatch.setattr(writer, "submit", lambda events: got["events"].extend(events))
     monkeypatch.setattr(writer, "add_gap", lambda *args, **kw: got["gaps"].append(args))
+    # Call-path gaps go through note_gap, which also starts the writer.
+    monkeypatch.setattr(writer, "note_gap", lambda *args, **kw: got["gaps"].append(args))
     return got
 
 
@@ -175,6 +182,80 @@ class TestHook:
             await router.complete([{"role": "user", "content": "hi"}], model_override="gpt-4o", tenant_id=TID)
         assert on["gaps"] and on["gaps"][0][3:] == ("failed_no_usage", "cancelled:openai")
 
+    @pytest.mark.asyncio
+    async def test_a_fallback_cancelled_after_a_recorded_primary_failure_is_counted(self, monkeypatch, on):
+        """The primary failure's record must not hide the fallback the outer timeout cancels."""
+
+        async def decide(request):
+            return SimpleNamespace(applied=False, provider=None, model=request.requested_model, tenant_id=TID,
+                                   correlation_id="c", gated=False, use_case="completion")  # fmt: skip
+
+        async def admit(decision_):
+            return None
+
+        async def release(lease):
+            return None
+
+        called: list[str] = []
+
+        async def primary_fails_then_fallback_cancelled(model, messages, temperature, max_tokens, **scope):
+            called.append(model)
+            if len(called) == 1:
+                raise ConnectionError("primary unreachable")  # transient: the router falls back
+            raise asyncio.CancelledError()  # the outer timeout cuts the fallback off
+
+        monkeypatch.setattr(llm_router, "gateway_decide", decide)
+        monkeypatch.setattr(llm_router, "gateway_admit", admit)
+        monkeypatch.setattr(llm_router, "gateway_release", release)
+        router = llm_router.LLMRouter()
+        router.primary_model, router.fallback_model = "gpt-4o", "claude-sonnet-4-5"
+        monkeypatch.setattr(router, "_call_model", primary_fails_then_fallback_cancelled)
+        with pytest.raises(asyncio.CancelledError):
+            await router.complete([{"role": "user", "content": "hi"}], tenant_id=TID)
+        assert called == ["gpt-4o", "claude-sonnet-4-5"]
+        assert [gap[3:] for gap in on["gaps"]] == [
+            ("failed_no_usage", "openai"),  # the recorded primary failure
+            ("failed_no_usage", "cancelled:anthropic"),  # the cancelled fallback, on its own provider
+        ]
+
+    @pytest.mark.asyncio
+    async def test_a_cancelled_gated_write_still_meters_the_finished_call(self, monkeypatch, on):
+        async def cancelled_write(record):
+            raise asyncio.CancelledError()
+
+        monkeypatch.setattr(records, "_write", cancelled_write)
+        with pytest.raises(asyncio.CancelledError):
+            await records.record_model_call(
+                decision(gated=True), provider="gpt", model="gpt-4o", outcome="completed", latency_ms=5, tokens=15,
+                input_tokens=10, output_tokens=5,
+            )  # fmt: skip
+        assert [e.unit for e in on["events"]] == ["input_token", "output_token"]
+
+        def explode(*args, **kwargs):
+            raise AssertionError("the meter ran while spend is off")
+
+        monkeypatch.setattr(settings, "spend_intelligence_enabled", False)
+        monkeypatch.setattr(meter, "meter_model_call", explode)
+        with pytest.raises(asyncio.CancelledError):  # off: the cancellation passes through exactly as before
+            await records.record_model_call(
+                decision(gated=True), provider="gpt", model="gpt-4o", outcome="completed", latency_ms=5, tokens=15
+            )
+
+    @pytest.mark.asyncio
+    async def test_a_tenantless_call_notes_the_platform_key(self, monkeypatch, on):
+        """An earlier tenant-key note in the task must not bill a later call that used the platform's key."""
+        monkeypatch.setattr(context, "_CREDENTIAL", ContextVar("agenticorg_spend_credential_test", default=None))
+        monkeypatch.setattr(llm_router.external_keys, "openai_api_key", "unit-test-placeholder")
+        router = llm_router.LLMRouter()
+        context.note_credential("openai", "tenant")  # a tenant call earlier in the same task
+        assert await router._provider_secret("openai", None) == "unit-test-placeholder"
+        assert context.current_credential() == ("openai", "platform_env")
+        assert context.account_for("openai", context.current_credential()) == "platform_key"
+        monkeypatch.setattr(settings, "spend_intelligence_enabled", False)
+        monkeypatch.setattr(context, "_CREDENTIAL", ContextVar("agenticorg_spend_credential_off", default=None))
+        assert await router._provider_secret("openai", None) == "unit-test-placeholder"
+        assert context.current_credential() is None  # off: nothing noted
+
     def test_flag_off_router_raw_and_cassette_payload_unchanged(self, monkeypatch):
         monkeypatch.setattr(settings, "spend_intelligence_enabled", False)
         response = SimpleNamespace(candidates=["c"])
@@ -195,7 +276,10 @@ class TestHook:
         resolver_block = text[text.index("resolved = await get_provider_credential(") :][:400]
         assert "spend_context.note_credential(provider, resolved.source)" in resolver_block
         assert "spend_usage=_spend_usage(response, exc, messages, tenant_id)" in text
-        assert 'spend.note("cancelled", tenant_id, provider=_model_provider(model))' in text
+        # The provider of the call in flight (the primary, or the fallback once it started).
+        assert 'spend.note("cancelled", tenant_id, provider=_model_provider(in_flight))' in text
+        env_block = text[text.index("env_secret = {") :][:600]
+        assert 'spend_context.note_credential(provider, "platform_env")' in env_block
 
     def test_graph_hands_its_usage_and_billing_account_to_the_record(self):
         text = source("core/langgraph/agent_graph.py")
@@ -215,6 +299,79 @@ class TestEntryPoints:
         assert run.index("spend_context.bind_scope(") < run.index("lg_result = await langgraph_run(")
         assert "spend_context.reset_scope(spend_token)" in run
         assert 'inputs.get("business_unit")' not in bind and "use_case" not in bind
+
+    @staticmethod
+    def _run_agent_up_to_the_graph(monkeypatch, **caller_kwargs) -> list:
+        """Drive the real run route to the LangGraph call; returns the spend scope the graph would see."""
+        from starlette.requests import Request
+
+        import core.langgraph.runner as langgraph_runner
+        from api.v1 import agents as agents_api
+
+        agent = SimpleNamespace(
+            id=uuid.uuid4(), status="active", version="3", visibility="tenant", owner_user_id=None, config={}
+        )
+
+        @asynccontextmanager
+        async def session(*_args, **_kwargs):
+            yield SimpleNamespace(execute=AsyncMock(return_value=SimpleNamespace(scalar_one_or_none=lambda: agent)))
+
+        config = {
+            "review_learning": {"effective_confidence_floor": 0.8, "confidence_condition_suppressed": False},
+            "authorized_tools": [],
+            "system_prompt_text": "You are a probe agent.",
+            "config": {},
+            "cost_controls": {},
+            "connector_ids": [],
+            "agent_type": "spend_scope_probe",
+            "domain": "ops",
+        }
+        monkeypatch.setattr(agents_api, "get_tenant_session", session)
+        monkeypatch.setattr(agents_api, "require_agent_visible", lambda _agent, _caller: None)
+        monkeypatch.setattr(agents_api, "_require_agent_runnable", AsyncMock(return_value=None))
+        monkeypatch.setattr(agents_api, "_required_connector_ids_for_agent", lambda _agent: [])
+        monkeypatch.setattr(agents_api, "_agent_to_dict", lambda _agent: dict(config))
+        monkeypatch.setattr(
+            agents_api,
+            "caller_grant_from_request",
+            lambda _request: SimpleNamespace(resolve_kwargs=lambda: {}, marker=lambda: None),
+        )
+        monkeypatch.setattr(agents_api, "resolve_run_grant", AsyncMock(return_value=None))
+        monkeypatch.setattr(agents_api, "_resolve_connector_configs", AsyncMock(return_value=({}, [])))
+        seen: list = []
+
+        class ReachedTheGraphError(Exception):
+            pass
+
+        async def graph(**_kwargs):
+            seen.append(context.current_scope())
+            raise ReachedTheGraphError
+
+        monkeypatch.setattr(langgraph_runner, "run_agent", graph)
+        with pytest.raises(ReachedTheGraphError):
+            asyncio.run(
+                agents_api.run_agent(
+                    agent.id,
+                    Request({"type": "http"}),
+                    {"inputs": {"text": "Summarise the open invoices"}},
+                    tenant_id=TID,
+                    **caller_kwargs,
+                )
+            )
+        return seen
+
+    def test_run_agent_scope_binding_takes_a_direct_python_callers_depends_default(self, monkeypatch):
+        """A direct caller passes the Depends default as ``caller``: the bind must not read it (flag off or on)."""
+        from core.ownership import Caller
+
+        monkeypatch.setattr(settings, "spend_intelligence_enabled", False)
+        assert self._run_agent_up_to_the_graph(monkeypatch) == [None]  # off: no AttributeError, nothing bound
+        monkeypatch.setattr(settings, "spend_intelligence_enabled", True)
+        bound = self._run_agent_up_to_the_graph(monkeypatch)[0]
+        assert bound.application == "agents" and bound.agent_version == "3" and bound.initiating_user_id is None
+        user = uuid.uuid4()
+        human = Caller(user_id=user, role="admin", domains=None, is_admin=True, is_machine=False)
+        assert self._run_agent_up_to_the_graph(monkeypatch, caller=human)[0].initiating_user_id == str(user)
 
     @pytest.mark.parametrize(
         ("path", "anchor"),
@@ -293,6 +450,51 @@ class TestEntryPoints:
         assert after.index("await spend.drain(timeout=5.0)") < after.index("stop_metrics_server()")
         celery = source("core/tasks/celery_app.py")
         assert "def _drain_spend_writer(" in celery and "spend.drain_blocking(5.0)" in celery
+
+    def test_api_and_workers_prewarm_the_meter_at_start(self, monkeypatch):
+        text = source("api/main.py")
+        lifespan = text[text.index("async def lifespan(") :]
+        assert lifespan.index("spend.prewarm()") < lifespan.index("    yield\n")
+        from core import spend
+        from core.tasks import celery_app
+
+        calls: list[int] = []
+        monkeypatch.setattr(spend, "prewarm", lambda: calls.append(1) or True)
+        celery_app._prewarm_spend_meter()
+        assert calls == [1]
+        celery = source("core/tasks/celery_app.py").replace("\r\n", "\n")
+        assert "@worker_process_init.connect\ndef _prewarm_spend_meter(" in celery
+
+
+class TestPrewarm:
+    def test_off_it_does_nothing_at_all(self, monkeypatch):
+        from core import spend
+
+        def explode(name):
+            raise AssertionError(f"imported {name} while spend is off")
+
+        monkeypatch.setattr(settings, "spend_intelligence_enabled", False)
+        monkeypatch.setattr(spend, "importlib", SimpleNamespace(import_module=explode))
+        assert spend.prewarm() is False
+
+    def test_on_it_loads_the_hook_path_and_reopens_a_drained_writer(self, monkeypatch):
+        from core import spend
+
+        monkeypatch.setattr(settings, "spend_intelligence_enabled", True)
+        monkeypatch.setitem(writer._WRITER, "closed_pid", os.getpid())  # an earlier lifespan drained
+        assert spend.prewarm() is True
+        assert all(name in sys.modules for name in spend._HOOK_MODULES)
+        assert writer._WRITER["closed_pid"] is None and not writer.started()  # no thread until first use
+
+    def test_a_failure_is_logged_never_raised(self, monkeypatch):
+        from core import spend
+
+        def broken(name):
+            raise ImportError(name)
+
+        monkeypatch.setattr(settings, "spend_intelligence_enabled", True)
+        monkeypatch.setattr(spend, "importlib", SimpleNamespace(import_module=broken))
+        assert spend.prewarm() is False
 
 
 class TestMeteringHandlers:
