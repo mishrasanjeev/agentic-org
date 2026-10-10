@@ -350,10 +350,13 @@ writes them idempotently with the same keys, one tenant per transaction. A trans
 there (a lock or statement timeout and a deadlock included) is retried with backoff up to eight
 times, each retry carrying only the tenants not yet written; events it finally cannot write are
 counted (`spill_failed`) and recorded as gaps per tenant. At shutdown (the API lifespan, a worker's exit) the
-writer stops, waits up to 5 seconds and spills what is left; what cannot be spilled is counted
-as `shutdown_lost`, and so are gap counts the writer had not yet flushed. Once the drain has
-begun the process starts no new writer: usage or a gap that arrives later, and a batch the
-stopping writer tries to retry after the drain took the queue, are counted as `shutdown_lost`.
+writer stops, waits up to 5 seconds and spills what is left, including the batch it was still
+writing when the wait ran out (records are keyed, so a batch the writer still finishes is not
+written twice); what cannot be spilled is counted as `shutdown_lost`. Once the drain has begun
+the process starts no new writer: usage that arrives later is counted as `shutdown_lost`. Gap
+counts the writer had not yet flushed, and gaps that arrive after the drain began, are counted in
+`agenticorg_spend_meter_gaps_lost_total` under the gap's own reason, not as write failures: the
+usage behind each gap was already counted when it went unmetered.
 A gap seen on a call path starts the writer, so a process whose calls only fail still flushes its
 gaps. The only loss on the call path is a full queue (5,000 events), counted globally and per
 tenant (`queue_full`).

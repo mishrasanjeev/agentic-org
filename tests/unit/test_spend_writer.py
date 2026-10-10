@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import asyncio
+import os
 import threading
 import uuid
 from datetime import date
@@ -34,6 +35,12 @@ def failures(reason: str) -> float:
     from observability import metrics
 
     return metrics.spend_usage_write_failures_total.labels(usage_type="llm_tokens", reason=reason)._value.get()
+
+
+def gaps_lost(reason: str) -> float:
+    from observability import metrics
+
+    return metrics.spend_meter_gaps_lost_total.labels(usage_type="llm_tokens", reason=reason)._value.get()
 
 
 @pytest.fixture
@@ -132,37 +139,71 @@ class TestCallPath:
         assert started == [1] and writer.started()  # no event was ever submitted
         assert writer.pop_gaps() == {(TID, date(2026, 10, 1), "llm_tokens", "failed_no_usage", "openai"): 2}
 
-    def test_drain_counts_unflushed_gaps_as_shutdown_lost(self, monkeypatch):
+    def test_drain_counts_unflushed_gaps_as_lost_gaps_not_write_failures(self, monkeypatch):
         writer.add_gap(TID, date(2026, 10, 1), "llm_tokens", "failed_no_usage", "openai", count=2)
         writer.add_gap(TID, date(2026, 10, 2), "llm_tokens", "queue_full")
-        before = failures("shutdown_lost")
+        before = failures("shutdown_lost"), gaps_lost("failed_no_usage"), gaps_lost("queue_full")
         assert writer.drain_blocking(0.1) == 0  # no writer ever started
-        assert failures("shutdown_lost") == before + 3 and writer.pop_gaps() == {}
+        # The usage behind each gap was counted when it went unmetered: not counted again as a failure.
+        assert failures("shutdown_lost") == before[0] and writer.pop_gaps() == {}
+        assert gaps_lost("failed_no_usage") == before[1] + 2 and gaps_lost("queue_full") == before[2] + 1
 
     def test_after_a_drain_late_usage_and_gaps_are_counted_and_no_writer_starts(self, monkeypatch, spilled):
         started: list[int] = []
         monkeypatch.setattr(writer._Writer, "start", lambda self: started.append(1))
         writer.submit([event()])
         assert writer.drain_blocking(0.1) == 1 and started == [1]
-        before = failures("shutdown_lost")
+        before = failures("shutdown_lost"), gaps_lost("failed_no_usage")
         writer.submit([event(), event()])  # late: would die in a new thread nobody drains
         writer.note_gap(TID, date(2026, 10, 1), "llm_tokens", "failed_no_usage", "openai")
         writer.start_for_gaps()
         assert started == [1] and not writer.started() and writer.pending() == 0
-        assert failures("shutdown_lost") == before + 3 and writer.pop_gaps() == {}
+        assert failures("shutdown_lost") == before[0] + 2 and writer.pop_gaps() == {}
+        assert gaps_lost("failed_no_usage") == before[1] + 1
         writer.reopen()  # a new lifespan in the same process
         writer.submit([event()])
         assert started == [1, 1] and writer.pending() == 1
+
+    def test_the_batch_in_flight_when_the_join_times_out_is_spilled_once(self, monkeypatch, spilled):
+        class Stalled:
+            def join(self, timeout=None):
+                return None
+
+            def is_alive(self):
+                return True
+
+        live = idle_writer()
+        live._thread = Stalled()
+        flying = [event(), event(), event()]
+        live._inflight = list(flying)
+        live.put([event()])
+        left = live.stop_and_collect(0.0)
+        assert len(left) == 4 and live._inflight == [] and live._handed_over
+        before = failures("shutdown_lost")
+        live._requeue(writer._Retry(0.0, TID, flying, 1, None, 0))  # the stalled write gives up later
+        assert failures("shutdown_lost") == before and live.pending() == 0
+        # A thread that finished before the join hands nothing over.
+        done = idle_writer()
+        done._inflight = [event()]
+        assert done.stop_and_collect(0.0) == [] and not done._handed_over
+        # Through the drain: the in-flight batch is spilled with the queue.
+        live_two = idle_writer()
+        with writer._LOCK:
+            writer._WRITER.update(writer=live_two, pid=os.getpid())
+        live_two._thread = Stalled()
+        live_two._inflight = [event(), event()]
+        assert writer.drain_blocking(0.0) == 2 and sum(len(batch) for batch in spilled) == 2
 
     def test_a_requeue_or_gap_restore_after_the_drain_collected_is_counted(self):
         live = idle_writer()
         live.put([event()])
         assert len(live.stop_and_collect(0.0)) == 1
-        before = failures("shutdown_lost")
+        before = failures("shutdown_lost"), gaps_lost("paused"), failures("paused")
         live._requeue(writer._Retry(0.0, TID, [event(), event()], 1, None, 0))  # a thread that outlived the join
         live._restore_gaps({(TID, date(2026, 10, 1), "llm_tokens", "paused", ""): 4})
         assert live.pending() == 0 and writer.pop_gaps() == {}
-        assert failures("shutdown_lost") == before + 6
+        assert failures("shutdown_lost") == before[0] + 2 and gaps_lost("paused") == before[1] + 4
+        assert failures("paused") == before[2]  # a paused tenant's gaps never reach the write-failure alert
         assert live.put([event()]) == "shutdown_lost" and live.pending() == 0
         open_writer = idle_writer()
         open_writer._restore_gaps({(TID, date(2026, 10, 1), "llm_tokens", "paused", ""): 1})

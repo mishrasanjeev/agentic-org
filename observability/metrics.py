@@ -305,6 +305,13 @@ spend_unmetered_calls_total = Counter(
     "cancelled, no_tenant)",
     ["usage_type", "reason"],
 )
+# Gap counts (usage already counted above when it went unmetered) that a shutdown dropped before
+# they reached spend_meter_gaps. Kept apart from the write failures: the loss was counted once already.
+spend_meter_gaps_lost_total = Counter(
+    "agenticorg_spend_meter_gaps_lost_total",
+    "Meter gap counts dropped at shutdown before they were written, by the gap's reason",
+    ["usage_type", "reason"],
+)
 # livemax: a Celery child that dies with a backlog leaves no series behind (mark_process_dead
 # removes live* gauge files), and the backlog alert reads max() across processes.
 spend_usage_pending = Gauge(
