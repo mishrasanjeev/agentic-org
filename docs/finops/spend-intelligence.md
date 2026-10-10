@@ -208,17 +208,22 @@ supersede records the predecessor's end as its own change. An import records a m
 summary row (the counts and the uploaded file's sha256) and one row per 200 changed rows, every
 changed row with its before and after values. Audit details hold identifiers, codes, counts and
 reference-data values only. The rows of rate-card and commitment writes (`spend.rate_cards.*`,
-`spend.commitments.*`) carry prices and committed amounts, so `GET /audit` shows them only to a
-human administrator or auditor, the callers the commercial routes answer. That filter applies
-whatever `spend_intelligence_enabled` says, because the rows stay after the flag is turned off.
-It is applied only for a tenant that keeps a rate card or a commitment (spend rows are never
-deleted, and their audit rows commit with them); every other tenant's audit query is unchanged.
+`spend.commitments.*`) carry prices and committed amounts, and the rows maintenance jobs write
+(`spend.job.*`: a job's parameters, a correction's reason and card ids; `spend.usage.*`: amounts
+restated or re-attributed per billing date and card, backfill counts; `spend.fx.*`: INR totals
+settled per currency; `spend.rollups.*`: rebuild counts) carry the same kind of figures, so
+`GET /audit` shows them only to a human administrator or auditor, the callers the commercial
+routes answer. FX reference-data rows (`spend.fx_rates.*`) stay visible to every audit reader.
+That filter applies whatever `spend_intelligence_enabled` says, because the rows stay after the
+flag is turned off. It is applied only for a tenant that keeps a rate card, a commitment or a
+spend job (spend rows are never deleted, and their audit rows commit with them); every other
+tenant's audit query is unchanged.
 
 ## API
 
 | Method and path | Who | Notes |
 |---|---|---|
-| `GET /spend/status` | `audit:read` | `enabled`, the reporting currency and zone, the vocabularies, the import bounds |
+| `GET /spend/status` | `audit:read` | `enabled`, the reporting currency and zone, the vocabularies, the import bounds; the writer's pending count for an administrator or auditor only |
 | `GET /spend/org-nodes`, `GET /spend/org-nodes/{node_id}` | `audit:read` | a node with its ancestors and business unit |
 | `POST /spend/org-nodes`, `PATCH /spend/org-nodes/{node_id}`, `POST /spend/org-nodes/import` | administrator | |
 | `GET /spend/mappings`, `GET /spend/model-aliases` | `audit:read` | |
@@ -230,17 +235,18 @@ deleted, and their audit rows commit with them); every other tenant's audit quer
 | `GET /spend/fx-rates` | `audit:read` | |
 | `PUT /spend/fx-rates`, `POST /spend/fx-rates/import` | administrator | |
 | `GET /spend/price` | administrator or auditor | the price of a usage at a date |
-| `GET /spend/usage` | `audit:read` | records of at most 31 days, a page at a time (`cursor`); filters `usage_type`, `provider`, `org_node_id`, `agent_id`, `unattributed`, `unpriced`; other people's personal agents hidden, user ids shown to administrators and auditors only |
-| `GET /spend/rollups` | `audit:read` | sums per a dimension or per `day` (at most 366 days), amounts per currency and in INR; every grouping applies the agent visibility rule |
+| `GET /spend/usage` | `audit:read` | records of at most 31 days, a page at a time (`cursor`); filters `usage_type`, `provider`, `org_node_id`, `agent_id`, `unattributed`, `unpriced`; every record for an administrator or auditor, the agent visibility rule for anyone else; user ids shown to administrators and auditors only |
+| `GET /spend/rollups` | `audit:read` | sums per a dimension or per `day` (at most 366 days), amounts per currency and in INR; every grouping applies the agent visibility rule except for an administrator or auditor; `rate_card_id` and `commitment_id` groupings for a human administrator or auditor only |
 | `GET /spend/coverage` | administrator or auditor | the Gate 1 attribution measure (at most 366 days); tenant-wide |
-| `GET /spend/coverage/ledgers` | `audit:read` | usage beside the existing ledgers (at most 31 days); every source filtered by the agent visibility rule |
+| `GET /spend/coverage/ledgers` | `audit:read` | usage beside the existing ledgers (at most 31 days); every source filtered by the agent visibility rule except for an administrator or auditor |
 | `GET /spend/gaps` | administrator or auditor | meter gaps (at most 92 days); tenant-wide |
 | `POST /spend/rollups/rebuild`, `POST /spend/usage/backfill`, `POST /spend/usage/restate`, `POST /spend/usage/reattribute`, `POST /spend/fx-rates/settle`, `POST /spend/commitments/recompute` | administrator | `202` with a job id |
 | `GET /spend/jobs`, `GET /spend/jobs/{job_id}` | administrator or auditor | tenant-wide (record counts of every agent; a correction's reason) |
 
 `GET /spend/status` also reports the usage limits (`usage_window_days` 31, `rebuild_days` 31,
 `restate_days` 92), `backfill_source`, `partition_horizon` and this process's writer
-(`started`, `pending`).
+(`started`, and for an administrator or auditor `pending`: the events queued in the process, which
+are every tenant's).
 
 ## Usage records
 
@@ -416,7 +422,8 @@ visible; a day whose records are all unpriced or unconverted has no INR amount. 
 to six decimals rounded so they never look better than they are: attributed shares toward zero,
 unattributed shares away from it. The finops `unattributed_share` is a different measure and is
 not used here. Coverage sums every agent's usage (and gaps, which carry no agent), so it is answered
-to an administrator or auditor only (see [Who reads usage](#who-reads-usage)).
+to an administrator or auditor only, the readers who also read every record (see
+[Who reads usage](#who-reads-usage)).
 
 ## Meter gaps
 
@@ -446,17 +453,25 @@ dropped, and the change's response (`restate_job_id`, `settle_job_id`) names a j
   ranges and adds the forced dates; a restatement of the same provider joins the ranges, adds the
   cards (or restates every record of the provider when either job does) and lists both reasons; a
   recompute covers the one provider both name, or every provider. The merge is audited
-  (`spend.job.merge`, with the parameters before and after). A joined range is never longer than a
-  job may run (ten years); widening one only re-checks records that are already right;
-- otherwise it is queued as its own job (a restatement of another provider, or while the job of
-  its kind is running) and runs after the one before it: a job's end sends the next queued job of
-  its kind to a worker.
+  (`spend.job.merge`, with the parameters before and after) and counted in the job's
+  `result.merges`. A joined range is never longer than a job may run (ten years); widening one only
+  re-checks records that are already right. A job queued again after a transient failure is never
+  merged into: the merged work would get only the attempts it has left;
+- otherwise it is queued as its own job (a restatement of another provider, while the job of its
+  kind is running, after a transient failure, or while another transaction holds the queued job's
+  row) and runs after the one before it: a job's end sends the next queued job of its kind to a
+  worker.
+
+When an administrator's job cannot be sent to a worker, the request answers `failed` so it can be
+sent again, unless a change merged its job into that one while the send was failing: then the
+job stays queued, the request answers `queued`, and the job sweep sends it.
 
 Locks are taken in one order on every path: the resource's own lock first (a rate card's key, a
 currency, a commitment), then the job kind's lock, then the kind's queued jobs (row locks in
-creation order, the order the sweep locks them in). Nothing that holds a job-kind lock or a job
-row waits for a resource lock: the claim, the sweep, a job's status writes and an
-administrator's job request take none.
+creation order, the order the sweep locks them in, skipping a row another transaction holds
+rather than waiting for it). Nothing that holds a job-kind lock or a job row waits for a resource
+lock: the claim, the sweep, a job's status writes and an administrator's job request take none.
+Commitment rows are locked in id order by the write path and by the recompute alike.
 
 A running job writes a heartbeat every minute. A job whose heartbeat has stopped for ten minutes
 (its worker was lost) can be taken over by a redelivered task, and the job sweep (every 15 minutes)
@@ -575,22 +590,28 @@ scoped under forced row-level security, and spend-to-spend foreign keys are comp
 
 ### Who reads usage
 
-Every usage read either applies the agent visibility rule or is answered to tenant-wide readers
-only:
+One rule, the one `GET /audit` follows (administrators and auditors see every row). A tenant-wide
+reader, that is an administrator or a person whose domains are unrestricted (an auditor), reads
+every usage record, every rollup, coverage, gaps, jobs and the ledger comparison with no agent
+filter. Every other reader (a domain role, a machine credential without the administrator scope,
+anyone who does not own a personal agent) gets the agent visibility rule where a read carries an
+agent, and is refused the tenant-wide figures, which cannot be filtered without letting a reader
+difference two views:
 
-| Read | Rule |
-|---|---|
-| `GET /spend/usage` | agent visibility |
-| `GET /spend/rollups`, every grouping | agent visibility (the agent is a rollup dimension, so a total per use case, provider, node or day sums only the agents the reader may see) |
-| `GET /spend/coverage/ledgers` | agent visibility, on the usage side and on every ledger (each carries an agent id) |
-| `GET /spend/coverage` | tenant-wide readers only (the Gate 1 measure sums every agent's usage; gaps carry no agent) |
-| `GET /spend/gaps` | tenant-wide readers only (gaps carry no agent) |
-| `GET /spend/jobs`, `GET /spend/jobs/{job_id}` | tenant-wide readers only (results count every agent's records; parameters carry a correction's reason) |
-| `GET /spend/status` | `audit:read` (no usage figure: the bounds, the backfill source, the partition horizon and this process's writer) |
+| Read | Tenant-wide reader | Anyone else |
+|---|---|---|
+| `GET /spend/usage` | every record | agent visibility |
+| `GET /spend/rollups`, every grouping | every row | agent visibility (the agent is a rollup dimension, so a total per use case, provider, node or day sums only the agents the reader may see) |
+| `GET /spend/coverage/ledgers` | every row of every source | agent visibility, on the usage side and on every ledger (each carries an agent id) |
+| `GET /spend/coverage` | the whole tenant | 403 `tenant_wide_read_refused` (the Gate 1 measure sums every agent's usage; gaps carry no agent) |
+| `GET /spend/gaps` | the whole tenant | 403 `tenant_wide_read_refused` (gaps carry no agent) |
+| `GET /spend/jobs`, `GET /spend/jobs/{job_id}` | every job | 403 `tenant_wide_read_refused`, checked before a job is looked up (results count every agent's records; parameters carry a correction's reason) |
+| `GET /spend/status` | with the writer's pending count | without it (the count is every tenant's queued events in the process) |
 
-Under the agent visibility rule an administrator reads every record; anyone else reads the records
-with no agent, the records of shared agents in their domains and of their own personal agents (an
-auditor's domains are unrestricted, so every shared agent, but not another person's personal
-agent). A tenant-wide reader is an administrator (who reads every record anyway) or a person whose
-domains are unrestricted (an auditor); a domain role, or a machine credential without the
-administrator scope, gets 403 `tenant_wide_read_refused`, checked before a job is looked up.
+Under the agent visibility rule a reader sees the records with no agent, the records of shared
+agents in their domains (every shared agent for a machine credential) and of their own personal
+agents. An agent id whose agent row is gone is visible to tenant-wide readers only. User ids, and
+the contract terms of a record (`rate_card_id`, `unit_price`, `commitment_id`, `overage_quantity`)
+with the `rate_card_id` and `commitment_id` rollup groupings, are for a human administrator or
+auditor only, whatever else a reader may see. The audit rows of spend jobs are hidden from
+`GET /audit` for the same readers (see [Audit](#audit)).

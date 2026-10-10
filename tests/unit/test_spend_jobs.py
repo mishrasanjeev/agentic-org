@@ -8,6 +8,7 @@ import asyncio
 import uuid
 from datetime import date, timedelta
 from decimal import Decimal
+from types import SimpleNamespace
 
 import pytest
 from sqlalchemy.exc import DBAPIError, IntegrityError, OperationalError
@@ -366,6 +367,78 @@ class TestFollowupAtomicity:
         assert len(store.of("spend_jobs")) == 1
 
     @pytest.mark.asyncio
+    async def test_a_correction_merged_while_an_administrators_dispatch_fails_keeps_the_job_queued(
+        self, store, monkeypatch
+    ):
+        """The finding: enqueue committed an administrator's job and its send was slow to fail; meanwhile a
+        correction merged its restatement into that queued job and committed (reporting the job's id); then the
+        failed send marked the job failed, the sweep never resends a failed job and the correction could not be
+        repeated (its card was retired)."""
+        transactional(monkeypatch, store)
+        used = card(effective_to=date(2026, 12, 1))
+        store.add(used)
+        await meter.write_events(store, TENANT, [event()], now=T0)
+        broker_down(monkeypatch)
+        real_mark = jobs._mark_undispatched
+        during: dict = {}
+
+        async def a_correction_while_the_send_fails(tenant_id, job_id, **kwargs):
+            during["correction"] = await rates.correct_card(
+                TENANT, used.id, {"unit_price": "3"}, reason="Contract price was wrong", actor=ACTOR, now=T0
+            )
+            return await real_mark(tenant_id, job_id, **kwargs)
+
+        monkeypatch.setattr(jobs, "_mark_undispatched", a_correction_while_the_send_fails)
+        params = {"provider": "openai", "start": "2026-10-01", "end": "2026-10-01", "card_ids": [],
+                  "include_unpriced": True, "reason": "Administrator restatement"}  # fmt: skip
+        out = await jobs.enqueue(TENANT, kind="restate", params=params, actor=ACTOR, now=T0)
+        row = job(store, out["job_id"])
+        assert during["correction"]["restate_job_id"] == out["job_id"]  # merged into the administrator's job
+        assert used.status == "retired"  # the correction cannot be sent again
+        assert out == {"job_id": str(row.id), "status": "queued", "kind": "restate"}
+        assert row.status == "queued" and row.error_code == "" and row.finished_at is None
+        assert row.params["card_ids"] == [str(used.id)] and row.result == {"merges": 1}
+        assert store.locks.count(locks.job_kind(TENANT, "restate")) == 3  # enqueue, the merge, the failed send
+        assert await resent_by_the_sweep(monkeypatch) == [out["job_id"]]
+        done = await jobs.run(TENANT, row.id, now=T0)
+        assert done["status"] == "succeeded" and done["result"]["changed"] == 1
+        assert store.of("spend_usage_records")[0].rate_card_id == uuid.UUID(during["correction"]["card"]["id"])
+
+    @pytest.mark.asyncio
+    async def test_a_followup_merged_without_widening_the_job_keeps_it_queued_too(self, store, monkeypatch):
+        """A follow-up the queued job already covers leaves its parameters as they were; it still relies on it."""
+        broker_down(monkeypatch)
+        real_mark = jobs._mark_undispatched
+        merged: dict = {}
+
+        async def a_commitment_change_while_the_send_fails(tenant_id, job_id, **kwargs):
+            merged["out"] = await jobs.queue_followup(
+                store, TENANT, kind="recompute_commitments", params={"provider": "openai"}, actor=ACTOR
+            )
+            return await real_mark(tenant_id, job_id, **kwargs)
+
+        monkeypatch.setattr(jobs, "_mark_undispatched", a_commitment_change_while_the_send_fails)
+        out = await jobs.enqueue(TENANT, kind="recompute_commitments", params={}, actor=ACTOR)
+        row = job(store, out["job_id"])
+        assert merged["out"] == {**out, "merged": True}
+        assert row.params == {} and row.result == {"merges": 1}  # every provider already: parameters unchanged
+        assert out["status"] == "queued" and row.status == "queued"
+        assert await resent_by_the_sweep(monkeypatch) == [out["job_id"]]
+
+    @pytest.mark.asyncio
+    async def test_an_undispatched_job_the_sweep_already_took_is_left_alone(self, store, monkeypatch):
+        broker_down(monkeypatch)
+        real_mark = jobs._mark_undispatched
+
+        async def claimed_meanwhile(tenant_id, job_id, **kwargs):
+            job(store, job_id).status = "running"  # the sweep resent it and a worker claimed it
+            return await real_mark(tenant_id, job_id, **kwargs)
+
+        monkeypatch.setattr(jobs, "_mark_undispatched", claimed_meanwhile)
+        out = await jobs.enqueue(TENANT, kind="reattribute", params=SPAN, actor=ACTOR)
+        assert out["status"] == "queued" and job(store, out["job_id"]).status == "running"
+
+    @pytest.mark.asyncio
     async def test_queue_followup_merges_inside_the_callers_transaction_and_raises_on_a_bad_kind(self, store):
         from core.spend.errors import SpendError
 
@@ -378,6 +451,94 @@ class TestFollowupAtomicity:
         with pytest.raises(SpendError):
             await jobs.queue_followup(store, TENANT, kind="nonsense", params={}, actor=ACTOR)
         jobs.dispatch(TENANT, None)  # nothing queued: nothing sent
+
+
+# ---------------------------------------------------------------- which queued job takes merged work
+
+
+class TestMergeTargets:
+    @pytest.mark.asyncio
+    async def test_queued_jobs_are_locked_skip_locked_in_the_sweeps_order(self, store):
+        """The finding: an import queueing restatements for two providers re-ran SELECT ... FOR UPDATE on the
+        kind's queued rows; a row the runner had queued again meanwhile (older than one already held) was then
+        locked out of order and could deadlock with the sweep. Rows another transaction holds are skipped."""
+        from sqlalchemy.dialects import postgresql
+        from sqlalchemy.sql.selectable import Select
+
+        await jobs.queue_followup(store, TENANT, kind="settle_fx", params={**SPAN, "force_dates": []}, actor=ACTOR)
+        locking = [s for s in store.statements if isinstance(s, Select) and s._for_update_arg is not None]
+        assert len(locking) == 1
+        sql = " ".join(str(locking[0].compile(dialect=postgresql.dialect())).split())
+        assert sql.endswith("ORDER BY spend_jobs.created_at, spend_jobs.id FOR UPDATE SKIP LOCKED")
+        assert "spend_jobs.status = %(status_1)s" in sql and "spend_jobs.kind = %(kind_1)s" in sql
+
+    @pytest.mark.asyncio
+    async def test_a_queued_job_another_transaction_holds_is_skipped_and_the_work_queued_on_its_own(self, store):
+        held = await jobs.queue_followup(store, TENANT, kind="settle_fx", params={**SPAN, "force_dates": []},
+                                         actor=ACTOR)  # fmt: skip
+        store.held_elsewhere.add(uuid.UUID(held["job_id"]))  # the sweep or a claim holds its row
+        forced = {**SPAN, "force_dates": [["USD", "2026-10-01"]]}
+        own = await jobs.queue_followup(store, TENANT, kind="settle_fx", params=forced, actor=ACTOR)
+        assert own["merged"] is False and own["job_id"] != held["job_id"]
+        assert job(store, held["job_id"]).params["force_dates"] == []  # not changed under another's lock
+        assert job(store, own["job_id"]).params["force_dates"] == [["USD", "2026-10-01"]]  # never dropped
+        store.held_elsewhere.clear()
+        later = await jobs.queue_followup(store, TENANT, kind="settle_fx", params=forced, actor=ACTOR)
+        assert later["merged"] is True and later["job_id"] == held["job_id"]  # free again: the oldest takes it
+
+    @pytest.mark.asyncio
+    async def test_an_import_for_two_providers_skips_an_older_job_held_by_the_sweep(self, store):
+        store.add(card(source="list"))
+        store.add(card(provider="anthropic", model_sku="claude-x", source="list"))
+        await meter.write_events(
+            store, TENANT, [event(), event(provider="anthropic", model="claude-x", calls=1)], now=T0
+        )
+        older = await jobs.queue_followup(
+            store, TENANT, kind="restate", actor=ACTOR,
+            params={"provider": "anthropic", "start": "2026-09-01", "end": "2026-10-01", "card_ids": [],
+                    "include_unpriced": False, "reason": "An earlier restatement"},
+        )  # fmt: skip
+        store.held_elsewhere.add(uuid.UUID(older["job_id"]))  # queued again by a lost worker's sweep, held by it
+        rows = [
+            {"provider": provider, "usage_type": "llm_tokens", "model_sku": sku, "unit": "1m_input_tokens",
+             "unit_price": "3", "currency": "USD", "effective_from": "2026-09-01", "source": "list",
+             "supersede": "true", "restate": "true"}
+            for provider, sku in (("openai", "gpt-4o"), ("anthropic", "claude-x"))
+        ]  # fmt: skip
+        report = await rates.import_cards(TENANT, rows, actor=ACTOR, dry_run=False, file_sha256="0" * 64, now=T0)
+        queued = {q["provider"]: q["job_id"] for q in report["restate_jobs"]}
+        assert set(queued) == {"openai", "anthropic"} and older["job_id"] not in queued.values()
+        assert job(store, older["job_id"]).params["reason"] == "An earlier restatement"
+        for provider, job_id in queued.items():
+            assert job(store, job_id).params["provider"] == provider and job(store, job_id).status == "queued"
+
+    @pytest.mark.asyncio
+    async def test_work_is_never_merged_into_a_job_queued_again_after_a_transient_failure(
+        self, store, sent, monkeypatch
+    ):
+        """The finding: a follow-up merged into a job the runner had queued again after transient failures got
+        only the attempts that job had left, and was dropped with it when the last attempt failed."""
+
+        async def busy(*args, **kwargs):
+            raise lock_timeout()
+
+        monkeypatch.setattr(maintenance, "settle_fx", busy)
+        first = await jobs.enqueue(TENANT, kind="settle_fx", params={**SPAN, "force_dates": []}, actor=ACTOR)
+        first_id = uuid.UUID(first["job_id"])
+        assert (await jobs.run(TENANT, first_id))["attempts"] == 1
+        retried = job(store, first_id)
+        assert retried.status == "queued" and retried.result["attempts"] == 1
+        forced = {**SPAN, "force_dates": [["USD", "2026-10-01"]]}
+        later = await jobs.enqueue_followup(TENANT, kind="settle_fx", params=forced, actor=ACTOR)
+        assert later["merged"] is False and later["job_id"] != first["job_id"]
+        assert retried.params["force_dates"] == [] and "merges" not in retried.result
+        assert (await jobs.run(TENANT, first_id))["attempts"] == 2
+        assert (await jobs.run(TENANT, first_id))["status"] == "failed"
+        own = job(store, later["job_id"])
+        assert own.status == "queued" and own.result == {}  # its own full budget of attempts
+        assert sent[-1] == (later["job_id"], {})  # the failed job's end sent it
+        assert jobs._attempts(SimpleNamespace(result={"attempts": "x"})) == 0
+        assert jobs._attempts(SimpleNamespace(result=None)) == 0
 
 
 # ---------------------------------------------------------------- one running job per kind

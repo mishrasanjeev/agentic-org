@@ -589,8 +589,13 @@ async def mark_commitments_for_replay(
     A commitment with no watermark (never recomputed, or in a full replay that
     dropped it until the replay ends) is marked too, so a late record whose day
     a running replay has already passed is drawn by the next one.
+
+    The rows are locked in id order before the update, the order the
+    recompute job locks a provider's commitments in, so the two never lock
+    the same rows in opposite orders (one unordered update could deadlock
+    with a recompute, which Postgres resolves by aborting one of them).
     """
-    from sqlalchemy import or_, update
+    from sqlalchemy import or_, select, update
 
     from core.models.spend import SpendCommitment as C
 
@@ -601,7 +606,11 @@ async def mark_commitments_for_replay(
         conditions.append(or_(C.recomputed_through.is_(None), C.recomputed_through > after))
     if kind:
         conditions.append(C.kind == kind)
-    await session.execute(update(C).where(*conditions).values(needs_full_recompute=True))
+    locked = (await session.execute(select(C.id).where(*conditions).order_by(C.id).with_for_update())).all()
+    ids = [row[0] for row in locked]
+    if not ids:
+        return
+    await session.execute(update(C).where(C.tenant_id == tenant_id, C.id.in_(ids)).values(needs_full_recompute=True))
 
 
 def _gap_key(day: date, usage_type: str, reason: str, detail: str) -> tuple[date, str, str, str]:

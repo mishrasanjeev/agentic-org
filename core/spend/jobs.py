@@ -17,7 +17,11 @@ tenant (the partial unique index ``ux_spend_jobs_running``).
   queued job of the kind whose parameters can be widened to cover both (the
   range joined, the cards and forced dates added; a restatement only for the
   same provider), or it is queued as a job of its own, which runs after the
-  one running.
+  one running. It is never merged into a job queued again after a transient
+  failure, whose spent attempts the merged work would inherit.
+* An administrator's job whose dispatch fails is marked failed, so the
+  request can be sent again, unless a follow-up was merged into it while the
+  send was failing: then it stays queued for the sweep.
 
 A worker claims a job atomically, and only while no other job of its kind is
 running. A running job writes a heartbeat every minute. When a job ends, the
@@ -110,7 +114,17 @@ async def _active(session: Any, tenant_id: uuid.UUID, kind: str) -> Any:
 
 
 async def _queued(session: Any, tenant_id: uuid.UUID, kind: str, *, lock: bool = False) -> list[Any]:
-    """The kind's queued jobs, oldest first (row-locked when ``lock``)."""
+    """The kind's queued jobs, oldest first.
+
+    With ``lock`` the rows are locked ``FOR UPDATE SKIP LOCKED``: a row another
+    transaction holds (the sweep, a claim, the runner's status write) is left
+    out instead of waited for. So a caller never waits for a job row, and a
+    second call in one transaction (an import queueing restatements for two
+    providers) never waits for an older row the runner queued again after the
+    first call locked a newer one, which could deadlock with the sweep's
+    ``(created_at, id)`` order. A skipped row only means the work is queued
+    as a job of its own.
+    """
     from core.models.spend_usage import SpendJob
 
     statement = (
@@ -119,8 +133,16 @@ async def _queued(session: Any, tenant_id: uuid.UUID, kind: str, *, lock: bool =
         .order_by(SpendJob.created_at, SpendJob.id)
     )
     if lock:
-        statement = statement.with_for_update()
+        statement = statement.with_for_update(skip_locked=True)
     return list((await session.execute(statement)).scalars().all())
+
+
+def _attempts(job: Any) -> int:
+    """The attempts a job queued again after transient failures has spent (0 for a job that never failed)."""
+    try:
+        return int(dict(job.result or {}).get("attempts") or 0)
+    except (TypeError, ValueError):
+        return 0
 
 
 def _dispatch(tenant_id: uuid.UUID, job_id: uuid.UUID, **options: Any) -> None:
@@ -141,16 +163,43 @@ def _send(tenant_id: uuid.UUID, job_id: uuid.UUID, kind: str, **options: Any) ->
     return True
 
 
-async def _mark_undispatched(tenant_id: uuid.UUID, job_id: uuid.UUID) -> None:
+async def _mark_undispatched(tenant_id: uuid.UUID, job_id: uuid.UUID, *, kind: str, params: dict[str, Any]) -> bool:
+    """Mark an administrator's job whose dispatch failed as failed; ``False`` when it is left queued instead.
+
+    Under the kind's lock, which ``queue_followup`` merges under: while the
+    broker was slow to fail, a change may have merged its follow-up into this
+    still-queued job and committed, reporting this job's id, and the change
+    may not be repeatable (its card retired). So the job is failed only when
+    its parameters are still the ones ``enqueue`` wrote and no follow-up was
+    merged into it (``result.merges``, which also counts a merge that left
+    the parameters as they were); otherwise it stays queued and the sweep
+    resends it. A job no longer queued (the sweep resent it already) is left
+    alone too.
+    """
     from core.database import get_tenant_session
     from core.models.spend_usage import SpendJob
 
     async with get_tenant_session(tenant_id) as session:
+        await locks.xact_lock(session, locks.job_kind(tenant_id, kind))
+        rows = (
+            (
+                await session.execute(
+                    select(SpendJob).where(
+                        SpendJob.tenant_id == tenant_id, SpendJob.id == job_id, SpendJob.status == "queued"
+                    )
+                )
+            )
+            .scalars()
+            .all()
+        )
+        if not rows or dict(rows[0].params or {}) != params or dict(rows[0].result or {}).get("merges"):
+            return False
         await session.execute(
             update(SpendJob)
             .where(SpendJob.tenant_id == tenant_id, SpendJob.id == job_id, SpendJob.status == "queued")
             .values(status="failed", error_code="dispatch_failed", finished_at=func.now())
         )
+    return True
 
 
 def _new_job(
@@ -222,9 +271,12 @@ async def enqueue(
     except IntegrityError:
         raise SpendError(409, "job_running", f"a {kind} job is already queued or running") from None
     if not _send(tenant_id, job_id, kind):
-        # An administrator's request answers ``failed`` at once, so it can be sent again.
-        await _mark_undispatched(tenant_id, job_id)
-        return {"job_id": str(job_id), "status": "failed", "kind": kind}
+        if await _mark_undispatched(tenant_id, job_id, kind=kind, params=clean):
+            # An administrator's request answers ``failed`` at once, so it can be sent again.
+            return {"job_id": str(job_id), "status": "failed", "kind": kind}
+        # A change's follow-up was merged into the job meanwhile: it stays queued for the sweep.
+        logger.warning("spend_job_kept_queued_for_sweep", kind=kind)
+        return {"job_id": str(job_id), "status": "queued", "kind": kind}
     logger.info("spend_job_enqueued", kind=kind)
     return {"job_id": str(job_id), "status": "queued", "kind": kind}
 
@@ -318,15 +370,19 @@ async def queue_followup(
     Lock order (every path, one global order): the caller has already taken
     its resource's lock (a rate card's key, a currency, a commitment); this
     takes the kind's lock (``locks.job_kind``) and then the kind's queued job
-    rows (``FOR UPDATE``, in ``(created_at, id)`` order, the sweep's order).
-    Nothing that holds a job-kind lock or a job row ever waits for a resource
-    lock: the claim, the sweep, the runner's status writes and the route's
-    ``enqueue`` take no resource lock.
+    rows (``FOR UPDATE SKIP LOCKED``, in ``(created_at, id)`` order, the
+    sweep's order; a row another transaction holds is skipped, never waited
+    for). Nothing that holds a job-kind lock or a job row ever waits for a
+    resource lock: the claim, the sweep, the runner's status writes and the
+    route's ``enqueue`` take no resource lock.
 
     The work is merged into a queued job of the kind that can cover it
-    (audited as ``spend.job.merge``), or inserted as a queued job of its own
-    (audited as ``spend.job.enqueue``), to run after a running one. Returns
-    ``{"job_id", "status": "queued", "kind", "merged"}``.
+    (audited as ``spend.job.merge``; counted in the job's ``result.merges``),
+    or inserted as a queued job of its own (audited as ``spend.job.enqueue``),
+    to run after a running one. A job queued again after a transient failure
+    (``result.attempts``) is never merged into: the merged work would get only
+    the attempts it has left and be dropped with it when the last one fails.
+    Returns ``{"job_id", "status": "queued", "kind", "merged"}``.
     """
     kind = vocab.choice(kind, vocab.JOB_KINDS, field="kind")
     who = _actor(actor)
@@ -334,10 +390,15 @@ async def queue_followup(
     clean = audit.jsonable(params)
     await locks.xact_lock(session, locks.job_kind(tenant_id, kind))
     for job in await _queued(session, tenant_id, kind, lock=True):
+        if _attempts(job) > 0:
+            continue
         merged = merge_params(kind, dict(job.params or {}), clean)
         if merged is None:
             continue
         before = dict(job.params or {})
+        result = dict(job.result or {})
+        # Marks the job as relied on by a change, even when its parameters already covered the work.
+        job.result = {**result, "merges": int(result.get("merges") or 0) + 1}
         if merged != before:
             job.params = merged
             session.add(
@@ -351,7 +412,7 @@ async def queue_followup(
                     now=stamp,
                 )
             )
-            await session.flush()
+        await session.flush()
         return {"job_id": str(job.id), "status": "queued", "kind": kind, "merged": True}
     job_id = _new_job(session, tenant_id, kind=kind, params=clean, who=who, stamp=stamp)
     await session.flush()

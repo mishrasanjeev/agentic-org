@@ -385,8 +385,9 @@ async def query(
     Amounts are kept per currency (they are never added across currencies);
     INR is the one sum across all of them. Every grouping applies the caller's
     agent visibility (``agent_id`` is a rollup dimension): a reader who is not
-    an administrator sums only the rows of agents they may see and the rows
-    with no agent, whatever they group by, as ``GET /spend/usage`` lists them.
+    a tenant-wide reader (an administrator or auditor) sums only the rows of
+    agents they may see and the rows with no agent, whatever they group by, as
+    ``GET /spend/usage`` lists them.
     """
     from core.database import get_tenant_session
     from core.models.agent import Agent
@@ -409,7 +410,7 @@ async def query(
     if view.agent_clause is not None:
         # Every grouping, not only agent_id: a use-case, provider or node total would otherwise
         # carry the usage of personal or out-of-domain agents the record list hides.
-        conditions.append(access.usage_filter(view, U.__table__, Agent.__table__))
+        conditions.append(access.usage_filter(view, U.__table__, Agent.__table__, tenant_id=tenant_id))
     statement = (
         select(
             group,
@@ -829,7 +830,7 @@ async def list_records(
         R.tenant_id == tenant_id,
         R.event_time >= clock.day_bounds(start, zone)[0],
         R.event_time < clock.day_bounds(end, zone)[1],
-        access.usage_filter(view, R.__table__, Agent.__table__),
+        access.usage_filter(view, R.__table__, Agent.__table__, tenant_id=tenant_id),
     ]
     if usage_type:
         conditions.append(R.usage_type == vocab.choice(usage_type, vocab.USAGE_TYPES, field="usage_type"))

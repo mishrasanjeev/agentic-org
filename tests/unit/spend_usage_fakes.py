@@ -6,8 +6,9 @@ the usage code builds: multi-row inserts with ``ON CONFLICT DO NOTHING`` or an
 additive ``DO UPDATE`` and ``RETURNING``; updates and deletes; selects with
 ``sum``/``count``/``max``/``min``/``coalesce``/``case``/``cast``, several
 ``group_by`` columns, ``distinct``, subqueries in ``IN``, tuple ``IN`` and
-keyset conditions; and the text statements of the resolver, the job claim and
-the statement timeout. Expressions are evaluated against the ORM rows it
+keyset conditions, ``FOR UPDATE SKIP LOCKED`` (skipping the rows a test marks
+as held by another transaction); and the text statements of the resolver, the
+job claim and the statement timeout. Expressions are evaluated against the ORM rows it
 holds, one table per statement.
 """
 
@@ -223,6 +224,7 @@ class UsageSession(FakeSession):
         self.user_departments: dict[str, tuple] = {}  # user id -> (department_id, code)
         self.fail_on: set[str] = set()  # markers of text statements that raise
         self.claims: list[dict[str, Any]] = []
+        self.held_elsewhere: set[Any] = set()  # ids of rows another transaction holds (SKIP LOCKED skips them)
 
     # ---------------------------------------------------------------- execute
 
@@ -346,6 +348,9 @@ class UsageSession(FakeSession):
         froms = [f for f in statement.get_final_froms() if f.name != getattr(outer, "__tablename__", None)]
         table = froms[0].name
         rows = self._matching(table, statement.whereclause, outer)
+        locking = getattr(statement, "_for_update_arg", None)
+        if locking is not None and locking.skip_locked:
+            rows = [r for r in rows if getattr(r, "id", None) not in self.held_elsewhere]
         evaluator = Evaluator(self, outer=outer)
         described = statement.column_descriptions
         entity = len(described) == 1 and isinstance(described[0]["expr"], type)

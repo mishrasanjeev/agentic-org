@@ -19,11 +19,13 @@ settlement and commitment recomputes are jobs (202 with a job id) read
 through ``/spend/jobs``.
 
 Reads need ``audit:read``; rate cards, commitments and prices are for a
-human administrator or auditor only. Usage records, rollups (every
-grouping) and the ledger comparison apply the caller's agent visibility;
-coverage, gaps and jobs, which sum every agent's usage, are for an
-administrator or auditor only. Every write needs a tenant
-administrator signed in as a person and is audited. Off
+human administrator or auditor only. Administrators and auditors (people
+whose domains are unrestricted) read every usage record, rollup, coverage
+figure, gap, job and ledger comparison unfiltered, as ``GET /audit`` shows
+them every row; for anyone else usage records, rollups (every grouping) and
+the ledger comparison apply the caller's agent visibility, and coverage,
+gaps and jobs, which sum every agent's usage, are refused. Every write
+needs a tenant administrator signed in as a person and is audited. Off
 (``spend_intelligence_enabled``), the status route says so and every other
 route is not found.
 """
@@ -282,14 +284,19 @@ async def _upload_rows(
 # ---------------------------------------------------------------- status
 
 
-def _writer_state() -> dict[str, Any]:
-    """This process's usage writer: started or not, and events pending (no import while it never started)."""
+def _writer_state(*, with_pending: bool) -> dict[str, Any]:
+    """This process's usage writer: started or not (no import while it never started), and events pending.
+
+    The pending count is process-wide (every tenant's queued events), so it is
+    given to tenant-wide readers (administrators and auditors) only.
+    """
     import sys
 
     module = sys.modules.get("core.spend.writer")
-    if module is None:
-        return {"started": False, "pending": 0}
-    return {"started": bool(module.started()), "pending": int(module.pending())}
+    state: dict[str, Any] = {"started": bool(module.started()) if module is not None else False}
+    if with_pending:
+        state["pending"] = int(module.pending()) if module is not None else 0
+    return state
 
 
 @router.get("/status")
@@ -301,8 +308,14 @@ def _writer_state() -> dict[str, Any]:
     idempotency="read-only",
     audit_event="spend.status",
 )
-async def spend_status(tenant_id: str = Depends(get_current_tenant)) -> dict[str, Any]:
-    """Whether spend intelligence is on, the reporting currency and calendar, the vocabularies and the bounds."""
+async def spend_status(
+    caller: Caller = Depends(caller_from_request),
+    tenant_id: str = Depends(get_current_tenant),
+) -> dict[str, Any]:
+    """Whether spend intelligence is on, the reporting currency and calendar, the vocabularies and the bounds.
+
+    The writer's pending count (every tenant's queued events in this process) is for an administrator or
+    auditor only; anyone else gets whether the writer started."""
     return {
         "enabled": spend.enabled(),
         "reporting_currency": vocab.REPORTING_CURRENCY,
@@ -324,7 +337,7 @@ async def spend_status(tenant_id: str = Depends(get_current_tenant)) -> dict[str
         },
         "backfill_source": ledgers.backfill_source(),
         "partition_horizon": await partitions.horizon(clock.now_utc()),
-        "writer": _writer_state(),
+        "writer": _writer_state(with_pending=access.is_tenant_wide_reader(caller)),
     }
 
 
@@ -1001,7 +1014,10 @@ async def list_usage(
     caller: Caller = Depends(caller_from_request),
     tenant_id: str = Depends(get_current_tenant),
 ) -> dict[str, Any]:
-    """Usage records of reporting days (at most 31), a page at a time; other people's personal agents are hidden."""
+    """Usage records of reporting days (at most 31), a page at a time.
+
+    Every record for an administrator or auditor; anyone else gets the agent visibility rule (other people's
+    personal agents and agents outside their domains are hidden)."""
     spend_on()
     try:
         return await rollups.list_records(
@@ -1045,7 +1061,8 @@ async def list_rollups(
 ) -> dict[str, Any]:
     """Daily rollups summed per a dimension or per day (at most 366 days); amounts per currency and in INR.
 
-    Every grouping applies the caller's agent visibility, as ``GET /spend/usage`` does."""
+    Every grouping applies the caller's agent visibility, as ``GET /spend/usage`` does (none for an
+    administrator or auditor)."""
     spend_on()
     try:
         filters = {
@@ -1110,7 +1127,8 @@ async def ledger_comparison(
     tenant_id: str = Depends(get_current_tenant),
 ) -> dict[str, Any]:
     """Usage tokens and amounts per day beside the existing cost ledgers (at most 31 days), with the expected
-    differences. Every source carries an agent id, so each is filtered by the caller's agent visibility."""
+    differences. Every source carries an agent id, so each is filtered by the caller's agent visibility (none
+    for an administrator or auditor)."""
     spend_on()
     try:
         return await ledgers.compare(_tenant(tenant_id), start=start, end=end, view=access.read_view(caller))

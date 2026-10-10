@@ -186,12 +186,18 @@ class TestRollups:
         await write(
             store, event(hints=hints(agent_id=str(shared))), event(hints=hints(agent_id=str(personal))), event()
         )
-        auditor = Caller(user_id=uuid.uuid4(), role="auditor", domains=None, is_admin=False, is_machine=False)
-        view = access.read_view(auditor)
+        domain_reader = Caller(user_id=uuid.uuid4(), role="cfo", domains=["finance"], is_admin=False,
+                               is_machine=False)  # fmt: skip
+        view = access.read_view(domain_reader)
         out = await rollups.query(TENANT, start=DAY, end=DAY, group_by="agent_id", filters={}, view=view)
         assert {r["agent_id"] for r in out["rows"]} == {str(shared), None}
         admin = await rollups.query(TENANT, start=DAY, end=DAY, group_by="agent_id", filters={}, view=ADMIN_VIEW)
         assert {r["agent_id"] for r in admin["rows"]} == {str(shared), str(personal), None}
+        auditor = Caller(user_id=uuid.uuid4(), role="auditor", domains=None, is_admin=False, is_machine=False)
+        audited = await rollups.query(
+            TENANT, start=DAY, end=DAY, group_by="agent_id", filters={}, view=access.read_view(auditor)
+        )
+        assert {r["agent_id"] for r in audited["rows"]} == {str(shared), str(personal), None}  # as GET /audit
 
 
 class TestCoverage:
