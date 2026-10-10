@@ -188,6 +188,10 @@ class SpendReconciliation(BaseModel):
     fx_rows: Mapped[list[Any]] = mapped_column(JSONB, nullable=False, server_default=_json_list(), default=list)
     # Cards and FX rows entered or changed after the period or after the newest invoice import.
     retroactive: Mapped[list[Any]] = mapped_column(JSONB, nullable=False, server_default=_json_list(), default=list)
+    # {usage, cards, aliases}: sha256 digests of what the run read, compared again to tell whether it is stale.
+    input_digests: Mapped[dict[str, Any]] = mapped_column(
+        JSONB, nullable=False, server_default=text("'{}'::jsonb"), default=dict
+    )
     superseded: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("false"), default=False)
     accepted_by: Mapped[str | None] = mapped_column(String(128), nullable=True)
     accepted_at: Mapped[datetime | None] = mapped_column(TIMESTAMP(timezone=True), nullable=True)

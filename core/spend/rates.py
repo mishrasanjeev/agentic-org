@@ -264,8 +264,9 @@ async def card_in_use(session: Any, tenant_id: uuid.UUID, card_id: uuid.UUID) ->
     The direct references use ``ix_spend_usage_records_rate_card``; blend
     references are looked up only inside the card's own date range (the
     tenant-time index), the only days a blend could have used it. A
-    reconciliation that is not superseded counts until the last day of its
-    month, so a card it used is changed only by a correction.
+    reconciliation that is not superseded counts up to the last billing day
+    it compared (its month's end, or the day it ran for a month still open),
+    so a card it used is changed only by a correction.
     """
     from core.models.spend import SpendRateCard
     from core.models.spend_usage import SpendUsageRecord as R

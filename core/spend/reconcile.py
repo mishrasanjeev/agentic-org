@@ -47,23 +47,36 @@ reported as ``informational`` items and never enter the variance.
 
 **Re-runs and acceptance.** A run supersedes the earlier runs of the month and
 carries over an acceptance to an item whose key, invoice lines and both
-figures are unchanged. Accepting needs a reason, an active tenant
-administrator and someone other than the invoices' importer; every run, carry
-over and acceptance is audited with the totals. A run goes stale when a card,
-FX row, record or invoice it depends on changes after it.
+figures are unchanged, unless the acceptor has since imported one of the
+month's current invoices (maker-checker holds for carried acceptances too).
+Accepting needs a reason, an active tenant administrator and someone other
+than the invoices' importer; every run, carry over and acceptance is audited
+with the totals.
+
+**Staleness.** A run stores digests of what it read: the rollup groups and
+the platform-billed sum, the cards (each with its prices, dates, status and
+timestamps) and the provider's model aliases. It goes stale when one of those
+would now read differently, when an FX lookup it made would now find another
+row or rate, when the month's current invoices are not the ones it compared,
+or when a card or rollup row of the month carries a change stamped after it.
+Comparing content, not only clocks, catches a change whose transaction began
+before the run and committed after the run had read.
 """
 
 from __future__ import annotations
 
+import asyncio
+import hashlib
+import json
 import uuid
-from collections.abc import Mapping, Sequence
-from dataclasses import dataclass, replace
-from datetime import date, datetime, timedelta
+from collections.abc import Collection, Mapping, Sequence
+from dataclasses import astuple, dataclass, replace
+from datetime import UTC, date, datetime, timedelta
 from decimal import ROUND_HALF_EVEN, ROUND_UP, Context, Decimal, localcontext
 from typing import Any
 
 import structlog
-from sqlalchemy import and_, case, func, or_, select
+from sqlalchemy import and_, any_, case, func, or_, select
 
 from core.spend import audit, clock, invoices, locks, pricing, vocab
 from core.spend.errors import SpendError, require_actor
@@ -133,6 +146,17 @@ class PricedGroup:
     @property
     def total_repriced(self) -> Decimal | None:
         return _plus(self.repriced_amount, self.adjustments)
+
+
+@dataclass(frozen=True)
+class Inputs:
+    """What a run reads for a provider's month, besides invoices, commitments and FX rows."""
+
+    groups: list[MeteredGroup]
+    platform_inr: Decimal
+    aliases: Mapping[tuple[str, str], str]
+    cards: list[Card]  # active cards of the provider in force in the month
+    stored_cards: Mapping[uuid.UUID, Card]  # the cards that priced the groups, whatever their status
 
 
 # ---------------------------------------------------------------- arithmetic
@@ -708,12 +732,18 @@ def match(
     return items
 
 
-def carry_over(items: Sequence[dict[str, Any]], previous: Sequence[Any]) -> list[tuple[dict[str, Any], Any]]:
+def carry_over(
+    items: Sequence[dict[str, Any]], previous: Sequence[Any], *, refused: Collection[str] = ()
+) -> list[tuple[dict[str, Any], Any]]:
     """Accepted items of the previous run handed to unchanged items of this one (pure); the pairs carried.
 
     An item is unchanged when its usage type, model, unit and day, its invoice
-    lines and both its figures are the same.
+    lines and both its figures are the same. An acceptance by anyone in
+    ``refused`` (the importers of this run's invoices) is not carried, so the
+    item needs review again: maker-checker holds for a carried acceptance as
+    it does for a new one.
     """
+    barred = {str(actor) for actor in refused}
 
     def key_of(usage_type: Any, model: Any, unit: Any, day: Any, line_ids: Any, stored: Any, repriced: Any) -> Any:
         return (
@@ -728,7 +758,7 @@ def carry_over(items: Sequence[dict[str, Any]], previous: Sequence[Any]) -> list
 
     accepted: dict[Any, Any] = {}
     for old in previous:
-        if old.item_kind == "usage" and old.status == "accepted":
+        if old.item_kind == "usage" and old.status == "accepted" and str(old.accepted_by) not in barred:
             accepted.setdefault(
                 key_of(
                     old.usage_type,
@@ -921,6 +951,57 @@ async def _rates(
     return out
 
 
+async def load_inputs(session: Any, tenant_id: uuid.UUID, provider: str, b0: date, b1: date) -> Inputs:
+    """The rollup groups, aliases and cards a run of the provider's month reads (``run`` and ``is_stale``)."""
+    groups, platform_inr = await load_groups(session, tenant_id, provider, b0, b1)
+    aliases = await pricing.alias_map(session, tenant_id)
+    cards = await pricing.load_cards(
+        session, tenant_id, providers={provider}, usage_types=vocab.USAGE_TYPES, start=b0, end=b1 - timedelta(days=1)
+    )
+    stored_cards = await _cards_by_id(session, tenant_id, {g.rate_card_id for g in groups if g.rate_card_id})
+    return Inputs(groups=groups, platform_inr=platform_inr, aliases=aliases, cards=cards, stored_cards=stored_cards)
+
+
+# ---------------------------------------------------------------- input digests (staleness by content)
+
+
+def _canon(value: Any) -> Any:
+    """A JSON-ready form of a value whose text never depends on how it was read (scale, zone, order)."""
+    if isinstance(value, Decimal):
+        return "0" if value == 0 else format(value.normalize(), "f")
+    if isinstance(value, datetime):
+        return (value.astimezone(UTC) if value.tzinfo is not None else value).isoformat()
+    if isinstance(value, date):
+        return value.isoformat()
+    if isinstance(value, uuid.UUID):
+        return str(value)
+    if isinstance(value, Mapping):
+        return {str(key): _canon(item) for key, item in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_canon(item) for item in value]
+    return value
+
+
+def _digest(value: Any) -> str:
+    text = json.dumps(_canon(value), sort_keys=True, separators=(",", ":"))
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()
+
+
+def input_digests(inputs: Inputs, provider: str) -> dict[str, str]:
+    """Digests of what a run read: usage (groups and the platform-billed sum), cards and the provider's aliases.
+
+    Each card counts with every field that prices or dates it, its status and
+    its timestamps, so a card that is new, changed, retired or no longer in
+    force changes the digest whatever its clock says.
+    """
+    cards = {card.id: card for card in (*inputs.cards, *inputs.stored_cards.values())}
+    return {
+        "usage": _digest({"groups": [astuple(g) for g in inputs.groups], "platform_inr": inputs.platform_inr}),
+        "cards": _digest([astuple(cards[card_id]) for card_id in sorted(cards, key=str)]),
+        "aliases": _digest(sorted([alias, sku] for (owner, alias), sku in inputs.aliases.items() if owner == provider)),
+    }
+
+
 async def _runs(session: Any, tenant_id: uuid.UUID, provider: str, period_start: date) -> list[Any]:
     """The month's runs not yet superseded, newest first."""
     from core.models.spend_invoice import SpendReconciliation as R
@@ -1053,6 +1134,35 @@ def _needed_currencies(
     return needed
 
 
+def _compare(
+    inputs: Inputs,
+    commitments: Sequence[Any],
+    rates: Mapping[tuple[str, date], FxRate | None],
+    lines: Sequence[Any],
+    *,
+    provider: str,
+    currency: str,
+    b0: date,
+    b1: date,
+) -> tuple[list[PricedGroup], list[dict[str, Any]]]:
+    """Both figures of every group with the month-level adjustments, matched to the lines (pure)."""
+    priced = tier_true_ups(
+        reprice(
+            inputs.groups,
+            inputs.cards,
+            inputs.stored_cards,
+            commitments,
+            rates,
+            inputs.aliases,
+            provider=provider,
+            invoice_currency=currency,
+            b0=b0,
+            b1=b1,
+        )
+    )
+    return priced, match(lines, priced, inputs.aliases, provider=provider, days_in_month=clock.days_in_month(b0))
+
+
 def _provider_level(items: Sequence[dict[str, Any]], invoice_amount: Decimal) -> dict[str, Any]:
     usage = [item for item in items if item["item_kind"] == "usage"]
     stored = _sum([item["stored_amount"] for item in usage])
@@ -1134,31 +1244,21 @@ async def run(tenant_id: uuid.UUID, *, provider: str, period: str, actor: str, n
                 422, "currency_mismatch", f"the month's current invoices are in {', '.join(currencies)}; use one"
             )
         currency = currencies[0]
-        groups, platform_inr = await load_groups(session, tenant_id, provider, b0, b1)
-        aliases = await pricing.alias_map(session, tenant_id)
-        cards = await pricing.load_cards(
-            session, tenant_id, providers={provider}, usage_types=vocab.USAGE_TYPES, start=b0, end=month_end
-        )
-        stored_cards = await _cards_by_id(session, tenant_id, {g.rate_card_id for g in groups if g.rate_card_id})
+        inputs = await load_inputs(session, tenant_id, provider, b0, b1)
+        groups = inputs.groups
         commitments = await _commitments(session, tenant_id, {g.commitment_id for g in groups if g.commitment_id})
-        rates = await _rates(session, tenant_id, _needed_currencies(currency, groups, cards, commitments), month_end)
-        priced = tier_true_ups(
-            reprice(
-                groups,
-                cards,
-                stored_cards,
-                commitments,
-                rates,
-                aliases,
-                provider=provider,
-                invoice_currency=currency,
-                b0=b0,
-                b1=b1,
-            )
+        rates = await _rates(
+            session, tenant_id, _needed_currencies(currency, groups, inputs.cards, commitments), month_end
         )
-        items = match(lines, priced, aliases, provider=provider, days_in_month=clock.days_in_month(b0))
+        # The comparison is pure and CPU-bound: off the event loop, so a large month never stalls other requests.
+        priced, items = await asyncio.to_thread(
+            _compare, inputs, commitments, rates, lines, provider=provider, currency=currency, b0=b0, b1=b1
+        )
         earlier = await _runs(session, tenant_id, provider, b0)
-        carried = carry_over(items, await _items(session, tenant_id, earlier[0].id) if earlier else [])
+        importers = {str(inv.imported_by) for inv in current}
+        carried = carry_over(
+            items, await _items(session, tenant_id, earlier[0].id) if earlier else [], refused=importers
+        )
         for row in earlier:
             row.superseded = True
         await session.flush()
@@ -1199,13 +1299,14 @@ async def run(tenant_id: uuid.UUID, *, provider: str, period: str, actor: str, n
             needs_review_count=needs_review,
             unpriced_quantity_items=sum(1 for item in items if item["unpriced_quantity"] > 0),
             unknown_account_records=sum(g.unknown_account_records for g in groups),
-            platform_billed_amount_inr=_q(platform_inr),
+            platform_billed_amount_inr=_q(inputs.platform_inr),
             invoice_ids=sorted(str(inv.id) for inv in current),
             card_ids=sorted({card.id for card in all_cards}, key=str),
             fx_rows=fx_json(lookups),
             retroactive=retroactive_refs(
                 all_cards, lookups, period_end=clock.day_bounds(b1, zone)[0], imported_at=imported_at
             ),
+            input_digests=input_digests(inputs, provider),
             superseded=False,
             run_by=who,
             created_at=now,
@@ -1442,15 +1543,35 @@ def _after(stamp: datetime | None, moment: datetime) -> bool:
     return stamp is not None and stamp > moment
 
 
-async def is_stale(session: Any, tenant_id: uuid.UUID, run: Any) -> bool:
-    """Whether a card, FX row, record or invoice the run depends on changed after it.
+Digests = dict[tuple[str, date], dict[str, str]]
 
-    Stale when a card it used, or any card of the provider in force in the
-    month, was created or changed after the run; when an FX lookup it made
-    would now find another row, rate or change; when the provider's rollup
-    rows of the month changed after it (late records, restatement,
-    settlement, re-attribution); or when the month's current invoices are no
-    longer the ones it compared.
+
+async def _current_digests(
+    session: Any, tenant_id: uuid.UUID, provider: str, period_start: date, memo: Digests | None
+) -> dict[str, str]:
+    key = (provider, period_start)
+    if memo is not None and key in memo:
+        return memo[key]
+    inputs = await load_inputs(session, tenant_id, provider, period_start, clock.next_month(period_start))
+    found = input_digests(inputs, provider)
+    if memo is not None:
+        memo[key] = found
+    return found
+
+
+async def is_stale(session: Any, tenant_id: uuid.UUID, run: Any, *, memo: Digests | None = None) -> bool:
+    """Whether a card, alias, FX row, record or invoice the run depends on changed after it.
+
+    Stale when what the run read (its rollup groups and platform-billed sum,
+    its cards with their prices, dates and status, the provider's aliases)
+    would now read differently, by content, so a change whose transaction
+    began before the run and committed after it is caught whatever its
+    timestamp; when an FX lookup it made would now find another row, rate or
+    change; when the month's current invoices are no longer the ones it
+    compared; and, as before, when a card of the provider in force in the
+    month or a rollup row of the month carries a change stamped after the
+    run. A run without its digests is stale. ``memo`` shares the current
+    digests of a month between the runs of one listing.
     """
     from core.models.spend import SpendRateCard as C
     from core.models.spend_invoice import SpendInvoice
@@ -1458,7 +1579,7 @@ async def is_stale(session: Any, tenant_id: uuid.UUID, run: Any) -> bool:
     from core.spend import fx
 
     created = run.created_at
-    if created is None:
+    if created is None or not run.input_digests:
         return True
     b0 = run.period_start
     b1 = clock.next_month(b0)
@@ -1502,7 +1623,9 @@ async def is_stale(session: Any, tenant_id: uuid.UUID, run: Any) -> bool:
             )
         )
     ).all()
-    return {str(row[0]) for row in current} != {str(i) for i in run.invoice_ids or []}
+    if {str(row[0]) for row in current} != {str(i) for i in run.invoice_ids or []}:
+        return True
+    return await _current_digests(session, tenant_id, run.provider, b0, memo) != dict(run.input_digests)
 
 
 async def list_runs(
@@ -1527,13 +1650,17 @@ async def list_runs(
         rows = (
             (
                 await session.execute(
-                    select(R).where(*conditions).order_by(R.period_start.desc(), R.provider, R.created_at.desc())
+                    select(R)
+                    .where(*conditions)
+                    .order_by(R.period_start.desc(), R.provider, R.created_at.desc())
+                    .limit(LIST_LIMIT)
                 )
             )
             .scalars()
             .all()
-        )[:LIST_LIMIT]
-        out = [run_dict(row, stale=await is_stale(session, tenant_id, row)) for row in rows]
+        )
+        memo: Digests = {}
+        out = [run_dict(row, stale=await is_stale(session, tenant_id, row, memo=memo)) for row in rows]
     return {"items": out}
 
 
@@ -1581,31 +1708,47 @@ async def latest_run(session: Any, tenant_id: uuid.UUID, provider: str, period_s
 # ---------------------------------------------------------------- references kept by runs
 
 
+def compared_through(provider: str, period_start: date, created_at: datetime | None) -> date:
+    """The last billing day a run of the month could have compared: the month's end, or for a month
+    still open when it ran, the provider's billing day of the run (no record is dated later)."""
+    month_end = clock.next_month(period_start) - timedelta(days=1)
+    if created_at is None:
+        return month_end
+    return min(month_end, max(period_start, clock.billing_date_of(provider, created_at)))
+
+
 async def card_used_until(session: Any, tenant_id: uuid.UUID, card_id: uuid.UUID) -> date | None:
-    """The last day of the newest month a current run compared with the card (``rates.card_in_use``)."""
+    """The last billing day a current run compared with the card (``rates.card_in_use``).
+
+    The card is looked up in the runs' ``card_ids`` in SQL. A run counts up
+    to ``compared_through``: a run of the month in progress used the card only
+    up to the day it ran, so a successor that starts later is not a backdated
+    change.
+    """
     from core.models.spend_invoice import SpendReconciliation as R
 
     rows = (
         await session.execute(
-            select(R.period_start, R.card_ids).where(R.tenant_id == tenant_id, R.superseded.is_(False))
+            select(R.provider, R.period_start, R.created_at).where(
+                R.tenant_id == tenant_id, R.superseded.is_(False), any_(R.card_ids) == card_id
+            )
         )
     ).all()
-    ends = [
-        clock.next_month(period_start) - timedelta(days=1)
-        for period_start, ids in rows
-        if any(str(found) == str(card_id) for found in ids or [])
-    ]
+    ends = [compared_through(provider, period_start, created_at) for provider, period_start, created_at in rows]
     return max(ends) if ends else None
 
 
 async def fx_row_used(session: Any, tenant_id: uuid.UUID, currency: str, rate_date: date) -> bool:
-    """Whether a current run used the FX row of ``(currency, rate_date)`` (``fx.fx_in_use``)."""
+    """Whether a current run used the FX row of ``(currency, rate_date)`` (``fx.fx_in_use``), tested in SQL."""
     from core.models.spend_invoice import SpendReconciliation as R
 
-    rows = (await session.execute(select(R.fx_rows).where(R.tenant_id == tenant_id, R.superseded.is_(False)))).all()
-    day = rate_date.isoformat()
-    return any(
-        entry.get("currency") == currency and entry.get("rate_date") == day
-        for (rows_used,) in rows
-        for entry in rows_used or []
+    statement = (
+        select(R.id)
+        .where(
+            R.tenant_id == tenant_id,
+            R.superseded.is_(False),
+            R.fx_rows.contains([{"currency": currency, "rate_date": rate_date.isoformat()}]),
+        )
+        .limit(1)
     )
+    return bool((await session.execute(statement)).all())

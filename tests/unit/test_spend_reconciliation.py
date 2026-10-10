@@ -3,19 +3,22 @@
 
 from __future__ import annotations
 
+import asyncio
 import csv
 import importlib.util
 import io
 import json
 import re
 import uuid
-from datetime import UTC, date, datetime, timedelta
+from dataclasses import replace as replace_card
+from datetime import UTC, date, datetime, timedelta, timezone
 from decimal import Decimal
 from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
 from fastapi import HTTPException
+from sqlalchemy import Select
 from sqlalchemy.dialects import postgresql
 from sqlalchemy.schema import CreateIndex, CreateTable
 from starlette.datastructures import Headers, UploadFile
@@ -25,7 +28,7 @@ from api.route_enforcement import SCOPE_FAMILIES, required_scopes_for
 from api.route_metadata import ROUTE_METADATA_ATTR
 from api.v1 import spend as api
 from core.config import settings
-from core.models.spend import SpendModelAlias, SpendOrgNode
+from core.models.spend import SpendCommitment, SpendModelAlias, SpendOrgNode
 from core.models.spend_invoice import SpendInvoice, SpendInvoiceLine, SpendReconciliation, SpendReconciliationItem
 from core.models.spend_usage import SpendUsageRollup
 from core.ownership import Caller
@@ -250,6 +253,15 @@ def audits(store, event_type: str) -> list:
     return [row for row in store.of("audit_log") if row.event_type == event_type]
 
 
+def _select_sql(store, table: str) -> list[str]:
+    """The PostgreSQL text of the selects the store saw that read ``table``."""
+    return [
+        str(s.compile(dialect=postgresql.dialect()))
+        for s in store.statements
+        if isinstance(s, Select) and any(getattr(f, "name", None) == table for f in s.get_final_froms())
+    ]
+
+
 # ---------------------------------------------------------------- import
 
 
@@ -458,6 +470,27 @@ class TestImport:
             await api.import_invoice(upload, "openai", "2026-10", "INV-1", "USD", False, False, CHECKER_ADMIN, TID)
         assert http.value.status_code == 422 and http.value.detail["error"] == "invoice_rejected"
         assert http.value.detail["rejected"][0]["reason"] == "invalid_number"
+
+    @pytest.mark.asyncio
+    async def test_a_month_holds_a_bounded_number_of_current_lines(self, store, tmp_path, monkeypatch):
+        # A run loads every current line of the month, so the imports bound the run.
+        assert invoices.MAX_PERIOD_LINES == 4 * imports.MAX_IMPORT_ROWS
+        monkeypatch.setattr(invoices, "MAX_PERIOD_LINES", 3)
+        await add_invoice(tmp_path, [usage_line("1"), usage_line("2")])
+        for dry_run in (True, False):
+            with pytest.raises(SpendError) as info:
+                await add_invoice(tmp_path, [usage_line("1"), usage_line("2")], ref="ACCT-2", dry_run=dry_run)
+            assert info.value.status == 413 and info.value.code == "too_many_rows", dry_run
+            assert "holds 2 current invoice lines" in info.value.message
+        assert len(store.of("spend_invoices")) == 1
+        await add_invoice(tmp_path, [usage_line("1")], ref="ACCT-2")  # three lines in the month
+        await add_invoice(tmp_path, [usage_line("3"), usage_line("4")], replace=True)  # the replaced lines leave
+        with pytest.raises(SpendError) as info:
+            await add_invoice(tmp_path, [usage_line("1")] * 3, replace=True)
+        assert info.value.code == "too_many_rows"
+        await add_invoice(tmp_path, [usage_line("1")] * 3, period="2026-11")  # another month, its own bound
+        await add_invoice(tmp_path, [usage_line("1")] * 3, provider="anthropic")  # another provider, its own bound
+        assert len([r for r in store.of("spend_invoices") if r.status == "current"]) == 4
 
 
 # ---------------------------------------------------------------- reconcile
@@ -990,6 +1023,224 @@ class TestReconcile:
         row.created_at = None
         assert await reconcile.is_stale(store, TENANT, row)
 
+    @pytest.mark.asyncio
+    async def test_staleness_compares_what_the_run_read_not_only_clocks(self, store, tmp_path):
+        # A writer whose transaction began before the run and committed after the run had read stamps its rows
+        # earlier than the run: only a comparison of content sees that the run missed them.
+        before = RUN_AT - timedelta(minutes=1)
+        september = datetime(2026, 9, 1, tzinfo=UTC)
+        c = card(created_at=september, updated_at=september)
+        store.add(c)
+        group_row = priced_usage(store, c, 4_000_000)
+        await add_invoice(tmp_path, [usage_line("10")])
+        run = await run_month()
+        row = store.of("spend_reconciliations")[0]
+        assert run["stale"] is False and set(row.input_digests) == {"usage", "cards", "aliases"}
+        assert not await reconcile.is_stale(store, TENANT, row)
+
+        group_row.quantity, group_row.amount, group_row.updated_at = Decimal(4_400_000), Decimal("11"), before
+        assert await reconcile.is_stale(store, TENANT, row)  # records the run never saw, stamped before it
+        group_row.quantity, group_row.amount, group_row.updated_at = Decimal(4_000_000), Decimal("10"), None
+        assert not await reconcile.is_stale(store, TENANT, row)
+        late = priced_usage(store, c, 1_000_000, day=date(2026, 10, 2), updated_at=before)
+        assert await reconcile.is_stale(store, TENANT, row)
+        store.rows.remove(late)
+        platform = priced_usage(store, c, 1_000_000, billing_account="platform_key")  # the platform-billed sum
+        assert await reconcile.is_stale(store, TENANT, row)
+        store.rows.remove(platform)
+        assert not await reconcile.is_stale(store, TENANT, row)
+
+        c.unit_price, c.updated_at = Decimal("2.6"), before  # a card write stamped when it began
+        assert await reconcile.is_stale(store, TENANT, row)
+        c.unit_price, c.updated_at = Decimal("2.5"), september
+        hidden = card(model_sku="gpt-4o-mini", created_at=before, updated_at=before)  # committed after the read
+        store.add(hidden)
+        assert await reconcile.is_stale(store, TENANT, row)
+        store.rows.remove(hidden)
+        assert not await reconcile.is_stale(store, TENANT, row)
+
+        alias = SpendModelAlias(
+            id=uuid.uuid4(), tenant_id=TENANT, provider="openai", alias="gpt-4o-latest", model_sku="gpt-4o",
+            created_at=before, updated_at=before,
+        )  # fmt: skip
+        store.add(alias)
+        assert await reconcile.is_stale(store, TENANT, row)  # an alias re-maps both matching and pricing
+        alias.provider = "anthropic"  # another provider's alias changes nothing for this run
+        assert not await reconcile.is_stale(store, TENANT, row)
+
+        row.input_digests = {}
+        assert await reconcile.is_stale(store, TENANT, row)  # a run that cannot show what it read is stale
+
+    def test_input_digests_do_not_depend_on_how_values_were_read(self):
+        stamp = datetime(2026, 9, 1, 5, 30, tzinfo=UTC)
+        inputs = reconcile.Inputs(
+            groups=[group(amount=Decimal("10.0000000000"), unconverted_amount=Decimal("0E-10"))],
+            platform_inr=Decimal("0"),
+            aliases={("openai", "a"): "gpt-4o", ("anthropic", "b"): "c"},
+            cards=[pcard(created_at=stamp, updated_at=stamp)],
+            stored_cards={},
+        )
+        same = reconcile.Inputs(
+            groups=[group(amount=Decimal("10"), unconverted_amount=Decimal("0"))],
+            platform_inr=Decimal("0.00"),
+            aliases={("openai", "a"): "gpt-4o"},
+            cards=[
+                replace_card(inputs.cards[0], created_at=stamp.astimezone(timezone(timedelta(hours=5, minutes=30))))
+            ],
+            stored_cards={inputs.cards[0].id: inputs.cards[0]},
+        )
+        assert reconcile.input_digests(inputs, "openai") == reconcile.input_digests(same, "openai")
+        other = reconcile.input_digests(inputs, "anthropic")
+        assert other["aliases"] != reconcile.input_digests(inputs, "openai")["aliases"]
+        assert all(len(value) == 64 for value in other.values())
+
+    @pytest.mark.asyncio
+    async def test_listing_reads_a_month_once_and_limits_in_sql(self, store, tmp_path, monkeypatch):
+        c = card()
+        store.add(c)
+        priced_usage(store, c, 4_000_000)
+        await add_invoice(tmp_path, [usage_line("10")])
+        first = await run_month()
+        second = await run_month(now=LATER)
+        reads = []
+        original = reconcile.load_inputs
+
+        async def counting(session, tenant_id, provider, b0, b1):
+            reads.append((provider, b0))
+            return await original(session, tenant_id, provider, b0, b1)
+
+        monkeypatch.setattr(reconcile, "load_inputs", counting)
+        listed = await reconcile.list_runs(TENANT, include_superseded=True)
+        assert {r["id"] for r in listed["items"]} == {first["id"], second["id"]}
+        assert reads == [("openai", OCT)] and {r["stale"] for r in listed["items"]} == {False}
+        monkeypatch.setattr(reconcile, "LIST_LIMIT", 1)
+        store.statements.clear()
+        listed = await reconcile.list_runs(TENANT, include_superseded=True)
+        assert [r["id"] for r in listed["items"]] == [second["id"]]
+        listing = [
+            s
+            for s in store.statements
+            if isinstance(s, Select) and s.column_descriptions[0]["entity"] is SpendReconciliation
+        ]
+        assert [s._limit for s in listing] == [1]
+
+    @pytest.mark.asyncio
+    async def test_the_comparison_runs_off_the_event_loop(self, store, tmp_path, monkeypatch):
+        c = card()
+        store.add(c)
+        priced_usage(store, c, 4_000_000)
+        await add_invoice(tmp_path, [usage_line("10")])
+        threaded = []
+        original = asyncio.to_thread
+
+        async def spy(func, /, *args, **kwargs):
+            threaded.append(func.__name__)
+            return await original(func, *args, **kwargs)
+
+        monkeypatch.setattr(asyncio, "to_thread", spy)
+        assert (await run_month())["status"] == "within_tolerance"
+        assert threaded == ["_compare"]
+
+    @pytest.mark.asyncio
+    async def test_carried_acceptance_is_refused_once_the_acceptor_imported_an_invoice(self, store, tmp_path):
+        c = card()
+        output = card(unit="1m_output_tokens", unit_price=Decimal("10"))
+        store.add(c)
+        store.add(output)
+        priced_usage(store, c, 4_000_000)  # 10 USD of input
+        priced_usage(store, output, 1_000_000, unit="output_token")  # 10 USD of output
+        await add_invoice(tmp_path, [usage_line("12")])  # imported by IMPORTER
+        first = await run_month()
+        review = next(i for i in usage_items(first) if i["unit"] == "1m_input_tokens")
+        await reconcile.accept_item(
+            TENANT, uuid.UUID(first["id"]), uuid.UUID(review["id"]), reason="Provider rounding per contract",
+            actor=CHECKER,
+        )  # fmt: skip
+        # The acceptor then imports the month's second account; the accepted item and its line are unchanged.
+        await add_invoice(tmp_path, [usage_line("10", unit="1m_output_tokens")], ref="ACCT-2", actor=CHECKER, now=LATER)
+        second = await run_month(actor=IMPORTER, now=LATER + timedelta(hours=1))
+        item = next(i for i in usage_items(second) if i["unit"] == "1m_input_tokens")
+        assert item["invoice_line_ids"] == review["invoice_line_ids"]
+        assert item["stored_amount"] == review["stored_amount"] and item["repriced_amount"] == review["repriced_amount"]
+        assert item["status"] == "needs_review" and item["carried_from"] is None and item["accepted_by"] is None
+        assert second["status"] == "needs_review" and audits(store, "spend.reconciliations.carry_over") == []
+        # The pure rule: the same acceptance carries for anyone who imported none of the run's invoices.
+        unchanged = {
+            "item_kind": "usage", "status": "needs_review", "usage_type": "llm_tokens", "model_sku": "gpt-4o",
+            "unit": "1m_input_tokens", "usage_date": None, "invoice_line_ids": ["a"],
+            "stored_amount": Decimal("10"), "repriced_amount": Decimal("10"),
+        }  # fmt: skip
+        old = SimpleNamespace(
+            id=uuid.uuid4(), item_kind="usage", status="accepted", usage_type="llm_tokens", model_sku="gpt-4o",
+            unit="1m_input_tokens", usage_date=None, invoice_line_ids=["a"], stored_amount=Decimal("10"),
+            repriced_amount=Decimal("10"), accepted_by=CHECKER, accepted_at=RUN_AT, accept_reason="agreed rounding",
+        )  # fmt: skip
+        assert reconcile.carry_over([dict(unchanged)], [old], refused={CHECKER}) == []
+        assert len(reconcile.carry_over([dict(unchanged)], [old], refused={IMPORTER})) == 1
+
+    @pytest.mark.asyncio
+    async def test_run_loads_the_commitment_and_adds_its_overage(self, store, tmp_path):
+        c = card()
+        store.add(c)
+        commitment = SpendCommitment(
+            id=uuid.uuid4(), tenant_id=TENANT, provider="openai", usage_type="llm_tokens", model_sku="gpt-4o",
+            unit="1m_input_tokens", kind="quantity", committed_quantity=Decimal("3"), period_start=OCT,
+            period_end=NOV, overage_unit_price=Decimal("3.0"), overage_currency="USD",
+        )  # fmt: skip
+        store.add(commitment)
+        priced_usage(store, c, 4_000_000, commitment_id=commitment.id, overage_quantity=Decimal(1_000_000))
+        await add_invoice(tmp_path, [usage_line("10.5")])
+        run = await run_month()
+        item = usage_items(run)[0]
+        # One million tokens over the commitment at 3.0 instead of the 2.5 already in both figures.
+        assert item["adjustments"] == [
+            {"kind": "commitment_overage", "commitment_id": str(commitment.id), "amount": "0.5000000000"}
+        ]
+        assert item["stored_amount"] == "10.5000000000" and item["repriced_amount"] == "10.5000000000"
+        assert item["status"] == "within_tolerance" and run["adjustments_amount"] == "0.5000000000"
+
+    @pytest.mark.asyncio
+    async def test_fx_row_entered_after_the_month_is_flagged_retroactive(self, store, tmp_path):
+        september = datetime(2026, 9, 1, tzinfo=UTC)
+        store.add(card(created_at=september, updated_at=september))
+        fx_rate(store, OCT, "83")
+        fx_rate(store, MONTH_END, "90", currency="EUR")
+        late = datetime(2026, 11, 1, 10, 0, tzinfo=UTC)
+        next(r for r in store.of("spend_fx_rates") if str(r.currency).strip() == "EUR").updated_at = late
+        priced_usage(store, store.of("spend_rate_cards")[0], 4_000_000)
+        await add_invoice(tmp_path, [usage_line("9.2222222222")], currency="EUR")
+        run = await run_month()
+        assert run["retroactive"] == [
+            {
+                "kind": "fx",
+                "currency": "EUR",
+                "rate_date": "2026-10-31",
+                "reasons": ["after_period_end", "after_invoice_import"],
+                "updated_at": late.isoformat(),
+            }
+        ]
+
+    @pytest.mark.asyncio
+    async def test_a_missing_fx_rate_keeps_the_run_fresh_until_it_arrives(self, store, tmp_path):
+        september = datetime(2026, 9, 1, tzinfo=UTC)
+        c = card(created_at=september, updated_at=september)
+        store.add(c)
+        priced_usage(store, c, 4_000_000)
+        await add_invoice(tmp_path, [usage_line("9.2")], currency="EUR")
+        run = await run_month()
+        assert run["stored_amount"] is None and run["status"] == "needs_review"
+        assert {(f["currency"], f["rate_date"]) for f in run["fx_rows"]} == {("EUR", None), ("USD", None)}
+        row = store.of("spend_reconciliations")[0]
+        assert not await reconcile.is_stale(store, TENANT, row)  # still missing: nothing changed
+        fx_rate(store, MONTH_END, "90", currency="EUR")
+        assert await reconcile.is_stale(store, TENANT, row)  # it arrived: a re-run would convert
+        fx_rate(store, OCT, "83")
+        rerun = await run_month(now=LATER)
+        fresh = next(r for r in store.of("spend_reconciliations") if str(r.id) == rerun["id"])
+        assert rerun["stale"] is False and not await reconcile.is_stale(store, TENANT, fresh)
+        store.rows.remove(next(r for r in store.of("spend_fx_rates") if str(r.currency).strip() == "EUR"))
+        assert await reconcile.is_stale(store, TENANT, fresh)  # a row the run used is gone
+
 
 # ---------------------------------------------------------------- references kept by runs
 
@@ -1012,6 +1263,57 @@ class TestReferences:
         store.of("spend_reconciliations")[0].superseded = True
         assert await rates.card_in_use(store, TENANT, c.id) is None
         assert not await fx.fx_in_use(store, TENANT, "EUR", date(2026, 10, 31))
+
+    @pytest.mark.asyncio
+    async def test_runs_are_searched_for_a_card_or_fx_row_in_sql(self, store, tmp_path):
+        c = card()
+        store.add(c)
+        fx_rate(store, OCT, "83")
+        fx_rate(store, MONTH_END, "90", currency="EUR")
+        priced_usage(store, c, 4_000_000)
+        await add_invoice(tmp_path, [usage_line("9.2222222222")], currency="EUR")
+        await run_month()
+        store.statements.clear()
+        assert await rates.card_in_use(store, TENANT, c.id) == MONTH_END
+        assert await rates.card_in_use(store, TENANT, uuid.uuid4()) is None
+        assert await fx.fx_in_use(store, TENANT, "EUR", MONTH_END)
+        assert not await fx.fx_in_use(store, TENANT, "USD", MONTH_END)  # looked up, but the row was 1 October's
+        sql = _select_sql(store, "spend_reconciliations")
+        assert any("= ANY (spend_reconciliations.card_ids)" in s for s in sql)
+        assert any("spend_reconciliations.fx_rows @>" in s for s in sql)
+        assert not any("SELECT spend_reconciliations.card_ids" in s or "SELECT spend_reconciliations.fx_rows" in s
+                       for s in sql)  # fmt: skip
+
+    def test_compared_through_caps_an_open_month_at_the_day_of_the_run(self):
+        assert reconcile.compared_through("openai", OCT, None) == MONTH_END
+        assert reconcile.compared_through("openai", OCT, RUN_AT) == MONTH_END  # run after the month closed
+        assert reconcile.compared_through("openai", OCT, datetime(2026, 10, 10, 9, tzinfo=UTC)) == date(2026, 10, 10)
+        assert reconcile.compared_through("openai", OCT, datetime(2026, 9, 20, tzinfo=UTC)) == OCT
+        # Pacific billing: 03:00 UTC on 10 October is still 9 October there.
+        assert reconcile.compared_through("gemini", OCT, datetime(2026, 10, 10, 3, tzinfo=UTC)) == date(2026, 10, 9)
+
+    @pytest.mark.asyncio
+    async def test_a_run_of_an_open_month_holds_its_cards_only_up_to_the_day_it_ran(self, store, tmp_path):
+        open_run = datetime(2026, 10, 10, 9, 0, tzinfo=UTC)
+        c = card()
+        store.add(c)
+        priced_usage(store, c, 4_000_000, day=date(2026, 10, 5))  # a month-to-date export
+        await add_invoice(tmp_path, [usage_line("10")], now=datetime(2026, 10, 9, tzinfo=UTC))
+        await run_month(now=open_run)
+        assert await rates.card_in_use(store, TENANT, c.id) == date(2026, 10, 10)
+        body = {
+            "provider": "openai", "usage_type": "llm_tokens", "model_sku": "gpt-4o", "unit": "1m_input_tokens",
+            "unit_price": "2.4", "currency": "USD", "source": "contract", "supersede": True,
+        }  # fmt: skip
+        with pytest.raises(SpendError) as info:  # inside the days the run compared: a backdated change
+            await rates.create_card(TENANT, {**body, "effective_from": "2026-10-08"}, actor=IMPORTER, now=open_run)
+        assert info.value.status == 409 and info.value.code == "restate_required"
+        assert c.effective_to is None
+        # A successor from a later day touches nothing the run compared: no restatement is asked for.
+        out = await rates.create_card(TENANT, {**body, "effective_from": "2026-10-20"}, actor=IMPORTER, now=open_run)
+        assert out["superseded_id"] == str(c.id) and out["restate_job_id"] is None
+        assert c.effective_to == date(2026, 10, 20)
+        assert store.of("spend_jobs") == []
 
 
 # ---------------------------------------------------------------- acceptance

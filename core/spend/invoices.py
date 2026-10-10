@@ -18,7 +18,9 @@ the same without writing. A second current invoice with the same provider,
 month and reference is refused (409 ``invoice_exists``) unless ``replace``:
 the earlier one is then ``superseded`` and points at its successor; both
 are kept. Several references for one provider and month (two accounts) are
-all current and are summed by the reconciliation. Each import is audited
+all current and are summed by the reconciliation; together they hold at most
+``MAX_PERIOD_LINES`` lines (413 ``too_many_rows``), because a reconciliation
+run loads every one of them. Each import is audited
 (``spend.invoices.import``) in its own transaction.
 """
 
@@ -34,7 +36,7 @@ from pathlib import Path
 from typing import Any
 
 import structlog
-from sqlalchemy import select
+from sqlalchemy import func, select
 
 from core.spend import audit, clock, imports, locks, vocab
 from core.spend.errors import SpendError, require_actor
@@ -47,6 +49,9 @@ ENVELOPE_KEYS = ("rows", "lines")
 MAX_LINE_AMOUNT = Decimal("1e12")
 MAX_INVOICE_TOTAL = Decimal("1e13")
 MAX_LINE_QUANTITY = Decimal("1e15")
+# Current invoice lines one provider's month may hold across its references: a reconciliation run loads
+# them all, so the import bounds the run (four full files' worth).
+MAX_PERIOD_LINES = 4 * imports.MAX_IMPORT_ROWS
 INVOICE_REF_MAX = 128
 MIN_YEAR = 2000
 MAX_YEAR = 2999
@@ -218,6 +223,22 @@ async def _current(session: Any, tenant_id: uuid.UUID, provider: str, period_sta
     return rows[0] if rows else None
 
 
+async def _current_line_count(session: Any, tenant_id: uuid.UUID, provider: str, period_start: date) -> int:
+    from core.models.spend_invoice import SpendInvoice
+
+    held = (
+        await session.execute(
+            select(func.sum(SpendInvoice.line_count)).where(
+                SpendInvoice.tenant_id == tenant_id,
+                SpendInvoice.provider == provider,
+                SpendInvoice.period_start == period_start,
+                SpendInvoice.status == "current",
+            )
+        )
+    ).scalar()
+    return int(held or 0)
+
+
 async def import_invoice(
     tenant_id: uuid.UUID,
     *,
@@ -290,6 +311,16 @@ async def import_invoice(
                 "send replace=true to supersede it",
             )
         out["superseded_id"] = str(existing.id) if existing is not None else None
+        held = await _current_line_count(session, tenant_id, provider, p0)
+        if existing is not None:
+            held -= int(existing.line_count)  # its lines leave the month with it
+        if held + len(lines) > MAX_PERIOD_LINES:
+            raise SpendError(
+                413,
+                "too_many_rows",
+                f"{provider}'s {period_text(p0)} holds {held} current invoice lines; with these "
+                f"{len(lines)} it would pass the {MAX_PERIOD_LINES} one month may hold",
+            )
         out["created"] = len(lines)
         if dry_run:
             return out

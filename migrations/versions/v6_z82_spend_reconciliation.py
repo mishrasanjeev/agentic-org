@@ -12,8 +12,9 @@ lines with a kind (usage, credit, tax, fee, commitment), usage type, SKU,
 card unit, quantity, amount and an optional billing date.
 ``spend_reconciliations``: one run of a provider's month, metered usage
 against the invoice in two figures (as stored, and re-priced at the cards
-known at run time), with the cards and FX rows it used; a re-run supersedes
-the earlier run. ``spend_reconciliation_items``: the compared keys of a run
+known at run time), with the cards and FX rows it used and digests of the
+inputs it read (to tell when it is stale); a re-run supersedes the earlier
+run. ``spend_reconciliation_items``: the compared keys of a run
 and its non-usage lines, with acceptances (``core/spend/``). All tenant
 scoped under forced row-level policies. Foreign keys are composite on
 ``(tenant_id, id)`` so a row can never reference another tenant's row; every
@@ -149,6 +150,7 @@ def upgrade() -> None:
             card_ids UUID[] NOT NULL DEFAULT '{}',
             fx_rows JSONB NOT NULL DEFAULT '[]'::jsonb,
             retroactive JSONB NOT NULL DEFAULT '[]'::jsonb,
+            input_digests JSONB NOT NULL DEFAULT '{}'::jsonb,
             superseded BOOLEAN NOT NULL DEFAULT false,
             accepted_by VARCHAR(128) NULL,
             accepted_at TIMESTAMPTZ NULL,

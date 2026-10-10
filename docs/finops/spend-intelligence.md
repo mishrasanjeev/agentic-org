@@ -558,7 +558,10 @@ second line of defence, not the first.
 `card_in_use` answers the latest billing date of a record a card priced (directly, or as the
 output half of a blended price within the card's own dates); a card in use can be retired only by
 a correction and its price changed only by one. A card a current reconciliation used counts as in
-use until the last day of the run's month. A correction of a card in use, a backdated
+use up to the last billing day the run compared: the end of its month, or, for a month still open
+when it ran, the run's own billing day (no record is dated later), so a successor that starts after
+that day is not a backdated change. The runs are searched for the card, and for an FX row, in SQL.
+A correction of a card in use, a backdated
 supersede over priced records sent with `restate`, and an earlier `effective_to` over priced
 records sent with `restate` each queue the restatement of the affected billing days once the
 change has committed, and answer its `restate_job_id`; a rate-card import queues one restatement
@@ -760,6 +763,10 @@ under `rows` or `lines`). Columns: `amount` (required); `line_kind`, `usage_type
   `currency`, when given, must be the invoice currency; amounts are -10^12 to 10^12 with at most
   10 decimals, and an invoice totals at most 10^13 in magnitude. In-house serving and platform
   storage have no provider invoice and are refused.
+- **A bounded month.** The current invoices of one provider and month hold at most 20,000 lines
+  together (four full files), because a reconciliation run loads every one of them; an import
+  past that is 413 `too_many_rows` (a dry run reports it too). A replaced invoice's lines leave the
+  count with it.
 - **Whole or nothing.** A refused line refuses the import: 422 `invoice_rejected` with every
   refused line and its reason (`invalid_number`, `invalid_value`, `invalid_unit`, `invalid_sku`,
   `invalid_period`, `invalid_date`, `currency_mismatch`). A partial invoice would reconcile
@@ -850,20 +857,26 @@ invoice; 422 `currency_mismatch` when its current invoices are in different curr
   `retroactive` every card or FX row created or changed after the end of the billing month
   (`after_period_end`) or after the newest invoice import (`after_invoice_import`). A backdated
   contract card can be legitimate, so these are reported, in the run and in the gate, and do not
-  by themselves fail it. A card a current run used counts as in use until the last day of the run's
-  month (its price changes only by a correction), and changing an FX row a current run used needs
-  `restate`.
+  by themselves fail it. A card a current run used counts as in use up to the last billing day the
+  run compared (the month's end, or the day it ran for a month still open; its price changes only by
+  a correction), and changing an FX row a current run used needs `restate`.
 - **Re-runs.** A new run supersedes the month's earlier runs (kept, `superseded`). An item of the new
   run whose usage type, model, unit and day, invoice lines and both figures equal an accepted item
   of the previous run takes over its acceptance (`carried_from`; audited as
   `spend.reconciliations.carry_over`); a changed item, or a replaced invoice (other line ids),
-  needs review again. The run is audited as `spend.reconciliations.run` with the totals, both
+  needs review again. Maker-checker holds for a carried acceptance too: an acceptance by someone
+  who has since imported one of the month's current invoices is not carried, and the item needs
+  review again. The run is audited as `spend.reconciliations.run` with the totals, both
   variances and the counts.
-- **Staleness.** A run is `stale` when a card it used, or any card of the provider in force in the
-  month, was created or changed after it; when an FX lookup it made would now find another row,
-  rate or change; when the provider's rollup rows of the month changed after it (late records,
-  restatement, FX settlement, re-attribution); or when the month's current invoices are no longer
-  the ones it compared. `GET /spend/reconciliations` (filters `period`, `provider`,
+- **Staleness.** A run stores digests of what it read (`input_digests`): the rollup groups and the
+  platform-billed sum, every card it read with the fields that price and date it, its status and
+  its timestamps, and the provider's model aliases. It is `stale` when any of these would now read
+  differently, so a change whose transaction began before the run and committed after the run had
+  read is caught whatever its timestamp (late records, a restatement or settlement chunk in
+  flight, a card or alias written meanwhile); when an FX lookup it made would now find another
+  row, rate or change; when the month's current invoices are no longer the ones it compared; and,
+  as well, when a card of the provider in force in the month or a rollup row of the month carries a
+  change stamped after the run (re-attribution included). A run without its digests is stale. `GET /spend/reconciliations` (filters `period`, `provider`,
   `include_superseded`) and `GET /spend/reconciliations/{reconciliation_id}` (with items) report
   `stale`.
 
