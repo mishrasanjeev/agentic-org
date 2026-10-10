@@ -610,7 +610,7 @@ class TestJobAuditRows:
             assert not [e for e in kept if access.is_commercial_audit_event(e)]
         for reader in ("admin", "auditor"):
             assert access.commercial_audit_clause(READERS[reader], rows.c.event_type) is None
-        assert access.COMMERCIAL_AUDIT_PREFIXES[2:] == JOB_AUDIT_PREFIXES
+        assert set(JOB_AUDIT_PREFIXES) <= set(access.COMMERCIAL_AUDIT_PREFIXES)  # every job prefix is hidden
 
     @pytest.mark.asyncio
     async def test_general_audit_read_hides_job_rows_from_a_domain_reader_and_a_machine_credential(self, monkeypatch):

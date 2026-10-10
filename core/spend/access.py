@@ -1,8 +1,8 @@
 # SPDX-License-Identifier: Apache-2.0
 """Who reads what in spend intelligence.
 
-Commercial reads (rate cards, commitments, the price quote, and later
-invoices, reconciliations and the gate) are for a human administrator or
+Commercial reads (rate cards, commitments, the price quote, invoices,
+reconciliations and the gate) are for a human administrator or
 auditor only: a person whose domains are unrestricted. Machine credentials
 can hold ``audit:read`` through agent grants and are refused here. The
 audit rows of commercial writes, which carry the same values, and of
@@ -38,22 +38,26 @@ from core.ownership import Caller, agent_visibility_clause
 from core.spend.errors import SpendError
 
 # Audit rows of commercial writes carry the values themselves (prices, tiers,
-# committed amounts, overage prices) in ``details``; the general audit read
-# hides them from anyone the commercial routes refuse. So do the rows jobs
-# write: a job's parameters (a correction's reason, card ids, ranges), the
-# amounts a restatement or re-attribution moved per billing date and card,
-# the INR totals a settlement moved per currency, and rebuild and backfill
-# counts. Each event-type prefix names the model whose rows those audit rows
-# describe: the application never deletes those rows and their audit rows
-# commit with them (``spend.job.*``, ``spend.usage.*``, ``spend.fx.*`` and
-# ``spend.rollups.*`` rows are written only by jobs and by queueing one), so a
-# tenant with none of them has no such audit rows. ``spend.fx.`` does not
-# match the ``spend.fx_rates.*`` rows of FX reference data, which stay
-# visible. Later parts add the invoice and reconciliation event types here,
-# with models that are never deleted either.
+# committed amounts, overage prices, invoice totals, reconciliation figures and
+# acceptance reasons) in ``details``; the general audit read hides them from
+# anyone the commercial routes refuse. So do the rows jobs write: a job's
+# parameters (a correction's reason, card ids, ranges), the amounts a
+# restatement or re-attribution moved per billing date and card, the INR
+# totals a settlement moved per currency, and rebuild and backfill counts.
+# Each event-type prefix names the model whose rows those audit rows
+# describe: the application never deletes those rows (invoices and runs are
+# superseded, never removed) and their audit rows commit with them
+# (``spend.job.*``, ``spend.usage.*``, ``spend.fx.*`` and ``spend.rollups.*``
+# rows are written only by jobs and by queueing one), so a tenant with none of
+# them has no such audit rows. ``spend.fx.`` does not match the
+# ``spend.fx_rates.*`` rows of FX reference data, which stay visible. Item
+# acceptances and carried-over acceptances are ``spend.reconciliations.*``
+# events and describe rows of their run's table.
 COMMERCIAL_AUDIT_SOURCES = (
     ("spend.rate_cards.", "SpendRateCard"),
     ("spend.commitments.", "SpendCommitment"),
+    ("spend.invoices.", "SpendInvoice"),
+    ("spend.reconciliations.", "SpendReconciliation"),
     ("spend.job.", "SpendJob"),
     ("spend.usage.", "SpendJob"),
     ("spend.fx.", "SpendJob"),
@@ -78,7 +82,9 @@ def require_commercial(caller: Caller) -> None:
     """403 ``commercial_read_refused`` for anyone but a human administrator or auditor."""
     if not is_commercial_reader(caller):
         raise SpendError(
-            403, "commercial_read_refused", "rate cards, commitments and prices are for an administrator or auditor"
+            403,
+            "commercial_read_refused",
+            "rate cards, commitments, prices, invoices and reconciliations are for an administrator or auditor",
         )
 
 
@@ -119,10 +125,10 @@ def commercial_audit_clause(caller: Caller, event_type: Any) -> ColumnElement[bo
 
 
 def _source_model(name: str) -> Any:
-    """The ORM class a ``COMMERCIAL_AUDIT_SOURCES`` entry names (reference data or usage models)."""
-    from core.models import spend, spend_usage
+    """The ORM class a ``COMMERCIAL_AUDIT_SOURCES`` entry names (any spend model the package exports)."""
+    import core.models as models
 
-    return getattr(spend, name, None) or getattr(spend_usage, name)
+    return getattr(models, name)
 
 
 async def commercial_rows_kept(session: Any, tenant_id: Any) -> bool:

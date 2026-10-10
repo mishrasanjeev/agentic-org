@@ -486,10 +486,12 @@ class TestAccess:
             if filtered:
                 kept_sql = sql_of(capture.statements[0])
                 assert "FROM spend_rate_cards" in kept_sql and "FROM spend_commitments" in kept_sql
+                assert "FROM spend_invoices" in kept_sql and "FROM spend_reconciliations" in kept_sql
                 assert f"tenant_id = '{TID}'" in kept_sql and "audit_log" not in kept_sql
             for statement in capture.statements[-2:]:  # the count and the page
                 sql = sql_of(statement)
                 assert ("NOT LIKE 'spend.rate/_cards.'" in sql and "NOT LIKE 'spend.commitments.'" in sql) is filtered
+                assert ("NOT LIKE 'spend.invoices.'" in sql and "NOT LIKE 'spend.reconciliations.'" in sql) is filtered
                 assert ("spend.rate/_cards." in sql) is filtered, role
 
         # A tenant that never kept a rate card or commitment runs the audit query it ran before.
@@ -521,6 +523,8 @@ class TestAccess:
     def test_commercial_audit_event_matches_the_clause_prefixes(self):
         assert access.is_commercial_audit_event("spend.rate_cards.correct")
         assert access.is_commercial_audit_event("spend.commitments.update")
+        assert access.is_commercial_audit_event("spend.invoices.import")
+        assert access.is_commercial_audit_event("spend.reconciliations.accept_item")
         for other in ("spend.rateXcards.create", "spend.org_node.create", "Spend.rate_cards.create", None, 7):
             assert not access.is_commercial_audit_event(other)
         assert access.COMMERCIAL_AUDIT_PREFIXES == tuple(prefix for prefix, _ in access.COMMERCIAL_AUDIT_SOURCES)
@@ -593,14 +597,17 @@ class TestRouteShape:
             jobs_route = route.path in api_job_paths()
             imports_route = route.path.endswith("/import")
             preview_route = route.path == "/spend/storage/sample"  # measures every store, as heavy as a job
-            assert meta["rate_limit"] == ("bulk-import" if imports_route or jobs_route or preview_route else "standard")
+            # A reconciliation run reads a provider's month of rollups and writes every item: as heavy as a job.
+            run_route = route.path == "/spend/reconciliations" and "POST" in route.methods
+            heavy = imports_route or jobs_route or preview_route or run_route
+            assert meta["rate_limit"] == ("bulk-import" if heavy else "standard")
             if "GET" in route.methods:
                 assert meta["idempotency"] == "read-only"
-        assert operations == 38  # 23 reference-data, 13 usage and 2 metering operations
+        assert operations == 47  # 23 reference-data, 13 usage, 2 metering and 9 reconciliation operations
 
     def test_write_routes_carry_tenant_admin_dependency(self):
         writes = [r for r in api.router.routes if not r.methods <= {"GET", "HEAD"}]
-        assert len(writes) == 21  # 14 reference-data writes, 6 job routes and the storage preview
+        assert len(writes) == 25  # 14 reference-data writes, 6 job routes, the storage preview, 4 reconciliation
         for route in writes:
             assert require_tenant_admin in route.dependencies, route.path
             assert api.spend_admin in [d.call for d in route.dependant.dependencies], route.path
@@ -608,7 +615,16 @@ class TestRouteShape:
         for route in api.router.routes:
             if route.methods <= {"GET", "HEAD"}:
                 assert require_tenant_admin not in route.dependencies
-        commercial = {"/spend/rate-cards", "/spend/commitments", "/spend/price"}
+        commercial = {
+            "/spend/rate-cards",
+            "/spend/commitments",
+            "/spend/price",
+            "/spend/invoices",
+            "/spend/invoices/{invoice_id}",
+            "/spend/reconciliations",
+            "/spend/reconciliations/{reconciliation_id}",
+            "/spend/gate",
+        }
         for route in api.router.routes:
             if route.methods <= {"GET"} and route.path in commercial:
                 assert "caller" in route.dependant.call.__code__.co_varnames

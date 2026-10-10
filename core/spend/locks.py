@@ -64,6 +64,14 @@ def job_kind(tenant_id: uuid.UUID | str, kind: str) -> str:
     return key("job", tenant_id, kind)
 
 
+def invoice(tenant_id: uuid.UUID | str, provider: str, period_start: date) -> str:
+    return key("invoice", tenant_id, provider, period_start.isoformat())
+
+
+def reconciliation(tenant_id: uuid.UUID | str, provider: str, period_start: date) -> str:
+    return key("reconciliation", tenant_id, provider, period_start.isoformat())
+
+
 async def xact_lock(session: Any, k: str) -> None:
     """Wait for the exclusive lock on ``k`` until the transaction ends."""
     await session.execute(_LOCK, {"k": k})

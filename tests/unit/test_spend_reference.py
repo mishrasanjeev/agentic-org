@@ -134,9 +134,11 @@ class TestVocabulary:
         first, following, a, b = clock.month_bounds("2026-12", clock.billing_zone("openai"))
         assert (first, following) == (date(2026, 12, 1), date(2027, 1, 1))
         assert a == datetime(2026, 12, 1, tzinfo=UTC) and b == datetime(2027, 1, 1, tzinfo=UTC)
-        with pytest.raises(SpendError) as info:
-            clock.month_bounds("2026-13", clock.reporting_zone())
-        assert info.value.code == "invalid_period"
+        for outside in ("2026-13", "0000-01", "9999-12"):  # the last two fall outside the calendar
+            with pytest.raises(SpendError) as info:
+                clock.month_bounds(outside, clock.reporting_zone())
+            assert (info.value.status, info.value.code) == (422, "invalid_period"), outside
+        assert clock.month_bounds("9999-11", clock.billing_zone("openai"))[1] == date(9999, 12, 1)
         assert clock.days_in_month(date(2028, 2, 3)) == 29
         assert clock.event_date_of(T0.replace(hour=20, tzinfo=None)) == date(2026, 10, 2)  # naive is read as UTC
         assert clock.today_in(clock.reporting_zone(), T0) == date(2026, 10, 1)

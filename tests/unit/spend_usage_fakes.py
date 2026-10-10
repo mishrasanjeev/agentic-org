@@ -5,10 +5,11 @@ It extends the reference-data fake (``tests/unit/spend_fakes.py``) with what
 the usage code builds: multi-row inserts with ``ON CONFLICT DO NOTHING`` or an
 additive ``DO UPDATE`` and ``RETURNING``; updates and deletes; selects with
 ``sum``/``count``/``max``/``min``/``coalesce``/``case``/``cast``, several
-``group_by`` columns, ``distinct``, subqueries in ``IN``, tuple ``IN`` and
-keyset conditions, ``FOR UPDATE SKIP LOCKED`` (skipping the rows a test marks
-as held by another transaction); and the text statements of the resolver, the
-job claim and the statement timeout. Expressions are evaluated against the ORM rows it
+``group_by`` columns, ``distinct``, subqueries in ``IN``, tuple ``IN``,
+keyset conditions, ``= ANY(array)``, JSONB ``@>`` and ``FOR UPDATE SKIP
+LOCKED`` (skipping the rows a test marks as held by another transaction);
+and the text statements of the resolver, the job claim and the statement
+timeout. Expressions are evaluated against the ORM rows it
 holds, one table per statement.
 """
 
@@ -28,6 +29,7 @@ from sqlalchemy.sql.elements import (
     Case,
     Cast,
     ClauseList,
+    CollectionAggregate,
     ColumnClause,
     False_,
     Grouping,
@@ -149,6 +151,14 @@ class Evaluator:
 
     def binary(self, expr: BinaryExpression, row: Any) -> Any:
         op = expr.operator
+        for value_side, array_side in ((expr.left, expr.right), (expr.right, expr.left)):
+            if isinstance(array_side, CollectionAggregate) and array_side.operator is operators.any_op:
+                if op is not operators.eq:
+                    raise NotImplementedError(f"{op} ANY")
+                members = self.value(array_side.element, row) or []
+                return _strip(self.value(value_side, row)) in [_strip(m) for m in members]
+        if getattr(op, "opstring", None) == "@>":  # JSONB containment
+            return _json_contains(self.value(expr.left, row), self.value(expr.right, row))
         left = self.value(expr.left, row)
         if op in (operators.in_op, operators.not_in_op):
             right = self.value(expr.right, row)
@@ -205,6 +215,15 @@ class Evaluator:
                 return total
             return max(values) if name == "max" else min(values)
         return self.value(expr, rows[0]) if rows else None
+
+
+def _json_contains(container: Any, contained: Any) -> bool:
+    """PostgreSQL ``jsonb @> jsonb``: every element or key of the right side is contained in the left."""
+    if isinstance(container, list) and isinstance(contained, list):
+        return all(any(_json_contains(have, want) for have in container) for want in contained)
+    if isinstance(container, dict) and isinstance(contained, dict):
+        return all(key in container and _json_contains(container[key], want) for key, want in contained.items())
+    return container == contained
 
 
 def _is_aggregate(expr: Any) -> bool:

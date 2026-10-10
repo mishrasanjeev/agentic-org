@@ -4,6 +4,57 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
 
 ## [Unreleased] - 2026-08-29
 
+### Added - AI spend intelligence: invoice reconciliation and the Gate 1 status
+- Provider invoices: `POST /spend/invoices/import` takes a provider's invoice or
+  billing export for one billing month (CSV or JSON, bounded like every
+  import) with line kinds (`usage`, `credit`, `tax`, `fee`, `commitment`),
+  card units, quantities and optional daily billing dates. An invoice is
+  stored whole or refused whole (422 `invoice_rejected` names every refused
+  line); a second current invoice with the same reference needs `replace`,
+  which supersedes the earlier one; several references for a month are
+  summed, up to 20,000 current lines per provider and month (413
+  `too_many_rows`), since a run loads them all. Invoices are listed and
+  read through `GET /spend/invoices`.
+- Reconciliation: `POST /spend/reconciliations` compares a provider's
+  tenant-billed usage in its own billing month with its current invoices in
+  two figures, the amounts as stored and a re-pricing at the cards in force
+  on each billing day as known at run time (fallback-priced usage keeps its
+  stored price), both with the month-level tier true-up per contract key
+  (one ladder across card versions, graduated or all-units) and commitment
+  overage at the commitment's price, converted through INR. Lines and usage
+  match on usage type, the canonical model (aliases applied) and the
+  canonical unit, exact lines first; daily lines give day items and monthly
+  items list their days. An item is within tolerance only when both figures
+  are within 1%; non-usage lines are informational. Runs store the cards
+  and FX rows they used, flag data entered after the month or the import,
+  supersede earlier runs and carry over unchanged acceptances (never one by
+  an importer of the month's invoices). A run keeps digests of the usage,
+  cards and model aliases it read and goes stale when any of them would
+  read differently, when an FX row it used or the month's invoices change,
+  or when a card or usage change is stamped after it, so a change committed
+  while the run was reading is not missed. The comparison runs off the
+  event loop. Platform-key usage is reported beside the comparison;
+  in-house, storage and GPU usage are never compared.
+- Acceptance: an item, or a run out of tolerance only at the provider level,
+  is accepted with a reason by an active tenant administrator other than the
+  invoice importer (maker-checker), audited with both variances.
+- `GET /spend/gate` answers the Gate 1 status of a month: at least 98% of
+  INR spend attributed to a business unit, department, team or cost centre
+  (group nodes do not count) with no unpriced, unconverted or FX-pending
+  record, and every invoiced or tenant-billed provider reconciled within 1%
+  by a current, fresh run (an accepted difference does not count).
+- Invoice, reconciliation and acceptance audit rows are commercial reads
+  (`spend.invoices.*`, `spend.reconciliations.*`), hidden from `GET /audit`
+  for callers the commercial routes refuse. A card or FX row a current
+  reconciliation used counts as in use (a card up to the last billing day
+  the run compared, so a run of a month still open does not hold its cards
+  to the month's end). Behind `spend_intelligence_enabled` (default off):
+  off, the nine new routes are not found. Migration
+  `v6z82_spend_reconciliation` adds `spend_invoices`, `spend_invoice_lines`,
+  `spend_reconciliations` and `spend_reconciliation_items`, tenant scoped
+  under forced row-level security, with composite tenant foreign keys and a
+  leading index on each. Freezing closed months and statements are Phase 2.
+
 ### Added - AI spend intelligence: embeddings, OCR, speech, priced tools, storage and GPU metering
 - Non-token usage becomes usage records with the same pricing, attribution,
   writer, keys and rollups as model calls: embedding tokens (knowledge

@@ -531,6 +531,7 @@ def _tally_json(tally: _Tally) -> dict[str, Any]:
         "records": tally.records,
         "calls": tally.calls,
         "attributed_records": tally.attributed_records,
+        "countable_records": tally.countable_records,
         "amount_inr": None if no_inr else vocab.dec_str(tally.amount_inr),
         "attributed_amount_inr": vocab.dec_str(tally.attributed_amount_inr),
         "countable_amount_inr": vocab.dec_str(tally.countable_amount_inr),

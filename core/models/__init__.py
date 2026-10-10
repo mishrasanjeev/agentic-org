@@ -145,6 +145,10 @@ from core.models.spend import SpendRateCard as SpendRateCard
 from core.models.spend import SpendSourceMapping as SpendSourceMapping
 from core.models.spend_gpu import SpendGpuAllocation as SpendGpuAllocation
 from core.models.spend_gpu import SpendGpuPoolHour as SpendGpuPoolHour
+from core.models.spend_invoice import SpendInvoice as SpendInvoice
+from core.models.spend_invoice import SpendInvoiceLine as SpendInvoiceLine
+from core.models.spend_invoice import SpendReconciliation as SpendReconciliation
+from core.models.spend_invoice import SpendReconciliationItem as SpendReconciliationItem
 from core.models.spend_usage import SpendJob as SpendJob
 from core.models.spend_usage import SpendMeterGap as SpendMeterGap
 from core.models.spend_usage import SpendUsageRecord as SpendUsageRecord

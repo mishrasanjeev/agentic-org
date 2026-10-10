@@ -24,14 +24,20 @@ operator command, never through this API), and ``POST /spend/storage/sample``
 previews today's storage sample without writing a record (the daily job
 writes it).
 
-Reads need ``audit:read``; rate cards, commitments and prices are for a
-human administrator or auditor only. Administrators and auditors (people
-whose domains are unrestricted) read every usage record, rollup, coverage
-figure, gap, job and ledger comparison unfiltered, as ``GET /audit`` shows
-them every row; for anyone else usage records, rollups (every grouping) and
-the ledger comparison apply the caller's agent visibility, and coverage,
-gaps and jobs, which sum every agent's usage, are refused. Every write
-needs a tenant administrator signed in as a person and is audited. Off
+``/spend/invoices`` imports a provider's invoice for a billing month (CSV
+or JSON, stored whole, superseded on ``replace``), ``/spend/reconciliations``
+reconciles a provider's month against it in two figures and records accepted
+differences, and ``GET /spend/gate`` answers the Gate 1 status of a month.
+
+Reads need ``audit:read``; rate cards, commitments, prices, invoices,
+reconciliations and the gate are for a human administrator or auditor only.
+Administrators and auditors (people whose domains are unrestricted) read
+every usage record, rollup, coverage figure, gap, job and ledger comparison
+unfiltered, as ``GET /audit`` shows them every row; for anyone else usage
+records, rollups (every grouping) and the ledger comparison apply the
+caller's agent visibility, and coverage, gaps and jobs, which sum every
+agent's usage, are refused. Every write needs a tenant administrator signed
+in as a person and is audited. Off
 (``spend_intelligence_enabled``), the status route says so and every other
 route is not found.
 """
@@ -58,8 +64,10 @@ from core.spend import (
     clock,
     commitments,
     fx,
+    gate,
     gpu,
     imports,
+    invoices,
     jobs,
     ledgers,
     maintenance,
@@ -68,6 +76,7 @@ from core.spend import (
     partitions,
     pricing,
     rates,
+    reconcile,
     rollups,
     storage,
     vocab,
@@ -248,7 +257,7 @@ async def spend_admin(request: Request) -> ActiveHumanAdmin:
 
 
 def _refused(exc: SpendError) -> HTTPException:
-    return HTTPException(exc.status, detail={"error": exc.code, "message": exc.message})
+    return HTTPException(exc.status, detail={**exc.extra, "error": exc.code, "message": exc.message})
 
 
 def _tenant(tenant_id: str) -> uuid.UUID:
@@ -258,10 +267,8 @@ def _tenant(tenant_id: str) -> uuid.UUID:
         raise HTTPException(401, "Invalid tenant context") from None
 
 
-async def _upload_rows(
-    file: UploadFile, *, required: tuple[str, ...], optional: tuple[str, ...]
-) -> tuple[list[dict[str, str]], str]:
-    """The rows of an uploaded import file and its sha256; the file is bounded while it streams."""
+async def _stream_upload(file: UploadFile) -> Any:
+    """The uploaded import file in a temporary file, bounded while it streams (413 ``import_too_large``)."""
     try:
         path, _size = await stream_to_tempfile(file, max_bytes=imports.MAX_IMPORT_BYTES)
     except HTTPException as exc:
@@ -274,6 +281,14 @@ async def _upload_rows(
                 },
             ) from None
         raise
+    return path
+
+
+async def _upload_rows(
+    file: UploadFile, *, required: tuple[str, ...], optional: tuple[str, ...]
+) -> tuple[list[dict[str, str]], str]:
+    """The rows of an uploaded import file and its sha256; the file is bounded while it streams."""
+    path = await _stream_upload(file)
     try:
         rows = await asyncio.to_thread(
             imports.parse_rows,
@@ -1439,3 +1454,277 @@ async def preview_storage_sample(
         _tenant(tenant_id), day=storage.intended_day(now), now=now, write=False, actor=str(admin.user_id)
     )
     return {"day": out["day"], "stores": out["stores"], "written": 0}
+
+
+# ---------------------------------------------------------------- invoices, reconciliation, Gate 1
+
+PERIOD_PATTERN = r"^\d{4}-\d{2}$"
+Period = Annotated[str, Query(pattern=PERIOD_PATTERN)]
+
+
+class ReconcileIn(BaseModel):
+    model_config = {"extra": "forbid"}
+
+    provider: str = Field(..., min_length=1, max_length=64)
+    period: str = Field(..., pattern=PERIOD_PATTERN)
+
+
+class AcceptIn(BaseModel):
+    model_config = {"extra": "forbid"}
+
+    reason: str = Field(..., min_length=reconcile.REASON_MIN, max_length=reconcile.REASON_MAX)
+
+
+@router.post("/invoices/import", dependencies=[require_tenant_admin])
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="spend.invoices.sensitive.write",
+    rate_limit="bulk-import",
+    idempotency="one-current-invoice-per-reference",
+    audit_event="spend.invoices.import",
+)
+async def import_invoice(
+    file: UploadFile,
+    provider: Annotated[str, Query(min_length=1, max_length=64)],
+    period: Period,
+    invoice_ref: Annotated[str, Query(min_length=1, max_length=invoices.INVOICE_REF_MAX)],
+    currency: Annotated[str, Query(pattern=r"^[A-Z]{3}$")],
+    replace: bool = False,
+    dry_run: bool = False,
+    admin: ActiveHumanAdmin = Depends(spend_admin),
+    tenant_id: str = Depends(get_current_tenant),
+) -> dict[str, Any]:
+    """Import a provider's invoice for a billing month from CSV or JSON, stored whole or refused whole.
+
+    Columns: ``amount``; optional ``line_kind``, ``usage_type``, ``model_sku``, ``unit``, ``quantity``,
+    ``usage_date``, ``currency``.
+    """
+    spend_on()
+    try:
+        path = await _stream_upload(file)
+        try:
+            return await invoices.import_invoice(
+                _tenant(tenant_id),
+                provider=provider,
+                period=period,
+                invoice_ref=invoice_ref,
+                currency=currency,
+                path=path,
+                filename=file.filename or "",
+                content_type=file.content_type or "",
+                actor=str(admin.user_id),
+                replace=replace,
+                dry_run=dry_run,
+            )
+        finally:
+            cleanup_tempfile(path)
+    except SpendError as exc:
+        raise _refused(exc) from None
+
+
+@router.get("/invoices")
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="spend.invoices.read",
+    rate_limit="standard",
+    idempotency="read-only",
+    audit_event="spend.invoices.list",
+)
+async def list_invoices(
+    provider: Annotated[str | None, Query(max_length=64)] = None,
+    period: Annotated[str | None, Query(pattern=PERIOD_PATTERN)] = None,
+    caller: Caller = Depends(caller_from_request),
+    tenant_id: str = Depends(get_current_tenant),
+) -> dict[str, Any]:
+    """Imported invoices, current and superseded (an administrator or auditor only)."""
+    spend_on()
+    try:
+        access.require_commercial(caller)
+        return await invoices.list_invoices(_tenant(tenant_id), provider=provider, period=period)
+    except SpendError as exc:
+        raise _refused(exc) from None
+
+
+@router.get("/invoices/{invoice_id}")
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="spend.invoices.read",
+    rate_limit="standard",
+    idempotency="read-only",
+    audit_event="spend.invoices.get",
+)
+async def get_invoice(
+    invoice_id: uuid.UUID,
+    caller: Caller = Depends(caller_from_request),
+    tenant_id: str = Depends(get_current_tenant),
+) -> dict[str, Any]:
+    """An invoice with its lines (an administrator or auditor only)."""
+    spend_on()
+    try:
+        access.require_commercial(caller)
+        return await invoices.get_invoice(_tenant(tenant_id), invoice_id)
+    except SpendError as exc:
+        raise _refused(exc) from None
+
+
+@router.post("/reconciliations", status_code=201, dependencies=[require_tenant_admin])
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="spend.reconciliations.sensitive.write",
+    rate_limit="bulk-import",
+    idempotency="supersedes-earlier-runs",
+    audit_event="spend.reconciliations.run",
+)
+async def run_reconciliation(
+    body: ReconcileIn,
+    admin: ActiveHumanAdmin = Depends(spend_admin),
+    tenant_id: str = Depends(get_current_tenant),
+) -> dict[str, Any]:
+    """Reconcile a provider's billing month against its current invoices; earlier runs are superseded."""
+    spend_on()
+    try:
+        return await reconcile.run(
+            _tenant(tenant_id),
+            provider=body.provider,
+            period=body.period,
+            actor=str(admin.user_id),
+            now=clock.now_utc(),
+        )
+    except SpendError as exc:
+        raise _refused(exc) from None
+
+
+@router.get("/reconciliations")
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="spend.reconciliations.read",
+    rate_limit="standard",
+    idempotency="read-only",
+    audit_event="spend.reconciliations.list",
+)
+async def list_reconciliations(
+    period: Annotated[str | None, Query(pattern=PERIOD_PATTERN)] = None,
+    provider: Annotated[str | None, Query(max_length=64)] = None,
+    include_superseded: bool = False,
+    caller: Caller = Depends(caller_from_request),
+    tenant_id: str = Depends(get_current_tenant),
+) -> dict[str, Any]:
+    """Reconciliation runs, newest first, each with ``stale`` (an administrator or auditor only)."""
+    spend_on()
+    try:
+        access.require_commercial(caller)
+        return await reconcile.list_runs(
+            _tenant(tenant_id), period=period, provider=provider, include_superseded=include_superseded
+        )
+    except SpendError as exc:
+        raise _refused(exc) from None
+
+
+@router.get("/reconciliations/{reconciliation_id}")
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="spend.reconciliations.read",
+    rate_limit="standard",
+    idempotency="read-only",
+    audit_event="spend.reconciliations.get",
+)
+async def get_reconciliation(
+    reconciliation_id: uuid.UUID,
+    caller: Caller = Depends(caller_from_request),
+    tenant_id: str = Depends(get_current_tenant),
+) -> dict[str, Any]:
+    """A run with its items and ``stale`` (an administrator or auditor only)."""
+    spend_on()
+    try:
+        access.require_commercial(caller)
+        return await reconcile.get_run(_tenant(tenant_id), reconciliation_id)
+    except SpendError as exc:
+        raise _refused(exc) from None
+
+
+@router.post("/reconciliations/{reconciliation_id}/accept", dependencies=[require_tenant_admin])
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="spend.reconciliations.sensitive.write",
+    rate_limit="standard",
+    idempotency="accepts-once",
+    audit_event="spend.reconciliations.accept_run",
+)
+async def accept_reconciliation(
+    reconciliation_id: uuid.UUID,
+    body: AcceptIn,
+    admin: ActiveHumanAdmin = Depends(spend_admin),
+    tenant_id: str = Depends(get_current_tenant),
+) -> dict[str, Any]:
+    """Accept a run out of tolerance at the provider level while no item needs review, with a reason."""
+    spend_on()
+    try:
+        return await reconcile.accept_run(
+            _tenant(tenant_id), reconciliation_id, reason=body.reason, actor=str(admin.user_id), now=clock.now_utc()
+        )
+    except SpendError as exc:
+        raise _refused(exc) from None
+
+
+@router.post("/reconciliations/{reconciliation_id}/items/{item_id}/accept", dependencies=[require_tenant_admin])
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="spend.reconciliations.sensitive.write",
+    rate_limit="standard",
+    idempotency="accepts-once",
+    audit_event="spend.reconciliations.accept_item",
+)
+async def accept_reconciliation_item(
+    reconciliation_id: uuid.UUID,
+    item_id: uuid.UUID,
+    body: AcceptIn,
+    admin: ActiveHumanAdmin = Depends(spend_admin),
+    tenant_id: str = Depends(get_current_tenant),
+) -> dict[str, Any]:
+    """Accept one item that needs review, with a reason; the run's status comes back with it."""
+    spend_on()
+    try:
+        return await reconcile.accept_item(
+            _tenant(tenant_id),
+            reconciliation_id,
+            item_id,
+            reason=body.reason,
+            actor=str(admin.user_id),
+            now=clock.now_utc(),
+        )
+    except SpendError as exc:
+        raise _refused(exc) from None
+
+
+@router.get("/gate")
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="spend.gate.read",
+    rate_limit="standard",
+    idempotency="read-only",
+    audit_event="spend.gate.get",
+)
+async def gate_status(
+    period: Period,
+    caller: Caller = Depends(caller_from_request),
+    tenant_id: str = Depends(get_current_tenant),
+) -> dict[str, Any]:
+    """The Gate 1 status of a month: the attributed share and every provider's reconciliation.
+
+    For an administrator or auditor only.
+    """
+    spend_on()
+    try:
+        access.require_commercial(caller)
+        return await gate.status(_tenant(tenant_id), period, now=clock.now_utc())
+    except SpendError as exc:
+        raise _refused(exc) from None

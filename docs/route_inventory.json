@@ -10076,7 +10076,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "spend.commitments.read",
-    "source_line": 737,
+    "source_line": 752,
     "tenant_required": true
   },
   {
@@ -10094,7 +10094,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "spend.commitments.sensitive.write",
-    "source_line": 765,
+    "source_line": 780,
     "tenant_required": true
   },
   {
@@ -10112,7 +10112,7 @@
     "public_exempt_reason": null,
     "rate_limit": null,
     "scope": "spend.commitments.sensitive.write",
-    "source_line": 1331,
+    "source_line": 1346,
     "tenant_required": true
   },
   {
@@ -10130,7 +10130,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "spend.commitments.sensitive.write",
-    "source_line": 787,
+    "source_line": 802,
     "tenant_required": true
   },
   {
@@ -10148,7 +10148,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "spend.usage.read",
-    "source_line": 1099,
+    "source_line": 1114,
     "tenant_required": true
   },
   {
@@ -10166,7 +10166,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "spend.usage.read",
-    "source_line": 1126,
+    "source_line": 1141,
     "tenant_required": true
   },
   {
@@ -10184,7 +10184,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "spend.fx.read",
-    "source_line": 815,
+    "source_line": 830,
     "tenant_required": true
   },
   {
@@ -10202,7 +10202,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "spend.fx.sensitive.write",
-    "source_line": 842,
+    "source_line": 857,
     "tenant_required": true
   },
   {
@@ -10220,7 +10220,7 @@
     "public_exempt_reason": null,
     "rate_limit": "bulk-import",
     "scope": "spend.fx.sensitive.write",
-    "source_line": 864,
+    "source_line": 879,
     "tenant_required": true
   },
   {
@@ -10238,7 +10238,7 @@
     "public_exempt_reason": null,
     "rate_limit": null,
     "scope": "spend.fx.sensitive.write",
-    "source_line": 1302,
+    "source_line": 1317,
     "tenant_required": true
   },
   {
@@ -10256,7 +10256,25 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "spend.usage.read",
-    "source_line": 1151,
+    "source_line": 1166,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "spend.gate.get",
+    "auth_required": true,
+    "function": "gate_status",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/spend/gate api/v1/spend.py:gate_status",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/spend.py",
+    "path": "/api/v1/spend/gate",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "spend.gate.read",
+    "source_line": 1716,
     "tenant_required": true
   },
   {
@@ -10274,7 +10292,61 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "spend.gpu.read",
-    "source_line": 1411,
+    "source_line": 1426,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "spend.invoices.list",
+    "auth_required": true,
+    "function": "list_invoices",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/spend/invoices api/v1/spend.py:list_invoices",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/spend.py",
+    "path": "/api/v1/spend/invoices",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "spend.invoices.read",
+    "source_line": 1535,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "spend.invoices.import",
+    "auth_required": true,
+    "function": "import_invoice",
+    "idempotency": "one-current-invoice-per-reference",
+    "key": "POST /api/v1/spend/invoices/import api/v1/spend.py:import_invoice",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/spend.py",
+    "path": "/api/v1/spend/invoices/import",
+    "public_exempt_reason": null,
+    "rate_limit": "bulk-import",
+    "scope": "spend.invoices.sensitive.write",
+    "source_line": 1487,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "spend.invoices.get",
+    "auth_required": true,
+    "function": "get_invoice",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/spend/invoices/{invoice_id} api/v1/spend.py:get_invoice",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/spend.py",
+    "path": "/api/v1/spend/invoices/{invoice_id}",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "spend.invoices.read",
+    "source_line": 1559,
     "tenant_required": true
   },
   {
@@ -10292,7 +10364,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "spend.jobs.read",
-    "source_line": 1357,
+    "source_line": 1372,
     "tenant_required": true
   },
   {
@@ -10310,7 +10382,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "spend.jobs.read",
-    "source_line": 1384,
+    "source_line": 1399,
     "tenant_required": true
   },
   {
@@ -10328,7 +10400,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "spend.mappings.read",
-    "source_line": 477,
+    "source_line": 492,
     "tenant_required": true
   },
   {
@@ -10346,7 +10418,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "spend.mappings.sensitive.write",
-    "source_line": 503,
+    "source_line": 518,
     "tenant_required": true
   },
   {
@@ -10364,7 +10436,7 @@
     "public_exempt_reason": null,
     "rate_limit": "bulk-import",
     "scope": "spend.mappings.sensitive.write",
-    "source_line": 525,
+    "source_line": 540,
     "tenant_required": true
   },
   {
@@ -10382,7 +10454,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "spend.mappings.read",
-    "source_line": 551,
+    "source_line": 566,
     "tenant_required": true
   },
   {
@@ -10400,7 +10472,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "spend.mappings.sensitive.write",
-    "source_line": 572,
+    "source_line": 587,
     "tenant_required": true
   },
   {
@@ -10418,7 +10490,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "spend.org.read",
-    "source_line": 359,
+    "source_line": 374,
     "tenant_required": true
   },
   {
@@ -10436,7 +10508,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "spend.org.sensitive.write",
-    "source_line": 427,
+    "source_line": 442,
     "tenant_required": true
   },
   {
@@ -10454,7 +10526,7 @@
     "public_exempt_reason": null,
     "rate_limit": "bulk-import",
     "scope": "spend.org.sensitive.write",
-    "source_line": 383,
+    "source_line": 398,
     "tenant_required": true
   },
   {
@@ -10472,7 +10544,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "spend.org.read",
-    "source_line": 409,
+    "source_line": 424,
     "tenant_required": true
   },
   {
@@ -10490,7 +10562,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "spend.org.sensitive.write",
-    "source_line": 449,
+    "source_line": 464,
     "tenant_required": true
   },
   {
@@ -10508,7 +10580,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "spend.read",
-    "source_line": 893,
+    "source_line": 908,
     "tenant_required": true
   },
   {
@@ -10526,7 +10598,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "spend.rate_cards.read",
-    "source_line": 597,
+    "source_line": 612,
     "tenant_required": true
   },
   {
@@ -10544,7 +10616,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "spend.rate_cards.sensitive.write",
-    "source_line": 662,
+    "source_line": 677,
     "tenant_required": true
   },
   {
@@ -10562,7 +10634,7 @@
     "public_exempt_reason": null,
     "rate_limit": "bulk-import",
     "scope": "spend.rate_cards.sensitive.write",
-    "source_line": 636,
+    "source_line": 651,
     "tenant_required": true
   },
   {
@@ -10580,7 +10652,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "spend.rate_cards.sensitive.write",
-    "source_line": 684,
+    "source_line": 699,
     "tenant_required": true
   },
   {
@@ -10598,7 +10670,97 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "spend.rate_cards.sensitive.write",
-    "source_line": 709,
+    "source_line": 724,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "spend.reconciliations.list",
+    "auth_required": true,
+    "function": "list_reconciliations",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/spend/reconciliations api/v1/spend.py:list_reconciliations",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/spend.py",
+    "path": "/api/v1/spend/reconciliations",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "spend.reconciliations.read",
+    "source_line": 1610,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "spend.reconciliations.run",
+    "auth_required": true,
+    "function": "run_reconciliation",
+    "idempotency": "supersedes-earlier-runs",
+    "key": "POST /api/v1/spend/reconciliations api/v1/spend.py:run_reconciliation",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/spend.py",
+    "path": "/api/v1/spend/reconciliations",
+    "public_exempt_reason": null,
+    "rate_limit": "bulk-import",
+    "scope": "spend.reconciliations.sensitive.write",
+    "source_line": 1582,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "spend.reconciliations.get",
+    "auth_required": true,
+    "function": "get_reconciliation",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/spend/reconciliations/{reconciliation_id} api/v1/spend.py:get_reconciliation",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/spend.py",
+    "path": "/api/v1/spend/reconciliations/{reconciliation_id}",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "spend.reconciliations.read",
+    "source_line": 1637,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "spend.reconciliations.accept_run",
+    "auth_required": true,
+    "function": "accept_reconciliation",
+    "idempotency": "accepts-once",
+    "key": "POST /api/v1/spend/reconciliations/{reconciliation_id}/accept api/v1/spend.py:accept_reconciliation",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/spend.py",
+    "path": "/api/v1/spend/reconciliations/{reconciliation_id}/accept",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "spend.reconciliations.sensitive.write",
+    "source_line": 1660,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "spend.reconciliations.accept_item",
+    "auth_required": true,
+    "function": "accept_reconciliation_item",
+    "idempotency": "accepts-once",
+    "key": "POST /api/v1/spend/reconciliations/{reconciliation_id}/items/{item_id}/accept api/v1/spend.py:accept_reconciliation_item",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/spend.py",
+    "path": "/api/v1/spend/reconciliations/{reconciliation_id}/items/{item_id}/accept",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "spend.reconciliations.sensitive.write",
+    "source_line": 1685,
     "tenant_required": true
   },
   {
@@ -10616,7 +10778,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "spend.usage.read",
-    "source_line": 1053,
+    "source_line": 1068,
     "tenant_required": true
   },
   {
@@ -10634,7 +10796,7 @@
     "public_exempt_reason": null,
     "rate_limit": null,
     "scope": "spend.rollups.sensitive.write",
-    "source_line": 1178,
+    "source_line": 1193,
     "tenant_required": true
   },
   {
@@ -10652,7 +10814,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "spend.read",
-    "source_line": 317,
+    "source_line": 332,
     "tenant_required": true
   },
   {
@@ -10670,7 +10832,7 @@
     "public_exempt_reason": null,
     "rate_limit": null,
     "scope": "spend.storage.sensitive.write",
-    "source_line": 1431,
+    "source_line": 1446,
     "tenant_required": true
   },
   {
@@ -10688,7 +10850,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "spend.usage.read",
-    "source_line": 1006,
+    "source_line": 1021,
     "tenant_required": true
   },
   {
@@ -10706,7 +10868,7 @@
     "public_exempt_reason": null,
     "rate_limit": null,
     "scope": "spend.usage.sensitive.write",
-    "source_line": 1207,
+    "source_line": 1222,
     "tenant_required": true
   },
   {
@@ -10724,7 +10886,7 @@
     "public_exempt_reason": null,
     "rate_limit": null,
     "scope": "spend.usage.sensitive.write",
-    "source_line": 1273,
+    "source_line": 1288,
     "tenant_required": true
   },
   {
@@ -10742,7 +10904,7 @@
     "public_exempt_reason": null,
     "rate_limit": null,
     "scope": "spend.usage.sensitive.write",
-    "source_line": 1236,
+    "source_line": 1251,
     "tenant_required": true
   },
   {
