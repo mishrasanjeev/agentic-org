@@ -20,16 +20,20 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
-from sqlalchemy import ColumnElement, and_, not_, or_, select
+from sqlalchemy import ColumnElement, and_, exists, not_, or_, select
 
 from core.ownership import Caller, agent_visibility_clause
 from core.spend.errors import SpendError
 
 # Audit rows of commercial writes carry the values themselves (prices, tiers,
 # committed amounts, overage prices) in ``details``; the general audit read
-# hides them from anyone the commercial routes refuse. Later parts add the
-# invoice and reconciliation event types here.
-COMMERCIAL_AUDIT_PREFIXES = ("spend.rate_cards.", "spend.commitments.")
+# hides them from anyone the commercial routes refuse. Each event-type prefix
+# names the model whose rows those audit rows describe: the application never
+# deletes those rows and their audit rows commit with them, so a tenant with
+# none of them has no commercial audit rows. Later parts add the invoice and
+# reconciliation event types here, with models that are never deleted either.
+COMMERCIAL_AUDIT_SOURCES = (("spend.rate_cards.", "SpendRateCard"), ("spend.commitments.", "SpendCommitment"))
+COMMERCIAL_AUDIT_PREFIXES = tuple(prefix for prefix, _model in COMMERCIAL_AUDIT_SOURCES)
 
 
 @dataclass(frozen=True)
@@ -55,12 +59,33 @@ def require_commercial(caller: Caller) -> None:
 def commercial_audit_clause(caller: Caller, event_type: Any) -> ColumnElement[bool] | None:
     """``None`` for a commercial reader; otherwise a clause on ``event_type`` hiding commercial spend audit rows.
 
-    ``GET /audit`` applies it, so a caller refused ``GET /spend/rate-cards``
+    ``GET /audit`` applies it, whatever ``spend_intelligence_enabled`` says
+    (the rows outlive the flag), when ``commercial_rows_kept`` finds the
+    tenant has such rows, so a caller refused ``GET /spend/rate-cards``
     cannot read the same prices from the rows their writes left.
     """
     if is_commercial_reader(caller):
         return None
     return and_(*(not_(event_type.startswith(prefix, autoescape=True)) for prefix in COMMERCIAL_AUDIT_PREFIXES))
+
+
+async def commercial_rows_kept(session: Any, tenant_id: Any) -> bool:
+    """Whether the tenant keeps any row a commercial audit row describes (one query, two index probes).
+
+    False means the tenant has no commercial audit rows, so ``GET /audit``
+    runs the query it ran before spend intelligence existed.
+    """
+    from core.models import spend as models
+
+    kept = [
+        exists().where(getattr(models, model).tenant_id == tenant_id) for _prefix, model in COMMERCIAL_AUDIT_SOURCES
+    ]
+    return bool((await session.execute(select(or_(*kept)))).scalar())
+
+
+def is_commercial_audit_event(event_type: Any) -> bool:
+    """The same test as ``commercial_audit_clause``, on a loaded row's ``event_type``."""
+    return isinstance(event_type, str) and event_type.startswith(COMMERCIAL_AUDIT_PREFIXES)
 
 
 def read_view(caller: Caller) -> ReadView:

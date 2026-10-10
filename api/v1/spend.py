@@ -542,7 +542,10 @@ async def list_rate_cards(
     caller: Caller = Depends(caller_from_request),
     tenant_id: str = Depends(get_current_tenant),
 ) -> dict[str, Any]:
-    """Rate cards (an administrator or auditor only); ``as_of`` keeps those in force on a billing date."""
+    """Rate cards (an administrator or auditor only); ``as_of`` keeps the active cards in force on a billing date.
+
+    With ``as_of``, ``status=retired`` lists the retired cards whose dates cover it.
+    """
     spend_on()
     try:
         access.require_commercial(caller)

@@ -256,6 +256,11 @@ class TestFlow:
         assert info.value.status_code == 409
         cards = await api.list_rate_cards(status="active", caller=AUDITOR, tenant_id=TID)
         assert cards["total"] == 1 and cards["items"][0]["replaces_id"] == card["id"]
+        day = date.fromisoformat(corrected["card"]["effective_from"])
+        in_force = await api.list_rate_cards(as_of=day, caller=AUDITOR, tenant_id=TID)
+        assert in_force["total"] == 1 and in_force["items"][0]["id"] == corrected["card"]["id"]
+        retired = await api.list_rate_cards(as_of=day, status="retired", caller=AUDITOR, tenant_id=TID)
+        assert [c["id"] for c in retired["items"]] == [card["id"]]
         report = await api.import_rate_cards(
             upload(
                 b"provider,usage_type,unit,unit_price,currency,effective_from,source,model_sku\n"
@@ -412,8 +417,10 @@ class TestAccess:
         from api.v1 import audit as audit_api
 
         class Capture:
-            def __init__(self):
+            def __init__(self, kept=True, entries=()):
                 self.statements = []
+                self.kept = kept
+                self.entries = list(entries)
 
             async def __aenter__(self):
                 return self
@@ -423,7 +430,12 @@ class TestAccess:
 
             async def execute(self, statement):
                 self.statements.append(statement)
-                return SimpleNamespace(scalar=lambda: 0, scalars=lambda: SimpleNamespace(all=list))
+                if "spend_rate_cards" in sql_of(statement):
+                    return SimpleNamespace(scalar=lambda: self.kept)
+                return SimpleNamespace(scalar=lambda: 0, scalars=lambda: SimpleNamespace(all=lambda: self.entries))
+
+        def sql_of(statement):
+            return str(statement.compile(dialect=postgresql.dialect(), compile_kwargs={"literal_binds": True}))
 
         def request(role, *, user_id=True, auth_mode="legacy", scopes=None, domains=None):
             claims = {"sub": f"{role}@example.com", "role": role}
@@ -442,15 +454,54 @@ class TestAccess:
             (request("admin", user_id=False, auth_mode="api_key"), "admin", True),
             (request("", user_id=False, auth_mode="grantex", scopes=["audit:read"]), "", True),
         ]
+        assert settings.spend_intelligence_enabled is False  # the filter does not depend on the flag
         for req, role, filtered in cases:
             capture = Capture()
             monkeypatch.setattr(audit_api, "get_tenant_session", lambda tenant_id, c=capture: c)
             out = await audit_api.query_audit(request=req, event_type="spend.rate_cards", tenant_id=TID, user_role=role)
-            assert out.total == 0 and len(capture.statements) == 2
-            for statement in capture.statements:  # the count and the page
-                sql = str(statement.compile(dialect=postgresql.dialect(), compile_kwargs={"literal_binds": True}))
+            # A refused caller first asks whether the tenant keeps rate cards or commitments.
+            assert out.total == 0 and len(capture.statements) == (3 if filtered else 2), role
+            if filtered:
+                kept_sql = sql_of(capture.statements[0])
+                assert "FROM spend_rate_cards" in kept_sql and "FROM spend_commitments" in kept_sql
+                assert f"tenant_id = '{TID}'" in kept_sql and "audit_log" not in kept_sql
+            for statement in capture.statements[-2:]:  # the count and the page
+                sql = sql_of(statement)
                 assert ("NOT LIKE 'spend.rate/_cards.'" in sql and "NOT LIKE 'spend.commitments.'" in sql) is filtered
                 assert ("spend.rate/_cards." in sql) is filtered, role
+
+        # A tenant that never kept a rate card or commitment runs the audit query it ran before.
+        machine = request("admin", user_id=False, auth_mode="api_key")
+        before = Capture(kept=False)
+        monkeypatch.setattr(audit_api, "get_tenant_session", lambda tenant_id, c=before: c)
+        await audit_api.query_audit(request=machine, tenant_id=TID, user_role="admin")
+        admin = Capture(kept=False)
+        monkeypatch.setattr(audit_api, "get_tenant_session", lambda tenant_id, c=admin: c)
+        await audit_api.query_audit(request=request("admin"), tenant_id=TID, user_role="admin")
+        assert [sql_of(s) for s in before.statements[1:]] == [sql_of(s) for s in admin.statements]
+        assert all("NOT LIKE" not in sql_of(s) for s in before.statements[1:])
+
+        # A first rate card committed between the check and the page query is still not shown.
+        raced = SimpleNamespace(event_type="spend.rate_cards.create")
+        other = SimpleNamespace(event_type="agent.run.resumed")
+        monkeypatch.setattr(audit_api, "_audit_to_dict", lambda entry: {"event_type": entry.event_type})
+        race = Capture(kept=False, entries=[raced, other])
+        monkeypatch.setattr(audit_api, "get_tenant_session", lambda tenant_id, c=race: c)
+        out = await audit_api.query_audit(request=machine, tenant_id=TID, user_role="admin")
+        assert out.items == [{"event_type": "agent.run.resumed"}]
+        shown = Capture(kept=False, entries=[raced, other])
+        monkeypatch.setattr(audit_api, "get_tenant_session", lambda tenant_id, c=shown: c)
+        out = await audit_api.query_audit(
+            request=request("auditor", scopes=["audit:read"]), tenant_id=TID, user_role="auditor"
+        )
+        assert len(out.items) == 2  # an auditor reads them
+
+    def test_commercial_audit_event_matches_the_clause_prefixes(self):
+        assert access.is_commercial_audit_event("spend.rate_cards.correct")
+        assert access.is_commercial_audit_event("spend.commitments.update")
+        for other in ("spend.rateXcards.create", "spend.org_node.create", "Spend.rate_cards.create", None, 7):
+            assert not access.is_commercial_audit_event(other)
+        assert access.COMMERCIAL_AUDIT_PREFIXES == tuple(prefix for prefix, _ in access.COMMERCIAL_AUDIT_SOURCES)
 
 
 class TestRouteShape:

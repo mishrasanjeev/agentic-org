@@ -769,7 +769,12 @@ async def list_cards(
     limit: int = 500,
     offset: int = 0,
 ) -> dict[str, Any]:
-    """Cards by key and start date; ``as_of`` keeps the cards in force on that billing date."""
+    """Cards by key and start date; ``as_of`` keeps the cards in force on that billing date.
+
+    With ``as_of`` and no ``status``, only active cards are listed: a retired card
+    (corrected, or retired while unused) keeps its dates as history but prices
+    nothing. ``status="retired"`` lists them.
+    """
     from core.database import get_tenant_session
     from core.models.spend import SpendRateCard
 
@@ -786,6 +791,9 @@ async def list_cards(
     if as_of is not None:
         conditions.append(SpendRateCard.effective_from <= as_of)
         conditions.append(or_(SpendRateCard.effective_to.is_(None), SpendRateCard.effective_to > as_of))
+        if not status:
+            # In force means active: a corrected card keeps its dates as history but prices nothing.
+            conditions.append(SpendRateCard.status == "active")
     async with get_tenant_session(tenant_id) as session:
         total = (await session.execute(select(func.count()).select_from(SpendRateCard).where(*conditions))).scalar()
         rows = (

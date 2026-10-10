@@ -328,6 +328,46 @@ class TestMoney:
         assert pricing.price_with(usage(), [discounted], no_fx).amount == Decimal("2.0000000000")
         assert pricing.price_with(usage(batch=True), [discounted], no_fx).amount == Decimal("1.0000000000")
 
+    def test_batch_blend_discounts_each_portion_by_its_own_card(self):
+        cards = [card("1m_input_tokens", "2", batch="50"), card("1m_output_tokens", "8")]
+        # 0.75 x 2 x 0.5 + 0.25 x 8 = 2.75 for a million batch tokens; list price 3.5.
+        assert pricing.price_with(usage("token"), cards, no_fx).amount == Decimal("3.5000000000")
+        priced = pricing.price_with(usage("token", batch=True), cards, no_fx)
+        assert priced.amount == Decimal("2.7500000000") and priced.unit_price == Decimal("3.50")
+        both = [card("1m_input_tokens", "2", batch="50"), card("1m_output_tokens", "8", batch="25")]
+        # 0.75 x 2 x 0.5 + 0.25 x 8 x 0.75 = 2.25
+        assert pricing.price_with(usage("token", batch=True), both, no_fx).amount == Decimal("2.2500000000")
+        out_only = [card("1m_input_tokens", "2"), card("1m_output_tokens", "8", batch="50")]
+        assert pricing.price_with(usage("token", batch=True), out_only, no_fx).amount == Decimal("2.5000000000")
+
+    def test_batch_discount_on_every_card_path_and_never_on_fallback(self):
+        tokens = card("1m_tokens", "4", batch="20")
+        assert pricing.price_with(usage("token", batch=True), [tokens], no_fx).amount == Decimal("3.2000000000")
+        cached_card = card("1m_cached_input_tokens", "1", batch="10")
+        assert pricing.price_with(usage("cached_input_token", batch=True), [cached_card], no_fx).amount == Decimal(
+            "0.9000000000"
+        )
+        # No card prices it: the list price stays undiscounted, batch or not.
+        listed = pricing.price_with(usage("input_token", model="gpt-4o-mini"), [], no_fx)
+        batched = pricing.price_with(usage("input_token", model="gpt-4o-mini", batch=True), [], no_fx)
+        assert listed.price_source != "none" and batched.amount == listed.amount
+
+    def test_blend_price_is_exact_whatever_the_ambient_precision(self):
+        from decimal import localcontext as ambient
+
+        cards = [card("1m_input_tokens", "1.2345678901"), card("1m_output_tokens", "9.8765432109")]
+        exact = pricing.price_with(usage("token"), cards, no_fx).amount
+        with ambient() as low:
+            low.prec = 6
+            assert pricing.price_with(usage("token"), cards, no_fx).amount == exact
+            assert pricing.price_with(usage("token", batch=True), cards, no_fx).amount == exact
+
+    def test_batch_discount_applies_to_the_cached_price(self):
+        cached = card(price="2", cached="1", batch="50")
+        assert pricing.price_with(usage("cached_input_token", batch=True), [cached], no_fx).amount == Decimal(
+            "0.5000000000"
+        )
+
     def test_priced_json_carries_decimal_text_and_flags(self):
         priced = pricing.price_with(usage(), [card(price="2")], rates_on({("USD", ON): "83"})(ON))
         out = pricing.priced_json(priced)
