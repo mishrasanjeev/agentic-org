@@ -163,6 +163,11 @@ RISK_TIERS = ("low", "medium", "high", "critical")
 LINE_KINDS = ("usage", "credit", "tax", "fee", "commitment")
 ITEM_KINDS = ("usage", "non_usage_line")
 ITEM_STATUSES = ("within_tolerance", "needs_review", "accepted", "informational")
+RUN_STATUSES = ("within_tolerance", "needs_review", "accepted")
+INVOICE_SOURCES = ("csv", "json")
+INVOICE_STATUSES = ("current", "superseded")
+# Every card unit, in one order (the invoice-line unit CHECK lists them so).
+ALL_CARD_UNITS = tuple(dict.fromkeys(unit for units in CARD_UNITS.values() for unit in units))
 GAP_REASONS = (
     "queue_full",
     "spill_failed",

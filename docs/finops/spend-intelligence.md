@@ -1,4 +1,4 @@
-# AI spend intelligence: reference data, pricing, usage records, coverage and metering
+# AI spend intelligence: reference data, pricing, usage records, coverage, metering and reconciliation
 
 Behind `spend_intelligence_enabled` (default off; `AGENTICORG_SPEND_INTELLIGENCE_ENABLED`). Off,
 `GET /spend/status` answers `enabled: false`, every other spend route is not found (the request
@@ -11,15 +11,17 @@ a usage at its date in the card's currency and in INR. It meters every model cal
 record with its server-owned attribution, keeps a daily rollup, and reports coverage: the share of
 spend attributed to the organisation, the first measure of Gate 1. Beyond model tokens it
 meters embeddings, OCR pages, speech minutes, priced tool calls, storage GB-days and the GPU node
-hours of in-house serving. Invoice reconciliation and the Gate 1 status build on it in a later
-part. The code is in `core/spend/` (reference data: `org.py`, `mappings.py`, `rates.py`,
+hours of in-house serving. It imports provider invoices, reconciles each provider's billing
+month against them, and answers the Gate 1 status of a month. The code is in `core/spend/`
+(reference data: `org.py`, `mappings.py`, `rates.py`,
 `commitments.py`, `fx.py`, `pricing.py`, `imports.py`, `audit.py`; usage: `context.py`,
 `tokens.py`, `meter.py`, `writer.py`, `resolver.py`, `billing.py`, `rollups.py`,
 `maintenance.py`, `jobs.py`, `ledgers.py`, `partitions.py`, `metering.py`; non-token metering:
-`metering.py`, `storage.py`, `gpu.py`, `gpu_cli.py`), the routes in `api/v1/spend.py`, the tables
-in `core/models/spend.py`, `core/models/spend_usage.py` and `core/models/spend_gpu.py`,
-migrations `v6z79_spend_reference`, `v6z80_spend_usage` and `v6z81_spend_gpu`, the tasks in
-`core/tasks/spend_tasks.py`.
+`metering.py`, `storage.py`, `gpu.py`, `gpu_cli.py`; reconciliation: `invoices.py`,
+`reconcile.py`, `gate.py`), the routes in `api/v1/spend.py`, the tables in
+`core/models/spend.py`, `core/models/spend_usage.py`, `core/models/spend_gpu.py` and
+`core/models/spend_invoice.py`, migrations `v6z79_spend_reference`, `v6z80_spend_usage`,
+`v6z81_spend_gpu` and `v6z82_spend_reconciliation`, the tasks in `core/tasks/spend_tasks.py`.
 
 ## Two calendars
 
@@ -210,12 +212,15 @@ change. A single write records its changed rows with their before and after valu
 supersede records the predecessor's end as its own change. An import records a manifest: a
 summary row (the counts and the uploaded file's sha256) and one row per 200 changed rows, every
 changed row with its before and after values. Audit details hold identifiers, codes, counts and
-reference-data values only. The rows of rate-card and commitment writes (`spend.rate_cards.*`,
-`spend.commitments.*`) carry prices and committed amounts, so `GET /audit` shows them only to a
-human administrator or auditor, the callers the commercial routes answer. That filter applies
-whatever `spend_intelligence_enabled` says, because the rows stay after the flag is turned off.
-It is applied only for a tenant that keeps a rate card or a commitment (spend rows are never
-deleted, and their audit rows commit with them); every other tenant's audit query is unchanged.
+reference-data values only. The rows of rate-card, commitment, invoice and reconciliation
+writes (`spend.rate_cards.*`, `spend.commitments.*`, `spend.invoices.*`,
+`spend.reconciliations.*`, acceptances and carried-over acceptances included) carry prices,
+committed amounts, invoice totals, variances and acceptance reasons, so `GET /audit` shows them
+only to a human administrator or auditor, the callers the commercial routes answer. That filter
+applies whatever `spend_intelligence_enabled` says, because the rows stay after the flag is
+turned off. It is applied only for a tenant that keeps a rate card, a commitment, an invoice or a
+reconciliation (none of these rows is ever deleted: invoices and runs are superseded, and their
+audit rows commit with them); every other tenant's audit query is unchanged.
 
 ## API
 
@@ -242,6 +247,12 @@ deleted, and their audit rows commit with them); every other tenant's audit quer
 | `GET /spend/jobs`, `GET /spend/jobs/{job_id}` | `audit:read` | |
 | `GET /spend/gpu-allocations` | `audit:read` | the tenant's own shares of in-house GPU pool hours starting in `[start, end)` (at most 31 days) |
 | `POST /spend/storage/sample` | administrator | a preview of today's storage sample in GiB per store; writes no record, audited as `spend.storage.preview` |
+| `POST /spend/invoices/import` | administrator | a provider's invoice for a billing month, CSV or JSON, stored whole; `replace`, `dry_run` |
+| `GET /spend/invoices`, `GET /spend/invoices/{invoice_id}` | administrator or auditor | current and superseded invoices; one with its lines |
+| `POST /spend/reconciliations` | administrator | reconcile a provider's billing month (201 with the run and its items) |
+| `GET /spend/reconciliations`, `GET /spend/reconciliations/{reconciliation_id}` | administrator or auditor | runs with `stale`; one with its items |
+| `POST /spend/reconciliations/{reconciliation_id}/accept`, `POST /spend/reconciliations/{reconciliation_id}/items/{item_id}/accept` | administrator other than the invoice importer | accept with a reason |
+| `GET /spend/gate` | administrator or auditor | the Gate 1 status of a month |
 
 `GET /spend/status` also reports the usage limits (`usage_window_days` 31, `rebuild_days` 31,
 `restate_days` 92, `gpu_allocation_days` 31), `backfill_source`, `partition_horizon` and this
@@ -530,7 +541,8 @@ second line of defence, not the first.
 
 `card_in_use` answers the latest billing date of a record a card priced (directly, or as the
 output half of a blended price within the card's own dates); a card in use can be retired only by
-a correction and its price changed only by one. A correction of a card in use, a backdated
+a correction and its price changed only by one. A card a current reconciliation used counts as in
+use until the last day of the run's month. A correction of a card in use, a backdated
 supersede over priced records sent with `restate`, and an earlier `effective_to` over priced
 records sent with `restate` each queue the restatement of the affected billing days once the
 change has committed, and answer its `restate_job_id`; a rate-card import queues one restatement
@@ -692,6 +704,192 @@ platform-operator guard exists, and a tenant administrator must not set a shared
 - `GET /spend/gpu-allocations` lists the tenant's own shares; another tenant's share is never
   shown.
 
+## Invoice import
+
+`POST /spend/invoices/import` (administrator; rate class `bulk-import`) imports a provider's
+invoice or billing export for one billing month. Query parameters: `provider`, `period` (the
+provider's billing month, `YYYY-MM`, in its own billing zone), `invoice_ref` (the provider's
+invoice or account reference: 1 to 128 of letters, digits, space and `. _ : / @ -`, never a
+spreadsheet formula), `currency`, `replace` and `dry_run`. The file is CSV or JSON with the same
+byte and row bounds and parser-error mapping as every import (a JSON object may hold the lines
+under `rows` or `lines`). Columns: `amount` (required); `line_kind`, `usage_type`, `model_sku`,
+`unit`, `quantity`, `usage_date`, `currency`.
+
+| Line kind | Rule | In the variance |
+|---|---|---|
+| `usage` (default) | `usage_type` required, amount zero or more | yes |
+| `credit` | amount zero or less | no, reported |
+| `tax`, `fee` | any sign | no, reported |
+| `commitment` (shortfall or prepaid charges) | any sign | no, reported |
+
+- `unit` is a card unit of the line's usage type (`1m_input_tokens`, `1m_cached_input_tokens`,
+  `ocr_page`, `gb_month`, ...) or empty for every unit of it; `quantity` is in that unit (0 to
+  10^15, 6 decimals); `usage_date` is a billing date inside the month (a daily export); a row's
+  `currency`, when given, must be the invoice currency; amounts are -10^12 to 10^12 with at most
+  10 decimals, and an invoice totals at most 10^13 in magnitude. In-house serving and platform
+  storage have no provider invoice and are refused.
+- **Whole or nothing.** A refused line refuses the import: 422 `invoice_rejected` with every
+  refused line and its reason (`invalid_number`, `invalid_value`, `invalid_unit`, `invalid_sku`,
+  `invalid_period`, `invalid_date`, `currency_mismatch`). A partial invoice would reconcile
+  against a wrong total. A dry run reports the same, and the outcome of a valid file, without
+  writing.
+- **Replace.** A second current invoice with the same provider, month and reference is 409
+  `invoice_exists`; with `replace=true` the earlier one becomes `superseded` and points at its
+  successor. Both are kept: invoices, their lines, reconciliations and their items are never
+  deleted. Several references for one provider and month (two accounts) are all current and are
+  summed. The response is the import report with `invoice_id`, `total_amount` (every line),
+  `usage_amount` (usage lines), `line_count` and `superseded_id`; the import is audited as
+  `spend.invoices.import` (counts, totals, the file's sha256, the superseded id).
+- `GET /spend/invoices` lists invoices, current and superseded (filters `provider`, `period`);
+  `GET /spend/invoices/{invoice_id}` returns one with its lines.
+
+## Reconciliation
+
+`POST /spend/reconciliations` (administrator; `{provider, period}`; rate class `bulk-import`)
+reconciles a provider's billing month against its current invoices, in one transaction, and
+answers the run with its items (201). 409 `invoice_missing` when the month has no current
+invoice; 422 `currency_mismatch` when its current invoices are in different currencies.
+
+- **The billing month** is computed from the records' `billing_date`, so a provider that closes its
+  month in Pacific time is compared over its own month, not the UTC or IST one (a call at 03:00
+  UTC on 1 October belongs to a Pacific-time provider's September). The run stores the zone as
+  `billing_timezone`.
+- **Tenant-billed scope.** Only usage on the tenant's own key (`billing_account = tenant_key`) is
+  compared with the tenant's invoice. Records whose account could not be inferred are included,
+  the conservative choice that surfaces a variance, and counted as `unknown_account_records`.
+  Usage on the platform's key is summed separately as `platform_billed_amount_inr`. In-house
+  serving, storage GB-days and GPU node hours have no provider invoice and are never compared.
+- **Two figures** per rollup group (billing day, usage type, model, unit, currency, card, price
+  source, commitment), each in the invoice currency:
+  - *stored*: the amounts as written: summed in the invoice currency when it is the records'
+    currency; the records' INR amounts when the invoice is in INR; otherwise those INR amounts at
+    the invoice currency's rate on the last day of the month (`fx_converted`). A group with an
+    unpriced or unconverted record has no stored figure (incomplete), so its item needs review;
+  - *re-priced*: the group priced again with the pricing engine at the active cards in force on its
+    billing day, as known at run time, cards entered after metering included. A group the
+    deployment fallback priced keeps its stored price while no card covers it, because the
+    fallback tables carry no dates; an in-house group re-prices at zero; a group with no card and
+    no fallback has no re-priced figure. The re-priced amount converts through INR at the
+    month-end rates. Records carry no batch flag in Phase 1, so groups re-price as non-batch.
+- **Tier true-up.** Volume tiers apply per contract key `(provider, usage type, card model, card
+  unit, source)` and billing month, never per record: billing days are walked in order with the
+  key's cumulative quantity in card units across card versions, so a card version change
+  mid-month continues one ladder instead of restarting it. Each day's quantity is priced with
+  that day's card (`graduated` from its cumulative position; `all_units` at the tier the month's
+  total reaches) less the quantity at the card's base price, and the difference is added to both
+  figures as an adjustment `{kind: tier_true_up, contract_key, amount}`.
+- **Commitment overage.** For a group drawn from a quantity commitment with an overage price, the
+  overage quantity is priced at that price less the base price already in the figures
+  (`overage_quantity / divisor × (overage price - base price per card unit)`), the overage price
+  converted from its currency through INR when it differs, and added to both figures as
+  `{kind: commitment_overage, commitment_id, amount}`. Overage is never priced on the records.
+  Commitment shortfall and prepaid fees appear on invoices as `commitment` lines and are reported,
+  not compared.
+- **Matching.** Lines and groups meet on usage type, the canonical model (the tenant's model aliases
+  applied to both, so usage metered under a dated model name matches the SKU's line) and the
+  canonical unit: cached input tokens match the cached-input line whichever card priced them,
+  unsplit token records match a `1m_tokens` line, and a `gb_month` line matches GB-day usage, its
+  quantity times the month's days. Lines with the same key (two accounts) are one item. Pass 1:
+  lines naming a model and a unit take the groups of their key (and day). Pass 2: lines leaving
+  the model or the unit open take the remaining groups that fit what they name (a model before a
+  unit before neither, a day before a month). Pass 3: groups left over become items with no
+  invoice amount, and lines that took nothing are items with nothing metered.
+- **Items.** A line with a `usage_date` gives a day item; a monthly line gives a month item whose
+  `days` list each billing day's metered quantity and both figures, which is how an item shows the
+  days that differ. Quantities are in the canonical card unit. Each item lists the cards used
+  (`role: stored` from the records, `role: repriced` from the re-pricing, with unit price,
+  currency, source and timestamps), the FX rows read and the invoice lines it covers.
+  Non-usage lines are `informational` items, summed into `non_usage_amount` and never in a
+  variance.
+- **Tolerance.** For each figure, `variance = figure - invoice` and `pct = variance / invoice × 100`
+  when the invoice is above zero; 0 when both are zero; none when the invoice is zero and the
+  figure is not. An item is `within_tolerance` only when **both** figures are known and each is
+  within 1% (exactly 1.00% passes, 1.000001% does not); otherwise `needs_review`. So an item whose
+  stored amounts differ from the re-pricing (a card entered or corrected after metering, not yet
+  restated) needs review until a restatement brings the records to contracted rates. The provider
+  level compares the sums of the usage items with the sum of the usage lines the same way; an
+  invoice usage total of zero with metered usage has no percentage and needs review. A run is
+  `within_tolerance` when the provider level is and no item needs review or was accepted.
+  Percentages are stored rounded away from zero to six decimals (at most 99999999.999999) and
+  every verdict uses the exact values, so a displayed percentage never looks better than the
+  verdict.
+- **References and retroactive data.** A run stores the cards (`card_ids`) and FX rows (`fx_rows`,
+  with each row's `updated_at` and the date it was looked up for) it used, and lists in
+  `retroactive` every card or FX row created or changed after the end of the billing month
+  (`after_period_end`) or after the newest invoice import (`after_invoice_import`). A backdated
+  contract card can be legitimate, so these are reported, in the run and in the gate, and do not
+  by themselves fail it. A card a current run used counts as in use until the last day of the run's
+  month (its price changes only by a correction), and changing an FX row a current run used needs
+  `restate`.
+- **Re-runs.** A new run supersedes the month's earlier runs (kept, `superseded`). An item of the new
+  run whose usage type, model, unit and day, invoice lines and both figures equal an accepted item
+  of the previous run takes over its acceptance (`carried_from`; audited as
+  `spend.reconciliations.carry_over`); a changed item, or a replaced invoice (other line ids),
+  needs review again. The run is audited as `spend.reconciliations.run` with the totals, both
+  variances and the counts.
+- **Staleness.** A run is `stale` when a card it used, or any card of the provider in force in the
+  month, was created or changed after it; when an FX lookup it made would now find another row,
+  rate or change; when the provider's rollup rows of the month changed after it (late records,
+  restatement, FX settlement, re-attribution); or when the month's current invoices are no longer
+  the ones it compared. `GET /spend/reconciliations` (filters `period`, `provider`,
+  `include_superseded`) and `GET /spend/reconciliations/{reconciliation_id}` (with items) report
+  `stale`.
+
+## Acceptance
+
+- `POST /spend/reconciliations/{reconciliation_id}/items/{item_id}/accept` accepts one item that
+  needs review; `POST /spend/reconciliations/{reconciliation_id}/accept` accepts a run whose
+  provider-level variance is out of tolerance while no item needs review. Both take `{reason}`,
+  10 to 500 characters of plain text (422 `reason_required`, or `invalid_text` for a formula lead
+  or a control character).
+- **Who.** An active tenant administrator confirmed in the database (the administrator dependency);
+  `approvals:write` alone, which developers and domain heads hold, is not enough. **Maker-checker:**
+  whoever imported one of the run's invoices cannot accept its differences (409 `same_actor`), so
+  a tenant with a single administrator cannot accept anything (an accepted difference does not
+  meet Gate 1 either).
+- The item must belong to the run (404 `not_found`), the run must be current and the item must need
+  review (409 `not_reviewable`). Once no item needs review the run becomes `accepted`, carrying
+  the acceptor, the time and the reason. Every acceptance writes a signed audit row
+  (`spend.reconciliations.accept_item` / `.accept_run`) with the reason, both variances and the
+  actor, in the same transaction.
+
+## Gate 1 status
+
+`GET /spend/gate?period=YYYY-MM` (administrator or auditor) answers whether Gate 1 is met for the
+month: `gate_met = attribution.met and reconciliation.met`.
+
+- **Attribution** (the reporting month, from the coverage measure): `attributed_share` = the INR
+  amount attributed to a business unit, department, team or cost centre over the month's INR
+  amount. Attribution to a `group` node is reported as `group_share` and does not count, so an
+  application mapping to the root cannot make every record "attributed". Reported beside it: the
+  count share over the same node kinds, the amount by attribution path and node kind, by
+  unattributed reason, unpriced records and quantities by unit, unconverted records and amounts by
+  currency, FX conversions pending and meter gaps by reason. `met` needs the share at or above
+  0.98 **and** no unpriced record **and** no unconverted record **and** no pending FX conversion:
+  those records have no INR amount and sit outside both sides of the share, so without these
+  conditions a model with no price could carry a third of the tokens and the share would still
+  pass. `reasons` lists `below_target`, `no_priced_usage` (no priced INR spend, so no share),
+  `unpriced_usage`, `unconverted_usage` and `fx_pending`.
+- **Reconciliation** (each provider's own billing month): the providers to reconcile are every
+  provider with a current invoice for the month together with every provider with tenant-billed
+  priced usage in it; in-house serving, platform storage and providers with only GPU or storage
+  usage are left out. An invoiced provider with no metered records is listed (a broken hook, a
+  provider-name mismatch, or usage on a key the tenant did not pay for), and so is a metered
+  provider with no invoice. For each, the newest current run counts: none is listed in
+  `missing_reconciliations`, a stale one in `stale_reconciliations`. `met` needs every listed
+  provider to have a current, fresh run that is `within_tolerance`; an accepted run is listed in
+  `accepted_exceptions` and does not meet the gate. A month with no invoices and no tenant-billed
+  usage has nothing to reconcile.
+- **Strictness** (owner decision O4): no unpriced record is allowed, an unconverted record or a
+  pending conversion fails attribution, group attribution does not count, an accepted difference
+  does not meet the gate, an item needs both figures within 1%, and there is no absolute floor.
+  Shares are shown rounded toward zero and variances away from it, with the verdicts on the exact
+  values: a share of 0.979996 shows `0.979996` and is not met.
+- The response repeats `backfill_source`, so an operator knows whether lost model-call writes can be
+  recovered before trusting the month.
+
+Freezing closed months and statements belong to Phase 2.
+
 ## Scopes, administrators and commercial reads
 
 The routes form the `spend` scope family: reads need `audit:read`, other methods
@@ -699,7 +897,8 @@ The routes form the `spend` scope family: reads need `audit:read`, other methods
 route checks the admin scope, then confirms an active administrator of the tenant in the
 database (API keys and agent tokens are refused), so a deployment in route-enforcement log mode
 still never opens a write. Rate cards, commitments and the price quote are commercial: they are
-answered to a human administrator or auditor only (403 `commercial_read_refused` otherwise),
+answered to a human administrator or auditor only (403 `commercial_read_refused` otherwise), and
+so are invoices, reconciliations and the gate,
 because machine credentials can hold `audit:read` through agent grants. The same readers get a usage
 record's contract terms: anyone else reading `GET /spend/usage` gets `rate_card_id`, `unit_price`,
 `commitment_id` and `overage_quantity` as `null` and no `overage` flag (amounts stay, they are the

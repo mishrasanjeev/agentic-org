@@ -12,13 +12,18 @@ RETRYABLE_SQLSTATES = frozenset({"55P03", "40P01", "40001", "57014"})
 
 
 class SpendError(Exception):
-    """A refusal with an HTTP status, a stable code and a message for the caller."""
+    """A refusal with an HTTP status, a stable code and a message for the caller.
 
-    def __init__(self, status: int, code: str, message: str) -> None:
+    ``extra`` carries structured detail the caller can act on (the refused
+    lines of an invoice); the routes add it beside ``error`` and ``message``.
+    """
+
+    def __init__(self, status: int, code: str, message: str, *, extra: dict[str, object] | None = None) -> None:
         super().__init__(message)
         self.status = status
         self.code = code
         self.message = message
+        self.extra = dict(extra or {})
 
 
 def require_actor(actor: str | None) -> str:

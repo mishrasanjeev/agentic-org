@@ -1,8 +1,8 @@
 # SPDX-License-Identifier: Apache-2.0
 """Who reads what in spend intelligence.
 
-Commercial reads (rate cards, commitments, the price quote, and later
-invoices, reconciliations and the gate) are for a human administrator or
+Commercial reads (rate cards, commitments, the price quote, invoices,
+reconciliations and the gate) are for a human administrator or
 auditor only: a person whose domains are unrestricted. Machine credentials
 can hold ``audit:read`` through agent grants and are refused here. The
 audit rows of commercial writes, which carry the same values, are hidden
@@ -26,13 +26,20 @@ from core.ownership import Caller, agent_visibility_clause
 from core.spend.errors import SpendError
 
 # Audit rows of commercial writes carry the values themselves (prices, tiers,
-# committed amounts, overage prices) in ``details``; the general audit read
-# hides them from anyone the commercial routes refuse. Each event-type prefix
-# names the model whose rows those audit rows describe: the application never
-# deletes those rows and their audit rows commit with them, so a tenant with
-# none of them has no commercial audit rows. Later parts add the invoice and
-# reconciliation event types here, with models that are never deleted either.
-COMMERCIAL_AUDIT_SOURCES = (("spend.rate_cards.", "SpendRateCard"), ("spend.commitments.", "SpendCommitment"))
+# committed amounts, overage prices, invoice totals, reconciliation figures and
+# acceptance reasons) in ``details``; the general audit read hides them from
+# anyone the commercial routes refuse. Each event-type prefix names the model
+# whose rows those audit rows describe: the application never deletes those
+# rows (invoices and runs are superseded, never removed) and their audit rows
+# commit with them, so a tenant with none of them has no commercial audit rows.
+# Item acceptances and carried-over acceptances are ``spend.reconciliations.*``
+# events and describe rows of their run's table.
+COMMERCIAL_AUDIT_SOURCES = (
+    ("spend.rate_cards.", "SpendRateCard"),
+    ("spend.commitments.", "SpendCommitment"),
+    ("spend.invoices.", "SpendInvoice"),
+    ("spend.reconciliations.", "SpendReconciliation"),
+)
 COMMERCIAL_AUDIT_PREFIXES = tuple(prefix for prefix, _model in COMMERCIAL_AUDIT_SOURCES)
 
 
@@ -52,7 +59,9 @@ def require_commercial(caller: Caller) -> None:
     """403 ``commercial_read_refused`` for anyone but a human administrator or auditor."""
     if not is_commercial_reader(caller):
         raise SpendError(
-            403, "commercial_read_refused", "rate cards, commitments and prices are for an administrator or auditor"
+            403,
+            "commercial_read_refused",
+            "rate cards, commitments, prices, invoices and reconciliations are for an administrator or auditor",
         )
 
 
@@ -70,12 +79,12 @@ def commercial_audit_clause(caller: Caller, event_type: Any) -> ColumnElement[bo
 
 
 async def commercial_rows_kept(session: Any, tenant_id: Any) -> bool:
-    """Whether the tenant keeps any row a commercial audit row describes (one query, two index probes).
+    """Whether the tenant keeps any row a commercial audit row describes (one query, one index probe per table).
 
     False means the tenant has no commercial audit rows, so ``GET /audit``
     runs the query it ran before spend intelligence existed.
     """
-    from core.models import spend as models
+    import core.models as models
 
     kept = [
         exists().where(getattr(models, model).tenant_id == tenant_id) for _prefix, model in COMMERCIAL_AUDIT_SOURCES

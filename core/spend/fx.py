@@ -135,8 +135,13 @@ SETTLE_DAYS_WITHOUT_NEXT = 31
 
 
 async def fx_in_use(session: Any, tenant_id: uuid.UUID, currency: str, rate_date: date) -> bool:
-    """Whether settled usage records (converted at this exact date's rate) use the rate."""
+    """Whether settled usage records (converted at this exact date's rate) or a current reconciliation use the rate.
+
+    A reconciliation that used it goes stale once the rate changes; changing
+    it still needs ``restate``, so the change is deliberate and audited.
+    """
     from core.models.spend_usage import SpendUsageRecord as R
+    from core.spend import reconcile
     from core.spend.rollups import day_window
 
     start, end = day_window(rate_date)
@@ -154,7 +159,7 @@ async def fx_in_use(session: Any, tenant_id: uuid.UUID, currency: str, rate_date
             .limit(1)
         )
     ).all()
-    return bool(rows)
+    return bool(rows) or await reconcile.fx_row_used(session, tenant_id, currency, rate_date)
 
 
 async def settle_window(session: Any, tenant_id: uuid.UUID, currency: str, rate_date: date) -> tuple[date, date]:

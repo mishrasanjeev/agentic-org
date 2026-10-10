@@ -42,6 +42,11 @@ def _is_json(filename: str, content_type: str) -> bool:
     )
 
 
+def file_format(filename: str, content_type: str) -> str:
+    """``json`` or ``csv``: how ``iter_rows`` reads a file of this name and content type."""
+    return "json" if _is_json(filename, content_type) else "csv"
+
+
 def _cell(value: Any) -> str:
     if value is None:
         return ""

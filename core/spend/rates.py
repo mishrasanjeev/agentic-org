@@ -258,14 +258,18 @@ def card_dict(row: Any) -> dict[str, Any]:
 
 
 async def card_in_use(session: Any, tenant_id: uuid.UUID, card_id: uuid.UUID) -> date | None:
-    """The latest billing date of a usage record the card priced, directly or as a blend's output card.
+    """The latest billing date of a usage record the card priced, directly or as a blend's output card,
+    or of a month a current reconciliation compared with it.
 
     The direct references use ``ix_spend_usage_records_rate_card``; blend
     references are looked up only inside the card's own date range (the
-    tenant-time index), the only days a blend could have used it.
+    tenant-time index), the only days a blend could have used it. A
+    reconciliation that is not superseded counts until the last day of its
+    month, so a card it used is changed only by a correction.
     """
     from core.models.spend import SpendRateCard
     from core.models.spend_usage import SpendUsageRecord as R
+    from core.spend import reconcile
 
     direct = (
         await session.execute(
@@ -294,6 +298,9 @@ async def card_in_use(session: Any, tenant_id: uuid.UUID, card_id: uuid.UUID) ->
         blend = (await session.execute(select(func.max(R.billing_date)).where(*conditions))).scalar()
         if blend is not None:
             found.append(blend)
+    reconciled = await reconcile.card_used_until(session, tenant_id, card_id)
+    if reconciled is not None:
+        found.append(reconciled)
     return max(found) if found else None
 
 
