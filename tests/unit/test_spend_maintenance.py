@@ -410,8 +410,9 @@ class TestRestatement:
         assert result["changed"] == 1 and not row.unpriced and row.amount_inr == Decimal("0.1000000000")
         with pytest.raises(SpendError) as info:
             await maintenance.restate(
-                TENANT, provider="openai", start=DAY, end=DAY + timedelta(days=92), actor=ACTOR, reason="x" * 12, now=T0
-            )
+                TENANT, provider="openai", start=DAY, end=DAY + timedelta(days=maintenance.JOB_MAX_DAYS),
+                actor=ACTOR, reason="x" * 12, now=T0,
+            )  # fmt: skip
         assert info.value.code == "range_too_long"
 
 

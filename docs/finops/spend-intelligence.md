@@ -427,7 +427,8 @@ they touch, with a 30-second lock timeout and a 120-second statement timeout.
   are marked for a full recompute.
 - **Restatement** (`POST /spend/usage/restate`, a provider and at most 92 billing days, a reason;
   queued automatically by a correction of a card that priced records, a backdated supersede and an
-  earlier `effective_to` sent with `restate`). Records of the given cards (and, with
+  earlier `effective_to` sent with `restate`; an automatic restatement covers every affected billing
+  day, however long the card was in force). Records of the given cards (and, with
   `include_unpriced`, the unpriced and fallback-priced records of the provider; with neither,
   every record of the provider) are re-priced with the active cards as known now and converted
   again. A record priced by the deployment's fallback list that still has no card keeps its stored

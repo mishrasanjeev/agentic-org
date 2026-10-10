@@ -36,7 +36,11 @@ from core.spend.errors import SpendError
 logger = structlog.get_logger()
 
 CHUNK = 1000
-MAX_DAYS = 92
+MAX_DAYS = 92  # what an administrator may request through a route
+# What a job accepts: a restatement a correction queues covers every billing day the corrected
+# card priced (it can have been in force for months), and a new rate settles the days up to the
+# next one. The work is still one day and 1,000 records per transaction.
+JOB_MAX_DAYS = 3660
 FALLBACK_SOURCES = ("fallback_list", "fallback_override")
 _STATEMENT_TIMEOUT = text("SELECT set_config('statement_timeout', :v, true)")
 FX_FIELDS = ("fx_rate", "fx_rate_date", "amount_inr", "fx_estimated", "unconverted")
@@ -76,7 +80,7 @@ def _days(start: date, end: date) -> list[date]:
 def _check(start: date, end: date) -> None:
     from core.spend.rollups import check_range
 
-    check_range(start, end, max_days=MAX_DAYS)
+    check_range(start, end, max_days=JOB_MAX_DAYS)
 
 
 def _after(record_cls: Any, last: tuple[datetime, uuid.UUID] | None) -> Any:

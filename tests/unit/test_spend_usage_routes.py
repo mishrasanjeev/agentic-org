@@ -594,6 +594,29 @@ class TestReferenceHooks:
         assert job.params["reason"] == "Contract price was wrong"
 
     @pytest.mark.asyncio
+    async def test_a_queued_correction_restatement_runs_over_its_whole_range(self, store):
+        """A card in force since January: the restatement covers nine months, past the route's 92 days."""
+        used = card()
+        store.add(used)
+        await meter.write_events(store, TENANT, [event()], now=T0)
+        out = await rates.correct_card(
+            TENANT, used.id, {"unit_price": "3"}, reason="Contract price was wrong", actor=ACTOR, now=T0
+        )
+        done = await jobs.run(TENANT, uuid.UUID(out["restate_job_id"]), now=T0)
+        assert done["status"] == "succeeded" and done["result"]["changed"] == 1 and done["result"]["days"] == 274
+        record = store.of("spend_usage_records")[0]
+        assert record.rate_card_id == uuid.UUID(out["card"]["id"]) and record.amount == Decimal("0.0030000000")
+        with pytest.raises(HTTPException) as info:
+            await api.restate_usage(
+                api.RestateIn(
+                    provider="openai", start=DAY, end=DAY + timedelta(days=92), reason="a long enough reason"
+                ),
+                ADMIN,
+                tenant_id=TID,
+            )
+        assert info.value.status_code == 422 and info.value.detail["error"] == "range_too_long"
+
+    @pytest.mark.asyncio
     async def test_moving_effective_to_over_priced_records_queues_a_restatement(self, store):
         used = card()
         store.add(used)
