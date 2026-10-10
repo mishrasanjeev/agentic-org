@@ -283,6 +283,17 @@ class FakeSession:
         columns = list(statement.selected_columns)
         if len(columns) == 1 and isinstance(columns[0], FunctionElement) and columns[0].name == "count":
             return Result([(len(rows),)])
+        if (
+            not statement._group_by_clauses
+            and columns
+            and all(isinstance(c, FunctionElement) and c.name in ("max", "min") for c in columns)
+        ):
+            values = []
+            for column in columns:
+                inner = list(column.clauses)[0]
+                found = [getattr(r, inner.key) for r in rows if getattr(r, inner.key) is not None]
+                values.append((max(found) if column.name == "max" else min(found)) if found else None)
+            return Result([tuple(values)])
         if statement._group_by_clauses:
             group = list(statement._group_by_clauses)[0]
             buckets: dict[Any, list[Any]] = {}

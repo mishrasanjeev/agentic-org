@@ -13,6 +13,7 @@ from typing import Any
 import structlog
 
 from core.agent_generator import _AGENT_TYPE_DEFAULT_TOOLS as CANONICAL_AGENT_DEFAULT_TOOLS
+from core.spend import context as spend_context
 from workflows.parser import WorkflowParser
 
 logger = structlog.get_logger()
@@ -343,7 +344,8 @@ async def generate_workflow(
                 # Production path — use the existing LLM router
                 from core.llm.router import llm_router
 
-                llm_response = await llm_router.complete(messages, tenant_id=tenant_id)
+                with spend_context.scope(application="console", default_use_case="workflow.generate"):
+                    llm_response = await llm_router.complete(messages, tenant_id=tenant_id)
                 raw_response = llm_response.content
 
             logger.info(

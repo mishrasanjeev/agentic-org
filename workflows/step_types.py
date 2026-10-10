@@ -14,6 +14,7 @@ from core.governance.agent_status import inactive_agent_statuses
 from core.marketing.approval_timeouts import timeout_policy_for_action
 from core.marketing.external_writes import evaluate_marketing_external_write_result
 from core.marketing.workflow_activation import EXTERNAL_WRITE_ACTIONS
+from core.spend import context as spend_context
 from workflows.condition_evaluator import evaluate_condition
 from workflows.event_waits import WorkflowEventWaitStore
 from workflows.parallel_executor import execute_parallel
@@ -478,6 +479,17 @@ def _external_write_failure(
 
 
 async def execute_step(step: dict, state: dict) -> dict[str, Any]:
+    # Spend metering (off by default): the workflow's server-owned attribution for the step's model calls.
+    with spend_context.scope(
+        application="workflows",
+        tenant_id=state.get("tenant_id"),
+        workflow_id=state.get("workflow_id"),
+        workflow_run_id=state.get("workflow_run_id"),
+    ):
+        return await _dispatch_step(step, state)
+
+
+async def _dispatch_step(step: dict, state: dict) -> dict[str, Any]:
     step_type = step.get("type", "agent")
     if step_type == "agent" and any(key in step for key in ("tool", "tool_name")):
         return await _execute_connector_tool_step(step, state)
@@ -754,7 +766,8 @@ async def _execute_agent(step: dict, state: dict) -> dict[str, Any]:
             metadata=TaskMetadata(idempotency_key=str(step.get("idempotency_key") or "")),
         )
 
-        result = await agent_instance.execute(task)
+        with spend_context.scope(agent_id=stored_config.get("id")):
+            result = await agent_instance.execute(task)
         result_status = result.status
         final_output = result.output
         if result_status == "hitl_triggered":

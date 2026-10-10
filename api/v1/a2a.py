@@ -27,6 +27,7 @@ from api.deps import get_current_tenant
 from api.route_metadata import route_meta
 from core.database import get_tenant_session
 from core.models.a2a_task import A2ATask
+from core.spend import context as spend_context
 
 router = APIRouter(prefix="/a2a", tags=["A2A"])
 _log = structlog.get_logger()
@@ -241,23 +242,24 @@ async def create_task(
             caller_agent_id=str(getattr(request.state, "agent_id", "") or ""),
             runtime="a2a",
         )
-        result = await langgraph_run(
-            agent_id=task_id,
-            agent_type=body.agent_type,
-            domain=_get_domain_for_type(body.agent_type),
-            tenant_id=tenant_id,
-            system_prompt=system_prompt,
-            authorized_tools=tools,
-            task_input={
-                "action": body.action,
-                "inputs": body.inputs,
-                "context": body.context,
-            },
-            grant_token=grant_token,
-            run_grant=run_grant,
-            connector_config=connector_config,
-            company_id=str(company_uuid),
-        )
+        with spend_context.scope(application="a2a"):
+            result = await langgraph_run(
+                agent_id=task_id,
+                agent_type=body.agent_type,
+                domain=_get_domain_for_type(body.agent_type),
+                tenant_id=tenant_id,
+                system_prompt=system_prompt,
+                authorized_tools=tools,
+                task_input={
+                    "action": body.action,
+                    "inputs": body.inputs,
+                    "context": body.context,
+                },
+                grant_token=grant_token,
+                run_grant=run_grant,
+                connector_config=connector_config,
+                company_id=str(company_uuid),
+            )
 
         final_status = result.get("status", "completed")
         # Persist the full trace server-side for later inspection via GET /tasks/{id}.

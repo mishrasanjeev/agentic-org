@@ -19,7 +19,7 @@ from sqlalchemy.schema import CreateIndex, CreateTable
 from sqlalchemy.sql.elements import TextClause
 
 from core.config import Settings, settings
-from core.spend import audit, clock, commitments, fx, imports, locks, mappings, org, pricing, rates, vocab
+from core.spend import audit, clock, commitments, fx, imports, jobs, locks, mappings, org, pricing, rates, vocab
 from core.spend.errors import SpendError, require_actor
 from core.tool_gateway.audit_logger import verify_audit_row
 from tests.unit.spend_fakes import FakeSession
@@ -42,6 +42,7 @@ def session(monkeypatch):
     monkeypatch.setattr(settings, "spend_provider_billing_timezones_json", "")
     monkeypatch.setattr(settings, "model_price_overrides_json", "")
     monkeypatch.setattr(clock, "now_utc", lambda: T0)  # a service called without now reads T0
+    monkeypatch.setattr(jobs, "_dispatch", lambda tenant_id, job_id: None)  # follow-up jobs stay queued
     pricing._ALIAS_CACHE.clear()
     return store
 
@@ -492,7 +493,12 @@ class TestRateCards:
             await rates.create_card(TENANT, backdated, actor=ACTOR, now=T0)
         assert info.value.code == "restate_required" and "2026-09-01" in info.value.message
         out = await rates.create_card(TENANT, {**backdated, "restate": True}, actor=ACTOR, now=T0)
-        assert out["superseded_id"] and out["restate_job_id"] is None
+        # The supersede cut priced history, so a restatement of the predecessor's records is queued.
+        assert out["superseded_id"] and out["restate_job_id"]
+        job = next(r for r in session.of("spend_jobs") if str(r.id) == out["restate_job_id"])
+        assert job.kind == "restate" and job.status == "queued"
+        assert job.params["card_ids"] == [out["superseded_id"]] and job.params["provider"] == "openai"
+        assert (job.params["start"], job.params["end"]) == ("2026-09-01", "2026-10-01")
 
     @pytest.mark.asyncio
     async def test_price_edit_refused_when_card_in_use(self, session, monkeypatch):
@@ -803,9 +809,9 @@ class TestCommitmentsAndFx:
             actor=ACTOR,
             now=T0,
         )
-        assert (
-            second["previous_rate"] == "83.1" and second["rate_to_inr"] == "83.25" and second["settle_job_id"] is None
-        )
+        # Each change queues an FX settlement; the second folds into the one still queued.
+        assert first["settle_job_id"] and second["settle_job_id"] == first["settle_job_id"]
+        assert second["previous_rate"] == "83.1" and second["rate_to_inr"] == "83.25"
         same = await fx.put_rate(
             TENANT,
             {"rate_date": "2026-10-01", "currency": "USD", "rate_to_inr": "83.25", "source": "reference"},
@@ -1326,7 +1332,9 @@ class TestAudit:
             "spend.rate_cards.create",
             "spend.rate_cards.update",
             "spend.commitments.create",
+            "spend.job.enqueue",  # the commitment's drawdown recompute
             "spend.fx_rates.create",
+            "spend.job.enqueue",  # the new rate's FX settlement
         ]
         for row in rows:
             assert row.tenant_id == TENANT and row.actor_id == ACTOR and row.actor_type == "user"

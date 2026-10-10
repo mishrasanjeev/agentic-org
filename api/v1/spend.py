@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
-"""AI spend intelligence: reference data and rupee pricing.
+"""AI spend intelligence: reference data, rupee pricing, usage records and their coverage.
 
 ``/spend/org-nodes`` keeps the organisation tree spend rolls up through,
 ``/spend/mappings`` ties agents, workflows, applications and legacy labels
@@ -9,6 +9,14 @@ wrong price), ``/spend/commitments`` committed volume and ``/spend/fx-rates``
 the reference rates to INR. ``GET /spend/price`` prices a usage at a date
 the way metering will. Each kind of reference data also takes a bounded
 CSV or JSON import with a dry run.
+
+``/spend/usage`` lists usage records, ``/spend/rollups`` sums them per day
+and dimension, ``/spend/coverage`` reports the attributed and unattributed
+shares (the Gate 1 attribution measure), ``/spend/coverage/ledgers`` sets
+them beside the existing cost ledgers and ``/spend/gaps`` counts what could
+not be metered. Rebuilds, backfills, restatements, re-attribution, FX
+settlement and commitment recomputes are jobs (202 with a job id) read
+through ``/spend/jobs``.
 
 Reads need ``audit:read``; rate cards, commitments and prices are for a
 human administrator or auditor only. Every write needs a tenant
@@ -34,7 +42,23 @@ from core import spend
 from core.config import settings
 from core.file_ingestion.limits import cleanup_tempfile, stream_to_tempfile
 from core.ownership import Caller, caller_from_request
-from core.spend import access, commitments, fx, imports, mappings, org, pricing, rates, vocab
+from core.spend import (
+    access,
+    clock,
+    commitments,
+    fx,
+    imports,
+    jobs,
+    ledgers,
+    maintenance,
+    mappings,
+    org,
+    partitions,
+    pricing,
+    rates,
+    rollups,
+    vocab,
+)
 from core.spend.errors import SpendError
 
 router = APIRouter(prefix="/spend", tags=["Spend"])
@@ -255,6 +279,16 @@ async def _upload_rows(
 # ---------------------------------------------------------------- status
 
 
+def _writer_state() -> dict[str, Any]:
+    """This process's usage writer: started or not, and events pending (no import while it never started)."""
+    import sys
+
+    module = sys.modules.get("core.spend.writer")
+    if module is None:
+        return {"started": False, "pending": 0}
+    return {"started": bool(module.started()), "pending": int(module.pending())}
+
+
 @router.get("/status")
 @route_meta(
     auth_required=True,
@@ -278,7 +312,16 @@ async def spend_status(tenant_id: str = Depends(get_current_tenant)) -> dict[str
         "source_types": list(vocab.SOURCE_TYPES),
         "price_sources": list(vocab.PRICE_SOURCES),
         "line_kinds": list(vocab.LINE_KINDS),
-        "limits": {"import_rows": imports.MAX_IMPORT_ROWS, "import_bytes": imports.MAX_IMPORT_BYTES},
+        "limits": {
+            "import_rows": imports.MAX_IMPORT_ROWS,
+            "import_bytes": imports.MAX_IMPORT_BYTES,
+            "usage_window_days": rollups.MAX_USAGE_DAYS,
+            "rebuild_days": rollups.MAX_REBUILD_DAYS,
+            "restate_days": maintenance.MAX_DAYS,
+        },
+        "backfill_source": ledgers.backfill_source(),
+        "partition_horizon": await partitions.horizon(clock.now_utc()),
+        "writer": _writer_state(),
     }
 
 
@@ -850,5 +893,446 @@ async def price_quote(
             on=on,
             fx_on=fx_on,
         )
+    except SpendError as exc:
+        raise _refused(exc) from None
+
+
+# ---------------------------------------------------------------- usage, rollups, coverage (PR B)
+
+JOB_RATE_LIMIT = "bulk-import"
+JOB_IDEMPOTENCY = "single-active-job-per-kind"
+JobKindQuery = Literal["rebuild", "backfill", "restate", "settle_fx", "reattribute", "recompute_commitments"]
+GroupBy = Literal[
+    "day",
+    "billing_date",
+    "org_node_id",
+    "business_unit_node_id",
+    "attribution_path",
+    "unattributed_reason",
+    "product_line",
+    "use_case",
+    "application",
+    "agent_id",
+    "provider",
+    "model",
+    "usage_type",
+    "unit",
+    "currency",
+    "rate_card_id",
+    "price_source",
+    "commitment_id",
+    "billing_account",
+    "region",
+    "environment",
+    "risk_tier",
+]
+
+
+class RangeIn(BaseModel):
+    model_config = {"extra": "forbid"}
+
+    start: date
+    end: date
+
+
+class RebuildIn(RangeIn):
+    pass
+
+
+class BackfillIn(RangeIn):
+    pass
+
+
+class ReattributeIn(RangeIn):
+    pass
+
+
+class SettleIn(RangeIn):
+    pass
+
+
+class RestateIn(BaseModel):
+    model_config = {"extra": "forbid"}
+
+    provider: str = Field(..., min_length=1, max_length=64)
+    start: date
+    end: date
+    card_ids: list[uuid.UUID] = Field(default_factory=list, max_length=50)
+    include_unpriced: bool = True
+    reason: str = Field(..., min_length=10, max_length=500)
+
+
+class RecomputeIn(BaseModel):
+    model_config = {"extra": "forbid"}
+
+    provider: str | None = Field(None, min_length=1, max_length=64)
+
+
+def _job_accepted(out: dict[str, Any]) -> dict[str, Any]:
+    return {"job_id": out["job_id"], "status": out["status"]}
+
+
+@router.get("/usage")
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="spend.usage.read",
+    rate_limit="standard",
+    idempotency="read-only",
+    audit_event="spend.usage.list",
+)
+async def list_usage(
+    start: date,
+    end: date,
+    usage_type: Annotated[str | None, Query(max_length=32)] = None,
+    provider: Annotated[str | None, Query(max_length=64)] = None,
+    org_node_id: uuid.UUID | None = None,
+    agent_id: uuid.UUID | None = None,
+    unattributed: bool | None = None,
+    unpriced: bool | None = None,
+    limit: Limit = 100,
+    cursor: Annotated[str | None, Query(max_length=120)] = None,
+    caller: Caller = Depends(caller_from_request),
+    tenant_id: str = Depends(get_current_tenant),
+) -> dict[str, Any]:
+    """Usage records of reporting days (at most 31), a page at a time; other people's personal agents are hidden."""
+    spend_on()
+    try:
+        return await rollups.list_records(
+            _tenant(tenant_id),
+            start=start,
+            end=end,
+            view=access.read_view(caller),
+            usage_type=usage_type,
+            provider=provider,
+            org_node_id=org_node_id,
+            agent_id=agent_id,
+            unattributed=unattributed,
+            unpriced=unpriced,
+            limit=limit,
+            cursor=cursor,
+        )
+    except SpendError as exc:
+        raise _refused(exc) from None
+
+
+@router.get("/rollups")
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="spend.usage.read",
+    rate_limit="standard",
+    idempotency="read-only",
+    audit_event="spend.rollups.list",
+)
+async def list_rollups(
+    start: date,
+    end: date,
+    group_by: GroupBy = "day",
+    provider: Annotated[str | None, Query(max_length=64)] = None,
+    usage_type: Annotated[str | None, Query(max_length=32)] = None,
+    org_node_id: uuid.UUID | None = None,
+    application: Annotated[str | None, Query(max_length=16)] = None,
+    billing_account: Annotated[str | None, Query(max_length=16)] = None,
+    caller: Caller = Depends(caller_from_request),
+    tenant_id: str = Depends(get_current_tenant),
+) -> dict[str, Any]:
+    """Daily rollups summed per a dimension or per day (at most 366 days); amounts per currency and in INR."""
+    spend_on()
+    try:
+        filters = {
+            "provider": vocab.norm_provider(provider) if provider else None,
+            "usage_type": usage_type,
+            "org_node_id": org_node_id,
+            "application": application,
+            "billing_account": billing_account,
+        }
+        return await rollups.query(
+            _tenant(tenant_id),
+            start=start,
+            end=end,
+            group_by=group_by,
+            filters=filters,
+            view=access.read_view(caller),
+        )
+    except SpendError as exc:
+        raise _refused(exc) from None
+
+
+@router.get("/coverage")
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="spend.usage.read",
+    rate_limit="standard",
+    idempotency="read-only",
+    audit_event="spend.coverage.get",
+)
+async def spend_coverage(start: date, end: date, tenant_id: str = Depends(get_current_tenant)) -> dict[str, Any]:
+    """Attribution coverage per day and for the period (at most 366 days): the Gate 1 attribution measure."""
+    spend_on()
+    try:
+        return await rollups.coverage(_tenant(tenant_id), start=start, end=end, now=clock.now_utc())
+    except SpendError as exc:
+        raise _refused(exc) from None
+
+
+@router.get("/coverage/ledgers")
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="spend.usage.read",
+    rate_limit="standard",
+    idempotency="read-only",
+    audit_event="spend.coverage.ledgers",
+)
+async def ledger_comparison(
+    start: date,
+    end: date,
+    caller: Caller = Depends(caller_from_request),
+    tenant_id: str = Depends(get_current_tenant),
+) -> dict[str, Any]:
+    """Usage tokens and amounts per day beside the existing cost ledgers (at most 31 days), with the expected
+    differences."""
+    spend_on()
+    try:
+        return await ledgers.compare(_tenant(tenant_id), start=start, end=end, view=access.read_view(caller))
+    except SpendError as exc:
+        raise _refused(exc) from None
+
+
+@router.get("/gaps")
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="spend.usage.read",
+    rate_limit="standard",
+    idempotency="read-only",
+    audit_event="spend.gaps.list",
+)
+async def list_gaps(start: date, end: date, tenant_id: str = Depends(get_current_tenant)) -> dict[str, Any]:
+    """Usage that could not be metered (at most 92 days), by day, usage type, reason and detail."""
+    spend_on()
+    try:
+        return await rollups.list_gaps(_tenant(tenant_id), start=start, end=end)
+    except SpendError as exc:
+        raise _refused(exc) from None
+
+
+@router.post("/rollups/rebuild", status_code=202, dependencies=[require_tenant_admin])
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="spend.rollups.sensitive.write",
+    rate_limit=JOB_RATE_LIMIT,
+    idempotency=JOB_IDEMPOTENCY,
+    audit_event="spend.rollups.rebuild",
+)
+async def rebuild_rollups(
+    body: RebuildIn,
+    admin: ActiveHumanAdmin = Depends(spend_admin),
+    tenant_id: str = Depends(get_current_tenant),
+) -> dict[str, Any]:
+    """Queue a rebuild of the daily rollups of reporting days (at most 31) from the usage records."""
+    spend_on()
+    try:
+        rollups.check_range(body.start, body.end, max_days=rollups.MAX_REBUILD_DAYS)
+        out = await jobs.enqueue(
+            _tenant(tenant_id),
+            kind="rebuild",
+            params={"start": body.start, "end": body.end},
+            actor=str(admin.user_id),
+        )
+        return _job_accepted(out)
+    except SpendError as exc:
+        raise _refused(exc) from None
+
+
+@router.post("/usage/backfill", status_code=202, dependencies=[require_tenant_admin])
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="spend.usage.sensitive.write",
+    rate_limit=JOB_RATE_LIMIT,
+    idempotency=JOB_IDEMPOTENCY,
+    audit_event="spend.usage.backfill",
+)
+async def backfill_usage(
+    body: BackfillIn,
+    admin: ActiveHumanAdmin = Depends(spend_admin),
+    tenant_id: str = Depends(get_current_tenant),
+) -> dict[str, Any]:
+    """Queue a backfill of model-call records from the gateway rows of reporting days (at most 31)."""
+    spend_on()
+    try:
+        rollups.check_range(body.start, body.end, max_days=ledgers.MAX_DAYS)
+        out = await jobs.enqueue(
+            _tenant(tenant_id),
+            kind="backfill",
+            params={"start": body.start, "end": body.end},
+            actor=str(admin.user_id),
+        )
+        return _job_accepted(out)
+    except SpendError as exc:
+        raise _refused(exc) from None
+
+
+@router.post("/usage/restate", status_code=202, dependencies=[require_tenant_admin])
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="spend.usage.sensitive.write",
+    rate_limit=JOB_RATE_LIMIT,
+    idempotency=JOB_IDEMPOTENCY,
+    audit_event="spend.usage.restate",
+)
+async def restate_usage(
+    body: RestateIn,
+    admin: ActiveHumanAdmin = Depends(spend_admin),
+    tenant_id: str = Depends(get_current_tenant),
+) -> dict[str, Any]:
+    """Queue a restatement of a provider's records of billing days (at most 92) with the cards as known now."""
+    spend_on()
+    try:
+        rollups.check_range(body.start, body.end, max_days=maintenance.MAX_DAYS)
+        reason = maintenance.check_reason(body.reason)
+        out = await jobs.enqueue(
+            _tenant(tenant_id),
+            kind="restate",
+            params={
+                "provider": vocab.norm_provider(body.provider),
+                "start": body.start,
+                "end": body.end,
+                "card_ids": [str(c) for c in body.card_ids],
+                "include_unpriced": body.include_unpriced,
+                "reason": reason,
+            },
+            actor=str(admin.user_id),
+        )
+        return _job_accepted(out)
+    except SpendError as exc:
+        raise _refused(exc) from None
+
+
+@router.post("/usage/reattribute", status_code=202, dependencies=[require_tenant_admin])
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="spend.usage.sensitive.write",
+    rate_limit=JOB_RATE_LIMIT,
+    idempotency=JOB_IDEMPOTENCY,
+    audit_event="spend.usage.reattribute",
+)
+async def reattribute_usage(
+    body: ReattributeIn,
+    admin: ActiveHumanAdmin = Depends(spend_admin),
+    tenant_id: str = Depends(get_current_tenant),
+) -> dict[str, Any]:
+    """Queue a re-attribution of the still-unattributed records of reporting days (at most 92)."""
+    spend_on()
+    try:
+        rollups.check_range(body.start, body.end, max_days=maintenance.MAX_DAYS)
+        out = await jobs.enqueue(
+            _tenant(tenant_id),
+            kind="reattribute",
+            params={"start": body.start, "end": body.end},
+            actor=str(admin.user_id),
+        )
+        return _job_accepted(out)
+    except SpendError as exc:
+        raise _refused(exc) from None
+
+
+@router.post("/fx-rates/settle", status_code=202, dependencies=[require_tenant_admin])
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="spend.fx.sensitive.write",
+    rate_limit=JOB_RATE_LIMIT,
+    idempotency=JOB_IDEMPOTENCY,
+    audit_event="spend.fx_rates.settle",
+)
+async def settle_fx_rates(
+    body: SettleIn,
+    admin: ActiveHumanAdmin = Depends(spend_admin),
+    tenant_id: str = Depends(get_current_tenant),
+) -> dict[str, Any]:
+    """Queue an FX settlement of reporting days (at most 92): pending records converted with the rates known now."""
+    spend_on()
+    try:
+        rollups.check_range(body.start, body.end, max_days=maintenance.MAX_DAYS)
+        out = await jobs.enqueue(
+            _tenant(tenant_id),
+            kind="settle_fx",
+            params={"start": body.start, "end": body.end, "force_dates": []},
+            actor=str(admin.user_id),
+        )
+        return _job_accepted(out)
+    except SpendError as exc:
+        raise _refused(exc) from None
+
+
+@router.post("/commitments/recompute", status_code=202, dependencies=[require_tenant_admin])
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="spend.commitments.sensitive.write",
+    rate_limit=JOB_RATE_LIMIT,
+    idempotency=JOB_IDEMPOTENCY,
+    audit_event="spend.commitments.recompute",
+)
+async def recompute_commitments(
+    body: RecomputeIn,
+    admin: ActiveHumanAdmin = Depends(spend_admin),
+    tenant_id: str = Depends(get_current_tenant),
+) -> dict[str, Any]:
+    """Queue a recompute of commitment drawdown and overage (one provider, or every provider with commitments)."""
+    spend_on()
+    try:
+        params = {"provider": vocab.norm_provider(body.provider)} if body.provider else {}
+        out = await jobs.enqueue(
+            _tenant(tenant_id), kind="recompute_commitments", params=params, actor=str(admin.user_id)
+        )
+        return _job_accepted(out)
+    except SpendError as exc:
+        raise _refused(exc) from None
+
+
+@router.get("/jobs")
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="spend.jobs.read",
+    rate_limit="standard",
+    idempotency="read-only",
+    audit_event="spend.jobs.list",
+)
+async def list_jobs(
+    kind: JobKindQuery | None = None,
+    limit: Annotated[int, Query(ge=1, le=50)] = 50,
+    tenant_id: str = Depends(get_current_tenant),
+) -> dict[str, Any]:
+    """Spend maintenance jobs, newest first."""
+    spend_on()
+    try:
+        return await jobs.list_jobs(_tenant(tenant_id), kind=kind, limit=limit)
+    except SpendError as exc:
+        raise _refused(exc) from None
+
+
+@router.get("/jobs/{job_id}")
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="spend.jobs.read",
+    rate_limit="standard",
+    idempotency="read-only",
+    audit_event="spend.jobs.get",
+)
+async def get_job(job_id: uuid.UUID, tenant_id: str = Depends(get_current_tenant)) -> dict[str, Any]:
+    """One spend maintenance job: its parameters, status, result and error code."""
+    spend_on()
+    try:
+        return await jobs.get_job(_tenant(tenant_id), job_id)
     except SpendError as exc:
         raise _refused(exc) from None

@@ -20,6 +20,7 @@ import structlog
 
 from core.conversation import feedback
 from core.conversation import intents as catalogue
+from core.spend import context as spend_context
 
 logger = structlog.get_logger()
 
@@ -170,9 +171,10 @@ async def model(
     """A summary from the model through the content services' checked JSON call."""
     from core.content import services
 
-    answer, usage = await services.ask_model(
-        tenant_id, _messages(transcript, agent, customer), SCHEMA, complete=complete
-    )
+    with spend_context.scope(application="speech", default_use_case="speech.summary"):
+        answer, usage = await services.ask_model(
+            tenant_id, _messages(transcript, agent, customer), SCHEMA, complete=complete
+        )
     return {
         "method": "model",
         "intent": str(answer.get("intent") or "")[:120],

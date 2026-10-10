@@ -15,6 +15,7 @@ import structlog
 
 from core.commerce.sales_guardrails import GRANTEX_COMMERCE_DEFAULT_TOOLS
 from core.llm.router import LLMRouter, llm_router
+from core.spend import context as spend_context
 
 logger = structlog.get_logger()
 
@@ -553,12 +554,13 @@ async def generate_agent_config(
 
     logger.info("agent_generator_call", description_length=len(sanitized))
 
-    response = await router.complete(
-        messages=messages,
-        temperature=0.3,
-        max_tokens=2048,
-        tenant_id=tenant_id,
-    )
+    with spend_context.scope(application="console", default_use_case="agent.generate"):
+        response = await router.complete(
+            messages=messages,
+            temperature=0.3,
+            max_tokens=2048,
+            tenant_id=tenant_id,
+        )
 
     try:
         parsed = _parse_llm_response(response.content)
@@ -579,12 +581,13 @@ async def generate_agent_config(
             {"role": "user", "content": f"Create an agent for: {short_desc}"},
         ]
         try:
-            retry_response = await router.complete(
-                messages=retry_messages,
-                temperature=0.1,
-                max_tokens=1024,
-                tenant_id=tenant_id,
-            )
+            with spend_context.scope(application="console", default_use_case="agent.generate"):
+                retry_response = await router.complete(
+                    messages=retry_messages,
+                    temperature=0.1,
+                    max_tokens=1024,
+                    tenant_id=tenant_id,
+                )
             parsed = _parse_llm_response(retry_response.content)
         except (json.JSONDecodeError, ValueError) as retry_exc:
             logger.warning("agent_generator_retry_also_failed", error=str(retry_exc))

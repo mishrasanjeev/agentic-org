@@ -47,6 +47,7 @@ from typing import Any
 import structlog
 
 from core.config import settings
+from core.spend import context as spend_context
 
 logger = structlog.get_logger()
 
@@ -153,9 +154,10 @@ async def _complete(
     from core.llm.router import llm_router
 
     extra = {"pseudonymiser": pseudonymiser} if pseudonymiser is not None else {}
-    return await llm_router.complete(
-        messages, model_override=model, max_tokens=max_tokens, tenant_id=str(tenant_id), **extra
-    )
+    with spend_context.scope(application="console", default_use_case="prompts.compare"):
+        return await llm_router.complete(
+            messages, model_override=model, max_tokens=max_tokens, tenant_id=str(tenant_id), **extra
+        )
 
 
 async def open_pseudonymiser(tenant_id: uuid.UUID) -> Any:

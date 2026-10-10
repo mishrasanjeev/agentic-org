@@ -12,15 +12,17 @@ overlap; the check runs under one advisory lock on create and on every
 change of the period or the status.
 
 A storage commitment is entered in ``gb_day``: a GB-month has no fixed
-number of GB-days. Drawdown (computed from usage records in a later part)
-is in record units; every create or update marks the commitment for a full
-recompute.
+number of GB-days. Drawdown is computed from usage records in record units
+(``recompute``, run as the ``recompute_commitments`` job); every create or
+update marks the commitment for a full recompute and queues the job.
 """
 
 from __future__ import annotations
 
 import uuid
-from datetime import date, datetime
+from collections.abc import Sequence
+from dataclasses import dataclass
+from datetime import date, datetime, timedelta
 from decimal import Decimal
 from typing import Any
 
@@ -260,6 +262,7 @@ async def create_commitment(
         )
         out = _commitment_dict(row)
     logger.info("spend_commitment_created", kind=fields["kind"], provider=fields["provider"])
+    await enqueue_recompute(tenant_id, fields["provider"], actor=who)
     return out
 
 
@@ -338,6 +341,8 @@ async def update_commitment(
                 )
             )
         out = _commitment_dict(row)
+    if changed:
+        await enqueue_recompute(tenant_id, out["provider"], actor=who)
     return out
 
 
@@ -374,3 +379,265 @@ async def list_commitments(
             .all()
         )
     return {"items": [_commitment_dict(row) for row in rows], "total": int(total or 0)}
+
+
+# ---------------------------------------------------------------- drawdown (recompute)
+
+APPEND_GRACE = timedelta(hours=2)
+RECOMPUTE_CHUNK = 1000
+
+
+@dataclass
+class Drawn:
+    """A commitment's running drawdown during a recompute."""
+
+    quantity: Decimal = Decimal("0")
+    amount: Decimal = Decimal("0")
+    undrawn: int = 0
+
+
+def match_rank(record: Any, commitment: Any) -> int | None:
+    """How specifically ``commitment`` covers ``record`` (0 = quantity with model ... 3 = money without usage
+    type), or ``None`` when it does not cover it."""
+    if commitment.status != "active" or commitment.provider != record.provider:
+        return None
+    if not (commitment.period_start <= record.billing_date < commitment.period_end):
+        return None
+    if commitment.kind == "quantity":
+        if commitment.usage_type != record.usage_type:
+            return None
+        if commitment.unit != vocab.CANONICAL_UNIT.get(record.unit):
+            return None
+        model = (record.model or "").strip()
+        if commitment.model_sku and commitment.model_sku != model:
+            return None
+        return 0 if commitment.model_sku else 1
+    if commitment.usage_type is None:
+        return 3
+    return 2 if commitment.usage_type == record.usage_type else None
+
+
+def best_commitment(record: Any, commitments: Sequence[Any]) -> Any:
+    """The most specific active commitment covering ``record``, or ``None``."""
+    ranked = [(rank, str(c.id), c) for c in commitments if (rank := match_rank(record, c)) is not None]
+    if not ranked:
+        return None
+    ranked.sort(key=lambda item: (item[0], item[1]))
+    return ranked[0][2]
+
+
+def _overage(before: Decimal, drawn: Decimal, capacity: Decimal) -> Decimal:
+    """``max(0, before + drawn - max(capacity, before))``: the part of this draw past the capacity."""
+    return max(Decimal("0"), before + drawn - max(capacity, before))
+
+
+def draw(
+    record: Any, commitment: Any, state: Drawn, rate_to_inr: Decimal | None
+) -> tuple[uuid.UUID | None, bool, Decimal]:
+    """Draw ``record`` from ``commitment``; ``(commitment_id, overage, overage_quantity)`` for the record.
+
+    Quantity commitments draw the record's quantity in record units (the
+    capacity is the committed card units times the unit's divisor); an
+    unpriced record still draws its quantity. Money commitments draw the
+    record's amount in the commitment's currency, through INR at the
+    reporting-date rate when the currencies differ; a priced record that
+    cannot be converted does not draw and is counted as undrawn, an unpriced
+    one does not draw. A money overage is reported as the matching share of
+    the record's quantity.
+    """
+    quantity = Decimal(record.quantity or 0)
+    if commitment.kind == "quantity":
+        capacity = Decimal(commitment.committed_quantity) * vocab.CANONICAL_DIVISOR.get(commitment.unit, 1)
+        over = _overage(state.quantity, quantity, capacity)
+        state.quantity += quantity
+        return commitment.id, over > 0, over.quantize(vocab.QTY_QUANT)
+    if record.amount is None or record.currency is None:
+        return None, False, Decimal("0")
+    target = str(commitment.currency).strip()
+    if str(record.currency).strip() == target:
+        amount = Decimal(record.amount)
+    elif record.amount_inr is not None and target == vocab.REPORTING_CURRENCY:
+        amount = Decimal(record.amount_inr)
+    elif record.amount_inr is not None and rate_to_inr:
+        amount = (Decimal(record.amount_inr) / Decimal(rate_to_inr)).quantize(vocab.AMOUNT_QUANT)
+    else:
+        state.undrawn += 1
+        return None, False, Decimal("0")
+    over = _overage(state.amount, amount, Decimal(commitment.committed_amount))
+    state.amount += amount
+    if over <= 0 or amount <= 0:
+        return commitment.id, False, Decimal("0")
+    share = min(quantity, (quantity * over / amount).quantize(vocab.QTY_QUANT))
+    return commitment.id, share > 0, share
+
+
+async def _provider_commitments(session: Any, tenant_id: uuid.UUID, provider: str) -> list[Any]:
+    from core.models.spend import SpendCommitment
+
+    statement = select(SpendCommitment).where(
+        SpendCommitment.tenant_id == tenant_id, SpendCommitment.provider == provider
+    )
+    return list((await session.execute(statement)).scalars().all())
+
+
+def _billing_days(provider: str, start: datetime, end: datetime) -> list[date]:
+    first = clock.billing_date_of(provider, start)
+    last = clock.billing_date_of(provider, end - timedelta(microseconds=1))
+    return [first + timedelta(days=offset) for offset in range((last - first).days + 1)]
+
+
+async def _money_rate(session: Any, tenant_id: uuid.UUID, rates: dict, currency: str, on: date) -> Decimal | None:
+    from core.spend import fx
+
+    key = (currency, on)
+    if key not in rates:
+        found = await fx.rate_on(session, tenant_id, currency, on)
+        rates[key] = found.rate_to_inr if found is not None else None
+    return rates[key]
+
+
+async def _replay_window(
+    tenant_id: uuid.UUID,
+    provider: str,
+    commitments: list[Any],
+    states: dict[uuid.UUID, Drawn],
+    *,
+    start: datetime,
+    end: datetime,
+    now: datetime,
+) -> dict[str, int]:
+    """Walk the provider's records in ``[start, end)`` in ``(event_time, id)`` order and (re)assign them."""
+    from sqlalchemy import and_, or_
+
+    from core.database import get_tenant_session
+    from core.models.spend_usage import SpendUsageRecord as R
+    from core.spend import maintenance, rollups
+
+    counts = {"scanned": 0, "changed": 0}
+    if end <= start:
+        return counts
+    zone = clock.billing_zone(provider)
+    for billing_day in _billing_days(provider, start, end):
+        day_start, day_end = clock.day_bounds(billing_day, zone)
+        low, high = max(day_start, start), min(day_end, end)
+        if high <= low:
+            continue
+        last: tuple[datetime, uuid.UUID] | None = None
+        while True:
+            async with get_tenant_session(tenant_id) as session:
+                await maintenance.job_timeouts(session)
+                await locks.xact_lock(session, locks.commitment_recompute(tenant_id, provider))
+                await maintenance.lock_days(session, tenant_id, maintenance.report_days(provider, billing_day))
+                conditions = [
+                    R.tenant_id == tenant_id,
+                    R.provider == provider,
+                    R.event_time >= low,
+                    R.event_time < high,
+                ]
+                if last is not None:
+                    conditions.append(or_(R.event_time > last[0], and_(R.event_time == last[0], R.id > last[1])))
+                statement = select(R).where(*conditions).order_by(R.event_time, R.id).limit(RECOMPUTE_CHUNK)
+                rows = list((await session.execute(statement)).scalars().all())
+                if not rows:
+                    break
+                deltas: rollups.Deltas = {}
+                rates: dict[tuple[str, date], Decimal | None] = {}
+                for row in rows:
+                    counts["scanned"] += 1
+                    chosen = best_commitment(row, commitments)
+                    assignment: tuple[uuid.UUID | None, bool, Decimal] = (None, False, Decimal("0"))
+                    if chosen is not None:
+                        target = str(chosen.currency or "").strip()
+                        rate = None
+                        if chosen.kind == "money" and target and target != vocab.REPORTING_CURRENCY:
+                            rate = await _money_rate(session, tenant_id, rates, target, row.event_date)
+                        assignment = draw(row, chosen, states[chosen.id], rate)
+                    current = (row.commitment_id, bool(row.overage), Decimal(row.overage_quantity or 0))
+                    if current == assignment:
+                        continue
+                    before = maintenance.record_dict(row)
+                    row.commitment_id, row.overage, row.overage_quantity = assignment
+                    row.revised_at = now
+                    rollups.move(deltas, before, maintenance.record_dict(row))
+                    counts["changed"] += 1
+                await session.flush()
+                await rollups.apply_deltas(session, tenant_id, deltas)
+                last = (rows[-1].event_time, rows[-1].id)
+            if len(rows) < RECOMPUTE_CHUNK:
+                break
+    return counts
+
+
+async def _recompute_provider(tenant_id: uuid.UUID, provider: str, *, now: datetime) -> dict[str, Any]:
+    from core.database import get_tenant_session
+
+    cutoff = now - APPEND_GRACE
+    async with get_tenant_session(tenant_id) as session:
+        await locks.xact_lock(session, locks.commitment_recompute(tenant_id, provider))
+        every = await _provider_commitments(session, tenant_id, provider)
+    active = [c for c in every if c.status == "active"]
+    if not every:
+        return {"mode": "none", "scanned": 0, "changed": 0}
+    zone = clock.billing_zone(provider)
+    full = any(c.needs_full_recompute for c in every) or any(c.recomputed_through is None for c in active)
+    if full:
+        start = clock.day_bounds(min(c.period_start for c in every), zone)[0]
+        end = min(cutoff, clock.day_bounds(max(c.period_end for c in every), zone)[0])
+        states = {c.id: Drawn() for c in active}
+    else:
+        start = min(c.recomputed_through for c in active)
+        end = cutoff
+        states = {
+            c.id: Drawn(Decimal(c.drawn_quantity or 0), Decimal(c.drawn_amount or 0), int(c.undrawn_records or 0))
+            for c in active
+        }
+    through = max(start, end)
+    counts = await _replay_window(tenant_id, provider, active, states, start=start, end=through, now=now)
+    async with get_tenant_session(tenant_id) as session:
+        await locks.xact_lock(session, locks.commitment_recompute(tenant_id, provider))
+        for row in await _provider_commitments(session, tenant_id, provider):
+            if row.id in states:
+                state = states[row.id]
+                row.drawn_quantity = state.quantity
+                row.drawn_amount = state.amount
+                row.undrawn_records = state.undrawn
+                row.recomputed_through = through
+                row.recomputed_at = now
+            row.needs_full_recompute = False
+        await session.flush()
+    return {"mode": "full" if full else "append", **counts}
+
+
+async def recompute(tenant_id: uuid.UUID, *, provider: str | None = None, now: datetime | None = None) -> dict:
+    """Recompute drawdown and overage for each provider with commitments (or the given one).
+
+    A full replay (after a commitment change, a late record, a restatement or
+    a settlement) starts from the earliest period; otherwise only the window
+    from the stored watermark to two hours ago is drawn, continuing the stored
+    totals. Records are drawn in ``(event_time, id)`` order, so the result
+    never depends on the order records arrived in.
+    """
+    from core.database import get_tenant_session
+    from core.models.spend import SpendCommitment
+
+    stamp = now or clock.now_utc()
+    async with get_tenant_session(tenant_id) as session:
+        statement = select(SpendCommitment.provider).where(SpendCommitment.tenant_id == tenant_id)
+        if provider:
+            statement = statement.where(SpendCommitment.provider == vocab.norm_provider(provider))
+        providers = sorted({str(row[0]) for row in (await session.execute(statement)).all()})
+    out = {}
+    for name in providers:
+        out[name] = await _recompute_provider(tenant_id, name, now=stamp)
+    logger.info("spend_commitments_recomputed", providers=len(out))
+    return {"providers": out}
+
+
+async def enqueue_recompute(tenant_id: uuid.UUID, provider: str, *, actor: str) -> str | None:
+    """Queue the recompute a commitment change calls for (folded into an active one); the job id."""
+    from core.spend import jobs
+
+    out = await jobs.enqueue_followup(
+        tenant_id, kind="recompute_commitments", params={"provider": provider}, actor=actor
+    )
+    return out["job_id"] if out else None

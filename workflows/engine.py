@@ -10,6 +10,7 @@ from typing import Any
 
 import structlog
 
+from core.spend import context as spend_context
 from workflows.parser import WorkflowParser
 from workflows.retry import retry_with_backoff
 from workflows.state_store import StaleStateError, WorkflowStateStore
@@ -280,15 +281,21 @@ class WorkflowEngine:
                     and state.get("replan_count", 0) < MAX_REPLAN_ATTEMPTS
                 )
                 if replan_enabled:
-                    replan_result = await self._attempt_replan(
-                        state,
-                        run_id,
-                        step_id,
-                        step,
-                        steps,
-                        execution_order,
-                        str(exc),
-                    )
+                    with spend_context.scope(
+                        application="workflows",
+                        tenant_id=state.get("tenant_id"),
+                        workflow_id=state.get("workflow_id"),
+                        workflow_run_id=state.get("workflow_run_id"),
+                    ):
+                        replan_result = await self._attempt_replan(
+                            state,
+                            run_id,
+                            step_id,
+                            step,
+                            steps,
+                            execution_order,
+                            str(exc),
+                        )
                     if replan_result is not None:
                         # Re-planning succeeded — restart execution with updated steps
                         return await self.execute(run_id)

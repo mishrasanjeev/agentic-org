@@ -185,3 +185,46 @@ tests:
       - eval_time: 1h
         alertname: AgenticOrgProviderErrorRate
         exp_alerts: []
+
+  # Usage events failing to write, sustained, fires the spend alert; a paused tenant does not.
+  - interval: 1m
+    name: spend usage write failures fire the spend write alert
+    input_series:
+      - series: 'agenticorg_spend_usage_write_failures_total{usage_type="llm_tokens",reason="db_error"}'
+        values: "0+2x60"
+    alert_rule_test:
+      - eval_time: 45m
+        alertname: AgenticOrgSpendWriteFailures
+        exp_alerts:
+          - exp_labels: { severity: warning, area: cost }
+            exp_annotations:
+              summary: "Spend usage events are not being written"
+              description: >-
+                The spend usage writer is dropping, spilling or failing to write usage events. Check the reason label, the database and the maintenance queue; the per-tenant meter gaps show what was lost.
+              runbook: docs/finops/spend-intelligence.md#writer-alerts
+
+  - interval: 1m
+    name: a paused tenant does not fire the spend write alert
+    input_series:
+      - series: 'agenticorg_spend_usage_write_failures_total{usage_type="llm_tokens",reason="paused"}'
+        values: "0+50x60"
+    alert_rule_test:
+      - eval_time: 45m
+        alertname: AgenticOrgSpendWriteFailures
+        exp_alerts: []
+
+  - interval: 1m
+    name: a sustained spend writer backlog fires the backlog alert
+    input_series:
+      - series: 'agenticorg_spend_usage_pending{instance="api-1"}'
+        values: "4500x30"
+    alert_rule_test:
+      - eval_time: 20m
+        alertname: AgenticOrgSpendWriterBacklog
+        exp_alerts:
+          - exp_labels: { severity: warning, area: cost }
+            exp_annotations:
+              summary: "The spend usage writer is falling behind"
+              description: >-
+                An instance holds more than 4000 usage events it has not written. The database may be slow or a rebuild may be holding rollup days; past 5000 events new usage is dropped and counted.
+              runbook: docs/finops/spend-intelligence.md#writer-alerts

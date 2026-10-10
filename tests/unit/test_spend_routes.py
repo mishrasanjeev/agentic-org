@@ -25,7 +25,7 @@ from api.route_metadata import ROUTE_METADATA_ATTR
 from api.v1 import spend as api
 from core.config import settings
 from core.ownership import Caller
-from core.spend import access, clock, imports, pricing, rates, vocab
+from core.spend import access, clock, imports, jobs, pricing, rates, vocab
 from core.spend.errors import SpendError
 from tests.unit.spend_fakes import FakeSession
 
@@ -58,6 +58,18 @@ ALL_PATHS = {
 }
 
 
+def api_job_paths() -> set[str]:
+    """The routes that queue a maintenance job (rate class bulk-import, like the imports)."""
+    return {
+        "/spend/rollups/rebuild",
+        "/spend/usage/backfill",
+        "/spend/usage/restate",
+        "/spend/usage/reattribute",
+        "/spend/fx-rates/settle",
+        "/spend/commitments/recompute",
+    }
+
+
 @pytest.fixture
 def session(monkeypatch):
     import core.database
@@ -69,6 +81,7 @@ def session(monkeypatch):
     monkeypatch.setattr(settings, "spend_provider_billing_timezones_json", "")
     monkeypatch.setattr(settings, "model_price_overrides_json", "")
     monkeypatch.setattr(clock, "now_utc", lambda: T0)  # handlers stamp the frozen clock
+    monkeypatch.setattr(jobs, "_dispatch", lambda tenant_id, job_id: None)  # follow-up jobs stay queued
     pricing._ALIAS_CACHE.clear()
     return store
 
@@ -142,7 +155,12 @@ class TestFlag:
         assert out["usage_types"] == list(vocab.USAGE_TYPES) and out["limits"] == {
             "import_rows": 5000,
             "import_bytes": 2097152,
+            "usage_window_days": 31,
+            "rebuild_days": 31,
+            "restate_days": 92,
         }
+        assert out["backfill_source"] in ("model_gateway_records", "none")
+        assert out["partition_horizon"]["last_month"] == "2028-12" and set(out["writer"]) == {"started", "pending"}
         assert out["record_units"]["llm_tokens"][0] == "input_token" and "gb_month" in out["card_units"]["storage"]
         monkeypatch.setattr(settings, "spend_intelligence_enabled", True)
         assert (await api.spend_status(tenant_id=TID))["enabled"] is True
@@ -517,14 +535,16 @@ class TestRouteShape:
             operations += len(route.methods)
             assert meta["scope"].startswith("spend.") and meta["audit_event"].startswith("spend.")
             assert meta["auth_required"] and meta["tenant_required"]
-            assert meta["rate_limit"] == ("bulk-import" if route.path.endswith("/import") else "standard")
+            jobs_route = route.path in api_job_paths()
+            imports_route = route.path.endswith("/import")
+            assert meta["rate_limit"] == ("bulk-import" if imports_route or jobs_route else "standard")
             if "GET" in route.methods:
                 assert meta["idempotency"] == "read-only"
-        assert operations == 23
+        assert operations == 36  # 23 reference-data operations and 13 usage operations
 
     def test_write_routes_carry_tenant_admin_dependency(self):
         writes = [r for r in api.router.routes if not r.methods <= {"GET", "HEAD"}]
-        assert len(writes) == 14
+        assert len(writes) == 20  # 14 reference-data writes and 6 job routes
         for route in writes:
             assert require_tenant_admin in route.dependencies, route.path
             assert api.spend_admin in [d.call for d in route.dependant.dependencies], route.path

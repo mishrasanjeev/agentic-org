@@ -4,6 +4,61 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
 
 ## [Unreleased] - 2026-08-29
 
+### Added - AI spend intelligence: usage records, attribution and the model-call meter
+- Every metered model call becomes usage records (uncached input, cached
+  input and output tokens, or one estimated token record when the split is
+  unknown), priced at the card in force on the provider's billing date and
+  converted to INR on the reporting date, with every attribution dimension:
+  agent and version, organisation node and business unit, product line, use
+  case, application, region, workflow, run, initiating user id, environment,
+  risk tier and billing account (tenant key, platform key or in-house).
+  Records hold identifiers, counts and amounts only, and are never deleted.
+- Attribution is resolved on the server from the agent's configuration, the
+  registry, source mappings and the organisation tree, never from request
+  labels; each record stores the rule that matched. A legacy cost-centre or
+  department label that names no node leaves the record unattributed as
+  `unknown_label`; every unattributed record is kept and counted by reason.
+  An agent hint naming a missing or retired agent is ignored on the metering
+  path. Entry points (agent runs, chat, A2A, MCP, voice, workflows, content,
+  speech, transaction narratives, console tools) bind their application.
+- The hook in `record_model_call` is synchronous and failure-isolated: it
+  builds events in memory and queues them for one writer thread per process,
+  which writes them in batches on its own two-connection engine, retries a
+  transient error once, waits out a rollup rebuild without blocking other
+  tenants, and spills what it cannot write to the `persist_usage` task.
+  Drops, spills and pauses are counted globally and per tenant; a feature
+  flag (`spend.metering_paused`) pauses metering per tenant or for all
+  without a restart; the writer drains at shutdown. Four direct model callers
+  outside the router are metered too.
+- A daily rollup kept in the writer's transaction and rebuildable per day;
+  coverage (the attributed share of INR spend, by amount and by count, with
+  unpriced, unconverted and FX-pending volume, gaps, reasons and attribution
+  paths); a read-only comparison with the existing cost ledgers; meter gaps.
+  Audited maintenance jobs revise derived fields only: FX settlement (also
+  queued by every new or changed rate, and `fx_in_use` for a rate settled
+  records use), restatement (queued by corrections and backdated cards),
+  re-attribution of unattributed records, and commitment drawdown and
+  overage in event order. Backfill recreates model-call records from
+  `model_gateway_records` with the hook's own keys.
+- `GET /spend/usage`, `GET /spend/rollups`, `GET /spend/coverage`,
+  `GET /spend/coverage/ledgers`, `GET /spend/gaps`, `GET /spend/jobs`,
+  `GET /spend/jobs/{job_id}`, and the job routes `POST /spend/rollups/rebuild`,
+  `POST /spend/usage/{backfill,restate,reattribute}`,
+  `POST /spend/fx-rates/settle` and `POST /spend/commitments/recompute`
+  (202 with a job id, one active job of a kind per tenant). Usage reads apply
+  the agent visibility rule and show user ids to administrators and auditors
+  only. Celery tasks `core.tasks.spend_tasks.*` with beats for the partition
+  horizon, FX settlement and commitment recompute. Alerts
+  `AgenticOrgSpendWriteFailures` and `AgenticOrgSpendWriterBacklog`.
+- Behind `spend_intelligence_enabled` (default off): off, the hook returns
+  at its first statement, no writer starts, scopes and credential notes do
+  nothing, the router's responses are unchanged, the tasks skip and the new
+  routes are not found. Migration `v6z80_spend_usage` adds
+  `spend_usage_records` (range-partitioned by month, July 2026 to December
+  2028 plus a default partition), `spend_usage_rollups`, `spend_meter_gaps`
+  and `spend_jobs` under forced row-level security on every table and
+  partition, with tenant-composite foreign keys and their leading indexes.
+
 ### Added - AI spend intelligence: reference data and rupee pricing
 - `core/spend/`: the reference data AI spend is measured against. An
   organisation tree (group, business unit, department, team, cost centre)

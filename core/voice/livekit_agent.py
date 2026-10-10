@@ -15,6 +15,8 @@ from typing import Any
 
 import structlog
 
+from core.spend import context as spend_context
+
 logger = structlog.get_logger()
 
 # ---------------------------------------------------------------------------
@@ -94,20 +96,21 @@ class VoiceAgentWorker:
             "context": {"channel": "voice", "session_id": str(id(session))},
         }
 
-        result = await run_agent(
-            agent_id=cfg.get("agent_id", "voice-agent"),
-            agent_type=cfg.get("agent_type", "voice"),
-            domain=cfg.get("domain", "general"),
-            tenant_id=cfg.get("tenant_id", ""),
-            system_prompt=cfg.get("system_prompt", "You are a helpful voice assistant."),
-            authorized_tools=cfg.get("authorized_tools", []),
-            task_input=task_input,
-            grant_token=self.grant_token,
-            thread_id=self._thread_id,
-            # Pinned provider from the agent row (bug sheet 2026-09-14 #31);
-            # None keeps model-name inference for legacy configs.
-            llm_provider=cfg.get("llm_provider") or (cfg.get("llm_config") or {}).get("provider"),
-        )
+        with spend_context.scope(application="voice", tenant_id=cfg.get("tenant_id") or None):
+            result = await run_agent(
+                agent_id=cfg.get("agent_id", "voice-agent"),
+                agent_type=cfg.get("agent_type", "voice"),
+                domain=cfg.get("domain", "general"),
+                tenant_id=cfg.get("tenant_id", ""),
+                system_prompt=cfg.get("system_prompt", "You are a helpful voice assistant."),
+                authorized_tools=cfg.get("authorized_tools", []),
+                task_input=task_input,
+                grant_token=self.grant_token,
+                thread_id=self._thread_id,
+                # Pinned provider from the agent row (bug sheet 2026-09-14 #31);
+                # None keeps model-name inference for legacy configs.
+                llm_provider=cfg.get("llm_provider") or (cfg.get("llm_config") or {}).get("provider"),
+            )
 
         # Persist thread for multi-turn conversations
         if "thread_id" in result:

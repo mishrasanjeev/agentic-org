@@ -29,6 +29,7 @@ from pydantic import BaseModel, ValidationError
 
 from core.config import settings
 from core.content.sources import Source
+from core.spend import context as spend_context
 
 logger = structlog.get_logger()
 
@@ -231,7 +232,8 @@ async def ask_model(
     last_errors: list[str] = []
     for round_index in range(RETRIES + 1):
         try:
-            response = await complete(tenant_id, model, attempt, max_tokens, **extra)
+            with spend_context.scope(application="content", default_use_case="content"):
+                response = await complete(tenant_id, model, attempt, max_tokens, **extra)
         except PseudonymisationError as exc:
             logger.warning("content_pseudonymisation_unavailable", reason=exc.reason)
             raise ContentError(

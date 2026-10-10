@@ -204,6 +204,16 @@ async def lifespan(app: FastAPI):
     start_metrics_server()
 
     yield
+    # Spend metering (off by default): stop this process's usage writer and hand
+    # what it still holds to a worker, before the metrics server stops so the
+    # shutdown counts are still scraped. A failure never skips the cleanup below.
+    try:
+        from core import spend
+
+        await spend.drain(timeout=5.0)
+    # enterprise-gate: broad-except-ok reason=spend-drain-failure-is-logged-shutdown-continues
+    except Exception as exc:
+        _logging.getLogger(__name__).warning("spend_drain_failed: %s", type(exc).__name__)
     stop_metrics_server()
     shutdown_tracing()
     from api.v1.health import close_health_resources

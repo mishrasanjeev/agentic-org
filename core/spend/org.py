@@ -64,8 +64,11 @@ class NodeRef:
 
 
 def _on_change(tenant_id: uuid.UUID) -> None:
-    """Called after every write to the tree; later parts drop the attribution cache here."""
-    return None
+    """Called after every write to the tree: drop this process's attribution and alias caches."""
+    from core.spend import pricing, resolver
+
+    resolver.invalidate(tenant_id)
+    pricing.invalidate_aliases(tenant_id)
 
 
 # ---------------------------------------------------------------- pure checks
