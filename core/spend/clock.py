@@ -97,9 +97,13 @@ def month_bounds(period: str, zone: ZoneInfo) -> tuple[date, date, datetime, dat
     match = _PERIOD_RE.fullmatch(str(period or "").strip())
     if not match:
         raise SpendError(422, "invalid_period", "a period is a month YYYY-MM")
-    first = date(int(match.group(1)), int(match.group(2)), 1)
-    following = next_month(first)
-    return first, following, day_bounds(first, zone)[0], day_bounds(following, zone)[0]
+    try:
+        first = date(int(match.group(1)), int(match.group(2)), 1)
+        following = next_month(first)
+        return first, following, day_bounds(first, zone)[0], day_bounds(following, zone)[0]
+    except (ValueError, OverflowError):
+        # Year 0000, or a month whose bounds fall outside the calendar (9999-12): a bad request, not a 500.
+        raise SpendError(422, "invalid_period", "a period is a month YYYY-MM within the calendar") from None
 
 
 def today_in(zone: ZoneInfo, now: datetime) -> date:
