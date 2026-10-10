@@ -3,16 +3,17 @@
 
 An import file is at most ``MAX_IMPORT_BYTES`` (the request gate and the
 upload stream both hold it there) and at most ``MAX_IMPORT_ROWS`` rows,
-counted while the rows are read, so a file of tiny lines never becomes a
-million rows before it is refused.
+counted while CSV rows are read and as soon as a JSON file is parsed, so a
+file of tiny rows never becomes a million row dicts before it is refused.
 
 JSON is a list of objects, or an object holding the list under one of the
-envelope keys (``rows``; the invoice import also accepts ``lines``). CSV is
-decoded as UTF-8 (a byte-order mark is dropped), else Latin-1; header names
-are trimmed and lower-cased; unknown columns are ignored. Every value comes
-out as text: numbers as their text, ``null`` as empty, a nested list or
-object as its JSON text. A file that cannot be read is 400 ``bad_file``; a
-missing required column is 400 ``missing_columns``.
+envelope keys (``rows``; the invoice import also accepts ``lines``). Its
+numbers are read as decimals, never binary floats. CSV is decoded as UTF-8
+(a byte-order mark is dropped), else Latin-1; header names are trimmed and
+lower-cased; unknown columns are ignored. Every value comes out as text:
+numbers as their exact text, ``null`` as empty, a nested list or object as
+its JSON text (decimals inside it as strings). A file that cannot be read is
+400 ``bad_file``; a missing required column is 400 ``missing_columns``.
 
 This module is the contract a later HR or finance synchronisation writes to.
 """
@@ -24,6 +25,7 @@ import hashlib
 import io
 import json
 from collections.abc import Iterator
+from decimal import Decimal
 from pathlib import Path
 from typing import Any
 
@@ -46,7 +48,8 @@ def _cell(value: Any) -> str:
     if isinstance(value, bool):
         return "true" if value else "false"
     if isinstance(value, (dict, list)):
-        return json.dumps(value, separators=(",", ":"), sort_keys=True)
+        # A Decimal inside a nested cell (the only type json.dumps cannot write here) goes out as its exact text.
+        return json.dumps(value, separators=(",", ":"), sort_keys=True, default=str)
     return str(value).strip()
 
 
@@ -58,18 +61,22 @@ def _check_columns(present: set[str], required: tuple[str, ...]) -> None:
 
 def _json_rows(path: Path, required: tuple[str, ...], envelope_keys: tuple[str, ...]) -> Iterator[dict[str, Any]]:
     with path.open("rb") as handle:
-        data = json.load(handle)
+        # Numbers as Decimal: a binary float would change a price past about 15 significant digits.
+        data = json.load(handle, parse_float=Decimal)
     if isinstance(data, dict):
         found = next((data[k] for k in envelope_keys if k in data), None)
         data = found
     if not isinstance(data, list):
         raise SpendError(400, "bad_file", f"a JSON import is a list of objects or an object with {list(envelope_keys)}")
+    # Counted before any row is copied, so a file of tiny objects is refused at once.
+    if len(data) > MAX_IMPORT_ROWS:
+        raise SpendError(413, "too_many_rows", f"an import holds at most {MAX_IMPORT_ROWS} rows")
     if not all(isinstance(item, dict) for item in data):
         raise SpendError(400, "bad_file", "every row of a JSON import is an object")
-    rows = [{str(k).strip().lower(): v for k, v in item.items()} for item in data]
     # The columns of a JSON file are the keys any of its rows carries.
-    _check_columns({name for row in rows for name in row}, required)
-    yield from rows
+    _check_columns({str(k).strip().lower() for item in data for k in item}, required)
+    for item in data:
+        yield {str(k).strip().lower(): v for k, v in item.items()}
 
 
 def _csv_text(path: Path) -> str:

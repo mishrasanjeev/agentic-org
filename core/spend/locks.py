@@ -52,6 +52,10 @@ def model_alias(tenant_id: uuid.UUID | str, provider: str) -> str:
     return key("model_alias", tenant_id, provider)
 
 
+def fx_rate(tenant_id: uuid.UUID | str, currency: str) -> str:
+    return key("fx_rate", tenant_id, currency)
+
+
 def commitment_recompute(tenant_id: uuid.UUID | str, provider: str) -> str:
     return key("commitment_recompute", tenant_id, provider)
 

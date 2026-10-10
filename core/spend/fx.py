@@ -2,7 +2,9 @@
 """FX rates: the reference rate of a currency to INR per reporting date.
 
 A rate is kept per ``(currency, rate_date)``; ``put_rate`` and the import
-upsert by that key and audit the before and after rate and source. INR is
+upsert by that key under the currency's advisory lock (so two writers of a
+new rate never both insert it) and audit the before and after rate and
+source. INR is
 the reporting currency and has no row. ``rate_on`` answers the rate of the
 date, else the latest earlier one; the pricing engine marks the second
 ``fx_estimated`` (``core/spend/pricing.py``). Settlement of records that used
@@ -18,7 +20,7 @@ from typing import Any
 import structlog
 from sqlalchemy import func, select
 
-from core.spend import audit, clock, imports, vocab
+from core.spend import audit, clock, imports, locks, vocab
 from core.spend.errors import SpendError, require_actor
 from core.spend.pricing import FxRate
 
@@ -83,10 +85,24 @@ async def _row(session: Any, tenant_id: uuid.UUID, currency: str, rate_date: dat
     return rows[0] if rows else None
 
 
+async def _lock_currencies(session: Any, tenant_id: uuid.UUID, currencies: set[str]) -> None:
+    """Take the currencies' advisory locks, in sorted order, before any rate of them is read or written.
+
+    ``SELECT ... FOR UPDATE`` locks nothing while the ``(currency, rate_date)``
+    row does not exist yet, so without this two writers of a new rate would
+    both insert it and one would fail on the unique index.
+    """
+    for currency in sorted(currencies):
+        await locks.xact_lock(session, locks.fx_rate(tenant_id, currency))
+
+
 async def _upsert(
     session: Any, tenant_id: uuid.UUID, fields: dict[str, Any], *, who: str, now: datetime
 ) -> tuple[str, Any, audit.Change | None, Any]:
-    """Write one rate; ``(outcome, row, change, previous_rate)`` with outcome created, updated or unchanged."""
+    """Write one rate; ``(outcome, row, change, previous_rate)`` with outcome created, updated or unchanged.
+
+    The caller holds the currency's lock (``_lock_currencies``).
+    """
     from core.models.spend import SpendFxRate
 
     row = await _row(session, tenant_id, fields["currency"], fields["rate_date"], lock=True)
@@ -120,6 +136,7 @@ async def put_rate(
     fields = check_rate(body)
     stamp = now or clock.now_utc()
     async with get_tenant_session(tenant_id) as session:
+        await _lock_currencies(session, tenant_id, {fields["currency"]})
         outcome, row, change, previous = await _upsert(session, tenant_id, fields, who=who, now=stamp)
         if change is not None:
             session.add(
@@ -169,6 +186,7 @@ async def import_rates(
         checked.append((index, fields))
     changes: list[audit.Change] = []
     async with get_tenant_session(tenant_id) as session:
+        await _lock_currencies(session, tenant_id, {fields["currency"] for _index, fields in checked})
         outer = await session.begin_nested() if dry_run else None
         for _index, fields in checked:
             outcome, _row_obj, change, _previous = await _upsert(session, tenant_id, fields, who=who, now=stamp)

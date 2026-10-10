@@ -62,8 +62,9 @@ counts as unattributed, never dropped.
 
 An alias maps a model name as called (a dated name, a deployment name) to the SKU the tenant's
 rate cards and invoices use, per provider. Pricing applies it before choosing a card, so a
-called alias prices with the SKU's card. Aliases do not chain: an alias may not name another
-alias, and a SKU may not itself be an alias.
+called alias prices with the SKU's card. With no card for the SKU, the list fallback tries the
+SKU and then the name as called, so an alias never leaves unpriced a call the list prices.
+Aliases do not chain: an alias may not name another alias, and a SKU may not itself be an alias.
 
 ## Rate cards
 
@@ -145,7 +146,9 @@ FX rates are kept per `(currency, rate_date)` as the rate to INR, with a source 
   rate converts and the record is marked `fx_estimated` with the rate's date;
 - with no rate at all, the INR amount is empty and the record is marked `unconverted`.
 
-`PUT /spend/fx-rates` upserts a rate and answers the rate it replaced. Settling estimated records
+`PUT /spend/fx-rates` upserts a rate and answers the rate it replaced. Writes of a currency's
+rates (a `PUT` and an import) take that currency's lock first, so two writers of the same new
+rate never both insert it. Settling estimated records
 when the day's rate arrives, and refusing a change to a rate settled records used without
 `restate` (`fx_in_use`), come with the usage records in the next part.
 
@@ -164,8 +167,10 @@ in the next part; every create or change marks the commitment for a full recompu
 
 Each kind of reference data takes a CSV or JSON file (`POST .../import`, `dry_run` query
 parameter), at most 2 MiB and 5,000 rows; larger bodies are refused with 413 `import_too_large`
-before they are read in full, and a 5,001st row with 413 `too_many_rows`. JSON is a list of
-objects or `{"rows": [...]}`. CSV is UTF-8 (a byte-order mark is dropped) or Latin-1; header
+before they are read in full, and a 5,001st row with 413 `too_many_rows` (a JSON file as soon as
+it is parsed, before its rows are copied). JSON is a list of objects or `{"rows": [...]}`; its
+numbers are read as decimals, never binary floats, so a price or tier keeps every decimal place
+it was given. CSV is UTF-8 (a byte-order mark is dropped) or Latin-1; header
 names are trimmed and lower-cased; unknown columns are ignored. A file that cannot be read is
 400 `bad_file`, a missing required column 400 `missing_columns`. An optional column absent from
 the file leaves that field of an existing row as it is; an empty cell clears the field (an empty
@@ -194,7 +199,9 @@ change. A single write records its changed rows with their before and after valu
 supersede records the predecessor's end as its own change. An import records a manifest: a
 summary row (the counts and the uploaded file's sha256) and one row per 200 changed rows, every
 changed row with its before and after values. Audit details hold identifiers, codes, counts and
-reference-data values only.
+reference-data values only. The rows of rate-card and commitment writes (`spend.rate_cards.*`,
+`spend.commitments.*`) carry prices and committed amounts, so `GET /audit` shows them only to a
+human administrator or auditor, the callers the commercial routes answer.
 
 ## API
 

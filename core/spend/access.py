@@ -4,7 +4,9 @@
 Commercial reads (rate cards, commitments, the price quote, and later
 invoices, reconciliations and the gate) are for a human administrator or
 auditor only: a person whose domains are unrestricted. Machine credentials
-can hold ``audit:read`` through agent grants and are refused here.
+can hold ``audit:read`` through agent grants and are refused here. The
+audit rows of commercial writes, which carry the same values, are hidden
+from the general audit read for the same callers.
 
 Usage reads apply the existing agent visibility rule (``core/ownership.py``)
 to everyone but administrators: a record of a personal agent is visible to
@@ -18,10 +20,16 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
-from sqlalchemy import ColumnElement, or_, select
+from sqlalchemy import ColumnElement, and_, not_, or_, select
 
 from core.ownership import Caller, agent_visibility_clause
 from core.spend.errors import SpendError
+
+# Audit rows of commercial writes carry the values themselves (prices, tiers,
+# committed amounts, overage prices) in ``details``; the general audit read
+# hides them from anyone the commercial routes refuse. Later parts add the
+# invoice and reconciliation event types here.
+COMMERCIAL_AUDIT_PREFIXES = ("spend.rate_cards.", "spend.commitments.")
 
 
 @dataclass(frozen=True)
@@ -42,6 +50,17 @@ def require_commercial(caller: Caller) -> None:
         raise SpendError(
             403, "commercial_read_refused", "rate cards, commitments and prices are for an administrator or auditor"
         )
+
+
+def commercial_audit_clause(caller: Caller, event_type: Any) -> ColumnElement[bool] | None:
+    """``None`` for a commercial reader; otherwise a clause on ``event_type`` hiding commercial spend audit rows.
+
+    ``GET /audit`` applies it, so a caller refused ``GET /spend/rate-cards``
+    cannot read the same prices from the rows their writes left.
+    """
+    if is_commercial_reader(caller):
+        return None
+    return and_(*(not_(event_type.startswith(prefix, autoescape=True)) for prefix in COMMERCIAL_AUDIT_PREFIXES))
 
 
 def read_view(caller: Caller) -> ReadView:

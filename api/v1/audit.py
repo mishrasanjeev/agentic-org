@@ -17,6 +17,7 @@ from core.models.agent import Agent
 from core.models.audit import AuditLog
 from core.ownership import Caller, agent_visibility_clause, caller_from_request
 from core.schemas.api import PaginatedResponse
+from core.spend import access as spend_access
 
 router = APIRouter()
 
@@ -109,6 +110,14 @@ async def query_audit(
         if domain_filter is not None:
             base = base.where(domain_filter)
             count_base = count_base.where(domain_filter)
+
+        # Spend rate-card and commitment rows carry contract prices and
+        # committed amounts: only a human administrator or auditor reads
+        # them, as on the spend routes themselves.
+        commercial_filter = spend_access.commercial_audit_clause(caller, AuditLog.event_type)
+        if commercial_filter is not None:
+            base = base.where(commercial_filter)
+            count_base = count_base.where(commercial_filter)
 
         if event_type:
             # Support partial matching: use ILIKE for substring search

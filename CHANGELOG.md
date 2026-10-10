@@ -40,8 +40,10 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
   `approvals:write`); every write needs an active human tenant
   administrator and is audited with before and after values (imports as a
   manifest with the file's sha256); rate cards, commitments and prices are
-  read by an administrator or auditor only. A request gate refuses oversize
-  import bodies before they are read.
+  read by an administrator or auditor only, and `GET /audit` shows the
+  `spend.rate_cards.*` and `spend.commitments.*` rows, which carry the same
+  values, to those callers only. A request gate refuses oversize import
+  bodies before they are read; JSON import numbers are read as decimals.
 - Behind `spend_intelligence_enabled` (default off): off, the status route
   answers `enabled: false`, every other spend route is not found before its
   body is read, and nothing else changes. Migration `v6z79_spend_reference`

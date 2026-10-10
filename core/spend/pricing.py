@@ -16,7 +16,9 @@ input and an output card (three to one), marked estimated.
 
 **Fallback.** With no card, LLM tokens fall back to the deployment's list
 prices and overrides (``core/governance/model_pricing.py``), computed in
-``Decimal`` from the floats' text. In-house providers price at zero per
+``Decimal`` from the floats' text: the SKU's price, else (when an alias
+replaced the called name) the called name's, so an alias never leaves
+unpriced a call the list prices. In-house providers price at zero per
 token, page or minute. Anything else is unpriced: no amount, never zero.
 
 **Money.** ``amount = quantity / divisor * unit_price`` rounded half-even to
@@ -35,7 +37,7 @@ from __future__ import annotations
 import time
 import uuid
 from collections.abc import Callable, Collection, Mapping, Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import date, datetime
 from decimal import ROUND_HALF_EVEN, Context, Decimal, localcontext
 from typing import Any
@@ -98,6 +100,9 @@ class Usage:
     on: date  # billing date: selects cards
     fx_on: date  # event (reporting) date: selects the FX rate
     batch: bool = False
+    # The model name as called, when an alias replaced it in ``model``; the list fallback
+    # tries it after the SKU, so an alias never leaves unpriced a call the list prices.
+    called_model: str = ""
 
 
 @dataclass(frozen=True)
@@ -245,12 +250,18 @@ def _float_decimal(value: float) -> Decimal:
 
 
 def fallback_price(usage: Usage) -> Selection | None:
-    """LLM tokens with no card: the deployment's override or list price (``model_pricing.price_for``), in Decimal."""
+    """LLM tokens with no card: the deployment's override or list price (``model_pricing.price_for``), in Decimal.
+
+    The SKU is tried first; when an alias named an SKU the deployment has no
+    price for, the model as called keeps the price it had before the alias.
+    """
     if usage.usage_type != "llm_tokens":
         return None
     from core.governance.model_pricing import price_for
 
     price = price_for(usage.provider, usage.model)
+    if price is None and usage.called_model and usage.called_model != usage.model:
+        price = price_for(usage.provider, usage.called_model)
     if price is None:
         return None
     source = _FALLBACK_SOURCES.get(price.source)
@@ -547,24 +558,23 @@ async def rate_on(session: Any, tenant_id: uuid.UUID, currency: str, on: date) -
     return await fx.rate_on(session, tenant_id, currency, on)
 
 
+def _through_aliases(usage: Usage, aliases: Mapping[tuple[str, str], str]) -> Usage:
+    """``usage`` with its model canonical, keeping the name as called when an alias replaced it.
+
+    A caller that applied the aliases itself passes the called name in
+    ``called_model``; it is kept.
+    """
+    called = canonical_model(usage.provider, usage.model, {})
+    model = canonical_model(usage.provider, usage.model, aliases)
+    return replace(usage, model=model, called_model=usage.called_model or (called if called != model else ""))
+
+
 async def price_many(session: Any, tenant_id: uuid.UUID, usages: Sequence[Usage]) -> list[Priced]:
     """Price a batch: cards loaded once, one FX lookup per (currency, date), models through the aliases."""
     if not usages:
         return []
     aliases = await cached_aliases(session, tenant_id)
-    usages = [
-        Usage(
-            provider=u.provider,
-            usage_type=u.usage_type,
-            unit=u.unit,
-            quantity=u.quantity,
-            model=canonical_model(u.provider, u.model, aliases),
-            on=u.on,
-            fx_on=u.fx_on,
-            batch=u.batch,
-        )
-        for u in usages
-    ]
+    usages = [_through_aliases(u, aliases) for u in usages]
     cards = await load_cards(
         session,
         tenant_id,

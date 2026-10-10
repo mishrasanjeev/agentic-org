@@ -16,6 +16,7 @@ import pytest
 from pydantic import ValidationError
 from sqlalchemy.dialects import postgresql
 from sqlalchemy.schema import CreateIndex, CreateTable
+from sqlalchemy.sql.elements import TextClause
 
 from core.config import Settings, settings
 from core.spend import audit, clock, commitments, fx, imports, locks, mappings, org, pricing, rates, vocab
@@ -613,6 +614,84 @@ class TestRateCards:
         reopened = await rates.update_card(TENANT, uuid.UUID(card["id"]), {"effective_to": None}, actor=ACTOR, now=T0)
         assert reopened["effective_to"] is None
 
+    @pytest.mark.asyncio
+    async def test_card_writes_take_the_key_lock_before_any_row_lock(self, session):
+        """A superseding create and an import update the predecessor row while holding the key's lock, so a
+        PATCH or a correction must take the key's lock before its row lock too, or the two deadlock."""
+        card = await rates.create_card(TENANT, card_body(), actor=ACTOR, now=T0)
+        key = locks.rate_card(TENANT, "openai", "llm_tokens", "gpt-4o", "1m_input_tokens", "list")
+
+        def row_locked(statement) -> bool:
+            return getattr(statement, "_for_update_arg", None) is not None
+
+        for write in (
+            lambda: rates.update_card(TENANT, uuid.UUID(card["id"]), {"reference": "MSA-2"}, actor=ACTOR, now=T0),
+            lambda: rates.correct_card(
+                TENANT, uuid.UUID(card["id"]), {"unit_price": "2"}, reason="Keyed wrong", actor=ACTOR, now=T0
+            ),
+        ):
+            session.statements.clear()
+            session.locks.clear()
+            await write()
+            lock_at = next(
+                i for i, s in enumerate(session.statements) if isinstance(s, TextClause) and "advisory" in str(s)
+            )
+            row_lock_at = next(i for i, s in enumerate(session.statements) if row_locked(s))
+            assert session.locks == [key] and lock_at < row_lock_at
+        # The superseding create and the import take no row lock at all: the key's lock serialises them.
+        for write in (
+            lambda: rates.create_card(
+                TENANT, card_body(effective_from="2026-12-01", supersede=True), actor=ACTOR, now=T0
+            ),
+            lambda: rates.import_cards(
+                TENANT,
+                [card_body(effective_from="2027-03-01", supersede="true")],
+                actor=ACTOR,
+                dry_run=False,
+                file_sha256="0" * 64,
+                now=T0,
+            ),
+        ):
+            session.statements.clear()
+            await write()
+            assert not any(row_locked(s) for s in session.statements)
+        active = sorted(
+            (r.effective_from, r.effective_to) for r in session.of("spend_rate_cards") if r.status == "active"
+        )
+        assert active == [  # both writes cut their open predecessor's row under the key's lock
+            (date(2026, 1, 1), date(2026, 12, 1)),
+            (date(2026, 12, 1), date(2027, 3, 1)),
+            (date(2027, 3, 1), None),
+        ]
+
+    @pytest.mark.asyncio
+    async def test_card_is_read_again_under_the_key_lock(self, session, monkeypatch):
+        """A correction that committed while this write waited for the key's lock is seen: the retired card
+        is refused instead of being retired a second time."""
+        card = await rates.create_card(TENANT, card_body(), actor=ACTOR, now=T0)
+        stored = next(r for r in session.of("spend_rate_cards") if str(r.id) == card["id"])
+        original = rates._lock
+
+        async def lock_after_a_concurrent_correction(s, tenant_id, key):
+            await original(s, tenant_id, key)
+            stored.status, stored.retired_at = "retired", T0
+
+        monkeypatch.setattr(rates, "_lock", lock_after_a_concurrent_correction)
+        for write in (
+            lambda: rates.correct_card(
+                TENANT, uuid.UUID(card["id"]), {}, reason="A second correction", actor=ACTOR, now=T0
+            ),
+            lambda: rates.update_card(TENANT, uuid.UUID(card["id"]), {"reference": "x"}, actor=ACTOR, now=T0),
+        ):
+            stored.status, stored.retired_at = "active", None
+            with pytest.raises(SpendError) as info:
+                await write()
+            assert info.value.code == "card_in_use"
+        assert len(session.of("spend_rate_cards")) == 1
+        with pytest.raises(SpendError) as info:
+            await rates.update_card(TENANT, uuid.uuid4(), {"reference": "x"}, actor=ACTOR, now=T0)
+        assert info.value.code == "not_found"
+
     def test_overlaps_is_half_open(self):
         assert rates.overlaps(date(2026, 1, 1), None, date(2026, 6, 1), None)
         assert not rates.overlaps(date(2026, 1, 1), date(2026, 6, 1), date(2026, 6, 1), None)
@@ -753,6 +832,45 @@ class TestCommitmentsAndFx:
         listed = await fx.list_rates(TENANT, currency="usd", start=date(2026, 9, 1), end=date(2026, 10, 31))
         assert listed["total"] == 1 and listed["items"][0]["rate_to_inr"] == "83.25"
 
+    @pytest.mark.asyncio
+    async def test_fx_writes_take_the_currency_lock_before_reading_the_rate(self, session):
+        """``FOR UPDATE`` locks nothing while a new rate's row does not exist, so two writers of the same new
+        rate are serialised by the currency's advisory lock instead of both inserting it."""
+
+        def first(predicate) -> int:
+            return next(i for i, s in enumerate(session.statements) if predicate(s))
+
+        def is_lock(statement) -> bool:
+            return isinstance(statement, TextClause) and "advisory" in str(statement)
+
+        def reads_rates(statement) -> bool:
+            return not isinstance(statement, TextClause) and "spend_fx_rates" in str(statement)
+
+        await fx.put_rate(TENANT, {"rate_date": "2026-10-01", "currency": "USD", "rate_to_inr": "83"}, actor=ACTOR)
+        assert session.locks == [locks.fx_rate(TENANT, "USD")]
+        assert first(is_lock) < first(reads_rates)
+        for dry_run in (True, False):
+            session.statements.clear()
+            session.locks.clear()
+            report = await fx.import_rates(
+                TENANT,
+                [
+                    {"rate_date": "2026-10-02", "currency": "USD", "rate_to_inr": "83.1"},
+                    {"rate_date": "2026-10-02", "currency": "EUR", "rate_to_inr": "90.2"},
+                    {"rate_date": "2026-10-03", "currency": "USD", "rate_to_inr": "83.2"},
+                ],
+                actor=ACTOR,
+                dry_run=dry_run,
+                file_sha256="0" * 64,
+                now=T0,
+            )
+            assert report["created"] == 3
+            # Every currency of the file is locked once, in sorted order, before the first rate is read.
+            assert session.locks == [locks.fx_rate(TENANT, "EUR"), locks.fx_rate(TENANT, "USD")]
+            last_lock = max(i for i, s in enumerate(session.statements) if is_lock(s))
+            assert last_lock < first(reads_rates)
+        assert len(session.of("spend_fx_rates")) == 4
+
 
 # ---------------------------------------------------------------- pricing loaders
 
@@ -813,6 +931,38 @@ class TestPricingLoaders:
             args.update(bad)
             with pytest.raises(SpendError):
                 await pricing.quote(TENANT, on=on, fx_on=None, **args)
+
+    @pytest.mark.asyncio
+    async def test_price_many_falls_back_to_the_called_name_when_the_aliased_sku_has_no_price(self, session):
+        await mappings.put_alias(
+            TENANT, {"provider": "openai", "alias": "gpt-4o", "model_sku": "acme-gpt-4o"}, actor=ACTOR, now=T0
+        )
+        on = date(2026, 10, 1)
+        (priced,) = await pricing.price_many(
+            session,
+            TENANT,
+            [pricing.Usage("openai", "llm_tokens", "input_token", Decimal("1000000"), "GPT-4o", on, on)],
+        )
+        assert priced.price_source == "fallback_list" and priced.amount == Decimal("2.5000000000")
+        await rates.create_card(TENANT, card_body(model_sku="acme-gpt-4o", unit_price="2"), actor=ACTOR, now=T0)
+        (carded,) = await pricing.price_many(
+            session,
+            TENANT,
+            [pricing.Usage("openai", "llm_tokens", "input_token", Decimal("1000000"), "gpt-4o", on, on)],
+        )
+        assert carded.price_source == "list" and carded.amount == Decimal("2.0000000000")
+        aliases = {("openai", "gpt-4o"): "acme-gpt-4o"}
+        through = pricing._through_aliases(
+            pricing.Usage("openai", "llm_tokens", "input_token", Decimal("1"), " GPT-4o ", on, on), aliases
+        )
+        assert (through.model, through.called_model) == ("acme-gpt-4o", "gpt-4o")
+        # A caller that applied the aliases already passes the called name; it is kept.
+        again = pricing._through_aliases(through, aliases)
+        assert (again.model, again.called_model) == ("acme-gpt-4o", "gpt-4o")
+        plain = pricing._through_aliases(
+            pricing.Usage("openai", "llm_tokens", "input_token", Decimal("1"), "o1", on, on), aliases
+        )
+        assert (plain.model, plain.called_model) == ("o1", "")
 
 
 # ---------------------------------------------------------------- imports
@@ -907,6 +1057,52 @@ class TestImports:
         imports.reject(report, row=2, key="k" * 300, reason="invalid_code")
         assert report["rejected"] == [{"row": 2, "key": "k" * 200, "reason": "invalid_code"}]
         assert report["dry_run"] is True and report["created"] == 0
+
+    def test_json_import_row_limit_is_checked_before_rows_are_copied(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(imports, "MAX_IMPORT_ROWS", 3)
+        checked = []
+        monkeypatch.setattr(imports, "_check_columns", lambda present, required: checked.append(present))
+        # Empty objects lack every column; the size refusal comes first, before any row dict is built.
+        for content in (b"[" + b",".join([b"{}"] * 1000) + b"]", b'{"rows": [' + b",".join([b"{}"] * 4) + b"]}"):
+            path = _write(tmp_path, "tiny.json", content)
+            with pytest.raises(SpendError) as info:
+                imports.parse_rows(path, filename="tiny.json", content_type="", required=("code",), optional=())
+            assert (info.value.status, info.value.code) == (413, "too_many_rows")
+        assert checked == []
+        exact = _write(tmp_path, "three.json", json.dumps([{"Code": "a"}, {"code": "b"}, {"code": "c"}]).encode())
+        rows = imports.parse_rows(exact, filename="three.json", content_type="", required=("code",), optional=())
+        assert [r["code"] for r in rows] == ["a", "b", "c"] and checked == [{"code"}]
+
+    @pytest.mark.asyncio
+    async def test_json_import_numbers_keep_every_decimal_place(self, session, tmp_path):
+        """JSON numbers are read as decimals: a binary float would silently change a precise price or tier."""
+        body = (
+            b'[{"provider": "openai", "usage_type": "llm_tokens", "model_sku": "gpt-4o", "unit": "1m_input_tokens",'
+            b' "unit_price": 999999999.1234567891, "currency": "USD", "effective_from": "2026-12-01",'
+            b' "source": "contract", "volume_tiers": [{"from_quantity": 0, "unit_price": 2.5},'
+            b' {"from_quantity": 1000000000000.123456, "unit_price": 0.1234567891}]}]'
+        )
+        path = _write(tmp_path, "cards.json", body)
+        rows = imports.parse_rows(
+            path, filename="cards.json", content_type="", required=rates.IMPORT_REQUIRED, optional=rates.IMPORT_OPTIONAL
+        )
+        assert rows[0]["unit_price"] == "999999999.1234567891"
+        assert "1000000000000.123456" in rows[0]["volume_tiers"]
+        report = await rates.import_cards(TENANT, rows, actor=ACTOR, dry_run=False, file_sha256="", now=T0)
+        assert report["created"] == 1 and report["rejected"] == []
+        (stored,) = session.of("spend_rate_cards")
+        assert stored.unit_price == Decimal("999999999.1234567891")
+        assert stored.volume_tiers == [
+            {"from_quantity": "0", "unit_price": "2.5"},
+            {"from_quantity": "1000000000000.123456", "unit_price": "0.1234567891"},
+        ]
+        # A tiers cell given as JSON text (CSV) keeps its decimals too.
+        tiers = rates.validate_tiers('[{"from_quantity": 0, "unit_price": 999999999.1234567891}]', mode="graduated")
+        assert tiers == [{"from_quantity": "0", "unit_price": "999999999.1234567891"}]
+        for bad in ("[" * 100_000 + "]" * 100_000, "[{"):
+            with pytest.raises(SpendError) as info:
+                rates.validate_tiers(bad, mode="graduated")
+            assert (info.value.status, info.value.code) == (422, "invalid_number")
 
     @pytest.mark.asyncio
     async def test_org_import_two_pass_parents_reports_created_updated_rejected(self, session):

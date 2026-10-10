@@ -9,11 +9,12 @@ import typing
 import uuid
 from datetime import UTC, date, datetime
 from decimal import Decimal
+from types import SimpleNamespace
 
 import pytest
 from fastapi import HTTPException
 from pydantic import ValidationError
-from sqlalchemy import Column, MetaData, Table
+from sqlalchemy import Column, MetaData, String, Table, create_engine, insert, select
 from sqlalchemy.dialects import postgresql
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from starlette.datastructures import Headers, UploadFile
@@ -387,6 +388,69 @@ class TestAccess:
         access.require_commercial(AUDITOR)
         with pytest.raises(SpendError):
             access.require_commercial(MACHINE)
+
+    def test_commercial_audit_clause_hides_exactly_the_commercial_spend_rows(self):
+        rows = Table("audit_rows", MetaData(), Column("event_type", String(100)))
+        engine = create_engine("sqlite://")
+        rows.metadata.create_all(engine)
+        kept = ["spend.org_nodes.create", "spend.fx_rates.import", "spend.rateXcards.create", "agent.run", "auth.login"]
+        hidden = ["spend.rate_cards.create", "spend.rate_cards.correct", "spend.commitments.update"]
+        with engine.begin() as connection:
+            connection.execute(insert(rows), [{"event_type": name} for name in kept + hidden])
+        for caller in (DOMAIN_ROLE, MACHINE, Caller(user_id=None, role="admin", domains=None, is_admin=True,
+                                                    is_machine=True)):  # fmt: skip
+            clause = access.commercial_audit_clause(caller, rows.c.event_type)
+            with engine.begin() as connection:
+                seen = [r[0] for r in connection.execute(select(rows.c.event_type).where(clause))]
+            assert sorted(seen) == sorted(kept)  # "_" is matched literally, not as a wildcard
+        assert access.commercial_audit_clause(ADMIN_CALLER, rows.c.event_type) is None
+        assert access.commercial_audit_clause(AUDITOR, rows.c.event_type) is None
+
+    @pytest.mark.asyncio
+    async def test_general_audit_read_hides_rate_card_and_commitment_rows_from_refused_callers(self, monkeypatch):
+        """A caller refused GET /spend/rate-cards cannot read the same prices from GET /audit."""
+        from api.v1 import audit as audit_api
+
+        class Capture:
+            def __init__(self):
+                self.statements = []
+
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, *args):
+                return False
+
+            async def execute(self, statement):
+                self.statements.append(statement)
+                return SimpleNamespace(scalar=lambda: 0, scalars=lambda: SimpleNamespace(all=list))
+
+        def request(role, *, user_id=True, auth_mode="legacy", scopes=None, domains=None):
+            claims = {"sub": f"{role}@example.com", "role": role}
+            if user_id:
+                claims["agenticorg:user_id"] = str(uuid.uuid4())
+            if domains is not None:
+                claims["agenticorg:domains"] = domains
+            scopes = scopes or (["agenticorg:admin"] if role == "admin" else ["agents:read", "audit:read"])
+            return SimpleNamespace(state=SimpleNamespace(claims=claims, scopes=scopes, auth_mode=auth_mode))
+
+        cases = [
+            (request("admin"), "admin", False),
+            (request("auditor", scopes=["audit:read"]), "auditor", False),
+            (request("cfo", domains=["finance"]), "cfo", True),
+            (request("domain_lead"), "domain_lead", True),
+            (request("admin", user_id=False, auth_mode="api_key"), "admin", True),
+            (request("", user_id=False, auth_mode="grantex", scopes=["audit:read"]), "", True),
+        ]
+        for req, role, filtered in cases:
+            capture = Capture()
+            monkeypatch.setattr(audit_api, "get_tenant_session", lambda tenant_id, c=capture: c)
+            out = await audit_api.query_audit(request=req, event_type="spend.rate_cards", tenant_id=TID, user_role=role)
+            assert out.total == 0 and len(capture.statements) == 2
+            for statement in capture.statements:  # the count and the page
+                sql = str(statement.compile(dialect=postgresql.dialect(), compile_kwargs={"literal_binds": True}))
+                assert ("NOT LIKE 'spend.rate/_cards.'" in sql and "NOT LIKE 'spend.commitments.'" in sql) is filtered
+                assert ("spend.rate/_cards." in sql) is filtered, role
 
 
 class TestRouteShape:

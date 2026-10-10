@@ -214,6 +214,24 @@ class TestFallbackAndInHouse:
         assert pricing.canonical_model("openai", "", aliases) == ""
         assert pricing.canonical_model("openai", "=weird name!", aliases) == "=weird name!"
 
+    def test_alias_to_an_sku_without_a_price_keeps_the_called_models_list_price(self, monkeypatch):
+        """An alias naming an SKU with no card and no list price must not unprice a call the list prices today."""
+        monkeypatch.setattr(settings, "model_price_overrides_json", "")
+        aliased = Usage(
+            "openai", "llm_tokens", "input_token", Decimal("1000000"), "acme-gpt-4o", ON, ON, False, "gpt-4o"
+        )
+        priced = pricing.price_with(aliased, [], no_fx)
+        assert priced.price_source == "fallback_list" and priced.amount == Decimal("2.5000000000")
+        assert pricing.price_with(usage(model="acme-gpt-4o"), [], no_fx).unpriced  # no called name, no price
+        # The SKU's own card, and the SKU's own override, still come first.
+        sku_card = card(price="2.0", sku="acme-gpt-4o", source="contract")
+        assert pricing.price_with(aliased, [sku_card], no_fx).rate_card_id == sku_card.id
+        monkeypatch.setattr(
+            settings, "model_price_overrides_json", '{"openai/acme-gpt-4o": {"input": 1.9, "output": 7.0}}'
+        )
+        overridden = pricing.price_with(aliased, [], no_fx)
+        assert overridden.price_source == "fallback_override" and overridden.unit_price == Decimal("1.9")
+
     def test_local_provider_falls_back_to_in_house_zero(self, monkeypatch):
         monkeypatch.setattr(settings, "model_price_overrides_json", "")
         priced = pricing.price_with(usage(provider="ollama", model="llama3"), [], no_fx)

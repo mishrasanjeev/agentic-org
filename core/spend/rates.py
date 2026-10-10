@@ -107,8 +107,9 @@ def validate_tiers(raw: Any, *, mode: str) -> list[dict[str, str]]:
         return []
     if isinstance(raw, str):
         try:
-            raw = json.loads(raw)
-        except ValueError:
+            # Numbers as Decimal: a binary float would change a price past about 15 significant digits.
+            raw = json.loads(raw, parse_float=Decimal)
+        except (ValueError, RecursionError):
             raise SpendError(422, "invalid_number", "volume_tiers is a JSON array of tiers") from None
     if not isinstance(raw, list):
         raise SpendError(422, "invalid_number", "volume_tiers is a list of tiers")
@@ -298,23 +299,31 @@ async def check_overlap(
             )
 
 
-async def _card_row(session: Any, tenant_id: uuid.UUID, card_id: uuid.UUID) -> Any:
+async def _card_row(session: Any, tenant_id: uuid.UUID, card_id: uuid.UUID, *, for_update: bool = False) -> Any:
     from core.models.spend import SpendRateCard
 
-    rows = (
-        (
-            await session.execute(
-                select(SpendRateCard)
-                .where(SpendRateCard.tenant_id == tenant_id, SpendRateCard.id == card_id)
-                .with_for_update()
-            )
-        )
-        .scalars()
-        .all()
-    )
+    statement = select(SpendRateCard).where(SpendRateCard.tenant_id == tenant_id, SpendRateCard.id == card_id)
+    if for_update:
+        # Re-read under the key's lock: the row's current values, not the ones the first read cached.
+        statement = statement.with_for_update().execution_options(populate_existing=True)
+    rows = (await session.execute(statement)).scalars().all()
     if not rows:
         raise SpendError(404, "not_found", "no such rate card")
     return rows[0]
+
+
+async def _locked_card(session: Any, tenant_id: uuid.UUID, card_id: uuid.UUID) -> Any:
+    """The card, read again under its key's advisory lock and then row-locked.
+
+    Every writer of a card takes the key's advisory lock before it touches a
+    card row (a superseding create and an import update the predecessor row
+    while holding it), so the row lock is taken second here too. Taking the
+    row lock first would deadlock against them. The key fields never change,
+    so the plain first read names the right lock.
+    """
+    row = await _card_row(session, tenant_id, card_id)
+    await _lock(session, tenant_id, _key_of(row))
+    return await _card_row(session, tenant_id, card_id, for_update=True)
 
 
 def _today(provider: str, now: datetime) -> date:
@@ -528,8 +537,7 @@ async def update_card(
     who = require_actor(actor)
     stamp = now or clock.now_utc()
     async with get_tenant_session(tenant_id) as session:
-        row = await _card_row(session, tenant_id, card_id)
-        await _lock(session, tenant_id, _key_of(row))
+        row = await _locked_card(session, tenant_id, card_id)
         changes = await _update_in(session, tenant_id, row, body, restate=bool(body.get("restate")), who=who, now=stamp)
         if changes:
             session.add(
@@ -566,11 +574,10 @@ async def correct_card(
     why = check_reason(reason)
     stamp = now or clock.now_utc()
     async with get_tenant_session(tenant_id) as session:
-        old = await _card_row(session, tenant_id, card_id)
+        old = await _locked_card(session, tenant_id, card_id)
         if old.status != "active":
             raise SpendError(409, "card_in_use", "the card is already retired; correct its replacement")
         key = _key_of(old)
-        await _lock(session, tenant_id, key)
         merged = {name: getattr(old, name) for name in CORRECTABLE_FIELDS}
         merged["currency"] = str(old.currency).strip()
         for name in CORRECTABLE_FIELDS:
