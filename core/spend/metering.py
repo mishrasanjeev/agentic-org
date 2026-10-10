@@ -567,14 +567,18 @@ def cached_priced_tools(tenant_id: uuid.UUID | str) -> frozenset[tuple[str, str]
 
 
 async def priced_tool_set(session: Any, tenant_id: uuid.UUID, *, now: datetime) -> frozenset[tuple[str, str]]:
-    """``(provider, model_sku)`` of the tenant's active tool cards in force around ``now``.
+    """``(provider, name)`` of every tool a tenant's active tool card in force around ``now`` may price.
 
+    The names are the cards' SKUs and the tenant's aliases of them, because
+    the writer prices a call through the aliases (``pricing.price_many``): a
+    tool called by an alias of a priced SKU is queued, not dropped as a gap.
     A day either side covers every provider's billing zone, so the set never
     misses a priced tool; the writer still prices each call at its own date.
     """
     from sqlalchemy import or_, select
 
     from core.models.spend import SpendRateCard as C
+    from core.spend import pricing
 
     today = now.astimezone(UTC).date()
     start, end = today - timedelta(days=1), today + timedelta(days=1)
@@ -589,7 +593,12 @@ async def priced_tool_set(session: Any, tenant_id: uuid.UUID, *, now: datetime) 
             )
         )
     ).all()
-    return frozenset((str(row[0]), str(row[1] or "")) for row in rows)
+    skus = {(str(row[0]), str(row[1] or "")) for row in rows}
+    if not skus:
+        return frozenset()
+    aliases = await pricing.cached_aliases(session, tenant_id)
+    named = {(provider, alias) for (provider, alias), sku in aliases.items() if (provider, sku) in skus}
+    return frozenset(skus | named)
 
 
 async def refresh_priced_tools(session: Any, tenant_id: uuid.UUID, *, now: datetime) -> None:

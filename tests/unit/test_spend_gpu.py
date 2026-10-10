@@ -24,7 +24,7 @@ from core.config import Settings, parse_spend_gpu_pools, settings
 from core.models.spend_gpu import SpendGpuAllocation, SpendGpuPoolHour
 from core.spend import gpu, gpu_cli, meter, pricing, vocab
 from core.spend.errors import SpendError
-from tests.unit.spend_metering_fakes import install_metering, tenant_ids
+from tests.unit.spend_metering_fakes import install_metering, tenant_ids, tenants_since
 from tests.unit.spend_usage_fakes import ACTOR, NOW, OTHER_TENANT, TENANT
 from tests.unit.test_spend_usage import card, event
 
@@ -43,6 +43,7 @@ def store(monkeypatch):
 
     found = install_metering(monkeypatch)
     monkeypatch.setattr(tenants, "active_tenant_ids", tenant_ids(TENANT, OTHER_TENANT))
+    monkeypatch.setattr(tenants, "tenants_since", tenants_since(TENANT, OTHER_TENANT))
     return found
 
 
@@ -208,6 +209,7 @@ class TestGpuPoolSettings:
             json.dumps([{**entry, "models": ["m"] * 51}]),
             json.dumps([{**entry, "models": ["=bad"]}]),
             json.dumps([{**entry, "node_pool": 5}]),
+            json.dumps([{**entry, "node_pool": "p" * 65}]),  # the tables hold 64 characters
             json.dumps([{**entry, "from": "2026-10-01T00:30:00Z"}]),
             json.dumps([{**entry, "from": "yesterday"}]),
             json.dumps([{**entry, "to": "2026-10-01T00:00:00Z"}]),
@@ -284,6 +286,7 @@ class TestPoolHours:
         listing = ["list", "--start", "2026-10-01T00:00:00Z", "--end", "2026-10-02T00:00:00Z"]
         assert await asyncio.to_thread(gpu_cli.main, listing) == 0
         items = _printed(capsys.readouterr().out)["items"]
+        assert all(i["skipped_node_hours"] == "0" for i in items)
         assert [i["hour_start"][11:13] for i in items] == ["05", "06", "07"]
         half = argv[:8] + ["2026-10-01T05:30:00Z"] + argv[9:]
         assert await asyncio.to_thread(gpu_cli.main, half) == 2
@@ -367,9 +370,118 @@ class TestAllocation:
         await write_calls(store, OTHER_TENANT, [5000, 5000])
         assert {r.price_source for r in store.of("spend_usage_records") if r.tenant_id == OTHER_TENANT} == {"contract"}
         out = await gpu.allocate_hour(hour.id, now=RUN)
-        assert out["priced_calls_skipped"] == 2 and out["tenants"] == 1
-        assert [r.quantity for r in gpu_records(store)] == [Decimal(2)] and gpu_records(store, OTHER_TENANT) == []
-        assert hour.priced_calls_skipped == 2
+        assert out["priced_calls_skipped"] == 2 and out["tenants"] == 1 and out["total_tokens"] == "10500.000000"
+        # The card-priced calls carry their own cost: no GPU record, and their share stays with the platform.
+        assert gpu_records(store, OTHER_TENANT) == []
+        assert [r.quantity for r in gpu_records(store)] == [Decimal("0.095238")]  # 2 hours x 500 / 10500
+        assert hour.priced_calls_skipped == 2 and hour.skipped_node_hours == Decimal("1.904762")
+        (allocation,) = store.of("spend_gpu_allocations")
+        assert allocation.tenant_id == TENANT and allocation.node_hours + hour.skipped_node_hours == hour.node_hours
+
+    @pytest.mark.asyncio
+    async def test_another_tenants_card_never_raises_my_share(self, store):
+        hour = pool_hour(store, node_hours=Decimal("1"))
+        store.add(card(tenant_id=OTHER_TENANT, provider="vllm", model_sku=MODEL, unit_price=Decimal("0.5")))
+        await write_calls(store, OTHER_TENANT, [900])
+        await write_calls(store, TENANT, [100])
+        await gpu.allocate_hour(hour.id, now=RUN)
+        assert [r.quantity for r in gpu_records(store, TENANT)] == [Decimal("0.1")]  # 10% of the tokens, 10%
+        assert hour.skipped_node_hours == Decimal("0.9") and gpu_records(store, OTHER_TENANT) == []
+
+    @pytest.mark.asyncio
+    async def test_calls_a_zero_priced_card_prices_share_the_hour(self, store):
+        hour = pool_hour(store)
+        store.add(card(tenant_id=OTHER_TENANT, provider="vllm", model_sku=MODEL, unit_price=Decimal("0")))
+        await write_calls(store, OTHER_TENANT, [3000])
+        await write_calls(store, TENANT, [1000])
+        mine = {r.price_source for r in store.of("spend_usage_records") if r.tenant_id == OTHER_TENANT}
+        assert mine == {"contract"}
+        out = await gpu.allocate_hour(hour.id, now=RUN)
+        assert out["priced_calls_skipped"] == 0 and out["tenants"] == 2
+        assert [r.quantity for r in gpu_records(store, OTHER_TENANT)] == [Decimal("1.5")]
+        assert [r.quantity for r in gpu_records(store, TENANT)] == [Decimal("0.5")]
+        assert hour.skipped_node_hours == 0
+
+    @pytest.mark.asyncio
+    async def test_a_deleted_tenants_share_stays_with_the_platform(self, monkeypatch, store):
+        from core.spend import tenants
+
+        hour = pool_hour(store)
+        monkeypatch.setattr(tenants, "tenants_since", tenants_since(TENANT, OTHER_TENANT, deleted=(OTHER_TENANT,)))
+        await write_calls(store, TENANT, [1000])
+        await write_calls(store, OTHER_TENANT, [3000])
+        out = await gpu.allocate_hour(hour.id, now=RUN)
+        assert out["tenants"] == 1 and out["total_tokens"] == "4000.000000"
+        assert [r.quantity for r in gpu_records(store, TENANT)] == [Decimal("0.5")]
+        assert gpu_records(store, OTHER_TENANT) == [] and hour.skipped_node_hours == Decimal("1.5")
+        assert [a.tenant_id for a in store.of("spend_gpu_allocations")] == [TENANT]
+
+    @pytest.mark.asyncio
+    async def test_a_deleted_tenants_frozen_row_is_settled_on_a_resumed_run(self, monkeypatch, store):
+        from core.spend import tenants
+
+        hour = pool_hour(store, status="allocating", claimed_at=NOW - timedelta(hours=2), frozen_at=NOW)
+        await write_calls(store, OTHER_TENANT, [3000])
+        store.add(
+            SpendGpuAllocation(
+                id=uuid.uuid4(),
+                tenant_id=OTHER_TENANT,
+                pool_hour_id=hour.id,
+                provider="vllm",
+                node_pool="pool-a",
+                hour_start=HOUR,
+                tokens=Decimal(3000),
+                status="frozen",
+                records=0,
+            )
+        )
+        monkeypatch.setattr(tenants, "tenants_since", tenants_since(OTHER_TENANT, deleted=(OTHER_TENANT,)))
+        out = await gpu.allocate_hour(hour.id, now=RUN)
+        assert out["claimed"] and out["tenants"] == 0 and gpu_records(store) == []
+        (allocation,) = store.of("spend_gpu_allocations")
+        assert (allocation.status, allocation.node_hours, allocation.records) == ("written", 0, 0)
+        assert hour.status == "allocated" and hour.skipped_node_hours == hour.node_hours
+
+    @pytest.mark.asyncio
+    async def test_a_share_that_rounds_to_nothing_settles_its_row(self, store):
+        hour = pool_hour(store, node_hours=Decimal("0.0001"))
+        await write_calls(store, TENANT, [1])
+        await write_calls(store, OTHER_TENANT, [1_000_000_000])
+        out = await gpu.allocate_hour(hour.id, now=RUN)
+        assert out["tenants"] == 2 and out["failed"] == 0 and gpu_records(store, TENANT) == []
+        allocations = {a.tenant_id: a for a in store.of("spend_gpu_allocations")}
+        assert (allocations[TENANT].status, allocations[TENANT].node_hours, allocations[TENANT].records) == (
+            "written",
+            0,
+            0,
+        )
+        assert allocations[OTHER_TENANT].node_hours == Decimal("0.0001") and hour.status == "allocated"
+        assert all(a.status == "written" for a in allocations.values())  # nothing left frozen after the close
+
+    @pytest.mark.asyncio
+    async def test_a_frozen_row_left_without_charged_tokens_is_settled(self, store):
+        # A resumed hour whose tenant's calls a card now prices above zero (a restatement since the first run).
+        hour = pool_hour(store, status="allocating", claimed_at=NOW - timedelta(hours=2), frozen_at=NOW)
+        store.add(card(tenant_id=TENANT, provider="vllm", model_sku=MODEL, unit_price=Decimal("1")))
+        await write_calls(store, TENANT, [500])
+        store.add(
+            SpendGpuAllocation(
+                id=uuid.uuid4(),
+                tenant_id=TENANT,
+                pool_hour_id=hour.id,
+                provider="vllm",
+                node_pool="pool-a",
+                hour_start=HOUR,
+                tokens=Decimal(500),
+                status="frozen",
+                records=0,
+            )
+        )
+        out = await gpu.allocate_hour(hour.id, now=RUN)
+        assert out["tenants"] == 0 and out["priced_calls_skipped"] == 1 and gpu_records(store) == []
+        (allocation,) = store.of("spend_gpu_allocations")
+        assert (allocation.status, allocation.tokens, allocation.node_hours) == ("written", 0, 0)
+        assert hour.status == "allocated" and hour.skipped_node_hours == hour.node_hours
 
     @pytest.mark.asyncio
     async def test_allocation_prices_each_tenant_share_once_and_conserves_money(self, monkeypatch, store):
@@ -440,19 +552,21 @@ class TestAllocation:
 
     @pytest.mark.asyncio
     async def test_claim_is_exclusive_and_a_stale_claim_is_resumed(self, store):
-        busy = pool_hour(store, status="allocating", claimed_at=RUN - timedelta(minutes=10))
+        # Claims run on the database clock (the fake's now() is NOW), never on the run's own start time.
+        busy = pool_hour(store, status="allocating", claimed_at=NOW - timedelta(minutes=10))
         assert await gpu.allocate_hour(busy.id, now=RUN) == {"id": str(busy.id), "claimed": False}
+        assert await gpu.allocate_hour(busy.id, now=RUN + timedelta(hours=3)) == {"id": str(busy.id), "claimed": False}
         done = pool_hour(store, status="allocated", hour_start=HOUR - timedelta(hours=1))
         assert (await gpu.allocate_hour(done.id, now=RUN))["claimed"] is False
         stale = pool_hour(
             store,
             status="allocating",
-            claimed_at=RUN - timedelta(hours=2),
+            claimed_at=NOW - timedelta(hours=2),
             frozen_at=HOUR + timedelta(minutes=30),
             hour_start=HOUR + timedelta(hours=1),
         )
         out = await gpu.allocate_hour(stale.id, now=RUN)
-        assert out["claimed"] and stale.status == "allocated" and stale.claimed_at == RUN
+        assert out["claimed"] and stale.status == "allocated" and stale.claimed_at == NOW
         assert stale.frozen_at == HOUR + timedelta(minutes=30)  # a resumed claim keeps its frozen instant
 
     @pytest.mark.asyncio
@@ -475,6 +589,8 @@ class TestAllocation:
         await write_calls(store, OTHER_TENANT, [9000], prefix="late", created=NOW + timedelta(minutes=5))
         monkeypatch.setattr(gpu, "_write_tenant", real)
         assert (await gpu.allocate_hour(hour.id, now=RUN))["claimed"] is False  # the claim is still fresh
+        assert hour.claimed_at == NOW  # the database clock at the claim
+        hour.claimed_at = NOW - timedelta(hours=2)  # two hours pass on the database clock
         later = RUN + timedelta(hours=2)
         out = await gpu.allocate_hour(hour.id, now=later)
         assert out["claimed"] and out["failed"] == 0 and out["total_tokens"] == "4000.000000"
@@ -508,6 +624,63 @@ class TestAllocation:
         monkeypatch.setattr(gpu, "allocate_hour", flaky)
         out = await gpu.allocate_pending(now=RUN + timedelta(hours=1))
         assert out["failed"] == 1 and out["hours"] == 1 and out["idle"] == 1
+
+    @pytest.mark.asyncio
+    async def test_fresh_hours_go_before_resumed_ones(self, monkeypatch, store):
+        stale = pool_hour(store, status="allocating", claimed_at=NOW - timedelta(hours=3))
+        fresh = pool_hour(store, hour_start=HOUR + timedelta(hours=1))
+        monkeypatch.setattr(gpu, "MAX_HOURS_PER_RUN", 1)
+        out = await gpu.allocate_pending(now=RUN + timedelta(hours=1))
+        assert out["hours"] == 1 and fresh.status == "allocated" and stale.status == "allocating"
+        await gpu.allocate_pending(now=RUN + timedelta(hours=1))
+        assert stale.status == "allocated"  # the older resumed hour takes the next free slot
+
+    @pytest.mark.asyncio
+    async def test_a_failing_config_never_stops_recorded_hours(self, monkeypatch, store):
+        recorded = pool_hour(store, source="manual")
+
+        async def broken(*, now):
+            raise RuntimeError("value too long for type character varying(64)")
+
+        monkeypatch.setattr(gpu, "materialise_config_hours", broken)
+        out = await gpu.allocate_pending(now=RUN)
+        assert out == {"materialised": 0, "hours": 1, "idle": 1, "records": 0, "failed": 1}
+        assert recorded.status == "allocated"
+
+    @pytest.mark.asyncio
+    async def test_an_hour_another_run_took_is_not_counted(self, monkeypatch, store):
+        pool_hour(store)
+
+        async def taken(pool_hour_id, *, now):
+            return {"id": str(pool_hour_id), "claimed": False}
+
+        monkeypatch.setattr(gpu, "allocate_hour", taken)
+        assert await gpu.allocate_pending(now=RUN) == {
+            "materialised": 0,
+            "hours": 0,
+            "idle": 0,
+            "records": 0,
+            "failed": 0,
+        }
+
+    @pytest.mark.asyncio
+    async def test_tenants_since_keeps_tenants_deleted_after_the_hour(self, monkeypatch):
+        import core.database
+        from core.models.tenant import Tenant
+        from core.spend import tenants
+        from tests.unit.spend_usage_fakes import UsageSession
+
+        session = UsageSession()
+        live, late, early = (
+            uuid.UUID("10000000-0000-4000-8000-000000000001"),
+            uuid.UUID("10000000-0000-4000-8000-000000000002"),
+            uuid.UUID("10000000-0000-4000-8000-000000000003"),
+        )
+        session.add(Tenant(id=live, name="a", slug="a", deleted_at=None))
+        session.add(Tenant(id=late, name="b", slug="b", deleted_at=HOUR + timedelta(minutes=30)))
+        session.add(Tenant(id=early, name="c", slug="c", deleted_at=HOUR - timedelta(days=1)))
+        monkeypatch.setattr(core.database, "async_session_factory", lambda: session)
+        assert await tenants.tenants_since(HOUR) == [(live, True), (late, False)]
 
     @pytest.mark.asyncio
     async def test_gpu_without_card_is_unpriced(self, store):
@@ -696,7 +869,7 @@ class TestMigration:
                 ddl += str(CreateIndex(index).compile(dialect=postgresql.dialect()))
         flat_ddl = _strip_ws(ddl)
         names = set(re.findall(r"CONSTRAINT (\w+)", sql)) | set(re.findall(r"INDEX IF NOT EXISTS (\w+)", sql))
-        assert len(names) == 12
+        assert len(names) == 13
         for name in names:
             assert name in ddl, name
         for match in re.finditer(r"(?<!WITH )CHECK \(", sql):

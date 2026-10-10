@@ -8,8 +8,9 @@ Create Date: 2026-10-10
 In-house model serving (ollama, vllm) is one deployment-wide endpoint that
 serves every tenant, so a GPU node hour is a deployment cost, not a tenant's.
 ``spend_gpu_pool_hours`` holds the node hours of each pool and hour (from
-configuration or an operator command) and the aggregate tokens it was spread
-over; it holds no tenant data, so it has no ``tenant_id`` and no row-level
+configuration or an operator command), the aggregate tokens it was spread
+over and the node hours no tenant carries (idle capacity and the share of
+calls a card priced above zero); it holds no tenant data, so it has no ``tenant_id`` and no row-level
 policy (the precedent of ``health_check_history``). ``spend_gpu_allocations``
 holds each tenant's share of an hour, tenant scoped under a forced row-level
 policy; the usage records of the share go to ``spend_usage_records``
@@ -61,6 +62,7 @@ def upgrade() -> None:
             tenant_count INTEGER NOT NULL DEFAULT 0,
             idle BOOLEAN NOT NULL DEFAULT false,
             priced_calls_skipped BIGINT NOT NULL DEFAULT 0,
+            skipped_node_hours NUMERIC(18,6) NOT NULL DEFAULT 0,
             allocated_at TIMESTAMPTZ NULL,
             recorded_by VARCHAR(128) NOT NULL DEFAULT '',
             created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
@@ -69,6 +71,8 @@ def upgrade() -> None:
             CONSTRAINT ck_spend_gpu_pool_hours_hours CHECK (node_hours > 0 AND node_hours <= 10000),
             CONSTRAINT ck_spend_gpu_pool_hours_source CHECK (source IN ('config','metrics','manual')),
             CONSTRAINT ck_spend_gpu_pool_hours_status CHECK (status IN ('pending','allocating','allocated')),
+            CONSTRAINT ck_spend_gpu_pool_hours_skipped CHECK (
+                skipped_node_hours >= 0 AND skipped_node_hours <= node_hours),
             CONSTRAINT ck_spend_gpu_pool_hours_whole_hour CHECK (
                 date_trunc('hour', hour_start AT TIME ZONE 'UTC') = (hour_start AT TIME ZONE 'UTC'))
         );

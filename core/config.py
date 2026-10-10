@@ -71,6 +71,8 @@ SPEND_SKU_PATTERN = r"^[A-Za-z0-9][A-Za-z0-9 ._:/@-]{0,127}$"
 SPEND_GPU_PROVIDERS = ("ollama", "vllm")
 SPEND_GPU_MAX_MODELS = 50
 SPEND_GPU_MAX_NODES = Decimal("10000")
+# The width of ``node_pool`` in spend_gpu_pool_hours and spend_gpu_allocations (VARCHAR(64)).
+SPEND_GPU_POOL_MAX_CHARS = 64
 _SPEND_GPU_POOL_KEYS = frozenset({"provider", "node_pool", "models", "nodes", "from", "to"})
 _SPEND_SKU_RE = re.compile(SPEND_SKU_PATTERN)
 
@@ -141,9 +143,13 @@ def _gpu_pool(item: Any) -> SpendGpuPool:
     end = _gpu_pool_hour(item["to"], "to") if item.get("to") is not None else None
     if end is not None and end <= start:
         raise ValueError("spend_gpu_pools_json: to is after from")
+    node_pool = _gpu_pool_sku(item.get("node_pool"), "node_pool")
+    if len(node_pool) > SPEND_GPU_POOL_MAX_CHARS:
+        # The pool-hour tables hold 64 characters; a longer name would fail every hourly insert.
+        raise ValueError(f"spend_gpu_pools_json: node_pool is at most {SPEND_GPU_POOL_MAX_CHARS} characters")
     return SpendGpuPool(
         provider=provider,
-        node_pool=_gpu_pool_sku(item.get("node_pool"), "node_pool"),
+        node_pool=node_pool,
         models=tuple(dict.fromkeys(_gpu_pool_sku(m, "every model") for m in models)),
         nodes=_gpu_pool_nodes(item.get("nodes")),
         start=start,
