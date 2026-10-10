@@ -305,7 +305,8 @@ class UsageSession(FakeSession):
             if existing is not None:
                 if conflict is not None and type(conflict).__name__ == "OnConflictDoUpdate":
                     evaluator = Evaluator(self, excluded=values)
-                    for name, expr in conflict.update_values_to_set:
+                    to_set = conflict.update_values_to_set  # pairs in SQLAlchemy 2.0, a dict in 2.1
+                    for name, expr in to_set.items() if isinstance(to_set, dict) else to_set:
                         column = name if isinstance(name, str) else name.key
                         setattr(existing, column, evaluator.value(expr, existing))
                     continue
