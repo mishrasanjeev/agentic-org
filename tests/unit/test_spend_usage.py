@@ -132,6 +132,8 @@ def queued(monkeypatch):
     got: dict[str, list] = {"events": [], "gaps": []}
     monkeypatch.setattr(writer, "submit", lambda events: got["events"].extend(events))
     monkeypatch.setattr(writer, "add_gap", lambda *args, **kw: got["gaps"].append(args))
+    # Call-path gaps go through note_gap, which also starts the writer.
+    monkeypatch.setattr(writer, "note_gap", lambda *args, **kw: got["gaps"].append(args))
     monkeypatch.setattr(settings, "spend_intelligence_enabled", True)
     return got
 
@@ -315,6 +317,19 @@ class TestEvents:
         with context.scope(tenant_id=TID):
             meter.meter_model_call(record(tenant_id=None))
         assert len(queued["events"]) == 2 and queued["events"][0].tenant_id == TID
+
+    def test_a_tenantless_call_is_an_unmetered_call_not_a_write_failure(self, queued):
+        """Routine tenantless traffic must never feed the write-failure alert (reason != "paused")."""
+        from observability import metrics
+
+        unmetered = metrics.spend_unmetered_calls_total.labels(usage_type="llm_tokens", reason="no_tenant")
+        failed = metrics.spend_usage_write_failures_total.labels(usage_type="llm_tokens", reason="no_tenant")
+        before = (unmetered._value.get(), failed._value.get())
+        meter.meter_model_call(record(tenant_id=None))
+        failed_call = record(tenant_id=None, outcome="failed", tokens=0, input_tokens=None, output_tokens=None)
+        meter.meter_model_call(failed_call)
+        assert (unmetered._value.get(), failed._value.get()) == (before[0] + 2, before[1])
+        assert queued["events"] == [] and queued["gaps"] == []
 
     def test_wire_round_trip_keeps_everything_but_resolution_and_price(self):
         original = event(hints=hints(agent_id="a", run_id="run_1"), allocated=True, allocated_from="ref")

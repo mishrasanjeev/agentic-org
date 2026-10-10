@@ -179,7 +179,7 @@ def handle_cancelled(tenant_id: object, raw: Mapping[str, Any]) -> None:
     if not tenant:
         return
     provider = vocab.label(normalise_provider(raw.get("provider")) or "") or "unknown"
-    writer.add_gap(
+    writer.note_gap(
         tenant_text(tenant), clock.event_date_of(clock.now_utc()), LLM, "failed_no_usage", f"cancelled:{provider}"
     )
 

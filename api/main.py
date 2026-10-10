@@ -203,6 +203,12 @@ async def lifespan(app: FastAPI):
 
     start_metrics_server()
 
+    # Spend metering (off by default): while on, load the metering code now so the first
+    # metered call does not pay for the imports. Nothing at all while off; it never raises.
+    from core import spend
+
+    spend.prewarm()
+
     yield
     # Spend metering (off by default): stop this process's usage writer and hand
     # what it still holds to a worker, before the metrics server stops so the

@@ -323,17 +323,22 @@ failure is logged and counted (`hook_error`); the call proceeds unchanged. The t
 measured (`agenticorg_spend_hook_seconds`). A call with no tokens is counted as a gap
 (`failed_no_usage`); a router call whose primary attempt timed out with no response gets one
 estimated input record from the prompt's length (`timeout_estimated`); a router call cancelled by
-its outer timeout is counted, never estimated. Four direct model callers that bypass the router
-(the run explainer, the feedback analyser, the SOP parser, the workflow re-planner) are metered
-through `spend.note`.
+its outer timeout (the primary attempt or the fallback) is counted, never estimated. A call with
+no tenant at all (a tenantless router call outside any tenant scope) cannot be attributed to
+anyone: it is counted in `agenticorg_spend_unmetered_calls_total{reason="no_tenant"}`, not as a
+write failure. Four direct model callers that bypass the router (the run explainer, the feedback
+analyser, the SOP parser, the workflow re-planner) are metered through `spend.note`. While spend
+is on, the API and each Celery worker process load the metering code at startup, so the first
+metered call does not pay for the imports.
 
 One writer thread per process, with its own event loop and a two-connection engine, flushes the
 queue every 200 ms in batches of up to 500 events, tenant by tenant, so it never competes with
 request handlers for the shared pool:
 
 - a **paused** tenant (the feature flag `spend.metering_paused`, a tenant row or the global row,
-  with `enabled = true` and `rollout_percentage = 100`; read by the writer, never on the call path)
-  has its events dropped and counted, taking effect within 30 seconds without a restart;
+  with `enabled = true` and `rollout_percentage = 100`; read by the writer through its own
+  30-second cache, never on the call path) has its events dropped and counted, taking effect
+  within 30 seconds without a restart;
 - a rollup day held by a **rebuild** makes that tenant's events wait for the next backoff step
   while other tenants are written; after two minutes they are spilled;
 - a **transient** database error (a dropped connection, a pool timeout, a deadlock) is retried
@@ -346,8 +351,12 @@ there (a lock or statement timeout and a deadlock included) is retried with back
 times, each retry carrying only the tenants not yet written; events it finally cannot write are
 counted (`spill_failed`) and recorded as gaps per tenant. At shutdown (the API lifespan, a worker's exit) the
 writer stops, waits up to 5 seconds and spills what is left; what cannot be spilled is counted
-as `shutdown_lost`. The only loss on the call path is a full queue (5,000 events), counted
-globally and per tenant (`queue_full`).
+as `shutdown_lost`, and so are gap counts the writer had not yet flushed. Once the drain has
+begun the process starts no new writer: usage or a gap that arrives later, and a batch the
+stopping writer tries to retry after the drain took the queue, are counted as `shutdown_lost`.
+A gap seen on a call path starts the writer, so a process whose calls only fail still flushes its
+gaps. The only loss on the call path is a full queue (5,000 events), counted globally and per
+tenant (`queue_full`).
 
 ### Writer alerts
 
