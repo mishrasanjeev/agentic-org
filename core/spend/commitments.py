@@ -14,7 +14,9 @@ change of the period or the status.
 A storage commitment is entered in ``gb_day``: a GB-month has no fixed
 number of GB-days. Drawdown is computed from usage records in record units
 (``recompute``, run as the ``recompute_commitments`` job); every create or
-update marks the commitment for a full recompute and queues the job.
+update marks the commitment for a full recompute and queues the job in the
+same transaction (the change and its job commit or roll back together); the
+job is sent to a worker after the commit.
 """
 
 from __future__ import annotations
@@ -260,9 +262,10 @@ async def create_commitment(
                 now=stamp,
             )
         )
+        queued = await queue_recompute(session, tenant_id, fields["provider"], actor=who, now=stamp)
         out = _commitment_dict(row)
     logger.info("spend_commitment_created", kind=fields["kind"], provider=fields["provider"])
-    await enqueue_recompute(tenant_id, fields["provider"], actor=who)
+    _dispatch(tenant_id, queued)
     return out
 
 
@@ -280,6 +283,7 @@ async def update_commitment(
 
     who = require_actor(actor)
     stamp = now or clock.now_utc()
+    queued: dict[str, Any] | None = None
     async with get_tenant_session(tenant_id) as session:
         rows = (
             (
@@ -340,9 +344,9 @@ async def update_commitment(
                     now=stamp,
                 )
             )
+            queued = await queue_recompute(session, tenant_id, row.provider, actor=who, now=stamp)
         out = _commitment_dict(row)
-    if changed:
-        await enqueue_recompute(tenant_id, out["provider"], actor=who)
+    _dispatch(tenant_id, queued)
     return out
 
 
@@ -709,11 +713,25 @@ async def recompute(
     return {"providers": out}
 
 
-async def enqueue_recompute(tenant_id: uuid.UUID, provider: str, *, actor: str) -> str | None:
-    """Queue the recompute a commitment change calls for (merged into a queued one); the job id."""
+async def queue_recompute(
+    session: Any, tenant_id: uuid.UUID, provider: str, *, actor: str, now: datetime
+) -> dict[str, Any]:
+    """Queue, in the commitment change's transaction, the recompute it calls for (merged into a queued one).
+
+    The caller holds the commitment's row lock (and, for a period change, its
+    key lock), which come before the job-kind lock in the one lock order; the
+    recompute job never takes a job-kind lock. A failure raises, so the change
+    rolls back with it.
+    """
     from core.spend import jobs
 
-    out = await jobs.enqueue_followup(
-        tenant_id, kind="recompute_commitments", params={"provider": provider}, actor=actor
+    return await jobs.queue_followup(
+        session, tenant_id, kind="recompute_commitments", params={"provider": provider}, actor=actor, now=now
     )
-    return out["job_id"] if out else None
+
+
+def _dispatch(tenant_id: uuid.UUID, queued: dict[str, Any] | None) -> None:
+    """Send a committed change's recompute to a worker (a failed send leaves it queued for the sweep)."""
+    from core.spend import jobs
+
+    jobs.dispatch(tenant_id, queued)

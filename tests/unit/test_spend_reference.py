@@ -844,9 +844,11 @@ class TestCommitmentsAndFx:
         assert listed["total"] == 1 and listed["items"][0]["rate_to_inr"] == "83.25"
 
     @pytest.mark.asyncio
-    async def test_fx_writes_take_the_currency_lock_before_reading_the_rate(self, session, monkeypatch):
+    async def test_fx_writes_take_the_currency_lock_before_reading_the_rate(self, session):
         """``FOR UPDATE`` locks nothing while a new rate's row does not exist, so two writers of the same new
-        rate are serialised by the currency's advisory lock instead of both inserting it."""
+        rate are serialised by the currency's advisory lock instead of both inserting it. The settlement the
+        rate calls for is queued in the same transaction, under the job-kind lock taken after the currency's
+        (the one lock order: resource first, then the job kind)."""
 
         def first(predicate) -> int:
             return next(i for i, s in enumerate(session.statements) if predicate(s))
@@ -857,12 +859,9 @@ class TestCommitmentsAndFx:
         def reads_rates(statement) -> bool:
             return not isinstance(statement, TextClause) and "spend_fx_rates" in str(statement)
 
-        async def no_followup(*args, **kwargs):
-            return None  # the settlement job takes its own lock in its own transaction, after this one
-
-        monkeypatch.setattr(jobs, "enqueue_followup", no_followup)
+        settle = locks.job_kind(TENANT, "settle_fx")
         await fx.put_rate(TENANT, {"rate_date": "2026-10-01", "currency": "USD", "rate_to_inr": "83"}, actor=ACTOR)
-        assert session.locks == [locks.fx_rate(TENANT, "USD")]
+        assert session.locks == [locks.fx_rate(TENANT, "USD"), settle]
         assert first(is_lock) < first(reads_rates)
         for dry_run in (True, False):
             session.statements.clear()
@@ -880,10 +879,13 @@ class TestCommitmentsAndFx:
                 now=T0,
             )
             assert report["created"] == 3
-            # Every currency of the file is locked once, in sorted order, before the first rate is read.
-            assert session.locks == [locks.fx_rate(TENANT, "EUR"), locks.fx_rate(TENANT, "USD")]
-            last_lock = max(i for i, s in enumerate(session.statements) if is_lock(s))
-            assert last_lock < first(reads_rates)
+            # Every currency of the file is locked once, in sorted order, before the first rate is read;
+            # a real import then queues its settlement under the job-kind lock (a dry run queues nothing).
+            currencies = [locks.fx_rate(TENANT, "EUR"), locks.fx_rate(TENANT, "USD")]
+            assert session.locks == (currencies if dry_run else [*currencies, settle])
+            taken = [i for i, s in enumerate(session.statements) if is_lock(s)]
+            assert taken[1] < first(reads_rates)  # both currency locks before the first read of a rate
+            assert dry_run or taken[2] > first(reads_rates)  # the job-kind lock last
         assert len(session.of("spend_fx_rates")) == 4
 
 

@@ -601,6 +601,45 @@ class TestWritePath:
         assert commitment.needs_full_recompute is True
 
     @pytest.mark.asyncio
+    async def test_commitments_are_locked_in_id_order_before_they_are_marked(self, store):
+        """The recompute job locks a provider's commitments in id order; one unordered update here could lock
+        the same rows in another order and deadlock with it."""
+        from sqlalchemy.dialects import postgresql
+        from sqlalchemy.sql.dml import Update
+        from sqlalchemy.sql.selectable import Select
+
+        ids = sorted((uuid.uuid4() for _ in range(4)), key=str)
+
+        def commitment(commitment_id, provider, status="active"):
+            return SpendCommitment(
+                id=commitment_id, tenant_id=TENANT, provider=provider, kind="money", committed_amount=Decimal(10),
+                currency="USD", period_start=date(2026, 9, 1), period_end=date(2026, 11, 1), status=status,
+                needs_full_recompute=False, recomputed_through=None,
+            )  # fmt: skip
+
+        for row in (
+            commitment(ids[3], "openai"),
+            commitment(ids[1], "anthropic"),
+            commitment(ids[0], "openai", status="closed"),
+            commitment(ids[2], "openai"),
+        ):
+            store.add(row)
+        store.statements.clear()
+        await meter.mark_commitments_for_replay(store, TENANT, ["openai", "anthropic"])
+        marked = {row.id for row in store.of("spend_commitments") if row.needs_full_recompute}
+        assert marked == {ids[1], ids[2], ids[3]}  # active ones only
+        kinds = [type(s).__name__ for s in store.statements]
+        assert kinds == ["Select", "Update"]  # locked first, then updated
+        locking, change = store.statements
+        assert isinstance(locking, Select) and isinstance(change, Update)
+        sql = " ".join(str(locking.compile(dialect=postgresql.dialect())).split())
+        assert sql.startswith("SELECT spend_commitments.id FROM spend_commitments WHERE")
+        assert sql.endswith("ORDER BY spend_commitments.id FOR UPDATE")
+        store.statements.clear()
+        await meter.mark_commitments_for_replay(store, TENANT, ["nobody"])
+        assert [type(s).__name__ for s in store.statements] == ["Select"]  # nothing to mark: no update
+
+    @pytest.mark.asyncio
     async def test_busy_rollup_day_answers_busy_with_nothing_written(self, store, monkeypatch):
         from core.spend import locks
 

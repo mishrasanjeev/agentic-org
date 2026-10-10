@@ -161,7 +161,7 @@ class TestFlag:
             "gpu_allocation_days": 31,
         }
         assert out["backfill_source"] in ("model_gateway_records", "none")
-        assert out["partition_horizon"]["last_month"] == "2028-12" and set(out["writer"]) == {"started", "pending"}
+        assert out["partition_horizon"]["last_month"] == "2028-12" and out["writer"] == {"started": False}
         assert out["record_units"]["llm_tokens"][0] == "input_token" and "gb_month" in out["card_units"]["storage"]
         monkeypatch.setattr(settings, "spend_intelligence_enabled", True)
         assert (await api.spend_status(tenant_id=TID))["enabled"] is True
@@ -390,22 +390,25 @@ class TestAccess:
             assert (await api.list_rate_cards(caller=caller, tenant_id=TID))["total"] == 0
             assert (await api.list_commitments(caller=caller, tenant_id=TID))["total"] == 0
 
-    def test_read_view_filters_agents_for_everyone_but_administrators(self):
+    def test_read_view_filters_agents_for_everyone_but_administrators_and_auditors(self):
         from core.models.agent import Agent
 
         records = Table("usage_records", MetaData(), Column("tenant_id", PG_UUID), Column("agent_id", PG_UUID))
         admin = access.read_view(ADMIN_CALLER)
         assert admin.agent_clause is None and admin.show_user_ids and admin.commercial
-        assert str(access.usage_filter(admin, records, Agent.__table__).compile(dialect=postgresql.dialect())) == "true"
+        everything = access.usage_filter(admin, records, Agent.__table__, tenant_id=TENANT)
+        assert str(everything.compile(dialect=postgresql.dialect())) == "true"
         domain = access.read_view(DOMAIN_ROLE)
         assert not domain.show_user_ids and not domain.commercial
-        sql = str(access.usage_filter(domain, records, Agent.__table__).compile(dialect=postgresql.dialect()))
-        assert "usage_records.agent_id IS NULL" in sql and "agents.tenant_id = usage_records.tenant_id" in sql
+        sql = str(access.usage_filter(domain, records, Agent.__table__, tenant_id=TENANT).compile(
+            dialect=postgresql.dialect()))  # fmt: skip
+        assert "usage_records.agent_id IS NULL" in sql and "agents.tenant_id = %(tenant_id_1)s" in sql
+        assert "usage_records.tenant_id" not in sql  # the tenant is bound: the subquery is not correlated
         assert "agents.domain IN" in sql and "agents.owner_user_id" in sql
         machine = access.read_view(MACHINE)
-        assert not machine.show_user_ids and not machine.commercial
+        assert not machine.show_user_ids and not machine.commercial and machine.agent_clause is not None
         auditor = access.read_view(AUDITOR)
-        assert auditor.show_user_ids and auditor.agent_clause is not None
+        assert auditor.show_user_ids and auditor.agent_clause is None  # every record, as on GET /audit
         user = uuid.uuid4()
         assert access.redact_user(auditor, user) == str(user)
         assert access.redact_user(domain, user) is None and access.redact_user(auditor, None) is None

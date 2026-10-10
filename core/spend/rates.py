@@ -21,8 +21,10 @@ nothing.
 ``card_in_use`` answers the latest billing date of a usage record the card
 priced (directly, or as the output half of a blended price). A change that
 cuts priced history (a backdated supersede, an earlier ``effective_to``, a
-correction) queues a restatement job for the affected billing days once it
-has committed; ``restate_job_id`` names it (or the queued restatement of the
+correction) queues a restatement job for the affected billing days in its
+own transaction, so the change and the job commit or roll back together; the
+job is sent to a worker after the commit (a failed send leaves it queued for
+the job sweep). ``restate_job_id`` names it (or the queued restatement of the
 same provider it was merged into, widened to cover it).
 """
 
@@ -300,16 +302,28 @@ async def card_in_use(session: Any, tenant_id: uuid.UUID, card_id: uuid.UUID) ->
 RestatePlan = tuple[str, date, date, uuid.UUID]
 
 
-async def _restate_job(
-    tenant_id: uuid.UUID, plan: RestatePlan | None, *, reason: str, actor: str, card_ids: list[uuid.UUID] | None = None
-) -> str | None:
-    """Queue the restatement a committed change calls for; the job id (or the queued one it joins)."""
+async def _queue_restate(
+    session: Any,
+    tenant_id: uuid.UUID,
+    plan: RestatePlan | None,
+    *,
+    reason: str,
+    actor: str,
+    now: datetime,
+    card_ids: list[uuid.UUID] | None = None,
+) -> dict[str, Any] | None:
+    """Queue, in the change's transaction, the restatement the change calls for (``None`` when it calls for none).
+
+    The caller holds the card key's lock, which comes before the job-kind lock
+    in the one lock order. A failure raises, so the change rolls back with it.
+    """
     if plan is None:
         return None
     from core.spend import jobs
 
     provider, start, end, card_id = plan
-    out = await jobs.enqueue_followup(
+    return await jobs.queue_followup(
+        session,
         tenant_id,
         kind="restate",
         params={
@@ -321,8 +335,16 @@ async def _restate_job(
             "reason": reason,
         },
         actor=actor,
+        now=now,
     )
-    return out["job_id"] if out else None
+
+
+def _sent(tenant_id: uuid.UUID, queued: dict[str, Any] | None) -> str | None:
+    """Send a committed change's restatement to a worker; its job id (or the queued one it joined)."""
+    from core.spend import jobs
+
+    jobs.dispatch(tenant_id, queued)
+    return str(queued["job_id"]) if queued else None
 
 
 def _merge_plans(plans: list[RestatePlan]) -> list[tuple[RestatePlan, list[uuid.UUID]]]:
@@ -605,10 +627,13 @@ async def create_card(
                 now=stamp,
             )
         )
+        queued = await _queue_restate(
+            session, tenant_id, plan, reason="a backdated card superseded priced records", actor=who, now=stamp
+        )
         out = card_dict(row)
     _on_change(tenant_id)
     logger.info("spend_rate_card_created", usage_type=key.usage_type, source=key.source)
-    job = await _restate_job(tenant_id, plan, reason="a backdated card superseded priced records", actor=who)
+    job = _sent(tenant_id, queued)
     return {**out, "superseded_id": str(superseded) if superseded else None, "restate_job_id": job}
 
 
@@ -643,11 +668,13 @@ async def update_card(
                     now=stamp,
                 )
             )
+        queued = await _queue_restate(
+            session, tenant_id, plan, reason="a card's end moved over priced records", actor=who, now=stamp
+        )
         out = card_dict(row)
     if changes:
         _on_change(tenant_id)
-    job = await _restate_job(tenant_id, plan, reason="a card's end moved over priced records", actor=who)
-    return {**out, "restate_job_id": job}
+    return {**out, "restate_job_id": _sent(tenant_id, queued)}
 
 
 async def correct_card(
@@ -746,12 +773,14 @@ async def correct_card(
             now=stamp,
         ):
             session.add(entry)
+        # The restatement commits with the correction: a correction never commits without the job that
+        # re-prices what the retired card priced (a retry would be refused, the card being retired).
+        queued = await _queue_restate(session, tenant_id, plan, reason=why, actor=who, now=stamp)
         out = card_dict(new)
         retired_id = str(old.id)
     _on_change(tenant_id)
     logger.info("spend_rate_card_corrected", usage_type=key.usage_type)
-    job = await _restate_job(tenant_id, plan, reason=why, actor=who)
-    return {"card": out, "retired_id": retired_id, "restate_job_id": job}
+    return {"card": out, "retired_id": retired_id, "restate_job_id": _sent(tenant_id, queued)}
 
 
 def _import_row(raw: dict[str, str]) -> tuple[dict[str, Any], bool, bool]:
@@ -798,6 +827,7 @@ async def import_cards(
         checked.append((index, fields, set(raw), supersede, restate))
     changes: list[audit.Change] = []
     plans: list[RestatePlan] = []
+    queued: list[tuple[str, dict[str, Any] | None]] = []
     async with get_tenant_session(tenant_id) as session:
         keys = sorted({k for k, _start in seen})
         for key in keys:
@@ -862,14 +892,21 @@ async def import_cards(
                 now=stamp,
             ):
                 session.add(entry)
+            # One restatement per provider, in the import's transaction (after every key lock it took).
+            for plan, cards in _merge_plans(plans):
+                restatement = await _queue_restate(
+                    session,
+                    tenant_id,
+                    plan,
+                    reason="a rate-card import cut priced history",
+                    actor=who,
+                    now=stamp,
+                    card_ids=cards,
+                )
+                queued.append((plan[0], restatement))
     if changes and not dry_run:
         _on_change(tenant_id)
-        restate_jobs = []
-        for plan, cards in _merge_plans(plans):
-            job = await _restate_job(
-                tenant_id, plan, reason="a rate-card import cut priced history", actor=who, card_ids=cards
-            )
-            restate_jobs.append({"provider": plan[0], "job_id": job})
+        restate_jobs = [{"provider": provider, "job_id": _sent(tenant_id, q)} for provider, q in queued]
         if restate_jobs:
             report["restate_jobs"] = restate_jobs
     return report

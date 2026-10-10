@@ -94,19 +94,38 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
   twice and a job that stops part-way leaves nothing unaudited. Backfill
   recreates model-call records from `model_gateway_records` with the hook's
   own keys.
-- Jobs a reference-data change calls for are never dropped: they are merged
-  into a queued job of the kind that can cover them, or queued to run after
-  the running one. One job of a kind runs at a time; a running job beats a
-  heartbeat, a sweep every 15 minutes requeues a lost worker's job, and a
-  transient database failure is retried twice before the job fails.
+- Jobs a reference-data change calls for are never dropped: they are queued
+  in the change's own transaction (a rate-card correction, supersede, end
+  change or import; an FX rate or import; a commitment create or update), so
+  the change and its job commit or roll back together, and sent to a worker
+  after the commit (a failed send leaves the job queued for the sweep). They
+  are merged into a queued job of the kind that can cover them, or queued to
+  run after the running one, never into a job queued again after a
+  transient failure. An administrator's job whose send fails answers
+  `failed`, unless a change's job was merged into it meanwhile: then it stays
+  queued for the sweep. Locks are taken in one order: the resource's lock,
+  then the job kind's, then the kind's queued jobs (skipping, never waiting
+  for, a row another transaction holds); commitment rows are locked in id
+  order on the write path as in the recompute. One job of a kind runs at a
+  time; a running job beats a heartbeat, a sweep every 15 minutes requeues a
+  lost worker's job and resends queued jobs, and a transient database
+  failure is retried twice before the job fails.
 - `GET /spend/usage`, `GET /spend/rollups`, `GET /spend/coverage`,
   `GET /spend/coverage/ledgers`, `GET /spend/gaps`, `GET /spend/jobs`,
   `GET /spend/jobs/{job_id}`, and the job routes `POST /spend/rollups/rebuild`,
   `POST /spend/usage/{backfill,restate,reattribute}`,
   `POST /spend/fx-rates/settle` and `POST /spend/commitments/recompute`
-  (202 with a job id, one active job of a kind per tenant). Usage reads apply
-  the agent visibility rule and show user ids, rate cards, unit prices and
-  commitments to administrators and auditors only. Celery tasks
+  (202 with a job id, one active job of a kind per tenant). One read rule,
+  as on `GET /audit`: administrators and auditors read every usage record,
+  rollup, coverage figure, gap, job and ledger comparison unfiltered; for
+  anyone else usage records, rollups (every grouping, not only the grouping
+  by agent) and the ledger comparison apply the agent visibility rule, and
+  coverage, gaps and jobs, which sum every agent's usage, are refused (403
+  `tenant_wide_read_refused`). User ids, rate cards, unit prices and
+  commitments are shown to administrators and auditors only, as are, on
+  `GET /audit`, the audit rows of spend jobs (`spend.job.*`, `spend.usage.*`,
+  `spend.fx.*`, `spend.rollups.*`: parameters, amounts moved and counts),
+  for a tenant that keeps a spend job. Celery tasks
   `core.tasks.spend_tasks.*` with beats for the partition horizon, FX
   settlement, commitment recompute and the job sweep. Alerts
   `AgenticOrgSpendWriteFailures` and `AgenticOrgSpendWriterBacklog`.
