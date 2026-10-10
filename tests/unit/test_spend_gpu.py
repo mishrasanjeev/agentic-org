@@ -234,6 +234,15 @@ class TestGpuPoolSettings:
         assert "spend_gpu_pools_json" in str(info.value)
         assert Settings.model_fields["spend_gpu_pools_json"].default == ""
 
+    def test_deeply_nested_json_is_refused_naming_the_setting(self):
+        deep = "[" * 100_000 + "]" * 100_000  # beyond the parser's nesting limit: RecursionError, not ValueError
+        with pytest.raises(ValueError, match="spend_gpu_pools_json: not valid JSON"):
+            parse_spend_gpu_pools(deep)
+        for field in ("spend_gpu_pools_json", "spend_provider_billing_timezones_json"):
+            with pytest.raises(ValidationError) as info:
+                Settings(spend_intelligence_enabled=True, **{field: deep})
+            assert f"{field}: not valid JSON" in str(info.value) and "[[[" not in str(info.value)
+
     def test_the_settings_sku_pattern_is_the_spend_one(self):
         from core.config import SPEND_SKU_PATTERN
 
@@ -324,6 +333,122 @@ class TestPoolHours:
             with pytest.raises(SpendError) as info:
                 gpu.check_record(**{**base, **over})
             assert info.value.code == code, over
+
+    @pytest.mark.asyncio
+    async def test_record_logs_who_recorded_what_and_the_values_it_overwrote(self, store):
+        from structlog.testing import capture_logs
+
+        replaced = pool_hour(
+            store,
+            node_pool="pool-b",
+            hour_start=datetime(2026, 10, 1, 6, 0, tzinfo=UTC),
+            node_hours=Decimal("2.5"),
+            source="manual",
+            recorded_by="ops-day",
+        )
+        with capture_logs() as logs:
+            out = await gpu.record_hours(
+                now=RUN,
+                provider="vllm",
+                node_pool="Pool-B",
+                models=[MODEL, "other"],
+                hour_start=datetime(2026, 10, 1, 5, 0, tzinfo=UTC),
+                hour_end=datetime(2026, 10, 1, 7, 0, tzinfo=UTC),
+                node_hours="1.5",
+                source="metrics",
+                actor="ops-night",
+            )
+        assert out == {"created": 1, "updated": 1, "already_allocated": []}
+        assert (replaced.node_hours, replaced.source, replaced.recorded_by) == (Decimal("1.5"), "metrics", "ops-night")
+        (recorded,) = [e for e in logs if e["event"] == "spend_gpu_hours_recorded"]
+        assert {k: v for k, v in recorded.items() if k not in ("event", "log_level")} == {
+            "actor": "ops-night",
+            "provider": "vllm",
+            "node_pool": "pool-b",
+            "models": [MODEL, "other"],
+            "first_hour": "2026-10-01T05:00:00+00:00",
+            "last_hour": "2026-10-01T06:00:00+00:00",
+            "node_hours": "1.5",
+            "source": "metrics",
+            "created": 1,
+            "updated": 1,
+            "already_allocated": 0,
+        }
+        (overwritten,) = [e for e in logs if e["event"] == "spend_gpu_hour_overwritten"]
+        assert overwritten["hour_start"] == "2026-10-01T06:00:00+00:00" and overwritten["actor"] == "ops-night"
+        assert (
+            overwritten["previous_node_hours"],
+            overwritten["previous_source"],
+            overwritten["previous_recorded_by"],
+        ) == ("2.5", "manual", "ops-day")
+
+    @pytest.mark.asyncio
+    async def test_record_upserts_atomically_and_never_overwrites_a_claimed_hour(self, monkeypatch, store):
+        from sqlalchemy.sql.dml import Insert
+
+        claimed = pool_hour(store, hour_start=datetime(2026, 10, 1, 5, 0, tzinfo=UTC))
+        real = store.execute
+        upserts: list = []
+
+        async def racing(statement, params=None):
+            if isinstance(statement, Insert) and statement.table.name == "spend_gpu_pool_hours":
+                if not upserts:
+                    # Between the command's read and its first upsert: the allocator claims 05:00, and another
+                    # command inserts 06:00 (pending) and 07:00 (already being allocated).
+                    claimed.status = "allocating"
+                    pool_hour(store, hour_start=datetime(2026, 10, 1, 6, 0, tzinfo=UTC), recorded_by="other")
+                    pool_hour(store, hour_start=datetime(2026, 10, 1, 7, 0, tzinfo=UTC), status="allocating")
+                upserts.append(statement)
+            return await real(statement, params)
+
+        monkeypatch.setattr(store, "execute", racing)
+        out = await gpu.record_hours(
+            now=RUN,
+            provider="vllm",
+            node_pool="pool-a",
+            models=[MODEL],
+            hour_start=datetime(2026, 10, 1, 5, 0, tzinfo=UTC),
+            hour_end=datetime(2026, 10, 1, 9, 0, tzinfo=UTC),
+            node_hours="1.5",
+            source="metrics",
+            actor="ops",
+        )
+        assert out == {
+            "created": 1,
+            "updated": 1,
+            "already_allocated": ["2026-10-01T05:00:00+00:00", "2026-10-01T07:00:00+00:00"],
+        }
+        assert (claimed.node_hours, claimed.source, claimed.status) == (Decimal(2), "config", "allocating")
+        rows = {r.hour_start.hour: r for r in store.of("spend_gpu_pool_hours")}
+        assert (rows[6].node_hours, rows[6].recorded_by) == (Decimal("1.5"), "ops")  # still pending: updated
+        assert rows[7].node_hours == Decimal(2) and (rows[8].status, rows[8].source) == ("pending", "metrics")
+        sql = " ".join(str(upserts[0].compile(dialect=postgresql.dialect())).split())
+        assert "ON CONFLICT (provider, node_pool, hour_start) DO UPDATE SET" in sql
+        assert "WHERE spend_gpu_pool_hours.status = " in sql and sql.endswith("RETURNING spend_gpu_pool_hours.id")
+
+    def test_record_refuses_hours_not_yet_over_or_beyond_the_lookback(self, store, capsys):
+        now = datetime(2026, 10, 8, 9, 40, tzinfo=UTC)
+        assert gpu.RECORD_LOOKBACK == gpu.CONFIG_LOOKBACK == timedelta(days=7)
+        whole = [datetime(2026, 10, 1, 10, 0, tzinfo=UTC) + gpu.HOUR * n for n in range(167)]
+        gpu.check_record_window(whole, now=now)  # from 7 days back (to the hour) to the last hour that is over
+        for hours, field in (
+            ([datetime(2026, 10, 8, 9, 0, tzinfo=UTC)], "hour_end"),  # the current hour is not over
+            ([datetime(2026, 10, 8, 8, 0, tzinfo=UTC), datetime(2026, 10, 8, 10, 0, tzinfo=UTC)], "hour_end"),
+            ([datetime(2026, 10, 1, 9, 0, tzinfo=UTC)], "hour_start"),  # more than 7 days back
+        ):
+            with pytest.raises(SpendError) as info:
+                gpu.check_record_window(hours, now=now)
+            assert info.value.code == "invalid_period" and info.value.message.startswith(field), hours
+        record = [
+            "record", "--provider", "vllm", "--pool", "pool-a", "--models", MODEL,
+            "--node-hours", "1", "--source", "manual", "--actor", "ops", "--hour-start",
+        ]  # fmt: skip
+        for start, why in (("2026-10-01T09:00:00Z", "hour_end"), ("2026-09-24T08:00:00Z", "hour_start")):
+            assert gpu_cli.main([*record, start]) == 2  # the clock reads 09:00 on 1 October
+            assert f"invalid_period: {why}" in capsys.readouterr().err
+        assert store.of("spend_gpu_pool_hours") == []
+        assert gpu_cli.main([*record, "2026-09-24T09:00:00Z"]) == 0
+        assert _printed(capsys.readouterr().out)["created"] == 1
 
 
 # ---------------------------------------------------------------- allocation
@@ -599,6 +724,37 @@ class TestAllocation:
         assert hour.status == "allocated" and hour.allocated_at == later
 
     @pytest.mark.asyncio
+    async def test_a_paused_tenant_keeps_its_share_frozen_and_the_hour_resumes(self, monkeypatch, store):
+        from core import feature_flags
+
+        hour = pool_hour(store)
+        await write_calls(store, TENANT, [1000])
+        await write_calls(store, OTHER_TENANT, [3000])
+        paused = {OTHER_TENANT}
+
+        async def flag_row(tenant_id, key):
+            assert key == "spend.metering_paused"
+            return {"enabled": True, "rollout_percentage": 100} if tenant_id in paused else None
+
+        async def shared_cache_path(*args, **kwargs):
+            raise AssertionError("the allocation must not use the flag module's shared cache")
+
+        monkeypatch.setattr(feature_flags, "_query_flag", flag_row)
+        monkeypatch.setattr(feature_flags, "is_enabled", shared_cache_path)
+        out = await gpu.allocate_pending(now=RUN)
+        assert out == {"materialised": 0, "hours": 1, "idle": 0, "records": 1, "failed": 0, "paused": 1}
+        assert hour.status == "allocating" and hour.allocated_at is None  # not closed
+        statuses = {a.tenant_id: a.status for a in store.of("spend_gpu_allocations")}
+        assert statuses == {TENANT: "written", OTHER_TENANT: "frozen"}
+        assert gpu_records(store, OTHER_TENANT) == []
+        paused.clear()  # metering resumes; the claim goes stale on the database clock
+        hour.claimed_at = NOW - timedelta(hours=2)
+        out = await gpu.allocate_hour(hour.id, now=RUN + timedelta(hours=2))
+        assert out["paused"] == 0 and out["failed"] == 0 and hour.status == "allocated"
+        assert [r.quantity for r in gpu_records(store, TENANT)] == [Decimal("0.5")]  # not written twice
+        assert [r.quantity for r in gpu_records(store, OTHER_TENANT)] == [Decimal("1.5")]
+
+    @pytest.mark.asyncio
     async def test_allocation_waits_seventy_five_minutes(self, store):
         hour = pool_hour(store)
         await write_calls(store, TENANT, [100])
@@ -734,6 +890,21 @@ class TestTasksAndRoutes:
         monkeypatch.setattr(settings, "spend_sweeps_enabled", False)
         for task in (tasks.sample_storage, tasks.allocate_gpu_hours):
             assert task.run() == {"skipped": "spend_sweeps_disabled"}
+
+    def test_storage_task_loads_no_spend_module_while_skipped(self, monkeypatch):
+        import sys
+
+        import core.spend
+        import core.tasks.spend_tasks as tasks
+
+        monkeypatch.delitem(sys.modules, "core.spend.storage", raising=False)
+        monkeypatch.delattr(core.spend, "storage", raising=False)
+        monkeypatch.setattr(settings, "spend_intelligence_enabled", False)
+        assert tasks.sample_storage.run() == {"skipped": "spend_intelligence_disabled"}
+        monkeypatch.setattr(settings, "spend_intelligence_enabled", True)
+        monkeypatch.setattr(settings, "spend_sweeps_enabled", False)
+        assert tasks.sample_storage.run() == {"skipped": "spend_sweeps_disabled"}
+        assert "core.spend.storage" not in sys.modules  # the import comes after the guard
 
     def test_task_bodies_sample_and_allocate(self, monkeypatch, store):
         import core.tasks.spend_tasks as tasks

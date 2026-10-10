@@ -9,7 +9,8 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
   writer, keys and rollups as model calls: embedding tokens (knowledge
   ingestion, re-indexing, search and RPA ingestion; estimated from
   characters and capped at the model's input limit), OCR pages (document
-  processing, knowledge uploads, ingestion that extracted for itself),
+  processing, knowledge uploads, ingestion that extracted for itself; once
+  per extraction, even when the upload is refused or nothing is indexed),
   speech minutes (a recording Whisper or Deepgram transcribed, with the
   Deepgram credential's billing account) and connector tool calls for tools
   a rate card prices (an unpriced call is counted as an `unpriced_tool` gap,
@@ -21,7 +22,9 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
   store and day; a delayed run still records its day, missed days after the
   first sample are filled as estimates (a day sampled empty is marked, so it
   is never filled), and `POST /spend/storage/sample`
-  previews the sample without writing (audited).
+  previews the sample without writing (audited). A tenant paused by
+  `spend.metering_paused` is not sampled: its day is a `paused` gap, filled
+  like a missed day once metering resumes.
 - GPU node hours of in-house serving: standing pools from
   `AGENTICORG_SPEND_GPU_POOLS_JSON` and metered or manual hours from the
   operator command `python -m core.spend.gpu_cli`, held in a platform table;
@@ -33,7 +36,12 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
   counted, and their share, the share of tenants deleted since the hour and
   idle hours stay with the platform (`skipped_node_hours`), so no tenant's
   card or alias moves cost onto another; in-house providers take no model
-  alias. `GET /spend/gpu-allocations` lists a tenant's own shares.
+  alias. A paused tenant's share waits, frozen, and the hour is resumed once
+  metering resumes. The operator command records only hours that have ended,
+  at most seven days back, with one guarded upsert per hour (an hour being
+  allocated is never overwritten), and logs the actor, pool, hours, node
+  hours and models, and the values of each hour it overwrote.
+  `GET /spend/gpu-allocations` lists a tenant's own shares.
 - Celery tasks `core.tasks.spend_tasks.sample_storage` and
   `allocate_gpu_hours` with their beats. Behind `spend_intelligence_enabled`
   (default off): off, every site is a bool read, the Deepgram credential note

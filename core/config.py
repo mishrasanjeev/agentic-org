@@ -167,7 +167,7 @@ def parse_spend_gpu_pools(raw: str | None) -> tuple[SpendGpuPool, ...]:
         return ()
     try:
         data = json.loads(text)
-    except ValueError as exc:
+    except (ValueError, RecursionError) as exc:  # nesting too deep for the parser raises RecursionError
         raise ValueError("spend_gpu_pools_json: not valid JSON") from exc
     if not isinstance(data, list):
         raise ValueError("spend_gpu_pools_json: must be a JSON list of pools")
@@ -786,7 +786,7 @@ class Settings(BaseSettings):
         if raw:
             try:
                 zones = json.loads(raw)
-            except ValueError as exc:
+            except (ValueError, RecursionError) as exc:  # nesting too deep for the parser raises RecursionError
                 raise ValueError("spend_provider_billing_timezones_json: not valid JSON") from exc
             if not isinstance(zones, dict):
                 raise ValueError("spend_provider_billing_timezones_json: must be a JSON object of provider to zone")

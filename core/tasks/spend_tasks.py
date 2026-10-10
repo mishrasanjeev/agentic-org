@@ -294,11 +294,12 @@ def sweep_jobs() -> dict[str, Any]:
 @app.task(name="core.tasks.spend_tasks.sample_storage")
 def sample_storage() -> dict[str, Any]:
     """Daily (23:30 IST): every active tenant's storage GB-days for the intended day, missed days filled."""
-    from core.spend import storage
-
     off = _sweeps_off()
     if off is not None:
         return off
+    # Imported past the guard, so a skipped run loads neither the storage module nor what it imports.
+    from core.spend import storage
+
     return run_async(storage.sample_all_tenants())
 
 

@@ -10,11 +10,14 @@ operator, not through the tenant API::
     python -m core.spend.gpu_cli list --start 2026-10-01T00:00:00Z --end 2026-10-02T00:00:00Z
 
 ``record`` upserts a ``pending`` row per whole UTC hour of ``[hour-start,
-hour-end)`` (one hour when no end is given; at most 744); an hour already
-being allocated or allocated is reported and left alone. The command logs
-what it recorded (``spend_gpu_hours_recorded``); the audit log needs a tenant,
-so a platform input is logged, not audited. Refused while spend intelligence
-is off.
+hour-end)`` (one hour when no end is given; at most 744), for hours that have
+ended and start at most seven days back; an hour already being allocated or
+allocated is reported and left alone. The command logs what it recorded
+(``spend_gpu_hours_recorded``: the actor, the pool, the first and last hour,
+the node hours and the models) and, for each hour it overwrote, the values
+the hour had before (``spend_gpu_hour_overwritten``); the audit log needs a
+tenant, so a platform input is logged, not audited. Refused while spend
+intelligence is off, and for an input the checks refuse (exit code 2).
 """
 
 from __future__ import annotations

@@ -590,8 +590,8 @@ content. While the feature is off every site is a bool read and nothing else.
 | embeddings, search | `api/v1/knowledge.py`, each query embedding of the vector and the hybrid search (an agentic search embeds up to five times, and each is metered) | `emb:search:{uuid}` | `knowledge`, `knowledge.search` |
 | embeddings, RPA | `core/tasks/rpa_tasks.py:_embed_and_store`, once per run with the chunks it embedded | `emb:rpa:{script}:{uuid}` | `system`, `rpa.ingest` |
 | OCR, document processing | `api/v1/idp.py:analyse`, the pages whose OCR ran | `ocr:idp:{uuid}` | `documents`, `documents.ocr` |
-| OCR, knowledge upload | `api/v1/knowledge.py:upload_document`, the extraction's OCR pages | `ocr:upload:{document}` | `knowledge`, `knowledge.ocr` |
-| OCR, ingestion | `core/rag/ingest.py:ingest_document`, only when it extracted the file itself (an upload passes its extraction and is metered at the route, so nothing is counted twice) | `ocr:ingest:{document}` | `knowledge`, `knowledge.ocr` |
+| OCR, knowledge upload | `api/v1/knowledge.py:upload_document`, the extraction's OCR pages, once whatever the outcome | `ocr:upload:{document}`: the id the document is stored under (the managed retrieval service's id when it indexed the upload); a refused upload's is a fresh id | `knowledge`, `knowledge.ocr` |
+| OCR, ingestion | `core/rag/ingest.py:ingest_document`, only when it extracted the file itself, right after extracting, so a document that indexes nothing is counted too (an upload passes its extraction and is metered at the route, so nothing is counted twice) | `ocr:ingest:{document}` | `knowledge`, `knowledge.ocr` |
 | speech minutes | `core/speech/store.py:save`, a recording an engine transcribed | `speech:{recording}` | `speech`, `speech.transcription` |
 | tool calls | `core/langgraph/tool_adapter.py:_execute_connector_tool`, the production dispatch boundary | `tool:{uuid}` | the bound scope's, else `agents`; `tool.call` |
 | storage | the daily sample (below) | `storage:{day}:{store}` | the store's |
@@ -620,7 +620,9 @@ meters nothing.
 
 Only local Tesseract reads pages. A document-processing analysis counts the pages whose OCR ran.
 A knowledge upload counts every frame of an image (each one is OCR'd, even those that yield no
-text) and the low-text pages of a PDF that were OCR'd; a text extraction counts nothing.
+text) and the low-text pages of a PDF that were OCR'd; a text extraction counts nothing. Pages are
+counted once per extraction, as soon as OCR has run: an upload refused afterwards (no usable text, a
+duplicate filename, a failed lookup or store) is still counted, under a fresh id.
 
 ### Speech minutes
 
@@ -669,6 +671,9 @@ the spec's name, `gb_day`. A store whose table does not exist is skipped.
 - **Only the job writes.** `POST /spend/storage/sample` (administrator) measures and returns GiB
   per store with `written: 0` and an audit row (`spend.storage.preview`); it writes no record, so
   a manual run cannot pre-empt the day's scheduled figure.
+- **Paused tenants.** The job reads `spend.metering_paused` for each tenant (the flag module's own
+  lookup, as the writer does): a paused tenant is not measured, its day is counted as a `paused`
+  gap, and once metering resumes the gap fill writes the day like any missed beat.
 
 ### GPU node hours of in-house serving
 
@@ -695,8 +700,14 @@ platform-operator guard exists, and a tenant administrator must not set a shared
   python -m core.spend.gpu_cli list --start 2026-10-01T00:00:00Z --end 2026-10-02T00:00:00Z
   ```
 
-  `record` upserts a pending row per whole UTC hour (at most 744 per command); an hour already
-  being allocated or allocated is reported as `already_allocated` and left alone.
+  `record` upserts a pending row per whole UTC hour (at most 744 per command) for hours that have
+  ended and start at most seven days back (the window standing pools are materialised in); a
+  future or older hour is refused with exit code 2. Each hour is one
+  `INSERT ... ON CONFLICT DO UPDATE ... WHERE status = 'pending'`, so an hour already being
+  allocated or allocated, even one claimed while the command runs, is reported as
+  `already_allocated` and left alone. The log names the actor, the pool, the first and last hour,
+  the node hours and the models (`spend_gpu_hours_recorded`), and each overwritten hour's previous
+  node hours, source and recorder (`spend_gpu_hour_overwritten`).
 - **Allocation** (the beat `spend-allocate-gpu-hours`, hourly at :20, at most 48 hours a run,
   oldest first) spreads each pool hour once it has closed (75 minutes after its start, so the
   writer and its spill have caught up). It claims the hour (a claim older than an hour is
@@ -721,6 +732,8 @@ platform-operator guard exists, and a tenant administrator must not set a shared
   allocation fails for a tenant stays claimed and is resumed after an hour; fresh hours are
   allocated before resumed ones, so an hour that keeps failing never holds back newer hours.
 - **Late calls.** An in-house call written after its hour was frozen is not reallocated.
+- **Paused tenants.** A tenant `spend.metering_paused` holds for keeps its allocation `frozen`: the
+  hour is not closed and is resumed, with the same frozen totals, once metering resumes.
 - `GET /spend/gpu-allocations` lists the tenant's own shares; another tenant's share is never
   shown.
 

@@ -6746,7 +6746,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "knowledge.sensitive.documents.list",
-    "source_line": 1017,
+    "source_line": 1026,
     "tenant_required": true
   },
   {
@@ -6764,7 +6764,7 @@
     "public_exempt_reason": null,
     "rate_limit": "knowledge-write",
     "scope": "knowledge.documents.delete",
-    "source_line": 1130,
+    "source_line": 1139,
     "tenant_required": true
   },
   {
@@ -6782,7 +6782,7 @@
     "public_exempt_reason": null,
     "rate_limit": "knowledge-search",
     "scope": "knowledge.sensitive.search",
-    "source_line": 1780,
+    "source_line": 1789,
     "tenant_required": true
   },
   {
@@ -6800,7 +6800,7 @@
     "public_exempt_reason": null,
     "rate_limit": "knowledge-search",
     "scope": "knowledge.sensitive.search",
-    "source_line": 1731,
+    "source_line": 1740,
     "tenant_required": true
   },
   {
@@ -6818,7 +6818,7 @@
     "public_exempt_reason": "deployment-smoke-test-no-tenant-data",
     "rate_limit": "healthcheck",
     "scope": "knowledge.health.public",
-    "source_line": 2088,
+    "source_line": 2097,
     "tenant_required": false
   },
   {
@@ -6836,7 +6836,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "knowledge.sensitive.stats",
-    "source_line": 1620,
+    "source_line": 1629,
     "tenant_required": true
   },
   {
@@ -6854,7 +6854,7 @@
     "public_exempt_reason": null,
     "rate_limit": "knowledge-search",
     "scope": "knowledge.sensitive.search",
-    "source_line": 1642,
+    "source_line": 1651,
     "tenant_required": true
   },
   {
@@ -6872,7 +6872,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "knowledge.upload",
-    "source_line": 1663,
+    "source_line": 1672,
     "tenant_required": true
   },
   {
@@ -6890,7 +6890,7 @@
     "public_exempt_reason": null,
     "rate_limit": "knowledge-search",
     "scope": "knowledge.sensitive.search",
-    "source_line": 1868,
+    "source_line": 1877,
     "tenant_required": true
   },
   {
@@ -6908,7 +6908,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "knowledge.sensitive.stats",
-    "source_line": 2201,
+    "source_line": 2210,
     "tenant_required": true
   },
   {

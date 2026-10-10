@@ -73,7 +73,7 @@ def tokens_of(texts, cap=512) -> int:
 class TestIsolation:
     SITES = (
         ("core/rag/ingest.py", 'spend.note("embeddings", tid, items=chunks, purpose="ingest", ref=document_id)'),
-        ("core/rag/ingest.py", 'spend.note("ocr", tid, extracted=content, purpose="ingest", ref=document_id)'),
+        ("core/rag/ingest.py", 'spend.note("ocr", tenant_id, extracted=content, purpose="ingest", ref=document_id)'),
         (
             "core/rag/reindex.py",
             'spend.note("embeddings", tenant_id, items=batch, purpose="reindex", run_ref=run_ref, start=start)',
@@ -81,7 +81,7 @@ class TestIsolation:
         ("api/v1/knowledge.py", 'spend.note("embeddings", tid, items=(query,), purpose="search")'),
         (
             "api/v1/knowledge.py",
-            'spend.note("ocr", tenant_id, extracted=extracted_content, purpose="upload", ref=doc_id)',
+            'spend.note("ocr", tenant_id, extracted=extracted_content, purpose="upload", ref=stored_doc_id or doc_id)',
         ),
         ("api/v1/idp.py", 'spend.note("ocr", tenant_id, result=result, purpose="idp")'),
         (
@@ -377,6 +377,45 @@ class TestEmbeddings:
 # ---------------------------------------------------------------- OCR
 
 
+def _upload_file():
+    import io
+
+    class _Upload:
+        filename = "scan.txt"
+        content_type = "text/plain"
+        size = None
+
+        def __init__(self):
+            self._file = io.BytesIO(b"scanned page bytes")
+
+        async def read(self, size=-1):
+            return self._file.read(size)
+
+    return _Upload()
+
+
+def _prepare_upload(monkeypatch, content):
+    """The upload route extracting ``content``: no managed retrieval, the documents it stores collected."""
+    from api.v1 import knowledge
+
+    _prepare_ingest(monkeypatch, content)
+    stored: list[dict] = []
+
+    class _Gate:
+        async def run_blocking(self, fn, *args, **kwargs):
+            return content
+
+    async def store_doc(tenant_id, doc):
+        stored.append(dict(doc))
+
+    monkeypatch.setattr(knowledge, "_DOCUMENT_EXTRACTION_CAPACITY", _Gate())
+    monkeypatch.setattr(knowledge, "_ragflow_available", lambda: False)
+    monkeypatch.setattr(knowledge, "_db_find_existing_by_filename", AsyncMock(return_value=None))
+    monkeypatch.setattr(knowledge, "_db_store_doc", store_doc)
+    monkeypatch.setattr(knowledge, "_db_set_doc_status", AsyncMock(return_value=None))
+    return knowledge, stored
+
+
 class TestOcr:
     @pytest.mark.asyncio
     async def test_idp_counts_only_ocr_done_pages(self, monkeypatch, on):
@@ -472,6 +511,92 @@ class TestOcr:
         assert kinds["ocr_pages"].quantity == 3
         document = kinds["embedding_tokens"].source_ref
         assert kinds["ocr_pages"].idempotency_key == f"ocr:ingest:{document}"
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("refusal", ["no_text", "duplicate", "lookup_down", "replace_lookup_down", "store_down"])
+    async def test_upload_refused_after_ocr_still_meters_its_pages_once(self, monkeypatch, on, refusal):
+        from fastapi import HTTPException
+
+        from core.rag.extractors import ExtractedContent
+
+        content = _content("tesseract-ocr")
+        if refusal == "no_text":  # OCR read three frames and found nothing usable
+            content = ExtractedContent(
+                spans=[], mime_type="image/png", extraction_method="tesseract-ocr", extra={"page_count": 3}
+            )
+        knowledge, stored = _prepare_upload(monkeypatch, content)
+        down = AsyncMock(side_effect=RuntimeError("database down"))
+        if refusal == "duplicate":
+            kept = AsyncMock(return_value={"document_id": "kept-doc", "filename": "scan.txt"})
+            monkeypatch.setattr(knowledge, "_db_find_existing_by_filename", kept)
+        if refusal in ("lookup_down", "replace_lookup_down"):
+            monkeypatch.setattr(knowledge, "_db_find_existing_by_filename", down)
+        if refusal == "store_down":
+            monkeypatch.setattr(knowledge, "_db_store_doc", down)
+        with pytest.raises(HTTPException) as info:
+            await knowledge.upload_document(
+                file=_upload_file(),
+                tenant_id=TID,
+                domain=None,
+                allow_duplicate=False,
+                replace=refusal == "replace_lookup_down",
+            )
+        assert info.value.status_code == (422 if refusal == "no_text" else 409 if refusal == "duplicate" else 503)
+        (event_,) = on["events"]  # the pages OCR read are metered once, though no document was stored
+        ref = event_.source_ref
+        assert (event_.usage_type, event_.quantity, event_.idempotency_key) == ("ocr_pages", 3, f"ocr:upload:{ref}")
+        assert str(uuid.UUID(ref)) == ref and ref != "kept-doc" and stored == []  # a fresh ref, never stored
+
+    @pytest.mark.asyncio
+    async def test_upload_ocr_names_the_document_as_stored_under_managed_retrieval(self, monkeypatch, on):
+        content = _content("tesseract-ocr")
+        knowledge, stored = _prepare_upload(monkeypatch, content)
+        monkeypatch.setattr(knowledge, "_ragflow_available", lambda: True)
+        monkeypatch.setattr(knowledge, "_ragflow_allowed", AsyncMock(return_value=True))
+        monkeypatch.setattr(knowledge, "_ragflow_upload", AsyncMock(return_value={"data": {"id": "rf-doc-0042"}}))
+        out = await knowledge.upload_document(
+            file=_upload_file(), tenant_id=TID, domain=None, allow_duplicate=False, replace=False
+        )
+        (doc,) = stored
+        assert out.document_id == doc["document_id"] == "rf-doc-0042"  # the managed service's id is stored
+        ocr = [e for e in on["events"] if e.usage_type == "ocr_pages"]
+        assert [(e.idempotency_key, e.source_ref, e.quantity) for e in ocr] == [
+            ("ocr:upload:rf-doc-0042", "rf-doc-0042", 3)
+        ]
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("failure", ["no_spans", "no_chunks", "embedding"])
+    async def test_ingest_meters_its_own_ocr_even_when_nothing_is_indexed(self, monkeypatch, on, failure):
+        from core.rag.extractors import ExtractedContent
+
+        content = _content("tesseract-ocr")
+        if failure == "no_spans":
+            content = ExtractedContent(
+                spans=[], mime_type="image/png", extraction_method="tesseract-ocr", extra={"page_count": 3}
+            )
+        ingest = _prepare_ingest(monkeypatch, content)
+        if failure == "no_chunks":
+            monkeypatch.setattr(ingest.chunking, "chunk", lambda spans, plan: [])
+        if failure == "embedding":
+            monkeypatch.setattr(ingest, "_embed_chunks", AsyncMock(side_effect=RuntimeError("embedder down")))
+        for extracted in (None, content):
+            on["events"].clear()
+            result = await ingest.ingest_document(
+                tenant_id=TENANT,
+                title="Scan",
+                stream=b"scan bytes",
+                mime_type="image/png",
+                filename="scan.png",
+                extracted_content=extracted,
+            )
+            assert result.chunks_indexed == 0 and result.errors
+            if extracted is not None:
+                assert on["events"] == []  # the caller passed its extraction and meters its OCR
+                continue
+            (event_,) = on["events"]  # extracted here: metered once, before the early return
+            ref = event_.source_ref
+            assert (event_.usage_type, event_.quantity) == ("ocr_pages", 3)
+            assert event_.idempotency_key == f"ocr:ingest:{ref}" and str(uuid.UUID(ref)) == ref
 
 
 # ---------------------------------------------------------------- speech
@@ -944,6 +1069,46 @@ class TestStorage:
         _bytes(store, knowledge=GIB)
         out = await storage.sample_all_tenants(now=datetime(2026, 10, 1, 18, 0, tzinfo=UTC))
         assert out["tenants"] == 2 and out["failed"] == 1 and out["written"] == 1
+
+    @pytest.mark.asyncio
+    async def test_storage_skips_a_paused_tenant_and_counts_a_paused_gap(self, monkeypatch, store):
+        from core import feature_flags
+        from core.spend import tenants
+        from observability import metrics
+
+        paused = {OTHER_TENANT}
+
+        async def flag_row(tenant_id, key):
+            assert key == "spend.metering_paused"
+            return {"enabled": True, "rollout_percentage": 100} if tenant_id in paused else None
+
+        async def shared_cache_path(*args, **kwargs):
+            raise AssertionError("the storage job must not use the flag module's shared cache")
+
+        monkeypatch.setattr(feature_flags, "_query_flag", flag_row)
+        monkeypatch.setattr(feature_flags, "is_enabled", shared_cache_path)
+        monkeypatch.setattr(tenants, "active_tenant_ids", tenant_ids(TENANT, OTHER_TENANT))
+        _bytes(store, knowledge=GIB)
+        _bytes(store, tenant=OTHER_TENANT, knowledge=GIB)
+        counter = metrics.spend_usage_write_failures_total.labels(usage_type="storage", reason="paused")
+        before = counter._value.get()
+        out = await storage.sample_all_tenants(now=datetime(2026, 10, 1, 18, 0, tzinfo=UTC))
+        assert out == {"day": "2026-10-01", "tenants": 2, "measured": 1, "written": 1, "failed": 0, "paused": 1}
+        assert {r.tenant_id for r in store.of("spend_usage_records")} == {TENANT}
+        assert store.measured == [TID]  # the paused tenant is not even measured
+        (gap,) = store.of("spend_meter_gaps")
+        assert (gap.tenant_id, gap.day, gap.usage_type, gap.reason, gap.count) == (
+            OTHER_TENANT,
+            DAY,
+            "storage",
+            "paused",
+            1,
+        )
+        assert counter._value.get() == before + 1
+        assert (await storage.sample_tenant(OTHER_TENANT, day=DAY, now=T0, write=False))["written"] == 0  # preview
+        paused.clear()  # metering resumes: the day is written
+        out = await storage.sample_tenant(OTHER_TENANT, day=DAY, now=T0, write=True)
+        assert out["written"] == 1 and "paused" not in out
 
     @pytest.mark.asyncio
     async def test_storage_route_previews_without_writing(self, store):

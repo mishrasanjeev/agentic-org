@@ -68,6 +68,8 @@ CONFIG_LOOKBACK = timedelta(days=7)
 STALE_CLAIM = timedelta(hours=1)
 MAX_WINDOW_DAYS = 31
 MAX_RECORD_HOURS = 744  # 31 days of hours per operator command
+# How far back the operator command records hours: the window configured pools are materialised in.
+RECORD_LOOKBACK = CONFIG_LOOKBACK
 MAX_NODE_HOURS = Decimal("10000")
 HOUR = timedelta(hours=1)
 PROVIDERS = ("ollama", "vllm")
@@ -564,8 +566,13 @@ async def _write_tenant(tenant_id: uuid.UUID, hour: PoolHour, share: Decimal, *,
 
 
 async def allocate_hour(pool_hour_id: uuid.UUID, *, now: datetime) -> dict[str, Any]:
-    """Spread one closed pool hour over every call of the pool's models; charge the zero-priced calls' tenants."""
-    from core.spend import tenants
+    """Spread one closed pool hour over every call of the pool's models; charge the zero-priced calls' tenants.
+
+    A tenant ``spend.metering_paused`` holds for keeps its allocation ``frozen``
+    and the hour is not closed, so it is resumed, with the same totals, once
+    metering resumes.
+    """
+    from core.spend import tenants, writer
 
     hour = await _claim(pool_hour_id, now)
     if hour is None:
@@ -594,6 +601,7 @@ async def allocate_hour(pool_hour_id: uuid.UUID, *, now: datetime) -> dict[str, 
         "priced_calls_skipped": skipped,
         "records": 0,
         "failed": 0,
+        "paused": 0,
         "idle": total == 0,
     }
     carried = Decimal(0)  # node hours tenant records carry
@@ -606,6 +614,9 @@ async def allocate_hour(pool_hour_id: uuid.UUID, *, now: datetime) -> dict[str, 
             if tenant_id in written:
                 carried += written[tenant_id]
                 continue
+            if await writer.metering_paused(tenant_id):
+                out["paused"] += 1  # its row stays frozen; the hour stays claimed and is resumed later
+                continue
             try:
                 out["records"] += await _write_tenant(tenant_id, hour, share, now=now)
                 carried += share
@@ -613,7 +624,9 @@ async def allocate_hour(pool_hour_id: uuid.UUID, *, now: datetime) -> dict[str, 
             except Exception as exc:
                 logger.warning("spend_gpu_allocation_failed", error_type=type(exc).__name__)
                 out["failed"] += 1
-    if out["failed"]:
+    if out["paused"]:
+        logger.info("spend_gpu_allocation_paused", pool_hour_id=str(pool_hour_id), tenants=out["paused"])
+    if out["failed"] or out["paused"]:
         return out
     # Exact for one run; a resumed run keeps the hours its first run wrote, so bound it to the hour.
     platform_hours = min(hour.node_hours, max(Decimal(0), Decimal(hour.node_hours) - carried))
@@ -671,6 +684,8 @@ async def allocate_pending(*, now: datetime) -> dict[str, Any]:
         totals["idle"] += 1 if out["idle"] else 0
         totals["records"] += out["records"]
         totals["failed"] += out["failed"]
+        if out.get("paused"):
+            totals["paused"] = totals.get("paused", 0) + out["paused"]
     return totals
 
 
@@ -764,57 +779,122 @@ def check_record(
     }
 
 
+def check_record_window(hours: Sequence[datetime], *, now: datetime) -> None:
+    """Refuse hours that have not ended by ``now`` or that start more than ``RECORD_LOOKBACK`` back (422).
+
+    A future hour would be allocated as if it had been metered, and an old one
+    would land late records in days already reported on.
+    """
+    current = now.astimezone(UTC).replace(minute=0, second=0, microsecond=0)
+    if hours[-1] + HOUR > current:
+        raise SpendError(
+            422,
+            "invalid_period",
+            f"hour_end is at most the current whole hour ({current.isoformat()}): an hour is recorded once over",
+        )
+    earliest = _ceil_hour(now - RECORD_LOOKBACK)
+    if hours[0] < earliest:
+        raise SpendError(
+            422,
+            "invalid_period",
+            f"hour_start is at most {RECORD_LOOKBACK.days} days back (from {earliest.isoformat()})",
+        )
+
+
 async def record_hours(*, now: datetime, **body: Any) -> dict[str, Any]:
-    """Upsert ``pending`` node-hour rows (the operator command); an hour already allocated is left alone."""
+    """Upsert ``pending`` node-hour rows (the operator command); an hour being allocated or allocated is left alone.
+
+    Only hours that have ended, at most ``RECORD_LOOKBACK`` back. In one
+    transaction the hours' rows are read ``FOR UPDATE`` (for the log), then
+    each hour is one ``INSERT ... ON CONFLICT DO UPDATE ... WHERE status =
+    'pending'``: an hour the allocator claims, or another command inserts,
+    meanwhile is never overwritten and never fails the command, and a
+    conflict that updates nothing is reported ``already_allocated``. Node
+    hours are a platform input, logged rather than audited (the audit log
+    needs a tenant), so the log names who recorded what, and the values each
+    overwritten hour had before.
+    """
     from sqlalchemy import select
+    from sqlalchemy.dialects.postgresql import insert as pg_insert
 
     from core.database import async_session_factory
     from core.models.spend_gpu import SpendGpuPoolHour as H
 
     checked = check_record(**body)
+    hours: list[datetime] = checked["hours"]
+    check_record_window(hours, now=now)
+    table = H.__table__
     created, updated, allocated = 0, 0, []
+    overwritten: list[datetime] = []
     async with async_session_factory() as session:
-        for hour in checked["hours"]:
-            row = (
-                await session.execute(
-                    select(H).where(
-                        H.provider == checked["provider"], H.node_pool == checked["node_pool"], H.hour_start == hour
-                    )
-                )
-            ).scalar_one_or_none()
-            if row is None:
-                session.add(
-                    H(
-                        id=uuid.uuid4(),
-                        provider=checked["provider"],
-                        node_pool=checked["node_pool"],
-                        models=checked["models"],
-                        hour_start=hour,
-                        node_hours=checked["node_hours"],
-                        source=checked["source"],
-                        status="pending",
-                        recorded_by=checked["actor"],
-                    )
-                )
-                created += 1
-            elif row.status == "pending":
-                row.models = checked["models"]
-                row.node_hours = checked["node_hours"]
-                row.source = checked["source"]
-                row.recorded_by = checked["actor"]
-                row.updated_at = now
-                updated += 1
-            else:
+        found = await session.execute(
+            select(H.hour_start, H.node_hours, H.source, H.recorded_by)
+            .where(H.provider == checked["provider"], H.node_pool == checked["node_pool"], H.hour_start.in_(hours))
+            .with_for_update()
+        )
+        before = {row[0]: tuple(row[1:]) for row in found.all()}
+        for hour in hours:
+            new_id = uuid.uuid4()
+            insert = pg_insert(table).values(
+                id=new_id,
+                provider=checked["provider"],
+                node_pool=checked["node_pool"],
+                models=checked["models"],
+                hour_start=hour,
+                node_hours=checked["node_hours"],
+                source=checked["source"],
+                status="pending",
+                recorded_by=checked["actor"],
+            )
+            statement = insert.on_conflict_do_update(
+                index_elements=["provider", "node_pool", "hour_start"],
+                set_={
+                    "models": insert.excluded.models,
+                    "node_hours": insert.excluded.node_hours,
+                    "source": insert.excluded.source,
+                    "recorded_by": insert.excluded.recorded_by,
+                    "updated_at": now,
+                },
+                where=table.c.status == "pending",
+            ).returning(table.c.id)
+            row = (await session.execute(statement)).first()
+            if row is None:  # the row exists and is no longer pending
                 allocated.append(hour.isoformat())
+            elif row[0] == new_id:
+                created += 1
+            else:
+                updated += 1
+                overwritten.append(hour)
         await session.commit()
     logger.info(
         "spend_gpu_hours_recorded",
+        actor=checked["actor"],
         provider=checked["provider"],
+        node_pool=checked["node_pool"],
+        models=checked["models"],
+        first_hour=hours[0].isoformat(),
+        last_hour=hours[-1].isoformat(),
+        node_hours=vocab.dec_str(checked["node_hours"]),
         source=checked["source"],
         created=created,
         updated=updated,
         already_allocated=len(allocated),
     )
+    for hour in overwritten:
+        # None: another command inserted the hour after the read above, so its values were not seen.
+        previous = before.get(hour, (None, None, None))
+        logger.info(
+            "spend_gpu_hour_overwritten",
+            actor=checked["actor"],
+            provider=checked["provider"],
+            node_pool=checked["node_pool"],
+            hour_start=hour.isoformat(),
+            node_hours=vocab.dec_str(checked["node_hours"]),
+            source=checked["source"],
+            previous_node_hours=vocab.dec_str(previous[0]),
+            previous_source=previous[1],
+            previous_recorded_by=previous[2],
+        )
     return {"created": created, "updated": updated, "already_allocated": allocated}
 
 

@@ -242,11 +242,20 @@ async def sample_tenant(
     ``write=True`` (the scheduled job): reads the window's keys first, measures
     only when something is missing, and writes the day and any missed day.
     ``write=False`` (the preview): measures, writes no record, and audits the
-    preview under ``actor``.
+    preview under ``actor``. A tenant ``spend.metering_paused`` holds for is
+    not sampled by the job: the day is counted as a ``paused`` gap, and once
+    metering resumes the gap fill writes it like any missed day.
     """
     from core.database import get_tenant_session
-    from core.spend import audit, meter
+    from core.spend import audit, meter, writer
 
+    if write and await writer.metering_paused(tenant_id):
+        from observability import metrics as m
+
+        async with get_tenant_session(tenant_id) as session:
+            await meter.upsert_gaps(session, tenant_id, {(day, USAGE_TYPE, "paused", ""): 1})
+        m.spend_usage_write_failures_total.labels(usage_type=USAGE_TYPE, reason="paused").inc()
+        return {"day": day.isoformat(), "measured": False, "stores": {}, "written": 0, "paused": True}
     async with get_tenant_session(tenant_id) as session:
         existing: set[str] = set()
         done = False
@@ -310,5 +319,7 @@ async def sample_all_tenants(*, now: datetime | None = None) -> dict[str, Any]:
             continue
         totals["measured"] += 1 if out["measured"] else 0
         totals["written"] += out["written"]
+        if out.get("paused"):
+            totals["paused"] = totals.get("paused", 0) + 1
     logger.info("spend_storage_sampled", **{k: v for k, v in totals.items() if k != "day"})
     return totals
