@@ -22,8 +22,8 @@ nothing.
 priced (directly, or as the output half of a blended price). A change that
 cuts priced history (a backdated supersede, an earlier ``effective_to``, a
 correction) queues a restatement job for the affected billing days once it
-has committed; ``restate_job_id`` names it (or the restatement already
-active, which the change is folded into).
+has committed; ``restate_job_id`` names it (or the queued restatement of the
+same provider it was merged into, widened to cover it).
 """
 
 from __future__ import annotations
@@ -301,7 +301,7 @@ RestatePlan = tuple[str, date, date, uuid.UUID]
 async def _restate_job(
     tenant_id: uuid.UUID, plan: RestatePlan | None, *, reason: str, actor: str, card_ids: list[uuid.UUID] | None = None
 ) -> str | None:
-    """Queue the restatement a committed change calls for; the job id (or the active one it joins)."""
+    """Queue the restatement a committed change calls for; the job id (or the queued one it joins)."""
     if plan is None:
         return None
     from core.spend import jobs

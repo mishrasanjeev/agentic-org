@@ -253,11 +253,35 @@ class TestResolution:
 
         store.fail_on.add("FROM agents a")
         failed = await resolver.resolve(store, TENANT, hints(agent_id=str(AGENT), run_id="run_1"), now=1.0)
-        assert failed.unattributed_reason == "resolver_failed" and failed.run_id == "run_1" and failed.agent_id is None
+        assert failed.unattributed_reason == "resolver_failed" and failed.run_id == "run_1"
+        assert failed.agent_id == AGENT  # kept on the hook path too, so re-attribution can use it
         resolver.invalidate(TENANT)
         result = await meter.write_events(store, TENANT, [event(hints=hints(agent_id=str(AGENT)))], now=T0)
         assert result.written == 1
-        assert store.of("spend_usage_records")[0].unattributed_reason == "resolver_failed"
+        record = store.of("spend_usage_records")[0]
+        assert record.unattributed_reason == "resolver_failed" and record.agent_id == AGENT
+
+    @pytest.mark.asyncio
+    async def test_a_resolver_failure_is_reattributed_through_the_agent_once_reads_recover(self, store, tree):
+        from datetime import date
+
+        from core.spend import maintenance, meter
+        from tests.unit.test_spend_usage import event
+
+        agent_row(store)
+        mapping(store, "agent", AGENT, tree.dept)
+        store.fail_on.add("FROM agents a")
+        await meter.write_events(store, TENANT, [event(hints=hints(agent_id=str(AGENT)))], now=T0)
+        store.fail_on.clear()
+        day = date(2026, 10, 1)
+        out = await maintenance.reattribute(TENANT, start=day, end=day, actor=ACTOR, now=T0)
+        record = store.of("spend_usage_records")[0]
+        assert out["changed"] == 1 and record.org_node_id == tree.dept.id
+        assert record.attribution_path == "agent_mapping" and record.agent_id == AGENT
+        agent_row(store, status="retired")  # the retired-agent rule still applies when re-attributing
+        resolver.invalidate(TENANT)
+        found = await resolver.resolve(store, TENANT, maintenance.hints_of(record))
+        assert found.agent_id is None and found.attribution_path != "agent_mapping"
 
     @pytest.mark.asyncio
     async def test_resolution_cache_expires_and_is_invalidated_by_mapping_write(self, store, tree):
@@ -297,3 +321,31 @@ class TestResolution:
         store.add(GovernanceConfig(tenant_id=TENANT, data_region="eu"))
         resolver.invalidate(TENANT)
         assert (await resolver.resolve(store, TENANT, hints(), now=1.0)).region == "EU"
+
+
+def test_invalidation_is_safe_while_the_writer_thread_fills_the_cache():
+    """A mapping write invalidates on a request thread while the writer thread adds resolutions."""
+    import threading
+
+    stop = threading.Event()
+    errors: list[BaseException] = []
+    resolved = resolver.failed(hints())
+
+    def fill() -> None:
+        index = 0
+        while not stop.is_set():
+            resolver._remember((str(TENANT), str(index)), 0.0, resolved)
+            index += 1
+
+    filler = threading.Thread(target=fill)
+    filler.start()
+    try:
+        for _ in range(3000):
+            resolver.invalidate(TENANT)
+    except RuntimeError as exc:  # "dictionary changed size during iteration" without the lock
+        errors.append(exc)
+    finally:
+        stop.set()
+        filler.join(timeout=5)
+        resolver._RESOLUTION_CACHE.clear()
+    assert errors == []

@@ -582,8 +582,13 @@ async def upsert_gaps(session: Any, tenant_id: uuid.UUID, gaps: Mapping[tuple[da
 async def mark_commitments_for_replay(
     session: Any, tenant_id: uuid.UUID, providers: Sequence[str], *, after: datetime | None = None, kind: str = ""
 ) -> None:
-    """Set ``needs_full_recompute`` on the providers' active commitments (watermark past ``after`` when given)."""
-    from sqlalchemy import update
+    """Set ``needs_full_recompute`` on the providers' active commitments (watermark past ``after`` when given).
+
+    A commitment with no watermark (never recomputed, or in a full replay that
+    dropped it until the replay ends) is marked too, so a late record whose day
+    a running replay has already passed is drawn by the next one.
+    """
+    from sqlalchemy import or_, update
 
     from core.models.spend import SpendCommitment as C
 
@@ -591,7 +596,7 @@ async def mark_commitments_for_replay(
         return
     conditions = [C.tenant_id == tenant_id, C.status == "active", C.provider.in_(sorted(set(providers)))]
     if after is not None:
-        conditions.append(C.recomputed_through > after)
+        conditions.append(or_(C.recomputed_through.is_(None), C.recomputed_through > after))
     if kind:
         conditions.append(C.kind == kind)
     await session.execute(update(C).where(*conditions).values(needs_full_recompute=True))

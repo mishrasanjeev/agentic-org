@@ -132,7 +132,6 @@ async def _upsert(
 
 
 SETTLE_DAYS_WITHOUT_NEXT = 31
-SETTLE_MAX_DAYS = 92
 
 
 async def fx_in_use(session: Any, tenant_id: uuid.UUID, currency: str, rate_date: date) -> bool:
@@ -179,7 +178,7 @@ async def settle_window(session: Any, tenant_id: uuid.UUID, currency: str, rate_
 async def _settle_job(
     tenant_id: uuid.UUID, window: tuple[date, date] | None, forced: list[tuple[str, date]], *, actor: str
 ) -> str | None:
-    """Queue the settlement a committed rate change calls for; the job id (or the active one it joins)."""
+    """Queue the settlement a committed rate change calls for; the job id (or the queued one it joins)."""
     if window is None:
         return None
     from core.spend import jobs
@@ -315,8 +314,12 @@ async def import_rates(
             ):
                 session.add(entry)
     if windows and not dry_run:
+        from core.spend.maintenance import JOB_MAX_DAYS
+
+        # One settlement from the earliest changed rate to the end of the latest one's window,
+        # as long as a job may run (ten years), so no imported rate is left unsettled.
         start = min(w[0] for w in windows)
-        end = min(max(w[1] for w in windows), start + timedelta(days=SETTLE_MAX_DAYS - 1))
+        end = min(max(w[1] for w in windows), start + timedelta(days=JOB_MAX_DAYS - 1))
         report["settle_job_id"] = await _settle_job(tenant_id, (start, end), [], actor=who)
     return report
 

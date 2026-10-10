@@ -254,20 +254,30 @@ class UsageSession(FakeSession):
         if "FROM users u" in sql:
             found = self.user_departments.get(str(params["user"]))
             return Result([found] if found is not None else [])
-        if "UPDATE spend_jobs SET status = 'running'" in sql:
+        if "UPDATE spend_jobs AS j SET status = 'running'" in sql:
             return self._claim(params)
         return self._text(sql, params)
 
     def _claim(self, params: dict[str, Any]) -> Result:
-        for row in self.of("spend_jobs"):
+        """The job claim: queued, or running with no heartbeat for ten minutes; never beside another running job."""
+        jobs = self.of("spend_jobs")
+        for row in jobs:
             if row.id == params["id"] and row.tenant_id == params["tid"]:
-                stale = row.status == "running" and row.started_at is not None and (NOW - row.started_at).days >= 0
-                stale = stale and (NOW - row.started_at).total_seconds() > 2 * 3600
-                if row.status == "queued" or stale:
+                beat = row.heartbeat_at or row.started_at
+                stale = row.status == "running" and beat is not None and (NOW - beat).total_seconds() > 600
+                blocked = any(
+                    other.id != row.id
+                    and other.tenant_id == row.tenant_id
+                    and other.kind == row.kind
+                    and other.status == "running"
+                    for other in jobs
+                )
+                if (row.status == "queued" or stale) and not blocked:
                     row.status = "running"
                     row.started_at = NOW
+                    row.heartbeat_at = NOW
                     self.claims.append({"id": row.id})
-                    return Result([(row.kind, row.params, row.requested_by)])
+                    return Result([(row.kind, row.params, row.requested_by, row.result)])
         return Result([])
 
     # ---------------------------------------------------------------- writes
@@ -402,7 +412,7 @@ def install(monkeypatch: Any) -> UsageSession:
     monkeypatch.setattr(settings, "spend_provider_billing_timezones_json", "")
     monkeypatch.setattr(settings, "model_price_overrides_json", "")
     monkeypatch.setattr(clock, "now_utc", lambda: T0)
-    monkeypatch.setattr(jobs, "_dispatch", lambda tenant_id, job_id: None)
+    monkeypatch.setattr(jobs, "_dispatch", lambda tenant_id, job_id, **options: None)
     pricing._ALIAS_CACHE.clear()
     resolver._RESOLUTION_CACHE.clear()
     billing._BILLING_CACHE.clear()

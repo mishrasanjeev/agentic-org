@@ -844,7 +844,7 @@ class TestCommitmentsAndFx:
         assert listed["total"] == 1 and listed["items"][0]["rate_to_inr"] == "83.25"
 
     @pytest.mark.asyncio
-    async def test_fx_writes_take_the_currency_lock_before_reading_the_rate(self, session):
+    async def test_fx_writes_take_the_currency_lock_before_reading_the_rate(self, session, monkeypatch):
         """``FOR UPDATE`` locks nothing while a new rate's row does not exist, so two writers of the same new
         rate are serialised by the currency's advisory lock instead of both inserting it."""
 
@@ -857,6 +857,10 @@ class TestCommitmentsAndFx:
         def reads_rates(statement) -> bool:
             return not isinstance(statement, TextClause) and "spend_fx_rates" in str(statement)
 
+        async def no_followup(*args, **kwargs):
+            return None  # the settlement job takes its own lock in its own transaction, after this one
+
+        monkeypatch.setattr(jobs, "enqueue_followup", no_followup)
         await fx.put_rate(TENANT, {"rate_date": "2026-10-01", "currency": "USD", "rate_to_inr": "83"}, actor=ACTOR)
         assert session.locks == [locks.fx_rate(TENANT, "USD")]
         assert first(is_lock) < first(reads_rates)

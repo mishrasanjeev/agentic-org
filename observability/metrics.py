@@ -302,9 +302,12 @@ spend_unmetered_calls_total = Counter(
     "Calls that produced no usage quantity (failed_no_usage, timeout_estimated, cancelled)",
     ["usage_type", "reason"],
 )
+# livemax: a Celery child that dies with a backlog leaves no series behind (mark_process_dead
+# removes live* gauge files), and the backlog alert reads max() across processes.
 spend_usage_pending = Gauge(
     "agenticorg_spend_usage_pending",
     "Usage events queued or awaiting retry in this process",
+    multiprocess_mode="livemax",
 )
 spend_hook_seconds = Histogram(
     "agenticorg_spend_hook_seconds",

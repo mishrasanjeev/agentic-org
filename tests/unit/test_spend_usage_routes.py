@@ -21,7 +21,7 @@ from api.v1 import spend as api
 from core.config import settings
 from core.models.spend_usage import SpendJob, SpendMeterGap, SpendUsageRecord, SpendUsageRollup
 from core.ownership import Caller
-from core.spend import fx, jobs, meter, partitions, rates, rollups
+from core.spend import fx, jobs, locks, meter, partitions, rates, rollups
 from core.spend.errors import SpendError
 from tests.unit.spend_usage_fakes import ACTOR, T0, TENANT, install
 from tests.unit.test_spend_usage import card, event, hints
@@ -153,6 +153,33 @@ class TestRoutes:
         assert len((await api.list_usage(DAY, DAY, caller=owner_view, tenant_id=TID))["items"]) == 2
 
     @pytest.mark.asyncio
+    async def test_usage_reads_show_contract_terms_to_commercial_readers_only(self, store):
+        store.add(card())
+        await meter.write_events(store, TENANT, [event()], now=T0)
+        record = store.of("spend_usage_records")[0]
+        record.commitment_id, record.overage, record.overage_quantity = uuid.uuid4(), True, Decimal("5")
+        admin = (await api.list_usage(DAY, DAY, caller=ADMIN_CALLER, tenant_id=TID))["items"][0]
+        assert admin["rate_card_id"] == str(record.rate_card_id) and admin["unit_price"] == "2.5"
+        assert admin["commitment_id"] == str(record.commitment_id) and admin["overage_quantity"] == "5"
+        assert "overage" in admin["flags"]
+        for reader in (
+            Caller(user_id=uuid.uuid4(), role="cfo", domains=["finance"], is_admin=False, is_machine=False),
+            Caller(user_id=None, role="agent", domains=None, is_admin=False, is_machine=True),
+        ):
+            item = (await api.list_usage(DAY, DAY, caller=reader, tenant_id=TID))["items"][0]
+            assert item["rate_card_id"] is None and item["unit_price"] is None
+            assert item["commitment_id"] is None and item["overage_quantity"] is None
+            assert "overage" not in item["flags"] and item["amount"] == admin["amount"]
+            for group in ("rate_card_id", "commitment_id"):
+                with pytest.raises(HTTPException) as info:
+                    await api.list_rollups(DAY, DAY, group_by=group, caller=reader, tenant_id=TID)
+                assert info.value.status_code == 403 and info.value.detail["error"] == "commercial_read_refused"
+            rows = (await api.list_rollups(DAY, DAY, group_by="provider", caller=reader, tenant_id=TID))["rows"]
+            assert rows[0]["provider"] == "openai"
+        by_card = await api.list_rollups(DAY, DAY, group_by="rate_card_id", caller=ADMIN_CALLER, tenant_id=TID)
+        assert by_card["rows"][0]["rate_card_id"] == str(record.rate_card_id)
+
+    @pytest.mark.asyncio
     async def test_job_routes_answer_202_with_a_job_id(self, store):
         rebuild = await api.rebuild_rollups(api.RebuildIn(start=DAY, end=DAY), ADMIN, tenant_id=TID)
         assert rebuild["status"] == "queued" and uuid.UUID(rebuild["job_id"])
@@ -241,9 +268,14 @@ class TestJobs:
         other = await jobs.enqueue(TENANT, kind="reattribute", params={}, actor="")
         assert other["status"] == "queued"
         assert next(r for r in store.of("spend_jobs") if str(r.id) == other["job_id"]).requested_by == jobs.SYSTEM_ACTOR
+        # A follow-up is never folded into a job that does not cover it: other parameters, its own job.
         followup = await jobs.enqueue_followup(TENANT, kind="rebuild", params={}, actor=ACTOR)
-        assert followup == {"job_id": first["job_id"], "status": "queued", "kind": "rebuild", "coalesced": True}
+        assert followup["job_id"] != first["job_id"] and followup["merged"] is False
+        assert followup["status"] == "queued"
+        same = await jobs.enqueue_followup(TENANT, kind="rebuild", params={}, actor=ACTOR)
+        assert same == {"job_id": followup["job_id"], "status": "queued", "kind": "rebuild", "merged": True}
         assert await jobs.enqueue_followup(TENANT, kind="nonsense", params={}, actor=ACTOR) is None
+        assert locks.job_kind(TENANT, "rebuild") in store.locks
 
     @pytest.mark.asyncio
     async def test_dispatch_failure_fails_the_job_so_the_kind_is_not_blocked(self, store, monkeypatch):
@@ -265,9 +297,10 @@ class TestJobs:
         )
         job_id = uuid.UUID(queued["job_id"])
         row = store.of("spend_jobs")[0]
-        row.status, row.started_at = "running", datetime(2026, 10, 1, 11, 30, tzinfo=UTC)  # 30 minutes ago
+        row.status, row.started_at = "running", datetime(2026, 10, 1, 9, 0, tzinfo=UTC)  # started three hours ago
+        row.heartbeat_at = datetime(2026, 10, 1, 11, 55, tzinfo=UTC)  # but its heartbeat is five minutes old
         assert (await jobs.run(TENANT, job_id))["skipped"] == "not_claimable"
-        row.started_at = datetime(2026, 10, 1, 9, 0, tzinfo=UTC)  # three hours ago: the worker was lost
+        row.heartbeat_at = datetime(2026, 10, 1, 11, 40, tzinfo=UTC)  # silent for twenty minutes: the worker was lost
         done = await jobs.run(TENANT, job_id, now=T0)
         assert done["status"] == "succeeded" and row.status == "succeeded" and row.result["days"] == 1
         assert (await jobs.run(TENANT, job_id))["skipped"] == "not_claimable"
@@ -413,6 +446,7 @@ class TestPartitionsAndMigration:
             "org_node_id IS NOT NULL",
             "fx_estimated OR unconverted",
             "status IN ('queued','running')",
+            "status = 'running'",
         ):
             assert f"WHERE {predicate}" in ddl, predicate
         for model in MODELS:
@@ -682,6 +716,18 @@ class TestReferenceHooks:
         assert later["created"] == 1 and later["settle_job_id"]
         window = await fx.settle_window(store, TENANT, "USD", date(2026, 10, 1))
         assert window == (date(2026, 10, 1), date(2026, 10, 4))
+
+    @pytest.mark.asyncio
+    async def test_an_fx_import_settles_its_whole_window(self, store):
+        """Rates nine months apart: the settlement runs from the first to the end of the last one's window,
+        not 92 days."""
+        rows = [
+            {"rate_date": "2026-01-01", "currency": "USD", "rate_to_inr": "82"},
+            {"rate_date": "2026-09-30", "currency": "USD", "rate_to_inr": "83"},
+        ]
+        report = await fx.import_rates(TENANT, rows, actor=ACTOR, dry_run=False, file_sha256="0" * 64, now=T0)
+        job = next(r for r in store.of("spend_jobs") if str(r.id) == report["settle_job_id"])
+        assert (job.params["start"], job.params["end"]) == ("2026-01-01", "2026-10-31")
 
     @pytest.mark.asyncio
     async def test_commitment_changes_queue_a_recompute(self, store):

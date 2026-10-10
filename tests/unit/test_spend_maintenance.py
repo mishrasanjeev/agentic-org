@@ -707,3 +707,204 @@ class TestLedgersAndBackfill:
 
 def test_utc_constant():
     assert T0.tzinfo is UTC and datetime(2026, 10, 1, tzinfo=UTC) < T0
+
+
+# ---------------------------------------------------------------- review fixes: locking, partial runs, recompute
+
+
+class TestJobsRevisingRecords:
+    @pytest.mark.asyncio
+    async def test_job_chunks_lock_their_records_and_read_them_fresh(self, store):
+        from core.models.spend_usage import SpendUsageRecord as R
+
+        await write(store, event())
+        rows = await maintenance._chunk(store, [R.tenant_id == TENANT], None)
+        statement = store.statements[-1]
+        assert len(rows) == 1 and statement._for_update_arg is not None
+        assert statement.get_execution_options().get("populate_existing") is True
+        target = commitment()
+        store.add(target)
+        store.statements.clear()
+        await commitments.recompute(TENANT, now=LATER)
+        selects = [s for s in store.statements if hasattr(s, "get_final_froms")]
+        record_reads = [s for s in selects if "FROM spend_usage_records" in str(s)]
+        commitment_reads = [s for s in selects if "FROM spend_commitments" in str(s) and "provider =" in str(s)]
+        assert record_reads and all(s._for_update_arg is not None for s in record_reads)
+        assert commitment_reads and all(s._for_update_arg is not None for s in commitment_reads)
+
+    @pytest.mark.asyncio
+    async def test_a_restatement_that_stops_part_way_leaves_audited_chunks_and_marked_commitments(
+        self, store, monkeypatch
+    ):
+        from core.spend import pricing
+
+        old = card(unit_price=Decimal("2.5"))
+        store.add(old)
+        target = commitment(needs_full_recompute=False, recomputed_through=T0 - timedelta(days=1))
+        store.add(target)
+        await write(store, event(), event(event_time=T0 + timedelta(days=1)))
+        old.status, old.retired_at = "retired", T0
+        new = card(unit_price=Decimal("3"), replaces_id=old.id)
+        store.add(new)
+        real = pricing.price_many
+        calls = {"n": 0}
+
+        async def times_out_on_day_two(session, tenant_id, usages):
+            calls["n"] += 1
+            if calls["n"] > 1:
+                raise RuntimeError("lock timeout on the second day")
+            return await real(session, tenant_id, usages)
+
+        monkeypatch.setattr(pricing, "price_many", times_out_on_day_two)
+        with pytest.raises(RuntimeError):
+            await maintenance.restate(
+                TENANT, provider="openai", start=DAY, end=NEXT_DAY, card_ids=[old.id], include_unpriced=False,
+                actor=ACTOR, reason="Corrected contract price", now=T0,
+            )  # fmt: skip
+        events = [r.event_type for r in store.of("audit_log")]
+        assert "spend.usage.restate" not in events  # the summary never came
+        chunk = next(r for r in store.of("audit_log") if r.event_type == "spend.usage.restate.chunk")
+        assert chunk.details["billing_day"] == "2026-10-01" and chunk.details["changed"] == 1
+        assert chunk.details["reason"] == "Corrected contract price"
+        amounts = chunk.details["amounts"]
+        assert Decimal(amounts[f"2026-10-01:{old.id}"]["before"]) == Decimal("0.0025")
+        assert Decimal(amounts[f"2026-10-01:{new.id}"]["after"]) == Decimal("0.003")
+        assert target.needs_full_recompute is True  # marked in the same transaction as the revision
+
+    @pytest.mark.asyncio
+    async def test_a_settlement_that_stops_part_way_leaves_audited_chunks_and_marked_commitments(
+        self, store, monkeypatch
+    ):
+        from core.spend import fx
+
+        store.add(card())
+        money = commitment(
+            kind="money", unit=None, usage_type=None, committed_quantity=None, committed_amount=Decimal("1"),
+            currency="USD", needs_full_recompute=False, recomputed_through=T0 - timedelta(days=1),
+        )  # fmt: skip
+        store.add(money)
+        await write(store, event(), event(event_time=T0 + timedelta(days=1)))  # no rate yet: unconverted
+        fx_rate(store, DAY, "83")
+        real = fx.rate_on
+
+        async def fails_on_day_two(session, tenant_id, currency, on):
+            if on == NEXT_DAY:
+                raise RuntimeError("statement timeout on the second day")
+            return await real(session, tenant_id, currency, on)
+
+        monkeypatch.setattr(fx, "rate_on", fails_on_day_two)
+        with pytest.raises(RuntimeError):
+            await maintenance.settle_fx(TENANT, start=DAY, end=NEXT_DAY, actor=ACTOR, now=T0)
+        assert "spend.fx.settle" not in [r.event_type for r in store.of("audit_log")]
+        chunk = next(r for r in store.of("audit_log") if r.event_type == "spend.fx.settle.chunk")
+        assert chunk.details["day"] == "2026-10-01" and chunk.details["by_currency"]["USD"]["records"] == 1
+        assert Decimal(chunk.details["by_currency"]["USD"]["after"]) == Decimal("0.2075")
+        assert money.needs_full_recompute is True
+
+    @pytest.mark.asyncio
+    async def test_reattribution_audits_each_changing_chunk(self, store):
+        unit = SpendOrgNode(id=uuid.uuid4(), tenant_id=TENANT, code="BU", name="B", kind="business_unit", active=True)
+        store.add(unit)
+        await write(store, event(hints=hints(application="chat")))
+        store.add(
+            SpendSourceMapping(
+                id=uuid.uuid4(), tenant_id=TENANT, source_type="application", source_ref="chat",
+                org_node_id=unit.id, active=True,
+            )
+        )  # fmt: skip
+        await maintenance.reattribute(TENANT, start=DAY, end=NEXT_DAY, actor=ACTOR, now=T0)
+        chunks = [r for r in store.of("audit_log") if r.event_type == "spend.usage.reattribute.chunk"]
+        assert len(chunks) == 1  # the second day changed nothing and writes no chunk row
+        assert chunks[0].details["before"] == {"no_mapping": 1} and chunks[0].details["after"] == {"attributed": 1}
+
+
+class TestRecomputeFlags:
+    @pytest.mark.asyncio
+    async def test_a_flag_set_while_a_replay_runs_is_kept_for_the_next_run(self, store, monkeypatch):
+        target = commitment()
+        store.add(target)
+        await write(store, event())
+        real = commitments._replay_window
+
+        async def a_change_commits_meanwhile(*args, **kwargs):
+            out = await real(*args, **kwargs)
+            target.needs_full_recompute = True  # update_commitment changed the period during the replay
+            return out
+
+        monkeypatch.setattr(commitments, "_replay_window", a_change_commits_meanwhile)
+        await commitments.recompute(TENANT, now=LATER)
+        assert target.needs_full_recompute is True and target.drawn_quantity == Decimal(1000)
+        monkeypatch.setattr(commitments, "_replay_window", real)
+        again = await commitments.recompute(TENANT, now=LATER)
+        assert again["providers"]["openai"]["mode"] == "full" and target.needs_full_recompute is False
+
+    @pytest.mark.asyncio
+    async def test_a_provider_whose_commitments_are_all_closed_is_cleared_once_then_skipped(self, store):
+        target = commitment()
+        store.add(target)
+        await write(store, event())
+        await commitments.recompute(TENANT, now=LATER)
+        assert records(store)[0].commitment_id == target.id
+        target.status, target.needs_full_recompute = "closed", True  # what update_commitment does
+        cleared = await commitments.recompute(TENANT, now=LATER)
+        assert cleared["providers"]["openai"]["mode"] == "full" and records(store)[0].commitment_id is None
+        assert target.needs_full_recompute is False
+        later = await commitments.recompute(TENANT, now=LATER + timedelta(days=1))
+        assert later["providers"]["openai"] == {"mode": "none", "scanned": 0, "changed": 0}
+        assert rollup_state(store) == await _rebuilt(store)
+
+    @pytest.mark.asyncio
+    async def test_a_replay_that_stops_part_way_is_replayed_in_full_next_time(self, store, monkeypatch):
+        target = commitment()
+        store.add(target)
+        await write(store, event())
+        await commitments.recompute(TENANT, now=LATER)
+        target.needs_full_recompute = True
+
+        async def worker_lost(*args, **kwargs):
+            raise RuntimeError("worker lost")
+
+        real = commitments._replay_window
+        monkeypatch.setattr(commitments, "_replay_window", worker_lost)
+        with pytest.raises(RuntimeError):
+            await commitments.recompute(TENANT, now=LATER)
+        assert target.needs_full_recompute is False and target.recomputed_through is None
+        monkeypatch.setattr(commitments, "_replay_window", real)
+        result = await commitments.recompute(TENANT, now=LATER)
+        assert result["providers"]["openai"]["mode"] == "full" and target.recomputed_through is not None
+
+    @pytest.mark.asyncio
+    async def test_a_late_record_marks_a_commitment_whose_watermark_a_replay_dropped(self, store):
+        target = commitment(needs_full_recompute=False, recomputed_through=None)
+        store.add(target)
+        await write(store, event(event_time=T0), now=LATER)  # a day late
+        assert target.needs_full_recompute is True
+
+    @pytest.mark.asyncio
+    async def test_recompute_is_audited_with_totals_before_and_after(self, store):
+        from core.spend import vocab
+
+        target = commitment()
+        store.add(target)
+        await write(store, event())
+        await commitments.recompute(TENANT, now=LATER, actor=ACTOR)
+        summary = [r for r in store.of("audit_log") if r.event_type == "spend.commitments.recompute"]
+        chunks = [r for r in store.of("audit_log") if r.event_type == "spend.commitments.recompute.chunk"]
+        assert len(summary) == 1 and len(chunks) == 1 and summary[0].actor_id == ACTOR
+        details = summary[0].details
+        assert details["mode"] == "full" and details["changed"] == 1
+        assert details["commitments"] == [
+            {
+                "id": str(target.id),
+                "before": {"drawn_quantity": "0", "drawn_amount": "0", "undrawn_records": 0},
+                "after": {
+                    "drawn_quantity": vocab.dec_str(target.drawn_quantity),
+                    "drawn_amount": vocab.dec_str(target.drawn_amount),
+                    "undrawn_records": 0,
+                },
+            }
+        ]
+        assert access.is_commercial_audit_event(summary[0].event_type)  # hidden like the commitment itself
+        await commitments.recompute(TENANT, now=LATER)  # nothing new: no audit row
+        written = [r for r in store.of("audit_log") if r.event_type.startswith("spend.commitments.recompute")]
+        assert len(written) == 2

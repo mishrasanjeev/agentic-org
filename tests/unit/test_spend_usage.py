@@ -116,6 +116,16 @@ def store(monkeypatch):
     return install(monkeypatch)
 
 
+@pytest.fixture(autouse=True)
+def fresh_spend_context(monkeypatch):
+    """Each test gets its own scope and credential contextvars: a sync test that notes a credential
+    would otherwise leave it set for every later test in the process."""
+    from contextvars import ContextVar
+
+    monkeypatch.setattr(context, "_SCOPE", ContextVar("agenticorg_spend_scope_test", default=None))
+    monkeypatch.setattr(context, "_CREDENTIAL", ContextVar("agenticorg_spend_credential_test", default=None))
+
+
 @pytest.fixture
 def queued(monkeypatch):
     """Events and gaps the hook hands the writer, captured instead of queued."""
@@ -419,6 +429,12 @@ class TestBilling:
         context.note_credential("claude", "platform_env")
         events = meter.model_call_events(record(provider="claude", model="claude-sonnet"))
         assert events[0].billing_account == "platform_key"
+
+    def test_a_noted_credential_does_not_reach_the_next_test(self, monkeypatch):
+        monkeypatch.setattr(settings, "spend_intelligence_enabled", True)
+        assert context.current_credential() is None and context.current_scope() is None
+        events = meter.model_call_events(record(provider="claude", model="claude-sonnet"))
+        assert events[0].billing_account is None  # left for the writer to infer
 
     def test_graph_takes_the_billing_account_from_the_prefetched_credential(self, monkeypatch):
         monkeypatch.setattr(settings, "spend_intelligence_enabled", True)

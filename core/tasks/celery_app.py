@@ -138,9 +138,17 @@ app.conf.beat_schedule = {
     },
     "spend-recompute-commitments": {
         # Queues a commitment drawdown recompute for each tenant with an active
-        # commitment (a queued or running one makes it a no-op). A no-op unless
-        # spend intelligence and its sweeps are on.
+        # commitment (merged into a queued one; one runs at a time). A no-op
+        # unless spend intelligence and its sweeps are on.
         "task": "core.tasks.spend_tasks.recompute_commitments",
+        "schedule": 900.0,
+        "options": {"queue": "maintenance"},
+    },
+    "spend-sweep-jobs": {
+        # Queues again the spend jobs a lost worker left running (no heartbeat
+        # for ten minutes) and resends queued jobs nothing of their kind is
+        # running for. A no-op unless spend intelligence and its sweeps are on.
+        "task": "core.tasks.spend_tasks.sweep_jobs",
         "schedule": 900.0,
         "options": {"queue": "maintenance"},
     },

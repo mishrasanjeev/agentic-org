@@ -367,6 +367,8 @@ def _dec(value: Any) -> Decimal:
 
 
 ROLLUP_FILTERS = ("provider", "usage_type", "org_node_id", "application", "billing_account")
+# Groupings that show contract terms (amount and quantity per card or per commitment): commercial reads.
+COMMERCIAL_GROUP_BYS = ("rate_card_id", "commitment_id")
 
 
 async def query(
@@ -392,6 +394,10 @@ async def query(
     check_range(start, end, max_days=MAX_QUERY_DAYS)
     if group_by not in GROUP_BYS:
         raise SpendError(422, "invalid_value", f"group_by is one of {', '.join(GROUP_BYS)}")
+    if group_by in COMMERCIAL_GROUP_BYS and not view.commercial:
+        raise SpendError(
+            403, "commercial_read_refused", "grouping by rate card or commitment is for an administrator or auditor"
+        )
     group = getattr(U, group_by)
     conditions = [U.tenant_id == tenant_id, U.day >= start, U.day <= end]
     for name in ROLLUP_FILTERS:
@@ -731,9 +737,17 @@ def _text(value: Any) -> str | None:
 
 
 def record_json(row: Any, view: ReadView) -> dict[str, Any]:
-    """A usage record for a reader: amounts as decimal text, flags as a list, the user id only when allowed."""
+    """A usage record for a reader: amounts as decimal text, flags as a list, the user id only when allowed.
+
+    The contract terms on a record (its rate card, unit price, commitment and
+    overage) are commercial reads: a reader the rate-card and commitment routes
+    refuse (a machine credential, a domain role) gets them as ``null`` and no
+    ``overage`` flag. Amounts stay: they are the spend being reported.
+    """
     from core.spend import access
 
+    commercial = view.commercial
+    flags = [name for name in FLAG_FIELDS if getattr(row, name) and (commercial or name != "overage")]
     return {
         "id": str(row.id),
         "event_time": _iso(row.event_time),
@@ -744,17 +758,17 @@ def record_json(row: Any, view: ReadView) -> dict[str, Any]:
         "quantity": vocab.dec_str(row.quantity),
         "provider": row.provider,
         "model": row.model or "",
-        "rate_card_id": _text(row.rate_card_id),
+        "rate_card_id": _text(row.rate_card_id) if commercial else None,
         "price_source": row.price_source,
-        "unit_price": vocab.dec_str(row.unit_price),
+        "unit_price": vocab.dec_str(row.unit_price) if commercial else None,
         "amount": vocab.dec_str(row.amount),
         "currency": _canon(row.currency),
         "fx_rate": vocab.dec_str(row.fx_rate),
         "fx_rate_date": _iso(row.fx_rate_date),
         "amount_inr": vocab.dec_str(row.amount_inr),
-        "flags": [name for name in FLAG_FIELDS if getattr(row, name)],
-        "commitment_id": _text(row.commitment_id),
-        "overage_quantity": vocab.dec_str(row.overage_quantity),
+        "flags": flags,
+        "commitment_id": _text(row.commitment_id) if commercial else None,
+        "overage_quantity": vocab.dec_str(row.overage_quantity) if commercial else None,
         "agent_id": _text(row.agent_id),
         "agent_version": row.agent_version,
         "org_node_id": _text(row.org_node_id),

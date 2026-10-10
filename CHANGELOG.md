@@ -38,17 +38,26 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
   queued by every new or changed rate, and `fx_in_use` for a rate settled
   records use), restatement (queued by corrections and backdated cards),
   re-attribution of unattributed records, and commitment drawdown and
-  overage in event order. Backfill recreates model-call records from
-  `model_gateway_records` with the hook's own keys.
+  overage in event order. Each job locks the records it revises and audits
+  every transaction that revises any, so concurrent jobs never move a rollup
+  twice and a job that stops part-way leaves nothing unaudited. Backfill
+  recreates model-call records from `model_gateway_records` with the hook's
+  own keys.
+- Jobs a reference-data change calls for are never dropped: they are merged
+  into a queued job of the kind that can cover them, or queued to run after
+  the running one. One job of a kind runs at a time; a running job beats a
+  heartbeat, a sweep every 15 minutes requeues a lost worker's job, and a
+  transient database failure is retried twice before the job fails.
 - `GET /spend/usage`, `GET /spend/rollups`, `GET /spend/coverage`,
   `GET /spend/coverage/ledgers`, `GET /spend/gaps`, `GET /spend/jobs`,
   `GET /spend/jobs/{job_id}`, and the job routes `POST /spend/rollups/rebuild`,
   `POST /spend/usage/{backfill,restate,reattribute}`,
   `POST /spend/fx-rates/settle` and `POST /spend/commitments/recompute`
   (202 with a job id, one active job of a kind per tenant). Usage reads apply
-  the agent visibility rule and show user ids to administrators and auditors
-  only. Celery tasks `core.tasks.spend_tasks.*` with beats for the partition
-  horizon, FX settlement and commitment recompute. Alerts
+  the agent visibility rule and show user ids, rate cards, unit prices and
+  commitments to administrators and auditors only. Celery tasks
+  `core.tasks.spend_tasks.*` with beats for the partition horizon, FX
+  settlement, commitment recompute and the job sweep. Alerts
   `AgenticOrgSpendWriteFailures` and `AgenticOrgSpendWriterBacklog`.
 - Behind `spend_intelligence_enabled` (default off): off, the hook returns
   at its first statement, no writer starts, scopes and credential notes do

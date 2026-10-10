@@ -14,8 +14,8 @@ past the horizon are kept, never lost; a later migration adds months.
 rebuildable from the records. ``spend_meter_gaps``: counts of usage that
 could not be metered, per day, usage type and reason. ``spend_jobs``: the
 maintenance jobs (rebuild, backfill, restatement, FX settlement,
-re-attribution, commitment recompute); at most one queued or running job of
-a kind per tenant. Every table, and every partition, is tenant scoped under
+re-attribution, commitment recompute); at most one running job of a kind per
+tenant, with a heartbeat so a lost worker's job can be taken over. Every table, and every partition, is tenant scoped under
 forced row-level policies. The record's foreign keys are composite on
 ``(tenant_id, id)`` and carry leading indexes. No existing table is altered.
 """
@@ -290,6 +290,7 @@ def upgrade() -> None:
             requested_by VARCHAR(128) NOT NULL,
             created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
             started_at TIMESTAMPTZ NULL,
+            heartbeat_at TIMESTAMPTZ NULL,
             finished_at TIMESTAMPTZ NULL,
             CONSTRAINT ck_spend_jobs_kind CHECK (kind IN
                 ('rebuild','backfill','restate','settle_fx','reattribute','recompute_commitments')),
@@ -298,8 +299,12 @@ def upgrade() -> None:
         """
     )
     op.execute(
-        "CREATE UNIQUE INDEX IF NOT EXISTS ux_spend_jobs_active "
-        "ON spend_jobs(tenant_id, kind) WHERE status IN ('queued','running');"
+        "CREATE UNIQUE INDEX IF NOT EXISTS ux_spend_jobs_running "
+        "ON spend_jobs(tenant_id, kind) WHERE status = 'running';"
+    )
+    op.execute(
+        "CREATE INDEX IF NOT EXISTS ix_spend_jobs_open "
+        "ON spend_jobs(tenant_id, kind, created_at) WHERE status IN ('queued','running');"
     )
     op.execute("CREATE INDEX IF NOT EXISTS ix_spend_jobs_tenant_created ON spend_jobs(tenant_id, created_at);")
     _tenant_policy("spend_jobs")

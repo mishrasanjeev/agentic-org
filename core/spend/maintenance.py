@@ -6,7 +6,13 @@ provider, model, the call's identifiers) never change. Derived fields
 change only here and in the commitment recompute (``core/spend/commitments.py``),
 each job writing ``revised_at`` and moving the record's rollup contribution
 (the old one out, the new one in) in the same transaction, under the shared
-lock of each affected reporting day, 1000 records per transaction.
+lock of each affected reporting day, 1000 records per transaction. Each
+chunk's records are row-locked, so two jobs revising the same record (a
+settlement and a restatement, or a job run twice) take turns and each reads
+the other's committed values. A chunk that changes records writes its own
+audit row (counts, and the before and after totals per key) and marks the
+commitments to replay in the same transaction, so a job that stops part-way
+leaves no unaudited revision; the job's summary row follows at the end.
 
 * **FX settlement** converts records that used an earlier rate (or none)
   once their date's rate, or a closer one, exists; a corrected rate that
@@ -94,7 +100,14 @@ async def _chunk(session: Any, conditions: list[Any], last: tuple[datetime, uuid
 
     keyset = _after(R, last)
     where = [*conditions, keyset] if keyset is not None else conditions
-    statement = select(R).where(*where).order_by(R.event_time, R.id).limit(CHUNK)
+    statement = (
+        select(R)
+        .where(*where)
+        .order_by(R.event_time, R.id)
+        .limit(CHUNK)
+        .with_for_update()
+        .execution_options(populate_existing=True)
+    )
     return list((await session.execute(statement)).scalars().all())
 
 
@@ -126,6 +139,43 @@ def _add(totals: dict[str, dict[str, Any]], key: str, *, before: Decimal | None,
     entry["records"] += 1
     entry["before"] += before or Decimal("0")
     entry["after"] += after or Decimal("0")
+
+
+def _fold(totals: dict[str, dict[str, Any]], chunk: dict[str, dict[str, Any]]) -> None:
+    for key, entry in chunk.items():
+        into = totals.setdefault(key, {"records": 0, "before": Decimal("0"), "after": Decimal("0")})
+        into["records"] += entry["records"]
+        into["before"] += entry["before"]
+        into["after"] += entry["after"]
+
+
+def _count_into(totals: dict[str, int], chunk: dict[str, int]) -> None:
+    for key, count in chunk.items():
+        totals[key] = totals.get(key, 0) + count
+
+
+def _chunk_audit(
+    session: Any,
+    tenant_id: uuid.UUID,
+    *,
+    actor: str,
+    action: str,
+    resource_id: str,
+    details: dict[str, Any],
+    now: datetime,
+) -> None:
+    """The audit row of one chunk's revisions, in the chunk's transaction."""
+    session.add(
+        audit.audit_entry(
+            tenant_id,
+            actor_id=actor,
+            action=action,
+            resource_type="spend_usage_record",
+            resource_id=resource_id,
+            details=details,
+            now=now,
+        )
+    )
 
 
 # ---------------------------------------------------------------- FX settlement
@@ -173,6 +223,9 @@ async def settle_fx(
                     break
                 rates: dict[str, Any] = {}
                 deltas: rollups.Deltas = {}
+                chunk_currency: dict[str, dict[str, Any]] = {}
+                chunk_providers: set[str] = set()
+                chunk_changed = 0
                 for row in rows:
                     scanned += 1
                     if row.amount is None or row.currency is None:
@@ -197,11 +250,30 @@ async def settle_fx(
                         setattr(row, name, value)
                     row.revised_at = stamp
                     rollups.move(deltas, before, record_dict(row))
-                    _add(per_currency, currency, before=before["amount_inr"], after=inr)
-                    providers.add(row.provider)
-                    changed += 1
+                    _add(chunk_currency, currency, before=before["amount_inr"], after=inr)
+                    chunk_providers.add(row.provider)
+                    chunk_changed += 1
                 await session.flush()
                 await rollups.apply_deltas(session, tenant_id, deltas)
+                if chunk_changed:
+                    _chunk_audit(
+                        session,
+                        tenant_id,
+                        actor=actor,
+                        action="fx.settle.chunk",
+                        resource_id=day.isoformat(),
+                        details={
+                            "day": day.isoformat(),
+                            "scanned": len(rows),
+                            "changed": chunk_changed,
+                            "by_currency": chunk_currency,
+                        },
+                        now=stamp,
+                    )
+                    await _mark_commitments(tenant_id, chunk_providers, kind="money", session=session)
+                changed += chunk_changed
+                providers |= chunk_providers
+                _fold(per_currency, chunk_currency)
                 last = (rows[-1].event_time, rows[-1].id)
             if len(rows) < CHUNK:
                 break
@@ -298,6 +370,8 @@ async def restate(
                     ],
                 )
                 deltas: rollups.Deltas = {}
+                chunk_sums: dict[str, dict[str, Any]] = {}
+                chunk_changed = 0
                 for row, new in zip(rows, priced, strict=True):
                     scanned += 1
                     if new.rate_card_id is None and row.price_source in FALLBACK_SOURCES:
@@ -313,11 +387,31 @@ async def restate(
                     rollups.move(deltas, before, record_dict(row))
                     old_key = f"{row.billing_date.isoformat()}:{before['rate_card_id'] or 'none'}"
                     new_key = f"{row.billing_date.isoformat()}:{new.rate_card_id or 'none'}"
-                    _add(sums, old_key, before=before["amount"], after=None)
-                    _add(sums, new_key, before=None, after=new.amount)
-                    changed += 1
+                    _add(chunk_sums, old_key, before=before["amount"], after=None)
+                    _add(chunk_sums, new_key, before=None, after=new.amount)
+                    chunk_changed += 1
                 await session.flush()
                 await rollups.apply_deltas(session, tenant_id, deltas)
+                if chunk_changed:
+                    _chunk_audit(
+                        session,
+                        tenant_id,
+                        actor=actor,
+                        action="usage.restate.chunk",
+                        resource_id=f"{name}:{billing_day.isoformat()}",
+                        details={
+                            "provider": name,
+                            "billing_day": billing_day.isoformat(),
+                            "scanned": len(rows),
+                            "changed": chunk_changed,
+                            "reason": why,
+                            "amounts": chunk_sums,
+                        },
+                        now=stamp,
+                    )
+                    await _mark_commitments(tenant_id, {name}, session=session)
+                changed += chunk_changed
+                _fold(sums, chunk_sums)
                 last = (rows[-1].event_time, rows[-1].id)
             if len(rows) < CHUNK:
                 break
@@ -398,16 +492,19 @@ async def reattribute(
                     break
                 deltas: rollups.Deltas = {}
                 resolved_by_hints: dict[Any, Any] = {}
+                chunk_before: dict[str, int] = {}
+                chunk_after: dict[str, int] = {}
+                chunk_changed = 0
                 for row in rows:
                     scanned += 1
                     old_reason = row.unattributed_reason or "unknown"
-                    before_reasons[old_reason] = before_reasons.get(old_reason, 0) + 1
+                    chunk_before[old_reason] = chunk_before.get(old_reason, 0) + 1
                     hints = hints_of(row)
                     if hints not in resolved_by_hints:
                         resolved_by_hints[hints] = await resolver.resolve(session, tenant_id, hints)
                     found = resolved_by_hints[hints]
                     if found.org_node_id is None:
-                        after_reasons[old_reason] = after_reasons.get(old_reason, 0) + 1
+                        chunk_after[old_reason] = chunk_after.get(old_reason, 0) + 1
                         continue
                     before = record_dict(row)
                     row.org_node_id = found.org_node_id
@@ -420,10 +517,29 @@ async def reattribute(
                         row.use_case = found.use_case
                     row.revised_at = stamp
                     rollups.move(deltas, before, record_dict(row))
-                    after_reasons["attributed"] = after_reasons.get("attributed", 0) + 1
-                    changed += 1
+                    chunk_after["attributed"] = chunk_after.get("attributed", 0) + 1
+                    chunk_changed += 1
                 await session.flush()
                 await rollups.apply_deltas(session, tenant_id, deltas)
+                if chunk_changed:
+                    _chunk_audit(
+                        session,
+                        tenant_id,
+                        actor=actor,
+                        action="usage.reattribute.chunk",
+                        resource_id=day.isoformat(),
+                        details={
+                            "day": day.isoformat(),
+                            "scanned": len(rows),
+                            "changed": chunk_changed,
+                            "before": chunk_before,
+                            "after": chunk_after,
+                        },
+                        now=stamp,
+                    )
+                changed += chunk_changed
+                _count_into(before_reasons, chunk_before)
+                _count_into(after_reasons, chunk_after)
                 last = (rows[-1].event_time, rows[-1].id)
             if len(rows) < CHUNK:
                 break

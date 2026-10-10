@@ -18,7 +18,8 @@ tenant and writes each tenant's events in one transaction
 * a rollup day held by a rebuild answers ``busy``: the tenant's events wait
   for the next backoff step while other tenants are written; after
   ``BUSY_SPILL_AFTER_S`` they are spilled;
-* a transient database error is retried once, then the events are spilled;
+* a transient database error (a dropped connection, a pool timeout, a
+  deadlock) is retried once, then the events are spilled;
 * any other failure is logged, counted and spilled.
 
 **Spill** hands the events to the Celery task ``persist_usage`` on the
@@ -80,10 +81,9 @@ def _count(usage_type: str, reason: str, count: int = 1) -> None:
 
 
 def _transient(exc: BaseException) -> bool:
-    from sqlalchemy.exc import InterfaceError, OperationalError
-    from sqlalchemy.exc import TimeoutError as PoolTimeout
+    from core.spend.errors import retryable
 
-    return isinstance(exc, (OSError, TimeoutError, OperationalError, InterfaceError, PoolTimeout))
+    return retryable(exc)
 
 
 # ---------------------------------------------------------------- gaps
@@ -399,6 +399,15 @@ def submit(events: Sequence[UsageEvent]) -> None:
         logger.warning("spend_usage_submit_failed", error_type=type(exc).__name__)
         for event in events:
             _count(event.usage_type, "hook_error")
+
+
+def start_for_gaps() -> None:
+    """Start this process's writer if it has none, so gaps left in the aggregator get flushed. Never raises."""
+    try:
+        _writer(create=True)
+    # enterprise-gate: broad-except-ok reason=writer-start-failure-is-logged-the-gaps-keep-in-the-aggregator
+    except Exception as exc:
+        logger.warning("spend_usage_writer_start_failed", error_type=type(exc).__name__)
 
 
 def started() -> bool:

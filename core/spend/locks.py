@@ -60,6 +60,10 @@ def commitment_recompute(tenant_id: uuid.UUID | str, provider: str) -> str:
     return key("commitment_recompute", tenant_id, provider)
 
 
+def job_kind(tenant_id: uuid.UUID | str, kind: str) -> str:
+    return key("job", tenant_id, kind)
+
+
 async def xact_lock(session: Any, k: str) -> None:
     """Wait for the exclusive lock on ``k`` until the transaction ends."""
     await session.execute(_LOCK, {"k": k})

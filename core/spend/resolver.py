@@ -39,6 +39,7 @@ written in that window.
 
 from __future__ import annotations
 
+import threading
 import time
 import uuid
 from collections.abc import Mapping
@@ -154,13 +155,29 @@ class Facts:
 
 # enterprise-gate: process-local-ok reason=attribution-cache-ttl-60s-dropped-on-local-writes-keeps-no-cross-tenant-data
 _RESOLUTION_CACHE: dict[tuple[str, ...], tuple[float, Resolved]] = {}
+# The writer thread fills the cache while request threads invalidate it after a mapping write.
+# enterprise-gate: process-local-ok reason=guards-the-attribution-cache-across-threads-keeps-no-tenant-data
+_CACHE_LOCK = threading.Lock()
 
 
 def invalidate(tenant_id: uuid.UUID | str) -> None:
     """Drop the tenant's cached resolutions in this process."""
     key = str(tenant_id)
-    for cached in [k for k in _RESOLUTION_CACHE if k[0] == key]:
-        _RESOLUTION_CACHE.pop(cached, None)
+    with _CACHE_LOCK:
+        for cached in [k for k in _RESOLUTION_CACHE if k[0] == key]:
+            _RESOLUTION_CACHE.pop(cached, None)
+
+
+def _cached(key: tuple[str, ...]) -> tuple[float, Resolved] | None:
+    with _CACHE_LOCK:
+        return _RESOLUTION_CACHE.get(key)
+
+
+def _remember(key: tuple[str, ...], stamp: float, resolved: Resolved) -> None:
+    with _CACHE_LOCK:
+        if len(_RESOLUTION_CACHE) >= CACHE_MAX:
+            _RESOLUTION_CACHE.clear()
+        _RESOLUTION_CACHE[key] = (stamp, resolved)
 
 
 # ---------------------------------------------------------------- pure parts
@@ -340,7 +357,12 @@ def resolved_from(hints: Hints, facts: Facts, business_unit: uuid.UUID | None = 
 
 
 def failed(hints: Hints, *, agent_uuid: uuid.UUID | None = None, user_uuid: uuid.UUID | None = None) -> Resolved:
-    """The resolution of a record whose attribution could not be read: kept, ``resolver_failed``."""
+    """The resolution of a record whose attribution could not be read: kept, ``resolver_failed``.
+
+    The agent hint is kept on every path: the record is unattributed, so the
+    id charges nothing to the agent's cost centre, and re-attribution later
+    resolves it with the retired- and missing-agent rule of its own origin.
+    """
     return Resolved(
         org_node_id=None,
         business_unit_node_id=None,
@@ -348,7 +370,7 @@ def failed(hints: Hints, *, agent_uuid: uuid.UUID | None = None, user_uuid: uuid
         unattributed_reason="resolver_failed",
         product_line=None,
         use_case=_bounded_label(hints.default_use_case) or "unattributed",
-        agent_id=agent_uuid if hints.origin == "backfill" else None,
+        agent_id=agent_uuid,
         agent_version=str(hints.agent_version)[:20] if hints.agent_version else None,
         risk_tier=None,
         region=None,
@@ -541,7 +563,7 @@ async def resolve(session: Any, tenant_id: uuid.UUID, hints: Hints, *, now: floa
         async with session.begin_nested():
             user_uuid = await initiating_user(session, tenant_id, hints)
             key = _cache_key(tenant_id, hints, user_uuid)
-            hit = _RESOLUTION_CACHE.get(key)
+            hit = _cached(key)
             if hit is not None and clock_now - hit[0] < CACHE_TTL_SECONDS:
                 return _per_event(hit[1], hints, user_uuid)
             facts = await load_facts(session, tenant_id, hints, user_uuid=user_uuid)
@@ -552,7 +574,5 @@ async def resolve(session: Any, tenant_id: uuid.UUID, hints: Hints, *, now: floa
     except Exception as exc:
         logger.warning("spend_attribution_failed", error_type=type(exc).__name__, origin=hints.origin)
         return failed(hints, agent_uuid=as_uuid(hints.agent_id), user_uuid=user_uuid)
-    if len(_RESOLUTION_CACHE) >= CACHE_MAX:
-        _RESOLUTION_CACHE.clear()
-    _RESOLUTION_CACHE[key] = (clock_now, resolved)
+    _remember(key, clock_now, resolved)
     return _per_event(resolved, hints, user_uuid)

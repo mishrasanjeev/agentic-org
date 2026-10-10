@@ -472,10 +472,14 @@ def draw(
 
 
 async def _provider_commitments(session: Any, tenant_id: uuid.UUID, provider: str) -> list[Any]:
+    """The provider's commitments, row-locked: a change made while a recompute reads them waits for it."""
     from core.models.spend import SpendCommitment
 
-    statement = select(SpendCommitment).where(
-        SpendCommitment.tenant_id == tenant_id, SpendCommitment.provider == provider
+    statement = (
+        select(SpendCommitment)
+        .where(SpendCommitment.tenant_id == tenant_id, SpendCommitment.provider == provider)
+        .order_by(SpendCommitment.id)
+        .with_for_update()
     )
     return list((await session.execute(statement)).scalars().all())
 
@@ -505,8 +509,14 @@ async def _replay_window(
     start: datetime,
     end: datetime,
     now: datetime,
+    actor: str,
 ) -> dict[str, int]:
-    """Walk the provider's records in ``[start, end)`` in ``(event_time, id)`` order and (re)assign them."""
+    """Walk the provider's records in ``[start, end)`` in ``(event_time, id)`` order and (re)assign them.
+
+    Each chunk's records are row-locked (another job revising them commits
+    first and is read as committed), and a chunk that changes records writes
+    its audit row and rollup moves in its own transaction.
+    """
     from sqlalchemy import and_, or_
 
     from core.database import get_tenant_session
@@ -536,12 +546,20 @@ async def _replay_window(
                 ]
                 if last is not None:
                     conditions.append(or_(R.event_time > last[0], and_(R.event_time == last[0], R.id > last[1])))
-                statement = select(R).where(*conditions).order_by(R.event_time, R.id).limit(RECOMPUTE_CHUNK)
+                statement = (
+                    select(R)
+                    .where(*conditions)
+                    .order_by(R.event_time, R.id)
+                    .limit(RECOMPUTE_CHUNK)
+                    .with_for_update()
+                    .execution_options(populate_existing=True)
+                )
                 rows = list((await session.execute(statement)).scalars().all())
                 if not rows:
                     break
                 deltas: rollups.Deltas = {}
                 rates: dict[tuple[str, date], Decimal | None] = {}
+                chunk_changed = 0
                 for row in rows:
                     counts["scanned"] += 1
                     chosen = best_commitment(row, commitments)
@@ -560,62 +578,120 @@ async def _replay_window(
                     row.revised_at = now
                     rollups.move(deltas, before, maintenance.record_dict(row))
                     counts["changed"] += 1
+                    chunk_changed += 1
                 await session.flush()
                 await rollups.apply_deltas(session, tenant_id, deltas)
+                if chunk_changed:
+                    session.add(
+                        audit.audit_entry(
+                            tenant_id,
+                            actor_id=actor,
+                            action="commitments.recompute.chunk",
+                            resource_type="spend_usage_record",
+                            resource_id=f"{provider}:{billing_day.isoformat()}",
+                            details={"scanned": len(rows), "changed": chunk_changed},
+                            now=now,
+                        )
+                    )
                 last = (rows[-1].event_time, rows[-1].id)
             if len(rows) < RECOMPUTE_CHUNK:
                 break
     return counts
 
 
-async def _recompute_provider(tenant_id: uuid.UUID, provider: str, *, now: datetime) -> dict[str, Any]:
+def _drawn(row: Any) -> dict[str, Any]:
+    return {
+        "drawn_quantity": vocab.dec_str(row.drawn_quantity),
+        "drawn_amount": vocab.dec_str(row.drawn_amount),
+        "undrawn_records": int(row.undrawn_records or 0),
+    }
+
+
+async def _recompute_provider(tenant_id: uuid.UUID, provider: str, *, now: datetime, actor: str) -> dict[str, Any]:
+    """Recompute one provider's drawdown (full replay or append pass); audited when anything changed.
+
+    The flags that ask for a full replay are read and cleared in one
+    transaction under the provider's recompute lock, and the watermark of the
+    active commitments is dropped until the replay ends. So a flag set while
+    the replay runs (a commitment change, a late record, a restatement) stays
+    set for the next run, and a replay that stops part-way is replayed in
+    full next time.
+    """
     from core.database import get_tenant_session
 
     cutoff = now - APPEND_GRACE
+    zone = clock.billing_zone(provider)
     async with get_tenant_session(tenant_id) as session:
         await locks.xact_lock(session, locks.commitment_recompute(tenant_id, provider))
         every = await _provider_commitments(session, tenant_id, provider)
-    active = [c for c in every if c.status == "active"]
-    if not every:
-        return {"mode": "none", "scanned": 0, "changed": 0}
-    zone = clock.billing_zone(provider)
-    full = any(c.needs_full_recompute for c in every) or any(c.recomputed_through is None for c in active)
-    if full:
-        start = clock.day_bounds(min(c.period_start for c in every), zone)[0]
-        end = min(cutoff, clock.day_bounds(max(c.period_end for c in every), zone)[0])
-        states = {c.id: Drawn() for c in active}
-    else:
-        start = min(c.recomputed_through for c in active)
-        end = cutoff
-        states = {
-            c.id: Drawn(Decimal(c.drawn_quantity or 0), Decimal(c.drawn_amount or 0), int(c.undrawn_records or 0))
-            for c in active
-        }
+        active = [c for c in every if c.status == "active"]
+        flagged = any(c.needs_full_recompute for c in every)
+        full = flagged or any(c.recomputed_through is None for c in active)
+        if not active and not flagged:
+            return {"mode": "none", "scanned": 0, "changed": 0}
+        before = {c.id: _drawn(c) for c in active}
+        if full:
+            start = clock.day_bounds(min(c.period_start for c in every), zone)[0]
+            end = min(cutoff, clock.day_bounds(max(c.period_end for c in every), zone)[0])
+            states = {c.id: Drawn() for c in active}
+            for c in every:
+                c.needs_full_recompute = False
+            for c in active:
+                c.recomputed_through = None
+            await session.flush()
+        else:
+            start = min(c.recomputed_through for c in active)
+            end = cutoff
+            states = {
+                c.id: Drawn(Decimal(c.drawn_quantity or 0), Decimal(c.drawn_amount or 0), int(c.undrawn_records or 0))
+                for c in active
+            }
     through = max(start, end)
-    counts = await _replay_window(tenant_id, provider, active, states, start=start, end=through, now=now)
+    counts = await _replay_window(tenant_id, provider, active, states, start=start, end=through, now=now, actor=actor)
+    mode = "full" if full else "append"
     async with get_tenant_session(tenant_id) as session:
         await locks.xact_lock(session, locks.commitment_recompute(tenant_id, provider))
+        totals = []
         for row in await _provider_commitments(session, tenant_id, provider):
-            if row.id in states:
-                state = states[row.id]
-                row.drawn_quantity = state.quantity
-                row.drawn_amount = state.amount
-                row.undrawn_records = state.undrawn
-                row.recomputed_through = through
-                row.recomputed_at = now
-            row.needs_full_recompute = False
+            if row.id not in states:
+                continue
+            state = states[row.id]
+            row.drawn_quantity = state.quantity
+            row.drawn_amount = state.amount
+            row.undrawn_records = state.undrawn
+            row.recomputed_through = through
+            row.recomputed_at = now
+            after = _drawn(row)
+            if after != before.get(row.id):
+                totals.append({"id": str(row.id), "before": before.get(row.id), "after": after})
         await session.flush()
-    return {"mode": "full" if full else "append", **counts}
+        if counts["changed"] or totals:
+            session.add(
+                audit.audit_entry(
+                    tenant_id,
+                    actor_id=actor,
+                    action="commitments.recompute",
+                    resource_type="spend_commitment",
+                    resource_id=provider,
+                    details={"mode": mode, **counts, "through": through.isoformat(), "commitments": totals},
+                    now=now,
+                )
+            )
+    return {"mode": mode, **counts}
 
 
-async def recompute(tenant_id: uuid.UUID, *, provider: str | None = None, now: datetime | None = None) -> dict:
+async def recompute(
+    tenant_id: uuid.UUID, *, provider: str | None = None, now: datetime | None = None, actor: str = "system:spend"
+) -> dict:
     """Recompute drawdown and overage for each provider with commitments (or the given one).
 
     A full replay (after a commitment change, a late record, a restatement or
     a settlement) starts from the earliest period; otherwise only the window
     from the stored watermark to two hours ago is drawn, continuing the stored
     totals. Records are drawn in ``(event_time, id)`` order, so the result
-    never depends on the order records arrived in.
+    never depends on the order records arrived in. A provider whose
+    commitments are all closed is replayed once more after a change (its
+    records lose their assignments) and skipped otherwise.
     """
     from core.database import get_tenant_session
     from core.models.spend import SpendCommitment
@@ -628,13 +704,13 @@ async def recompute(tenant_id: uuid.UUID, *, provider: str | None = None, now: d
         providers = sorted({str(row[0]) for row in (await session.execute(statement)).all()})
     out = {}
     for name in providers:
-        out[name] = await _recompute_provider(tenant_id, name, now=stamp)
+        out[name] = await _recompute_provider(tenant_id, name, now=stamp, actor=actor)
     logger.info("spend_commitments_recomputed", providers=len(out))
     return {"providers": out}
 
 
 async def enqueue_recompute(tenant_id: uuid.UUID, provider: str, *, actor: str) -> str | None:
-    """Queue the recompute a commitment change calls for (folded into an active one); the job id."""
+    """Queue the recompute a commitment change calls for (merged into a queued one); the job id."""
     from core.spend import jobs
 
     out = await jobs.enqueue_followup(

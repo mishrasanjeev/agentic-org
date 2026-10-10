@@ -29,7 +29,7 @@ In-house providers and platform storage bill in the reporting zone. An event at 
 30 September is billed on 30 September by a UTC provider and reported (and converted) on
 1 October in India. With the feature on, the deployment refuses to start when a zone cannot be
 loaded. `spend_sweeps_enabled` (default on) gates the beat jobs (partition horizon, FX
-settlement, commitment recompute); it has no effect while the feature is off.
+settlement, commitment recompute, the job sweep); it has no effect while the feature is off.
 
 ## Organisation tree
 
@@ -336,11 +336,15 @@ request handlers for the shared pool:
   has its events dropped and counted, taking effect within 30 seconds without a restart;
 - a rollup day held by a **rebuild** makes that tenant's events wait for the next backoff step
   while other tenants are written; after two minutes they are spilled;
-- a **transient** database error is retried once, then the events are spilled;
+- a **transient** database error (a dropped connection, a pool timeout, a deadlock) is retried
+  once, then the events are spilled;
 - **any other** failure is logged, counted and spilled.
 
 A **spill** hands events to the Celery task `persist_usage` on the `maintenance` queue, which
-writes them idempotently with the same keys. At shutdown (the API lifespan, a worker's exit) the
+writes them idempotently with the same keys, one tenant per transaction. A transient failure
+there (a lock or statement timeout and a deadlock included) is retried with backoff up to eight
+times, each retry carrying only the tenants not yet written; events it finally cannot write are
+counted (`spill_failed`) and recorded as gaps per tenant. At shutdown (the API lifespan, a worker's exit) the
 writer stops, waits up to 5 seconds and spills what is left; what cannot be spilled is counted
 as `shutdown_lost`. The only loss on the call path is a full queue (5,000 events), counted
 globally and per tenant (`queue_full`).
@@ -412,14 +416,39 @@ from a call.
 ## Maintenance jobs
 
 Long operations are jobs: a route answers `202 {"job_id", "status"}` and a worker runs the job on
-the `maintenance` queue; `GET /spend/jobs` and `GET /spend/jobs/{job_id}` read them. At most one
-job of a kind is queued or running per tenant (a second request is 409 `job_running`, naming the
-first); a job started by a reference-data change (a restatement after a correction, a settlement
-after a new rate, a recompute after a commitment change) is folded into the active job of its kind
-and the change's response names that job. A job left running for two hours by a lost worker is
-taken over by the redelivered task. A failure stores the exception's type name, never its message.
+the `maintenance` queue; `GET /spend/jobs` and `GET /spend/jobs/{job_id}` read them. One job of a
+kind runs at a time per tenant. An administrator's request is refused with 409 `job_running`,
+naming the job, while one of its kind is queued or running.
+
+A job started by a reference-data change (a restatement after a correction, a settlement after a
+new or corrected rate, a recompute after a commitment change) is never dropped, and the change's
+response (`restate_job_id`, `settle_job_id`) names a job that covers it:
+
+- it is merged into a queued job of its kind when one job can cover both: a settlement joins the
+  ranges and adds the forced dates; a restatement of the same provider joins the ranges, adds the
+  cards (or restates every record of the provider when either job does) and lists both reasons; a
+  recompute covers the one provider both name, or every provider. The merge is audited
+  (`spend.job.merge`, with the parameters before and after). A joined range is never longer than a
+  job may run (ten years); widening one only re-checks records that are already right;
+- otherwise it is queued as its own job (a restatement of another provider, or while the job of
+  its kind is running) and runs after the one before it: a job's end sends the next queued job of
+  its kind to a worker.
+
+A running job writes a heartbeat every minute. A job whose heartbeat has stopped for ten minutes
+(its worker was lost) can be taken over by a redelivered task, and the job sweep (every 15 minutes)
+queues it again and resends queued jobs nothing of their kind is running for. Jobs are idempotent,
+so running one again is safe. A transient database failure (a lock or statement timeout, a
+deadlock, a dropped connection) queues the job again after one, then two minutes; the third
+failure fails it. A failure stores the exception's type name, never its message.
+
 Jobs work one day at a time, 1,000 records per transaction, under the shared lock of each day
-they touch, with a 30-second lock timeout and a 120-second statement timeout.
+they touch, with a 30-second lock timeout and a 120-second statement timeout. Each transaction
+locks the records it reads, so two jobs revising the same record (a settlement and a restatement,
+or a job run twice) take turns, and each reads the other's committed values before moving the
+rollup. A transaction that revises records writes its own audit row (`spend.fx.settle.chunk`,
+`spend.usage.restate.chunk`, `spend.usage.reattribute.chunk`, `spend.commitments.recompute.chunk`:
+counts and the totals before and after per key) and marks the commitments to replay, so a job that
+stops part-way leaves no revision unaudited; the job's summary row follows at its end.
 
 - **FX settlement** (`POST /spend/fx-rates/settle`, at most 92 days; the daily beat at 19:30 IST
   for the last seven days of every tenant with pending conversions; every new or changed rate for
@@ -455,7 +484,13 @@ they touch, with a 30-second lock timeout and a 120-second statement timeout.
   otherwise an append pass draws the window from the stored watermark to two hours ago. A record
   past the capacity is flagged `overage` with the quantity beyond it (for a money commitment, the
   matching share of the record's quantity); the record's amount is not changed, and the overage
-  price is applied in reconciliation.
+  price is applied in reconciliation. The flags that ask for a full replay are read and cleared
+  together, and the watermark is dropped until the replay ends: a commitment change or a late
+  record that arrives while a replay runs leaves its flag set for the next run, and a replay that
+  stops part-way runs in full again. A provider whose commitments are all closed is replayed once
+  after the change (its records lose their assignments) and skipped afterwards. Each recompute that
+  changes anything is audited (`spend.commitments.recompute`, with each commitment's drawn totals
+  before and after), and its audit rows are commercial like the commitment's own.
 - **Rebuild** and **backfill** are described above and below.
 
 ## Partitions
@@ -505,6 +540,10 @@ route checks the admin scope, then confirms an active administrator of the tenan
 database (API keys and agent tokens are refused), so a deployment in route-enforcement log mode
 still never opens a write. Rate cards, commitments and the price quote are commercial: they are
 answered to a human administrator or auditor only (403 `commercial_read_refused` otherwise),
-because machine credentials can hold `audit:read` through agent grants. Every table is tenant
+because machine credentials can hold `audit:read` through agent grants. The same readers get a usage
+record's contract terms: anyone else reading `GET /spend/usage` gets `rate_card_id`, `unit_price`,
+`commitment_id` and `overage_quantity` as `null` and no `overage` flag (amounts stay, they are the
+spend), and `GET /spend/rollups` grouped by `rate_card_id` or `commitment_id` is 403
+`commercial_read_refused` for them. Every table is tenant
 scoped under forced row-level security, and spend-to-spend foreign keys are composite on
 `(tenant_id, id)`.

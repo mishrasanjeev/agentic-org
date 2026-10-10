@@ -351,3 +351,130 @@ async def _never_paused(tenant_id):
 
 def test_uuid_tenants_only():
     assert uuid.UUID(TID)
+
+
+# ---------------------------------------------------------------- review fixes: the spill task and the gauge
+
+
+def _new_loop_run(awaitable):
+    loop = asyncio.new_event_loop()
+    try:
+        return loop.run_until_complete(awaitable)
+    finally:
+        loop.close()
+
+
+class _LockedError(Exception):
+    sqlstate = "55P03"
+
+
+class _RetriedError(Exception):
+    pass
+
+
+class TestSpillTask:
+    def test_a_lock_timeout_is_retried_with_only_the_tenants_not_yet_written(self, monkeypatch, store):
+        from sqlalchemy.exc import DBAPIError
+
+        import core.tasks.spend_tasks as tasks
+
+        real = meter.write_events
+
+        async def other_tenant_waits_too_long(session, tenant_id, events, **kwargs):
+            if tenant_id == OTHER_TENANT:
+                raise DBAPIError("INSERT", {}, _LockedError("lock timeout"))
+            return await real(session, tenant_id, events, **kwargs)
+
+        retried: list = []
+
+        def retry(args=None, exc=None, countdown=None, **kwargs):
+            retried.append((args, type(exc).__name__, countdown))
+            raise _RetriedError
+
+        monkeypatch.setattr(tasks, "run_async", _new_loop_run)
+        monkeypatch.setattr(meter, "write_events", other_tenant_waits_too_long)
+        monkeypatch.setattr(tasks.persist_usage, "retry", retry)
+        mine = event().to_wire()
+        theirs = event(tenant_id=str(OTHER_TENANT)).to_wire()
+        with pytest.raises(_RetriedError):
+            tasks.persist_usage.run([mine, theirs])
+        assert retried == [([[theirs]], "DBAPIError", 1)]
+        assert len(store.of("spend_usage_records")) == 1  # the first tenant's events are written once
+
+    def test_events_that_cannot_be_written_are_counted_and_gapped(self, monkeypatch, store):
+        import core.tasks.spend_tasks as tasks
+        from observability import metrics
+
+        async def broken(*args, **kwargs):
+            raise RuntimeError("bad row")
+
+        def failures() -> float:
+            return metrics.spend_usage_write_failures_total.labels(
+                usage_type="llm_tokens", reason="spill_failed"
+            )._value.get()
+
+        monkeypatch.setattr(tasks, "run_async", _new_loop_run)
+        monkeypatch.setattr(meter, "write_events", broken)
+        before = failures()
+        with pytest.raises(RuntimeError):
+            tasks.persist_usage.run([event().to_wire(), event(unit="output_token", calls=0).to_wire()])
+        assert failures() == before + 2
+        gaps = store.of("spend_meter_gaps")
+        assert [(g.reason, g.count, g.day) for g in gaps] == [("spill_failed", 2, date(2026, 10, 1))]
+
+    def test_retries_spent_record_the_loss_and_a_failed_gap_write_waits_for_the_writer(self, monkeypatch, store):
+        from sqlalchemy.exc import OperationalError
+
+        import core.tasks.spend_tasks as tasks
+
+        async def down(*args, **kwargs):
+            raise OperationalError("INSERT", {}, Exception("connection refused"))
+
+        started: list[int] = []
+        monkeypatch.setattr(tasks, "run_async", _new_loop_run)
+        monkeypatch.setattr(meter, "write_events", down)
+        monkeypatch.setattr(meter, "upsert_gaps", down)
+        monkeypatch.setattr(tasks.persist_usage, "max_retries", 0)
+        monkeypatch.setattr(writer._Writer, "start", lambda self: started.append(1))
+        with pytest.raises(OperationalError):
+            tasks.persist_usage.run([event().to_wire()])
+        assert writer.pop_gaps() == {(TID, date(2026, 10, 1), "llm_tokens", "spill_failed", ""): 1}
+        assert started == [1]  # the writer flushes the kept gaps
+
+    def test_an_unreadable_spilled_event_is_counted(self, monkeypatch, store):
+        import core.tasks.spend_tasks as tasks
+
+        monkeypatch.setattr(tasks, "run_async", _new_loop_run)
+        with pytest.raises(Exception):  # noqa: B017 - whatever the malformed payload raises, it is counted first
+            tasks.persist_usage.run([{"tenant_id": TID, "broken": True}])
+        assert store.of("spend_meter_gaps") == []
+
+    def test_start_for_gaps_starts_one_writer_and_never_raises(self, monkeypatch):
+        started: list[int] = []
+        monkeypatch.setattr(writer._Writer, "start", lambda self: started.append(1))
+        writer.start_for_gaps()
+        writer.start_for_gaps()
+        assert started == [1] and writer.started()
+
+        def broken(create):
+            raise RuntimeError("no thread")
+
+        monkeypatch.setattr(writer, "_writer", broken)
+        writer.start_for_gaps()
+
+    def test_the_writer_retries_a_deadlock_once(self):
+        from sqlalchemy.exc import DBAPIError
+
+        class DeadlockError(Exception):
+            sqlstate = "40P01"
+
+        class ConstraintError(Exception):
+            sqlstate = "23514"
+
+        assert writer._transient(DBAPIError("INSERT", {}, DeadlockError()))
+        assert not writer._transient(DBAPIError("INSERT", {}, ConstraintError()))
+
+    def test_the_backlog_gauge_forgets_dead_processes(self):
+        from observability import metrics
+
+        assert metrics.spend_usage_pending._multiprocess_mode == "livemax"

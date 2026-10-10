@@ -317,10 +317,17 @@ class SpendJob(BaseModel):
         CheckConstraint(f"kind IN ({_JOB_KINDS_SQL})", name="ck_spend_jobs_kind"),
         CheckConstraint("status IN ('queued','running','succeeded','failed')", name="ck_spend_jobs_status"),
         Index(
-            "ux_spend_jobs_active",
+            "ux_spend_jobs_running",
             "tenant_id",
             "kind",
             unique=True,
+            postgresql_where=text("status = 'running'"),
+        ),
+        Index(
+            "ix_spend_jobs_open",
+            "tenant_id",
+            "kind",
+            "created_at",
             postgresql_where=text("status IN ('queued','running')"),
         ),
         Index("ix_spend_jobs_tenant_created", "tenant_id", "created_at"),
@@ -340,4 +347,5 @@ class SpendJob(BaseModel):
     requested_by: Mapped[str] = mapped_column(String(128), nullable=False)
     created_at: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), server_default=func.now(), nullable=False)
     started_at: Mapped[datetime | None] = mapped_column(TIMESTAMP(timezone=True), nullable=True)
+    heartbeat_at: Mapped[datetime | None] = mapped_column(TIMESTAMP(timezone=True), nullable=True)
     finished_at: Mapped[datetime | None] = mapped_column(TIMESTAMP(timezone=True), nullable=True)
