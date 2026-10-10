@@ -673,7 +673,8 @@ the spec's name, `gb_day`. A store whose table does not exist is skipped.
   a manual run cannot pre-empt the day's scheduled figure.
 - **Paused tenants.** The job reads `spend.metering_paused` for each tenant (the flag module's own
   lookup, as the writer does): a paused tenant is not measured, its day is counted as a `paused`
-  gap, and once metering resumes the gap fill writes the day like any missed beat.
+  gap, and the day stays unmetered: the gap fill skips days with a `paused` gap, as the writer drops
+  paused usage.
 
 ### GPU node hours of in-house serving
 

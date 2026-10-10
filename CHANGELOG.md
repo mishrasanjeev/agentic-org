@@ -23,8 +23,8 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
   first sample are filled as estimates (a day sampled empty is marked, so it
   is never filled), and `POST /spend/storage/sample`
   previews the sample without writing (audited). A tenant paused by
-  `spend.metering_paused` is not sampled: its day is a `paused` gap, filled
-  like a missed day once metering resumes.
+  `spend.metering_paused` is not sampled: its day is a `paused` gap and stays
+  unmetered (it is never filled later, as paused usage is dropped).
 - GPU node hours of in-house serving: standing pools from
   `AGENTICORG_SPEND_GPU_POOLS_JSON` and metered or manual hours from the
   operator command `python -m core.spend.gpu_cli`, held in a platform table;

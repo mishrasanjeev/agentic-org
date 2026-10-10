@@ -565,6 +565,22 @@ class TestOcr:
         ]
 
     @pytest.mark.asyncio
+    async def test_upload_ocr_key_uses_the_stored_ids_canonical_form(self, monkeypatch, on):
+        content = _content("tesseract-ocr")
+        knowledge, stored = _prepare_upload(monkeypatch, content)
+        monkeypatch.setattr(knowledge, "_ragflow_available", lambda: True)
+        monkeypatch.setattr(knowledge, "_ragflow_allowed", AsyncMock(return_value=True))
+        hex_id = "0123456789abcdef0123456789abcdef"  # a managed id without dashes
+        monkeypatch.setattr(knowledge, "_ragflow_upload", AsyncMock(return_value={"data": {"id": hex_id}}))
+        await knowledge.upload_document(
+            file=_upload_file(), tenant_id=TID, domain=None, allow_duplicate=False, replace=False
+        )
+        canonical = "01234567-89ab-cdef-0123-456789abcdef"  # documents.id::text
+        ocr = [e for e in on["events"] if e.usage_type == "ocr_pages"]
+        assert [(e.idempotency_key, e.source_ref) for e in ocr] == [(f"ocr:upload:{canonical}", canonical)]
+        assert knowledge._canonical_doc_id("not-a-uuid") == "not-a-uuid"
+
+    @pytest.mark.asyncio
     @pytest.mark.parametrize("failure", ["no_spans", "no_chunks", "embedding"])
     async def test_ingest_meters_its_own_ocr_even_when_nothing_is_indexed(self, monkeypatch, on, failure):
         from core.rag.extractors import ExtractedContent
@@ -973,6 +989,26 @@ class TestStorage:
             "2026-09-30": {True},
             "2026-10-01": {False},
         }
+
+    @pytest.mark.asyncio
+    async def test_storage_paused_days_are_never_filled(self, store):
+        from core.models.spend_usage import SpendMeterGap
+
+        _bytes(store, knowledge=GIB)
+        await storage.sample_tenant(TENANT, day=date(2026, 9, 27), now=T0, write=True)
+        # 29 September was skipped while metering was paused (as the job records it); the 28th and 30th were missed.
+        store.add(
+            SpendMeterGap(
+                tenant_id=TENANT, day=date(2026, 9, 29), usage_type="storage", reason="paused", detail="", count=1
+            )
+        )
+        store.add(
+            SpendMeterGap(tenant_id=TENANT, day=date(2026, 9, 28), usage_type="llm_tokens", reason="paused", count=1)
+        )
+        out = await storage.sample_tenant(TENANT, day=DAY, now=T0, write=True)
+        assert out["filled"] == ["2026-09-28", "2026-09-30"]  # a paused storage day stays unmetered
+        days = {r.event_date.isoformat() for r in store.of("spend_usage_records")}
+        assert days == {"2026-09-27", "2026-09-28", "2026-09-30", "2026-10-01"}
 
     @pytest.mark.asyncio
     async def test_storage_empty_days_are_marked_and_never_filled(self, store):

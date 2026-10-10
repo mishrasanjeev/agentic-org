@@ -136,6 +136,24 @@ async def _existing_keys(session: Any, tenant_id: uuid.UUID, days: list[date]) -
     return {str(row[0]) for row in rows}
 
 
+async def _paused_days(session: Any, tenant_id: uuid.UUID, days: list[date]) -> set[date]:
+    """Days in ``days`` on which the tenant's storage sample was skipped because metering was paused."""
+    from sqlalchemy import select
+
+    from core.models.spend_usage import SpendMeterGap as G
+
+    if not days:
+        return set()
+    rows = (
+        await session.execute(
+            select(G.day).where(
+                G.tenant_id == tenant_id, G.usage_type == USAGE_TYPE, G.reason == "paused", G.day.in_(days)
+            )
+        )
+    ).all()
+    return {row[0] for row in rows}
+
+
 def plan_days(day: date, existing: set[str]) -> tuple[bool, list[date]]:
     """``(the day is written, the earlier days to fill)`` from the keys already written in the window."""
     sampled = {d for d in _window(day) if any(storage_key(d, store) in existing for store in STORES)}
@@ -263,6 +281,9 @@ async def sample_tenant(
         if write:
             existing = await _existing_keys(session, tenant_id, _window(day))
             done, gaps = plan_days(day, existing)
+            # A paused day stays unmetered, as the writer drops paused usage: it is never filled later.
+            paused_days = await _paused_days(session, tenant_id, gaps)
+            gaps = [d for d in gaps if d not in paused_days]
             if done and not gaps:
                 return {"day": day.isoformat(), "measured": False, "stores": {}, "written": 0}
         sizes = await measure(session, tenant_id)

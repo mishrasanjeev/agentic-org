@@ -828,7 +828,7 @@ async def record_hours(*, now: datetime, **body: Any) -> dict[str, Any]:
     overwritten: list[datetime] = []
     async with async_session_factory() as session:
         found = await session.execute(
-            select(H.hour_start, H.node_hours, H.source, H.recorded_by)
+            select(H.hour_start, H.node_hours, H.source, H.recorded_by, H.models)
             .where(H.provider == checked["provider"], H.node_pool == checked["node_pool"], H.hour_start.in_(hours))
             .with_for_update()
         )
@@ -882,7 +882,7 @@ async def record_hours(*, now: datetime, **body: Any) -> dict[str, Any]:
     )
     for hour in overwritten:
         # None: another command inserted the hour after the read above, so its values were not seen.
-        previous = before.get(hour, (None, None, None))
+        previous = before.get(hour, (None, None, None, None))
         logger.info(
             "spend_gpu_hour_overwritten",
             actor=checked["actor"],
@@ -894,6 +894,7 @@ async def record_hours(*, now: datetime, **body: Any) -> dict[str, Any]:
             previous_node_hours=vocab.dec_str(previous[0]),
             previous_source=previous[1],
             previous_recorded_by=previous[2],
+            previous_models=list(previous[3]) if previous[3] is not None else None,
         )
     return {"created": created, "updated": updated, "already_allocated": allocated}
 

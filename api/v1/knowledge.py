@@ -601,6 +601,14 @@ async def supported_document_types() -> dict[str, Any]:
     }
 
 
+def _canonical_doc_id(value: object) -> str:
+    """The id in the form the database gives it back (``documents.id::text``); the raw text if it is no UUID."""
+    try:
+        return str(uuid.UUID(str(value)))
+    except ValueError:
+        return str(value)
+
+
 @router.post("/knowledge/upload", response_model=DocumentOut, status_code=201)
 @route_meta(
     auth_required=True,
@@ -914,7 +922,7 @@ async def upload_document(
                     "document_id": doc["document_id"],
                 },
             ) from exc
-        stored_doc_id = doc["document_id"]
+        stored_doc_id = _canonical_doc_id(doc["document_id"])
     finally:
         if spend.enabled():
             spend.note("ocr", tenant_id, extracted=extracted_content, purpose="upload", ref=stored_doc_id or doc_id)

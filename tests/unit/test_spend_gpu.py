@@ -381,6 +381,7 @@ class TestPoolHours:
             overwritten["previous_source"],
             overwritten["previous_recorded_by"],
         ) == ("2.5", "manual", "ops-day")
+        assert overwritten["previous_models"] == [MODEL]  # the models that spread the hour before
 
     @pytest.mark.asyncio
     async def test_record_upserts_atomically_and_never_overwrites_a_claimed_hour(self, monkeypatch, store):
