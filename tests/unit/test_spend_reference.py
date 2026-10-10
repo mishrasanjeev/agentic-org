@@ -576,6 +576,11 @@ class TestRateCards:
         assert new["unit_price"] == "2.25" and new["cached_unit_price"] == "1.1" and new["reference"] == "MSA-1"
         stored = {str(r.id): r for r in session.of("spend_rate_cards")}
         assert stored[old["id"]].status == "retired" and stored[old["id"]].retired_at == T0
+        in_force = await rates.list_cards(TENANT, as_of=date(2026, 5, 1))
+        assert [c["id"] for c in in_force["items"]] == [new["id"]] and in_force["total"] == 1
+        history = await rates.list_cards(TENANT, as_of=date(2026, 5, 1), status="retired")
+        assert [c["id"] for c in history["items"]] == [old["id"]]
+        assert (await rates.list_cards(TENANT))["total"] == 2
         manifest = audit_rows(session, "spend.rate_cards.correct")
         assert len(manifest) == 2 and manifest[0].details["reason"] == "Contract rate was keyed wrong"
         assert [c["before"] is None for c in manifest[1].details["changes"]] == [False, True]

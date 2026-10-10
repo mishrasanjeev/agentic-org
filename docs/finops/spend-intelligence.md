@@ -88,7 +88,9 @@ to `effective_to` (exclusive; empty is open-ended), in the provider's billing da
 | `gpu_hours` | `gpu_node_hour` | `gpu_node_hour` |
 
 A `1m_input_tokens` card may also carry a cached-input price. A card may carry a batch discount
-(percent) and volume tiers (`[{"from_quantity": "0", "unit_price": "2.5"}, ...]` in card units,
+(percent): a batch usage takes the discount of the card that priced it, and a blend discounts its
+input and output shares each by its own card's; the recorded unit price stays undiscounted. A
+card may also carry volume tiers (`[{"from_quantity": "0", "unit_price": "2.5"}, ...]` in card units,
 ascending from 0, at most 20) with a tier mode (`graduated` or `all_units`). Usage is priced at
 the base price; tiers are applied per contract key and billing month in reconciliation.
 
@@ -207,7 +209,10 @@ summary row (the counts and the uploaded file's sha256) and one row per 200 chan
 changed row with its before and after values. Audit details hold identifiers, codes, counts and
 reference-data values only. The rows of rate-card and commitment writes (`spend.rate_cards.*`,
 `spend.commitments.*`) carry prices and committed amounts, so `GET /audit` shows them only to a
-human administrator or auditor, the callers the commercial routes answer.
+human administrator or auditor, the callers the commercial routes answer. That filter applies
+whatever `spend_intelligence_enabled` says, because the rows stay after the flag is turned off.
+It is applied only for a tenant that keeps a rate card or a commitment (spend rows are never
+deleted, and their audit rows commit with them); every other tenant's audit query is unchanged.
 
 ## API
 
@@ -218,7 +223,7 @@ human administrator or auditor, the callers the commercial routes answer.
 | `POST /spend/org-nodes`, `PATCH /spend/org-nodes/{node_id}`, `POST /spend/org-nodes/import` | administrator | |
 | `GET /spend/mappings`, `GET /spend/model-aliases` | `audit:read` | |
 | `PUT /spend/mappings`, `POST /spend/mappings/import`, `PUT /spend/model-aliases` | administrator | |
-| `GET /spend/rate-cards` | administrator or auditor | `as_of` keeps the cards in force on a billing date |
+| `GET /spend/rate-cards` | administrator or auditor | `as_of` keeps the active cards in force on a billing date (`status=retired` lists retired ones) |
 | `POST /spend/rate-cards`, `PATCH /spend/rate-cards/{card_id}`, `POST /spend/rate-cards/{card_id}/correct`, `POST /spend/rate-cards/import` | administrator | |
 | `GET /spend/commitments` | administrator or auditor | with drawdown and what remains |
 | `POST /spend/commitments`, `PATCH /spend/commitments/{commitment_id}` | administrator | |

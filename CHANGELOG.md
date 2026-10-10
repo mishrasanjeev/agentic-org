@@ -101,7 +101,12 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
   bodies before they are read; JSON import numbers are read as decimals.
 - Behind `spend_intelligence_enabled` (default off): off, the status route
   answers `enabled: false`, every other spend route is not found before its
-  body is read, and nothing else changes. Migration `v6z79_spend_reference`
+  body is read, and nothing else changes, with one exception: the `GET /audit`
+  filter above applies whatever the flag says, because the rows outlive it. It
+  applies only for a tenant that keeps a rate card or commitment (one
+  existence query on those tables, for callers other than a human
+  administrator or auditor), so a tenant that never used spend runs the
+  audit query it ran before. Migration `v6z79_spend_reference`
   adds `spend_org_nodes`, `spend_source_mappings`, `spend_rate_cards`,
   `spend_model_aliases`, `spend_commitments` and `spend_fx_rates` under
   forced row-level security, with tenant-composite foreign keys and a

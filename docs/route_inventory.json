@@ -1526,7 +1526,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "audit.sensitive.read",
-    "source_line": 342,
+    "source_line": 349,
     "tenant_required": true
   },
   {
@@ -1544,7 +1544,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "audit.sensitive.read",
-    "source_line": 356,
+    "source_line": 363,
     "tenant_required": true
   },
   {
@@ -1562,7 +1562,7 @@
     "public_exempt_reason": null,
     "rate_limit": "audit-read",
     "scope": "audit.enforcement.sensitive.read",
-    "source_line": 230,
+    "source_line": 237,
     "tenant_required": true
   },
   {
@@ -10076,7 +10076,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "spend.commitments.read",
-    "source_line": 715,
+    "source_line": 718,
     "tenant_required": true
   },
   {
@@ -10094,7 +10094,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "spend.commitments.sensitive.write",
-    "source_line": 743,
+    "source_line": 746,
     "tenant_required": true
   },
   {
@@ -10112,7 +10112,7 @@
     "public_exempt_reason": null,
     "rate_limit": null,
     "scope": "spend.commitments.sensitive.write",
-    "source_line": 1284,
+    "source_line": 1287,
     "tenant_required": true
   },
   {
@@ -10130,7 +10130,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "spend.commitments.sensitive.write",
-    "source_line": 765,
+    "source_line": 768,
     "tenant_required": true
   },
   {
@@ -10148,7 +10148,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "spend.usage.read",
-    "source_line": 1071,
+    "source_line": 1074,
     "tenant_required": true
   },
   {
@@ -10166,7 +10166,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "spend.usage.read",
-    "source_line": 1089,
+    "source_line": 1092,
     "tenant_required": true
   },
   {
@@ -10184,7 +10184,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "spend.fx.read",
-    "source_line": 793,
+    "source_line": 796,
     "tenant_required": true
   },
   {
@@ -10202,7 +10202,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "spend.fx.sensitive.write",
-    "source_line": 820,
+    "source_line": 823,
     "tenant_required": true
   },
   {
@@ -10220,7 +10220,7 @@
     "public_exempt_reason": null,
     "rate_limit": "bulk-import",
     "scope": "spend.fx.sensitive.write",
-    "source_line": 842,
+    "source_line": 845,
     "tenant_required": true
   },
   {
@@ -10238,7 +10238,7 @@
     "public_exempt_reason": null,
     "rate_limit": null,
     "scope": "spend.fx.sensitive.write",
-    "source_line": 1255,
+    "source_line": 1258,
     "tenant_required": true
   },
   {
@@ -10256,7 +10256,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "spend.usage.read",
-    "source_line": 1113,
+    "source_line": 1116,
     "tenant_required": true
   },
   {
@@ -10274,7 +10274,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "spend.jobs.read",
-    "source_line": 1310,
+    "source_line": 1313,
     "tenant_required": true
   },
   {
@@ -10292,7 +10292,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "spend.jobs.read",
-    "source_line": 1332,
+    "source_line": 1335,
     "tenant_required": true
   },
   {
@@ -10490,7 +10490,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "spend.read",
-    "source_line": 871,
+    "source_line": 874,
     "tenant_required": true
   },
   {
@@ -10526,7 +10526,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "spend.rate_cards.sensitive.write",
-    "source_line": 640,
+    "source_line": 643,
     "tenant_required": true
   },
   {
@@ -10544,7 +10544,7 @@
     "public_exempt_reason": null,
     "rate_limit": "bulk-import",
     "scope": "spend.rate_cards.sensitive.write",
-    "source_line": 614,
+    "source_line": 617,
     "tenant_required": true
   },
   {
@@ -10562,7 +10562,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "spend.rate_cards.sensitive.write",
-    "source_line": 662,
+    "source_line": 665,
     "tenant_required": true
   },
   {
@@ -10580,7 +10580,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "spend.rate_cards.sensitive.write",
-    "source_line": 687,
+    "source_line": 690,
     "tenant_required": true
   },
   {
@@ -10598,7 +10598,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "spend.usage.read",
-    "source_line": 1028,
+    "source_line": 1031,
     "tenant_required": true
   },
   {
@@ -10616,7 +10616,7 @@
     "public_exempt_reason": null,
     "rate_limit": null,
     "scope": "spend.rollups.sensitive.write",
-    "source_line": 1131,
+    "source_line": 1134,
     "tenant_required": true
   },
   {
@@ -10652,7 +10652,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "spend.usage.read",
-    "source_line": 984,
+    "source_line": 987,
     "tenant_required": true
   },
   {
@@ -10670,7 +10670,7 @@
     "public_exempt_reason": null,
     "rate_limit": null,
     "scope": "spend.usage.sensitive.write",
-    "source_line": 1160,
+    "source_line": 1163,
     "tenant_required": true
   },
   {
@@ -10688,7 +10688,7 @@
     "public_exempt_reason": null,
     "rate_limit": null,
     "scope": "spend.usage.sensitive.write",
-    "source_line": 1226,
+    "source_line": 1229,
     "tenant_required": true
   },
   {
@@ -10706,7 +10706,7 @@
     "public_exempt_reason": null,
     "rate_limit": null,
     "scope": "spend.usage.sensitive.write",
-    "source_line": 1189,
+    "source_line": 1192,
     "tenant_required": true
   },
   {

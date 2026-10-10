@@ -22,7 +22,9 @@ unpriced a call the list prices. In-house providers price at zero per
 token, page or minute. Anything else is unpriced: no amount, never zero.
 
 **Money.** ``amount = quantity / divisor * unit_price`` rounded half-even to
-ten places; ``amount_inr = amount * fx_rate`` per record on the reporting
+ten places; a batch usage takes the pricing card's batch discount (a blend
+discounts its input and output shares each by its own card's), and
+``unit_price`` stays the undiscounted price; ``amount_inr = amount * fx_rate`` per record on the reporting
 date: an exact-date rate, else the latest earlier rate (``fx_estimated``),
 else no INR amount (``unconverted``). INR converts at one; zero converts
 to zero without a lookup.
@@ -195,7 +197,8 @@ def select_price(usage: Usage, cards: Sequence[Card]) -> Selection | None:
                         continue
                     source = "contract" if in_card.source == out_card.source == "contract" else "list"
                     started = max(in_card.effective_from, out_card.effective_from)
-                    price = in_card.unit_price * INPUT_SHARE + out_card.unit_price * OUTPUT_SHARE
+                    with localcontext(Context(prec=38)):
+                        price = in_card.unit_price * INPUT_SHARE + out_card.unit_price * OUTPUT_SHARE
                     key = (
                         *rank_key(in_specific, index, usage.unit, source, started),
                         str(in_card.id),
@@ -276,7 +279,8 @@ def fallback_price(usage: Usage) -> Selection | None:
     elif usage.unit == "output_token":
         unit_price, estimated = out_rate, False
     elif usage.unit == "token":
-        unit_price, estimated = in_rate * INPUT_SHARE + out_rate * OUTPUT_SHARE, True
+        with localcontext(Context(prec=38)):
+            unit_price, estimated = in_rate * INPUT_SHARE + out_rate * OUTPUT_SHARE, True
     else:
         return None
     return Selection(
@@ -355,15 +359,35 @@ def _selection(usage: Usage, cards: Sequence[Card]) -> Selection | None:
     return select_price(usage, cards) or fallback_price(usage) or in_house_price(usage)
 
 
+def _discounted(price: Decimal, card: Card) -> Decimal:
+    if not card.batch_discount_pct:
+        return price
+    return price * (Decimal("1") - card.batch_discount_pct / Decimal("100"))
+
+
+def _charged_unit_price(usage: Usage, selection: Selection) -> Decimal:
+    """The unit price charged: a batch usage takes its card's batch discount.
+
+    A blend discounts its input and output portions each by its own card's
+    discount, so a discounted input card never discounts the output portion.
+    """
+    if not usage.batch or selection.card is None:
+        return selection.unit_price
+    if selection.blend_card is not None:
+        return (
+            _discounted(selection.card.unit_price, selection.card) * INPUT_SHARE
+            + _discounted(selection.blend_card.unit_price, selection.blend_card) * OUTPUT_SHARE
+        )
+    return _discounted(selection.unit_price, selection.card)
+
+
 def price_with(usage: Usage, cards: Sequence[Card], rate_for: Callable[[str], FxRate | None]) -> Priced:
     """Price ``usage`` against ``cards`` (pure); ``rate_for(currency)`` is asked only when a conversion needs it."""
     selection = _selection(usage, cards)
     if selection is None:
         return unpriced()
     with localcontext(Context(prec=38)):
-        raw = usage.quantity / Decimal(selection.divisor) * selection.unit_price
-        if usage.batch and selection.card is not None and selection.card.batch_discount_pct:
-            raw = raw * (Decimal("1") - selection.card.batch_discount_pct / Decimal("100"))
+        raw = usage.quantity / Decimal(selection.divisor) * _charged_unit_price(usage, selection)
         amount = _quantize(raw)
     needs_rate = selection.currency != vocab.REPORTING_CURRENCY and amount != 0
     rate = rate_for(selection.currency) if needs_rate else None

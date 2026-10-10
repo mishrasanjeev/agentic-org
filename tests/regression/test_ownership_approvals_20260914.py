@@ -707,7 +707,8 @@ class TestAuditOwnership:
                 await audit.query_enforce_audit(request=request, tenant_id=TENANT, user_role=role)
             else:
                 await audit.query_audit(request=request, tenant_id=TENANT, user_role=role)
-        return _sql(session.statements[0])
+        # The first audit_log statement: GET /audit may first ask whether the tenant keeps spend rate cards.
+        return next(sql for sql in map(_sql, session.statements) if "FROM audit_log" in sql)
 
     @pytest.mark.parametrize("enforce", [False, True])
     @pytest.mark.asyncio
