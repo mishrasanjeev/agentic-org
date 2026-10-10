@@ -94,8 +94,10 @@ class CardKey(NamedTuple):
 
 
 def _on_change(tenant_id: uuid.UUID) -> None:
-    """Called after every rate-card write; a later part drops the priced-tools cache here."""
-    return None
+    """Called after every rate-card write: drops this process's priced-tool set, so a new tool card applies at once."""
+    from core.spend import metering
+
+    metering.invalidate_priced_tools(tenant_id)
 
 
 # ---------------------------------------------------------------- pure checks

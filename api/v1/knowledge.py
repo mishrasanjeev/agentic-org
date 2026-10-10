@@ -20,6 +20,7 @@ from sqlalchemy.exc import SQLAlchemyError
 
 from api.deps import get_current_tenant, get_user_domains
 from api.route_metadata import route_meta
+from core import spend
 from core.config import settings
 from core.rag import access as knowledge_access
 from core.rag import entities as knowledge_entities
@@ -600,6 +601,14 @@ async def supported_document_types() -> dict[str, Any]:
     }
 
 
+def _canonical_doc_id(value: object) -> str:
+    """The id in the form the database gives it back (``documents.id::text``); the raw text if it is no UUID."""
+    try:
+        return str(uuid.UUID(str(value)))
+    except ValueError:
+        return str(value)
+
+
 @router.post("/knowledge/upload", response_model=DocumentOut, status_code=201)
 @route_meta(
     auth_required=True,
@@ -681,6 +690,9 @@ async def upload_document(
     from core.file_ingestion.limits import cleanup_tempfile, stream_to_tempfile
     from core.rag.extractors import UnsupportedMimeType, extract
 
+    # Drawn before extraction: the OCR usage of this extraction is keyed by it unless the upload is
+    # stored, and then by the id the document is stored under (core/spend/metering.py).
+    doc_id = str(uuid.uuid4())
     upload_path, _content_size = await stream_to_tempfile(file)
     try:
         content = upload_path.read_bytes()
@@ -710,6 +722,14 @@ async def upload_document(
                     "message": str(exc),
                 },
             ) from exc
+    finally:
+        cleanup_tempfile(upload_path)
+
+    # AI spend (core/spend/metering.py): the pages OCR read for this extraction, noted once whatever
+    # happens next: under the stored document's id when the upload is accepted, else under doc_id,
+    # which a refused upload never stores.
+    stored_doc_id: str | None = None
+    try:
         if not extracted_content.spans or extracted_content.total_chars < 2:
             raise HTTPException(
                 status_code=422,
@@ -718,193 +738,194 @@ async def upload_document(
                     "message": "No usable text was found after native extraction and OCR.",
                 },
             )
-    finally:
-        cleanup_tempfile(upload_path)
 
-    # Filename-level dedup. Caller can opt out with
-    # ?allow_duplicate=true (adds a second copy) or ?replace=true
-    # (deletes the old one first).
-    #
-    # Codex 2026-04-22 release-signoff review (TC_006 residual): the
-    # old body treated any dedup-lookup failure as "no duplicate,
-    # proceed" (fail-open). That allowed a transient DB error to
-    # silently insert a second copy of an existing document. Fail-
-    # closed here: if we can't read the state, we refuse the upload
-    # and ask the caller to retry, the same way every safety-gate in
-    # CLAUDE.md is required to behave.
-    if not allow_duplicate and not replace:
-        try:
-            existing = await _db_find_existing_by_filename(tenant_id, filename)
-        except _DB_READ_ERRORS as exc:
-            logger.error("dedup_lookup_failed", filename=filename, error=str(exc))
-            raise HTTPException(
-                status_code=503,
-                detail={
-                    "error": "dedup_lookup_unavailable",
-                    "message": (
-                        "Could not verify whether this filename already "
-                        "exists in the knowledge base. Refusing to upload "
-                        "rather than risk silently creating a duplicate. "
-                        "Please retry in a few seconds."
-                    ),
-                },
-            ) from exc
-        if existing is not None:
-            raise HTTPException(
-                status_code=409,
-                detail={
-                    "error": "duplicate_filename",
-                    "message": (
-                        f"A document named {filename!r} is already in the "
-                        "knowledge base. Upload again with ?replace=true "
-                        "to replace it, or ?allow_duplicate=true to add "
-                        "a second copy alongside the existing one."
-                    ),
-                    "existing_document_id": existing["document_id"],
-                },
-            )
-
-    # Real replace path — matches the UI's "Replace" modal action.
-    # Previously the UI alerted "check the duplicate box to replace it",
-    # but the duplicate box only added another copy — the existing
-    # document was never touched. Now replace=true soft-deletes the
-    # existing document in both RAGFlow and the DB mirror before
-    # ingesting the new one, so the UI copy and backend agree.
-    if replace:
-        try:
-            existing = await _db_find_existing_by_filename(tenant_id, filename)
-        except _DB_READ_ERRORS as exc:
-            logger.error("replace_lookup_failed", filename=filename, error=str(exc))
-            raise HTTPException(
-                status_code=503,
-                detail={
-                    "error": "replace_lookup_unavailable",
-                    "message": (
-                        "Could not verify the document being replaced. Refusing "
-                        "the upload rather than risk creating a duplicate."
-                    ),
-                },
-            ) from exc
-        if existing is not None:
-            old_doc_id = existing["document_id"]
-            # Deletion is not residency-gated (see _ragflow_allowed).
-            if _ragflow_available():
-                try:
-                    await _ragflow_delete(tenant_id, old_doc_id)
-                except _RAGFLOW_ERRORS as exc:
-                    logger.warning(
-                        "replace_ragflow_delete_failed",
-                        doc_id=old_doc_id,
-                        error=str(exc),
-                    )
+        # Filename-level dedup. Caller can opt out with
+        # ?allow_duplicate=true (adds a second copy) or ?replace=true
+        # (deletes the old one first).
+        #
+        # Codex 2026-04-22 release-signoff review (TC_006 residual): the
+        # old body treated any dedup-lookup failure as "no duplicate,
+        # proceed" (fail-open). That allowed a transient DB error to
+        # silently insert a second copy of an existing document. Fail-
+        # closed here: if we can't read the state, we refuse the upload
+        # and ask the caller to retry, the same way every safety-gate in
+        # CLAUDE.md is required to behave.
+        if not allow_duplicate and not replace:
             try:
-                from uuid import UUID as _UUID
-
-                from sqlalchemy import update
-
-                from core.database import get_tenant_session
-                from core.models.document import Document
-
-                tid = _UUID(tenant_id)
-                async with get_tenant_session(tid) as session:
-                    await session.execute(
-                        update(Document)
-                        .where(
-                            Document.id == _UUID(old_doc_id),
-                            Document.tenant_id == tid,
-                        )
-                        .values(status="deleted")
-                    )
-            except _DB_WRITE_ERRORS as exc:
-                logger.error(
-                    "replace_db_soft_delete_failed",
-                    doc_id=old_doc_id,
-                    error=str(exc),
-                )
+                existing = await _db_find_existing_by_filename(tenant_id, filename)
+            except _DB_READ_ERRORS as exc:
+                logger.error("dedup_lookup_failed", filename=filename, error=str(exc))
                 raise HTTPException(
                     status_code=503,
                     detail={
-                        "error": "replace_soft_delete_failed",
+                        "error": "dedup_lookup_unavailable",
                         "message": (
-                            "Could not safely mark the existing document as deleted. "
-                            "Refusing the replacement rather than returning a false success."
+                            "Could not verify whether this filename already "
+                            "exists in the knowledge base. Refusing to upload "
+                            "rather than risk silently creating a duplicate. "
+                            "Please retry in a few seconds."
                         ),
-                        "document_id": old_doc_id,
                     },
                 ) from exc
+            if existing is not None:
+                raise HTTPException(
+                    status_code=409,
+                    detail={
+                        "error": "duplicate_filename",
+                        "message": (
+                            f"A document named {filename!r} is already in the "
+                            "knowledge base. Upload again with ?replace=true "
+                            "to replace it, or ?allow_duplicate=true to add "
+                            "a second copy alongside the existing one."
+                        ),
+                        "existing_document_id": existing["document_id"],
+                    },
+                )
 
-    doc_id = str(uuid.uuid4())
-    extracted_text = extracted_content.full_text()
+        # Real replace path — matches the UI's "Replace" modal action.
+        # Previously the UI alerted "check the duplicate box to replace it",
+        # but the duplicate box only added another copy — the existing
+        # document was never touched. Now replace=true soft-deletes the
+        # existing document in both RAGFlow and the DB mirror before
+        # ingesting the new one, so the UI copy and backend agree.
+        if replace:
+            try:
+                existing = await _db_find_existing_by_filename(tenant_id, filename)
+            except _DB_READ_ERRORS as exc:
+                logger.error("replace_lookup_failed", filename=filename, error=str(exc))
+                raise HTTPException(
+                    status_code=503,
+                    detail={
+                        "error": "replace_lookup_unavailable",
+                        "message": (
+                            "Could not verify the document being replaced. Refusing "
+                            "the upload rather than risk creating a duplicate."
+                        ),
+                    },
+                ) from exc
+            if existing is not None:
+                old_doc_id = existing["document_id"]
+                # Deletion is not residency-gated (see _ragflow_allowed).
+                if _ragflow_available():
+                    try:
+                        await _ragflow_delete(tenant_id, old_doc_id)
+                    except _RAGFLOW_ERRORS as exc:
+                        logger.warning(
+                            "replace_ragflow_delete_failed",
+                            doc_id=old_doc_id,
+                            error=str(exc),
+                        )
+                try:
+                    from uuid import UUID as _UUID
 
-    doc_metadata: dict[str, Any] = {}
-    if extracted_text:
-        from core.file_ingestion.limits import MAX_EXTRACTED_TEXT_BYTES
+                    from sqlalchemy import update
 
-        encoded = extracted_text.encode("utf-8")[:MAX_EXTRACTED_TEXT_BYTES]
-        doc_metadata["content_text"] = encoded.decode("utf-8", errors="ignore")
-    doc_metadata.update(
-        {
-            "extraction_method": extracted_content.extraction_method,
-            "extracted_characters": extracted_content.total_chars,
-            "extraction_details": extracted_content.extra,
+                    from core.database import get_tenant_session
+                    from core.models.document import Document
+
+                    tid = _UUID(tenant_id)
+                    async with get_tenant_session(tid) as session:
+                        await session.execute(
+                            update(Document)
+                            .where(
+                                Document.id == _UUID(old_doc_id),
+                                Document.tenant_id == tid,
+                            )
+                            .values(status="deleted")
+                        )
+                except _DB_WRITE_ERRORS as exc:
+                    logger.error(
+                        "replace_db_soft_delete_failed",
+                        doc_id=old_doc_id,
+                        error=str(exc),
+                    )
+                    raise HTTPException(
+                        status_code=503,
+                        detail={
+                            "error": "replace_soft_delete_failed",
+                            "message": (
+                                "Could not safely mark the existing document as deleted. "
+                                "Refusing the replacement rather than returning a false success."
+                            ),
+                            "document_id": old_doc_id,
+                        },
+                    ) from exc
+
+        extracted_text = extracted_content.full_text()
+
+        doc_metadata: dict[str, Any] = {}
+        if extracted_text:
+            from core.file_ingestion.limits import MAX_EXTRACTED_TEXT_BYTES
+
+            encoded = extracted_text.encode("utf-8")[:MAX_EXTRACTED_TEXT_BYTES]
+            doc_metadata["content_text"] = encoded.decode("utf-8", errors="ignore")
+        doc_metadata.update(
+            {
+                "extraction_method": extracted_content.extraction_method,
+                "extracted_characters": extracted_content.total_chars,
+                "extraction_details": extracted_content.extra,
+            }
+        )
+        # A domain reaches here as a validated string from the query; anything else is no domain.
+        domain = domain if isinstance(domain, str) and domain else None
+        if domain:
+            doc_metadata["domain"] = domain
+
+        doc: dict[str, Any] = {
+            "document_id": doc_id,
+            "filename": filename,
+            "content_type": file.content_type,
+            "size_bytes": len(content),
+            "status": DOC_STATUS_PROCESSING,
+            "created_at": _now_iso(),
+            "metadata": doc_metadata,
         }
-    )
-    # A domain reaches here as a validated string from the query; anything else is no domain.
-    domain = domain if isinstance(domain, str) and domain else None
-    if domain:
-        doc_metadata["domain"] = domain
 
-    doc: dict[str, Any] = {
-        "document_id": doc_id,
-        "filename": filename,
-        "content_type": file.content_type,
-        "size_bytes": len(content),
-        "status": DOC_STATUS_PROCESSING,
-        "created_at": _now_iso(),
-        "metadata": doc_metadata,
-    }
+        if _ragflow_available() and await _ragflow_allowed(tenant_id):
+            try:
+                rf_result = await _ragflow_upload(
+                    tenant_id,
+                    doc["filename"],
+                    content,
+                    doc["content_type"],
+                )
+                # RAGFlow returns its own document ID
+                rf_doc_id = rf_result.get("data", {}).get("id", doc_id)
+                doc["document_id"] = rf_doc_id
+                doc["status"] = DOC_STATUS_INDEXED
+                logger.info("knowledge_upload_ragflow", doc_id=rf_doc_id, filename=doc["filename"])
+            except _RAGFLOW_ERRORS as exc:
+                logger.warning("ragflow_upload_failed_fallback_db", error=str(exc))
+        # QA sheet 2026-09-14 #48: without a RAGFlow index the row stays
+        # ``processing`` until the native pgvector ingestion below succeeds;
+        # a failed ingestion is persisted as ``failed`` instead of ``indexed``,
+        # so search and the document list never advertise unindexed content.
+        native_index_pending = doc["status"] != DOC_STATUS_INDEXED
 
-    if _ragflow_available() and await _ragflow_allowed(tenant_id):
+        # Session 5 TC-013: always mirror metadata to Postgres so the document
+        # list survives a RAGFlow outage or a RAGFlow-side search lag. Without
+        # this, documents uploaded via the RAGFlow path disappeared from the UI
+        # after a page refresh whenever /knowledge/documents fell back to the
+        # DB listing (first mirror was only created on RAGFlow upload failure).
         try:
-            rf_result = await _ragflow_upload(
-                tenant_id,
-                doc["filename"],
-                content,
-                doc["content_type"],
-            )
-            # RAGFlow returns its own document ID
-            rf_doc_id = rf_result.get("data", {}).get("id", doc_id)
-            doc["document_id"] = rf_doc_id
-            doc["status"] = DOC_STATUS_INDEXED
-            logger.info("knowledge_upload_ragflow", doc_id=rf_doc_id, filename=doc["filename"])
-        except _RAGFLOW_ERRORS as exc:
-            logger.warning("ragflow_upload_failed_fallback_db", error=str(exc))
-    # QA sheet 2026-09-14 #48: without a RAGFlow index the row stays
-    # ``processing`` until the native pgvector ingestion below succeeds;
-    # a failed ingestion is persisted as ``failed`` instead of ``indexed``,
-    # so search and the document list never advertise unindexed content.
-    native_index_pending = doc["status"] != DOC_STATUS_INDEXED
-
-    # Session 5 TC-013: always mirror metadata to Postgres so the document
-    # list survives a RAGFlow outage or a RAGFlow-side search lag. Without
-    # this, documents uploaded via the RAGFlow path disappeared from the UI
-    # after a page refresh whenever /knowledge/documents fell back to the
-    # DB listing (first mirror was only created on RAGFlow upload failure).
-    try:
-        await _db_store_doc(tenant_id, doc)
-    except _DB_WRITE_ERRORS as exc:
-        logger.error("db_store_doc_failed", doc_id=doc["document_id"], error=str(exc))
-        raise HTTPException(
-            status_code=503,
-            detail={
-                "error": "document_metadata_persist_failed",
-                "message": (
-                    "The document upload could not be durably recorded. Retry before "
-                    "treating this document as available in the knowledge base."
-                ),
-                "document_id": doc["document_id"],
-            },
-        ) from exc
+            await _db_store_doc(tenant_id, doc)
+        except _DB_WRITE_ERRORS as exc:
+            logger.error("db_store_doc_failed", doc_id=doc["document_id"], error=str(exc))
+            raise HTTPException(
+                status_code=503,
+                detail={
+                    "error": "document_metadata_persist_failed",
+                    "message": (
+                        "The document upload could not be durably recorded. Retry before "
+                        "treating this document as available in the knowledge base."
+                    ),
+                    "document_id": doc["document_id"],
+                },
+            ) from exc
+        stored_doc_id = _canonical_doc_id(doc["document_id"])
+    finally:
+        if spend.enabled():
+            spend.note("ocr", tenant_id, extracted=extracted_content, purpose="upload", ref=stored_doc_id or doc_id)
 
     # Run the canonical pgvector ingestion with the text already extracted
     # above, so every accepted format follows one provenance-aware path and
@@ -1322,6 +1343,8 @@ async def _native_vector_or_keyword_search(
         from core.embeddings import embed_one_async, rag_embedding_column
 
         qvec = await embed_one_async(query)
+        if spend.enabled():
+            spend.note("embeddings", tid, items=(query,), purpose="search")
         vector_literal = "[" + ",".join(f"{x:.6f}" for x in qvec) + "]"
         col = rag_embedding_column()
         async with get_tenant_session(tid) as session:
@@ -1504,6 +1527,8 @@ async def _native_hybrid_search(
             "ORDER BY d.embedding_bge_m3 <=> CAST(:vector AS vector), d.id ASC LIMIT :limit"
         )
         qvec = await embed_one_async(query)
+        if spend.enabled():
+            spend.note("embeddings", tid, items=(query,), purpose="search")
         vector_literal = "[" + ",".join(f"{x:.6f}" for x in qvec) + "]"
         async with get_tenant_session(tid) as session:
             rows = (

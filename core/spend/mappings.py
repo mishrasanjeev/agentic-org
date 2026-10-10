@@ -36,11 +36,12 @@ UUID_SOURCE_TYPES = ("agent", "workflow", "cost_center", "department")
 
 
 def _on_change(tenant_id: uuid.UUID) -> None:
-    """Called after every mapping or alias write: drop this process's attribution and alias caches."""
-    from core.spend import resolver
+    """Called after every mapping or alias write: drop this process's attribution, alias and priced-tool caches."""
+    from core.spend import metering, resolver
 
     resolver.invalidate(tenant_id)
     pricing.invalidate_aliases(tenant_id)
+    metering.invalidate_priced_tools(tenant_id)  # a tool alias can name a priced SKU
 
 
 def check_source_ref(source_type: str, source_ref: str) -> str:
@@ -384,12 +385,22 @@ async def list_aliases(tenant_id: uuid.UUID, *, provider: str | None = None) -> 
 async def put_alias(
     tenant_id: uuid.UUID, body: dict[str, Any], *, actor: str, now: datetime | None = None
 ) -> dict[str, Any]:
-    """Upsert the SKU of ``(provider, alias)``; refuses an alias of itself and alias chains."""
+    """Upsert the SKU of ``(provider, alias)``; refuses an alias of itself, alias chains and in-house providers.
+
+    In-house models (``vocab.IN_HOUSE_PROVIDERS``) are named by the deployment,
+    not by a vendor's invoice, and GPU allocation matches their calls to a
+    pool by the name the call carries: a tenant alias would take its calls
+    out of the pool's hours and move their share onto other tenants.
+    """
     from core.database import get_tenant_session
     from core.models.spend import SpendModelAlias
 
     who = require_actor(actor)
     provider = vocab.norm_provider(body.get("provider"))
+    if provider in vocab.IN_HOUSE_PROVIDERS:
+        raise SpendError(
+            422, "invalid_reference", "in-house models are named by the deployment; aliases are for billed providers"
+        )
     alias = vocab.norm_sku(body.get("alias"))
     sku = vocab.norm_sku(body.get("model_sku"))
     if alias == sku:

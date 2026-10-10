@@ -130,6 +130,19 @@ EMBEDDING_MODEL_NAME = _configured_model_name()
 EMBEDDING_DIM = _MODEL_DIMS.get(EMBEDDING_MODEL_NAME, 384)
 
 
+def serving_identity() -> tuple[str, str] | None:
+    """``(provider, model)`` of the engine ``embed_async`` uses now, for spend metering; ``None`` for the fake.
+
+    ``tei`` for bge-m3 behind ``AGENTICORG_TEI_URL``, ``local_embeddings`` for
+    bge-m3 or the fastembed model in this process. Pure: reads settings only.
+    """
+    if rag_use_bge_m3():
+        return ("tei", BGE_M3_MODEL) if os.getenv("AGENTICORG_TEI_URL") else ("local_embeddings", BGE_M3_MODEL)
+    if _use_fake_embeddings():
+        return None
+    return ("local_embeddings", EMBEDDING_MODEL_NAME)
+
+
 def _bounded_float_env(
     name: str,
     *,

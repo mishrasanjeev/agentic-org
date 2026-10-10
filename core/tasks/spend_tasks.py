@@ -8,8 +8,9 @@ statement timeout and a deadlock included), each retry carrying only the
 tenants not yet written. Events it finally cannot write are counted
 (``spill_failed``) and recorded as gaps per tenant. ``run_job`` runs one
 maintenance job. The beat tasks check the partition horizon, settle FX for
-tenants with pending conversions, queue commitment recomputes and sweep the
-jobs (a lost worker's job queued again, queued jobs resent).
+tenants with pending conversions, queue commitment recomputes, sweep the
+jobs (a lost worker's job queued again, queued jobs resent), sample every
+tenant's storage once a day and spread closed in-house GPU pool hours.
 
 Every task answers ``{"skipped": "spend_intelligence_disabled"}`` while the
 feature is off; the beat tasks also skip while ``spend_sweeps_enabled`` is off.
@@ -288,3 +289,30 @@ def sweep_jobs() -> dict[str, Any]:
     if off is not None:
         return off
     return run_async(_sweep_jobs())
+
+
+@app.task(name="core.tasks.spend_tasks.sample_storage")
+def sample_storage() -> dict[str, Any]:
+    """Daily (23:30 IST): every active tenant's storage GB-days for the intended day, missed days filled."""
+    off = _sweeps_off()
+    if off is not None:
+        return off
+    # Imported past the guard, so a skipped run loads neither the storage module nor what it imports.
+    from core.spend import storage
+
+    return run_async(storage.sample_all_tenants())
+
+
+async def _allocate_gpu_hours() -> dict[str, Any]:
+    from core.spend import clock, gpu
+
+    return await gpu.allocate_pending(now=clock.now_utc())
+
+
+@app.task(name="core.tasks.spend_tasks.allocate_gpu_hours")
+def allocate_gpu_hours() -> dict[str, Any]:
+    """Hourly: spread each closed in-house GPU pool hour across the tenants' calls it served."""
+    off = _sweeps_off()
+    if off is not None:
+        return off
+    return run_async(_allocate_gpu_hours())

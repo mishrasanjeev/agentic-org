@@ -125,6 +125,7 @@ async def transcribe_deepgram(tenant_id: uuid.UUID, recording: Recording, *, lan
     import httpx
 
     from core.ai_providers.resolver import ProviderNotConfigured, get_provider_credential
+    from core.spend import context as spend_context
 
     try:
         credential = await get_provider_credential(tenant_id, "stt_deepgram", "stt")
@@ -132,6 +133,8 @@ async def transcribe_deepgram(tenant_id: uuid.UUID, recording: Recording, *, lan
         raise SpeechError(
             503, "engine_not_configured", "No Deepgram credential is configured for this tenant"
         ) from None
+    # AI spend: whose key pays for these minutes (the tenant's or the platform's); a no-op while off.
+    spend_context.note_credential("deepgram", getattr(credential, "source", ""))
     params = {"model": "nova-2", "punctuate": "true", "diarize": "true", "smart_format": "false"}
     if language:
         params["language"] = language

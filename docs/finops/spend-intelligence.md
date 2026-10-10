@@ -1,4 +1,4 @@
-# AI spend intelligence: reference data, pricing, usage records and coverage
+# AI spend intelligence: reference data, pricing, usage records, coverage and metering
 
 Behind `spend_intelligence_enabled` (default off; `AGENTICORG_SPEND_INTELLIGENCE_ENABLED`). Off,
 `GET /spend/status` answers `enabled: false`, every other spend route is not found (the request
@@ -9,14 +9,17 @@ The feature keeps the reference data spend is measured against (the organisation
 mappings, model aliases, rate cards, commitments and FX rates) and the pricing engine that prices
 a usage at its date in the card's currency and in INR. It meters every model call into a usage
 record with its server-owned attribution, keeps a daily rollup, and reports coverage: the share of
-spend attributed to the organisation, the first measure of Gate 1. Non-token metering, invoice
-reconciliation and the Gate 1 status build on it in later parts. The code is in `core/spend/`
-(reference data: `org.py`, `mappings.py`, `rates.py`, `commitments.py`, `fx.py`, `pricing.py`,
-`imports.py`, `audit.py`; usage: `context.py`, `tokens.py`, `meter.py`, `writer.py`,
-`resolver.py`, `billing.py`, `rollups.py`, `maintenance.py`, `jobs.py`, `ledgers.py`,
-`partitions.py`, `metering.py`), the routes in `api/v1/spend.py`, the tables in
-`core/models/spend.py` and `core/models/spend_usage.py`, migrations `v6z79_spend_reference` and
-`v6z80_spend_usage`, the tasks in `core/tasks/spend_tasks.py`.
+spend attributed to the organisation, the first measure of Gate 1. Beyond model tokens it
+meters embeddings, OCR pages, speech minutes, priced tool calls, storage GB-days and the GPU node
+hours of in-house serving. Invoice reconciliation and the Gate 1 status build on it in a later
+part. The code is in `core/spend/` (reference data: `org.py`, `mappings.py`, `rates.py`,
+`commitments.py`, `fx.py`, `pricing.py`, `imports.py`, `audit.py`; usage: `context.py`,
+`tokens.py`, `meter.py`, `writer.py`, `resolver.py`, `billing.py`, `rollups.py`,
+`maintenance.py`, `jobs.py`, `ledgers.py`, `partitions.py`, `metering.py`; non-token metering:
+`metering.py`, `storage.py`, `gpu.py`, `gpu_cli.py`), the routes in `api/v1/spend.py`, the tables
+in `core/models/spend.py`, `core/models/spend_usage.py` and `core/models/spend_gpu.py`,
+migrations `v6z79_spend_reference`, `v6z80_spend_usage` and `v6z81_spend_gpu`, the tasks in
+`core/tasks/spend_tasks.py`.
 
 ## Two calendars
 
@@ -70,6 +73,10 @@ rate cards and invoices use, per provider. Pricing applies it before choosing a 
 called alias prices with the SKU's card. With no card for the SKU, the list fallback tries the
 SKU and then the name as called, so an alias never leaves unpriced a call the list prices.
 Aliases do not chain: an alias may not name another alias, and a SKU may not itself be an alias.
+In-house providers (`ollama`, `vllm`, `local_embeddings`, `tei`, `tesseract`, `faster_whisper`)
+take no alias (422 `invalid_reference`): their models are named by the deployment, not by an
+invoice, and GPU allocation matches in-house calls to a pool by the name they carry, so an alias
+would take a tenant's calls out of the pool's hours and move their share onto other tenants.
 
 ## Rate cards
 
@@ -242,11 +249,13 @@ tenant's audit query is unchanged.
 | `GET /spend/gaps` | administrator or auditor | meter gaps (at most 92 days); tenant-wide |
 | `POST /spend/rollups/rebuild`, `POST /spend/usage/backfill`, `POST /spend/usage/restate`, `POST /spend/usage/reattribute`, `POST /spend/fx-rates/settle`, `POST /spend/commitments/recompute` | administrator | `202` with a job id |
 | `GET /spend/jobs`, `GET /spend/jobs/{job_id}` | administrator or auditor | tenant-wide (record counts of every agent; a correction's reason) |
+| `GET /spend/gpu-allocations` | `audit:read` | the tenant's own shares of in-house GPU pool hours starting in `[start, end)` (at most 31 days) |
+| `POST /spend/storage/sample` | administrator | a preview of today's storage sample in GiB per store; writes no record, audited as `spend.storage.preview` |
 
 `GET /spend/status` also reports the usage limits (`usage_window_days` 31, `rebuild_days` 31,
-`restate_days` 92), `backfill_source`, `partition_horizon` and whether this process's writer
-`started`. The writer's pending count spans every tenant in the process, so it is not in the route;
-operators read it from the `agenticorg_spend_usage_pending` gauge.
+`restate_days` 92, `gpu_allocation_days` 31), `backfill_source`, `partition_horizon` and whether
+this process's writer `started`. The writer's pending count spans every tenant in the process, so
+it is not in the route; operators read it from the `agenticorg_spend_usage_pending` gauge.
 
 ## Usage records
 
@@ -569,8 +578,192 @@ supersede over priced records sent with `restate`, and an earlier `effective_to`
 records sent with `restate` each queue the restatement of the affected billing days in the
 change's own transaction, and answer its `restate_job_id`; a rate-card import queues one
 restatement per provider for the rows that call for one (`restate_jobs` in its report), in the
-import's transaction. A mapping, alias or
-tree change drops this process's attribution and alias caches.
+import's transaction. A mapping, alias or tree change drops this process's attribution and alias
+caches, and an alias change also its set of priced tools; a rate-card write drops this process's set of priced tools, so a new tool card
+applies at once (other processes within 60 seconds).
+
+## Non-token metering
+
+Beyond model tokens, usage is metered where it happens, as usage records with the same pricing,
+attribution, writer, keys and rollups as model calls:
+
+| Usage type | Record unit | Card unit | Provider and model |
+|---|---|---|---|
+| `embedding_tokens` | `embedding_token` | `1m_embedding_tokens` | `tei` or `local_embeddings`, the embedding model |
+| `ocr_pages` | `ocr_page` | `ocr_page` | `tesseract`, no model |
+| `speech_minutes` | `audio_minute` | `audio_minute` | `faster_whisper` (`base`) or `deepgram` (`nova-2`) |
+| `tool_calls` | `call` | `call` | the connector, the tool (a card with no model prices every tool of the connector) |
+| `storage` | `gb_day` | `gb_day`, or `gb_month` over the days of the billing month | `platform_storage`, the store |
+| `gpu_hours` | `gpu_node_hour` | `gpu_node_hour` | `ollama` or `vllm`, the node pool |
+
+**In-house is zero.** Embeddings, OCR and Whisper run in-house, so without a card they price at
+zero (`price_source = 'in_house'`, billing account `in_house`), like in-house model tokens. A
+tenant may still put a card on them and it wins. Storage and GPU hours have no zero default: they
+are unpriced until a card exists. Deepgram is a paid provider: unpriced until a card exists.
+
+Every site is `if spend.enabled(): spend.note(kind, tenant_id, ...)` and passes the objects it
+already holds; the handler (`core/spend/metering.py`) derives every quantity inside the note's
+guard, so a malformed object, a number it cannot read or a name it refuses can never fail an
+ingestion, a search, a speech save or a tool call: the failure is logged and counted
+(`hook_error`, under the usage type of the note). Handlers read counts, lengths and ids, never
+content. While the feature is off every site is a bool read and nothing else.
+
+### Metered call sites
+
+| Usage | Site | Key | Application, use case |
+|---|---|---|---|
+| embeddings, ingestion | `core/rag/ingest.py:ingest_document`, once the chunks are embedded | `emb:ingest:{document}` | `knowledge`, `knowledge.ingest` |
+| embeddings, re-indexing | `core/rag/reindex.py:reindex`, each batch of 32 | `emb:reindex:{run}:{batch start}` | `knowledge`, `knowledge.reindex` |
+| embeddings, search | `api/v1/knowledge.py`, each query embedding of the vector and the hybrid search (an agentic search embeds up to five times, and each is metered) | `emb:search:{uuid}` | `knowledge`, `knowledge.search` |
+| embeddings, RPA | `core/tasks/rpa_tasks.py:_embed_and_store`, once per run with the chunks it embedded | `emb:rpa:{script}:{uuid}` | `system`, `rpa.ingest` |
+| OCR, document processing | `api/v1/idp.py:analyse`, the pages whose OCR ran | `ocr:idp:{uuid}` | `documents`, `documents.ocr` |
+| OCR, knowledge upload | `api/v1/knowledge.py:upload_document`, the extraction's OCR pages, once whatever the outcome | `ocr:upload:{document}`: the id the document is stored under (the managed retrieval service's id when it indexed the upload); a refused upload's is a fresh id | `knowledge`, `knowledge.ocr` |
+| OCR, ingestion | `core/rag/ingest.py:ingest_document`, only when it extracted the file itself, right after extracting, so a document that indexes nothing is counted too (an upload passes its extraction and is metered at the route, so nothing is counted twice) | `ocr:ingest:{document}` | `knowledge`, `knowledge.ocr` |
+| speech minutes | `core/speech/store.py:save`, a recording an engine transcribed | `speech:{recording}` | `speech`, `speech.transcription` |
+| tool calls | `core/langgraph/tool_adapter.py:_execute_connector_tool`, the production dispatch boundary | `tool:{uuid}` | the bound scope's, else `agents`; `tool.call` |
+| storage | the daily sample (below) | `storage:{day}:{store}` | the store's |
+| GPU hours | the hourly allocation (below) | `gpu:{pool hour}:{call}` | the call's |
+
+A bound scope wins over the defaults: an agent's knowledge search is the agent's, a workflow
+step's tool call is the workflow's. A site without a tenant takes the bound scope's; a note with
+no tenant at all is counted (`no_tenant`), never queued.
+
+**Not metered in Phase 1:** the embedding backfill command (cross-tenant maintenance) and seed
+data; the voice runtime's own speech-to-text and text-to-speech (Twilio, LiveKit), which are
+outside `core/speech`; the tool gateway's own completion path, which production does not use.
+
+### Embeddings
+
+No embedding path returns token counts and the ingestion `token_count` is a word count, so tokens
+are estimated: each embedded item counts `ceil(characters / 4)` tokens, capped at the model's
+input limit from the embedding catalogue (512 for the small, base and large BGE models, 8192 for
+bge-m3), because the embedder truncates past it. Records carry `quantity_estimated`. The engine
+is the one embedding actually used: `tei` for bge-m3 behind `AGENTICORG_TEI_URL`, else
+`local_embeddings` with bge-m3 or the fastembed model loaded in the process. The tenant's
+embedding label is not used, because ingestion always embeds in-house. The hermetic test embedder
+meters nothing.
+
+### OCR pages
+
+Only local Tesseract reads pages. A document-processing analysis counts the pages whose OCR ran.
+A knowledge upload counts every frame of an image (each one is OCR'd, even those that yield no
+text) and the low-text pages of a PDF that were OCR'd; a text extraction counts nothing. Pages are
+counted once per extraction, as soon as OCR has run: an upload refused afterwards (no usable text, a
+duplicate filename, a failed lookup or store) is still counted, under a fresh id.
+
+### Speech minutes
+
+A recording is metered once, when it is kept with status `transcribed` by `faster_whisper` or
+`deepgram`: its duration in minutes to six places. A supplied transcript is not metered. For
+Deepgram, the transcription notes whose credential paid (the tenant's own key, `tenant_key`, or
+the platform's, `platform_key`), and the record carries it; otherwise the writer infers it.
+
+### Priced tool calls
+
+A successful connector tool call (outcome `ok`; an error or a governance refusal is never
+metered) is metered only when a tool is **priced**: a `tool_calls` card exists for the connector
+and the tool, or for the connector with no model. No field is added to the tool registry. Each
+process keeps a 60-second set of the tenant's priced tools (the cards' tools and the tenant's
+aliases of them, since a call is priced through the aliases), refreshed by the writer: a call the
+set says is unpriced is not queued and is counted as an `unpriced_tool` gap with the detail
+`<connector>:<tool>`; otherwise it is queued, and the writer drops it as an `unpriced_tool` gap
+if no card prices it on its billing date. The gaps (`GET /spend/gaps`) show what a new card would
+have priced. A rate-card or alias write drops the set in this process; other processes refresh
+within 60 seconds.
+
+### Storage GB-days
+
+A daily job (the beat `spend-sample-storage`, 23:30 IST) samples every active tenant's storage
+and writes one record per non-empty store: `knowledge` (the text and vectors of
+`knowledge_documents`, soft-deleted rows included, since they still occupy storage), `documents`
+(the kept metadata of `documents`; upload bytes are not kept), `idp` (the files document
+processing keeps) and `speech` (the recordings kept). GB means GiB (2^30 bytes); the unit keeps
+the spec's name, `gb_day`. A store whose table does not exist is skipped.
+
+- **The intended day.** A run records the reporting day six hours before it ran, so a run delayed
+  past midnight still records its own day. Each record is stamped at the end of its day minus 30
+  minutes and keyed `storage:{day}:{store}`, so a day is written once whatever the runs.
+- **Keys first.** A tenant's keys for the day and the seven days before are read before anything
+  is measured; nothing is measured when the day is written and no earlier day is missing.
+- **Gap fill.** A day missing between the tenant's first sample in that window and today (a
+  missed beat) is written with today's measurement and flagged `quantity_estimated`. Days before
+  the first sample are never filled, so a new tenant or a newly enabled deployment is not charged
+  for days nothing sampled.
+- **Empty days.** A day on which every store is empty writes no storage figure, so it would look
+  like a missed beat. When the tenant already has a storage record in the window and a card
+  prices storage, the day gets one zero-quantity record (under the first store, priced at zero),
+  so a later fill never charges it. A tenant that never kept anything writes nothing, and without
+  a card no marker is written: an unpriced zero would count against the unpriced limit, and a
+  fill without a card is unpriced too, so it charges no money.
+- **Only the job writes.** `POST /spend/storage/sample` (administrator) measures and returns GiB
+  per store with `written: 0` and an audit row (`spend.storage.preview`); it writes no record, so
+  a manual run cannot pre-empt the day's scheduled figure.
+- **Paused tenants.** The job reads `spend.metering_paused` for each tenant (the flag module's own
+  lookup, as the writer does): a paused tenant is not measured, its day is counted as a `paused`
+  gap, and the day stays unmetered: the gap fill skips days with a `paused` gap, as the writer drops
+  paused usage.
+
+### GPU node hours of in-house serving
+
+One in-house endpoint (ollama, vllm) serves every tenant, so a node hour is a deployment cost, not
+a tenant's. Node hours are held in the platform table `spend_gpu_pool_hours`, which has no tenant
+and no row-level policy because it holds no tenant data (node hours and an aggregate token total);
+each tenant's share is in the tenant-scoped `spend_gpu_allocations`. There is no HTTP write: no
+platform-operator guard exists, and a tenant administrator must not set a shared cost.
+
+- **Standing pools** come from `spend_gpu_pools_json` (`AGENTICORG_SPEND_GPU_POOLS_JSON`), a JSON
+  list of `{provider: "ollama" | "vllm", node_pool (at most 64 characters), models: [1 to 50 model
+  names as usage records carry them, every name the endpoint is called by], nodes: above 0 and at most 10000, from: a whole UTC hour, to: a whole UTC hour or
+  null}`. Two entries for one pool may not cover the same hour. With the feature on, a deployment
+  refuses to start when the setting does not parse. Each run adds a pending row for every closed
+  hour of the last seven days that has none, never overwriting a metered or allocated one.
+- **Metered or manual hours** come from the operator command (logged as
+  `spend_gpu_hours_recorded`; the audit log needs a tenant, so a platform input is logged, not
+  audited; refused while the feature is off):
+
+  ```
+  python -m core.spend.gpu_cli record --provider vllm --pool <pool> --models <m1,m2> \
+      --hour-start 2026-10-01T09:00:00Z [--hour-end 2026-10-01T12:00:00Z] --node-hours 2 \
+      --source metrics --actor <name>
+  python -m core.spend.gpu_cli list --start 2026-10-01T00:00:00Z --end 2026-10-02T00:00:00Z
+  ```
+
+  `record` upserts a pending row per whole UTC hour (at most 744 per command) for hours that have
+  ended and start at most seven days back (the window standing pools are materialised in); a
+  future or older hour is refused with exit code 2. Each hour is one
+  `INSERT ... ON CONFLICT DO UPDATE ... WHERE status = 'pending'`, so an hour already being
+  allocated or allocated, even one claimed while the command runs, is reported as
+  `already_allocated` and left alone. The log names the actor, the pool, the first and last hour,
+  the node hours and the models (`spend_gpu_hours_recorded`), and each overwritten hour's previous
+  node hours, source and recorder (`spend_gpu_hour_overwritten`).
+- **Allocation** (the beat `spend-allocate-gpu-hours`, hourly at :20, at most 48 hours a run,
+  oldest first) spreads each pool hour once it has closed (75 minutes after its start, so the
+  writer and its spill have caught up). It claims the hour (a claim older than an hour is
+  resumed; the claim and its age run on the database clock) and freezes it: records created
+  after that instant are not counted, so a rerun sees the same totals. The hour is spread over
+  every token record of the pool's models in that hour, whatever priced it, so no tenant's own
+  card or alias can move its share onto other tenants. Calls priced at zero (in-house, or a
+  tenant's card at zero) are charged their share. A call a card priced above zero already carries
+  its cost: it is counted in `priced_calls_skipped`, gets no GPU record and never pays twice, and
+  its share stays with the platform. So does the share of a tenant deleted since the hour began.
+  The shares follow the tokens by largest remainder, so they sum to the hour's node hours exactly
+  and none is negative; `skipped_node_hours` on the pool hour is the part no tenant carries. Each
+  tenant's share is priced once with its `gpu_hours` card (`gpu_node_hour`, the pool as model or
+  the provider default; unpriced without one), then its node hours, amount and INR amount are
+  split over its calls by tokens, so money is conserved as well as hours; each call's share is a
+  record flagged `allocated`, with `allocated_from` naming the call and the call's attribution. A
+  share that rounds to nothing is recorded as written with no hours.
+- **Idle hours stay with the platform.** An hour no call used is closed as `idle` and charged to
+  no tenant.
+- **Failures.** A failing configuration (for example a pool name the tables cannot hold, which
+  start-up refuses anyway) is logged and recorded hours are still allocated. An hour whose
+  allocation fails for a tenant stays claimed and is resumed after an hour; fresh hours are
+  allocated before resumed ones, so an hour that keeps failing never holds back newer hours.
+- **Late calls.** An in-house call written after its hour was frozen is not reallocated.
+- **Paused tenants.** A tenant `spend.metering_paused` holds for keeps its allocation `frozen`: the
+  hour is not closed and is resumed, with the same frozen totals, once metering resumes.
+- `GET /spend/gpu-allocations` lists the tenant's own shares; another tenant's share is never
+  shown.
 
 ## Scopes, administrators and commercial reads
 

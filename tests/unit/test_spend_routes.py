@@ -158,6 +158,7 @@ class TestFlag:
             "usage_window_days": 31,
             "rebuild_days": 31,
             "restate_days": 92,
+            "gpu_allocation_days": 31,
         }
         assert out["backfill_source"] in ("model_gateway_records", "none")
         assert out["partition_horizon"]["last_month"] == "2028-12" and out["writer"] == {"started": False}
@@ -591,14 +592,15 @@ class TestRouteShape:
             assert meta["auth_required"] and meta["tenant_required"]
             jobs_route = route.path in api_job_paths()
             imports_route = route.path.endswith("/import")
-            assert meta["rate_limit"] == ("bulk-import" if imports_route or jobs_route else "standard")
+            preview_route = route.path == "/spend/storage/sample"  # measures every store, as heavy as a job
+            assert meta["rate_limit"] == ("bulk-import" if imports_route or jobs_route or preview_route else "standard")
             if "GET" in route.methods:
                 assert meta["idempotency"] == "read-only"
-        assert operations == 36  # 23 reference-data operations and 13 usage operations
+        assert operations == 38  # 23 reference-data, 13 usage and 2 metering operations
 
     def test_write_routes_carry_tenant_admin_dependency(self):
         writes = [r for r in api.router.routes if not r.methods <= {"GET", "HEAD"}]
-        assert len(writes) == 20  # 14 reference-data writes and 6 job routes
+        assert len(writes) == 21  # 14 reference-data writes, 6 job routes and the storage preview
         for route in writes:
             assert require_tenant_admin in route.dependencies, route.path
             assert api.spend_admin in [d.call for d in route.dependant.dependencies], route.path
