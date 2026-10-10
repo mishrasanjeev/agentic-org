@@ -10062,6 +10062,420 @@
     "tenant_required": true
   },
   {
+    "audit_event": "spend.commitments.list",
+    "auth_required": true,
+    "function": "list_commitments",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/spend/commitments api/v1/spend.py:list_commitments",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/spend.py",
+    "path": "/api/v1/spend/commitments",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "spend.commitments.read",
+    "source_line": 672,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "spend.commitments.create",
+    "auth_required": true,
+    "function": "create_commitment",
+    "idempotency": "not-idempotent-create",
+    "key": "POST /api/v1/spend/commitments api/v1/spend.py:create_commitment",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/spend.py",
+    "path": "/api/v1/spend/commitments",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "spend.commitments.sensitive.write",
+    "source_line": 700,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "spend.commitments.update",
+    "auth_required": true,
+    "function": "update_commitment",
+    "idempotency": "idempotent-update",
+    "key": "PATCH /api/v1/spend/commitments/{commitment_id} api/v1/spend.py:update_commitment",
+    "metadata_present": true,
+    "methods": [
+      "PATCH"
+    ],
+    "module": "api/v1/spend.py",
+    "path": "/api/v1/spend/commitments/{commitment_id}",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "spend.commitments.sensitive.write",
+    "source_line": 722,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "spend.fx_rates.list",
+    "auth_required": true,
+    "function": "list_fx_rates",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/spend/fx-rates api/v1/spend.py:list_fx_rates",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/spend.py",
+    "path": "/api/v1/spend/fx-rates",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "spend.fx.read",
+    "source_line": 750,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "spend.fx_rates.put",
+    "auth_required": true,
+    "function": "put_fx_rate",
+    "idempotency": "upsert-by-key",
+    "key": "PUT /api/v1/spend/fx-rates api/v1/spend.py:put_fx_rate",
+    "metadata_present": true,
+    "methods": [
+      "PUT"
+    ],
+    "module": "api/v1/spend.py",
+    "path": "/api/v1/spend/fx-rates",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "spend.fx.sensitive.write",
+    "source_line": 777,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "spend.fx_rates.import",
+    "auth_required": true,
+    "function": "import_fx_rates",
+    "idempotency": "upsert-by-key",
+    "key": "POST /api/v1/spend/fx-rates/import api/v1/spend.py:import_fx_rates",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/spend.py",
+    "path": "/api/v1/spend/fx-rates/import",
+    "public_exempt_reason": null,
+    "rate_limit": "bulk-import",
+    "scope": "spend.fx.sensitive.write",
+    "source_line": 799,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "spend.mappings.list",
+    "auth_required": true,
+    "function": "list_mappings",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/spend/mappings api/v1/spend.py:list_mappings",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/spend.py",
+    "path": "/api/v1/spend/mappings",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "spend.mappings.read",
+    "source_line": 415,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "spend.mappings.put",
+    "auth_required": true,
+    "function": "put_mapping",
+    "idempotency": "upsert-by-key",
+    "key": "PUT /api/v1/spend/mappings api/v1/spend.py:put_mapping",
+    "metadata_present": true,
+    "methods": [
+      "PUT"
+    ],
+    "module": "api/v1/spend.py",
+    "path": "/api/v1/spend/mappings",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "spend.mappings.sensitive.write",
+    "source_line": 441,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "spend.mappings.import",
+    "auth_required": true,
+    "function": "import_mappings",
+    "idempotency": "upsert-by-key",
+    "key": "POST /api/v1/spend/mappings/import api/v1/spend.py:import_mappings",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/spend.py",
+    "path": "/api/v1/spend/mappings/import",
+    "public_exempt_reason": null,
+    "rate_limit": "bulk-import",
+    "scope": "spend.mappings.sensitive.write",
+    "source_line": 463,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "spend.model_aliases.list",
+    "auth_required": true,
+    "function": "list_model_aliases",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/spend/model-aliases api/v1/spend.py:list_model_aliases",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/spend.py",
+    "path": "/api/v1/spend/model-aliases",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "spend.mappings.read",
+    "source_line": 489,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "spend.model_aliases.put",
+    "auth_required": true,
+    "function": "put_model_alias",
+    "idempotency": "upsert-by-key",
+    "key": "PUT /api/v1/spend/model-aliases api/v1/spend.py:put_model_alias",
+    "metadata_present": true,
+    "methods": [
+      "PUT"
+    ],
+    "module": "api/v1/spend.py",
+    "path": "/api/v1/spend/model-aliases",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "spend.mappings.sensitive.write",
+    "source_line": 510,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "spend.org_nodes.list",
+    "auth_required": true,
+    "function": "list_org_nodes",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/spend/org-nodes api/v1/spend.py:list_org_nodes",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/spend.py",
+    "path": "/api/v1/spend/org-nodes",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "spend.org.read",
+    "source_line": 297,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "spend.org_nodes.create",
+    "auth_required": true,
+    "function": "create_org_node",
+    "idempotency": "not-idempotent-create",
+    "key": "POST /api/v1/spend/org-nodes api/v1/spend.py:create_org_node",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/spend.py",
+    "path": "/api/v1/spend/org-nodes",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "spend.org.sensitive.write",
+    "source_line": 365,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "spend.org_nodes.import",
+    "auth_required": true,
+    "function": "import_org_nodes",
+    "idempotency": "upsert-by-code",
+    "key": "POST /api/v1/spend/org-nodes/import api/v1/spend.py:import_org_nodes",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/spend.py",
+    "path": "/api/v1/spend/org-nodes/import",
+    "public_exempt_reason": null,
+    "rate_limit": "bulk-import",
+    "scope": "spend.org.sensitive.write",
+    "source_line": 321,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "spend.org_nodes.get",
+    "auth_required": true,
+    "function": "get_org_node",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/spend/org-nodes/{node_id} api/v1/spend.py:get_org_node",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/spend.py",
+    "path": "/api/v1/spend/org-nodes/{node_id}",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "spend.org.read",
+    "source_line": 347,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "spend.org_nodes.update",
+    "auth_required": true,
+    "function": "update_org_node",
+    "idempotency": "idempotent-update",
+    "key": "PATCH /api/v1/spend/org-nodes/{node_id} api/v1/spend.py:update_org_node",
+    "metadata_present": true,
+    "methods": [
+      "PATCH"
+    ],
+    "module": "api/v1/spend.py",
+    "path": "/api/v1/spend/org-nodes/{node_id}",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "spend.org.sensitive.write",
+    "source_line": 387,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "spend.price.quote",
+    "auth_required": true,
+    "function": "price_quote",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/spend/price api/v1/spend.py:price_quote",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/spend.py",
+    "path": "/api/v1/spend/price",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "spend.read",
+    "source_line": 828,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "spend.rate_cards.list",
+    "auth_required": true,
+    "function": "list_rate_cards",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/spend/rate-cards api/v1/spend.py:list_rate_cards",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/spend.py",
+    "path": "/api/v1/spend/rate-cards",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "spend.rate_cards.read",
+    "source_line": 535,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "spend.rate_cards.create",
+    "auth_required": true,
+    "function": "create_rate_card",
+    "idempotency": "not-idempotent-create",
+    "key": "POST /api/v1/spend/rate-cards api/v1/spend.py:create_rate_card",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/spend.py",
+    "path": "/api/v1/spend/rate-cards",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "spend.rate_cards.sensitive.write",
+    "source_line": 597,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "spend.rate_cards.import",
+    "auth_required": true,
+    "function": "import_rate_cards",
+    "idempotency": "upsert-by-key",
+    "key": "POST /api/v1/spend/rate-cards/import api/v1/spend.py:import_rate_cards",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/spend.py",
+    "path": "/api/v1/spend/rate-cards/import",
+    "public_exempt_reason": null,
+    "rate_limit": "bulk-import",
+    "scope": "spend.rate_cards.sensitive.write",
+    "source_line": 571,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "spend.rate_cards.update",
+    "auth_required": true,
+    "function": "update_rate_card",
+    "idempotency": "idempotent-update",
+    "key": "PATCH /api/v1/spend/rate-cards/{card_id} api/v1/spend.py:update_rate_card",
+    "metadata_present": true,
+    "methods": [
+      "PATCH"
+    ],
+    "module": "api/v1/spend.py",
+    "path": "/api/v1/spend/rate-cards/{card_id}",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "spend.rate_cards.sensitive.write",
+    "source_line": 619,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "spend.rate_cards.correct",
+    "auth_required": true,
+    "function": "correct_rate_card",
+    "idempotency": "not-idempotent-create",
+    "key": "POST /api/v1/spend/rate-cards/{card_id}/correct api/v1/spend.py:correct_rate_card",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/spend.py",
+    "path": "/api/v1/spend/rate-cards/{card_id}/correct",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "spend.rate_cards.sensitive.write",
+    "source_line": 644,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "spend.status",
+    "auth_required": true,
+    "function": "spend_status",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/spend/status api/v1/spend.py:spend_status",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/spend.py",
+    "path": "/api/v1/spend/status",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "spend.read",
+    "source_line": 267,
+    "tenant_required": true
+  },
+  {
     "audit_event": "sso.config.list",
     "auth_required": true,
     "function": "list_configs",

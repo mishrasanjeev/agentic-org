@@ -4,6 +4,52 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
 
 ## [Unreleased] - 2026-08-29
 
+### Added - AI spend intelligence: reference data and rupee pricing
+- `core/spend/`: the reference data AI spend is measured against. An
+  organisation tree (group, business unit, department, team, cost centre)
+  keyed by the organisation's own codes, with kind nesting rules, cycle and
+  depth checks under a per-tenant lock, deactivation instead of deletion.
+  Source mappings tie agents, workflows, applications and legacy cost-centre
+  and department labels to nodes, product lines and use cases. Model aliases
+  map called model names to the SKUs cards and invoices use.
+- Effective-dated rate cards per provider, usage type, model (or provider
+  default), unit and source (list or contract), with cached-input prices,
+  batch discounts and volume tiers. Overlapping active cards of one key are
+  refused on every create, change, correction and import row. A wrong price
+  on a started or referenced card is fixed by a correction (retire and
+  replace, with a reason), never by an edit. Commitments (quantity or money)
+  over billing periods, refused when they overlap. FX rates to INR per
+  reporting date.
+- A pricing engine: a usage is priced with the card in force on its billing
+  date, ranking every pricing path together (model-specific before default,
+  cached-capable before "no discount", contract before list), falling back
+  to the deployment's list and override prices, zero for in-house models,
+  and unpriced (never zero) otherwise; amounts are `Decimal`, rounded
+  half-even to ten places, and converted to INR per record on the reporting
+  date (`fx_estimated` on an earlier rate, `unconverted` with none). Two
+  calendars: `spend_reporting_timezone` (default `Asia/Kolkata`) and each
+  provider's billing zone (`spend_provider_billing_timezones_json`).
+- `GET /spend/status`, `GET/POST /spend/org-nodes`, `GET/PATCH
+  /spend/org-nodes/{node_id}`, `GET/PUT /spend/mappings`, `GET/PUT
+  /spend/model-aliases`, `GET/POST /spend/rate-cards`, `PATCH
+  /spend/rate-cards/{card_id}`, `POST /spend/rate-cards/{card_id}/correct`,
+  `GET/POST /spend/commitments`, `PATCH /spend/commitments/{commitment_id}`,
+  `GET/PUT /spend/fx-rates`, `GET /spend/price`, and bounded CSV/JSON imports
+  (`POST /spend/{org-nodes,mappings,rate-cards,fx-rates}/import`, 2 MiB and
+  5,000 rows, with a dry run). Scope family `spend` (`audit:read`,
+  `approvals:write`); every write needs an active human tenant
+  administrator and is audited with before and after values (imports as a
+  manifest with the file's sha256); rate cards, commitments and prices are
+  read by an administrator or auditor only. A request gate refuses oversize
+  import bodies before they are read.
+- Behind `spend_intelligence_enabled` (default off): off, the status route
+  answers `enabled: false`, every other spend route is not found before its
+  body is read, and nothing else changes. Migration `v6z79_spend_reference`
+  adds `spend_org_nodes`, `spend_source_mappings`, `spend_rate_cards`,
+  `spend_model_aliases`, `spend_commitments` and `spend_fx_rates` under
+  forced row-level security, with tenant-composite foreign keys and a
+  leading index on every foreign key.
+
 ### Fixed - Combined security and feature release regressions
 - Lineage details ignore superseded node requests, distinguish traversal limits
   from absent sources, and expose native keyboard-accessible node controls.
