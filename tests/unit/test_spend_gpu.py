@@ -22,6 +22,7 @@ from api.deps import ActiveHumanAdmin
 from api.v1 import spend as api
 from core.config import Settings, parse_spend_gpu_pools, settings
 from core.models.spend_gpu import SpendGpuAllocation, SpendGpuPoolHour
+from core.ownership import Caller
 from core.spend import gpu, gpu_cli, meter, pricing, vocab
 from core.spend.errors import SpendError
 from tests.unit.spend_metering_fakes import install_metering, tenant_ids, tenants_since
@@ -34,7 +35,16 @@ RUN = datetime(2026, 10, 1, 11, 0, tzinfo=UTC)
 MIGRATION = Path("migrations/versions/v6_z81_spend_gpu.py")
 MODELS = (SpendGpuPoolHour, SpendGpuAllocation)
 ADMIN = ActiveHumanAdmin(user_id=uuid.UUID(ACTOR), tenant_id=TENANT, email="admin@example.com", role="admin")
+ADMIN_CALLER = Caller(user_id=uuid.UUID(ACTOR), role="admin", domains=None, is_admin=True, is_machine=False)
 MODEL = "inhouse-70b"
+# Who reads GPU allocations: a share sums every agent's calls of the hour, so only tenant-wide readers.
+GPU_READERS = {
+    "admin": (ADMIN_CALLER, True),
+    "auditor": (Caller(user_id=uuid.uuid4(), role="auditor", domains=None, is_admin=False, is_machine=False), True),
+    "domain": (Caller(user_id=uuid.uuid4(), role="cfo", domains=["finance"], is_admin=False, is_machine=False), False),
+    "machine": (Caller(user_id=None, role="", domains=None, is_admin=False, is_machine=True), False),
+    "machine_admin": (Caller(user_id=None, role="", domains=None, is_admin=True, is_machine=True), True),
+}
 
 
 @pytest.fixture
@@ -529,6 +539,32 @@ class TestAllocation:
         assert hour.skipped_node_hours == 0
 
     @pytest.mark.asyncio
+    async def test_a_legacy_in_house_alias_moves_no_share(self, store):
+        """The finding: put_alias refuses in-house providers, but an alias written before it did stayed in force
+        (there is no delete): the writer stored the tenant's in-house calls under the alias's SKU, the pool's
+        model list matched none of them, and their share moved onto the other tenants. Aliases never apply to an
+        in-house provider, so a legacy row changes neither a new record's model nor any share."""
+        from core.models.spend import SpendModelAlias
+
+        # A legacy row, inserted past put_alias: the pool's model renamed onto a SKU the tenant's card prices.
+        store.add(
+            SpendModelAlias(
+                id=uuid.uuid4(), tenant_id=OTHER_TENANT, provider="vllm", alias=MODEL, model_sku="tenant-sku"
+            )
+        )
+        store.add(card(tenant_id=OTHER_TENANT, provider="vllm", model_sku="tenant-sku", unit_price=Decimal("1")))
+        hour = pool_hour(store)
+        await write_calls(store, TENANT, [1000])
+        await write_calls(store, OTHER_TENANT, [3000])
+        theirs = [r for r in store.of("spend_usage_records") if r.tenant_id == OTHER_TENANT]
+        assert [(r.model, r.price_source, r.amount) for r in theirs] == [(MODEL, "in_house", 0)]
+        out = await gpu.allocate_hour(hour.id, now=RUN)
+        assert out["tenants"] == 2 and out["total_tokens"] == "4000.000000" and out["priced_calls_skipped"] == 0
+        assert [r.quantity for r in gpu_records(store, OTHER_TENANT)] == [Decimal("1.5")]  # 3000 of 4000 tokens
+        assert [r.quantity for r in gpu_records(store, TENANT)] == [Decimal("0.5")]  # not the whole hour
+        assert hour.skipped_node_hours == 0
+
+    @pytest.mark.asyncio
     async def test_a_deleted_tenants_share_stays_with_the_platform(self, monkeypatch, store):
         from core.spend import tenants
 
@@ -922,7 +958,7 @@ class TestTasksAndRoutes:
     async def test_metering_routes_not_found_while_off(self, monkeypatch):
         monkeypatch.setattr(settings, "spend_intelligence_enabled", False)
         for call in (
-            api.list_gpu_allocations(HOUR, RUN, tenant_id=TID),
+            api.list_gpu_allocations(HOUR, RUN, caller=ADMIN_CALLER, tenant_id=TID),
             api.preview_storage_sample(ADMIN, tenant_id=TID),
         ):
             with pytest.raises(HTTPException) as info:
@@ -937,20 +973,50 @@ class TestTasksAndRoutes:
         await write_calls(store, TENANT, [1000])
         await write_calls(store, OTHER_TENANT, [1000])
         await gpu.allocate_hour(hour.id, now=RUN)
-        out = await api.list_gpu_allocations(HOUR.replace(tzinfo=None), RUN, tenant_id=TID)
+        out = await api.list_gpu_allocations(HOUR.replace(tzinfo=None), RUN, caller=ADMIN_CALLER, tenant_id=TID)
         (item,) = out["items"]  # the other tenant's share is not listed
         assert (item["hour_start"], item["provider"], item["node_pool"]) == (HOUR.isoformat(), "vllm", "pool-a")
         assert (item["currency"], item["records"], item["status"]) == ("INR", 1, "written")
         assert Decimal(item["tokens"]) == 1000 and Decimal(item["node_hours"]) == 1
         assert Decimal(item["amount"]) == Decimal("200")
         with pytest.raises(HTTPException) as info:
-            await api.list_gpu_allocations(HOUR, HOUR + timedelta(days=32), tenant_id=TID)
+            await api.list_gpu_allocations(HOUR, HOUR + timedelta(days=32), caller=ADMIN_CALLER, tenant_id=TID)
         assert info.value.status_code == 422 and info.value.detail["error"] == "range_too_long"
         with pytest.raises(HTTPException) as info:
-            await api.list_gpu_allocations(RUN, HOUR, tenant_id=TID)
+            await api.list_gpu_allocations(RUN, HOUR, caller=ADMIN_CALLER, tenant_id=TID)
         assert info.value.detail["error"] == "invalid_period"
         status = await api.spend_status(tenant_id=TID)
         assert status["limits"]["gpu_allocation_days"] == 31
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("reader", sorted(GPU_READERS))
+    async def test_gpu_allocations_are_for_tenant_wide_readers_only(self, monkeypatch, store, reader):
+        """The finding: a domain-scoped person or a machine credential holding audit:read read the tenant's
+        token counts, node-hour shares and amounts, which sum every agent's calls and carry no agent. Coverage,
+        gaps and jobs follow one rule: an administrator (a machine credential with the admin scope included) or
+        an auditor reads them, anyone else is refused before anything is looked up."""
+        hour = pool_hour(store)
+        store.add(gpu_card(TENANT))
+        await write_calls(store, TENANT, [1000])
+        await gpu.allocate_hour(hour.id, now=RUN)
+        caller, tenant_wide = GPU_READERS[reader]
+        if tenant_wide:
+            (item,) = (await api.list_gpu_allocations(HOUR, RUN, caller=caller, tenant_id=TID))["items"]
+            assert Decimal(item["tokens"]) == 1000 and Decimal(item["node_hours"]) == 2  # the only calls of the hour
+            assert Decimal(item["amount"]) == Decimal("400")
+            return
+        looked_up = []
+
+        async def lookup(*args, **kwargs):
+            looked_up.append(args)
+            return {"items": []}
+
+        monkeypatch.setattr(gpu, "list_allocations", lookup)
+        for start, end in ((HOUR, RUN), (RUN, HOUR), (HOUR, HOUR + timedelta(days=32))):  # even a bad range: 403
+            with pytest.raises(HTTPException) as info:
+                await api.list_gpu_allocations(start, end, caller=caller, tenant_id=TID)
+            assert info.value.status_code == 403 and info.value.detail["error"] == "tenant_wide_read_refused"
+        assert looked_up == []
 
     def test_routes_are_registered_with_their_scopes(self):
         from api.deps import require_tenant_admin
@@ -970,6 +1036,9 @@ class TestTasksAndRoutes:
         assert api.spend_admin in [d.call for d in sample.dependant.dependencies]
         allocations = next(r for r in api.router.routes if r.path == "/spend/gpu-allocations")
         assert require_tenant_admin not in allocations.dependencies
+        from core.ownership import caller_from_request
+
+        assert caller_from_request in [d.call for d in allocations.dependant.dependencies]  # the reader is checked
 
 
 def _migration():

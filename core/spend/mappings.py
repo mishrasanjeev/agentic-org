@@ -390,7 +390,9 @@ async def put_alias(
     In-house models (``vocab.IN_HOUSE_PROVIDERS``) are named by the deployment,
     not by a vendor's invoice, and GPU allocation matches their calls to a
     pool by the name the call carries: a tenant alias would take its calls
-    out of the pool's hours and move their share onto other tenants.
+    out of the pool's hours and move their share onto other tenants. An
+    in-house alias written before this refusal is never applied
+    (``pricing.alias_map`` and ``pricing.canonical_model`` skip it).
     """
     from core.database import get_tenant_session
     from core.models.spend import SpendModelAlias

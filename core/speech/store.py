@@ -127,6 +127,9 @@ async def save(
     recording: Recording = await asyncio.to_thread(load, data, mime_type)
     found = await asyncio.to_thread(diarisation.diarise, recording, channel_roles=channel_roles)
     row = SpeechRecording(
+        # The column's own default, drawn now rather than at the flush, so the recording has its id
+        # before it is transcribed (the spend key of its minutes) and keeps it when it is saved.
+        id=uuid.uuid4(),
         tenant_id=tenant_id,
         filename=(filename or "recording.wav")[:255],
         mime_type=(mime_type or "audio/wav")[:100],
@@ -149,6 +152,10 @@ async def save(
     if engine and engine != "supplied":
         try:
             words = await engines.transcribe(tenant_id, recording, engine=engine, language=language)
+            # AI spend (core/spend/metering.py): the engine has run, so its minutes are spent whatever happens
+            # next; metered now, under the recording's id, before redaction, encryption or the save can fail.
+            if spend.enabled():
+                spend.note("speech", tenant_id, row=row, engine=engine, user_id=created_by)
             transcript = engines.transcript_of(words, found)
             transcript, spans, recording = await _auto_redact(tenant_id, transcript, recording)
             if spans:
@@ -167,9 +174,6 @@ async def save(
         session.add(row)
         await session.flush()
         answer = detail_dict(row)
-    # AI spend (core/spend/metering.py): the audio minutes a metered engine transcribed.
-    if spend.enabled():
-        spend.note("speech", tenant_id, row=row, engine=engine, user_id=created_by)
     logger.info(
         "speech_recording_kept", status=answer["status"], channels=answer["channels"], segments=answer["segments"]
     )

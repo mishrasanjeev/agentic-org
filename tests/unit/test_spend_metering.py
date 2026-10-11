@@ -618,14 +618,21 @@ class TestOcr:
 # ---------------------------------------------------------------- speech
 
 
-async def _save_speech(monkeypatch, *, engine):
+def _speech_store(monkeypatch, session=None, transcriber=None):
+    """The speech store with a fake session, tenant crypto and an engine that returns one word."""
     from core.speech import store as speech_store
     from core.speech import transcribe
-    from tests.unit.test_speech_transcription import _Session, _use, mono_call
+    from tests.unit.test_speech_transcription import _Session, _use
 
-    session = _Session()
-    _use(monkeypatch, session)
-    monkeypatch.setattr(transcribe, "transcribe", AsyncMock(return_value=[transcribe.Word("hello", 0.4, 0.8, 0.9)]))
+    _use(monkeypatch, session if session is not None else _Session())
+    words = AsyncMock(return_value=[transcribe.Word("hello", 0.4, 0.8, 0.9)])
+    monkeypatch.setattr(transcribe, "transcribe", transcriber or words)
+    return speech_store
+
+
+async def _save(speech_store, *, engine):
+    from tests.unit.test_speech_transcription import mono_call
+
     return await speech_store.save(
         TENANT,
         filename="call.wav",
@@ -638,42 +645,132 @@ async def _save_speech(monkeypatch, *, engine):
     )
 
 
-def _row(**over):
-    base = {"id": uuid.uuid4(), "status": "transcribed", "duration_seconds": 90.5}
-    base.update(over)
-    return SimpleNamespace(**base)
+async def _save_speech(monkeypatch, *, engine, transcriber=None):
+    return await _save(_speech_store(monkeypatch, transcriber=transcriber), engine=engine)
+
+
+def _speech(*, engine="faster_whisper", user_id=None, **row):
+    """What the save notes once an engine has transcribed a recording: its row, whose id is drawn up front."""
+    fields = {"id": uuid.uuid4(), "status": "received", "duration_seconds": 90.5}
+    fields.update(row)
+    return {"row": SimpleNamespace(**fields), "engine": engine, "user_id": user_id}
+
+
+def _mono_minutes() -> Decimal:
+    from core.speech import audio
+    from tests.unit.test_speech_transcription import mono_call
+
+    return metering.speech_minutes(round(audio.load(mono_call(), "audio/wav").duration, 3))
 
 
 class TestSpeech:
     @pytest.mark.asyncio
-    async def test_speech_minutes_from_duration_for_transcribed_only(self, monkeypatch, on):
-        row = _row()
-        metering.handle("speech", TID, {"row": row, "engine": "faster_whisper", "user_id": ACTOR})
+    async def test_speech_minutes_from_duration_once_the_engine_returns(self, monkeypatch, on):
+        raw = _speech(user_id=ACTOR)
+        metering.handle("speech", TID, raw)
         event_ = on["events"][0]
         assert (event_.usage_type, event_.unit, event_.quantity) == (
             "speech_minutes",
             "audio_minute",
             Decimal("1.508333"),
         )
+        recording = str(raw["row"].id)
         assert (event_.provider, event_.model, event_.billing_account) == ("faster_whisper", "base", "in_house")
-        assert event_.idempotency_key == f"speech:{row.id}" and event_.source_ref == str(row.id)
+        assert event_.idempotency_key == f"speech:{recording}" and event_.source_ref == recording
         assert event_.hints.application == "speech" and event_.hints.default_use_case == "speech.transcription"
         assert event_.hints.initiating_user_id == ACTOR
-        for status in ("received", "failed"):
-            metering.handle("speech", TID, {"row": _row(status=status), "engine": "faster_whisper"})
-        metering.handle("speech", TID, {"row": _row(duration_seconds=0), "engine": "deepgram"})
+        metering.handle("speech", TID, _speech(duration_seconds=0, engine="deepgram"))
         assert len(on["events"]) == 1
         kept = await _save_speech(monkeypatch, engine="faster_whisper")
         assert kept["status"] == "transcribed" and len(on["events"]) == 2
         saved = on["events"][1]
-        assert saved.idempotency_key.startswith("speech:") and saved.quantity == metering.speech_minutes(
-            kept["duration_seconds"]
-        )
+        # The key names the row the recording was kept as: its id is drawn before the transcription.
+        assert saved.idempotency_key == f"speech:{kept['id']}" and saved.source_ref == kept["id"]
+        assert saved.quantity == metering.speech_minutes(kept["duration_seconds"]) == _mono_minutes()
+
+    @pytest.mark.asyncio
+    async def test_only_a_transcription_the_engine_returned_is_metered(self, monkeypatch, on):
+        from core import spend
+        from core.speech.audio import SpeechError
+        from observability import metrics
+
+        failing = AsyncMock(side_effect=SpeechError(503, "engine_unavailable", "down"))
+        kept = await _save_speech(monkeypatch, engine="deepgram", transcriber=failing)
+        assert kept["status"] == "failed" and on["events"] == []  # the engine never returned: nothing was spent
+        counter = metrics.spend_usage_write_failures_total.labels(usage_type="speech_minutes", reason="hook_error")
+        before = counter._value.get()
+        spend.note("speech", TID, **_speech(id=None))  # no id: refused and counted, never keyed at random
+        assert counter._value.get() == before + 1 and on["events"] == []
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        "stage", ["redaction", "redaction_refused", "transcript_encryption", "audio_encryption", "database"]
+    )
+    async def test_minutes_are_metered_once_when_a_later_step_fails(self, monkeypatch, store, on, stage):
+        """The finding: the minutes were noted only after redaction, encryption and the database write, so a
+        vault or database outage after the engine had run lost minutes the engine had spent. They are noted as
+        soon as the engine returns, under the recording's id, so one record stands for the transcription; the
+        writer retrying that recording's event adds nothing."""
+        from core.speech.audio import SpeechError
+        from tests.unit.test_speech_transcription import _Session
+
+        session = _Session()
+        speech_store = _speech_store(monkeypatch, session)
+        down = RuntimeError(f"{stage} down")
+        if stage == "redaction":
+            monkeypatch.setattr(speech_store, "_auto_redact", AsyncMock(side_effect=down))
+        elif stage == "redaction_refused":  # a speech error: the recording is kept as failed
+            refused = SpeechError(422, "redaction_failed", "no")
+            monkeypatch.setattr(speech_store, "_auto_redact", AsyncMock(side_effect=refused))
+        elif stage == "transcript_encryption":
+            monkeypatch.setattr(speech_store, "encrypt_for_tenant", AsyncMock(side_effect=down))  # the vault
+        elif stage == "audio_encryption":
+            monkeypatch.setattr(speech_store, "encrypt_audio", AsyncMock(side_effect=down))
+        else:
+            monkeypatch.setattr(session, "flush", AsyncMock(side_effect=down))  # the database write
+        if stage == "redaction_refused":
+            kept = await _save(speech_store, engine="faster_whisper")
+            assert kept["status"] == "failed"
+        else:
+            kept = None
+            with pytest.raises(RuntimeError, match="down"):
+                await _save(speech_store, engine="faster_whisper")
+        (event_,) = on["events"]
+        recording = event_.source_ref
+        assert event_.idempotency_key == f"speech:{recording}" and str(uuid.UUID(recording)) == recording
+        assert kept is None or kept["id"] == recording
+        assert event_.quantity == _mono_minutes()
+        first = await meter.write_events(store, TENANT, on["events"], now=T0)
+        again = await meter.write_events(store, TENANT, on["events"], now=T0)  # a retry of that recording's event
+        assert (first.written, again.written, again.duplicates) == (1, 0, 1)
+        (record,) = [r for r in store.of("spend_usage_records") if r.usage_type == "speech_minutes"]
+        assert record.source_ref == recording and record.price_source == "in_house"
+
+    @pytest.mark.asyncio
+    async def test_flag_off_the_save_is_unchanged_and_notes_nothing(self, monkeypatch):
+        from tests.unit.test_speech_transcription import _Session
+
+        monkeypatch.setattr(settings, "spend_intelligence_enabled", False)
+
+        def explode(*args):
+            raise AssertionError("noted while off")
+
+        monkeypatch.setattr(metering, "handle", explode)
+        session = _Session()
+        speech_store = _speech_store(monkeypatch, session)
+        kept = await _save(speech_store, engine="faster_whisper")
+        (row,) = session.rows
+        assert kept["status"] == "transcribed" and isinstance(row.id, uuid.UUID) and kept["id"] == str(row.id)
+        assert kept["duration_seconds"] == row.duration_seconds and row.transcript_encrypted["_encrypted"]
+        monkeypatch.setattr(session, "flush", AsyncMock(side_effect=RuntimeError("database down")))
+        with pytest.raises(RuntimeError, match="database down"):  # a failure surfaces exactly as before
+            await _save(speech_store, engine="faster_whisper")
 
     @pytest.mark.asyncio
     async def test_supplied_engine_is_not_metered(self, monkeypatch, on):
-        metering.handle("speech", TID, {"row": _row(), "engine": "supplied"})
-        metering.handle("speech", TID, {"row": _row(), "engine": None})
+        metering.handle("speech", TID, _speech(engine="supplied"))
+        metering.handle("speech", TID, _speech(engine=None))
+        metering.handle("speech", TID, _speech(engine="deepgram", duration_seconds=None))
         metering.handle("speech", TID, {"row": None, "engine": "deepgram"})
         assert on["events"] == []
         from core.speech import store as speech_store
@@ -695,8 +792,8 @@ class TestSpeech:
     @pytest.mark.asyncio
     async def test_whisper_is_in_house_zero_deepgram_needs_card(self, monkeypatch, store, on):
         monkeypatch.setattr(writer, "submit", lambda events: on["events"].extend(events))
-        metering.handle("speech", TID, {"row": _row(duration_seconds=120), "engine": "faster_whisper"})
-        metering.handle("speech", TID, {"row": _row(duration_seconds=60), "engine": "deepgram"})
+        metering.handle("speech", TID, _speech(duration_seconds=120))
+        metering.handle("speech", TID, _speech(duration_seconds=60, engine="deepgram"))
         await meter.write_events(store, TENANT, on["events"], now=T0)
         records = {r.provider: r for r in store.of("spend_usage_records")}
         assert records["faster_whisper"].price_source == "in_house" and records["faster_whisper"].amount == 0
@@ -711,7 +808,7 @@ class TestSpeech:
             )
         )
         on["events"].clear()
-        metering.handle("speech", TID, {"row": _row(duration_seconds=60), "engine": "deepgram"})
+        metering.handle("speech", TID, _speech(duration_seconds=60, engine="deepgram"))
         await meter.write_events(store, TENANT, on["events"], now=T0)
         priced = [r for r in store.of("spend_usage_records") if r.provider == "deepgram" and not r.unpriced]
         assert len(priced) == 1 and priced[0].amount == Decimal("0.0043") and priced[0].price_source == "contract"
@@ -724,7 +821,7 @@ class TestSpeech:
         from core.speech import audio, transcribe
         from tests.unit.test_speech_transcription import mono_call
 
-        metering.handle("speech", TID, {"row": _row(), "engine": "deepgram"})
+        metering.handle("speech", TID, _speech(engine="deepgram"))
         assert on["events"][-1].billing_account is None  # unknown here: the writer infers it
         payload = {"results": {"channels": [{"alternatives": [{"words": [{"word": "hi", "start": 0, "end": 1}]}]}]}}
         real_client = httpx.AsyncClient
@@ -738,7 +835,7 @@ class TestSpeech:
             words = await transcribe.transcribe_deepgram(TENANT, audio.load(mono_call(), "audio/wav"))
             assert [w.text for w in words] == ["hi"]
             assert context.current_credential() == ("deepgram", source_name)
-            metering.handle("speech", TID, {"row": _row(), "engine": "deepgram"})
+            metering.handle("speech", TID, _speech(engine="deepgram"))
             assert on["events"][-1].billing_account == account
         monkeypatch.setattr(settings, "spend_intelligence_enabled", False)
         context.note_credential("deepgram", "tenant")  # a no-op while off
@@ -856,6 +953,35 @@ class TestTools:
             )
         assert refused.value.status_code == 422 and refused.value.detail["error"] == "invalid_reference"
         assert store.of("spend_model_aliases") == []
+
+    @pytest.mark.asyncio
+    async def test_a_legacy_in_house_alias_is_never_applied(self, store):
+        """The finding: the write-time refusal left an in-house alias written before it in force (there is no
+        delete). Such a row is inert: out of the alias map and its cache, never applied by canonical_model or
+        pricing, never a name in the priced-tool set; a billed provider's alias still applies."""
+        from core.models.spend import SpendModelAlias
+        from core.spend import pricing
+
+        for provider, alias, sku in (
+            ("vllm", "inhouse-70b", "billed-sku"),
+            ("ollama", "send_message", "post_message"),
+            ("openai", "gpt-4o-2024-08-06", "gpt-4o"),
+        ):
+            store.add(SpendModelAlias(id=uuid.uuid4(), tenant_id=TENANT, provider=provider, alias=alias, model_sku=sku))
+        billed = {("openai", "gpt-4o-2024-08-06"): "gpt-4o"}
+        assert await pricing.alias_map(store, TENANT) == billed
+        assert await pricing.cached_aliases(store, TENANT) == billed
+        legacy = {("vllm", "inhouse-70b"): "billed-sku", **billed}
+        assert pricing.canonical_model("vllm", "InHouse-70B", legacy) == "inhouse-70b"
+        assert pricing.canonical_model("openai", "GPT-4o-2024-08-06", legacy) == "gpt-4o"
+        usage = pricing.Usage("vllm", "llm_tokens", "input_token", Decimal(1000), "inhouse-70b", DAY, DAY)
+        through = pricing._through_aliases(usage, legacy)
+        assert (through.model, through.called_model) == ("inhouse-70b", "")
+        store.add(card(provider="vllm", model_sku="billed-sku", unit_price=Decimal("1")))
+        priced = await pricing.price(store, TENANT, usage)
+        assert priced.price_source == "in_house" and priced.amount == 0  # not the alias SKU's card
+        store.add(tool_card(provider="ollama"))
+        assert await metering.priced_tool_set(store, TENANT, now=T0) == frozenset({("ollama", "post_message")})
 
     @pytest.mark.asyncio
     async def test_card_write_invalidates_the_priced_tool_cache(self, store, on):
@@ -1199,6 +1325,6 @@ class TestHelpers:
         assert metering._row_chars(["id"]) == 0 and metering._text_chars(42) == 0
 
     def test_hints_from_the_events_are_server_side(self, on):
-        metering.handle("speech", TID, {"row": _row(), "engine": "faster_whisper", "user_id": "u-raw"})
+        metering.handle("speech", TID, _speech(user_id="u-raw"))
         assert on["events"][0].hints.initiating_user_id is None  # only a user uuid is kept
         assert hints(application="api").application == "api"

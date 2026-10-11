@@ -78,7 +78,10 @@ Aliases do not chain: an alias may not name another alias, and a SKU may not its
 In-house providers (`ollama`, `vllm`, `local_embeddings`, `tei`, `tesseract`, `faster_whisper`)
 take no alias (422 `invalid_reference`): their models are named by the deployment, not by an
 invoice, and GPU allocation matches in-house calls to a pool by the name they carry, so an alias
-would take a tenant's calls out of the pool's hours and move their share onto other tenants.
+would take a tenant's calls out of the pool's hours and move their share onto other tenants. An
+in-house alias written before this refusal is kept and still listed but never applied: the writer
+stores an in-house call under the name it was called by, pricing ignores the alias, and so does
+the set of priced tools.
 
 ## Rate cards
 
@@ -254,7 +257,7 @@ unchanged.
 | `GET /spend/gaps` | administrator or auditor | meter gaps (at most 92 days); tenant-wide |
 | `POST /spend/rollups/rebuild`, `POST /spend/usage/backfill`, `POST /spend/usage/restate`, `POST /spend/usage/reattribute`, `POST /spend/fx-rates/settle`, `POST /spend/commitments/recompute` | administrator | `202` with a job id |
 | `GET /spend/jobs`, `GET /spend/jobs/{job_id}` | administrator or auditor | tenant-wide (record counts of every agent; a correction's reason) |
-| `GET /spend/gpu-allocations` | `audit:read` | the tenant's own shares of in-house GPU pool hours starting in `[start, end)` (at most 31 days) |
+| `GET /spend/gpu-allocations` | administrator or auditor | the tenant's own shares of in-house GPU pool hours starting in `[start, end)` (at most 31 days); tenant-wide (each share sums every agent's calls of the hour) |
 | `POST /spend/storage/sample` | administrator | a preview of today's storage sample in GiB per store; writes no record, audited as `spend.storage.preview` |
 | `POST /spend/invoices/import` | administrator | a provider's invoice for a billing month, CSV or JSON, stored whole; `replace`, `dry_run` |
 | `GET /spend/invoices`, `GET /spend/invoices/{invoice_id}` | administrator or auditor | current and superseded invoices; one with its lines |
@@ -634,7 +637,7 @@ content. While the feature is off every site is a bool read and nothing else.
 | OCR, document processing | `api/v1/idp.py:analyse`, the pages whose OCR ran | `ocr:idp:{uuid}` | `documents`, `documents.ocr` |
 | OCR, knowledge upload | `api/v1/knowledge.py:upload_document`, the extraction's OCR pages, once whatever the outcome | `ocr:upload:{document}`: the id the document is stored under (the managed retrieval service's id when it indexed the upload); a refused upload's is a fresh id | `knowledge`, `knowledge.ocr` |
 | OCR, ingestion | `core/rag/ingest.py:ingest_document`, only when it extracted the file itself, right after extracting, so a document that indexes nothing is counted too (an upload passes its extraction and is metered at the route, so nothing is counted twice) | `ocr:ingest:{document}` | `knowledge`, `knowledge.ocr` |
-| speech minutes | `core/speech/store.py:save`, a recording an engine transcribed | `speech:{recording}` | `speech`, `speech.transcription` |
+| speech minutes | `core/speech/store.py:save`, as soon as an engine has transcribed the recording (before redaction, encryption and the database write) | `speech:{recording}` | `speech`, `speech.transcription` |
 | tool calls | `core/langgraph/tool_adapter.py:_execute_connector_tool`, the production dispatch boundary | `tool:{uuid}` | the bound scope's, else `agents`; `tool.call` |
 | storage | the daily sample (below) | `storage:{day}:{store}` | the store's |
 | GPU hours | the hourly allocation (below) | `gpu:{pool hour}:{call}` | the call's |
@@ -668,8 +671,15 @@ duplicate filename, a failed lookup or store) is still counted, under a fresh id
 
 ### Speech minutes
 
-A recording is metered once, when it is kept with status `transcribed` by `faster_whisper` or
-`deepgram`: its duration in minutes to six places. A supplied transcript is not metered. For
+A recording is metered once, as soon as `faster_whisper` or `deepgram` has transcribed it: its
+duration in minutes to six places. The note comes before the transcript is redacted and
+encrypted and the recording is written, so a redaction, vault or database failure afterwards
+cannot lose minutes the engine already spent; a transcription that failed is not metered. The key
+is `speech:{recording}`, the id the save gives the recording before transcribing it: the record
+names the recording it is kept as, or, when the save fails, the one transcription that ran (an
+upload sent again after such a failure is a new recording and a new transcription, metered on its
+own). The event is built once, so the writer's retries and spills add no second record. A
+supplied transcript is not metered. For
 Deepgram, the transcription notes whose credential paid (the tenant's own key, `tenant_key`, or
 the platform's, `platform_key`), and the record carries it; otherwise the writer infers it.
 
@@ -778,7 +788,9 @@ platform-operator guard exists, and a tenant administrator must not set a shared
 - **Paused tenants.** A tenant `spend.metering_paused` holds for keeps its allocation `frozen`: the
   hour is not closed and is resumed, with the same frozen totals, once metering resumes.
 - `GET /spend/gpu-allocations` lists the tenant's own shares; another tenant's share is never
-  shown.
+  shown. A share sums every agent's calls of the hour and carries no agent, so the route is for
+  an administrator or auditor only (403 `tenant_wide_read_refused` otherwise; see
+  [Who reads usage](#who-reads-usage)).
 
 ## Invoice import
 
@@ -1018,8 +1030,8 @@ scoped under forced row-level security, and spend-to-spend foreign keys are comp
 
 One rule, the one `GET /audit` follows (administrators and auditors see every row). A tenant-wide
 reader, that is an administrator or a person whose domains are unrestricted (an auditor), reads
-every usage record, every rollup, coverage, gaps, jobs and the ledger comparison with no agent
-filter. Every other reader (a domain role, a machine credential without the administrator scope,
+every usage record, every rollup, coverage, gaps, jobs, GPU allocations and the ledger comparison
+with no agent filter. Every other reader (a domain role, a machine credential without the administrator scope,
 anyone who does not own a personal agent) gets the agent visibility rule where a read carries an
 agent, and is refused the tenant-wide figures, which cannot be filtered without letting a reader
 difference two views:
@@ -1032,6 +1044,7 @@ difference two views:
 | `GET /spend/coverage` | the whole tenant | 403 `tenant_wide_read_refused` (the Gate 1 measure sums every agent's usage; gaps carry no agent) |
 | `GET /spend/gaps` | the whole tenant | 403 `tenant_wide_read_refused` (gaps carry no agent) |
 | `GET /spend/jobs`, `GET /spend/jobs/{job_id}` | every job | 403 `tenant_wide_read_refused`, checked before a job is looked up (results count every agent's records; parameters carry a correction's reason) |
+| `GET /spend/gpu-allocations` | the tenant's shares | 403 `tenant_wide_read_refused`, checked before anything is looked up (a share's tokens, node hours and amount sum every agent's calls of the hour; a share carries no agent) |
 | `GET /spend/status` | whether the writer started | the same (the pending count is every tenant's queued events in the process: it is on the `agenticorg_spend_usage_pending` gauge, not in the route) |
 
 Under the agent visibility rule a reader sees the records with no agent, the records of shared
