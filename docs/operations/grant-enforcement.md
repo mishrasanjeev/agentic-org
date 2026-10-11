@@ -437,7 +437,8 @@ outside the token (`auth/revocation.py`):
 - **Unknown state fails closed in production.** When the feed cannot be built (no
   `GRANTEX_API_KEY`), is stale or fails, the state is unknown: a strict runtime refuses the
   token (`grant_revocation_state_unknown_refused`) and a relaxed runtime allows it with a
-  warning. `AGENTICORG_GRANTEX_REVOCATION_CHECK=off` skips the feed and keeps only the
+  warning. The feed check is off by default; `AGENTICORG_GRANTEX_REVOCATION_CHECK=feed` turns it on (a
+  revoked parent grant then refuses its delegated children too), and off keeps only the
   agent-status refusal.
 - **Delegation reports the truth.** `POST /agents/{id}/delegate` answers 502 `delegation_failed`
   when the authority service does not issue the delegated grant, and keeps the grant it does

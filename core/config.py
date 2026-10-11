@@ -605,10 +605,12 @@ class Settings(BaseSettings):
     # until the next minor.
     paused_agents_refused: bool = False
     # Whether the authentication middleware consults the authority service's
-    # revocation feed before honouring a grant token: "feed" (default) or
-    # "off". An unknown state (no feed, stale feed) refuses the token in a
-    # strict runtime and is allowed with a warning elsewhere (auth/revocation.py).
-    grantex_revocation_check: str = "feed"
+    # revocation feed before honouring a grant token: "off" (default) or
+    # "feed". Off by default because it changes an existing authentication
+    # path: on, an unknown state (no feed, stale feed, no GRANTEX_API_KEY)
+    # refuses the token in a strict runtime and is allowed with a warning
+    # elsewhere (auth/revocation.py). Agent status is checked either way.
+    grantex_revocation_check: str = "off"
     # Authenticated routes reached with an auth_mode the auth middleware does
     # not set (FINDINGS A-95). Off, such a request is logged as
     # route_enforcement_unknown_auth_mode and then checked on whatever scopes

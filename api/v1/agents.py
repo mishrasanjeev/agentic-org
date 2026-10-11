@@ -2396,8 +2396,8 @@ async def delegate_to_agent(
         "parent_did": parent_grantex.get("grantex_did", ""),
         "child_did": child_grantex.get("grantex_did", ""),
         "scopes_delegated": len(child_scopes),
-        "grant_id": str(result.get("grant_id") or result.get("id") or "") or None,
-        "expires_at": result.get("expires_at"),
+        "grant_id": str(result.get("grantId") or result.get("grant_id") or result.get("id") or "") or None,
+        "expires_at": result.get("expiresAt") or result.get("expires_at"),
         "stored": stored,
     }
 

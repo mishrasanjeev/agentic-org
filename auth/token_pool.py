@@ -103,6 +103,33 @@ def _parse_expiry(value: Any) -> float | None:
         return None
 
 
+def _grant_token_of(raw: str | bytes | None) -> str:
+    """The bearer token inside a stored grant payload (SDK ``grantToken`` or the pool's own ``token``)."""
+    if not raw:
+        return ""
+    try:
+        data = json.loads(raw)
+    except (TypeError, ValueError):
+        return ""
+    if not isinstance(data, dict):
+        return ""
+    return str(data.get("grantToken") or data.get("grant_token") or data.get("token") or "")
+
+
+def _delegated_ttl_seconds(grant: dict[str, Any]) -> int:
+    """Seconds until a delegated grant expires: a numeric expiresIn or expires_in, else expiresAt or expires_at."""
+    ttl = grant.get("expiresIn", grant.get("expires_in"))
+    if ttl is not None:
+        try:
+            return int(ttl)
+        except (TypeError, ValueError):
+            logger.debug("delegated_grant_ttl_not_numeric")
+    expires_at = _parse_expiry(grant.get("expiresAt") or grant.get("expires_at"))
+    if expires_at:
+        return max(0, int(expires_at - time.time()))
+    return 8 * 3600
+
+
 @dataclass(frozen=True)
 class RevocationOutcome:
     """What revoking an agent's authority did: cache entries evicted, grants revoked remotely, failures."""
@@ -464,11 +491,7 @@ class TokenPool:
         client = self._existing_redis_client()
         if client is None:
             return False
-        ttl = grant.get("expires_in")
-        try:
-            ttl_seconds = int(ttl) if ttl is not None else 8 * 3600
-        except (TypeError, ValueError):
-            ttl_seconds = 8 * 3600
+        ttl_seconds = _delegated_ttl_seconds(grant)
         try:
             await client.setex(
                 f"agent:{agent_id}:delegated_grant", max(60, ttl_seconds), json.dumps(grant, default=str)
@@ -522,6 +545,10 @@ class TokenPool:
                             tokens.setdefault(token)
                     await client.delete(key)
                 await client.delete(f"agent:{agent_id}:token")
+                delegated = _grant_token_of(await client.get(f"agent:{agent_id}:delegated_grant"))
+                if delegated:
+                    tokens.setdefault(delegated)
+                await client.delete(f"agent:{agent_id}:delegated_grant")
                 await client.publish("agenticorg:token:revoke", agent_id)
             except (aioredis.RedisError, OSError) as exc:
                 logger.warning("run_grant_cache_revoke_failed", agent_id=agent_id, error_type=type(exc).__name__)

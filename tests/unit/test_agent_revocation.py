@@ -16,7 +16,8 @@ from auth.token_pool import RevocationOutcome, TokenPool
 
 
 @pytest.fixture(autouse=True)
-def _clean():
+def _clean(monkeypatch):
+    monkeypatch.setattr(revocation.settings, "grantex_revocation_check", "feed")  # the default is off
     revocation.reset_for_tests()
     yield
     revocation.reset_for_tests()
@@ -289,4 +290,100 @@ class TestMiddleware:
         revocation.set_feed_for_tests(_Feed(fresh=False))
         monkeypatch.setattr(revocation.settings, "env", "production")
         with pytest.raises(gm.GrantexAuthError, match="revocation_unknown"):
+            asyncio.run(gm.resolve_grantex_claims("header.payload.signature"))
+
+
+class _ParentAwareFeed(_Feed):
+    def match(self, *, grant_id=None, token_id=None, parent_grant_id=None):
+        if parent_grant_id and parent_grant_id in self.revoked:
+            return SimpleNamespace(kind="grant", id=parent_grant_id, action="revoke")
+        return super().match(grant_id=grant_id, token_id=token_id, parent_grant_id=parent_grant_id)
+
+
+class TestReviewFollowUps:
+    def test_the_feed_check_is_off_by_default(self):
+        from core.config import Settings
+
+        assert Settings.model_fields["grantex_revocation_check"].default == "off"
+
+    def test_a_revoked_parent_grant_refuses_its_delegated_children(self):
+        revocation.set_feed_for_tests(_ParentAwareFeed(revoked={"parent"}))
+        assert revocation.check("child", "t1", "parent").revoked is True
+        assert revocation.check("child", "t1", None).revoked is False
+        assert (
+            revocation.refusal_reason(grant_id="child", token_id="t1", agent_status="active", parent_grant_id="parent")
+            == revocation.REASON_REVOKED
+        )
+
+    def test_the_verified_token_carries_its_parent_grant(self):
+        from auth.grantex_middleware import VerifiedGrantexToken
+
+        token = VerifiedGrantexToken(
+            principal_id="p",
+            agent_did="did:a",
+            developer_id="d",
+            scopes=(),
+            grant_id="g",
+            delegation_depth=1,
+            issued_at=1,
+            token_id="t",
+            parent_grant_id="parent",
+        )
+        assert token.parent_grant_id == "parent"
+        assert VerifiedGrantexToken("p", "did:a", "d", (), "g", 0, 1).parent_grant_id == ""
+
+    def test_the_delegated_grant_is_revoked_and_deleted_with_the_rest(self):
+        import asyncio
+
+        from auth.token_pool import TokenPool
+
+        pool = TokenPool()
+        pool.redis = _Redis({"agent:a1:delegated_grant": '{"grantToken": "tok-delegated", "grantId": "gd"}'})
+        revoked: list[str] = []
+
+        async def revoker(token: str) -> bool:
+            revoked.append(token)
+            return True
+
+        outcome = asyncio.run(pool.revoke_agent_grants("t", "a1", revoker))
+        assert revoked == ["tok-delegated"] and outcome.evicted == 1 and outcome.token_revoked
+        assert "agent:a1:delegated_grant" in pool.redis.deleted
+
+    def test_delegated_ttl_reads_the_sdk_fields(self):
+        import time
+        from datetime import UTC, datetime
+
+        from auth.token_pool import _delegated_ttl_seconds, _grant_token_of
+
+        assert _delegated_ttl_seconds({"expiresIn": 120}) == 120
+        assert _delegated_ttl_seconds({"expires_in": "90"}) == 90
+        later = datetime.fromtimestamp(time.time() + 600, tz=UTC).isoformat().replace("+00:00", "Z")
+        assert 590 <= _delegated_ttl_seconds({"expiresIn": "10m", "expiresAt": later}) <= 600
+        assert _delegated_ttl_seconds({}) == 8 * 3600
+        assert _grant_token_of('{"grantToken": "x"}') == "x" and _grant_token_of("not json") == ""
+
+    def test_the_middleware_forwards_the_parent_grant_to_the_feed(self, monkeypatch):
+        from auth import grantex_middleware as gm
+
+        verified = gm.VerifiedGrantexToken(
+            principal_id="user-1",
+            agent_did="did:grantex:agent-abc",
+            developer_id="dev-1",
+            scopes=("agents.read",),
+            grant_id="child",
+            delegation_depth=1,
+            issued_at=1,
+            token_id="tok-1",
+            parent_grant_id="parent",
+        )
+        monkeypatch.setattr(gm, "grantex_expected_issuer", lambda: "https://issuer.example")
+        monkeypatch.setattr(gm, "grantex_expected_audience", lambda: "agenticorg")
+        monkeypatch.setattr(gm, "_is_grantex_token", lambda _token: True)
+        monkeypatch.setattr(gm, "_verify_grantex_token_sync", lambda *_a, **_k: verified)
+        tenant, agent = str(uuid.uuid4()), str(uuid.uuid4())
+        monkeypatch.setattr(gm, "_resolve_agent_tenant", AsyncMock(return_value=(tenant, agent, "active")))
+        revocation.set_feed_for_tests(_ParentAwareFeed())
+        assert asyncio.run(gm.resolve_grantex_claims("header.payload.signature"))["grantex:grant_id"] == "child"
+        revocation.set_feed_for_tests(_ParentAwareFeed(revoked={"parent"}))
+        with pytest.raises(gm.GrantexAuthError, match="grant_revoked"):
             asyncio.run(gm.resolve_grantex_claims("header.payload.signature"))

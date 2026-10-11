@@ -193,6 +193,7 @@ class VerifiedGrantexToken:
     delegation_depth: int
     issued_at: int
     token_id: str = ""
+    parent_grant_id: str = ""  # the grant this token was delegated from, when any
 
 
 def _verify_grantex_token_sync(token: str, *, jwks_uri: str, issuer: str, audience: str) -> VerifiedGrantexToken:
@@ -236,6 +237,7 @@ def _verify_grantex_token_sync(token: str, *, jwks_uri: str, issuer: str, audien
         delegation_depth=int(depth) if depth is not None else 0,
         issued_at=int(claims["iat"]),
         token_id=str(claims["jti"]),
+        parent_grant_id=str(claims.get("parentGrnt") or ""),
     )
 
 
@@ -292,7 +294,10 @@ async def resolve_grantex_claims(token: str) -> dict[str, Any]:
     # A token that is unexpired but withdrawn never authenticates: the agent
     # must be active and the grant must not be revoked (auth/revocation.py).
     refusal = revocation.refusal_reason(
-        grant_id=verified.grant_id, token_id=verified.token_id, agent_status=agent_status
+        grant_id=verified.grant_id,
+        token_id=verified.token_id,
+        parent_grant_id=verified.parent_grant_id,
+        agent_status=agent_status,
     )
     if refusal is not None:
         logger.info("grantex_token_refused", reason=refusal, agent_id=agent_id)

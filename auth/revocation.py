@@ -121,8 +121,8 @@ class RevocationState:
     detail: str
 
 
-def check(grant_id: str | None, token_id: str | None) -> RevocationState:
-    """Whether the authority service has revoked the grant or the token."""
+def check(grant_id: str | None, token_id: str | None, parent_grant_id: str | None = None) -> RevocationState:
+    """Whether the authority service has revoked the grant, the token, or the grant it was delegated from."""
     if mode() == "off":
         return RevocationState(False, "check_off")
     current = feed()
@@ -131,14 +131,22 @@ def check(grant_id: str | None, token_id: str | None) -> RevocationState:
     try:
         if not current.is_fresh():
             return RevocationState(None, "feed_stale")
-        match = current.match(grant_id=grant_id or None, token_id=token_id or None)
+        match = current.match(
+            grant_id=grant_id or None, token_id=token_id or None, parent_grant_id=parent_grant_id or None
+        )
     # enterprise-gate: broad-except-ok reason=failing-feed-degrades-to-unknown-state-refused-in-strict-runtimes
     except Exception as exc:
         return RevocationState(None, f"feed_error:{type(exc).__name__}")
     return RevocationState(bool(match), "revoked" if match else "current")
 
 
-def refusal_reason(*, grant_id: str | None, token_id: str | None, agent_status: str | None) -> str | None:
+def refusal_reason(
+    *,
+    grant_id: str | None,
+    token_id: str | None,
+    agent_status: str | None,
+    parent_grant_id: str | None = None,
+) -> str | None:
     """Why a verified grant token must still be refused, or None.
 
     The agent's status comes first (retired, or paused while paused agents are
@@ -147,7 +155,7 @@ def refusal_reason(*, grant_id: str | None, token_id: str | None, agent_status: 
     """
     if refusal_for(agent_status):
         return REASON_AGENT_INACTIVE
-    state = check(grant_id, token_id)
+    state = check(grant_id, token_id, parent_grant_id)
     if state.revoked:
         return REASON_REVOKED
     if state.revoked is None:
