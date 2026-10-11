@@ -682,6 +682,7 @@ export default function Landing() {
                     ["OACP cache", "Scoped refs, TTL, freshness, revocation"],
                     ["Buyer agent", "Answers, compares, prepares, or refuses"],
                     ["Channels", "Web, MCP, OpenAPI, A2A, WhatsApp, Telegram"],
+                    ["Workflow intake", "Bring your own Messenger, WhatsApp, Telegram, Viber, email or signed gateway; voice has separate setup"],
                   ].map(([title, detail], i) => (
                     <div key={title} className="relative rounded-xl border border-white/10 bg-white/10 p-4">
                       <div className="mb-3 inline-flex h-7 w-7 items-center justify-center rounded-lg bg-white text-sm font-bold text-slate-950">

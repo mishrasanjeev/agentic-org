@@ -236,7 +236,7 @@ async def deploy_sop_agent(
             condition=hitl_expr,
             assignee_role=escalation[0] if escalation else "admin",
         ),
-        llm=LLMConfig(model=config.get("llm_model", "gemini-2.5-flash")),
+        llm=LLMConfig(**({"model": config["llm_model"]} if config.get("llm_model") else {})),
         employee_name=agent_name,
         initial_status="shadow",
         company_id=company_id,

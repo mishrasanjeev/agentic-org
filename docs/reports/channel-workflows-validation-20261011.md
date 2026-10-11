@@ -1,0 +1,153 @@
+# Configurable channel workflow validation
+
+## Scope and evidence
+
+This change provides customer-owned channel credentials, signed inbound text
+callbacks, private-account delegation or single-message review, durable dispatch
+to existing agents/workflows, encrypted receipt/results, and a setup UI. New
+agent defaults use `gemini-3.5-flash-lite`; explicitly stored model choices and
+separate routing-tier overrides are preserved.
+
+Local validation uses a dedicated Docker project with a freshly built Python
+3.14 production-style API/worker image, the current source mounted read-only,
+PostgreSQL, Redis, worker, beat and UI. Callback bodies and secrets are synthetic.
+The combined baseline includes the conversation, model content-block parsing,
+and customer-agent documentation changes already merged on main. The focused
+suite was rerun after rebasing onto `6d16c6e7363b6ed5d12f3a37bcbd70b1b86d5bf0`.
+The agent model's final response is scripted locally; it is not a Google API
+call. The tests do not contact native channel providers or make telephone calls.
+
+| Check | Observed result | Boundary proved |
+|---|---|---|
+| HTTP/worker channel E2E | Combined replay passed, 58 seconds | Disabled/bad-signature refusal; one-message review; private linking; duplicate/content-mismatch refusal; rotation/revocation; native callback parsing; actual workflow and LangGraph dispatch; paused target refusal |
+| Chromium desktop/mobile | Combined replay passed, 14 seconds | Real signup, workflow selection, protected credential form, save/enable/replace, Telegram setup rejection without activation, no secret returned, responsive layout and public workflow guide |
+| Isolated PostgreSQL RLS | Passed | Full migration chain; non-superuser/non-bypass role; cross-tenant reads/writes refused on all three new tables; another owner cannot read a binding |
+| Alembic integration replay | 22 passed | Reproduced CI downgrade failure; empty, stamped, populated and repeated upgrades; migration round-trip with channel rows and forced RLS retained |
+| Combined model/provider/auth regression replay | 384 passed | Model content-block parsing, explicit legacy models preserved, configured default respected, catalog/credential access separation, vault startup tests and isolated metrics environment |
+| Native provider and setup unit tests | 50 passed | Signatures, receiver scope, bounded payloads, private Telegram identity, replay windows, malformed replies, access-log token redaction, confirmed Telegram registration, foreign-callback refusal, owner-scoped activation and local/production callback separation |
+| Expanded channel branch replay | 142 passed across four suites; 96% combined channel-module line coverage | Encrypted roundtrip; owner/tenant-scoped management; lost-worker refusal; revocation; paused/retired targets; durable workflow completion; approval preservation; no automatic action replay; rotation; inbox privacy; bounded callback forms; ID-only task publication |
+| UI production build and SEO verification | Passed | Public guide is prerendered; sitemap/canonical/CSP/generated documentation remain synchronized |
+
+Full preflight and exact PR/main CI results are release gates, not inferred from
+these focused results. Record their final results on the PR before merge. Do
+not describe this report as production verification.
+
+## Reproduced problems and corrections
+
+- A paused channel target initially ran because the legacy direct-run pause
+  policy defaults off. New channel dispatch independently rechecks ownership
+  and active/shadow lifecycle state. The same HTTP/worker test now observes
+  refusal after pausing the target.
+- The first full suite exposed stale Gemini default expectations and the new
+  non-secret registry defaults field. Assertions now reflect the deliberate
+  default change while preserving explicit legacy-provider tests and access
+  denials.
+- Management route parameters initially shared the public webhook prefix.
+  Management mutations now use `/channels/bindings/{binding_id}`; the existing
+  authentication overlap test passes without a new baseline exception.
+- An existing metrics test leaked a temporary multiprocess directory into
+  later subprocess tests. Its fixture now restores the environment and value
+  class, so import/vault tests replay independently and in the suite ordering.
+- Meta challenge tokens arrive in URL queries. Application access logs redact
+  plain and percent-encoded token keys. Infrastructure/provider logs can still
+  retain URLs; never reuse an API key or app secret as the verification token.
+- A local binding could initially display the production callback origin.
+  Local and staging defaults now stay local; the Docker overlay supplies its
+  actual UI origin. Real Telegram registration refuses non-public HTTPS
+  callbacks, rather than registering a local binding on production.
+- CI's migration round-trip failed because the new additive migration raised
+  during version step-back. The same failure was reproduced in an isolated
+  Docker database. Step-back now retains schema, encrypted history and RLS;
+  reapplying the migration must preserve seeded rows and tenant isolation.
+- The existing Google credential health probe placed a key in its URL query.
+  A failing request-boundary regression reproduced that exposure. The probe now
+  uses Google's `x-goog-api-key` header and keeps URLs key-free for successful,
+  unauthorized and quota-exceeded responses.
+
+## Limited account-backed provider checks
+
+A customer-supplied Google authorization key returned a real HTTP 200 response
+from `gemini-3.5-flash-lite`. Telegram `getMe` and `getWebhookInfo` confirmed a
+valid bot with no existing webhook and no pending updates. These minimal checks
+were followed by a disposable local AgenticOrg tenant: protected credential
+save/test reported active, and a tool-free LangGraph agent using that tenant's
+key returned the requested acceptance marker without returning the key. The
+default human-review policy produced `hitl_triggered`; it was not bypassed to
+claim autonomous completion. The local credential was revoked and the agent
+paused after the check. This does not prove production tenant-bound inference,
+private sender delegation, native inbound delivery or outbound acknowledgement.
+No bot message was sent and no callback was registered by these checks.
+Credentials and account identifiers are excluded from this report.
+
+## Production Telegram acceptance follow-up
+
+A dedicated customer-owned bot was registered through the protected Channels
+screen. A human redeemed the private one-time link command and sent a synthetic
+acceptance message. The inbox recorded the account link and message; Telegram
+delivered the native task-status reply. This proves real inbound delivery,
+private sender delegation, worker dispatch and outbound status delivery, not
+successful workflow execution or production Gemini inference.
+
+The workflow failed before its first step because the durable workflow repository
+did not bind the transaction-local tenant context required by existing forced
+RLS. The native reply correctly reported `needs review`. The sibling durable
+event-wait repository had the same defect. Local PostgreSQL's superuser role had
+masked this failure in the earlier HTTP replay; a passing superuser test is not
+production-isolation evidence.
+
+New Docker regressions first failed for both repositories under a role with
+neither superuser nor RLS-bypass permissions. After binding tenant context,
+the repository, real identity-transform workflow, fresh-worker reload,
+event match/timeout, cross-tenant refusal, optimistic version and idempotency
+checks passed. The repair changes no migration, grants, RLS policy, provider
+permissions or approval rules. Run, approval-resume and cancellation use the
+server-validated tenant; legacy internal resume jobs resolve candidates from
+the server tenant registry and query each candidate under RLS, never from a
+client message or Redis authority.
+Legacy Redis backfill requires an explicitly bound server tenant and matching
+tenant/run identifiers; unscoped workers cannot promote cache entries into
+authoritative database state. A negative regression reproduced that unsafe
+backfill before the scope check was added.
+
+These are local repair results only. Production workflow completion remains
+blocked until the repair passes release gates, is deployed and a fresh approved
+message produces a completed workflow and receipt. Do not approve or replay an
+unrelated `/start` message to manufacture completion. Keep credential rotation
+separate from this deterministic, model-free acceptance workflow.
+
+The combined PostgreSQL replay also exposed an isolation defect in the new
+regression fixture: the real engine's operator-policy lookup reached the shared
+application pool instead of the fixture's loop-local restricted database. The
+fixture now binds the existing session-factory context for the complete replay,
+including actual policy reads. No policy check or cross-loop guard is disabled,
+and the committed cross-loop baseline is unchanged.
+
+## Design review
+
+The repository's optional external design command pack was unavailable. A
+manual audit/critique/polish review and Chromium screenshots were used instead:
+labelled protected fields, keyboard-operable controls, compact three-step setup,
+unframed sections, clear disabled/review/error states, credential clearing after
+save, bounded result display, and no desktop/mobile page overflow. Native
+outbound messages intentionally contain status only, not private tool outputs.
+Telegram callback registration is a protected server-side action; users do not
+need a token-bearing browser URL or terminal command. Provider setup contract
+tests use an in-process HTTP double, not a real Telegram account. A bot attached
+to another application's callback is refused rather than overwritten.
+
+## Not verified or not implemented by this release
+
+- Provider account approval, production tenant-bound Google inference/quota,
+  non-Telegram native delivery, speech accuracy and telephone delivery require
+  customer-owned accounts and authorized test recipients. The Telegram
+  follow-up above proves native transport, not successful task execution.
+- Messaging callbacks ingest text only. Images, attachments and audio notes
+  are not automatically ingested; existing knowledge/voice flows are separate.
+- WeChat uses an approved signed gateway, not a native WeChat adapter.
+- Email and generic gateways do not send native outbound replies.
+- Changing or disabling a binding cannot undo an already-running external
+  action. Ambiguous executions/delivery acknowledgements require review and
+  are not blindly replayed.
+
+See the [account guide](../user-guide/channel-workflows.md) and
+[migration-first release runbook](channel-workflows-release-runbook.md).

@@ -252,9 +252,9 @@ def test_provider_none_keeps_legacy_inference_for_old_rows(cloud_mode, monkeypat
     from core.langgraph.llm_factory import _resolve_model, create_chat_model
 
     calls = _stub_builders(monkeypatch)
-    assert _resolve_model("some-unknown-model") == "gemini-2.5-flash"
+    assert _resolve_model("some-unknown-model") == "gemini-3.5-flash-lite"
     create_chat_model(model="some-unknown-model")
-    assert calls["gemini"] == [("gemini-2.5-flash", None)]
+    assert calls["gemini"] == [("gemini-3.5-flash-lite", None)]
     create_chat_model(model="claude-3-5-sonnet-20241022")
     assert calls["anthropic"] == [("claude-3-5-sonnet-20241022", None)]
 
@@ -348,5 +348,5 @@ def test_agents_api_persists_and_returns_llm_provider() -> None:
     assert "agent.llm_provider = body.llm.provider" in src
     assert 'agent.llm_provider = update_data["llm"].get("provider")' in src
     assert 'agent.llm_provider = prev_version.llm_config.get("provider")' in src
-    # generate_agent pins the provider it hardcodes
-    assert re.search(r'llm_model="gemini-2\.5-flash",\s*llm_provider="gemini",', src)
+    # Generated agents use the configured model and its matching provider.
+    assert re.search(r'llm_model=primary_model\(\),\s*llm_provider=primary_provider\(\),', src)

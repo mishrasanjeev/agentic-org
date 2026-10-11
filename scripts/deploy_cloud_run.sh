@@ -781,6 +781,26 @@ UI_UPDATE_ENV_VARS="GIT_SHA=${DEPLOY_SHA}"
 # verification (image digest + AGENTICORG_GIT_SHA) applies to them too.
 BACKGROUND_UPDATE_ENV_VARS="AGENTICORG_GIT_SHA=${DEPLOY_SHA}"
 
+# Optional model rollout: preserve installed service overrides unless both are supplied.
+DEPLOY_LLM_PRIMARY="${AGENTICORG_DEPLOY_LLM_PRIMARY:-}"
+DEPLOY_LLM_FALLBACK="${AGENTICORG_DEPLOY_LLM_FALLBACK:-}"
+if [[ -n "$DEPLOY_LLM_PRIMARY" || -n "$DEPLOY_LLM_FALLBACK" ]]; then
+  if [[ -z "$DEPLOY_LLM_PRIMARY" || -z "$DEPLOY_LLM_FALLBACK" ]]; then
+    echo "::error::Supply both AGENTICORG_DEPLOY_LLM_PRIMARY and AGENTICORG_DEPLOY_LLM_FALLBACK." >&2
+    exit 2
+  fi
+  for model in "$DEPLOY_LLM_PRIMARY" "$DEPLOY_LLM_FALLBACK"; do
+    if [[ ! "$model" =~ ^[a-zA-Z0-9][a-zA-Z0-9._:/-]{0,199}$ ]]; then
+      echo "::error::Invalid deployment model identifier." >&2
+      exit 2
+    fi
+  done
+  MODEL_UPDATE_ENV_VARS="AGENTICORG_LLM_PRIMARY=${DEPLOY_LLM_PRIMARY},AGENTICORG_LLM_FALLBACK=${DEPLOY_LLM_FALLBACK}"
+  API_UPDATE_ENV_VARS+=",${MODEL_UPDATE_ENV_VARS}"
+  BACKGROUND_UPDATE_ENV_VARS+=",${MODEL_UPDATE_ENV_VARS}"
+fi
+# End optional model rollout.
+
 # 3. Build + push images.
 if [[ $SKIP_BUILD -eq 0 ]]; then
   run gcloud auth configure-docker "$GAR_HOST" --quiet

@@ -7,6 +7,18 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
 Entries here have accumulated since 4.0.0. The source version in `pyproject.toml`
 is 4.8.0; versions 4.1 to 4.8 have no sections of their own.
 
+### Fixed - durable workflow tenant context
+- Durable workflow state and event-wait transactions now bind the validated
+  tenant before accessing PostgreSQL. Run, approval-resume and cancellation
+  retain server-owned scope. Existing RLS, grants and approval rules are
+  unchanged; this repairs persistence under the existing isolation policy,
+  rather than introducing an execution permission or a feature-default change.
+- Docker regression tests use a non-superuser, non-RLS-bypass role with forced
+  RLS and a reused connection, and cover real transform execution, fresh-worker
+  reload, cross-tenant denial, event completion, timeout, version and replay.
+- Legacy Redis backfill requires an explicit server tenant and matching run
+  identity; an unscoped background worker cannot obtain authority from cache.
+
 ### Fixed - user documentation matches shipped behaviour
 - A new guide, *Documents, conversations, calls and workbenches*, covers the six
   console screens of services that ship off by default, and Start here links
@@ -94,6 +106,30 @@ is 4.8.0; versions 4.1 to 4.8 have no sections of their own.
 - Synchronize the linked BFSI overview and the Start here guide with the
   existing capability inventory; check public and domain summaries against that
   inventory instead of stale counts.
+
+### Changed - configurable reasoning default
+- Newly created agents and unset platform model defaults use
+  `gemini-3.5-flash-lite`. Existing explicit models are not rewritten. This is a
+  deliberate default/cost change: choose another provider/model in AI settings or
+  set `AGENTICORG_LLM_PRIMARY` and `AGENTICORG_LLM_FALLBACK` to opt out.
+- Added catalog and standard text pricing for the new model. Runner estimates
+  account for input/output usage instead of applying the legacy blended rate to
+  this model. Speech synthesis still requires a separate provider.
+
+### Added - bring-your-own channel workflow intake
+- Owner-scoped encrypted channel bindings and a three-step setup screen for
+  WhatsApp, Messenger, Telegram, Viber, Mailgun inbound email and signed gateways.
+- Signed, bounded text callbacks, tenant-scoped duplicate protection, one-time
+  private sender linking, explicit email/unlinked-message review and durable
+  worker dispatch through existing agent/workflow authorization and approvals.
+- Forward migration `v6_z83_channel_bindings` adds RLS-protected bindings, sender
+  links and receipts. Run migrations before starting the API/worker/beat release.
+- Credentials rotate without disclosure; rotation and disable revoke delegation.
+  Uncertain executions require review and are never blindly replayed. Optional
+  native replies contain status only. Added an account creation/verification guide.
+- No native WeChat adapter, channel attachment ingestion or automatic email
+  identity delegation is claimed. Real provider delivery requires BYO accounts
+  and authorized test contacts; local simulations are labeled separately.
 
 ### Security - breaking for audit readers of tenants that keep spend rows: `GET /audit` hides commercial spend audit rows by default
 - A deliberate default, on whatever `spend_intelligence_enabled` says:

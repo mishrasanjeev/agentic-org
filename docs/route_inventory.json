@@ -554,7 +554,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "agents.sensitive.list",
-    "source_line": 2142,
+    "source_line": 2141,
     "tenant_required": true
   },
   {
@@ -572,7 +572,7 @@
     "public_exempt_reason": null,
     "rate_limit": "agent-write",
     "scope": "agents.write",
-    "source_line": 1847,
+    "source_line": 1846,
     "tenant_required": true
   },
   {
@@ -590,7 +590,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "agents.tools.sensitive.read",
-    "source_line": 1801,
+    "source_line": 1800,
     "tenant_required": true
   },
   {
@@ -608,7 +608,7 @@
     "public_exempt_reason": null,
     "rate_limit": "ai-generation",
     "scope": "agents.generate",
-    "source_line": 2605,
+    "source_line": 2592,
     "tenant_required": true
   },
   {
@@ -626,7 +626,7 @@
     "public_exempt_reason": null,
     "rate_limit": "file-upload",
     "scope": "agents.import",
-    "source_line": 2417,
+    "source_line": 2404,
     "tenant_required": true
   },
   {
@@ -644,7 +644,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "agents.sensitive.org_tree",
-    "source_line": 2260,
+    "source_line": 2259,
     "tenant_required": true
   },
   {
@@ -662,7 +662,7 @@
     "public_exempt_reason": null,
     "rate_limit": "agent-write",
     "scope": "agents.write",
-    "source_line": 5868,
+    "source_line": 5847,
     "tenant_required": true
   },
   {
@@ -680,7 +680,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "agents.sensitive.read",
-    "source_line": 2783,
+    "source_line": 2770,
     "tenant_required": true
   },
   {
@@ -698,7 +698,7 @@
     "public_exempt_reason": null,
     "rate_limit": "agent-write",
     "scope": "agents.write",
-    "source_line": 3022,
+    "source_line": 3009,
     "tenant_required": true
   },
   {
@@ -716,7 +716,7 @@
     "public_exempt_reason": null,
     "rate_limit": "agent-write",
     "scope": "agents.write",
-    "source_line": 2813,
+    "source_line": 2800,
     "tenant_required": true
   },
   {
@@ -734,7 +734,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "agents.sensitive.amendments.read",
-    "source_line": 5826,
+    "source_line": 5805,
     "tenant_required": true
   },
   {
@@ -752,7 +752,7 @@
     "public_exempt_reason": null,
     "rate_limit": "agent-write",
     "scope": "agents.sensitive.amendments.write",
-    "source_line": 5992,
+    "source_line": 5971,
     "tenant_required": true
   },
   {
@@ -770,7 +770,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "agents.sensitive.budget.read",
-    "source_line": 5512,
+    "source_line": 5491,
     "tenant_required": true
   },
   {
@@ -824,7 +824,7 @@
     "public_exempt_reason": null,
     "rate_limit": "agent-write",
     "scope": "agents.write",
-    "source_line": 5297,
+    "source_line": 5276,
     "tenant_required": true
   },
   {
@@ -968,7 +968,7 @@
     "public_exempt_reason": null,
     "rate_limit": "agent-write",
     "scope": "agents.delegate",
-    "source_line": 2326,
+    "source_line": 2325,
     "tenant_required": true
   },
   {
@@ -1004,7 +1004,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "agents.read",
-    "source_line": 4833,
+    "source_line": 4815,
     "tenant_required": true
   },
   {
@@ -1022,7 +1022,7 @@
     "public_exempt_reason": null,
     "rate_limit": "agent-write",
     "scope": "agents.write",
-    "source_line": 4772,
+    "source_line": 4754,
     "tenant_required": true
   },
   {
@@ -1040,7 +1040,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "agents.sensitive.explanation.read",
-    "source_line": 5674,
+    "source_line": 5653,
     "tenant_required": true
   },
   {
@@ -1058,7 +1058,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "agents.sensitive.feedback.list",
-    "source_line": 5635,
+    "source_line": 5614,
     "tenant_required": true
   },
   {
@@ -1076,7 +1076,7 @@
     "public_exempt_reason": null,
     "rate_limit": "agent-feedback",
     "scope": "agents.feedback.write",
-    "source_line": 5584,
+    "source_line": 5563,
     "tenant_required": true
   },
   {
@@ -1094,7 +1094,7 @@
     "public_exempt_reason": null,
     "rate_limit": "agent-control",
     "scope": "agents.feedback.analyze",
-    "source_line": 5791,
+    "source_line": 5770,
     "tenant_required": true
   },
   {
@@ -1148,7 +1148,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "agents.read",
-    "source_line": 4738,
+    "source_line": 4720,
     "tenant_required": true
   },
   {
@@ -1166,7 +1166,7 @@
     "public_exempt_reason": null,
     "rate_limit": "agent-write",
     "scope": "agents.write",
-    "source_line": 4687,
+    "source_line": 4669,
     "tenant_required": true
   },
   {
@@ -1184,7 +1184,7 @@
     "public_exempt_reason": null,
     "rate_limit": "agent-write",
     "scope": "agents.write",
-    "source_line": 4514,
+    "source_line": 4496,
     "tenant_required": true
   },
   {
@@ -1202,7 +1202,7 @@
     "public_exempt_reason": null,
     "rate_limit": "agent-control",
     "scope": "agents.lifecycle",
-    "source_line": 4344,
+    "source_line": 4331,
     "tenant_required": true
   },
   {
@@ -1220,7 +1220,7 @@
     "public_exempt_reason": null,
     "rate_limit": "agent-control",
     "scope": "agents.lifecycle",
-    "source_line": 4873,
+    "source_line": 4855,
     "tenant_required": true
   },
   {
@@ -1238,7 +1238,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "agents.sensitive.prompt_history",
-    "source_line": 5456,
+    "source_line": 5435,
     "tenant_required": true
   },
   {
@@ -1292,7 +1292,7 @@
     "public_exempt_reason": null,
     "rate_limit": "agent-control",
     "scope": "agents.lifecycle",
-    "source_line": 4400,
+    "source_line": 4382,
     "tenant_required": true
   },
   {
@@ -1310,7 +1310,7 @@
     "public_exempt_reason": null,
     "rate_limit": "agent-control",
     "scope": "agents.lifecycle",
-    "source_line": 5109,
+    "source_line": 5088,
     "tenant_required": true
   },
   {
@@ -1328,7 +1328,7 @@
     "public_exempt_reason": null,
     "rate_limit": "agent-control",
     "scope": "agents.lifecycle",
-    "source_line": 5049,
+    "source_line": 5031,
     "tenant_required": true
   },
   {
@@ -1346,7 +1346,7 @@
     "public_exempt_reason": null,
     "rate_limit": "agent-control",
     "scope": "agents.lifecycle",
-    "source_line": 5174,
+    "source_line": 5153,
     "tenant_required": true
   },
   {
@@ -1364,7 +1364,7 @@
     "public_exempt_reason": null,
     "rate_limit": "agent-execution",
     "scope": "agents.execute",
-    "source_line": 3486,
+    "source_line": 3473,
     "tenant_required": true
   },
   {
@@ -1382,7 +1382,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "agents.read",
-    "source_line": 4650,
+    "source_line": 4632,
     "tenant_required": true
   },
   {
@@ -1400,7 +1400,7 @@
     "public_exempt_reason": null,
     "rate_limit": "agent-write",
     "scope": "agents.write",
-    "source_line": 4590,
+    "source_line": 4572,
     "tenant_required": true
   },
   {
@@ -2680,6 +2680,186 @@
     "scope": "cdc.events.replay.admin",
     "source_line": 150,
     "tenant_required": true
+  },
+  {
+    "audit_event": "channels.list",
+    "auth_required": true,
+    "function": "list_bindings",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/channels api/v1/channels.py:list_bindings",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/channels.py",
+    "path": "/api/v1/channels",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "agents:write",
+    "source_line": 138,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "channels.create",
+    "auth_required": true,
+    "function": "create_binding",
+    "idempotency": "creates-binding",
+    "key": "POST /api/v1/channels api/v1/channels.py:create_binding",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/channels.py",
+    "path": "/api/v1/channels",
+    "public_exempt_reason": null,
+    "rate_limit": "security-admin-write",
+    "scope": "agents:write",
+    "source_line": 159,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "channels.update",
+    "auth_required": true,
+    "function": "update_binding",
+    "idempotency": "idempotent-update",
+    "key": "PATCH /api/v1/channels/bindings/{binding_id} api/v1/channels.py:update_binding",
+    "metadata_present": true,
+    "methods": [
+      "PATCH"
+    ],
+    "module": "api/v1/channels.py",
+    "path": "/api/v1/channels/bindings/{binding_id}",
+    "public_exempt_reason": null,
+    "rate_limit": "security-admin-write",
+    "scope": "agents:write",
+    "source_line": 211,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "channels.telegram.connect",
+    "auth_required": true,
+    "function": "register_telegram",
+    "idempotency": "register-same-binding-callback",
+    "key": "POST /api/v1/channels/bindings/{binding_id}/connect-telegram api/v1/channels.py:register_telegram",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/channels.py",
+    "path": "/api/v1/channels/bindings/{binding_id}/connect-telegram",
+    "public_exempt_reason": null,
+    "rate_limit": "security-admin-write",
+    "scope": "agents:write",
+    "source_line": 275,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "channels.inbox.list",
+    "auth_required": true,
+    "function": "deliveries",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/channels/bindings/{binding_id}/deliveries api/v1/channels.py:deliveries",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/channels.py",
+    "path": "/api/v1/channels/bindings/{binding_id}/deliveries",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "agents:write",
+    "source_line": 364,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "channels.message.approve",
+    "auth_required": true,
+    "function": "approve",
+    "idempotency": "approve-once",
+    "key": "POST /api/v1/channels/bindings/{binding_id}/deliveries/{delivery_id}/approve api/v1/channels.py:approve",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/channels.py",
+    "path": "/api/v1/channels/bindings/{binding_id}/deliveries/{delivery_id}/approve",
+    "public_exempt_reason": null,
+    "rate_limit": "agent-execution",
+    "scope": "agents:write",
+    "source_line": 402,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "channels.link.request",
+    "auth_required": true,
+    "function": "link_code",
+    "idempotency": "creates-one-time-link-code",
+    "key": "POST /api/v1/channels/bindings/{binding_id}/link-code api/v1/channels.py:link_code",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/channels.py",
+    "path": "/api/v1/channels/bindings/{binding_id}/link-code",
+    "public_exempt_reason": null,
+    "rate_limit": "security-admin-write",
+    "scope": "agents:write",
+    "source_line": 316,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "channels.catalog",
+    "auth_required": true,
+    "function": "catalog",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/channels/catalog api/v1/channels.py:catalog",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/channels.py",
+    "path": "/api/v1/channels/catalog",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "agents:write",
+    "source_line": 118,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "none-public-challenge",
+    "auth_required": false,
+    "function": "challenge",
+    "idempotency": "challenge",
+    "key": "GET /api/v1/channels/webhooks/{tenant_id}/{binding_id} api/v1/channels.py:challenge",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/channels.py",
+    "path": "/api/v1/channels/webhooks/{tenant_id}/{binding_id}",
+    "public_exempt_reason": "provider-verify-token-required",
+    "rate_limit": "standard",
+    "scope": "public:channel-challenge",
+    "source_line": 452,
+    "tenant_required": false
+  },
+  {
+    "audit_event": "channels.message.receive",
+    "auth_required": false,
+    "function": "webhook",
+    "idempotency": "provider-event-id",
+    "key": "POST /api/v1/channels/webhooks/{tenant_id}/{binding_id} api/v1/channels.py:webhook",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/channels.py",
+    "path": "/api/v1/channels/webhooks/{tenant_id}/{binding_id}",
+    "public_exempt_reason": "provider-signature-and-binding-required",
+    "rate_limit": "standard",
+    "scope": "public:channel-callback",
+    "source_line": 477,
+    "tenant_required": false
   },
   {
     "audit_event": "chat.history.read",
@@ -11102,7 +11282,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "tenant_ai_settings.sensitive.read",
-    "source_line": 216,
+    "source_line": 222,
     "tenant_required": true
   },
   {
@@ -11120,7 +11300,7 @@
     "public_exempt_reason": null,
     "rate_limit": "security-admin-write",
     "scope": "tenant_ai_settings.control_plane.write",
-    "source_line": 237,
+    "source_line": 243,
     "tenant_required": true
   },
   {
@@ -11138,7 +11318,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "tenant_ai_settings.registry.read",
-    "source_line": 172,
+    "source_line": 174,
     "tenant_required": false
   },
   {

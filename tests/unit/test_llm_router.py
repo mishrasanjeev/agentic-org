@@ -122,9 +122,8 @@ async def test_claude_call_forwards_supported_temperature(monkeypatch):
 # ===================================================================
 # TC-LLM-01: Simple query routes to Tier 1 (Gemini Flash-Lite)
 # ===================================================================
-# Tier1 was gemini-2.5-flash before the spend-cap PR; the rework
-# moves Flash to Tier2 and uses Flash-Lite for high-volume Tier1
-# traffic so per-token cost on the cheapest path drops ~2x.
+# The default Tier 1 and Tier 2 cloud paths use Gemini 3.5 Flash-Lite.
+# Explicit per-tier environment overrides remain supported.
 
 
 class TestSimpleQueryRoutesToTier1:
@@ -133,18 +132,18 @@ class TestSimpleQueryRoutesToTier1:
     def test_short_query_routes_to_tier1(self):
         router = _make_router(routing="auto", llm_mode="cloud")
         model = router.route(query="What is 2+2?", config={})
-        assert model == "gemini-2.5-flash-lite", f"Expected tier1 model, got {model}"
+        assert model == "gemini-3.5-flash-lite", f"Expected tier1 model, got {model}"
 
     def test_very_short_query(self):
         router = _make_router(routing="auto", llm_mode="cloud")
         model = router.route(query="Hello", config={})
-        assert model == "gemini-2.5-flash-lite"
+        assert model == "gemini-3.5-flash-lite"
 
     def test_empty_query_routes_to_tier1(self):
         """Empty string < 100 chars -> tier1."""
         router = _make_router(routing="auto", llm_mode="cloud")
         model = router.route(query="", config={})
-        assert model == "gemini-2.5-flash-lite"
+        assert model == "gemini-3.5-flash-lite"
 
 
 # ===================================================================
@@ -169,8 +168,7 @@ class TestComplexQueryRoutesToTier3:
         )
         assert len(long_query) >= 500
         model = router.route(query=long_query, config={})
-        # Tier 3 model — defaults to claude-sonnet-4-20250514 (from env or constant)
-        assert "gemini-2.5-flash" not in model or model != "gemini-2.5-flash"
+        assert model == "gemini-2.5-pro"
 
     def test_medium_query_routes_to_tier2(self):
         router = _make_router(routing="auto", llm_mode="cloud")
@@ -183,7 +181,7 @@ class TestComplexQueryRoutesToTier3:
         )
         assert 100 <= len(medium_query) < 500
         model = router.route(query=medium_query, config={})
-        assert model == "gemini-2.5-flash"
+        assert model == "gemini-3.5-flash-lite"
 
 
 # ===================================================================
@@ -198,12 +196,12 @@ class TestForcedTierOverridesAuto:
         router = _make_router(routing="tier1", llm_mode="cloud")
         long_query = "x" * 600  # Would be tier3 in auto mode
         model = router.route(query=long_query, config={})
-        assert model == "gemini-2.5-flash-lite"
+        assert model == "gemini-3.5-flash-lite"
 
     def test_force_tier2(self):
         router = _make_router(routing="tier2", llm_mode="cloud")
         model = router.route(query="Hi", config={})  # Would be tier1 in auto
-        assert model == "gemini-2.5-flash"
+        assert model == "gemini-3.5-flash-lite"
 
     def test_force_tier3_on_simple_query(self):
         router = _make_router(routing="tier3", llm_mode="cloud")
@@ -227,7 +225,7 @@ class TestForcedTierOverridesAuto:
             query="Analyze this complex legal document...",
             config={"routing": "tier1"},
         )
-        assert model == "gemini-2.5-flash-lite"
+        assert model == "gemini-3.5-flash-lite"
 
 
 # ===================================================================
@@ -350,13 +348,13 @@ class TestFallbackWhenRouteLLMUnavailable:
         """Without RouteLLM, short queries use heuristic -> tier1."""
         router = _make_router(routing="auto", llm_mode="cloud", routellm_available=False)
         model = router.route(query="Hi", config={})
-        assert model == "gemini-2.5-flash-lite"
+        assert model == "gemini-3.5-flash-lite"
 
     def test_heuristic_fallback_medium(self):
         router = _make_router(routing="auto", llm_mode="cloud", routellm_available=False)
         medium = "a" * 200
         model = router.route(query=medium, config={})
-        assert model == "gemini-2.5-flash"
+        assert model == "gemini-3.5-flash-lite"
 
     def test_heuristic_fallback_long(self):
         router = _make_router(routing="auto", llm_mode="cloud", routellm_available=False)
@@ -383,7 +381,7 @@ class TestFallbackWhenRouteLLMUnavailable:
         router._routellm_controller = None
         model = router.route(query="Quick question", config={})
         # Heuristic short-query path -> tier1 -> flash-lite.
-        assert model == "gemini-2.5-flash-lite"
+        assert model == "gemini-3.5-flash-lite"
 
     def test_routellm_openai_config_error_falls_back_to_heuristic(self, monkeypatch):
         """RouteLLM import-time OpenAI credential errors must not block routing."""

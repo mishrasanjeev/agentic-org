@@ -70,6 +70,7 @@ export function inferProviderForModel(registry: LlmRegistry | null, model: strin
 
 export interface LlmRegistryState {
   registry: LlmRegistry | null;
+  defaultModel?: string;
   loading: boolean;
   /** True when the registry could not be loaded — callers fall back to text inputs. */
   failed: boolean;
@@ -79,6 +80,7 @@ export function useLlmRegistry(): LlmRegistryState {
   const [registry, setRegistry] = useState<LlmRegistry | null>(null);
   const [loading, setLoading] = useState(true);
   const [failed, setFailed] = useState(false);
+  const [defaultModel, setDefaultModel] = useState<string>();
 
   useEffect(() => {
     let cancelled = false;
@@ -89,6 +91,9 @@ export function useLlmRegistry(): LlmRegistryState {
         if (cancelled) return;
         if (llm && typeof llm === "object" && Object.keys(llm).length > 0) {
           setRegistry(llm as LlmRegistry);
+          if (typeof res.data.defaults?.reasoning_model === "string") {
+            setDefaultModel(res.data.defaults.reasoning_model);
+          }
         } else {
           setFailed(true);
         }
@@ -103,5 +108,5 @@ export function useLlmRegistry(): LlmRegistryState {
     };
   }, []);
 
-  return { registry, loading, failed };
+  return { registry, loading, failed, defaultModel };
 }
