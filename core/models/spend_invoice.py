@@ -160,7 +160,11 @@ class SpendReconciliation(BaseModel):
     stored_amount: Mapped[Decimal | None] = mapped_column(Numeric(24, 10), nullable=True)
     # Re-priced at the cards in force on each billing day, as known at run time.
     repriced_amount: Mapped[Decimal | None] = mapped_column(Numeric(24, 10), nullable=True)
-    adjustments_amount: Mapped[Decimal] = mapped_column(
+    # Each figure's month-level adjustments (tier true-ups, commitment overage), worked from what it priced.
+    stored_adjustments_amount: Mapped[Decimal] = mapped_column(
+        Numeric(24, 10), nullable=False, server_default=text("0"), default=Decimal("0")
+    )
+    repriced_adjustments_amount: Mapped[Decimal] = mapped_column(
         Numeric(24, 10), nullable=False, server_default=text("0"), default=Decimal("0")
     )
     stored_variance_amount: Mapped[Decimal | None] = mapped_column(Numeric(24, 10), nullable=True)
@@ -242,7 +246,7 @@ class SpendReconciliationItem(BaseModel):
     )
     stored_amount: Mapped[Decimal | None] = mapped_column(Numeric(24, 10), nullable=True)
     repriced_amount: Mapped[Decimal | None] = mapped_column(Numeric(24, 10), nullable=True)
-    # [{kind: tier_true_up | commitment_overage, amount, contract_key | commitment_id}]
+    # [{kind: tier_true_up | commitment_overage, figure: stored | repriced, amount, contract_key | commitment_id}]
     adjustments: Mapped[list[Any]] = mapped_column(JSONB, nullable=False, server_default=_json_list(), default=list)
     stored_variance_amount: Mapped[Decimal | None] = mapped_column(Numeric(24, 10), nullable=True)
     stored_variance_pct: Mapped[Decimal | None] = mapped_column(Numeric(14, 6), nullable=True)

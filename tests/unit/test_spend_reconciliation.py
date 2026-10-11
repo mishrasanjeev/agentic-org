@@ -12,7 +12,7 @@ import re
 import uuid
 from dataclasses import replace as replace_card
 from datetime import UTC, date, datetime, timedelta, timezone
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -492,6 +492,101 @@ class TestImport:
         await add_invoice(tmp_path, [usage_line("1")] * 3, provider="anthropic")  # another provider, its own bound
         assert len([r for r in store.of("spend_invoices") if r.status == "current"]) == 4
 
+    @pytest.mark.asyncio
+    async def test_a_month_holds_at_most_the_amounts_a_run_can_store(self, store, tmp_path):
+        # A run stores the month's invoice amounts and variances in NUMERIC(24,10): ten invoices of 10^13
+        # (each within its own bound) would total 10^14, one ten-billionth past the largest such value.
+        assert invoices.MAX_PERIOD_AMOUNT == vocab.AMOUNT_MAX == Decimal("99999999999999.9999999999")
+        for n in range(9):
+            await add_invoice(tmp_path, [usage_line("1e12")] * 10, ref=f"ACCT-{n}")
+        last = [usage_line("1e12")] * 9 + [usage_line("999999999999.9999999999")]
+        await add_invoice(tmp_path, last, ref="ACCT-9")  # the month holds exactly the largest amount
+        for dry_run in (True, False):
+            with pytest.raises(SpendError) as info:
+                await add_invoice(tmp_path, [usage_line("0.0000000001")], ref="ACCT-10", dry_run=dry_run)
+            assert (info.value.status, info.value.code) == (413, "period_amount_too_large"), dry_run
+            assert "would total 100000000000000.0000000000 in magnitude" in info.value.message
+        # A credit counts by its magnitude: the run stores the non-usage sum and the variances too.
+        with pytest.raises(SpendError) as info:
+            await add_invoice(tmp_path, [{"amount": "-0.0000000001", "line_kind": "credit"}], ref="ACCT-10")
+        assert info.value.code == "period_amount_too_large"
+        assert len(store.of("spend_invoices")) == 10
+        # Another month or provider has its own bound; a replaced invoice's amounts leave the month with it.
+        await add_invoice(tmp_path, [usage_line("1")], ref="ACCT-10", period="2026-11")
+        await add_invoice(tmp_path, [usage_line("1")], ref="ACCT-10", provider="anthropic")
+        smaller = [usage_line("1e12")] * 9 + [usage_line("999999999999.9999999998")]
+        await add_invoice(tmp_path, smaller, ref="ACCT-9", replace=True)
+        await add_invoice(tmp_path, [usage_line("0.0000000001")], ref="ACCT-10")
+        # A run of the month stores it: the largest invoice amount against nothing metered.
+        run = await run_month()
+        assert run["invoice_amount"] == "99999999999999.9999999999"
+        assert run["stored_variance_amount"] == run["repriced_variance_amount"] == "-99999999999999.9999999999"
+        assert usage_items(run)[0]["invoice_amount"] == "99999999999999.9999999999"
+
+    @pytest.mark.asyncio
+    async def test_a_month_holds_at_most_the_quantity_a_run_can_store(self, store, tmp_path, monkeypatch):
+        # An item's invoice quantity is NUMERIC(24,6): a thousand lines of 10^15 would pass its largest value.
+        assert invoices.MAX_PERIOD_QUANTITY == vocab.QTY_MAX == Decimal("999999999999999999.999999")
+        lines = [usage_line("0", quantity="1e15")] * 999 + [usage_line("0", quantity="999999999999999.999999")]
+        await add_invoice(tmp_path, lines)
+        # Any model counts: the tenant's aliases can merge models into one item after the import.
+        for over in ({"model_sku": "gpt-4o-mini"}, {"model_sku": ""}):
+            for dry_run in (True, False):
+                with pytest.raises(SpendError) as info:
+                    await add_invoice(
+                        tmp_path, [usage_line("0", quantity="0.000001", **over)], ref="ACCT-2", dry_run=dry_run
+                    )
+                assert (info.value.status, info.value.code) == (413, "period_quantity_too_large"), over
+                assert "llm_tokens usage lines in 1m_input_tokens would total" in info.value.message
+        # Another unit, a daily line, a line without a unit and a non-usage line sum apart.
+        apart = [
+            usage_line("0", quantity="1", unit="1m_output_tokens"),
+            usage_line("0", quantity="1", usage_date="2026-10-05"),
+            usage_line("0", quantity="1", unit=""),
+            {"amount": "1", "line_kind": "fee", "usage_type": "llm_tokens", "unit": "1m_input_tokens", "quantity": "1"},
+        ]
+        await add_invoice(tmp_path, apart, ref="ACCT-2")
+        # A GB-month line counts in GB-days, as the run holds it: 31 of them in October.
+        monkeypatch.setattr(invoices, "MAX_PERIOD_QUANTITY", Decimal("31"))
+        storage = {"usage_type": "storage", "model_sku": "", "unit": "gb_month"}
+        await add_invoice(tmp_path, [usage_line("0", quantity="1", **storage)], provider="anthropic")
+        with pytest.raises(SpendError) as info:
+            await add_invoice(
+                tmp_path,
+                [usage_line("0", quantity="0.000001", **{**storage, "unit": "gb_day"})],
+                provider="anthropic",
+                ref="ACCT-2",
+            )
+        assert info.value.code == "period_quantity_too_large" and "storage usage lines in gb_day" in info.value.message
+
+    def test_period_bounds_come_from_the_narrowest_reconciliation_columns(self):
+        sql = MIGRATION.read_text(encoding="utf-8")
+        columns: dict[tuple[str, str], tuple[int, int]] = {}
+        for table in ("spend_reconciliations", "spend_reconciliation_items"):
+            body = sql[sql.index(f"CREATE TABLE IF NOT EXISTS {table} (") :]
+            body = body[: body.index(");")]
+            for name, precision, scale in re.findall(r"^\s*(\w+) NUMERIC\((\d+),(\d+)\)", body, re.M):
+                columns[(table, name)] = (int(precision), int(scale))
+        variance_pcts = {key for key in columns if key[1].endswith("_variance_pct")}
+        assert len(variance_pcts) == 4 and {columns[key] for key in variance_pcts} == {(14, 6)}
+        assert reconcile.PCT_LIMIT == vocab.numeric_max(14, 6)  # stored percentages are capped at it
+        amounts = {key: value for key, value in columns.items() if value[1] == 10}
+        quantities = {key: value for key, value in columns.items() if value[1] == 6 and key not in variance_pcts}
+        assert invoices.MAX_PERIOD_AMOUNT == min(vocab.numeric_max(*value) for value in amounts.values())
+        assert invoices.MAX_PERIOD_QUANTITY == min(vocab.numeric_max(*value) for value in quantities.values())
+        assert columns[("spend_reconciliations", "platform_billed_amount_inr")] == (28, 10)
+        assert vocab.INR_TOTAL_MAX == vocab.numeric_max(28, 10)
+        # A run checks every stored sum, variance and converted figure against its column before writing.
+        checked = (
+            {("spend_reconciliations", name) for name in reconcile.RUN_AMOUNT_FIELDS}
+            | {("spend_reconciliations", "platform_billed_amount_inr")}
+            | {
+                ("spend_reconciliation_items", name)
+                for name in (*reconcile.ITEM_AMOUNT_FIELDS, *reconcile.ITEM_QUANTITY_FIELDS)
+            }
+        )
+        assert set(amounts) | set(quantities) == checked
+
 
 # ---------------------------------------------------------------- reconcile
 
@@ -608,22 +703,27 @@ class TestReconcile:
         tiers_2 = [{"from_quantity": "0", "unit_price": "2.4"}, {"from_quantity": "10", "unit_price": "1.9"}]
         v1 = pcard(unit_price=Decimal("2.5"), volume_tiers=tiers_1, effective_from=OCT, effective_to=date(2026, 10, 16))
         v2 = pcard(unit_price=Decimal("2.4"), volume_tiers=tiers_2, effective_from=date(2026, 10, 16))
-        day_1 = group(quantity=Decimal(8_000_000), amount=Decimal("20"))
-        day_2 = group(billing_date=date(2026, 10, 20), quantity=Decimal(6_000_000), amount=Decimal("14.4"))
-        out = priced([day_2, day_1], [v1, v2])
+        day_1 = group(quantity=Decimal(8_000_000), amount=Decimal("20"), rate_card_id=v1.id)
+        day_2 = group(
+            billing_date=date(2026, 10, 20), quantity=Decimal(6_000_000), amount=Decimal("14.4"), rate_card_id=v2.id
+        )
+        out = priced([day_2, day_1], [v1, v2], stored={v1.id: v1, v2.id: v2})
         assert out[1].adjustments == ()  # 8 units below the second tier
-        # Units 8 to 10 at 2.4 and 10 to 14 at 1.9 (12.4) instead of 6 at 2.4 (14.4): the ladder continues.
-        assert out[0].adjustments == (
+        # Units 8 to 10 at 2.4 and 10 to 14 at 1.9 (12.4) instead of 6 at 2.4 (14.4): the ladder continues, in
+        # the stored figure (the cards that priced the records) as in the re-priced one.
+        assert out[0].adjustments == tuple(
             {
                 "kind": "tier_true_up",
+                "figure": figure,
                 "contract_key": "openai|llm_tokens|gpt-4o|1m_input_tokens|contract",
                 "amount": Decimal("-2.0000000000"),
-            },
+            }
+            for figure in ("stored", "repriced")
         )
         assert out[0].total_stored == Decimal("12.4") and out[0].total_repriced == Decimal("12.4000000000")
         items = reconcile.match([line(amount=Decimal("32.4"))], out, {}, provider="openai", days_in_month=31)
         assert items[0]["stored_amount"] == Decimal("32.4") and items[0]["status"] == "within_tolerance"
-        assert len(items[0]["adjustments"]) == 1
+        assert [a["figure"] for a in items[0]["adjustments"]] == ["stored", "repriced"]
 
     def test_all_units_tier_mode(self):
         tiers = [{"from_quantity": "0", "unit_price": "2.5"}, {"from_quantity": "10", "unit_price": "2.0"}]
@@ -647,8 +747,14 @@ class TestReconcile:
         )
         g = group(commitment_id=commitment.id, overage_quantity=Decimal(1_000_000))
         out = priced([g], [pcard()], commitments=[commitment])
-        assert out[0].adjustments == (
-            {"kind": "commitment_overage", "commitment_id": str(commitment.id), "amount": Decimal("0.5000000000")},
+        assert out[0].adjustments == tuple(
+            {
+                "kind": "commitment_overage",
+                "figure": figure,
+                "commitment_id": str(commitment.id),
+                "amount": Decimal("0.5000000000"),
+            }
+            for figure in ("stored", "repriced")
         )
         assert out[0].total_stored == Decimal("10.5") and out[0].total_repriced == Decimal("10.5")
         # An overage price in INR converts through INR: 249 INR at 83 is 3 USD.
@@ -663,6 +769,83 @@ class TestReconcile:
         # A money commitment carries no overage price.
         money = SimpleNamespace(**{**vars(commitment), "kind": "money"})
         assert priced([g], [pcard()], commitments=[money])[0].adjustments == ()
+
+    def test_overage_of_each_figure_uses_its_own_base(self):
+        # Four units stored at 2.00 by a card since corrected, re-priced at 2.50; one of them is overage at 3.00.
+        old = pcard(unit_price=Decimal("2"), status="retired")
+        new = pcard(unit_price=Decimal("2.5"))
+        commitment = SimpleNamespace(
+            id=uuid.uuid4(),
+            kind="quantity",
+            unit="1m_input_tokens",
+            overage_unit_price=Decimal("3"),
+            overage_currency="USD",
+        )
+        g = group(
+            amount=Decimal("8"),
+            amount_inr=Decimal("664"),
+            rate_card_id=old.id,
+            commitment_id=commitment.id,
+            overage_quantity=Decimal(1_000_000),
+        )
+        out = priced([g], [new], stored={old.id: old}, commitments=[commitment])
+        # Stored: three units at 2.00 and one at 3.00 (9.00); re-priced: three at 2.50 and one at 3.00 (10.50).
+        assert [(a["figure"], a["amount"]) for a in out[0].adjustments] == [
+            ("stored", Decimal("1.0000000000")),
+            ("repriced", Decimal("0.5000000000")),
+        ]
+        assert out[0].total_stored == Decimal("9") and out[0].total_repriced == Decimal("10.5")
+        items = reconcile.match([line(amount=Decimal("10.5"))], out, {}, provider="openai", days_in_month=31)
+        assert items[0]["stored_amount"] == Decimal("9") and items[0]["repriced_amount"] == Decimal("10.5")
+        assert items[0]["days"] == [
+            {
+                "date": "2026-10-01",
+                "metered_quantity": Decimal("4"),
+                "stored_amount": Decimal("9"),
+                "repriced_amount": Decimal("10.5"),
+            }
+        ]
+        assert items[0]["status"] == "needs_review"  # the records are not restated yet
+        level = reconcile._provider_level(items, Decimal("10.5"))
+        assert level["stored"] == Decimal("9") and level["repriced"] == Decimal("10.5")
+        assert level["stored_adjustments"] == Decimal("1") and level["repriced_adjustments"] == Decimal("0.5")
+
+    def test_tier_true_up_of_each_figure_walks_its_own_cards(self):
+        ladder = [{"from_quantity": "0", "unit_price": "2.5"}, {"from_quantity": "2", "unit_price": "2.0"}]
+        new = pcard(unit_price=Decimal("2.5"), volume_tiers=ladder)
+        flat = pcard(unit_price=Decimal("2"), status="retired")
+        g = group(amount=Decimal("8"), amount_inr=Decimal("664"), rate_card_id=flat.id)
+        out = priced([g], [new], stored={flat.id: flat})
+        # Re-priced: two units at 2.50 and two at 2.00 (9.00) instead of 10.00. Stored: priced flat at 2.00 by a
+        # card without tiers, so it stays 8.00 (not 8.00 less the re-pricing's 1.00).
+        assert [(a["figure"], a["amount"]) for a in out[0].adjustments] == [("repriced", Decimal("-1.0000000000"))]
+        assert out[0].total_stored == Decimal("8") and out[0].total_repriced == Decimal("9")
+        # A stored card with its own ladder: two units at 2.00 and two at 1.80 (7.60) instead of the 8.00 stored.
+        own = [{"from_quantity": "0", "unit_price": "2.0"}, {"from_quantity": "2", "unit_price": "1.8"}]
+        tiered = replace_card(flat, volume_tiers=pricing.parse_tiers(own))
+        out = priced([g], [new], stored={flat.id: tiered})
+        assert [(a["figure"], a["amount"]) for a in out[0].adjustments] == [
+            ("stored", Decimal("-0.4000000000")),
+            ("repriced", Decimal("-1.0000000000")),
+        ]
+        assert out[0].total_stored == Decimal("7.6") and out[0].total_repriced == Decimal("9")
+        items = reconcile.match([line(amount=Decimal("9"))], out, {}, provider="openai", days_in_month=31)
+        assert items[0]["days"][0]["stored_amount"] == Decimal("7.6") and items[0]["stored_amount"] == Decimal("7.6")
+        # Invoiced in INR, the stored true-up converts at the month-end rate: 664 less 0.40 at 83.
+        inr = priced([g], [new], stored={flat.id: tiered}, currency="INR")
+        assert inr[0].total_stored == Decimal("630.8") and inr[0].total_repriced == Decimal("747")
+        assert ("USD", MONTH_END) in {(currency, on) for currency, on, _rate in inr[0].fx}
+        # The ladder applies only where the stored card priced the group at its own unit price, in its currency.
+        cached = group(unit="cached_input_token", amount=Decimal("8"), rate_card_id=flat.id)
+        with_cached_price = replace_card(tiered, cached_unit_price=Decimal("2"))
+        assert priced([cached], stored={flat.id: with_cached_price})[0].stored_card_quantity is None
+        assert priced([cached], stored={flat.id: tiered})[0].stored_card_quantity == Decimal("4")
+        in_euro = group(amount=Decimal("8"), rate_card_id=flat.id, currency="EUR")
+        assert priced([in_euro], stored={flat.id: tiered})[0].stored_card_quantity is None
+        fallback = group(amount=Decimal("8"), rate_card_id=flat.id, price_source="fallback_list")
+        assert priced([fallback], stored={flat.id: tiered})[0].stored_card_quantity is None
+        blend = group(unit="token", amount=Decimal("8"), rate_card_id=flat.id)  # its input card priced a blend
+        assert priced([blend], stored={flat.id: tiered})[0].stored_card_quantity is None
 
     def test_currency_conversion_through_inr_marks_fx_converted(self):
         rates = {**USD_83, ("EUR", MONTH_END): FxRate("EUR", date(2026, 10, 30), Decimal("90"))}
@@ -1194,10 +1377,110 @@ class TestReconcile:
         item = usage_items(run)[0]
         # One million tokens over the commitment at 3.0 instead of the 2.5 already in both figures.
         assert item["adjustments"] == [
-            {"kind": "commitment_overage", "commitment_id": str(commitment.id), "amount": "0.5000000000"}
+            {
+                "kind": "commitment_overage",
+                "figure": figure,
+                "commitment_id": str(commitment.id),
+                "amount": "0.5000000000",
+            }
+            for figure in ("stored", "repriced")
         ]
         assert item["stored_amount"] == "10.5000000000" and item["repriced_amount"] == "10.5000000000"
-        assert item["status"] == "within_tolerance" and run["adjustments_amount"] == "0.5000000000"
+        assert item["status"] == "within_tolerance"
+        assert run["stored_adjustments_amount"] == run["repriced_adjustments_amount"] == "0.5000000000"
+
+    @pytest.mark.asyncio
+    async def test_run_reports_each_figures_own_overage_and_days(self, store, tmp_path):
+        old = card(unit_price=Decimal("2"), status="retired", retired_at=OCT)
+        new = card(unit_price=Decimal("2.5"))
+        store.add(old)
+        store.add(new)
+        commitment = SpendCommitment(
+            id=uuid.uuid4(), tenant_id=TENANT, provider="openai", usage_type="llm_tokens", model_sku="gpt-4o",
+            unit="1m_input_tokens", kind="quantity", committed_quantity=Decimal("3"), period_start=OCT,
+            period_end=NOV, overage_unit_price=Decimal("3"), overage_currency="USD",
+        )  # fmt: skip
+        store.add(commitment)
+        priced_usage(store, old, 4_000_000, commitment_id=commitment.id, overage_quantity=Decimal(1_000_000))
+        await add_invoice(tmp_path, [usage_line("10.5")])
+        run = await run_month()
+        item = usage_items(run)[0]
+        assert item["stored_amount"] == "9.0000000000" and item["repriced_amount"] == "10.5000000000"
+        assert item["days"] == [
+            {
+                "date": "2026-10-01",
+                "metered_quantity": "4.000000",
+                "stored_amount": "9.0000000000",
+                "repriced_amount": "10.5000000000",
+            }
+        ]
+        assert run["stored_amount"] == "9.0000000000" and run["repriced_amount"] == "10.5000000000"
+        assert run["stored_adjustments_amount"] == "1.0000000000"
+        assert run["repriced_adjustments_amount"] == "0.5000000000"
+        assert run["stored_variance_amount"] == "-1.5000000000" and item["status"] == "needs_review"
+
+    def test_a_figure_that_does_not_fit_its_column_fails_closed(self):
+        figures = dict.fromkeys(reconcile.RUN_AMOUNT_FIELDS, vocab.AMOUNT_MAX)
+        item = {
+            "item_kind": "usage",
+            "line_kind": "usage",
+            "usage_type": "llm_tokens",
+            "model_sku": "gpt-4o",
+            "unit": "1m_input_tokens",
+            "usage_date": None,
+            **dict.fromkeys(reconcile.ITEM_AMOUNT_FIELDS, -vocab.AMOUNT_MAX),
+            **dict.fromkeys(reconcile.ITEM_QUANTITY_FIELDS, vocab.QTY_MAX),
+        }
+        reconcile.check_capacity(figures, vocab.INR_TOTAL_MAX, [item], label="openai 2026-10")  # at every limit
+        # Rounded as stored: less than half a quantum past the limit still fits.
+        nearly = {**figures, "stored_amount": vocab.AMOUNT_MAX + Decimal("0.00000000004")}
+        reconcile.check_capacity(nearly, ZERO, [item], label="openai 2026-10")
+        cases = [
+            (
+                {**figures, "repriced_variance_amount": -vocab.AMOUNT_MAX - vocab.AMOUNT_QUANT},
+                ZERO,
+                item,
+                "repriced_variance_amount",
+                "run",
+            ),
+            (figures, vocab.INR_TOTAL_MAX + vocab.AMOUNT_QUANT, item, "platform_billed_amount_inr", "run"),
+            (figures, ZERO, {**item, "metered_quantity": vocab.QTY_MAX + vocab.QTY_QUANT}, "metered_quantity", "item"),
+            (figures, ZERO, {**item, "stored_amount": Decimal("1e40")}, "stored_amount", "item"),
+        ]
+        for run_figures, platform, bad_item, field, scope in cases:
+            with pytest.raises(SpendError) as info:
+                reconcile.check_capacity(run_figures, platform, [bad_item], label="openai 2026-10")
+            assert (info.value.status, info.value.code) == (422, "figure_out_of_range"), field
+            assert info.value.extra == {"field": field, "scope": scope}
+            assert info.value.message.startswith(f"openai 2026-10: the {scope}")
+
+    @pytest.mark.asyncio
+    async def test_run_fails_closed_when_a_converted_figure_does_not_fit(self, store, tmp_path, monkeypatch):
+        c = card()
+        store.add(c)
+        priced_usage(store, c, 4_000_000)
+        await add_invoice(tmp_path, [usage_line("830")], currency="INR")
+        first = await run_month()
+        # 1.3 x 10^12 USD of usage is 1.079 x 10^14 INR against an INR invoice: every record and invoice line
+        # is within its own bounds, but the converted figure would not fit the run.
+        priced_usage(store, c, 520_000_000_000_000_000, day=date(2026, 10, 2))
+        with pytest.raises(SpendError) as info:
+            await run_month(now=LATER)
+        assert (info.value.status, info.value.code) == (422, "figure_out_of_range")
+        assert info.value.extra == {"field": "stored_amount", "scope": "item"}
+        assert "NUMERIC(24,10)" in info.value.message
+        # Nothing was written: the earlier run stands, not superseded.
+        assert [str(r.id) for r in store.of("spend_reconciliations")] == [first["id"]]
+        assert store.of("spend_reconciliations")[0].superseded is False
+
+        # A figure past any decimal context is refused the same way, never a server error.
+        def overflow(*args, **kwargs):
+            raise InvalidOperation
+
+        monkeypatch.setattr(reconcile, "_compare", overflow)
+        with pytest.raises(SpendError) as info:
+            await run_month(now=LATER)
+        assert (info.value.status, info.value.code) == (422, "figure_out_of_range")
 
     @pytest.mark.asyncio
     async def test_fx_row_entered_after_the_month_is_flagged_retroactive(self, store, tmp_path):

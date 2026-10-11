@@ -22,11 +22,15 @@ currency, card, price source, commitment), each in the invoice currency:
   keeps its stored price (the fallback tables carry no dates); a group with
   no price at all is ``NULL``. Converted through INR at the month-end rates.
 
-Both carry the month-level adjustments: the **tier true-up** of each contract
-key ``(provider, usage_type, card model_sku, card unit, source)``, one volume
-ladder over the month across card versions, and the **commitment overage**
-at the commitment's overage price. Records are never re-priced here and never
-change.
+Each figure carries its own month-level adjustments, worked from what that
+figure priced: the **tier true-up** of each contract key ``(provider,
+usage_type, card model_sku, card unit, source)``, one volume ladder over the
+month across card versions (the stored figure walks the ladders of the cards
+that priced the records, less the amounts they priced; the re-priced figure
+those of the re-pricing cards, less the re-priced amounts), and the
+**commitment overage** at the commitment's overage price less the base price
+already in that figure (the stored amount, or the re-priced one, per unit).
+Records are never re-priced here and never change.
 
 **Matching.** Invoice lines and groups meet on usage type, the canonical
 model (the tenant's aliases applied to both) and the canonical unit
@@ -72,7 +76,7 @@ import uuid
 from collections.abc import Collection, Mapping, Sequence
 from dataclasses import astuple, dataclass, replace
 from datetime import UTC, date, datetime, timedelta
-from decimal import ROUND_HALF_EVEN, ROUND_UP, Context, Decimal, localcontext
+from decimal import ROUND_HALF_EVEN, ROUND_UP, Context, Decimal, InvalidOperation, localcontext
 from typing import Any
 
 import structlog
@@ -128,7 +132,7 @@ class PricedGroup:
     stored_amount: Decimal | None  # in the invoice currency, before adjustments
     repriced_amount: Decimal | None  # in the invoice currency, before adjustments
     repriced_card: Card | None
-    adjustments: tuple[dict[str, Any], ...]
+    adjustments: tuple[dict[str, Any], ...]  # each names its figure: "stored" or "repriced"
     fx_converted: bool
     model: str = ""  # canonical, through the aliases known at run time
     repriced_currency: str | None = None
@@ -138,14 +142,19 @@ class PricedGroup:
     blend_card: Card | None = None
     stored_card: Card | None = None
     fx: tuple[FxLookup, ...] = ()
+    stored_card_quantity: Decimal | None = None  # the quantity in the stored card's unit, when its ladder applies
+    stored_factor: Decimal | None = None  # the stored card's currency -> the invoice currency
+
+    def figure_adjustments(self, figure: str) -> list[dict[str, Any]]:
+        return [adjustment for adjustment in self.adjustments if adjustment.get("figure") == figure]
 
     @property
     def total_stored(self) -> Decimal | None:
-        return _plus(self.stored_amount, self.adjustments)
+        return _plus(self.stored_amount, self.figure_adjustments("stored"))
 
     @property
     def total_repriced(self) -> Decimal | None:
-        return _plus(self.repriced_amount, self.adjustments)
+        return _plus(self.repriced_amount, self.figure_adjustments("repriced"))
 
 
 @dataclass(frozen=True)
@@ -303,8 +312,15 @@ def _overage(
     rates: Mapping[tuple[str, date], FxRate | None],
     invoice_currency: str,
     month_end: date,
+    *,
+    figure: str,
 ) -> tuple[dict[str, Any], tuple[FxLookup, ...]]:
-    """Overage at the commitment's price less the base price already in the figures, in the invoice currency."""
+    """Overage at the commitment's price less the base price already in ``figure``, in the invoice currency.
+
+    ``base`` is the group's amount in that figure before adjustments, in its
+    own currency (the stored amount, or the re-priced one); ``None`` when the
+    figure has none, and so is the adjustment.
+    """
     unit = commitment.unit or canonical_unit
     divisor = Decimal(vocab.CANONICAL_DIVISOR.get(unit, 1))
     amount: Decimal | None = None
@@ -320,7 +336,30 @@ def _overage(
                 overage_price = Decimal(commitment.overage_unit_price) * to_base
                 native = (group.overage_quantity / divisor) * (overage_price - base_price)
                 amount = _q(native * to_invoice)
-    return {"kind": "commitment_overage", "commitment_id": str(commitment.id), "amount": amount}, used
+    adjustment = {"kind": "commitment_overage", "figure": figure, "commitment_id": str(commitment.id), "amount": amount}
+    return adjustment, used
+
+
+def _stored_tier_quantity(group: MeteredGroup, usage: Usage, card: Card | None) -> Decimal | None:
+    """The group's quantity in the unit of the card that priced its records, when that card's ladder applies.
+
+    As for the re-priced figure: a card with volume tiers that priced the
+    group at its own unit price (not a blend, not a cached price) and in the
+    group's currency. The path is the one the card prices this usage by,
+    whatever its status or dates now: it priced these records then.
+    """
+    if card is None or not card.volume_tiers or card.currency != group.currency:
+        return None
+    if group.price_source not in vocab.CARD_SOURCES:
+        return None
+    eligible = replace(card, status="active", effective_from=date.min, effective_to=None)
+    selection = pricing.select_price(replace(usage, model=card.model_sku or usage.model), [eligible])
+    if selection is None or selection.blend_card is not None:
+        return None
+    if vocab.PRICE_PATHS[group.unit][selection.path_index][1] != "unit_price":
+        return None
+    with localcontext(_CTX):
+        return group.quantity / Decimal(selection.divisor)
 
 
 def _price_group(
@@ -396,13 +435,23 @@ def _price_group(
         and commitment.overage_unit_price is not None
         and group.overage_quantity > 0
     ):
-        base: tuple[Decimal, str] | None = None
-        if native is not None and currency is not None:
-            base = (native, currency)
-        elif not group.unpriced_quantity and group.currency:
-            base = (group.amount, group.currency)
-        adjustment, used = _overage(group, commitment, canonical_unit, base, rates, invoice_currency, month_end)
-        adjustments.append(adjustment)
+        # Each figure takes the overage from the base price it holds: the stored figure from the amount the
+        # records were priced at, the re-priced figure from the re-priced amount.
+        bases: tuple[tuple[str, tuple[Decimal, str] | None], ...] = (
+            ("stored", (group.amount, group.currency) if stored is not None and group.currency else None),
+            ("repriced", (native, currency) if native is not None and currency is not None else None),
+        )
+        for figure, base in bases:
+            adjustment, used = _overage(
+                group, commitment, canonical_unit, base, rates, invoice_currency, month_end, figure=figure
+            )
+            adjustments.append(adjustment)
+            fx_used += used
+    stored_card = stored_cards.get(group.rate_card_id) if group.rate_card_id else None
+    stored_card_quantity = _stored_tier_quantity(group, usage, stored_card)
+    stored_factor: Decimal | None = None
+    if stored_card is not None and stored_card_quantity is not None:
+        stored_factor, used = _factor(rates, stored_card.currency, invoice_currency, month_end)
         fx_used += used
     converted = (group.currency is not None and group.currency != invoice_currency) or (
         currency is not None and currency != invoice_currency
@@ -422,8 +471,10 @@ def _price_group(
         card_quantity=card_quantity,
         tierable=tierable,
         blend_card=blend_card,
-        stored_card=stored_cards.get(group.rate_card_id) if group.rate_card_id else None,
+        stored_card=stored_card,
         fx=fx_used,
+        stored_card_quantity=stored_card_quantity,
+        stored_factor=stored_factor,
     )
 
 
@@ -476,44 +527,62 @@ def contract_key(card: Card) -> tuple[str, str, str, str, str]:
     return (card.provider, card.usage_type, card.model_sku, card.unit, card.source)
 
 
+TierBasis = tuple[Card, Decimal, Decimal, Decimal | None]  # card, quantity in its unit, amount held, factor
+
+
+def _tier_basis(item: PricedGroup, figure: str) -> TierBasis | None:
+    """What ``figure`` priced a group with: the card, the quantity in its unit, the amount the figure holds
+    for it in the card's currency, and the factor to the invoice currency; ``None`` when no ladder applies."""
+    if figure == "stored":
+        if item.stored_card is None or item.stored_card_quantity is None:
+            return None
+        return item.stored_card, item.stored_card_quantity, item.group.amount, item.stored_factor
+    if not item.tierable or item.repriced_card is None or item.card_quantity is None:
+        return None
+    with localcontext(_CTX):
+        held = _q(item.card_quantity * item.repriced_card.unit_price)
+    return item.repriced_card, item.card_quantity, held, item.factor
+
+
 def tier_true_ups(priced: Sequence[PricedGroup]) -> list[PricedGroup]:
-    """Each contract key's volume ladder over the month, added to both figures of its groups (pure).
+    """Each contract key's volume ladder over the month, added to each figure from what it priced (pure).
 
     Billing days are walked in order with the key's cumulative quantity in
     card units across card versions, so a card version change mid-month
     continues one ladder. Each day prices its quantity with that day's card:
     ``graduated`` from the cumulative position, ``all_units`` at the tier the
-    month's total reaches. The adjustment is that price less the quantity at
-    the card's base unit price, which the figures already hold. Records carry
-    no batch flag in Phase 1 and nothing meters batch usage yet, so the base
-    is the card's undiscounted ``unit_price``; a later phase that meters batch
-    calls must discount the ladder the same way ``pricing.price_with`` does.
+    month's total reaches. The adjustment is that price less the amount the
+    figure already holds for the quantity. Each figure walks its own cards:
+    the stored figure the cards that priced the records (``rate_card_id``),
+    less the stored amount; the re-priced figure the re-pricing cards, less
+    the quantity at their base unit price. With the same card both agree; a
+    card entered or corrected after metering leaves them apart until a
+    restatement. Records carry no batch flag in Phase 1 and nothing meters
+    batch usage yet, so the re-priced base is the card's undiscounted
+    ``unit_price``; a later phase that meters batch calls must discount the
+    ladder the same way ``pricing.price_with`` does.
     """
     out = list(priced)
-    keys: dict[tuple[str, str, str, str, str], list[int]] = {}
-    for index, item in enumerate(out):
-        if item.tierable and item.repriced_card is not None and item.card_quantity is not None:
-            keys.setdefault(contract_key(item.repriced_card), []).append(index)
-    for key, members in keys.items():
-        members.sort(key=lambda i: _group_order(out[i]))
-        month_total = sum((out[i].card_quantity or _ZERO for i in members), _ZERO)
-        cumulative = _ZERO
-        for index in members:
-            item = out[index]
-            card = item.repriced_card
-            quantity = item.card_quantity
-            if card is None or quantity is None:
-                continue
-            start = month_total - quantity if card.tier_mode == "all_units" else cumulative
-            cumulative += quantity
-            with localcontext(_CTX):
-                tiered = pricing.tiered_amount(card.volume_tiers, card.tier_mode, start, quantity)
-                delta = tiered - _q(quantity * card.unit_price)
-            if delta == 0:
-                continue
-            amount = None if item.factor is None else _q(delta * item.factor)
-            adjustment = {"kind": "tier_true_up", "contract_key": "|".join(key), "amount": amount}
-            out[index] = replace(item, adjustments=(*item.adjustments, adjustment))
+    for figure in ("stored", "repriced"):
+        keys: dict[tuple[str, str, str, str, str], list[tuple[int, TierBasis]]] = {}
+        for index, item in enumerate(out):
+            basis = _tier_basis(item, figure)
+            if basis is not None:
+                keys.setdefault(contract_key(basis[0]), []).append((index, basis))
+        for key, members in keys.items():
+            members.sort(key=lambda member: _group_order(out[member[0]]))
+            month_total = sum((basis[1] for _index, basis in members), _ZERO)
+            cumulative = _ZERO
+            for index, (card, quantity, held, factor) in members:
+                start = month_total - quantity if card.tier_mode == "all_units" else cumulative
+                cumulative += quantity
+                with localcontext(_CTX):
+                    delta = pricing.tiered_amount(card.volume_tiers, card.tier_mode, start, quantity) - held
+                if delta == 0:
+                    continue
+                amount = None if factor is None else _q(delta * factor)
+                adjustment = {"kind": "tier_true_up", "figure": figure, "contract_key": "|".join(key), "amount": amount}
+                out[index] = replace(out[index], adjustments=(*out[index].adjustments, adjustment))
     return out
 
 
@@ -524,11 +593,9 @@ def _line_key(
     line: Any, provider: str, aliases: Mapping[tuple[str, str], str], days_in_month: int
 ) -> tuple[tuple[str, str, str | None, date | None], Decimal | None]:
     model = pricing.canonical_model(provider, line.model_sku, aliases) if line.model_sku else ""
-    unit = line.unit
-    quantity = Decimal(line.quantity) if line.quantity is not None else None
-    if unit == "gb_month":
-        unit = "gb_day"
-        quantity = quantity * days_in_month if quantity is not None else None
+    unit, quantity = invoices.item_unit_quantity(
+        line.unit, Decimal(line.quantity) if line.quantity is not None else None, days_in_month
+    )
     return (line.usage_type, model, unit, line.usage_date), quantity
 
 
@@ -1091,7 +1158,8 @@ def run_dict(row: Any, *, items: Sequence[Any] | None = None, stale: bool | None
         "non_usage_amount": vocab.dec_str(row.non_usage_amount),
         "stored_amount": vocab.dec_str(row.stored_amount),
         "repriced_amount": vocab.dec_str(row.repriced_amount),
-        "adjustments_amount": vocab.dec_str(row.adjustments_amount),
+        "stored_adjustments_amount": vocab.dec_str(row.stored_adjustments_amount),
+        "repriced_adjustments_amount": vocab.dec_str(row.repriced_adjustments_amount),
         "stored_variance_amount": vocab.dec_str(row.stored_variance_amount),
         "stored_variance_pct": vocab.dec_str(row.stored_variance_pct),
         "repriced_variance_amount": vocab.dec_str(row.repriced_variance_amount),
@@ -1168,17 +1236,101 @@ def _provider_level(items: Sequence[dict[str, Any]], invoice_amount: Decimal) ->
     stored = _sum([item["stored_amount"] for item in usage])
     repriced = _sum([item["repriced_amount"] for item in usage])
     status, stored_pct, repriced_pct = status_for(stored, repriced, invoice_amount)
-    adjustments = sum(
-        (a["amount"] for item in usage for a in item["adjustments"] if a.get("amount") is not None), _ZERO
-    )
+
+    def adjustments(figure: str) -> Decimal:
+        return sum(
+            (
+                a["amount"]
+                for item in usage
+                for a in item["adjustments"]
+                if a.get("figure") == figure and a.get("amount") is not None
+            ),
+            _ZERO,
+        )
+
     return {
         "stored": stored,
         "repriced": repriced,
         "status": status,
         "stored_pct": stored_pct,
         "repriced_pct": repriced_pct,
-        "adjustments": adjustments,
+        "stored_adjustments": adjustments("stored"),
+        "repriced_adjustments": adjustments("repriced"),
     }
+
+
+# Every figure a run stores, by the column that holds it (migration v6z82); percentages are bounded by pct_shown.
+RUN_AMOUNT_FIELDS = (
+    "invoice_amount",
+    "non_usage_amount",
+    "stored_amount",
+    "repriced_amount",
+    "stored_adjustments_amount",
+    "repriced_adjustments_amount",
+    "stored_variance_amount",
+    "repriced_variance_amount",
+)
+ITEM_AMOUNT_FIELDS = (
+    "invoice_amount",
+    "stored_amount",
+    "repriced_amount",
+    "stored_variance_amount",
+    "repriced_variance_amount",
+    "unconverted_amount",
+)
+ITEM_QUANTITY_FIELDS = ("invoice_quantity", "metered_quantity", "unpriced_quantity")
+
+
+def _too_large(value: Decimal | None, limit: Decimal, quant: Decimal) -> bool:
+    """Whether ``value``, rounded as it is stored, is past ``limit`` (a far larger value is never rounded)."""
+    if value is None:
+        return False
+    with localcontext(_CTX):
+        if abs(value) > limit + _ONE:
+            return True
+        return abs(value.quantize(quant, rounding=ROUND_HALF_EVEN)) > limit
+
+
+def check_capacity(
+    figures: Mapping[str, Decimal | None],
+    platform_inr: Decimal,
+    items: Sequence[Mapping[str, Any]],
+    *,
+    label: str,
+) -> None:
+    """Fail closed before anything is written: 422 ``figure_out_of_range`` when a figure would not fit its column.
+
+    The imports bound the invoice side (``invoices.check_period_capacity``);
+    the metered side is what the records hold, converted into the invoice
+    currency (USD usage against an INR invoice grows by the rate), so a month
+    whose figures do not fit is refused with the field it failed on instead
+    of failing in the database.
+    """
+    checks: list[tuple[str, str, Decimal | None, Decimal, Decimal, str]] = []
+    for item in items:
+        where = "item " + " ".join(
+            str(part)
+            for part in (item["usage_type"] or item["line_kind"], item["model_sku"], item["unit"], item["usage_date"])
+            if part
+        )
+        for name in ITEM_AMOUNT_FIELDS:
+            checks.append((where, name, item[name], vocab.AMOUNT_MAX, vocab.AMOUNT_QUANT, "NUMERIC(24,10)"))
+        for name in ITEM_QUANTITY_FIELDS:
+            checks.append((where, name, item[name], vocab.QTY_MAX, vocab.QTY_QUANT, "NUMERIC(24,6)"))
+    for name in RUN_AMOUNT_FIELDS:
+        checks.append(("run", name, figures[name], vocab.AMOUNT_MAX, vocab.AMOUNT_QUANT, "NUMERIC(24,10)"))
+    checks.append(
+        ("run", "platform_billed_amount_inr", platform_inr, vocab.INR_TOTAL_MAX, vocab.AMOUNT_QUANT, "NUMERIC(28,10)")
+    )
+    for where, name, value, limit, quant, column in checks:
+        if _too_large(value, limit, quant):
+            raise SpendError(
+                422,
+                "figure_out_of_range",
+                f"{label}: the {where} {name} does not fit a reconciliation ({column}, at most {limit} in "
+                "magnitude); check the month's records, cards and FX rows",
+                extra={"field": name, "scope": "run" if where == "run" else "item"},
+            )
 
 
 def _item_row(tenant_id: uuid.UUID, run_id: uuid.UUID, item: dict[str, Any], stamp: datetime) -> Any:
@@ -1250,10 +1402,35 @@ async def run(tenant_id: uuid.UUID, *, provider: str, period: str, actor: str, n
         rates = await _rates(
             session, tenant_id, _needed_currencies(currency, groups, inputs.cards, commitments), month_end
         )
-        # The comparison is pure and CPU-bound: off the event loop, so a large month never stalls other requests.
-        priced, items = await asyncio.to_thread(
-            _compare, inputs, commitments, rates, lines, provider=provider, currency=currency, b0=b0, b1=b1
-        )
+        label = f"{provider} {invoices.period_text(b0)}"
+        try:
+            # The comparison is pure and CPU-bound: off the event loop, so a large month never stalls other requests.
+            priced, items = await asyncio.to_thread(
+                _compare, inputs, commitments, rates, lines, provider=provider, currency=currency, b0=b0, b1=b1
+            )
+        except InvalidOperation as exc:  # a figure past 38 significant digits: far beyond any column
+            raise SpendError(
+                422,
+                "figure_out_of_range",
+                f"{label}: a figure of the month is too large to reconcile; "
+                "check the month's records, cards and FX rows",
+            ) from exc
+        usage_lines = [line for line in lines if line.line_kind == "usage"]
+        invoice_amount = sum((Decimal(line.amount) for line in usage_lines), _ZERO)
+        non_usage_amount = sum((Decimal(line.amount) for line in lines if line.line_kind != "usage"), _ZERO)
+        level = _provider_level(items, invoice_amount)
+        figures: dict[str, Decimal | None] = {
+            "invoice_amount": invoice_amount,
+            "non_usage_amount": non_usage_amount,
+            "stored_amount": level["stored"],
+            "repriced_amount": level["repriced"],
+            "stored_adjustments_amount": level["stored_adjustments"],
+            "repriced_adjustments_amount": level["repriced_adjustments"],
+            "stored_variance_amount": None if level["stored"] is None else level["stored"] - invoice_amount,
+            "repriced_variance_amount": None if level["repriced"] is None else level["repriced"] - invoice_amount,
+        }
+        check_capacity(figures, inputs.platform_inr, items, label=label)  # before anything is written
+
         earlier = await _runs(session, tenant_id, provider, b0)
         importers = {str(inv.imported_by) for inv in current}
         carried = carry_over(
@@ -1263,10 +1440,6 @@ async def run(tenant_id: uuid.UUID, *, provider: str, period: str, actor: str, n
             row.superseded = True
         await session.flush()
 
-        usage_lines = [line for line in lines if line.line_kind == "usage"]
-        invoice_amount = sum((Decimal(line.amount) for line in usage_lines), _ZERO)
-        non_usage_amount = sum((Decimal(line.amount) for line in lines if line.line_kind != "usage"), _ZERO)
-        level = _provider_level(items, invoice_amount)
         needs_review = sum(1 for item in items if item["status"] == "needs_review")
         accepted_items = [item for item in items if item["status"] == "accepted"]
         status = run_status(level["status"], needs_review, len(accepted_items))
@@ -1286,12 +1459,13 @@ async def run(tenant_id: uuid.UUID, *, provider: str, period: str, actor: str, n
             currency=currency,
             invoice_amount=_q(invoice_amount),
             non_usage_amount=_q(non_usage_amount),
-            stored_amount=None if level["stored"] is None else _q(level["stored"]),
-            repriced_amount=None if level["repriced"] is None else _q(level["repriced"]),
-            adjustments_amount=_q(level["adjustments"]),
-            stored_variance_amount=None if level["stored"] is None else _q(level["stored"] - invoice_amount),
+            stored_amount=_q_or_none(figures["stored_amount"]),
+            repriced_amount=_q_or_none(figures["repriced_amount"]),
+            stored_adjustments_amount=_q(level["stored_adjustments"]),
+            repriced_adjustments_amount=_q(level["repriced_adjustments"]),
+            stored_variance_amount=_q_or_none(figures["stored_variance_amount"]),
             stored_variance_pct=pct_shown(level["stored_pct"]),
-            repriced_variance_amount=None if level["repriced"] is None else _q(level["repriced"] - invoice_amount),
+            repriced_variance_amount=_q_or_none(figures["repriced_variance_amount"]),
             repriced_variance_pct=pct_shown(level["repriced_pct"]),
             tolerance_pct=TOLERANCE_PCT,
             status=status,

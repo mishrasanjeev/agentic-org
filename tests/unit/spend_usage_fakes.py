@@ -4,7 +4,7 @@
 It extends the reference-data fake (``tests/unit/spend_fakes.py``) with what
 the usage code builds: multi-row inserts with ``ON CONFLICT DO NOTHING`` or an
 additive ``DO UPDATE`` and ``RETURNING``; updates and deletes; selects with
-``sum``/``count``/``max``/``min``/``coalesce``/``case``/``cast``, several
+``sum``/``count``/``max``/``min``/``abs``/``coalesce``/``case``/``cast``, several
 ``group_by`` columns, ``distinct``, subqueries in ``IN``, tuple ``IN``,
 keyset conditions, ``= ANY(array)``, JSONB ``@>`` and ``FOR UPDATE SKIP
 LOCKED`` (skipping the rows a test marks as held by another transaction);
@@ -145,6 +145,9 @@ class Evaluator:
             return moment.astimezone(UTC).replace(tzinfo=None) if moment is not None else None
         if name == "now":
             return NOW
+        if name == "abs":
+            found = self.value(args[0], row)
+            return abs(found) if found is not None else None
         if name in AGGREGATES:
             raise NotImplementedError("an aggregate outside a grouped select")
         raise NotImplementedError(name)

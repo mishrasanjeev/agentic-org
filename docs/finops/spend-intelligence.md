@@ -806,8 +806,17 @@ under `rows` or `lines`). Columns: `amount` (required); `line_kind`, `usage_type
   storage have no provider invoice and are refused.
 - **A bounded month.** The current invoices of one provider and month hold at most 20,000 lines
   together (four full files), because a reconciliation run loads every one of them; an import
-  past that is 413 `too_many_rows` (a dry run reports it too). A replaced invoice's lines leave the
-  count with it.
+  past that is 413 `too_many_rows` (a dry run reports it too). They also hold at most what a run
+  can store of their sums, whatever their references: the magnitudes of all their lines (credits
+  included) total at most 99999999999999.9999999999, the largest `NUMERIC(24,10)` amount a run
+  stores its invoice amounts, non-usage sum and variances in (413 `period_amount_too_large`), and
+  the quantities of the usage lines of one usage type, unit and billing day, any model (aliases can
+  merge models into one item later) and a `gb_month` line counted in GB-days, total at most
+  999999999999999999.999999, the largest `NUMERIC(24,6)` item quantity (413
+  `period_quantity_too_large`). These are 413 like `too_many_rows`: each is a bound on what one
+  month may hold across its invoices, checked under the same lock, and the file itself is valid
+  (422 stays for a line or an invoice past its own bounds). A replaced invoice's lines, amounts
+  and quantities leave the month with it.
 - **Whole or nothing.** A refused line refuses the import: 422 `invoice_rejected` with every
   refused line and its reason (`invalid_number`, `invalid_value`, `invalid_unit`, `invalid_sku`,
   `invalid_period`, `invalid_date`, `currency_mismatch`). A partial invoice would reconcile
@@ -828,7 +837,10 @@ under `rows` or `lines`). Columns: `amount` (required); `line_kind`, `usage_type
 `POST /spend/reconciliations` (administrator; `{provider, period}`; rate class `bulk-import`)
 reconciles a provider's billing month against its current invoices, in one transaction, and
 answers the run with its items (201). 409 `invoice_missing` when the month has no current
-invoice; 422 `currency_mismatch` when its current invoices are in different currencies.
+invoice; 422 `currency_mismatch` when its current invoices are in different currencies; 422
+`figure_out_of_range` (naming the field) when a figure would not fit the column that stores it,
+for example usage in dollars converted for an invoice in rupees: the run fails closed before
+writing anything, and earlier runs stand.
 
 - **The billing month** is computed from the records' `billing_date`, so a provider that closes its
   month in Pacific time is compared over its own month, not the UTC or IST one (a call at 03:00
@@ -856,13 +868,22 @@ invoice; 422 `currency_mismatch` when its current invoices are in different curr
   key's cumulative quantity in card units across card versions, so a card version change
   mid-month continues one ladder instead of restarting it. Each day's quantity is priced with
   that day's card (`graduated` from its cumulative position; `all_units` at the tier the month's
-  total reaches) less the quantity at the card's base price, and the difference is added to both
-  figures as an adjustment `{kind: tier_true_up, contract_key, amount}`.
+  total reaches) less what the figure already holds for the quantity. Each figure walks its own
+  cards: the stored figure the cards that priced the records, less the stored amounts (a card
+  without tiers adds nothing); the re-priced figure the re-pricing cards, less the quantity at
+  their base price. The difference is added to that figure as an adjustment
+  `{kind: tier_true_up, figure: stored | repriced, contract_key, amount}`, so with the same card
+  both figures agree, and a card entered or corrected after metering leaves them apart until a
+  restatement.
 - **Commitment overage.** For a group drawn from a quantity commitment with an overage price, the
-  overage quantity is priced at that price less the base price already in the figures
-  (`overage_quantity / divisor × (overage price - base price per card unit)`), the overage price
-  converted from its currency through INR when it differs, and added to both figures as
-  `{kind: commitment_overage, commitment_id, amount}`. Overage is never priced on the records.
+  overage quantity is priced at that price less the base price already in each figure
+  (`overage_quantity / divisor × (overage price - base price per card unit)`): the stored amount
+  per unit for the stored figure, the re-priced amount per unit for the re-priced one (four units
+  stored at 2.00 and re-priced at 2.50, one of them overage at 3.00, are 9.00 stored and 10.50
+  re-priced). The overage price converts from its currency through INR when it differs, and each
+  figure gets its own `{kind: commitment_overage, figure, commitment_id, amount}`. A run reports
+  the sum of each figure's adjustments as `stored_adjustments_amount` and
+  `repriced_adjustments_amount`. Overage is never priced on the records.
   Commitment shortfall and prepaid fees appear on invoices as `commitment` lines and are reported,
   not compared.
 - **Matching.** Lines and groups meet on usage type, the canonical model (the tenant's model aliases

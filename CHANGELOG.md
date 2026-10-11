@@ -13,15 +13,20 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
   line); a second current invoice with the same reference needs `replace`,
   which supersedes the earlier one; several references for a month are
   summed, up to 20,000 current lines per provider and month (413
-  `too_many_rows`), since a run loads them all. Invoices are listed and
-  read through `GET /spend/invoices`.
+  `too_many_rows`), since a run loads them all, and up to the amounts and
+  quantities a run can store of their sums (413 `period_amount_too_large`,
+  `period_quantity_too_large`). Invoices are listed and read through
+  `GET /spend/invoices`.
 - Reconciliation: `POST /spend/reconciliations` compares a provider's
   tenant-billed usage in its own billing month with its current invoices in
   two figures, the amounts as stored and a re-pricing at the cards in force
   on each billing day as known at run time (fallback-priced usage keeps its
-  stored price), both with the month-level tier true-up per contract key
+  stored price), each with its own month-level tier true-up per contract key
   (one ladder across card versions, graduated or all-units) and commitment
-  overage at the commitment's price, converted through INR. Lines and usage
+  overage at the commitment's price, worked from the cards and base price
+  that figure priced with and converted through INR. A month whose figures
+  would not fit a run is refused before anything is written (422
+  `figure_out_of_range`). Lines and usage
   match on usage type, the canonical model (aliases applied) and the
   canonical unit, exact lines first; daily lines give day items and monthly
   items list their days. An item is within tolerance only when both figures

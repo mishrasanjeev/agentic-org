@@ -20,7 +20,11 @@ the earlier one is then ``superseded`` and points at its successor; both
 are kept. Several references for one provider and month (two accounts) are
 all current and are summed by the reconciliation; together they hold at most
 ``MAX_PERIOD_LINES`` lines (413 ``too_many_rows``), because a reconciliation
-run loads every one of them. Each import is audited
+run loads every one of them, and at most what a run can store of their sums:
+the magnitudes of all their lines within ``MAX_PERIOD_AMOUNT`` (413
+``period_amount_too_large``) and the quantities of the usage lines of one
+usage type, unit and billing day within ``MAX_PERIOD_QUANTITY`` (413
+``period_quantity_too_large``). Each import is audited
 (``spend.invoices.import``) in its own transaction.
 """
 
@@ -29,7 +33,7 @@ from __future__ import annotations
 import asyncio
 import re
 import uuid
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from datetime import date, datetime
 from decimal import Decimal
 from pathlib import Path
@@ -52,6 +56,12 @@ MAX_LINE_QUANTITY = Decimal("1e15")
 # Current invoice lines one provider's month may hold across its references: a reconciliation run loads
 # them all, so the import bounds the run (four full files' worth).
 MAX_PERIOD_LINES = 4 * imports.MAX_IMPORT_ROWS
+# What the month's current invoices may sum to, so a run stores every sum it makes of them (migration v6z82):
+# an item's or the run's invoice amount, the non-usage amount and a variance against no metering are each at
+# most the magnitudes of all the lines, and an item's invoice quantity at most the quantities of the usage
+# lines of its usage type, unit and day (any model: aliases can merge models into one item after the import).
+MAX_PERIOD_AMOUNT = vocab.AMOUNT_MAX
+MAX_PERIOD_QUANTITY = vocab.QTY_MAX
 INVOICE_REF_MAX = 128
 MIN_YEAR = 2000
 MAX_YEAR = 2999
@@ -162,6 +172,82 @@ def totals(lines: Sequence[dict[str, Any]]) -> tuple[Decimal, Decimal]:
     return total, usage
 
 
+QuantityKey = tuple[str, str, date | None]  # usage type, item unit, billing day (None: a monthly line)
+
+
+def item_unit_quantity(
+    unit: str | None, quantity: Decimal | None, days_in_month: int
+) -> tuple[str | None, Decimal | None]:
+    """A line's unit and quantity as a reconciliation item holds them: a ``gb_month`` line in GB-days."""
+    if unit == "gb_month":
+        return "gb_day", None if quantity is None else quantity * days_in_month
+    return unit, quantity
+
+
+def _add_quantity(
+    totals: dict[QuantityKey, Decimal],
+    kind: str,
+    usage_type: str | None,
+    unit: str | None,
+    usage_date: date | None,
+    quantity: Decimal | None,
+    days_in_month: int,
+) -> None:
+    """Count a usage line's quantity under its usage type, item unit and day (a line without a unit sums none)."""
+    unit, quantity = item_unit_quantity(unit, quantity, days_in_month)
+    if kind != "usage" or usage_type is None or unit is None or quantity is None:
+        return
+    key = (usage_type, unit, usage_date)
+    totals[key] = totals.get(key, Decimal("0")) + quantity
+
+
+def check_period_capacity(
+    held_amount: Decimal,
+    held_quantities: Mapping[QuantityKey, Decimal],
+    lines: Sequence[dict[str, Any]],
+    *,
+    provider: str,
+    period_start: date,
+) -> None:
+    """413 when the month's current invoices with these lines would sum past what a reconciliation stores.
+
+    ``held_amount`` and ``held_quantities`` describe the month's other current
+    invoices (a replaced one left out), whatever their reference or currency.
+    Amounts count by magnitude in the invoice currency: a run never converts
+    invoice lines (it converts the metered figures into the invoice currency
+    and checks those itself, ``reconcile.check_capacity``).
+    """
+    amount = held_amount + sum((abs(line["amount"]) for line in lines), Decimal("0"))
+    if amount > MAX_PERIOD_AMOUNT:
+        raise SpendError(
+            413,
+            "period_amount_too_large",
+            f"{provider}'s {period_text(period_start)} current invoice lines would total {amount} in magnitude; "
+            f"a reconciliation of one month holds at most {MAX_PERIOD_AMOUNT}",
+        )
+    days = clock.days_in_month(period_start)
+    quantities = dict(held_quantities)
+    for line in lines:
+        _add_quantity(
+            quantities,
+            line["line_kind"],
+            line["usage_type"],
+            line["unit"],
+            line["usage_date"],
+            line["quantity"],
+            days,
+        )
+    for (usage_type, unit, day), quantity in sorted(quantities.items(), key=str):
+        if quantity > MAX_PERIOD_QUANTITY:
+            when = f" on {day.isoformat()}" if day is not None else ""
+            raise SpendError(
+                413,
+                "period_quantity_too_large",
+                f"{provider}'s {period_text(period_start)} {usage_type} usage lines in {unit}{when} would total "
+                f"{quantity}; a reconciliation item holds at most {MAX_PERIOD_QUANTITY}",
+            )
+
+
 def _iso(value: date | datetime | None) -> str | None:
     return value.isoformat() if value is not None else None
 
@@ -237,6 +323,44 @@ async def _current_line_count(session: Any, tenant_id: uuid.UUID, provider: str,
         )
     ).scalar()
     return int(held or 0)
+
+
+async def _held_totals(
+    session: Any, tenant_id: uuid.UUID, provider: str, period_start: date, *, excluded: uuid.UUID | None
+) -> tuple[Decimal, dict[QuantityKey, Decimal]]:
+    """The magnitudes and usage quantities of the month's current invoice lines, ``excluded`` left out."""
+    from core.models.spend_invoice import SpendInvoice
+    from core.models.spend_invoice import SpendInvoiceLine as L
+
+    found = (
+        await session.execute(
+            select(SpendInvoice.id).where(
+                SpendInvoice.tenant_id == tenant_id,
+                SpendInvoice.provider == provider,
+                SpendInvoice.period_start == period_start,
+                SpendInvoice.status == "current",
+            )
+        )
+    ).all()
+    ids = [row[0] for row in found if row[0] != excluded]
+    if not ids:
+        return Decimal("0"), {}
+    rows = (
+        await session.execute(
+            select(L.line_kind, L.usage_type, L.unit, L.usage_date, func.sum(func.abs(L.amount)), func.sum(L.quantity))
+            .where(L.tenant_id == tenant_id, L.invoice_id.in_(ids))
+            .group_by(L.line_kind, L.usage_type, L.unit, L.usage_date)
+        )
+    ).all()
+    days = clock.days_in_month(period_start)
+    amount = Decimal("0")
+    quantities: dict[QuantityKey, Decimal] = {}
+    for kind, usage_type, unit, usage_date, magnitude, quantity in rows:
+        amount += Decimal(magnitude or 0)
+        _add_quantity(
+            quantities, kind, usage_type, unit, usage_date, None if quantity is None else Decimal(quantity), days
+        )
+    return amount, quantities
 
 
 async def import_invoice(
@@ -321,6 +445,10 @@ async def import_invoice(
                 f"{provider}'s {period_text(p0)} holds {held} current invoice lines; with these "
                 f"{len(lines)} it would pass the {MAX_PERIOD_LINES} one month may hold",
             )
+        held_amount, held_quantities = await _held_totals(
+            session, tenant_id, provider, p0, excluded=existing.id if existing is not None else None
+        )
+        check_period_capacity(held_amount, held_quantities, lines, provider=provider, period_start=p0)
         out["created"] = len(lines)
         if dry_run:
             return out
