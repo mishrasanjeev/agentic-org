@@ -57,7 +57,14 @@ test("the complete manual has maintained source references and five BFSI playboo
   assert.equal(manual.groups.length, 5);
   const coverage = manual.articles.find((article) => article.slug === "bfsi-capability-status");
   assert.ok(coverage);
-  assert.match(coverage.html, /15\s*covered, 102 partial and 33 gaps/);
+  // The counts are refreshed with the BFSI coverage rows, so check that the
+  // stated breakdown adds up to the stated total rather than pinning numbers.
+  const counts = coverage.html.match(
+    /<strong>(\d+) functional capabilities<\/strong>: <strong>(\d+)\s+covered, (\d+) partial and (\d+) gaps<\/strong>/,
+  );
+  assert.ok(counts, "bfsi-capability-status states its capability counts");
+  const [total, covered, partial, gaps] = counts.slice(1).map(Number);
+  assert.equal(covered + partial + gaps, total);
   assert.ok(
     manual.articles.every(
       (article) => article.sources.length && article.headings.length >= 3,
