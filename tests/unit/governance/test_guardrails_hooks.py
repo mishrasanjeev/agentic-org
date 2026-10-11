@@ -231,6 +231,23 @@ class TestBlockContent:
         clean = AIMessage(content="nothing to redact")
         assert _guarded([_rule()], hooks.guard_output_message(clean, tenant_id=TENANT)) is clean
 
+    def test_a_refusal_block_is_evaluated_and_a_transform_keeps_it_a_refusal(self, hooks_on):
+        answer = AIMessage(content=[THINKING, {"type": "refusal", "refusal": f"I will not charge {CARD}."}])
+        with pytest.raises(GuardrailBlocked, match="output blocked"):
+            _guarded([_rule(action="block")], hooks.guard_output_message(answer, tenant_id=TENANT))
+        out = _guarded([_rule()], hooks.guard_output_message(answer, tenant_id=TENANT))
+        assert out.content == [THINKING, {"type": "refusal", "refusal": "I will not charge <CREDIT_CARD>."}]
+
+    def test_a_signature_only_text_block_is_not_evaluated_and_survives_a_transform(self, hooks_on):
+        signed = {"type": "text", "text": "", "extras": {"signature": "c2lnbmF0dXJl"}}
+        answer = AIMessage(content=[signed, _text_block(f"pay {CARD}")])
+        result = GuardrailResult(stage="output", text="x", allowed=True, enforced=False, correlation_id="c")
+        with patch.object(hooks, "evaluate", AsyncMock(return_value=result)) as evaluate:
+            asyncio.run(hooks.guard_output_message(answer, tenant_id=TENANT))
+        assert evaluate.await_args.args == ("output", f"pay {CARD}")
+        out = _guarded([_rule()], hooks.guard_output_message(answer, tenant_id=TENANT))
+        assert out.content == [signed, _text_block("pay <CREDIT_CARD>")]
+
     def test_a_block_answer_with_no_text_is_not_evaluated(self, hooks_on):
         with patch.object(hooks, "evaluate", AsyncMock()) as evaluate:
             answer = AIMessage(content=[THINKING, TOOL_USE], tool_calls=[{"name": "pay", "args": {"n": 1}, "id": "c1"}])

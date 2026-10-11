@@ -40,6 +40,9 @@ FENCED = "```json\n" + json.dumps(ANSWER) + "\n```"
 SIGNED_TEXT_BLOCK = {"type": "text", "text": FENCED, "extras": {"signature": "c2lnbmF0dXJlLXN5bnRoZXRpYw=="}}
 PRODUCTION_SHAPE = [SIGNED_TEXT_BLOCK]
 THINKING_BLOCK = {"type": "thinking", "thinking": "Check the GSTIN checksum first.", "signature": "c3ludGhldGlj"}
+REFUSAL_BLOCK = {"type": "refusal", "refusal": "I cannot validate this vendor."}
+# A text block with no text that only carries a signature, as some providers send ahead of the answer.
+EMPTY_SIGNED_BLOCK = {"type": "text", "text": "", "extras": {"signature": "c2lnbmF0dXJlLW9ubHk="}}
 
 
 def _no_block_repr(value: Any) -> None:
@@ -100,6 +103,21 @@ class TestContentText:
         assert block_text({"type": "text", "text": 7}) is None
         assert block_text(THINKING_BLOCK) is None
         assert block_text(["nested"]) is None
+        assert block_text(REFUSAL_BLOCK) == "I cannot validate this vendor."
+        assert block_text({"type": "refusal", "refusal": None}) is None
+        assert block_text({"type": "refusal", "text": "not where a refusal keeps it"}) is None
+
+    def test_a_refusal_block_is_read_as_the_answer(self):
+        assert content_text([THINKING_BLOCK, REFUSAL_BLOCK]) == "I cannot validate this vendor."
+
+    def test_a_signature_only_text_block_adds_nothing(self):
+        assert content_text([EMPTY_SIGNED_BLOCK, {"type": "text", "text": "plain"}]) == "plain"
+        assert content_text([EMPTY_SIGNED_BLOCK]) == ""
+        assert content_text([SimpleNamespace(text=""), SimpleNamespace(text="sdk")]) == "sdk"
+
+    def test_empty_string_items_join_as_before(self):
+        items = ["first", "", "third"]
+        assert content_text(items) == "\n".join(str(item) for item in items) == "first\n\nthird"
 
 
 class TestStripCodeFence:
@@ -154,6 +172,19 @@ class TestParseJsonOutput:
         result = _parse_json_output(content)
         assert result == {"raw_output": "The GSTIN is invalid.", "status": "completed"}
         _no_block_repr(result)
+
+    def test_a_refusal_answer_keeps_its_text(self):
+        assert _parse_json_output([REFUSAL_BLOCK]) == {
+            "raw_output": "I cannot validate this vendor.",
+            "status": "completed",
+        }
+
+    def test_a_signature_only_block_ahead_of_the_answer_adds_no_stray_newline(self):
+        assert _parse_json_output([EMPTY_SIGNED_BLOCK, {"type": "text", "text": "plain"}]) == {
+            "raw_output": "plain",
+            "status": "completed",
+        }
+        assert _parse_json_output([EMPTY_SIGNED_BLOCK, SIGNED_TEXT_BLOCK]) == ANSWER
 
 
 def _state() -> dict[str, Any]:
@@ -321,6 +352,18 @@ class TestWithText:
 
     def test_a_list_without_a_text_block_gains_one(self):
         assert with_text([THINKING_BLOCK], "t") == [THINKING_BLOCK, {"type": "text", "text": "t"}]
+        assert with_text([EMPTY_SIGNED_BLOCK], "t") == [EMPTY_SIGNED_BLOCK, {"type": "text", "text": "t"}]
+
+    def test_a_refusal_block_takes_the_text_as_its_refusal(self):
+        out = with_text([THINKING_BLOCK, REFUSAL_BLOCK], "redacted refusal")
+        assert out == [THINKING_BLOCK, {"type": "refusal", "refusal": "redacted refusal"}]
+        assert content_text(out) == "redacted refusal"
+
+    def test_a_signature_only_text_block_stays_in_place(self):
+        content = [EMPTY_SIGNED_BLOCK, SIGNED_TEXT_BLOCK, self.TOOL_USE]
+        out = with_text(content, "redacted")
+        assert out == [EMPTY_SIGNED_BLOCK, {**SIGNED_TEXT_BLOCK, "text": "redacted"}, self.TOOL_USE]
+        assert content_text(out) == "redacted"
 
 
 @pytest.fixture
