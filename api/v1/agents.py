@@ -2382,7 +2382,7 @@ async def delegate_to_agent(
         raise HTTPException(
             502, detail={"error": "delegation_failed", "message": "Grantex delegation failed"}
         ) from None
-    if not result:
+    if result is None:
         # The helper returns None when Grantex is not configured or refused the
         # delegation; that is a failure, never a delegation.
         raise HTTPException(
