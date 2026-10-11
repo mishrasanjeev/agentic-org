@@ -124,7 +124,7 @@ Each billable quantity in one unit becomes one usage record, with the same prici
 | Model calls | input, cached input and output tokens | Every model call through the router and the agent graph, plus four direct callers; one estimated `token` record when a provider does not split its count |
 | Embeddings | embedding tokens, estimated from characters | Knowledge ingestion, re-indexing, search and RPA ingestion |
 | OCR pages | pages | Document processing, knowledge uploads and ingestion that extracted a file itself |
-| Speech minutes | audio minutes | A recording kept as transcribed by the in-house Whisper engine or Deepgram |
+| Speech minutes | audio minutes | Each transcription by the in-house Whisper engine or Deepgram, metered when the engine returns, so a later redaction, encryption or save failure does not lose minutes already transcribed |
 | Priced tool calls | calls | A successful connector tool call, only when a rate card prices that tool |
 | Storage | GB-days | A daily sample of each tenant's knowledge, document, document-processing and recording storage |
 | In-house GPU | GPU node hours | Each closed pool hour, shared over the calls of the pool's models by tokens |
@@ -189,12 +189,14 @@ tax,,,,,358.43
 | `credit`, `tax`, `fee` | No, reported beside it |
 | `commitment` (shortfall or prepaid charges) | No, reported beside it |
 
-A second current invoice with the same reference is refused unless `replace=true`, which supersedes the earlier one; both are kept. Several references for one provider and month, such as two accounts, are summed.
+A second current invoice with the same reference is refused unless `replace=true`, which supersedes the earlier one; both are kept. Several references for one provider and month, such as two accounts, are summed. A month holds at most what a reconciliation can store: an import that would take the month's current invoices past that is refused with 413 (`too_many_rows`, `period_amount_too_large` or `period_quantity_too_large`), dry runs included.
 
 **Run the reconciliation.** `POST /spend/reconciliations` with `{"provider":"openai","period":"2026-10"}` compares the provider's month with its current invoices and answers the run with its items. Only usage billed to the tenant's own key is compared (usage whose paying account could not be inferred is included and counted); usage on the platform's key is reported separately, and in-house serving, storage and GPU hours have no provider invoice. Each item carries two figures in the invoice currency:
 
 - **stored**: the amounts as metered;
-- **re-priced**: the same usage priced again with the cards in force on each billing day as known now, with the month's volume tiers and any commitment overage added to both figures.
+- **re-priced**: the same usage priced again with the cards in force on each billing day as known now.
+
+The month's volume tiers and any commitment overage are worked out for each figure from its own base: the stored figure from the cards that priced the records, the re-priced figure from the cards in force now. The run reports both adjustment totals (`stored_adjustments_amount`, `repriced_adjustments_amount`).
 
 An item is within tolerance only when both figures are known and each is within 1% of the invoice. Otherwise it needs review. So a card entered or corrected after metering leaves its items needing review until a restatement brings the records to the contracted rates. A run goes `stale` when anything it read would now read differently: late records, a card, an alias, an FX row or the month's invoices.
 
@@ -247,7 +249,7 @@ Reads need the `audit:read` scope. Beyond that, one rule decides what each reade
 | Read | Administrator (a person) | Auditor (a person with unrestricted domains) | Anyone else |
 | --- | --- | --- | --- |
 | Usage records and rollups | Every record and row | Every record and row | Only records of agents they may see, and records with no agent; contract terms and user ids hidden; no rate-card or commitment grouping |
-| Coverage, meter gaps and jobs | The whole tenant | The whole tenant | Refused, 403 `tenant_wide_read_refused` |
+| Coverage, meter gaps, jobs and GPU allocations | The whole tenant | The whole tenant | Refused, 403 `tenant_wide_read_refused` |
 | Rate cards, commitments and price quotes | Yes | Yes | Refused, 403 `commercial_read_refused` |
 | Invoices, reconciliations and the Gate 1 status | Yes | Yes | Refused, 403 `commercial_read_refused` |
 | Changes, imports, jobs and acceptance | Yes, signed in as a person | No | No |

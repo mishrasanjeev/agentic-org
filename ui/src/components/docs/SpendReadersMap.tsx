@@ -68,8 +68,8 @@ const reads: readonly {
     },
   },
   {
-    label: "Coverage, meter gaps and jobs",
-    request: "GET /spend/coverage, /spend/gaps, /spend/jobs",
+    label: "Coverage, meter gaps, jobs and GPU allocations",
+    request: "GET /spend/coverage, /spend/gaps, /spend/jobs, /spend/gpu-allocations",
     access: {
       administrator: { level: "full", text: "The whole tenant." },
       auditor: { level: "full", text: "The whole tenant." },
