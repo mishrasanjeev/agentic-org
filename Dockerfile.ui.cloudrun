@@ -13,10 +13,12 @@ COPY core/billing/catalog.py ../core/billing/catalog.py
 COPY core/agents/ ../core/agents/
 COPY core/governance/model_gateway.py ../core/governance/model_gateway.py
 COPY core/governance/guardrails/ ../core/governance/guardrails/
+COPY core/spend/pricing.py core/spend/reconcile.py core/spend/gate.py core/spend/access.py ../core/spend/
 COPY connectors/ ../connectors/
 COPY api/v1/model_gateway.py ../api/v1/model_gateway.py
 COPY api/v1/guardrails.py ../api/v1/guardrails.py
 COPY api/v1/observability.py ../api/v1/observability.py
+COPY api/v1/spend.py ../api/v1/spend.py
 COPY observability/workload.py observability/timeline.py ../observability/
 COPY docs/ ../docs/
 COPY SECURITY.md docker-compose.yml ../

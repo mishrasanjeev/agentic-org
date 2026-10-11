@@ -11,6 +11,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from api.error_handlers import register_error_handlers
 from api.middleware import DeprecationHeaderMiddleware
 from api.middleware.request_id import RequestIDMiddleware
+from api.middleware.spend_gate import SpendRequestGate
 from api.route_enforcement import enforce_route_metadata
 from api.v1 import (
     a2a,
@@ -95,6 +96,7 @@ from api.v1 import (
     sop,
     speech,
     speech_assist,
+    spend,
     sso,
     tenant_ai_credentials,
     tenant_ai_settings,
@@ -201,7 +203,23 @@ async def lifespan(app: FastAPI):
 
     start_metrics_server()
 
+    # Spend metering (off by default): while on, load the metering code now so the first
+    # metered call does not pay for the imports. Nothing at all while off; it never raises.
+    from core import spend
+
+    spend.prewarm()
+
     yield
+    # Spend metering (off by default): stop this process's usage writer and hand
+    # what it still holds to a worker, before the metrics server stops so the
+    # shutdown counts are still scraped. A failure never skips the cleanup below.
+    try:
+        from core import spend
+
+        await spend.drain(timeout=5.0)
+    # enterprise-gate: broad-except-ok reason=spend-drain-failure-is-logged-shutdown-continues
+    except Exception as exc:
+        _logging.getLogger(__name__).warning("spend_drain_failed: %s", type(exc).__name__)
     stop_metrics_server()
     shutdown_tracing()
     from api.v1.health import close_health_resources
@@ -249,6 +267,10 @@ _cors_origins = (
         else ["https://agenticorg.ai", "https://app.agenticorg.ai", "https://www.agenticorg.ai"]
     )
 )
+# AI spend (api/middleware/spend_gate.py): registered before CORS, so it runs
+# inside authentication and CORS: off, every spend path but the status is not
+# found before its body is read; on, an import body is bounded as it streams.
+app.add_middleware(SpendRequestGate)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=_cors_origins,
@@ -262,7 +284,7 @@ app.add_middleware(
 # middleware in the chain. Starlette runs ``add_middleware``-registered
 # middleware in reverse insertion order - the LAST add_middleware call
 # is the outermost (runs first on the request). So with this ordering:
-#   request flow: RequestID -> Deprecation -> GrantexAuth -> CSRF -> CORS -> route
+#   request flow: RequestID -> Deprecation -> GrantexAuth -> CSRF -> CORS -> SpendRequestGate -> route
 # CSRF runs AFTER auth (so it only checks already-validated requests)
 # and BEFORE the route handler.
 app.add_middleware(CSRFMiddleware)
@@ -337,6 +359,7 @@ app.include_router(speech_assist.router, prefix="/api/v1")
 app.include_router(txn.router, prefix="/api/v1")
 app.include_router(lineage.router, prefix="/api/v1")
 app.include_router(personalisation.router, prefix="/api/v1")
+app.include_router(spend.router, prefix="/api/v1")
 app.include_router(companies.router, prefix="/api/v1", tags=["Companies"])
 app.include_router(ca_operations.router, prefix="/api/v1", tags=["CA Operations"])
 app.include_router(

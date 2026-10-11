@@ -87,6 +87,7 @@ from core.schemas.api import (
     FleetLimits,
     PaginatedResponse,
 )
+from core.spend import context as spend_context
 from observability import tracing
 
 MAX_AGENT_CSV_IMPORT_BYTES = 2 * 1024 * 1024
@@ -3972,6 +3973,15 @@ async def run_agent(
             if fixture.get("expected_tool"):
                 incoming_inputs["shadow_expected_tool"] = str(fixture["expected_tool"])
 
+    # Spend metering (off by default): the run's server-owned attribution for its model calls.
+    # The user comes from effective_caller: a direct Python caller passes the Depends default.
+    spend_token = spend_context.bind_scope(
+        application="agents",
+        agent_id=str(agent_id),
+        agent_version=getattr(agent_row, "version", None),
+        run_id=correlation_id,
+        initiating_user_id=str(effective_caller.user_id) if effective_caller.user_id else None,
+    )
     try:
         if locals().get("_shadow_route_taken"):
             # lg_result already populated by the deterministic route
@@ -4251,6 +4261,7 @@ async def run_agent(
     recorded_cost = await _record_cost_ledger(tid, agent_id, perf)
     if attribution_token is not None:
         cost_attribution.reset(attribution_token)
+    spend_context.reset_scope(spend_token)
     if not recorded_cost:
         # AGENT-BUDGET-014: Cost ledger failures must not be silently ignored.
         # Flag the result so downstream consumers (HITL, dashboards) know

@@ -6,12 +6,12 @@ Output: docs/AgenticOrg_Product_Guide_v3.3.0.pdf
 
 from __future__ import annotations
 
-import datetime
+import datetime as dt
 import os
 from fpdf import FPDF
 
 VERSION = "4.0.0"
-DATE = datetime.date.today().strftime("%B %d, %Y")
+DATE = dt.date.today().strftime("%B %d, %Y")
 
 # ── Color palette ─────────────────────────────────────────────────────────
 C_NAVY = (20, 40, 80)

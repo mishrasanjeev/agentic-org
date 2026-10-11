@@ -10,8 +10,277 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
 - Keep availability claims sourced from the status endpoint; static content
   does not embed healthy states or historical uptime figures.
 - Add server-rendering, pending-report, failure and loaded-report regressions.
-- Synchronize the linked BFSI overview with the existing capability inventory;
-  check public and domain summaries against that inventory instead of stale counts.
+- Synchronize the linked BFSI overview and the Start here guide with the
+  existing capability inventory; check public and domain summaries against that
+  inventory instead of stale counts.
+
+### Security - breaking for audit readers of tenants that keep spend rows: `GET /audit` hides commercial spend audit rows by default
+- A deliberate default, on whatever `spend_intelligence_enabled` says:
+  `GET /audit` hides the audit rows of rate cards, commitments, invoices,
+  reconciliations and spend jobs (`spend.rate_cards.*`, `spend.commitments.*`,
+  `spend.invoices.*`, `spend.reconciliations.*`, `spend.job.*`,
+  `spend.usage.*`, `spend.fx.*`, `spend.rollups.*`: contract prices,
+  committed amounts, invoice figures, job parameters and the amounts jobs
+  moved) from every reader who is not a human administrator or auditor, that
+  is domain-scoped roles and machine credentials, the readers the spend
+  routes refuse. Audit rows are never deleted, so the filter stays when spend
+  intelligence is turned off. Only tenants that keep a rate card, commitment,
+  invoice, reconciliation or spend job are affected; every other tenant's
+  audit query is the one it ran before.
+- Opt-out: `AGENTICORG_SPEND_AUDIT_COMMERCIAL_FILTER=false` (setting
+  `spend_audit_commercial_filter`, default `true`, read by the API) restores
+  the previous `GET /audit` behaviour for every reader, commercial rows
+  included, with no extra query.
+
+### Added - AI spend intelligence: invoice reconciliation and the Gate 1 status
+- Provider invoices: `POST /spend/invoices/import` takes a provider's invoice or
+  billing export for one billing month (CSV or JSON, bounded like every
+  import) with line kinds (`usage`, `credit`, `tax`, `fee`, `commitment`),
+  card units, quantities and optional daily billing dates. An invoice is
+  stored whole or refused whole (422 `invoice_rejected` names every refused
+  line); a second current invoice with the same reference needs `replace`,
+  which supersedes the earlier one; several references for a month are
+  summed, up to 20,000 current lines per provider and month (413
+  `too_many_rows`), since a run loads them all, and up to the amounts and
+  quantities a run can store of their sums (413 `period_amount_too_large`,
+  `period_quantity_too_large`). Invoices are listed and read through
+  `GET /spend/invoices`.
+- Reconciliation: `POST /spend/reconciliations` compares a provider's
+  tenant-billed usage in its own billing month with its current invoices in
+  two figures, the amounts as stored and a re-pricing at the cards in force
+  on each billing day as known at run time (fallback-priced usage keeps its
+  stored price), each with its own month-level tier true-up per contract key
+  (one ladder across card versions, graduated or all-units) and commitment
+  overage at the commitment's price, worked from the cards and base price
+  that figure priced with and converted through INR. A month whose figures
+  would not fit a run is refused before anything is written (422
+  `figure_out_of_range`). Lines and usage
+  match on usage type, the canonical model (aliases applied) and the
+  canonical unit, exact lines first; daily lines give day items and monthly
+  items list their days. An item is within tolerance only when both figures
+  are within 1%; non-usage lines are informational. Runs store the cards
+  and FX rows they used, flag data entered after the month or the import,
+  supersede earlier runs and carry over unchanged acceptances (never one by
+  an importer of the month's invoices). A run keeps digests of the usage,
+  cards and model aliases it read and goes stale when any of them would
+  read differently, when an FX row it used or the month's invoices change,
+  or when a card or usage change is stamped after it, so a change committed
+  while the run was reading is not missed. The comparison runs off the
+  event loop. Platform-key usage is reported beside the comparison;
+  in-house, storage and GPU usage are never compared.
+- Acceptance: an item, or a run out of tolerance only at the provider level,
+  is accepted with a reason by an active tenant administrator other than the
+  invoice importer (maker-checker), audited with both variances.
+- `GET /spend/gate` answers the Gate 1 status of a month: at least 98% of
+  INR spend attributed to a business unit, department, team or cost centre
+  (group nodes do not count) with no unpriced, unconverted or FX-pending
+  record, and every invoiced or tenant-billed provider reconciled within 1%
+  by a current, fresh run (an accepted difference does not count).
+- Invoice, reconciliation and acceptance audit rows are commercial reads
+  (`spend.invoices.*`, `spend.reconciliations.*`), hidden from `GET /audit`
+  for callers the commercial routes refuse. A card or FX row a current
+  reconciliation used counts as in use (a card up to the last billing day
+  the run compared, so a run of a month still open does not hold its cards
+  to the month's end). Behind `spend_intelligence_enabled` (default off):
+  off, the nine new routes are not found. Migration
+  `v6z82_spend_reconciliation` adds `spend_invoices`, `spend_invoice_lines`,
+  `spend_reconciliations` and `spend_reconciliation_items`, tenant scoped
+  under forced row-level security, with composite tenant foreign keys and a
+  leading index on each. Freezing closed months and statements are Phase 2.
+
+### Added - AI spend intelligence: embeddings, OCR, speech, priced tools, storage and GPU metering
+- Non-token usage becomes usage records with the same pricing, attribution,
+  writer, keys and rollups as model calls: embedding tokens (knowledge
+  ingestion, re-indexing, search and RPA ingestion; estimated from
+  characters and capped at the model's input limit), OCR pages (document
+  processing, knowledge uploads, ingestion that extracted for itself; once
+  per extraction, even when the upload is refused or nothing is indexed),
+  speech minutes (a recording Whisper or Deepgram transcribed, with the
+  Deepgram credential's billing account, metered as soon as the engine
+  returns, so a redaction, encryption or database failure afterwards still
+  leaves the billed minutes recorded once) and connector tool calls for tools
+  a rate card prices (an unpriced call is counted as an `unpriced_tool` gap,
+  never recorded). Every site is guarded and failure-isolated: a malformed
+  object can never fail the ingestion, search, speech save or tool call.
+  In-house embeddings, OCR and Whisper price at zero unless a card exists.
+- Storage GB-days: a daily job (23:30 IST) samples each tenant's knowledge,
+  document, document-processing and recording storage in GiB, one record per
+  store and day; a delayed run still records its day, missed days after the
+  first sample are filled as estimates (a day sampled empty is marked, so it
+  is never filled), and `POST /spend/storage/sample`
+  previews the sample without writing (audited). A tenant paused by
+  `spend.metering_paused` is not sampled: its day is a `paused` gap and stays
+  unmetered (it is never filled later, as paused usage is dropped).
+- GPU node hours of in-house serving: standing pools from
+  `AGENTICORG_SPEND_GPU_POOLS_JSON` and metered or manual hours from the
+  operator command `python -m core.spend.gpu_cli`, held in a platform table;
+  an hourly job spreads each closed pool hour over every call of the pool's
+  models by tokens and charges the zero-priced calls' tenants (shares by
+  largest remainder, each tenant's share priced once and split so hours and
+  money are both conserved, records flagged `allocated` with the call's
+  attribution). Calls a tenant's own card priced above zero are skipped and
+  counted, and their share, the share of tenants deleted since the hour and
+  idle hours stay with the platform (`skipped_node_hours`), so no tenant's
+  card or alias moves cost onto another; in-house providers take no model
+  alias, and an in-house alias kept from before is never applied when a
+  call is priced or recorded, so it cannot move a tenant's calls out of
+  their pool. A paused tenant's share waits, frozen, and the hour is resumed once
+  metering resumes. The operator command records only hours that have ended,
+  at most seven days back, with one guarded upsert per hour (an hour being
+  allocated is never overwritten), and logs the actor, pool, hours, node
+  hours and models, and the values of each hour it overwrote.
+  `GET /spend/gpu-allocations` lists a tenant's own shares to an
+  administrator or auditor only (403 `tenant_wide_read_refused` for anyone
+  else, checked before anything is looked up), because a share sums every
+  agent's calls of the hour and carries no agent to filter by.
+- Celery tasks `core.tasks.spend_tasks.sample_storage` and
+  `allocate_gpu_hours` with their beats. Behind `spend_intelligence_enabled`
+  (default off): off, every site is a bool read, the Deepgram credential note
+  does nothing, the tasks skip, the operator command refuses and the two new
+  routes are not found. Migration `v6z81_spend_gpu` adds
+  `spend_gpu_pool_hours` (a platform table without tenant data, so without
+  `tenant_id` or a row-level policy) and `spend_gpu_allocations` (tenant
+  scoped under forced row-level security), with a leading index on its
+  foreign key and a whole-UTC-hour check.
+
+### Added - AI spend intelligence: usage records, attribution and the model-call meter
+- Every metered model call becomes usage records (uncached input, cached
+  input and output tokens, or one estimated token record when the split is
+  unknown), priced at the card in force on the provider's billing date and
+  converted to INR on the reporting date, with every attribution dimension:
+  agent and version, organisation node and business unit, product line, use
+  case, application, region, workflow, run, initiating user id, environment,
+  risk tier and billing account (tenant key, platform key or in-house).
+  Records hold identifiers, counts and amounts only, and are never deleted.
+- Attribution is resolved on the server from the agent's configuration, the
+  registry, source mappings and the organisation tree, never from request
+  labels; each record stores the rule that matched. A legacy cost-centre or
+  department label that names no node leaves the record unattributed as
+  `unknown_label`; every unattributed record is kept and counted by reason.
+  An agent hint naming a missing or retired agent is ignored on the metering
+  path. Entry points (agent runs, chat, A2A, MCP, voice, workflows, content,
+  speech, transaction narratives, console tools) bind their application.
+- The hook in `record_model_call` is synchronous and failure-isolated: it
+  builds events in memory and queues them for one writer thread per process,
+  which writes them in batches on its own two-connection engine, retries a
+  transient error once, waits out a rollup rebuild without blocking other
+  tenants, and spills what it cannot write to the `persist_usage` task.
+  Drops, spills and pauses are counted globally and per tenant; a call with
+  no tenant is counted as unmetered, never as a write failure; a feature
+  flag (`spend.metering_paused`) pauses metering per tenant or for all
+  without a restart; the writer drains at shutdown, counting what it cannot
+  hand on (late usage, unflushed gaps) as lost. While spend is on, the API
+  and each worker process load the metering code at startup. Four direct
+  model callers outside the router are metered too.
+- A daily rollup kept in the writer's transaction and rebuildable per day;
+  coverage (the attributed share of INR spend, by amount and by count, with
+  unpriced, unconverted and FX-pending volume, gaps, reasons and attribution
+  paths); a read-only comparison with the existing cost ledgers; meter gaps.
+  Audited maintenance jobs revise derived fields only: FX settlement (also
+  queued by every new or changed rate, and `fx_in_use` for a rate settled
+  records use), restatement (queued by corrections and backdated cards),
+  re-attribution of unattributed records, and commitment drawdown and
+  overage in event order. Each job locks the records it revises and audits
+  every transaction that revises any, so concurrent jobs never move a rollup
+  twice and a job that stops part-way leaves nothing unaudited. Backfill
+  recreates model-call records from `model_gateway_records` with the hook's
+  own keys.
+- Jobs a reference-data change calls for are never dropped: they are queued
+  in the change's own transaction (a rate-card correction, supersede, end
+  change or import; an FX rate or import; a commitment create or update), so
+  the change and its job commit or roll back together, and sent to a worker
+  after the commit (a failed send leaves the job queued for the sweep). They
+  are merged into a queued job of the kind that can cover them, or queued to
+  run after the running one, never into a job queued again after a
+  transient failure. An administrator's job whose send fails answers
+  `failed`, unless a change's job was merged into it meanwhile: then it stays
+  queued for the sweep. Locks are taken in one order: the resource's lock,
+  then the job kind's, then the kind's queued jobs (skipping, never waiting
+  for, a row another transaction holds); commitment rows are locked in id
+  order on the write path as in the recompute. One job of a kind runs at a
+  time; a running job beats a heartbeat, a sweep every 15 minutes requeues a
+  lost worker's job and resends queued jobs, and a transient database
+  failure is retried twice before the job fails.
+- `GET /spend/usage`, `GET /spend/rollups`, `GET /spend/coverage`,
+  `GET /spend/coverage/ledgers`, `GET /spend/gaps`, `GET /spend/jobs`,
+  `GET /spend/jobs/{job_id}`, and the job routes `POST /spend/rollups/rebuild`,
+  `POST /spend/usage/{backfill,restate,reattribute}`,
+  `POST /spend/fx-rates/settle` and `POST /spend/commitments/recompute`
+  (202 with a job id, one active job of a kind per tenant). One read rule,
+  as on `GET /audit`: administrators and auditors read every usage record,
+  rollup, coverage figure, gap, job and ledger comparison unfiltered; for
+  anyone else usage records, rollups (every grouping, not only the grouping
+  by agent) and the ledger comparison apply the agent visibility rule, and
+  coverage, gaps and jobs, which sum every agent's usage, are refused (403
+  `tenant_wide_read_refused`). User ids, rate cards, unit prices and
+  commitments are shown to administrators and auditors only, as are, on
+  `GET /audit`, the audit rows of spend jobs (`spend.job.*`, `spend.usage.*`,
+  `spend.fx.*`, `spend.rollups.*`: parameters, amounts moved and counts),
+  for a tenant that keeps a spend job. Celery tasks
+  `core.tasks.spend_tasks.*` with beats for the partition horizon, FX
+  settlement, commitment recompute and the job sweep. Alerts
+  `AgenticOrgSpendWriteFailures` and `AgenticOrgSpendWriterBacklog`.
+- Behind `spend_intelligence_enabled` (default off): off, the hook returns
+  at its first statement, no writer starts, scopes and credential notes do
+  nothing, the router's responses are unchanged, the tasks skip and the new
+  routes are not found. Migration `v6z80_spend_usage` adds
+  `spend_usage_records` (range-partitioned by month, July 2026 to December
+  2028 plus a default partition), `spend_usage_rollups`, `spend_meter_gaps`
+  and `spend_jobs` under forced row-level security on every table and
+  partition, with tenant-composite foreign keys and their leading indexes.
+
+### Added - AI spend intelligence: reference data and rupee pricing
+- `core/spend/`: the reference data AI spend is measured against. An
+  organisation tree (group, business unit, department, team, cost centre)
+  keyed by the organisation's own codes, with kind nesting rules, cycle and
+  depth checks under a per-tenant lock, deactivation instead of deletion.
+  Source mappings tie agents, workflows, applications and legacy cost-centre
+  and department labels to nodes, product lines and use cases. Model aliases
+  map called model names to the SKUs cards and invoices use.
+- Effective-dated rate cards per provider, usage type, model (or provider
+  default), unit and source (list or contract), with cached-input prices,
+  batch discounts and volume tiers. Overlapping active cards of one key are
+  refused on every create, change, correction and import row. A wrong price
+  on a started or referenced card is fixed by a correction (retire and
+  replace, with a reason), never by an edit. Commitments (quantity or money)
+  over billing periods, refused when they overlap. FX rates to INR per
+  reporting date.
+- A pricing engine: a usage is priced with the card in force on its billing
+  date, ranking every pricing path together (model-specific before default,
+  cached-capable before "no discount", contract before list), falling back
+  to the deployment's list and override prices, zero for in-house models,
+  and unpriced (never zero) otherwise; amounts are `Decimal`, rounded
+  half-even to ten places, and converted to INR per record on the reporting
+  date (`fx_estimated` on an earlier rate, `unconverted` with none). Two
+  calendars: `spend_reporting_timezone` (default `Asia/Kolkata`) and each
+  provider's billing zone (`spend_provider_billing_timezones_json`).
+- `GET /spend/status`, `GET/POST /spend/org-nodes`, `GET/PATCH
+  /spend/org-nodes/{node_id}`, `GET/PUT /spend/mappings`, `GET/PUT
+  /spend/model-aliases`, `GET/POST /spend/rate-cards`, `PATCH
+  /spend/rate-cards/{card_id}`, `POST /spend/rate-cards/{card_id}/correct`,
+  `GET/POST /spend/commitments`, `PATCH /spend/commitments/{commitment_id}`,
+  `GET/PUT /spend/fx-rates`, `GET /spend/price`, and bounded CSV/JSON imports
+  (`POST /spend/{org-nodes,mappings,rate-cards,fx-rates}/import`, 2 MiB and
+  5,000 rows, with a dry run). Scope family `spend` (`audit:read`,
+  `approvals:write`); every write needs an active human tenant
+  administrator and is audited with before and after values (imports as a
+  manifest with the file's sha256); rate cards, commitments and prices are
+  read by an administrator or auditor only, and `GET /audit` shows the
+  `spend.rate_cards.*` and `spend.commitments.*` rows, which carry the same
+  values, to those callers only. A request gate refuses oversize import
+  bodies before they are read; JSON import numbers are read as decimals.
+- Behind `spend_intelligence_enabled` (default off): off, the status route
+  answers `enabled: false`, every other spend route is not found before its
+  body is read, and nothing else changes, with one exception: the `GET /audit`
+  filter above applies whatever the flag says, because the rows outlive it. It
+  applies only for a tenant that keeps a rate card or commitment (one
+  existence query on those tables, for callers other than a human
+  administrator or auditor), so a tenant that never used spend runs the
+  audit query it ran before. Migration `v6z79_spend_reference`
+  adds `spend_org_nodes`, `spend_source_mappings`, `spend_rate_cards`,
+  `spend_model_aliases`, `spend_commitments` and `spend_fx_rates` under
+  forced row-level security, with tenant-composite foreign keys and a
+  leading index on every foreign key.
 
 ### Fixed - Combined security and feature release regressions
 - Lineage details ignore superseded node requests, distinguish traversal limits

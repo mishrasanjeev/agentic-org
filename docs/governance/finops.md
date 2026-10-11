@@ -72,3 +72,12 @@ With `AGENTICORG_FINOPS_FORECAST_ENABLED` on (`core/finops/forecast.py`):
 
 Both are read on request and store nothing; the figures are tokens and USD by label. Off, the
 endpoints are not found.
+
+## AI spend intelligence
+
+The figures above are blended USD estimates per run. AI spend intelligence (behind
+`AGENTICORG_SPEND_INTELLIGENCE_ENABLED`, default off) measures spend against the organisation's
+own reference data instead: an organisation tree, source mappings, model aliases, effective-dated
+rate cards (list and contract, with corrections), commitments and FX rates to INR, and a pricing
+engine that prices each usage at its date in the card's currency and in rupees. It reads none of
+the ledgers above and changes none of them. See [AI spend intelligence](../finops/spend-intelligence.md).

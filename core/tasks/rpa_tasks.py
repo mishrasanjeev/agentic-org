@@ -40,6 +40,7 @@ from typing import Any
 
 from sqlalchemy import select, text
 
+from core import spend
 from core.tasks.async_runner import run_async as _run_async
 from core.tasks.celery_app import app
 
@@ -286,6 +287,7 @@ async def _embed_and_store(
     from core.database import get_tenant_session
 
     inserted = 0
+    embedded: list[str] = []  # what was embedded, for AI spend metering after the loop
     # Tenant-bound session, committed on exit. The raw session used before
     # was rolled back on close, so no chunk ever reached knowledge_documents
     # even though the task reported ``inserted=N``.
@@ -300,6 +302,7 @@ async def _embed_and_store(
             except Exception as exc:
                 logger.info("rpa_embed_failed err=%s", exc)
                 continue
+            embedded.append(content)
 
             # vector is a list[float] — format for pgvector as JSON-array literal
             vector_literal = "[" + ",".join(f"{v:.6f}" for v in vector) + "]"
@@ -343,6 +346,8 @@ async def _embed_and_store(
                 },
             )
             inserted += 1
+        if spend.enabled():
+            spend.note("embeddings", tid, items=embedded, purpose="rpa", script_key=schedule.script_key)
     return inserted
 
 

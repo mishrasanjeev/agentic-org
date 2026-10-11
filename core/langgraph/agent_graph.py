@@ -62,6 +62,7 @@ from core.prompts.context_window import fit_for_call
 from core.prompts.context_window import unwrap as unwrap_llm
 from core.prompts.output_schema import MAX_REPAIRS as MAX_OUTPUT_REPAIRS
 from core.prompts.output_schema import check as check_output_schema
+from core.spend import context as spend_context
 from observability import tracing
 from observability.streaming import invoke_timed, observe_first_token
 
@@ -463,6 +464,8 @@ def build_agent_graph(
     # building the graph; the model itself is created later inside a node,
     # after that context is gone, so carry a snapshot into ``_get_llm``.
     prefetched_credentials = snapshot_prefetched_llm_credentials()
+    # Spend metering (off by default): who pays for this graph's calls, from that credential.
+    spend_billing = spend_context.billing_account_of(prefetched_credentials, tenant_id, llm_model, llm_provider)
 
     def _get_llm():
         if "instance" not in _llm_cache:
@@ -611,6 +614,9 @@ def build_agent_graph(
             prompt_digest=prompt_digest,
             request_digest=request_digest,
             response_digest=message_digest(response),
+            spend_usage=spend_context.call_usage(
+                "message", response=response, llm=llm, tenant_id=tenant_id, billing_account=spend_billing
+            ),
         )
         # Guardrails: the answer passes the output stage before it travels on.
         # A grounding rule holds it against the tool results and the user's words in ``messages``.

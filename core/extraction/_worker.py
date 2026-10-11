@@ -34,7 +34,7 @@ from __future__ import annotations
 
 import base64
 import binascii
-import datetime
+import datetime as dt
 import html.parser
 import json
 import os
@@ -796,7 +796,7 @@ def _apply_pairs(out: _Collector, pairs: list[tuple[str, str, str]], aliases: di
             try:
                 if not re.fullmatch(DATE_PATTERN, cleaned):
                     raise ValueError(cleaned)
-                out.fields[field] = datetime.date.fromisoformat(cleaned).isoformat()
+                out.fields[field] = dt.date.fromisoformat(cleaned).isoformat()
                 out.excerpt(field, line)
             except ValueError:
                 out.rejected.add(field)

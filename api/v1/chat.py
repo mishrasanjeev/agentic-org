@@ -37,6 +37,7 @@ from core.ownership import (
     require_agent_visible,
     shared_agents_only_clause,
 )
+from core.spend import context as spend_context
 
 router = APIRouter()
 _log = structlog.get_logger()
@@ -1118,34 +1119,35 @@ async def chat_query(
             from core.langgraph.runner import run_agent as langgraph_run
 
             grant_token = getattr(request.state, "grant_token", None)
-            lg_result = await langgraph_run(
-                agent_id=agent_id,
-                agent_type=resolved_agent_type,
-                domain=_DOMAIN_TO_DB_DOMAIN.get(domain, domain),
-                tenant_id=tenant_id,
-                system_prompt=(
-                    agent_system_prompt
-                    or (
-                        f"You are {agent_name}, a domain expert for {domain}. "
-                        "Answer the user's question concisely and helpfully. "
-                        "Extract amount, period, section, customer, ledger, "
-                        "and filing details already present before asking "
-                        "for clarification."
+            with spend_context.scope(application="chat"):
+                lg_result = await langgraph_run(
+                    agent_id=agent_id,
+                    agent_type=resolved_agent_type,
+                    domain=_DOMAIN_TO_DB_DOMAIN.get(domain, domain),
+                    tenant_id=tenant_id,
+                    system_prompt=(
+                        agent_system_prompt
+                        or (
+                            f"You are {agent_name}, a domain expert for {domain}. "
+                            "Answer the user's question concisely and helpfully. "
+                            "Extract amount, period, section, customer, ledger, "
+                            "and filing details already present before asking "
+                            "for clarification."
+                        )
                     )
+                    + (f"\n\n{context_note}" if context_note else ""),
+                    authorized_tools=resolved_tools,
+                    task_input={"action": "query", "inputs": {"query": body.query}, "context": run_context},
+                    llm_model="",
+                    llm_provider=agent_llm_provider,
+                    confidence_floor=0.88,
+                    grant_token=grant_token,
+                    run_grant=run_grant,
+                    connector_config=connector_config,
+                    connector_names=connector_names,
+                    company_id=str(company_uuid),
+                    limits=agent_limits,
                 )
-                + (f"\n\n{context_note}" if context_note else ""),
-                authorized_tools=resolved_tools,
-                task_input={"action": "query", "inputs": {"query": body.query}, "context": run_context},
-                llm_model="",
-                llm_provider=agent_llm_provider,
-                confidence_floor=0.88,
-                grant_token=grant_token,
-                run_grant=run_grant,
-                connector_config=connector_config,
-                connector_names=connector_names,
-                company_id=str(company_uuid),
-                limits=agent_limits,
-            )
             # Bug sheet #28 (2026-09-14): every chat turn with a known agent
             # is a task for the cost ledger, even when no tokens were
             # reported. A ledger failure is logged, never a chat failure.

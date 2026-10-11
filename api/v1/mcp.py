@@ -24,6 +24,7 @@ from pydantic import BaseModel
 from api.deps import get_current_tenant
 from api.route_metadata import route_meta
 from core.database import get_tenant_session
+from core.spend import context as spend_context
 
 router = APIRouter(prefix="/mcp", tags=["MCP"])
 _log = structlog.get_logger()
@@ -225,23 +226,24 @@ async def call_tool(
     )
 
     try:
-        result = await langgraph_run(
-            agent_id=f"mcp_{_uuid.uuid4().hex[:12]}",
-            agent_type=agent_type,
-            domain=_get_domain(agent_type),
-            tenant_id=tenant_id,
-            system_prompt=system_prompt,
-            authorized_tools=tools,
-            task_input={
-                "action": body.arguments.get("action", "process"),
-                "inputs": body.arguments.get("inputs", body.arguments),
-                "context": body.arguments.get("context", {}),
-            },
-            grant_token=grant_token,
-            run_grant=run_grant,
-            connector_config=connector_config,
-            company_id=str(company_uuid),
-        )
+        with spend_context.scope(application="mcp"):
+            result = await langgraph_run(
+                agent_id=f"mcp_{_uuid.uuid4().hex[:12]}",
+                agent_type=agent_type,
+                domain=_get_domain(agent_type),
+                tenant_id=tenant_id,
+                system_prompt=system_prompt,
+                authorized_tools=tools,
+                task_input={
+                    "action": body.arguments.get("action", "process"),
+                    "inputs": body.arguments.get("inputs", body.arguments),
+                    "context": body.arguments.get("context", {}),
+                },
+                grant_token=grant_token,
+                run_grant=run_grant,
+                connector_config=connector_config,
+                company_id=str(company_uuid),
+            )
     except (KeyError, RuntimeError, TypeError, ValueError) as exc:
         _log.error("mcp_call_failed", tool=body.name, error=str(exc))
         return {

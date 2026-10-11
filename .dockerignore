@@ -125,6 +125,8 @@ docs/**
 !docs/governance/case-hand-off.md
 !docs/governance/decision-requests.md
 !docs/governance/README.md
+!docs/finops/
+!docs/finops/spend-intelligence.md
 !docs/oacp/
 !docs/oacp/end-user-flow.md
 !docs/oacp/merchant-commerce-configuration.md

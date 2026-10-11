@@ -51,12 +51,13 @@ playbooks. Administrators can publish the optional docs subdomain using the
 | Configure voice agents | [Voice runtime](voice-runtime.md) |
 | Run browser automation | [RPA runtime](rpa-runtime.md) |
 | Simulate voice, email, OCR, and RPA locally | [Local multichannel simulation](local-multichannel-simulation.md) |
+| Track AI spend (off by default, API-only) | [AI spend intelligence guide](user-guide/ai-spend-intelligence.md), [feature reference](finops/spend-intelligence.md), [FinOps attribution and thresholds](governance/finops.md), [rollout and enablement runbook](runbooks/spend-intelligence.md) |
 | Integrate through APIs | [API reference](api-reference.md), generated OpenAPI, [Python SDK](../sdk/README.md), [TypeScript SDK](../sdk-ts/README.md) |
 | Connect an external A2A buyer agent | [A2A interoperability and seller access](a2a-interoperability.md) |
 | Run a local seller and outside buyer demo | [Independent-buyer A2A commerce demo](a2a-commerce-demo.md), [visual user guide](user-guide/external-buyer-a2a-demo.md) |
 | Connect an MCP client | [MCP server](../mcp-server/README.md) |
 | Implement agentic commerce | [OACP documentation](oacp/README.md) |
-| Operate production | [Deployment](deployment.md), [runbooks](RUNBOOKS.md), [backup and recovery](BACKUP_AND_DR.md), [secrets rotation](SECRETS_ROTATION.md), [vault key rotation](runbooks/vault-key-rotation.md) |
+| Operate production | [Deployment](deployment.md), [runbooks](RUNBOOKS.md), [backup and recovery](BACKUP_AND_DR.md), [secrets rotation](SECRETS_ROTATION.md), [vault key rotation](runbooks/vault-key-rotation.md), [AI spend rollout and enablement](runbooks/spend-intelligence.md) |
 | Review security | [Security policy](../SECURITY.md), [vulnerability disclosure](VULNERABILITY_DISCLOSURE.md) |
 
 ## OACP And Agentic Commerce

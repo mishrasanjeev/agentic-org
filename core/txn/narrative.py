@@ -23,6 +23,8 @@ from typing import Any
 
 import structlog
 
+from core.spend import context as spend_context
+
 logger = structlog.get_logger()
 
 METHODS = ("auto", "model", "extractive")
@@ -204,7 +206,8 @@ async def model(
 ) -> dict[str, Any]:
     from core.content import services
 
-    answer, usage = await services.ask_model(tenant_id, _messages(finding, rows, view), SCHEMA, complete=complete)
+    with spend_context.scope(application="txn", default_use_case="txn.narrative"):
+        answer, usage = await services.ask_model(tenant_id, _messages(finding, rows, view), SCHEMA, complete=complete)
     return {
         "method": "model",
         "title": str(answer.get("title") or "")[:160],

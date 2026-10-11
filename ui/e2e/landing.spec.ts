@@ -142,9 +142,12 @@ test.describe("Landing Page — Sections", () => {
     const runtimeBand = page.getByTestId("runtime-capability-band");
     await expect(runtimeBand).toBeVisible({ timeout: 10000 });
     await expect(runtimeBand.getByRole("heading", { name: "What the deployed runtime does today." })).toBeVisible();
-    for (const capability of ["Knowledge + OCR", "Voice STT/TTS", "Browser RPA", "SDK + protocols", "Shopify to OACP"]) {
+    for (const capability of ["Knowledge + OCR", "Voice STT/TTS", "Browser RPA", "SDK + protocols", "Shopify to OACP", "AI spend intelligence"]) {
       await expect(runtimeBand.getByText(capability, { exact: true })).toBeVisible();
     }
+    const spend = runtimeBand.getByRole("link", { name: /AI spend intelligence/ });
+    await expect(spend).toHaveAttribute("href", "/docs/ai-spend-intelligence");
+    await expect(spend).toContainText("Built / off by default");
   });
 
   test("Footer renders with key sections", async ({ page }) => {

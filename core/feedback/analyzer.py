@@ -21,6 +21,8 @@ from typing import Any
 
 import structlog
 
+from core import spend
+
 logger = structlog.get_logger()
 
 MAX_AMENDMENT_CHARS = 500
@@ -100,6 +102,8 @@ async def analyze_feedback(
         llm = create_chat_model(model="", tenant_id=tenant_id or None)
         prompt = _ANALYSIS_PROMPT.format(feedback_text=feedback_text)
         response = await llm.ainvoke(prompt)
+        if spend.enabled():
+            spend.note("message", tenant_id, message=response, llm=llm, default_use_case="feedback.analysis")
         content = response.content if hasattr(response, "content") else str(response)
 
         json_match = re.search(r"\{[\s\S]*\}", content)
