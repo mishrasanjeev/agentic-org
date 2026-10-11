@@ -1227,14 +1227,14 @@ export default function Landing() {
           <p className="text-xs font-semibold text-emerald-800 mb-3">USER DOCUMENTATION</p>
           <h2 id="documentation-heading" className="text-3xl font-bold text-slate-900">Make AgenticOrg part of everyday work.</h2>
           <p className="text-slate-600 mt-4 max-w-2xl">Step-by-step setup, everyday operating guides and end-to-end banking, financial-services and insurance examples. Start with one useful agent, then build a working team.</p>
-          <div className="grid sm:grid-cols-2 lg:grid-cols-5 gap-6 mt-9">
+          <div className="grid sm:grid-cols-2 xl:grid-cols-5 gap-6 mt-9">
             {[
               { icon: BookOpen, title: "Your first agent", text: "A complete document-review exercise, from setup to tested answers.", href: "/docs/first-agent" },
               { icon: FileText, title: "Documents and OCR", text: "Upload, inspect extraction quality and verify source-grounded retrieval.", href: "/docs/knowledge-and-ocr" },
               { icon: Network, title: "Connect and orchestrate", text: "Models, business systems, workflows, voice and browser automation.", href: "/docs/workflows" },
               { icon: Building2, title: "BFSI process maps", text: "Onboarding, reconciliation, customer service, claims and merchant enablement.", href: "/docs#bfsi-playbooks" },
-              { icon: IndianRupee, title: "AI spend intelligence", text: "Organisation tree, rate cards, attributed usage, invoice reconciliation and the Gate 1 status. Off by default.", href: "/docs/ai-spend-intelligence" },
-            ].map(({ icon: Icon, title, text, href }) => <Link key={href} to={href} className="border-t-2 border-emerald-700 pt-5 group">
+              { icon: IndianRupee, title: "AI spend intelligence", text: "Organisation tree, rate cards, attributed usage, invoice reconciliation and the Gate 1 status. Off by default.", href: "/docs/ai-spend-intelligence", wide: true },
+            ].map(({ icon: Icon, title, text, href, wide }) => <Link key={href} to={href} className={`border-t-2 border-emerald-700 pt-5 group${wide ? " sm:col-span-2 xl:col-span-1" : ""}`}>
               <Icon size={22} className="text-emerald-800 mb-4" aria-hidden="true" />
               <h3 className="font-semibold text-slate-900 flex items-center justify-between gap-2">{title}<ArrowRight size={16} className="shrink-0" aria-hidden="true" /></h3>
               <p className="text-sm text-slate-600 mt-2 leading-relaxed">{text}</p>

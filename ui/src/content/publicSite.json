@@ -433,7 +433,7 @@
     },
     {
       "question": "Can AgenticOrg track AI spend by team and reconcile provider invoices?",
-      "answer": "AI spend intelligence is an API-only module that is off by default. Once a deployment enables it, each model call and non-token usage such as embeddings, OCR pages, and speech minutes becomes a usage record with server-side attribution to the organisation tree, a price from the tenant's rate cards or the deployment's list prices, and an INR amount. Administrators can import provider invoices and reconcile each billing month. Spend dashboards, budgets, and statements are later phases."
+      "answer": "AI spend intelligence is an API-only module that is off by default. Once a deployment enables it, each model call and non-token usage such as embeddings, OCR pages, and speech minutes becomes a usage record with server-side attribution to the organisation tree, priced from the tenant's rate cards (model tokens fall back to the deployment's list prices) and converted to INR when a rate exists. Administrators can import provider invoices and reconcile each billing month. Spend dashboards, budgets, and statements are later phases."
     },
     {
       "question": "Can AgenticOrg be self-hosted?",

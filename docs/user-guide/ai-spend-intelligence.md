@@ -1,13 +1,13 @@
 ## What it answers
 
-AI spend intelligence keeps a priced, attributed record of the AI work a deployment does and checks it against what each provider invoices. This guide is for the administrators who set it up, the finance teams who read and reconcile the figures, and the auditors who check them.
+AI spend intelligence keeps a priced, attributed record of the AI work a deployment does and checks it against what each provider invoices. This guide is for the administrators who set it up and reconcile the figures, and the auditors who read and check them. The CFO role and the other domain roles are not readers of tenant-wide or commercial figures (see [Who can read what](/docs/ai-spend-intelligence#who-can-read-what)).
 
 | Question | Where the answer comes from |
 | --- | --- |
 | Which business unit, department, team or cost centre used which model, and what did it cost in rupees? | Usage records and daily rollups |
 | How much of the month's spend is not attributed to the organisation, and why? | Coverage: the attributed share, the unattributed share and its reasons |
 | Does each provider's invoice agree with what was metered, priced at the rates you agreed? | Invoice import and reconciliation within the 1% match tolerance |
-| Are this month's figures complete and reconciled? | The Gate 1 status |
+| Does the month meet Gate 1: attributed, priced, converted to INR and reconciled? | The Gate 1 status, read together with the month's meter gaps |
 
 The feature is off by default, and phase 1 is API-only: there is no spend screen in the app. Every request in this guide goes to `/api/v1/spend/...` with an authenticated session, and the values in the examples are illustrative. The figures are what was metered and priced with the rate cards you entered. They are not a provider's bill, a tax figure or an accounting entry. Usage records are a separate source: the existing cost ledgers, the model-call records and the screens that read them stay as they are, and `GET /spend/coverage/ledgers` sets the two side by side with the expected differences listed.
 
@@ -29,16 +29,16 @@ The tables come from four migrations, `v6z79_spend_reference`, `v6z80_spend_usag
 
 ```flow
 Apply the migrations | Run v6z79 to v6z82 in the release before the one that turns the switch on.
-Set the switch | Set AGENTICORG_SPEND_INTELLIGENCE_ENABLED and check that the reporting and billing zones load.
+Turn on the switch | Turn on the spend switch from the settings table above and check that the reporting and billing zones load.
 Confirm the status | GET /api/v1/spend/status answers enabled true and says whether this process's writer started.
 Load reference data | Build the organisation tree, map sources, then enter rate cards, FX rates and commitments.
-Watch coverage | Read coverage and meter gaps; add mappings and rate cards for what is unattributed or unpriced.
+Watch coverage | Read coverage and meter gaps; add mappings and rate cards, then re-attribute and restate the records already written.
 Reconcile the first month | Import each provider's invoice, reconcile the month and read the Gate 1 status.
 ```
 
 ## Setting up the reference data
 
-Reference data is what spend is measured against. Each kind can be written one row at a time or imported from a CSV or JSON file (`POST .../import`, at most 2 MiB and 5,000 rows). Add `dry_run=true` to an import to see exactly what it would create, update or reject without writing anything. The examples below omit the `Authorization` header that every request carries.
+Reference data is what spend is measured against. Every kind can be written one row at a time, and the organisation tree, mappings, rate cards and FX rates can also be imported from a CSV or JSON file (`POST .../import`, at most 2 MiB and 5,000 rows). Add `dry_run=true` to an import to see exactly what it would create, update or reject without writing anything. The examples below omit the `Authorization` header that every request carries.
 
 ### Organisation tree
 
@@ -85,8 +85,9 @@ Content-Type: application/json
 ```
 
 - **Which card prices a call.** A model-specific card comes before a provider default; within one level, a cached-token price comes before the plain input price; then a contract card comes before a list card; then the latest start.
-- **Cached and batch prices.** An input card may carry a cached-input price and a batch discount percentage.
+- **Cached and batch prices.** An input-token card may carry a cached-input price. Any card may carry a batch discount percentage, but phase 1 records carry no batch flag, so the discount is stored but not yet applied in metering, price quotes or reconciliation.
 - **Volume tiers.** A card may carry up to 20 tiers, `graduated` or `all_units`. Usage is priced at the base price; the tiers are applied per contract and billing month in reconciliation.
+- **Adding a card later.** A new card prices usage metered from then on. Records already written stay unpriced, or fallback-priced, until you run `POST /spend/usage/restate` for the provider and its billing days (at most 92 per job, with a reason); `include_unpriced` is on by default, so the job re-prices those records with the cards as known now.
 - **No card.** Model tokens fall back to the deployment's list prices in USD and are marked as fallback-priced. In-house models, embeddings, OCR and Whisper price at zero unless you add a card; in-house model serving is charged through GPU node hours. Anything else with no price is **unpriced**: it has no amount, never zero, and is counted.
 - **Corrections.** A card that has priced usage changes only through `POST /spend/rate-cards/{card_id}/correct` with a reason. The correction queues a restatement of the records the old card priced, in the same transaction.
 
@@ -130,7 +131,7 @@ Each billable quantity in one unit becomes one usage record, with the same prici
 
 A record holds identifiers, counts and amounts only, never a prompt, a response, a document or customer data. It is append-only: its event fields never change, and only audited maintenance jobs revise its price, FX, attribution or commitment fields.
 
-**The meter does not hold up the call.** The hook builds the call's usage in memory and puts it on a bounded in-process queue, with no database work on the call path. If metering fails, the failure is logged and counted and the call carries on unchanged. A writer thread in each process writes the queue in batches; a batch it cannot write is handed to a retry task with the same keys, so a retry never writes a record twice. Usage that still cannot be written is counted as a meter gap (`GET /spend/gaps`), and backfill can recreate model-call records from the model gateway's records while those exist.
+**The meter does no database work or waiting on the call path.** The hook builds the call's usage in memory and puts it on a bounded in-process queue. If metering fails, the failure is logged and counted and the call carries on unchanged. A writer thread in each process writes the queue in batches; a batch it cannot write is handed to a retry task with the same keys, so a retry never writes a record twice. Usage that still cannot be written is counted as a meter gap (`GET /spend/gaps`), and backfill can recreate model-call records from the model gateway's records while those exist.
 
 **How attribution is chosen.** The first rule that matches wins and is stored on the record as its `attribution_path`:
 
@@ -140,7 +141,7 @@ A record holds identifiers, counts and amounts only, never a prompt, a response,
 | A workflow step with no agent | the workflow's mapping; the application's mapping; the initiating user's department |
 | Anything else | the application's mapping; the initiating user's department |
 
-A legacy label that names no node stops there: the record is kept and counted as unattributed with the reason `unknown_label`, never moved to a broader mapping. The business unit stored with a record is the nearest business unit above its node.
+A legacy label that names no node stops there: the record is kept and counted as unattributed with the reason `unknown_label`, never moved to a broader mapping. The business unit stored with a record is the nearest business unit at or above its node.
 
 ## Reading spend
 
@@ -200,12 +201,12 @@ An item is within tolerance only when both figures are known and each is within 
 **Accept a difference.** An item that needs review can be accepted with a reason of 10 to 500 characters (`POST /spend/reconciliations/{reconciliation_id}/items/{item_id}/accept`). The acceptor must be an active tenant administrator other than whoever imported one of the run's invoices (409 `same_actor`); this is the maker-checker rule, and a tenant with a single administrator cannot accept anything. Every acceptance is audited with the reason, both variances and the actor. An accepted difference is recorded, but it does not meet Gate 1.
 
 ```flow
-Check the month's reference data | Confirm the month's rate cards, commitments and FX rates are entered and settled. | Owner: Spend administrator | Human decision: Decide whether any contract change dated inside the month needs a correction and restatement first. | If blocked: Unpriced or unconverted records stay listed in coverage until a card or rate covers them.
-Review coverage | Read the month's coverage and meter gaps and clear unattributed spend with mappings and re-attribution. | Owner: Finance analyst with auditor access | Human decision: Agree which unattributed reasons are fixed now and which are explained. | If blocked: A share below 0.98 or any unpriced record keeps attribution unmet.
+Check the month's reference data | Confirm the month's rate cards, commitments and FX rates are entered and settled. | Owner: Spend administrator | Human decision: Decide whether any contract change dated inside the month needs a correction and restatement first. | If blocked: Unpriced records stay listed in coverage until a card covers them and a restatement re-prices them; unconverted records convert when the settlement a new FX rate queues has run.
+Review coverage | Read the month's coverage and meter gaps and clear unattributed spend with mappings and re-attribution. | Owner: Spend administrator, reviewed by an auditor | Human decision: Agree which unattributed reasons are fixed now and which are explained. | If blocked: A share below 0.98 or any unpriced record keeps attribution unmet.
 Import the provider invoice | Dry-run the invoice file, then import it for the provider's billing month. | Owner: Administrator A, the importer | Human decision: Confirm the invoice reference, currency and billing month against the provider document. | If blocked: 422 invoice_rejected lists every refused line; nothing is stored until the file is corrected.
 Run the reconciliation | Reconcile the provider's month and read each item's stored and re-priced variance. | Owner: Spend administrator | Human decision: Decide whether a difference is a metering, pricing or invoice question. | If blocked: 409 invoice_missing when the month has no current invoice; 422 currency_mismatch when its invoices differ in currency.
 Resolve or accept differences | Correct cards and restate, or accept an explained difference with a written reason. | Owner: Administrator B, not the importer | Human decision: Accept only a difference that is explained and evidenced outside the system. | If blocked: 409 same_actor when the importer tries to accept; the item stays open.
-Read the Gate 1 status | Request the month's gate and keep the response with the month's evidence. | Owner: Finance controller or auditor | Human decision: Treat the month as reconciled only when gate_met is true. | If blocked: Missing, stale or accepted reconciliations are listed by provider and keep the gate unmet.
+Read the Gate 1 status | Request the month's gate and meter gaps and keep both responses with the month's evidence. | Owner: Auditor or administrator | Human decision: Treat the month as reconciled only when gate_met is true and the meter gaps are explained. | If blocked: Missing, stale or accepted reconciliations are listed by provider and keep the gate unmet.
 ```
 
 ## The Gate 1 status
@@ -229,10 +230,12 @@ Read the Gate 1 status | Request the month's gate and keep the response with the
 
 The rules are deliberately strict: no unpriced record is allowed, group attribution does not count, an accepted difference does not meet the gate, and an item needs both figures within 1%. Shares are shown rounded toward zero and variances away from it, while the verdicts use the exact values, so a share of 0.979996 is shown as `0.979996` and is not met. An invoiced provider with no metered records is listed too, because it can point to a broken hook, a provider-name mismatch or usage on a key the tenant did not pay for. The response repeats `backfill_source`, so you know whether lost model-call writes can still be recreated before you trust the month.
 
+Gate 1 does not check everything. Meter gaps are reported beside the attribution figures but do not fail the gate: usage that could not be written or was lost at shutdown, tool calls that no card prices, and usage paused for the tenant with `spend.metering_paused`, which is not in the share at all. Storage, in-house GPU hours and in-house model serving have no provider invoice, so they are never reconciled. Read `GET /spend/gaps` for the month before you treat its figures as complete.
+
 ```flow
 Read the reasons | Start from attribution.reasons and the three reconciliation lists in the gate response.
 Fix attribution | Add mappings or nodes, then run re-attribution for the month.
-Fix prices and rates | Add or correct rate cards and FX rates; the restatement and settlement jobs follow.
+Fix prices and rates | After adding a card, run POST /spend/usage/restate for the provider's billing days (at most 92). A correction queues its own restatement, and a new FX rate queues its settlement.
 Re-run reconciliation | Reconcile every missing or stale provider again after the records change.
 Read the gate again | Request the gate for the same month and compare it with the earlier response.
 ```
@@ -249,7 +252,7 @@ Reads need the `audit:read` scope. Beyond that, one rule decides what each reade
 | Invoices, reconciliations and the Gate 1 status | Yes | Yes | Refused, 403 `commercial_read_refused` |
 | Changes, imports, jobs and acceptance | Yes, signed in as a person | No | No |
 
-"Anyone else" includes domain roles and machine credentials without the administrator scope. Under the agent visibility rule a reader sees records with no agent, records of shared agents in their domains (every shared agent, for a machine credential) and records of their own personal agents. Tenant-wide figures are refused rather than filtered, because a filtered total would let a reader work out other agents' spend by comparing two views. Rate cards, commitments, prices, invoices, reconciliations and the gate are for a human administrator or auditor only: an API key or agent token is refused them whatever scopes it holds, since machine credentials can hold `audit:read` through agent grants. The audit rows of those writes and of spend jobs carry the same figures, so `GET /audit` hides them from the same readers.
+"Anyone else" includes the CFO role and every other domain role, and machine credentials without the administrator scope. A finance team reads coverage, reconciliations and the gate through a person with the auditor or administrator role. Under the agent visibility rule a reader sees records with no agent, records of shared agents in their domains (every shared agent, for a machine credential) and records of their own personal agents. Tenant-wide figures are refused rather than filtered, because a filtered total would let a reader work out other agents' spend by comparing two views. Rate cards, commitments, prices, invoices, reconciliations and the gate are for a human administrator or auditor only: an API key or agent token is refused them whatever scopes it holds, since machine credentials can hold `audit:read` through agent grants. The audit rows of those writes and of spend jobs carry the same figures, so `GET /audit` hides them from the same readers.
 
 ## What is not in phase 1
 

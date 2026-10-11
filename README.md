@@ -90,7 +90,8 @@ no spend screen yet.
 When a deployment turns it on, administrators keep the reference data spend is
 measured against: an organisation tree, source mappings, model aliases,
 effective-dated rate cards (a contract card ranks above a list card, with
-cached and batch prices and volume tiers), FX rates that convert every price
+cached-input prices, volume tiers and a stored batch discount that phase 1 does
+not yet apply), FX rates that convert every price
 to INR, and commitments. Every metered model call is written as usage records
 with server-side attribution, priced at the rate card in force on its billing
 date (or the deployment's list price for model tokens), and so are embeddings,

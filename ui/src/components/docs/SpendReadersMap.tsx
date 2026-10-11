@@ -35,7 +35,7 @@ const readers: readonly {
   {
     id: "domain",
     label: "Domain role",
-    note: "A person whose domains are restricted",
+    note: "A person whose domains are restricted, such as the CFO role",
     icon: UserRound,
   },
   {
@@ -131,6 +131,7 @@ export default function SpendReadersMap() {
   const [active, setActive] = useState(0);
   const buttons = useRef<(HTMLButtonElement | null)[]>([]);
   const reader = readers[active];
+  const tally = (level: Level) => reads.filter((read) => read.access[reader.id].level === level).length;
 
   function onReaderKey(event: KeyboardEvent<HTMLButtonElement>, index: number) {
     const moves: Record<string, number> = {
@@ -180,10 +181,12 @@ export default function SpendReadersMap() {
           );
         })}
       </div>
+      <p className="sr-only" role="status">
+        {reader.label}: {tally("full")} read, {tally("filtered")} filtered, {tally("refused")} refused
+      </p>
       <ul
         className="docs-spend-readers-list"
         aria-label={`What ${reader.label.toLowerCase()} reads`}
-        aria-live="polite"
       >
         {reads.map((read) => {
           const access = read.access[reader.id];

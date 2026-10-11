@@ -38,7 +38,9 @@ describe("AI spend pipeline map", () => {
     expect(stages[0]).toHaveAttribute("tabindex", "0");
     expect(stages.slice(1).every((stage) => stage.getAttribute("tabindex") === "-1")).toBe(true);
     expect(map).toHaveTextContent("Never a prompt, a response, a document or customer data");
-    expect(within(map).getByRole("button", { name: "Previous stage" })).toBeDisabled();
+    expect(within(map).getByRole("button", { name: "Previous stage" })).toHaveAttribute("aria-disabled", "true");
+    expect(within(map).getByRole("button", { name: "Next stage" })).toHaveAttribute("aria-disabled", "false");
+    expect(within(map).getByRole("status")).toHaveTextContent("Stage 1 of 9: Billable event");
   });
 
   it("selects a stage by click and explains reconciliation and the gate", () => {
@@ -53,7 +55,58 @@ describe("AI spend pipeline map", () => {
     expect(map).toHaveTextContent("at least 98%");
     expect(map).toHaveTextContent("An accepted difference does not meet the gate");
     expect(map).toHaveTextContent("GET /api/v1/spend/gate?period=YYYY-MM");
-    expect(within(map).getByRole("button", { name: "Next stage" })).toBeDisabled();
+    expect(within(map).getByRole("button", { name: "Next stage" })).toHaveAttribute("aria-disabled", "true");
+    expect(within(map).getByRole("status")).toHaveTextContent("Stage 9 of 9: Gate 1");
+  });
+
+  it("keeps focus on the stepper buttons at either end", () => {
+    render(<SpendPipelineMap />);
+    const map = screen.getByRole("region", { name: "AI spend pipeline map" });
+    const previous = within(map).getByRole("button", { name: "Previous stage" });
+    previous.focus();
+    fireEvent.click(previous);
+    expect(previous).toHaveFocus();
+    expect(within(map).getByRole("heading", { level: 3, name: "Billable event" })).toBeInTheDocument();
+    fireEvent.click(within(map).getByRole("button", { name: "Stage 9 of 9: Gate 1" }));
+    const next = within(map).getByRole("button", { name: "Next stage" });
+    next.focus();
+    fireEvent.click(next);
+    expect(next).toHaveFocus();
+    expect(next).not.toBeDisabled();
+    expect(within(map).getByRole("heading", { level: 3, name: "Gate 1" })).toBeInTheDocument();
+  });
+
+  it("scrolls the detail panel into view when a stage is chosen on a narrow screen", () => {
+    const original = window.matchMedia;
+    const scroll = vi.fn();
+    Element.prototype.scrollIntoView = scroll;
+    try {
+      window.matchMedia = ((query: string) => ({ matches: query === "(max-width: 640px)" })) as typeof window.matchMedia;
+      render(<SpendPipelineMap />);
+      const map = screen.getByRole("region", { name: "AI spend pipeline map" });
+      fireEvent.click(within(map).getByRole("button", { name: "Stage 6 of 9: Rollups and coverage" }));
+      expect(scroll).toHaveBeenCalledTimes(1);
+      expect(scroll.mock.contexts[0]).toBe(map.querySelector("#docs-spend-detail"));
+      fireEvent.keyDown(within(map).getByRole("button", { name: "Stage 6 of 9: Rollups and coverage" }), { key: "ArrowRight" });
+      expect(scroll).toHaveBeenCalledTimes(1);
+    } finally {
+      window.matchMedia = original;
+    }
+  });
+
+  it("does not scroll on a wide screen", () => {
+    const original = window.matchMedia;
+    const scroll = vi.fn();
+    Element.prototype.scrollIntoView = scroll;
+    try {
+      window.matchMedia = (() => ({ matches: false })) as unknown as typeof window.matchMedia;
+      render(<SpendPipelineMap />);
+      const map = screen.getByRole("region", { name: "AI spend pipeline map" });
+      fireEvent.click(within(map).getByRole("button", { name: "Stage 6 of 9: Rollups and coverage" }));
+      expect(scroll).not.toHaveBeenCalled();
+    } finally {
+      window.matchMedia = original;
+    }
   });
 
   it("moves selection and focus with the arrow, Home and End keys", () => {
@@ -112,6 +165,8 @@ describe("who reads spend figures", () => {
     expect(list).toHaveTextContent("Contract terms and user ids hidden");
     expect(within(list).getAllByText("Refused")).toHaveLength(4);
     expect(within(list).getAllByText("Filtered")).toHaveLength(1);
+    expect(within(view).getByRole("status")).toHaveTextContent("Domain role: 0 read, 1 filtered, 4 refused");
+    expect(within(view).getByRole("button", { name: /such as the CFO role/ })).toHaveAttribute("aria-pressed", "true");
   });
 
   it("explains machine credentials and auditors, and moves with the arrow keys", () => {

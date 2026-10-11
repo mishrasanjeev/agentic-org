@@ -17,7 +17,7 @@ import {
 import "./spend-pipeline.css";
 
 const phases = [
-  { id: "meter", title: "Meter", note: "Count the usage without holding up the call" },
+  { id: "meter", title: "Meter", note: "Count the usage with no database work on the call path" },
   { id: "price", title: "Price and record", note: "Attribute, price in rupees and sum" },
   { id: "reconcile", title: "Reconcile", note: "Check against invoices and the gate" },
 ] as const;
@@ -68,7 +68,7 @@ const stages: readonly {
     icon: Network,
     happens:
       "The server works out who the usage belongs to: the agent's mapping, a legacy cost-centre label, the workflow's or application's mapping, or the initiating user's department. The first match wins.",
-    kept: "The node, its nearest business unit, the product line, the use case and the attribution path, or the reason it is unattributed.",
+    kept: "The node, its business unit (the nearest at or above it), the product line, the use case and the attribution path, or the reason it is unattributed.",
     boundary:
       "Labels a caller sends are ignored. A legacy label that names no node stays unattributed as unknown_label; it is never moved to a broader mapping.",
     request: "POST /api/v1/spend/org-nodes\nPUT /api/v1/spend/mappings",
@@ -112,7 +112,7 @@ const stages: readonly {
     boundary:
       "Attribution to a group node does not count. Coverage is a tenant-wide figure: an administrator or auditor reads it, anyone else is refused.",
     request: "GET /api/v1/spend/rollups?group_by=…\nGET /api/v1/spend/coverage",
-    owner: "Finance teams and auditors",
+    owner: "An administrator or auditor; the CFO and other domain roles are refused",
   },
   {
     title: "Invoice import",
@@ -153,16 +153,22 @@ const stages: readonly {
     boundary:
       "An accepted difference does not meet the gate. Verdicts use exact values, so a share shown as 0.979996 is not met.",
     request: "GET /api/v1/spend/gate?period=YYYY-MM",
-    owner: "A finance controller or auditor",
+    owner: "An administrator or auditor; the CFO and other domain roles are refused",
   },
 ];
 
 const pad = (value: number) => String(value).padStart(2, "0");
 
+/* Below this width the stages stack above the detail panel, so a chosen stage scrolls it into view. */
+const STACKED = "(max-width: 640px)";
+
 export default function SpendPipelineMap() {
   const [active, setActive] = useState(0);
   const buttons = useRef<(HTMLButtonElement | null)[]>([]);
+  const detail = useRef<HTMLDivElement>(null);
   const stage = stages[active];
+  const first = active === 0;
+  const last = active === stages.length - 1;
   const phase = phases.find((item) => item.id === stage.phase) ?? phases[0];
   const StageIcon = stage.icon;
 
@@ -170,6 +176,16 @@ export default function SpendPipelineMap() {
     const next = Math.max(0, Math.min(stages.length - 1, index));
     setActive(next);
     if (focus) buttons.current[next]?.focus();
+  }
+
+  function choose(index: number) {
+    select(index);
+    const panel = detail.current;
+    if (!panel || typeof window.matchMedia !== "function" || !window.matchMedia(STACKED).matches) return;
+    // The sticky docs header wraps to a different height at different widths, so clear its real height.
+    const header = document.querySelector<HTMLElement>(".docs-header");
+    if (header) panel.style.scrollMarginTop = `${header.getBoundingClientRect().height + 14}px`;
+    panel.scrollIntoView({ block: "start" });
   }
 
   function onStageKey(event: KeyboardEvent<HTMLButtonElement>, index: number) {
@@ -222,7 +238,7 @@ export default function SpendPipelineMap() {
                       aria-controls="docs-spend-detail"
                       aria-label={`Stage ${index + 1} of ${stages.length}: ${entry.title}`}
                       tabIndex={index === active ? 0 : -1}
-                      onClick={() => select(index)}
+                      onClick={() => choose(index)}
                       onKeyDown={(event) => onStageKey(event, index)}
                     >
                       <span className="docs-spend-stage-number">
@@ -240,10 +256,13 @@ export default function SpendPipelineMap() {
           </div>
         ))}
       </div>
+      <p className="sr-only" role="status">
+        Stage {active + 1} of {stages.length}: {stage.title}
+      </p>
       <div
         id="docs-spend-detail"
+        ref={detail}
         className={`docs-spend-detail docs-spend-detail-${stage.phase}`}
-        aria-live="polite"
       >
         <div className="docs-spend-detail-top">
           <span className="docs-spend-detail-phase">{phase.title}</span>
@@ -286,8 +305,10 @@ export default function SpendPipelineMap() {
             type="button"
             title="Previous stage"
             aria-label="Previous stage"
-            disabled={active === 0}
-            onClick={() => select(active - 1)}
+            aria-disabled={first}
+            onClick={() => {
+              if (!first) select(active - 1);
+            }}
           >
             <ArrowLeft size={17} aria-hidden="true" />
           </button>
@@ -298,8 +319,10 @@ export default function SpendPipelineMap() {
             type="button"
             title="Next stage"
             aria-label="Next stage"
-            disabled={active === stages.length - 1}
-            onClick={() => select(active + 1)}
+            aria-disabled={last}
+            onClick={() => {
+              if (!last) select(active + 1);
+            }}
           >
             <ArrowRight size={17} aria-hidden="true" />
           </button>

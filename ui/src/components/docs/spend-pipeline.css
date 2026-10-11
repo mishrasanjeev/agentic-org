@@ -107,6 +107,7 @@
   gap: 8px;
   align-items: start;
   width: 100%;
+  height: 100%;
   min-height: 58px;
   padding: 8px 10px 8px 8px;
   border: 1px solid var(--spend-line);
@@ -171,6 +172,9 @@
   border-top: 3px solid var(--phase);
   border-radius: 4px;
   background: #fff;
+  /* Clears the sticky docs header when a stage scrolls the panel into view; the
+     component replaces it with the header's measured height. */
+  scroll-margin-top: 136px;
 }
 .docs-spend-detail-price {
   --phase: var(--spend-price);
@@ -288,10 +292,10 @@
   color: #193a30;
   cursor: pointer;
 }
-.docs-spend-controls button:hover:not(:disabled) {
+.docs-spend-controls button:hover:not([aria-disabled="true"]) {
   border-color: var(--phase);
 }
-.docs-spend-controls button:disabled {
+.docs-spend-controls button[aria-disabled="true"] {
   opacity: 0.45;
   cursor: default;
 }

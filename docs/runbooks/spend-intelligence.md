@@ -41,13 +41,26 @@ export GCP_PROJECT_ID=<project id>
 export CLOUD_RUN_REGION=<Cloud Run region>
 export DEPLOY_SHA=<full commit to release>
 export APP=<the environment's API origin, for example https://app.agenticorg.ai>
+# The deploy script checks the new commit at HEALTH_URL, which otherwise defaults to production.
+export HEALTH_URL="$APP/api/v1/health"
+# The service and job names; change them where the environment's names differ.
+export API_SERVICE=agenticorg-api UI_SERVICE=agenticorg-ui
+export WORKER_SERVICE=agenticorg-worker BEAT_SERVICE=agenticorg-beat
+export MIGRATE_JOB=agenticorg-migrate
 ```
+
+Run every step from a clean checkout at `$DEPLOY_SHA`: the deploy script refuses
+a checkout whose HEAD differs or that has uncommitted or untracked files (see
+the [deployment guide](../deployment.md)). In staging, `HEALTH_URL` must point at
+staging; left at its default, the script would poll production health, miss the
+new commit and roll staging back, or pass falsely when production already serves
+that commit.
 
 Confirm that no service already sets a spend variable. This lists variable
 names only, never values:
 
 ```bash
-for svc in agenticorg-api agenticorg-worker agenticorg-beat; do
+for svc in "$API_SERVICE" "$WORKER_SERVICE" "$BEAT_SERVICE"; do
   gcloud run services describe "$svc" --project="$GCP_PROJECT_ID" --region="$CLOUD_RUN_REGION" \
     --format='value(spec.template.spec.containers[0].env[].name)' |
     tr ';' '\n' | grep '^AGENTICORG_SPEND_' | sed "s/^/$svc: /"
@@ -150,12 +163,26 @@ skips them. Turning the worker on first means a spilled batch always reaches a
 worker that writes it.
 
 ```bash
-stage_spend() {
-  # $1 service, $2 the --update-env-vars or --remove-env-vars argument
-  gcloud run services update "$1" --project="$GCP_PROJECT_ID" --region="$CLOUD_RUN_REGION" \
-    "$2" --no-traffic
+latest_created() {
   gcloud run services describe "$1" --project="$GCP_PROJECT_ID" --region="$CLOUD_RUN_REGION" \
     --format='value(status.latestCreatedRevisionName)'
+}
+
+stage_spend() {
+  # $1 service, $2 the --update-env-vars or --remove-env-vars argument.
+  # Prints only the new revision; fails when the update fails or creates no new revision.
+  before="$(latest_created "$1")" || return 1
+  if ! gcloud run services update "$1" --project="$GCP_PROJECT_ID" --region="$CLOUD_RUN_REGION" \
+    "$2" --no-traffic >&2; then
+    echo "$1: the update failed; nothing was staged and traffic is unchanged" >&2
+    return 1
+  fi
+  after="$(latest_created "$1")" || return 1
+  if [ -z "$after" ] || [ "$after" = "$before" ]; then
+    echo "$1: no new revision was created; traffic is unchanged" >&2
+    return 1
+  fi
+  echo "$after"
 }
 
 route_spend() {
@@ -172,19 +199,35 @@ print(conditions.get("Ready", "Unknown"))')"
     --to-revisions="$2=100"
 }
 
-for svc in agenticorg-worker agenticorg-beat agenticorg-api; do
-  rev="$(stage_spend "$svc" --update-env-vars=AGENTICORG_SPEND_INTELLIGENCE_ENABLED=true | tail -n 1)"
+SPEND_ENV='--update-env-vars=AGENTICORG_SPEND_INTELLIGENCE_ENABLED=true'
+
+for svc in "$WORKER_SERVICE" "$BEAT_SERVICE" "$API_SERVICE"; do
+  rev="$(stage_spend "$svc" "$SPEND_ENV")" || break
   echo "$svc staged $rev"
   route_spend "$svc" "$rev" || break
 done
 ```
 
-The loop stops at the first revision that does not become ready, for example
-when a spend setting does not load; that service and the ones after it keep
-their previous revisions. Read the revision's log, fix the setting and run the
-loop again from that service. Add the optional settings to the same
-`--update-env-vars` list (comma separated) when the environment needs them;
-`AGENTICORG_SPEND_SWEEPS_ENABLED` stays unset, which means on.
+The loop stops at the first service whose update fails, creates no new
+revision or stages a revision that does not become ready, for example when a
+spend setting does not load; that service and the ones after it keep their
+previous revisions. Read the revision's log, fix the setting and run the loop
+again from that service. If a service already has the same values, gcloud may
+create no new revision and the loop stops there too: check its variables before
+you go on.
+
+Add the optional settings to `SPEND_ENV` when the environment needs them;
+`AGENTICORG_SPEND_SWEEPS_ENABLED` stays unset, which means on. gcloud splits
+`--update-env-vars` on commas, and `AGENTICORG_SPEND_GPU_POOLS_JSON` or a billing
+zone object with two or more providers contains commas, so choose another
+delimiter with gcloud's `^delimiter^` prefix (see `gcloud topic escaping`):
+
+```bash
+SPEND_ENV='--update-env-vars=^@^AGENTICORG_SPEND_INTELLIGENCE_ENABLED=true@AGENTICORG_SPEND_PROVIDER_BILLING_TIMEZONES_JSON=<JSON object>@AGENTICORG_SPEND_GPU_POOLS_JSON=<JSON>'
+```
+
+Do not use `--env-vars-file` for this: it replaces every variable of the
+service with the file's contents.
 
 Each `services update` keeps the other variables, secret mounts, the image and
 the worker or beat command of the service. The next release with
@@ -207,7 +250,9 @@ Use an administrator or auditor token as in section 1.
    administrator or auditor:
 
    ```bash
-   today="$(TZ=Asia/Kolkata date +%F)"   # the reporting zone's date
+   zone="$(curl -sS -H "Authorization: Bearer $TOKEN" "$APP/api/v1/spend/status" |
+     python -c 'import json, sys; print(json.load(sys.stdin)["reporting_timezone"])')"
+   today="$(TZ="$zone" date +%F)"   # today in the reporting zone the deployment uses
    curl -sS -H "Authorization: Bearer $TOKEN" \
      "$APP/api/v1/spend/usage?start=$today&end=$today&limit=5" | python -m json.tool | head -60
    ```
@@ -216,9 +261,14 @@ Use an administrator or auditor token as in section 1.
    200 ms). Until a tenant enters its organisation tree and mappings, records
    are kept as unattributed with a reason; until a rate card or the
    deployment's list price covers a model, they are kept as unpriced. Neither
-   is an error. `GET /api/v1/spend/coverage` and `GET /api/v1/spend/gaps` (same
-   `start` and `end`) show the attributed and unattributed shares and anything
-   that could not be metered.
+   is an error. Entering the data later does not change records already
+   written: `POST /api/v1/spend/usage/reattribute` resolves unattributed
+   records again, and `POST /api/v1/spend/usage/restate` (a provider and at
+   most 92 billing days) re-prices unpriced and fallback-priced records with a
+   card added since. A new FX rate queues its own settlement.
+   `GET /api/v1/spend/coverage` and `GET /api/v1/spend/gaps` (same `start` and
+   `end`) show the attributed and unattributed shares and anything that could
+   not be metered.
 4. **Alerts and metrics.** `AgenticOrgSpendWriteFailures` fires when usage
    events have failed to be written for 15 minutes (any reason except
    `paused`); `AgenticOrgSpendWriterBacklog` fires when an instance holds more
@@ -251,22 +301,43 @@ later. Delete or disable the row to resume.
 
 ## 4. Disable
 
-Disabling turns metering and the spend routes off without touching data. Turn
-the API off first, then beat, then the worker, so a batch the API spills while
-it shuts down still reaches a worker that writes it:
+Disabling turns metering and the spend routes off without touching data. It
+uses `stage_spend` and `route_spend` from [section 2](#2-enable-in-an-environment),
+defined in the same shell. Turn the API and beat off first, wait, and only then
+the worker, so a batch the API spills while it shuts down still reaches a
+worker that writes it. A worker with the feature off skips such a batch, and
+its usage is lost without being counted as a gap.
 
-```bash
-for svc in agenticorg-api agenticorg-beat agenticorg-worker; do
-  rev="$(stage_spend "$svc" --remove-env-vars=AGENTICORG_SPEND_INTELLIGENCE_ENABLED | tail -n 1)"
-  echo "$svc staged $rev"
-  route_spend "$svc" "$rev"
-done
-```
+1. Turn off the API, then beat:
 
-Wait until the old API instances have stopped (each drains its writer for up
-to 5 seconds and spills the rest) and the `maintenance` queue holds no
-`persist_usage` task before you turn the worker off; a spilled batch that
-reaches a worker with the feature off is skipped.
+   ```bash
+   for svc in "$API_SERVICE" "$BEAT_SERVICE"; do
+     rev="$(stage_spend "$svc" --remove-env-vars=AGENTICORG_SPEND_INTELLIGENCE_ENABLED)" || break
+     echo "$svc staged $rev"
+     route_spend "$svc" "$rev" || break
+   done
+   ```
+
+2. Wait until the previous API revision has no instances left (its container
+   instance count in Cloud Run monitoring reaches zero; each instance drains
+   its writer for up to 5 seconds when it stops and spills the rest),
+   then until the worker has had no `persist_usage` task for 10 minutes. A
+   spilled batch retries with backoff for about four minutes, so a quiet
+   10-minute window means none is left. Repeat this until it prints nothing:
+
+   ```bash
+   gcloud logging read \
+     "resource.type=\"cloud_run_revision\" AND resource.labels.service_name=\"$WORKER_SERVICE\" AND \"spend_tasks.persist_usage\"" \
+     --project="$GCP_PROJECT_ID" --freshness=10m --limit=5 --format='value(timestamp)'
+   ```
+
+3. Turn off the worker:
+
+   ```bash
+   rev="$(stage_spend "$WORKER_SERVICE" --remove-env-vars=AGENTICORG_SPEND_INTELLIGENCE_ENABLED)" &&
+     echo "$WORKER_SERVICE staged $rev" &&
+     route_spend "$WORKER_SERVICE" "$rev"
+   ```
 
 After disabling:
 
@@ -286,6 +357,12 @@ After disabling:
 
 Rollback moves traffic, never the schema.
 
+- If the feature is on and the rollback goes to a revision from before the
+  spend release, [disable](#4-disable) it first and let the `maintenance` queue
+  drain as described there. A worker from before the spend release does not
+  know the `persist_usage` and `run_job` tasks and drops them, so spilled usage
+  still queued would be lost without being counted as a gap. A rollback to a
+  revision that already has the spend code needs no such step.
 - Move each service back to the revision recorded before the release:
 
   ```bash
@@ -293,8 +370,7 @@ Rollback moves traffic, never the schema.
     --region="$CLOUD_RUN_REGION" --to-revisions=<previous revision>=100
   ```
 
-  for `agenticorg-api`, `agenticorg-worker`, `agenticorg-beat` and
-  `agenticorg-ui`. The deploy script does this itself when the new API fails
+  for `$API_SERVICE`, `$WORKER_SERVICE`, `$BEAT_SERVICE` and `$UI_SERVICE`. The deploy script does this itself when the new API fails
   its health check.
 - The spend migrations are forward-only in production. They add tables only, so
   the previous revisions run unchanged against the new schema and ignore the
@@ -304,9 +380,10 @@ Rollback moves traffic, never the schema.
   commercial filter. Once any tenant has written spend reference data, invoices
   or jobs, rolling back to such a revision lets audit readers other than
   administrators and auditors see those audit rows. Prefer
-  [disabling](#4-disable) the feature on the current release; if a rollback past
-  the spend release is unavoidable, keep it short and record the exposure in the
-  change record.
+  [disabling](#4-disable) the feature on the current release and staying there;
+  if a rollback past the spend release is unavoidable, disable and drain first
+  as above, keep the rollback short and record the exposure in the change
+  record.
 
 ## Reference
 
