@@ -125,6 +125,12 @@ docs/**
 !docs/governance/case-hand-off.md
 !docs/governance/decision-requests.md
 !docs/governance/README.md
+!docs/governance/guardrails.md
+!docs/governance/model-gateway.md
+!docs/operations/
+!docs/operations/audit-chain.md
+!docs/customer-agent/
+!docs/customer-agent/PRD.md
 !docs/finops/
 !docs/finops/spend-intelligence.md
 !docs/oacp/
