@@ -22,7 +22,7 @@ the UI or API alone leaves callbacks queued without a consumer.
    Alembic version step-back retains all three tables, encrypted rows and RLS;
    upgrading again is idempotent. This supports migration rehearsals, not a
    destructive production rollback. Production recovery remains a forward fix
-   or restoration of the recorded application revision with the schema retained.
+   or an explicitly approved database recovery, with the channel history retained.
 3. Record the exact release commit and existing API/UI/worker/beat revisions.
    Keep production backups, infrastructure and unrelated service settings
    unchanged.
@@ -64,9 +64,14 @@ configured providers.
   rotation, paused agent target and user revocation. Native status replies need
   separate provider acknowledgement; ambiguous delivery is not automatically
   retried.
-- If runtime health fails, restore the previously recorded image/traffic and
-  model environment values. The additive migration remains in place. Do not
-  delete receipts or replay ambiguous executions to simulate recovery.
+- If runtime health fails, leave traffic on the existing healthy revision
+  where possible and prepare a forward fix with the current migration head.
+  An older image's strict startup schema check can reject the newer database
+  revision on a cold start: traffic rollback alone is not a verified recovery.
+  Recheck schema compatibility, health and model settings before declaring
+  recovery. Database restore requires separate approval. Do not delete receipts,
+  change production revision stamps or replay ambiguous executions to simulate
+  recovery. The additive schema and forced RLS remain in place.
 
 ## Account-backed acceptance still required
 
