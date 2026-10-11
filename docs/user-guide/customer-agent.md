@@ -25,7 +25,7 @@ Early bank assistants on the market execute a short list of actions inside one a
 The same path applies in every channel. The bank keeps identity and the step-up; the agent keeps the conversation, the explanation and the record.
 
 ```flow
-Sign in with the bank | The customer signs in to the bank's own app or site; the bank's backend signs a short-lived assertion and opens a customer session. | Owner: Bank identity team | If blocked: Without the bank's assertion there is no session; the platform never accepts a customer nobody vouched for.
+Sign in with the bank | The customer signs in to the bank's own app or site; the bank's backend signs a short-lived assertion and opens a customer session. | Owner: Bank identity team | If blocked: Without the bank's assertion there is no session; the platform never accepts a customer the bank has not asserted.
 Disclosure | The customer reads that this is the bank's AI assistant and acknowledges it before the first turn. | Owner: Bank channel owner | If blocked: Turns are refused until the disclosure is acknowledged.
 Ask | The customer asks in their own words; the dialogue recognises the intent, collects the details across turns and explains why. | Owner: Customer agent | If blocked: An unrecognised request gets a clarifying question or an offer of a person, never a guess.
 Prepare | For a transaction the agent prepares a card with the amount, the payee and a "why this" panel at the customer's autonomy level. | Owner: Customer agent | Human decision: The customer confirms with one tap, cancels, or asks for a change. | If blocked: Below level 2 the action is explained and refused; the customer can raise the level on the permissions page.
