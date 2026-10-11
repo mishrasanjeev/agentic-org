@@ -33,7 +33,7 @@ The product facts endpoint is authoritative for the deployed version and current
 
 - A connector listing is not proof that a tenant configured credentials or provider access.
 - Governed cases are tenant-gated. Repository source checks a role's registered tools, an exact local case-purpose allowlist and a delegated grant before provider calls; this does not prove a hosted deployment enabled the flow.
-- Published Grantex Python SDK 0.5.1 does not enforce a token-level case purpose or per-case cap. A machine credential or MCP tool cannot perform a human-only case decision.
+- AgenticOrg calls the pinned Grantex Python SDK (grantex==0.7.1) with the grant token, connector, tool and any numeric amount, but no case id or case purpose, so a token-level case purpose or per-case cap is not checked on that path. A machine credential or MCP tool cannot perform a human-only case decision.
 - Model-backed work requires a supported cloud provider or configured local model runtime.
 - Optional channels and provider rails require separate approvals, secrets, callbacks, and adapters.
 - OACP artifacts cannot create orders, inventory holds, mandates, payments, refunds, or paid states.
@@ -85,7 +85,8 @@ Pricing comes from core/billing/catalog.py. Infrastructure, model, provider, and
 - [Python SDK and CLI](https://github.com/mishrasanjeev/agentic-org/tree/main/sdk)
 - [TypeScript SDK](https://github.com/mishrasanjeev/agentic-org/tree/main/sdk-ts)
 - [MCP server](https://github.com/mishrasanjeev/agentic-org/tree/main/mcp-server)
-- A2A discovery: https://app.agenticorg.ai/api/v1/a2a/agent-card
+- A2A v1 Agent Card: https://app.agenticorg.ai/.well-known/agent-card.json
+- Legacy AgenticOrg discovery card (not A2A v1): https://app.agenticorg.ai/api/v1/a2a/agent-card
 - MCP discovery: https://app.agenticorg.ai/api/v1/mcp/tools
 - [API reference](https://github.com/mishrasanjeev/agentic-org/blob/main/docs/api-reference.md)
 

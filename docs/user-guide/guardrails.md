@@ -4,7 +4,7 @@ Tenant-scoped rules evaluate text at the input, retrieved-evidence, model-output
 
 Tenant administrators manage rules on the [Guardrails](https://app.agenticorg.ai/dashboard/settings/guardrails) page. It shows the mode in effect (hooks off, flag-only or enforcing), lists the rules with what each applies to, adds, changes, enables, disables and deletes a rule, and dry-runs a stage over a text. Detector options are edited as JSON, starting from an example for the chosen detector. The page changes rules only; hooks and tenant enforcement are switched on through their own approved controls.
 
-The same operations are available to an approved API client with the required `governance.guardrails.sensitive.read` or `.write` permission, under `/api/v1/guardrails`: `GET /status`, `GET/POST /rules`, `PATCH/DELETE /rules/{rule_id}` and `POST /evaluate`. Do not copy a privileged key into a browser console or commit it to a script.
+The same operations are available under `/api/v1/guardrails` to an approved client acting as a tenant administrator and holding `governance.guardrails.sensitive.read` or `.write`: `GET /status`, `GET/POST /rules`, `PATCH/DELETE /rules/{rule_id}`, `POST /evaluate`, `GET /adversarial` and `POST /adversarial/run`. Do not copy a privileged key into a browser console or commit it to a script.
 
 ```flow
 Check effective status | Open the Guardrails page and read the banner: hooks off, flag-only or enforcing.

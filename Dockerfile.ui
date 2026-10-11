@@ -19,6 +19,8 @@ COPY api/v1/model_gateway.py ../api/v1/model_gateway.py
 COPY api/v1/guardrails.py ../api/v1/guardrails.py
 COPY api/v1/observability.py ../api/v1/observability.py
 COPY api/v1/spend.py ../api/v1/spend.py
+COPY api/v1/conversation.py api/v1/conversation_supervisor.py api/v1/approvals.py ../api/v1/
+COPY core/conversation/intents.py ../core/conversation/intents.py
 COPY observability/workload.py observability/timeline.py ../observability/
 COPY docs/ ../docs/
 COPY SECURITY.md docker-compose.yml ../

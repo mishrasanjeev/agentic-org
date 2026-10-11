@@ -32,7 +32,7 @@ The exact status vocabulary varies by run resource. Preserve the returned state 
 
 ## Follow-ups and retries
 
-A conversational follow-up should retain relevant context, but never assume a different browser session or company automatically shares it. Repeat the input reference when ambiguity matters. Do not ask an agent to "ignore the earlier policy" to unblock a refusal.
+Chat passes earlier turns to a follow-up only when the deployment turns on conversational services (`AGENTICORG_CONVERSATION_V2_ENABLED`, off by default). While it is off, each message runs on its own even though the panel shows the earlier messages, so repeat the document, case and company reference every time. While it is on, recent turns from the same user, company and agent reach the agent as context; another user, company or agent does not share them. Do not ask an agent to "ignore the earlier policy" to unblock a refusal.
 
 Before retrying an external action, check whether the provider already accepted it. Use the integration's idempotency and status lookup where available. Blindly rerunning a workflow can duplicate an email, record update or provider request.
 
