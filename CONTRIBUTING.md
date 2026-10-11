@@ -7,7 +7,7 @@ We welcome contributions from the community. This guide covers everything you ne
 ### Prerequisites
 
 - Python 3.12+
-- Node.js 22.22+ (for UI; CI uses 22.22.0)
+- Node.js 22.22+ for the UI build (react-router requires 22.22.0; CI uses 22.22.0). The UI test tooling (jsdom) declares Node.js 22.22.2+ on the 22 line, 24.15+, or 26+
 - Docker & Docker Compose
 - Git
 

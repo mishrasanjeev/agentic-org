@@ -4,9 +4,9 @@ Six console screens belong to services that are built into the product but switc
 
 | Screen | Sidebar entry and who sees it | Deployment setting (off by default) | While it is off |
 | --- | --- | --- | --- |
-| Documents | Always listed for roles that can open the approval queue | `AGENTICORG_IDP_ENABLED` | The page reports `idp_disabled`: document processing is off for this deployment |
-| Conversations | Always listed for administrators | `AGENTICORG_CONVERSATION_V2_ENABLED` | The page reports `conversation_disabled`: conversational services are off |
-| Workbenches | Always listed for every role | `AGENTICORG_WORKBENCH_V2_ENABLED` | The page says "Workbenches are off for this deployment." |
+| Documents | Always listed for roles that can open the approval queue | `AGENTICORG_IDP_ENABLED` | The page shows "Document processing is off for this deployment"; the API answers `404` `idp_disabled` |
+| Conversations | Always listed for administrators | `AGENTICORG_CONVERSATION_V2_ENABLED` | The page shows "Conversational services are off for this deployment"; the API answers `404` `conversation_disabled` |
+| Workbenches | Always listed for every role except merchant | `AGENTICORG_WORKBENCH_V2_ENABLED` | The page says "Workbenches are off for this deployment." |
 | Calls | Administrator, COO and auditor; hidden until the service is on | `AGENTICORG_SPEECH_INTELLIGENCE_ENABLED` | No sidebar entry |
 | Transactions | Administrator, CFO, COO and auditor; hidden until the service is on | `AGENTICORG_TRANSACTION_INTELLIGENCE_ENABLED` | No sidebar entry |
 | Lineage | Administrator, CxO roles, auditor and domain lead; hidden until the service is on | `AGENTICORG_LINEAGE_ENABLED` | No sidebar entry |

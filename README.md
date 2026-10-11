@@ -50,7 +50,7 @@ purpose, and delegated grant all authorize the call. This case-specific check
 is strict even if general tool enforcement is in `off` or `warn` mode.
 
 AgenticOrg pins `grantex==0.7.1` and calls its enforcement check with the
-grant token, connector and tool only. It does not pass a case id or case
+grant token, connector, tool and any numeric amount. It does not pass a case id or case
 purpose, so a token's case purpose and per-case caps are **not** checked on
 this path. The role's `case_purposes` list is a local AgenticOrg control, and
 pooled grants are not bound to one case. Decision and

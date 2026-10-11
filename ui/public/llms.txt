@@ -33,7 +33,7 @@ The product facts endpoint is authoritative for the deployed version and current
 
 - A connector listing is not proof that a tenant configured credentials or provider access.
 - Governed cases are tenant-gated. Repository source checks a role's registered tools, an exact local case-purpose allowlist and a delegated grant before provider calls; this does not prove a hosted deployment enabled the flow.
-- AgenticOrg calls the pinned Grantex Python SDK (grantex==0.7.1) with the grant token, connector and tool only, so a token-level case purpose or per-case cap is not checked on that path. A machine credential or MCP tool cannot perform a human-only case decision.
+- AgenticOrg calls the pinned Grantex Python SDK (grantex==0.7.1) with the grant token, connector, tool and any numeric amount, but no case id or case purpose, so a token-level case purpose or per-case cap is not checked on that path. A machine credential or MCP tool cannot perform a human-only case decision.
 - Model-backed work requires a supported cloud provider or configured local model runtime.
 - Optional channels and provider rails require separate approvals, secrets, callbacks, and adapters.
 - OACP artifacts cannot create orders, inventory holds, mandates, payments, refunds, or paid states.

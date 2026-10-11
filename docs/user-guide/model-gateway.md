@@ -16,7 +16,7 @@ Enable deliberately | Confirm tenant policy and feature configuration, then moni
 
 | Control | What it decides | Good first use |
 | --- | --- | --- |
-| Routing policy | Which configured provider/model or weighted target is selected for a matching request. A cost-aware policy picks the lowest-priced target whose observed failure rate stays under the policy's threshold, reading the routing records, and states that reason in the decision | Prefer an approved lower-cost model for a bounded use case |
+| Routing policy | Which configured provider/model or weighted target is selected for a matching request. A cost-aware policy picks the lowest-priced target whose observed failure rate stays under the policy's threshold, reading the routing records, and states that reason in the decision. A target with no observations in the window counts as healthy, so with routing records off (the default) the cheapest listed target is chosen | Prefer an approved lower-cost model for a bounded use case |
 | Access policy | Whether a request matching a principal, application, agent, provider, model or other supported context is allowed or denied | Deny a model for a sensitive use case |
 | Model limit | Maximum concurrent requests and/or requests per minute for a provider/model | Protect a shared quota from bursts |
 | Dry run | What the current policy would decide for supplied request context | Compare intended behavior before changing live traffic |

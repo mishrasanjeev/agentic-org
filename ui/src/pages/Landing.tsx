@@ -894,7 +894,7 @@ export default function Landing() {
                 />
                 <h3 className="text-xl font-bold text-slate-900">Agent Observatory</h3>
                 <p className="text-slate-600 text-sm leading-relaxed">
-                  Review the newest audit rows for agent actions, results, and human-review escalations. The screen polls the 20 most recent rows every five seconds and labels that scope; run timelines and model-call summaries are on the administrator Observability screen when tracing is enabled.
+                  Review the newest audit rows for agent actions, results, and human-review escalations. The screen polls the 20 most recent rows every five seconds and labels that scope; run timelines (when tracing is enabled) and model-call summaries (when gateway routing records are enabled) are on the administrator Observability screen.
                 </p>
               </div>
             </FadeIn>

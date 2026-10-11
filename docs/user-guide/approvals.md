@@ -35,7 +35,7 @@ Request missing information or reject an unsafe proposal. Do not ask the agent t
 
 When an approval policy applies to an item, the person who requested it cannot decide it (`403`). Each person votes once per item across every step: a second vote returns `409`, so a policy that needs the same person at two steps cannot complete. A step whose condition cannot be evaluated for the item, for example because the item lacks a field the condition names, still applies and needs its own approvers. If the item's policy is deleted, replaced, or loses the step the item is waiting on, decisions return `409` and the item stays pending until it expires.
 
-Where the platform operator sets the stricter condition mode (authority flag `approvals.unevaluable_condition.deny`, off by default), an approval on an item with such a step returns `409` `approval_condition_unevaluable` and is not counted; a rejection is still accepted. These refusals are the policy working. Ask the policy owner to correct the policy or assign another reviewer; do not sign in twice as different identities.
+Where the platform operator sets the stricter condition mode (authority flag `approvals.unevaluable_condition.deny`, off by default), an approval on an item with such a step returns `409` `approval_decision_refused` with reason code `approval_condition_unevaluable` and is not counted; a rejection is still accepted. These refusals are the policy working. Ask the policy owner to correct the policy or assign another reviewer; do not sign in twice as different identities.
 
 ## Operating the queue
 

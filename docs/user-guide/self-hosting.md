@@ -35,7 +35,7 @@ Do not copy development placeholder secrets, fake-model flags or seed identities
 
 ## Feature switches that ship off
 
-These deployment settings default to off in `core/config.py`. A setting that is off leaves the earlier behaviour in place. Some also have a per-tenant authority flag, managed by the platform operator, shown in parentheses. Set a switch the same way on every service of the deployment, and treat turning one on as a change to plan, test and record like a release.
+The main feature switches that default to off are listed below; `core/config.py` lists every setting. A setting that is off leaves the earlier behaviour in place. Some also have a per-tenant flag, shown in parentheses. These are authority flags managed by the platform operator, except `prompts.maker_checker`, which a tenant admin can set. Set a switch the same way on every service of the deployment, and treat turning one on as a change to plan, test and record like a release.
 
 | Setting | What it turns on |
 | --- | --- |
@@ -49,6 +49,7 @@ These deployment settings default to off in `core/config.py`. A setting that is 
 | `AGENTICORG_AUDIT_CHAIN_ENABLED` | Linking audit rows into a tamper-evident hash chain |
 | `AGENTICORG_RUNTIME_LIMITS_ENABLED`, `AGENTICORG_RUNTIME_MEMORY_ENABLED`, `AGENTICORG_TOOL_REGISTRY_ENABLED`, `AGENTICORG_RUNTIME_DEBUG_CONSOLE_ENABLED` | Per-agent run limits and loop detection, long-term memory, tool schema checks and the step-through debugger |
 | `AGENTICORG_WORKFLOW_BUILDER_V2_ENABLED` | The **Build visually** tab and definition checks on save |
+| `AGENTICORG_OUTPUT_SCHEMA_ENFORCED`, `AGENTICORG_CONTEXT_WINDOW_MANAGED`, `AGENTICORG_PROMPT_TYPED_PARAMETERS_ENABLED` | Checking an agent's final answer against its output schema, with escalation to a person when it stays invalid; leaving older tool results out of a conversation that does not fit the model's window; typed prompt parameters |
 | `AGENTICORG_PROMPTS_MAKER_CHECKER` (`prompts.maker_checker`), `AGENTICORG_PROMPT_COMPARE_ENABLED`, `AGENTICORG_EVALS_V2_ENABLED`, `AGENTICORG_EVAL_PROMOTION_GATE_ENABLED` | Prompt maker-checker, model comparison, evaluation datasets and the promotion gate |
 | `AGENTICORG_AGENT_REGISTRY_ENABLED` | Agent registry cards, lifecycle states and the Agent Catalogue |
 | `AGENTICORG_GOVERNANCE_INVENTORY_ENABLED`, `AGENTICORG_GOVERNANCE_MODEL_CARDS_ENABLED`, `AGENTICORG_GOVERNANCE_RISK_TIERS_ENABLED`, `AGENTICORG_GOVERNANCE_POLICY_CONSOLE_ENABLED` | AI asset inventory, model cards, risk tiers and the policy console |

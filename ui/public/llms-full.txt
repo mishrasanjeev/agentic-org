@@ -56,7 +56,7 @@ purpose, and delegated grant all authorize the call. This case-specific check
 is strict even if general tool enforcement is in `off` or `warn` mode.
 
 AgenticOrg pins `grantex==0.7.1` and calls its enforcement check with the
-grant token, connector and tool only. It does not pass a case id or case
+grant token, connector, tool and any numeric amount. It does not pass a case id or case
 purpose, so a token's case purpose and per-case caps are **not** checked on
 this path. The role's `case_purposes` list is a local AgenticOrg control, and
 pooled grants are not bound to one case. Decision and
@@ -1170,7 +1170,7 @@ Enable deliberately | Confirm tenant policy and feature configuration, then moni
 
 | Control | What it decides | Good first use |
 | --- | --- | --- |
-| Routing policy | Which configured provider/model or weighted target is selected for a matching request. A cost-aware policy picks the lowest-priced target whose observed failure rate stays under the policy's threshold, reading the routing records, and states that reason in the decision | Prefer an approved lower-cost model for a bounded use case |
+| Routing policy | Which configured provider/model or weighted target is selected for a matching request. A cost-aware policy picks the lowest-priced target whose observed failure rate stays under the policy's threshold, reading the routing records, and states that reason in the decision. A target with no observations in the window counts as healthy, so with routing records off (the default) the cheapest listed target is chosen | Prefer an approved lower-cost model for a bounded use case |
 | Access policy | Whether a request matching a principal, application, agent, provider, model or other supported context is allowed or denied | Deny a model for a sensitive use case |
 | Model limit | Maximum concurrent requests and/or requests per minute for a provider/model | Protect a shared quota from bursts |
 | Dry run | What the current policy would decide for supplied request context | Compare intended behavior before changing live traffic |
@@ -1726,7 +1726,7 @@ Request missing information or reject an unsafe proposal. Do not ask the agent t
 
 When an approval policy applies to an item, the person who requested it cannot decide it (`403`). Each person votes once per item across every step: a second vote returns `409`, so a policy that needs the same person at two steps cannot complete. A step whose condition cannot be evaluated for the item, for example because the item lacks a field the condition names, still applies and needs its own approvers. If the item's policy is deleted, replaced, or loses the step the item is waiting on, decisions return `409` and the item stays pending until it expires.
 
-Where the platform operator sets the stricter condition mode (authority flag `approvals.unevaluable_condition.deny`, off by default), an approval on an item with such a step returns `409` `approval_condition_unevaluable` and is not counted; a rejection is still accepted. These refusals are the policy working. Ask the policy owner to correct the policy or assign another reviewer; do not sign in twice as different identities.
+Where the platform operator sets the stricter condition mode (authority flag `approvals.unevaluable_condition.deny`, off by default), an approval on an item with such a step returns `409` `approval_decision_refused` with reason code `approval_condition_unevaluable` and is not counted; a rejection is still accepted. These refusals are the policy working. Ask the policy owner to correct the policy or assign another reviewer; do not sign in twice as different identities.
 
 #### Operating the queue
 
@@ -1782,11 +1782,11 @@ If the issuer is unconfigured, the default verifier refuses decisions. `decision
 
 Applications and signed case handoffs require reviewed API integration. The console is not a universal application-intake form or core-banking adapter. The signed outbox and REST case record provide evidence to your system of record; the institution controls account opening, monitoring, reporting and retention.
 
-Provider events reach a tenant-specific address. A tenant administrator signed in as a person reads it from `GET /api/v1/case-push/provider-webhook-inbox?provider=<name>` and gives it to the provider; treat it as a credential. It has the form `/api/v1/webhooks/providers/{tenant_id}/{provider}/{token}`; the earlier tokenless path answers 404. Every delivery is answered with `202`, and one that cannot be verified is recorded without being acted on. Rotating `AGENTICORG_SECRET_KEY` changes every tenant's address, so re-point the providers after a rotation.
+Provider events reach a tenant-specific address. A tenant administrator signed in as a person reads it from `GET /api/v1/case-push/provider-webhook-inbox?provider=<name>` and gives it to the provider; treat it as a credential. It has the form `/api/v1/webhooks/providers/{tenant_id}/{provider}/{token}`; the earlier tokenless path answers 404. A delivery to that address within the 256 KiB body cap is answered with `202` while governed cases are on for the tenant (a larger body gets `413`), and one that cannot be verified is recorded without being acted on. Rotating `AGENTICORG_SECRET_KEY` changes every tenant's address, so re-point the providers after a rotation.
 
 Deciding, withdrawing, requesting a decision, reviewing a screening disposition and approving an information request need a person's session. An API key or agent token gets `403` `human_session_required`.
 
-AgenticOrg pins the Grantex Python SDK (`grantex==0.7.1`) and calls its enforcement check with the grant token, connector and tool only. It does not pass a case id or case purpose, so a token's case purpose and per-case caps are not checked on this path. The role's case-purpose allowlist is a local AgenticOrg control, and pooled grants are not bound to one case. Evaluate that boundary explicitly before enabling a production process.
+AgenticOrg pins the Grantex Python SDK (`grantex==0.7.1`) and calls its enforcement check with the grant token, connector, tool and any numeric amount. It does not pass a case id or case purpose, so a token's case purpose and per-case caps are not checked on this path. The role's case-purpose allowlist is a local AgenticOrg control, and pooled grants are not bound to one case. Evaluate that boundary explicitly before enabling a production process.
 
 Next: [BFSI onboarding walkthrough](/docs/bfsi-business-onboarding), [Security and data](/docs/security-and-data).
 
@@ -1802,9 +1802,9 @@ Six console screens belong to services that are built into the product but switc
 
 | Screen | Sidebar entry and who sees it | Deployment setting (off by default) | While it is off |
 | --- | --- | --- | --- |
-| Documents | Always listed for roles that can open the approval queue | `AGENTICORG_IDP_ENABLED` | The page reports `idp_disabled`: document processing is off for this deployment |
-| Conversations | Always listed for administrators | `AGENTICORG_CONVERSATION_V2_ENABLED` | The page reports `conversation_disabled`: conversational services are off |
-| Workbenches | Always listed for every role | `AGENTICORG_WORKBENCH_V2_ENABLED` | The page says "Workbenches are off for this deployment." |
+| Documents | Always listed for roles that can open the approval queue | `AGENTICORG_IDP_ENABLED` | The page shows "Document processing is off for this deployment"; the API answers `404` `idp_disabled` |
+| Conversations | Always listed for administrators | `AGENTICORG_CONVERSATION_V2_ENABLED` | The page shows "Conversational services are off for this deployment"; the API answers `404` `conversation_disabled` |
+| Workbenches | Always listed for every role except merchant | `AGENTICORG_WORKBENCH_V2_ENABLED` | The page says "Workbenches are off for this deployment." |
 | Calls | Administrator, COO and auditor; hidden until the service is on | `AGENTICORG_SPEECH_INTELLIGENCE_ENABLED` | No sidebar entry |
 | Transactions | Administrator, CFO, COO and auditor; hidden until the service is on | `AGENTICORG_TRANSACTION_INTELLIGENCE_ENABLED` | No sidebar entry |
 | Lineage | Administrator, CxO roles, auditor and domain lead; hidden until the service is on | `AGENTICORG_LINEAGE_ENABLED` | No sidebar entry |
@@ -2849,7 +2849,7 @@ Do not copy development placeholder secrets, fake-model flags or seed identities
 
 #### Feature switches that ship off
 
-These deployment settings default to off in `core/config.py`. A setting that is off leaves the earlier behaviour in place. Some also have a per-tenant authority flag, managed by the platform operator, shown in parentheses. Set a switch the same way on every service of the deployment, and treat turning one on as a change to plan, test and record like a release.
+The main feature switches that default to off are listed below; `core/config.py` lists every setting. A setting that is off leaves the earlier behaviour in place. Some also have a per-tenant flag, shown in parentheses. These are authority flags managed by the platform operator, except `prompts.maker_checker`, which a tenant admin can set. Set a switch the same way on every service of the deployment, and treat turning one on as a change to plan, test and record like a release.
 
 | Setting | What it turns on |
 | --- | --- |
@@ -2863,6 +2863,7 @@ These deployment settings default to off in `core/config.py`. A setting that is 
 | `AGENTICORG_AUDIT_CHAIN_ENABLED` | Linking audit rows into a tamper-evident hash chain |
 | `AGENTICORG_RUNTIME_LIMITS_ENABLED`, `AGENTICORG_RUNTIME_MEMORY_ENABLED`, `AGENTICORG_TOOL_REGISTRY_ENABLED`, `AGENTICORG_RUNTIME_DEBUG_CONSOLE_ENABLED` | Per-agent run limits and loop detection, long-term memory, tool schema checks and the step-through debugger |
 | `AGENTICORG_WORKFLOW_BUILDER_V2_ENABLED` | The **Build visually** tab and definition checks on save |
+| `AGENTICORG_OUTPUT_SCHEMA_ENFORCED`, `AGENTICORG_CONTEXT_WINDOW_MANAGED`, `AGENTICORG_PROMPT_TYPED_PARAMETERS_ENABLED` | Checking an agent's final answer against its output schema, with escalation to a person when it stays invalid; leaving older tool results out of a conversation that does not fit the model's window; typed prompt parameters |
 | `AGENTICORG_PROMPTS_MAKER_CHECKER` (`prompts.maker_checker`), `AGENTICORG_PROMPT_COMPARE_ENABLED`, `AGENTICORG_EVALS_V2_ENABLED`, `AGENTICORG_EVAL_PROMOTION_GATE_ENABLED` | Prompt maker-checker, model comparison, evaluation datasets and the promotion gate |
 | `AGENTICORG_AGENT_REGISTRY_ENABLED` | Agent registry cards, lifecycle states and the Agent Catalogue |
 | `AGENTICORG_GOVERNANCE_INVENTORY_ENABLED`, `AGENTICORG_GOVERNANCE_MODEL_CARDS_ENABLED`, `AGENTICORG_GOVERNANCE_RISK_TIERS_ENABLED`, `AGENTICORG_GOVERNANCE_POLICY_CONSOLE_ENABLED` | AI asset inventory, model cards, risk tiers and the policy console |
@@ -3225,12 +3226,16 @@ tenant setting, approved provider, external system or human reviewer. No full
 BFSI journey has end-to-end acceptance on the strength of these counts alone.
 
 Services built behind default-off settings after this baseline was last refreshed
-are not yet reflected in these counts or in the table below: document
-processing, speech and call intelligence, transaction intelligence,
-conversational services and the supervisor view, workbenches, lineage, content
-services, personalisation, the agent registry and banking pack, model cards,
-and FinOps thresholds and forecast. Each is unavailable until its setting is
-turned on; see [Documents, conversations, calls and workbenches](/docs/review-and-operations-screens).
+are not yet reflected in these counts; where the table below names one, it is
+marked (built, off by default). They are document processing, speech and call
+intelligence, transaction intelligence, conversational services and the
+supervisor view, workbenches, lineage, content services, personalisation, the
+agent registry, model cards, and FinOps thresholds and forecast. Each is
+unavailable until its setting is turned on; see
+[feature switches that ship off](/docs/self-hosting#feature-switches-that-ship-off)
+and [the six screens that ship switched off](/docs/review-and-operations-screens).
+The Banking Pack can be installed without a setting, but it is not counted
+either.
 
 This page describes functional software coverage, not infrastructure location,
 regulatory approval, certification or permission to process customer data. A

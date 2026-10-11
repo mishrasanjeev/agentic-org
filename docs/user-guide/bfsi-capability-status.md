@@ -8,12 +8,16 @@ tenant setting, approved provider, external system or human reviewer. No full
 BFSI journey has end-to-end acceptance on the strength of these counts alone.
 
 Services built behind default-off settings after this baseline was last refreshed
-are not yet reflected in these counts or in the table below: document
-processing, speech and call intelligence, transaction intelligence,
-conversational services and the supervisor view, workbenches, lineage, content
-services, personalisation, the agent registry and banking pack, model cards,
-and FinOps thresholds and forecast. Each is unavailable until its setting is
-turned on; see [Documents, conversations, calls and workbenches](/docs/review-and-operations-screens).
+are not yet reflected in these counts; where the table below names one, it is
+marked (built, off by default). They are document processing, speech and call
+intelligence, transaction intelligence, conversational services and the
+supervisor view, workbenches, lineage, content services, personalisation, the
+agent registry, model cards, and FinOps thresholds and forecast. Each is
+unavailable until its setting is turned on; see
+[feature switches that ship off](/docs/self-hosting#feature-switches-that-ship-off)
+and [the six screens that ship switched off](/docs/review-and-operations-screens).
+The Banking Pack can be installed without a setting, but it is not counted
+either.
 
 This page describes functional software coverage, not infrastructure location,
 regulatory approval, certification or permission to process customer data. A

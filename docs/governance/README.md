@@ -56,8 +56,8 @@ Every provider call a reference agent makes passes through the provider tool gat
    so and the missing-items list asks for it.
 
 AgenticOrg calls the pinned Python Grantex SDK (`grantex==0.7.1`) with the grant
-token, connector and tool only, so case purpose in the token and per-case caps
-are not checked on that path. The purpose check above is
+token, connector, tool and any numeric amount, but no case id or case purpose,
+so case purpose in the token and per-case caps are not checked on that path. The purpose check above is
 local to AgenticOrg, and pooled grants are not bound to one case. Grants bound
 *what* an agent can touch. They never let an agent decide: there is no decision
 tool to grant.
