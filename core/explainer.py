@@ -120,6 +120,7 @@ async def _call_llm_for_summary(
         import json as _json
 
         from core.langgraph.llm_factory import create_chat_model
+        from core.llm.content import content_text
 
         llm = create_chat_model(model="", tenant_id=tenant_id)  # the tenant's default model
         trace_text = "\n".join(reasoning_trace[:20])
@@ -133,7 +134,7 @@ async def _call_llm_for_summary(
         response = await llm.ainvoke(prompt)
         if spend.enabled():
             spend.note("message", tenant_id, message=response, llm=llm, default_use_case="run.explanation")
-        content = response.content if hasattr(response, "content") else str(response)
+        content = content_text(response.content) if hasattr(response, "content") else str(response)
 
         # Parse JSON from response
         # Try to extract JSON from fenced block or raw content

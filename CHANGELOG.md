@@ -4,6 +4,21 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
 
 ## [Unreleased] - 2026-08-29
 
+### Fixed - Agent output parsing of provider content blocks
+- A model answer that arrives as a list of provider content blocks (for
+  example one `{"type": "text", "text": "```json ...```", "extras":
+  {"signature": ...}}` block) is now read for each block's text. The agent
+  graph used to join the blocks with `str()`, so the fenced JSON never parsed
+  and the run's output became `{"raw_output": "<block repr>"}`; it now parses
+  to the model's object, and an answer that is not JSON keeps its readable
+  text in `raw_output`. Reasoning, signature and tool-use blocks carry no
+  answer text and are skipped. The confidence length signal measures the
+  answer text instead of the number of blocks.
+- The SOP parser, the run explainer and the feedback analyser read block
+  content the same way (they failed or fell back to heuristics on it).
+  Plain string answers parse exactly as before. The shared helpers are in
+  `core/llm/content.py`.
+
 ### Security - breaking for audit readers of tenants that keep spend rows: `GET /audit` hides commercial spend audit rows by default
 - A deliberate default, on whatever `spend_intelligence_enabled` says:
   `GET /audit` hides the audit rows of rate cards, commitments, invoices,

@@ -57,6 +57,7 @@ from core.langgraph.tool_adapter import (
     _build_tool_index,
     build_tools_for_agent,
 )
+from core.llm.content import content_text, strip_code_fence
 from core.pii.pseudonymiser import PseudonymSession
 from core.prompts.context_window import fit_for_call
 from core.prompts.context_window import unwrap as unwrap_llm
@@ -652,7 +653,9 @@ def build_agent_graph(
 
         # Parse output — _parse_json_output guarantees a dict, but be
         # defensive for any future caller that builds output differently.
-        content = last_ai.content or ""
+        # Block content (a list of provider content blocks) is read for its
+        # text once, so the length signal below measures the answer too.
+        content = content_text(last_ai.content)
         output = _parse_json_output(content)
         if not isinstance(output, dict):
             output = {"raw_output": output, "status": "completed"}
@@ -1067,21 +1070,17 @@ def _parse_json_output(content: str | list | Any) -> dict[str, Any]:
     version returned whatever ``json.loads`` produced, so a JSON list
     crashed the graph with ``AttributeError: 'list' object has no
     attribute 'get'`` in evaluate/_extract_confidence.
+
+    List content (provider content blocks) is read for each block's text,
+    never ``str()`` of a block: a ``{"type": "text", "text": "```json ..."}``
+    block's repr kept the fenced answer from parsing and leaked the block
+    into ``raw_output``.
     """
-    # Handle list content (multiple messages) — join into single string
-    if isinstance(content, list):
-        content = "\n".join(str(item) for item in content)
-    if not isinstance(content, str):
-        content = str(content)
-    text = content.strip()
-    if text.startswith("```"):
-        lines = text.split("\n")
-        lines = [ln for ln in lines if not ln.strip().startswith("```")]
-        text = "\n".join(lines).strip()
+    text = content_text(content)
     try:
-        parsed = json.loads(text)
+        parsed = json.loads(strip_code_fence(text))
     except json.JSONDecodeError:
-        return {"raw_output": content, "status": "completed"}
+        return {"raw_output": text, "status": "completed"}
     if isinstance(parsed, dict):
         return parsed
     # Valid JSON but not an object — wrap to preserve our dict contract.
