@@ -4,11 +4,18 @@
  * cards with one-tap confirm and cancel, the step-up event, and the "why this" panel.
  *
  * The widget is a dependency-free script served from ui/public, so the test loads
- * its source and evaluates it against the jsdom window rather than importing a module.
+ * its source as a string and evaluates it against the jsdom window rather than importing a module.
  */
-import { readFileSync } from "node:fs";
-import path from "node:path";
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+
+// The widget source as a string through Vite, so the test needs no Node types.
+const WIDGET_SOURCE = (
+  import.meta.glob("../../public/customer-agent/widget.js", {
+    query: "?raw",
+    import: "default",
+    eager: true,
+  }) as Record<string, string>
+)["../../public/customer-agent/widget.js"];
 
 type JsonResponse = { ok: boolean; status: number; statusText?: string; json: () => Promise<unknown> };
 
@@ -70,9 +77,8 @@ describe("customer agent widget", () => {
   let fetchMock: ReturnType<typeof vi.fn>;
 
   beforeAll(() => {
-    const source = readFileSync(path.resolve(__dirname, "../../public/customer-agent/widget.js"), "utf8");
-    // eslint-disable-next-line @typescript-eslint/no-implied-eval
-    new Function(source)();
+    expect(WIDGET_SOURCE).toContain("agenticorg-customer-agent");
+    new Function(WIDGET_SOURCE)();
   });
 
   beforeEach(() => {
