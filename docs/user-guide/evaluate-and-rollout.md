@@ -22,6 +22,18 @@ Create candidates in shadow and restrict tools to reads where possible. Shadow i
 
 The public **Evaluations** page describes methodology; use the task's actual evaluation/run evidence for promotion. Jev advisory shadow work has its own access and cost/latency gate and does not replace human authority.
 
+## Prompt templates, datasets and the agent catalogue
+
+Administrators manage prompt templates on **Prompt Templates**. Three panels on that screen appear only where the deployment turns them on, and each is off by default:
+
+| Panel | Setting | What it adds |
+| --- | --- | --- |
+| Changes waiting for approval | `AGENTICORG_PROMPTS_MAKER_CHECKER`, or the tenant flag `prompts.maker_checker` | A template create, change, rollback or delete waits for a second person's approval |
+| Evaluation datasets | `AGENTICORG_EVALS_V2_ENABLED` | Versioned tenant datasets that can be run and compared run by run |
+| Compare models | `AGENTICORG_PROMPT_COMPARE_ENABLED` | One prompt run against several models side by side; these are real, billed model calls |
+
+With `AGENTICORG_EVAL_PROMOTION_GATE_ENABLED` on (off by default), an agent that declares an evaluation gate is not promoted or resumed to active until its prompt has a stored run on the gate's dataset version that meets the gate's pass rate without regressing beyond its allowance. The **Agent Catalogue** screen lists each agent's registry card and lifecycle state when the agent registry is on (`AGENTICORG_AGENT_REGISTRY_ENABLED`, off by default); otherwise it says the registry is off in this deployment.
+
 ## Move to a limited pilot
 
 Agree users, volume, allowed data, hours, review coverage and rollback triggers. Choose a narrow population and a named support owner. Train operators and reviewers separately. Verify that a non-admin user can complete the documented flow with their own account.

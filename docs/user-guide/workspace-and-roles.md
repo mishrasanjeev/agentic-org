@@ -16,7 +16,7 @@ The onboarding wizard includes organization details, industry and size, team inv
 
 ## Understand role-based navigation
 
-The sidebar deliberately differs by role. The backend, not a visible button, decides whether the operation is authorized. Current common roles include administrator, finance/CFO, HR/CHRO, marketing/CMO, operations/COO, auditor, merchant and domain-lead contexts.
+The sidebar deliberately differs by role. The backend, not a visible button, decides whether the operation is authorized. Current common roles include administrator, finance/CFO, HR/CHRO, marketing/CMO, operations/COO, auditor, merchant, domain lead, analyst (read-only within an assigned domain) and developer (builds personal agents and connectors, and approves only their own personal agents).
 
 | Task | Typical owner | Important boundary |
 | --- | --- | --- |
@@ -38,7 +38,8 @@ Do not copy a successful company's connector ID into another company's task. Hav
 
 During onboarding, the **Send Invites** action creates the entered invitations.
 The CFO/CHRO/CMO/COO labels map to domain-lead invitations for their respective
-domains. Check any per-recipient failure before retrying; successful recipients
+domains. An invitation is created as administrator, domain lead, analyst, auditor
+or developer; one sent without a role is created as analyst. Check any per-recipient failure before retrying; successful recipients
 are cleared from the form rather than being resent.
 
 In **Settings > User Management**, follow the entry points for company role

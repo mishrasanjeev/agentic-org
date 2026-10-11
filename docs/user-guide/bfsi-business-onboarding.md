@@ -37,7 +37,7 @@ Bank handoff | The signed outcome is delivered for the bank system to interpret 
 
 ## What a successful trial proves
 
-It proves the configured evidence/review/decision/handoff path for that test. It does not prove universal registry coverage, calibrated model accuracy, case-bound pooled grants or regulatory approval. The published Grantex SDK's token-level purpose/per-case-cap limitations must remain visible in the rollout review.
+It proves the configured evidence/review/decision/handoff path for that test. It does not prove universal registry coverage, calibrated model accuracy, case-bound pooled grants or regulatory approval. The rollout review must keep visible that AgenticOrg's Grantex SDK call passes no case id or purpose, so token-level case purpose and per-case caps are not checked on that path.
 
 ## Negative cases to demonstrate
 

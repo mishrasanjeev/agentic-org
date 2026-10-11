@@ -7,7 +7,7 @@ We welcome contributions from the community. This guide covers everything you ne
 ### Prerequisites
 
 - Python 3.12+
-- Node.js 20+ (for UI)
+- Node.js 22.22+ (for UI; CI uses 22.22.0)
 - Docker & Docker Compose
 - Git
 

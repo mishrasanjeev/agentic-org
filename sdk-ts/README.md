@@ -195,9 +195,9 @@ const current = await client.cases.get(record.case_ref as string);
 
 `investigate()` schedules work; it does not certify a completed investigation.
 The backend checks tenant enablement, role registration, the local case-purpose
-allowlist and delegated tool grants before provider calls. The currently
-legacy Python Grantex SDK `0.5.1` does not enforce token-level case purpose
-or per-case caps. Human-only decisions, withdrawal, screening review and
+allowlist and delegated tool grants before provider calls. AgenticOrg's call to the
+pinned Python Grantex SDK (`grantex==0.7.1`) passes no case id or purpose, so
+token-level case purpose and per-case caps are not checked on that path. Human-only decisions, withdrawal, screening review and
 information-request approval are not exposed through this API-key/agent-token
 client or the MCP agent catalog. See the [case lifecycle](../docs/governance/case-lifecycle.md)
 and [SDK contract test](test/sdk-contract-smoke.mjs).

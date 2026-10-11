@@ -14,6 +14,8 @@ Use REST/OpenAPI for application contracts, the repository SDKs for client acces
 
 Use a credential issued for the reviewed deployment and minimum scopes. Keep it in environment/secret storage. Supply authorized company context for execution paths that require it. Never accept a company ID from untrusted model content without server-side authorization.
 
+Outside the A2A and MCP routes, route scope checks apply to every credential, Grantex agent tokens included: an agent token needs the route family's scope (for example `agents:read` or `audit:read`) or `agenticorg:admin`, or it gets `403`. A tenant administrator signed in as a person grants an agent route scopes with `PATCH /api/v1/agents/{id}` and `{"route_scopes": [...]}`, on a shared agent registered on Grantex. Only canonical route-family scopes are accepted there, never `agenticorg:admin` (`422`). Administrator access is the exact scope `agenticorg:admin`; a look-alike such as `agenticorg:admin:full` is not an administrator.
+
 ### Obtain a workspace API key
 
 An authorized administrator opens **Settings > API Keys**. Enter a meaningful
@@ -62,7 +64,7 @@ bearer authentication and reviewed read execution, not arbitrary write execution
 
 Use the repository MCP adapter with a client that supports its stdio transport. Configure `AGENTICORG_BASE_URL` and one accepted authentication value: `AGENTICORG_API_KEY` or `AGENTICORG_GRANTEX_TOKEN`. Use the client's secure configuration mechanism instead of committing a key in JSON.
 
-The adapter's execution/SOP-submission tools require `company_id`. Its `run_agent` path goes through A2A. Scope enforcement for A2A/MCP depends on the deployment's `AGENTICORG_ROUTE_SCOPE_A2A_MCP` setting; administrators must evaluate and configure it, not assume every discovery route is protected identically.
+The adapter's execution/SOP-submission tools require `company_id`. Its `run_agent` path goes through A2A. Scope checks on the A2A and MCP routes are off by default (`AGENTICORG_ROUTE_SCOPE_A2A_MCP`). While the setting is off, any authenticated credential reaches `POST /api/v1/a2a/tasks`, `GET /api/v1/a2a/tasks/{id}` and `POST /api/v1/mcp/call`; when it is on, those routes need `a2a:read`, `a2a:write` or `mcp:write` (or `agenticorg:admin`). Administrators must evaluate and configure it, not assume every discovery route is protected identically.
 
 The `seller.*` tools read cached commerce artifacts; they do not authorize payment, orders or holds. Governed-case human decisions have no shortcut through the machine-authenticated MCP adapter.
 

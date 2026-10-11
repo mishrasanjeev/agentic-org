@@ -49,9 +49,11 @@ are refused unless the active role agent, registered tools, exact local case
 purpose, and delegated grant all authorize the call. This case-specific check
 is strict even if general tool enforcement is in `off` or `warn` mode.
 
-The currently published `grantex==0.5.1` does **not** verify a case purpose in
-the token or enforce a per-case cap. The role's `case_purposes` list is a local
-AgenticOrg control, and pooled grants are not bound to one case. Decision and
+AgenticOrg pins `grantex==0.7.1` and calls its enforcement check with the
+grant token, connector and tool only. It does not pass a case id or case
+purpose, so a token's case purpose and per-case caps are **not** checked on
+this path. The role's `case_purposes` list is a local AgenticOrg control, and
+pooled grants are not bound to one case. Decision and
 analyst actions still require a signed-in human; API keys, agent tokens, and
 MCP tools cannot act as that human. The case runtime is off for a tenant until
 enabled and configured. This source description is not a claim that a particular
@@ -66,8 +68,11 @@ real Playwright Chromium while keeping paid calls and production mutations off.
 
 The dashboard's Recent Activity queries audit records. The separate internal
 live-feed pipeline persists events per tenant *when published* and can replay
-them by sequence after a WebSocket interruption, but operational event writers
-are not yet wired to that pipeline. Its browser component exposes
+them by sequence after a WebSocket interruption. Its only writer is the
+conversation supervisor console (off by default behind
+`AGENTICORG_CONVERSATION_V2_ENABLED`), which announces conversation changes
+without message text for the Conversations screen; other operational event
+writers are not wired to that pipeline. Its browser component exposes
 connection/catch-up status without raw payload display; it is not mounted as
 the dashboard's live stream. Broker reconnection, bounded socket fanout, and
 periodic credential revalidation are covered by local tests. Production
@@ -180,6 +185,15 @@ A source definition is not evidence that a specific tenant has connected the pro
   tenant administrator enters; prices come from the tenant's rate cards, else the deployment's list prices
   for model tokens, converted to INR with the tenant's FX rates. Follow the
   [rollout and enablement runbook](docs/runbooks/spend-intelligence.md).
+- Many governance and BFSI services ship in source but are off by default, each behind its own
+  `AGENTICORG_*` setting: the model gateway, guardrail hooks and enforcement, operator override,
+  residency enforcement, the audit chain, tracing and synthetic checks, runtime limits and memory, the
+  visual workflow builder, prompt maker-checker and comparison, evaluation datasets and the promotion
+  gate, the agent registry, governance inventory and model cards, FinOps attribution, thresholds and
+  forecast, conversational services, content services, document processing, workbenches, speech and
+  transaction intelligence, lineage and personalisation. A default installation has none of them on.
+  See the [feature switches](docs/user-guide/self-hosting.md#feature-switches-that-ship-off) table and
+  the [guide to the default-off screens](docs/user-guide/review-and-operations-screens.md).
 - SSO, SCIM, enterprise support, and custom SLAs depend on plan and deployment configuration.
 - WhatsApp, Telegram, payment-provider, bank, POS, and merchant-system flows require provider setup and verified callbacks or adapters.
 - WooCommerce, ERP, PIM, OMS, WMS, custom commerce APIs, and additional payment rails can be recorded as adapter-ready configuration but are not represented as active execution paths until an approved adapter exists.
@@ -233,7 +247,7 @@ Start with [docs/oacp/README.md](docs/oacp/README.md) and the [runtime launch cl
 ## Requirements
 
 - Python 3.12 or newer
-- Node.js 20 or newer
+- Node.js 22.22 or newer (the UI's router requires it; CI uses 22.22.0)
 - Docker with Docker Compose for local PostgreSQL and Redis
 - At least one supported LLM provider key, or a configured local model runtime, for model-backed execution
 
@@ -456,6 +470,7 @@ To refresh the tracked sitemap and llms copies plus route JSON-LD CSP hashes:
 - [End-user manual: first agent, everyday operations and BFSI playbooks](docs/user-guide/README.md). The UI serves this same Markdown content at [agenticorg.ai/docs](https://agenticorg.ai/docs), with full-text search, visual process flows, print-friendly guides and mobile navigation. The [docs.agenticorg.ai](https://docs.agenticorg.ai) alias has configured Cloud DNS and managed HTTPS; its hosting and verification instructions live in the [documentation runbook](docs/runbooks/documentation-site.md).
 - [Functional BFSI coverage and open gaps](docs/bfsi/functional-coverage.md) shows what is implemented, partial or unavailable, with verification scenarios and product boundaries.
 - [Public BFSI capability status](docs/user-guide/bfsi-capability-status.md) gives readers a plain-language summary of the same assessment, including unfinished work.
+- [Documents, conversations, calls and workbenches](docs/user-guide/review-and-operations-screens.md) covers the console screens of services that ship off by default and the setting each needs.
 - [Documentation site publishing and subdomain runbook](docs/runbooks/documentation-site.md)
 - [Documentation home](docs/README.md)
 - [Current product status](docs/PRODUCT_STATUS.md)

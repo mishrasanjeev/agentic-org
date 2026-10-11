@@ -890,11 +890,11 @@ export default function Landing() {
                 <BrowserFrame
                   src="/screenshots/observatory.webp"
                   title="app.agenticorg.ai/dashboard/observatory"
-                  alt="Illustrative observatory dashboard mockup for reviewing agent activity, throughput, and error trends"
+                  alt="Illustrative observatory dashboard mockup for reviewing recent agent audit activity"
                 />
                 <h3 className="text-xl font-bold text-slate-900">Agent Observatory</h3>
                 <p className="text-slate-600 text-sm leading-relaxed">
-                  Review captured agent actions, decisions, escalations, throughput, latency, errors, and cost from a unified operations view. Data coverage depends on configured telemetry and evidence.
+                  Review the newest audit rows for agent actions, results, and human-review escalations. The screen polls the 20 most recent rows every five seconds and labels that scope; run timelines and model-call summaries are on the administrator Observability screen when tracing is enabled.
                 </p>
               </div>
             </FadeIn>

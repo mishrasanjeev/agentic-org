@@ -30,6 +30,8 @@ Dashboard visibility is role-based. A missing menu can be expected permission be
 
 ## BFSI configuration examples
 
+The **Banking Pack** offers agent templates for retail and SME banking operations: loan underwriting support, KYC review, collections, complaint handling and bank reconciliation. Each template sends defined cases to a person through its review condition and carries a confidence floor. Installing it creates the agents in shadow and its two workflows with manual triggers; it does not schedule work, promote an agent to active or connect a bank system. Some packs on the screen, such as Insurance and Legal, are listed but cannot be installed yet.
+
 Bank onboarding can use governed cases with reviewed evidence providers and decision authority. Insurance assistance can use a custom document-review agent plus OCR and workflow approvals. Reconciliation can use finance definitions with a bank's approved ledger/export interface. These are explained in the [BFSI playbooks](/docs/bfsi-business-onboarding), not presented as universally installed bank products.
 
 ## Maintain the business layer

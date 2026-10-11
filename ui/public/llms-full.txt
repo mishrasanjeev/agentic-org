@@ -55,9 +55,11 @@ are refused unless the active role agent, registered tools, exact local case
 purpose, and delegated grant all authorize the call. This case-specific check
 is strict even if general tool enforcement is in `off` or `warn` mode.
 
-The currently published `grantex==0.5.1` does **not** verify a case purpose in
-the token or enforce a per-case cap. The role's `case_purposes` list is a local
-AgenticOrg control, and pooled grants are not bound to one case. Decision and
+AgenticOrg pins `grantex==0.7.1` and calls its enforcement check with the
+grant token, connector and tool only. It does not pass a case id or case
+purpose, so a token's case purpose and per-case caps are **not** checked on
+this path. The role's `case_purposes` list is a local AgenticOrg control, and
+pooled grants are not bound to one case. Decision and
 analyst actions still require a signed-in human; API keys, agent tokens, and
 MCP tools cannot act as that human. The case runtime is off for a tenant until
 enabled and configured. This source description is not a claim that a particular
@@ -72,8 +74,11 @@ real Playwright Chromium while keeping paid calls and production mutations off.
 
 The dashboard's Recent Activity queries audit records. The separate internal
 live-feed pipeline persists events per tenant *when published* and can replay
-them by sequence after a WebSocket interruption, but operational event writers
-are not yet wired to that pipeline. Its browser component exposes
+them by sequence after a WebSocket interruption. Its only writer is the
+conversation supervisor console (off by default behind
+`AGENTICORG_CONVERSATION_V2_ENABLED`), which announces conversation changes
+without message text for the Conversations screen; other operational event
+writers are not wired to that pipeline. Its browser component exposes
 connection/catch-up status without raw payload display; it is not mounted as
 the dashboard's live stream. Broker reconnection, bounded socket fanout, and
 periodic credential revalidation are covered by local tests. Production
@@ -186,6 +191,15 @@ A source definition is not evidence that a specific tenant has connected the pro
   tenant administrator enters; prices come from the tenant's rate cards, else the deployment's list prices
   for model tokens, converted to INR with the tenant's FX rates. Follow the
   [rollout and enablement runbook](https://github.com/mishrasanjeev/agentic-org/blob/main/docs/runbooks/spend-intelligence.md).
+- Many governance and BFSI services ship in source but are off by default, each behind its own
+  `AGENTICORG_*` setting: the model gateway, guardrail hooks and enforcement, operator override,
+  residency enforcement, the audit chain, tracing and synthetic checks, runtime limits and memory, the
+  visual workflow builder, prompt maker-checker and comparison, evaluation datasets and the promotion
+  gate, the agent registry, governance inventory and model cards, FinOps attribution, thresholds and
+  forecast, conversational services, content services, document processing, workbenches, speech and
+  transaction intelligence, lineage and personalisation. A default installation has none of them on.
+  See the [feature switches](https://github.com/mishrasanjeev/agentic-org/blob/main/docs/user-guide/self-hosting.md#feature-switches-that-ship-off) table and
+  the [guide to the default-off screens](https://github.com/mishrasanjeev/agentic-org/blob/main/docs/user-guide/review-and-operations-screens.md).
 - SSO, SCIM, enterprise support, and custom SLAs depend on plan and deployment configuration.
 - WhatsApp, Telegram, payment-provider, bank, POS, and merchant-system flows require provider setup and verified callbacks or adapters.
 - WooCommerce, ERP, PIM, OMS, WMS, custom commerce APIs, and additional payment rails can be recorded as adapter-ready configuration but are not represented as active execution paths until an approved adapter exists.
@@ -239,7 +253,7 @@ Start with [docs/oacp/README.md](https://github.com/mishrasanjeev/agentic-org/bl
 ## Requirements
 
 - Python 3.12 or newer
-- Node.js 20 or newer
+- Node.js 22.22 or newer (the UI's router requires it; CI uses 22.22.0)
 - Docker with Docker Compose for local PostgreSQL and Redis
 - At least one supported LLM provider key, or a configured local model runtime, for model-backed execution
 
@@ -462,6 +476,7 @@ To refresh the tracked sitemap and llms copies plus route JSON-LD CSP hashes:
 - [End-user manual: first agent, everyday operations and BFSI playbooks](https://github.com/mishrasanjeev/agentic-org/blob/main/docs/user-guide/README.md). The UI serves this same Markdown content at [agenticorg.ai/docs](https://agenticorg.ai/docs), with full-text search, visual process flows, print-friendly guides and mobile navigation. The [docs.agenticorg.ai](https://docs.agenticorg.ai) alias has configured Cloud DNS and managed HTTPS; its hosting and verification instructions live in the [documentation runbook](https://github.com/mishrasanjeev/agentic-org/blob/main/docs/runbooks/documentation-site.md).
 - [Functional BFSI coverage and open gaps](https://github.com/mishrasanjeev/agentic-org/blob/main/docs/bfsi/functional-coverage.md) shows what is implemented, partial or unavailable, with verification scenarios and product boundaries.
 - [Public BFSI capability status](https://github.com/mishrasanjeev/agentic-org/blob/main/docs/user-guide/bfsi-capability-status.md) gives readers a plain-language summary of the same assessment, including unfinished work.
+- [Documents, conversations, calls and workbenches](https://github.com/mishrasanjeev/agentic-org/blob/main/docs/user-guide/review-and-operations-screens.md) covers the console screens of services that ship off by default and the setting each needs.
 - [Documentation site publishing and subdomain runbook](https://github.com/mishrasanjeev/agentic-org/blob/main/docs/runbooks/documentation-site.md)
 - [Documentation home](https://github.com/mishrasanjeev/agentic-org/blob/main/docs/README.md)
 - [Current product status](https://github.com/mishrasanjeev/agentic-org/blob/main/docs/PRODUCT_STATUS.md)
@@ -670,6 +685,7 @@ These names are parsed from connectors. A listing does not prove credentials, su
 - [Industry packs and business dashboards](https://agenticorg.ai/docs/industry-packs): Use available packs as reviewed starting points and understand the finance, HR, marketing, operations and partner workspaces.
 - [Approvals and human review](https://agenticorg.ai/docs/approvals): Review evidence and permissions before a decision, handle escalations, and distinguish workflow approvals from governed-case decisions.
 - [Governed business onboarding cases](https://agenticorg.ai/docs/governed-cases): Investigate a business, inspect cited evidence and deterministic policy scores, review screening proposals, and request a human decision.
+- [Documents, conversations, calls and workbenches](https://agenticorg.ai/docs/review-and-operations-screens): Find and use the Documents, Conversations, Workbenches, Calls, Transactions and Lineage screens, each off until an operator turns on its setting.
 - [Audit, monitoring and run history](https://agenticorg.ai/docs/audit-and-monitoring): Read agent and workflow evidence, understand dashboard limits, investigate failures, and measure your own service outcomes.
 - [Guardrail rules, dry runs and enforcement](https://agenticorg.ai/docs/guardrails): Configure tenant-admin guardrail rules through the authenticated API, test detector behavior, and distinguish flag-only from enforced operation.
 - [Run timelines and workload observability](https://agenticorg.ai/docs/run-observability): Use the admin trace waterfall and tenant workload view, understand opt-in tracing and storage, and investigate run failures without overreading missing data.
@@ -806,7 +822,7 @@ These source-verified guides describe usage and configured boundaries, not a bla
 ### Start here
 
 URL: https://agenticorg.ai/docs/start-here
-Audience: Everyone. Reviewed: 2026-10-02.
+Audience: Everyone. Reviewed: 2026-10-11.
 
 #### What you can do with AgenticOrg
 
@@ -860,7 +876,7 @@ bypass permissions.
 | I want to... | Screen | Read first |
 | --- | --- | --- |
 | Choose a company | [Companies](https://app.agenticorg.ai/dashboard/companies) | [Workspace and roles](/docs/workspace-and-roles) |
-| Connect a model | [AI Provider Credentials](https://app.agenticorg.ai/dashboard/settings/ai-credentials) | [Model setup](/docs/model-setup) |
+| Connect a model | [AI Credentials](https://app.agenticorg.ai/dashboard/settings/ai-credentials) | [Model setup](/docs/model-setup) |
 | Find or create an agent | [Agents](https://app.agenticorg.ai/dashboard/agents) | [Create agents](/docs/create-agents) |
 | Build from a procedure | [Create from SOP](https://app.agenticorg.ai/dashboard/agents/from-sop) | [Create agents](/docs/create-agents) |
 | Upload a document | [Knowledge Base](https://app.agenticorg.ai/dashboard/knowledge) | [Knowledge and OCR](/docs/knowledge-and-ocr) |
@@ -868,9 +884,15 @@ bypass permissions.
 | Coordinate several steps | [Workflows](https://app.agenticorg.ai/dashboard/workflows) | [Workflows](/docs/workflows) |
 | Review proposed actions | [Approvals](https://app.agenticorg.ai/dashboard/approvals) | [Human review](/docs/approvals) |
 | Review business onboarding | [Governed cases](https://app.agenticorg.ai/dashboard/approvals/cases) | [Governed cases](/docs/governed-cases) |
-| Configure voice | [Voice Setup](https://app.agenticorg.ai/dashboard/voice-setup) | [Voice](/docs/voice) |
-| Configure browser automation | [RPA](https://app.agenticorg.ai/dashboard/rpa) | [RPA](/docs/rpa) |
-| Investigate run evidence | [Audit](https://app.agenticorg.ai/dashboard/audit) | [Monitoring](/docs/audit-and-monitoring) |
+| Review extracted document fields (off by default) | [Documents](https://app.agenticorg.ai/dashboard/documents) | [Default-off screens](/docs/review-and-operations-screens) |
+| Watch or take over a live chat (off by default) | [Conversations](https://app.agenticorg.ai/dashboard/conversations) | [Default-off screens](/docs/review-and-operations-screens) |
+| Work from a role workbench (off by default) | [Workbenches](https://app.agenticorg.ai/dashboard/workbench) | [Default-off screens](/docs/review-and-operations-screens) |
+| Review kept call recordings (off by default) | [Calls](https://app.agenticorg.ai/dashboard/calls) | [Default-off screens](/docs/review-and-operations-screens) |
+| Decide transaction findings (off by default) | [Transactions](https://app.agenticorg.ai/dashboard/transactions) | [Default-off screens](/docs/review-and-operations-screens) |
+| Trace where a kept item came from (off by default) | [Lineage](https://app.agenticorg.ai/dashboard/lineage) | [Default-off screens](/docs/review-and-operations-screens) |
+| Configure voice | [Voice Agents](https://app.agenticorg.ai/dashboard/voice-setup) | [Voice](/docs/voice) |
+| Configure browser automation | [RPA Scripts](https://app.agenticorg.ai/dashboard/rpa) | [RPA](/docs/rpa) |
+| Investigate run evidence | [Audit Log](https://app.agenticorg.ai/dashboard/audit) | [Monitoring](/docs/audit-and-monitoring) |
 | Inspect run timelines | [Observability](https://app.agenticorg.ai/dashboard/observability) | [Run observability](/docs/run-observability) |
 | Configure model routing | [Model Gateway](https://app.agenticorg.ai/dashboard/settings/model-gateway) | [Model Gateway](/docs/model-gateway) |
 | Configure guardrail rules | [Guardrails](https://app.agenticorg.ai/dashboard/settings/guardrails) | [Guardrails](/docs/guardrails) |
@@ -878,6 +900,7 @@ bypass permissions.
 | Connect an external agent client | [A2A / MCP](https://app.agenticorg.ai/dashboard/integrations) | [API and clients](/docs/api-sdk-mcp) |
 | Create an API key | [Settings](https://app.agenticorg.ai/dashboard/settings) | [API and clients](/docs/api-sdk-mcp) |
 | Review subscription or usage | [Billing](https://app.agenticorg.ai/dashboard/billing) | [Billing and support](/docs/billing-and-support) |
+| Review recorded agent cost in USD (no sidebar entry) | [Cost Dashboard](https://app.agenticorg.ai/dashboard/costs) | [Billing and support](/docs/billing-and-support) |
 
 #### When you get stuck
 
@@ -960,7 +983,7 @@ Have a second person reproduce the exercise with the correct role and company. R
 ### Workspace, companies and roles
 
 URL: https://agenticorg.ai/docs/workspace-and-roles
-Audience: Administrators and team leads. Reviewed: 2026-10-02.
+Audience: Administrators and team leads. Reviewed: 2026-10-11.
 
 #### Organization, company and user are different things
 
@@ -980,7 +1003,7 @@ The onboarding wizard includes organization details, industry and size, team inv
 
 #### Understand role-based navigation
 
-The sidebar deliberately differs by role. The backend, not a visible button, decides whether the operation is authorized. Current common roles include administrator, finance/CFO, HR/CHRO, marketing/CMO, operations/COO, auditor, merchant and domain-lead contexts.
+The sidebar deliberately differs by role. The backend, not a visible button, decides whether the operation is authorized. Current common roles include administrator, finance/CFO, HR/CHRO, marketing/CMO, operations/COO, auditor, merchant, domain lead, analyst (read-only within an assigned domain) and developer (builds personal agents and connectors, and approves only their own personal agents).
 
 | Task | Typical owner | Important boundary |
 | --- | --- | --- |
@@ -1002,7 +1025,8 @@ Do not copy a successful company's connector ID into another company's task. Hav
 
 During onboarding, the **Send Invites** action creates the entered invitations.
 The CFO/CHRO/CMO/COO labels map to domain-lead invitations for their respective
-domains. Check any per-recipient failure before retrying; successful recipients
+domains. An invitation is created as administrator, domain lead, analyst, auditor
+or developer; one sent without a role is created as analyst. Check any per-recipient failure before retrying; successful recipients
 are cleared from the form rather than being resent.
 
 In **Settings > User Management**, follow the entry points for company role
@@ -1126,11 +1150,13 @@ Jev/System One is an optional advisory integration with separate TypeSafe access
 ### Model Gateway, routing and limits
 
 URL: https://agenticorg.ai/docs/model-gateway
-Audience: Tenant administrators. Reviewed: 2026-10-02.
+Audience: Tenant administrators. Reviewed: 2026-10-11.
 
 #### Control model routing with the Model Gateway
 
-The Model Gateway is an administrator console for reviewing provider/model choices, routing rules, access policies, per-model limits, dry-run decisions, recent routing records and cost comparisons. It does not create provider credentials. Configure and test credentials first in [AI Provider Credentials](/docs/model-setup), then use **Settings > Model Gateway** (`/dashboard/settings/model-gateway`) for tenant-scoped gateway controls.
+The Model Gateway is an administrator console for reviewing provider/model choices, routing rules, access policies, per-model limits, dry-run decisions, recent routing records and cost comparisons. It does not create provider credentials. Configure and test credentials first in [AI Provider Credentials](/docs/model-setup), then open **Model Gateway** in the administrator sidebar (`/dashboard/settings/model-gateway`) for tenant-scoped gateway controls.
+
+The gateway is off by default. Until a platform operator turns on the `model_gateway.enabled` authority flag for your tenant, or sets `AGENTICORG_MODEL_GATEWAY_ENABLED` for the deployment, the status card shows **Gateway off**, and saved routing rules, access rules and limits are not applied: each model call keeps the provider and model its agent asked for. The dry run still shows what the rules would decide and says whether the gateway currently applies them. With the gateway on, a call goes ahead without its limit when the limit settings or their Redis state cannot be read, unless the deployment sets `AGENTICORG_MODEL_GATEWAY_LIMITS_FAIL_CLOSED=true`.
 
 ```flow
 Prepare approved provider access | Add credentials and confirm allowed models, regions, billing owner and data terms.
@@ -1144,7 +1170,7 @@ Enable deliberately | Confirm tenant policy and feature configuration, then moni
 
 | Control | What it decides | Good first use |
 | --- | --- | --- |
-| Routing policy | Which configured provider/model or weighted target is selected for a matching request | Prefer an approved lower-cost model for a bounded use case |
+| Routing policy | Which configured provider/model or weighted target is selected for a matching request. A cost-aware policy picks the lowest-priced target whose observed failure rate stays under the policy's threshold, reading the routing records, and states that reason in the decision | Prefer an approved lower-cost model for a bounded use case |
 | Access policy | Whether a request matching a principal, application, agent, provider, model or other supported context is allowed or denied | Deny a model for a sensitive use case |
 | Model limit | Maximum concurrent requests and/or requests per minute for a provider/model | Protect a shared quota from bursts |
 | Dry run | What the current policy would decide for supplied request context | Compare intended behavior before changing live traffic |
@@ -1233,7 +1259,7 @@ Next: [Run and chat](/docs/run-and-chat), [Workflows](/docs/workflows), [Evaluat
 ### Run agents and use chat
 
 URL: https://agenticorg.ai/docs/run-and-chat
-Audience: Operators. Reviewed: 2026-10-02.
+Audience: Operators. Reviewed: 2026-10-11.
 
 #### Choose the right entry point
 
@@ -1269,7 +1295,7 @@ The exact status vocabulary varies by run resource. Preserve the returned state 
 
 #### Follow-ups and retries
 
-A conversational follow-up should retain relevant context, but never assume a different browser session or company automatically shares it. Repeat the input reference when ambiguity matters. Do not ask an agent to "ignore the earlier policy" to unblock a refusal.
+Chat passes earlier turns to a follow-up only when the deployment turns on conversational services (`AGENTICORG_CONVERSATION_V2_ENABLED`, off by default). While it is off, each message runs on its own even though the panel shows the earlier messages, so repeat the document, case and company reference every time. While it is on, recent turns from the same user, company and agent reach the agent as context; another user, company or agent does not share them. Do not ask an agent to "ignore the earlier policy" to unblock a refusal.
 
 Before retrying an external action, check whether the provider already accepted it. Use the integration's idempotency and status lookup where available. Blindly rerunning a workflow can duplicate an email, record update or provider request.
 
@@ -1283,7 +1309,7 @@ Next: [Troubleshooting](/docs/troubleshooting), [Approvals](/docs/approvals), [A
 ### Knowledge Base and scanned documents
 
 URL: https://agenticorg.ai/docs/knowledge-and-ocr
-Audience: Content owners and operators. Reviewed: 2026-10-02.
+Audience: Content owners and operators. Reviewed: 2026-10-11.
 
 #### What Knowledge Base does
 
@@ -1314,6 +1340,8 @@ Audio and video are not document uploads. File size, pages, decompressed pixels 
 5. Search a known phrase and review source/page/sheet/slide details.
 6. Run a grounded question and verify it against the original document.
 
+Each search result shows the document and, where recorded, its citation: page, sheet, cell range, paragraph or heading. **Open excerpt** shows the whole cited passage, with **Previous** and **Next** for the neighbouring passages. Where the deployment turns on query transformation (`AGENTICORG_KNOWLEDGE_QUERY_TRANSFORM_ENABLED`, off by default), **How this was retrieved** lists each retrieval step. Documents uploaded from this page are shared with the whole tenant. An API upload can name a domain (`?domain=`), and then users limited to other domains do not see that document.
+
 If a duplicate dialog appears, choose the appropriate supported action deliberately. Replacement extraction is performed before old content is removed, but you should still verify that search returns the intended version. Do not leave two conflicting policies current without an explicit effective-date rule.
 
 ```flow
@@ -1341,7 +1369,7 @@ Next: [First agent](/docs/first-agent), [Insurance assistance](/docs/bfsi-insura
 ### Connect business systems
 
 URL: https://agenticorg.ai/docs/connectors
-Audience: Administrators and integration owners. Reviewed: 2026-10-02.
+Audience: Administrators and integration owners. Reviewed: 2026-10-11.
 
 #### Connector readiness is more than a green badge
 
@@ -1382,18 +1410,17 @@ refused to keep the response-size limit effective before decompression.
 2. Open **Connectors > Remote MCP**. Enter a unique name such as `mcp_support`, the endpoint and token. Choose **Connect and discover tools**. AgenticOrg performs protocol initialization and paginated tool discovery before saving. A rejected token or incompatible server produces an error; it does not create a healthy connection.
 3. Review the discovered descriptions and input schemas with the server owner. Server annotations are hints, not permission. All tools begin as write/unreviewed. Only tools advertised as read-only can be reviewed as reads, and obvious write names remain writes. A remote server can still misrepresent its behavior: register only trusted servers and use minimally scoped provider tokens.
 4. Select the read-only tools you have reviewed and choose **Save read-only review**. Run one **Read-only connection probe** with non-sensitive arguments. A successful probe verifies that tool, not every server capability or any real speech/payment provider behind it.
-5. In **Create Agent > Behavior**, or **Agent > Config > Edit**, select the remote connector and its exact tools. Save and reload the agent. Names are connector-qualified, such as `mcp_support__search`; a tool from another connection is not interchangeable.
+5. In **Agents > Create Agent**, on the **Behavior** step of the Create Virtual Employee wizard, or in **Agent > Config > Edit**, select the remote connector and its exact tools. Save and reload the agent. Names are connector-qualified, such as `mcp_support__search`; a tool from another connection is not interchangeable.
 6. Run a company-scoped agent with an appropriate delegated grant. The runtime rechecks persisted ownership, active connector, selected tools and current schema before dispatch. MCP registration and a read probe do not bypass agent grants, operator overrides or action policies.
 
-```mermaid
-flowchart LR
-  A[Owner connects HTTPS server] --> B[Initialize and discover tools]
-  B --> C[Encrypted token and tenant catalog]
-  C --> D[Owner reviews read-only tools]
-  D --> E[Agent selects exact connector and tools]
-  E --> F[Grant and action checks]
-  F --> G[Reload authority and compare live schema]
-  G --> H[One bounded MCP call]
+```flow
+Owner connects the HTTPS server | The endpoint and bearer token are saved only after protocol initialization succeeds.
+Discover tools | Paginated discovery stores the encrypted token and the tenant's tool catalog.
+Review read-only tools | The owner marks reviewed read tools; every other tool stays write/unreviewed.
+Agent selects tools | The agent names the exact connector and the tools it may use.
+Grant and action checks | Delegated grants, operator overrides and action policy apply.
+Reload and compare the schema | Ownership, the active connector and the live schema are checked again before dispatch.
+One bounded MCP call | The call runs once within the size and time caps below.
 ```
 
 **Current boundary:** write/unreviewed tools may be selected but remain contained by the platform's action policy. This path does not enable arbitrary messaging, voice replies, payments or destructive actions. Grant labels remain conservatively write-scoped; the reviewed read classification is a separate execution-policy check. Tools and their output are untrusted source data, never instructions to expand permissions.
@@ -1458,7 +1485,7 @@ Next: [Workflows](/docs/workflows), [Model setup](/docs/model-setup), [BFSI reco
 ### Build and run workflows
 
 URL: https://agenticorg.ai/docs/workflows
-Audience: Process owners. Reviewed: 2026-10-02.
+Audience: Process owners. Reviewed: 2026-10-11.
 
 #### Turn a process into explicit steps
 
@@ -1470,7 +1497,9 @@ The screenshot illustrates the existing workflow view. Your available definition
 
 #### Create a definition
 
-Open **Workflows > Create Workflow**. You can describe the business process to generate a draft, or enter a reviewed definition manually. The screen includes name, version, domain, trigger type, optional cron schedule and JSON steps. Generated output is not an approved operational process.
+Open **Workflows > Create Workflow**. Choose **Describe in English** to generate a draft from a description of the business process, or **Use Template** to enter or edit a reviewed definition. The definition form includes name, version, domain, trigger type, optional cron schedule and JSON steps. Generated output is not an approved operational process.
+
+A third tab, **Build visually**, appears only where the deployment turns on the visual builder (`AGENTICORG_WORKFLOW_BUILDER_V2_ENABLED`, off by default). It draws agent steps, human checkpoints, conditions and failure paths, lists every validation problem, and copies valid steps into the definition form. With the setting on, saving a definition that cannot be drawn and run is refused with each problem named.
 
 The available step options include agent, condition, human-in-loop, parallel, wait, wait-for-event, notify, transform and collaboration. Review each option against the runtime implementation and selected integration. Do not infer that selecting a step type provisions its external system.
 
@@ -1480,7 +1509,7 @@ The available step options include agent, condition, human-in-loop, parallel, wa
 4. Add a condition for missing/invalid evidence.
 5. Add human review before a consequential action.
 6. Define success and failure routing, bounded retries and a time limit.
-7. Validate JSON in the editor and inspect the visual builder.
+7. Validate the JSON steps; where **Build visually** is available, check the drawn paths and its validation list.
 8. Save and run with synthetic inputs before scheduling.
 
 #### Worked process: complaint response preparation
@@ -1513,7 +1542,7 @@ Next: [Approvals](/docs/approvals), [Audit and monitoring](/docs/audit-and-monit
 ### Voice, speech-to-text and text-to-speech
 
 URL: https://agenticorg.ai/docs/voice
-Audience: Voice administrators. Reviewed: 2026-10-02.
+Audience: Voice administrators. Reviewed: 2026-10-11.
 
 #### Shipped voice path
 
@@ -1547,7 +1576,7 @@ Never place a paid outbound call to an unapproved number. A local signed-webhook
 
 #### Privacy and service boundaries
 
-AgenticOrg does not store call audio in this path or expose full transcripts in the call-history API. Bounded conversation text is encrypted. The provider's recording, retention and regional settings are separate and must be reviewed with your data owner.
+AgenticOrg does not store call audio in this path or expose full transcripts in the call-history API. Bounded conversation text is encrypted. The separate **Calls** screen (speech intelligence, off by default) keeps uploaded recordings and their transcripts encrypted; see [Calls](/docs/review-and-operations-screens#calls-recordings-transcripts-and-summaries). The provider's recording, retention and regional settings are separate and must be reviewed with your data owner.
 
 For BFSI, general policy answers and complaint-routing assistance are appropriate starting points. Voice identity, balance disclosure, account access, transfer instructions and card actions need institution-approved authentication and integrations. A caller saying an account number is not identity verification.
 
@@ -1610,7 +1639,7 @@ Next: [Connectors](/docs/connectors), [Security and data](/docs/security-and-dat
 ### Industry packs and business dashboards
 
 URL: https://agenticorg.ai/docs/industry-packs
-Audience: Department leads. Reviewed: 2026-10-02.
+Audience: Department leads. Reviewed: 2026-10-11.
 
 #### Packs are starting points, not automatic integrations
 
@@ -1644,6 +1673,8 @@ Dashboard visibility is role-based. A missing menu can be expected permission be
 
 #### BFSI configuration examples
 
+The **Banking Pack** offers agent templates for retail and SME banking operations: loan underwriting support, KYC review, collections, complaint handling and bank reconciliation. Each template sends defined cases to a person through its review condition and carries a confidence floor. Installing it creates the agents in shadow and its two workflows with manual triggers; it does not schedule work, promote an agent to active or connect a bank system. Some packs on the screen, such as Insurance and Legal, are listed but cannot be installed yet.
+
 Bank onboarding can use governed cases with reviewed evidence providers and decision authority. Insurance assistance can use a custom document-review agent plus OCR and workflow approvals. Reconciliation can use finance definitions with a bank's approved ledger/export interface. These are explained in the [BFSI playbooks](/docs/bfsi-business-onboarding), not presented as universally installed bank products.
 
 #### Maintain the business layer
@@ -1656,7 +1687,7 @@ Next: [Create agents](/docs/create-agents), [Adoption checklist](/docs/adoption-
 ### Approvals and human review
 
 URL: https://agenticorg.ai/docs/approvals
-Audience: Reviewers and approvers. Reviewed: 2026-10-02.
+Audience: Reviewers and approvers. Reviewed: 2026-10-11.
 
 #### What human review should answer
 
@@ -1691,6 +1722,12 @@ If a source changes while you review, inspect the current version again. A gover
 
 Request missing information or reject an unsafe proposal. Do not ask the agent to fill gaps with assumptions. A refusal is a useful safety outcome when authorization or evidence is absent.
 
+#### Multi-person approval rules
+
+When an approval policy applies to an item, the person who requested it cannot decide it (`403`). Each person votes once per item across every step: a second vote returns `409`, so a policy that needs the same person at two steps cannot complete. A step whose condition cannot be evaluated for the item, for example because the item lacks a field the condition names, still applies and needs its own approvers. If the item's policy is deleted, replaced, or loses the step the item is waiting on, decisions return `409` and the item stays pending until it expires.
+
+Where the platform operator sets the stricter condition mode (authority flag `approvals.unevaluable_condition.deny`, off by default), an approval on an item with such a step returns `409` `approval_condition_unevaluable` and is not counted; a rejection is still accepted. These refusals are the policy working. Ask the policy owner to correct the policy or assign another reviewer; do not sign in twice as different identities.
+
 #### Operating the queue
 
 Assign primary and backup reviewers, a review target, an escalation contact and absence coverage. Track queue age and rejection reasons. Separate preparation from approval wherever your policy requires it. Reviewers need training in the task domain, not only product navigation.
@@ -1701,7 +1738,7 @@ For BFSI, loan, onboarding, claim, sanction, account-change and payment decision
 ### Governed business onboarding cases
 
 URL: https://agenticorg.ai/docs/governed-cases
-Audience: BFSI analysts and authorized approvers. Reviewed: 2026-10-02.
+Audience: BFSI analysts and authorized approvers. Reviewed: 2026-10-11.
 
 #### What a governed case is
 
@@ -1745,15 +1782,85 @@ If the issuer is unconfigured, the default verifier refuses decisions. `decision
 
 Applications and signed case handoffs require reviewed API integration. The console is not a universal application-intake form or core-banking adapter. The signed outbox and REST case record provide evidence to your system of record; the institution controls account opening, monitoring, reporting and retention.
 
-The current published Grantex Python SDK verifies tool authority but does not enforce every token-level case-purpose or per-case-cap requirement. AgenticOrg has local purpose controls; pooled grants are not case-bound. Evaluate that boundary explicitly before enabling a production process.
+Provider events reach a tenant-specific address. A tenant administrator signed in as a person reads it from `GET /api/v1/case-push/provider-webhook-inbox?provider=<name>` and gives it to the provider; treat it as a credential. It has the form `/api/v1/webhooks/providers/{tenant_id}/{provider}/{token}`; the earlier tokenless path answers 404. Every delivery is answered with `202`, and one that cannot be verified is recorded without being acted on. Rotating `AGENTICORG_SECRET_KEY` changes every tenant's address, so re-point the providers after a rotation.
+
+Deciding, withdrawing, requesting a decision, reviewing a screening disposition and approving an information request need a person's session. An API key or agent token gets `403` `human_session_required`.
+
+AgenticOrg pins the Grantex Python SDK (`grantex==0.7.1`) and calls its enforcement check with the grant token, connector and tool only. It does not pass a case id or case purpose, so a token's case purpose and per-case caps are not checked on this path. The role's case-purpose allowlist is a local AgenticOrg control, and pooled grants are not bound to one case. Evaluate that boundary explicitly before enabling a production process.
 
 Next: [BFSI onboarding walkthrough](/docs/bfsi-business-onboarding), [Security and data](/docs/security-and-data).
+
+
+### Documents, conversations, calls and workbenches
+
+URL: https://agenticorg.ai/docs/review-and-operations-screens
+Audience: Administrators, reviewers and operations leads. Reviewed: 2026-10-11.
+
+#### Six screens that ship switched off
+
+Six console screens belong to services that are built into the product but switched off in a default installation. Each needs its own deployment setting, which a platform operator turns on. While a service is off, it processes nothing and its other routes answer as not found.
+
+| Screen | Sidebar entry and who sees it | Deployment setting (off by default) | While it is off |
+| --- | --- | --- | --- |
+| Documents | Always listed for roles that can open the approval queue | `AGENTICORG_IDP_ENABLED` | The page reports `idp_disabled`: document processing is off for this deployment |
+| Conversations | Always listed for administrators | `AGENTICORG_CONVERSATION_V2_ENABLED` | The page reports `conversation_disabled`: conversational services are off |
+| Workbenches | Always listed for every role | `AGENTICORG_WORKBENCH_V2_ENABLED` | The page says "Workbenches are off for this deployment." |
+| Calls | Administrator, COO and auditor; hidden until the service is on | `AGENTICORG_SPEECH_INTELLIGENCE_ENABLED` | No sidebar entry |
+| Transactions | Administrator, CFO, COO and auditor; hidden until the service is on | `AGENTICORG_TRANSACTION_INTELLIGENCE_ENABLED` | No sidebar entry |
+| Lineage | Administrator, CxO roles, auditor and domain lead; hidden until the service is on | `AGENTICORG_LINEAGE_ENABLED` | No sidebar entry |
+
+An "off for this deployment" message is configuration, not an empty queue. Ask the platform owner whether the service is meant to be on; do not treat it as "nothing to review". The sidebar only offers a page; the server still checks each request against your role and scopes.
+
+```flow
+Choose one service | Pick the screen a pilot needs and name its business owner and reviewer.
+Agree the data terms | Confirm what the service keeps, who may read it and how it is removed.
+Turn on the setting | The platform operator sets the service's deployment setting.
+Confirm the screen | Reopen the screen and check that the off message has gone.
+Test with fictional material | Run one synthetic document, call or record through the service.
+Review before relying on it | A named person checks each output before anyone acts on it.
+```
+
+#### Documents: review extracted fields
+
+With document processing on, a file sent to `POST /api/v1/idp/analyse?store=true` is split into typed documents (bank statement, salary slip, invoice, identity document and other types in the catalogue), and its fields and tables are extracted with the place on the page each came from. The screen has no upload button; files arrive through that API.
+
+Filter the list by **Needs review**, **Processed**, **Approved**, **Rejected** or **All**. Open a file to see each page with a box drawn around every field. The box colour shows whether a field was read with high or low confidence, is missing, or has been corrected. Click a field to jump to its page, type a correction and choose **Save**; the extracted value stays visible beside your correction. Then **Approve** or **Reject** the whole file. The review reasons at the top say why a file was routed to a person, for example a missing required field or a page whose text could not be read.
+
+A confidence colour is a hint, not a verified value. Check account numbers, amounts, dates and identity numbers against the page image every time.
+
+#### Conversations: watch and take over a chat
+
+With conversational services on, an administrator sees every chat conversation in progress or escalated, newest activity first, with who holds each one. Open one to read its transcript. **Take over** stops the runtime from answering: the user's next messages are shown to you and your replies reach the user's chat. **Release** hands the conversation back to the runtime. The screen updates through the live feed, which carries only the fact that something changed, never the message text.
+
+The same setting turns on banking intents in chat and passes earlier turns to the agent as context; see [Run agents and use chat](/docs/run-and-chat).
+
+#### Workbenches: one place per role
+
+With workbenches on, the index lists the workbenches your role holds or an administrator assigned to you. A workbench shows tabs with the number of items waiting behind each. Most tabs open the page they name (for example Documents or Approvals), and that page applies its own permissions. A content-drafts tab lists drafts waiting for a decision with **Approve** and **Reject**. Use **Refresh counts** before reporting a queue size; a dash means the count is not available, not zero.
+
+#### Calls: recordings, transcripts and summaries
+
+With speech intelligence on, a recording sent to `POST /api/v1/speech/recordings` is split by speaker and transcribed, by a local engine where the deployment installed one or through the tenant's own speech-provider credential. The audio and the transcript are kept encrypted under the tenant's key. The screen has no upload button.
+
+Open a recording to see each speaker's talk time and turns. **Summarise** asks a model for the intent, key points and next actions; **From the words only** builds the same summary from the transcript without a model. **Redact spoken data** finds spoken card numbers, one-time codes, CVVs and PINs, replaces them in the transcript, silences them in the audio and records only the kinds and times removed. Sentiment, empathy, talk ratio and escalation risk are review aids for a supervisor, not a judgement of the staff member or the customer. Agree retention and removal of recordings with the data owner before turning the service on; see [Security and data](/docs/security-and-data).
+
+#### Transactions: findings under human disposition
+
+With transaction intelligence on, transaction records are loaded through the API and detectors look for patterns such as structuring and pass-through movements. Each finding names an entity, a summary, a severity and its supporting records. Filter by **Open**, **Confirmed**, **Escalated** or **Dismissed**.
+
+**Draft narrative** writes a draft account of the finding, by a model or from the facts alone, with what is still to check. **Download evidence** exports the finding with its supporting rows and a digest over the package. **Show the fund flow** draws the accounts and counterparties around the entity across a chosen number of hops. A reviewer with approval access records **Confirm**, **Escalate** or **Dismiss**; a dismissal needs notes. A narrative is a draft for an investigator, never a regulatory filing, and auditors can read findings without deciding them.
+
+#### Lineage: where a kept item came from
+
+With lineage on, ingestion records each kept item's source, version and processing steps. Search by kind and reference, choose **Upstream (sources)**, **Downstream (uses)** or **Both** and a number of hops, then open an item to trace it. The sync-sources table lists scheduled sources with their last run, and **Run now** starts one. Items ingested while lineage was off have no recorded chain, so "No provenance kept yet" can mean the item predates the switch.
+
+Next: [Approvals](/docs/approvals), [Security and data](/docs/security-and-data), [Troubleshooting](/docs/troubleshooting), [Self-hosting](/docs/self-hosting).
 
 
 ### Audit, monitoring and run history
 
 URL: https://agenticorg.ai/docs/audit-and-monitoring
-Audience: Operators and auditors. Reviewed: 2026-10-02.
+Audience: Operators and auditors. Reviewed: 2026-10-11.
 
 #### What evidence you should inspect
 
@@ -1777,7 +1884,9 @@ Do not infer that an absent event means no action occurred. Confirm the view's s
 
 #### Understand screen limits
 
-Dashboard Recent Activity and Observatory read audit history. Observatory polls the newest 20 rows every five seconds and labels that scope. This is not an exhaustive live stream or a full-day activity total. An internal resilient feed exists in the repository, but no production writer currently publishes into that feed; do not represent it as universal real-time monitoring.
+Dashboard Recent Activity and Observatory read audit history. Observatory polls the newest 20 rows every five seconds and labels that scope. This is not an exhaustive live stream or a full-day activity total. An internal resilient feed exists in the repository. Its only writer is the conversation supervisor console (off by default behind `AGENTICORG_CONVERSATION_V2_ENABLED`), which announces conversation changes, never message text, for the Conversations screen; no other operational event is published to it, so do not represent it as universal real-time monitoring.
+
+In a tenant that keeps spend rate cards, commitments, invoices, reconciliations or spend jobs, the Audit Log hides those audit rows from every reader who is not a human administrator or auditor, including domain roles and machine credentials, even after spend intelligence is turned off. This is `AGENTICORG_SPEND_AUDIT_COMMERCIAL_FILTER`, on by default; `false` shows them to every reader as before. Where the deployment turns on the tamper-evident audit chain (`AGENTICORG_AUDIT_CHAIN_ENABLED`, off by default), audit rows are linked into a hash chain, and a reader with audit access can read the chain status and verify the links through `GET /api/v1/audit/chain` and `GET /api/v1/audit/chain/verify`.
 
 For governed cases, inspect transitions, memo citations, policy inputs/version, analyst reviews, decision-grant evidence and signed handoff delivery history. The case record can retain stronger lineage than a general activity summary.
 
@@ -1797,7 +1906,7 @@ Next: [Run observability](/docs/run-observability), [Guardrails](/docs/guardrail
 ### Guardrail rules, dry runs and enforcement
 
 URL: https://agenticorg.ai/docs/guardrails
-Audience: Tenant administrators and security owners. Reviewed: 2026-10-02.
+Audience: Tenant administrators and security owners. Reviewed: 2026-10-11.
 
 #### Configure and test guardrails
 
@@ -1805,7 +1914,7 @@ Tenant-scoped rules evaluate text at the input, retrieved-evidence, model-output
 
 Tenant administrators manage rules on the [Guardrails](https://app.agenticorg.ai/dashboard/settings/guardrails) page. It shows the mode in effect (hooks off, flag-only or enforcing), lists the rules with what each applies to, adds, changes, enables, disables and deletes a rule, and dry-runs a stage over a text. Detector options are edited as JSON, starting from an example for the chosen detector. The page changes rules only; hooks and tenant enforcement are switched on through their own approved controls.
 
-The same operations are available to an approved API client with the required `governance.guardrails.sensitive.read` or `.write` permission, under `/api/v1/guardrails`: `GET /status`, `GET/POST /rules`, `PATCH/DELETE /rules/{rule_id}` and `POST /evaluate`. Do not copy a privileged key into a browser console or commit it to a script.
+The same operations are available under `/api/v1/guardrails` to an approved client acting as a tenant administrator and holding `governance.guardrails.sensitive.read` or `.write`: `GET /status`, `GET/POST /rules`, `PATCH/DELETE /rules/{rule_id}`, `POST /evaluate`, `GET /adversarial` and `POST /adversarial/run`. Do not copy a privileged key into a browser console or commit it to a script.
 
 ```flow
 Check effective status | Open the Guardrails page and read the banner: hooks off, flag-only or enforcing.
@@ -1846,11 +1955,11 @@ Next: [Model Gateway](/docs/model-gateway), [Security and data](/docs/security-a
 ### Run timelines and workload observability
 
 URL: https://agenticorg.ai/docs/run-observability
-Audience: Administrators and operators. Reviewed: 2026-10-02.
+Audience: Administrators and operators. Reviewed: 2026-10-11.
 
 #### Inspect run timelines and workload
 
-The administrator-only **Observability** screen (`/dashboard/observability`) has two views: Traces, which lists recent instrumented runs and a span waterfall for one run, and Workload, which summarizes review deadlines and selected tenant outcomes. These are read-only views. They help an operator investigate; they do not replace the audit log, provider billing, a system-of-record check or an incident process.
+The administrator-only **Observability** screen (`/dashboard/observability`) has Traces, which lists recent instrumented runs and a span waterfall for one run, and Workload, which summarizes review deadlines and selected tenant outcomes. Traces and Workload are read-only views. Where the deployment turns on synthetic checks (`AGENTICORG_SYNTHETIC_CHECKS_ENABLED`, off by default), a third **Checks** tab lists the tenant's scheduled probes with their latest results and lets an administrator add or run one. Where the debugging console is on (`AGENTICORG_RUNTIME_DEBUG_CONSOLE_ENABLED`, off by default), a run recorded while it was on offers **Step through** to read its checkpoints one step at a time. They help an operator investigate; they do not replace the audit log, provider billing, a system-of-record check or an incident process.
 
 ```flow
 Open Observability | Sign in as an authorized administrator and select the intended company.
@@ -1887,7 +1996,7 @@ If the view is empty, first verify permissions, selected company, feature config
 ### Evaluate and roll out safely
 
 URL: https://agenticorg.ai/docs/evaluate-and-rollout
-Audience: Product owners and administrators. Reviewed: 2026-10-02.
+Audience: Product owners and administrators. Reviewed: 2026-10-11.
 
 #### Define success before running tests
 
@@ -1913,6 +2022,18 @@ Create candidates in shadow and restrict tools to reads where possible. Shadow i
 
 The public **Evaluations** page describes methodology; use the task's actual evaluation/run evidence for promotion. Jev advisory shadow work has its own access and cost/latency gate and does not replace human authority.
 
+#### Prompt templates, datasets and the agent catalogue
+
+Administrators manage prompt templates on **Prompt Templates**. Three panels on that screen appear only where the deployment turns them on, and each is off by default:
+
+| Panel | Setting | What it adds |
+| --- | --- | --- |
+| Changes waiting for approval | `AGENTICORG_PROMPTS_MAKER_CHECKER`, or the tenant flag `prompts.maker_checker` | A template create, change, rollback or delete waits for a second person's approval |
+| Evaluation datasets | `AGENTICORG_EVALS_V2_ENABLED` | Versioned tenant datasets that can be run and compared run by run |
+| Compare models | `AGENTICORG_PROMPT_COMPARE_ENABLED` | One prompt run against several models side by side; these are real, billed model calls |
+
+With `AGENTICORG_EVAL_PROMOTION_GATE_ENABLED` on (off by default), an agent that declares an evaluation gate is not promoted or resumed to active until its prompt has a stored run on the gate's dataset version that meets the gate's pass rate without regressing beyond its allowance. The **Agent Catalogue** screen lists each agent's registry card and lifecycle state when the agent registry is on (`AGENTICORG_AGENT_REGISTRY_ENABLED`, off by default); otherwise it says the registry is off in this deployment.
+
 #### Move to a limited pilot
 
 Agree users, volume, allowed data, hours, review coverage and rollback triggers. Choose a narrow population and a named support owner. Train operators and reviewers separately. Verify that a non-admin user can complete the documented flow with their own account.
@@ -1931,7 +2052,7 @@ Next: [Team adoption checklist](/docs/adoption-checklist), [BFSI onboarding](/do
 ### Security, privacy and data handling
 
 URL: https://agenticorg.ai/docs/security-and-data
-Audience: Security teams and data owners. Reviewed: 2026-10-02.
+Audience: Security teams and data owners. Reviewed: 2026-10-11.
 
 #### Start with approved data
 
@@ -1952,11 +2073,14 @@ Review API keys and delegated grants by scope, environment and owner. Rotate and
 | Model and embedding calls | Provider endpoint, permitted data, retention and contractual terms |
 | Knowledge extraction | File access, extracted chunks, OCR quality, replacement and deletion |
 | Voice | Provider recording/retention, approved number and encrypted bounded text |
+| Calls (speech intelligence, off by default) | Encrypted audio and transcript kept per tenant, the transcription engine and speech-provider credential used, spoken-data redaction, and how recordings are removed: the speech routes offer no deletion or retention setting |
 | RPA | Approved domains, secret custody and screenshot/log content |
 | Governed cases | Cited evidence, encrypted excerpts, decision authority and signed handoff |
 | Commerce | Merchant scope, artifact freshness, public-safe projection and provider-owned execution |
 
 AgenticOrg's controls do not automatically set the provider's retention or your bank's network configuration. Review those separately.
+
+**Settings > Compliance & Data > Data Region** records the tenant's region (IN, EU or US). It does not move stored data or change where the hosted service runs. Residency enforcement is off by default. When a platform operator turns it on for the deployment (`AGENTICORG_RESIDENCY_ENFORCE=true`) or for one tenant (authority flag `residency.enforce`), any AI or integration provider without an active attestation for that region is refused; providers running inside the deployment need none. Administrators record attestations through `/api/v1/residency/attestations`. Confirm the deployment's actual regions with your platform owner.
 
 #### Retention and deletion
 
@@ -1976,11 +2100,13 @@ Next: [Workspace and roles](/docs/workspace-and-roles), [Audit and monitoring](/
 ### Billing, limits and support
 
 URL: https://agenticorg.ai/docs/billing-and-support
-Audience: Account owners. Reviewed: 2026-10-02.
+Audience: Account owners. Reviewed: 2026-10-11.
 
 #### Understand separate cost sources
 
 Hosted platform plans and external provider usage are different. Models, embeddings, calls, messaging, merchant systems and payment providers can charge independently. Self-hosting adds your infrastructure and operating costs. Do not assume an economy label means the provider is free for your account.
+
+Administrators and CFOs can open the **Cost Dashboard** at `/dashboard/costs` (it has no sidebar entry). It sums the platform's own recorded USD cost per task and agent; it is not a provider invoice.
 
 The hosted pricing page is generated from the platform's plan catalog. Use [Pricing](https://agenticorg.ai/pricing) and **Billing** in your workspace for current plan information rather than relying on a hard-coded price in a guide.
 
@@ -2275,7 +2401,7 @@ Reads need the `audit:read` scope. Beyond that, one rule decides what each reade
 
 #### What is not in phase 1
 
-- **No spend screen.** Phase 1 is API-only. The app's existing cost views read the existing cost ledgers, not these usage records.
+- **No spend screen.** Phase 1 is API-only. The app's existing cost views, such as the Cost Dashboard at `/dashboard/costs` (administrators and CFOs; it has no sidebar entry), read the existing cost ledgers, not these usage records.
 - **No spend dashboards, budgets, alerts, forecasts, statements or month close.** These belong to later phases; freezing closed months and statements belong to phase 2. Spend intelligence does not block or throttle a call because of its spend.
 - **Some usage is not metered:** the embedding backfill command and seed data, the voice runtime's own speech-to-text and text-to-speech outside the speech store, and the tool gateway's own completion path.
 - **No batch flag on records.** Reconciliation re-prices every group as non-batch usage.
@@ -2289,7 +2415,7 @@ Next: [Model Gateway](/docs/model-gateway), [Audit and monitoring](/docs/audit-a
 ### Troubleshooting by symptom
 
 URL: https://agenticorg.ai/docs/troubleshooting
-Audience: Everyone. Reviewed: 2026-10-02.
+Audience: Everyone. Reviewed: 2026-10-11.
 
 #### Start with the smallest failing layer
 
@@ -2314,6 +2440,13 @@ Record the exact screen, timestamp, company, safe run reference and error code. 
 | RPA times out | Target changes, session, selectors, approved domain | Pause schedules and revalidate the script in a test environment |
 | Commerce answer is stale | Source sync, artifact TTL, revocation and merchant state | Refresh through the supported path; do not promise final inventory/price |
 | Case decision refused | Current version, issuer configuration, distinct approvals | Resolve the exact reason and request a current decision |
+| A screen says a service is off, or `idp_disabled`, `conversation_disabled` or `spend_disabled` | The service's deployment setting is off (the default) | Ask the platform owner whether it should be on; this is configuration, not an empty result |
+| Run refused with `guardrail_blocked` / `E1016` | A guardrail rule at that stage blocked it | Review the rule with its owner on the Guardrails page; do not reword input to get past it |
+| `423` or a tool result with `operator_override` / `E1013` | An operator halt or throttle covers the model, agent, workflow or tool pipeline | Ask the administrator who placed it; do not work around it |
+| `409` "Agent is paused" | The agent is paused and the deployment refuses paused agents (`AGENTICORG_PAUSED_AGENTS_REFUSED`, off by default) | Have the owner resume the agent, or use another active agent |
+| Run stopped with a `limit` block | The agent's own step, duration or tool-call limit, or its loop rule, applied while `AGENTICORG_RUNTIME_LIMITS_ENABLED` is on (off by default) | Review the limits and the repeated tool calls before running it again |
+| Approval decision returns `409` | You already voted on the item, or its policy changed while it waited | See [multi-person approval rules](/docs/approvals#multi-person-approval-rules) |
+| `403` `human_session_required` | An API key or agent token tried a governed-case action reserved for a person | Sign in as the named person |
 
 #### Distinguish refused, failed and unavailable
 
@@ -2579,7 +2712,7 @@ For an external buyer client, begin with the generic card and a protected creden
 ### API, SDK, MCP and A2A integration
 
 URL: https://agenticorg.ai/docs/api-sdk-mcp
-Audience: Developers and integration owners. Reviewed: 2026-10-02.
+Audience: Developers and integration owners. Reviewed: 2026-10-11.
 
 #### Choose an integration surface
 
@@ -2596,6 +2729,8 @@ Use REST/OpenAPI for application contracts, the repository SDKs for client acces
 #### Authenticate and preserve context
 
 Use a credential issued for the reviewed deployment and minimum scopes. Keep it in environment/secret storage. Supply authorized company context for execution paths that require it. Never accept a company ID from untrusted model content without server-side authorization.
+
+Outside the A2A and MCP routes, route scope checks apply to every credential, Grantex agent tokens included: an agent token needs the route family's scope (for example `agents:read` or `audit:read`) or `agenticorg:admin`, or it gets `403`. A tenant administrator signed in as a person grants an agent route scopes with `PATCH /api/v1/agents/{id}` and `{"route_scopes": [...]}`, on a shared agent registered on Grantex. Only canonical route-family scopes are accepted there, never `agenticorg:admin` (`422`). Administrator access is the exact scope `agenticorg:admin`; a look-alike such as `agenticorg:admin:full` is not an administrator.
 
 ### Obtain a workspace API key
 
@@ -2645,7 +2780,7 @@ bearer authentication and reviewed read execution, not arbitrary write execution
 
 Use the repository MCP adapter with a client that supports its stdio transport. Configure `AGENTICORG_BASE_URL` and one accepted authentication value: `AGENTICORG_API_KEY` or `AGENTICORG_GRANTEX_TOKEN`. Use the client's secure configuration mechanism instead of committing a key in JSON.
 
-The adapter's execution/SOP-submission tools require `company_id`. Its `run_agent` path goes through A2A. Scope enforcement for A2A/MCP depends on the deployment's `AGENTICORG_ROUTE_SCOPE_A2A_MCP` setting; administrators must evaluate and configure it, not assume every discovery route is protected identically.
+The adapter's execution/SOP-submission tools require `company_id`. Its `run_agent` path goes through A2A. Scope checks on the A2A and MCP routes are off by default (`AGENTICORG_ROUTE_SCOPE_A2A_MCP`). While the setting is off, any authenticated credential reaches `POST /api/v1/a2a/tasks`, `GET /api/v1/a2a/tasks/{id}` and `POST /api/v1/mcp/call`; when it is on, those routes need `a2a:read`, `a2a:write` or `mcp:write` (or `agenticorg:admin`). Administrators must evaluate and configure it, not assume every discovery route is protected identically.
 
 The `seller.*` tools read cached commerce artifacts; they do not authorize payment, orders or holds. Governed-case human decisions have no shortcut through the machine-authenticated MCP adapter.
 
@@ -2675,7 +2810,7 @@ refusal, and revocation over HTTP.
 ### Self-hosting and deployment handoff
 
 URL: https://agenticorg.ai/docs/self-hosting
-Audience: IT and platform teams. Reviewed: 2026-10-02.
+Audience: IT and platform teams. Reviewed: 2026-10-11.
 
 #### Hosted versus institution-managed
 
@@ -2712,9 +2847,38 @@ Use `make ps` for service status, `make logs` for logs, `make test`/`make check`
 
 Do not copy development placeholder secrets, fake-model flags or seed identities into production. Air-gapped deployment has additional dependency/model/image and outbound-integration limits; review the operator guide before promising disconnected capability.
 
+#### Feature switches that ship off
+
+These deployment settings default to off in `core/config.py`. A setting that is off leaves the earlier behaviour in place. Some also have a per-tenant authority flag, managed by the platform operator, shown in parentheses. Set a switch the same way on every service of the deployment, and treat turning one on as a change to plan, test and record like a release.
+
+| Setting | What it turns on |
+| --- | --- |
+| `AGENTICORG_MODEL_GATEWAY_ENABLED` (`model_gateway.enabled`) | Routing and access policies and per-model limits on live model calls |
+| `AGENTICORG_MODEL_GATEWAY_RECORDS_ENABLED` | A signed routing record for each gateway-routed model call |
+| `AGENTICORG_GUARDRAILS_HOOKS_ENABLED`, `AGENTICORG_GUARDRAILS_ENFORCE` (`guardrails.enforce`) | Guardrail evaluation at every stage, then enforcement instead of flag-only |
+| `AGENTICORG_OPERATOR_OVERRIDE_ENABLED` (`operator_override.enabled`) | Halting or throttling a model, agent, workflow or the tool pipeline |
+| `AGENTICORG_RESIDENCY_ENFORCE` (`residency.enforce`) | Refusing providers without an attestation for the tenant's data region |
+| `AGENTICORG_TRACING_ENABLED`, `AGENTICORG_TRACING_TIMELINE_ENABLED` | OpenTelemetry spans and stored run timelines |
+| `AGENTICORG_SYNTHETIC_CHECKS_ENABLED` | The scheduled synthetic-check sweep and the Observability Checks tab |
+| `AGENTICORG_AUDIT_CHAIN_ENABLED` | Linking audit rows into a tamper-evident hash chain |
+| `AGENTICORG_RUNTIME_LIMITS_ENABLED`, `AGENTICORG_RUNTIME_MEMORY_ENABLED`, `AGENTICORG_TOOL_REGISTRY_ENABLED`, `AGENTICORG_RUNTIME_DEBUG_CONSOLE_ENABLED` | Per-agent run limits and loop detection, long-term memory, tool schema checks and the step-through debugger |
+| `AGENTICORG_WORKFLOW_BUILDER_V2_ENABLED` | The **Build visually** tab and definition checks on save |
+| `AGENTICORG_PROMPTS_MAKER_CHECKER` (`prompts.maker_checker`), `AGENTICORG_PROMPT_COMPARE_ENABLED`, `AGENTICORG_EVALS_V2_ENABLED`, `AGENTICORG_EVAL_PROMOTION_GATE_ENABLED` | Prompt maker-checker, model comparison, evaluation datasets and the promotion gate |
+| `AGENTICORG_AGENT_REGISTRY_ENABLED` | Agent registry cards, lifecycle states and the Agent Catalogue |
+| `AGENTICORG_GOVERNANCE_INVENTORY_ENABLED`, `AGENTICORG_GOVERNANCE_MODEL_CARDS_ENABLED`, `AGENTICORG_GOVERNANCE_RISK_TIERS_ENABLED`, `AGENTICORG_GOVERNANCE_POLICY_CONSOLE_ENABLED` | AI asset inventory, model cards, risk tiers and the policy console |
+| `AGENTICORG_FINOPS_ATTRIBUTION_ENABLED`, `AGENTICORG_FINOPS_THRESHOLDS_ENABLED`, `AGENTICORG_FINOPS_FORECAST_ENABLED` | Use-case cost attribution, thresholds that alert, throttle or suspend runs (they need attribution on), and forecasts |
+| `AGENTICORG_SPEND_INTELLIGENCE_ENABLED` | [AI spend intelligence](/docs/ai-spend-intelligence) |
+| `AGENTICORG_KNOWLEDGE_HYBRID_SEARCH`, `AGENTICORG_KNOWLEDGE_RERANK_ENABLED`, `AGENTICORG_KNOWLEDGE_QUERY_TRANSFORM_ENABLED`, `AGENTICORG_KNOWLEDGE_GRAPH_RETRIEVAL_ENABLED` | Additional knowledge retrieval stages |
+| `AGENTICORG_CONVERSATION_V2_ENABLED` | Banking intents and earlier-turn context in chat, and the Conversations screen |
+| `AGENTICORG_CONTENT_SERVICES_ENABLED` | Governed drafting, summarisation and extraction APIs |
+| `AGENTICORG_IDP_ENABLED`, `AGENTICORG_WORKBENCH_V2_ENABLED`, `AGENTICORG_SPEECH_INTELLIGENCE_ENABLED`, `AGENTICORG_TRANSACTION_INTELLIGENCE_ENABLED`, `AGENTICORG_LINEAGE_ENABLED` | Document processing, workbenches, call recordings, transaction findings and lineage, with their [screens](/docs/review-and-operations-screens) |
+| `AGENTICORG_PERSONALISATION_ENABLED` | Consent-checked personalisation |
+| `AGENTICORG_PAUSED_AGENTS_REFUSED` | Refusing runs, chats and workflow steps for paused agents |
+| `AGENTICORG_ROUTE_SCOPE_A2A_MCP` | Scope checks on the A2A task and MCP call routes |
+
 #### Release handoff
 
-Use the repository's reviewed deployment path and migration-first process. Verify exact commit, migration completion, API/UI revisions, traffic, health, database/Redis and required CI. Then test the institution's actual authorized flow with approved synthetic data. A successful build is not a completed deployment or provider canary.
+Use the repository's reviewed deployment path and migration-first process. Strict (non-local) runtimes make no schema changes at start-up and refuse to start unless the database is at the migration head the build carries, so apply migrations before the release that needs them. Verify exact commit, migration completion, API/UI revisions, traffic, health, database/Redis and required CI. Then test the institution's actual authorized flow with approved synthetic data. A successful build is not a completed deployment or provider canary.
 
 #### User documentation domain
 
@@ -2724,7 +2888,7 @@ The public user manual is available under `/docs` in the UI build. `docs.agentic
 ### BFSI: business onboarding and KYB review
 
 URL: https://agenticorg.ai/docs/bfsi-business-onboarding
-Audience: Banks, NBFCs and fintech operations. Reviewed: 2026-10-02.
+Audience: Banks, NBFCs and fintech operations. Reviewed: 2026-10-11.
 
 #### Scenario and boundary
 
@@ -2765,7 +2929,7 @@ Bank handoff | The signed outcome is delivered for the bank system to interpret 
 
 #### What a successful trial proves
 
-It proves the configured evidence/review/decision/handoff path for that test. It does not prove universal registry coverage, calibrated model accuracy, case-bound pooled grants or regulatory approval. The published Grantex SDK's token-level purpose/per-case-cap limitations must remain visible in the rollout review.
+It proves the configured evidence/review/decision/handoff path for that test. It does not prove universal registry coverage, calibrated model accuracy, case-bound pooled grants or regulatory approval. The rollout review must keep visible that AgenticOrg's Grantex SDK call passes no case id or purpose, so token-level case purpose and per-case caps are not checked on that path.
 
 #### Negative cases to demonstrate
 
@@ -3049,7 +3213,7 @@ Next: [Capability status and gaps](/docs/bfsi-capability-status), [Commerce guid
 ### BFSI capability status and open work
 
 URL: https://agenticorg.ai/docs/bfsi-capability-status
-Audience: BFSI sponsors, operators and integration owners. Reviewed: 2026-10-02.
+Audience: BFSI sponsors, operators and integration owners. Reviewed: 2026-10-11.
 
 #### What this status means
 
@@ -3060,19 +3224,27 @@ covered, 97 partial and 29 gaps**. A covered component may still need a
 tenant setting, approved provider, external system or human reviewer. No full
 BFSI journey has end-to-end acceptance on the strength of these counts alone.
 
+Services built behind default-off settings after this baseline was last refreshed
+are not yet reflected in these counts or in the table below: document
+processing, speech and call intelligence, transaction intelligence,
+conversational services and the supervisor view, workbenches, lineage, content
+services, personalisation, the agent registry and banking pack, model cards,
+and FinOps thresholds and forecast. Each is unavailable until its setting is
+turned on; see [Documents, conversations, calls and workbenches](/docs/review-and-operations-screens).
+
 This page describes functional software coverage, not infrastructure location,
 regulatory approval, certification or permission to process customer data. A
 feature behind a disabled flag is unavailable in the default installation.
 
 #### Where the work stands
 
-| Area | Working foundation | Still needs real implementation or validation |
+| Area | Working foundation | Still needs implementation, enabling or validation |
 |---|---|---|
-| Agent governance | Agent execution, scoped grants, human review and case evidence paths | Registry-grade discoverability, dependency mapping, model cards and cross-service lifecycle proof |
-| Knowledge and documents | Ingestion, OCR and source-aware answers on configured paths | Mixed bundles, page-region review, comparison, hybrid-ranking rollout and cited refusal across every tenant path |
-| Conversation and speech | Web chat and configured voice runtime | Intent and channel parity, speaker separation, sensitive-data handling and supervised handoff |
-| Transactions and commerce | Read-only source evidence and prepared agent handoffs | Bank-owned source connections, human disposition, provider-owned execution and reconciliation evidence |
-| Operations | Logging, approval controls and evaluation hooks | Complete trace coverage, measured SLOs, budget enforcement, rollback and production-grade recovery |
+| Agent governance | Agent execution, scoped grants, human review and case evidence paths | Registry-grade discoverability, dependency mapping and model cards (built, off by default) and cross-service lifecycle proof |
+| Knowledge and documents | Ingestion, OCR and source-aware answers on configured paths | Mixed bundles, page-region review and document comparison (built, off by default), hybrid-ranking rollout (off by default) and cited refusal across every tenant path |
+| Conversation and speech | Web chat and configured voice runtime | Banking intents, speaker separation, spoken sensitive-data redaction and supervised takeover (built, off by default), and channel parity |
+| Transactions and commerce | Read-only source evidence and prepared agent handoffs | Human disposition of transaction findings (built, off by default), bank-owned source connections, provider-owned execution and reconciliation evidence |
+| Operations | Logging, approval controls and evaluation hooks | Budget thresholds and synthetic checks (built, off by default), complete trace coverage, measured SLOs, rollback and production-grade recovery |
 
 The detailed [functional assessment](https://github.com/mishrasanjeev/agentic-org/blob/main/docs/bfsi/functional-coverage.md)
 and [capability matrix](https://github.com/mishrasanjeev/agentic-org/blob/main/docs/bfsi/coverage-matrix.md)
