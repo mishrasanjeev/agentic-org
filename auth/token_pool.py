@@ -103,6 +103,23 @@ def _parse_expiry(value: Any) -> float | None:
         return None
 
 
+@dataclass(frozen=True)
+class RevocationOutcome:
+    """What revoking an agent's authority did: cache entries evicted, grants revoked remotely, failures."""
+
+    evicted: int
+    revoked: int
+    failed: int
+
+    @property
+    def token_revoked(self) -> bool:
+        """True when every grant found was revoked at the authority service (none found counts)."""
+        return self.failed == 0
+
+    def to_dict(self) -> dict[str, Any]:
+        return {"evicted": self.evicted, "revoked": self.revoked, "failed": self.failed}
+
+
 class TokenPool:
     """Cache and manage agent tokens in Redis."""
 
@@ -442,6 +459,84 @@ class TokenPool:
             self._refresh_tasks[agent_id].cancel()
             del self._refresh_tasks[agent_id]
 
+    async def store_delegated_grant(self, agent_id: str, grant: dict[str, Any]) -> bool:
+        """Keep the grant a parent delegated to ``agent_id`` for its lifetime; False without a cache to keep it in."""
+        client = self._existing_redis_client()
+        if client is None:
+            return False
+        ttl = grant.get("expires_in")
+        try:
+            ttl_seconds = int(ttl) if ttl is not None else 8 * 3600
+        except (TypeError, ValueError):
+            ttl_seconds = 8 * 3600
+        try:
+            await client.setex(
+                f"agent:{agent_id}:delegated_grant", max(60, ttl_seconds), json.dumps(grant, default=str)
+            )
+        except (aioredis.RedisError, OSError) as exc:
+            logger.warning("delegated_grant_store_failed", agent_id=agent_id, error_type=type(exc).__name__)
+            return False
+        return True
+
+    def _existing_redis_client(self) -> aioredis.Redis | None:
+        """A client this process already holds; never opens one just to revoke."""
+        if self.redis is not None:
+            return self.redis
+        try:
+            key = (os.getpid(), id(asyncio.get_running_loop()))
+        except RuntimeError:
+            return None
+        return self._loop_clients.get(key)
+
+    def _evict_local_agent_grants(self, agent_id: str) -> list[str]:
+        """Drop every in-process run grant of ``agent_id``; the tokens dropped."""
+        tokens: list[str] = []
+        for key in [k for k in self._local_grants if k.startswith("grant:run:") and k.split(":")[3:4] == [agent_id]]:
+            grant = self._local_grants.pop(key, None)
+            if grant is not None and grant.token:
+                tokens.append(grant.token)
+        return tokens
+
+    async def revoke_agent_grants(
+        self, tenant_id: str, agent_id: str, revoker: Callable[[str], Awaitable[bool]]
+    ) -> RevocationOutcome:
+        """Evict every cached grant of an agent, broadcast the eviction, and revoke each token through ``revoker``.
+
+        The shared cache is read through a client this process already holds;
+        the broadcast makes every other node drop its in-process copies. A
+        revoker failure is counted, never raised.
+        """
+        tokens: dict[str, None] = dict.fromkeys(self._evict_local_agent_grants(agent_id))
+        client = self._existing_redis_client()
+        if client is not None:
+            prefix = f"grant:run:{tenant_id}:{agent_id}:"
+            try:
+                async for key in client.scan_iter(match=prefix + "*"):
+                    raw = await client.get(key)
+                    if raw:
+                        try:
+                            token = str(json.loads(raw).get("token") or "")
+                        except (TypeError, ValueError):
+                            token = ""
+                        if token:
+                            tokens.setdefault(token)
+                    await client.delete(key)
+                await client.delete(f"agent:{agent_id}:token")
+                await client.publish("agenticorg:token:revoke", agent_id)
+            except (aioredis.RedisError, OSError) as exc:
+                logger.warning("run_grant_cache_revoke_failed", agent_id=agent_id, error_type=type(exc).__name__)
+        task = self._refresh_tasks.pop(agent_id, None)
+        if task is not None:
+            task.cancel()
+        revoked = 0
+        failed = 0
+        for token in tokens:
+            if await revoker(token):
+                revoked += 1
+            else:
+                failed += 1
+        return RevocationOutcome(evicted=len(tokens), revoked=revoked, failed=failed)
+
     def _schedule_refresh(self, agent_id: str, delay: int) -> None:
         if agent_id in self._refresh_tasks:
             self._refresh_tasks[agent_id].cancel()
@@ -529,8 +624,9 @@ class TokenPool:
             # of tripping the client's ordinary socket read timeout.
             message = await pubsub.get_message(ignore_subscribe_messages=True, timeout=1.0)
             if message is not None and message["type"] == "message":
-                agent_id = message["data"]
+                agent_id = str(message["data"])
                 await self.redis.delete(f"agent:{agent_id}:token")
+                self._evict_local_agent_grants(agent_id)
 
     async def close(self):
         for task in self._refresh_tasks.values():

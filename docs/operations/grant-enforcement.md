@@ -417,6 +417,32 @@ A human tenant admin grants an agent the route families its token may call:
 - A route scope applies across the tenant (an `agents:write` grant can run any
   shared agent), so grant the narrowest families the integration needs.
 
+## Revocation
+
+A grant token is unexpired for as long as its `exp` says, so withdrawing authority happens
+outside the token (`auth/revocation.py`):
+
+- **Pause and retire revoke.** `POST /agents/{id}/pause` and `POST /agents/{id}/retire` revoke
+  every run grant the pool minted for the agent at the authority service (`/oauth2/revoke`),
+  evict them from the shared cache and, through the pool's broadcast, from every node's
+  in-process cache. The response reports the real result: `token_revoked` is true only when
+  every grant found was revoked, with `grants_revoked` and `grants_failed` alongside. A failed
+  remote revocation is logged (`grant_revocation_failed`); the pause or retirement still lands,
+  and the middleware refuses the agent's tokens regardless.
+- **The middleware refuses withdrawn authority.** Before a verified grant token is honoured, the
+  agent must be active (retired agents are always refused; paused agents are refused while
+  `AGENTICORG_PAUSED_AGENTS_REFUSED` is on) and the grant must not appear in the authority
+  service's revocation feed, which the SDK keeps current in a background thread. The refusal
+  reasons are `agent_inactive`, `grant_revoked` and `revocation_unknown`.
+- **Unknown state fails closed in production.** When the feed cannot be built (no
+  `GRANTEX_API_KEY`), is stale or fails, the state is unknown: a strict runtime refuses the
+  token (`grant_revocation_state_unknown_refused`) and a relaxed runtime allows it with a
+  warning. `AGENTICORG_GRANTEX_REVOCATION_CHECK=off` skips the feed and keeps only the
+  agent-status refusal.
+- **Delegation reports the truth.** `POST /agents/{id}/delegate` answers 502 `delegation_failed`
+  when the authority service does not issue the delegated grant, and keeps the grant it does
+  issue in the pool (`agent:{id}:delegated_grant`) for its lifetime instead of discarding it.
+
 ## Runbook
 
 ### 1. Put a tenant in warn and read the warnings

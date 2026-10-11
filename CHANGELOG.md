@@ -4,6 +4,20 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
 
 ## [Unreleased] - 2026-08-29
 
+### Fixed - Grant revocation for paused and retired agents, revocation checks before a token is honoured
+- Pausing or retiring an agent revokes the run grants the pool minted for it
+  at the authority service, evicts them from the shared cache and from every
+  node's in-process cache, and reports the real result (`token_revoked`,
+  `grants_revoked`, `grants_failed`) instead of a constant.
+- The authentication middleware refuses a grant token of a retired agent (or
+  a paused one while paused agents are refused) and a token whose grant the
+  authority service has revoked, read from the SDK's revocation feed
+  (`AGENTICORG_GRANTEX_REVOCATION_CHECK`, `feed` by default, `off` to skip).
+  An unknown revocation state refuses the token in a strict runtime and is
+  allowed with a warning elsewhere.
+- `POST /agents/{id}/delegate` answers 502 when no delegated grant was issued
+  and keeps the grant it receives instead of discarding it.
+
 ### Security - breaking for audit readers of tenants that keep spend rows: `GET /audit` hides commercial spend audit rows by default
 - A deliberate default, on whatever `spend_intelligence_enabled` says:
   `GET /audit` hides the audit rows of rate cards, commitments, invoices,

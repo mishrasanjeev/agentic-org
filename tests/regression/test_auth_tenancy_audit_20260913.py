@@ -83,7 +83,7 @@ def grantex_env(monkeypatch, rsa_keypair):
     monkeypatch.setattr(
         gm,
         "_resolve_agent_tenant",
-        AsyncMock(side_effect=lambda did: (tenant, agent_id) if did == "did:grantex:agent-abc" else None),
+        AsyncMock(side_effect=lambda did: (tenant, agent_id, "active") if did == "did:grantex:agent-abc" else None),
     )
     yield SimpleNamespace(fetches=fetches, tenant=tenant, agent_id=agent_id, gm=gm)
     gm._reset_jwks_cache()

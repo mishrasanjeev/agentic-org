@@ -40,6 +40,7 @@ from fastapi.responses import JSONResponse
 from starlette.middleware.base import BaseHTTPMiddleware
 
 from api.client_ip import client_ip as resolve_client_ip
+from auth import revocation
 from auth.jwt import extract_scopes, extract_tenant_id, validate_token
 from core.auth_state import (
     clear_auth_failures,
@@ -191,6 +192,7 @@ class VerifiedGrantexToken:
     grant_id: str
     delegation_depth: int
     issued_at: int
+    token_id: str = ""
 
 
 def _verify_grantex_token_sync(token: str, *, jwks_uri: str, issuer: str, audience: str) -> VerifiedGrantexToken:
@@ -233,11 +235,12 @@ def _verify_grantex_token_sync(token: str, *, jwks_uri: str, issuer: str, audien
         grant_id=str(claims.get("grnt") or claims["jti"]),
         delegation_depth=int(depth) if depth is not None else 0,
         issued_at=int(claims["iat"]),
+        token_id=str(claims["jti"]),
     )
 
 
-async def _resolve_agent_tenant(agent_did: str) -> tuple[str, str] | None:
-    """Map a Grantex agent DID to ``(tenant_id, agent_id)`` via ``agents.config.grantex``."""
+async def _resolve_agent_tenant(agent_did: str) -> tuple[str, str, str | None] | None:
+    """Map a Grantex agent DID to ``(tenant_id, agent_id, status)`` via ``agents.config.grantex``."""
     from sqlalchemy import select
 
     from core.database import async_session_factory
@@ -245,15 +248,15 @@ async def _resolve_agent_tenant(agent_did: str) -> tuple[str, str] | None:
 
     async with async_session_factory() as session:
         result = await session.execute(
-            select(Agent.id, Agent.tenant_id).where(
+            select(Agent.id, Agent.tenant_id, Agent.status).where(
                 Agent.config["grantex"]["grantex_did"].astext == agent_did,
             )
         )
         rows = result.all()
     if len(rows) != 1:
         return None
-    agent_id, tenant_id = rows[0]
-    return str(tenant_id), str(agent_id)
+    agent_id, tenant_id, status = rows[0]
+    return str(tenant_id), str(agent_id), (str(status) if status is not None else None)
 
 
 async def resolve_grantex_claims(token: str) -> dict[str, Any]:
@@ -284,7 +287,16 @@ async def resolve_grantex_claims(token: str) -> dict[str, Any]:
     if mapping is None:
         logger.warning("grantex_agent_did_unmapped")
         raise GrantexAuthError("grant token agent is not registered with any tenant")
-    tenant_id, agent_id = mapping
+    tenant_id, agent_id = str(mapping[0]), str(mapping[1])
+    agent_status = str(mapping[2]) if len(mapping) > 2 and mapping[2] is not None else None
+    # A token that is unexpired but withdrawn never authenticates: the agent
+    # must be active and the grant must not be revoked (auth/revocation.py).
+    refusal = revocation.refusal_reason(
+        grant_id=verified.grant_id, token_id=verified.token_id, agent_status=agent_status
+    )
+    if refusal is not None:
+        logger.info("grantex_token_refused", reason=refusal, agent_id=agent_id)
+        raise GrantexAuthError(refusal)
     return {
         "sub": verified.principal_id,
         "agenticorg:tenant_id": tenant_id,
