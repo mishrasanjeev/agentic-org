@@ -11,6 +11,9 @@ separate routing-tier overrides are preserved.
 Local validation uses a dedicated Docker project with a freshly built Python
 3.14 production-style API/worker image, the current source mounted read-only,
 PostgreSQL, Redis, worker, beat and UI. Callback bodies and secrets are synthetic.
+The combined baseline includes the conversation, model content-block parsing,
+and customer-agent documentation changes already merged on main. The focused
+suite was rerun after rebasing onto `6d16c6e7363b6ed5d12f3a37bcbd70b1b86d5bf0`.
 The agent model's final response is scripted locally; it is not a Google API
 call. The tests do not contact native channel providers or make telephone calls.
 
@@ -19,7 +22,7 @@ call. The tests do not contact native channel providers or make telephone calls.
 | HTTP/worker channel E2E | Passed, 93 seconds | Disabled/bad-signature refusal; one-message review; private linking; duplicate/content-mismatch refusal; rotation/revocation; native callback parsing; actual workflow and LangGraph dispatch; paused target refusal |
 | Chromium desktop/mobile | Passed, 15 seconds | Real signup, workflow selection, protected credential form, save/enable/replace, Telegram setup rejection without activation, no secret returned, responsive layout and public workflow guide |
 | Isolated PostgreSQL RLS | Passed | Full migration chain; non-superuser/non-bypass role; cross-tenant reads/writes refused on all three new tables; another owner cannot read a binding |
-| Default/provider/auth regression replay | 164 passed | Explicit legacy models preserved, configured default respected, catalog/credential access separation, no new authentication exemption overlap, vault startup tests and isolated metrics environment |
+| Combined model/provider/auth regression replay | 384 passed | Model content-block parsing, explicit legacy models preserved, configured default respected, catalog/credential access separation, vault startup tests and isolated metrics environment |
 | Native provider and setup unit tests | 50 passed | Signatures, receiver scope, bounded payloads, private Telegram identity, replay windows, malformed replies, access-log token redaction, confirmed Telegram registration, foreign-callback refusal, owner-scoped activation and local/production callback separation |
 | UI production build and SEO verification | Passed | Public guide is prerendered; sitemap/canonical/CSP/generated documentation remain synchronized |
 
