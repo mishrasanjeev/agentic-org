@@ -738,7 +738,7 @@ async def _execute_workflow_bg(
     from workflows.state_store import WorkflowStateStore
 
     state_store = WorkflowStateStore()
-    await state_store.init()
+    await state_store.init(tenant_id=tenant_id)
     engine = WorkflowEngine(state_store)
 
     try:
@@ -1165,7 +1165,7 @@ async def cancel_workflow_run(
                 from workflows.state_store import WorkflowStateStore  # noqa: PLC0415
 
                 state_store = WorkflowStateStore()
-                await state_store.init()
+                await state_store.init(tenant_id=tid)
                 engine = WorkflowEngine(state_store)
                 await engine.cancel(engine_run_id)
             # enterprise-gate: broad-except-ok reason=db-status-is-authoritative-when-engine-cancel-fails

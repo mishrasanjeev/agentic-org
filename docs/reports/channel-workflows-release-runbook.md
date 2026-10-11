@@ -64,6 +64,11 @@ configured providers.
   rotation, paused agent target and user revocation. Native status replies need
   separate provider acknowledgement; ambiguous delivery is not automatically
   retried.
+- Run durable workflow-state and event-wait tests as a non-superuser,
+  non-RLS-bypass role with forced RLS, including a real transform workflow and
+  fresh-worker reload. Verify transaction-local tenant context is reset when
+  a pooled connection is reused. A provider acknowledgement or a green test
+  using a database superuser cannot establish workflow completion.
 - If runtime health fails, leave traffic on the existing healthy revision
   where possible and prepare a forward fix with the current migration head.
   An older image's strict startup schema check can reject the newer database

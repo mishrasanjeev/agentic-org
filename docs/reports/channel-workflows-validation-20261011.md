@@ -79,6 +79,42 @@ private sender delegation, native inbound delivery or outbound acknowledgement.
 No bot message was sent and no callback was registered by these checks.
 Credentials and account identifiers are excluded from this report.
 
+## Production Telegram acceptance follow-up
+
+A dedicated customer-owned bot was registered through the protected Channels
+screen. A human redeemed the private one-time link command and sent a synthetic
+acceptance message. The inbox recorded the account link and message; Telegram
+delivered the native task-status reply. This proves real inbound delivery,
+private sender delegation, worker dispatch and outbound status delivery, not
+successful workflow execution or production Gemini inference.
+
+The workflow failed before its first step because the durable workflow repository
+did not bind the transaction-local tenant context required by existing forced
+RLS. The native reply correctly reported `needs review`. The sibling durable
+event-wait repository had the same defect. Local PostgreSQL's superuser role had
+masked this failure in the earlier HTTP replay; a passing superuser test is not
+production-isolation evidence.
+
+New Docker regressions first failed for both repositories under a role with
+neither superuser nor RLS-bypass permissions. After binding tenant context,
+the repository, real identity-transform workflow, fresh-worker reload,
+event match/timeout, cross-tenant refusal, optimistic version and idempotency
+checks passed. The repair changes no migration, grants, RLS policy, provider
+permissions or approval rules. Run, approval-resume and cancellation use the
+server-validated tenant; legacy internal resume jobs resolve candidates from
+the server tenant registry and query each candidate under RLS, never from a
+client message or Redis authority.
+Legacy Redis backfill requires an explicitly bound server tenant and matching
+tenant/run identifiers; unscoped workers cannot promote cache entries into
+authoritative database state. A negative regression reproduced that unsafe
+backfill before the scope check was added.
+
+These are local repair results only. Production workflow completion remains
+blocked until the repair passes release gates, is deployed and a fresh approved
+message produces a completed workflow and receipt. Do not approve or replay an
+unrelated `/start` message to manufacture completion. Keep credential rotation
+separate from this deterministic, model-free acceptance workflow.
+
 ## Design review
 
 The repository's optional external design command pack was unavailable. A
@@ -94,9 +130,10 @@ to another application's callback is refused rather than overwritten.
 
 ## Not verified or not implemented by this release
 
-- Provider account approval, production tenant-bound Google inference/quota, native inbound
-  delivery, native outbound delivery, speech accuracy and telephone delivery
-  require customer-owned accounts and authorized test recipients.
+- Provider account approval, production tenant-bound Google inference/quota,
+  non-Telegram native delivery, speech accuracy and telephone delivery require
+  customer-owned accounts and authorized test recipients. The Telegram
+  follow-up above proves native transport, not successful task execution.
 - Messaging callbacks ingest text only. Images, attachments and audio notes
   are not automatically ingested; existing knowledge/voice flows are separate.
 - WeChat uses an approved signed gateway, not a native WeChat adapter.

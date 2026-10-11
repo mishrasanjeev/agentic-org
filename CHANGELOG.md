@@ -7,6 +7,18 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
 Entries here have accumulated since 4.0.0. The source version in `pyproject.toml`
 is 4.8.0; versions 4.1 to 4.8 have no sections of their own.
 
+### Fixed - durable workflow tenant context
+- Durable workflow state and event-wait transactions now bind the validated
+  tenant before accessing PostgreSQL. Run, approval-resume and cancellation
+  retain server-owned scope. Existing RLS, grants and approval rules are
+  unchanged; this repairs persistence under the existing isolation policy,
+  rather than introducing an execution permission or a feature-default change.
+- Docker regression tests use a non-superuser, non-RLS-bypass role with forced
+  RLS and a reused connection, and cover real transform execution, fresh-worker
+  reload, cross-tenant denial, event completion, timeout, version and replay.
+- Legacy Redis backfill requires an explicit server tenant and matching run
+  identity; an unscoped background worker cannot obtain authority from cache.
+
 ### Fixed - user documentation matches shipped behaviour
 - A new guide, *Documents, conversations, calls and workbenches*, covers the six
   console screens of services that ship off by default, and Start here links

@@ -19,6 +19,7 @@ import structlog
 from sqlalchemy import select
 
 from core.config import settings
+from workflows.tenant_sessions import lookup_tenants, tenant_transaction
 
 logger = structlog.get_logger()
 
@@ -32,9 +33,7 @@ class StaleStateError(RuntimeError):
     """Raised when saving a state whose loaded version is no longer current."""
 
     def __init__(self, run_id: str, expected: int | None, actual: int | None) -> None:
-        super().__init__(
-            f"workflow state {run_id} is stale (expected version {expected}, found {actual})"
-        )
+        super().__init__(f"workflow state {run_id} is stale (expected version {expected}, found {actual})")
         self.run_id = run_id
         self.expected = expected
         self.actual = actual
@@ -78,9 +77,7 @@ def _extract_tenant_id(state: dict[str, Any], override: Any = None) -> uuid.UUID
     if not isinstance(trigger_payload, dict):
         trigger_payload = {}
     return _coerce_uuid(
-        state.get("tenant_id")
-        or trigger_payload.get("tenant_id")
-        or trigger_payload.get("agenticorg:tenant_id")
+        state.get("tenant_id") or trigger_payload.get("tenant_id") or trigger_payload.get("agenticorg:tenant_id")
     )
 
 
@@ -88,9 +85,7 @@ def _extract_workflow_run_id(state: dict[str, Any], override: Any = None) -> uui
     if override:
         return _coerce_uuid(override)
     return _coerce_uuid(
-        state.get("workflow_run_id")
-        or state.get("db_workflow_run_id")
-        or state.get("database_workflow_run_id")
+        state.get("workflow_run_id") or state.get("db_workflow_run_id") or state.get("database_workflow_run_id")
     )
 
 
@@ -113,11 +108,9 @@ class WorkflowStateRepository(Protocol):
         idempotency_key: str | None = None,
         metadata: dict[str, Any] | None = None,
         expected_version: int | None = None,
-    ) -> int | None:
-        ...
+    ) -> int | None: ...
 
-    async def load(self, run_id: str) -> dict[str, Any] | None:
-        ...
+    async def load(self, run_id: str) -> dict[str, Any] | None: ...
 
 
 class InMemoryWorkflowStateRepository:
@@ -142,8 +135,7 @@ class InMemoryWorkflowStateRepository:
     ) -> int | None:
         run_id = str(state["id"])
         if idempotency_key and any(
-            t["run_id"] == run_id and t.get("idempotency_key") == idempotency_key
-            for t in self.transitions
+            t["run_id"] == run_id and t.get("idempotency_key") == idempotency_key for t in self.transitions
         ):
             return None
 
@@ -191,8 +183,14 @@ class InMemoryWorkflowStateRepository:
 class SqlAlchemyWorkflowStateRepository:
     """PostgreSQL implementation using the app's async SQLAlchemy session factory."""
 
-    def __init__(self, session_factory: Any) -> None:
+    def __init__(self, session_factory: Any, *, tenant_id: uuid.UUID | None = None) -> None:
         self._session_factory = session_factory
+        self._tenant_id = tenant_id
+
+    @property
+    def tenant_id(self) -> uuid.UUID | None:
+        """The trusted server scope, never one inferred from cached state."""
+        return self._tenant_id
 
     async def save(
         self,
@@ -211,84 +209,91 @@ class SqlAlchemyWorkflowStateRepository:
 
         run_id = str(state["id"])
         safe_state = _json_safe(state)
-        async with self._session_factory() as session:
-            async with session.begin():
-                if idempotency_key:
-                    existing_transition = (
-                        await session.execute(
-                            select(WorkflowStateTransition.id).where(
-                                WorkflowStateTransition.run_id == run_id,
-                                WorkflowStateTransition.idempotency_key == idempotency_key,
-                            )
-                        )
-                    ).scalar_one_or_none()
-                    if existing_transition:
-                        return None
-
-                row = (
+        if self._tenant_id is not None and tenant_id != self._tenant_id:
+            raise ValueError("Workflow state tenant does not match repository scope")
+        async with tenant_transaction(self._session_factory, tenant_id) as session:
+            if idempotency_key:
+                existing_transition = (
                     await session.execute(
-                        select(WorkflowRunState)
-                        .where(WorkflowRunState.run_id == run_id)
-                        .with_for_update()
+                        select(WorkflowStateTransition.id)
+                        .join(
+                            WorkflowRunState,
+                            WorkflowRunState.run_id == WorkflowStateTransition.run_id,
+                        )
+                        .where(
+                            WorkflowStateTransition.run_id == run_id,
+                            WorkflowStateTransition.idempotency_key == idempotency_key,
+                            WorkflowRunState.tenant_id == tenant_id,
+                        )
                     )
                 ).scalar_one_or_none()
+                if existing_transition:
+                    return None
 
-                previous_hash = row.state_hash if row else None
-                if (
-                    row is not None
-                    and expected_version is not None
-                    and int(row.version or 0) != int(expected_version)
-                ):
-                    raise StaleStateError(run_id, expected_version, int(row.version or 0))
-                if row is None:
-                    row = WorkflowRunState(
-                        run_id=run_id,
-                        tenant_id=tenant_id,
-                        workflow_run_id=workflow_run_id,
-                        status=safe_state.get("status", "unknown"),
-                        waiting_step_id=safe_state.get("waiting_step_id"),
-                        state=safe_state,
-                        state_hash=state_hash,
-                        version=1,
-                    )
-                    session.add(row)
-                else:
-                    row.tenant_id = tenant_id or row.tenant_id
-                    row.workflow_run_id = workflow_run_id or row.workflow_run_id
-                    row.status = safe_state.get("status", "unknown")
-                    row.waiting_step_id = safe_state.get("waiting_step_id")
-                    row.state = safe_state
-                    row.state_hash = state_hash
-                    row.version = int(row.version or 0) + 1
-                    row.updated_at = datetime.now(UTC)
-
-                session.add(
-                    WorkflowStateTransition(
-                        run_id=run_id,
-                        step_id=step_id,
-                        previous_state_hash=previous_hash,
-                        new_state_hash=state_hash,
-                        actor=actor,
-                        idempotency_key=idempotency_key,
-                        transition_metadata=_json_safe(metadata or {}),
-                    )
+            row = (
+                await session.execute(
+                    select(WorkflowRunState)
+                    .where(WorkflowRunState.run_id == run_id, WorkflowRunState.tenant_id == tenant_id)
+                    .with_for_update()
                 )
-                return int(row.version)
+            ).scalar_one_or_none()
+
+            previous_hash = row.state_hash if row else None
+            if row is not None and expected_version is not None and int(row.version or 0) != int(expected_version):
+                raise StaleStateError(run_id, expected_version, int(row.version or 0))
+            if row is None:
+                row = WorkflowRunState(
+                    run_id=run_id,
+                    tenant_id=tenant_id,
+                    workflow_run_id=workflow_run_id,
+                    status=safe_state.get("status", "unknown"),
+                    waiting_step_id=safe_state.get("waiting_step_id"),
+                    state=safe_state,
+                    state_hash=state_hash,
+                    version=1,
+                )
+                session.add(row)
+            else:
+                row.tenant_id = tenant_id or row.tenant_id
+                row.workflow_run_id = workflow_run_id or row.workflow_run_id
+                row.status = safe_state.get("status", "unknown")
+                row.waiting_step_id = safe_state.get("waiting_step_id")
+                row.state = safe_state
+                row.state_hash = state_hash
+                row.version = int(row.version or 0) + 1
+                row.updated_at = datetime.now(UTC)
+
+            session.add(
+                WorkflowStateTransition(
+                    run_id=run_id,
+                    step_id=step_id,
+                    previous_state_hash=previous_hash,
+                    new_state_hash=state_hash,
+                    actor=actor,
+                    idempotency_key=idempotency_key,
+                    transition_metadata=_json_safe(metadata or {}),
+                )
+            )
+            return int(row.version)
 
     async def load(self, run_id: str) -> dict[str, Any] | None:
         from core.models.workflow import WorkflowRunState
 
-        async with self._session_factory() as session:
-            row = (
-                await session.execute(
-                    select(WorkflowRunState).where(WorkflowRunState.run_id == str(run_id))
-                )
-            ).scalar_one_or_none()
-            if row is None:
-                return None
-            state = copy.deepcopy(row.state)
-            state[STATE_VERSION_KEY] = int(row.version or 0)
-            return state
+        async for tenant in lookup_tenants(self._session_factory, self._tenant_id):
+            async with tenant_transaction(self._session_factory, tenant) as session:
+                row = (
+                    await session.execute(
+                        select(WorkflowRunState).where(
+                            WorkflowRunState.run_id == str(run_id),
+                            WorkflowRunState.tenant_id == tenant,
+                        )
+                    )
+                ).scalar_one_or_none()
+                if row is not None:
+                    state = copy.deepcopy(row.state)
+                    state[STATE_VERSION_KEY] = int(row.version or 0)
+                    return state
+        return None
 
 
 class WorkflowStateStore:
@@ -301,13 +306,15 @@ class WorkflowStateStore:
         self._repository_explicit = repository is not None
         self.redis = redis
 
-    async def init(self) -> None:
+    async def init(self, *, tenant_id: uuid.UUID | None = None) -> None:
         self.redis = aioredis.from_url(settings.redis_url, decode_responses=True)
         if not self._repository_explicit:
             from core.database import current_session_factory
 
             # Resolved per call, not captured (FINDINGS A-53).
-            self.repository = SqlAlchemyWorkflowStateRepository(lambda: current_session_factory()())
+            self.repository = SqlAlchemyWorkflowStateRepository(
+                lambda: current_session_factory()(), tenant_id=tenant_id
+            )
 
     async def save(
         self,
@@ -353,8 +360,14 @@ class WorkflowStateStore:
             return state
 
         legacy_state = await self._load_redis_legacy(run_id)
-        if legacy_state is None:
+        if not isinstance(legacy_state, dict) or legacy_state.get("id") != str(run_id):
             return None
+
+        if isinstance(self.repository, SqlAlchemyWorkflowStateRepository):
+            scope = self.repository.tenant_id
+            # A cache may restore content within trusted scope, not choose it.
+            if scope is None or _extract_tenant_id(legacy_state) != scope:
+                return None
 
         await self.save(
             legacy_state,
