@@ -1073,6 +1073,7 @@ class TestLLMRouter:
     async def test_complete_falls_back_on_failure(self):
         from core.llm.router import LLMResponse, LLMRouter
         router = LLMRouter()
+        router.fallback_model = "gemini-2.5-flash"
         fallback_resp = LLMResponse(content="fallback", model=router.fallback_model, tokens_used=2)
 
         async def side_effect(model, msgs, temp, max_tok):

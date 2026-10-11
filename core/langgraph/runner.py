@@ -112,7 +112,28 @@ def _message_token_total(msg: Any) -> int:
     )
 
 
-def _sum_usage(messages: Any) -> tuple[int, float]:
+def _message_cost(msg: Any, model: str) -> float:
+    from core.ai_providers.defaults import DEFAULT_REASONING_MODEL
+
+    total = int(_message_token_total(msg) or 0)
+    if model != DEFAULT_REASONING_MODEL:
+        return total * _BLENDED_COST_PER_1K_TOKENS_USD / 1000
+    from core.llm.router import GEMINI_PRICE_PER_1M
+
+    rates = GEMINI_PRICE_PER_1M[DEFAULT_REASONING_MODEL]
+    input_rate, output_rate = rates["input"], rates["output"]
+    usage = getattr(msg, "usage_metadata", None) or {}
+    if not isinstance(usage, dict):
+        usage = {}
+    inputs = int(usage.get("input_tokens") or 0)
+    outputs = int(usage.get("output_tokens") or 0)
+    # Unknown token direction is billed conservatively at the output rate;
+    # reasoning tokens are included in output usage, not charged twice.
+    unknown = max(0, total - inputs - outputs)
+    return (inputs * input_rate + (outputs + unknown) * output_rate) / 1_000_000
+
+
+def _sum_usage(messages: Any, model: str = "") -> tuple[int, float]:
     """Return ``(llm_tokens_used, llm_cost_usd)`` summed over AI messages.
 
     Bug sheet #36 (2026-09-14): shared by the completed, HITL-interrupted
@@ -120,23 +141,32 @@ def _sum_usage(messages: Any) -> tuple[int, float]:
     ``reason`` node already spent instead of a hardcoded 0.
     """
     tokens_used = 0
+    cost = 0.0
     for msg in messages or []:
         if isinstance(msg, AIMessage):
             tokens_used += int(_message_token_total(msg) or 0)
-    cost_usd = round(tokens_used * _BLENDED_COST_PER_1K_TOKENS_USD / 1000, 6) if tokens_used else 0
-    return tokens_used, cost_usd
+            cost += _message_cost(msg, model)
+    return tokens_used, round(cost, 6)
 
 
-def _usage_since(before_tokens: int, messages: Any) -> tuple[int, float]:
+def _usage_since(before_tokens: int, messages: Any, model: str = "") -> tuple[int, float]:
     """Return ``(llm_tokens_used, llm_cost_usd)`` spent since a checkpoint that had used ``before_tokens``.
 
     A debug step resumes a thread whose messages carry every earlier model
     call; only the tokens the step itself spent are its usage.
     """
-    total, _cost = _sum_usage(messages)
+    total, _cost = _sum_usage(messages, model)
     tokens_used = max(0, total - max(0, int(before_tokens or 0)))
-    cost_usd = round(tokens_used * _BLENDED_COST_PER_1K_TOKENS_USD / 1000, 6) if tokens_used else 0
-    return tokens_used, cost_usd
+    remaining = max(0, int(before_tokens or 0))
+    cost = 0.0
+    for msg in messages or []:
+        if isinstance(msg, AIMessage):
+            count = int(_message_token_total(msg) or 0)
+            skipped = min(remaining, count)
+            remaining -= skipped
+            if count:
+                cost += _message_cost(msg, model) * (count - skipped) / count
+    return tokens_used, round(cost, 6)
 
 
 def _run_thread_id(tenant_id: str, thread_id: str | None, agent_id: str) -> str:
@@ -580,7 +610,7 @@ async def run_agent(
         await meter_agent_run(tenant_id)  # billing usage counter; best-effort
 
         # Extract token usage from AI messages (blended cost estimate)
-        tokens_used, cost_usd = _sum_usage(result.get("messages", []))
+        tokens_used, cost_usd = _sum_usage(result.get("messages", []), llm_model)
 
         # Bug sheet #36 (2026-09-14): on LangGraph >= 1.x a top-level
         # ``ainvoke`` does NOT raise GraphInterrupt for ``interrupt()`` — it
@@ -780,7 +810,7 @@ async def run_agent(
 
         # Bug sheet #36: the ``reason`` node already spent tokens before the
         # gate paused the run — report them instead of a hardcoded 0.
-        tokens_used, cost_usd = _sum_usage(state_values.get("messages", []))
+        tokens_used, cost_usd = _sum_usage(state_values.get("messages", []), llm_model)
 
         # BUG-11 dual-emit (see comment above): keep both keys.
         hitl_tool_log = state_values.get("tool_calls_log", [])
@@ -1086,7 +1116,7 @@ async def resume_agent(
         if require_paused or debug_mode:
             snapshot = await compiled.aget_state(config)  # type: ignore[arg-type]
             if debug_mode and snapshot is not None and isinstance(snapshot.values, dict):
-                tokens_before, _ = _sum_usage(snapshot.values.get("messages", []))
+                tokens_before, _ = _sum_usage(snapshot.values.get("messages", []), llm_model)
         if require_paused:
             refusal = ""
             if snapshot is None or not snapshot.values:
@@ -1129,7 +1159,7 @@ async def resume_agent(
             )
         latency_ms = int((time.perf_counter() - t0) * 1000)
         if debug_mode:
-            step_tokens, step_cost = _usage_since(tokens_before, result.get("messages", []))
+            step_tokens, step_cost = _usage_since(tokens_before, result.get("messages", []), llm_model)
             interrupts = result.get("__interrupt__") or []
             if interrupts:
                 # The step reached an approval the gate requires: the normal approval flow takes over.
@@ -1187,9 +1217,9 @@ async def resume_agent(
         # thread, so this is the whole-thread usage (pre-interrupt reasoning
         # included), not just the post-resume delta. A debug step reports its own.
         if debug_mode:
-            tokens_used, cost_usd = _usage_since(tokens_before, result.get("messages", []))
+            tokens_used, cost_usd = _usage_since(tokens_before, result.get("messages", []), llm_model)
         else:
-            tokens_used, cost_usd = _sum_usage(result.get("messages", []))
+            tokens_used, cost_usd = _sum_usage(result.get("messages", []), llm_model)
         if pseudonymiser is not None:
             result["output"] = pseudonymiser.restore_value(result.get("output", {}))
             result["reasoning_trace"] = pseudonymiser.restore_value(result.get("reasoning_trace", []))

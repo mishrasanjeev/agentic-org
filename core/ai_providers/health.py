@@ -117,14 +117,14 @@ async def _probe_anthropic(credential: str) -> dict[str, Any]:
 
 
 async def _probe_gemini(credential: str) -> dict[str, Any]:
-    """Gemini: GET /v1beta/models?key=..."""
+    """Gemini: list models with header authentication, never a token-bearing URL."""
     url = "https://generativelanguage.googleapis.com/v1beta/models"
     async with httpx.AsyncClient(
         timeout=_PROBE_TIMEOUT_S,
         transport=build_pinned_async_transport(require_dns=True),
     ) as client:
         start = time.time()
-        resp = await client.get(url, params={"key": credential})
+        resp = await client.get(url, headers={"x-goog-api-key": credential})
         latency_ms = int((time.time() - start) * 1000)
     if resp.status_code == 200:
         return {"ok": True, "latency_ms": latency_ms, "raw_status": 200}

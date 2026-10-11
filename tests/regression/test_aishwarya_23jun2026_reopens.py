@@ -321,9 +321,11 @@ async def test_approval_resume_missing_engine_state_marks_run_failed(monkeypatch
     )
     workflow_def = SimpleNamespace(definition={"steps": [{"id": "approval"}]})
     _install_fake_tenant_sessions(monkeypatch, [run, workflow_def, run])
+    expected_tenant_id = tenant_id
 
     class FakeStateStore:
-        async def init(self):
+        async def init(self, *, tenant_id):
+            assert tenant_id == expected_tenant_id
             return None
 
         async def load(self, _run_id):

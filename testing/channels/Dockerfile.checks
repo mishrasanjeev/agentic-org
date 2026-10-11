@@ -1,0 +1,9 @@
+# SPDX-License-Identifier: Apache-2.0
+ARG CHECKS_BASE=agenticorg-tools:dev
+FROM ${CHECKS_BASE}
+COPY --from=agenticorg-channel-ui-tools:local /usr/local/bin/node /usr/local/bin/node
+COPY --from=agenticorg-channel-ui-tools:local /usr/local/lib/node_modules /usr/local/lib/node_modules
+RUN ln -s /usr/local/lib/node_modules/npm/bin/npm-cli.js /usr/local/bin/npm \
+    && ln -s /usr/local/lib/node_modules/npm/bin/npx-cli.js /usr/local/bin/npx
+COPY --from=agenticorg-channel-ui-tools:local /app/ui/node_modules /opt/channel-node-modules
+CMD ["sleep", "infinity"]

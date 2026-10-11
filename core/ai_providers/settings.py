@@ -14,6 +14,8 @@ from dataclasses import dataclass
 import structlog
 from sqlalchemy import select
 
+from core.ai_providers.defaults import fallback_model, primary_model
+
 logger = structlog.get_logger(__name__)
 
 # enterprise-gate: process-local-ok reason=bounded-ttl-db-backed-ai-setting-cache
@@ -51,8 +53,8 @@ class EffectiveAISetting:
 _PLATFORM_DEFAULTS = EffectiveAISetting(
     tenant_id="__platform__",
     llm_provider="gemini",
-    llm_model="gemini-2.5-flash",
-    llm_fallback_model="gemini-2.5-flash-preview-05-20",
+    llm_model=primary_model(),
+    llm_fallback_model=fallback_model(),
     llm_routing_policy="auto",
     max_input_tokens=None,
     embedding_provider="local",

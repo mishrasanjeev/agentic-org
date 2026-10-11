@@ -24,6 +24,7 @@ from sqlalchemy import (
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
+from core.ai_providers.defaults import primary_model
 from core.models.base import BaseModel
 
 
@@ -69,7 +70,7 @@ class Agent(BaseModel):
     system_prompt_ref: Mapped[str] = mapped_column(String(500), nullable=False)
     prompt_variables: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
     llm_model: Mapped[str] = mapped_column(
-        String(100), nullable=False, default="claude-3-5-sonnet-20241022"
+        String(100), nullable=False, default=primary_model
     )
     # Bug sheet 2026-09-14 #31: explicit provider pin (catalog id such as
     # ``gemini`` / ``anthropic`` / ``openai_compatible``). NULL on legacy

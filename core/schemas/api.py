@@ -9,18 +9,19 @@ from uuid import UUID
 from pydantic import BaseModel, Field, field_validator, model_validator
 
 from core.ai_providers.catalog import validate_llm_selection
+from core.ai_providers.defaults import fallback_model, primary_model
 
 # ── Agent schemas ──
 
 
 class LLMConfig(BaseModel):
-    model: str = "claude-3-5-sonnet-20241022"
+    model: str = Field(default_factory=primary_model)
     # Bug sheet 2026-09-14 #31: explicit catalog provider id. ``None`` keeps
     # the legacy "infer provider from the model name" behaviour; when set,
     # the (provider, model) pair must exist in the catalog or the request is
     # rejected with 422 instead of silently downgrading at run time.
     provider: str | None = None
-    fallback_model: str = "gpt-4o-2024-11-20"
+    fallback_model: str = Field(default_factory=fallback_model)
     temperature: float = 0.1
     context_strategy: str = "sliding_16k"
 

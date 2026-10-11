@@ -2,14 +2,13 @@
 
 Routing tiers (cloud, default ``AGENTICORG_LLM_MODE=cloud``):
 
-  - Tier 1 (simple):    ``gemini-2.5-flash-lite`` — high-volume
+  - Tier 1 (simple):    ``gemini-3.5-flash-lite`` — high-volume
                         classification, extraction, simple Q&A.
-                        ~$0.04/1M input, ~$0.10/1M output.
-  - Tier 2 (moderate):  ``gemini-2.5-flash`` — multi-step reasoning,
-                        light synthesis. $0.075/1M input,
-                        $0.30/1M output.
+  - Tier 2 (moderate):  ``gemini-3.5-flash-lite`` — multi-step reasoning,
+                        light synthesis. Both tiers accept explicit overrides;
+                        costs come from the maintained pricing registry.
   - Tier 3 (complex):   ``gemini-2.5-pro`` — heavy synthesis, deep
-                        reasoning. $1.25/1M input, $5/1M output.
+                        reasoning; the existing separate default is preserved.
                         ``AGENTICORG_LLM_TIER3`` overrides for hosted
                         Claude/GPT.
 
@@ -214,12 +213,11 @@ def _load_routellm_controller_cls() -> type[Any] | None:
 # Tier model definitions
 # ---------------------------------------------------------------------------
 
-# Cloud tier models. Tier1 was previously gemini-2.5-flash; the
-# 3-tier rework moves Flash to Tier2 and uses Flash-Lite for Tier1
-# so high-volume classify/extract calls land at the cheapest model.
+# Cloud tiers remain configurable independently of the primary model.
+# The default low/medium tiers use Flash-Lite; the existing high tier is retained.
 CLOUD_TIERS: dict[str, str] = {
-    "tier1": os.getenv("AGENTICORG_LLM_TIER1", "gemini-2.5-flash-lite"),
-    "tier2": os.getenv("AGENTICORG_LLM_TIER2", "gemini-2.5-flash"),
+    "tier1": os.getenv("AGENTICORG_LLM_TIER1", "gemini-3.5-flash-lite"),
+    "tier2": os.getenv("AGENTICORG_LLM_TIER2", "gemini-3.5-flash-lite"),
     "tier3": os.getenv("AGENTICORG_LLM_TIER3", "gemini-2.5-pro"),
 }
 
@@ -236,8 +234,8 @@ LOCAL_TIERS: dict[str, str] = {
 # ``GEMINI_PRICE_PER_1M`` below and is used by the per-call cost
 # write to agent_task_results.
 TIER_COST_PER_1K: dict[str, float] = {
-    "tier1": 0.000_10,  # gemini-2.5-flash-lite output
-    "tier2": 0.000_30,  # gemini-2.5-flash output
+    "tier1": 0.002_50,  # gemini-3.5-flash-lite output
+    "tier2": 0.002_50,  # gemini-3.5-flash-lite output
     "tier3": 0.005_00,  # gemini-2.5-pro output
 }
 
@@ -246,6 +244,8 @@ TIER_COST_PER_1K: dict[str, float] = {
 # When a new model is added, add an entry here AND update
 # core/billing/spend.py if the model name introduces a new prefix.
 GEMINI_PRICE_PER_1M: dict[str, dict[str, float]] = {
+    # Standard text pricing, https://ai.google.dev/gemini-api/docs/pricing
+    "gemini-3.5-flash-lite": {"input": 0.30, "output": 2.50},
     # Flash-Lite (cheapest)
     "gemini-2.5-flash-lite": {"input": 0.04, "output": 0.10},
     # Flash (mid)

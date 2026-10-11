@@ -10,6 +10,7 @@ import { agentDomainsForUser, isAdminUser, isDomainLocked } from "@/lib/roles";
 import {
   agentLlmProviders,
   formatLlmOption,
+  inferProviderForModel,
   isFreeTextModelProvider,
   selectableModels,
   useLlmRegistry,
@@ -125,8 +126,20 @@ export default function AgentCreate() {
   // Sheet #34: provider + model come from the shared catalog registry so the
   // picker cannot offer ids the backend rejects; provider is sent explicitly.
   const [llmProvider, setLlmProvider] = useState("gemini");
-  const [llmModel, setLlmModel] = useState("gemini-2.5-flash");
-  const { registry: llmRegistry } = useLlmRegistry();
+  const [llmModel, setLlmModel] = useState("gemini-3.5-flash-lite");
+  const { registry: llmRegistry, defaultModel } = useLlmRegistry();
+  const appliedDefault = useRef(false);
+  const modelEdited = useRef(false);
+  useEffect(() => {
+    if (!appliedDefault.current && defaultModel && llmRegistry) {
+      appliedDefault.current = true;
+      const provider = inferProviderForModel(llmRegistry, defaultModel);
+      if (provider && !modelEdited.current) {
+        setLlmModel((current) => current === "gemini-3.5-flash-lite" ? defaultModel : current);
+        setLlmProvider((current) => current === "gemini" ? provider : current);
+      }
+    }
+  }, [defaultModel, llmRegistry]);
   const llmModelOptions = selectableModels(llmRegistry, llmProvider);
   const [llmRouting, setLlmRouting] = useState("auto");
   const [authorizedTools, setAuthorizedTools] = useState<string[]>([]);
@@ -391,7 +404,7 @@ export default function AgentCreate() {
         llm: {
           model: llmModel.trim(),
           provider: llmProvider.trim() || undefined,
-          fallback_model: "gemini-2.5-flash-preview-05-20",
+          fallback_model: llmModel.trim(),
         },
         llm_routing: llmRouting,
         parent_agent_id: parentAgentId || undefined,
@@ -671,6 +684,7 @@ export default function AgentCreate() {
                       value={llmProvider}
                       onChange={(e) => {
                         const next = e.target.value;
+                        modelEdited.current = true;
                         setLlmProvider(next);
                         setLlmModel(isFreeTextModelProvider(next) ? "" : (selectableModels(llmRegistry, next)[0]?.model ?? ""));
                       }}
@@ -685,7 +699,7 @@ export default function AgentCreate() {
                       type="text"
                       data-testid="llm-provider"
                       value={llmProvider}
-                      onChange={(e) => setLlmProvider(e.target.value)}
+                      onChange={(e) => { modelEdited.current = true; setLlmProvider(e.target.value); }}
                       placeholder="gemini / openai / anthropic / openai_compatible (blank = infer from model)"
                       className="border rounded px-3 py-2 text-sm w-full mt-1"
                     />
@@ -694,7 +708,7 @@ export default function AgentCreate() {
                 <div>
                   <label className="text-sm font-medium">LLM Model</label>
                   {llmRegistry && !isFreeTextModelProvider(llmProvider) && llmModelOptions.length > 0 ? (
-                    <select data-testid="llm-model" value={llmModel} onChange={(e) => setLlmModel(e.target.value)} className="border rounded px-3 py-2 text-sm w-full mt-1">
+                    <select data-testid="llm-model" value={llmModel} onChange={(e) => { modelEdited.current = true; setLlmModel(e.target.value); }} className="border rounded px-3 py-2 text-sm w-full mt-1">
                       {llmModelOptions.map((m) => (
                         <option key={m.model} value={m.model}>{formatLlmOption(m)}</option>
                       ))}
@@ -704,7 +718,7 @@ export default function AgentCreate() {
                       type="text"
                       data-testid="llm-model"
                       value={llmModel}
-                      onChange={(e) => setLlmModel(e.target.value)}
+                      onChange={(e) => { modelEdited.current = true; setLlmModel(e.target.value); }}
                       placeholder={isFreeTextModelProvider(llmProvider) ? "Model name served by your endpoint" : "Model id"}
                       className="border rounded px-3 py-2 text-sm w-full mt-1"
                     />

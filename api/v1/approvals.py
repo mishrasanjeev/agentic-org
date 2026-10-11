@@ -289,7 +289,7 @@ async def _resume_workflow_bg(
         return
 
     state_store = WorkflowStateStore()
-    await state_store.init()
+    await state_store.init(tenant_id=tenant_id)
     engine = WorkflowEngine(state_store)
 
     try:

@@ -24,7 +24,13 @@ def _free_port() -> int:
 
 
 @pytest.fixture(autouse=True)
-def _stop_server() -> None:
+def _stop_server(monkeypatch: pytest.MonkeyPatch) -> None:
+    from prometheus_client import values
+
+    # enable_multiprocess mutates both globals directly. Restore them so later
+    # subprocess tests do not inherit a deleted test-specific mmap directory.
+    monkeypatch.setenv("PROMETHEUS_MULTIPROC_DIR", "")
+    monkeypatch.setattr(values, "ValueClass", values.ValueClass)
     yield
     metrics_export.stop_metrics_server()
 

@@ -343,7 +343,8 @@ async def test_workflow_background_execution_holds_the_caller_only_while_it_runs
         pass
 
     class _StateStore:
-        async def init(self) -> None:
+        async def init(self, *, tenant_id: uuid.UUID) -> None:
+            assert tenant_id == uuid.UUID(TENANT)
             # The first thing the background execution does; stop the run here.
             seen["active"] = caller_grant_for_run({"agent_id": CALLER_AGENT})
             raise _StopAfterBindingError

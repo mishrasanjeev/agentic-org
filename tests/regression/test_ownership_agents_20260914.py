@@ -723,7 +723,8 @@ class TestAiModelRegistry:
             settings_get = c.get("/api/v1/tenant-ai-settings")
             settings_put = c.put("/api/v1/tenant-ai-settings", json={"chunk_size": 512})
         assert registry.status_code == 200, registry.text
-        assert set(registry.json()) == {"llm", "embedding"}
+        assert set(registry.json()) == {"llm", "embedding", "defaults"}
+        assert registry.json()["defaults"]["reasoning_model"] == "gemini-3.5-flash-lite"
         assert settings_get.status_code == 403
         assert settings_put.status_code == 403
 

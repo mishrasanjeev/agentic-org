@@ -516,14 +516,17 @@ def _build_model(
     if "gpt" in resolved:
         return _build_openai_model(resolved, temperature, max_tokens, tenant_id)
 
-    # Default fallback — Gemini Flash (free)
-    return _build_gemini_model("gemini-2.5-flash", temperature, max_tokens, tenant_id)
+    from core.ai_providers.defaults import primary_model, primary_provider
+
+    return _build_provider_model(primary_provider(), primary_model(), temperature, max_tokens, tenant_id)
 
 
 def _resolve_model(model: str) -> str:
     """Resolve the model name without constructing optional provider clients."""
     if not model:
-        return os.getenv("AGENTICORG_LLM_PRIMARY", "gemini-2.5-flash")
+        from core.ai_providers.defaults import primary_model
+
+        return primary_model()
 
     m = model.lower()
 
@@ -543,7 +546,9 @@ def _resolve_model(model: str) -> str:
     if "gpt" in m:
         return model
 
-    return "gemini-2.5-flash"
+    from core.ai_providers.defaults import primary_model
+
+    return primary_model()
 
 
 def _is_ollama_model(model: str) -> bool:
