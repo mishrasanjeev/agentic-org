@@ -402,11 +402,14 @@ Rollback moves traffic, never the schema.
   [disabling](#4-disable) the feature on the current release and staying there;
   if a rollback past the spend release is unavoidable, disable and drain first
   as above, keep the rollback short and record the exposure in the change
-  record. A rollback to a revision that already has the spend code keeps the
-  filter, and `AGENTICORG_SPEND_AUDIT_COMMERCIAL_FILTER` keeps the value the
-  service has; that variable, not a rollback past the spend release, is the
-  way to restore the previous `GET /audit` behaviour when an owner decides
-  to (see [disable](#4-disable)).
+  record. A rollback runs the target revision with the environment variables
+  it was created with, `AGENTICORG_SPEND_AUDIT_COMMERCIAL_FILTER` included, so
+  read the target revision's value before moving traffic
+  (`gcloud run revisions describe <revision> --project="$GCP_PROJECT_ID"
+  --region="$CLOUD_RUN_REGION" --format='value(spec.containers[0].env)'`).
+  That variable, not a rollback past the spend release, is the way to restore
+  the previous `GET /audit` behaviour when an owner decides to (see
+  [disable](#4-disable)).
 
 ## Reference
 
