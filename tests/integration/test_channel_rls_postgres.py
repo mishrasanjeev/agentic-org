@@ -99,17 +99,32 @@ async def test_all_channel_tables_enforce_scope_and_owner(as_rls_role: _Db) -> N
     with pytest.raises(HTTPException) as cross_owner:
         await _binding(tenant_a, binding_a, actor)
     assert cross_owner.value.status_code == 404
-    with pytest.raises(DBAPIError):
-        async with get_tenant_session(tenant_a) as session:
-            session.add(
-                ChannelBinding(
-                    tenant_id=tenant_b,
-                    owner_user_id=user_b,
-                    name="Blocked",
-                    provider="signed_webhook",
-                    target_kind="agent",
-                    target_id=uuid.uuid4(),
-                    credentials_ciphertext="sealed",
-                )
-            )
-            await session.flush()
+    forbidden_rows = (
+        ChannelBinding(
+            tenant_id=tenant_b,
+            owner_user_id=user_b,
+            name="Blocked",
+            provider="signed_webhook",
+            target_kind="agent",
+            target_id=uuid.uuid4(),
+            credentials_ciphertext="sealed",
+        ),
+        ChannelSenderLink(
+            tenant_id=tenant_b,
+            binding_id=binding_b,
+            user_id=user_b,
+            expires_at=datetime.now(UTC) + timedelta(minutes=10),
+        ),
+        ChannelDelivery(
+            tenant_id=tenant_b,
+            binding_id=binding_b,
+            event_id="blocked-write",
+            content_hash="hash",
+            message_ciphertext="sealed",
+        ),
+    )
+    for forbidden_row in forbidden_rows:
+        with pytest.raises(DBAPIError):
+            async with get_tenant_session(tenant_a) as session:
+                session.add(forbidden_row)
+                await session.flush()
