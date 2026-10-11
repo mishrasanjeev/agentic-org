@@ -57,6 +57,8 @@ The main feature switches that default to off are listed below; `core/config.py`
 | `AGENTICORG_SPEND_INTELLIGENCE_ENABLED` | [AI spend intelligence](/docs/ai-spend-intelligence) |
 | `AGENTICORG_KNOWLEDGE_HYBRID_SEARCH`, `AGENTICORG_KNOWLEDGE_RERANK_ENABLED`, `AGENTICORG_KNOWLEDGE_QUERY_TRANSFORM_ENABLED`, `AGENTICORG_KNOWLEDGE_GRAPH_RETRIEVAL_ENABLED` | Additional knowledge retrieval stages |
 | `AGENTICORG_CONVERSATION_V2_ENABLED` | Banking intents and earlier-turn context in chat, and the Conversations screen |
+| `AGENTICORG_CUSTOMER_AGENT_ENABLED` | The bank-operated [customer agent](/docs/customer-agent): customer sessions, the autonomy ladder, cards, the permissions page and the embeddable element |
+| `AGENTICORG_GRANTEX_REVOCATION_CHECK=feed` | Refusing grant tokens the authority service has revoked, read from its revocation feed, before they are honoured |
 | `AGENTICORG_CONTENT_SERVICES_ENABLED` | Governed drafting, summarisation and extraction APIs |
 | `AGENTICORG_IDP_ENABLED`, `AGENTICORG_WORKBENCH_V2_ENABLED`, `AGENTICORG_SPEECH_INTELLIGENCE_ENABLED`, `AGENTICORG_TRANSACTION_INTELLIGENCE_ENABLED`, `AGENTICORG_LINEAGE_ENABLED` | Document processing, workbenches, call recordings, transaction findings and lineage, with their [screens](/docs/review-and-operations-screens) |
 | `AGENTICORG_PERSONALISATION_ENABLED` | Consent-checked personalisation |
