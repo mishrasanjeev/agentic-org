@@ -97,6 +97,23 @@ is 4.8.0; versions 4.1 to 4.8 have no sections of their own.
 - Migration `v6z83_customer_agent` (three RLS tables). Integration guide:
   `docs/customer-agent/integration.md`.
 
+### Added - Grant revocation for paused and retired agents; an opt-in revocation check before a token is honoured
+- Pausing or retiring an agent revokes the run grants the pool minted for it
+  at the authority service, evicts them from the shared cache and from every
+  node's in-process cache, and reports the real result (`token_revoked`,
+  `grants_revoked`, `grants_failed`) instead of a constant.
+- The authentication middleware refuses a grant token of a retired agent (or
+  a paused one while paused agents are refused). With
+  `AGENTICORG_GRANTEX_REVOCATION_CHECK=feed` (off by default, so no existing
+  authentication path changes until a deployment opts in) it also refuses a
+  token whose grant, or whose parent grant, the authority service has
+  revoked, read from the SDK's revocation feed. An unknown revocation state
+  then refuses the token in a strict runtime and is allowed with a warning
+  elsewhere.
+- `POST /agents/{id}/delegate` answers 502 when no delegated grant was issued
+  and keeps the grant it receives instead of discarding it; pausing or
+  retiring the agent revokes that delegated grant with the rest.
+
 ### Fixed - Public status page crawlability
 - Render status interpretation, an explicit unconfirmed loading state and
   support links in the initial HTML, even without JavaScript or a live report.
