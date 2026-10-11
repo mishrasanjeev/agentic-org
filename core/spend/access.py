@@ -118,7 +118,9 @@ def commercial_audit_clause(caller: Caller, event_type: Any) -> ColumnElement[bo
     ``GET /audit`` applies it, whatever ``spend_intelligence_enabled`` says
     (the rows outlive the flag), when ``commercial_rows_kept`` finds the
     tenant has such rows, so a caller refused ``GET /spend/rate-cards``
-    cannot read the same prices from the rows their writes left.
+    cannot read the same prices from the rows their writes left. The setting
+    ``spend_audit_commercial_filter`` (default on) is the explicit opt-out:
+    off, ``GET /audit`` applies nothing of this for any reader.
     """
     if is_commercial_reader(caller):
         return None

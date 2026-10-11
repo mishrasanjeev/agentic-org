@@ -312,6 +312,14 @@ spend_meter_gaps_lost_total = Counter(
     "Meter gap counts dropped at shutdown before they were written, by the gap's reason",
     ["usage_type", "reason"],
 )
+# Gap counts the in-process gap aggregator could not keep: it was full (core/spend/writer.py
+# MAX_GAP_KEYS, during a database outage or a stalled writer) and held no coarser key of the same
+# tenant, day, usage type and reason to fold them into. The gap report undercounts by this much.
+spend_meter_gaps_overflow_total = Counter(
+    "agenticorg_spend_meter_gaps_overflow_total",
+    "Meter gap counts dropped because the in-process gap aggregator was full, by the gap's reason",
+    ["usage_type", "reason"],
+)
 # livemax: a Celery child that dies with a backlog leaves no series behind (mark_process_dead
 # removes live* gauge files), and the backlog alert reads max() across processes.
 spend_usage_pending = Gauge(

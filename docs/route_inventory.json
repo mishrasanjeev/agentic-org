@@ -1508,7 +1508,7 @@
     "public_exempt_reason": null,
     "rate_limit": "audit-read",
     "scope": "audit.sensitive.read",
-    "source_line": 85,
+    "source_line": 86,
     "tenant_required": true
   },
   {
@@ -1526,7 +1526,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "audit.sensitive.read",
-    "source_line": 350,
+    "source_line": 358,
     "tenant_required": true
   },
   {
@@ -1544,7 +1544,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "audit.sensitive.read",
-    "source_line": 364,
+    "source_line": 372,
     "tenant_required": true
   },
   {
@@ -1562,7 +1562,7 @@
     "public_exempt_reason": null,
     "rate_limit": "audit-read",
     "scope": "audit.enforcement.sensitive.read",
-    "source_line": 238,
+    "source_line": 246,
     "tenant_required": true
   },
   {

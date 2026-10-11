@@ -234,6 +234,14 @@ invoice, a reconciliation or a spend job (none of these rows is ever deleted: in
 are superseded, and audit rows commit with their rows); every other tenant's audit query is
 unchanged.
 
+The filter is a deliberate default, recorded in `CHANGELOG.md` as a breaking change for the audit
+readers of tenants that keep such rows, with an explicit opt-out:
+`spend_audit_commercial_filter` (`AGENTICORG_SPEND_AUDIT_COMMERCIAL_FILTER`, default `true`, read
+by the API). Set to `false`, `GET /audit` runs the query it ran before for every reader: no
+existence query, no filter, and domain-scoped readers and machine credentials read the commercial
+spend audit rows again, contract prices and committed amounts included. The setting is
+independent of `spend_intelligence_enabled`: turning spend off leaves the filter on.
+
 ## API
 
 | Method and path | Who | Notes |
@@ -455,6 +463,18 @@ detail in `spend_meter_gaps` (`GET /spend/gaps`, at most 92 days): `queue_full`,
 `shutdown_lost`, `paused`, `tenant_mismatch`, `failed_no_usage` (the detail names the provider,
 or `cancelled:<provider>`), `timeout_estimated` and `unpriced_tool`. The detail never carries text
 from a call. Gaps carry no agent, so they are answered to an administrator or auditor only.
+
+Each process adds gaps up in memory until its writer flushes them, in at most 10,000 tenant, day,
+usage type, reason and detail keys, so memory stays bounded. When a database outage or a stalled
+writer fills that aggregator, a new key's count is added to the key of the same tenant, day,
+usage type and reason with no detail if the aggregator already holds it (the report then shows
+that count without its detail); otherwise the count is not kept but counted in
+`agenticorg_spend_meter_gaps_overflow_total` by usage type and reason (never the tenant or the
+detail), and a warning `spend_gap_aggregator_full` with the counts only (the keys' bound and the
+counts overflowed since the previous warning) is logged at most once a minute per process. Gaps
+put back after a failed flush follow the same rule. During such an incident the gap report and
+coverage undercount the unmetered usage by what that counter shows; counts it holds are not
+counted again in `agenticorg_spend_meter_gaps_lost_total` at shutdown.
 
 ## Maintenance jobs
 

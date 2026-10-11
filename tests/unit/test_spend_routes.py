@@ -520,6 +520,86 @@ class TestAccess:
         )
         assert len(out.items) == 2  # an auditor reads them
 
+    @pytest.mark.asyncio
+    async def test_general_audit_filter_has_an_explicit_opt_out(self, monkeypatch):
+        """spend_audit_commercial_filter=false: no existence query and the previous GET /audit for every reader."""
+        from api.v1 import audit as audit_api
+        from core.config import Settings
+
+        class Capture:
+            def __init__(self, kept, entries=()):
+                self.statements = []
+                self.kept = kept
+                self.entries = list(entries)
+
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, *args):
+                return False
+
+            async def execute(self, statement):
+                self.statements.append(statement)
+                if "spend_rate_cards" in sql_of(statement):
+                    return SimpleNamespace(scalar=lambda: self.kept)
+                return SimpleNamespace(scalar=lambda: 0, scalars=lambda: SimpleNamespace(all=lambda: self.entries))
+
+        def sql_of(statement):
+            return str(statement.compile(dialect=postgresql.dialect(), compile_kwargs={"literal_binds": True}))
+
+        def request(role, *, user_id=True, auth_mode="legacy", scopes=None, domains=None):
+            claims = {"sub": f"{role}@example.com", "role": role}
+            if user_id:
+                claims["agenticorg:user_id"] = str(uuid.uuid4())
+            if domains is not None:
+                claims["agenticorg:domains"] = domains
+            scopes = scopes or (["agenticorg:admin"] if role == "admin" else ["agents:read", "audit:read"])
+            return SimpleNamespace(state=SimpleNamespace(claims=claims, scopes=scopes, auth_mode=auth_mode))
+
+        async def run(req, role, capture):
+            monkeypatch.setattr(audit_api, "get_tenant_session", lambda tenant_id, c=capture: c)
+            return await audit_api.query_audit(request=req, tenant_id=TID, user_role=role)
+
+        # On by default; AGENTICORG_SPEND_AUDIT_COMMERCIAL_FILTER=false turns it off.
+        assert settings.spend_audit_commercial_filter is True
+        monkeypatch.delenv("AGENTICORG_SPEND_AUDIT_COMMERCIAL_FILTER", raising=False)
+        assert Settings().spend_audit_commercial_filter is True
+        monkeypatch.setenv("AGENTICORG_SPEND_AUDIT_COMMERCIAL_FILTER", "false")
+        assert Settings().spend_audit_commercial_filter is False
+
+        monkeypatch.setattr(audit_api, "_audit_to_dict", lambda entry: {"event_type": entry.event_type})
+        names = ["spend.rate_cards.create", "spend.job.queued", "agent.run"]
+        rows = [SimpleNamespace(event_type=name) for name in names]
+        readers = [
+            (request("cfo", domains=["finance"]), "cfo", True),
+            (request("domain_lead"), "domain_lead", True),
+            (request("admin", user_id=False, auth_mode="api_key"), "admin", True),
+            (request("", user_id=False, auth_mode="grantex", scopes=["audit:read"]), "", True),
+            (request("admin"), "admin", False),
+            (request("auditor", scopes=["audit:read"]), "auditor", False),
+        ]
+        for req, role, refused in readers:
+            # The query the reader ran before the filter: the filter on, for a tenant that keeps no commercial rows.
+            monkeypatch.setattr(settings, "spend_audit_commercial_filter", True)
+            before = Capture(kept=False)
+            await run(req, role, before)
+            assert len(before.statements) == (3 if refused else 2), role  # a refused reader's existence query
+            previous = [sql_of(s) for s in before.statements if "spend_rate_cards" not in sql_of(s)]
+            # Opted out, for a tenant that does keep them.
+            monkeypatch.setattr(settings, "spend_audit_commercial_filter", False)
+            opted = Capture(kept=True, entries=rows)
+            out = await run(req, role, opted)
+            assert [sql_of(s) for s in opted.statements] == previous, role  # no existence query, no filter
+            assert all("NOT LIKE" not in sql for sql in previous), role
+            # No backstop either: a domain reader and a machine credential read the commercial rows again.
+            assert [item["event_type"] for item in out.items] == names, role
+
+        # With the default on, the same tenant's rows stay hidden from the same domain reader.
+        monkeypatch.setattr(settings, "spend_audit_commercial_filter", True)
+        hidden = Capture(kept=True, entries=rows)
+        out = await run(readers[0][0], "cfo", hidden)
+        assert len(hidden.statements) == 3 and [item["event_type"] for item in out.items] == ["agent.run"]
+
     def test_commercial_audit_event_matches_the_clause_prefixes(self):
         assert access.is_commercial_audit_event("spend.rate_cards.correct")
         assert access.is_commercial_audit_event("spend.commitments.update")

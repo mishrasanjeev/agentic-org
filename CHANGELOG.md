@@ -4,6 +4,24 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
 
 ## [Unreleased] - 2026-08-29
 
+### Security - breaking for audit readers of tenants that keep spend rows: `GET /audit` hides commercial spend audit rows by default
+- A deliberate default, on whatever `spend_intelligence_enabled` says:
+  `GET /audit` hides the audit rows of rate cards, commitments, invoices,
+  reconciliations and spend jobs (`spend.rate_cards.*`, `spend.commitments.*`,
+  `spend.invoices.*`, `spend.reconciliations.*`, `spend.job.*`,
+  `spend.usage.*`, `spend.fx.*`, `spend.rollups.*`: contract prices,
+  committed amounts, invoice figures, job parameters and the amounts jobs
+  moved) from every reader who is not a human administrator or auditor, that
+  is domain-scoped roles and machine credentials, the readers the spend
+  routes refuse. Audit rows are never deleted, so the filter stays when spend
+  intelligence is turned off. Only tenants that keep a rate card, commitment,
+  invoice, reconciliation or spend job are affected; every other tenant's
+  audit query is the one it ran before.
+- Opt-out: `AGENTICORG_SPEND_AUDIT_COMMERCIAL_FILTER=false` (setting
+  `spend_audit_commercial_filter`, default `true`, read by the API) restores
+  the previous `GET /audit` behaviour for every reader, commercial rows
+  included, with no extra query.
+
 ### Added - AI spend intelligence: invoice reconciliation and the Gate 1 status
 - Provider invoices: `POST /spend/invoices/import` takes a provider's invoice or
   billing export for one billing month (CSV or JSON, bounded like every

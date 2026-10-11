@@ -11,6 +11,7 @@ from sqlalchemy import func, or_, select
 
 from api.deps import get_current_tenant, get_user_role
 from api.route_metadata import route_meta
+from core.config import settings
 from core.database import get_tenant_session
 from core.governance import audit_chain
 from core.models.agent import Agent
@@ -117,8 +118,15 @@ async def query_audit(
         # reads them, as on the spend routes themselves. Applied whatever
         # spend_intelligence_enabled says, because the rows outlive the flag;
         # a tenant that has never kept a rate card, commitment or spend job
-        # has no such rows, and its query is the one it ran before.
-        commercial_filter = spend_access.commercial_audit_clause(caller, AuditLog.event_type)
+        # has no such rows, and its query is the one it ran before. The
+        # explicit opt-out spend_audit_commercial_filter=false (default on)
+        # restores the previous query for every reader: no existence query,
+        # no filter and no backstop below.
+        commercial_filter = (
+            spend_access.commercial_audit_clause(caller, AuditLog.event_type)
+            if settings.spend_audit_commercial_filter
+            else None
+        )
         if commercial_filter is not None and await spend_access.commercial_rows_kept(session, tid):
             base = base.where(commercial_filter)
             count_base = count_base.where(commercial_filter)

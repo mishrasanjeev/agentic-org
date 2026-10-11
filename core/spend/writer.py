@@ -30,13 +30,20 @@ If the publish fails, the loss is counted (``spill_failed``) per tenant.
 tenant, day, usage type, reason and detail, and flushed by the writer with
 additive upserts into ``spend_meter_gaps``. A gap seen on a call path
 (``note_gap``) starts the writer too, so a process that only ever sees
-failed or cancelled calls still flushes its gaps.
+failed or cancelled calls still flushes its gaps. The aggregator holds at
+most ``MAX_GAP_KEYS`` keys: when a database outage or a stalled writer fills
+it, a new key's count goes to the key of the same tenant, day, usage type
+and reason with no detail when the aggregator has that key, and is
+otherwise counted on ``spend_meter_gaps_overflow_total`` (usage type and
+reason only) with a warning at most once a minute per process.
 
 **Drain** at shutdown (the API lifespan, a Celery worker's exit) stops the
 thread, waits up to its timeout and spills whatever is still queued or
 waiting for a retry, counting what cannot be spilled as ``shutdown_lost``.
-Gap counts nothing flushed are counted as ``shutdown_lost`` too. Once a
-drain has begun, the process starts no new writer: a late submit or gap,
+Gap counts nothing flushed are counted on ``spend_meter_gaps_lost_total``
+(gaps already counted as overflow are not in the aggregator, so they are
+not counted twice). Once a drain has begun, the process starts no new
+writer: a late submit or gap,
 and a batch the stopping thread tries to requeue after the drain collected
 the queue, are counted as ``shutdown_lost`` rather than left to die
 uncounted.
@@ -68,6 +75,7 @@ RETRY_BACKOFF_S = (0.25, 0.5, 1.0, 2.0, 5.0)
 BUSY_SPILL_AFTER_S = 120.0
 WRITER_POOL_SIZE = 2
 MAX_GAP_KEYS = 10_000
+GAP_OVERFLOW_LOG_INTERVAL_S = 60.0  # at most one aggregator-full warning a minute per process
 PAUSE_FLAG = "spend.metering_paused"
 PAUSE_CACHE_TTL_S = 30.0  # the feature flag module's TTL
 PAUSE_CACHE_MAX = 1024  # tenants; cleared when full
@@ -77,6 +85,8 @@ SHUTDOWN_LOST = "shutdown_lost"
 _WRITER: dict[str, Any] = {"writer": None, "pid": None, "closed_pid": None}
 # enterprise-gate: process-local-ok reason=gap-counts-aggregated-per-tenant-flushed-by-the-writer-bounded-10k-keys
 _GAPS: dict[tuple[str, date, str, str, str], int] = {}
+# enterprise-gate: process-local-ok reason=overflow-count-since-the-last-warning-and-its-time-counts-only-no-tenant-data
+_GAP_OVERFLOW: dict[str, Any] = {"unlogged": 0, "logged_at": None}
 # enterprise-gate: process-local-ok reason=guards-the-writer-holder-and-gap-aggregator-keeps-no-tenant-data
 _LOCK = threading.Lock()
 
@@ -100,10 +110,45 @@ def _transient(exc: BaseException) -> bool:
 # ---------------------------------------------------------------- gaps
 
 
-def _add_gap_locked(key: tuple[str, date, str, str, str], count: int) -> None:
-    if key not in _GAPS and len(_GAPS) >= MAX_GAP_KEYS:
+def _add_gap_locked(key: tuple[str, date, str, str, str], count: int) -> int:
+    """Add ``count`` to the aggregator (callers hold ``_LOCK``); return the part it could not keep.
+
+    Bounded at ``MAX_GAP_KEYS`` keys. When it is full, a new key's count goes
+    to the coarser key of the same tenant, day, usage type and reason with no
+    detail if the aggregator already has it; otherwise the count is returned
+    for ``_gap_overflowed`` to count. No key is added past the bound.
+    """
+    count = int(count)
+    if key in _GAPS or len(_GAPS) < MAX_GAP_KEYS:
+        _GAPS[key] = _GAPS.get(key, 0) + count
+        return 0
+    coarse = (key[0], key[1], key[2], key[3], "")
+    if coarse in _GAPS:
+        _GAPS[coarse] += count
+        return 0
+    return count
+
+
+def _gap_overflowed(key: tuple[str, date, str, str, str], count: int) -> None:
+    """Count gap counts the full aggregator could not keep; warn at most once a minute per process.
+
+    The counter carries the usage type and reason only, never the tenant or
+    the detail, and the warning counts only: the overflow since the previous
+    warning, this one included. Not a write failure: the usage behind the gap
+    was counted when it went unmetered.
+    """
+    if count <= 0:
         return
-    _GAPS[key] = _GAPS.get(key, 0) + int(count)
+    _metrics().spend_meter_gaps_overflow_total.labels(usage_type=key[2], reason=key[3]).inc(count)
+    now = time.monotonic()
+    with _LOCK:
+        _GAP_OVERFLOW["unlogged"] += count
+        logged_at = _GAP_OVERFLOW["logged_at"]
+        if logged_at is not None and now - logged_at < GAP_OVERFLOW_LOG_INTERVAL_S:
+            return
+        overflowed = _GAP_OVERFLOW["unlogged"]
+        _GAP_OVERFLOW.update(unlogged=0, logged_at=now)
+    logger.warning("spend_gap_aggregator_full", max_keys=MAX_GAP_KEYS, overflowed=overflowed)
 
 
 def _gap_key(tenant_id: str, day: date, usage_type: str, reason: str, detail: str) -> tuple[str, date, str, str, str]:
@@ -136,10 +181,15 @@ async def metering_paused(tenant_id: str | uuid.UUID) -> bool:
 
 
 def add_gap(tenant_id: str, day: date, usage_type: str, reason: str, detail: str = "", count: int = 1) -> None:
-    """Count usage that could not be metered; flushed by the writer. Never raises; bounded at 10 000 keys."""
+    """Count usage that could not be metered; flushed by the writer. Never raises; bounded at 10 000 keys.
+
+    On a full aggregator a new key's count is folded into its coarser key or counted as overflow
+    (``_add_gap_locked``).
+    """
     key = _gap_key(tenant_id, day, usage_type, reason, detail)
     with _LOCK:
-        _add_gap_locked(key, count)
+        lost = _add_gap_locked(key, count)
+    _gap_overflowed(key, lost)
 
 
 def _gaps_lost(gaps: dict[tuple[str, date, str, str, str], int]) -> None:
@@ -166,11 +216,11 @@ def note_gap(tenant_id: str, day: date, usage_type: str, reason: str, detail: st
     key = _gap_key(tenant_id, day, usage_type, reason, detail)
     with _LOCK:
         closed = _closed_locked()
-        if not closed:
-            _add_gap_locked(key, count)
+        lost = 0 if closed else _add_gap_locked(key, count)
     if closed:
         _gaps_lost({key: int(count)})
         return
+    _gap_overflowed(key, lost)
     start_for_gaps()
 
 
@@ -182,7 +232,11 @@ def pop_gaps(tenant_id: str | None = None) -> dict[tuple[str, date, str, str, st
 
 
 def restore_gaps(gaps: dict[tuple[str, date, str, str, str], int]) -> None:
-    """Put gaps back after a failed flush, so the next pass writes them."""
+    """Put gaps back after a failed flush, so the next pass writes them.
+
+    A key that no longer fits (new keys filled the aggregator after the flush took it) is folded into
+    its coarser key or counted as overflow like any new gap, so the bound holds and nothing is lost uncounted.
+    """
     for (tenant_id, day, usage_type, reason, detail), count in gaps.items():
         add_gap(tenant_id, day, usage_type, reason, detail, count)
 

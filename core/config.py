@@ -565,6 +565,17 @@ class Settings(BaseSettings):
     # from, to}. Empty: no standing node hours (an operator can still record
     # metered hours with python -m core.spend.gpu_cli).
     spend_gpu_pools_json: str = ""
+    # GET /audit hides the commercial spend audit rows (rate cards,
+    # commitments, invoices, reconciliations and spend jobs: contract prices,
+    # committed amounts, invoice figures, job parameters and the amounts they
+    # moved) from every reader who is not a human administrator or auditor,
+    # as the spend routes refuse those readers. It applies whatever
+    # spend_intelligence_enabled says, because audit rows are never deleted
+    # and outlive the flag, and only for a tenant that keeps such rows. On by
+    # default, a deliberate default recorded in CHANGELOG.md; false restores
+    # the previous GET /audit behaviour for every reader, commercial rows
+    # included. Env: AGENTICORG_SPEND_AUDIT_COMMERCIAL_FILTER.
+    spend_audit_commercial_filter: bool = True
     # JSON object keyed provider/model with input and output USD per million
     # tokens; a negotiated rate replaces the list price.
     model_price_overrides_json: str = ""

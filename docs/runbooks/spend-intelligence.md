@@ -21,9 +21,12 @@ services and the existing PostgreSQL database.
 | `AGENTICORG_SPEND_REPORTING_TIMEZONE` | `Asia/Kolkata` | API, worker, beat | The reporting calendar (event dates, FX dates, rollup days, coverage). Choose it before enabling: records keep the dates they were written with. |
 | `AGENTICORG_SPEND_PROVIDER_BILLING_TIMEZONES_JSON` | empty | API, worker, beat | A JSON object of provider to IANA zone for billing dates; unlisted providers use the built-in defaults, then UTC. |
 | `AGENTICORG_SPEND_GPU_POOLS_JSON` | empty | API, worker, beat | Standing in-house GPU pools whose node hours are spread over the pool's calls. Leave empty when nothing is served in house. |
+| `AGENTICORG_SPEND_AUDIT_COMMERCIAL_FILTER` | `true` | API | `GET /api/v1/audit` hides rate-card, commitment, invoice, reconciliation and spend job audit rows from readers who are not a human administrator or auditor, whatever the feature switch says. `false` is the explicit opt-out: the previous `GET /audit` behaviour for every reader, those rows included. |
 
 With the feature on, a process refuses to start when a zone cannot be loaded
-or the GPU pools do not parse. Off, none of these settings is read.
+or the GPU pools do not parse. Off, none of these settings is read except
+`AGENTICORG_SPEND_AUDIT_COMMERCIAL_FILTER`, which applies whatever the switch
+says because audit rows outlive it.
 
 Phase 1 is API-only: there is no spend screen in the application. Spend
 dashboards, budgets, spend alerts, forecasting, statements and month close are
@@ -347,7 +350,23 @@ After disabling:
   again when the feature is turned back on;
 - the `GET /api/v1/audit` commercial filter stays: rate-card, commitment,
   invoice, reconciliation and spend job audit rows remain visible only to a
-  human administrator or auditor, whatever the switch says;
+  human administrator or auditor, whatever the switch says. Those audit rows
+  are never deleted, so turning the switch off does not and must not expose
+  them. The filter is a deliberate default (recorded in `CHANGELOG.md`); its
+  explicit opt-out is `AGENTICORG_SPEND_AUDIT_COMMERCIAL_FILTER=false` on the
+  API, which restores the previous `GET /audit` behaviour for every reader and
+  so shows contract prices, committed amounts and invoice figures to
+  domain-scoped readers and machine credentials. Set it only with the owner's
+  approval recorded in the change record, staged and routed like the switch:
+
+  ```bash
+  rev="$(stage_spend "$API_SERVICE" --update-env-vars=AGENTICORG_SPEND_AUDIT_COMMERCIAL_FILTER=false)" &&
+    echo "$API_SERVICE staged $rev" &&
+    route_spend "$API_SERVICE" "$rev"
+  ```
+
+  Remove the variable the same way (`--remove-env-vars=AGENTICORG_SPEND_AUDIT_COMMERCIAL_FILTER`)
+  to hide the rows again;
 - usage while the feature is off is not metered and not counted as a gap. After
   turning it back on, `POST /api/v1/spend/usage/backfill` (at most 31 days)
   can recreate model-call records for the off period from model gateway records
@@ -383,7 +402,11 @@ Rollback moves traffic, never the schema.
   [disabling](#4-disable) the feature on the current release and staying there;
   if a rollback past the spend release is unavoidable, disable and drain first
   as above, keep the rollback short and record the exposure in the change
-  record.
+  record. A rollback to a revision that already has the spend code keeps the
+  filter, and `AGENTICORG_SPEND_AUDIT_COMMERCIAL_FILTER` keeps the value the
+  service has; that variable, not a rollback past the spend release, is the
+  way to restore the previous `GET /audit` behaviour when an owner decides
+  to (see [disable](#4-disable)).
 
 ## Reference
 

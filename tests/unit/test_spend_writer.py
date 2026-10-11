@@ -25,9 +25,11 @@ TID = str(TENANT)
 @pytest.fixture(autouse=True)
 def clean_writer():
     writer._GAPS.clear()
+    writer._GAP_OVERFLOW.update(unlogged=0, logged_at=None)
     writer._WRITER.update({"writer": None, "pid": None, "closed_pid": None})
     yield
     writer._GAPS.clear()
+    writer._GAP_OVERFLOW.update(unlogged=0, logged_at=None)
     writer._WRITER.update({"writer": None, "pid": None, "closed_pid": None})
 
 
@@ -41,6 +43,16 @@ def gaps_lost(reason: str) -> float:
     from observability import metrics
 
     return metrics.spend_meter_gaps_lost_total.labels(usage_type="llm_tokens", reason=reason)._value.get()
+
+
+def gaps_overflowed(reason: str) -> float:
+    from observability import metrics
+
+    return metrics.spend_meter_gaps_overflow_total.labels(usage_type="llm_tokens", reason=reason)._value.get()
+
+
+def full_warnings(logs: list[dict]) -> list[dict]:
+    return [entry for entry in logs if entry["event"] == "spend_gap_aggregator_full"]
 
 
 @pytest.fixture
@@ -99,6 +111,101 @@ class TestCallPath:
         writer.add_gap(TID, date(2026, 10, 2), "llm_tokens", "paused")
         writer.add_gap(TID, date(2026, 10, 1), "llm_tokens", "paused", count=2)
         assert writer.pop_gaps(TID) == {(TID, date(2026, 10, 1), "llm_tokens", "paused", ""): 3}
+
+    def test_a_full_aggregator_folds_a_new_key_into_its_existing_coarse_key(self, monkeypatch):
+        from structlog.testing import capture_logs
+
+        monkeypatch.setattr(writer, "MAX_GAP_KEYS", 2)
+        monkeypatch.setattr(writer._Writer, "start", lambda self: None)
+        day = date(2026, 10, 1)
+        writer.add_gap(TID, day, "llm_tokens", "failed_no_usage")  # the coarse key: no detail
+        writer.add_gap(TID, day, "llm_tokens", "failed_no_usage", "openai")
+        before = gaps_overflowed("failed_no_usage")
+        with capture_logs() as logs:
+            writer.add_gap(TID, day, "llm_tokens", "failed_no_usage", "gemini", count=3)
+            writer.note_gap(TID, day, "llm_tokens", "failed_no_usage", "cancelled:openai")
+        assert len(writer._GAPS) == 2  # no key past the bound
+        assert writer.pop_gaps() == {
+            (TID, day, "llm_tokens", "failed_no_usage", ""): 5,  # 1 + 3 + 1, without their details
+            (TID, day, "llm_tokens", "failed_no_usage", "openai"): 1,
+        }
+        assert gaps_overflowed("failed_no_usage") == before and full_warnings(logs) == []
+
+    def test_a_full_aggregator_counts_the_overflow_and_warns_at_most_once_a_minute(self, monkeypatch):
+        from structlog.testing import capture_logs
+
+        monkeypatch.setattr(writer, "MAX_GAP_KEYS", 2)
+        monkeypatch.setattr(writer._Writer, "start", lambda self: None)
+        writer.add_gap(TID, date(2026, 10, 1), "llm_tokens", "paused")
+        writer.add_gap(TID, date(2026, 10, 2), "llm_tokens", "paused")
+        before = gaps_overflowed("queue_full"), gaps_overflowed("failed_no_usage"), failures("queue_full")
+        with capture_logs() as logs:
+            writer.add_gap(str(OTHER_TENANT), date(2026, 10, 1), "llm_tokens", "queue_full", count=2)
+            writer.add_gap(TID, date(2026, 10, 3), "llm_tokens", "queue_full")
+            # Its coarse key (no detail) is not in the aggregator either: counted, never added.
+            writer.note_gap(TID, date(2026, 10, 1), "llm_tokens", "failed_no_usage", "openai", count=4)
+        (warning,) = full_warnings(logs)  # once for the three overflows
+        assert {k: v for k, v in warning.items() if k not in ("event", "log_level")} == {
+            "max_keys": 2,
+            "overflowed": 2,
+        }  # counts only: no tenant, day or detail
+        assert gaps_overflowed("queue_full") == before[0] + 3 and gaps_overflowed("failed_no_usage") == before[1] + 4
+        assert failures("queue_full") == before[2]  # the usage was counted once already, when it went unmetered
+        assert sorted(writer._GAPS) == [
+            (TID, date(2026, 10, 1), "llm_tokens", "paused", ""),
+            (TID, date(2026, 10, 2), "llm_tokens", "paused", ""),
+        ]
+        assert writer._GAP_OVERFLOW["unlogged"] == 5  # held for the next warning
+        # A minute later the next overflow warns again, with everything since the previous warning.
+        writer._GAP_OVERFLOW["logged_at"] -= writer.GAP_OVERFLOW_LOG_INTERVAL_S
+        with capture_logs() as logs:
+            writer.add_gap(TID, date(2026, 10, 4), "llm_tokens", "queue_full")
+        (again,) = full_warnings(logs)
+        assert again["overflowed"] == 6 and writer._GAP_OVERFLOW["unlogged"] == 0
+        assert gaps_overflowed("queue_full") == before[0] + 4
+
+    def test_the_aggregator_never_grows_past_the_bound_and_every_count_is_kept_or_counted(self, monkeypatch):
+        monkeypatch.setattr(writer, "MAX_GAP_KEYS", 50)
+        reasons = ("queue_full", "spill_failed", "failed_no_usage")
+        before = {reason: gaps_overflowed(reason) for reason in reasons}
+        added = dict.fromkeys(reasons, 0)
+        for n in range(600):
+            reason = reasons[n % 3]
+            tenant = str(uuid.UUID(int=n % 7 + 1))
+            detail = "" if n % 10 == 0 else f"detail-{n}"  # some coarse keys, for later keys to fold into
+            writer.add_gap(tenant, date(2026, 10, 1 + n % 5), "llm_tokens", reason, detail, count=n % 4 + 1)
+            added[reason] += n % 4 + 1
+            assert len(writer._GAPS) <= 50
+        kept = writer.pop_gaps()
+        assert len(kept) == 50
+        for reason in reasons:
+            in_aggregator = sum(count for key, count in kept.items() if key[3] == reason)
+            assert in_aggregator + gaps_overflowed(reason) - before[reason] == added[reason], reason
+
+    def test_a_restore_into_a_full_aggregator_folds_or_counts_and_the_drain_does_not_count_twice(self, monkeypatch):
+        monkeypatch.setattr(writer, "MAX_GAP_KEYS", 2)
+        day = date(2026, 10, 1)
+        taken = {  # what a failed flush took
+            (TID, day, "llm_tokens", "failed_no_usage", "openai"): 2,
+            (TID, day, "llm_tokens", "queue_full", ""): 3,
+        }
+        # Meanwhile new keys filled the aggregator, one of them the first taken gap's coarse key.
+        writer.add_gap(TID, day, "llm_tokens", "failed_no_usage")
+        writer.add_gap(TID, day, "llm_tokens", "paused")
+        overflow_before = gaps_overflowed("queue_full"), gaps_overflowed("failed_no_usage")
+        idle_writer()._restore_gaps(taken)
+        assert writer._GAPS == {
+            (TID, day, "llm_tokens", "failed_no_usage", ""): 3,  # folded
+            (TID, day, "llm_tokens", "paused", ""): 1,
+        }
+        assert gaps_overflowed("queue_full") == overflow_before[0] + 3  # counted, not added
+        assert gaps_overflowed("failed_no_usage") == overflow_before[1]
+        lost_before = gaps_lost("queue_full"), gaps_lost("failed_no_usage"), gaps_lost("paused")
+        assert writer.drain_blocking(0.1) == 0
+        # The drain counts what the aggregator holds; the overflow was counted already and is not counted again.
+        assert gaps_lost("queue_full") == lost_before[0]
+        assert gaps_lost("failed_no_usage") == lost_before[1] + 3 and gaps_lost("paused") == lost_before[2] + 1
+        assert writer._GAPS == {}
 
     def test_drain_returns_zero_when_never_started(self):
         assert writer.drain_blocking(0.1) == 0
