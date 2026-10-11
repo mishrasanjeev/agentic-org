@@ -13,7 +13,7 @@ import structlog
 
 from auth.grant_enforcement import EnforcementMode
 from auth.run_grants import NO_CALLER, CallerGrant, RunGrant, refresh_run_grant, resolve_run_grant
-from core.llm.content import content_text, strip_code_fence
+from core.llm.content import model_answer, strip_code_fence
 from core.llm.router import LLMResponse, llm_router
 from core.pii import pseudonymiser as pseudonymisation
 from core.schemas.messages import (
@@ -349,7 +349,7 @@ class BaseAgent:
         trace.append(f"LLM responded: {response.model}, {response.tokens_used} tokens")
 
         # Strip markdown code blocks (```json ... ```) that Gemini often wraps
-        content = strip_code_fence(content_text(response.content))
+        content = strip_code_fence(model_answer(response.content))
 
         try:
             return json.loads(content)
@@ -560,7 +560,7 @@ class BaseAgent:
         )
         trace.append(f"Synthesis LLM: {response.model}, {response.tokens_used} tokens")
 
-        content = strip_code_fence(content_text(response.content))
+        content = strip_code_fence(model_answer(response.content))
         try:
             result = json.loads(content)
             result["tool_results"] = tool_results

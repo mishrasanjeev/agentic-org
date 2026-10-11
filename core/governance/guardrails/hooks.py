@@ -13,6 +13,13 @@ produced it.
 The hooks are behind ``guardrails_hooks_enabled`` (off by default): on, every
 stage is evaluated, in flag-only mode until ``guardrails.enforce`` is on for
 the tenant. Off, the hooks return what they were given and read nothing.
+
+A message whose content is a list of provider content blocks is evaluated on
+its answer text, read as the output parsers read it (``core.llm.content``):
+reasoning and signature blocks are never evaluated as the answer, and a
+transform replaces the text blocks while every other block stays as it was.
+This holds whatever ``agent_output_block_parsing`` says, so a block answer
+never travels on unevaluated.
 """
 
 from __future__ import annotations
@@ -26,6 +33,7 @@ import structlog
 from core.config import settings
 from core.governance.guardrails.engine import evaluate
 from core.governance.guardrails.schema import GuardrailBlocked, GuardrailResult
+from core.llm.content import content_text, with_text
 
 logger = structlog.get_logger()
 
@@ -115,15 +123,22 @@ def run_context(messages: list[Any]) -> tuple[list[str], list[str]]:
 
 
 def _content_text(message: Any) -> str | None:
+    """The text a stage evaluates: string content as it is, block content's answer text, else None."""
     content = getattr(message, "content", None)
-    return content if isinstance(content, str) else None
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list | tuple):
+        return content_text(content)
+    return None
 
 
 def _with_content(message: Any, text: str) -> Any:
+    """``message`` with the transformed ``text``: string content is replaced, block content keeps its other blocks."""
+    content = with_text(getattr(message, "content", None), text)
     copy = getattr(message, "model_copy", None)
     if callable(copy):
-        return copy(update={"content": text})
-    message.content = text
+        return copy(update={"content": content})
+    message.content = content
     return message
 
 

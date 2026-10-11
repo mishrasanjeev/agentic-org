@@ -19,8 +19,21 @@ import pytest
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 
 from auth.run_grants import NO_RUN_GRANT_FOR_TESTS
-from core.langgraph.agent_graph import _parse_json_output, build_agent_graph
-from core.llm.content import block_text, content_text, strip_code_fence
+from core.config import Settings, settings
+from core.langgraph.agent_graph import (
+    _extract_confidence,
+    _parse_json_output,
+    _parse_json_output_str_blocks,
+    build_agent_graph,
+)
+from core.llm.content import (
+    block_parsing_enabled,
+    block_text,
+    content_text,
+    model_answer,
+    strip_code_fence,
+    with_text,
+)
 
 ANSWER = {"status": "incomplete", "validation_errors": ["GSTIN format is invalid"], "next_step": "ask the vendor"}
 FENCED = "```json\n" + json.dumps(ANSWER) + "\n```"
@@ -282,3 +295,134 @@ class TestBaseAgentReason:
             result = await agent._reason({"task": "validate"}, [])
 
         assert result == expected
+
+
+class TestWithText:
+    """A guardrail transform is written back into block content without disturbing the other blocks."""
+
+    TOOL_USE = {"type": "tool_use", "id": "toolu_1", "name": "lookup", "input": {}}
+
+    def test_string_and_other_content_becomes_the_text(self):
+        assert with_text("before", "after") == "after"
+        assert with_text(None, "after") == "after"
+
+    def test_the_text_block_takes_the_text_and_other_blocks_stay_in_place(self):
+        content = [THINKING_BLOCK, SIGNED_TEXT_BLOCK, self.TOOL_USE]
+        out = with_text(content, "redacted")
+        assert out == [THINKING_BLOCK, {**SIGNED_TEXT_BLOCK, "text": "redacted"}, self.TOOL_USE]
+        assert content == [THINKING_BLOCK, SIGNED_TEXT_BLOCK, self.TOOL_USE]
+        assert content_text(out) == "redacted"
+
+    def test_several_text_blocks_give_way_to_one(self):
+        content = ["first", THINKING_BLOCK, {"type": "text", "text": "second"}, SimpleNamespace(text="third")]
+        out = with_text(content, "joined and redacted")
+        assert out == ["joined and redacted", THINKING_BLOCK]
+        assert with_text((SimpleNamespace(text="sdk"),), "t") == [{"type": "text", "text": "t"}]
+
+    def test_a_list_without_a_text_block_gains_one(self):
+        assert with_text([THINKING_BLOCK], "t") == [THINKING_BLOCK, {"type": "text", "text": "t"}]
+
+
+@pytest.fixture
+def block_parsing_off(monkeypatch):
+    monkeypatch.setattr(settings, "agent_output_block_parsing", False)
+
+
+class TestBlockParsingSetting:
+    """agent_output_block_parsing: on by default; off, every parser reads content exactly as it did before."""
+
+    def test_on_by_default_with_an_env_opt_out(self, monkeypatch):
+        assert Settings.model_fields["agent_output_block_parsing"].default is True
+        assert settings.agent_output_block_parsing is True and block_parsing_enabled() is True
+        monkeypatch.setenv("AGENTICORG_AGENT_OUTPUT_BLOCK_PARSING", "false")
+        assert Settings(_env_file=None).agent_output_block_parsing is False
+
+    def test_off_the_content_is_read_as_given(self, block_parsing_off):
+        assert block_parsing_enabled() is False
+        assert model_answer(PRODUCTION_SHAPE) is PRODUCTION_SHAPE
+        assert model_answer("  text  ") == "  text  "
+
+    def test_off_block_content_parses_as_before(self, block_parsing_off):
+        before = {"raw_output": "\n".join(str(item) for item in PRODUCTION_SHAPE), "status": "completed"}
+        assert _parse_json_output(PRODUCTION_SHAPE) == before
+        assert _parse_json_output(SIGNED_TEXT_BLOCK) == {"raw_output": str(SIGNED_TEXT_BLOCK), "status": "completed"}
+        assert _parse_json_output([THINKING_BLOCK, SIGNED_TEXT_BLOCK]) == _parse_json_output_str_blocks(
+            [THINKING_BLOCK, SIGNED_TEXT_BLOCK]
+        )
+
+    @pytest.mark.parametrize("parsing", [True, False])
+    def test_strings_and_string_lists_parse_the_same_either_way(self, monkeypatch, parsing: bool):
+        monkeypatch.setattr(settings, "agent_output_block_parsing", parsing)
+        assert _parse_json_output(FENCED) == ANSWER
+        assert _parse_json_output(json.dumps(ANSWER)) == ANSWER
+        assert _parse_json_output("  not json at all \n") == {
+            "raw_output": "  not json at all \n",
+            "status": "completed",
+        }
+        assert _parse_json_output("[1, 2]") == {"raw_output": [1, 2], "status": "completed"}
+        assert _parse_json_output(['{"confidence": 0.95,', '"status": "completed"}']) == {
+            "confidence": 0.95,
+            "status": "completed",
+        }
+        assert _parse_json_output(["hello", "world"]) == {"raw_output": "hello\nworld", "status": "completed"}
+        assert _parse_json_output(12345) == {"raw_output": 12345, "status": "completed"}
+
+    async def test_off_the_evaluate_node_keeps_the_previous_output_and_confidence(
+        self, scripted_model: Any, block_parsing_off
+    ):
+        blocks = [THINKING_BLOCK, SIGNED_TEXT_BLOCK]
+        result = await _run_graph(scripted_model, AIMessage(content=blocks))
+        before = {"raw_output": "\n".join(str(item) for item in blocks), "status": "completed"}
+        assert result["output"] == before
+        # The previous length signal: the number of blocks.
+        assert result["confidence"] == _extract_confidence(before, content_length=len(blocks))
+
+    async def test_on_and_off_agree_on_a_string_answer(self, scripted_model: Any, monkeypatch):
+        on = await _run_graph(scripted_model, AIMessage(content=FENCED))
+        monkeypatch.setattr(settings, "agent_output_block_parsing", False)
+        off = await _run_graph(scripted_model, AIMessage(content=FENCED))
+        assert on["output"] == off["output"] == ANSWER and on["confidence"] == off["confidence"]
+
+    async def test_off_the_sop_parser_fails_on_block_content_as_before(self, block_parsing_off):
+        from core.langgraph.sop_parser import parse_sop_document
+
+        response = MagicMock()
+        response.content = [SIGNED_TEXT_BLOCK]
+        llm = MagicMock()
+        llm.ainvoke = AsyncMock(return_value=response)
+
+        with (
+            patch("core.langgraph.sop_parser.create_chat_model", return_value=llm),
+            pytest.raises(AttributeError, match="strip"),
+        ):
+            await parse_sop_document("Check every invoice")
+
+    async def test_off_the_explainer_and_analyser_fall_back_as_before(self, block_parsing_off):
+        from core.explainer import _call_llm_for_summary
+        from core.feedback.analyzer import analyze_feedback
+
+        response = MagicMock()
+        response.content = [{"type": "text", "text": '{"bullets": ["Checked the GSTIN."]}'}]
+        llm = MagicMock()
+        llm.ainvoke = AsyncMock(return_value=response)
+        entries = [
+            {"feedback_type": "thumbs_down", "text": f"Wrong currency in run {i}.", "corrected_output": None}
+            for i in range(12)
+        ]
+        with (
+            patch("core.langgraph.llm_factory.create_chat_model", return_value=llm),
+            patch("core.feedback.collector.list_feedback", new=AsyncMock(return_value=entries)),
+        ):
+            assert await _call_llm_for_summary(["step"], {"status": "incomplete"}, []) is None
+            assert (await analyze_feedback("agent-blocks", "tenant-blocks"))["source"] == "heuristic"
+
+    @pytest.mark.parametrize("parsing", [True, False])
+    async def test_the_base_agent_parses_string_content_the_same_either_way(self, monkeypatch, parsing: bool):
+        from core.agents.base import BaseAgent
+        from core.llm.router import LLMResponse
+
+        monkeypatch.setattr(settings, "agent_output_block_parsing", parsing)
+        agent = BaseAgent(agent_id="agent-blocks", tenant_id="tenant-blocks")
+        reply = LLMResponse(content=FENCED, model="synthetic-model")
+        with patch("core.agents.base.llm_router.complete", new=AsyncMock(return_value=reply)):
+            assert await agent._reason({"task": "validate"}, []) == ANSWER

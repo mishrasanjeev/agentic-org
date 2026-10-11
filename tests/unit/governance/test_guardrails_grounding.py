@@ -299,6 +299,53 @@ class TestHook:
         assert "full_messages = messages" in src
 
 
+class TestBlockAnswers:
+    """A provider block answer is held against the run's context exactly as a string answer is."""
+
+    THINKING = {"type": "thinking", "thinking": "The rate might be 9.75% per year.", "signature": "c3ludGhldGlj"}
+
+    @pytest.fixture
+    def hooks_on(self, monkeypatch):
+        monkeypatch.setattr(hooks.settings, "guardrails_hooks_enabled", True)
+
+    @staticmethod
+    def _blocks(text: str, thinking: dict | None = None) -> AIMessage:
+        text_block = {"type": "text", "text": text, "extras": {"signature": "c2lnbmF0dXJl"}}
+        return AIMessage(content=[thinking, text_block] if thinking else [text_block])
+
+    def _guard(self, answer: AIMessage, conversation: list):
+        with contextlib.ExitStack() as stack:
+            for p in _rules([_rule(action="block")]):
+                stack.enter_context(p)
+            return asyncio.run(hooks.guard_output_message(answer, tenant_id=TENANT, messages=conversation))
+
+    def test_an_ungrounded_block_answer_is_refused_when_grounding_enforces(self, hooks_on):
+        conversation = TestHook()._conversation()
+        with pytest.raises(GuardrailBlocked):
+            self._guard(self._blocks("The savings account earns interest at 9.75% per year."), conversation)
+        grounded = self._blocks("The savings account earns interest at 3.5% per year.")
+        assert self._guard(grounded, conversation) is grounded
+
+    def test_the_reasoning_block_is_not_judged(self, hooks_on):
+        answer = self._blocks("The savings account earns interest at 3.5% per year.", thinking=self.THINKING)
+        assert self._guard(answer, TestHook()._conversation()) is answer
+
+    def test_a_tool_result_in_blocks_is_context(self, hooks_on):
+        conversation = TestHook()._conversation()
+        conversation[-1] = ToolMessage(content=[{"type": "text", "text": POLICY}], tool_call_id="c1")
+        grounded = self._blocks("The savings account earns interest at 3.5% per year.")
+        assert self._guard(grounded, conversation) is grounded
+        with pytest.raises(GuardrailBlocked):
+            self._guard(self._blocks("The savings account earns interest at 9.75% per year."), conversation)
+
+    def test_a_string_answer_is_judged_as_before(self, hooks_on):
+        conversation = TestHook()._conversation()
+        with pytest.raises(GuardrailBlocked):
+            self._guard(AIMessage(content="The savings account earns interest at 9.75% per year."), conversation)
+        grounded = AIMessage(content="The savings account earns interest at 3.5% per year.")
+        assert self._guard(grounded, conversation) is grounded
+
+
 class TestDryRunEndpoint:
     def test_the_dry_run_takes_a_context(self):
         from fastapi import Depends, FastAPI, Request

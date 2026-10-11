@@ -4,8 +4,8 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
 
 ## [Unreleased] - 2026-08-29
 
-### Fixed - Agent output parsing of provider content blocks
-- A model answer that arrives as a list of provider content blocks (for
+### Fixed - breaking for agent runs whose model answers in content blocks: agent output parsing of provider content blocks
+- A deliberate default: a model answer that arrives as a list of provider content blocks (for
   example one `{"type": "text", "text": "```json ...```", "extras":
   {"signature": ...}}` block) is now read for each block's text. The agent
   graph used to join the blocks with `str()`, so the fenced JSON never parsed
@@ -18,6 +18,24 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
   content the same way (they failed or fell back to heuristics on it).
   Plain string answers parse exactly as before. The shared helpers are in
   `core/llm/content.py`.
+- Opt-out: `AGENTICORG_AGENT_OUTPUT_BLOCK_PARSING=false` (setting
+  `agent_output_block_parsing`, default `true`, read by the API and the
+  workers) restores the previous parsing in all four parsers: an agent run
+  whose model answers in blocks again gets the `str()` of the blocks in
+  `raw_output`, with the confidence length signal counting blocks, and the
+  SOP parser, explainer and feedback analyser fail or fall back on block
+  content as they did.
+- Guardrails: with `guardrails_hooks_enabled` on, a block answer passes the
+  output stage, grounding rules included, on its answer text, as a string
+  answer does; it used to skip the stage and travel on unevaluated. Reasoning
+  and signature blocks are never evaluated as the answer. A transform
+  (redaction) replaces the answer's text blocks and keeps every other block
+  (reasoning, tool use) as it was; a block rule refuses the run as for a
+  string answer. The input stage and the grounding context read block
+  content (a multimodal user turn, a tool result in blocks) the same way.
+  This is not turned off by `agent_output_block_parsing=false`; it changes
+  nothing while the hooks are off, and with them on an answer is changed only
+  where a rule transforms or blocks it.
 
 ### Security - breaking for audit readers of tenants that keep spend rows: `GET /audit` hides commercial spend audit rows by default
 - A deliberate default, on whatever `spend_intelligence_enabled` says:
