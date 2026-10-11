@@ -202,6 +202,30 @@ def test_telegram_url_token_is_removed_from_httpx_logs(caplog):
     assert "[redacted]" in caplog.text
 
 
+@pytest.mark.parametrize("key", ["hub.verify_token", "hub%2Everify_token"])
+def test_meta_verification_token_is_removed_from_application_access_logs(key):
+    from core.logging_config import redact_webhook_path_tokens
+
+    record = logging.LogRecord(
+        "uvicorn.access",
+        logging.INFO,
+        "",
+        0,
+        "%s - %s %s %s %s",
+        (
+            "127.0.0.1",
+            "GET",
+            f"/api/v1/channels/webhooks/test/test?{key}=synthetic-private&hub.mode=subscribe",
+            "HTTP/1.1",
+            200,
+        ),
+        None,
+    )
+    assert redact_webhook_path_tokens(record)
+    assert "synthetic-private" not in record.getMessage()
+    assert "hub.mode=subscribe" in record.getMessage()
+
+
 @pytest.mark.asyncio
 async def test_reply_timeout_is_unconfirmed_without_secret_disclosure(monkeypatch):
     class TimeoutClient:

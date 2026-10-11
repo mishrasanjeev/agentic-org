@@ -32,7 +32,7 @@ Create a Meta developer application and the appropriate business assets. For Wha
 
 Save the app secret, access token, a verification token you generate, the destination ID and a supported Graph API version. **Receiver ID** means the phone-number ID for WhatsApp, not the telephone number; for Messenger it means the Page ID. Register the callback URL and matching verification token. Subscribe to messages. AgenticOrg verifies the raw-body `X-Hub-Signature-256` signature and checks receiver scope before storing any message. Use the provider's development/test recipients first. Test tokens can expire; replace them with the account's approved production credential when ready.
 
-See [WhatsApp setup](https://developers.facebook.com/docs/whatsapp/cloud-api/get-started) and [Messenger setup](https://developers.facebook.com/docs/messenger-platform/getting-started/). Provider restrictions, customer-contact windows and billing still apply. An AgenticOrg connection is not platform approval.
+See [WhatsApp setup](https://developers.facebook.com/docs/whatsapp/cloud-api/get-started) and [Messenger setup](https://developers.facebook.com/docs/messenger-platform/getting-started/). Provider restrictions, customer-contact windows and billing still apply. An AgenticOrg connection is not platform approval. Use a dedicated verification token, never an API key or app secret: Meta sends it in its verification URL, which provider or infrastructure request logs may retain. Application access logs redact it.
 
 ## Telegram
 
@@ -65,5 +65,7 @@ The gateway body is JSON with `event_id`, `sender_id` and `text`. Send an epoch-
 ## Verify before serving customers
 
 Send a small signed test message, confirm it appears in the inbox, link the private sender or approve that one message, and inspect the completed agent/workflow run. Test a bad signature, duplicate message, expired link and disabled connection as well. Expect the same existing approvals for sensitive tools. A timed-out or interrupted execution enters review and is not automatically replayed, because it may already have performed an external action.
+
+Channel agent targets must still be active or in shadow mode when the worker dispatches. Paused, retired, deleted, unavailable or no-longer-owned targets enter review instead of executing. A pause or revocation cannot undo a task already running. Workflow steps retain their existing approval and lifecycle policies.
 
 Local provider-shaped tests prove the platform's wire handling, isolation and execution paths. They do not prove that your provider account is approved or that a real message or call was delivered. Record those account-backed results separately, with sanitized evidence and authorized test contacts.

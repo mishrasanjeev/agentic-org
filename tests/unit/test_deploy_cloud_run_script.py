@@ -30,13 +30,54 @@ def test_cloud_run_deploy_requires_a_clean_checkout_at_the_target_sha() -> None:
 
     assert 'git rev-parse --verify "${DEPLOY_SHA}^{commit}"' in script
     assert '"$(git rev-parse HEAD)" != "$DEPLOY_SHA"' in script
-    assert 'git status --porcelain --untracked-files=all' in script
-    assert script.index('Checkout has uncommitted or untracked files') < script.index('docker build \\')
+    assert "git status --porcelain --untracked-files=all" in script
+    assert script.index("Checkout has uncommitted or untracked files") < script.index("docker build \\")
+
+
+def test_optional_model_rollout_preserves_or_updates_all_runtime_services() -> None:
+    script = _deploy_script()
+    block = script[script.index("# Optional model rollout:") : script.index("# End optional model rollout.")]
+    git_bash = Path(os.environ.get("ProgramFiles", "")) / "Git" / "bin" / "bash.exe"
+    bash = str(git_bash) if os.name == "nt" and git_bash.is_file() else shutil.which("bash")
+    assert bash is not None
+
+    def run(primary: str = "", fallback: str = "") -> subprocess.CompletedProcess[str]:
+        return subprocess.run(  # noqa: S603
+            [
+                bash,
+                "-c",
+                "API_UPDATE_ENV_VARS=api; BACKGROUND_UPDATE_ENV_VARS=worker\n"
+                + block
+                + '\nprintf "%s\\n%s\\n" "$API_UPDATE_ENV_VARS" "$BACKGROUND_UPDATE_ENV_VARS"',
+            ],
+            env={**os.environ, "AGENTICORG_DEPLOY_LLM_PRIMARY": primary, "AGENTICORG_DEPLOY_LLM_FALLBACK": fallback},
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+
+    assert run().stdout == "api\nworker\n"
+    changed = run("gemini-3.5-flash-lite", "gemini-3.5-flash-lite")
+    assert changed.returncode == 0
+    lines = changed.stdout.splitlines()
+    assert len(lines) == 2
+    for line in lines:
+        assert "AGENTICORG_LLM_PRIMARY=gemini-3.5-flash-lite" in line
+        assert "AGENTICORG_LLM_FALLBACK=gemini-3.5-flash-lite" in line
+    for primary, fallback in [
+        ("gemini-3.5-flash-lite", ""),
+        ("", "gemini-3.5-flash-lite"),
+        ("model,INJECTED=true", "model"),
+        ("model\nINJECTED=true", "model"),
+    ]:
+        rejected = run(primary, fallback)
+        assert rejected.returncode == 2
+        assert not rejected.stdout
 
 
 def test_deploy_source_guard_rejects_dirty_or_mismatched_checkout(tmp_path: Path) -> None:
     script = _deploy_script()
-    guard = script[script.index("# 1. Resolve commit."):script.index('SHORT_SHA="${DEPLOY_SHA:0:7}"')]
+    guard = script[script.index("# 1. Resolve commit.") : script.index('SHORT_SHA="${DEPLOY_SHA:0:7}"')]
     git_bash = Path(os.environ.get("ProgramFiles", "")) / "Git" / "bin" / "bash.exe"
     bash = str(git_bash) if os.name == "nt" and git_bash.is_file() else shutil.which("bash")
     assert bash is not None
@@ -87,9 +128,7 @@ def test_ui_metadata_is_set_on_ui_service_update() -> None:
     script = _deploy_script()
 
     ui_update_calls = [
-        line
-        for line in script.splitlines()
-        if 'update_service_no_traffic UI_NEW_REVISION "$UI_SERVICE"' in line
+        line for line in script.splitlines() if 'update_service_no_traffic UI_NEW_REVISION "$UI_SERVICE"' in line
     ]
 
     assert len(ui_update_calls) >= 3
@@ -165,7 +204,7 @@ def test_script_resolves_usable_python_for_git_bash_on_windows() -> None:
 
     assert "resolve_python_bin()" in script
     assert 'PYTHON_BIN="$(resolve_python_bin)"' in script
-    assert 'for candidate in python3 python; do' in script
+    assert "for candidate in python3 python; do" in script
     assert "Missing: usable python3 or python" in script
 
 
@@ -178,8 +217,8 @@ def test_health_poll_json_parsing_uses_shell_safe_helper() -> None:
     assert "json_field_from_stdin" in script
     assert "python3 -c" not in poll_block
     assert "python -c" not in poll_block
-    assert 'json_field_from_stdin status' in poll_block
-    assert 'json_field_from_stdin commit' in poll_block
+    assert "json_field_from_stdin status" in poll_block
+    assert "json_field_from_stdin commit" in poll_block
 
 
 def test_retired_ready_staged_revision_is_accepted_when_target_matches() -> None:
@@ -229,7 +268,7 @@ def test_deploy_script_accepts_cloud_run_platform_digest_from_manifest_list() ->
 
     assert "image_acceptable_digests()" in script
     assert "docker buildx imagetools inspect" in script
-    assert "manifest.get(\"manifests\"" in script
+    assert 'manifest.get("manifests"' in script
     assert "candidate_digest in image_digests" in ready_block
     assert "digest(s)" in ready_block
 
@@ -249,10 +288,7 @@ def test_dry_run_reports_planned_traffic_changes() -> None:
 
     assert "[dry-run] would update $API_SERVICE image/env with --no-traffic" in script
     assert "[dry-run] would route API traffic 100% to $API_NEW_REVISION" in script
-    assert (
-        "[dry-run] would stage and route UI traffic 100% to $UI_NEW_REVISION only after API health passes"
-        in script
-    )
+    assert "[dry-run] would stage and route UI traffic 100% to $UI_NEW_REVISION only after API health passes" in script
     assert (
         "[dry-run] would check staged API/UI readiness from revision objects, not service latestReadyRevisionName"
         in script
@@ -291,9 +327,7 @@ def test_api_failure_rolls_back_ui_traffic_plan() -> None:
 def test_ui_is_staged_only_after_api_public_health_in_latest_mode() -> None:
     script = _deploy_script()
 
-    api_stage = script.index(
-        'update_service_no_traffic API_NEW_REVISION "$API_SERVICE"'
-    )
+    api_stage = script.index('update_service_no_traffic API_NEW_REVISION "$API_SERVICE"')
     public_health = script.index('poll_health_url "$HEALTH_URL" "public API" 30')
     ui_stage = script.index('update_service_no_traffic UI_NEW_REVISION "$UI_SERVICE"', public_health)
     ui_traffic = script.index('move_traffic_to_revision "$UI_SERVICE" "$UI_NEW_REVISION"')
@@ -306,7 +340,7 @@ def test_script_refuses_success_when_public_health_reports_old_sha() -> None:
 
     assert 'poll_health_url "$HEALTH_URL" "public API" 30' in script
     assert "health did not converge to $SHORT_SHA" in script
-    assert 'commit=${commit:-?} (want $SHORT_SHA)' in script
+    assert "commit=${commit:-?} (want $SHORT_SHA)" in script
     assert script.index('poll_health_url "$HEALTH_URL" "public API" 30') < script.index(
         "DEPLOYED: API=$API_NEW_REVISION"
     )

@@ -36,7 +36,7 @@ Set unused `AGENTICORG_DEV_API_PORT`, `AGENTICORG_DEV_UI_PORT`,
 
 ```powershell
 docker compose -p ao-channels-local -f docker-compose.dev.yml -f testing/channels/compose.local.yml up -d
-docker compose -p ao-channels-local -f docker-compose.dev.yml -f testing/channels/compose.local.yml exec tools python -m pytest tests/e2e/test_channel_workflows.py --no-cov
+docker compose -p ao-channels-local -f docker-compose.dev.yml -f testing/channels/compose.local.yml run --rm tools python -m pytest tests/e2e/test_channel_workflows.py --no-cov --basetemp=/tmp/channel-e2e
 ```
 
 Run the browser image on that project's network, mount `ui/e2e` read-only at
@@ -49,7 +49,7 @@ public workflow guide. Callback processing is tested by the Python HTTP suite.
 Also run the isolated, non-superuser PostgreSQL RLS regression:
 
 ```powershell
-docker compose -p ao-channels-local -f docker-compose.dev.yml -f testing/channels/compose.local.yml exec tools python -m pytest tests/integration/test_channel_rls_postgres.py --no-cov
+docker compose -p ao-channels-local -f docker-compose.dev.yml -f testing/channels/compose.local.yml run --rm tools python -m pytest tests/integration/test_channel_rls_postgres.py --no-cov --basetemp=/tmp/channel-rls
 ```
 
 If recreating the local API changes its container IP, reload the local UI's

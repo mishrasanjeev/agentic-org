@@ -101,17 +101,17 @@ def test_signed_channel_to_durable_workflow_and_revocation():
             )
 
         assert send("disabled", "Do not run").status_code == 404
-        checked(client.patch(f"/channels/{bid}", json={"enabled": True}))
+        checked(client.patch(f"/channels/bindings/{bid}", json={"enabled": True}))
         assert send("bad", "Do not run", bad=True).status_code == 403
         checked(send("review", "Review the request"))
-        inbox = checked(client.get(f"/channels/{bid}/deliveries"))["deliveries"]
+        inbox = checked(client.get(f"/channels/bindings/{bid}/deliveries"))["deliveries"]
         assert inbox[0]["status"] == "needs_review"
-        checked(client.post(f"/channels/{bid}/deliveries/{inbox[0]['id']}/approve"))
+        checked(client.post(f"/channels/bindings/{bid}/deliveries/{inbox[0]['id']}/approve"))
 
         def wait_completed(text):
             deadline = time.monotonic() + 90
             while time.monotonic() < deadline:
-                receipts = checked(client.get(f"/channels/{bid}/deliveries"))["deliveries"]
+                receipts = checked(client.get(f"/channels/bindings/{bid}/deliveries"))["deliveries"]
                 item = next((row for row in receipts if row["text"] == text), None)
                 if item and item["status"] not in {"pending", "processing"}:
                     assert item["status"] == "completed", (item["status"], item["error_code"])
@@ -121,26 +121,26 @@ def test_signed_channel_to_durable_workflow_and_revocation():
             pytest.fail("Durable channel worker did not finish within 90 seconds")
 
         wait_completed("Review the request")
-        command = checked(client.post(f"/channels/{bid}/link-code"))["command"]
+        command = checked(client.post(f"/channels/bindings/{bid}/link-code"))["command"]
         checked(send("link", command))
         checked(send("run", "Process linked request"))
         wait_completed("Process linked request")
         checked(send("run", "Process linked request"))
         assert send("run", "Changed contents").status_code == 403
-        receipts = checked(client.get(f"/channels/{bid}/deliveries"))["deliveries"]
+        receipts = checked(client.get(f"/channels/bindings/{bid}/deliveries"))["deliveries"]
         assert sum(row["text"] == "Process linked request" for row in receipts) == 1
         assert command not in json.dumps(receipts)
         # A consumed code cannot delegate a second sender.
         checked(send("reuse-link", command, sender="other-sender"))
         checked(send("other", "Unlinked sender", sender="other-sender"))
-        assert checked(client.get(f"/channels/{bid}/deliveries"))["deliveries"][0]["status"] == "needs_review"
-        checked(client.patch(f"/channels/{bid}", json={"enabled": False}))
+        assert checked(client.get(f"/channels/bindings/{bid}/deliveries"))["deliveries"][0]["status"] == "needs_review"
+        checked(client.patch(f"/channels/bindings/{bid}", json={"enabled": False}))
         assert send("stopped", "Do not run").status_code == 404
-        checked(client.patch(f"/channels/{bid}", json={"enabled": True}))
+        checked(client.patch(f"/channels/bindings/{bid}", json={"enabled": True}))
         checked(send("revoked", "Previously linked sender"))
-        assert checked(client.get(f"/channels/{bid}/deliveries"))["deliveries"][0]["status"] == "needs_review"
+        assert checked(client.get(f"/channels/bindings/{bid}/deliveries"))["deliveries"][0]["status"] == "needs_review"
         rotated = checked(
-            client.patch(f"/channels/{bid}", json={"credentials": {"webhook_secret": secrets.token_hex(32)}})
+            client.patch(f"/channels/bindings/{bid}", json={"credentials": {"webhook_secret": secrets.token_hex(32)}})
         )
         assert rotated["enabled"] is False
         assert secret not in json.dumps(checked(client.get("/channels")))
@@ -229,7 +229,7 @@ def test_signed_channel_to_durable_workflow_and_revocation():
                 201,
             )
             native_callback = "/channels/webhooks/" + "/".join(urlsplit(native["callback_url"]).path.split("/")[-2:])
-            checked(client.patch(f"/channels/{native['id']}", json={"enabled": True}))
+            checked(client.patch(f"/channels/bindings/{native['id']}", json={"enabled": True}))
             with httpx.Client(base_url=BASE + "/api/v1", timeout=30) as public:
                 if provider in {"messenger", "whatsapp"}:
                     challenge = public.get(
@@ -276,7 +276,62 @@ def test_signed_channel_to_durable_workflow_and_revocation():
                         ).status_code
                         == 403
                     )
-            receipt = checked(client.get(f"/channels/{native['id']}/deliveries"))["deliveries"][0]
+            receipt = checked(client.get(f"/channels/bindings/{native['id']}/deliveries"))["deliveries"][0]
             assert receipt["status"] == "needs_review"
             assert receipt["text"] == "Native request"
-            checked(client.patch(f"/channels/{native['id']}", json={"enabled": False}))
+            checked(client.patch(f"/channels/bindings/{native['id']}", json={"enabled": False}))
+
+        # Exercise the real LangGraph agent dispatch separately from workflows.
+        # Only the model response is scripted; the API, authority checks, queue,
+        # graph execution and encrypted result persistence are real.
+        agent = checked(
+            client.post(
+                "/agents",
+                json={
+                    "name": "Channel local agent",
+                    "agent_type": "custom",
+                    "domain": "ops",
+                    "initial_status": "active",
+                    "system_prompt_text": "Answer the supplied task without using tools.",
+                    "authorized_tools": [],
+                    "llm_routing": "disabled",
+                    "llm": {"model": "vllm:scripted/final-only"},
+                },
+            ),
+            201,
+        )
+        secret = secrets.token_hex(32)
+        agent_binding = checked(
+            client.post(
+                "/channels",
+                json={
+                    "name": "Local agent inbox",
+                    "provider": "signed_webhook",
+                    "target_kind": "agent",
+                    "target_id": agent["agent_id"],
+                    "credentials": {"webhook_secret": secret},
+                },
+            ),
+            201,
+        )
+        bid = agent_binding["id"]
+        callback = "/channels/webhooks/" + "/".join(urlsplit(agent_binding["callback_url"]).path.split("/")[-2:])
+        checked(client.patch(f"/channels/bindings/{bid}", json={"enabled": True}))
+        command = checked(client.post(f"/channels/bindings/{bid}/link-code"))["command"]
+        checked(send("agent-link", command))
+        checked(send("agent-run", "Answer the local channel task"))
+        completed = wait_completed("Answer the local channel task")
+        assert completed["result"]["runtime"] == "langgraph"
+        assert completed["result"]["output"]
+        checked(client.post(f"/agents/{agent['agent_id']}/pause"))
+        checked(send("paused-agent", "Do not execute a paused agent"))
+        deadline = time.monotonic() + 60
+        while time.monotonic() < deadline:
+            item = checked(client.get(f"/channels/bindings/{bid}/deliveries"))["deliveries"][0]
+            if item["status"] == "needs_review":
+                assert item["error_code"] == "execution_not_completed"
+                break
+            time.sleep(2)
+        else:
+            pytest.fail("Paused agent was not refused by channel dispatch")
+        checked(client.patch(f"/channels/bindings/{bid}", json={"enabled": False}))

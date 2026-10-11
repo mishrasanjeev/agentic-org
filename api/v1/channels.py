@@ -185,7 +185,7 @@ async def create_binding(body: BindingIn, request: Request, tenant_id: str = Dep
     return _out(row)
 
 
-@router.patch("/{binding_id}")
+@router.patch("/bindings/{binding_id}")
 @route_meta(
     auth_required=True,
     tenant_required=True,
@@ -249,7 +249,7 @@ async def update_binding(
     return _out(row)
 
 
-@router.post("/{binding_id}/link-code")
+@router.post("/bindings/{binding_id}/link-code")
 @route_meta(
     auth_required=True,
     tenant_required=True,
@@ -297,7 +297,7 @@ async def link_code(binding_id: uuid.UUID, request: Request, tenant_id: str = De
     return {"command": f"/link {code}", "expires_at": expires_at.isoformat(), "delegation_days": 30}
 
 
-@router.get("/{binding_id}/deliveries")
+@router.get("/bindings/{binding_id}/deliveries")
 @route_meta(
     auth_required=True,
     tenant_required=True,
@@ -335,7 +335,7 @@ async def deliveries(binding_id: uuid.UUID, request: Request, tenant_id: str = D
     return {"deliveries": items}
 
 
-@router.post("/{binding_id}/deliveries/{delivery_id}/approve")
+@router.post("/bindings/{binding_id}/deliveries/{delivery_id}/approve")
 @route_meta(
     auth_required=True,
     tenant_required=True,

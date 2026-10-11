@@ -214,9 +214,8 @@ def _load_routellm_controller_cls() -> type[Any] | None:
 # Tier model definitions
 # ---------------------------------------------------------------------------
 
-# Cloud tier models. Tier1 was previously gemini-2.5-flash; the
-# 3-tier rework moves Flash to Tier2 and uses Flash-Lite for Tier1
-# so high-volume classify/extract calls land at the cheapest model.
+# Cloud tiers remain configurable independently of the primary model.
+# The default low/medium tiers use Flash-Lite; the existing high tier is retained.
 CLOUD_TIERS: dict[str, str] = {
     "tier1": os.getenv("AGENTICORG_LLM_TIER1", "gemini-3.5-flash-lite"),
     "tier2": os.getenv("AGENTICORG_LLM_TIER2", "gemini-3.5-flash-lite"),

@@ -248,6 +248,17 @@ async def dispatch_one(tenant_id: uuid.UUID, binding_id: uuid.UUID) -> str:
         if binding.target_kind == "agent":
             from api.deps import get_user_domains
             from api.v1.agents import run_agent
+            from core.models.agent import Agent
+            from core.ownership import require_agent_mutable
+
+            async with get_tenant_session(tenant_id) as session:
+                target = await session.scalar(
+                    select(Agent).where(Agent.tenant_id == tenant_id, Agent.id == binding.target_id)
+                )
+                require_agent_mutable(target, caller_from_request(request))
+                # New channel dispatch must not inherit the legacy paused-run opt-out.
+                if target is None or target.status not in {"shadow", "active"}:
+                    raise HTTPException(409, "Channel agent target is not runnable")
 
             result = await asyncio.wait_for(
                 run_agent(

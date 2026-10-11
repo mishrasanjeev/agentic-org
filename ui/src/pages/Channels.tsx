@@ -66,7 +66,7 @@ export default function Channels() {
     let active = true;
     async function load() {
       try {
-        const response = await api.get(`/channels/${selected!.id}/deliveries`);
+        const response = await api.get(`/channels/bindings/${selected!.id}/deliveries`);
         if (active) setDeliveries(response.data.deliveries);
       } catch (err) { if (active) setError(extractApiError(err, "Could not load inbox")); }
     }
@@ -142,22 +142,22 @@ export default function Channels() {
     </section>
     {selected && <section className="space-y-4 border-t pt-5" aria-label="Channel inbox">
       <div className="flex flex-wrap items-center justify-between gap-3"><h2 className="text-lg font-semibold break-words">{selected.name}</h2><label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={selected.enabled} disabled={busy} onChange={() => action(async () => {
-        const response = await api.patch(`/channels/${selected.id}`, { enabled: !selected.enabled }); setSelected(response.data); setCommand(""); await reload();
+        const response = await api.patch(`/channels/bindings/${selected.id}`, { enabled: !selected.enabled }); setSelected(response.data); setCommand(""); await reload();
       })} />Enabled</label></div>
       <div className="flex items-start gap-2"><label className="flex-1 min-w-0 text-sm">Callback URL<input className={inputClass} readOnly value={selected.callback_url} /></label><Button className="mt-6 shrink-0" variant="outline" title="Copy callback URL" aria-label="Copy callback URL" onClick={() => action(async () => { await navigator.clipboard.writeText(selected.callback_url); setNotice("Callback copied"); })}><Copy size={16} /></Button></div>
       <div className="flex flex-wrap items-center gap-4"><Button variant="outline" disabled={busy} onClick={() => { setCreating(false); setCredentials({}); setRotating(!rotating); }}><KeyRound size={16} className="mr-2" />Replace credentials</Button>
         {selectedProvider?.reply && <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={selected.auto_reply} disabled={busy} onChange={() => action(async () => {
-          const response = await api.patch(`/channels/${selected.id}`, { auto_reply: !selected.auto_reply }); setSelected(response.data); await reload();
+          const response = await api.patch(`/channels/bindings/${selected.id}`, { auto_reply: !selected.auto_reply }); setSelected(response.data); await reload();
         })} />Task-status replies</label>}</div>
       {rotating && selectedProvider && <form className="max-w-xl space-y-3 border-y py-4" aria-label="Replace channel credentials" onSubmit={(event) => { event.preventDefault(); void action(async () => {
-        const response = await api.patch(`/channels/${selected.id}`, { credentials }); setSelected(response.data); setCredentials({}); setRotating(false); setCommand(""); await reload();
+        const response = await api.patch(`/channels/bindings/${selected.id}`, { credentials }); setSelected(response.data); setCredentials({}); setRotating(false); setCommand(""); await reload();
         setNotice("Credentials replaced. Connection disabled and sender links revoked. Update the provider callback settings before enabling again.");
       }); }}><h3 className="text-base font-semibold">New credentials</h3>{credentialFields(selectedProvider.fields)}<div className="flex gap-3"><Button type="submit" disabled={busy}>Replace and disable</Button><Button type="button" variant="ghost" onClick={() => { setRotating(false); setCredentials({}); }}>Cancel</Button></div></form>}
-      {selected.enabled && selectedProvider?.identity_link && <Button disabled={busy} variant="outline" onClick={() => action(async () => { const response = await api.post(`/channels/${selected.id}/link-code`); setCommand(response.data.command); setExpiresAt(response.data.expires_at); })}><KeyRound size={16} className="mr-2" />Link my messaging account</Button>}
+      {selected.enabled && selectedProvider?.identity_link && <Button disabled={busy} variant="outline" onClick={() => action(async () => { const response = await api.post(`/channels/bindings/${selected.id}/link-code`); setCommand(response.data.command); setExpiresAt(response.data.expires_at); })}><KeyRound size={16} className="mr-2" />Link my messaging account</Button>}
       {command && <div role="status" className="border-l-4 border-teal-600 bg-teal-50 p-3 text-sm text-teal-950 break-all"><p>Send this command to your bot from your private account. Expires at {new Date(expiresAt).toLocaleTimeString()}.</p><code className="block mt-2 select-all">{command}</code></div>}
-      <div className="flex justify-between items-center"><h3 className="text-base font-semibold">Messages</h3><Button variant="outline" disabled={busy} title="Refresh messages" aria-label="Refresh messages" onClick={() => action(async () => { const response = await api.get(`/channels/${selected.id}/deliveries`); setDeliveries(response.data.deliveries); })}><RefreshCw size={16} /></Button></div>
+      <div className="flex justify-between items-center"><h3 className="text-base font-semibold">Messages</h3><Button variant="outline" disabled={busy} title="Refresh messages" aria-label="Refresh messages" onClick={() => action(async () => { const response = await api.get(`/channels/bindings/${selected.id}/deliveries`); setDeliveries(response.data.deliveries); })}><RefreshCw size={16} /></Button></div>
       {deliveries.map((item) => <article className="border-b py-4 space-y-2" key={item.id}><div className="flex flex-wrap justify-between gap-2 text-xs text-muted-foreground"><time dateTime={item.created_at}>{new Date(item.created_at).toLocaleString()}</time><span>{label(item.status)}</span></div><p className="text-sm whitespace-pre-wrap break-words">{item.text}</p>{item.error_code && <p className="text-sm text-red-700">{label(item.error_code)}</p>}
-        {item.status === "needs_review" && !item.error_code && <Button disabled={busy || !selected.enabled} variant="outline" onClick={() => action(async () => { await api.post(`/channels/${selected.id}/deliveries/${item.id}/approve`); const response = await api.get(`/channels/${selected.id}/deliveries`); setDeliveries(response.data.deliveries); })}><Check size={16} className="mr-2" />Approve this task</Button>}
+        {item.status === "needs_review" && !item.error_code && <Button disabled={busy || !selected.enabled} variant="outline" onClick={() => action(async () => { await api.post(`/channels/bindings/${selected.id}/deliveries/${item.id}/approve`); const response = await api.get(`/channels/bindings/${selected.id}/deliveries`); setDeliveries(response.data.deliveries); })}><Check size={16} className="mr-2" />Approve this task</Button>}
         {item.result != null && <details><summary className="cursor-pointer text-sm">Result</summary><pre className="mt-2 max-h-80 overflow-auto whitespace-pre-wrap break-all border p-3 text-xs">{JSON.stringify(item.result, null, 2)}</pre></details>}
       </article>)}
       {!deliveries.length && <p className="text-sm text-muted-foreground">No messages received</p>}
