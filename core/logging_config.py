@@ -104,16 +104,20 @@ def build_formatter(log_format: str) -> logging.Formatter:
 # access log writes the whole request line, so without this every delivery
 # would copy a reusable routing credential into the logs.
 _WEBHOOK_PATH_TOKEN = re.compile(r"(/api/v1/webhooks/(?:email/[^/?\s]+/[^/?\s]+|providers/[^/?\s]+/[^/?\s]+)/)[^/?\s]+")
+_CHANNEL_VERIFY_TOKEN = re.compile(r"((?:hub(?:\.|%2e)verify_token)=)[^&\s\"]*", re.IGNORECASE)
 
 
 def redact_webhook_path_tokens(record: logging.LogRecord) -> bool:
     """Logging filter: replace webhook path tokens in a request line; never drops a record."""
     if isinstance(record.args, tuple) and record.args:
         record.args = tuple(
-            _WEBHOOK_PATH_TOKEN.sub(r"\1[redacted]", arg) if isinstance(arg, str) else arg for arg in record.args
+            _CHANNEL_VERIFY_TOKEN.sub(r"\1[redacted]", _WEBHOOK_PATH_TOKEN.sub(r"\1[redacted]", arg))
+            if isinstance(arg, str)
+            else arg
+            for arg in record.args
         )
     elif isinstance(record.msg, str):
-        record.msg = _WEBHOOK_PATH_TOKEN.sub(r"\1[redacted]", record.msg)
+        record.msg = _CHANNEL_VERIFY_TOKEN.sub(r"\1[redacted]", _WEBHOOK_PATH_TOKEN.sub(r"\1[redacted]", record.msg))
     return True
 
 

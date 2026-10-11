@@ -28,6 +28,23 @@ Billing limits and list prices come from [core/billing/catalog.py](core/billing/
 
 ## Current release at a glance
 
+### Bring your own channels and AI credentials
+
+New agents default to `gemini-3.5-flash-lite`; explicitly selected models remain
+unchanged. Save your Google or other provider key in the protected AI credential
+settings. Model selection, fallback and company scope remain configurable.
+
+The **Channels** dashboard connects your own WhatsApp Cloud API, Meta Messenger,
+Telegram, Viber, inbound Mailgun email or signed gateway to an agent or workflow.
+Credentials are encrypted, callbacks are authenticated, unlinked messages require
+review, and private sender links delegate only your current permissions. Existing
+Twilio voice/call setup and remote MCP tool discovery remain separate integrations.
+Native channel replies are optional status notices, not private result exports.
+
+Follow the [channel account and workflow guide](docs/user-guide/channel-workflows.md)
+for account creation, callback registration, sender linking and verification.
+Local wire-contract tests are not proof of real provider-account delivery.
+
 The production platform currently includes governed agent/workflow execution,
 document ingestion with scanned-document OCR, signed Twilio voice with
 provider-managed STT/TTS, tenant-scoped browser RPA, Python and TypeScript SDKs,

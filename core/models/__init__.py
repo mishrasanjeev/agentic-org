@@ -56,6 +56,9 @@ from core.models.case_push import CasePushOutbox as CasePushOutbox
 from core.models.case_push import ProviderWebhookReceipt as ProviderWebhookReceipt
 from core.models.cdc import CDCEvent as CDCEvent
 from core.models.cdc import CDCEventDeadLetter as CDCEventDeadLetter
+from core.models.channel import ChannelBinding as ChannelBinding
+from core.models.channel import ChannelDelivery as ChannelDelivery
+from core.models.channel import ChannelSenderLink as ChannelSenderLink
 from core.models.client_portal import ClientPortalDocument as ClientPortalDocument
 from core.models.client_portal import ClientPortalInvite as ClientPortalInvite
 from core.models.commerce_a2a_buyer_access import CommerceA2ABuyerAccess as CommerceA2ABuyerAccess

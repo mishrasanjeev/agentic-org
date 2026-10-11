@@ -219,6 +219,7 @@ export default function Connectors() {
           )}
           <Button onClick={() => navigate("/dashboard/connectors/new")}>Register Connector</Button>
           <Button variant="outline" onClick={() => navigate("/dashboard/connectors/remote-mcp")}>Remote MCP</Button>
+          <Button variant="outline" onClick={() => navigate("/dashboard/channels")}>Channels</Button>
         </div>
       </div>
 

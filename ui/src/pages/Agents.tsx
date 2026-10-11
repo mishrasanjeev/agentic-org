@@ -139,7 +139,7 @@ export default function Agents() {
   }
 
   function downloadTemplate() {
-    const csv = "name,agent_type,domain,designation,specialization,reporting_to_name,org_level,llm_model,confidence_floor\nPriya Sharma,ap_processor,finance,Senior AP Analyst,Domestic invoices Mumbai,VP Finance,2,gemini-2.5-flash,0.88\n";
+    const csv = "name,agent_type,domain,designation,specialization,reporting_to_name,org_level,llm_model,confidence_floor\nPriya Sharma,ap_processor,finance,Senior AP Analyst,Domestic invoices Mumbai,VP Finance,2,gemini-3.5-flash-lite,0.88\n";
     const blob = new Blob([csv], { type: "text/csv" });
     const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = "agent_import_template.csv"; a.click();
   }

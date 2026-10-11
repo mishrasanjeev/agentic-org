@@ -29,6 +29,7 @@
     "calls": "कॉल",
     "transactions": "लेनदेन",
     "connectors": "कनेक्टर",
+    "channels": "चैनल",
     "commerceRuntime": "Commerce Runtime",
     "promptTemplates": "प्रॉम्प्ट टेम्पलेट",
     "createFromSop": "SOP से बनाएं",

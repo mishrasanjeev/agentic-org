@@ -43,7 +43,9 @@ class EmbeddingModel:
 # ``tests/regression/test_s008_tenant_ai_config.py::test_llm_catalog_covers_required_providers``
 # so future drift fails loudly.
 LLM_CATALOG: tuple[LLMModel, ...] = (
-    # Gemini (platform default — free-tier friendly)
+    # https://ai.google.dev/gemini-api/docs/models/gemini-3.5-flash-lite
+    LLMModel("gemini", "gemini-3.5-flash-lite", 1_048_576, 65_536, supports_vision=True),
+    # Legacy choices stay selectable; existing agents are not migrated.
     LLMModel("gemini", "gemini-2.5-flash", 1_048_576, 8192),
     LLMModel("gemini", "gemini-2.5-flash-preview-05-20", 1_048_576, 8192),
     LLMModel("gemini", "gemini-2.5-pro", 2_097_152, 8192, supports_vision=True),

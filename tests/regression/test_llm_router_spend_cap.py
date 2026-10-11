@@ -23,17 +23,13 @@ import pytest
 
 
 def test_tier1_default_is_flash_lite() -> None:
-    """Tier1 must be the cheapest model — flash-lite.
-
-    Regressing this would silently route high-volume calls back to
-    flash, ~2x the per-token cost.
-    """
+    """Default low/medium tiers use the requested model; the high tier stays configurable."""
     from core.llm.router import CLOUD_TIERS
 
-    assert CLOUD_TIERS["tier1"] == "gemini-2.5-flash-lite", (
-        f"tier1 must default to gemini-2.5-flash-lite, got {CLOUD_TIERS['tier1']!r}"
+    assert CLOUD_TIERS["tier1"] == "gemini-3.5-flash-lite", (
+        f"tier1 must default to gemini-3.5-flash-lite, got {CLOUD_TIERS['tier1']!r}"
     )
-    assert CLOUD_TIERS["tier2"] == "gemini-2.5-flash"
+    assert CLOUD_TIERS["tier2"] == "gemini-3.5-flash-lite"
     assert CLOUD_TIERS["tier3"] == "gemini-2.5-pro"
 
 
@@ -41,6 +37,7 @@ def test_pricing_table_includes_flash_lite_and_pro() -> None:
     from core.llm.router import GEMINI_PRICE_PER_1M
 
     for model in (
+        "gemini-3.5-flash-lite",
         "gemini-2.5-flash-lite",
         "gemini-2.5-flash",
         "gemini-2.5-pro",
