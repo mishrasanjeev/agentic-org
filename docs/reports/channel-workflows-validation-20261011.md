@@ -115,6 +115,13 @@ message produces a completed workflow and receipt. Do not approve or replay an
 unrelated `/start` message to manufacture completion. Keep credential rotation
 separate from this deterministic, model-free acceptance workflow.
 
+The combined PostgreSQL replay also exposed an isolation defect in the new
+regression fixture: the real engine's operator-policy lookup reached the shared
+application pool instead of the fixture's loop-local restricted database. The
+fixture now binds the existing session-factory context for the complete replay,
+including actual policy reads. No policy check or cross-loop guard is disabled,
+and the committed cross-loop baseline is unchanged.
+
 ## Design review
 
 The repository's optional external design command pack was unavailable. A

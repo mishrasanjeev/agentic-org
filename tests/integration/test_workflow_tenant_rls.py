@@ -12,6 +12,7 @@ from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.pool import NullPool
 
+from core.database import session_factory_scope
 from core.models.tenant import Tenant
 from core.models.workflow import WorkflowEventWait, WorkflowRunState
 from workflows.event_waits import EventWaitRecord, SqlAlchemyWorkflowEventWaitRepository
@@ -68,7 +69,10 @@ async def _restricted_database(db_engine):
             assert not await session.scalar(
                 text("SELECT rolsuper OR rolbypassrls FROM pg_roles WHERE rolname=current_user")
             )
-        yield runtime_factory, tenant_a, tenant_b
+        # Policy/feature-flag reads inside the real engine use the same isolated
+        # database and loop as persistence, not the application's shared pool.
+        with session_factory_scope(lambda: runtime_factory):
+            yield runtime_factory, tenant_a, tenant_b
     finally:
         if restricted is not None:
             await restricted.dispose()
