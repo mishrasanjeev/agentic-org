@@ -6,7 +6,8 @@ Revises: v6z82_spend_reconciliation
 Create Date: 2026-10-11
 
 ``customer_sessions``: one row per customer session the bank opened with a
-signed assertion; the opaque session token is stored as a SHA-256 hash.
+signed assertion; the opaque session token is stored as a SHA-256 hash and
+the assertion's id is unique per tenant, so an assertion opens one session.
 ``customer_mandates``: the autonomy level and limits a customer set per task
 class. ``customer_actions``: every action the agent prepared, executed,
 refused or saw cancelled, with the explanation shown and the approval given.
@@ -43,6 +44,7 @@ def upgrade() -> None:
             principal_id VARCHAR(128) NULL,
             channel VARCHAR(16) NOT NULL DEFAULT 'web',
             token_hash VARCHAR(64) NOT NULL,
+            assertion_jti VARCHAR(128) NOT NULL,
             issued_at TIMESTAMPTZ NOT NULL,
             expires_at TIMESTAMPTZ NOT NULL,
             last_seen_at TIMESTAMPTZ NULL,
@@ -52,6 +54,10 @@ def upgrade() -> None:
         );
     """)
     op.execute("CREATE UNIQUE INDEX IF NOT EXISTS ux_customer_sessions_token_hash ON customer_sessions(token_hash);")
+    op.execute(
+        "CREATE UNIQUE INDEX IF NOT EXISTS ux_customer_sessions_tenant_assertion "
+        "ON customer_sessions(tenant_id, assertion_jti);"
+    )
     op.execute(
         "CREATE INDEX IF NOT EXISTS ix_customer_sessions_tenant_customer "
         "ON customer_sessions(tenant_id, customer_ref, created_at DESC);"
@@ -71,7 +77,7 @@ def upgrade() -> None:
             currency VARCHAR(3) NOT NULL DEFAULT 'INR',
             counterparties JSONB NOT NULL DEFAULT '[]'::jsonb,
             categories JSONB NOT NULL DEFAULT '[]'::jsonb,
-            window JSONB NOT NULL DEFAULT '{}'::jsonb,
+            time_window JSONB NOT NULL DEFAULT '{}'::jsonb,
             status VARCHAR(16) NOT NULL DEFAULT 'active',
             expires_at TIMESTAMPTZ NULL,
             reconfirm_at TIMESTAMPTZ NULL,

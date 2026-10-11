@@ -7,7 +7,7 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
 ### Added - the bank-operated customer agent, behind `AGENTICORG_CUSTOMER_AGENT_ENABLED` (off by default)
 - `POST /api/v1/customer-agent/sessions` exchanges a bank-signed customer
   assertion (RS256 or ES256, verified against the bank's JWKS, issuer and
-  audience) for an opaque session token; the customer never holds a platform
+  audience; single-use by its `jti`) for an opaque session token; the customer never holds a platform
   credential, and the token's hash alone is stored (`customer_sessions`).
   Session, acknowledgement of the AI disclosure, and end-of-session routes
   authenticate that token themselves; the auth middleware exempts the prefix.

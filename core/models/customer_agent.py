@@ -18,7 +18,7 @@ import uuid
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import TIMESTAMP, Float, Index, Integer, String, func, text
+from sqlalchemy import TIMESTAMP, CheckConstraint, Float, Index, Integer, String, func, text
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -29,6 +29,7 @@ class CustomerSession(BaseModel):
     __tablename__ = "customer_sessions"
     __table_args__ = (
         Index("ux_customer_sessions_token_hash", "token_hash", unique=True),
+        Index("ux_customer_sessions_tenant_assertion", "tenant_id", "assertion_jti", unique=True),
         Index("ix_customer_sessions_tenant_customer", "tenant_id", "customer_ref", text("created_at DESC")),
     )
 
@@ -39,6 +40,7 @@ class CustomerSession(BaseModel):
     principal_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
     channel: Mapped[str] = mapped_column(String(16), nullable=False, default="web")
     token_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    assertion_jti: Mapped[str] = mapped_column(String(128), nullable=False)
     issued_at: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), nullable=False)
     expires_at: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), nullable=False)
     last_seen_at: Mapped[datetime | None] = mapped_column(TIMESTAMP(timezone=True), nullable=True)
@@ -49,7 +51,12 @@ class CustomerSession(BaseModel):
 
 class CustomerMandate(BaseModel):
     __tablename__ = "customer_mandates"
-    __table_args__ = (Index("ix_customer_mandates_tenant_customer_class", "tenant_id", "customer_ref", "task_class"),)
+    __table_args__ = (
+        Index("ix_customer_mandates_tenant_customer_class", "tenant_id", "customer_ref", "task_class"),
+        CheckConstraint("autonomy_level >= 0 AND autonomy_level <= 4", name="ck_customer_mandates_level"),
+        CheckConstraint("period IN ('day','week','month')", name="ck_customer_mandates_period"),
+        CheckConstraint("status IN ('active','revoked','expired')", name="ck_customer_mandates_status"),
+    )
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     tenant_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
@@ -62,7 +69,8 @@ class CustomerMandate(BaseModel):
     currency: Mapped[str] = mapped_column(String(3), nullable=False, default="INR")
     counterparties: Mapped[list[str]] = mapped_column(JSONB, nullable=False, default=list)
     categories: Mapped[list[str]] = mapped_column(JSONB, nullable=False, default=list)
-    window: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False, default=dict)
+    # "window" is a reserved word in PostgreSQL; the column is time_window, the attribute keeps the API name.
+    window: Mapped[dict[str, Any]] = mapped_column("time_window", JSONB, nullable=False, default=dict)
     status: Mapped[str] = mapped_column(String(16), nullable=False, default="active")
     expires_at: Mapped[datetime | None] = mapped_column(TIMESTAMP(timezone=True), nullable=True)
     reconfirm_at: Mapped[datetime | None] = mapped_column(TIMESTAMP(timezone=True), nullable=True)
@@ -77,6 +85,10 @@ class CustomerAction(BaseModel):
     __table_args__ = (
         Index("ix_customer_actions_tenant_customer_created", "tenant_id", "customer_ref", text("created_at DESC")),
         Index("ix_customer_actions_tenant_class_status", "tenant_id", "customer_ref", "task_class", "status"),
+        CheckConstraint(
+            "status IN ('prepared','executed','cancelled','refused','failed','superseded')",
+            name="ck_customer_actions_status",
+        ),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)

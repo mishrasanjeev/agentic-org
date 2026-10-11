@@ -49,7 +49,7 @@ class ApprovalError(ValueError):
 
 
 def user_id_for(session_row: Any) -> str:
-    return f"customer:{session_row.customer_ref}"[:128]
+    return f"customer:{session_row.customer_ref}"
 
 
 def session_key_for(session_row: Any) -> str:
@@ -100,7 +100,7 @@ async def spent_in_period(tenant_id: uuid.UUID, customer_ref: str, klass: str, s
                     CustomerAction.customer_ref == customer_ref,
                     CustomerAction.task_class == klass,
                     CustomerAction.status == "executed",
-                    CustomerAction.created_at >= since,
+                    CustomerAction.decided_at >= since,
                 )
             )
         ).scalar()
@@ -113,6 +113,43 @@ async def insert_action(row: Any) -> Any:
     async with get_tenant_session(row.tenant_id) as session:
         session.add(row)
     return row
+
+
+async def supersede_prepared(tenant_id: uuid.UUID, customer_ref: str, intent: str, keep_id: uuid.UUID) -> int:
+    """Mark every other prepared action of this intent superseded: one card per intent is confirmable."""
+    from sqlalchemy import select
+
+    from core.database import get_tenant_session
+    from core.models.customer_agent import CustomerAction
+
+    count = 0
+    async with get_tenant_session(tenant_id) as session:
+        rows = (
+            await session.execute(
+                select(CustomerAction).where(
+                    CustomerAction.tenant_id == tenant_id,
+                    CustomerAction.customer_ref == customer_ref,
+                    CustomerAction.intent == intent,
+                    CustomerAction.status == "prepared",
+                    CustomerAction.id != keep_id,
+                )
+            )
+        ).scalars()
+        for row in rows:
+            row.status = "superseded"
+            row.execution = {"status": "superseded", "reason": "replaced_by_a_newer_card"}
+            row.decided_at = datetime.now(UTC)
+            count += 1
+    return count
+
+
+def same_parameters(a: dict[str, Any] | None, b: dict[str, Any] | None) -> bool:
+    """Whether two slot sets describe the same action (values compared as text, empty values ignored)."""
+
+    def norm(d: dict[str, Any] | None) -> dict[str, str]:
+        return {k: str(v) for k, v in (d or {}).items() if v not in (None, "", [], {})}
+
+    return norm(a) == norm(b)
 
 
 async def latest_prepared(tenant_id: uuid.UUID, customer_ref: str, intent: str) -> Any | None:
@@ -325,7 +362,9 @@ async def _record_prepared(
         explanation=explanations.why_this(outcome.intent, slots, decision, mandate),
         channel=channel[:16],
     )
-    return await insert_action(row)
+    row = await insert_action(row)
+    await supersede_prepared(session_row.tenant_id, session_row.customer_ref, row.intent, row.id)
+    return row
 
 
 async def _record_direct(

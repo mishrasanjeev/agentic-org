@@ -34,7 +34,8 @@ logger = structlog.get_logger()
 TOKEN_PREFIX = "cas_"
 ALGORITHMS: tuple[str, ...] = ("RS256", "ES256")
 CHANNELS: tuple[str, ...] = ("web", "app", "whatsapp", "voice", "api")
-MAX_CUSTOMER_REF = 128
+MAX_CUSTOMER_REF = 100  # with the "customer:" prefix it must fit every 128-character user id column
+MAX_ASSERTION_ID = 128
 
 
 class CustomerAssertionError(ValueError):
@@ -77,6 +78,7 @@ class CustomerIdentity:
     customer_ref: str
     channel: str
     claims: dict[str, Any] = field(default_factory=dict)
+    assertion_id: str = ""  # the assertion's jti: each assertion opens at most one session
 
 
 def _signing_key(token: str) -> Any:
@@ -112,7 +114,7 @@ def verify_assertion(assertion: str, *, channel: str = "web") -> CustomerIdentit
             algorithms=list(ALGORITHMS),
             issuer=issuer,
             audience=audience,
-            options={"require": ["exp", "iat", "sub"]},
+            options={"require": ["exp", "iat", "sub", "jti"]},
             leeway=30,
         )
     except jwt.PyJWTError as exc:
@@ -124,10 +126,15 @@ def verify_assertion(assertion: str, *, channel: str = "web") -> CustomerIdentit
     ref = str(claims.get("sub") or "").strip()
     if not ref:
         raise CustomerAssertionError("assertion names no customer")
+    if len(ref) > MAX_CUSTOMER_REF:
+        raise CustomerAssertionError(f"customer reference is longer than {MAX_CUSTOMER_REF} characters")
+    assertion_id = str(claims.get("jti") or "").strip()
+    if not assertion_id or len(assertion_id) > MAX_ASSERTION_ID:
+        raise CustomerAssertionError("assertion needs a unique id (jti) of at most 128 characters")
     chosen = str(claims.get("channel") or channel or "web").lower()
     if chosen not in CHANNELS:
         chosen = "web"
-    return CustomerIdentity(customer_ref=ref[:MAX_CUSTOMER_REF], channel=chosen, claims=dict(claims))
+    return CustomerIdentity(customer_ref=ref, channel=chosen, claims=dict(claims), assertion_id=assertion_id)
 
 
 def new_token() -> str:
@@ -178,14 +185,22 @@ async def open_session(assertion: str, *, channel: str = "web") -> tuple[Any, st
         tenant_id=tid,
         company_id=uuid.UUID(company) if company else None,
         customer_ref=identity.customer_ref,
-        principal_id=f"customer:{identity.customer_ref}"[:MAX_CUSTOMER_REF],
+        principal_id=f"customer:{identity.customer_ref}",
+        assertion_jti=identity.assertion_id,
         channel=identity.channel,
         token_hash=token_hash(token),
         issued_at=now,
         expires_at=now + timedelta(minutes=ttl),
     )
-    async with get_tenant_session(tid) as session:
-        session.add(row)
+    from sqlalchemy.exc import IntegrityError
+
+    try:
+        async with get_tenant_session(tid) as session:
+            session.add(row)
+    except IntegrityError as exc:
+        # The unique index on (tenant_id, assertion_jti) makes the replay check atomic.
+        logger.info("customer_assertion_replayed", channel=identity.channel)
+        raise CustomerAssertionError("assertion already used") from exc
     logger.info("customer_session_opened", channel=identity.channel, session_id=str(row.id))
     return row, token
 

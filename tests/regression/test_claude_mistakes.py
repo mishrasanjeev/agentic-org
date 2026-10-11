@@ -254,7 +254,10 @@ def test_mistake_5_localstorage_auth_bypass_count_below_cap() -> None:
 # Reviewed addition: personalisation deletes tenant-scoped rule configuration,
 # not consents, encrypted profiles or audit events. The event FK uses SET NULL;
 # test_personalisation_rule_conflicts verifies event retention in PostgreSQL.
-DELETE_HANDLER_CAP = 36
+# Reviewed addition: the customer agent's DELETE /session and
+# DELETE /permissions/mandates/{id} are soft deletes (revoked_at and
+# status=revoked keep the rows); 36 -> 38.
+DELETE_HANDLER_CAP = 38
 
 DELETE_DECORATOR = re.compile(r'^@router\.delete\(', re.MULTILINE)
 

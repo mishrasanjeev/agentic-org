@@ -47,13 +47,14 @@ The assertion is a JWT signed with RS256 or ES256 by a key in the bank's JWKS:
   "iss": "https://id.example-bank.test",
   "aud": "agenticorg-customer-agent",
   "sub": "cust_7f3a",
+  "jti": "0b1f5c2e-3d44-4a8e-9c1a-7e2f8a9b6c3d",
   "iat": 1760140800,
   "exp": 1760140920,
   "channel": "app"
 }
 ```
 
-`sub` is the bank's pseudonymous customer reference; the platform stores nothing else about the customer. `channel` is optional (`web`, `app`, `whatsapp`, `voice`, `api`). Keep `exp` short: the assertion is used once.
+`sub` is the bank's pseudonymous customer reference, at most 100 characters; the platform stores nothing else about the customer. `jti` is required and unique: an assertion opens at most one session, and a replay is refused. `channel` is optional (`web`, `app`, `whatsapp`, `voice`, `api`). Keep `exp` short.
 
 ```bash
 curl -s -X POST https://api.example-bank.test/api/v1/customer-agent/sessions \
@@ -159,7 +160,8 @@ All three are tenant-scoped under row-level security. Executed actions also appe
 
 - The customer never holds a platform credential and the platform never holds a bank credential. The assertion is the only bridge, and it is signed, short-lived and used once.
 - Session tokens are random, prefixed `cas_`, and stored hashed. A leaked database row cannot be replayed.
-- Routes under the prefix are exempt from the operator middleware because they carry no operator credential; each one authenticates the session token itself and refuses without it. Session opening is rate-limited per client IP, the rest per session.
+- Routes under the prefix are exempt from the operator middleware because they carry no operator credential; each one authenticates the session token itself and refuses without it. Session opening is rate-limited per client address; every other route is rate-limited per session token, so customers behind one bank proxy do not share a window.
+- A prepared card confirms only the action it shows: if the conversation moved on, or the amount or payee changed since the card was prepared, the card is marked superseded and nothing runs. Preparing a new card for the same task supersedes the earlier one.
 - The element holds nothing but the session token the host injected, loads no third-party code and renders no HTML from server data.
 - Autonomy, caps and counterparties are enforced before an action is prepared and the step-up is verified before the engine executes. The model never decides whether something may run.
 - The disclosure is mandatory and recorded. Every explanation names the AI assistant and says how to reach a person.

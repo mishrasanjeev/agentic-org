@@ -254,9 +254,13 @@ async def _prepared_action(row: Any, action_id: str) -> Any:
 
 
 async def _decide(row: Any, action: Any, text: str, approval: dict[str, Any] | None) -> dict[str, Any]:
-    """Carry the card's tap into the dialogue; a card whose dialogue moved on is marked superseded, never run."""
+    """Carry the card's tap into the dialogue; a card whose dialogue moved on or changed is superseded, never run."""
     dialogue = await runtime.load_dialogue(row.tenant_id, turns.session_key_for(row))
-    if dialogue.stage != dialogue_engine.STAGE_CONFIRMING or dialogue.intent != action.intent:
+    if (
+        dialogue.stage != dialogue_engine.STAGE_CONFIRMING
+        or dialogue.intent != action.intent
+        or not turns.same_parameters(dialogue.slots, action.parameters)
+    ):
         await turns.settle_action(
             row.tenant_id,
             action.id,

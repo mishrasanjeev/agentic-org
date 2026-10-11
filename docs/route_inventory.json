@@ -5072,7 +5072,7 @@
     "public_exempt_reason": "public-read-or-doc-route",
     "rate_limit": "customer-agent",
     "scope": "public:customer_agent.turn",
-    "source_line": 306,
+    "source_line": 310,
     "tenant_required": false
   },
   {
@@ -5090,7 +5090,7 @@
     "public_exempt_reason": "public-read-or-doc-route",
     "rate_limit": "customer-agent",
     "scope": "public:customer_agent.turn",
-    "source_line": 287,
+    "source_line": 291,
     "tenant_required": false
   },
   {
@@ -5126,7 +5126,7 @@
     "public_exempt_reason": "public-read-or-doc-route",
     "rate_limit": "customer-agent",
     "scope": "public:customer_agent.permissions",
-    "source_line": 333,
+    "source_line": 337,
     "tenant_required": false
   },
   {
@@ -5144,7 +5144,7 @@
     "public_exempt_reason": "public-read-or-doc-route",
     "rate_limit": "customer-agent",
     "scope": "public:customer_agent.permissions",
-    "source_line": 348,
+    "source_line": 352,
     "tenant_required": false
   },
   {
@@ -5162,7 +5162,7 @@
     "public_exempt_reason": "public-read-or-doc-route",
     "rate_limit": "customer-agent",
     "scope": "public:customer_agent.permissions",
-    "source_line": 371,
+    "source_line": 375,
     "tenant_required": false
   },
   {

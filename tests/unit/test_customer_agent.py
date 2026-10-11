@@ -31,7 +31,7 @@ PUBLIC_KEY = PRIVATE_KEY.public_key()
 
 def sign(claims: dict, *, alg: str = "RS256", key=PRIVATE_KEY) -> str:
     now = int(time.time())
-    body = {"iss": ISSUER, "aud": AUDIENCE, "sub": "cust_7f3a", "iat": now, "exp": now + 120}
+    body = {"iss": ISSUER, "aud": AUDIENCE, "sub": "cust_7f3a", "iat": now, "exp": now + 120, "jti": uuid.uuid4().hex}
     body.update(claims)
     return jwt.encode(body, key, algorithm=alg)
 
@@ -62,6 +62,7 @@ def session_row(**overrides):
         principal_id="customer:cust_7f3a",
         channel="web",
         token_hash="x",
+        assertion_jti="jti-1",
         issued_at=now,
         expires_at=now + timedelta(minutes=30),
         last_seen_at=None,
@@ -314,6 +315,14 @@ class Store:
             row.decided_at = datetime.now(UTC)
             return row
 
+        async def supersede_prepared(tid, ref, intent, keep_id):
+            count = 0
+            for r in self.actions.values():
+                if r.intent == intent and r.status == "prepared" and r.id != keep_id:
+                    r.status = "superseded"
+                    count += 1
+            return count
+
         async def latest_prepared(tid, ref, intent):
             rows = [r for r in self.actions.values() if r.intent == intent and r.status == "prepared"]
             return rows[-1] if rows else None
@@ -337,6 +346,7 @@ class Store:
         monkeypatch.setattr(turns, "insert_action", insert_action)
         monkeypatch.setattr(turns, "settle_action", settle_action)
         monkeypatch.setattr(turns, "latest_prepared", latest_prepared)
+        monkeypatch.setattr(turns, "supersede_prepared", supersede_prepared)
         monkeypatch.setattr(turns, "load_mandate", load_mandate)
         monkeypatch.setattr(turns, "spent_in_period", spent_in_period)
         monkeypatch.setattr(turns, "execution_context", execution_context)
@@ -524,7 +534,9 @@ class TestRoutes:
 
     def test_confirm_carries_the_tap_into_the_dialogue_and_refuses_a_stale_card(self, client, monkeypatch):
         http, row = client
-        action = SimpleNamespace(id=uuid.uuid4(), intent="fund_transfer", status="prepared")
+        action = SimpleNamespace(
+            id=uuid.uuid4(), intent="fund_transfer", status="prepared", parameters={"amount": 5000}
+        )
         monkeypatch.setattr(actions, "get_action", AsyncMock(return_value=action))
         confirming = Dialogue(stage=engine.STAGE_CONFIRMING, intent="fund_transfer", slots={"amount": 5000})
         monkeypatch.setattr(runtime, "load_dialogue", AsyncMock(return_value=confirming))
@@ -539,6 +551,11 @@ class TestRoutes:
         )
         assert response.status_code == 200 and response.json()["answer"] == "Done"
         assert run.await_args.args[1] == "yes" and run.await_args.kwargs["approval"]["method"] == "otp"
+        # The amount changed at the confirmation: the old card is superseded and never run.
+        edited = Dialogue(stage=engine.STAGE_CONFIRMING, intent="fund_transfer", slots={"amount": 50000})
+        monkeypatch.setattr(runtime, "load_dialogue", AsyncMock(return_value=edited))
+        response = http.post(f"/api/v1/customer-agent/actions/{action.id}/confirm", headers=AUTH)
+        assert response.status_code == 409 and response.json()["detail"]["error"] == "action_stale"
         # The dialogue moved on: the card is superseded and never run.
         monkeypatch.setattr(runtime, "load_dialogue", AsyncMock(return_value=Dialogue()))
         response = http.post(f"/api/v1/customer-agent/actions/{action.id}/confirm", headers=AUTH)
@@ -552,7 +569,7 @@ class TestRoutes:
 
     def test_cancel_settles_the_card(self, client, monkeypatch):
         http, row = client
-        action = SimpleNamespace(id=uuid.uuid4(), intent="fund_transfer", status="prepared")
+        action = SimpleNamespace(id=uuid.uuid4(), intent="fund_transfer", status="prepared", parameters={})
         monkeypatch.setattr(actions, "get_action", AsyncMock(return_value=action))
         monkeypatch.setattr(runtime, "load_dialogue", AsyncMock(return_value=Dialogue()))
         settle = AsyncMock(return_value=action)
@@ -618,8 +635,124 @@ class TestMigration:
             assert f"ALTER TABLE {table} FORCE ROW LEVEL SECURITY" in joined
             assert f"CREATE POLICY {table}_tenant_isolation" in joined
         assert "ux_customer_sessions_token_hash" in joined and "UNIQUE INDEX" in joined
+        assert "assertion_jti VARCHAR(128) NOT NULL" in joined and "ux_customer_sessions_tenant_assertion" in joined
         assert "ck_customer_mandates_level CHECK (autonomy_level >= 0 AND autonomy_level <= 4)" in joined
         assert "ck_customer_actions_status" in joined
         statements.clear()
         module.downgrade()
         assert len(statements) == 3 and all(s.startswith("DROP TABLE IF EXISTS") for s in statements)
+
+
+class TestReviewFollowUps:
+    def test_an_overlong_customer_reference_is_refused_not_truncated(self):
+        with pytest.raises(sessions.CustomerAssertionError, match="longer than"):
+            sessions.verify_assertion(sign({"sub": "c" * 101}))
+        assert sessions.verify_assertion(sign({"sub": "c" * 100})).customer_ref == "c" * 100
+
+    def test_an_assertion_without_a_unique_id_is_refused(self):
+        now = int(time.time())
+        token = jwt.encode(
+            {"iss": ISSUER, "aud": AUDIENCE, "sub": "c", "iat": now, "exp": now + 60}, PRIVATE_KEY, algorithm="RS256"
+        )
+        with pytest.raises(sessions.CustomerAssertionError, match="jti"):
+            sessions.verify_assertion(token)
+        assert sessions.verify_assertion(sign({"jti": "one-time"})).assertion_id == "one-time"
+
+    def test_a_replayed_assertion_opens_no_second_session(self, monkeypatch):
+        import asyncio
+        from contextlib import asynccontextmanager
+
+        from sqlalchemy.exc import IntegrityError
+
+        import core.database as database
+
+        seen: set[str] = set()
+
+        @asynccontextmanager
+        async def fake_session(tid, company_id=None):
+            added = []
+            yield SimpleNamespace(add=added.append)
+            for row in added:
+                if row.assertion_jti in seen:
+                    raise IntegrityError("INSERT", {}, Exception("duplicate key ux_customer_sessions_tenant_assertion"))
+                seen.add(row.assertion_jti)
+
+        monkeypatch.setattr(database, "get_tenant_session", fake_session)
+        assertion = sign({"jti": "once"})
+        row, token = asyncio.run(sessions.open_session(assertion))
+        assert row.assertion_jti == "once" and row.principal_id == "customer:cust_7f3a" and token.startswith("cas_")
+        with pytest.raises(sessions.CustomerAssertionError, match="already used"):
+            asyncio.run(sessions.open_session(assertion))
+
+    def test_period_spend_counts_executed_actions_by_their_execution_time(self):
+        import inspect
+
+        source = inspect.getsource(turns.spent_in_period)
+        assert "decided_at >= since" in source and "created_at >= since" not in source
+
+    def test_same_parameters_compares_the_action_not_the_wording(self):
+        assert turns.same_parameters({"amount": 5000, "payee": "Ravi", "note": ""}, {"amount": "5000", "payee": "Ravi"})
+        assert not turns.same_parameters({"amount": 5000, "payee": "Ravi"}, {"amount": 50000, "payee": "Ravi"})
+        assert not turns.same_parameters({"amount": 5000}, {"amount": 5000, "payee": "Someone"})
+
+    @pytest.mark.asyncio
+    async def test_editing_the_amount_at_confirmation_supersedes_the_first_card(self, monkeypatch):
+        store = Store(monkeypatch)
+        row = session_row()
+        first = await turns.run_customer_turn(row, "transfer 5000 to Ravi")
+        second = await turns.run_customer_turn(row, "make it 7000")
+        assert first.card and second.card and first.card["action_id"] != second.card["action_id"]
+        statuses = {str(r.id): r.status for r in store.actions.values()}
+        assert statuses[first.card["action_id"]] == "superseded" and statuses[second.card["action_id"]] == "prepared"
+        done = await turns.run_customer_turn(row, "yes")
+        assert store.executed == ["fund_transfer"] and done.card["action_id"] == second.card["action_id"]
+
+    def test_customer_routes_are_rate_limited_per_session_token(self, monkeypatch):
+        import asyncio
+
+        import core.auth_state as auth_state
+        from api import route_enforcement
+
+        seen: list[tuple[str, str]] = []
+
+        async def check_window_rate(bucket, principal, limit, window):
+            seen.append((bucket, principal))
+            return False
+
+        monkeypatch.setattr(auth_state, "check_window_rate", check_window_rate)
+        monkeypatch.setattr(route_enforcement, "_client_ip", lambda request: "203.0.113.9")
+
+        def request(token: str | None):
+            headers = {"Authorization": f"Bearer {token}"} if token else {}
+            return SimpleNamespace(state=SimpleNamespace(), headers=headers, url=SimpleNamespace(path="/x"))
+
+        meta = {"rate_limit": "customer-agent", "auth_required": False}
+        asyncio.run(route_enforcement._check_rate_limit(request("cas_" + "a" * 40), meta))
+        asyncio.run(route_enforcement._check_rate_limit(request("cas_" + "b" * 40), meta))
+        asyncio.run(route_enforcement._check_rate_limit(request(None), meta))
+        asyncio.run(
+            route_enforcement._check_rate_limit(
+                request("cas_" + "a" * 40), {"rate_limit": "customer-agent-public", "auth_required": False}
+            )
+        )
+        principals = [p for _, p in seen]
+        assert principals[0].startswith("cas:") and principals[1].startswith("cas:") and principals[0] != principals[1]
+        assert principals[2] == "ip:203.0.113.9" and principals[3] == "ip:203.0.113.9"
+        assert "a" * 40 not in principals[0]
+
+    def test_the_tables_declare_the_migration_constraints(self):
+        from core.models.customer_agent import CustomerAction, CustomerMandate, CustomerSession
+
+        names = {c.name for c in CustomerMandate.__table__.constraints} | {
+            c.name for c in CustomerAction.__table__.constraints
+        }
+        assert {
+            "ck_customer_mandates_level",
+            "ck_customer_mandates_period",
+            "ck_customer_mandates_status",
+            "ck_customer_actions_status",
+        } <= names
+        assert {i.name for i in CustomerSession.__table__.indexes} >= {
+            "ux_customer_sessions_token_hash",
+            "ux_customer_sessions_tenant_assertion",
+        }
