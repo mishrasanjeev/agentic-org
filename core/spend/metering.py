@@ -20,7 +20,8 @@ site. Handlers read counts, lengths and ids only, never content.
 * ``ocr``: pages local Tesseract read (document processing, knowledge
   uploads, ingestion that extracted for itself).
 * ``speech``: the audio minutes of a transcribed recording (local Whisper or
-  Deepgram); a supplied transcript is not metered.
+  Deepgram), noted as soon as the engine returns; a supplied transcript is not
+  metered.
 * ``tool_call``: a successful connector tool call, metered only when a rate
   card prices the tool (``tool_calls``, the connector as provider, the tool or
   ``''`` as model). A per-tenant set of priced tools, refreshed by the writer,
@@ -512,14 +513,23 @@ def speech_minutes(duration_seconds: Any) -> Decimal:
 
 
 def handle_speech(tenant_id: object, raw: Mapping[str, Any]) -> None:
-    """The audio minutes of a recording a metered engine transcribed (``speech:{recording_id}``)."""
+    """The audio minutes of a recording a metered engine has just transcribed (``speech:{recording_id}``).
+
+    The save notes the row as soon as the engine returns (its status is still
+    ``received``), before the transcript is redacted and encrypted and the row
+    is written, so a later failure cannot lose minutes the engine already
+    spent; a transcription that failed is never noted. The key is the row's id,
+    which the save draws before transcribing: the record names the row the
+    recording is kept as, or, when the save fails, the one transcription that
+    ran. The event is built once, so the writer's retries and spills reuse its
+    key and time and add nothing. A row without a valid id raises (the note is
+    counted as failed) rather than being keyed at random.
+    """
     from core.spend.context import account_for, current_credential
 
     row = raw.get("row")
-    if getattr(row, "status", None) != "transcribed":
-        return
     spec = SPEECH_ENGINES.get(str(raw.get("engine") or ""))
-    if spec is None:
+    if row is None or spec is None:
         return
     quantity = speech_minutes(getattr(row, "duration_seconds", 0) or 0)
     if quantity <= 0:
@@ -527,9 +537,9 @@ def handle_speech(tenant_id: object, raw: Mapping[str, Any]) -> None:
     tenant = _tenant_or_count(tenant_id, SPEECH)
     if tenant is None:
         return
+    recording = str(uuid.UUID(str(getattr(row, "id", None))))
     provider, model = spec
     account = "in_house" if provider in vocab.IN_HOUSE_PROVIDERS else account_for(provider, current_credential())
-    recording = str(getattr(row, "id", None) or uuid.uuid4())
     _queue(
         [
             _event(

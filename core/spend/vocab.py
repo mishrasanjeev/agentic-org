@@ -199,6 +199,20 @@ QUANTITY_PLACES = 6
 FX_PLACES = 8
 PCT_PLACES = 2
 
+
+def numeric_max(precision: int, scale: int) -> Decimal:
+    """The largest value a ``NUMERIC(precision, scale)`` column holds."""
+    digits = "9" * (precision - scale)
+    return Decimal(f"{digits}.{'9' * scale}") if scale else Decimal(digits)
+
+
+# The largest amount and quantity a reconciliation stores (migration v6z82): every amount, sum, variance
+# and converted figure is NUMERIC(24,10), every quantity and summed quantity NUMERIC(24,6), and the
+# platform-billed INR sum NUMERIC(28,10).
+AMOUNT_MAX = numeric_max(24, 10)
+QTY_MAX = numeric_max(24, 6)
+INR_TOTAL_MAX = numeric_max(28, 10)
+
 _CODE_RE = re.compile(r"^[A-Z0-9][A-Z0-9_.:/-]{0,63}$")
 _SKU_RE = re.compile(SKU_PATTERN)
 _CURRENCY_RE = re.compile(r"^[A-Z]{3}$")

@@ -13,15 +13,20 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
   line); a second current invoice with the same reference needs `replace`,
   which supersedes the earlier one; several references for a month are
   summed, up to 20,000 current lines per provider and month (413
-  `too_many_rows`), since a run loads them all. Invoices are listed and
-  read through `GET /spend/invoices`.
+  `too_many_rows`), since a run loads them all, and up to the amounts and
+  quantities a run can store of their sums (413 `period_amount_too_large`,
+  `period_quantity_too_large`). Invoices are listed and read through
+  `GET /spend/invoices`.
 - Reconciliation: `POST /spend/reconciliations` compares a provider's
   tenant-billed usage in its own billing month with its current invoices in
   two figures, the amounts as stored and a re-pricing at the cards in force
   on each billing day as known at run time (fallback-priced usage keeps its
-  stored price), both with the month-level tier true-up per contract key
+  stored price), each with its own month-level tier true-up per contract key
   (one ladder across card versions, graduated or all-units) and commitment
-  overage at the commitment's price, converted through INR. Lines and usage
+  overage at the commitment's price, worked from the cards and base price
+  that figure priced with and converted through INR. A month whose figures
+  would not fit a run is refused before anything is written (422
+  `figure_out_of_range`). Lines and usage
   match on usage type, the canonical model (aliases applied) and the
   canonical unit, exact lines first; daily lines give day items and monthly
   items list their days. An item is within tolerance only when both figures
@@ -63,7 +68,9 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
   processing, knowledge uploads, ingestion that extracted for itself; once
   per extraction, even when the upload is refused or nothing is indexed),
   speech minutes (a recording Whisper or Deepgram transcribed, with the
-  Deepgram credential's billing account) and connector tool calls for tools
+  Deepgram credential's billing account, metered as soon as the engine
+  returns, so a redaction, encryption or database failure afterwards still
+  leaves the billed minutes recorded once) and connector tool calls for tools
   a rate card prices (an unpriced call is counted as an `unpriced_tool` gap,
   never recorded). Every site is guarded and failure-isolated: a malformed
   object can never fail the ingestion, search, speech save or tool call.
@@ -87,12 +94,17 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
   counted, and their share, the share of tenants deleted since the hour and
   idle hours stay with the platform (`skipped_node_hours`), so no tenant's
   card or alias moves cost onto another; in-house providers take no model
-  alias. A paused tenant's share waits, frozen, and the hour is resumed once
+  alias, and an in-house alias kept from before is never applied when a
+  call is priced or recorded, so it cannot move a tenant's calls out of
+  their pool. A paused tenant's share waits, frozen, and the hour is resumed once
   metering resumes. The operator command records only hours that have ended,
   at most seven days back, with one guarded upsert per hour (an hour being
   allocated is never overwritten), and logs the actor, pool, hours, node
   hours and models, and the values of each hour it overwrote.
-  `GET /spend/gpu-allocations` lists a tenant's own shares.
+  `GET /spend/gpu-allocations` lists a tenant's own shares to an
+  administrator or auditor only (403 `tenant_wide_read_refused` for anyone
+  else, checked before anything is looked up), because a share sums every
+  agent's calls of the hour and carries no agent to filter by.
 - Celery tasks `core.tasks.spend_tasks.sample_storage` and
   `allocate_gpu_hours` with their beats. Behind `spend_intelligence_enabled`
   (default off): off, every site is a bool read, the Deepgram credential note

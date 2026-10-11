@@ -78,7 +78,10 @@ Aliases do not chain: an alias may not name another alias, and a SKU may not its
 In-house providers (`ollama`, `vllm`, `local_embeddings`, `tei`, `tesseract`, `faster_whisper`)
 take no alias (422 `invalid_reference`): their models are named by the deployment, not by an
 invoice, and GPU allocation matches in-house calls to a pool by the name they carry, so an alias
-would take a tenant's calls out of the pool's hours and move their share onto other tenants.
+would take a tenant's calls out of the pool's hours and move their share onto other tenants. An
+in-house alias written before this refusal is kept and still listed but never applied: the writer
+stores an in-house call under the name it was called by, pricing ignores the alias, and so does
+the set of priced tools.
 
 ## Rate cards
 
@@ -254,7 +257,7 @@ unchanged.
 | `GET /spend/gaps` | administrator or auditor | meter gaps (at most 92 days); tenant-wide |
 | `POST /spend/rollups/rebuild`, `POST /spend/usage/backfill`, `POST /spend/usage/restate`, `POST /spend/usage/reattribute`, `POST /spend/fx-rates/settle`, `POST /spend/commitments/recompute` | administrator | `202` with a job id |
 | `GET /spend/jobs`, `GET /spend/jobs/{job_id}` | administrator or auditor | tenant-wide (record counts of every agent; a correction's reason) |
-| `GET /spend/gpu-allocations` | `audit:read` | the tenant's own shares of in-house GPU pool hours starting in `[start, end)` (at most 31 days) |
+| `GET /spend/gpu-allocations` | administrator or auditor | the tenant's own shares of in-house GPU pool hours starting in `[start, end)` (at most 31 days); tenant-wide (each share sums every agent's calls of the hour) |
 | `POST /spend/storage/sample` | administrator | a preview of today's storage sample in GiB per store; writes no record, audited as `spend.storage.preview` |
 | `POST /spend/invoices/import` | administrator | a provider's invoice for a billing month, CSV or JSON, stored whole; `replace`, `dry_run` |
 | `GET /spend/invoices`, `GET /spend/invoices/{invoice_id}` | administrator or auditor | current and superseded invoices; one with its lines |
@@ -634,7 +637,7 @@ content. While the feature is off every site is a bool read and nothing else.
 | OCR, document processing | `api/v1/idp.py:analyse`, the pages whose OCR ran | `ocr:idp:{uuid}` | `documents`, `documents.ocr` |
 | OCR, knowledge upload | `api/v1/knowledge.py:upload_document`, the extraction's OCR pages, once whatever the outcome | `ocr:upload:{document}`: the id the document is stored under (the managed retrieval service's id when it indexed the upload); a refused upload's is a fresh id | `knowledge`, `knowledge.ocr` |
 | OCR, ingestion | `core/rag/ingest.py:ingest_document`, only when it extracted the file itself, right after extracting, so a document that indexes nothing is counted too (an upload passes its extraction and is metered at the route, so nothing is counted twice) | `ocr:ingest:{document}` | `knowledge`, `knowledge.ocr` |
-| speech minutes | `core/speech/store.py:save`, a recording an engine transcribed | `speech:{recording}` | `speech`, `speech.transcription` |
+| speech minutes | `core/speech/store.py:save`, as soon as an engine has transcribed the recording (before redaction, encryption and the database write) | `speech:{recording}` | `speech`, `speech.transcription` |
 | tool calls | `core/langgraph/tool_adapter.py:_execute_connector_tool`, the production dispatch boundary | `tool:{uuid}` | the bound scope's, else `agents`; `tool.call` |
 | storage | the daily sample (below) | `storage:{day}:{store}` | the store's |
 | GPU hours | the hourly allocation (below) | `gpu:{pool hour}:{call}` | the call's |
@@ -668,8 +671,15 @@ duplicate filename, a failed lookup or store) is still counted, under a fresh id
 
 ### Speech minutes
 
-A recording is metered once, when it is kept with status `transcribed` by `faster_whisper` or
-`deepgram`: its duration in minutes to six places. A supplied transcript is not metered. For
+A recording is metered once, as soon as `faster_whisper` or `deepgram` has transcribed it: its
+duration in minutes to six places. The note comes before the transcript is redacted and
+encrypted and the recording is written, so a redaction, vault or database failure afterwards
+cannot lose minutes the engine already spent; a transcription that failed is not metered. The key
+is `speech:{recording}`, the id the save gives the recording before transcribing it: the record
+names the recording it is kept as, or, when the save fails, the one transcription that ran (an
+upload sent again after such a failure is a new recording and a new transcription, metered on its
+own). The event is built once, so the writer's retries and spills add no second record. A
+supplied transcript is not metered. For
 Deepgram, the transcription notes whose credential paid (the tenant's own key, `tenant_key`, or
 the platform's, `platform_key`), and the record carries it; otherwise the writer infers it.
 
@@ -778,7 +788,9 @@ platform-operator guard exists, and a tenant administrator must not set a shared
 - **Paused tenants.** A tenant `spend.metering_paused` holds for keeps its allocation `frozen`: the
   hour is not closed and is resumed, with the same frozen totals, once metering resumes.
 - `GET /spend/gpu-allocations` lists the tenant's own shares; another tenant's share is never
-  shown.
+  shown. A share sums every agent's calls of the hour and carries no agent, so the route is for
+  an administrator or auditor only (403 `tenant_wide_read_refused` otherwise; see
+  [Who reads usage](#who-reads-usage)).
 
 ## Invoice import
 
@@ -806,8 +818,17 @@ under `rows` or `lines`). Columns: `amount` (required); `line_kind`, `usage_type
   storage have no provider invoice and are refused.
 - **A bounded month.** The current invoices of one provider and month hold at most 20,000 lines
   together (four full files), because a reconciliation run loads every one of them; an import
-  past that is 413 `too_many_rows` (a dry run reports it too). A replaced invoice's lines leave the
-  count with it.
+  past that is 413 `too_many_rows` (a dry run reports it too). They also hold at most what a run
+  can store of their sums, whatever their references: the magnitudes of all their lines (credits
+  included) total at most 99999999999999.9999999999, the largest `NUMERIC(24,10)` amount a run
+  stores its invoice amounts, non-usage sum and variances in (413 `period_amount_too_large`), and
+  the quantities of the usage lines of one usage type, unit and billing day, any model (aliases can
+  merge models into one item later) and a `gb_month` line counted in GB-days, total at most
+  999999999999999999.999999, the largest `NUMERIC(24,6)` item quantity (413
+  `period_quantity_too_large`). These are 413 like `too_many_rows`: each is a bound on what one
+  month may hold across its invoices, checked under the same lock, and the file itself is valid
+  (422 stays for a line or an invoice past its own bounds). A replaced invoice's lines, amounts
+  and quantities leave the month with it.
 - **Whole or nothing.** A refused line refuses the import: 422 `invoice_rejected` with every
   refused line and its reason (`invalid_number`, `invalid_value`, `invalid_unit`, `invalid_sku`,
   `invalid_period`, `invalid_date`, `currency_mismatch`). A partial invoice would reconcile
@@ -828,7 +849,10 @@ under `rows` or `lines`). Columns: `amount` (required); `line_kind`, `usage_type
 `POST /spend/reconciliations` (administrator; `{provider, period}`; rate class `bulk-import`)
 reconciles a provider's billing month against its current invoices, in one transaction, and
 answers the run with its items (201). 409 `invoice_missing` when the month has no current
-invoice; 422 `currency_mismatch` when its current invoices are in different currencies.
+invoice; 422 `currency_mismatch` when its current invoices are in different currencies; 422
+`figure_out_of_range` (naming the field) when a figure would not fit the column that stores it,
+for example usage in dollars converted for an invoice in rupees: the run fails closed before
+writing anything, and earlier runs stand.
 
 - **The billing month** is computed from the records' `billing_date`, so a provider that closes its
   month in Pacific time is compared over its own month, not the UTC or IST one (a call at 03:00
@@ -856,13 +880,22 @@ invoice; 422 `currency_mismatch` when its current invoices are in different curr
   key's cumulative quantity in card units across card versions, so a card version change
   mid-month continues one ladder instead of restarting it. Each day's quantity is priced with
   that day's card (`graduated` from its cumulative position; `all_units` at the tier the month's
-  total reaches) less the quantity at the card's base price, and the difference is added to both
-  figures as an adjustment `{kind: tier_true_up, contract_key, amount}`.
+  total reaches) less what the figure already holds for the quantity. Each figure walks its own
+  cards: the stored figure the cards that priced the records, less the stored amounts (a card
+  without tiers adds nothing); the re-priced figure the re-pricing cards, less the quantity at
+  their base price. The difference is added to that figure as an adjustment
+  `{kind: tier_true_up, figure: stored | repriced, contract_key, amount}`, so with the same card
+  both figures agree, and a card entered or corrected after metering leaves them apart until a
+  restatement.
 - **Commitment overage.** For a group drawn from a quantity commitment with an overage price, the
-  overage quantity is priced at that price less the base price already in the figures
-  (`overage_quantity / divisor × (overage price - base price per card unit)`), the overage price
-  converted from its currency through INR when it differs, and added to both figures as
-  `{kind: commitment_overage, commitment_id, amount}`. Overage is never priced on the records.
+  overage quantity is priced at that price less the base price already in each figure
+  (`overage_quantity / divisor × (overage price - base price per card unit)`): the stored amount
+  per unit for the stored figure, the re-priced amount per unit for the re-priced one (four units
+  stored at 2.00 and re-priced at 2.50, one of them overage at 3.00, are 9.00 stored and 10.50
+  re-priced). The overage price converts from its currency through INR when it differs, and each
+  figure gets its own `{kind: commitment_overage, figure, commitment_id, amount}`. A run reports
+  the sum of each figure's adjustments as `stored_adjustments_amount` and
+  `repriced_adjustments_amount`. Overage is never priced on the records.
   Commitment shortfall and prepaid fees appear on invoices as `commitment` lines and are reported,
   not compared.
 - **Matching.** Lines and groups meet on usage type, the canonical model (the tenant's model aliases
@@ -997,8 +1030,8 @@ scoped under forced row-level security, and spend-to-spend foreign keys are comp
 
 One rule, the one `GET /audit` follows (administrators and auditors see every row). A tenant-wide
 reader, that is an administrator or a person whose domains are unrestricted (an auditor), reads
-every usage record, every rollup, coverage, gaps, jobs and the ledger comparison with no agent
-filter. Every other reader (a domain role, a machine credential without the administrator scope,
+every usage record, every rollup, coverage, gaps, jobs, GPU allocations and the ledger comparison
+with no agent filter. Every other reader (a domain role, a machine credential without the administrator scope,
 anyone who does not own a personal agent) gets the agent visibility rule where a read carries an
 agent, and is refused the tenant-wide figures, which cannot be filtered without letting a reader
 difference two views:
@@ -1011,6 +1044,7 @@ difference two views:
 | `GET /spend/coverage` | the whole tenant | 403 `tenant_wide_read_refused` (the Gate 1 measure sums every agent's usage; gaps carry no agent) |
 | `GET /spend/gaps` | the whole tenant | 403 `tenant_wide_read_refused` (gaps carry no agent) |
 | `GET /spend/jobs`, `GET /spend/jobs/{job_id}` | every job | 403 `tenant_wide_read_refused`, checked before a job is looked up (results count every agent's records; parameters carry a correction's reason) |
+| `GET /spend/gpu-allocations` | the tenant's shares | 403 `tenant_wide_read_refused`, checked before anything is looked up (a share's tokens, node hours and amount sum every agent's calls of the hour; a share carries no agent) |
 | `GET /spend/status` | whether the writer started | the same (the pending count is every tenant's queued events in the process: it is on the `agenticorg_spend_usage_pending` gauge, not in the route) |
 
 Under the agent visibility rule a reader sees the records with no agent, the records of shared

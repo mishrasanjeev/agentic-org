@@ -31,7 +31,8 @@ to zero without a lookup.
 
 Everything above is pure (``price_with``); the loaders read active cards
 once per batch, one FX rate per (currency, date), and the tenant's model
-aliases (cached for 60 seconds per process, dropped locally on a change).
+aliases (cached for 60 seconds per process, dropped locally on a change;
+never an in-house provider's, which take no alias).
 """
 
 from __future__ import annotations
@@ -497,7 +498,9 @@ def canonical_model(provider: str, model: str, aliases: Mapping[tuple[str, str],
 
     A name that is not a valid SKU is kept lower-cased and bounded (no card
     can name it, so it falls back or is unpriced); it is never refused here,
-    because this runs on metering paths.
+    because this runs on metering paths. An in-house provider's model is
+    never aliased: it is named by the deployment, and GPU allocation matches
+    its calls to a pool by that name.
     """
     name = str(model or "").strip()
     if not name:
@@ -506,11 +509,19 @@ def canonical_model(provider: str, model: str, aliases: Mapping[tuple[str, str],
         sku = vocab.norm_sku(name)
     except SpendError:
         return name.lower()[:128]
+    if provider in vocab.IN_HOUSE_PROVIDERS:
+        return sku
     return aliases.get((provider, sku), sku)
 
 
 async def alias_map(session: Any, tenant_id: uuid.UUID) -> dict[tuple[str, str], str]:
-    """The tenant's aliases, read now: ``(provider, alias) -> model_sku``."""
+    """The tenant's aliases that apply, read now: ``(provider, alias) -> model_sku``.
+
+    ``put_alias`` refuses in-house providers; an in-house alias written before
+    it did is left out here, so it is inert wherever aliases are applied (the
+    writer's model, pricing, the priced-tool set) and a tenant's in-house
+    calls keep the name their GPU pool matches.
+    """
     from sqlalchemy import select
 
     from core.models.spend import SpendModelAlias
@@ -522,7 +533,7 @@ async def alias_map(session: Any, tenant_id: uuid.UUID) -> dict[tuple[str, str],
             )
         )
     ).all()
-    return {(row[0], row[1]): row[2] for row in rows}
+    return {(row[0], row[1]): row[2] for row in rows if row[0] not in vocab.IN_HOUSE_PROVIDERS}
 
 
 async def cached_aliases(session: Any, tenant_id: uuid.UUID) -> dict[tuple[str, str], str]:

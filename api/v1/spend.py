@@ -35,9 +35,9 @@ Administrators and auditors (people whose domains are unrestricted) read
 every usage record, rollup, coverage figure, gap, job and ledger comparison
 unfiltered, as ``GET /audit`` shows them every row; for anyone else usage
 records, rollups (every grouping) and the ledger comparison apply the
-caller's agent visibility, and coverage, gaps and jobs, which sum every
-agent's usage, are refused. Every write needs a tenant administrator signed
-in as a person and is audited. Off
+caller's agent visibility, and coverage, gaps, jobs and GPU allocations,
+which sum every agent's usage, are refused. Every write needs a tenant
+administrator signed in as a person and is audited. Off
 (``spend_intelligence_enabled``), the status route says so and every other
 route is not found.
 """
@@ -1424,11 +1424,19 @@ async def get_job(
     audit_event="spend.gpu_allocations.list",
 )
 async def list_gpu_allocations(
-    start: datetime, end: datetime, tenant_id: str = Depends(get_current_tenant)
+    start: datetime,
+    end: datetime,
+    caller: Caller = Depends(caller_from_request),
+    tenant_id: str = Depends(get_current_tenant),
 ) -> dict[str, Any]:
-    """The tenant's own shares of in-house GPU pool hours starting in ``[start, end)`` (at most 31 days)."""
+    """The tenant's own shares of in-house GPU pool hours starting in ``[start, end)`` (at most 31 days).
+
+    A share sums every agent's calls of the hour and carries no agent, so it cannot be filtered by agent
+    visibility: an administrator or auditor only, 403 ``tenant_wide_read_refused`` otherwise, refused before
+    anything is looked up."""
     spend_on()
     try:
+        access.require_tenant_wide(caller)
         return await gpu.list_allocations(_tenant(tenant_id), start=start, end=end)
     except SpendError as exc:
         raise _refused(exc) from None
