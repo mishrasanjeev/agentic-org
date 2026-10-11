@@ -57,6 +57,7 @@ from core.langgraph.tool_adapter import (
     _build_tool_index,
     build_tools_for_agent,
 )
+from core.llm.content import block_parsing_enabled, content_text, model_answer, strip_code_fence
 from core.pii.pseudonymiser import PseudonymSession
 from core.prompts.context_window import fit_for_call
 from core.prompts.context_window import unwrap as unwrap_llm
@@ -652,7 +653,10 @@ def build_agent_graph(
 
         # Parse output — _parse_json_output guarantees a dict, but be
         # defensive for any future caller that builds output differently.
-        content = last_ai.content or ""
+        # Block content (a list of provider content blocks) is read for its
+        # text once, so the length signal below measures the answer too.
+        # With agent_output_block_parsing off the content is read as before.
+        content = model_answer(last_ai.content or "")
         output = _parse_json_output(content)
         if not isinstance(output, dict):
             output = {"raw_output": output, "status": "completed"}
@@ -1067,8 +1071,31 @@ def _parse_json_output(content: str | list | Any) -> dict[str, Any]:
     version returned whatever ``json.loads`` produced, so a JSON list
     crashed the graph with ``AttributeError: 'list' object has no
     attribute 'get'`` in evaluate/_extract_confidence.
+
+    List content (provider content blocks) is read for each block's text,
+    never ``str()`` of a block: a ``{"type": "text", "text": "```json ..."}``
+    block's repr kept the fenced answer from parsing and leaked the block
+    into ``raw_output``. With ``agent_output_block_parsing`` off the content
+    is parsed as it was before (``_parse_json_output_str_blocks``).
     """
-    # Handle list content (multiple messages) — join into single string
+    if not block_parsing_enabled():
+        return _parse_json_output_str_blocks(content)
+    text = content_text(content)
+    try:
+        parsed = json.loads(strip_code_fence(text))
+    except json.JSONDecodeError:
+        return {"raw_output": text, "status": "completed"}
+    if isinstance(parsed, dict):
+        return parsed
+    # Valid JSON but not an object — wrap to preserve our dict contract.
+    return {"raw_output": parsed, "status": "completed"}
+
+
+def _parse_json_output_str_blocks(content: str | list | Any) -> dict[str, Any]:
+    """The parsing before block content was read for its text: list items are joined by their ``str()``.
+
+    Kept for ``agent_output_block_parsing`` off, the opt-out of that default.
+    """
     if isinstance(content, list):
         content = "\n".join(str(item) for item in content)
     if not isinstance(content, str):
@@ -1084,7 +1111,6 @@ def _parse_json_output(content: str | list | Any) -> dict[str, Any]:
         return {"raw_output": content, "status": "completed"}
     if isinstance(parsed, dict):
         return parsed
-    # Valid JSON but not an object — wrap to preserve our dict contract.
     return {"raw_output": parsed, "status": "completed"}
 
 
