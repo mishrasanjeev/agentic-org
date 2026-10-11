@@ -76,7 +76,7 @@ test("all guide routes, source images, canonical metadata and narrow layouts wor
     await expect(page.locator(".docs-prose h2").first()).toBeVisible();
     expect(
       await page.evaluate(
-        () => document.documentElement.scrollWidth <= window.innerWidth + 1,
+        () => document.documentElement.scrollWidth <= document.documentElement.clientWidth + 1,
       ),
     ).toBe(true);
     for (const image of await page.locator(".docs-prose img").all()) {
@@ -204,7 +204,7 @@ test("BFSI process maps and overview anchor render without JavaScript", async ({
     await expect(map.getByText("Blocked / exception", { exact: true }).first()).toBeVisible();
   }
   await page.goto("/docs");
-  await page.getByRole("link", { name: "Jump to BFSI process maps" }).click();
+  await page.getByRole("link", { name: "Explore BFSI process maps" }).click();
   await expect(page).toHaveURL(/\/docs#bfsi-playbooks$/);
   await expect(page.locator("#bfsi-playbooks")).toBeVisible();
   await context.close();
@@ -313,7 +313,7 @@ test("BFSI overview jump, commerce map link and mobile process labels work", asy
   await expect(map.getByText("Owner:", { exact: true })).toHaveCount(6);
   await expect(map.getByText("Human decision", { exact: true }).first()).toBeVisible();
   await expect(map.getByText("Blocked / exception", { exact: true }).first()).toBeVisible();
-  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1)).toBe(true);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth + 1)).toBe(true);
   const accessible = await new AxeBuilder({ page })
     .include(".docs-site")
     .withTags(["wcag2a", "wcag2aa", "wcag21aa"])
@@ -334,7 +334,7 @@ test("overview and table guides are accessible at compact and tablet widths", as
     await expect(page.locator("h1")).toHaveText("AgenticOrg documentation");
     expect(
       await page.evaluate(
-        () => document.documentElement.scrollWidth <= window.innerWidth + 1,
+        () => document.documentElement.scrollWidth <= document.documentElement.clientWidth + 1,
       ),
     ).toBe(true);
     const home = await new AxeBuilder({ page })
@@ -346,7 +346,7 @@ test("overview and table guides are accessible at compact and tablet widths", as
     await expect(page.locator(".docs-prose table")).toBeVisible();
     expect(
       await page.evaluate(
-        () => document.documentElement.scrollWidth <= window.innerWidth + 1,
+        () => document.documentElement.scrollWidth <= document.documentElement.clientWidth + 1,
       ),
     ).toBe(true);
     const guide = await new AxeBuilder({ page })

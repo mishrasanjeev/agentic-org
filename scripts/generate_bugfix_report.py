@@ -2,13 +2,13 @@
 
 from __future__ import annotations
 
-import datetime
+import datetime as dt
 import os
 
 from fpdf import FPDF
 
 VERSION = "4.0.0"
-DATE = datetime.datetime.now(tz=datetime.UTC).strftime("%Y-%m-%d")
+DATE = dt.datetime.now(tz=dt.UTC).strftime("%Y-%m-%d")
 
 
 class BugReport(FPDF):

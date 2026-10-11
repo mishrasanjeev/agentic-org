@@ -163,6 +163,11 @@ SCOPE_FAMILIES: dict[str, tuple[str, str]] = {
     # rendered for a customer are audit-grade reads; granting consent, editing
     # profiles and rules, and rendering take the approvals write scope.
     "personalisation": ("audit:read", "approvals:write"),
+    # AI spend (core/spend/): spend, rate cards, the organisation tree and
+    # reconciliations are audit-grade reads; changing reference data, running
+    # jobs and reconciling take the approvals write scope and a tenant
+    # administrator.
+    "spend": ("audit:read", "approvals:write"),
     # Long-term memory holds what is remembered about customers and cases:
     # recall is an audit-grade read and a write changes what runs are told,
     # so it takes the approver scope (the sensitive-subsystem precedent).

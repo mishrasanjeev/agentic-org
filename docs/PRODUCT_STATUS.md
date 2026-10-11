@@ -40,6 +40,7 @@ records product behavior and availability, not deployment state.
 | Governed cases | Tenant-gated business onboarding cases, read-only provider investigation, local exact-purpose allowlists, strict grant checks, cited memos, policy scores, screening dispositions, human review, and case hand-off | Exactly one active shared agent per case role, a reviewed provider manifest and policy, Grantex root grant, and a tenant feature flag | Published Python Grantex SDK 0.5.1 does not enforce token-level case purpose or per-case caps; pooled grants are not case-bound. Machine credentials cannot perform human-only decisions. Confirm deployment before calling this live. |
 | Jev/System One | Type-safe Jev adapter, offline synthetic evaluator, and bounded advisory shadow hook | TypeSafe enrollment, a TypeSafe-issued `TYPESAFE_API_KEY`, approved cost/latency gates, and human review | Current enrollment is closed / waitlist; production mode is `off`, live evaluation is not run, and Jev cannot authorize or execute actions |
 | OACP commerce | Merchant config, Seller Commerce Agent onboarding, real Shopify read-only Admin GraphQL sync, signed Shopify webhook rejection, Grantex authority request, durable OACP cache, buyer-safe Q&A, protocol payloads, web/MCP/OpenAPI/A2A/WhatsApp/Telegram bridge routes, Plural/Pine capability verification, purchase preparation, and Offline POS handoff/reconciliation | Shopify, Grantex, channel, provider, and POS credentials or approvals; merchant publishing setting | AgenticOrg does not invent paid/order state or own provider/POS execution |
+| AI spend intelligence | API-only Phase 1: organisation tree, source mappings, model aliases, effective-dated rate cards (contract over list, cached-input prices, volume tiers, and a stored batch discount that Phase 1 does not yet apply), FX to INR, commitments, usage records with server-side attribution and rate-card or list prices for model calls, embeddings, OCR pages, speech minutes, priced tool calls, storage GB-days and in-house GPU node hours, daily rollups, coverage with the unattributed share, meter gaps, audited maintenance jobs, invoice import, reconciliation within a 1% match tolerance, maker-checker acceptance, and the Gate 1 status | `AGENTICORG_SPEND_INTELLIGENCE_ENABLED` on the API, worker, and beat (off by default; off, only `GET /api/v1/spend/status` answers and every other spend route is 404); tenant reference data entered by an administrator; provider invoices for reconciliation | No spend screen in the application; spend dashboards, budgets, spend alerts, forecasting, statements, and month close are later phases. Rate cards, commitments, prices, invoices, reconciliations, and the gate are answered only to a human administrator or auditor; other readers see usage filtered by agent visibility. Records hold identifiers, counts, and amounts, never prompts or responses |
 | Billing and operations | Hosted plan catalog, billing routes, health, migrations, observability hooks, security checks, and reviewed Cloud Run rollout helper | Payment-provider configuration and operational ownership | Billing integration is separate from OACP buyer-payment execution |
 | Activity and feed continuity | Dashboard Recent Activity and Observatory read audit history; Observatory polls the newest 20 rows every 5 seconds and labels that scope. A separate internal feed has tenant-scoped persistence, catch-up/retry, bounded fanout, Redis reconnect, and periodic credential revalidation | Operational event writers, Redis, PostgreSQL, authenticated browser session, and an operator-owned scale budget | No production writer currently publishes into the internal feed; its safe status UI is not mounted as a live dashboard; audit polling is not a complete live stream or full-day total; source-level resilience is not a measured delivery or recovery guarantee |
 
@@ -91,6 +92,11 @@ with a synthetic catalog; it does not create a paid transaction.
   claimed.
 - Jev is not currently an active production router. TypeSafe access is waitlist-
   gated, and no live Jev evaluation result is published.
+- AI spend intelligence is off by default and API-only. A deployment meters
+  nothing until it is enabled, and spend dashboards, budgets, spend alerts,
+  forecasting, statements, and month close are not shipped. The existing cost
+  dashboard and FinOps features keep their own USD figures, which spend
+  intelligence does not change.
 
 ## Verification Pointers
 
@@ -102,5 +108,6 @@ with a synthetic catalog; it does not create a paid transaction.
 - [OACP truth inventory](oacp/truth-inventory.md)
 - [OACP operations](oacp/runtime-operations-runbook.md)
 - [Deployment guide](deployment.md)
+- [AI spend intelligence rollout and enablement](runbooks/spend-intelligence.md)
 - [Scale and resilience assessment](reports/ema-agenticorg-gap-and-resilience-2026-09-24.md)
 - [Backup and recovery evidence boundary](BACKUP_AND_DR.md)

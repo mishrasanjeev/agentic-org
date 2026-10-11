@@ -44,6 +44,7 @@ from core.langgraph.thread_ids import thread_belongs_to_tenant
 from core.models.agent import Agent
 from core.models.audit import AuditLog
 from core.models.hitl import HITLQueue
+from core.spend import context as spend_context
 
 logger = structlog.get_logger()
 
@@ -285,24 +286,25 @@ async def resume_approved_agent_run(tenant_id: uuid.UUID, hitl_id: uuid.UUID) ->
             **caller_grant_for_run(spec[CALLER_GRANT_KEY]).resolve_kwargs(),
         )
     try:
-        result = await runner.resume_agent(
-            agent_id=str(claim.agent_id),
-            thread_id=claim.thread_id,
-            decision=claim.command,
-            system_prompt=claim.system_prompt,
-            authorized_tools=list(spec.get("authorized_tools") or []),
-            llm_model=str(spec.get("llm_model") or ""),
-            confidence_floor=float(spec["confidence_floor"]),
-            hitl_condition=str(spec.get("hitl_condition") or ""),
-            connector_config={},
-            connector_names=spec.get("connector_names"),
-            tenant_id=str(tenant_id),
-            company_id=spec.get("company_id"),
-            domain=spec.get("domain"),
-            llm_provider=spec.get("llm_provider"),
-            require_paused=True,
-            **bound_grant,
-        )
+        with spend_context.scope(application="agents", agent_id=str(claim.agent_id)):
+            result = await runner.resume_agent(
+                agent_id=str(claim.agent_id),
+                thread_id=claim.thread_id,
+                decision=claim.command,
+                system_prompt=claim.system_prompt,
+                authorized_tools=list(spec.get("authorized_tools") or []),
+                llm_model=str(spec.get("llm_model") or ""),
+                confidence_floor=float(spec["confidence_floor"]),
+                hitl_condition=str(spec.get("hitl_condition") or ""),
+                connector_config={},
+                connector_names=spec.get("connector_names"),
+                tenant_id=str(tenant_id),
+                company_id=spec.get("company_id"),
+                domain=spec.get("domain"),
+                llm_provider=spec.get("llm_provider"),
+                require_paused=True,
+                **bound_grant,
+            )
     except CheckpointerUnavailableError as exc:
         result = {"status": "failed", "error": str(exc), "reason": exc.reason}
     # enterprise-gate: broad-except-ok reason=resume-failure-is-recorded-on-the-approval-and-audited

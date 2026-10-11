@@ -8,6 +8,7 @@ from typing import Any
 
 import structlog
 
+from core import spend
 from workflows.parser import WorkflowParser
 
 logger = structlog.get_logger()
@@ -148,6 +149,16 @@ async def _call_llm(prompt: str) -> str:
             genai.configure(api_key=api_key)
             model = genai.GenerativeModel("gemini-1.5-flash")
             response = model.generate_content(prompt)
+            if spend.enabled():
+                spend.note(
+                    "direct_response",
+                    None,
+                    provider="gemini",
+                    model="gemini-1.5-flash",
+                    response=response,
+                    billing_account="platform_key",
+                    default_use_case="workflow.replan",
+                )
             return response.text
     # enterprise-gate: broad-except-ok reason=provider-fallback-continues-to-next-llm-backend
     except Exception as exc:
@@ -167,6 +178,16 @@ async def _call_llm(prompt: str) -> str:
                 messages=[{"role": "user", "content": prompt}],
                 temperature=0.2,
             )
+            if spend.enabled():
+                spend.note(
+                    "direct_response",
+                    None,
+                    provider="openai",
+                    model="gpt-4o-mini",
+                    response=resp,
+                    billing_account="platform_key",
+                    default_use_case="workflow.replan",
+                )
             return resp.choices[0].message.content or ""
     # enterprise-gate: broad-except-ok reason=provider-fallback-ends-in-explicit-replan-error
     except Exception as exc:

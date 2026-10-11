@@ -42,6 +42,7 @@ from typing import TYPE_CHECKING, Any
 
 import structlog
 
+from core import spend
 from core.config import external_keys, is_relaxed_env, settings
 from core.governance.model_gateway import ModelGatewayRefused, RouteRequest
 from core.governance.model_gateway import admit as gateway_admit
@@ -57,6 +58,7 @@ from core.governance.model_gateway_records import (
 from core.governance.model_pricing import price_for
 from core.governance.operator_override import OperatorOverrideBlocked
 from core.governance.residency import ResidencyBlocked
+from core.spend import context as spend_context
 
 if TYPE_CHECKING:
     from core.pii.pseudonymiser import PseudonymSession
@@ -136,6 +138,39 @@ def _model_provider(model: str) -> str | None:
         if provider in model:
             return provider
     return None
+
+
+def _count(obj: Any, name: str) -> int | None:
+    """A token count from a provider usage object, or ``None`` when absent or malformed."""
+    try:
+        value = getattr(obj, name, None)
+        return int(value) if value is not None else None
+    except (AttributeError, TypeError, ValueError):
+        return None
+
+
+def _gemini_raw(response: Any, usage: Any) -> dict[str, Any]:
+    """The raw Gemini response kept on ``LLMResponse``; with spend intelligence on, its cache and thinking counts.
+
+    Thoughts are billed as output and ``candidates_token_count`` excludes them;
+    spend reads both counts from here. Off, the payload is unchanged.
+    """
+    raw: dict[str, Any] = {"candidates": str(response.candidates)}
+    if spend.enabled():
+        raw["usage"] = {
+            "cached_content_token_count": _count(usage, "cached_content_token_count"),
+            "thoughts_token_count": _count(usage, "thoughts_token_count"),
+        }
+    return raw
+
+
+def _spend_usage(response: Any, exc: Exception | None, messages: Any, tenant_id: str | None) -> Any:
+    """The call's usage for the spend meter (``None`` while spend intelligence is off); never raises."""
+    try:
+        return spend_context.call_usage("router", response=response, error=exc, messages=messages, tenant_id=tenant_id)
+    # enterprise-gate: broad-except-ok reason=spend-usage-capture-failure-degrades-to-no-details-the-call-proceeds
+    except Exception:
+        return None
 
 
 def _load_routellm_controller_cls() -> type[Any] | None:
@@ -607,6 +642,7 @@ class LLMRouter:
                 resolved = await get_provider_credential(tenant_id, provider, "llm")
             except ProviderNotConfigured as exc:
                 raise LLMProviderConfigurationError(str(exc)) from exc
+            spend_context.note_credential(provider, resolved.source)
             return resolved.secret
 
         env_secret = {
@@ -616,6 +652,8 @@ class LLMRouter:
         }.get(provider)
         if not env_secret:
             raise LLMProviderConfigurationError(f"{provider.title()} provider is not configured")
+        # The platform's key paid: noted too, so an earlier tenant-key note in this task is not inherited.
+        spend_context.note_credential(provider, "platform_env")
         return env_secret
 
     async def complete(
@@ -683,6 +721,11 @@ class LLMRouter:
             prompt_digest = prompt_digest_of(messages)
             request_digest = messages_digest(messages)
 
+            # Whether the call in flight was recorded, and which model it is: a call the
+            # outer timeout cancels skips _record, and spend counts it as cancelled.
+            recorded = False
+            in_flight = model
+
             async def _record(
                 called: str,
                 outcome: str,
@@ -691,6 +734,8 @@ class LLMRouter:
                 exc: Exception | None,
                 fallback_from: str | None,
             ) -> None:
+                nonlocal recorded
+                recorded = True
                 await record_model_call(
                     decision,
                     provider=_model_provider(called),
@@ -710,6 +755,7 @@ class LLMRouter:
                     prompt_digest=prompt_digest,
                     request_digest=request_digest,
                     response_digest=content_digest(response.content) if response is not None else None,
+                    spend_usage=_spend_usage(response, exc, messages, tenant_id),
                 )
 
             started = time.monotonic()
@@ -743,6 +789,8 @@ class LLMRouter:
                     raise
                 logger.info("llm_falling_back", fallback=self.fallback_model)
                 started = time.monotonic()
+                recorded = False
+                in_flight = self.fallback_model
                 try:
                     response = await self._call_model(self.fallback_model, messages, temp, max_tokens, **scope)
                 # enterprise-gate: broad-except-ok reason=a-failed-fallback-is-recorded-then-raised-unchanged
@@ -752,6 +800,8 @@ class LLMRouter:
                 await _record(self.fallback_model, "completed", started, response, None, model)
                 return response
             finally:
+                if not recorded and tenant_id:
+                    spend.note("cancelled", tenant_id, provider=_model_provider(in_flight))
                 await gateway_release(lease)
 
     async def _call_model(
@@ -907,7 +957,7 @@ class LLMRouter:
             latency_ms=latency,
             input_tokens=input_tokens,
             output_tokens=output_tokens,
-            raw={"candidates": str(response.candidates)},
+            raw=_gemini_raw(response, usage),
         )
 
     async def _call_claude(

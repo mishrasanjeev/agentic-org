@@ -33,6 +33,7 @@ from core.langgraph import debugger
 from core.models.agent import Agent
 from core.models.hitl import HITLQueue
 from core.ownership import AGENT_VISIBILITY_TENANT, Caller, caller_from_request
+from core.spend import context as spend_context
 
 logger = structlog.get_logger()
 router = APIRouter(prefix="/agents/{agent_id}/debug", dependencies=[require_tenant_admin])
@@ -394,28 +395,31 @@ async def _advance_claimed(agent: Any, thread_id: str, tenant_id: str, caller: C
             **caller_grant_for_run(spec[CALLER_GRANT_KEY]).resolve_kwargs(),
         )
     try:
-        result = await runner.resume_agent(
-            agent_id=str(agent_id),
-            thread_id=thread_id,
-            decision={},
-            system_prompt=claim.system_prompt,
-            authorized_tools=list(spec.get("authorized_tools") or []),
-            llm_model=str(spec.get("llm_model") or ""),
-            confidence_floor=float(spec.get("confidence_floor") or 0.88),
-            hitl_condition=str(spec.get("hitl_condition") or ""),
-            connector_config=connector_config,
-            connector_names=connector_names,
-            tenant_id=tenant_id,
-            company_id=spec.get("company_id"),
-            domain=spec.get("domain"),
-            llm_provider=spec.get("llm_provider"),
-            require_paused=True,
-            debug={"mode": mode, "breakpoints": claim.breakpoints},
-            output_schema=spec.get("output_schema"),
-            output_schema_json=spec.get("output_schema_json"),
-            limits=spec.get("limits"),
-            **bound_grant,
-        )
+        with spend_context.scope(
+            application="agents", agent_id=str(agent_id), agent_version=getattr(agent, "version", None)
+        ):
+            result = await runner.resume_agent(
+                agent_id=str(agent_id),
+                thread_id=thread_id,
+                decision={},
+                system_prompt=claim.system_prompt,
+                authorized_tools=list(spec.get("authorized_tools") or []),
+                llm_model=str(spec.get("llm_model") or ""),
+                confidence_floor=float(spec.get("confidence_floor") or 0.88),
+                hitl_condition=str(spec.get("hitl_condition") or ""),
+                connector_config=connector_config,
+                connector_names=connector_names,
+                tenant_id=tenant_id,
+                company_id=spec.get("company_id"),
+                domain=spec.get("domain"),
+                llm_provider=spec.get("llm_provider"),
+                require_paused=True,
+                debug={"mode": mode, "breakpoints": claim.breakpoints},
+                output_schema=spec.get("output_schema"),
+                output_schema_json=spec.get("output_schema_json"),
+                limits=spec.get("limits"),
+                **bound_grant,
+            )
     except CheckpointerUnavailableError as exc:
         result = {"status": "failed", "error": str(exc), "reason": exc.reason}
     # enterprise-gate: broad-except-ok reason=debug-step-failure-is-recorded-on-the-session

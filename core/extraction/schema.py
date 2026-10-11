@@ -8,7 +8,7 @@ the same schema and refuses the whole extraction on any deviation.
 
 from __future__ import annotations
 
-import datetime
+import datetime as dt
 import enum
 import re
 import unicodedata
@@ -122,7 +122,7 @@ def _validate_field(name: str, value: Any, spec: Mapping[str, Any]) -> FieldValu
         if not isinstance(value, str) or not re.fullmatch(_worker.DATE_PATTERN, value):
             raise _fail(f"{name}: expected an ISO date")
         try:
-            datetime.date.fromisoformat(value)
+            dt.date.fromisoformat(value)
         except ValueError as exc:
             raise _fail(f"{name}: expected an ISO date") from exc
         return value

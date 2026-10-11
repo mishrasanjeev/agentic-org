@@ -27,6 +27,7 @@ The product facts endpoint is authoritative for the deployed version and current
 - Provides REST, Python, TypeScript, CLI, MCP, and A2A interfaces.
 - Supports knowledge, reporting, notifications, voice, RPA, and local models when their services are configured.
 - Supports Shopify read-only sync, OACP artifact caching, buyer-safe answers, public commerce surfaces, and non-executing handoff preparation.
+- Records AI spend per organisation unit when AI spend intelligence is enabled (off by default, API-only): usage records with server-side attribution, priced from rate cards and converted to INR, invoice reconciliation per billing month and a Gate 1 status.
 
 ## Boundaries
 
@@ -76,6 +77,7 @@ Pricing comes from core/billing/catalog.py. Infrastructure, model, provider, and
 - [BFSI customer service](https://agenticorg.ai/docs/bfsi-customer-service): procedural support across chat and configured voice.
 - [BFSI insurance assistance](https://agenticorg.ai/docs/bfsi-insurance): claim-file completeness and OCR quality review.
 - [BFSI merchant services](https://agenticorg.ai/docs/bfsi-merchant-services): Shopify evidence, OACP and provider-owned execution boundaries.
+- [AI spend intelligence](https://agenticorg.ai/docs/ai-spend-intelligence): off-by-default spend records, rate cards, attribution coverage, invoice reconciliation and the Gate 1 status.
 - [Troubleshooting](https://agenticorg.ai/docs/troubleshooting): isolate configuration, authority, knowledge and provider failures.
 
 ## Developer access

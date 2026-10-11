@@ -26,12 +26,16 @@ test("both production UI images preserve the repository layout and include autho
     assert.match(dockerfile, /COPY core\/governance\/model_gateway\.py \.\.\/core\/governance\/model_gateway\.py/);
     assert.match(dockerfile, /COPY core\/governance\/guardrails\/ \.\.\/core\/governance\/guardrails\//);
     assert.match(dockerfile, /COPY observability\/workload\.py observability\/timeline\.py \.\.\/observability\//);
+    assert.match(dockerfile, /COPY api\/v1\/spend\.py \.\.\/api\/v1\/spend\.py/);
+    assert.match(dockerfile, /COPY core\/spend\/pricing\.py core\/spend\/reconcile\.py core\/spend\/gate\.py core\/spend\/access\.py \.\.\/core\/spend\//);
   }
   const dockerignore = readFileSync(new URL("../../.dockerignore", import.meta.url), "utf8");
   assert.match(dockerignore, /^!docs\/a2a-commerce-demo\.md$/m);
   assert.match(dockerignore, /^!docs\/a2a-interoperability\.md$/m);
   assert.match(dockerignore, /^!docs\/bfsi\/functional-coverage\.md$/m);
   assert.match(dockerignore, /^!docs\/bfsi\/capability-baseline\.json$/m);
+  assert.match(dockerignore, /^!docs\/finops\/$/m);
+  assert.match(dockerignore, /^!docs\/finops\/spend-intelligence\.md$/m);
 });
 
 test("the complete manual has maintained source references and five BFSI playbooks", () => {
@@ -53,7 +57,14 @@ test("the complete manual has maintained source references and five BFSI playboo
   assert.equal(manual.groups.length, 5);
   const coverage = manual.articles.find((article) => article.slug === "bfsi-capability-status");
   assert.ok(coverage);
-  assert.match(coverage.html, /15\s*covered, 102 partial and 33 gaps/);
+  // The counts are refreshed with the BFSI coverage rows, so check that the
+  // stated breakdown adds up to the stated total rather than pinning numbers.
+  const counts = coverage.html.match(
+    /<strong>(\d+) functional capabilities<\/strong>: <strong>(\d+)\s+covered, (\d+) partial and (\d+) gaps<\/strong>/,
+  );
+  assert.ok(counts, "bfsi-capability-status states its capability counts");
+  const [total, covered, partial, gaps] = counts.slice(1).map(Number);
+  assert.equal(covered + partial + gaps, total);
   assert.ok(
     manual.articles.every(
       (article) => article.sources.length && article.headings.length >= 3,
@@ -71,6 +82,13 @@ test("the complete manual has maintained source references and five BFSI playboo
     assert.match(article.html, /Blocked \/ exception/);
     assert.match(article.html, /href="\/docs\/bfsi-capability-status"/);
   }
+  const spend = manual.articles.find((article) => article.slug === "ai-spend-intelligence");
+  assert.ok(spend);
+  assert.equal(spend.group, "Govern And Operate");
+  assert.match(spend.html, /AGENTICORG_SPEND_INTELLIGENCE_ENABLED/);
+  assert.match(spend.html, /class="docs-flow docs-process-map" aria-label="Process map"/);
+  assert.equal([...spend.html.matchAll(/class="docs-process-content"/g)].length, 6);
+  assert.ok(spend.sources.includes("docs/finops/spend-intelligence.md"));
   const commerce = manual.articles.find((article) => article.slug === "commerce");
   assert.match(commerce.html, /href="\/docs\/bfsi-merchant-services#process-map"/);
 });

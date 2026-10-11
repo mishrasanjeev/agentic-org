@@ -365,6 +365,11 @@
   margin: 8px 0 0;
   color: #51665a;
 }
+/* A long setting or route name in a step wraps instead of overlapping the next step. */
+.docs-flow p,
+.docs-flow strong {
+  overflow-wrap: anywhere;
+}
 .docs-prose .docs-process-map {
   display: flex;
   flex-direction: column;
@@ -700,7 +705,7 @@
 }
 .docs-start {
   display: flex;
-  gap: 20px;
+  gap: 12px 20px;
   align-items: center;
   flex-wrap: wrap;
   margin: 24px 0;

@@ -1,6 +1,6 @@
 import { useState, useRef, useCallback, useEffect, type FormEvent } from "react";
 import { Link, useLocation } from "react-router";
-import { ArrowRight, BookOpen, Building2, FileText, Network } from "lucide-react";
+import { ArrowRight, BookOpen, Building2, FileText, IndianRupee, Network } from "lucide-react";
 import publicSite from "../content/publicSite.json";
 import AgentActivityTicker from "../components/AgentActivityTicker";
 import AgentsInAction from "../components/AgentsInAction";
@@ -166,7 +166,16 @@ const OACP_SECTION_POINTS = [
   },
 ];
 
-const SHIPPED_RUNTIME = [
+type RuntimeCapability = {
+  title: string;
+  status: string;
+  copy: string;
+  href: string;
+  /* Built but switched off by default: the status reads amber, not the shipped green. */
+  offByDefault?: boolean;
+};
+
+const SHIPPED_RUNTIME: RuntimeCapability[] = [
   {
     title: "Knowledge + OCR",
     status: "Shipped",
@@ -196,6 +205,13 @@ const SHIPPED_RUNTIME = [
     status: "Shipped / bounded",
     copy: "Read-only sync, Grantex authority, durable artifacts, buyer-safe answers, and prepared provider or POS handoffs.",
     href: "/open-agentic-commerce-protocol",
+  },
+  {
+    title: "AI spend intelligence",
+    status: "Built / off by default",
+    copy: "API-only rupee spend records for model calls and non-token usage, attributed to the organisation tree, with invoice reconciliation and a Gate 1 status. Meters nothing until a deployment enables it.",
+    href: "/docs/ai-spend-intelligence",
+    offByDefault: true,
   },
 ];
 
@@ -731,7 +747,7 @@ export default function Landing() {
               <p className="text-sm font-semibold uppercase tracking-[0.18em] text-cyan-300">Current product boundary</p>
               <h2 id="shipped-runtime-heading" className="mt-3 text-3xl font-bold text-white sm:text-4xl">What the deployed runtime does today.</h2>
               <p className="mt-4 text-base leading-relaxed text-slate-300">
-                Shipped means the code path and release surface exist. Provider credentials, tenant scopes, approved destinations, and external-channel access are still required where noted.
+                Shipped means the code path and release surface exist. Built / off by default means the code is in the release but does nothing until an operator enables it. Provider credentials, tenant scopes, approved destinations, and external-channel access are still required where noted.
               </p>
             </div>
             <a
@@ -742,16 +758,17 @@ export default function Landing() {
             </a>
           </div>
 
-          <div className="mt-10 grid border-y border-white/15 sm:grid-cols-2 lg:grid-cols-5">
+          <div className="mt-10 grid border-t border-white/15 sm:grid-cols-2 lg:grid-cols-3">
             {SHIPPED_RUNTIME.map((capability) => {
+              const statusTone = capability.offByDefault ? "text-amber-200" : "text-emerald-300";
               const content = (
                 <>
-                  <p className="text-xs font-semibold uppercase tracking-[0.14em] text-emerald-300">{capability.status}</p>
+                  <p className={`text-xs font-semibold uppercase tracking-[0.14em] ${statusTone}`}>{capability.status}</p>
                   <h3 className="mt-3 text-lg font-bold text-white">{capability.title}</h3>
                   <p className="mt-3 text-sm leading-relaxed text-slate-400">{capability.copy}</p>
                 </>
               );
-              const className = "block min-w-0 border-b border-white/15 px-4 py-6 transition-colors hover:bg-white/5 sm:border-r lg:border-b-0";
+              const className = "block min-w-0 border-b border-white/15 px-4 py-6 transition-colors hover:bg-white/5 sm:border-r";
               return capability.href.startsWith("/") ? (
                 <Link key={capability.title} to={capability.href} className={className}>{content}</Link>
               ) : (
@@ -1210,13 +1227,14 @@ export default function Landing() {
           <p className="text-xs font-semibold text-emerald-800 mb-3">USER DOCUMENTATION</p>
           <h2 id="documentation-heading" className="text-3xl font-bold text-slate-900">Make AgenticOrg part of everyday work.</h2>
           <p className="text-slate-600 mt-4 max-w-2xl">Step-by-step setup, everyday operating guides and end-to-end banking, financial-services and insurance examples. Start with one useful agent, then build a working team.</p>
-          <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-6 mt-9">
+          <div className="grid sm:grid-cols-2 xl:grid-cols-5 gap-6 mt-9">
             {[
               { icon: BookOpen, title: "Your first agent", text: "A complete document-review exercise, from setup to tested answers.", href: "/docs/first-agent" },
               { icon: FileText, title: "Documents and OCR", text: "Upload, inspect extraction quality and verify source-grounded retrieval.", href: "/docs/knowledge-and-ocr" },
               { icon: Network, title: "Connect and orchestrate", text: "Models, business systems, workflows, voice and browser automation.", href: "/docs/workflows" },
               { icon: Building2, title: "BFSI process maps", text: "Onboarding, reconciliation, customer service, claims and merchant enablement.", href: "/docs#bfsi-playbooks" },
-            ].map(({ icon: Icon, title, text, href }) => <Link key={href} to={href} className="border-t-2 border-emerald-700 pt-5 group">
+              { icon: IndianRupee, title: "AI spend intelligence", text: "Organisation tree, rate cards, attributed usage, invoice reconciliation and the Gate 1 status. Off by default.", href: "/docs/ai-spend-intelligence", wide: true },
+            ].map(({ icon: Icon, title, text, href, wide }) => <Link key={href} to={href} className={`border-t-2 border-emerald-700 pt-5 group${wide ? " sm:col-span-2 xl:col-span-1" : ""}`}>
               <Icon size={22} className="text-emerald-800 mb-4" aria-hidden="true" />
               <h3 className="font-semibold text-slate-900 flex items-center justify-between gap-2">{title}<ArrowRight size={16} className="shrink-0" aria-hidden="true" /></h3>
               <p className="text-sm text-slate-600 mt-2 leading-relaxed">{text}</p>

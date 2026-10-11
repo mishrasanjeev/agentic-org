@@ -78,6 +78,57 @@ tracks remaining connection-scale, load, and restore work; the
 [recovery guide](docs/BACKUP_AND_DR.md) separates planned targets from proven
 production controls.
 
+### AI spend intelligence
+
+AI spend intelligence measures AI spend in rupees against the organisation's
+own structure. It is off by default behind
+`AGENTICORG_SPEND_INTELLIGENCE_ENABLED`: while it is off,
+`GET /api/v1/spend/status` answers `enabled: false`, every other spend route
+returns 404 and nothing is metered. Phase 1 is API-only; the application has
+no spend screen yet.
+
+When a deployment turns it on, administrators keep the reference data spend is
+measured against: an organisation tree, source mappings, model aliases,
+effective-dated rate cards (a contract card ranks above a list card, with
+cached-input prices, volume tiers and a stored batch discount that phase 1 does
+not yet apply), FX rates that convert every price
+to INR, and commitments. Every metered model call is written as usage records
+with server-side attribution, priced at the rate card in force on its billing
+date (or the deployment's list price for model tokens), and so are embeddings,
+OCR pages, speech minutes, priced tool calls, storage GB-days and in-house GPU
+node hours. Daily rollups, coverage
+with the unattributed share, meter gaps and audited maintenance jobs sit on
+these records. Provider invoices are imported and reconciled per billing month
+within a 1% match tolerance; a difference is accepted with a reason by an
+administrator other than the invoice importer. `GET /api/v1/spend/gate`
+reports the Gate 1 status of a month: at least 98% of INR spend attributed to
+a business unit, department, team or cost centre, with no unpriced,
+unconverted or FX-pending record, and every provider reconciled within 1%.
+
+```mermaid
+flowchart TD
+  flag{"AGENTICORG_SPEND_INTELLIGENCE_ENABLED"}
+  flag -->|"off, the default"| off["Only GET /api/v1/spend/status answers, other spend routes are 404"]
+  flag -->|"on"| ref["Reference data: organisation tree, source mappings, model aliases, rate cards, FX to INR, commitments"]
+  usage["Model calls, embeddings, OCR pages, speech minutes, priced tool calls, storage GB-days, GPU node hours"] --> meter["Meter and writer: server-side attribution and pricing"]
+  ref --> meter
+  meter --> records["Usage records"]
+  records --> rollups["Daily rollups, coverage and the unattributed share"]
+  invoices["Imported provider invoices"] --> recon["Reconciliation per provider and billing month"]
+  records --> recon
+  recon -->|"outside the 1% match tolerance"| accept["Acceptance with a reason by a second administrator"]
+  rollups --> gate(["Gate 1 status: at least 98% attributed and every provider within 1%"])
+  recon --> gate
+```
+
+Rate cards, commitments, prices, invoices, reconciliations and the gate are
+answered only to a human administrator or auditor. Other readers see usage
+filtered by agent visibility and are refused tenant-wide figures. Spend
+dashboards, budgets, spend alerts, forecasting, statements and month close
+are later phases. See the [user guide](docs/user-guide/ai-spend-intelligence.md),
+the [feature reference](docs/finops/spend-intelligence.md) and the
+[rollout runbook](docs/runbooks/spend-intelligence.md).
+
 ## What is in this repository
 
 | Area | Current implementation |
@@ -91,6 +142,7 @@ production controls.
 | Developer access | REST API, Python SDK and CLI, TypeScript SDK, MCP server, legacy A2A-shaped task APIs, and source-implemented A2A v1 HTTP+JSON synchronous text |
 | Commerce | Merchant-scoped Shopify read-only sync, OACP artifact intake/cache, buyer-safe answers, public catalog surfaces, and prepared provider or POS handoffs |
 | Operations | PostgreSQL, Redis, object storage, observability hooks, migrations, security checks, and Cloud Run deployment tooling |
+| AI spend intelligence | Off by default; API-only organisation tree, source mappings, rate cards, FX to INR, commitments, attributed usage records for model calls and non-token usage, daily rollups, coverage, invoice reconciliation, maker-checker acceptance, and the Gate 1 status |
 
 A source definition is not evidence that a specific tenant has connected the provider or enabled write access. The Connectors page now separates registration from configured credentials and a recent, stale, failed, or missing health check. That evidence does not verify provider scopes, API contract coverage, sustained sync, or an error budget. Connector actions still require approved credentials, scopes, policies, and provider availability.
 
@@ -123,6 +175,11 @@ A source definition is not evidence that a specific tenant has connected the pro
   and approved-domain egress controls. A run remains an explicit external
   action. See [RPA runtime](docs/rpa-runtime.md).
 - Outbound notifications and local-model profiles require their supporting services.
+- AI spend intelligence is off by default. Nothing is metered until `AGENTICORG_SPEND_INTELLIGENCE_ENABLED`
+  is set on the API, worker, and beat services. Attribution follows the organisation tree and mappings a
+  tenant administrator enters; prices come from the tenant's rate cards, else the deployment's list prices
+  for model tokens, converted to INR with the tenant's FX rates. Follow the
+  [rollout and enablement runbook](docs/runbooks/spend-intelligence.md).
 - SSO, SCIM, enterprise support, and custom SLAs depend on plan and deployment configuration.
 - WhatsApp, Telegram, payment-provider, bank, POS, and merchant-system flows require provider setup and verified callbacks or adapters.
 - WooCommerce, ERP, PIM, OMS, WMS, custom commerce APIs, and additional payment rails can be recorded as adapter-ready configuration but are not represented as active execution paths until an approved adapter exists.
@@ -405,6 +462,7 @@ To refresh the tracked sitemap and llms copies plus route JSON-LD CSP hashes:
 - [Architecture](docs/architecture.md)
 - [API reference](docs/api-reference.md)
 - [Deployment](docs/deployment.md)
+- [AI spend intelligence user guide](docs/user-guide/ai-spend-intelligence.md), [feature reference](docs/finops/spend-intelligence.md) and [rollout and enablement runbook](docs/runbooks/spend-intelligence.md)
 - [Knowledge ingestion and OCR](docs/knowledge-ingestion.md)
 - [Local voice, email, RPA, and OCR simulation](docs/local-multichannel-simulation.md)
 - [Voice runtime](docs/voice-runtime.md)

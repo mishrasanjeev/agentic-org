@@ -162,3 +162,35 @@ groups:
             refused rather than shown, so nothing unverified reaches a reviewer, but the stored
             copy needs investigating.
           runbook: docs/operations/metrics.md#chain-verification-failure
+
+      - alert: AgenticOrgSpendWriteFailures
+        # Usage events the spend writer could not write, other than a tenant an operator paused on
+        # purpose. Each one is counted per tenant as a meter gap and spilled to a worker where it can
+        # be; a sustained rate means spend records are going missing and coverage will show it.
+        expr: sum(rate(agenticorg_spend_usage_write_failures_total{reason!="paused"}[15m])) > 0
+        for: 15m
+        labels:
+          severity: warning
+          area: cost
+        annotations:
+          summary: "Spend usage events are not being written"
+          description: >-
+            The spend usage writer is dropping, spilling or failing to write usage events. Check the
+            reason label, the database and the maintenance queue; the per-tenant meter gaps show what
+            was lost.
+          runbook: docs/finops/spend-intelligence.md#writer-alerts
+
+      - alert: AgenticOrgSpendWriterBacklog
+        # 80% of the writer's in-process queue. Past the queue's bound new usage events are dropped
+        # (and counted), so a backlog that stays this high is the warning before the loss.
+        expr: max(agenticorg_spend_usage_pending) > 4000
+        for: 10m
+        labels:
+          severity: warning
+          area: cost
+        annotations:
+          summary: "The spend usage writer is falling behind"
+          description: >-
+            An instance holds more than 4000 usage events it has not written. The database may be slow
+            or a rebuild may be holding rollup days; past 5000 events new usage is dropped and counted.
+          runbook: docs/finops/spend-intelligence.md#writer-alerts

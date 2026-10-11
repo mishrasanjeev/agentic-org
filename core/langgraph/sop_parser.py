@@ -19,6 +19,7 @@ from typing import Any
 
 import structlog
 
+from core import spend
 from core.langgraph.llm_factory import create_chat_model
 from core.langgraph.tool_adapter import _build_tool_index
 
@@ -145,6 +146,8 @@ async def parse_sop_document(
         SystemMessage(content=system_prompt),
         HumanMessage(content=user_message),
     ])
+    if spend.enabled():
+        spend.note("message", tenant_id, message=response, llm=llm, default_use_case="sop.parse")
 
     # Parse the response
     content = response.content or ""

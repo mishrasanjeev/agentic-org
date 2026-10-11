@@ -34,6 +34,9 @@ ALERT_INSTRUMENTS: Final[dict[str, tuple[str, ...]]] = {
         "agenticorg_case_decision_dwell_seconds",
         "agenticorg_governed_case_transitions_total",
     ),
+    # AI spend intelligence (core/spend/writer.py): usage events lost or backing up.
+    "AgenticOrgSpendWriteFailures": ("agenticorg_spend_usage_write_failures_total",),
+    "AgenticOrgSpendWriterBacklog": ("agenticorg_spend_usage_pending",),
 }
 
 #: Every instrument any alert reads.

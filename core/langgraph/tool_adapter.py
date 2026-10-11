@@ -27,6 +27,7 @@ from auth.grant_enforcement import EnforcementMode, GrantCallContext, enforce_co
 from auth.run_grants import RunGrant, check_run_grant
 from connectors.framework.base_connector import BaseConnector
 from connectors.registry import ConnectorRegistry
+from core import spend
 from core.config import is_strict_runtime_env, settings
 from core.governance.action_policy import (
     ActionContext,
@@ -335,6 +336,11 @@ async def _execute_connector_tool(
             remote_schema_hash=remote_schema_hash,
         )
         tracing.set_attributes(**{"tool.outcome": _tool_outcome(result)})
+        # AI spend (core/spend/metering.py): a successful call of a tool a rate card prices.
+        if spend.enabled():
+            spend.note(
+                "tool_call", tenant_id, connector=connector_name, tool=tool_name, agent_id=agent_id, result=result
+            )
         return result
 
 
