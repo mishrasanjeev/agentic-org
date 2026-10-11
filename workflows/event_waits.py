@@ -20,6 +20,7 @@ import structlog
 from sqlalchemy import select
 
 from core.config import settings
+from workflows.tenant_sessions import bind_transaction_tenant, lookup_tenants, tenant_transaction
 
 logger = structlog.get_logger()
 
@@ -78,16 +79,14 @@ class EventWaitRecord:
 
 
 class WorkflowEventWaitRepository(Protocol):
-    async def register(self, record: EventWaitRecord) -> EventWaitRecord:
-        ...
+    async def register(self, record: EventWaitRecord) -> EventWaitRecord: ...
 
     async def list_waiting(
         self,
         *,
         event_types: Sequence[str] | None = None,
         tenant_id: uuid.UUID | None = None,
-    ) -> list[EventWaitRecord]:
-        ...
+    ) -> list[EventWaitRecord]: ...
 
     async def claim_matched(
         self,
@@ -96,16 +95,14 @@ class WorkflowEventWaitRepository(Protocol):
         step_id: str,
         matched_event_id: str | None,
         event_data: dict[str, Any],
-    ) -> EventWaitRecord | None:
-        ...
+    ) -> EventWaitRecord | None: ...
 
     async def mark_timed_out(
         self,
         *,
         engine_run_id: str,
         step_id: str,
-    ) -> EventWaitRecord | None:
-        ...
+    ) -> EventWaitRecord | None: ...
 
 
 class InMemoryWorkflowEventWaitRepository:
@@ -197,14 +194,18 @@ class InMemoryWorkflowEventWaitRepository:
 class SqlAlchemyWorkflowEventWaitRepository:
     """PostgreSQL implementation using the app async SQLAlchemy session factory."""
 
-    def __init__(self, session_factory: Any) -> None:
+    def __init__(self, session_factory: Any, *, tenant_id: uuid.UUID | None = None) -> None:
         self._session_factory = session_factory
+        self._tenant_id = tenant_id
 
     async def register(self, record: EventWaitRecord) -> EventWaitRecord:
         from core.models.workflow import WorkflowEventWait
 
+        if self._tenant_id is not None and record.tenant_id != self._tenant_id:
+            raise ValueError("Event wait tenant does not match repository scope")
         async with self._session_factory() as session:
             async with session.begin():
+                await bind_transaction_tenant(session, record.tenant_id)
                 row = (
                     await session.execute(
                         select(WorkflowEventWait)
@@ -212,6 +213,7 @@ class SqlAlchemyWorkflowEventWaitRepository:
                             WorkflowEventWait.engine_run_id == record.engine_run_id,
                             WorkflowEventWait.step_id == record.step_id,
                             WorkflowEventWait.status == ACTIVE_STATUS,
+                            WorkflowEventWait.tenant_id == record.tenant_id,
                         )
                         .with_for_update()
                     )
@@ -254,8 +256,7 @@ class SqlAlchemyWorkflowEventWaitRepository:
 
         conditions = [
             WorkflowEventWait.status == ACTIVE_STATUS,
-            (WorkflowEventWait.timeout_at.is_(None))
-            | (WorkflowEventWait.timeout_at > datetime.now(UTC)),
+            (WorkflowEventWait.timeout_at.is_(None)) | (WorkflowEventWait.timeout_at > datetime.now(UTC)),
         ]
         if event_types:
             conditions.append(WorkflowEventWait.event_type.in_(list(event_types)))
@@ -264,10 +265,10 @@ class SqlAlchemyWorkflowEventWaitRepository:
         else:
             conditions.append(WorkflowEventWait.tenant_id == tenant_id)
 
-        async with self._session_factory() as session:
-            rows = (
-                await session.execute(select(WorkflowEventWait).where(*conditions))
-            ).scalars().all()
+        if self._tenant_id is not None and tenant_id != self._tenant_id:
+            return []
+        async with tenant_transaction(self._session_factory, tenant_id) as session:
+            rows = (await session.execute(select(WorkflowEventWait).where(*conditions))).scalars().all()
             return [self._from_model(row) for row in rows]
 
     async def claim_matched(
@@ -280,8 +281,8 @@ class SqlAlchemyWorkflowEventWaitRepository:
     ) -> EventWaitRecord | None:
         from core.models.workflow import WorkflowEventWait
 
-        async with self._session_factory() as session:
-            async with session.begin():
+        async for tenant in lookup_tenants(self._session_factory, self._tenant_id):
+            async with tenant_transaction(self._session_factory, tenant) as session:
                 row = (
                     await session.execute(
                         select(WorkflowEventWait)
@@ -289,12 +290,13 @@ class SqlAlchemyWorkflowEventWaitRepository:
                             WorkflowEventWait.engine_run_id == engine_run_id,
                             WorkflowEventWait.step_id == step_id,
                             WorkflowEventWait.status == ACTIVE_STATUS,
+                            WorkflowEventWait.tenant_id == tenant,
                         )
                         .with_for_update()
                     )
                 ).scalar_one_or_none()
                 if row is None or row.status != ACTIVE_STATUS:
-                    return None
+                    continue
 
                 now = datetime.now(UTC)
                 row.status = "matched"
@@ -303,6 +305,7 @@ class SqlAlchemyWorkflowEventWaitRepository:
                 row.matched_event_id = matched_event_id
                 row.matched_event = _json_safe(event_data)
                 return self._from_model(row)
+        return None
 
     async def mark_timed_out(
         self,
@@ -312,14 +315,15 @@ class SqlAlchemyWorkflowEventWaitRepository:
     ) -> EventWaitRecord | None:
         from core.models.workflow import WorkflowEventWait
 
-        async with self._session_factory() as session:
-            async with session.begin():
+        async for tenant in lookup_tenants(self._session_factory, self._tenant_id):
+            async with tenant_transaction(self._session_factory, tenant) as session:
                 row = (
                     await session.execute(
                         select(WorkflowEventWait)
                         .where(
                             WorkflowEventWait.engine_run_id == engine_run_id,
                             WorkflowEventWait.step_id == step_id,
+                            WorkflowEventWait.tenant_id == tenant,
                         )
                         .order_by(WorkflowEventWait.updated_at.desc().nullslast())
                         .limit(1)
@@ -327,11 +331,12 @@ class SqlAlchemyWorkflowEventWaitRepository:
                     )
                 ).scalar_one_or_none()
                 if row is None:
-                    return None
+                    continue
                 if row.status == ACTIVE_STATUS:
                     row.status = "timed_out"
                     row.updated_at = datetime.now(UTC)
                 return self._from_model(row)
+        return None
 
     @staticmethod
     def _from_model(row: Any) -> EventWaitRecord:
@@ -361,21 +366,21 @@ class WorkflowEventWaitStore:
         repository: WorkflowEventWaitRepository | None = None,
         redis: aioredis.Redis | None = None,
     ) -> None:
-        self.repository: WorkflowEventWaitRepository = (
-            repository or InMemoryWorkflowEventWaitRepository()
-        )
+        self.repository: WorkflowEventWaitRepository = repository or InMemoryWorkflowEventWaitRepository()
         self._repository_explicit = repository is not None
         self.redis = redis
         self._redis_explicit = redis is not None
 
-    async def init(self) -> None:
+    async def init(self, *, tenant_id: uuid.UUID | None = None) -> None:
         if not self._redis_explicit:
             self.redis = aioredis.from_url(settings.redis_url, decode_responses=True)
         if not self._repository_explicit:
             from core.database import current_session_factory
 
             # Resolved per call, not captured (FINDINGS A-53).
-            self.repository = SqlAlchemyWorkflowEventWaitRepository(lambda: current_session_factory()())
+            self.repository = SqlAlchemyWorkflowEventWaitRepository(
+                lambda: current_session_factory()(), tenant_id=tenant_id
+            )
 
     async def close(self) -> None:
         if not self.redis or self._redis_explicit:
