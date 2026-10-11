@@ -31,6 +31,7 @@ from core.ai_providers.catalog import (
     llm_models_for,
     llm_providers,
 )
+from core.ai_providers.defaults import fallback_model, primary_model
 from core.ai_providers.settings import invalidate_tenant_ai_setting_cache
 from core.database import get_tenant_session
 from core.models.tenant_ai_setting import (
@@ -132,6 +133,7 @@ class TenantAISettingUpdate(BaseModel):
 class RegistryOut(BaseModel):
     llm: dict[str, Any]
     embedding: dict[str, Any]
+    defaults: dict[str, str] = Field(default_factory=dict)
 
 
 def _to_out(row: TenantAISetting | None, tenant_id: str) -> TenantAISettingOut:
@@ -201,7 +203,11 @@ async def list_registry() -> RegistryOut:
         ]
         for provider in embedding_providers()
     }
-    return RegistryOut(llm=llm_items, embedding=embedding_items)
+    return RegistryOut(
+        llm=llm_items,
+        embedding=embedding_items,
+        defaults={"reasoning_model": primary_model(), "fallback_model": fallback_model()},
+    )
 
 
 @router.get("", response_model=TenantAISettingOut)

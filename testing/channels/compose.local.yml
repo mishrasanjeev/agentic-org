@@ -1,0 +1,40 @@
+# SPDX-License-Identifier: Apache-2.0
+# Use with docker-compose.dev.yml and a separate Compose project.
+services:
+  api:
+    image: ${AGENTICORG_CHANNEL_API_IMAGE:-agenticorg-channel-api:local}
+    volumes: [".:/app:ro"]
+  migrate:
+    image: ${AGENTICORG_CHANNEL_API_IMAGE:-agenticorg-channel-api:local}
+    volumes: [".:/app:ro"]
+  worker:
+    image: ${AGENTICORG_CHANNEL_API_IMAGE:-agenticorg-channel-api:local}
+    volumes: [".:/app:ro"]
+  beat:
+    image: ${AGENTICORG_CHANNEL_API_IMAGE:-agenticorg-channel-api:local}
+    volumes: [".:/app:ro"]
+    environment:
+      AGENTICORG_ENV: development
+      AGENTICORG_DB_URL: postgresql+asyncpg://agenticorg:agenticorg_dev@postgres:5432/agenticorg
+      AGENTICORG_REDIS_URL: redis://redis:6379/0
+      AGENTICORG_SECRET_KEY: agenticorg-dev-only-do-not-use-in-production
+    command: python -m celery -A core.tasks.celery_app beat --loglevel=info --schedule=/tmp/channel-beat
+    healthcheck:
+      disable: true
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+  mock-provider:
+    image: ${AGENTICORG_CHANNEL_API_IMAGE:-agenticorg-channel-api:local}
+  tools:
+    image: agenticorg-channel-tools:local
+  ui:
+    image: agenticorg-channel-ui:local
+  oidc-stub:
+    image: agenticorg-channel-oidc:local
+  oidc-approvers:
+    image: agenticorg-channel-oidc:local
+  model-stub:
+    image: ${AGENTICORG_CHANNEL_MODEL_IMAGE:-agenticorg-channel-model-stub:local}

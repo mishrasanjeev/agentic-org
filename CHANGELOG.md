@@ -78,6 +78,30 @@ is 4.8.0; versions 4.1 to 4.8 have no sections of their own.
   existing capability inventory; check public and domain summaries against that
   inventory instead of stale counts.
 
+### Changed - configurable reasoning default
+- Newly created agents and unset platform model defaults use
+  `gemini-3.5-flash-lite`. Existing explicit models are not rewritten. This is a
+  deliberate default/cost change: choose another provider/model in AI settings or
+  set `AGENTICORG_LLM_PRIMARY` and `AGENTICORG_LLM_FALLBACK` to opt out.
+- Added catalog and standard text pricing for the new model. Runner estimates
+  account for input/output usage instead of applying the legacy blended rate to
+  this model. Speech synthesis still requires a separate provider.
+
+### Added - bring-your-own channel workflow intake
+- Owner-scoped encrypted channel bindings and a three-step setup screen for
+  WhatsApp, Messenger, Telegram, Viber, Mailgun inbound email and signed gateways.
+- Signed, bounded text callbacks, tenant-scoped duplicate protection, one-time
+  private sender linking, explicit email/unlinked-message review and durable
+  worker dispatch through existing agent/workflow authorization and approvals.
+- Forward migration `v6_z83_channel_bindings` adds RLS-protected bindings, sender
+  links and receipts. Run migrations before starting the API/worker/beat release.
+- Credentials rotate without disclosure; rotation and disable revoke delegation.
+  Uncertain executions require review and are never blindly replayed. Optional
+  native replies contain status only. Added an account creation/verification guide.
+- No native WeChat adapter, channel attachment ingestion or automatic email
+  identity delegation is claimed. Real provider delivery requires BYO accounts
+  and authorized test contacts; local simulations are labeled separately.
+
 ### Security - breaking for audit readers of tenants that keep spend rows: `GET /audit` hides commercial spend audit rows by default
 - A deliberate default, on whatever `spend_intelligence_enabled` says:
   `GET /audit` hides the audit rows of rate cards, commitments, invoices,

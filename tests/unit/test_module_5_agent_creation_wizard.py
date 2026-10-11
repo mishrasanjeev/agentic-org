@@ -26,8 +26,8 @@ Pinned contracts:
   on the Agent model).
 - Shadow-fleet limit enforced (409 if exceeded) — fail-closed
   on safety errors per the Codex 2026-04-22 audit.
-- LLM fallback model defaults to gemini-2.5-flash-preview-05-20
-  in the wizard payload.
+- LLM fallback defaults to the selected reasoning model in the wizard payload;
+  a different fallback must be configured explicitly.
 """
 
 from __future__ import annotations

@@ -218,8 +218,8 @@ def _load_routellm_controller_cls() -> type[Any] | None:
 # 3-tier rework moves Flash to Tier2 and uses Flash-Lite for Tier1
 # so high-volume classify/extract calls land at the cheapest model.
 CLOUD_TIERS: dict[str, str] = {
-    "tier1": os.getenv("AGENTICORG_LLM_TIER1", "gemini-2.5-flash-lite"),
-    "tier2": os.getenv("AGENTICORG_LLM_TIER2", "gemini-2.5-flash"),
+    "tier1": os.getenv("AGENTICORG_LLM_TIER1", "gemini-3.5-flash-lite"),
+    "tier2": os.getenv("AGENTICORG_LLM_TIER2", "gemini-3.5-flash-lite"),
     "tier3": os.getenv("AGENTICORG_LLM_TIER3", "gemini-2.5-pro"),
 }
 
@@ -236,8 +236,8 @@ LOCAL_TIERS: dict[str, str] = {
 # ``GEMINI_PRICE_PER_1M`` below and is used by the per-call cost
 # write to agent_task_results.
 TIER_COST_PER_1K: dict[str, float] = {
-    "tier1": 0.000_10,  # gemini-2.5-flash-lite output
-    "tier2": 0.000_30,  # gemini-2.5-flash output
+    "tier1": 0.002_50,  # gemini-3.5-flash-lite output
+    "tier2": 0.002_50,  # gemini-3.5-flash-lite output
     "tier3": 0.005_00,  # gemini-2.5-pro output
 }
 
@@ -246,6 +246,8 @@ TIER_COST_PER_1K: dict[str, float] = {
 # When a new model is added, add an entry here AND update
 # core/billing/spend.py if the model name introduces a new prefix.
 GEMINI_PRICE_PER_1M: dict[str, dict[str, float]] = {
+    # Standard text pricing, https://ai.google.dev/gemini-api/docs/pricing
+    "gemini-3.5-flash-lite": {"input": 0.30, "output": 2.50},
     # Flash-Lite (cheapest)
     "gemini-2.5-flash-lite": {"input": 0.04, "output": 0.10},
     # Flash (mid)

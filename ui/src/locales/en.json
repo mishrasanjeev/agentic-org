@@ -29,6 +29,7 @@
     "calls": "Calls",
     "transactions": "Transactions",
     "connectors": "Connectors",
+    "channels": "Channels",
     "commerceRuntime": "Commerce Runtime",
     "promptTemplates": "Prompt Templates",
     "createFromSop": "Create from SOP",

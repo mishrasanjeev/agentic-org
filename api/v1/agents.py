@@ -35,6 +35,7 @@ from auth.run_grants import (
 )
 from core.agent_registry import approval as registry_approval
 from core.agent_registry import traffic as agent_traffic
+from core.ai_providers.defaults import fallback_model, primary_model, primary_provider
 from core.commerce.sales_guardrails import GRANTEX_COMMERCE_DEFAULT_TOOLS
 from core.database import get_tenant_session
 from core.evals import gates as eval_gates
@@ -2701,13 +2702,13 @@ async def generate_agent(
                 system_prompt_ref="",
                 system_prompt_text=top.get("system_prompt", ""),
                 prompt_variables={},
-                llm_model="gemini-2.5-flash",
-                llm_provider="gemini",
-                llm_fallback="gemini-2.5-flash-preview-05-20",
+                llm_model=primary_model(),
+                llm_provider=primary_provider(),
+                llm_fallback=fallback_model(),
                 llm_config={
-                    "model": "gemini-2.5-flash",
-                    "provider": "gemini",
-                    "fallback_model": "gemini-2.5-flash-preview-05-20",
+                    "model": primary_model(),
+                    "provider": primary_provider(),
+                    "fallback_model": fallback_model(),
                 },
                 confidence_floor=Decimal(str(top.get("confidence_floor", 0.88))),
                 hitl_condition=top.get("hitl_condition", "confidence < 0.88"),

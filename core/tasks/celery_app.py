@@ -47,6 +47,7 @@ app = Celery(
         "core.tasks.audit_chain_tasks",
         "core.tasks.budget_tasks",
         "core.tasks.case_push_tasks",
+        "core.tasks.channel_tasks",
         "core.tasks.gateway_tasks",
         "core.tasks.health_snapshot",
         "core.tasks.invoice_tasks",
@@ -84,6 +85,7 @@ app.conf.update(
         "core.tasks.report_tasks.deliver_report": {"queue": "delivery"},
         "core.tasks.report_tasks.cleanup_old_reports": {"queue": "maintenance"},
         "core.tasks.workflow_tasks.*": {"queue": "workflows"},
+        "core.tasks.channel_tasks.*": {"queue": "workflows"},
         # Retain the historical short task names so messages already in
         # Redis remain executable during rolling deploys.
         "resume_workflow_wait": {"queue": "workflows"},
@@ -98,6 +100,11 @@ app.conf.update(
 
 # ── Beat schedule — periodic tasks ──────────────────────────────────
 app.conf.beat_schedule = {
+    "sweep-channel-inbox": {
+        "task": "core.tasks.channel_tasks.sweep",
+        "schedule": 15.0,
+        "options": {"queue": "workflows"},
+    },
     "sweep-case-pushes": {
         # Governed case hand-off retries and missed kicks (core/cases/push.py).
         # A no-op unless AGENTICORG_CASE_PUSH_SWEEP_ENABLED is true.

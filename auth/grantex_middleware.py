@@ -358,6 +358,7 @@ class GrantexAuthMiddleware(BaseHTTPMiddleware):
     }
 
     EXEMPT_PREFIXES = (
+        "/api/v1/channels/webhooks/",  # Provider signature and receiver binding are mandatory.
         "/api/v1/evals",
         "/api/v1/webhooks/",
         "/api/v1/voice/webhooks/twilio/",  # Twilio HMAC signature is verified by the route

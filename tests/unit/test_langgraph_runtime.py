@@ -72,7 +72,7 @@ class TestLLMFactory:
 
         # Unknown models pass through (may be local Ollama/vLLM models)
         result = _resolve_model("llama-70b")
-        assert result in ("llama-70b", "gemini-2.5-flash")  # either pass-through or fallback
+        assert result in ("llama-70b", "gemini-3.5-flash-lite")  # either pass-through or fallback
 
 
 # ═══════════════════════════════════════════════════════════════════════════

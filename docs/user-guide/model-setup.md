@@ -43,3 +43,17 @@ Record which agents and environments use the credential. Use the supported rotat
 | Unexpected model/cost | Routing mode and actual run metadata | Adjust reviewed configuration and repeat the same task |
 
 Jev/System One is an optional advisory integration with separate TypeSafe access and evaluation requirements. A waitlist enrollment does not supply an API key or activate production routing. Keep the ordinary model path usable without it.
+## Default reasoning and your own Google account
+
+New agents default to `gemini-3.5-flash-lite`. Existing agents keep an explicitly
+selected model. Administrators can choose another model and fallback in agent/AI
+settings; operators can override unset defaults with `AGENTICORG_LLM_PRIMARY`
+and `AGENTICORG_LLM_FALLBACK`.
+
+Create or select a Google AI Studio project, enable the provider account and
+appropriate billing, generate an API key, and save it in the protected **AI
+credentials** Gemini form. Never paste the key into chat or an agent prompt.
+Choose the correct company or tenant scope and test a small reasoning request.
+Provider availability, quota and pricing depend on your account. This model does
+not produce audio: configure STT/TTS separately for voice workflows. See the
+[channel workflow guide](/docs/channel-workflows) for account setup and tests.

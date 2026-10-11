@@ -260,8 +260,8 @@ class Settings(BaseSettings):
     storage_endpoint: str | None = None  # Set for MinIO/S3-compatible; leave empty for GCS
 
     # LLM — Gemini 2.5 Flash (free tier) as default; switch to Claude for production
-    llm_primary: str = "gemini-2.5-flash"
-    llm_fallback: str = "gemini-2.5-flash-preview-05-20"
+    llm_primary: str = "gemini-3.5-flash-lite"
+    llm_fallback: str = "gemini-3.5-flash-lite"
     llm_temperature: float = 0.2
     llm_complete_timeout_seconds: float = Field(default=90.0, ge=1.0, le=600.0)
     llm_primary_timeout_fraction: float = Field(default=0.7, ge=0.1, le=0.9)

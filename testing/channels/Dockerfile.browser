@@ -1,0 +1,6 @@
+FROM mcr.microsoft.com/playwright:v1.63.0-noble
+WORKDIR /app/ui
+COPY --from=agenticorg-channel-ui-tools:local /app/ui/node_modules ./node_modules
+COPY --from=agenticorg-channel-ui-tools:local /app/ui/package.json /app/ui/playwright.config.ts ./
+# Mount the test sources at runtime; production Docker context excludes E2E files.
+CMD ["npx", "playwright", "test", "channel-workflows-local.spec.ts", "--retries=0", "--workers=1"]
