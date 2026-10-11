@@ -33,8 +33,8 @@ Run under review | Assign operators, approvals, support and change control.
 ## What availability means
 
 For regulated workflows, first read the [BFSI capability status](/docs/bfsi-capability-status).
-The five process maps are fictional configured examples; 15 of 150 assessed
-functional capabilities are covered, 102 are partial and 33 remain gaps.
+The five process maps are fictional configured examples; 24 of 150 assessed
+functional capabilities are covered, 97 are partial and 29 remain gaps.
 
 **Implemented** means a runtime path exists. **Configuration-dependent** means it also needs credentials, permissions, worker infrastructure or tenant settings. **Example** means a teaching scenario, not a pre-integrated solution. A listed connector, agent template, voice provider or channel is not proof of successful live execution in your workspace.
 
@@ -50,7 +50,7 @@ bypass permissions.
 | I want to... | Screen | Read first |
 | --- | --- | --- |
 | Choose a company | [Companies](https://app.agenticorg.ai/dashboard/companies) | [Workspace and roles](/docs/workspace-and-roles) |
-| Connect a model | [AI Provider Credentials](https://app.agenticorg.ai/dashboard/settings/ai-credentials) | [Model setup](/docs/model-setup) |
+| Connect a model | [AI Credentials](https://app.agenticorg.ai/dashboard/settings/ai-credentials) | [Model setup](/docs/model-setup) |
 | Find or create an agent | [Agents](https://app.agenticorg.ai/dashboard/agents) | [Create agents](/docs/create-agents) |
 | Build from a procedure | [Create from SOP](https://app.agenticorg.ai/dashboard/agents/from-sop) | [Create agents](/docs/create-agents) |
 | Upload a document | [Knowledge Base](https://app.agenticorg.ai/dashboard/knowledge) | [Knowledge and OCR](/docs/knowledge-and-ocr) |
@@ -58,9 +58,15 @@ bypass permissions.
 | Coordinate several steps | [Workflows](https://app.agenticorg.ai/dashboard/workflows) | [Workflows](/docs/workflows) |
 | Review proposed actions | [Approvals](https://app.agenticorg.ai/dashboard/approvals) | [Human review](/docs/approvals) |
 | Review business onboarding | [Governed cases](https://app.agenticorg.ai/dashboard/approvals/cases) | [Governed cases](/docs/governed-cases) |
-| Configure voice | [Voice Setup](https://app.agenticorg.ai/dashboard/voice-setup) | [Voice](/docs/voice) |
-| Configure browser automation | [RPA](https://app.agenticorg.ai/dashboard/rpa) | [RPA](/docs/rpa) |
-| Investigate run evidence | [Audit](https://app.agenticorg.ai/dashboard/audit) | [Monitoring](/docs/audit-and-monitoring) |
+| Review extracted document fields (off by default) | [Documents](https://app.agenticorg.ai/dashboard/documents) | [Default-off screens](/docs/review-and-operations-screens) |
+| Watch or take over a live chat (off by default) | [Conversations](https://app.agenticorg.ai/dashboard/conversations) | [Default-off screens](/docs/review-and-operations-screens) |
+| Work from a role workbench (off by default) | [Workbenches](https://app.agenticorg.ai/dashboard/workbench) | [Default-off screens](/docs/review-and-operations-screens) |
+| Review kept call recordings (off by default) | [Calls](https://app.agenticorg.ai/dashboard/calls) | [Default-off screens](/docs/review-and-operations-screens) |
+| Decide transaction findings (off by default) | [Transactions](https://app.agenticorg.ai/dashboard/transactions) | [Default-off screens](/docs/review-and-operations-screens) |
+| Trace where a kept item came from (off by default) | [Lineage](https://app.agenticorg.ai/dashboard/lineage) | [Default-off screens](/docs/review-and-operations-screens) |
+| Configure voice | [Voice Agents](https://app.agenticorg.ai/dashboard/voice-setup) | [Voice](/docs/voice) |
+| Configure browser automation | [RPA Scripts](https://app.agenticorg.ai/dashboard/rpa) | [RPA](/docs/rpa) |
+| Investigate run evidence | [Audit Log](https://app.agenticorg.ai/dashboard/audit) | [Monitoring](/docs/audit-and-monitoring) |
 | Inspect run timelines | [Observability](https://app.agenticorg.ai/dashboard/observability) | [Run observability](/docs/run-observability) |
 | Configure model routing | [Model Gateway](https://app.agenticorg.ai/dashboard/settings/model-gateway) | [Model Gateway](/docs/model-gateway) |
 | Configure guardrail rules | [Guardrails](https://app.agenticorg.ai/dashboard/settings/guardrails) | [Guardrails](/docs/guardrails) |
@@ -68,6 +74,7 @@ bypass permissions.
 | Connect an external agent client | [A2A / MCP](https://app.agenticorg.ai/dashboard/integrations) | [API and clients](/docs/api-sdk-mcp) |
 | Create an API key | [Settings](https://app.agenticorg.ai/dashboard/settings) | [API and clients](/docs/api-sdk-mcp) |
 | Review subscription or usage | [Billing](https://app.agenticorg.ai/dashboard/billing) | [Billing and support](/docs/billing-and-support) |
+| Review recorded agent cost in USD (no sidebar entry) | [Cost Dashboard](https://app.agenticorg.ai/dashboard/costs) | [Billing and support](/docs/billing-and-support) |
 
 ## When you get stuck
 

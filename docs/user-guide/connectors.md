@@ -37,18 +37,17 @@ refused to keep the response-size limit effective before decompression.
 2. Open **Connectors > Remote MCP**. Enter a unique name such as `mcp_support`, the endpoint and token. Choose **Connect and discover tools**. AgenticOrg performs protocol initialization and paginated tool discovery before saving. A rejected token or incompatible server produces an error; it does not create a healthy connection.
 3. Review the discovered descriptions and input schemas with the server owner. Server annotations are hints, not permission. All tools begin as write/unreviewed. Only tools advertised as read-only can be reviewed as reads, and obvious write names remain writes. A remote server can still misrepresent its behavior: register only trusted servers and use minimally scoped provider tokens.
 4. Select the read-only tools you have reviewed and choose **Save read-only review**. Run one **Read-only connection probe** with non-sensitive arguments. A successful probe verifies that tool, not every server capability or any real speech/payment provider behind it.
-5. In **Create Agent > Behavior**, or **Agent > Config > Edit**, select the remote connector and its exact tools. Save and reload the agent. Names are connector-qualified, such as `mcp_support__search`; a tool from another connection is not interchangeable.
+5. In **Agents > Create Agent**, on the **Behavior** step of the Create Virtual Employee wizard, or in **Agent > Config > Edit**, select the remote connector and its exact tools. Save and reload the agent. Names are connector-qualified, such as `mcp_support__search`; a tool from another connection is not interchangeable.
 6. Run a company-scoped agent with an appropriate delegated grant. The runtime rechecks persisted ownership, active connector, selected tools and current schema before dispatch. MCP registration and a read probe do not bypass agent grants, operator overrides or action policies.
 
-```mermaid
-flowchart LR
-  A[Owner connects HTTPS server] --> B[Initialize and discover tools]
-  B --> C[Encrypted token and tenant catalog]
-  C --> D[Owner reviews read-only tools]
-  D --> E[Agent selects exact connector and tools]
-  E --> F[Grant and action checks]
-  F --> G[Reload authority and compare live schema]
-  G --> H[One bounded MCP call]
+```flow
+Owner connects the HTTPS server | The endpoint and bearer token are saved only after protocol initialization succeeds.
+Discover tools | Paginated discovery stores the encrypted token and the tenant's tool catalog.
+Review read-only tools | The owner marks reviewed read tools; every other tool stays write/unreviewed.
+Agent selects tools | The agent names the exact connector and the tools it may use.
+Grant and action checks | Delegated grants, operator overrides and action policy apply.
+Reload and compare the schema | Ownership, the active connector and the live schema are checked again before dispatch.
+One bounded MCP call | The call runs once within the size and time caps below.
 ```
 
 **Current boundary:** write/unreviewed tools may be selected but remain contained by the platform's action policy. This path does not enable arbitrary messaging, voice replies, payments or destructive actions. Grant labels remain conservatively write-scoped; the reviewed read classification is a separate execution-policy check. Tools and their output are untrusted source data, never instructions to expand permissions.

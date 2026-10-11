@@ -57,14 +57,19 @@ test("the complete manual has maintained source references and six BFSI playbook
   assert.equal(manual.groups.length, 5);
   const coverage = manual.articles.find((article) => article.slug === "bfsi-capability-status");
   assert.ok(coverage);
-  // The counts are refreshed with the BFSI coverage rows, so check that the
-  // stated breakdown adds up to the stated total rather than pinning numbers.
-  const counts = coverage.html.match(
-    /<strong>(\d+) functional capabilities<\/strong>: <strong>(\d+)\s+covered, (\d+) partial and (\d+) gaps<\/strong>/,
-  );
-  assert.ok(counts, "bfsi-capability-status states its capability counts");
-  const [total, covered, partial, gaps] = counts.slice(1).map(Number);
-  assert.equal(covered + partial + gaps, total);
+  const baseline = JSON.parse(readFileSync(
+    new URL("../../docs/bfsi/capability-baseline.json", import.meta.url), "utf8",
+  ));
+  const functional = baseline.capabilities.filter((item) => item.kind === "functional");
+  const count = (status) => functional.filter((item) => item.status === status).length;
+  assert.match(coverage.html, new RegExp(
+    `<strong>${functional.length} functional capabilities</strong>: <strong>${count("covered")}\\s+covered, ${count("partial")} partial and ${count("none")} gaps</strong>`,
+  ));
+  const startHere = manual.articles.find((article) => article.slug === "start-here");
+  assert.ok(startHere);
+  assert.match(startHere.html, new RegExp(
+    `${count("covered")} of ${functional.length} assessed\\s+functional capabilities are covered, ${count("partial")} are partial and ${count("none")} remain gaps`,
+  ));
   assert.ok(
     manual.articles.every(
       (article) => article.sources.length && article.headings.length >= 3,
@@ -91,6 +96,37 @@ test("the complete manual has maintained source references and six BFSI playbook
   assert.ok(spend.sources.includes("docs/finops/spend-intelligence.md"));
   const commerce = manual.articles.find((article) => article.slug === "commerce");
   assert.match(commerce.html, /href="\/docs\/bfsi-merchant-services#process-map"/);
+});
+
+test("the linked functional overview agrees with the machine inventory by domain", () => {
+  const baseline = JSON.parse(readFileSync(
+    new URL("../../docs/bfsi/capability-baseline.json", import.meta.url), "utf8",
+  ));
+  const functional = baseline.capabilities.filter((item) => item.kind === "functional");
+  const overview = readFileSync(
+    new URL("../../docs/bfsi/functional-coverage.md", import.meta.url), "utf8",
+  ).replaceAll("**", "");
+  const domains = {
+    Acquisition: "ACQ", "AI governance": "AIGOV", Content: "CONTENT",
+    Conversation: "CONV", Evaluation: "EVAL", "Front end": "FE", FinOps: "FIN",
+    "Model gateway": "GW", "Document intelligence": "IDP", "Lead intelligence": "LEAD",
+    MLOps: "MLOPS", Observability: "OBS", Orchestration: "ORCH",
+    "Prompt governance": "PROMPT", Retrieval: "RAG", "Agent registry": "REG",
+    Speech: "SPEECH", "Trust controls": "TRUST", "Transaction intelligence": "TXN",
+    "Vector infrastructure": "VEC",
+  };
+  assert.deepEqual(new Set(Object.values(domains)), new Set(functional.map((item) => item.domain)));
+  for (const [label, domain] of [...Object.entries(domains), ["Total", null]]) {
+    const items = domain ? functional.filter((item) => item.domain === domain) : functional;
+    const counts = ["covered", "partial", "none"].map(
+      (status) => items.filter((item) => item.status === status).length,
+    );
+    assert.ok(overview.includes(`| ${label} | ${items.length} | ${counts.join(" | ")} |`), label);
+  }
+  const count = (status) => functional.filter((item) => item.status === status).length;
+  assert.match(overview, new RegExp(
+    `${count("covered")} functional capabilities are covered, ${count("partial")} are partial,\\s*and ${count("none")} are gaps`,
+  ));
 });
 
 test("tracked reader data matches the authored Markdown and manifest", () => {

@@ -27,6 +27,8 @@ Audio and video are not document uploads. File size, pages, decompressed pixels 
 5. Search a known phrase and review source/page/sheet/slide details.
 6. Run a grounded question and verify it against the original document.
 
+Each search result shows the document and, where recorded, its citation: page, sheet, cell range, paragraph or heading. **Open excerpt** shows the whole cited passage, with **Previous** and **Next** for the neighbouring passages. Where the deployment turns on query transformation (`AGENTICORG_KNOWLEDGE_QUERY_TRANSFORM_ENABLED`, off by default), **How this was retrieved** lists each retrieval step. Documents uploaded from this page are shared with the whole tenant. An API upload can name a domain (`?domain=`), and then users limited to other domains do not see that document.
+
 If a duplicate dialog appears, choose the appropriate supported action deliberately. Replacement extraction is performed before old content is removed, but you should still verify that search returns the intended version. Do not leave two conflicting policies current without an explicit effective-date rule.
 
 ```flow

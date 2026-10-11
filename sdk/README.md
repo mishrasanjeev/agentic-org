@@ -210,8 +210,9 @@ scheduled, not that it succeeded; inspect the later case state and failure
 reason. This SDK intentionally has no decision, withdrawal, screening-review,
 or information-request approval helper: those actions require a signed-in
 human, which an API key or agent token does not represent. MCP discovery does
-not expose the governed-case roles as agent tools. The legacy
-`grantex==0.5.1` does not enforce purpose in the token or per-case caps. See
+not expose the governed-case roles as agent tools. AgenticOrg's call to
+the pinned `grantex==0.7.1` passes no case id or purpose, so token-level purpose
+and per-case caps are not checked on that path. See
 [case lifecycle](../docs/governance/case-lifecycle.md) and the
 [tested client contract](../tests/regression/test_sdk_governed_cases.py).
 

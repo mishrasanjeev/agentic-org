@@ -259,7 +259,7 @@ Reads need the `audit:read` scope. Beyond that, one rule decides what each reade
 
 ## What is not in phase 1
 
-- **No spend screen.** Phase 1 is API-only. The app's existing cost views read the existing cost ledgers, not these usage records.
+- **No spend screen.** Phase 1 is API-only. The app's existing cost views, such as the Cost Dashboard at `/dashboard/costs` (administrators and CFOs; it has no sidebar entry), read the existing cost ledgers, not these usage records.
 - **No spend dashboards, budgets, alerts, forecasts, statements or month close.** These belong to later phases; freezing closed months and statements belong to phase 2. Spend intelligence does not block or throttle a call because of its spend.
 - **Some usage is not metered:** the embedding backfill command and seed data, the voice runtime's own speech-to-text and text-to-speech outside the speech store, and the tool gateway's own completion path.
 - **No batch flag on records.** Reconciliation re-prices every group as non-batch usage.

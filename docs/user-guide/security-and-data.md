@@ -17,11 +17,14 @@ Review API keys and delegated grants by scope, environment and owner. Rotate and
 | Model and embedding calls | Provider endpoint, permitted data, retention and contractual terms |
 | Knowledge extraction | File access, extracted chunks, OCR quality, replacement and deletion |
 | Voice | Provider recording/retention, approved number and encrypted bounded text |
+| Calls (speech intelligence, off by default) | Encrypted audio and transcript kept per tenant, the transcription engine and speech-provider credential used, spoken-data redaction, and how recordings are removed: the speech routes offer no deletion or retention setting |
 | RPA | Approved domains, secret custody and screenshot/log content |
 | Governed cases | Cited evidence, encrypted excerpts, decision authority and signed handoff |
 | Commerce | Merchant scope, artifact freshness, public-safe projection and provider-owned execution |
 
 AgenticOrg's controls do not automatically set the provider's retention or your bank's network configuration. Review those separately.
+
+**Settings > Compliance & Data > Data Region** records the tenant's region (IN, EU or US). It does not move stored data or change where the hosted service runs. Residency enforcement is off by default. When a platform operator turns it on for the deployment (`AGENTICORG_RESIDENCY_ENFORCE=true`) or for one tenant (authority flag `residency.enforce`), any AI or integration provider without an active attestation for that region is refused; providers running inside the deployment need none. Administrators record attestations through `/api/v1/residency/attestations`. Confirm the deployment's actual regions with your platform owner.
 
 ## Retention and deletion
 

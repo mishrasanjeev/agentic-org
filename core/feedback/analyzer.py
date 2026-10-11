@@ -96,6 +96,7 @@ async def analyze_feedback(
         import json as _json
 
         from core.langgraph.llm_factory import create_chat_model
+        from core.llm.content import model_answer
 
         # The agent's tenant goes with the call: provider resolution and the
         # residency check are the tenant's.
@@ -104,7 +105,7 @@ async def analyze_feedback(
         response = await llm.ainvoke(prompt)
         if spend.enabled():
             spend.note("message", tenant_id, message=response, llm=llm, default_use_case="feedback.analysis")
-        content = response.content if hasattr(response, "content") else str(response)
+        content = model_answer(response.content) if hasattr(response, "content") else str(response)
 
         json_match = re.search(r"\{[\s\S]*\}", content)
         if json_match:

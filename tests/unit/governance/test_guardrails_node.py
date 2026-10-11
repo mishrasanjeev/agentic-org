@@ -93,6 +93,47 @@ async def test_a_card_number_in_the_answer_is_redacted_before_delivery(scripted_
     assert CARD not in str(result.get("output"))
 
 
+THINKING = {"type": "thinking", "thinking": "Read the card back.", "signature": "c3ludGhldGlj"}
+
+
+def _block_answer(text: str) -> AIMessage:
+    return AIMessage(content=[THINKING, {"type": "text", "text": text, "extras": {"signature": "c2lnbmF0dXJl"}}])
+
+
+async def test_a_card_number_in_a_block_answer_is_redacted_before_delivery(scripted_model, guarded):
+    scripted_model([_block_answer(f"Pay with card {CARD} today.")])
+    result = await _run(scripted_model, "what card?", [_rule()])
+    answers = [m for m in result["messages"] if isinstance(m, AIMessage)]
+    assert answers[-1].content[0] == THINKING
+    assert answers[-1].content[1]["text"] == "Pay with card <CREDIT_CARD> today."
+    assert result["output"] == {"raw_output": "Pay with card <CREDIT_CARD> today.", "status": "completed"}
+    assert CARD not in str(result.get("output"))
+
+
+async def test_a_block_answer_a_rule_blocks_ends_the_run(scripted_model, guarded):
+    scripted_model([_block_answer(f"Pay with card {CARD} today.")])
+    with pytest.raises(GuardrailBlocked, match="output blocked by rule no-cards"):
+        await _run(scripted_model, "what card?", [_rule(action="block", name="no-cards")])
+
+
+async def test_a_block_answers_text_is_redacted_with_block_parsing_off_too(scripted_model, guarded, monkeypatch):
+    from core.config import settings
+
+    monkeypatch.setattr(settings, "agent_output_block_parsing", False)
+    scripted_model([_block_answer(f"Pay with card {CARD} today.")])
+    result = await _run(scripted_model, "what card?", [_rule()])
+    answers = [m for m in result["messages"] if isinstance(m, AIMessage)]
+    assert answers[-1].content[0] == THINKING
+    assert answers[-1].content[1]["text"] == "Pay with card <CREDIT_CARD> today."
+    # The previous parsing keeps the str() of every block in raw_output, reasoning blocks included: the output
+    # stage evaluates only the answer's text blocks, so what it redacts is the text block's share of raw_output.
+    assert result["output"] == {
+        "raw_output": "\n".join(str(block) for block in answers[-1].content),
+        "status": "completed",
+    }
+    assert CARD not in str(result.get("output"))
+
+
 async def test_an_input_that_a_rule_blocks_ends_the_run_before_the_model_is_called(scripted_model, guarded):
     scripted_model([])
     with pytest.raises(GuardrailBlocked, match="input blocked by rule no-cards"):

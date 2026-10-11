@@ -21,6 +21,13 @@ Record the exact screen, timestamp, company, safe run reference and error code. 
 | RPA times out | Target changes, session, selectors, approved domain | Pause schedules and revalidate the script in a test environment |
 | Commerce answer is stale | Source sync, artifact TTL, revocation and merchant state | Refresh through the supported path; do not promise final inventory/price |
 | Case decision refused | Current version, issuer configuration, distinct approvals | Resolve the exact reason and request a current decision |
+| A screen says a service is off, or `idp_disabled`, `conversation_disabled` or `spend_disabled` | The service's deployment setting is off (the default) | Ask the platform owner whether it should be on; this is configuration, not an empty result |
+| Run refused with `guardrail_blocked` / `E1016` | A guardrail rule at that stage blocked it | Review the rule with its owner on the Guardrails page; do not reword input to get past it |
+| `423` or a tool result with `operator_override` / `E1013` | An operator halt or throttle covers the model, agent, workflow or tool pipeline | Ask the administrator who placed it; do not work around it |
+| `409` "Agent is paused" | The agent is paused and the deployment refuses paused agents (`AGENTICORG_PAUSED_AGENTS_REFUSED`, off by default) | Have the owner resume the agent, or use another active agent |
+| Run stopped with a `limit` block | The agent's own step, duration or tool-call limit, or its loop rule, applied while `AGENTICORG_RUNTIME_LIMITS_ENABLED` is on (off by default) | Review the limits and the repeated tool calls before running it again |
+| Approval decision returns `409` | You already voted on the item, or its policy changed while it waited | See [multi-person approval rules](/docs/approvals#multi-person-approval-rules) |
+| `403` `human_session_required` | An API key or agent token tried a governed-case action reserved for a person | Sign in as the named person |
 
 ## Distinguish refused, failed and unavailable
 

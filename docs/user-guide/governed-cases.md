@@ -40,6 +40,10 @@ If the issuer is unconfigured, the default verifier refuses decisions. `decision
 
 Applications and signed case handoffs require reviewed API integration. The console is not a universal application-intake form or core-banking adapter. The signed outbox and REST case record provide evidence to your system of record; the institution controls account opening, monitoring, reporting and retention.
 
-The current published Grantex Python SDK verifies tool authority but does not enforce every token-level case-purpose or per-case-cap requirement. AgenticOrg has local purpose controls; pooled grants are not case-bound. Evaluate that boundary explicitly before enabling a production process.
+Provider events reach a tenant-specific address. A tenant administrator signed in as a person reads it from `GET /api/v1/case-push/provider-webhook-inbox?provider=<name>` and gives it to the provider; treat it as a credential. It has the form `/api/v1/webhooks/providers/{tenant_id}/{provider}/{token}`; the earlier tokenless path answers 404. A delivery to that address within the 256 KiB body cap is answered with `202` while governed cases are on for the tenant (a larger body gets `413`), and one that cannot be verified is recorded without being acted on. Rotating `AGENTICORG_SECRET_KEY` changes every tenant's address, so re-point the providers after a rotation.
+
+Deciding, withdrawing, requesting a decision, reviewing a screening disposition and approving an information request need a person's session. An API key or agent token gets `403` `human_session_required`.
+
+AgenticOrg pins the Grantex Python SDK (`grantex==0.7.1`) and calls its enforcement check with the grant token, connector, tool and any numeric amount. It does not pass a case id or case purpose, so a token's case purpose and per-case caps are not checked on this path. The role's case-purpose allowlist is a local AgenticOrg control, and pooled grants are not bound to one case. Evaluate that boundary explicitly before enabling a production process.
 
 Next: [BFSI onboarding walkthrough](/docs/bfsi-business-onboarding), [Security and data](/docs/security-and-data).

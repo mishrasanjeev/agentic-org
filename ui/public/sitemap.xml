@@ -278,7 +278,7 @@
   </url>
   <url>
     <loc>https://agenticorg.ai/docs/start-here</loc>
-    <lastmod>2026-10-02</lastmod>
+    <lastmod>2026-10-11</lastmod>
   </url>
   <url>
     <loc>https://agenticorg.ai/docs/first-agent</loc>
@@ -286,7 +286,7 @@
   </url>
   <url>
     <loc>https://agenticorg.ai/docs/workspace-and-roles</loc>
-    <lastmod>2026-10-02</lastmod>
+    <lastmod>2026-10-11</lastmod>
   </url>
   <url>
     <loc>https://agenticorg.ai/docs/concepts</loc>
@@ -298,7 +298,7 @@
   </url>
   <url>
     <loc>https://agenticorg.ai/docs/model-gateway</loc>
-    <lastmod>2026-10-02</lastmod>
+    <lastmod>2026-10-11</lastmod>
   </url>
   <url>
     <loc>https://agenticorg.ai/docs/create-agents</loc>
@@ -306,23 +306,23 @@
   </url>
   <url>
     <loc>https://agenticorg.ai/docs/run-and-chat</loc>
-    <lastmod>2026-10-02</lastmod>
+    <lastmod>2026-10-11</lastmod>
   </url>
   <url>
     <loc>https://agenticorg.ai/docs/knowledge-and-ocr</loc>
-    <lastmod>2026-10-02</lastmod>
+    <lastmod>2026-10-11</lastmod>
   </url>
   <url>
     <loc>https://agenticorg.ai/docs/connectors</loc>
-    <lastmod>2026-10-02</lastmod>
+    <lastmod>2026-10-11</lastmod>
   </url>
   <url>
     <loc>https://agenticorg.ai/docs/workflows</loc>
-    <lastmod>2026-10-02</lastmod>
+    <lastmod>2026-10-11</lastmod>
   </url>
   <url>
     <loc>https://agenticorg.ai/docs/voice</loc>
-    <lastmod>2026-10-02</lastmod>
+    <lastmod>2026-10-11</lastmod>
   </url>
   <url>
     <loc>https://agenticorg.ai/docs/rpa</loc>
@@ -330,39 +330,43 @@
   </url>
   <url>
     <loc>https://agenticorg.ai/docs/industry-packs</loc>
-    <lastmod>2026-10-02</lastmod>
+    <lastmod>2026-10-11</lastmod>
   </url>
   <url>
     <loc>https://agenticorg.ai/docs/approvals</loc>
-    <lastmod>2026-10-02</lastmod>
+    <lastmod>2026-10-11</lastmod>
   </url>
   <url>
     <loc>https://agenticorg.ai/docs/governed-cases</loc>
-    <lastmod>2026-10-02</lastmod>
+    <lastmod>2026-10-11</lastmod>
+  </url>
+  <url>
+    <loc>https://agenticorg.ai/docs/review-and-operations-screens</loc>
+    <lastmod>2026-10-11</lastmod>
   </url>
   <url>
     <loc>https://agenticorg.ai/docs/audit-and-monitoring</loc>
-    <lastmod>2026-10-02</lastmod>
+    <lastmod>2026-10-11</lastmod>
   </url>
   <url>
     <loc>https://agenticorg.ai/docs/guardrails</loc>
-    <lastmod>2026-10-02</lastmod>
+    <lastmod>2026-10-11</lastmod>
   </url>
   <url>
     <loc>https://agenticorg.ai/docs/run-observability</loc>
-    <lastmod>2026-10-02</lastmod>
+    <lastmod>2026-10-11</lastmod>
   </url>
   <url>
     <loc>https://agenticorg.ai/docs/evaluate-and-rollout</loc>
-    <lastmod>2026-10-02</lastmod>
+    <lastmod>2026-10-11</lastmod>
   </url>
   <url>
     <loc>https://agenticorg.ai/docs/security-and-data</loc>
-    <lastmod>2026-10-02</lastmod>
+    <lastmod>2026-10-11</lastmod>
   </url>
   <url>
     <loc>https://agenticorg.ai/docs/billing-and-support</loc>
-    <lastmod>2026-10-02</lastmod>
+    <lastmod>2026-10-11</lastmod>
   </url>
   <url>
     <loc>https://agenticorg.ai/docs/ai-spend-intelligence</loc>
@@ -370,7 +374,7 @@
   </url>
   <url>
     <loc>https://agenticorg.ai/docs/troubleshooting</loc>
-    <lastmod>2026-10-02</lastmod>
+    <lastmod>2026-10-11</lastmod>
   </url>
   <url>
     <loc>https://agenticorg.ai/docs/commerce</loc>
@@ -386,15 +390,15 @@
   </url>
   <url>
     <loc>https://agenticorg.ai/docs/api-sdk-mcp</loc>
-    <lastmod>2026-10-02</lastmod>
+    <lastmod>2026-10-11</lastmod>
   </url>
   <url>
     <loc>https://agenticorg.ai/docs/self-hosting</loc>
-    <lastmod>2026-10-02</lastmod>
+    <lastmod>2026-10-11</lastmod>
   </url>
   <url>
     <loc>https://agenticorg.ai/docs/bfsi-business-onboarding</loc>
-    <lastmod>2026-10-02</lastmod>
+    <lastmod>2026-10-11</lastmod>
   </url>
   <url>
     <loc>https://agenticorg.ai/docs/bfsi-reconciliation</loc>
@@ -414,7 +418,7 @@
   </url>
   <url>
     <loc>https://agenticorg.ai/docs/bfsi-capability-status</loc>
-    <lastmod>2026-10-02</lastmod>
+    <lastmod>2026-10-11</lastmod>
   </url>
   <url>
     <loc>https://agenticorg.ai/docs/adoption-checklist</loc>

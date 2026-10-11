@@ -2,7 +2,81 @@
 
 All notable changes to AgenticOrg are documented here. Format follows [Keep a Changelog](https://keepachangelog.com/).
 
-## [Unreleased] - 2026-08-29
+## [Unreleased]
+
+Entries here have accumulated since 4.0.0. The source version in `pyproject.toml`
+is 4.8.0; versions 4.1 to 4.8 have no sections of their own.
+
+### Fixed - user documentation matches shipped behaviour
+- A new guide, *Documents, conversations, calls and workbenches*, covers the six
+  console screens of services that ship off by default, and Start here links
+  them with the sidebar's own labels and the Cost Dashboard.
+- Guides name the default-off settings behind chat context, the visual workflow
+  builder, the Observability Checks tab and step-through debugger, the model
+  gateway and its limits, A2A and MCP route scopes, residency enforcement and the
+  audit chain. The self-hosting guide lists the feature switches that ship off
+  and says strict runtimes make no schema changes at start-up.
+- The approvals, troubleshooting, governed-case, knowledge, industry-pack, roles,
+  guardrails, evaluation and security guides describe the multi-person approval
+  rules, current refusal codes, the provider webhook address, citations and
+  excerpts, the Banking Pack, invitation roles, the adversarial routes, the
+  prompt-template panels, the Data Region setting and kept call recordings.
+- The Connectors guide's diagram is a flow block; the site has no Mermaid
+  renderer.
+- The README, product status, llms.txt, SDK READMEs and governance overview say
+  what AgenticOrg's Grantex call checks; the conversation supervisor is named as
+  the internal feed's only writer; llms.txt points A2A discovery at the v1 Agent
+  Card; the landing Observatory card describes the screen as it is; Node.js
+  22.22 is the stated minimum.
+
+### Fixed - breaking for agent runs whose model answers in content blocks: agent output parsing of provider content blocks
+- A deliberate default: a model answer that arrives as a list of provider content blocks (for
+  example one `{"type": "text", "text": "```json ...```", "extras":
+  {"signature": ...}}` block) is now read for each block's text. The agent
+  graph used to join the blocks with `str()`, so the fenced JSON never parsed
+  and the run's output became `{"raw_output": "<block repr>"}`; it now parses
+  to the model's object, and an answer that is not JSON keeps its readable
+  text in `raw_output`. Reasoning, signature and tool-use blocks carry no
+  answer text and are skipped, as is a signature-only text block with empty
+  text; a refusal block (`{"type": "refusal", "refusal": ...}`) is read for
+  its refusal text. The confidence length signal measures the answer text
+  instead of the number of blocks.
+- The SOP parser, the run explainer and the feedback analyser read block
+  content the same way (they failed or fell back to heuristics on it).
+  Plain string answers parse exactly as before. The shared helpers are in
+  `core/llm/content.py`.
+- Opt-out: `AGENTICORG_AGENT_OUTPUT_BLOCK_PARSING=false` (setting
+  `agent_output_block_parsing`, default `true`, read by the API and the
+  workers) restores the previous parsing in all four parsers: an agent run
+  whose model answers in blocks again gets the `str()` of the blocks in
+  `raw_output`, with the confidence length signal counting blocks, and the
+  SOP parser, explainer and feedback analyser fail or fall back on block
+  content as they did. With the opt-out and the guardrail hooks on, the
+  reasoning blocks also reach `raw_output` in that `str()` as before, and the
+  output rules do not evaluate them: the output stage evaluates the answer's
+  text blocks only.
+- Guardrails: with `guardrails_hooks_enabled` on, a block answer passes the
+  output stage, grounding rules included, on its answer text, as a string
+  answer does; it used to skip the stage and travel on unevaluated. Reasoning
+  and signature blocks are never evaluated as the answer. A transform
+  (redaction) replaces the answer's text blocks (a refusal block keeps its
+  type) and keeps every other block (reasoning, signature-only text, tool use)
+  as it was; a block rule refuses the run as for a string answer. The input
+  stage and the grounding context read block content (a multimodal user turn,
+  a tool result in blocks) the same way.
+  This is not turned off by `agent_output_block_parsing=false`; it changes
+  nothing while the hooks are off, and with them on an answer is changed only
+  where a rule transforms or blocks it.
+
+### Fixed - Public status page crawlability
+- Render status interpretation, an explicit unconfirmed loading state and
+  support links in the initial HTML, even without JavaScript or a live report.
+- Keep availability claims sourced from the status endpoint; static content
+  does not embed healthy states or historical uptime figures.
+- Add server-rendering, pending-report, failure and loaded-report regressions.
+- Synchronize the linked BFSI overview and the Start here guide with the
+  existing capability inventory; check public and domain summaries against that
+  inventory instead of stale counts.
 
 ### Security - breaking for audit readers of tenants that keep spend rows: `GET /audit` hides commercial spend audit rows by default
 - A deliberate default, on whatever `spend_intelligence_enabled` says:
