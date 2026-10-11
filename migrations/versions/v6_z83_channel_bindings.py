@@ -64,4 +64,6 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    raise RuntimeError("Forward-only migration: disable channel bindings rather than deleting intake history")
+    # Retain encrypted intake and RLS during version traversal/application rollback.
+    # A destructive schema rollback requires a separately reviewed migration.
+    pass

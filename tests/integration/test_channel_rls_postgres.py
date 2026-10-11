@@ -3,8 +3,12 @@
 
 from __future__ import annotations
 
+import os
+import subprocess
+import sys
 import uuid
 from datetime import UTC, datetime, timedelta
+from pathlib import Path
 
 import pytest
 from fastapi import HTTPException
@@ -30,6 +34,7 @@ from tests.integration.test_feature_flags_rls_postgres import (
 )
 
 
+@pytest.mark.timeout(300)
 async def test_all_channel_tables_enforce_scope_and_owner(as_rls_role: _Db) -> None:
     tenant_a, tenant_b, user_a, user_b = (uuid.uuid4() for _ in range(4))
     binding_a, binding_b = uuid.uuid4(), uuid.uuid4()
@@ -78,6 +83,46 @@ async def test_all_channel_tables_enforce_scope_and_owner(as_rls_role: _Db) -> N
                 ),
                 {"id": uuid.uuid4(), "tenant": tenant, "binding": binding},
             )
+    tables = ("channel_bindings", "channel_sender_links", "channel_deliveries")
+    snapshot_queries = {
+        "channel_bindings": text("SELECT row_to_json(r) FROM channel_bindings r ORDER BY id"),
+        "channel_sender_links": text("SELECT row_to_json(r) FROM channel_sender_links r ORDER BY id"),
+        "channel_deliveries": text("SELECT row_to_json(r) FROM channel_deliveries r ORDER BY id"),
+    }
+
+    def retained_rows() -> dict[str, list[object]]:
+        with as_rls_role.owner.connect() as conn:
+            return {table: list(conn.scalars(query)) for table, query in snapshot_queries.items()}
+
+    before = retained_rows()
+    env = {**os.environ, "AGENTICORG_DB_URL": as_rls_role.url}
+    for action, revision in (("downgrade", "v6z82_spend_reconciliation"), ("upgrade", "head")):
+        result = subprocess.run(  # noqa: S603
+            [sys.executable, "-m", "alembic", action, revision],
+            cwd=Path(__file__).resolve().parents[2],
+            env=env,
+            capture_output=True,
+            text=True,
+            timeout=600,
+            check=False,
+        )
+        assert result.returncode == 0, result.stderr[-4000:]
+        assert retained_rows() == before
+        with as_rls_role.owner.connect() as conn:
+            assert conn.scalar(text("SELECT version_num FROM alembic_version")) == (
+                "v6z83_channel_bindings" if action == "upgrade" else revision
+            )
+            for table in tables:
+                assert tuple(
+                    conn.execute(
+                        text("SELECT relrowsecurity, relforcerowsecurity FROM pg_class WHERE oid=to_regclass(:table)"),
+                        {"table": table},
+                    ).one()
+                ) == (True, True)
+                assert conn.scalar(
+                    text("SELECT count(*) FROM pg_policies WHERE tablename=:table AND policyname=:policy"),
+                    {"table": table, "policy": f"{table}_tenant_isolation"},
+                ) == 1
     for tenant, own_binding in ((tenant_a, binding_a), (tenant_b, binding_b)):
         async with get_tenant_session(tenant) as session:
             role = (

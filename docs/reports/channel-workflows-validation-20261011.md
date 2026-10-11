@@ -22,6 +22,7 @@ call. The tests do not contact native channel providers or make telephone calls.
 | HTTP/worker channel E2E | Combined replay passed, 58 seconds | Disabled/bad-signature refusal; one-message review; private linking; duplicate/content-mismatch refusal; rotation/revocation; native callback parsing; actual workflow and LangGraph dispatch; paused target refusal |
 | Chromium desktop/mobile | Combined replay passed, 14 seconds | Real signup, workflow selection, protected credential form, save/enable/replace, Telegram setup rejection without activation, no secret returned, responsive layout and public workflow guide |
 | Isolated PostgreSQL RLS | Passed | Full migration chain; non-superuser/non-bypass role; cross-tenant reads/writes refused on all three new tables; another owner cannot read a binding |
+| Alembic integration replay | 22 passed | Reproduced CI downgrade failure; empty, stamped, populated and repeated upgrades; migration round-trip with channel rows and forced RLS retained |
 | Combined model/provider/auth regression replay | 384 passed | Model content-block parsing, explicit legacy models preserved, configured default respected, catalog/credential access separation, vault startup tests and isolated metrics environment |
 | Native provider and setup unit tests | 50 passed | Signatures, receiver scope, bounded payloads, private Telegram identity, replay windows, malformed replies, access-log token redaction, confirmed Telegram registration, foreign-callback refusal, owner-scoped activation and local/production callback separation |
 | Expanded channel branch replay | 142 passed across four suites; 96% combined channel-module line coverage | Encrypted roundtrip; owner/tenant-scoped management; lost-worker refusal; revocation; paused/retired targets; durable workflow completion; approval preservation; no automatic action replay; rotation; inbox privacy; bounded callback forms; ID-only task publication |
@@ -54,6 +55,29 @@ not describe this report as production verification.
   Local and staging defaults now stay local; the Docker overlay supplies its
   actual UI origin. Real Telegram registration refuses non-public HTTPS
   callbacks, rather than registering a local binding on production.
+- CI's migration round-trip failed because the new additive migration raised
+  during version step-back. The same failure was reproduced in an isolated
+  Docker database. Step-back now retains schema, encrypted history and RLS;
+  reapplying the migration must preserve seeded rows and tenant isolation.
+- The existing Google credential health probe placed a key in its URL query.
+  A failing request-boundary regression reproduced that exposure. The probe now
+  uses Google's `x-goog-api-key` header and keeps URLs key-free for successful,
+  unauthorized and quota-exceeded responses.
+
+## Limited account-backed provider checks
+
+A customer-supplied Google authorization key returned a real HTTP 200 response
+from `gemini-3.5-flash-lite`. Telegram `getMe` and `getWebhookInfo` confirmed a
+valid bot with no existing webhook and no pending updates. These minimal checks
+were followed by a disposable local AgenticOrg tenant: protected credential
+save/test reported active, and a tool-free LangGraph agent using that tenant's
+key returned the requested acceptance marker without returning the key. The
+default human-review policy produced `hitl_triggered`; it was not bypassed to
+claim autonomous completion. The local credential was revoked and the agent
+paused after the check. This does not prove production tenant-bound inference,
+private sender delegation, native inbound delivery or outbound acknowledgement.
+No bot message was sent and no callback was registered by these checks.
+Credentials and account identifiers are excluded from this report.
 
 ## Design review
 
@@ -70,7 +94,7 @@ to another application's callback is refused rather than overwritten.
 
 ## Not verified or not implemented by this release
 
-- Provider account approval, real Google inference/quota, native inbound
+- Provider account approval, production tenant-bound Google inference/quota, native inbound
   delivery, native outbound delivery, speech accuracy and telephone delivery
   require customer-owned accounts and authorized test recipients.
 - Messaging callbacks ingest text only. Images, attachments and audio notes

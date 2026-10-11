@@ -19,6 +19,10 @@ the UI or API alone leaves callbacks queued without a consumer.
 2. Review migration `v6_z83_channel_bindings`: three new tenant-scoped tables,
    forced RLS, composite tenant/binding references and no customer backfill.
    Apply through the repository's migration-first helper, not startup DDL.
+   Alembic version step-back retains all three tables, encrypted rows and RLS;
+   upgrading again is idempotent. This supports migration rehearsals, not a
+   destructive production rollback. Production recovery remains a forward fix
+   or restoration of the recorded application revision with the schema retained.
 3. Record the exact release commit and existing API/UI/worker/beat revisions.
    Keep production backups, infrastructure and unrelated service settings
    unchanged.
