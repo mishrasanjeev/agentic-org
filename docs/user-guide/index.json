@@ -49,7 +49,10 @@
       "description": "A plain-language guide to agents, tools, prompts, workflows, grants, knowledge, shadow mode, cases and OACP artifacts.",
       "group": "Start Here",
       "audience": "Everyone",
-      "sources": ["docs/PRODUCT_STATUS.md", "docs/governance/README.md"]
+      "sources": [
+        "docs/PRODUCT_STATUS.md",
+        "docs/governance/README.md"
+      ]
     },
     {
       "slug": "model-setup",
@@ -475,6 +478,24 @@
       "sources": [
         "docs/PRODUCT_STATUS.md",
         "docs/readiness/DOMAIN_READINESS_STANDARD.md"
+      ]
+    },
+    {
+      "slug": "customer-agent",
+      "title": "Customer agent: own the agent, open the agent",
+      "description": "The bank-operated assistant for the bank's own customers: what the conversation services do today, how it is easier than an in-app assistant, and the phased plan in the PRD.",
+      "group": "BFSI Playbooks",
+      "audience": "Bank product, risk and platform teams",
+      "reviewed": "2026-10-11",
+      "sources": [
+        "docs/customer-agent/PRD.md",
+        "api/v1/conversation.py",
+        "api/v1/conversation_supervisor.py",
+        "core/conversation/intents.py",
+        "api/v1/approvals.py",
+        "docs/governance/guardrails.md",
+        "docs/governance/model-gateway.md",
+        "docs/operations/audit-chain.md"
       ]
     }
   ]
