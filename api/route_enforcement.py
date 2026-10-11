@@ -62,6 +62,8 @@ RATE_LIMIT_CLASSES: dict[str, tuple[int, int]] = {
     "public-product-facts": (60, 60),
     "demo-request-public": (5, 3600),
     "client-portal-public": (60, 60),
+    "customer-agent-public": (30, 60),
+    "customer-agent": (120, 60),
     "branding-public-lookup": (120, 60),
     "push-public-config": (60, 60),
     "healthcheck": (600, 60),

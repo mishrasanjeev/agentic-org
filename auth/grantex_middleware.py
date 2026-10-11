@@ -366,6 +366,7 @@ class GrantexAuthMiddleware(BaseHTTPMiddleware):
         "/api/v1/client-portal/public/",  # Signed client portal invite/access tokens
         "/api/v1/auth/sso/",  # SSO login + OIDC callback (pre-session)
         "/api/v1/cron/",  # Cloud Scheduler triggers: X-Cron-Key verified by the route
+        "/api/v1/customer-agent/",  # Bank-signed customer assertions and the session tokens they issue
     )
 
     async def _credential_failure_response(

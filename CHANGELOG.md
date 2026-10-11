@@ -4,6 +4,35 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
 
 ## [Unreleased] - 2026-08-29
 
+### Added - the bank-operated customer agent, behind `AGENTICORG_CUSTOMER_AGENT_ENABLED` (off by default)
+- `POST /api/v1/customer-agent/sessions` exchanges a bank-signed customer
+  assertion (RS256 or ES256, verified against the bank's JWKS, issuer and
+  audience) for an opaque session token; the customer never holds a platform
+  credential, and the token's hash alone is stored (`customer_sessions`).
+  Session, acknowledgement of the AI disclosure, and end-of-session routes
+  authenticate that token themselves; the auth middleware exempts the prefix.
+- `POST /api/v1/customer-agent/turns` runs the conversational services under
+  an autonomy ladder set per task and per customer: level 0 inform, 1
+  recommend, 2 prepare and wait for one tap (the default), 3 execute after
+  the bank's step-up of the specific action (a signed approval bound to the
+  action id), 4 execute within the customer's mandate (caps, counterparties,
+  window) with a step-up outside it. `AGENTICORG_CUSTOMER_AGENT_MAX_AUTONOMY`
+  (2) bounds every level. Every answer and card carries a "why this"
+  explanation: data used, rule applied, alternatives, what the bank earns,
+  how to challenge it.
+- Prepared actions (`customer_actions`) with `GET /actions`,
+  `POST /actions/{id}/confirm` and `POST /actions/{id}/cancel`; a card whose
+  conversation moved on is marked superseded and never run. Mandates
+  (`customer_mandates`) through `GET /permissions`,
+  `PUT /permissions/mandates` and `DELETE /permissions/mandates/{id}`; the
+  permissions page also links the authority service's dashboard for outside
+  agents when `AGENTICORG_CUSTOMER_AGENT_OUTSIDE_AGENTS` is on.
+- `ui/public/customer-agent/widget.js`: a dependency-free embeddable element
+  (`<agenticorg-customer-agent>`) for the bank's page, with the disclosure
+  gate, one-tap cards, the "why this" panel and a host event for step-ups.
+- Migration `v6z83_customer_agent` (three RLS tables). Integration guide:
+  `docs/customer-agent/integration.md`.
+
 ### Security - breaking for audit readers of tenants that keep spend rows: `GET /audit` hides commercial spend audit rows by default
 - A deliberate default, on whatever `spend_intelligence_enabled` says:
   `GET /audit` hides the audit rows of rate cards, commitments, invoices,

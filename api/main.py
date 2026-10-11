@@ -51,6 +51,7 @@ from api.v1 import (
     conversation_supervisor,
     costs,
     cron,
+    customer_agent,
     delegations,
     departments,
     eval_datasets,
@@ -343,6 +344,7 @@ app.include_router(kpis.router, prefix="/api/v1", tags=["KPIs"])
 app.include_router(chat.router, prefix="/api/v1", tags=["Chat"])
 app.include_router(conversation.router, prefix="/api/v1")
 app.include_router(conversation_supervisor.router, prefix="/api/v1")
+app.include_router(customer_agent.router, prefix="/api/v1")
 app.include_router(content.router, prefix="/api/v1")
 app.include_router(content_structuring.router, prefix="/api/v1")
 app.include_router(content_translation.router, prefix="/api/v1")
