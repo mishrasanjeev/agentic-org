@@ -2696,7 +2696,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "agents:write",
-    "source_line": 124,
+    "source_line": 132,
     "tenant_required": true
   },
   {
@@ -2714,7 +2714,7 @@
     "public_exempt_reason": null,
     "rate_limit": "security-admin-write",
     "scope": "agents:write",
-    "source_line": 145,
+    "source_line": 153,
     "tenant_required": true
   },
   {
@@ -2732,7 +2732,25 @@
     "public_exempt_reason": null,
     "rate_limit": "security-admin-write",
     "scope": "agents:write",
-    "source_line": 197,
+    "source_line": 205,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "channels.telegram.connect",
+    "auth_required": true,
+    "function": "register_telegram",
+    "idempotency": "register-same-binding-callback",
+    "key": "POST /api/v1/channels/bindings/{binding_id}/connect-telegram api/v1/channels.py:register_telegram",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/channels.py",
+    "path": "/api/v1/channels/bindings/{binding_id}/connect-telegram",
+    "public_exempt_reason": null,
+    "rate_limit": "security-admin-write",
+    "scope": "agents:write",
+    "source_line": 269,
     "tenant_required": true
   },
   {
@@ -2750,7 +2768,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "agents:write",
-    "source_line": 309,
+    "source_line": 358,
     "tenant_required": true
   },
   {
@@ -2768,7 +2786,7 @@
     "public_exempt_reason": null,
     "rate_limit": "agent-execution",
     "scope": "agents:write",
-    "source_line": 347,
+    "source_line": 396,
     "tenant_required": true
   },
   {
@@ -2786,7 +2804,7 @@
     "public_exempt_reason": null,
     "rate_limit": "security-admin-write",
     "scope": "agents:write",
-    "source_line": 261,
+    "source_line": 310,
     "tenant_required": true
   },
   {
@@ -2804,7 +2822,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "agents:write",
-    "source_line": 104,
+    "source_line": 112,
     "tenant_required": true
   },
   {
@@ -2822,7 +2840,7 @@
     "public_exempt_reason": "provider-verify-token-required",
     "rate_limit": "standard",
     "scope": "public:channel-challenge",
-    "source_line": 397,
+    "source_line": 446,
     "tenant_required": false
   },
   {
@@ -2840,7 +2858,7 @@
     "public_exempt_reason": "provider-signature-and-binding-required",
     "rate_limit": "standard",
     "scope": "public:channel-callback",
-    "source_line": 422,
+    "source_line": 471,
     "tenant_required": false
   },
   {

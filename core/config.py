@@ -259,7 +259,7 @@ class Settings(BaseSettings):
     storage_region: str = "asia-south1"
     storage_endpoint: str | None = None  # Set for MinIO/S3-compatible; leave empty for GCS
 
-    # LLM — Gemini 2.5 Flash (free tier) as default; switch to Claude for production
+    # Reasoning defaults are shared with the model registry; explicit operator overrides remain supported.
     llm_primary: str = "gemini-3.5-flash-lite"
     llm_fallback: str = "gemini-3.5-flash-lite"
     llm_temperature: float = 0.2

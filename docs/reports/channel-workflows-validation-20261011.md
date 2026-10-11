@@ -19,7 +19,7 @@ call. The tests do not contact native channel providers or make telephone calls.
 | Chromium desktop/mobile | Passed, 13 seconds | Real signup, workflow selection, protected credential form, save/enable/replace, no secret returned, responsive layout and public workflow guide |
 | Isolated PostgreSQL RLS | Passed | Full migration chain; non-superuser/non-bypass role; cross-tenant reads/writes refused on all three new tables; another owner cannot read a binding |
 | Default/provider/auth regression replay | 164 passed | Explicit legacy models preserved, configured default respected, catalog/credential access separation, no new authentication exemption overlap, vault startup tests and isolated metrics environment |
-| Native provider unit tests | 29 passed | Signatures, receiver scope, bounded payloads, private Telegram identity, replay windows, malformed replies and access-log token redaction |
+| Native provider and setup unit tests | 50 passed | Signatures, receiver scope, bounded payloads, private Telegram identity, replay windows, malformed replies, access-log token redaction, confirmed Telegram registration, foreign-callback refusal, owner-scoped activation and local/production callback separation |
 | UI production build and SEO verification | Passed | Public guide is prerendered; sitemap/canonical/CSP/generated documentation remain synchronized |
 
 Full preflight and exact PR/main CI results are release gates, not inferred from
@@ -45,6 +45,10 @@ not describe this report as production verification.
 - Meta challenge tokens arrive in URL queries. Application access logs redact
   plain and percent-encoded token keys. Infrastructure/provider logs can still
   retain URLs; never reuse an API key or app secret as the verification token.
+- A local binding could initially display the production callback origin.
+  Local and staging defaults now stay local; the Docker overlay supplies its
+  actual UI origin. Real Telegram registration refuses non-public HTTPS
+  callbacks, rather than registering a local binding on production.
 
 ## Design review
 
@@ -54,6 +58,10 @@ labelled protected fields, keyboard-operable controls, compact three-step setup,
 unframed sections, clear disabled/review/error states, credential clearing after
 save, bounded result display, and no desktop/mobile page overflow. Native
 outbound messages intentionally contain status only, not private tool outputs.
+Telegram callback registration is a protected server-side action; users do not
+need a token-bearing browser URL or terminal command. Provider setup contract
+tests use an in-process HTTP double, not a real Telegram account. A bot attached
+to another application's callback is refused rather than overwritten.
 
 ## Not verified or not implemented by this release
 

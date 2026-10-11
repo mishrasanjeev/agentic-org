@@ -89,7 +89,7 @@ export default function Channels() {
     await action(async () => {
       const response = await api.post("/channels", { name, provider: providerId, target_kind: kind, target_id: target, credentials, auto_reply: reply });
       setCredentials({}); setCreating(false); setSelected(response.data); setCommand("");
-      await reload(); setNotice("Channel saved. Register the callback in your provider account, then enable it.");
+      await reload(); setNotice(providerId === "telegram" ? "Channel saved. Select Connect Telegram to register its callback." : "Channel saved. Register the callback in your provider account, then enable it.");
     });
   }
   function credentialFields(fields: string[]) {
@@ -146,6 +146,10 @@ export default function Channels() {
       })} />Enabled</label></div>
       <div className="flex items-start gap-2"><label className="flex-1 min-w-0 text-sm">Callback URL<input className={inputClass} readOnly value={selected.callback_url} /></label><Button className="mt-6 shrink-0" variant="outline" title="Copy callback URL" aria-label="Copy callback URL" onClick={() => action(async () => { await navigator.clipboard.writeText(selected.callback_url); setNotice("Callback copied"); })}><Copy size={16} /></Button></div>
       <div className="flex flex-wrap items-center gap-4"><Button variant="outline" disabled={busy} onClick={() => { setCreating(false); setCredentials({}); setRotating(!rotating); }}><KeyRound size={16} className="mr-2" />Replace credentials</Button>
+        {selected.provider === "telegram" && <Button disabled={busy} onClick={() => action(async () => {
+          const response = await api.post(`/channels/bindings/${selected.id}/connect-telegram`);
+          setSelected(response.data.binding); await reload(); setNotice(`Telegram callback registered for @${response.data.bot_username}. Link your private account next.`);
+        })}><Plug size={16} className="mr-2" />Connect Telegram</Button>}
         {selectedProvider?.reply && <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={selected.auto_reply} disabled={busy} onChange={() => action(async () => {
           const response = await api.patch(`/channels/bindings/${selected.id}`, { auto_reply: !selected.auto_reply }); setSelected(response.data); await reload();
         })} />Task-status replies</label>}</div>

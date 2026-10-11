@@ -10,7 +10,14 @@ from urllib.parse import urlencode
 import httpx
 import pytest
 
-from core.channels.providers import CATALOG, ChannelError, decode_messages, send_reply, validate_credentials
+from core.channels.providers import (
+    CATALOG,
+    ChannelError,
+    connect_telegram,
+    decode_messages,
+    send_reply,
+    validate_credentials,
+)
 
 
 def signed(secret, data, prefix=""):
@@ -278,3 +285,95 @@ async def test_reply_requires_native_acceptance_marker(monkeypatch, provider, re
     else:
         with pytest.raises(ChannelError, match="provider_reply_unconfirmed"):
             await send_reply(provider, credentials, "20001", "Task status: completed")
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("existing_url", ["", "https://app.example.test/api/callback"])
+async def test_telegram_setup_confirms_bot_and_callback_without_dropping_updates(monkeypatch, existing_url):
+    callback = "https://app.example.test/api/callback"
+    calls = []
+    responses = iter(
+        [
+            {"id": 123, "is_bot": True, "username": "example_test_bot"},
+            {"url": existing_url},
+            True,
+            {"url": callback},
+        ]
+    )
+
+    class Client:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *args):
+            pass
+
+        async def post(self, url, **kwargs):
+            calls.append((url.rsplit("/", 1)[1], kwargs["json"]))
+            return httpx.Response(200, json={"ok": True, "result": next(responses)})
+
+    monkeypatch.setattr("core.channels.providers.httpx.AsyncClient", lambda **kw: Client())
+    credentials = {"access_token": "123:synthetic", "webhook_secret": "synthetic-secret"}
+    assert await connect_telegram(credentials, callback) == "example_test_bot"
+    assert calls[2] == (
+        "setWebhook",
+        {"url": callback, "secret_token": "synthetic-secret", "allowed_updates": ["message"]},
+    )
+    assert "drop_pending_updates" not in calls[2][1]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "callback",
+    [
+        "http://app.example.test/callback",
+        "https://127.0.0.1/callback",
+        "https://localhost/callback",
+        "https://user:password@app.example.test/callback",
+        "https://app.example.test:8000/callback",
+        "https://app.example.test:invalid/callback",
+        "https://app.example.test/callback?token=private",
+    ],
+)
+async def test_telegram_setup_refuses_non_public_callback_before_network(callback):
+    with pytest.raises(ChannelError, match="public_https_callback_required"):
+        await connect_telegram({"access_token": "123:synthetic"}, callback)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("failure", ["conflict", "rejected", "unconfirmed", "timeout"])
+async def test_telegram_setup_does_not_replace_other_callback_or_leak_provider_errors(monkeypatch, failure):
+    calls = []
+
+    class Client:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *args):
+            pass
+
+        async def post(self, url, **kwargs):
+            method = url.rsplit("/", 1)[1]
+            calls.append(method)
+            if failure == "timeout":
+                raise httpx.ReadTimeout("token-bearing-provider-url")
+            if method == "getMe":
+                return httpx.Response(
+                    200, json={"ok": True, "result": {"is_bot": True, "username": "example_test_bot"}}
+                )
+            if method == "getWebhookInfo":
+                result = {"url": "https://other.example.test/callback"} if failure == "conflict" else {"url": ""}
+                return httpx.Response(200, json={"ok": True, "result": result})
+            return httpx.Response(200, json={"ok": failure != "rejected", "result": failure != "unconfirmed"})
+
+    monkeypatch.setattr("core.channels.providers.httpx.AsyncClient", lambda **kw: Client())
+    with pytest.raises(ChannelError) as caught:
+        await connect_telegram(
+            {"access_token": "123:synthetic", "webhook_secret": "synthetic-secret"},
+            "https://app.example.test/callback",
+        )
+    assert "synthetic" not in str(caught.value)
+    assert "provider-url" not in str(caught.value)
+    if failure == "conflict":
+        assert "setWebhook" not in calls
+        assert str(caught.value) == "telegram_bot_connected_elsewhere"

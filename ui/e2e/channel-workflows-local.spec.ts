@@ -53,6 +53,26 @@ test("BYO channel setup and documentation on desktop and mobile", async ({ page,
     await expect(page.getByLabel("Webhook Secret")).toHaveCount(0);
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBeTruthy();
     await page.screenshot({ path: testInfo.outputPath(`channels-${viewport.width}.png`), fullPage: true });
+    await page.getByRole("button", { name: "Connect channel", exact: true }).click();
+    await page.getByRole("combobox", { name: "Channel", exact: true }).selectOption("telegram");
+    await page.getByLabel("Connection name").fill(`Telegram setup ${viewport.width}`);
+    await page.getByRole("button", { name: "Next", exact: true }).click();
+    await page.getByRole("combobox", { name: "Destination type", exact: true }).selectOption("workflow");
+    await page.getByRole("combobox", { name: "Workflow", exact: true }).selectOption(target);
+    await page.getByRole("button", { name: "Next", exact: true }).click();
+    await page.getByLabel("Access Token", { exact: true }).fill("123:synthetic");
+    await page.getByRole("button", { name: "Generate secret" }).click();
+    await page.getByRole("button", { name: "Save connection" }).click();
+    await expect(page.getByRole("heading", { name: `Telegram setup ${viewport.width}`, exact: true })).toBeVisible();
+    // Simulate a provider setup rejection only. Never contact Telegram with synthetic credentials.
+    await page.route("**/channels/bindings/*/connect-telegram", (route) => route.fulfill({
+      status: 422, contentType: "application/json", body: JSON.stringify({ detail: "telegram_setup_rejected" }),
+    }));
+    await page.getByRole("button", { name: "Connect Telegram", exact: true }).click();
+    await expect(page.getByRole("alert")).toContainText("telegram_setup_rejected");
+    await expect(page.getByLabel("Enabled", { exact: true })).not.toBeChecked();
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBeTruthy();
+    await page.screenshot({ path: testInfo.outputPath(`telegram-setup-${viewport.width}.png`), fullPage: true });
     await page.goto("/docs/channel-workflows");
     await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
     await expect(page.getByText("gemini-3.5-flash-lite", { exact: false }).first()).toBeVisible();

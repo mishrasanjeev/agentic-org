@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import hmac
 import os
@@ -19,7 +20,14 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from api.deps import get_current_tenant, require_scope
 from api.route_metadata import route_meta
-from core.channels.providers import CATALOG, MAX_BODY_BYTES, ChannelError, decode_messages, validate_credentials
+from core.channels.providers import (
+    CATALOG,
+    MAX_BODY_BYTES,
+    ChannelError,
+    connect_telegram,
+    decode_messages,
+    validate_credentials,
+)
 from core.channels.runtime import _request_for_user, receive, seal, unseal
 from core.database import get_tenant_session
 from core.models.agent import Agent
@@ -78,7 +86,13 @@ async def _binding(tenant_id: uuid.UUID, binding_id: uuid.UUID, user: User) -> C
 
 
 def _out(row: ChannelBinding) -> dict:
-    origin = os.getenv("AGENTICORG_BASE_URL", "https://app.agenticorg.ai").rstrip("/")
+    from core.config import normalize_env
+
+    origin = os.getenv("AGENTICORG_BASE_URL", "").strip().rstrip("/")
+    if not origin:
+        # A local/staging binding must never register a callback on the production host.
+        production = normalize_env(os.getenv("AGENTICORG_ENV")) in {"production", "prod"}
+        origin = "https://app.agenticorg.ai" if production else "http://localhost:8000"
     return {
         "id": str(row.id),
         "name": row.name,
@@ -247,6 +261,47 @@ async def update_binding(
             for receipt in receipts:
                 receipt.status, receipt.error_code = "needs_review", "binding_authority_revoked"
     return _out(row)
+
+
+@router.post("/bindings/{binding_id}/connect-telegram")
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="agents:write",
+    rate_limit="security-admin-write",
+    idempotency="register-same-binding-callback",
+    audit_event="channels.telegram.connect",
+)
+async def register_telegram(
+    binding_id: uuid.UUID, request: Request, tenant_id: str = Depends(get_current_tenant)
+) -> dict:
+    tid = uuid.UUID(tenant_id)
+    user = await _actor(request, tid)
+    async with get_tenant_session(tid) as session:
+        # Serialize provider registration with credential rotation and disable operations.
+        row = await session.scalar(
+            select(ChannelBinding)
+            .where(
+                ChannelBinding.tenant_id == tid,
+                ChannelBinding.id == binding_id,
+                ChannelBinding.owner_user_id == user.id,
+            )
+            .with_for_update()
+        )
+        if row is None:
+            raise HTTPException(404, "Channel not found")
+        if row.provider != "telegram":
+            raise HTTPException(422, "This setup action is for Telegram only")
+        try:
+            credentials = await unseal(row.credentials_ciphertext)
+            username = await asyncio.wait_for(connect_telegram(credentials, _out(row)["callback_url"]), timeout=45)
+        except ChannelError as exc:
+            status = 409 if str(exc) == "telegram_bot_connected_elsewhere" else 422
+            raise HTTPException(status, str(exc)) from exc
+        except TimeoutError as exc:
+            raise HTTPException(504, "Telegram setup is unconfirmed; check the connection before retrying") from exc
+        row.enabled = True
+    return {"binding": _out(row), "bot_username": username, "status": "callback_registered"}
 
 
 @router.post("/bindings/{binding_id}/link-code")

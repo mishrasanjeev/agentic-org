@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import hashlib
 import hmac
+import ipaddress
 import json
 import logging
 import math
@@ -12,7 +13,7 @@ import re
 import time
 from dataclasses import dataclass
 from typing import Any
-from urllib.parse import parse_qs
+from urllib.parse import parse_qs, urlsplit
 
 import httpx
 
@@ -277,3 +278,66 @@ async def send_reply(provider: str, credentials: dict[str, str], sender: str, te
     except (httpx.HTTPError, ValueError) as exc:
         # A timeout may have delivered the message. Never retry a reply blindly.
         raise ChannelError("provider_reply_unconfirmed") from exc
+
+
+async def connect_telegram(credentials: dict[str, str], callback_url: str) -> str:
+    """Register this binding only; never replace another application's bot webhook."""
+    try:
+        parsed = urlsplit(callback_url)
+        port = parsed.port
+    except ValueError as exc:
+        raise ChannelError("public_https_callback_required") from exc
+    host = parsed.hostname or ""
+    try:
+        private_host = not ipaddress.ip_address(host).is_global
+    except ValueError:
+        private_host = host == "localhost" or host.endswith((".localhost", ".local"))
+    if (
+        parsed.scheme != "https"
+        or not host
+        or private_host
+        or parsed.username
+        or parsed.password
+        or port not in {None, 443}
+        or parsed.query
+        or parsed.fragment
+    ):
+        raise ChannelError("public_https_callback_required")
+    base = f"https://api.telegram.org/bot{credentials['access_token']}"
+    try:
+        async with httpx.AsyncClient(timeout=15, follow_redirects=False) as client:
+
+            async def call(method: str, payload: dict[str, Any] | None = None) -> Any:
+                response = await client.post(f"{base}/{method}", json=payload or {})
+                data = response.json()
+                if response.status_code != 200 or not isinstance(data, dict) or data.get("ok") is not True:
+                    raise ChannelError("telegram_setup_rejected")
+                return data.get("result")
+
+            bot = await call("getMe")
+            if not isinstance(bot, dict) or bot.get("is_bot") is not True:
+                raise ChannelError("telegram_bot_identity_unconfirmed")
+            username = bot.get("username")
+            if not isinstance(username, str) or not re.fullmatch(r"[A-Za-z0-9_]{5,32}", username):
+                raise ChannelError("telegram_bot_identity_unconfirmed")
+            existing = await call("getWebhookInfo")
+            if not isinstance(existing, dict) or not isinstance(existing.get("url"), str):
+                raise ChannelError("telegram_webhook_state_unconfirmed")
+            if existing["url"] not in {"", callback_url}:
+                raise ChannelError("telegram_bot_connected_elsewhere")
+            # Telegram Bot API setWebhook: retain pending updates and authenticate callbacks with secret_token.
+            accepted = await call(
+                "setWebhook",
+                {"url": callback_url, "secret_token": credentials["webhook_secret"], "allowed_updates": ["message"]},
+            )
+            if accepted is not True:
+                raise ChannelError("telegram_webhook_state_unconfirmed")
+            current = await call("getWebhookInfo")
+            if not isinstance(current, dict) or current.get("url") != callback_url:
+                raise ChannelError("telegram_webhook_state_unconfirmed")
+            return username
+    except (httpx.HTTPError, ValueError) as exc:
+        if isinstance(exc, ChannelError):
+            raise
+        # Do not expose Telegram's token-bearing URL or raw error response.
+        raise ChannelError("telegram_setup_unconfirmed") from exc

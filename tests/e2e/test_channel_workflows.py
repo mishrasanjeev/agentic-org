@@ -85,6 +85,8 @@ def test_signed_channel_to_durable_workflow_and_revocation():
         callback = "/channels/webhooks/" + "/".join(urlsplit(binding["callback_url"]).path.split("/")[-2:])
         assert binding["enabled"] is False
         assert secret not in json.dumps(binding)
+        # Provider setup remains owner-authenticated and rejects the wrong adapter before any external call.
+        checked(client.post(f"/channels/bindings/{bid}/connect-telegram"), 422)
 
         def send(event, text, sender="private-sender", bad=False):
             body = json.dumps({"event_id": event, "sender_id": sender, "text": text}, separators=(",", ":")).encode()

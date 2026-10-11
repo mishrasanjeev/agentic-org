@@ -1069,7 +1069,7 @@ Audience: Agent creators and administrators. Reviewed: 2026-10-02.
 
 #### From a message to useful work
 
-Create an agent with a purpose, knowledge and permitted tools, or choose an existing workflow. Open **Channels** in the dashboard. Choose a provider, choose the destination, and enter credentials from your own provider account. Connections start disabled. Register the displayed HTTPS callback with the provider before enabling the connection.
+Create an agent with a purpose, knowledge and permitted tools, or choose an existing workflow. Open **Channels** in the dashboard. Choose a provider, choose the destination, and enter credentials from your own provider account. Connections start disabled. For Telegram, select **Connect Telegram** to check the bot and register its callback. For other providers, register the displayed HTTPS callback with the provider before enabling the connection.
 
 ```flow
 Create a provider account | You own the account, permissions and billing. | Owner: Workspace user
@@ -1105,7 +1105,9 @@ See [WhatsApp setup](https://developers.facebook.com/docs/whatsapp/cloud-api/get
 
 #### Telegram
 
-Create a bot through BotFather. Save its token and a fresh, random URL-safe webhook secret of 24 to 256 characters. Register the AgenticOrg callback with Telegram's `setWebhook`, supplying the same `secret_token`. AgenticOrg requires the resulting `X-Telegram-Bot-Api-Secret-Token` header. Open a private conversation with the bot, generate **Link my messaging account** in AgenticOrg and send the displayed command from that private account. Then send a small, read-only task. Groups and channel posts deliberately do not inherit a human account's authority. See the [Bot API](https://core.telegram.org/bots/api#setwebhook).
+Open [BotFather](https://t.me/BotFather), send `/newbot`, and follow its prompts to create a dedicated bot. In AgenticOrg, choose Telegram and the destination agent or workflow, enter the bot token, select **Generate secret**, and save. Select **Connect Telegram**: AgenticOrg checks the bot account, registers the HTTPS callback and verifies its registration before enabling the connection. Tokens never need to appear in a browser URL or terminal command. A bot already connected to another application is refused; use a dedicated bot rather than overwriting that application's callback.
+
+Open a private conversation with the bot, generate **Link my messaging account** in AgenticOrg and send the displayed command from that private account. Then send a small, read-only task. Groups and channel posts deliberately do not inherit a human account's authority. Localhost callbacks cannot be registered with Telegram; use the deployed HTTPS service for the real account test. AgenticOrg supplies `secret_token` and requires the resulting `X-Telegram-Bot-Api-Secret-Token` header. Registration is not proof of delivery: confirm a real message and completed run in the inbox. See the [Bot API](https://core.telegram.org/bots/api#setwebhook).
 
 #### Viber
 

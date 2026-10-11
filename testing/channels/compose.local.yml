@@ -4,6 +4,8 @@ services:
   api:
     image: ${AGENTICORG_CHANNEL_API_IMAGE:-agenticorg-channel-api:local}
     volumes: [".:/app:ro"]
+    environment:
+      AGENTICORG_BASE_URL: http://127.0.0.1:${AGENTICORG_DEV_UI_PORT:-3900}
   migrate:
     image: ${AGENTICORG_CHANNEL_API_IMAGE:-agenticorg-channel-api:local}
     volumes: [".:/app:ro"]
