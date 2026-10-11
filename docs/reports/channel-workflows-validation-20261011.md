@@ -19,11 +19,12 @@ call. The tests do not contact native channel providers or make telephone calls.
 
 | Check | Observed result | Boundary proved |
 |---|---|---|
-| HTTP/worker channel E2E | Passed, 93 seconds | Disabled/bad-signature refusal; one-message review; private linking; duplicate/content-mismatch refusal; rotation/revocation; native callback parsing; actual workflow and LangGraph dispatch; paused target refusal |
-| Chromium desktop/mobile | Passed, 15 seconds | Real signup, workflow selection, protected credential form, save/enable/replace, Telegram setup rejection without activation, no secret returned, responsive layout and public workflow guide |
+| HTTP/worker channel E2E | Combined replay passed, 58 seconds | Disabled/bad-signature refusal; one-message review; private linking; duplicate/content-mismatch refusal; rotation/revocation; native callback parsing; actual workflow and LangGraph dispatch; paused target refusal |
+| Chromium desktop/mobile | Combined replay passed, 14 seconds | Real signup, workflow selection, protected credential form, save/enable/replace, Telegram setup rejection without activation, no secret returned, responsive layout and public workflow guide |
 | Isolated PostgreSQL RLS | Passed | Full migration chain; non-superuser/non-bypass role; cross-tenant reads/writes refused on all three new tables; another owner cannot read a binding |
 | Combined model/provider/auth regression replay | 384 passed | Model content-block parsing, explicit legacy models preserved, configured default respected, catalog/credential access separation, vault startup tests and isolated metrics environment |
 | Native provider and setup unit tests | 50 passed | Signatures, receiver scope, bounded payloads, private Telegram identity, replay windows, malformed replies, access-log token redaction, confirmed Telegram registration, foreign-callback refusal, owner-scoped activation and local/production callback separation |
+| Expanded channel branch replay | 142 passed across four suites; 96% combined channel-module line coverage | Encrypted roundtrip; owner/tenant-scoped management; lost-worker refusal; revocation; paused/retired targets; durable workflow completion; approval preservation; no automatic action replay; rotation; inbox privacy; bounded callback forms; ID-only task publication |
 | UI production build and SEO verification | Passed | Public guide is prerendered; sitemap/canonical/CSP/generated documentation remain synchronized |
 
 Full preflight and exact PR/main CI results are release gates, not inferred from
