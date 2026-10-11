@@ -1,6 +1,6 @@
 # Own the Agent, Open the Agent
 
-> **Status: approved for implementation; delivery tracked in the phased plan (section 12).** This is the product requirements document for the bank-operated customer agent. The user-guide article [Customer agent](../user-guide/customer-agent.md) describes what ships today and how to try it; this document is the full requirement set, including the platform defects that gate the first customer-facing release.
+> **Status: approved for implementation; delivery is tracked in the programme plan.** This is the product requirements document for the bank-operated customer agent. The user-guide article [Customer agent](../user-guide/customer-agent.md) describes what ships today and how to try it; this document is the full requirement set, with the control catalogue and the capability status that gate the first customer-facing release.
 
 **Product Requirements Document: a bank-operated customer agent for banks, insurers and NBFCs, built on AgenticOrg with Grantex as the authority service**
 
@@ -26,7 +26,7 @@ Both doors need the same things: a verified identity for every agent, a grant th
 
 ### 1.3 What this document asks for
 
-Sections 2 to 7 set out the problem, goals, personas, scope, the open side and the control catalogue. Section 8 lays out the architecture and states honestly, per capability, whether AgenticOrg or Grantex has it, has it partially, or lacks it. Section 9 lists functional requirements with priorities and acceptance criteria. Sections 10 to 12 cover non-functional requirements, integrations and the phased plan. Section 13 names decisions needed. Appendices hold the standards table, glossary and recorded gaps.
+Sections 2 to 7 set out the problem, goals, personas, scope, the open side and the control catalogue. Section 8 lays out the architecture and states honestly, per capability, whether AgenticOrg or Grantex has it, has it partially, or lacks it. Section 9 lists functional requirements with priorities and acceptance criteria. Sections 10 and 11 cover non-functional requirements and integrations. Appendices hold the standards table and glossary. Delivery phasing, risks and the decisions each party owes are kept in the programme's own plan.
 
 ---
 
@@ -34,7 +34,7 @@ Sections 2 to 7 set out the problem, goals, personas, scope, the open side and t
 
 ### 2.1 The trigger
 
-After Sibos 2026 (Miami, 28 September to 1 October 2026; Frankfurt hosted the 2025 edition ([Swift](https://www.swift.com/news-events/events/sibos-2026-miami))), Eddy Rodriguez argued on LinkedIn that banks are moving AI into production just as customers begin to bring their own agents to the relationship. He cites Revolut's AIR assistant and Robinhood's agent work as early signs, and describes a financial assistant working 24/7 within the goals, risk tolerance and permissions a customer sets: finding a better savings rate, comparing card rewards against spending, evaluating ways to pay a mortgage faster, then taking approved actions. His conclusions: if agents make comparing providers and moving money easier, customer lifetime value gets harder to keep and banks must keep earning the relationship; risk and compliance become central to the experience (how a bank authenticates an agent, verifies on whose behalf it acts, enforces what it may do, and lets the customer see its actions and revoke access at once); customers may favour institutions that let their agents connect securely and get things done; and so banking infrastructure, meaning identity, permissions, secure connections and reliable execution, becomes the product. This PRD treats that argument as the hypothesis under test and sets out how a bank answers it with AgenticOrg and Grantex. It runs: a 24/7 financial assistant working within the goals, risk tolerance and permissions a customer sets can find a better savings rate, compare card rewards against spending, evaluate ways to pay a mortgage faster, then take approved actions. If agents make comparing providers and moving money easy, customer lifetime value becomes harder to keep and banks must keep earning the relationship. Risk and compliance move to the centre: how does a bank authenticate an agent, verify whose behalf it acts on, enforce what it may do, and let the customer see its actions and revoke access immediately? Customers may favour institutions that let their agents connect securely. In his phrase, "banking infrastructure is becoming the product". The evidence below shows the argument holds.
+After Sibos 2026 (Miami, 28 September to 1 October 2026; Frankfurt hosted the 2025 edition ([Swift](https://www.swift.com/news-events/events/sibos-2026-miami))), a widely shared practitioner post argued that banks are moving AI into production just as customers begin to bring their own agents to the relationship. It cites Revolut's AIR assistant and Robinhood's agent work as early signs, and describes a financial assistant working 24/7 within the goals, risk tolerance and permissions a customer sets: finding a better savings rate, comparing card rewards against spending, evaluating ways to pay a mortgage faster, then taking approved actions. Its conclusions: if agents make comparing providers and moving money easier, customer lifetime value gets harder to keep and banks must keep earning the relationship; risk and compliance become central to the experience (how a bank authenticates an agent, verifies on whose behalf it acts, enforces what it may do, and lets the customer see its actions and revoke access at once); customers may favour institutions that let their agents connect securely and get things done; and so banking infrastructure, meaning identity, permissions, secure connections and reliable execution, becomes the product. This PRD treats that argument as the hypothesis under test and sets out how a bank answers it with AgenticOrg and Grantex. In its phrase, "banking infrastructure is becoming the product". The evidence below shows the argument holds.
 
 ### 2.2 Bring-your-own-agent is live
 
@@ -68,7 +68,7 @@ No regulator has agent-specific binding rules yet; all keep accountability with 
 2. Make the bank the easiest institution for a customer's outside agent to connect to, under bank-controlled identity, scopes, mandates and revocation.
 3. Run both on one authority, policy and evidence layer so every agent action produces the same quality of record.
 4. Fix the platform defects in section 8.3 before any customer-facing release.
-5. Meet the convergent regulatory minimum (inventory, materiality tiering, meaningful human oversight, kill switch, tamper-evident audit, residency) in India, the UK, the EU and Singapore from day one.
+5. Meet the convergent regulatory minimum (inventory, materiality tiering, meaningful human oversight, operator override, tamper-evident audit, residency) in India, the UK, the EU and Singapore from day one.
 
 ### 3.2 Non-goals
 
@@ -104,7 +104,7 @@ Measurement follows the DBS pattern of control groups, the only published bank a
 | Retail customer | See money across banks; be warned before missed payments; get a better rate without hunting; pay, freeze, dispute in one place; understand why; stop the agent instantly | Whole-wallet view, nudges with "why this", one-tap prepared actions, biometric approval, one permissions page | 48 per cent open to proactive assistants paying bills and setting alerts ([American Banker](https://www.americanbanker.com/news/more-americans-asking-ai-for-financial-advice-td-survey)) |
 | SME owner | Forecast cash, reconcile ledger to bank, pay vendors and GST on time, get working capital before a shortfall | Agent across ledger (Tally, Zoho, QuickBooks) and account; bulk approvals within limits | 50 per cent would let agents initiate with approval ([GlobeNewswire](https://www.globenewswire.com/news-release/2026/09/29/3370931/0/en/54-of-Finance-Leaders-Using-AI-Agents-Would-Seek-a-Workaround-if-Their-Bank-Can-t-Support-Them.html)) |
 | Relationship manager | See what the agent said; take over with context; receive nudges worth a call | Supervisor view with takeover, summary and intent tag | DBS nudges also feed RMs ([Retail Banker International](https://www.retailbankerinternational.com/news/singapores-dbs-bank-leverages-ai-to-boost-intelligent-banking-capabilities/)) |
-| Risk and compliance officer | Prove every action was within an authenticated mandate; show where humans sat; halt anything; produce evidence in hours | Agent inventory, materiality tier, kill switch, signed evidence package, override analytics | FSB SP10 and inventory attributes ([FSB](https://www.fsb.org/uploads/P100626.pdf)) |
+| Risk and compliance officer | Prove every action was within an authenticated mandate; show where humans sat; halt anything; produce evidence in hours | Agent inventory, materiality tier, operator override, signed evidence package, override analytics | FSB SP10 and inventory attributes ([FSB](https://www.fsb.org/uploads/P100626.pdf)) |
 | Bank platform team | Deploy in-country, integrate rails, route models by policy, bound costs, observe everything | Self-hosted AgenticOrg and Grantex, connectors, gateway with spend caps, traces and timelines | |
 | Customer's external agent (principal) | Prove who I am and for whom; discover what I may do; get a scoped grant; act within it; learn when revoked | Agent Passport verification, MCP discovery, RAR-scoped grant, revocation feed | MCP authorization 2026-07-28 ([MCP](https://modelcontextprotocol.io/specification/2026-07-28/basic/authorization)) |
 | Regulator and auditor | Reconstruct any decision: instruction, mandate, data, steps, model version, approvals, warnings | Exportable hash-chained signed evidence package | Reconstruction standard ([Ashfords](https://www.ashfords.co.uk/insights/articles/when-an-ai-agent-makes-the-wrong-payment-who-carries-the-loss)) |
@@ -187,14 +187,14 @@ Card-network agent tokens are live. Visa Intelligent Commerce binds agent tokens
 
 ### 7.1 Control catalogue
 
-Regime status: RBI FREE-AI is a committee report ([RBI](https://www.rbi.org.in/Scripts/PublicationReportDetails.aspx?ID=1306)); FSB sound practices are a June 2026 consultation ([FSB](https://www.fsb.org/uploads/P100626.pdf)); MAS consulted on AI Risk Management Guidelines covering agents with a 12-month transition ([Allen & Gledhill](https://www.allenandgledhill.com/sg/publication/articles/31741/mas-consults-on-proposed-guidelines-for-artificial-intelligence-risk-management)); FCA Consumer Duty and the Mills Review apply in the UK ([FCA](https://www.fca.org.uk/publications/corporate-documents/mills-review)); EU AI Act high-risk obligations for creditworthiness apply from **2 December 2027** and Article 50 transparency from 2 August 2026 ([Hunton](https://www.hunton.com/privacy-and-cybersecurity-law-blog/eu-digital-omnibus-on-ai-enters-into-force)); SEBI makes advisers solely responsible for AI advice and signalled mandatory kill switches ([The Policy Edge](https://www.policyedge.in/p/sebi-signals-tiered-ai-rules-with-kill-switches-and-human-oversight)).
+Regime status: RBI FREE-AI is a committee report ([RBI](https://www.rbi.org.in/Scripts/PublicationReportDetails.aspx?ID=1306)); FSB sound practices are a June 2026 consultation ([FSB](https://www.fsb.org/uploads/P100626.pdf)); MAS consulted on AI Risk Management Guidelines covering agents with a 12-month transition ([Allen & Gledhill](https://www.allenandgledhill.com/sg/publication/articles/31741/mas-consults-on-proposed-guidelines-for-artificial-intelligence-risk-management)); FCA Consumer Duty and the Mills Review apply in the UK ([FCA](https://www.fca.org.uk/publications/corporate-documents/mills-review)); EU AI Act high-risk obligations for creditworthiness apply from **2 December 2027** and Article 50 transparency from 2 August 2026 ([Hunton](https://www.hunton.com/privacy-and-cybersecurity-law-blog/eu-digital-omnibus-on-ai-enters-into-force)); SEBI makes advisers solely responsible for AI advice and signalled mandatory operator overrides ([The Policy Edge](https://www.policyedge.in/p/sebi-signals-tiered-ai-rules-with-kill-switches-and-human-oversight)).
 
 | ID | Control | RBI FREE-AI | FSB | MAS | FCA | EU AI Act | SEBI | Platform component (status) |
 |---|---|---|---|---|---|---|---|---|
 | C-01 | Agent inventory: identifier, tools, guardrails, permitted uses, model versions, tier | Governance | SP3, SP5 | Inventory | SM&CR | Art. 9 | AI records | Agent registry, model cards, inventory (exist, flag-gated) |
 | C-02 | Materiality tiering; money and credit at top tier | Proportionate | SP5 | Impact, complexity, reliance | Proportionality | Annex III | Tiered | Risk tiers (exists, flag-gated) |
 | C-03 | Meaningful human oversight at checkpoints; override analytics | Sutra 2 | SP10 | Oversight | Consumer Duty | Art. 14 | HITL | HITL grammar, approvals (exist); analytics (new) |
-| C-04 | Kill switch at agent, model, tool, connector, all-agents; tested runbooks | Safety | SP10 | Stop | Resilience | Art. 14(4) | Kill switch | Operator override (exists, off); Grantex emergency stop (flag) |
+| C-04 | Operator override at agent, model, tool, connector, all-agents; tested runbooks | Safety | SP10 | Stop | Resilience | Art. 14(4) | Halt control | Operator override (exists, off); Grantex emergency stop (flag) |
 | C-05 | Mandate enforced at execution layer: value, velocity, counterparty, category, time | Protection | Agentic risks | SAFR mandate check | PSRs consent | n/a | n/a | Grantex caps and budget (exist); `caps.enforce` (reserved, unimplemented) |
 | C-06 | Per-agent identity, short-lived scoped credentials, no passthrough, model never holds credentials | Trust | SP11 | SAFR identity | n/a | n/a | n/a | Grantex DID, grants, vault references (exist) |
 | C-07 | Revocation p95 at most 2 s, fail-closed verification | Protection | SP10 | SAFR | Customer control | n/a | n/a | Grantex feed (exists); AgenticOrg path (absent) |
@@ -220,9 +220,9 @@ A specific product or action proposed to an identified customer is a personal re
 
 SR 26-2 excludes generative and agentic AI from US model-risk scope and points to the bank's own governance ([Federal Reserve](https://www.federalreserve.gov/supervisionreg/srletters/SR2602a1.pdf)); everywhere else the direction is stricter. The baseline adopted here is the convergent minimum: agent-level inventory, materiality tiering, pre-deployment and continuous evaluation on fixed test sets, provider updates treated as changes, documented meaningful oversight ([FSB](https://www.fsb.org/uploads/P100626.pdf)). ISO/IEC 42001 with ISO/IEC 42005:2025 impact assessments and NIST AI 600-1 form the audit scaffolding ([CMS](https://cms.law/en/gbr/legal-updates/iso-iec-42005-2025-a-new-blueprint-for-legal-and-commercial-leaders-navigating-ai-risk-and-governance); [NIST](https://www.nist.gov/node/1855536)). Reproducibility is evidenced by replayable logs, version pinning and periodic re-evaluation, not determinism.
 
-### 7.4 HITL thresholds and kill switches
+### 7.4 HITL thresholds and operator overrides
 
-No regulator sets numeric thresholds; the bank sets them in a board-approved policy per task class. Proposed defaults: auto-execute below the mandate's per-action cap; customer step-up above it or for any new payee; bank four-eyes for high-value, new-payee or credit-affecting actions; always-human for vulnerability or fraud signals, regulatory requests and anything the HITL grammar cannot evaluate (which fails closed). Kill switches at five scopes with a 5-second cache and signed set and release; Grantex emergency stop at grant, agent, principal and developer scope; quarterly drills.
+No regulator sets numeric thresholds; the bank sets them in a board-approved policy per task class. Proposed defaults: auto-execute below the mandate's per-action cap; customer step-up above it or for any new payee; bank four-eyes for high-value, new-payee or credit-affecting actions; always-human for vulnerability or fraud signals, regulatory requests and anything the HITL grammar cannot evaluate (which fails closed). Operator overrides at five scopes with a 5-second cache and signed set and release; Grantex emergency stop at grant, agent, principal and developer scope; quarterly drills.
 
 ### 7.5 Liability positions
 
@@ -317,28 +317,9 @@ For a bank-operated agent the multi-party debate collapses onto the bank, which 
 | Platform | Spend caps | Partial | Per-agent cap on one endpoint; no token or spend limits in gateway |
 | Platform | In-country hosting | Partial | Self-hostable; hosted single-region foreign; Grantex has no DR or backup runbook |
 
-### 8.3 Critical defects as explicit requirements
+### 8.3 Closing the gaps
 
-Each is P0 and a Phase 0 exit criterion.
-
-| ID | Defect found | Requirement |
-|---|---|---|
-| DEF-01 | No grant revocation path in AgenticOrg: `TokenPool.revoke_token()` has no callers; pause and retire return `"token_revoked": true` without revoking | Pause and retire revoke through Grantex and the pool; the response reflects the real result |
-| DEF-02 | Token pool never revokes; grants only expire | Pool subscribes to the revocation feed and evicts revoked tokens |
-| DEF-03 | Middleware checks neither revocation nor agent status; a paused or retired agent's unexpired token still authenticates | Verify current grant state and refuse paused or retired agents; fail closed |
-| DEF-04 | Pinned `grantex==0.5.1` predates purpose, cap and reason-code APIs; Grantex publishes 0.7.x | Re-pin and verify purpose, cap, decision and region enforcement end to end |
-| DEF-05 | In-memory checkpointer by default; paused approvals lost on restart | Postgres sealed checkpointer mandatory; startup refuses `memory` outside development |
-| DEF-06 | Banking pack tools not bound; `knowledge_base_search` dropped silently; no retrieval tool at all | Bind retrieval as an agent tool; unresolved pack tools fail loudly at creation |
-| DEF-07 | No end-customer channel or widget | Customer session layer, embeddable widget, auth-exempt customer routes |
-| DEF-08 | Limits without spend caps; `caps.enforce` reserved but unimplemented | Spend caps on every run path; token and cost limits in the gateway; `caps.enforce` wired to Grantex caps |
-| DEF-09 | `grants.enforce_closed` defaults `off` | Bank profile forces `deny`; `off` refused in strict runtimes |
-| DEF-10 | Audit signed with the general app secret; chain off everywhere | Dedicated KMS or HSM key; chain on with daily verification and anchor export |
-| DEF-11 | A2A tasks accept any authenticated credential unless a flag is set | Route scopes on by default for A2A and MCP |
-| DEF-12 | Agent delegation endpoint returns `delegated` on failure and discards the token | Return the real outcome; store the delegated token or fail |
-| DEF-13 | Tenant admins can switch on live `money` and `filing` capability | Move `safety.live_capability.*` to operator-reserved keys |
-| DEF-14 | Guardrail hooks and enforcement off; detector pattern-based; classifier absent | Both on; semantic detector; working classifier; multilingual coverage |
-| DEF-15 | Grantex gateway and Go SDK skip revocation; status lists unsigned; missing list treated as not revoked | Revocation-aware verification everywhere; signed lists; fail closed |
-| DEF-16 | Grantex `enforce()` emits no audit; Enforce Log backend missing | Enforcement decisions written to the hash-chained audit; real endpoint |
+Every gap the capability status records is closed as a default-off platform change, verified by tests, before a customer touches the agent. The user guide's roadmap lists the headline items; the detailed register is maintained with the programme, not in this document.
 
 ---
 
@@ -352,7 +333,7 @@ P0 ships before any customer-facing release; P1 before execute with approval; P2
 |---|---|---|---|---|
 | FR-01 | Bind the bank-authenticated customer to a Grantex principal and an AgenticOrg session | P0 | Principal id identical across session, grants and audit rows | Session layer (new); Grantex principal (exists) |
 | FR-02 | Customer permissions page listing all agents, scopes, caps, last action, audit | P0 | Shows bank agent and outside agents from principal endpoints; loads under 2 s | Permission Dashboard (exists); embedded rendering (new) |
-| FR-03 | One-tap revoke with cascade; p95 at most 2 s to next refused action | P0 | Tool call after revoke refused with `grant_revoked`; measured end to end | Grantex revocation (exists); DEF-01 to DEF-03 (new) |
+| FR-03 | One-tap revoke with cascade; p95 at most 2 s to next refused action | P0 | Tool call after revoke refused with `grant_revoked`; measured end to end | Grantex revocation (exists); AgenticOrg revocation path (new) |
 | FR-04 | Passkey-bound consent for grant creation and L3 approval on an issuer-branded page | P0 | Live approval refused without bound WebAuthn assertion | Grantex consent (exists); branding (partial) |
 | FR-05 | AI disclosure at first use and every interaction; acknowledgement retained | P0 | Acknowledgement in audit; transcripts carry AI marker | Channel layer (new) |
 | FR-06 | AA and open banking consent with per-use notification and partial revocation | P1 | Artefact created, used, revoked through bank's AA client | AA connector (partial) |
@@ -381,8 +362,8 @@ P0 ships before any customer-facing release; P1 before execute with approval; P2
 | FR-19 | Mandate enforced at tool boundary and at bank rail | P1 | Both checks logged; disagreement raises irregularity and halts | ToolGateway (exists); rail connector (new) |
 | FR-20 | Confirmation of Payee on every new payee | P1 | No payment prepared to an unverified payee | CoP via connector (new) |
 | FR-21 | 90-day and change-triggered mandate re-confirmation | P2 | Expired mandate demotes to L3 | Grant expiry (exists); scheduler (new) |
-| FR-22 | Spend caps on every run path and in the gateway, in tokens and currency | P0 | Chat, A2A, MCP, workflow, voice refused at cap; alerts at 50 and 80 per cent | DEF-08 (new) |
-| FR-23 | L4 execution for sweeps, recurring bills, SME payables | P2 | Executes within mandate; every execution notified; kill switch demotes | Workflows (exist); rails (new) |
+| FR-22 | Spend caps on every run path and in the gateway, in tokens and currency | P0 | Chat, A2A, MCP, workflow, voice refused at cap; alerts at 50 and 80 per cent | Spend caps (new) |
+| FR-23 | L4 execution for sweeps, recurring bills, SME payables | P2 | Executes within mandate; every execution notified; operator override demotes | Workflows (exist); rails (new) |
 | FR-24 | Agent channel flag, mandate id and provenance to the fraud engine | P1 | Every agent transaction carries the fields | Fraud connector (new) |
 
 ### 9.4 Outside agents
@@ -396,19 +377,19 @@ P0 ships before any customer-facing release; P1 before execute with approval; P2
 | FR-29 | RFC 9421 signed-request verification, 8-minute window, nonce replay protection | P2 | Replayed or stale signature refused | agent-httpsig (partial) |
 | FR-30 | Outside-agent activity feed, push per action, one-tap disconnect | P1 | Every inbound action notifies; disconnect cascades | Dashboard (exists); notifications (new) |
 | FR-31 | Network agent-token mirror in Grantex | P2 | Revoking either side revokes both | New |
-| FR-32 | A2A and MCP route scopes on by default | P0 | Unscoped credential refused | DEF-11 (exists, flag) |
+| FR-32 | A2A and MCP route scopes on by default | P0 | Unscoped credential refused | Route scopes (exists, flag) |
 
 ### 9.5 Risk, controls and evidence
 
 | ID | Requirement | Priority | Acceptance criteria | Component (status) |
 |---|---|---|---|---|
 | FR-33 | Inventory entry per agent: tools, guardrails, permitted uses, model versions, tier | P0 | Stale entry blocks promotion | Registry, inventory, tiers (exist, flag-gated) |
-| FR-34 | Kill switch at five scopes with signed audit and quarterly drill | P0 | Halts within 5 s; drill recorded | Operator override (exists, off); UI (new) |
+| FR-34 | Operator override at five scopes with signed audit and quarterly drill | P0 | Halts within 5 s; drill recorded | Operator override (exists, off); UI (new) |
 | FR-35 | Board-approved HITL thresholds; unevaluable conditions fail closed | P0 | Versioned policy; monthly override analytics | HITL grammar (exists); analytics (new) |
 | FR-36 | Advisory agents hold no execution tools | P0 | Static check at creation; violation refused | Agent config (new) |
-| FR-37 | Guardrails on in four stages with semantic injection detection, multilingual | P0 | Adversarial set passes incl. paraphrased and non-English overrides | DEF-14 (partial) |
+| FR-37 | Guardrails on in four stages with semantic injection detection, multilingual | P0 | Adversarial set passes incl. paraphrased and non-English overrides | Guardrails (partial) |
 | FR-38 | Untrusted-content isolation for all retrieved and tool content on customer agents | P0 | Context guard active; leak raises error | Sandbox (exists, scoped to cases) |
-| FR-39 | Hash chain on, KMS or HSM key, daily verify, anchor export, WORM | P0 | Verify passes daily; anchors in SIEM | DEF-10 (exists, off) |
+| FR-39 | Hash chain on, KMS or HSM key, daily verify, anchor export, WORM | P0 | Verify passes daily; anchors in SIEM | Audit chain (exists, off) |
 | FR-40 | Signed evidence package per interaction (identity and SCA event, mandate version, transcript with retrieved content and tool calls, model and prompt hash, policy decisions, approvals, intent) | P1 | Exportable within one hour; signature verifies; PII pseudonymised | Grantex packages (exist); AgenticOrg package (stub) |
 | FR-41 | Gateway on with in-region fence, attestations, cost-aware routing, second-provider failover on every path | P0 | Out-of-region provider refused; failover tested; sidecar calls routed | Gateway (exists, off); failover (partial) |
 | FR-42 | Provider update as change with regression gate | P1 | Version recorded per run; new version passes dataset before promotion | Evals v2 (exists, flag-gated) |
@@ -462,70 +443,7 @@ Data classes: customer identifiers and payment data (India-resident, pseudonymis
 
 ---
 
-## 12. Phased delivery plan
-
-Quarters are relative to programme start. Phases are workstreams with gates, not calendar promises.
-
-| Phase | Workstreams | Dependencies | Regulatory gate | Exit criteria |
-|---|---|---|---|---|
-| 0: foundations and defects (Q1) | Close DEF-01 to DEF-16; bank deployment profile forcing `deny` enforcement, Postgres checkpointer, guardrails, gateway, residency, audit chain and route scopes on; re-pin Grantex SDK; in-country self-hosting with KMS or HSM; customer session layer; retrieval bound as tool; intent model v1 | Bank identity provider; in-country infrastructure; Grantex fixes to verifiers and enforce-time audit | Board-approved AI policy and tiering; inventory populated; ISO/IEC 42005 impact assessment | All DEFs closed with tests; revocation under 2 s p95 end to end; daily chain verification passing; penetration test complete |
-| 1: inform and recommend (Q2 to Q3) | Widget; WhatsApp inbound; voice in Hindi and English; L0 and L1 across deposits, cards, lending, payments status, insurance, SME; "why this"; disclosure; whole-wallet via AA or open banking partner; human hand-off with supervisor view; nudge engine with controls; kill switch drills | Core banking read connector; AA production flows; knowledge ingestion; advice regime decision per domain | Advice boundary sign-off; disclosure approved; vulnerability routing evidenced; UK targeted support if used | Intent accuracy at least 90 per cent; resolution and repeat-contact reported with controls; zero red-team guardrail bypasses; complaint taxonomy live |
-| 2: execute with approval and open MCP (Q3 to Q4) | L2 and L3 for transfers, bills, card controls, disputes, top-ups, SME vendor payments; signed intent record; decision grants wired; fraud agent features; CoP; bank MCP server and scope registry; outside-agent feed and disconnect; permissions page with inbound and bank agents | Payment hub and card connectors; fraud engine; relying-party agreement; mcp-auth principal resolver | Payments authorisation legal opinion per jurisdiction; reimbursement policy published; DPDP flows live | Zero out-of-mandate executions in pilot; approval latency met; MCP conformance passes; one outside provider in sandbox |
-| 3: mandates and agentic payments (Q5 to Q6) | Mandate schema and L4 for sweeps, bills, SME payables; 90-day re-confirmation; network agent-token mirror; UK VRP as mandate rail; UPI Circle-aligned limits pending NPCI rules; Agent Passport and registry gating; per-interaction evidence packages within one hour | Network programmes in bank markets; NPCI agent rules (not live); HMT response (targeted Q4 2026) and PSR consultation (December 2026) ([GOV.UK](https://www.gov.uk/government/publications/payments-forward-plan/payments-forward-plan-accessible-version)) | Supervisory engagement on L4; EU creditworthiness cases assessed ahead of 2 December 2027; SEBI compliance where investments in scope | L4 live for two task classes with error rate below 0.1 per cent; mandate verified at tool boundary and rail; single customer-visible mandate |
-| 4: ecosystem (Q7 onward) | Accredited-issuer programme; relying-party onboarding; RFC 9421 verification; AP2 or ACP intent formats as they stabilise; more Indian languages and voice providers; SME ledger-to-bank automation incl. Xero; machine-readable product shelf | Standards maturity (Grant Management, passport specs, OpenID Federation); FIDO AP2 work | Ongoing supervisory reporting | Three relying-party providers live; measured retention and product effect versus control; regulator evidence requests within SLA |
-
----
-
-## 13. Risks, open questions and decisions needed
-
-### 13.1 Risks
-
-| Risk | Likelihood | Impact | Mitigation |
-|---|---|---|---|
-| Default-off governance stays off in production | High | Severe | Bank profile hard-codes strict configuration; startup refuses unsafe defaults |
-| Revocation gap lets a revoked agent act | High today | Severe | DEF-01 to DEF-03 as Phase 0 exits; end-to-end measurement |
-| Pattern-based injection detection misses paraphrased or non-English attacks | High | Severe | Semantic detector; content isolation on all customer agents; mandate enforced at the rail so a hijacked agent cannot exceed the instruction |
-| Liability rules change mid-programme (HMT, PSR, NPCI, EU) | Medium | High | Signed intent records from day one; narrow mandates until rules land; legal review per gate |
-| Provider concentration and update risk | Medium | High | Vendor-neutral gateway, second provider, regression gate ([FSB](https://www.fsb.org/uploads/P100626.pdf)) |
-| Advice boundary crossed by L1 | Medium | High | Per-domain regime, output filters, audit sampling, targeted support where available |
-| Trust falls after a visible incident; it already fell after security incidents ([Biometric Update](https://www.biometricupdate.com/202610/consumer-trust-in-autonomous-agents-sinks-following-security-incidents)) | Medium | High | Launch L0 to L2; reimbursement policy; transparent incident communication |
-| Integration partner outages; an accounting integration was "temporarily disabled" at a bank's request ([Zoho](https://www.zoho.com/in/books/kb/icici/icici-bank-integration.html)) | Medium | Medium | Degrade to AA or open banking feeds; connector health in inventory |
-| Containment rises while quality falls | Medium | Medium | Resolution, repeat-contact and reimbursement as north-star metrics; guaranteed human path |
-| Grantex in-country hosting has no DR or backup runbook | High | High | Bank-operated DR and backup as Phase 0 deliverable with RPO and RTO |
-
-### 13.2 Open questions
-
-1. Whether model inference on payment data is "processing" under RBI's 24-hour offshore rule; no source addresses it. Default: in-region inference.
-2. How agent-initiated payments are classified under PSRs 2017 and PSD2, and how the PSR caution standard applies when the bank's own agent chose the action; pending HMT and PSR.
-3. NPCI's final limits, liability and launch date for agent payments on UPI.
-4. Whether SEC 17a-4 treats prompts and responses as records; the bank retains them regardless.
-5. Which advice regime applies per domain and market, including UK targeted support.
-6. Grantex grant lifetime defaults for the bank profile (service default 24 hours, no maximum unless set).
-7. Reconciling the two conflicting functional coverage totals in the repositories' BFSI documents.
-
-### 13.3 Decisions needed from the bank
-
-- Approve the autonomy policy: task classes eligible for L3 and L4, default caps, four-eyes thresholds.
-- Choose the advice regime per domain and market.
-- Confirm in-country self-hosting of both products with bank-operated DR and backup.
-- Select model providers per use case through the gateway and accept the second-provider requirement.
-- Approve the reimbursement policy and the relying-party agreement.
-- Nominate accountable owners under SM&CR or equivalent for the agent, mandates and kill switch.
-
-### 13.4 Decisions needed from the AgenticOrg product owner
-
-- Commit Phase 0 engineering to DEF-01 to DEF-16 ahead of feature work and publish a bank deployment profile.
-- Raise the Grantex SDK pin; implement the reserved `caps.enforce` and `decisions.required` flags.
-- Consume Grantex principal sessions, decision grants, DPDP records, passports and the revocation feed natively in AgenticOrg (recommended) rather than leaving them to bank integration.
-- Build the customer session layer, widget, banking intent model, supervisor view and long-term memory as platform features.
-- Publish the Agent Passport packages; move passport-bound grants, registry public endpoints and lifecycle states out of default-off for the bank profile; fix passport-bound grant delegation.
-- Add enforce-time audit records and the Enforce Log backend in Grantex; sign status lists and fail closed on missing lists.
-- Reconcile the BFSI coverage matrix with code and keep it current; it is what a bank's due diligence will read.
-- Decide the India and EU hosting roadmap for Grantex (demand-gated for H1 2027) or formally position self-hosting as the bank option.
-
----
-
-## 14. Appendices
+## 12. Appendices
 
 ### Appendix A: standards and regulation reference
 
@@ -579,22 +497,12 @@ Quarters are relative to programme start. Phases are workstreams with gates, not
 - **Autonomy level (L0 to L4)**: inform, recommend, prepare, execute with approval, execute within mandate.
 - **Decision grant**: a human approval bound cryptographically to one action and consumed once.
 - **Grant**: scoped, time-bound authority issued to an agent on behalf of a principal, carried as a signed token with `authorization_details`.
-- **Irregularity**: anomalous agent behaviour detected by the authority service, which can trigger alerts, suspension or demotion.
+- **Irregularity**: irregular agent behaviour detected by the authority service, which can trigger alerts, suspension or demotion.
 - **Issuer-branded**: a consent or permissions page carrying the bank's branding as issuer of the grant.
 - **Know Your Agent**: establishing an agent's identity, authority and accountability before it may act.
 - **Mandate**: the customer's standing instruction and limits within which the agent may execute without per-action approval.
-- **Operator override**: the platform-level halt or throttle on a provider, model, agent, workflow, connector or tool; the kill switch.
+- **Operator override**: the platform-level halt or throttle on a provider, model, agent, workflow, connector or tool.
 - **Principal**: the human or organisation on whose behalf an agent acts; here, the bank's customer.
 - **Registry**: the trust registry of issuers, attestations, agents and trust levels; also the bank's scope registry.
 - **Relying party**: a system that verifies a passport, grant or attestation before acting on it; the bank, for outside agents.
 - **Scope**: a permission string of the form `resource:action[:constraint]` or `tool:<connector>:<permission>[:<tool>]`.
-
-### Appendix C: recorded gaps and unverified items
-
-Market: the Rodriguez post was read directly on LinkedIn (11 October 2026) and its substance is reflected in section 2; it is treated as the hypothesis under test. Revolut's own release and product page could not be fetched; AIR's model vendors and executable-action list are undisclosed. No post-launch metrics for Robinhood Agentic Trading or Lloyds' assistant. No analyst measured deposit outflows caused by consumer agents and no published CLV model links agent compatibility to retention. McKinsey's primary article on agent threats to retail banks could not be fetched. No 2026 India-specific survey on delegating money decisions to agents. Several commerce adoption figures were reached only through aggregators. Reports of regulatory scrutiny of Revolut AIR, Nubank's 2026 outcomes and the claim that 60 per cent of Erica interactions are Erica-initiated are secondary or self-reported.
-
-Standards and rails: Mastercard developer documentation for Agent Pay could not be fetched; token formats and revocation APIs are undocumented publicly. Visa TAP carries no version or date. Grant Management's draft number is unresolved. The ACP delegate-payment schema was not read. Mastercard's live-market list conflicts between sources. No NPCI document on the Unified Agent Protocol exists; only press reports. No EBA or Commission statement on SCA for agent transactions was found. PSD3 and PSR Official Journal publication is unconfirmed.
-
-Regulation: the full RBI FREE-AI recommendation text and the reported tolerant supervisory approach could not be verified from a reachable source. MAS final guideline status and the FSB final report are unknown. Retention periods (six years SEC 17a-4, five years SEBI) come from commentary. No court or ombudsman decision on an agent-initiated payment loss was found. No regulator sets numeric thresholds. Whether model inference is processing under RBI's 24-hour rule is unaddressed.
-
-Platform: the capability inventory's code-level claims were consolidated from sub-inventories and not independently re-verified line by line. The two BFSI coverage documents give conflicting functional totals. Grantex's hosted `EMERGENCY_STOP_ENABLED` default was not read. The RLS behaviour of agent-tenant resolution under a non-BYPASSRLS role is a possible, unconfirmed defect. Grantex's February 2026 security audit covers SDKs at 0.1.0 and its independence could not be verified; its SOC 2 document is an internal readiness mapping, not an attestation.
