@@ -10670,7 +10670,7 @@
     "public_exempt_reason": null,
     "rate_limit": null,
     "scope": "spend.storage.sensitive.write",
-    "source_line": 1431,
+    "source_line": 1439,
     "tenant_required": true
   },
   {

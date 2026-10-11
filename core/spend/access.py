@@ -21,7 +21,8 @@ by agent) and the ledger comparison. A record of a personal agent is
 visible to its owner, a record of a shared agent within the reader's
 domains, a record with no agent to every reader. Tenant-wide figures that
 carry no agent to filter by (coverage, the Gate 1 attribution measure;
-meter gaps; maintenance jobs, their parameters and their record counts) are
+meter gaps; maintenance jobs, their parameters and their record counts; GPU
+allocations, each a tenant's share of a pool hour over every agent's calls) are
 refused to those readers with 403 ``tenant_wide_read_refused``: a filtered
 version would let a reader difference two views. The initiating user's id
 is shown to administrators and auditors only.
@@ -100,8 +101,8 @@ def require_tenant_wide(caller: Caller) -> None:
         raise SpendError(
             403,
             "tenant_wide_read_refused",
-            "coverage, meter gaps and maintenance jobs sum every agent's usage: they are for an administrator or "
-            "auditor",
+            "coverage, meter gaps, maintenance jobs and GPU allocations sum every agent's usage: they are for an "
+            "administrator or auditor",
         )
 
 

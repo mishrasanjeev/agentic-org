@@ -12,7 +12,9 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
   processing, knowledge uploads, ingestion that extracted for itself; once
   per extraction, even when the upload is refused or nothing is indexed),
   speech minutes (a recording Whisper or Deepgram transcribed, with the
-  Deepgram credential's billing account) and connector tool calls for tools
+  Deepgram credential's billing account, metered as soon as the engine
+  returns, so a redaction, encryption or database failure afterwards still
+  leaves the billed minutes recorded once) and connector tool calls for tools
   a rate card prices (an unpriced call is counted as an `unpriced_tool` gap,
   never recorded). Every site is guarded and failure-isolated: a malformed
   object can never fail the ingestion, search, speech save or tool call.
@@ -36,12 +38,17 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
   counted, and their share, the share of tenants deleted since the hour and
   idle hours stay with the platform (`skipped_node_hours`), so no tenant's
   card or alias moves cost onto another; in-house providers take no model
-  alias. A paused tenant's share waits, frozen, and the hour is resumed once
+  alias, and an in-house alias kept from before is never applied when a
+  call is priced or recorded, so it cannot move a tenant's calls out of
+  their pool. A paused tenant's share waits, frozen, and the hour is resumed once
   metering resumes. The operator command records only hours that have ended,
   at most seven days back, with one guarded upsert per hour (an hour being
   allocated is never overwritten), and logs the actor, pool, hours, node
   hours and models, and the values of each hour it overwrote.
-  `GET /spend/gpu-allocations` lists a tenant's own shares.
+  `GET /spend/gpu-allocations` lists a tenant's own shares to an
+  administrator or auditor only (403 `tenant_wide_read_refused` for anyone
+  else, checked before anything is looked up), because a share sums every
+  agent's calls of the hour and carries no agent to filter by.
 - Celery tasks `core.tasks.spend_tasks.sample_storage` and
   `allocate_gpu_hours` with their beats. Behind `spend_intelligence_enabled`
   (default off): off, every site is a bool read, the Deepgram credential note
