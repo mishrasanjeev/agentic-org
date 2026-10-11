@@ -106,7 +106,7 @@ is 4.8.0; versions 4.1 to 4.8 have no sections of their own.
 - `ui/public/customer-agent/widget.js`: a dependency-free embeddable element
   (`<agenticorg-customer-agent>`) for the bank's page, with the disclosure
   gate, one-tap cards, the "why this" panel and a host event for step-ups.
-- Migration `v6z83_customer_agent` (three RLS tables). Integration guide:
+- Migration `v6z84_customer_agent` (three RLS tables). Integration guide:
   `docs/customer-agent/integration.md`.
 
 ### Added - Grant revocation for paused and retired agents; an opt-in revocation check before a token is honoured

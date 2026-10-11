@@ -1,8 +1,8 @@
 # SPDX-License-Identifier: Apache-2.0
 """Customer agent: customer sessions, mandates and prepared actions.
 
-Revision ID: v6z83_customer_agent
-Revises: v6z82_spend_reconciliation
+Revision ID: v6z84_customer_agent
+Revises: v6z83_channel_bindings
 Create Date: 2026-10-11
 
 ``customer_sessions``: one row per customer session the bank opened with a
@@ -16,8 +16,8 @@ All three are tenant-scoped under row-level security.
 
 from alembic import op
 
-revision = "v6z83_customer_agent"
-down_revision = "v6z82_spend_reconciliation"
+revision = "v6z84_customer_agent"
+down_revision = "v6z83_channel_bindings"
 branch_labels = None
 depends_on = None
 

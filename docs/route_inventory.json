@@ -5220,6 +5220,222 @@
     "tenant_required": false
   },
   {
+    "audit_event": null,
+    "auth_required": false,
+    "function": "list_actions",
+    "idempotency": "idempotent-read",
+    "key": "GET /api/v1/customer-agent/actions api/v1/customer_agent.py:list_actions",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/customer_agent.py",
+    "path": "/api/v1/customer-agent/actions",
+    "public_exempt_reason": "public-read-or-doc-route",
+    "rate_limit": "customer-agent",
+    "scope": "public:customer_agent.read",
+    "source_line": 233,
+    "tenant_required": false
+  },
+  {
+    "audit_event": "customer_agent.action.cancel",
+    "auth_required": false,
+    "function": "cancel_action",
+    "idempotency": "idempotent-per-prepared-action",
+    "key": "POST /api/v1/customer-agent/actions/{action_id}/cancel api/v1/customer_agent.py:cancel_action",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/customer_agent.py",
+    "path": "/api/v1/customer-agent/actions/{action_id}/cancel",
+    "public_exempt_reason": "public-read-or-doc-route",
+    "rate_limit": "customer-agent",
+    "scope": "public:customer_agent.turn",
+    "source_line": 310,
+    "tenant_required": false
+  },
+  {
+    "audit_event": "customer_agent.action.confirm",
+    "auth_required": false,
+    "function": "confirm_action",
+    "idempotency": "idempotent-per-prepared-action-a-settled-action-is-refused",
+    "key": "POST /api/v1/customer-agent/actions/{action_id}/confirm api/v1/customer_agent.py:confirm_action",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/customer_agent.py",
+    "path": "/api/v1/customer-agent/actions/{action_id}/confirm",
+    "public_exempt_reason": "public-read-or-doc-route",
+    "rate_limit": "customer-agent",
+    "scope": "public:customer_agent.turn",
+    "source_line": 291,
+    "tenant_required": false
+  },
+  {
+    "audit_event": null,
+    "auth_required": false,
+    "function": "list_intents",
+    "idempotency": "idempotent-read",
+    "key": "GET /api/v1/customer-agent/intents api/v1/customer_agent.py:list_intents",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/customer_agent.py",
+    "path": "/api/v1/customer-agent/intents",
+    "public_exempt_reason": "public-read-or-doc-route",
+    "rate_limit": "customer-agent",
+    "scope": "public:customer_agent.read",
+    "source_line": 187,
+    "tenant_required": false
+  },
+  {
+    "audit_event": null,
+    "auth_required": false,
+    "function": "get_permissions",
+    "idempotency": "idempotent-read",
+    "key": "GET /api/v1/customer-agent/permissions api/v1/customer_agent.py:get_permissions",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/customer_agent.py",
+    "path": "/api/v1/customer-agent/permissions",
+    "public_exempt_reason": "public-read-or-doc-route",
+    "rate_limit": "customer-agent",
+    "scope": "public:customer_agent.permissions",
+    "source_line": 337,
+    "tenant_required": false
+  },
+  {
+    "audit_event": "customer_agent.mandate.set",
+    "auth_required": false,
+    "function": "put_mandate",
+    "idempotency": "idempotent-one-active-mandate-per-task-class",
+    "key": "PUT /api/v1/customer-agent/permissions/mandates api/v1/customer_agent.py:put_mandate",
+    "metadata_present": true,
+    "methods": [
+      "PUT"
+    ],
+    "module": "api/v1/customer_agent.py",
+    "path": "/api/v1/customer-agent/permissions/mandates",
+    "public_exempt_reason": "public-read-or-doc-route",
+    "rate_limit": "customer-agent",
+    "scope": "public:customer_agent.permissions",
+    "source_line": 352,
+    "tenant_required": false
+  },
+  {
+    "audit_event": "customer_agent.mandate.revoke",
+    "auth_required": false,
+    "function": "delete_mandate",
+    "idempotency": "idempotent-revokes-the-mandate",
+    "key": "DELETE /api/v1/customer-agent/permissions/mandates/{mandate_id} api/v1/customer_agent.py:delete_mandate",
+    "metadata_present": true,
+    "methods": [
+      "DELETE"
+    ],
+    "module": "api/v1/customer_agent.py",
+    "path": "/api/v1/customer-agent/permissions/mandates/{mandate_id}",
+    "public_exempt_reason": "public-read-or-doc-route",
+    "rate_limit": "customer-agent",
+    "scope": "public:customer_agent.permissions",
+    "source_line": 375,
+    "tenant_required": false
+  },
+  {
+    "audit_event": "customer_agent.session.end",
+    "auth_required": false,
+    "function": "end_session",
+    "idempotency": "idempotent-revokes-the-session",
+    "key": "DELETE /api/v1/customer-agent/session api/v1/customer_agent.py:end_session",
+    "metadata_present": true,
+    "methods": [
+      "DELETE"
+    ],
+    "module": "api/v1/customer_agent.py",
+    "path": "/api/v1/customer-agent/session",
+    "public_exempt_reason": "public-read-or-doc-route",
+    "rate_limit": "customer-agent",
+    "scope": "public:customer_agent.session",
+    "source_line": 173,
+    "tenant_required": false
+  },
+  {
+    "audit_event": null,
+    "auth_required": false,
+    "function": "get_session",
+    "idempotency": "idempotent-read",
+    "key": "GET /api/v1/customer-agent/session api/v1/customer_agent.py:get_session",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/customer_agent.py",
+    "path": "/api/v1/customer-agent/session",
+    "public_exempt_reason": "public-read-or-doc-route",
+    "rate_limit": "customer-agent",
+    "scope": "public:customer_agent.session",
+    "source_line": 144,
+    "tenant_required": false
+  },
+  {
+    "audit_event": "customer_agent.disclosure.acknowledged",
+    "auth_required": false,
+    "function": "acknowledge",
+    "idempotency": "idempotent-records-the-first-acknowledgement-only",
+    "key": "POST /api/v1/customer-agent/session/acknowledge api/v1/customer_agent.py:acknowledge",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/customer_agent.py",
+    "path": "/api/v1/customer-agent/session/acknowledge",
+    "public_exempt_reason": "public-read-or-doc-route",
+    "rate_limit": "customer-agent",
+    "scope": "public:customer_agent.session",
+    "source_line": 158,
+    "tenant_required": false
+  },
+  {
+    "audit_event": "customer_agent.session.open",
+    "auth_required": false,
+    "function": "open_session",
+    "idempotency": "not_idempotent-opens-a-customer-session",
+    "key": "POST /api/v1/customer-agent/sessions api/v1/customer_agent.py:open_session",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/customer_agent.py",
+    "path": "/api/v1/customer-agent/sessions",
+    "public_exempt_reason": "public-read-or-doc-route",
+    "rate_limit": "customer-agent-public",
+    "scope": "public:customer_agent.session",
+    "source_line": 121,
+    "tenant_required": false
+  },
+  {
+    "audit_event": "customer_agent.turn",
+    "auth_required": false,
+    "function": "post_turn",
+    "idempotency": "not_idempotent-advances-the-dialogue-and-may-run-a-confirmed-action",
+    "key": "POST /api/v1/customer-agent/turns api/v1/customer_agent.py:post_turn",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/customer_agent.py",
+    "path": "/api/v1/customer-agent/turns",
+    "public_exempt_reason": "public-read-or-doc-route",
+    "rate_limit": "customer-agent",
+    "scope": "public:customer_agent.turn",
+    "source_line": 217,
+    "tenant_required": false
+  },
+  {
     "audit_event": "delegations.list",
     "auth_required": true,
     "function": "list_delegations",

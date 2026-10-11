@@ -615,17 +615,17 @@ class TestRoutes:
 
 
 class TestMigration:
-    def test_migration_v6z83_tables_rls_and_constraints(self, monkeypatch):
+    def test_migration_v6z84_tables_rls_and_constraints(self, monkeypatch):
         import importlib.util
         from pathlib import Path
 
-        path = Path(__file__).resolve().parents[2] / "migrations" / "versions" / "v6_z83_customer_agent.py"
-        spec = importlib.util.spec_from_file_location("v6_z83_customer_agent", path)
+        path = Path(__file__).resolve().parents[2] / "migrations" / "versions" / "v6_z84_customer_agent.py"
+        spec = importlib.util.spec_from_file_location("v6_z84_customer_agent", path)
         module = importlib.util.module_from_spec(spec)
         assert spec.loader is not None
         spec.loader.exec_module(module)
-        assert module.revision == "v6z83_customer_agent" and len(module.revision) <= 32
-        assert module.down_revision == "v6z82_spend_reconciliation"
+        assert module.revision == "v6z84_customer_agent" and len(module.revision) <= 32
+        assert module.down_revision == "v6z83_channel_bindings"
         statements: list[str] = []
         monkeypatch.setattr(module.op, "execute", lambda sql: statements.append(" ".join(str(sql).split())))
         module.upgrade()

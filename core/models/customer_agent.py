@@ -9,7 +9,7 @@ customer has set per task class (the envelope the agent executes inside).
 ``customer_actions`` record every action the agent prepared, executed,
 refused or saw cancelled, with the explanation shown and the approval given.
 
-Row-level security: tenant-scoped (``v6z83_customer_agent``).
+Row-level security: tenant-scoped (``v6z84_customer_agent``).
 """
 
 from __future__ import annotations
