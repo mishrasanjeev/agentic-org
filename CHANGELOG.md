@@ -2,7 +2,32 @@
 
 All notable changes to AgenticOrg are documented here. Format follows [Keep a Changelog](https://keepachangelog.com/).
 
-## [Unreleased] - 2026-08-29
+## [Unreleased]
+
+Entries here have accumulated since 4.0.0. The source version in `pyproject.toml`
+is 4.8.0; versions 4.1 to 4.8 have no sections of their own.
+
+### Fixed - user documentation matches shipped behaviour
+- A new guide, *Documents, conversations, calls and workbenches*, covers the six
+  console screens of services that ship off by default, and Start here links
+  them with the sidebar's own labels and the Cost Dashboard.
+- Guides name the default-off settings behind chat context, the visual workflow
+  builder, the Observability Checks tab and step-through debugger, the model
+  gateway and its limits, A2A and MCP route scopes, residency enforcement and the
+  audit chain. The self-hosting guide lists the feature switches that ship off
+  and says strict runtimes make no schema changes at start-up.
+- The approvals, troubleshooting, governed-case, knowledge, industry-pack, roles,
+  guardrails, evaluation and security guides describe the multi-person approval
+  rules, current refusal codes, the provider webhook address, citations and
+  excerpts, the Banking Pack, invitation roles, the adversarial routes, the
+  prompt-template panels, the Data Region setting and kept call recordings.
+- The Connectors guide's diagram is a flow block; the site has no Mermaid
+  renderer.
+- The README, product status, llms.txt, SDK READMEs and governance overview say
+  what AgenticOrg's Grantex call checks; the conversation supervisor is named as
+  the internal feed's only writer; llms.txt points A2A discovery at the v1 Agent
+  Card; the landing Observatory card describes the screen as it is; Node.js
+  22.22 is the stated minimum.
 
 ### Fixed - breaking for agent runs whose model answers in content blocks: agent output parsing of provider content blocks
 - A deliberate default: a model answer that arrives as a list of provider content blocks (for

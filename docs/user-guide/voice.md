@@ -30,7 +30,7 @@ Never place a paid outbound call to an unapproved number. A local signed-webhook
 
 ## Privacy and service boundaries
 
-AgenticOrg does not store call audio in this path or expose full transcripts in the call-history API. Bounded conversation text is encrypted. The provider's recording, retention and regional settings are separate and must be reviewed with your data owner.
+AgenticOrg does not store call audio in this path or expose full transcripts in the call-history API. Bounded conversation text is encrypted. The separate **Calls** screen (speech intelligence, off by default) keeps uploaded recordings and their transcripts encrypted; see [Calls](/docs/review-and-operations-screens#calls-recordings-transcripts-and-summaries). The provider's recording, retention and regional settings are separate and must be reviewed with your data owner.
 
 For BFSI, general policy answers and complaint-routing assistance are appropriate starting points. Voice identity, balance disclosure, account access, transfer instructions and card actions need institution-approved authentication and integrations. A caller saying an account number is not identity verification.
 

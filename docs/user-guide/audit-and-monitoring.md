@@ -20,7 +20,9 @@ Do not infer that an absent event means no action occurred. Confirm the view's s
 
 ## Understand screen limits
 
-Dashboard Recent Activity and Observatory read audit history. Observatory polls the newest 20 rows every five seconds and labels that scope. This is not an exhaustive live stream or a full-day activity total. An internal resilient feed exists in the repository, but no production writer currently publishes into that feed; do not represent it as universal real-time monitoring.
+Dashboard Recent Activity and Observatory read audit history. Observatory polls the newest 20 rows every five seconds and labels that scope. This is not an exhaustive live stream or a full-day activity total. An internal resilient feed exists in the repository. Its only writer is the conversation supervisor console (off by default behind `AGENTICORG_CONVERSATION_V2_ENABLED`), which announces conversation changes, never message text, for the Conversations screen; no other operational event is published to it, so do not represent it as universal real-time monitoring.
+
+In a tenant that keeps spend rate cards, commitments, invoices, reconciliations or spend jobs, the Audit Log hides those audit rows from every reader who is not a human administrator or auditor, including domain roles and machine credentials, even after spend intelligence is turned off. This is `AGENTICORG_SPEND_AUDIT_COMMERCIAL_FILTER`, on by default; `false` shows them to every reader as before. Where the deployment turns on the tamper-evident audit chain (`AGENTICORG_AUDIT_CHAIN_ENABLED`, off by default), audit rows are linked into a hash chain, and a reader with audit access can read the chain status and verify the links through `GET /api/v1/audit/chain` and `GET /api/v1/audit/chain/verify`.
 
 For governed cases, inspect transitions, memo citations, policy inputs/version, analyst reviews, decision-grant evidence and signed handoff delivery history. The case record can retain stronger lineage than a general activity summary.
 
