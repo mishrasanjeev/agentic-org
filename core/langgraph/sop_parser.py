@@ -22,6 +22,7 @@ import structlog
 from core import spend
 from core.langgraph.llm_factory import create_chat_model
 from core.langgraph.tool_adapter import _build_tool_index
+from core.llm.content import model_answer, strip_code_fence
 
 logger = structlog.get_logger()
 
@@ -149,13 +150,9 @@ async def parse_sop_document(
     if spend.enabled():
         spend.note("message", tenant_id, message=response, llm=llm, default_use_case="sop.parse")
 
-    # Parse the response
-    content = response.content or ""
-    content = content.strip()
-    if content.startswith("```"):
-        lines = content.split("\n")
-        lines = [ln for ln in lines if not ln.strip().startswith("```")]
-        content = "\n".join(lines).strip()
+    # Parse the response: block content (a list of provider content blocks) is read for its text,
+    # unless agent_output_block_parsing is off.
+    content = strip_code_fence(model_answer(response.content or ""))
 
     try:
         parsed = json.loads(content)

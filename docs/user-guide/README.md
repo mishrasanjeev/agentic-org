@@ -18,10 +18,13 @@ Cloud DNS/managed HTTPS checks. The canonical manual is
 - [Build your first useful agent](first-agent.md)
 - [Workspace, companies and roles](workspace-and-roles.md)
 - [Concepts and terminology](concepts.md)
-- [Configure model access](model-setup.md)
+- [BFSI capability status and open work](bfsi-capability-status.md)
+- [Team adoption checklist](adoption-checklist.md)
 
 ## Build And Run
 
+- [Configure model access](model-setup.md)
+- [Model Gateway, routing and limits (gateway off by default)](model-gateway.md)
 - [Create and configure agents](create-agents.md)
 - [Run agents and chat](run-and-chat.md)
 - [Knowledge, document ingestion and OCR](knowledge-and-ocr.md)
@@ -30,20 +33,20 @@ Cloud DNS/managed HTTPS checks. The canonical manual is
 - [Voice, speech to text and text to speech](voice.md)
 - [Browser automation and RPA](rpa.md)
 - [Industry packs](industry-packs.md)
-- [Model Gateway, routing and limits](model-gateway.md)
 
 ## Govern And Operate
 
 - [Approvals and human review](approvals.md)
 - [Governed business-onboarding cases](governed-cases.md)
+- [Documents, conversations, calls and workbenches (off by default)](review-and-operations-screens.md)
 - [Audit, monitoring and dashboards](audit-and-monitoring.md)
 - [Guardrail rules, dry runs and enforcement](guardrails.md)
 - [Run timelines and workload observability](run-observability.md)
 - [Evaluation and rollout](evaluate-and-rollout.md)
 - [Security, privacy and data handling](security-and-data.md)
 - [Billing and support](billing-and-support.md)
+- [AI spend intelligence and invoice reconciliation (off by default, API-only)](ai-spend-intelligence.md)
 - [Troubleshooting](troubleshooting.md)
-- [Team adoption checklist](adoption-checklist.md)
 
 ## Connect And Extend
 

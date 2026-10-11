@@ -350,6 +350,16 @@ class Settings(BaseSettings):
     # one that is still invalid is escalated to a human instead of being
     # returned as completed. Off by default: off, nothing is validated.
     output_schema_enforced: bool = False
+    # Provider content blocks in a model answer (core/llm/content.py): the
+    # agent graph's output parser, the SOP parser, the run explainer and the
+    # feedback analyser read each block's answer text (reasoning, signature
+    # and tool-use blocks carry none), so a fenced JSON answer in a text block
+    # parses. On by default, a deliberate default recorded in CHANGELOG.md:
+    # false restores the previous parsing, where an agent run's output kept
+    # the str() of the blocks in raw_output. The guardrail hooks read block
+    # answers for their text whatever this says.
+    # Env: AGENTICORG_AGENT_OUTPUT_BLOCK_PARSING.
+    agent_output_block_parsing: bool = True
     # Evaluation framework v2 (core/evals/): tenant evaluation datasets, kept
     # as immutable versions, with an API and console to manage and run them.
     # Off by default: off, the endpoints answer 409 and nothing is stored.

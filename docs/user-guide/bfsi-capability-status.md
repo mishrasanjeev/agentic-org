@@ -7,19 +7,31 @@ covered, 97 partial and 29 gaps**. A covered component may still need a
 tenant setting, approved provider, external system or human reviewer. No full
 BFSI journey has end-to-end acceptance on the strength of these counts alone.
 
+Services built behind default-off settings after this baseline was last refreshed
+are not yet reflected in these counts; where the table below names one, it is
+marked (built, off by default). They are document processing, speech and call
+intelligence, transaction intelligence, conversational services and the
+supervisor view, workbenches, lineage, content services, personalisation, the
+agent registry, model cards, and FinOps thresholds and forecast. Each is
+unavailable until its setting is turned on; see
+[feature switches that ship off](/docs/self-hosting#feature-switches-that-ship-off)
+and [the six screens that ship switched off](/docs/review-and-operations-screens).
+The Banking Pack can be installed without a setting, but it is not counted
+either.
+
 This page describes functional software coverage, not infrastructure location,
 regulatory approval, certification or permission to process customer data. A
 feature behind a disabled flag is unavailable in the default installation.
 
 ## Where the work stands
 
-| Area | Working foundation | Still needs real implementation or validation |
+| Area | Working foundation | Still needs implementation, enabling or validation |
 |---|---|---|
-| Agent governance | Agent execution, scoped grants, human review and case evidence paths | Registry-grade discoverability, dependency mapping, model cards and cross-service lifecycle proof |
-| Knowledge and documents | Ingestion, OCR and source-aware answers on configured paths | Mixed bundles, page-region review, comparison, hybrid-ranking rollout and cited refusal across every tenant path |
-| Conversation and speech | Web chat and configured voice runtime | Intent and channel parity, speaker separation, sensitive-data handling and supervised handoff |
-| Transactions and commerce | Read-only source evidence and prepared agent handoffs | Bank-owned source connections, human disposition, provider-owned execution and reconciliation evidence |
-| Operations | Logging, approval controls and evaluation hooks | Complete trace coverage, measured SLOs, budget enforcement, rollback and production-grade recovery |
+| Agent governance | Agent execution, scoped grants, human review and case evidence paths | Registry-grade discoverability, dependency mapping and model cards (built, off by default) and cross-service lifecycle proof |
+| Knowledge and documents | Ingestion, OCR and source-aware answers on configured paths | Mixed bundles, page-region review and document comparison (built, off by default), hybrid-ranking rollout (off by default) and cited refusal across every tenant path |
+| Conversation and speech | Web chat and configured voice runtime | Banking intents, speaker separation, spoken sensitive-data redaction and supervised takeover (built, off by default), and channel parity |
+| Transactions and commerce | Read-only source evidence and prepared agent handoffs | Human disposition of transaction findings (built, off by default), bank-owned source connections, provider-owned execution and reconciliation evidence |
+| Operations | Logging, approval controls and evaluation hooks | Budget thresholds and synthetic checks (built, off by default), complete trace coverage, measured SLOs, rollback and production-grade recovery |
 
 The detailed [functional assessment](https://github.com/mishrasanjeev/agentic-org/blob/main/docs/bfsi/functional-coverage.md)
 and [capability matrix](https://github.com/mishrasanjeev/agentic-org/blob/main/docs/bfsi/coverage-matrix.md)

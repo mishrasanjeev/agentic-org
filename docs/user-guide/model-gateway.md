@@ -1,6 +1,8 @@
 ## Control model routing with the Model Gateway
 
-The Model Gateway is an administrator console for reviewing provider/model choices, routing rules, access policies, per-model limits, dry-run decisions, recent routing records and cost comparisons. It does not create provider credentials. Configure and test credentials first in [AI Provider Credentials](/docs/model-setup), then use **Settings > Model Gateway** (`/dashboard/settings/model-gateway`) for tenant-scoped gateway controls.
+The Model Gateway is an administrator console for reviewing provider/model choices, routing rules, access policies, per-model limits, dry-run decisions, recent routing records and cost comparisons. It does not create provider credentials. Configure and test credentials first in [AI Provider Credentials](/docs/model-setup), then open **Model Gateway** in the administrator sidebar (`/dashboard/settings/model-gateway`) for tenant-scoped gateway controls.
+
+The gateway is off by default. Until a platform operator turns on the `model_gateway.enabled` authority flag for your tenant, or sets `AGENTICORG_MODEL_GATEWAY_ENABLED` for the deployment, the status card shows **Gateway off**, and saved routing rules, access rules and limits are not applied: each model call keeps the provider and model its agent asked for. The dry run still shows what the rules would decide and says whether the gateway currently applies them. With the gateway on, a call goes ahead without its limit when the limit settings or their Redis state cannot be read, unless the deployment sets `AGENTICORG_MODEL_GATEWAY_LIMITS_FAIL_CLOSED=true`.
 
 ```flow
 Prepare approved provider access | Add credentials and confirm allowed models, regions, billing owner and data terms.
@@ -14,7 +16,7 @@ Enable deliberately | Confirm tenant policy and feature configuration, then moni
 
 | Control | What it decides | Good first use |
 | --- | --- | --- |
-| Routing policy | Which configured provider/model or weighted target is selected for a matching request | Prefer an approved lower-cost model for a bounded use case |
+| Routing policy | Which configured provider/model or weighted target is selected for a matching request. A cost-aware policy picks the lowest-priced target whose observed failure rate stays under the policy's threshold, reading the routing records, and states that reason in the decision. A target with no observations in the window counts as healthy, so with routing records off (the default) the cheapest listed target is chosen | Prefer an approved lower-cost model for a bounded use case |
 | Access policy | Whether a request matching a principal, application, agent, provider, model or other supported context is allowed or denied | Deny a model for a sensitive use case |
 | Model limit | Maximum concurrent requests and/or requests per minute for a provider/model | Protect a shared quota from bursts |
 | Dry run | What the current policy would decide for supplied request context | Compare intended behavior before changing live traffic |

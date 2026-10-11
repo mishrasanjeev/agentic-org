@@ -1,6 +1,6 @@
 ## Inspect run timelines and workload
 
-The administrator-only **Observability** screen (`/dashboard/observability`) has two views: Traces, which lists recent instrumented runs and a span waterfall for one run, and Workload, which summarizes review deadlines and selected tenant outcomes. These are read-only views. They help an operator investigate; they do not replace the audit log, provider billing, a system-of-record check or an incident process.
+The administrator-only **Observability** screen (`/dashboard/observability`) has Traces, which lists recent instrumented runs and a span waterfall for one run, and Workload, which summarizes review deadlines and selected tenant outcomes. Traces and Workload are read-only views. Where the deployment turns on synthetic checks (`AGENTICORG_SYNTHETIC_CHECKS_ENABLED`, off by default), a third **Checks** tab lists the tenant's scheduled probes with their latest results and lets an administrator add or run one. Where the debugging console is on (`AGENTICORG_RUNTIME_DEBUG_CONSOLE_ENABLED`, off by default), a run recorded while it was on offers **Step through** to read its checkpoints one step at a time. They help an operator investigate; they do not replace the audit log, provider billing, a system-of-record check or an incident process.
 
 ```flow
 Open Observability | Sign in as an authorized administrator and select the intended company.

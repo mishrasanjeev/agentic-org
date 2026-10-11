@@ -55,8 +55,9 @@ Every provider call a reference agent makes passes through the provider tool gat
 3. A capability the provider does not offer is `not_available`, not an error: the memo section says
    so and the missing-items list asks for it.
 
-The published Python Grantex SDK `0.5.1` verifies tool authority but does not
-enforce case purpose in the token or per-case caps. The purpose check above is
+AgenticOrg calls the pinned Python Grantex SDK (`grantex==0.7.1`) with the grant
+token, connector, tool and any numeric amount, but no case id or case purpose,
+so case purpose in the token and per-case caps are not checked on that path. The purpose check above is
 local to AgenticOrg, and pooled grants are not bound to one case. Grants bound
 *what* an agent can touch. They never let an agent decide: there is no decision
 tool to grant.

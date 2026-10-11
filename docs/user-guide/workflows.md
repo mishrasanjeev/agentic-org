@@ -8,7 +8,9 @@ The screenshot illustrates the existing workflow view. Your available definition
 
 ## Create a definition
 
-Open **Workflows > Create Workflow**. You can describe the business process to generate a draft, or enter a reviewed definition manually. The screen includes name, version, domain, trigger type, optional cron schedule and JSON steps. Generated output is not an approved operational process.
+Open **Workflows > Create Workflow**. Choose **Describe in English** to generate a draft from a description of the business process, or **Use Template** to enter or edit a reviewed definition. The definition form includes name, version, domain, trigger type, optional cron schedule and JSON steps. Generated output is not an approved operational process.
+
+A third tab, **Build visually**, appears only where the deployment turns on the visual builder (`AGENTICORG_WORKFLOW_BUILDER_V2_ENABLED`, off by default). It draws agent steps, human checkpoints, conditions and failure paths, lists every validation problem, and copies valid steps into the definition form. With the setting on, saving a definition that cannot be drawn and run is refused with each problem named.
 
 The available step options include agent, condition, human-in-loop, parallel, wait, wait-for-event, notify, transform and collaboration. Review each option against the runtime implementation and selected integration. Do not infer that selecting a step type provisions its external system.
 
@@ -18,7 +20,7 @@ The available step options include agent, condition, human-in-loop, parallel, wa
 4. Add a condition for missing/invalid evidence.
 5. Add human review before a consequential action.
 6. Define success and failure routing, bounded retries and a time limit.
-7. Validate JSON in the editor and inspect the visual builder.
+7. Validate the JSON steps; where **Build visually** is available, check the drawn paths and its validation list.
 8. Save and run with synthetic inputs before scheduling.
 
 ## Worked process: complaint response preparation
