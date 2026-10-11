@@ -690,6 +690,7 @@ These names are parsed from connectors. A listing does not prove credentials, su
 - [BFSI: merchant enablement and agentic commerce](https://agenticorg.ai/docs/bfsi-merchant-services): A bank-led merchant pilot using Seller Commerce Agents, Shopify, OACP artifacts, buyer channels and provider-owned payment capability evidence.
 - [BFSI capability status and open work](https://agenticorg.ai/docs/bfsi-capability-status): See which functional capabilities exist, which remain partial or unavailable, and what a configured pilot still needs to prove.
 - [Team adoption and launch checklist](https://agenticorg.ai/docs/adoption-checklist): Assign owners, select a first use case, train operators and reviewers, measure outcomes and expand without skipping real integration work.
+- [Customer agent: own the agent, open the agent](https://agenticorg.ai/docs/customer-agent): The bank-operated assistant for the bank's own customers: what the conversation services do today, how it is easier than an in-app assistant, and the phased plan in the PRD.
 
 Authenticated routes, callbacks, invites, onboarding, and dashboard pages are application surfaces, not public search landing pages.
 
@@ -3149,3 +3150,65 @@ Track task correctness, source coverage, review effort, queue age, external-acti
 Add one new capability at a time when its real dependency is ready. Update the matching guide, prompts, regression suite and operator training together. Review documents after each behavior change; do not leave an old deployment report as the user-facing source of truth.
 
 The public manual, current product status and deployed runtime each serve different purposes: the manual explains use, status explains boundaries, and actual release evidence proves availability. Keep all three aligned.
+
+
+### Customer agent: own the agent, open the agent
+
+URL: https://agenticorg.ai/docs/customer-agent
+Audience: Bank product, risk and platform teams. Reviewed: 2026-10-11.
+
+#### What the customer agent is
+
+The customer agent is the bank's own assistant for its own customers. It sits in the bank's app, web, WhatsApp and voice channels, sees every product the customer holds and every product the bank can offer, answers with citations, recommends with a "why this" explanation, prepares actions for one-tap confirmation and, once a customer has set a mandate, executes inside that mandate. It runs on AgenticOrg, with Grantex as the authority service that holds every grant the customer gives, to the bank's agent and to any outside agent the customer connects.
+
+The programme is called "own the agent, open the agent". Own the agent: the bank's assistant must be the best agent for the bank's services, so a customer has no reason to hand their finances to a general-purpose assistant. Open the agent: the bank is also the easiest institution for a customer's outside agent to connect to safely, through a governed MCP surface, Agent Passports and scoped grants the customer can see and revoke from one place. The full requirement set, market evidence, control catalogue and phased plan are in the [product requirements document](../customer-agent/PRD.md).
+
+#### Why it is easier than an in-app assistant
+
+Early bank assistants on the market execute a short list of actions inside one app, ask for a biometric approval on each sensitive step, and see only what the customer sees on screen. The customer agent is designed to be easier to use and to go much further, while staying inside the bank's controls:
+
+| What the customer gets | How it works |
+|---|---|
+| One agent across every service | Deposits, cards, lending, mortgages, investments, insurance, payments, remittances and SME banking share one session, one memory and one permissions page. |
+| Any channel, same conversation | A conversation started in the app continues on WhatsApp or by voice; the agent keeps the context, not the customer. |
+| Cards instead of chat | Balances, due dates, prepared transfers and offers arrive as inline cards with one-tap confirm or cancel, never as a wall of text. |
+| Approval only where it matters | An autonomy ladder from inform (L0) to execute within mandate (L4) is set per task and per customer. Routine actions inside a mandate run without a prompt; new payees and high values always step up. |
+| "Why this" on every recommendation | Data used, rule or goal applied, alternatives considered, what the bank earns, and how to challenge the suggestion. |
+| Whole-wallet view | With consent through Account Aggregator or open banking, the customer sees accounts held elsewhere inside the bank's agent, so comparison no longer needs an outside app. |
+| One place to see and stop every agent | The permissions page lists the bank's agent and every outside agent, with scopes, caps and last action, and revokes with one tap. The revoked agent's next action is refused within seconds. |
+| Open to the customer's own agent | Outside agents connect through the bank's MCP server with a verified Agent Passport and a scoped grant; the bank, not the agent provider, stays accountable for what executes. |
+| Evidence for every action | Signed, hash-chained audit rows, run timelines and a per-interaction evidence package the bank can hand to an auditor. |
+
+#### What ships today
+
+The conversation services are the foundation and are off by default (`AGENTICORG_CONVERSATION_V2_ENABLED`). On, `POST /api/v1/conversation/turns` recognises a banking intent from a synthetic catalogue, fills slots across turns (amounts, account and card endings, payees, dates, references), asks a clarifying question when two intents are close, confirms before anything runs, and runs the confirmed action through a governed agent under the caller's grant. Supervisors can list sessions, take over, reply and release through the supervisor endpoints. Intent recognition is deterministic and the catalogue is generic: no institution's products or names.
+
+Around it, the platform already provides the controls the customer agent needs: approvals with a fail-closed condition grammar, four-stage guardrails, the model gateway with routing, access policies, limits and cost-aware selection, operator overrides as the kill switch, residency enforcement, run timelines and the hash-chained audit log. Most of these ship off by default and are turned on per deployment; the PRD lists which must be on before a customer touches the agent.
+
+#### Try the foundation
+
+1. Turn on conversational services in a non-production deployment and create a reviewed service agent with a knowledge set, as described in [Customer service](/docs/bfsi-customer-service).
+2. Send a turn such as "what is my card payment due date" to `POST /api/v1/conversation/turns` with your operator credentials and the agent id; read the recognised intent, confidence and the slots still needed.
+3. Send a follow-up that fills a slot and watch the dialogue advance to a confirmation; confirm, and inspect the run in [Run observability](/docs/run-observability).
+4. Open the supervisor sessions endpoint, take over the session, reply as a human and release it.
+5. Review the audit rows and the evidence package the run produced.
+
+No customer-facing channel exists yet: every entry point is operator-authenticated. Do not point a real customer at these endpoints.
+
+#### What is planned
+
+| Phase | Outcome |
+|---|---|
+| 0: foundations | Close the platform defects the PRD lists, including grant revocation for paused and retired agents, revocation checks in the middleware, the durable checkpointer by default, banking pack tools bound at creation, spend caps on every run path, and a bank deployment profile that forces the strict configuration. |
+| 1: inform and recommend | Customer session bound to the bank's identity, the embedded widget, WhatsApp and voice in Hindi and English, L0 and L1 across the service range, "why this", disclosure, whole-wallet view, human hand-off with the supervisor view, nudges with control groups. |
+| 2: execute with approval and open MCP | L2 and L3 for transfers, bills, card controls, disputes and SME payments; signed intent records; the bank's MCP server and scope registry; the permissions page with outside agents and one-tap disconnect. |
+| 3: mandates and agentic payments | Mandates with caps, allow-lists and 90-day re-confirmation; L4 for sweeps, recurring bills and SME payables; network agent-token mirroring; Agent Passport gating. |
+| 4: ecosystem | Trust-registry issuer onboarding, relying-party onboarding, signed-request verification, more Indian languages and voice providers. |
+
+#### Design rules
+
+- The model never holds credentials and never decides authority: grants and mandates are checked at the tool boundary and again at the bank's rail.
+- Every action the agent takes is attributable to a customer, a grant and a run, and every grant can be revoked instantly.
+- The agent informs and recommends by default; execution is earned per task and per customer and is demoted on the first irregularity.
+- No PIN, OTP, password or card number is ever requested or accepted in conversation.
+- AI involvement is disclosed at first use and on every interaction, and a human is reachable at every turn.

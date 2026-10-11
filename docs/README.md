@@ -43,6 +43,7 @@ playbooks. Administrators can publish the optional docs subdomain using the
 | --- | --- |
 | Learn the product as a user | [First agent](user-guide/first-agent.md), [learning paths](user-guide/start-here.md), [team adoption](user-guide/adoption-checklist.md) |
 | Run a bank/fintech pilot | [Business onboarding](user-guide/bfsi-business-onboarding.md), [reconciliation](user-guide/bfsi-reconciliation.md), [customer service](user-guide/bfsi-customer-service.md), [insurance](user-guide/bfsi-insurance.md), [merchant services](user-guide/bfsi-merchant-services.md) |
+| Plan the bank-operated customer agent | [Customer agent guide](user-guide/customer-agent.md), [product requirements](customer-agent/PRD.md) |
 | Understand the platform | [Current product status](PRODUCT_STATUS.md), [why AgenticOrg](why-agenticorg.md) |
 | Verify ownership and contact | [Ownership and contact](OWNERSHIP.md), [repository notice](../NOTICE) |
 | Build and govern agents | [Agents](agents.md), [agent workflows](agent-workflows.md), [testing](TEST_PLAN.md) |

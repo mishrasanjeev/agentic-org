@@ -14,7 +14,10 @@
       "description": "Choose a practical learning path for your role and understand what AgenticOrg does, what it needs, and who stays in control.",
       "group": "Start Here",
       "audience": "Everyone",
-      "sources": ["docs/PRODUCT_STATUS.md", "ui/src/components/Layout.tsx"]
+      "sources": [
+        "docs/PRODUCT_STATUS.md",
+        "ui/src/components/Layout.tsx"
+      ]
     },
     {
       "slug": "first-agent",
@@ -47,7 +50,10 @@
       "description": "A plain-language guide to agents, tools, prompts, workflows, grants, knowledge, shadow mode, cases and OACP artifacts.",
       "group": "Start Here",
       "audience": "Everyone",
-      "sources": ["docs/PRODUCT_STATUS.md", "docs/governance/README.md"]
+      "sources": [
+        "docs/PRODUCT_STATUS.md",
+        "docs/governance/README.md"
+      ]
     },
     {
       "slug": "model-setup",
@@ -138,7 +144,10 @@
       "description": "Configure the signed Twilio runtime, validate speech turns and call history, and test calls only with approved destinations.",
       "group": "Build And Run",
       "audience": "Voice administrators",
-      "sources": ["docs/voice-runtime.md", "ui/src/pages/VoiceSetup.tsx"]
+      "sources": [
+        "docs/voice-runtime.md",
+        "ui/src/pages/VoiceSetup.tsx"
+      ]
     },
     {
       "slug": "rpa",
@@ -437,6 +446,24 @@
       "sources": [
         "docs/PRODUCT_STATUS.md",
         "docs/readiness/DOMAIN_READINESS_STANDARD.md"
+      ]
+    },
+    {
+      "slug": "customer-agent",
+      "title": "Customer agent: own the agent, open the agent",
+      "description": "The bank-operated assistant for the bank's own customers: what the conversation services do today, how it is easier than an in-app assistant, and the phased plan in the PRD.",
+      "group": "BFSI Playbooks",
+      "audience": "Bank product, risk and platform teams",
+      "reviewed": "2026-10-11",
+      "sources": [
+        "docs/customer-agent/PRD.md",
+        "api/v1/conversation.py",
+        "api/v1/conversation_supervisor.py",
+        "core/conversation/intents.py",
+        "api/v1/approvals.py",
+        "docs/governance/guardrails.md",
+        "docs/governance/model-gateway.md",
+        "docs/operations/audit-chain.md"
       ]
     }
   ]
