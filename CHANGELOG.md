@@ -43,6 +43,16 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
   nothing while the hooks are off, and with them on an answer is changed only
   where a rule transforms or blocks it.
 
+### Fixed - Public status page crawlability
+- Render status interpretation, an explicit unconfirmed loading state and
+  support links in the initial HTML, even without JavaScript or a live report.
+- Keep availability claims sourced from the status endpoint; static content
+  does not embed healthy states or historical uptime figures.
+- Add server-rendering, pending-report, failure and loaded-report regressions.
+- Synchronize the linked BFSI overview and the Start here guide with the
+  existing capability inventory; check public and domain summaries against that
+  inventory instead of stale counts.
+
 ### Security - breaking for audit readers of tenants that keep spend rows: `GET /audit` hides commercial spend audit rows by default
 - A deliberate default, on whatever `spend_intelligence_enabled` says:
   `GET /audit` hides the audit rows of rate cards, commitments, invoices,
