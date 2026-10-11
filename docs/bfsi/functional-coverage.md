@@ -7,8 +7,8 @@ functional IDs; the [coverage matrix](coverage-matrix.md) records per-product ev
 
 ## Read this status correctly
 
-At the current repository baseline, 15 functional capabilities are covered, 102 are partial,
-and 33 are gaps. A combined `covered` result means at least one component has an implemented,
+At the current repository baseline, 24 functional capabilities are covered, 97 are partial,
+and 29 are gaps. A combined `covered` result means at least one component has an implemented,
 tested capability; it does not mean the capability is wired into every agent, channel or tenant.
 Features behind disabled flags remain unavailable in the default installation. No domain or
 journey below has end-to-end acceptance solely because its components appear in the matrix.
@@ -19,23 +19,23 @@ journey below has end-to-end acceptance solely because its components appear in 
 | AI governance | 6 | 1 | 3 | 2 | Dependency graph and model cards |
 | Content | 8 | 0 | 7 | 1 | Approved-source drafting, clause assembly and translation |
 | Conversation | 6 | 0 | 5 | 1 | Typed intent, stateful case handoff and channel parity |
-| Evaluation | 7 | 0 | 6 | 1 | Real scored evaluations and governed release decisions |
+| Evaluation | 7 | 3 | 4 | 0 | Integrated scored evaluations and governed release decisions |
 | Front end | 15 | 3 | 8 | 4 | Multi-step journeys, supervisor view and search |
 | FinOps | 4 | 0 | 3 | 1 | Forecasting, attributable spend and budget enforcement |
 | Model gateway | 8 | 0 | 8 | 0 | SLO-aware routing, hard limits and complete telemetry |
 | Document intelligence | 12 | 0 | 8 | 4 | Bundle, OCR, review geometry and comparison |
 | Lead intelligence | 1 | 0 | 1 | 0 | Governed scoring and owner feedback |
 | MLOps | 2 | 0 | 2 | 0 | Independent model lifecycle and rollback evidence |
-| Observability | 6 | 1 | 5 | 0 | Complete trace coverage and streaming measurements |
+| Observability | 6 | 2 | 4 | 0 | Complete trace coverage and streaming measurements |
 | Orchestration | 11 | 4 | 7 | 0 | Durable multi-agent execution and human recovery |
-| Prompt governance | 11 | 0 | 8 | 3 | Optimisation, context limits and maker-checker |
+| Prompt governance | 11 | 5 | 6 | 0 | Integrated optimisation, context limits and maker-checker |
 | Retrieval | 15 | 1 | 9 | 5 | Hybrid relevance, reranking and governed citations |
 | Agent registry | 8 | 0 | 8 | 0 | Lifecycle, discoverability and authority revocation |
 | Speech | 8 | 0 | 3 | 5 | Speaker separation, safe transcripts and review |
 | Trust controls | 7 | 4 | 3 | 0 | Injection boundaries and blocking output policy |
 | Transaction intelligence | 6 | 1 | 1 | 4 | Evidence-linked detection and human disposition |
 | Vector infrastructure | 6 | 0 | 4 | 2 | Hybrid ranking rollout, metadata filters and lineage |
-| **Total** | **150** | **15** | **102** | **33** | **No full-journey sign-off yet** |
+| **Total** | **150** | **24** | **97** | **29** | **No full-journey sign-off yet** |
 
 These counts are a snapshot, not a target. A status can improve only after the real runtime
 path and its regression tests are present, and the JSON and Markdown matrix agree.

@@ -4,6 +4,15 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
 
 ## [Unreleased] - 2026-08-29
 
+### Fixed - Public status page crawlability
+- Render status interpretation, an explicit unconfirmed loading state and
+  support links in the initial HTML, even without JavaScript or a live report.
+- Keep availability claims sourced from the status endpoint; static content
+  does not embed healthy states or historical uptime figures.
+- Add server-rendering, pending-report, failure and loaded-report regressions.
+- Synchronize the linked BFSI overview with the existing capability inventory;
+  check public and domain summaries against that inventory instead of stale counts.
+
 ### Fixed - Combined security and feature release regressions
 - Lineage details ignore superseded node requests, distinguish traversal limits
   from absent sources, and expose native keyboard-accessible node controls.

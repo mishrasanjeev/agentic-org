@@ -53,7 +53,14 @@ test("the complete manual has maintained source references and five BFSI playboo
   assert.equal(manual.groups.length, 5);
   const coverage = manual.articles.find((article) => article.slug === "bfsi-capability-status");
   assert.ok(coverage);
-  assert.match(coverage.html, /15\s*covered, 102 partial and 33 gaps/);
+  const baseline = JSON.parse(readFileSync(
+    new URL("../../docs/bfsi/capability-baseline.json", import.meta.url), "utf8",
+  ));
+  const functional = baseline.capabilities.filter((item) => item.kind === "functional");
+  const count = (status) => functional.filter((item) => item.status === status).length;
+  assert.match(coverage.html, new RegExp(
+    `${count("covered")}\\s*covered, ${count("partial")} partial and ${count("none")} gaps`,
+  ));
   assert.ok(
     manual.articles.every(
       (article) => article.sources.length && article.headings.length >= 3,
@@ -73,6 +80,37 @@ test("the complete manual has maintained source references and five BFSI playboo
   }
   const commerce = manual.articles.find((article) => article.slug === "commerce");
   assert.match(commerce.html, /href="\/docs\/bfsi-merchant-services#process-map"/);
+});
+
+test("the linked functional overview agrees with the machine inventory by domain", () => {
+  const baseline = JSON.parse(readFileSync(
+    new URL("../../docs/bfsi/capability-baseline.json", import.meta.url), "utf8",
+  ));
+  const functional = baseline.capabilities.filter((item) => item.kind === "functional");
+  const overview = readFileSync(
+    new URL("../../docs/bfsi/functional-coverage.md", import.meta.url), "utf8",
+  ).replaceAll("**", "");
+  const domains = {
+    Acquisition: "ACQ", "AI governance": "AIGOV", Content: "CONTENT",
+    Conversation: "CONV", Evaluation: "EVAL", "Front end": "FE", FinOps: "FIN",
+    "Model gateway": "GW", "Document intelligence": "IDP", "Lead intelligence": "LEAD",
+    MLOps: "MLOPS", Observability: "OBS", Orchestration: "ORCH",
+    "Prompt governance": "PROMPT", Retrieval: "RAG", "Agent registry": "REG",
+    Speech: "SPEECH", "Trust controls": "TRUST", "Transaction intelligence": "TXN",
+    "Vector infrastructure": "VEC",
+  };
+  assert.deepEqual(new Set(Object.values(domains)), new Set(functional.map((item) => item.domain)));
+  for (const [label, domain] of [...Object.entries(domains), ["Total", null]]) {
+    const items = domain ? functional.filter((item) => item.domain === domain) : functional;
+    const counts = ["covered", "partial", "none"].map(
+      (status) => items.filter((item) => item.status === status).length,
+    );
+    assert.ok(overview.includes(`| ${label} | ${items.length} | ${counts.join(" | ")} |`), label);
+  }
+  const count = (status) => functional.filter((item) => item.status === status).length;
+  assert.match(overview, new RegExp(
+    `${count("covered")} functional capabilities are covered, ${count("partial")} are partial,\\s*and ${count("none")} are gaps`,
+  ));
 });
 
 test("tracked reader data matches the authored Markdown and manifest", () => {
