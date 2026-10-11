@@ -843,8 +843,8 @@ Run under review | Assign operators, approvals, support and change control.
 #### What availability means
 
 For regulated workflows, first read the [BFSI capability status](/docs/bfsi-capability-status).
-The five process maps are fictional configured examples; 15 of 150 assessed
-functional capabilities are covered, 102 are partial and 33 remain gaps.
+The five process maps are fictional configured examples; 24 of 150 assessed
+functional capabilities are covered, 97 are partial and 29 remain gaps.
 
 **Implemented** means a runtime path exists. **Configuration-dependent** means it also needs credentials, permissions, worker infrastructure or tenant settings. **Example** means a teaching scenario, not a pre-integrated solution. A listed connector, agent template, voice provider or channel is not proof of successful live execution in your workspace.
 

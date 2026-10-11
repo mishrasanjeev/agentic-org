@@ -66,6 +66,15 @@ export default function StatusPage() {
 
       <header>
         <h1 className="text-3xl font-bold">AgenticOrg Status</h1>
+        <p className="mt-2 text-muted-foreground">
+          Current service availability and incident reports for AgenticOrg.
+        </p>
+        {!data && !error && (
+          <p className="mt-3 text-sm text-muted-foreground" role="status">
+            Loading the current service report. Availability is not confirmed
+            until a report is received.
+          </p>
+        )}
         {data && (
           <p className="mt-2 text-lg text-muted-foreground">
             {headline[data.overall]}
@@ -179,6 +188,29 @@ export default function StatusPage() {
           </footer>
         </>
       )}
+
+      <section aria-labelledby="status-report-context" className="space-y-3 border-t pt-6">
+        <h2 id="status-report-context" className="text-lg font-semibold">
+          Reading the service report
+        </h2>
+        <p className="text-sm text-muted-foreground">
+          The report includes component availability, active incidents and recent
+          incident history. Use the report timestamp to judge freshness. A missing
+          or unreachable report does not mean the service is operational.
+        </p>
+        <p className="text-sm text-muted-foreground">
+          Historical figures reflect the status service&apos;s measurements. They
+          do not guarantee future availability or establish contractual service
+          levels, and do not confirm that your organization&apos;s models,
+          connectors or external providers are available.
+        </p>
+        <p className="text-sm">
+          <a className="underline underline-offset-4" href="/support">Contact support</a>
+          {" "}for incident-specific assistance. For organization-specific access
+          or connector errors, consult the{" "}
+          <a className="underline underline-offset-4" href="/docs/troubleshooting">troubleshooting guide</a>.
+        </p>
+      </section>
     </div>
   );
 }
