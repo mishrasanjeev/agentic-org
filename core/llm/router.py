@@ -2,14 +2,13 @@
 
 Routing tiers (cloud, default ``AGENTICORG_LLM_MODE=cloud``):
 
-  - Tier 1 (simple):    ``gemini-2.5-flash-lite`` — high-volume
+  - Tier 1 (simple):    ``gemini-3.5-flash-lite`` — high-volume
                         classification, extraction, simple Q&A.
-                        ~$0.04/1M input, ~$0.10/1M output.
-  - Tier 2 (moderate):  ``gemini-2.5-flash`` — multi-step reasoning,
-                        light synthesis. $0.075/1M input,
-                        $0.30/1M output.
+  - Tier 2 (moderate):  ``gemini-3.5-flash-lite`` — multi-step reasoning,
+                        light synthesis. Both tiers accept explicit overrides;
+                        costs come from the maintained pricing registry.
   - Tier 3 (complex):   ``gemini-2.5-pro`` — heavy synthesis, deep
-                        reasoning. $1.25/1M input, $5/1M output.
+                        reasoning; the existing separate default is preserved.
                         ``AGENTICORG_LLM_TIER3`` overrides for hosted
                         Claude/GPT.
 
