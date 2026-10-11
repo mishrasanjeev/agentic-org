@@ -19,6 +19,8 @@ import publicSite from "../content/publicSite.json";
 import ProductOwnership from "../components/ProductOwnership";
 import CommerceA2AJourney from "../components/docs/CommerceA2AJourney";
 import CommerceA2ATransaction from "../components/docs/CommerceA2ATransaction";
+import SpendPipelineMap from "../components/docs/SpendPipelineMap";
+import SpendReadersMap from "../components/docs/SpendReadersMap";
 import { buildDocumentationSchema } from "../lib/documentation-schema.mjs";
 
 type Guide = (typeof manual.articles)[number];
@@ -326,6 +328,12 @@ export default function Documentation() {
                   <CommerceA2AJourney />
                 </>
               )}
+              {guide.slug === "ai-spend-intelligence" && (
+                <>
+                  <SpendPipelineMap />
+                  <SpendReadersMap />
+                </>
+              )}
               <article
                 className="docs-prose"
                 dangerouslySetInnerHTML={{ __html: guide.html }}
@@ -402,6 +410,9 @@ export default function Documentation() {
                 <Link to="/docs/start-here">Choose your learning path</Link>
                 <Link to="/docs#bfsi-playbooks">Explore BFSI process maps</Link>
                 <Link to="/docs/bfsi-capability-status">BFSI capability status</Link>
+                <Link to="/docs/ai-spend-intelligence">
+                  AI spend and invoice reconciliation
+                </Link>
               </div>
               <div className="docs-home-note">
                 <strong>New to agents?</strong> Begin with a read-only task and

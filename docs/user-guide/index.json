@@ -263,6 +263,22 @@
       ]
     },
     {
+      "slug": "ai-spend-intelligence",
+      "title": "AI spend intelligence and invoice reconciliation",
+      "description": "Attribute metered AI usage to your organisation tree, price it in rupees from contract or list rate cards, reconcile invoices within 1% and read the Gate 1 status.",
+      "group": "Govern And Operate",
+      "audience": "Administrators, finance teams and auditors",
+      "reviewed": "2026-10-11",
+      "sources": [
+        "docs/finops/spend-intelligence.md",
+        "api/v1/spend.py",
+        "core/spend/pricing.py",
+        "core/spend/reconcile.py",
+        "core/spend/gate.py",
+        "core/spend/access.py"
+      ]
+    },
+    {
       "slug": "troubleshooting",
       "title": "Troubleshooting by symptom",
       "description": "Resolve access, model, connector, OCR, workflow, voice, RPA and commerce problems using concrete checks and safe recovery steps.",
