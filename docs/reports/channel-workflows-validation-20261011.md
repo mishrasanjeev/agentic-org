@@ -8,15 +8,16 @@ to existing agents/workflows, encrypted receipt/results, and a setup UI. New
 agent defaults use `gemini-3.5-flash-lite`; explicitly stored model choices and
 separate routing-tier overrides are preserved.
 
-Local validation uses a dedicated Docker project with the real API,
+Local validation uses a dedicated Docker project with a freshly built Python
+3.14 production-style API/worker image, the current source mounted read-only,
 PostgreSQL, Redis, worker, beat and UI. Callback bodies and secrets are synthetic.
 The agent model's final response is scripted locally; it is not a Google API
 call. The tests do not contact native channel providers or make telephone calls.
 
 | Check | Observed result | Boundary proved |
 |---|---|---|
-| HTTP/worker channel E2E | Passed, 53 seconds | Disabled/bad-signature refusal; one-message review; private linking; duplicate/content-mismatch refusal; rotation/revocation; native callback parsing; actual workflow and LangGraph dispatch; paused target refusal |
-| Chromium desktop/mobile | Passed, 13 seconds | Real signup, workflow selection, protected credential form, save/enable/replace, no secret returned, responsive layout and public workflow guide |
+| HTTP/worker channel E2E | Passed, 93 seconds | Disabled/bad-signature refusal; one-message review; private linking; duplicate/content-mismatch refusal; rotation/revocation; native callback parsing; actual workflow and LangGraph dispatch; paused target refusal |
+| Chromium desktop/mobile | Passed, 15 seconds | Real signup, workflow selection, protected credential form, save/enable/replace, Telegram setup rejection without activation, no secret returned, responsive layout and public workflow guide |
 | Isolated PostgreSQL RLS | Passed | Full migration chain; non-superuser/non-bypass role; cross-tenant reads/writes refused on all three new tables; another owner cannot read a binding |
 | Default/provider/auth regression replay | 164 passed | Explicit legacy models preserved, configured default respected, catalog/credential access separation, no new authentication exemption overlap, vault startup tests and isolated metrics environment |
 | Native provider and setup unit tests | 50 passed | Signatures, receiver scope, bounded payloads, private Telegram identity, replay windows, malformed replies, access-log token redaction, confirmed Telegram registration, foreign-callback refusal, owner-scoped activation and local/production callback separation |

@@ -2696,7 +2696,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "agents:write",
-    "source_line": 132,
+    "source_line": 138,
     "tenant_required": true
   },
   {
@@ -2714,7 +2714,7 @@
     "public_exempt_reason": null,
     "rate_limit": "security-admin-write",
     "scope": "agents:write",
-    "source_line": 153,
+    "source_line": 159,
     "tenant_required": true
   },
   {
@@ -2732,7 +2732,7 @@
     "public_exempt_reason": null,
     "rate_limit": "security-admin-write",
     "scope": "agents:write",
-    "source_line": 205,
+    "source_line": 211,
     "tenant_required": true
   },
   {
@@ -2750,7 +2750,7 @@
     "public_exempt_reason": null,
     "rate_limit": "security-admin-write",
     "scope": "agents:write",
-    "source_line": 269,
+    "source_line": 275,
     "tenant_required": true
   },
   {
@@ -2768,7 +2768,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "agents:write",
-    "source_line": 358,
+    "source_line": 364,
     "tenant_required": true
   },
   {
@@ -2786,7 +2786,7 @@
     "public_exempt_reason": null,
     "rate_limit": "agent-execution",
     "scope": "agents:write",
-    "source_line": 396,
+    "source_line": 402,
     "tenant_required": true
   },
   {
@@ -2804,7 +2804,7 @@
     "public_exempt_reason": null,
     "rate_limit": "security-admin-write",
     "scope": "agents:write",
-    "source_line": 310,
+    "source_line": 316,
     "tenant_required": true
   },
   {
@@ -2822,7 +2822,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "agents:write",
-    "source_line": 112,
+    "source_line": 118,
     "tenant_required": true
   },
   {
@@ -2840,7 +2840,7 @@
     "public_exempt_reason": "provider-verify-token-required",
     "rate_limit": "standard",
     "scope": "public:channel-challenge",
-    "source_line": 446,
+    "source_line": 452,
     "tenant_required": false
   },
   {
@@ -2858,7 +2858,7 @@
     "public_exempt_reason": "provider-signature-and-binding-required",
     "rate_limit": "standard",
     "scope": "public:channel-callback",
-    "source_line": 471,
+    "source_line": 477,
     "tenant_required": false
   },
   {
