@@ -614,6 +614,28 @@ class Settings(BaseSettings):
     # steps, not only left out of routing (FINDINGS A-110). Off by default
     # until the next minor.
     paused_agents_refused: bool = False
+    # The bank-operated customer agent (core/customer_agent/, api/v1/customer_agent.py).
+    # Off by default: off, every customer-agent route answers 404. On, the
+    # bank's backend opens customer sessions with assertions signed by the
+    # key at ``customer_agent_assertion_jwks_uri`` (issuer and audience must
+    # match), and confirmed actions run through the configured agent of the
+    # configured tenant and company under the autonomy ladder, whose highest
+    # level any customer may set is ``customer_agent_max_autonomy`` (2 =
+    # prepare and wait for one tap, until the bank raises it).
+    customer_agent_enabled: bool = False
+    customer_agent_tenant_id: str = ""
+    customer_agent_company_id: str = ""
+    customer_agent_agent_id: str = ""
+    customer_agent_assertion_issuer: str = ""
+    customer_agent_assertion_audience: str = ""
+    customer_agent_assertion_jwks_uri: str = ""
+    customer_agent_session_ttl_minutes: int = 30
+    customer_agent_max_autonomy: int = 2
+    customer_agent_disclosure: str = ""
+    customer_agent_bank_earns_text: str = ""
+    # Whether the permissions page opens a principal session on the authority
+    # service to show the customer's outside agents (needs GRANTEX_API_KEY).
+    customer_agent_outside_agents: bool = False
     # Whether the authentication middleware consults the authority service's
     # revocation feed before honouring a grant token: "off" (default) or
     # "feed". Off by default because it changes an existing authentication

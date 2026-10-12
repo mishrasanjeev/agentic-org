@@ -62,6 +62,8 @@ RATE_LIMIT_CLASSES: dict[str, tuple[int, int]] = {
     "public-product-facts": (60, 60),
     "demo-request-public": (5, 3600),
     "client-portal-public": (60, 60),
+    "customer-agent-public": (30, 60),
+    "customer-agent": (120, 60),
     "branding-public-lookup": (120, 60),
     "push-public-config": (60, 60),
     "healthcheck": (600, 60),
@@ -304,6 +306,21 @@ def _deny(request: Request, status: int, detail: str, **ctx: Any) -> None:
     raise HTTPException(status_code=status, detail=detail)
 
 
+def _customer_session_principal(request: Request, rate_class: str) -> str | None:
+    """The customer-agent routes authenticate their own session token after this check runs, so the
+    window is keyed by that token's digest rather than by an address many customers share behind the
+    bank's proxy. Session opening (the public class) stays keyed by address."""
+    if rate_class != "customer-agent":
+        return None
+    header = request.headers.get("Authorization", "")
+    token = header[7:].strip() if header.startswith("Bearer ") else ""
+    if not token.startswith("cas_") or len(token) < 24:
+        return None
+    import hashlib
+
+    return "cas:" + hashlib.sha256(token.encode("utf-8")).hexdigest()[:32]
+
+
 async def _check_rate_limit(request: Request, meta: dict[str, Any]) -> None:
     rate_class = meta.get("rate_limit")
     if not rate_class:
@@ -311,9 +328,12 @@ async def _check_rate_limit(request: Request, meta: dict[str, Any]) -> None:
     limit, window = RATE_LIMIT_CLASSES.get(rate_class, _DEFAULT_RATE)
     tenant_id = getattr(request.state, "tenant_id", None)
     buyer_access_id = getattr(request.state, "buyer_access_id", None)
+    customer_session = _customer_session_principal(request, rate_class)
     principal = (
         f"buyer:{buyer_access_id}"
         if buyer_access_id
+        else customer_session
+        if customer_session
         else f"t:{tenant_id}"
         if (meta.get("auth_required") and tenant_id)
         else f"ip:{_client_ip(request)}"

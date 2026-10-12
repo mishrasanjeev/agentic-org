@@ -21,6 +21,8 @@ COPY api/v1/observability.py ../api/v1/observability.py
 COPY api/v1/spend.py ../api/v1/spend.py
 COPY api/v1/conversation.py api/v1/conversation_supervisor.py api/v1/approvals.py ../api/v1/
 COPY core/conversation/intents.py ../core/conversation/intents.py
+COPY api/v1/customer_agent.py ../api/v1/customer_agent.py
+COPY core/customer_agent/ ../core/customer_agent/
 COPY api/v1/channels.py api/v1/voice_runtime.py ../api/v1/
 COPY core/channels/ ../core/channels/
 COPY observability/workload.py observability/timeline.py ../observability/

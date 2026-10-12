@@ -131,6 +131,7 @@ docs/**
 !docs/operations/audit-chain.md
 !docs/customer-agent/
 !docs/customer-agent/PRD.md
+!docs/customer-agent/integration.md
 !docs/finops/
 !docs/finops/spend-intelligence.md
 !docs/oacp/

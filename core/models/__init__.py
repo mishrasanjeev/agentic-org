@@ -79,6 +79,9 @@ from core.models.connector_config import ConnectorConfig as ConnectorConfig
 from core.models.content_clause import ContentClause as ContentClause
 from core.models.content_draft import ContentDraft as ContentDraft
 from core.models.conversation_session import ConversationSession as ConversationSession
+from core.models.customer_agent import CustomerAction as CustomerAction
+from core.models.customer_agent import CustomerMandate as CustomerMandate
+from core.models.customer_agent import CustomerSession as CustomerSession
 from core.models.delegation import UserDelegation as UserDelegation
 from core.models.document import Document as Document
 from core.models.dsar import DSARRequestRecord as DSARRequestRecord

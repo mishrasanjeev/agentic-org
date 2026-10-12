@@ -491,12 +491,15 @@
     {
       "slug": "customer-agent",
       "title": "Customer agent: own the agent, open the agent",
-      "description": "The bank-operated assistant for the bank's own customers: what the conversation services do today, how it is easier than an in-app assistant, and the phased plan in the PRD.",
+      "description": "The bank-operated assistant for the bank's own customers: sessions without a platform credential, the autonomy ladder, one-tap cards, the bank's step-up, why-this explanations, the permissions page and the embeddable element, all off by default.",
       "group": "BFSI Playbooks",
       "audience": "Bank product, risk and platform teams",
       "reviewed": "2026-10-11",
       "sources": [
         "docs/customer-agent/PRD.md",
+        "docs/customer-agent/integration.md",
+        "api/v1/customer_agent.py",
+        "core/customer_agent/turns.py",
         "api/v1/conversation.py",
         "api/v1/conversation_supervisor.py",
         "core/conversation/intents.py",
