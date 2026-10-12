@@ -10,8 +10,12 @@ import {
 import { buildSitemap } from "./generate-sitemap.mjs";
 
 test("approved policy publication preserves current rights without software adoption", () => {
-  const guide = loadUserGuides().articles.find((article) => article.slug === "licensing");
+  const manual = loadUserGuides();
+  assert.deepEqual(manual.articles.slice(0, 2).map((article) => article.slug), ["start-here", "first-agent"]);
+  const guide = manual.articles.find((article) => article.slug === "licensing");
   assert.ok(guide);
+  assert.equal(guide.group, "Govern And Operate");
+  assert.ok(manual.articles.indexOf(guide) > manual.articles.findIndex((article) => article.slug === "billing-and-support"));
   assert.match(guide.html, /Approved for policy publication; not adopted by a software release/);
   assert.match(guide.html, /No effective date or covered release has been approved/);
   assert.match(guide.html, /personal and internal use is free/);

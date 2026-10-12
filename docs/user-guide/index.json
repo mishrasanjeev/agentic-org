@@ -9,15 +9,6 @@
   ],
   "articles": [
     {
-      "slug": "licensing",
-      "title": "Usage and licensing",
-      "description": "Understand the approved prospective self-use and commercial-agreement policy, existing source rights and the separate software-release adoption boundary.",
-      "group": "Govern And Operate",
-      "audience": "Everyone",
-      "reviewed": "2026-10-12",
-      "sources": ["README.md", "ui/src/pages/legal/Terms.tsx"]
-    },
-    {
       "slug": "start-here",
       "title": "Start here",
       "description": "Choose a practical learning path for your role and understand what AgenticOrg does, what it needs, and who stays in control.",
@@ -314,6 +305,15 @@
         "ui/src/pages/Billing.tsx",
         "ui/src/pages/legal/Support.tsx"
       ]
+    },
+    {
+      "slug": "licensing",
+      "title": "Usage and licensing",
+      "description": "Understand the approved prospective self-use and commercial-agreement policy, existing source rights and the separate software-release adoption boundary.",
+      "group": "Govern And Operate",
+      "audience": "Everyone",
+      "reviewed": "2026-10-12",
+      "sources": ["README.md", "ui/src/pages/legal/Terms.tsx"]
     },
     {
       "slug": "ai-spend-intelligence",
