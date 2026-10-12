@@ -110,7 +110,7 @@ async def test_all_channel_tables_enforce_scope_and_owner(as_rls_role: _Db) -> N
         assert retained_rows() == before
         with as_rls_role.owner.connect() as conn:
             assert conn.scalar(text("SELECT version_num FROM alembic_version")) == (
-                "v6z83_channel_bindings" if action == "upgrade" else revision
+                "v6z84_customer_agent" if action == "upgrade" else revision  # the current Alembic head
             )
             for table in tables:
                 assert tuple(
