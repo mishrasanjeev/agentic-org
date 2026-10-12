@@ -3,7 +3,10 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import os
 import uuid as _uuid
+from email.errors import HeaderParseError
+from email.headerregistry import Address
 from html import escape
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request
@@ -21,7 +24,7 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 # Notification config — uses Gmail SMTP (free, 500/day)
-NOTIFY_TO = "sanjeev@agenticorg.ai"
+NOTIFY_TO = "sanjeev@orchestrum.in"
 
 # Public endpoint: per-IP ceiling so it cannot be used to spam email or LLM.
 _DEMO_REQUEST_MAX_PER_HOUR = 5
@@ -76,6 +79,14 @@ async def seed_demo_data(tenant_id: str = Depends(get_current_tenant)):
 
 def _send_email_notification(body: DemoRequest) -> bool:
     """Send demo request notification email via shared email utility."""
+    try:
+        recipient = Address(addr_spec=os.getenv("AGENTICORG_DEMO_NOTIFY_TO", NOTIFY_TO).strip())
+    except (ValueError, HeaderParseError):
+        logger.warning("Invalid marketing notification recipient; notification not sent")
+        return False
+    if not recipient.username or not recipient.domain:
+        logger.warning("Missing marketing notification recipient; notification not sent")
+        return False
     subject = f"AgenticOrg Demo Request - {body.name} ({body.effective_role or 'Not specified'})"
     company = escape(body.effective_company or "-")
     role = escape(body.effective_role or "-")
@@ -92,7 +103,7 @@ def _send_email_notification(body: DemoRequest) -> bool:
 <tr><td style="padding:8px;font-weight:bold;">Source:</td><td style="padding:8px;">{source}</td></tr>
 </table>
 <p style="color:#666;font-size:12px;margin-top:20px;">Sent from agenticorg.ai</p>"""
-    return send_email(NOTIFY_TO, subject, html)
+    return send_email(recipient.addr_spec, subject, html)
 
 
 def _send_trial_confirmation(body: DemoRequest) -> bool:

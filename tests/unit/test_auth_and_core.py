@@ -1838,6 +1838,41 @@ class TestSendEmailNotification:
             to_addr = mock_send.call_args[0][0]
             assert to_addr == NOTIFY_TO
 
+    def test_marketing_leads_use_owner_inbox_by_default(self, monkeypatch):
+        from api.v1.demo import DemoRequest, _send_email_notification
+        monkeypatch.delenv("AGENTICORG_DEMO_NOTIFY_TO", raising=False)
+        body = DemoRequest(name="Buyer", email="buyer@example.org", source="website")
+        with patch("api.v1.demo.send_email", return_value=True) as send:
+            assert _send_email_notification(body) is True
+            assert send.call_args.args[0] == "sanjeev@orchestrum.in"
+
+    def test_self_hosted_marketing_recipient_override(self, monkeypatch):
+        from api.v1.demo import DemoRequest, _send_email_notification
+        monkeypatch.setenv("AGENTICORG_DEMO_NOTIFY_TO", "operator@example.org")
+        body = DemoRequest(name="Buyer", email="buyer@example.org")
+        with patch("api.v1.demo.send_email", return_value=True) as send:
+            assert _send_email_notification(body) is True
+            assert send.call_args.args[0] == "operator@example.org"
+
+    @pytest.mark.parametrize("recipient", [
+        "", "one@example.org,two@example.org", "one@example.org\r\nBcc: two@example.org",
+    ])
+    def test_invalid_marketing_recipient_refuses_email(self, monkeypatch, recipient):
+        from api.v1.demo import DemoRequest, _send_email_notification
+        monkeypatch.setenv("AGENTICORG_DEMO_NOTIFY_TO", recipient)
+        body = DemoRequest(name="Buyer", email="buyer@example.org")
+        with patch("api.v1.demo.send_email", return_value=True) as send:
+            assert _send_email_notification(body) is False
+            send.assert_not_called()
+
+    def test_requester_confirmation_is_not_redirected_to_marketing(self, monkeypatch):
+        from api.v1.demo import DemoRequest, _send_trial_confirmation
+        monkeypatch.setenv("AGENTICORG_DEMO_NOTIFY_TO", "operator@example.org")
+        body = DemoRequest(name="Buyer", email="buyer@example.org")
+        with patch("api.v1.demo.send_email", return_value=True) as send:
+            assert _send_trial_confirmation(body) is True
+            assert send.call_args.args[0] == body.email
+
 
 # ===================================================================
 # 12. Additional edge-case tests to reach 60+ test functions
