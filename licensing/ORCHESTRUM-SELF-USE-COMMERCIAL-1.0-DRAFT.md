@@ -137,4 +137,3 @@ Commercial requests go to sanjeev@orchestrum.in.
 Until adoption, this document is a candidate agreement text only. It neither
 revokes existing grants nor grants commercial approval for a future covered
 offering.
-
