@@ -4,6 +4,16 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
 
 ## [Unreleased]
 
+### Changed - breaking default for marketing notification recipients
+- Website demo/trial notifications now default to `sanjeev@orchestrum.in`, the
+  owner-approved marketing inbox, rather than `sanjeev@agenticorg.ai`.
+- Self-hosters can opt out by setting `AGENTICORG_DEMO_NOTIFY_TO` to their own
+  single valid address, including the previous destination if appropriate.
+  An empty, multi-recipient or malformed override refuses notification rather
+  than silently forwarding lead details to a fallback inbox.
+- Requester confirmations, workspace emails, SMTP sender, credential custody,
+  throttling and lead persistence are unchanged.
+
 Entries here have accumulated since 4.0.0. The source version in `pyproject.toml`
 is 4.8.0; versions 4.1 to 4.8 have no sections of their own.
 

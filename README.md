@@ -7,6 +7,11 @@ AgenticOrg is an Apache-2.0 enterprise AI agent platform for building, running, 
 > **Inventor / Owner:** **Sanjeev Kumar**
 >
 > **Contact:** [sanjeev@orchestrum.in](mailto:sanjeev@orchestrum.in) | [mishra.sanjeev@gmail.com](mailto:mishra.sanjeev@gmail.com)
+
+Website demo and trial lead notifications default to `sanjeev@orchestrum.in`.
+Self-hosted operators can select their own single marketing inbox with
+`AGENTICORG_DEMO_NOTIFY_TO`. This does not redirect requester confirmations,
+workspace notifications, or account-recovery email, and does not replace SMTP setup.
 >
 > See the canonical [ownership and contact statement](docs/OWNERSHIP.md) and [NOTICE](NOTICE).
 

@@ -193,7 +193,7 @@ These tests require a browser and should be done manually by the QA team:
 - [ ] CTA to signup/playground at bottom
 
 ### Email
-- [ ] Submit demo request → check sanjeev@agenticorg.ai inbox for:
+- [ ] Submit demo request → check sanjeev@orchestrum.in (or configured AGENTICORG_DEMO_NOTIFY_TO) inbox for:
   - Personalized sales email from "Sanjeev Kumar, Founder, AgenticOrg"
   - Subject personalized by role (CFO gets ₹69,800 subject, COO gets 88% triage)
   - Calendar booking link works (https://calendar.app.google/p6P4DpRn85yxHua99)
