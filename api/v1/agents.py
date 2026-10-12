@@ -26,6 +26,7 @@ from api.deps import (
 )
 from api.route_metadata import route_meta
 from auth.grant_enforcement import EnforcementMode, resolve_enforcement_mode
+from auth.revocation import revoke_agent_authority
 from auth.run_grants import (
     CALLER_GRANT_KEY,
     RunGrant,
@@ -33,6 +34,7 @@ from auth.run_grants import (
     direct_tool_call_permitted,
     resolve_run_grant,
 )
+from auth.token_pool import token_pool
 from core.agent_registry import approval as registry_approval
 from core.agent_registry import traffic as agent_traffic
 from core.ai_providers.defaults import fallback_model, primary_model, primary_provider
@@ -2376,17 +2378,29 @@ async def delegate_to_agent(
             child_scopes=child_scopes,
             expires_in=body.get("expires_in", 28800),
         )
-        return {
-            "status": "delegated",
-            "parent_agent": str(parent.id),
-            "child_agent": str(child.id),
-            "parent_did": parent_grantex.get("grantex_did", ""),
-            "child_did": child_grantex.get("grantex_did", ""),
-            "scopes_delegated": len(child_scopes),
-        }
     except (KeyError, RuntimeError, TypeError, ValueError):
         logger.exception("delegation_failed")
-        return {"status": "failed", "reason": "Grantex delegation failed"}
+        raise HTTPException(
+            502, detail={"error": "delegation_failed", "message": "Grantex delegation failed"}
+        ) from None
+    if result is None:
+        # The helper returns None when Grantex is not configured or refused the
+        # delegation; that is a failure, never a delegation.
+        raise HTTPException(
+            502, detail={"error": "delegation_failed", "message": "Grantex did not issue the delegated grant"}
+        )
+    stored = await token_pool.store_delegated_grant(str(child.id), result)
+    return {
+        "status": "delegated",
+        "parent_agent": str(parent.id),
+        "child_agent": str(child.id),
+        "parent_did": parent_grantex.get("grantex_did", ""),
+        "child_did": child_grantex.get("grantex_did", ""),
+        "scopes_delegated": len(child_scopes),
+        "grant_id": str(result.get("grantId") or result.get("grant_id") or result.get("id") or "") or None,
+        "expires_at": result.get("expiresAt") or result.get("expires_at"),
+        "stored": stored,
+    }
 
 
 @router.post(
@@ -4358,11 +4372,16 @@ async def pause_agent(
         )
         session.add(event)
 
+    # The authority the agent held goes with the pause: its cached run grants
+    # are revoked and evicted, and the response says what happened.
+    revocation = await revoke_agent_authority(tenant_id, str(agent_id))
     return {
         "id": str(agent_id),
         "status": "paused",
         "previous_status": old_status,
-        "token_revoked": True,
+        "token_revoked": revocation.token_revoked,
+        "grants_revoked": revocation.revoked,
+        "grants_failed": revocation.failed,
     }
 
 
@@ -5067,11 +5086,14 @@ async def retire_agent(
         )
         session.add(event)
 
+    revocation = await revoke_agent_authority(tenant_id, str(agent_id))
     return {
         "id": str(agent_id),
         "status": "retired",
         "previous_status": old_status,
-        "token_revoked": True,
+        "token_revoked": revocation.token_revoked,
+        "grants_revoked": revocation.revoked,
+        "grants_failed": revocation.failed,
     }
 
 
