@@ -1,6 +1,6 @@
 # AgenticOrg
 
-AgenticOrg is an Apache-2.0 enterprise AI agent platform for building, running, and governing agent workflows across finance, HR, marketing, operations, back office, communications, and bounded agentic-commerce use cases.
+AgenticOrg is an enterprise AI agent platform for building, running, and governing agent workflows across finance, HR, marketing, operations, back office, communications, and bounded agentic-commerce use cases. See [usage and licensing](LICENSING.md) for current source rights and the proposed future platform license.
 
 > **Ownership:** AgenticOrg is owned by **Orchestrum Technologies LLP**.
 >
@@ -528,3 +528,10 @@ Read [CONTRIBUTING.md](CONTRIBUTING.md) and [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT
 ## License
 
 AgenticOrg is licensed under the [Apache License 2.0](LICENSE).
+
+Approved prospective policy (software adoption pending): personal/internal use is free;
+commercializing the platform requires an agreement with Orchestrum Technologies
+LLP. Write to [sanjeev@orchestrum.in](mailto:sanjeev@orchestrum.in).
+See [usage and licensing](LICENSING.md); current Apache-2.0 rights remain unchanged.
+The concrete transition uses a separate self-use/commercial-agreement license
+for eligible future platform material, not an added condition on legacy code.

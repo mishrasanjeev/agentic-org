@@ -6,7 +6,7 @@ AgenticOrg is owned by **Orchestrum Technologies LLP**. Inventor / Owner:
 **Sanjeev Kumar**. Contact: [sanjeev@orchestrum.in](mailto:sanjeev@orchestrum.in)
 or [mishra.sanjeev@gmail.com](mailto:mishra.sanjeev@gmail.com).
 **Effective Date:** March 21, 2026
-**Last Updated:** March 21, 2026
+**Last Updated:** October 12, 2026 (approved prospective licensing policy)
 
 These Terms of Service ("Terms") govern your access to and use of the AgenticOrg platform at agenticorg.ai (the "Service") provided by Orchestrum Technologies LLP ("we", "us", "our"). By accessing or using the Service, you agree to be bound by these Terms.
 
@@ -19,6 +19,21 @@ AgenticOrg is open-source software licensed under the **Apache License, Version 
 https://www.apache.org/licenses/LICENSE-2.0
 
 Subject to the terms of the Apache 2.0 License, you are free to use, modify, and distribute the software. The License applies to the software source code. These Terms govern your use of the hosted Service at agenticorg.ai.
+
+### Approved prospective policy (software adoption pending)
+
+Personal/internal use would be free; commercializing the platform would require
+an agreement with Orchestrum Technologies LLP. Agreements:
+[sanjeev@orchestrum.in](mailto:sanjeev@orchestrum.in).
+The [licensing policy](user-guide/licensing.md) records the owner's publication
+and legal-review approval. No effective date or covered software release has been approved.
+Existing Apache-2.0 grants, hosted-service plans and provider charges are unchanged.
+
+The concrete transition uses a separate source-available license for eligible
+future platform material, with exact release/file scope. Legacy code and published
+SDK/protocol grants keep their licenses. Hosted resale, OEM access and brand
+permissions need their own applicable agreement; that does not restrict independent
+use of Apache-licensed code. See [usage and licensing](../LICENSING.md).
 
 ---
 

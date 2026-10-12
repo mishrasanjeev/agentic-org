@@ -9,7 +9,7 @@ export default function Terms() {
         <title>Terms Notice - AgenticOrg</title>
         <meta
           name="description"
-          content="Draft AgenticOrg terms notice requiring legal review and an executed agreement."
+          content="AgenticOrg terms notice and approved prospective licensing policy; signed agreements and release-specific software licenses control."
         />
       </Helmet>
 
@@ -23,7 +23,7 @@ export default function Terms() {
       <main className="mx-auto max-w-3xl px-6 py-12">
         <h1 className="mb-3 text-4xl font-bold text-slate-900">Terms notice</h1>
         <p className="mb-10 rounded-lg border border-amber-300 bg-amber-50 p-4 font-medium text-amber-950">
-          Draft policy notice - legal review required before publication or reliance.
+          Informational notice - signed agreements and release-specific software licenses control.
         </p>
 
         <p className="mb-6 leading-relaxed text-slate-700">
@@ -47,6 +47,23 @@ export default function Terms() {
           <li>Use must follow applicable law, granted permissions, and third-party terms.</li>
           <li>Suspected unauthorized access should be reported through the support contact.</li>
         </ul>
+
+        <h2 className="mb-3 mt-8 text-2xl font-semibold text-slate-900">Prospective licensing policy</h2>
+        <p className="mb-6 leading-relaxed text-slate-700">
+          Publication approved; software adoption pending: personal/internal use would be free; commercializing
+          the platform would require an agreement with Orchestrum Technologies LLP.
+          Agreements: <a className="text-blue-600 hover:underline" href={`mailto:${PRIMARY_CONTACT_EMAIL}`}>{PRIMARY_CONTACT_EMAIL}</a>.
+          {" "}Read the <Link to="/docs/licensing" className="text-blue-600 hover:underline">licensing policy</Link> for
+          definitions, recorded approval and the release-scope boundary. Current Apache-2.0 rights remain unchanged;
+          hosted plans, infrastructure and provider costs are separate.
+        </p>
+        <p className="mb-6 leading-relaxed text-slate-700">
+          The concrete transition uses a separate source-available license for
+          explicitly covered, eligible future platform material. Legacy code and
+          published SDK/protocol grants keep their licenses. Hosted resale, OEM
+          access and brand permissions need their own applicable agreement; that
+          does not restrict independent use of Apache-licensed code.
+        </p>
 
         <h2 className="mb-3 mt-8 text-2xl font-semibold text-slate-900">Terms requiring agreement</h2>
         <p className="mb-6 leading-relaxed text-slate-700">

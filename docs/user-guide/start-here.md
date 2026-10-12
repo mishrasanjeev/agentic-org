@@ -78,6 +78,11 @@ bypass permissions.
 
 ## When you get stuck
 
+For current license rights and the approved prospective policy, read
+[Usage and licensing](/docs/licensing). Software adoption still needs an exact
+release/file scope. Existing Apache-2.0 rights remain unchanged; hosted
+plans, infrastructure and provider usage may have separate charges.
+
 Use [Troubleshooting](/docs/troubleshooting) to isolate the issue. Record the screen, time, selected company, action and safe error code. Never send passwords, API keys or raw customer files in a support ticket.
 
 The guides describe source-verified behavior, not a promise that your deployment has every optional feature enabled. Ask your administrator about the deployed version and tenant configuration.

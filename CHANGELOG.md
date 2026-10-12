@@ -4,6 +4,14 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
 
 ## [Unreleased]
 
+### Documentation - approved prospective licensing policy
+- Add concrete candidate source-available license terms and an explicitly
+  publication-approved, empty release-scope manifest for eligible future platform material.
+  Preserve legacy grants and separate hosted/reseller/brand agreements.
+- Publish the owner-approved self-use/commercial-agreement policy and quiet
+  legal/footer links. No software release has adopted it; existing Apache-2.0 grants,
+  contribution terms, package metadata, billing and runtime remain unchanged.
+
 ### Changed - breaking default for marketing notification recipients
 - Website demo/trial notifications now default to `sanjeev@orchestrum.in`, the
   owner-approved marketing inbox, rather than `sanjeev@agenticorg.ai`.

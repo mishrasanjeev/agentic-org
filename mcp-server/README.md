@@ -165,3 +165,7 @@ further promotion requires the backend's separate authorization path.
 ## License
 
 Apache-2.0
+
+The [approved prospective platform policy](https://agenticorg.ai/docs/licensing)
+awaits software-release adoption; this package's Apache-2.0 rights remain unchanged.
+Commercial agreements: [sanjeev@orchestrum.in](mailto:sanjeev@orchestrum.in).

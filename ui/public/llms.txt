@@ -69,6 +69,7 @@ Pricing comes from core/billing/catalog.py. Infrastructure, model, provider, and
 
 ## User documentation
 
+- [Usage and licensing](https://agenticorg.ai/docs/licensing): approved prospective self-use/commercial-agreement policy; software adoption awaits an exact release/file scope. Legacy grants remain unchanged. Agreements: sanjeev@orchestrum.in.
 - [User manual](https://agenticorg.ai/docs): task-based setup and operating guides, glossary, troubleshooting and five BFSI playbooks.
 - [Your first useful agent](https://agenticorg.ai/docs/first-agent): a bounded document-review exercise.
 - [Knowledge and OCR](https://agenticorg.ai/docs/knowledge-and-ocr): supported documents, extraction quality and source verification.
