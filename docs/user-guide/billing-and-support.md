@@ -2,6 +2,10 @@
 
 Hosted platform plans and external provider usage are different. Models, embeddings, calls, messaging, merchant systems and payment providers can charge independently. Self-hosting adds your infrastructure and operating costs. Do not assume an economy label means the provider is free for your account.
 
+The [approved prospective licensing policy](/docs/licensing) has not been adopted
+by a software release and does not change current Apache-2.0 rights or hosted/provider charges. Commercial
+agreement inquiries go to [sanjeev@orchestrum.in](mailto:sanjeev@orchestrum.in).
+
 Administrators and CFOs can open the **Cost Dashboard** at `/dashboard/costs` (it has no sidebar entry). It sums the platform's own recorded USD cost per task and agent; it is not a provider invoice.
 
 The hosted pricing page is generated from the platform's plan catalog. Use [Pricing](https://agenticorg.ai/pricing) and **Billing** in your workspace for current plan information rather than relying on a hard-coded price in a guide.

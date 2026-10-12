@@ -307,6 +307,15 @@
       ]
     },
     {
+      "slug": "licensing",
+      "title": "Usage and licensing",
+      "description": "Understand the approved prospective self-use and commercial-agreement policy, existing source rights and the separate software-release adoption boundary.",
+      "group": "Govern And Operate",
+      "audience": "Everyone",
+      "reviewed": "2026-10-12",
+      "sources": ["README.md", "ui/src/pages/legal/Terms.tsx"]
+    },
+    {
       "slug": "ai-spend-intelligence",
       "title": "AI spend intelligence and invoice reconciliation",
       "description": "Attribute metered AI usage to your organisation tree, price it in rupees from contract or list rate cards, reconcile invoices within 1% and read the Gate 1 status.",

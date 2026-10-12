@@ -1965,11 +1965,12 @@ $ agenticorg sop deploy \\
 
           <div className="border-t border-slate-800 pt-8 flex flex-col sm:flex-row items-center justify-between gap-4">
             <p className="text-sm text-slate-500">
-              &copy; 2026 Orchestrum Technologies LLP. AgenticOrg source is Apache-2.0 licensed.
+              &copy; 2026 Orchestrum Technologies LLP. See usage and licensing for release-specific terms.
             </p>
-            <div className="flex items-center gap-6">
+            <div className="flex flex-wrap items-center justify-center gap-x-6 gap-y-2">
               <a href="/privacy" className="text-sm text-slate-500 hover:text-slate-300 transition-colors">Privacy</a>
               <a href="/terms" className="text-sm text-slate-500 hover:text-slate-300 transition-colors">Terms</a>
+              <Link to="/docs/licensing" className="text-sm text-slate-400 hover:text-slate-300 transition-colors">Usage &amp; licensing</Link>
               <span className="text-sm text-slate-600">agenticorg.ai</span>
             </div>
           </div>

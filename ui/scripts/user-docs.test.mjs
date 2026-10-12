@@ -9,6 +9,60 @@ import {
 } from "./generate-static-seo.mjs";
 import { buildSitemap } from "./generate-sitemap.mjs";
 
+test("approved policy publication preserves current rights without software adoption", () => {
+  const manual = loadUserGuides();
+  assert.deepEqual(manual.articles.slice(0, 2).map((article) => article.slug), ["start-here", "first-agent"]);
+  const guide = manual.articles.find((article) => article.slug === "licensing");
+  assert.ok(guide);
+  assert.equal(guide.group, "Govern And Operate");
+  assert.ok(manual.articles.indexOf(guide) > manual.articles.findIndex((article) => article.slug === "billing-and-support"));
+  assert.match(guide.html, /Approved for policy publication; not adopted by a software release/);
+  assert.match(guide.html, /No effective date or covered release has been approved/);
+  assert.match(guide.html, /personal and internal use is free/);
+  assert.match(guide.html, /commercializing the platform requires an agreement with Orchestrum Technologies LLP/);
+  assert.match(guide.html, /Already-granted Apache-2.0 permissions remain in place/);
+  assert.match(guide.html, /bank or merchant serving its own customers/);
+  assert.match(guide.html, /Third-party dependencies retain their own licenses/);
+  assert.match(guide.html, /source-available,\s*not an OSI-approved open-source license/);
+  assert.match(guide.html, /href="mailto:sanjeev@orchestrum.in"/);
+  assert.match(readFileSync(new URL("../../LICENSE", import.meta.url), "utf8"), /Apache License/);
+  assert.match(readFileSync(new URL("../../pyproject.toml", import.meta.url), "utf8"), /license = "Apache-2.0"/);
+  for (const file of ["../../README.md", "../../LICENSING.md", "../../docs/terms-of-service.md"]) {
+    assert.match(readFileSync(new URL(file, import.meta.url), "utf8"), /software adoption pending/);
+  }
+});
+
+test("the concrete license and scope record cannot masquerade as an adopted license", () => {
+  const read = (file) => readFileSync(new URL("../../" + file, import.meta.url), "utf8");
+  const scope = JSON.parse(read("licensing/scope.json"));
+  assert.equal(scope.schema_version, 1);
+  assert.equal(scope.product, "AgenticOrg");
+  assert.equal(scope.status, "approved_for_publication");
+  assert.equal(scope.licensor, "Orchestrum Technologies LLP");
+  assert.equal(scope.commercial_contact, "sanjeev@orchestrum.in");
+  assert.equal(scope.proposed_license_id, "LicenseRef-Orchestrum-Self-Use-Commercial-1.0");
+  assert.match(scope.reference_baseline_commit, /^[a-f0-9]{40}$/);
+  assert.equal(scope.reference_baseline_is_cutoff, false);
+  assert.deepEqual(scope.covered_files, []);
+  for (const field of ["release_version", "effective_date"])
+    assert.equal(scope[field], null, field);
+  assert.equal(scope.owner_approval_reference, "owner-publication-approval-2026-10-12");
+  assert.equal(scope.legal_review_reference, "owner-attested-legal-review-2026-10-12");
+  assert.equal(scope.publication_approved_on, "2026-10-12");
+  assert.equal(scope.existing_grants_policy, "preserve");
+  assert.equal(scope.third_party_licenses_policy, "retain_original");
+  assert.match(scope.sdk_and_protocol_policy, /preserve_published_grants/);
+  const candidate = read(scope.license_text);
+  assert.match(candidate, /Approved for policy publication; not adopted by a software release/);
+  assert.match(candidate, /An agreement signed by an authorized Orchestrum representative/);
+  assert.match(candidate, /merchant[\s\S]*selling its own goods/);
+  assert.match(candidate, /implementation or consulting services/);
+  assert.match(candidate, /Previously[\s\S]*published grants remain available/);
+  assert.match(candidate, /Termination under this license does not terminate an independent legacy/);
+  assert.match(candidate, /No governing law, venue or effective date has been selected/);
+  assert.match(loadUserGuides().articles.find((article) => article.slug === "licensing").html, /zero covered files/);
+});
+
 test("missing authored sources cannot silently overwrite the manual with an empty build", () => {
   assert.throws(() => loadUserGuides(new URL("./missing-build-root/ui", import.meta.url).pathname),
     /Missing user-guide manifest/);

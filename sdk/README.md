@@ -230,3 +230,7 @@ boundaries as the Python client.
 ## License
 
 Apache-2.0
+
+The [approved prospective platform policy](https://agenticorg.ai/docs/licensing)
+awaits software-release adoption; this SDK's Apache-2.0 rights remain unchanged.
+Commercial agreements: [sanjeev@orchestrum.in](mailto:sanjeev@orchestrum.in).
