@@ -6,6 +6,9 @@ tenant policies and FORCE ROW LEVEL SECURITY are unchanged. PostgreSQL 16 keeps
 the role creator's admin-only management grant, as it does for other roles.
 """
 from alembic import op
+from sqlalchemy import text
+
+from core.crypto.migration_helpers import encrypted_migration
 
 revision = "v6z85_lead_delivery_spend"
 down_revision = "v6z84_customer_agent"
@@ -14,6 +17,7 @@ depends_on = None
 
 
 def upgrade() -> None:
+    existed = op.get_bind().execute(text("SELECT to_regclass('public.demo_delivery_jobs') IS NOT NULL")).scalar()
     op.execute("""
         CREATE TABLE IF NOT EXISTS demo_delivery_jobs (
             id UUID PRIMARY KEY,
@@ -34,6 +38,18 @@ def upgrade() -> None:
                 ('pending','processing','completed','needs_review','failed','skipped','unknown'))
         )
     """)
+    if not existed:
+        with encrypted_migration(
+            revision=revision, table="demo_delivery_jobs", columns=["payload_encrypted"],
+            rollback_doc="Disable durable delivery before rollback. Preserve encrypted outbox history; "
+                         "this migration creates an empty table and never rewrites or discards existing ciphertext.",
+        ) as ctx:
+            pre_count = ctx.snapshot_row_count()
+            ctx.dry_run_decrypt_sample(n=50)
+            for _offset in ctx.iter_resumable_batches(batch=500):
+                raise RuntimeError("new delivery outbox unexpectedly contained rows")
+            ctx.assert_decrypt_after(n=50)
+            ctx.record_audit({"pre_count": pre_count, "post_count": ctx.snapshot_row_count()})
     op.execute("CREATE INDEX IF NOT EXISTS ix_demo_delivery_tenant_created ON demo_delivery_jobs(tenant_id,created_at)")
     op.execute("ALTER TABLE demo_delivery_jobs ENABLE ROW LEVEL SECURITY")
     op.execute("ALTER TABLE demo_delivery_jobs FORCE ROW LEVEL SECURITY")

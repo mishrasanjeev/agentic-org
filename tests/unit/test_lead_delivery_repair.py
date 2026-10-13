@@ -5,6 +5,16 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 
+def test_outbox_ciphertext_is_in_the_key_retirement_scan():
+    from core.crypto.verify_all import _SCANNERS, KeyRef, _collect_key_refs
+
+    label = "demo_delivery_jobs.payload_encrypted"
+    assert (label, "core.models.demo_delivery:DemoDeliveryJob:payload_encrypted") in _SCANNERS
+    refs = {}
+    _collect_key_refs(refs, label, ['{"kek":"synthetic-kek","wrapped_dek":"synthetic-key"}'])
+    assert refs[label] == {KeyRef(kind="envelope", ref="synthetic-kek")}
+
+
 @pytest.mark.parametrize("host,password", [
     ("smtp.example.org", " leading space remains "),
     ("smtp.gmail.com", "not-a-google-app-password"),
