@@ -171,6 +171,18 @@ async def test_restricted_role_spend_and_outbox_isolation(monkeypatch):
             assert "owner@example.org" not in row["payload_encrypted"]
             assert row["notification_status"] == "failed"
             assert row["confirmation_status"] == "smtp_accepted"
+        from core.crypto import verify_all
+
+        key_ref = verify_all.parse_encrypted_container(row["payload_encrypted"])
+        assert key_ref is not None
+        monkeypatch.setattr(verify_all, "_SCANNERS", [
+            ("demo_delivery_jobs.payload_encrypted", "core.models.demo_delivery:DemoDeliveryJob:payload_encrypted"),
+        ])
+        monkeypatch.setattr(verify_all, "discover_tenant_company_scopes", AsyncMock(return_value=[
+            verify_all.TenantCompanyScope(tenant_a), verify_all.TenantCompanyScope(tenant_b),
+        ]))
+        with pytest.raises(verify_all.KeyStillReferencedError):
+            await verify_all.assert_key_unreferenced(key_ref.ref)
         with pytest.raises(ValueError, match="server-owned tenant"):
             await demo_delivery.dispatch_one(tenant_b, job)
 
@@ -207,7 +219,7 @@ async def test_restricted_role_spend_and_outbox_isolation(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_non_superuser_install_replay_and_rollback(monkeypatch):
+async def test_non_superuser_install_replay_and_rollback(monkeypatch, tmp_path):
     """A superuser must not mask function ACL/ownership transfer mistakes."""
     url = os.getenv("AGENTICORG_DB_URL")
     if not url:
@@ -218,6 +230,8 @@ async def test_non_superuser_install_replay_and_rollback(monkeypatch):
     installer = None
     created = False
     migration = importlib.import_module("migrations.versions.v6_z85_lead_delivery_spend")
+    progress = importlib.import_module("migrations.versions.v4_9_7_migration_progress")
+    monkeypatch.setenv("AGENTICORG_MIGRATION_AUDIT_DIR", str(tmp_path))
 
     def apply(conn, action):
         with Operations.context(MigrationContext.configure(conn)):
@@ -248,6 +262,7 @@ async def test_non_superuser_install_replay_and_rollback(monkeypatch):
                 CREATE POLICY tenant_scope ON agent_task_results
                 USING (tenant_id::text=current_setting('agenticorg.tenant_id',true))
             """)
+            await conn.run_sync(lambda c: apply(c, progress.upgrade))
             await conn.run_sync(lambda c: apply(c, migration.upgrade))
         async with installer.begin() as conn:
             await conn.run_sync(lambda c: apply(c, migration.upgrade))
