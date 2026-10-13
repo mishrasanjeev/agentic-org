@@ -58,6 +58,14 @@ export default function Terms() {
           hosted plans, infrastructure and provider costs are separate.
         </p>
         <p className="mb-6 leading-relaxed text-slate-700">
+          The policy includes existing and new covered users. An older account is not an exemption.
+          Existing hosted customers must obtain a commercial agreement for continued covered
+          commercialization after the notice and acceptance required by their current contract
+          and applicable law. An existing agreement already authorizing the offering is sufficient.
+          Publishing this notice does not backdate obligations or withdraw prior Apache-2.0 permissions.
+          Self-use remains free of a software license fee; hosting and provider charges are separate.
+        </p>
+        <p className="mb-6 leading-relaxed text-slate-700">
           The concrete transition uses a separate source-available license for
           explicitly covered, eligible future platform material. Legacy code and
           published SDK/protocol grants keep their licenses. Hosted resale, OEM

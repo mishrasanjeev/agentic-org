@@ -376,7 +376,7 @@ function summary(data) {
     "",
     "## User documentation",
     "",
-    "- [Usage and licensing](" + SITE + "/docs/licensing): approved prospective self-use/commercial-agreement policy; software adoption awaits an exact release/file scope. Legacy grants remain unchanged. Agreements: sanjeev@orchestrum.in.",
+    "- [Usage and licensing](" + SITE + "/docs/licensing): approved self-use/commercial-agreement policy for existing and new covered users; existing hosted customers transition through required notice and acceptance. Software adoption awaits an exact release/file scope. Legacy grants remain unchanged. Agreements: sanjeev@orchestrum.in.",
     "- [User manual](" + SITE + "/docs): task-based setup and operating guides, glossary, troubleshooting and five BFSI playbooks.",
     "- [Your first useful agent](" + SITE + "/docs/first-agent): a bounded document-review exercise.",
     "- [Knowledge and OCR](" + SITE + "/docs/knowledge-and-ocr): supported documents, extraction quality and source verification.",

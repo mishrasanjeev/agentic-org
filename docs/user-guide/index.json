@@ -299,7 +299,7 @@
       "description": "Understand hosted plan limits and provider charges, use the billing console, and send a useful support request without secrets.",
       "group": "Govern And Operate",
       "audience": "Account owners",
-      "reviewed": "2026-10-11",
+      "reviewed": "2026-10-13",
       "sources": [
         "core/billing/catalog.py",
         "ui/src/pages/Billing.tsx",
@@ -309,10 +309,10 @@
     {
       "slug": "licensing",
       "title": "Usage and licensing",
-      "description": "Understand the approved prospective self-use and commercial-agreement policy, existing source rights and the separate software-release adoption boundary.",
+      "description": "Understand free self-use and commercial agreements for existing and new covered users, prior source rights and the separate software-release adoption boundary.",
       "group": "Govern And Operate",
       "audience": "Everyone",
-      "reviewed": "2026-10-12",
+      "reviewed": "2026-10-13",
       "sources": ["README.md", "ui/src/pages/legal/Terms.tsx"]
     },
     {
