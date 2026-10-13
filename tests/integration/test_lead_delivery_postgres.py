@@ -335,6 +335,7 @@ async def test_concurrent_enqueue_leases_pending_publications_and_recovers_expir
 
     engine = create_async_engine(os.environ["AGENTICORG_DB_URL"], poolclass=NullPool)
     factory = async_sessionmaker(engine, expire_on_commit=False)
+    monkeypatch.setattr(database, "async_session_factory", factory)
     monkeypatch.setattr(database, "current_session_factory", lambda: factory)
     publish = MagicMock()
     monkeypatch.setattr("core.tasks.demo_tasks.dispatch.apply_async", publish)
