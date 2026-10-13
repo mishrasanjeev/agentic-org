@@ -76,6 +76,10 @@ def test_an_instrument_an_alert_reads_is_still_written_to(instrument: str, instr
 
 @pytest.fixture(scope="module")
 def instrument_source_index() -> tuple[dict[str, str], dict[str, set[str]]]:
+    return _build_instrument_index(ROOT, SOURCE_DIRS, REQUIRED_INSTRUMENTS)
+
+
+def _build_instrument_index(root, directories, required):
     """Index the same full source tree once per test run, not once per metric.
 
     Deliberately not a text search: a commented-out ``instrument.labels(...).inc()`` reads exactly
@@ -83,22 +87,40 @@ def instrument_source_index() -> tuple[dict[str, str], dict[str, set[str]]]:
     """
     definitions: dict[str, str] = {}
     writers: dict[str, set[str]] = {}
-    for directory in SOURCE_DIRS:
-        for path in (ROOT / directory).rglob("*.py"):
+    sources: list[tuple[Path, str]] = []
+    trees: dict[Path, ast.Module] = {}
+    for directory in directories:
+        for path in (root / directory).rglob("*.py"):
+            source = path.read_text(encoding="utf-8", errors="replace")
+            sources.append((path, source))
+            if not any(instrument in source for instrument in required):
+                continue
             try:
-                tree = ast.parse(path.read_text(encoding="utf-8", errors="replace"))
+                tree = ast.parse(source)
             except SyntaxError:  # pragma: no cover - a file this suite does not own
                 continue
+            trees[path] = tree
             for node in ast.walk(tree):
                 if isinstance(node, ast.Assign) and isinstance(node.value, ast.Call):
                     args = node.value.args
                     target = node.targets[0]
                     if (args and isinstance(args[0], ast.Constant) and isinstance(args[0].value, str)
-                            and isinstance(target, ast.Name)):
+                            and args[0].value in required and isinstance(target, ast.Name)):
                         definitions.setdefault(args[0].value, target.id)
-                variable = _recording_variable(node)
-                if variable:
-                    writers.setdefault(variable, set()).add(str(path.relative_to(ROOT)))
+    # The text is only a candidate filter. Comments/read-only mentions still
+    # need an actual recording call in the AST before they count as writers.
+    variables = set(definitions.values())
+    for path, source in sources:
+        if not any(variable in source for variable in variables):
+            continue
+        try:
+            tree = trees[path] if path in trees else ast.parse(source)
+        except SyntaxError:  # pragma: no cover - a file this suite does not own
+            continue
+        for node in ast.walk(tree):
+            variable = _recording_variable(node)
+            if variable is not None and variable in variables:
+                writers.setdefault(variable, set()).add(path.relative_to(root).as_posix())
     return definitions, writers
 
 
@@ -130,6 +152,18 @@ def test_reading_an_instrument_is_not_writing_to_it() -> None:
     """``labels()`` alone returns a child; it records nothing."""
     assert not _records_value(ast.parse("value = probe.labels(x='1')"), "probe")
     assert _records_value(ast.parse("probe.labels(x='1').observe(2)"), "probe")
+
+
+def test_source_index_filters_candidates_but_requires_real_recording_calls(tmp_path):
+    directory = tmp_path / "core"
+    directory.mkdir()
+    path = directory / "metrics.py"
+    path.write_text("probe = Counter('sample_total')\n# probe.inc()\nvalue = probe.labels(x='1')\n", encoding="utf-8")
+    definitions, writers = _build_instrument_index(tmp_path, ("core",), ("sample_total",))
+    assert definitions == {"sample_total": "probe"}
+    assert writers == {}
+    path.write_text("probe = Counter('sample_total')\nprobe.labels(x='1').inc()\n", encoding="utf-8")
+    assert _build_instrument_index(tmp_path, ("core",), ("sample_total",))[1] == {"probe": {"core/metrics.py"}}
 
 
 def test_every_declared_alert_has_at_least_one_instrument() -> None:
