@@ -257,6 +257,7 @@ export function DemoModal({ onClose, audience = "general" }: { onClose: () => vo
       if (!controls?.length) return;
       const first = controls[0];
       const last = controls[controls.length - 1];
+      if (!modalRef.current?.contains(document.activeElement)) { e.preventDefault(); first.focus(); return; }
       if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
       else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
     };
@@ -265,6 +266,7 @@ export function DemoModal({ onClose, audience = "general" }: { onClose: () => vo
   }, [onClose]);
 
   useEffect(() => () => requestRef.current?.abort(), []);
+  useEffect(() => { if (done) modalRef.current?.querySelector<HTMLButtonElement>("button")?.focus(); }, [done]);
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();

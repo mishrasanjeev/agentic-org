@@ -31,6 +31,7 @@ describe("public demo enquiry", () => {
     completeForm();
     fireEvent.click(screen.getByRole("button", { name: "Request Demo" }));
     await screen.findByText("Thanks!");
+    expect(screen.getAllByRole("button", { name: "Close" })[0]).toHaveFocus();
     expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toMatchObject({
       email: "visitor@example.test", company: "Private Company", role: "CFO",
     });
