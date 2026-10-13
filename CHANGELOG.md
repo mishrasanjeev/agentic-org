@@ -1,5 +1,22 @@
 # Changelog
 
+## Unreleased - Verified enquiry delivery and protected spend accounting
+
+- Correct demo intake's premature email-sent and agent-triggered claims. Receipt
+  responses report pending work and no guaranteed two-minute response; clients
+  must use persisted worker outcomes and separate inbox evidence.
+- Add encrypted, tenant-isolated demo delivery jobs and identifier-only worker
+  dispatch/recovery behind `AGENTICORG_DEMO_DURABLE_DELIVERY_ENABLED` (default off).
+  Failed/ambiguous SMTP actions are not automatically replayed.
+- Use Gmail LOGIN challenge/response, normalize only recognized Google app-password
+  display spacing, and log safe SMTP error classes/codes. Keep validated TLS.
+- Replace the platform Gemini spend query's RLS-off attempt with an aggregate-only
+  restricted database capability. Keep tenant/platform caps and fail-closed lookups.
+- Do not record failed/review-paused sales proposals as contact history or send
+  generated mail to a recipient other than the saved lead.
+- Add real Postgres isolation/replay regressions, SMTP negative cases and an
+  operator runbook. Apply the migration before enabling durable worker delivery.
+
 ## Unreleased - Global evaluation journeys and enquiry privacy
 
 - Add bank, fintech and merchant pilot paths to the public landing page with

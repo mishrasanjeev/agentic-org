@@ -446,7 +446,7 @@
     "public_exempt_reason": null,
     "rate_limit": "demo-seed",
     "scope": "demo.seed.control_plane.write",
-    "source_line": 69,
+    "source_line": 95,
     "tenant_required": true
   },
   {
@@ -5504,7 +5504,7 @@
     "public_exempt_reason": "public-lead-capture-email-and-sales-agent-trigger",
     "rate_limit": "demo-request-public",
     "scope": "public:demo_request.external_input.write",
-    "source_line": 130,
+    "source_line": 156,
     "tenant_required": false
   },
   {
@@ -9806,7 +9806,7 @@
     "public_exempt_reason": null,
     "rate_limit": "bulk-import",
     "scope": "sales.pipeline.sensitive.bulk_import",
-    "source_line": 592,
+    "source_line": 603,
     "tenant_required": true
   },
   {
@@ -9824,7 +9824,7 @@
     "public_exempt_reason": null,
     "rate_limit": "business-metrics-read",
     "scope": "sales.metrics.sensitive.read",
-    "source_line": 512,
+    "source_line": 523,
     "tenant_required": true
   },
   {
@@ -9932,7 +9932,7 @@
     "public_exempt_reason": null,
     "rate_limit": "sales-write",
     "scope": "sales.pipeline.sensitive.write",
-    "source_line": 296,
+    "source_line": 299,
     "tenant_required": true
   },
   {
@@ -9950,7 +9950,7 @@
     "public_exempt_reason": null,
     "rate_limit": "sales-inbox-sync",
     "scope": "sales.pipeline.external_action.process_inbox",
-    "source_line": 950,
+    "source_line": 961,
     "tenant_required": true
   },
   {
@@ -9968,7 +9968,7 @@
     "public_exempt_reason": null,
     "rate_limit": "sales-agent-trigger",
     "scope": "sales.pipeline.external_action.run_followups",
-    "source_line": 752,
+    "source_line": 763,
     "tenant_required": true
   },
   {
@@ -9986,7 +9986,7 @@
     "public_exempt_reason": null,
     "rate_limit": "sales-write",
     "scope": "sales.pipeline.sensitive.seed_demo",
-    "source_line": 870,
+    "source_line": 881,
     "tenant_required": true
   },
   {
