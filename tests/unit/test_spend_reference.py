@@ -11,9 +11,11 @@ import uuid
 from datetime import UTC, date, datetime
 from decimal import Decimal
 from pathlib import Path
+from typing import Any
 
 import pytest
 from pydantic import ValidationError
+from sqlalchemy import select
 from sqlalchemy.dialects import postgresql
 from sqlalchemy.schema import CreateIndex, CreateTable
 from sqlalchemy.sql.elements import TextClause
@@ -1323,6 +1325,32 @@ class TestImports:
 
 
 # ---------------------------------------------------------------- audit
+
+
+class TestFakeQuery:
+    def test_whereclause_is_resolved_once_without_losing_tenant_filter(self):
+        from core.models.spend import SpendFxRate
+
+        store = FakeSession()
+        for tenant, currency in ((TENANT, "USD"), (TENANT, "EUR"), (OTHER_TENANT, "USD")):
+            store.add(SpendFxRate(tenant_id=tenant, currency=currency, rate_date=T0.date(), rate_to_inr=Decimal("80")))
+        statement = select(SpendFxRate).where(SpendFxRate.tenant_id == TENANT, SpendFxRate.currency == "USD")
+
+        class Query:
+            reads = 0
+
+            @property
+            def whereclause(self) -> Any:
+                self.reads += 1
+                return statement.whereclause
+
+            def __getattr__(self, name: str) -> Any:
+                return getattr(statement, name)
+
+        query = Query()
+        result = store._select(query).all()
+        assert query.reads == 1
+        assert result == [store.rows[0]]
 
 
 class TestAudit:
