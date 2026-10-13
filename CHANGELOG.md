@@ -1,5 +1,18 @@
 # Changelog
 
+## Unreleased - Global evaluation journeys and enquiry privacy
+
+- Add bank, fintech and merchant pilot paths to the public landing page with
+  direct links to source-backed workflows and a visual rollout checklist.
+- Expand the accounts-payable guide with source setup, extraction, review and
+  external-confirmation steps, without treating prepared evidence as payment authority.
+- Remove company/role fields from public enquiry analytics as a default-on privacy
+  correction. Only bounded source/audience values are sent; the intake API retains
+  the contact details needed to respond. Add timeout, duplicate-submission and
+  accessible recovery behavior without changing API or notification recipients.
+- Reserve the actual 1920-by-1080 screenshot dimensions before lazy loading to
+  prevent collapsed media boxes and layout movement during the landing journey.
+
 All notable changes to AgenticOrg are documented here. Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]

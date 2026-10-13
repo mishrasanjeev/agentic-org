@@ -51,7 +51,7 @@ function FadeIn({ children, className = "", delay = 0 }: {
 /* ------------------------------------------------------------------ */
 /*  Browser Chrome Frame â€” wraps iframes in a macOS-style window       */
 /* ------------------------------------------------------------------ */
-function BrowserFrame({ src, title, alt, className = "", loading = "lazy" }: {
+export function BrowserFrame({ src, title, alt, className = "", loading = "lazy" }: {
   src: string;
   title: string;
   alt?: string;
@@ -76,6 +76,8 @@ function BrowserFrame({ src, title, alt, className = "", loading = "lazy" }: {
       {/* Content â€” static screenshot */}
       <img
         src={src}
+        width={1920}
+        height={1080}
         alt={alt || title}
         className="w-full h-auto block"
         loading={loading}
@@ -236,35 +238,59 @@ function CheckIcon({ className = "w-4 h-4 text-emerald-500" }: { className?: str
 /* ------------------------------------------------------------------ */
 /*  DemoModal â€” Book-a-Demo form overlay                               */
 /* ------------------------------------------------------------------ */
-function DemoModal({ onClose }: { onClose: () => void }) {
+export function DemoModal({ onClose, audience = "general" }: { onClose: () => void; audience?: "general" | "banks" | "fintechs" | "merchants" }) {
   const [form, setForm] = useState({ name: "", email: "", company: "", role: "", phone: "" });
   const [submitting, setSubmitting] = useState(false);
   const [done, setDone] = useState(false);
   const [error, setError] = useState("");
+  const requestRef = useRef<AbortController | null>(null);
+  const modalRef = useRef<HTMLDivElement>(null);
 
   // Close on Escape key
   useEffect(() => {
-    const handler = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
+    const previous = document.activeElement as HTMLElement | null;
+    modalRef.current?.querySelector<HTMLElement>("input")?.focus();
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+      if (e.key !== "Tab") return;
+      const controls = modalRef.current?.querySelectorAll<HTMLElement>("button:not(:disabled), input, select, a[href]");
+      if (!controls?.length) return;
+      const first = controls[0];
+      const last = controls[controls.length - 1];
+      if (!modalRef.current?.contains(document.activeElement)) { e.preventDefault(); first.focus(); return; }
+      if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+      else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+    };
     window.addEventListener("keydown", handler);
-    return () => window.removeEventListener("keydown", handler);
+    return () => { window.removeEventListener("keydown", handler); previous?.focus(); };
   }, [onClose]);
+
+  useEffect(() => () => requestRef.current?.abort(), []);
+  useEffect(() => { if (done) modalRef.current?.querySelector<HTMLButtonElement>("button")?.focus(); }, [done]);
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
+    if (requestRef.current) return;
+    const controller = new AbortController();
+    requestRef.current = controller;
+    const timeout = window.setTimeout(() => controller.abort(), 15000);
     setError("");
     setSubmitting(true);
     try {
       const res = await fetch("/api/v1/demo-request", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(form),
+        body: JSON.stringify({ ...form, source: `landing_${audience}` }),
+        signal: controller.signal,
       });
       if (!res.ok) throw new Error("Request failed");
-      import("@/components/Analytics").then(m => m.trackEvent("demo_request", { company: form.company || "", role: form.role || "" })).catch(() => {});
+      import("@/components/Analytics").then(m => m.trackEvent("demo_request", { source: "landing", audience })).catch(() => {});
       setDone(true);
     } catch {
-      setError("Something went wrong. Please try again.");
+      setError("We could not confirm receipt. Your details are still here. Please retry or email us directly.");
     } finally {
+      window.clearTimeout(timeout);
+      requestRef.current = null;
       setSubmitting(false);
     }
   };
@@ -280,7 +306,7 @@ function DemoModal({ onClose }: { onClose: () => void }) {
       aria-modal="true"
       aria-labelledby="demo-modal-title"
     >
-      <div className="relative w-full max-w-md rounded-2xl bg-white shadow-2xl p-8 animate-in fade-in zoom-in" role="document">
+      <div ref={modalRef} className="relative w-full max-w-md max-h-[90dvh] overflow-y-auto rounded-lg bg-white shadow-2xl p-6 sm:p-8 animate-in fade-in zoom-in" role="document">
         {/* Close button */}
         <button
           onClick={onClose}
@@ -299,8 +325,8 @@ function DemoModal({ onClose }: { onClose: () => void }) {
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
               </svg>
             </div>
-            <h3 className="text-xl font-bold text-slate-900 mb-2">Thanks!</h3>
-            <p className="text-slate-600">We'll follow up using the contact details you provided.</p>
+            <h3 id="demo-modal-title" className="text-xl font-bold text-slate-900 mb-2">Thanks!</h3>
+            <p className="text-slate-600">Your enquiry has been received. We'll follow up using the contact details you provided.</p>
             <button
               onClick={onClose}
               className="mt-6 inline-flex items-center justify-center bg-gradient-to-r from-blue-500 to-cyan-500 text-white px-6 py-2.5 rounded-lg text-sm font-medium hover:from-blue-600 hover:to-cyan-600 transition-all duration-200 ease-out-quart"
@@ -311,7 +337,7 @@ function DemoModal({ onClose }: { onClose: () => void }) {
         ) : (
           <>
             <h3 id="demo-modal-title" className="text-xl font-bold text-slate-900 mb-1">Book a Demo</h3>
-            <p className="text-sm text-slate-500 mb-6">See AgenticOrg in action. Fill out the form and we'll schedule a call.</p>
+            <p className="text-sm text-slate-600 mb-6">Discuss one useful workflow, your systems and a measurable pilot. Do not include credentials or customer data.</p>
 
             <form onSubmit={handleSubmit} className="space-y-4">
               <div>
@@ -376,14 +402,15 @@ function DemoModal({ onClose }: { onClose: () => void }) {
                 <input
                   id="demo-phone"
                   type="tel"
-                  placeholder="+91 98765 43210"
+                  placeholder="Country code and phone (optional)"
                   value={form.phone}
                   onChange={(e) => setForm({ ...form, phone: e.target.value })}
                   className={fieldClass}
                 />
               </div>
 
-              {error && <p className="text-sm text-red-600">{error}</p>}
+              {error && <p role="alert" className="text-sm text-red-700">{error}</p>}
+              <p className="text-xs text-slate-600">Prefer email? <a className="underline" href="mailto:sanjeev@orchestrum.in">sanjeev@orchestrum.in</a>. Contact details are used to respond to this enquiry, not sent as analytics event fields.</p>
 
               <button
                 type="submit"
@@ -406,6 +433,7 @@ function DemoModal({ onClose }: { onClose: () => void }) {
 export default function Landing() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [showDemo, setShowDemo] = useState(false);
+  const [demoAudience, setDemoAudience] = useState<"general" | "banks" | "fintechs" | "merchants">("general");
   const location = useLocation();
   const { facts } = useProductFacts();
   const connectorsText = facts.connector_count > 0 ? `${facts.connector_count}` : "Unavailable";
@@ -608,6 +636,29 @@ export default function Landing() {
       {/* ============================================================ */}
       {/* 2c. OPEN AGENTIC COMMERCE PROTOCOL                            */}
       {/* ============================================================ */}
+      <section id="evaluation-paths" className="py-14 bg-white border-b border-slate-200">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <h2 className="text-2xl font-bold text-slate-900">Start with your team's first useful workflow</h2>
+          <p className="mt-3 max-w-3xl text-slate-600">Build a bounded pilot with your own systems, credentials and reviewers. Measure results before expanding access or external actions.</p>
+          <div className="mt-8 grid gap-8 md:grid-cols-3">
+            {([
+              { audience: "banks", title: "Banks and BFSI teams", copy: "Prepare service cases, document reviews and evidence-backed responses. Keep institutional decisions and approvals with accountable people.", guide: "/docs/bfsi-customer-service", label: "Follow a service case", Icon: Building2 },
+              { audience: "fintechs", title: "Fintechs and platform teams", copy: "Connect APIs, SDKs and scoped MCP tools. Test identity, permissions, failure recovery and human approval before enabling actions.", guide: "/docs/api-sdk-mcp", label: "Connect your systems", Icon: Network },
+              { audience: "merchants", title: "Merchants and commerce teams", copy: "Connect seller data and receive authenticated third-party buyer agents. Source freshness, merchant confirmation and payment authority remain separate.", guide: "/docs/seller-a2a-commerce-journey", label: "Follow a buyer journey", Icon: BookOpen },
+            ] as const).map(({ audience, title, copy, guide, label, Icon }) => (
+              <div key={audience} className="border-t-2 border-emerald-600 pt-5">
+                <Icon className="h-6 w-6 text-emerald-700" aria-hidden="true" />
+                <h3 className="mt-3 text-lg font-semibold text-slate-900">{title}</h3>
+                <p className="mt-3 text-sm leading-relaxed text-slate-700">{copy}</p>
+                <Link to={guide} className="mt-4 inline-flex items-center gap-2 text-sm font-semibold text-blue-700">{label}<ArrowRight className="h-4 w-4" aria-hidden="true" /></Link>
+                <button onClick={() => { setDemoAudience(audience); setShowDemo(true); }} className="mt-4 block text-sm font-semibold text-slate-900 underline underline-offset-4">Discuss this pilot</button>
+              </div>
+            ))}
+          </div>
+          <Link to="/docs/adoption-checklist" className="mt-8 inline-flex items-center gap-2 text-sm font-semibold text-blue-700">Use the rollout checklist<ArrowRight className="h-4 w-4" aria-hidden="true" /></Link>
+        </div>
+      </section>
+
       <section id="open-commerce" className="py-24 bg-white border-b border-slate-100 scroll-mt-16">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <FadeIn>
@@ -1978,7 +2029,7 @@ $ agenticorg sop deploy \\
       </footer>
 
       {/* Demo modal */}
-      {showDemo && <DemoModal onClose={() => setShowDemo(false)} />}
+      {showDemo && <DemoModal audience={demoAudience} onClose={() => { setShowDemo(false); setDemoAudience("general"); }} />}
     </div>
   );
 }

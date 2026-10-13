@@ -17,6 +17,14 @@ workspace notifications, or account-recovery email, and does not replace SMTP se
 
 [Website](https://agenticorg.ai) | [Application](https://app.agenticorg.ai) | [Playground](https://agenticorg.ai/playground) | [User manual](docs/user-guide/README.md) | [Technical documentation](docs/README.md) | [Current product status](docs/PRODUCT_STATUS.md) | [Security policy](SECURITY.md)
 
+Start with a measurable pilot: [bank service cases](https://agenticorg.ai/docs/bfsi-customer-service),
+[fintech/API integrations](https://agenticorg.ai/docs/api-sdk-mcp), or
+[merchant and external-buyer workflows](https://agenticorg.ai/docs/seller-a2a-commerce-journey).
+The [visual rollout checklist](https://agenticorg.ai/docs/adoption-checklist) explains
+source setup, review, external confirmation and expansion. Discuss your task and
+systems at [sanjeev@orchestrum.in](mailto:sanjeev@orchestrum.in); do not send
+credentials or customer data in a public enquiry.
+
 ![Python 3.12+](https://img.shields.io/badge/Python-3.12%2B-3776AB)
 ![React 19](https://img.shields.io/badge/React-19-149ECA)
 ![License: Apache 2.0](https://img.shields.io/badge/License-Apache--2.0-blue)
