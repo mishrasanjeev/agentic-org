@@ -15,10 +15,13 @@ resets, customer confirmations or autonomous campaign permission.
 | `unknown` | A worker lost contact before recording the outcome | A safe reason to resend automatically |
 | `needs_review` | Sales processing reached a human approval boundary | An authorized completed external action |
 
-The intake response retains the legacy `*_sent` fields as false: background work
+With durable delivery enabled, intake retains the legacy `*_sent` fields as false: background work
 has not been verified at response time. It also reports pending mail status,
 whether sales processing is queued and the durable request identifier. It makes
 no guaranteed two-minute response claim.
+The default-off rollback path retains the old response shape and historical
+scheduled-work booleans for compatibility only; these are not delivery evidence.
+Enable the durable flag to opt into truthful pending/queued receipt semantics.
 
 Authorized staff can read the ten newest `demo_delivery` results on
 `GET /api/v1/sales/pipeline/{lead_id}` in the owning tenant. There is no anonymous
@@ -70,9 +73,20 @@ stored in an RLS-protected outbox. Broker messages carry only tenant/job
 identifiers. The worker claims notification, confirmation and sales processing
 independently with atomic state transitions. Re-delivery of the same job does not
 repeat claimed/completed external actions. A one-minute sweep recovers pending
-jobs after a missed broker publish. Failed SMTP actions are not automatically
+jobs after a missed broker publish. An atomic five-minute publication lease
+prevents concurrent/repeated sweeps from flooding the queue for one pending job;
+dispatch messages expire after five minutes and obsolete sweep messages after
+one minute. Broker failure preserves pending state and retries after lease expiry.
+Failed SMTP actions are not automatically
 resent; processing steps older than fifteen minutes become `unknown` for review.
 This is not a promise of exactly-once email delivery across a network failure.
+
+For application rollback, turn off the flag and retain the migrated schema.
+Schema downgrade locks the outbox and refuses if any tenant has encrypted
+history, even when RLS hides it from the installer's ordinary queries. Archive
+and verify that ciphertext through an approved private operator procedure before
+clearing it. Only an empty outbox can be dropped, with its index/policy and the
+spend capability removed. Never discard history merely to make rollback pass.
 
 Lead creation uses the model's required defaults so fresh migrated databases
 accept the same enquiry path as existing deployments. If lead creation fails,

@@ -30,6 +30,7 @@ def upgrade() -> None:
             error_codes JSONB NOT NULL DEFAULT '{}',
             created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
             updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+            publish_after TIMESTAMPTZ NOT NULL DEFAULT now(),
             CONSTRAINT demo_notification_state CHECK (notification_status IN
                 ('pending','processing','smtp_accepted','failed','unknown')),
             CONSTRAINT demo_confirmation_state CHECK (confirmation_status IN
@@ -38,6 +39,8 @@ def upgrade() -> None:
                 ('pending','processing','completed','needs_review','failed','skipped','unknown'))
         )
     """)
+    op.execute("ALTER TABLE demo_delivery_jobs ADD COLUMN IF NOT EXISTS "
+               "publish_after TIMESTAMPTZ NOT NULL DEFAULT now()")
     if not existed:
         with encrypted_migration(
             revision=revision, table="demo_delivery_jobs", columns=["payload_encrypted"],
@@ -130,6 +133,14 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
+    # Inspect all tenants as the migration table owner, never a runtime reader.
+    # The exclusive lock prevents inserts; FORCE is restored before any refusal.
+    op.execute("LOCK TABLE demo_delivery_jobs IN ACCESS EXCLUSIVE MODE")
+    op.execute("ALTER TABLE demo_delivery_jobs NO FORCE ROW LEVEL SECURITY")
+    populated = op.get_bind().execute(text("SELECT EXISTS(SELECT 1 FROM demo_delivery_jobs)")).scalar_one()
+    op.execute("ALTER TABLE demo_delivery_jobs FORCE ROW LEVEL SECURITY")
+    if populated:
+        raise RuntimeError("Archive encrypted delivery history with operator approval before schema downgrade")
     op.execute("""
         DO $$ BEGIN
             IF to_regprocedure('public.gemini_daily_platform_spend()') IS NOT NULL THEN
@@ -141,5 +152,6 @@ def downgrade() -> None:
     """)
     op.execute("DROP POLICY IF EXISTS spend_aggregate_read ON public.agent_task_results")
     op.execute("REVOKE ALL ON public.agent_task_results FROM agenticorg_spend_aggregate")
-    # Keep delivery history and its RLS on rollback. The inert NOLOGIN role can
-    # be shared with another database; do not DROP ROLE across database scopes.
+    op.execute("DROP TABLE demo_delivery_jobs")
+    op.execute("REVOKE ALL ON SCHEMA public FROM agenticorg_spend_aggregate")
+    # The inert NOLOGIN role can be shared with another database; do not DROP ROLE.

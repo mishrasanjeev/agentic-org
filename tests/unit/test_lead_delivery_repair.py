@@ -137,17 +137,31 @@ async def test_broker_failure_leaves_job_pending_for_recovery(monkeypatch):
 
     publish = MagicMock(side_effect=ConnectionError("broker unavailable"))
     monkeypatch.setattr("core.tasks.demo_tasks.dispatch.apply_async", publish)
+    session = AsyncMock()
+    result = MagicMock()
+    result.scalar_one_or_none.return_value = uuid4()
+    session.execute.return_value = result
+    factory = MagicMock()
+    factory.return_value.__aenter__ = AsyncMock(return_value=session)
+    factory.return_value.__aexit__ = AsyncMock(return_value=False)
+    monkeypatch.setattr(demo_delivery, "get_tenant_session", lambda _: factory())
     assert await demo_delivery.enqueue(uuid4()) is False
     publish.assert_called_once()
+    assert publish.call_args.kwargs["expires"] == 300
 
 
 @pytest.mark.asyncio
-async def test_receipt_never_claims_background_emails_have_been_sent(monkeypatch):
+@pytest.mark.parametrize("durable", [False, True])
+async def test_receipt_contract_is_gated_and_durable_delivery_never_claimed_early(monkeypatch, durable):
+    from uuid import uuid4
+
     from starlette.requests import Request
 
     from api.v1 import demo
 
-    monkeypatch.setenv("AGENTICORG_DEMO_DURABLE_DELIVERY_ENABLED", "false")
+    monkeypatch.setenv("AGENTICORG_DEMO_DURABLE_DELIVERY_ENABLED", str(durable).lower())
+    monkeypatch.setattr(demo.demo_delivery, "prepare", AsyncMock(return_value=uuid4()))
+    monkeypatch.setattr(demo.demo_delivery, "enqueue", AsyncMock(return_value=True))
     session = AsyncMock()
     session.add = MagicMock()
     result = MagicMock()
@@ -164,6 +178,12 @@ async def test_receipt_never_claims_background_emails_have_been_sent(monkeypatch
         demo.DemoRequest(name="Owner-only test", email="owner@example.org"), request, MagicMock(),
     )
     assert response["status"] == "received"
+    if not durable:
+        assert set(response) == {"status", "message", "lead_id", "agent_triggered", "email"}
+        assert response["email"] == {"internal_notification_sent": True, "requester_confirmation_sent": True}
+        assert response["agent_triggered"] is True
+        assert response["message"] == "We'll be in touch within 2 minutes."
+        return
     assert response["email"]["internal_notification_sent"] is False
     assert response["email"]["requester_confirmation_sent"] is False
     assert response["agent_triggered"] is False

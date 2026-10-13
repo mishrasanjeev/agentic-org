@@ -104,7 +104,7 @@ app.conf.beat_schedule = {
     "sweep-demo-delivery": {
         "task": "core.tasks.demo_tasks.sweep",
         "schedule": 60.0,
-        "options": {"queue": "delivery"},
+        "options": {"queue": "delivery", "expires": 60},
     },
     "sweep-channel-inbox": {
         "task": "core.tasks.channel_tasks.sweep",

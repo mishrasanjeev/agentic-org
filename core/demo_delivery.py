@@ -44,8 +44,18 @@ async def prepare(payload: dict, lead_id: str | None) -> UUID:
 async def enqueue(job_id: UUID) -> bool:
     from core.tasks.demo_tasks import dispatch
 
+    async with get_tenant_session(MARKETING_TENANT) as session:
+        leased = (await session.execute(text("""
+            UPDATE demo_delivery_jobs SET publish_after=now()+INTERVAL '5 minutes'
+            WHERE id=:id AND tenant_id=:tenant AND publish_after <= now()
+                AND 'pending' IN (notification_status,confirmation_status,agent_status)
+            RETURNING id
+        """), {"id": job_id, "tenant": MARKETING_TENANT})).scalar_one_or_none()
+    if leased is None:
+        return False
     try:
-        await asyncio.to_thread(dispatch.apply_async, args=[str(MARKETING_TENANT), str(job_id)], queue="delivery")
+        await asyncio.to_thread(dispatch.apply_async, args=[str(MARKETING_TENANT), str(job_id)],
+                                queue="delivery", expires=300)
     # enterprise-gate: broad-except-ok reason=broker-failure-leaves-durable-pending-job-for-sweep
     except Exception as exc:
         logger.warning("Demo delivery enqueue failed (%s)", type(exc).__name__)
@@ -133,6 +143,7 @@ async def sweep() -> int:
         """), {"tenant": MARKETING_TENANT})
         ids = (await session.execute(text("""
             SELECT id FROM demo_delivery_jobs WHERE tenant_id=:tenant
+                AND publish_after <= now()
                 AND 'pending' IN (notification_status,confirmation_status,agent_status)
             ORDER BY created_at LIMIT 50
         """), {"tenant": MARKETING_TENANT})).scalars().all()

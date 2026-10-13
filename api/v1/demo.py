@@ -234,6 +234,15 @@ async def submit_demo_request(body: DemoRequest, request: Request, background_ta
         await demo_delivery.enqueue(delivery_id)
     else:
         background_tasks.add_task(_demo_request_followups, body, default_tenant_id, lead_id)
+        # Preserve the historical response contract only while the rollout is off.
+        # Its legacy booleans describe scheduling, not verified delivery.
+        return {
+            "status": "received",
+            "message": "We'll be in touch within 2 minutes.",
+            "lead_id": lead_id,
+            "agent_triggered": lead_id is not None,
+            "email": {"internal_notification_sent": True, "requester_confirmation_sent": True},
+        }
 
     return {
         "status": "received",

@@ -292,10 +292,29 @@ async def test_non_superuser_install_replay_and_rollback(monkeypatch, tmp_path):
                                            "WHERE oid='public.agent_task_results'::regclass"))).scalar() is True
         async with installer.begin() as conn:
             await conn.run_sync(lambda c: apply(c, migration.downgrade))
-            assert (await conn.execute(text("SELECT to_regclass('public.demo_delivery_jobs')"))).scalar() is not None
+            assert (await conn.execute(text("SELECT to_regclass('public.demo_delivery_jobs')"))).scalar() is None
         async with installer.begin() as conn:
             await conn.run_sync(lambda c: apply(c, migration.upgrade))
             assert (await conn.execute(text("SELECT public.gemini_daily_platform_spend()"))).scalar() == 0
+            tenant = uuid.uuid4()
+            await conn.execute(text("INSERT INTO tenants VALUES (:id)"), {"id": tenant})
+            await conn.execute(text("SELECT set_config('agenticorg.tenant_id',:tenant,true)"),
+                               {"tenant": str(tenant)})
+            await conn.execute(text("INSERT INTO demo_delivery_jobs(id,tenant_id,payload_encrypted) "
+                                    "VALUES (:id,:tenant,'synthetic-encrypted-history')"),
+                               {"id": uuid.uuid4(), "tenant": tenant})
+        async with installer.begin() as conn:
+            # With no tenant context, FORCE-RLS hides the populated history.
+            assert (await conn.execute(text("SELECT count(*) FROM demo_delivery_jobs"))).scalar() == 0
+            with pytest.raises(RuntimeError, match="Archive encrypted delivery history"):
+                async with conn.begin_nested():
+                    await conn.run_sync(lambda c: apply(c, migration.downgrade))
+            assert (await conn.execute(text("SELECT relforcerowsecurity FROM pg_class "
+                                           "WHERE oid='public.demo_delivery_jobs'::regclass"))).scalar() is True
+            await conn.execute(text("SELECT set_config('agenticorg.tenant_id',:tenant,true)"),
+                               {"tenant": str(tenant)})
+            assert (await conn.execute(text("SELECT payload_encrypted FROM demo_delivery_jobs"))).scalar() == \
+                "synthetic-encrypted-history"
     finally:
         if installer:
             await installer.dispose()
@@ -306,3 +325,35 @@ async def test_non_superuser_install_replay_and_rollback(monkeypatch, tmp_path):
             if (await conn.execute(text("SELECT 1 FROM pg_roles WHERE rolname=:role"), {"role": role})).scalar():
                 await conn.exec_driver_sql(f'DROP ROLE "{role}"')
         await admin.dispose()
+
+
+@pytest.mark.asyncio
+async def test_concurrent_enqueue_leases_pending_publications_and_recovers_expired_lease(monkeypatch):
+    from unittest.mock import MagicMock
+
+    from core import database, demo_delivery
+
+    engine = create_async_engine(os.environ["AGENTICORG_DB_URL"], poolclass=NullPool)
+    factory = async_sessionmaker(engine, expire_on_commit=False)
+    monkeypatch.setattr(database, "current_session_factory", lambda: factory)
+    publish = MagicMock()
+    monkeypatch.setattr("core.tasks.demo_tasks.dispatch.apply_async", publish)
+    try:
+        job = await demo_delivery.prepare({"name": "Synthetic lease", "email": "owner@example.org"}, None)
+        results = await asyncio.gather(*(demo_delivery.enqueue(job) for _ in range(8)))
+        assert sum(results) == 1
+        assert await demo_delivery.enqueue(job) is False
+        assert publish.call_count == 1
+        assert publish.call_args.kwargs["expires"] == 300
+        async with database.get_tenant_session(demo_delivery.MARKETING_TENANT) as session:
+            await session.execute(text("UPDATE demo_delivery_jobs SET publish_after=now()-INTERVAL '1 second' "
+                                       "WHERE id=:id"), {"id": job})
+        publish.side_effect = ConnectionError("synthetic broker failure")
+        assert await demo_delivery.enqueue(job) is False
+        assert await demo_delivery.enqueue(job) is False
+        assert publish.call_count == 2
+        async with database.get_tenant_session(demo_delivery.MARKETING_TENANT) as session:
+            assert (await session.execute(text("SELECT notification_status FROM demo_delivery_jobs WHERE id=:id"),
+                                          {"id": job})).scalar() == "pending"
+    finally:
+        await engine.dispose()
