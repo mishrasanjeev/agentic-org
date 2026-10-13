@@ -174,7 +174,7 @@ Seed unique local accounts for the roles under test using developer-controlled c
 
 | # | Test Case | Steps | Expected Result | Pass/Fail | Notes |
 |---|-----------|-------|-----------------|-----------|-------|
-| I1 | Demo request triggers email | Submit demo form with a REAL email address you can check | Within 2 minutes, receive email at that address. Subject is personalized by role. From: sanjeev@agenticorg.ai | | |
+| I1 | Demo enquiry receipt and delivery | Submit one approved owner-only enquiry with an inbox you can check; do not include credentials or customer data | Form confirms receipt only. Check tenant-scoped delivery states for independent notification/confirmation SMTP acceptance, then verify both actual inbox messages. Sender is the configured mailbox; no guaranteed two-minute delivery or agent-completion claim. | | |
 | I2 | Email content — CFO role | Submit demo form with role = "CFO" | Email subject contains "₹69,800" or AP-related pitch. Body mentions invoice processing, GSTIN, 3-way match | | |
 | I3 | Email content — COO role | Submit demo form with role = "COO" | Email subject contains "88% tickets" or ops-related pitch. Body mentions support triage, P1 war rooms | | |
 | I4 | Calendar link works | Click the calendar booking link in the email | Opens Google Calendar appointment page (https://calendar.app.google/p6P4DpRn85yxHua99) | | |

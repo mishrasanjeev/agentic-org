@@ -74,6 +74,11 @@ jobs after a missed broker publish. Failed SMTP actions are not automatically
 resent; processing steps older than fifteen minutes become `unknown` for review.
 This is not a promise of exactly-once email delivery across a network failure.
 
+Lead creation uses the model's required defaults so fresh migrated databases
+accept the same enquiry path as existing deployments. If lead creation fails,
+the saved enquiry and independent email steps remain visible; sales processing
+is `skipped`, never reported as completed.
+
 Fix the cause before scheduling another approved test. Do not replay historical
 prospects as a mail probe. Failed/review-paused sales results do not create contact
 history, scheduled follow-ups or outbound mail. Sales output mail must match the
