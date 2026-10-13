@@ -62,69 +62,60 @@ def test_an_instrument_an_alert_reads_is_registered(instrument: str) -> None:
 
 
 @pytest.mark.parametrize("instrument", REQUIRED_INSTRUMENTS)
-def test_an_instrument_an_alert_reads_is_still_written_to(instrument: str) -> None:
+def test_an_instrument_an_alert_reads_is_still_written_to(instrument: str, instrument_source_index) -> None:
     """A defined instrument nobody records a value on exports a zero for ever and alerts on nothing."""
-    variable = _defining_variable(instrument)
-    writers = sorted(_writers(variable))
+    definitions, writers_by_variable = instrument_source_index
+    assert instrument in definitions, f"{instrument} is not defined anywhere under {SOURCE_DIRS}"
+    variable = definitions[instrument]
+    writers = sorted(writers_by_variable.get(variable, set()))
     assert writers, (
         f"{instrument} ({variable}) is registered but nothing in the codebase records a value for "
         "it, so the alert that reads it can never fire."
     )
 
 
-def _defining_variable(instrument: str) -> str:
-    """The Python name the instrument is bound to at its definition site."""
-    for directory in SOURCE_DIRS:
-        for path in (ROOT / directory).rglob("*.py"):
-            text = path.read_text(encoding="utf-8", errors="replace")
-            if f'"{instrument}"' not in text:
-                continue
-            tree = ast.parse(text)
-            for node in ast.walk(tree):
-                if not isinstance(node, ast.Assign) or not isinstance(node.value, ast.Call):
-                    continue
-                args = node.value.args
-                if args and isinstance(args[0], ast.Constant) and args[0].value == instrument:
-                    target = node.targets[0]
-                    if isinstance(target, ast.Name):
-                        return target.id
-    raise AssertionError(f"{instrument} is not defined anywhere under {SOURCE_DIRS}")
-
-
-def _writers(variable: str) -> set[str]:
-    """Modules that record a value on the instrument, found in the syntax tree.
+@pytest.fixture(scope="module")
+def instrument_source_index() -> tuple[dict[str, str], dict[str, set[str]]]:
+    """Index the same full source tree once per test run, not once per metric.
 
     Deliberately not a text search: a commented-out ``instrument.labels(...).inc()`` reads exactly
     like a live one, and a refactor that removes the last real call usually leaves one behind.
     """
-    found: set[str] = set()
+    definitions: dict[str, str] = {}
+    writers: dict[str, set[str]] = {}
     for directory in SOURCE_DIRS:
         for path in (ROOT / directory).rglob("*.py"):
             try:
                 tree = ast.parse(path.read_text(encoding="utf-8", errors="replace"))
             except SyntaxError:  # pragma: no cover - a file this suite does not own
                 continue
-            if _records_value(tree, variable):
-                found.add(str(path.relative_to(ROOT)))
-    return found
+            for node in ast.walk(tree):
+                if isinstance(node, ast.Assign) and isinstance(node.value, ast.Call):
+                    args = node.value.args
+                    target = node.targets[0]
+                    if (args and isinstance(args[0], ast.Constant) and isinstance(args[0].value, str)
+                            and isinstance(target, ast.Name)):
+                        definitions.setdefault(args[0].value, target.id)
+                variable = _recording_variable(node)
+                if variable:
+                    writers.setdefault(variable, set()).add(str(path.relative_to(ROOT)))
+    return definitions, writers
+
+
+def _recording_variable(node: ast.AST) -> str | None:
+    if not isinstance(node, ast.Call) or not isinstance(node.func, ast.Attribute):
+        return None
+    if node.func.attr not in {"inc", "observe", "set", "dec"}:
+        return None
+    target = node.func.value
+    if isinstance(target, ast.Call) and isinstance(target.func, ast.Attribute):
+        target = target.func.value
+    return target.attr if isinstance(target, ast.Attribute) else getattr(target, "id", None)
 
 
 def _records_value(tree: ast.AST, variable: str) -> bool:
     """True when the tree contains a call that records a value on ``variable``."""
-    recording = {"inc", "observe", "set", "dec"}
-    for node in ast.walk(tree):
-        if not isinstance(node, ast.Call) or not isinstance(node.func, ast.Attribute):
-            continue
-        if node.func.attr not in recording:
-            continue
-        target = node.func.value
-        # instrument.inc()  /  instrument.labels(...).inc()  /  module.instrument.labels(...).inc()
-        if isinstance(target, ast.Call) and isinstance(target.func, ast.Attribute):
-            target = target.func.value
-        name = target.attr if isinstance(target, ast.Attribute) else getattr(target, "id", None)
-        if name == variable:
-            return True
-    return False
+    return any(_recording_variable(node) == variable for node in ast.walk(tree))
 
 
 def test_a_commented_out_call_is_not_a_writer() -> None:
