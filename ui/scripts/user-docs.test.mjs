@@ -63,6 +63,28 @@ test("the concrete license and scope record cannot masquerade as an adopted lice
   assert.match(loadUserGuides().articles.find((article) => article.slug === "licensing").html, /zero covered files/);
 });
 
+test("existing covered users need an agreement while self-use and prior grants remain distinct", () => {
+  const read = (file) => readFileSync(new URL("../../" + file, import.meta.url), "utf8");
+  const guide = loadUserGuides().articles.find((article) => article.slug === "licensing");
+  assert.ok(guide);
+  assert.match(guide.html, /Existing users and new users/);
+  assert.match(guide.html, /agreement requirement is not limited to new customers/);
+  assert.match(guide.html, /Account age alone does not exempt/);
+  assert.match(guide.html, /Give the notice and obtain the acceptance/);
+  assert.match(guide.html, /No retroactive fees, automatic acceptance, account suspension or effective date/);
+  assert.match(guide.html, /Self-use remains free of a software license fee/);
+  assert.match(guide.html, /For previously distributed Apache-2.0 copies/);
+  for (const file of ["README.md", "LICENSING.md", "docs/terms-of-service.md", "docs/user-guide/billing-and-support.md"]) {
+    assert.match(read(file), /existing and new/i, file);
+    assert.match(read(file), /notice[\s\S]*acceptance|notice and agreement terms/, file);
+  }
+  const candidate = read("licensing/ORCHESTRUM-SELF-USE-COMMERCIAL-1.0-DRAFT.md");
+  assert.match(candidate, /applies equally to existing and new users of Covered Software/);
+  assert.match(candidate, /Self-use under section 2 remains free/);
+  assert.match(candidate, /does not withdraw the prior grants/);
+  assert.match(candidate, /Publication does not backdate obligations or replace executed agreements/);
+});
+
 test("missing authored sources cannot silently overwrite the manual with an empty build", () => {
   assert.throws(() => loadUserGuides(new URL("./missing-build-root/ui", import.meta.url).pathname),
     /Missing user-guide manifest/);

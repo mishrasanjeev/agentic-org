@@ -5,7 +5,7 @@ import { MemoryRouter } from "react-router";
 import { describe, expect, it } from "vitest";
 import Terms from "../pages/legal/Terms";
 
-describe("future-release licensing notice", () => {
+describe("self-use and commercialization notice", () => {
   it("records policy publication approval without inventing software adoption", () => {
     render(<HelmetProvider><MemoryRouter><Terms /></MemoryRouter></HelmetProvider>);
     const notice = screen.getByRole("heading", { name: "Prospective licensing policy" }).nextElementSibling;
@@ -18,5 +18,16 @@ describe("future-release licensing notice", () => {
     expect(screen.getAllByRole("link", { name: "sanjeev@orchestrum.in" })).toSatisfy(
       (links: HTMLElement[]) => links.every((link) => link.getAttribute("href") === "mailto:sanjeev@orchestrum.in"),
     );
+  });
+
+  it("includes existing covered users without backdating obligations or revoking grants", () => {
+    render(<HelmetProvider><MemoryRouter><Terms /></MemoryRouter></HelmetProvider>);
+    const notice = screen.getByText(/The policy includes existing and new covered users/);
+    expect(notice).toHaveTextContent("An older account is not an exemption");
+    expect(notice).toHaveTextContent("must obtain a commercial agreement");
+    expect(notice).toHaveTextContent("notice and acceptance required by their current contract");
+    expect(notice).toHaveTextContent("An existing agreement already authorizing the offering is sufficient");
+    expect(notice).toHaveTextContent("does not backdate obligations or withdraw prior Apache-2.0 permissions");
+    expect(notice).toHaveTextContent("Self-use remains free of a software license fee");
   });
 });
