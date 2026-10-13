@@ -118,14 +118,14 @@ async def test_gemini_spend_lookup_fails_closed_on_unbindable_tenant(monkeypatch
 
 
 @pytest.mark.asyncio
-async def test_gemini_platform_spend_disables_row_security_loudly(monkeypatch):
+async def test_gemini_platform_spend_uses_only_restricted_scalar_without_rls_override(monkeypatch):
     from core.llm import router
 
-    session = _Session({"SUM(cost_usd)": _Result(scalar=1.0)})
+    session = _Session({"public.gemini_daily_platform_spend()": _Result(scalar=1.0)})
     monkeypatch.setattr("core.database.async_session_factory", lambda: session)
 
     assert await router._todays_gemini_spend_usd() == 1.0
-    assert session.executed[0].startswith("SET LOCAL row_security = off")
+    assert session.executed == ["SELECT public.gemini_daily_platform_spend()"]
 
 
 # ── Finding 3: invoice generator ────────────────────────────────────
