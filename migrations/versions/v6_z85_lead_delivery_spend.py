@@ -113,7 +113,11 @@ def upgrade() -> None:
             EXECUTE format('GRANT EXECUTE ON FUNCTION public.gemini_daily_platform_spend() TO %I',current_user);
             REVOKE CREATE ON SCHEMA public FROM agenticorg_spend_aggregate;
             EXECUTE format('REVOKE agenticorg_spend_aggregate FROM %I',current_user);
-            IF current_setting('server_version_num')::integer >= 160000 THEN
+            IF (SELECT rolsuper FROM pg_roles WHERE rolname=current_user) THEN
+                -- A superuser has implicit access independently of membership.
+                -- The ordinary runtime role must still pass the checks below.
+                NULL;
+            ELSIF current_setting('server_version_num')::integer >= 160000 THEN
                 IF pg_has_role(current_user,'agenticorg_spend_aggregate','USAGE')
                     OR pg_has_role(current_user,'agenticorg_spend_aggregate','SET') THEN
                     RAISE EXCEPTION 'Installer retained aggregate row access';

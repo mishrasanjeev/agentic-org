@@ -2,8 +2,11 @@
 """Real Postgres isolation and replay checks for the marketing outbox."""
 from __future__ import annotations
 
+import asyncio
 import importlib
 import os
+import subprocess
+import sys
 import uuid
 from unittest.mock import AsyncMock
 
@@ -13,6 +16,17 @@ from alembic.operations import Operations
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from sqlalchemy.pool import NullPool
+
+
+@pytest.fixture(scope="module", autouse=True)
+async def migrated_delivery_schema():
+    if not os.getenv("AGENTICORG_DB_URL"):
+        pytest.skip("Requires the disposable Docker Postgres database")
+    result = await asyncio.to_thread(
+        subprocess.run, [sys.executable, "scripts/alembic_migrate.py"],
+        capture_output=True, text=True, check=False,
+    )
+    assert result.returncode == 0, result.stderr
 
 
 @pytest.mark.asyncio

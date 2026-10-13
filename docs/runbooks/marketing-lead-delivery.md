@@ -106,6 +106,9 @@ shares its application and migration SQL identity, that existing administrative
 identity can still manage roles; this is not a new promise of a least-privilege
 database login. Prefer a dedicated migration identity and grant the ordinary
 runtime identity only function EXECUTE. No public route exposes role management.
+Superuser installers retain their pre-existing powers; successful installation
+under a superuser is not evidence of runtime isolation. Local acceptance also
+tests the restricted, non-superuser identity explicitly.
 
 Both tenant and platform caps retain their existing values. A missing function,
 database failure or unknown spend refuses the model call. A lookup failure is
