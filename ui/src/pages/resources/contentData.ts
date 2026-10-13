@@ -306,16 +306,18 @@ export const CONTENT_PAGES: ContentPage[] = [
     keywords: ["AI accounts payable", "invoice automation", "three-way matching", "AP agent"],
     heroStat: { value: "Measured", label: "Accuracy and cycle time depend on your invoices and controls" },
     sections: [
-      { heading: "AP Workflow", body: "A bounded workflow can preserve the source invoice, extract candidate fields, validate configured formats or provider data, propose PO and receipt matches, check duplicates, and create an approval item." },
+      { heading: "1. Prepare the Sources", body: "Choose a representative set of approved invoices, purchase orders and receipts. Identify the company, accounting system, document owner and reviewer. Start read-only; a connector listing is not evidence of working tenant credentials." },
+      { heading: "2. Extract and Validate", body: "Preserve the source invoice, extract candidate fields and inspect citations. Compare configured PO and receipt data, check duplicates and retain mismatches as review items. Missing supplier, amount or source evidence must not become an invented fact." },
+      { heading: "3. Route Exceptions to Review", body: "Give the reviewer the source, proposed match and reason for escalation. Separate a model suggestion from a verified source result and an authorized human decision. Test rejected, stale, conflicting and partial cases as well as successful ones." },
       { heading: "Exceptions Matter", body: "Scans, handwriting, regional languages, credit notes, partial receipts, tax differences, and unusual layouts need representative testing and correction paths. Extracted data is a proposal until validated." },
-      { heading: "Posting and Payment Boundary", body: "Journal posting, scheduling, bank execution, and remittance require separate credentials, scopes, approvals, and confirmation from the systems that own those records. An invoice match does not authorize payment." },
+      { heading: "4. Confirm the External Outcome", body: "Journal posting, scheduling, bank execution and remittance require separate credentials, scopes, approvals and confirmation from the systems that own those records. An invoice match does not authorize payment. Compare error rate, reviewer effort, latency and cost on the same cases before expanding the pilot." },
     ],
     faqs: [
       { q: "How fast is invoice processing?", a: "Measure it on representative documents, including review and exception time. This guide makes no fixed speed claim." },
       { q: "Can the agent pay vendors?", a: "Only a separately authorized provider workflow can execute payment. AP evidence alone is not payment authority." },
     ],
     relatedSlugs: ["gst-compliance-automation", "month-end-close-automation"],
-    cta: { text: "Explore finance workflows", link: "/solutions/cfo" },
+    cta: { text: "Follow the visual pilot checklist", link: "/docs/adoption-checklist" },
   },
   {
     slug: "automated-bank-reconciliation-ai",

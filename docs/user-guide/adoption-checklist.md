@@ -32,6 +32,32 @@ Walk users through sign-in, company selection, task input, source inspection, ru
 
 Use the BFSI playbooks as teaching examples, then replace fictional inputs and procedures only after the institution approves real data and integrations. Bank-specific connectivity and regulated authority must remain explicit.
 
+## Follow one complete pilot
+
+```flow
+Choose the task | Pick document Q&A, invoice review, a service case or a seller catalogue question. Record the current process and expected answer. | Owner: Business sponsor | If blocked: Do not begin with an unbounded promise to automate everything.
+Connect approved sources | Upload reviewed knowledge and configure the model and required read-only tools using your own provider credentials. | Owner: Administrator and integration owner | If blocked: Missing credentials or unsupported tools are configuration gaps, not successful integrations.
+Run and inspect | Send a representative request, inspect citations and task status, and repeat with missing, stale and conflicting inputs. | Owner: Process owner | If blocked: An unsupported answer or partial run is reviewed, not described as completed work.
+Review the handoff | Check the prepared output and any required human approval. Verify external writes or messages in their owning system. | Owner: Authorized reviewer | Human decision: Approve only the scoped action supported by evidence. | If blocked: A draft, catalogue artifact or approval packet is not a posted invoice, completed order or executed payment.
+Measure and expand | Compare the same cases against the baseline, train users and add the next authorized capability only when its dependency works. | Owner: Sponsor and support owner | If blocked: Pause on unacceptable error, cost, latency or reopened cases; retain a recovery path.
+```
+
+For banks, use [Customer service](/docs/bfsi-customer-service) and
+[Capability status](/docs/bfsi-capability-status). For fintech/platform teams,
+use [API, SDK and MCP](/docs/api-sdk-mcp). For merchants, follow the
+[External buyer journey](/docs/seller-a2a-commerce-journey).
+
+## Operating across countries
+
+Agree on data location, retention, access, supported language, provider coverage,
+currency and applicable approval requirements for the actual deployment. A
+deployment option or provider connector does not establish residency, regulatory
+approval or support in every jurisdiction. Start with approved samples; never put
+customer records, API keys or passwords in a public demo enquiry.
+
+Discuss a specific pilot at [sanjeev@orchestrum.in](mailto:sanjeev@orchestrum.in).
+Describe the task, systems and expected outcome, not confidential evidence.
+
 ## Pilot scorecard
 
 Track task correctness, source coverage, review effort, queue age, external-action failures, latency, cost and reopened errors. Write the sample size, time window and workload. Compare to a baseline using the same cases. Decide in advance what triggers a pause.
