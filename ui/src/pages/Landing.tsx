@@ -51,7 +51,7 @@ function FadeIn({ children, className = "", delay = 0 }: {
 /* ------------------------------------------------------------------ */
 /*  Browser Chrome Frame â€” wraps iframes in a macOS-style window       */
 /* ------------------------------------------------------------------ */
-function BrowserFrame({ src, title, alt, className = "", loading = "lazy" }: {
+export function BrowserFrame({ src, title, alt, className = "", loading = "lazy" }: {
   src: string;
   title: string;
   alt?: string;
@@ -76,6 +76,8 @@ function BrowserFrame({ src, title, alt, className = "", loading = "lazy" }: {
       {/* Content â€” static screenshot */}
       <img
         src={src}
+        width={1920}
+        height={1080}
         alt={alt || title}
         className="w-full h-auto block"
         loading={loading}

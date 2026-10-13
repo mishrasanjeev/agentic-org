@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { DemoModal } from "@/pages/Landing";
+import { BrowserFrame, DemoModal } from "@/pages/Landing";
 
 const trackEvent = vi.hoisted(() => vi.fn());
 vi.mock("@/components/Analytics", () => ({ trackEvent }));
@@ -17,6 +17,13 @@ beforeEach(() => vi.clearAllMocks());
 afterEach(() => { vi.unstubAllGlobals(); vi.useRealTimers(); });
 
 describe("public demo enquiry", () => {
+  it("reserves the actual screenshot dimensions before lazy media loads", () => {
+    render(<BrowserFrame src="/screenshots/agents.webp" title="Synthetic preview" />);
+    const image = screen.getByRole("img", { name: "Synthetic preview" });
+    expect(image).toHaveAttribute("width", "1920");
+    expect(image).toHaveAttribute("height", "1080");
+    expect(image).toHaveAttribute("loading", "lazy");
+  });
   it("sends contact details to intake, not analytics", async () => {
     const fetchMock = vi.fn().mockResolvedValue({ ok: true, status: 201 });
     vi.stubGlobal("fetch", fetchMock);
