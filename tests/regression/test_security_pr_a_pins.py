@@ -245,6 +245,9 @@ def test_pillow_cve_floor_is_enforced_in_production_dependencies() -> None:
 # ─────────────────────────────────────────────────────────────────
 
 
+# The scan already has a 120-second subprocess bound; allow cleanup before
+# pytest's watchdog aborts the process. No security assertion is relaxed.
+@pytest.mark.timeout(150)
 def test_bandit_no_medium_severity_findings_in_security_critical_paths() -> None:
     """SEC-2026-05-P2-011: 99 Bandit findings — 0 high, 7 medium, 92 low.
     Pin a CI gate that no MEDIUM finding is allowed under
