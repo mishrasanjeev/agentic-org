@@ -533,7 +533,7 @@ async def test_spend_query_filters_by_tenant(monkeypatch: pytest.MonkeyPatch) ->
 
     # agent_task_results is FORCE-RLS: the per-tenant SUM runs inside
     # get_tenant_session (audit 2026-09-13 finding 2); the platform-wide
-    # SUM uses a raw session with row security disabled.
+    # total comes from the restricted aggregate function, never an RLS override.
     monkeypatch.setattr(core.database, "get_tenant_session", lambda tid: _Session())
     monkeypatch.setattr(core.database, "async_session_factory", lambda: _Session())
     tenant = "22222222-2222-2222-2222-222222222222"
@@ -542,7 +542,8 @@ async def test_spend_query_filters_by_tenant(monkeypatch: pytest.MonkeyPatch) ->
     assert str(captured["params"]["tenant_id"]) == tenant
 
     await r._todays_gemini_spend_usd()
-    assert "tenant_id" not in captured["sql"]
+    assert captured["sql"] == "SELECT public.gemini_daily_platform_spend()"
+    assert captured["params"] is None
 
 
 @pytest.mark.asyncio
