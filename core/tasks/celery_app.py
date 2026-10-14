@@ -48,6 +48,7 @@ app = Celery(
         "core.tasks.budget_tasks",
         "core.tasks.case_push_tasks",
         "core.tasks.channel_tasks",
+        "core.tasks.demo_tasks",
         "core.tasks.gateway_tasks",
         "core.tasks.health_snapshot",
         "core.tasks.invoice_tasks",
@@ -100,6 +101,11 @@ app.conf.update(
 
 # ── Beat schedule — periodic tasks ──────────────────────────────────
 app.conf.beat_schedule = {
+    "sweep-demo-delivery": {
+        "task": "core.tasks.demo_tasks.sweep",
+        "schedule": 60.0,
+        "options": {"queue": "delivery", "expires": 60},
+    },
     "sweep-channel-inbox": {
         "task": "core.tasks.channel_tasks.sweep",
         "schedule": 15.0,

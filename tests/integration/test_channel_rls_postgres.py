@@ -11,6 +11,8 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import pytest
+from alembic.config import Config
+from alembic.script import ScriptDirectory
 from fastapi import HTTPException
 from sqlalchemy import select, text
 from sqlalchemy.exc import DBAPIError
@@ -96,6 +98,11 @@ async def test_all_channel_tables_enforce_scope_and_owner(as_rls_role: _Db) -> N
 
     before = retained_rows()
     env = {**os.environ, "AGENTICORG_DB_URL": as_rls_role.url}
+    repo = Path(__file__).resolve().parents[2]
+    config = Config(str(repo / "alembic.ini"))
+    config.set_main_option("script_location", str(repo / "migrations"))
+    head = ScriptDirectory.from_config(config).get_current_head()
+    assert head is not None
     for action, revision in (("downgrade", "v6z82_spend_reconciliation"), ("upgrade", "head")):
         result = subprocess.run(  # noqa: S603
             [sys.executable, "-m", "alembic", action, revision],
@@ -110,7 +117,7 @@ async def test_all_channel_tables_enforce_scope_and_owner(as_rls_role: _Db) -> N
         assert retained_rows() == before
         with as_rls_role.owner.connect() as conn:
             assert conn.scalar(text("SELECT version_num FROM alembic_version")) == (
-                "v6z84_customer_agent" if action == "upgrade" else revision  # the current Alembic head
+                head if action == "upgrade" else revision
             )
             for table in tables:
                 assert tuple(

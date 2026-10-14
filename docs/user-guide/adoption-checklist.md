@@ -58,6 +58,19 @@ customer records, API keys or passwords in a public demo enquiry.
 Discuss a specific pilot at [sanjeev@orchestrum.in](mailto:sanjeev@orchestrum.in).
 Describe the task, systems and expected outcome, not confidential evidence.
 
+## Enquiries and external messages
+
+A demo enquiry acknowledgement means the request was received, not that email
+arrived or a sales agent completed its work. SMTP acceptance, actual inbox
+arrival and a reply are separate outcomes. Staff should inspect recorded delivery
+states and confirm receipt in the receiving system before marking a messaging
+pilot complete. Failed or uncertain sends need review, not repeated submissions.
+
+Operators can use the [marketing delivery runbook](https://github.com/mishrasanjeev/agentic-org/blob/main/docs/runbooks/marketing-lead-delivery.md)
+for mailbox setup, protected credentials, durable worker processing and spend
+controls. Customer operational messaging and tenant workflows keep their own
+recipients and credentials.
+
 ## Pilot scorecard
 
 Track task correctness, source coverage, review effort, queue age, external-action failures, latency, cost and reopened errors. Write the sample size, time window and workload. Compare to a baseline using the same cases. Decide in advance what triggers a pause.

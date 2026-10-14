@@ -2,6 +2,7 @@
 import html as _html
 import logging
 import os
+import re
 import smtplib
 import ssl
 from email.mime.text import MIMEText
@@ -102,7 +103,12 @@ def send_email(to: str, subject: str, html: str) -> bool:
         return False
 
     password = os.getenv("AGENTICORG_GMAIL_APP_PASSWORD", "")
-    smtp_login = os.getenv("AGENTICORG_SMTP_LOGIN", os.getenv("AGENTICORG_DEMO_SENDER", ""))
+    smtp_login = os.getenv("AGENTICORG_SMTP_LOGIN", os.getenv("AGENTICORG_DEMO_SENDER", "")).strip()
+    # Google's displayed app password is four groups; spaces are not secret bytes.
+    if host.lower() == "smtp.gmail.com":
+        candidate = password.strip()
+        if re.fullmatch(r"[a-zA-Z]{16}|[a-zA-Z]{4}(?:\s+[a-zA-Z]{4}){3}", candidate):
+            password = re.sub(r"\s+", "", candidate)
     display_sender = os.getenv("AGENTICORG_DEMO_SENDER", "sanjeev@agenticorg.ai")
     if not local_plain_capture and (not password or not smtp_login):
         logger.warning("AGENTICORG_GMAIL_APP_PASSWORD or SMTP_LOGIN not set - skipping email")
@@ -125,13 +131,21 @@ def send_email(to: str, subject: str, html: str) -> bool:
                 smtp.starttls(context=tls_context)
                 smtp.ehlo()
             if smtp_login and password:
-                smtp.login(smtp_login, password)
+                if host.lower() == "smtp.gmail.com":
+                    # Explicit challenge/response avoids a disconnected PLAIN
+                    # initial-response flow and preserves Gmail's error code.
+                    smtp.ehlo_or_helo_if_needed()
+                    smtp.user = smtp_login
+                    smtp.password = password
+                    smtp.auth("LOGIN", smtp.auth_login, initial_response_ok=False)
+                else:
+                    smtp.login(smtp_login, password)
             smtp.send_message(msg)
-        logger.info("Email sent to %s from %s via SMTP host %s", to, display_sender, host)
+        logger.info("email_smtp_accepted")
         return True
     # enterprise-gate: broad-except-ok reason=smtp-send-failure-returns-false-no-delivery-success
-    except Exception:
-        logger.exception("Failed to send email")
+    except Exception as exc:
+        logger.error("email_smtp_failed type=%s code=%s", type(exc).__name__, getattr(exc, "smtp_code", None))
         return False
 
 

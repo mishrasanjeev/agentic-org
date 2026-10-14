@@ -193,6 +193,7 @@ def parse_encrypted_container(value: dict | str | bytes | bytearray | memoryview
 # treats them as opaque columns to scan; adding a new encrypted
 # column is a one-line registration here.
 _SCANNERS: list[tuple[str, str]] = [
+    ("demo_delivery_jobs.payload_encrypted", "core.models.demo_delivery:DemoDeliveryJob:payload_encrypted"),
     ("connector_configs.credentials_encrypted", "core.models.connector_config:ConnectorConfig:credentials_encrypted"),
     ("gstn_credentials.password_encrypted", "core.models.gstn_credential:GSTNCredential:password_encrypted"),
     # Foundation #4 iter 4 — tenant_ai_credentials must rewrap too.

@@ -508,6 +508,7 @@ To refresh the tracked sitemap and llms copies plus route JSON-LD CSP hashes:
 - [Public BFSI capability status](https://github.com/mishrasanjeev/agentic-org/blob/main/docs/user-guide/bfsi-capability-status.md) gives readers a plain-language summary of the same assessment, including unfinished work.
 - [Documents, conversations, calls and workbenches](https://github.com/mishrasanjeev/agentic-org/blob/main/docs/user-guide/review-and-operations-screens.md) covers the console screens of services that ship off by default and the setting each needs.
 - [Documentation site publishing and subdomain runbook](https://github.com/mishrasanjeev/agentic-org/blob/main/docs/runbooks/documentation-site.md)
+- [Marketing enquiry delivery, SMTP setup and protected model spend](https://github.com/mishrasanjeev/agentic-org/blob/main/docs/runbooks/marketing-lead-delivery.md)
 - [Documentation home](https://github.com/mishrasanjeev/agentic-org/blob/main/docs/README.md)
 - [Current product status](https://github.com/mishrasanjeev/agentic-org/blob/main/docs/PRODUCT_STATUS.md)
 - [Architecture](https://github.com/mishrasanjeev/agentic-org/blob/main/docs/architecture.md)
@@ -3696,6 +3697,19 @@ customer records, API keys or passwords in a public demo enquiry.
 
 Discuss a specific pilot at [sanjeev@orchestrum.in](mailto:sanjeev@orchestrum.in).
 Describe the task, systems and expected outcome, not confidential evidence.
+
+#### Enquiries and external messages
+
+A demo enquiry acknowledgement means the request was received, not that email
+arrived or a sales agent completed its work. SMTP acceptance, actual inbox
+arrival and a reply are separate outcomes. Staff should inspect recorded delivery
+states and confirm receipt in the receiving system before marking a messaging
+pilot complete. Failed or uncertain sends need review, not repeated submissions.
+
+Operators can use the [marketing delivery runbook](https://github.com/mishrasanjeev/agentic-org/blob/main/docs/runbooks/marketing-lead-delivery.md)
+for mailbox setup, protected credentials, durable worker processing and spend
+controls. Customer operational messaging and tenant workflows keep their own
+recipients and credentials.
 
 #### Pilot scorecard
 

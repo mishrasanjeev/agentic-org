@@ -12,6 +12,7 @@ read as admin: its grant token passed ``require_scope`` - and with it
 from __future__ import annotations
 
 import ast
+import unicodedata
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
@@ -132,7 +133,12 @@ async def test_an_admin_only_rpa_script_refuses_a_lookalike(scope: str) -> None:
 
 def _prefix_admin_checks(path: Path) -> list[int]:
     """Lines calling ``.startswith``/``startsWith`` with a literal beginning ``agenticorg:admin``."""
-    tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+    source = path.read_text(encoding="utf-8")
+    # Python normalizes identifiers; preserve Unicode and joined-line candidates.
+    candidate = unicodedata.normalize("NFKC", source).replace("\\\r\n", "").replace("\\\n", "")
+    if "startswith" not in candidate:
+        return []
+    tree = ast.parse(source, filename=str(path))
     lines = []
     for node in ast.walk(tree):
         if (
@@ -146,6 +152,20 @@ def _prefix_admin_checks(path: Path) -> list[int]:
         ):
             lines.append(node.lineno)
     return lines
+
+
+@pytest.mark.parametrize("source,expected", [
+    ('scope.startswith("agenticorg:" "admin")', [1]),
+    ('scope.startswith("agenticorg:administration")', [1]),
+    ('scope.startswith("agenticorg:finance")', []),
+    ('# scope.startswith("agenticorg:admin")\ntext = "startswith"', []),
+    ('scope == "agenticorg:admin"', []),
+    ("scope." + "".join(chr(ord(c) + 0xFEE0) for c in "startswith") + '("agenticorg:admin")', [1]),
+])
+def test_prefix_scan_index_keeps_ast_detection(tmp_path, source, expected):
+    path = tmp_path / "scopes.py"
+    path.write_text(source, encoding="utf-8")
+    assert _prefix_admin_checks(path) == expected
 
 
 def test_no_production_module_matches_the_admin_scope_by_prefix() -> None:

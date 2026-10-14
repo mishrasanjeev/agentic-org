@@ -83,6 +83,7 @@ from core.models.customer_agent import CustomerAction as CustomerAction
 from core.models.customer_agent import CustomerMandate as CustomerMandate
 from core.models.customer_agent import CustomerSession as CustomerSession
 from core.models.delegation import UserDelegation as UserDelegation
+from core.models.demo_delivery import DemoDeliveryJob as DemoDeliveryJob
 from core.models.document import Document as Document
 from core.models.dsar import DSARRequestRecord as DSARRequestRecord
 from core.models.eval_dataset import EvalDataset as EvalDataset

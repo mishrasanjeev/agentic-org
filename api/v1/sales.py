@@ -279,6 +279,9 @@ async def get_lead(lead_id: UUID, tenant_id: str = Depends(get_current_tenant)):
         }
         for e in emails
     ]
+    from core.demo_delivery import enabled, statuses
+    if enabled():
+        lead_dict["demo_delivery"] = await statuses(tid, lead_id)
     return lead_dict
 
 
@@ -414,11 +417,15 @@ async def _run_sales_agent_on_lead(
         return {"error": str(exc)}
 
     output = task_result.output or {}
+    if task_result.status != "completed":
+        # Failed or review-paused proposals must not become contact history,
+        # scheduled follow-ups or outbound email actions.
+        return {"status": task_result.status, "lead_id": lead_id}
 
     # Update lead, send email, audit, slack
     async with get_tenant_session(tid) as session:
         result = await session.execute(
-            select(LeadPipeline).where(LeadPipeline.id == _uuid.UUID(lead_id))
+            select(LeadPipeline).where(LeadPipeline.id == _uuid.UUID(lead_id), LeadPipeline.tenant_id == tid)
         )
         lead = result.scalar_one_or_none()
         if lead:
@@ -426,15 +433,10 @@ async def _run_sales_agent_on_lead(
                 lead.score = output["lead_score"]
             if "qualification" in output:
                 lead.score_factors = output["qualification"].get("score_factors", {})
-            if "lead_stage" in output and output["lead_stage"] != lead.stage:
+            if output.get("lead_stage") and output["lead_stage"] not in {lead.stage, "contacted"}:
                 lead.stage = output["lead_stage"]
-            if "next_followup_at" in output and output["next_followup_at"]:
-                lead.next_followup_at = datetime.fromisoformat(output["next_followup_at"])
-            lead.last_contacted_at = datetime.now(UTC)
-            lead.followup_count += 1  # type: ignore[operator]
-
             email_data = output.get("email")
-            if email_data and email_data.get("to"):
+            if email_data and str(email_data.get("to", "")).strip().lower() == lead.email.strip().lower():
                 email_record = EmailSequence(
                     tenant_id=tid, lead_id=lead.id,
                     sequence_name=email_data.get("sequence_name", "initial_outreach"),
@@ -455,9 +457,18 @@ async def _run_sales_agent_on_lead(
                     if sent:
                         email_record.status = "sent"
                         email_record.sent_at = datetime.now(UTC)
-                # enterprise-gate: broad-except-ok reason=sales-email-sidecar-failure-leaves-email-pending
+                        lead.last_contacted_at = email_record.sent_at
+                        lead.followup_count += 1  # type: ignore[operator]
+                        if output.get("lead_stage") == "contacted":
+                            lead.stage = "contacted"
+                        if output.get("next_followup_at"):
+                            lead.next_followup_at = datetime.fromisoformat(output["next_followup_at"])
+                    else:
+                        email_record.status = "failed"
+                # enterprise-gate: broad-except-ok reason=sales-mail-failure-recorded-without-contact-history
                 except Exception as e:
-                    logger.warning("sales_email_failed", lead_id=lead_id, error=str(e))
+                    email_record.status = "failed"
+                    logger.warning("sales_email_failed", error_type=type(e).__name__)
 
             audit = AuditLog(
                 tenant_id=tid, event_type="sales.process_lead", actor_type="agent",

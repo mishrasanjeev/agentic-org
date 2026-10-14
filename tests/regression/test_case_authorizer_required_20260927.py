@@ -26,6 +26,7 @@ from __future__ import annotations
 import ast
 import dataclasses
 import pathlib
+import unicodedata
 import uuid
 from collections.abc import AsyncIterator, Callable
 from contextlib import asynccontextmanager
@@ -320,20 +321,46 @@ async def test_seed_script_injects_the_case_authorizer_explicitly(monkeypatch: p
     assert built.get("authorizer_factory") is case_authorizer
 
 
+def _authorization_offenders(source: str, relative: str) -> list[str]:
+    candidate = unicodedata.normalize("NFKC", source).replace("\\\r\n", "").replace("\\\n", "")
+    if SENTINEL not in candidate and "authorizer" not in candidate:
+        return []
+    offenders: list[str] = []
+    for node in ast.walk(ast.parse(source)):
+        named = (
+            (isinstance(node, ast.Name) and node.id == SENTINEL)
+            or (isinstance(node, ast.alias) and node.name == SENTINEL)
+            or (isinstance(node, ast.Attribute) and node.attr == SENTINEL)
+        )
+        if named and relative != "core/tool_gateway/provider_gateway.py":
+            offenders.append(f"{relative}: {SENTINEL}")
+        if isinstance(node, ast.keyword) and node.arg in ("authorizer", "authorizer_factory"):
+            if isinstance(node.value, ast.Constant) and node.value.value is None:
+                offenders.append(f"{relative}:{node.value.lineno}: {node.arg}=None")
+    return offenders
+
+
+@pytest.mark.parametrize("source,relative,expected", [
+    ("gateway(authorizer=None)", "sample.py", ["sample.py:1: authorizer=None"]),
+    ("gateway(authorizer_factory=None)", "sample.py", ["sample.py:1: authorizer_factory=None"]),
+    ("from module import " + SENTINEL, "sample.py", ["sample.py: " + SENTINEL]),
+    ("value = " + SENTINEL, "core/tool_gateway/provider_gateway.py", []),
+    ("gateway(authorizer=None)", "core/tool_gateway/provider_gateway.py",
+     ["core/tool_gateway/provider_gateway.py:1: authorizer=None"]),
+    ("gateway(authorizer=real)", "sample.py", []),
+    ("# " + SENTINEL + '\nvalue="authorizer=None"', "sample.py", []),
+    ("value = " + "".join(chr(ord(c) + 0xFEE0) for c in SENTINEL), "sample.py", ["sample.py: " + SENTINEL]),
+    ("gateway(" + "".join(chr(ord(c) + 0xFEE0) for c in "authorizer") + "=None)",
+     "sample.py", ["sample.py:1: authorizer=None"]),
+])
+def test_authorization_scan_index_keeps_ast_detection(source, relative, expected):
+    assert _authorization_offenders(source, relative) == expected
+
+
 def test_production_code_never_passes_the_test_sentinel_or_none() -> None:
     offenders: list[str] = []
     for top in ("api", "auth", "core", "workflows", "connectors", "scripts"):
         for path in (REPO / top).rglob("*.py"):
             relative = path.relative_to(REPO).as_posix()
-            for node in ast.walk(ast.parse(path.read_text(encoding="utf-8"))):
-                named = (
-                    (isinstance(node, ast.Name) and node.id == SENTINEL)
-                    or (isinstance(node, ast.alias) and node.name == SENTINEL)
-                    or (isinstance(node, ast.Attribute) and node.attr == SENTINEL)
-                )
-                if named and relative != "core/tool_gateway/provider_gateway.py":
-                    offenders.append(f"{relative}: {SENTINEL}")
-                if isinstance(node, ast.keyword) and node.arg in ("authorizer", "authorizer_factory"):
-                    if isinstance(node.value, ast.Constant) and node.value.value is None:
-                        offenders.append(f"{relative}:{node.value.lineno}: {node.arg}=None")
+            offenders += _authorization_offenders(path.read_text(encoding="utf-8"), relative)
     assert offenders == []

@@ -347,8 +347,8 @@ async def _todays_gemini_spend_usd(tenant_id: str | None = None) -> float:
     tenant GUC sums zero rows and the cap silently never trips. The
     per-tenant SUM therefore runs inside ``get_tenant_session`` (an
     unbindable tenant id is a lookup failure → refused), and the
-    platform-wide SUM disables row security for the statement so a role
-    that cannot bypass RLS errors out loudly instead of reading zero.
+    platform-wide SUM uses an aggregate-only function owned by a restricted
+    NOLOGIN role. The application never disables RLS or receives tenant rows.
     """
     try:
         from datetime import UTC, datetime
@@ -371,14 +371,19 @@ async def _todays_gemini_spend_usd(tenant_id: str | None = None) -> float:
                 row: float | None = (await session.execute(_text(sql), params)).scalar_one()
         else:
             async with async_session_factory() as session:
-                await session.execute(_text("SET LOCAL row_security = off"))
-                row = (await session.execute(_text(sql), params)).scalar_one()
-        return float(row or 0.0)
+                row = (await session.execute(_text("SELECT public.gemini_daily_platform_spend()"))).scalar_one()
+        from math import isfinite
+        if row is None:
+            raise ValueError("Missing spend total")
+        spent = float(row)
+        if not isfinite(spent) or spent < 0:
+            raise ValueError("Invalid spend total")
+        return spent
     except (SQLAlchemyError, ValueError) as exc:
         logger.warning(
             "gemini_daily_spend_lookup_failed",
-            error=str(exc),
             error_type=type(exc).__name__,
+            scope="tenant" if tenant_id else "platform",
         )
         raise DailyBudgetExceeded(
             "Gemini daily spend lookup unavailable; refusing request to "

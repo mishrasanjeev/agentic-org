@@ -267,7 +267,8 @@ class FakeSession:
 
     def _select(self, statement: Any) -> Result:
         table = statement.get_final_froms()[0]
-        rows = [row for row in self.rows if row.__tablename__ == table.name and matches(statement.whereclause, row)]
+        whereclause = statement.whereclause
+        rows = [row for row in self.rows if row.__tablename__ == table.name and matches(whereclause, row)]
         for clause in reversed(list(statement._order_by_clauses)):
             descending = isinstance(clause, UnaryExpression) and clause.modifier is operators.desc_op
             column = clause.element if isinstance(clause, UnaryExpression) else clause

@@ -10,15 +10,16 @@ from email.headerregistry import Address
 from html import escape
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request
-from pydantic import BaseModel
+from pydantic import BaseModel, Field, field_validator
 from sqlalchemy import text
 
 from api.client_ip import client_ip as resolve_client_ip
 from api.deps import get_current_tenant, require_tenant_admin
 from api.route_metadata import route_meta
-from core import auth_state
+from core import auth_state, demo_delivery
 from core.database import async_session_factory, get_tenant_session
 from core.email import send_email
+from core.models.lead_pipeline import LeadPipeline
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -32,14 +33,39 @@ _DEMO_REQUEST_WINDOW = 3600
 
 
 class DemoRequest(BaseModel):
-    name: str
-    email: str
-    company: str = ""
-    firm: str = ""
-    role: str = ""
-    phone: str = ""
-    clients: str = ""
-    source: str = ""
+    name: str = Field(min_length=1, max_length=128)
+    email: str = Field(max_length=255, pattern=r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
+    company: str = Field(default="", max_length=255)
+    firm: str = Field(default="", max_length=255)
+    role: str = Field(default="", max_length=100)
+    phone: str = Field(default="", max_length=50)
+    clients: str = Field(default="", max_length=80)
+    source: str = Field(default="", max_length=80)
+
+    @field_validator("name", "company", "firm", "role", "phone", "clients", "source")
+    @classmethod
+    def single_line(cls, value: str) -> str:
+        if any(ord(char) < 32 for char in value):
+            raise ValueError("Contact fields must be single-line text")
+        return value.strip()
+
+    @field_validator("name")
+    @classmethod
+    def nonempty_name(cls, value: str) -> str:
+        if not value:
+            raise ValueError("A name is required")
+        return value
+
+    @field_validator("email")
+    @classmethod
+    def email_address(cls, value: str) -> str:
+        try:
+            recipient = Address(addr_spec=value)
+        except (ValueError, HeaderParseError) as exc:
+            raise ValueError("A single email address is required") from exc
+        if not recipient.username or not recipient.domain:
+            raise ValueError("A single email address is required")
+        return recipient.addr_spec.lower()
 
     @property
     def effective_company(self) -> str:
@@ -130,7 +156,7 @@ def _send_trial_confirmation(body: DemoRequest) -> bool:
 async def submit_demo_request(body: DemoRequest, request: Request, background_tasks: BackgroundTasks):
     """Accept a demo request, persist it, create lead in pipeline, and trigger sales agent.
 
-    Email delivery and the sales-agent run are scheduled as background work so
+    Email delivery and the sales-agent run are queued after persistence so
     the public endpoint returns immediately and cannot be used to burn LLM
     budget or SMTP quota synchronously. Per-IP throttled (cross-replica).
     """
@@ -166,9 +192,9 @@ async def submit_demo_request(body: DemoRequest, request: Request, background_ta
         await session.commit()
 
     # 2. Create lead in sales pipeline
-    # Use the default org tenant (00000000-0000-0000-0000-000000000001)
-    # This is a single-tenant deployment — hardcoding avoids repeated tenant lookup bugs
-    default_tenant_id = "00000000-0000-0000-0000-000000000001"
+    # Public marketing input belongs to the server-owned marketing tenant,
+    # never a tenant supplied by the unauthenticated requester.
+    default_tenant_id = str(demo_delivery.MARKETING_TENANT)
     lead_id = None
     try:
         tid = _uuid.UUID(default_tenant_id)
@@ -186,39 +212,50 @@ async def submit_demo_request(body: DemoRequest, request: Request, background_ta
                 logger.info("Lead already exists: %s (%s)", lead_id, body.email)
             else:
                 new_id = _uuid.uuid4()
-                await session.execute(
-                    text(
-                        "INSERT INTO lead_pipeline (id, tenant_id, name, email, "
-                        "company, role, phone, source, stage, score) "
-                        "VALUES (:id, :tid, :name, :email, "
-                        ":company, :role, :phone, 'website', 'new', 0)"
-                    ),
-                    {
-                        "id": new_id, "tid": tid,
-                        "name": body.name, "email": body.email,
-                        "company": body.effective_company,
-                        "role": body.effective_role,
-                        "phone": body.phone,
-                    },
-                )
+                # ORM defaults are required by fresh Alembic-managed schemas;
+                # a raw insert bypassed non-null score/contact/page defaults.
+                session.add(LeadPipeline(
+                    id=new_id, tenant_id=tid, name=body.name, email=body.email,
+                    company=body.effective_company, role=body.effective_role,
+                    phone=body.phone, source="website", stage="new", score=0,
+                ))
                 await session.commit()
                 lead_id = str(new_id)
                 logger.info("Lead created in pipeline: %s (%s)", lead_id, body.email)
     # enterprise-gate: broad-except-ok reason=demo-lead-sidecar-failure-keeps-request-saved
-    except Exception:
-        logger.exception("Failed to create lead in pipeline (non-blocking)")
+    except Exception as exc:
+        logger.error("Failed to create lead in pipeline (non-blocking): %s", type(exc).__name__)
 
-    # 3 + 4. Emails and sales-agent run happen after the response is sent.
-    background_tasks.add_task(_demo_request_followups, body, default_tenant_id, lead_id)
+    # The durable path persists encrypted input before publishing identifiers.
+    # The feature flag retains a legacy in-process path for rollback only.
+    delivery_id = None
+    if demo_delivery.enabled():
+        delivery_id = await demo_delivery.prepare(body.model_dump(), lead_id)
+        await demo_delivery.enqueue(delivery_id)
+    else:
+        background_tasks.add_task(_demo_request_followups, body, default_tenant_id, lead_id)
+        # Preserve the historical response contract only while the rollout is off.
+        # Its legacy booleans describe scheduling, not verified delivery.
+        return {
+            "status": "received",
+            "message": "We'll be in touch within 2 minutes.",
+            "lead_id": lead_id,
+            "agent_triggered": lead_id is not None,
+            "email": {"internal_notification_sent": True, "requester_confirmation_sent": True},
+        }
 
     return {
         "status": "received",
-        "message": "We'll be in touch within 2 minutes.",
+        "message": "Your enquiry has been received. Email and sales follow-up are pending.",
         "lead_id": lead_id,
-        "agent_triggered": lead_id is not None,
+        "delivery_request_id": str(delivery_id) if delivery_id else None,
+        "agent_triggered": False,
+        "agent_queued": lead_id is not None,
         "email": {
-            "internal_notification_sent": True,
-            "requester_confirmation_sent": True,
+            "internal_notification_sent": False,
+            "requester_confirmation_sent": False,
+            "internal_notification_status": "pending",
+            "requester_confirmation_status": "pending",
         },
     }
 
@@ -226,12 +263,14 @@ async def submit_demo_request(body: DemoRequest, request: Request, background_ta
 async def _demo_request_followups(body: DemoRequest, default_tenant_id: str, lead_id: str | None) -> None:
     """Background: notify sales, confirm to requester, run the sales agent."""
     try:
-        await asyncio.to_thread(_send_email_notification, body)
+        accepted = await asyncio.to_thread(_send_email_notification, body)
+        logger.info("demo_notification_status=%s", "smtp_accepted" if accepted is True else "failed")
     # enterprise-gate: broad-except-ok reason=demo-internal-email-sidecar-logged-in-background
     except Exception:
         logger.exception("Demo internal notification email failed (background)")
     try:
-        await asyncio.to_thread(_send_trial_confirmation, body)
+        accepted = await asyncio.to_thread(_send_trial_confirmation, body)
+        logger.info("demo_confirmation_status=%s", "smtp_accepted" if accepted is True else "failed")
     # enterprise-gate: broad-except-ok reason=demo-confirmation-email-sidecar-logged-in-background
     except Exception:
         logger.exception("Demo requester confirmation email failed (background)")

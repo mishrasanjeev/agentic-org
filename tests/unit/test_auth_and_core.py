@@ -1003,6 +1003,7 @@ class TestSendEmail:
             {
                 "AGENTICORG_GMAIL_APP_PASSWORD": "pw",
                 "AGENTICORG_SMTP_LOGIN": "sender@y.com",
+                "AGENTICORG_SMTP_HOST": "smtp.example.org",
                 "AGENTICORG_TEST_FAKE_MAIL": "",
             },
             clear=False,
