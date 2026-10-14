@@ -416,6 +416,12 @@ Production security depends on correct deployment configuration, key custody, pr
 
 ## Testing
 
+For a complete local Docker replay, use `make dev`, `make check`, `make test`,
+`make seed` and `make e2e`. The tools image uses Python 3.14 like the runtime;
+both browser runners must match the locked Playwright version. See the
+[local quickstart](docs/quickstart-local.md#tests-and-checks) for isolated test
+databases, synthetic provider fixtures and decision-grant browser checks.
+
 Backend:
 
     pytest

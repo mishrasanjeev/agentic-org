@@ -54,6 +54,9 @@ def test_the_multiprocess_probe_still_proves_aggregation() -> None:
             check=False,
         )
     assert result.returncode == 0, f"stdout:\n{result.stdout}\nstderr:\n{result.stderr}"
+    if hasattr(os, "fork"):
+        assert "start method: fork\n" in result.stdout
+        assert "multiprocess aggregation OK" in result.stdout
 
 
 def test_the_multiprocess_probe_reads_a_metrics_body() -> None:

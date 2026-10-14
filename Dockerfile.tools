@@ -1,6 +1,6 @@
 # Test and check runner for `make test` and `make check` (docs/quickstart-local.md).
 #
-# Python 3.12, the version the CI jobs use, with the project's runtime and dev
+# Python 3.14, matching the production runtime, with the project's runtime and dev
 # dependencies, pip-audit and the pinned gitleaks. The repository is mounted at
 # run time rather than copied, so editing code never needs a rebuild; only a
 # dependency change does.

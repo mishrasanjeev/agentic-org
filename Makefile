@@ -14,8 +14,8 @@
 #   make e2e-decisions  the decision-grant end-to-end suite (needs decision grants,
 #                    the decision service and an administrator key; see below)
 #
-# `make test` and `make check` run in the agenticorg-tools image (Python 3.12,
-# as in CI), so Docker and make are all they need. RUNNER=local runs them with
+# `make test` and `make check` run in the agenticorg-tools image (Python 3.14,
+# matching the runtime), so Docker and make are all they need. RUNNER=local runs them with
 # the host's $(PYTHON) instead, which then needs the ".[dev]" extras, pip-audit
 # and gitleaks installed.
 

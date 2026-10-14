@@ -1,5 +1,16 @@
 # Changelog
 
+## Unreleased - Coordinated dependency and local-runner refresh
+
+- Refresh the backend/UI dependency batch, pinned runtime/tool images and CodeQL
+  action. Align LangChain core and OpenTelemetry pins with their required release
+  families so both installation manifests can resolve without bypassing audits.
+- Match both Docker browser runners to the locked Playwright version and add a
+  parity regression. Keep the metrics aggregation probe explicitly on Celery's
+  prefork model instead of inheriting Python's process-start default.
+- No provider, payment, public-discovery, budget or tenant-isolation default is
+  enabled by this dependency release.
+
 ## Unreleased - Verified enquiry delivery and protected spend accounting
 
 - Behind the default-off durable flag, correct demo intake's premature email-sent and agent-triggered claims. Receipt
