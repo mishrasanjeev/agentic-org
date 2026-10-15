@@ -30,7 +30,8 @@ async def migrated_delivery_schema():
 
 
 @pytest.mark.asyncio
-async def test_demo_receipt_on_fresh_schema_keeps_required_lead_defaults(monkeypatch):
+@pytest.mark.parametrize("product", ["agenticorg", "grantex"])
+async def test_demo_receipt_on_fresh_schema_keeps_required_lead_defaults(monkeypatch, product):
     from unittest.mock import MagicMock
 
     from starlette.requests import Request
@@ -48,6 +49,7 @@ async def test_demo_receipt_on_fresh_schema_keeps_required_lead_defaults(monkeyp
     monkeypatch.setattr(demo, "async_session_factory", factory)
     monkeypatch.setattr(demo.auth_state, "check_window_rate", AsyncMock(return_value=False))
     monkeypatch.setenv("AGENTICORG_DEMO_DURABLE_DELIVERY_ENABLED", "true")
+    monkeypatch.setenv("AGENTICORG_GRANTEX_ENQUIRIES_ENABLED", "true")
     enqueue = AsyncMock(return_value=False)
     monkeypatch.setattr(demo_delivery, "enqueue", enqueue)
     email = f"local-{uuid.uuid4().hex}@example.org"
@@ -59,18 +61,25 @@ async def test_demo_receipt_on_fresh_schema_keeps_required_lead_defaults(monkeyp
             """), {"id": demo_delivery.MARKETING_TENANT})
         request = Request({"type": "http", "client": ("198.51.100.15", 1), "headers": []})
         response = await demo.submit_demo_request(
-            demo.DemoRequest(name="Synthetic lead defaults", email=email), request, MagicMock(),
+            demo.DemoRequest(name="Synthetic lead defaults", email=email, product=product, message="Synthetic question"),
+            request, MagicMock(),
         )
         assert response["lead_id"] is not None
         assert response["delivery_request_id"] is not None
         assert response["agent_triggered"] is False
-        assert response["agent_queued"] is True
+        assert response["agent_queued"] is (product == "agenticorg")
         async with database.get_tenant_session(demo_delivery.MARKETING_TENANT) as session:
             row = (await session.execute(text("SELECT score_factors,followup_count,page_visits "
                                               "FROM lead_pipeline WHERE id=:id AND tenant_id=:tenant"),
                                          {"id": uuid.UUID(response["lead_id"]),
                                           "tenant": demo_delivery.MARKETING_TENANT})).mappings().one()
             assert row == {"score_factors": {}, "followup_count": 0, "page_visits": []}
+            source = (await session.execute(text("SELECT source FROM lead_pipeline WHERE id=:id"),
+                                            {"id": uuid.UUID(response["lead_id"])})).scalar_one()
+            assert source == ("grantex_website" if product == "grantex" else "website")
+            agent_status = (await session.execute(text("SELECT agent_status FROM demo_delivery_jobs WHERE id=:id"),
+                                                  {"id": uuid.UUID(response["delivery_request_id"])})).scalar_one()
+            assert agent_status == ("skipped" if product == "grantex" else "pending")
         enqueue.assert_awaited_once()
     finally:
         await engine.dispose()

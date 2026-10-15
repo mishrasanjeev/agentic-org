@@ -28,16 +28,21 @@ def enabled() -> bool:
     return os.getenv("AGENTICORG_DEMO_DURABLE_DELIVERY_ENABLED", "false").lower() in {"1", "true", "yes"}
 
 
+def grantex_enabled() -> bool:
+    return os.getenv("AGENTICORG_GRANTEX_ENQUIRIES_ENABLED", "false").lower() in {"1", "true", "yes"}
+
+
 async def prepare(payload: dict, lead_id: str | None) -> UUID:
     job_id = uuid4()
     kek = await resolve_tenant_kek(MARKETING_TENANT)
     encrypted = await asyncio.to_thread(encrypt_with_kek, json.dumps(payload), kek)
     async with get_tenant_session(MARKETING_TENANT) as session:
         await session.execute(text("""
-            INSERT INTO demo_delivery_jobs(id,tenant_id,lead_id,payload_encrypted)
-            VALUES (:id,:tenant,:lead,:payload)
+            INSERT INTO demo_delivery_jobs(id,tenant_id,lead_id,payload_encrypted,agent_status)
+            VALUES (:id,:tenant,:lead,:payload,:agent_status)
         """), {"id": job_id, "tenant": MARKETING_TENANT,
-                "lead": UUID(lead_id) if lead_id else None, "payload": encrypted})
+                "lead": UUID(lead_id) if lead_id else None, "payload": encrypted,
+                "agent_status": "skipped" if payload.get("product") == "grantex" else "pending"})
     return job_id
 
 
@@ -103,8 +108,11 @@ async def dispatch_one(tenant: UUID, job_id: UUID) -> dict[str, str]:
         try:
             payload = await asyncio.to_thread(decrypt_for_tenant, row["payload_encrypted"])
             body = DemoRequest.model_validate_json(payload)
+            logger.info("marketing_delivery_product=%s step=%s", body.product, step)
             if step == "agent":
-                if not row["lead_id"]:
+                if body.product == "grantex":
+                    status, error = "skipped", None
+                elif not row["lead_id"]:
                     status, error = "skipped", "lead_unavailable"
                 else:
                     result = await _run_sales_agent_on_lead(str(tenant), str(row["lead_id"]))

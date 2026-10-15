@@ -511,6 +511,7 @@ To refresh the tracked sitemap and llms copies plus route JSON-LD CSP hashes:
 - [Documents, conversations, calls and workbenches](docs/user-guide/review-and-operations-screens.md) covers the console screens of services that ship off by default and the setting each needs.
 - [Documentation site publishing and subdomain runbook](docs/runbooks/documentation-site.md)
 - [Marketing enquiry delivery, SMTP setup and protected model spend](docs/runbooks/marketing-lead-delivery.md)
+  also covers the default-off Grantex contact-form handoff, without sales-agent execution.
 - [Documentation home](docs/README.md)
 - [Current product status](docs/PRODUCT_STATUS.md)
 - [Architecture](docs/architecture.md)
