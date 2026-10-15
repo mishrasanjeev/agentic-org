@@ -105,7 +105,7 @@ dependencies = [
     "prometheus-client>=0.26.0",
     "langgraph>=1.2.14",
     "langchain>=1.4.4",
-    "langchain-google-genai>=4.4.0",
+    "langchain-google-genai>=4.4.1",
     "langchain-anthropic>=1.7.5",
     "langchain-openai>=1.7.0",
     # Exact pins: core/langgraph/checkpoint_postgres.py overrides saver internals
