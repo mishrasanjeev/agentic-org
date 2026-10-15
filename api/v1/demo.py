@@ -237,10 +237,12 @@ async def submit_demo_request(body: DemoRequest, request: Request, background_ta
         # lead_pipeline is FORCE-RLS (v6z16): the INSERT fails WITH CHECK in a
         # raw session, so bind the default tenant context explicitly.
         async with get_tenant_session(tid) as session:
-            # Check for duplicate lead (same email)
+            # Deduplicate within the product, not across the two enquiry paths.
             existing = await session.execute(
-                text("SELECT id FROM lead_pipeline WHERE email = :email AND tenant_id = :tid"),
-                {"email": body.email, "tid": tid},
+                text("SELECT id FROM lead_pipeline WHERE email = :email AND tenant_id = :tid "
+                     "AND ((:product='grantex' AND source='grantex_website') OR "
+                     "(:product='agenticorg' AND source<>'grantex_website'))"),
+                {"email": body.email, "tid": tid, "product": body.product},
             )
             dup = existing.fetchone()
             if dup:

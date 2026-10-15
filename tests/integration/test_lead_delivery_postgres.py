@@ -59,6 +59,12 @@ async def test_demo_receipt_on_fresh_schema_keeps_required_lead_defaults(monkeyp
                 INSERT INTO tenants(id,name,slug,plan,data_region,settings)
                 VALUES (:id,'Synthetic test','lead-defaults-test','free','IN','{}') ON CONFLICT(id) DO NOTHING
             """), {"id": demo_delivery.MARKETING_TENANT})
+        opposite_id = uuid.uuid4()
+        async with database.get_tenant_session(demo_delivery.MARKETING_TENANT) as session:
+            session.add(demo.LeadPipeline(
+                id=opposite_id, tenant_id=demo_delivery.MARKETING_TENANT, name="Other product enquiry", email=email,
+                source="website" if product == "grantex" else "grantex_website",
+            ))
         request = Request({"type": "http", "client": ("198.51.100.15", 1), "headers": []})
         response = await demo.submit_demo_request(
             demo.DemoRequest(name="Synthetic lead defaults", email=email, product=product,
@@ -66,6 +72,7 @@ async def test_demo_receipt_on_fresh_schema_keeps_required_lead_defaults(monkeyp
             request, MagicMock(),
         )
         assert response["lead_id"] is not None
+        assert response["lead_id"] != str(opposite_id)
         assert response["delivery_request_id"] is not None
         assert response["agent_triggered"] is False
         assert response["agent_queued"] is (product == "agenticorg")
