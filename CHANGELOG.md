@@ -15,6 +15,8 @@
 - Bound GPU-pool and provider-billing-zone JSON parsing independently of the
   interpreter recursion limit. Oversized nesting is rejected consistently while
   spend intelligence is enabled; the feature remains off by default.
+- Cover local grant refusal and the real signed-grant permission check separately
+  in the optional local authorization-service integration suite.
 
 ## Unreleased - Verified enquiry delivery and protected spend accounting
 
