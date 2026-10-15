@@ -122,6 +122,11 @@ contract tests check this pairing. The metrics aggregation probe deliberately us
 a fork context to match the worker's prefork behavior; it does not change the
 application's global multiprocessing defaults.
 
+Keep the ordinary browser suite's default decision-service configuration separate
+from the decision-enabled `make e2e-decisions` setup. Run `make seed-cases` first
+and set `AGENTICORG_E2E_REQUIRE_GOVERNED_CASES=true` to fail rather than skip when
+the governed-case prerequisites are missing. The CI jobs exercise both modes.
+
 The integration suites start the stack's `postgres` and `redis` services if
 they are not running, and use a separate database, `agenticorg_test`, dropped
 and recreated at the start of every run, plus Redis index 15. Your development

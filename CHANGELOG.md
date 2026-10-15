@@ -10,6 +10,8 @@
   prefork model instead of inheriting Python's process-start default.
 - No provider, payment, public-discovery, budget or tenant-isolation default is
   enabled by this dependency release.
+- Exclude the optional proprietary-APM dependency bump under the existing
+  open-source-only policy; its previous declared baseline is unchanged.
 
 ## Unreleased - Verified enquiry delivery and protected spend accounting
 
