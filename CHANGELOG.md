@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased - Coordinated dependency maintenance
+
+- Refresh PDF extraction, validation, vector storage, DNS, Google authentication
+  and model integration dependencies together with the UI controls, translations
+  and test tooling. Reconcile overlapping UI lockfile updates as one graph.
+- Keep API contracts, migrations, provider execution, public discovery, budgets,
+  tenant isolation and marketing delivery settings unchanged.
+
 ## Unreleased - Shared marketing SMTP intake
 
 - Add default-off Grantex website enquiry support over the existing encrypted
