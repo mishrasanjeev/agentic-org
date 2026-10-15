@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased - Shared marketing SMTP intake
+
+- Add default-off Grantex website enquiry support over the existing encrypted
+  delivery queue and authenticated SMTP mailbox. Keep notification and requester
+  recipients separate, and skip AI sales execution for Grantex enquiries.
+- Limit Grantex cross-origin access to uncredentialed public enquiry POSTs;
+  tenant API CORS, rate limits, model budgets and isolation are unchanged.
+
 ## Unreleased - Coordinated dependency and local-runner refresh
 
 - Refresh the backend/UI dependency batch, pinned runtime/tool images and CodeQL

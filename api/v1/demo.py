@@ -8,9 +8,10 @@ import uuid as _uuid
 from email.errors import HeaderParseError
 from email.headerregistry import Address
 from html import escape
+from typing import Literal
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 from sqlalchemy import text
 
 from api.client_ip import client_ip as resolve_client_ip
@@ -33,6 +34,7 @@ _DEMO_REQUEST_WINDOW = 3600
 
 
 class DemoRequest(BaseModel):
+    product: Literal["agenticorg", "grantex"] = "agenticorg"
     name: str = Field(min_length=1, max_length=128)
     email: str = Field(max_length=255, pattern=r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
     company: str = Field(default="", max_length=255)
@@ -41,6 +43,32 @@ class DemoRequest(BaseModel):
     phone: str = Field(default="", max_length=50)
     clients: str = Field(default="", max_length=80)
     source: str = Field(default="", max_length=80)
+    message: str = Field(default="", max_length=5000)
+    website: str = Field(default="", max_length=255)
+
+    @field_validator("website")
+    @classmethod
+    def empty_honeypot(cls, value: str) -> str:
+        if value:
+            raise ValueError("Invalid enquiry")
+        return value
+
+    @field_validator("message")
+    @classmethod
+    def safe_message(cls, value: str) -> str:
+        if any(ord(char) < 32 and char not in "\r\n\t" for char in value):
+            raise ValueError("Invalid message")
+        return value.strip()
+
+    @property
+    def product_name(self) -> str:
+        return "Grantex" if self.product == "grantex" else "AgenticOrg"
+
+    @model_validator(mode="after")
+    def grantex_message_required(self) -> DemoRequest:
+        if self.product == "grantex" and not self.message:
+            raise ValueError("A message is required")
+        return self
 
     @field_validator("name", "company", "firm", "role", "phone", "clients", "source")
     @classmethod
@@ -75,7 +103,7 @@ class DemoRequest(BaseModel):
     def effective_role(self) -> str:
         if self.role:
             return self.role
-        if self.source == "ca-firms-solution":
+        if self.product == "agenticorg" and self.source == "ca-firms-solution":
             return "CA firm trial"
         return ""
 
@@ -103,17 +131,24 @@ async def seed_demo_data(tenant_id: str = Depends(get_current_tenant)):
     return {"status": "seeded", "tenant_id": tenant_id, **result}
 
 
-def _send_email_notification(body: DemoRequest) -> bool:
-    """Send demo request notification email via shared email utility."""
+def _marketing_recipient() -> str | None:
     try:
         recipient = Address(addr_spec=os.getenv("AGENTICORG_DEMO_NOTIFY_TO", NOTIFY_TO).strip())
     except (ValueError, HeaderParseError):
         logger.warning("Invalid marketing notification recipient; notification not sent")
-        return False
+        return None
     if not recipient.username or not recipient.domain:
         logger.warning("Missing marketing notification recipient; notification not sent")
+        return None
+    return recipient.addr_spec
+
+
+def _send_email_notification(body: DemoRequest) -> bool:
+    """Send demo request notification email via shared email utility."""
+    recipient = _marketing_recipient()
+    if recipient is None:
         return False
-    subject = f"AgenticOrg Demo Request - {body.name} ({body.effective_role or 'Not specified'})"
+    subject = f"{body.product_name} Demo Request - {body.name} ({body.effective_role or 'Not specified'})"
     company = escape(body.effective_company or "-")
     role = escape(body.effective_role or "-")
     clients = escape(body.clients or "-")
@@ -127,20 +162,31 @@ def _send_email_notification(body: DemoRequest) -> bool:
 <tr><td style="padding:8px;font-weight:bold;">Phone:</td><td style="padding:8px;">{escape(body.phone or '-')}</td></tr>
 <tr><td style="padding:8px;font-weight:bold;">Client range:</td><td style="padding:8px;">{clients}</td></tr>
 <tr><td style="padding:8px;font-weight:bold;">Source:</td><td style="padding:8px;">{source}</td></tr>
+<tr><td style="padding:8px;font-weight:bold;">Message:</td>
+<td style="padding:8px;white-space:pre-wrap;">{escape(body.message or '-')}</td></tr>
 </table>
-<p style="color:#666;font-size:12px;margin-top:20px;">Sent from agenticorg.ai</p>"""
-    return send_email(recipient.addr_spec, subject, html)
+<p style="color:#666;font-size:12px;margin-top:20px;">{body.product_name} enquiry</p>"""
+    if demo_delivery.enabled() or body.product == "grantex":
+        return send_email(recipient, subject, html, reply_to=body.email)
+    return send_email(recipient, subject, html)
 
 
 def _send_trial_confirmation(body: DemoRequest) -> bool:
     """Send the requester a confirmation instead of only notifying sales."""
-    product = "CA Firm trial" if body.source == "ca-firms-solution" else "AgenticOrg demo"
+    product = ("CA Firm trial" if body.product == "agenticorg" and body.source == "ca-firms-solution"
+               else f"{body.product_name} demo")
     html = f"""<h2>{escape(product)} request received</h2>
 <p>Hi {escape(body.name)},</p>
 <p>We received your request for {escape(body.effective_company or 'your organization')}.</p>
 <p>Our team will contact you with next steps. No password or OAuth token is required by email.</p>
-<p style="color:#666;font-size:12px;margin-top:20px;">AgenticOrg</p>"""
-    return send_email(body.email, f"AgenticOrg {product} request received", html)
+<p style="color:#666;font-size:12px;margin-top:20px;">{body.product_name}</p>"""
+    subject = f"{product} request received" if body.product == "grantex" else f"AgenticOrg {product} request received"
+    if demo_delivery.enabled() or body.product == "grantex":
+        recipient = _marketing_recipient()
+        if recipient is None:
+            return False
+        return send_email(body.email, subject, html, reply_to=recipient)
+    return send_email(body.email, subject, html)
 
 
 @router.post("/demo-request", status_code=201)
@@ -160,6 +206,10 @@ async def submit_demo_request(body: DemoRequest, request: Request, background_ta
     the public endpoint returns immediately and cannot be used to burn LLM
     budget or SMTP quota synchronously. Per-IP throttled (cross-replica).
     """
+    if body.product == "grantex" and (
+        not demo_delivery.grantex_enabled() or not demo_delivery.enabled()
+    ):
+        raise HTTPException(status_code=503, detail="Enquiry service temporarily unavailable")
     client_ip = resolve_client_ip(request)
     try:
         blocked = await auth_state.check_window_rate(
@@ -201,15 +251,17 @@ async def submit_demo_request(body: DemoRequest, request: Request, background_ta
         # lead_pipeline is FORCE-RLS (v6z16): the INSERT fails WITH CHECK in a
         # raw session, so bind the default tenant context explicitly.
         async with get_tenant_session(tid) as session:
-            # Check for duplicate lead (same email)
+            # Deduplicate within the product, not across the two enquiry paths.
             existing = await session.execute(
-                text("SELECT id FROM lead_pipeline WHERE email = :email AND tenant_id = :tid"),
-                {"email": body.email, "tid": tid},
+                text("SELECT id FROM lead_pipeline WHERE email = :email AND tenant_id = :tid "
+                     "AND ((:product='grantex' AND source='grantex_website') OR "
+                     "(:product='agenticorg' AND source<>'grantex_website'))"),
+                {"email": body.email, "tid": tid, "product": body.product},
             )
             dup = existing.fetchone()
             if dup:
                 lead_id = str(dup[0])
-                logger.info("Lead already exists: %s (%s)", lead_id, body.email)
+                logger.info("Marketing lead already exists: %s product=%s", lead_id, body.product)
             else:
                 new_id = _uuid.uuid4()
                 # ORM defaults are required by fresh Alembic-managed schemas;
@@ -217,11 +269,12 @@ async def submit_demo_request(body: DemoRequest, request: Request, background_ta
                 session.add(LeadPipeline(
                     id=new_id, tenant_id=tid, name=body.name, email=body.email,
                     company=body.effective_company, role=body.effective_role,
-                    phone=body.phone, source="website", stage="new", score=0,
+                    phone=body.phone, source="grantex_website" if body.product == "grantex" else "website",
+                    stage="new", score=0,
                 ))
                 await session.commit()
                 lead_id = str(new_id)
-                logger.info("Lead created in pipeline: %s (%s)", lead_id, body.email)
+                logger.info("Marketing lead created: %s product=%s", lead_id, body.product)
     # enterprise-gate: broad-except-ok reason=demo-lead-sidecar-failure-keeps-request-saved
     except Exception as exc:
         logger.error("Failed to create lead in pipeline (non-blocking): %s", type(exc).__name__)
@@ -250,7 +303,7 @@ async def submit_demo_request(body: DemoRequest, request: Request, background_ta
         "lead_id": lead_id,
         "delivery_request_id": str(delivery_id) if delivery_id else None,
         "agent_triggered": False,
-        "agent_queued": lead_id is not None,
+        "agent_queued": lead_id is not None and body.product == "agenticorg",
         "email": {
             "internal_notification_sent": False,
             "requester_confirmation_sent": False,

@@ -199,6 +199,11 @@ These are recurring mistakes this repo must aggressively reject:
 - **ALL new development must go in a feature branch with a PR. Never commit directly to main.** Create a branch (`git checkout -b feat/<name>` or `fix/<name>`), push it, create a PR with `gh pr create`, wait for CI, then merge. Direct-to-main is only allowed for production-down hotfixes with explicit user approval.
 - **Run `bash scripts/preflight.sh` before every `git push`.** The local preflight mirrors every blocking CI gate (ruff whole-tree, bandit api/auth/core, alembic revision id ≤32 chars, verify=False scan, pytest regression+unit, tsc, npm run build) so you catch the failure locally instead of burning a CI run. Pass `SKIP_UI=1` when iterating backend-only; pass `--fast` to skip the UI production build. The repo-tracked git hook at `.githooks/pre-push` runs this automatically after `scripts/install_hooks.sh`.
 - For auth, billing, migrations, infra, workers, secrets, and deployment changes, verification is required.
+- README, public-guide, pricing and capability-source edits can change tracked
+  `ui/public/llms*.txt` even without a UI component edit. Run
+  `node ui/scripts/generate-llms.mjs --sync-public`, then `--check`, and the
+  frontend-quality checks. `SKIP_UI=1` skips artifact freshness; it is not
+  complete validation for documentation-derived public output.
 - Keep Docker, Helm, and CI contracts aligned when they touch the same runtime path.
 - Do not treat "probably fine" as a release standard.
 

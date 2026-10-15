@@ -62,6 +62,54 @@ inbox. Requester confirmations go to the requester; operational customer mail an
 tenant workflows are not redirected. Plain SMTP is allowed only for a loopback
 capture service in a relaxed local/test environment, never in production.
 
+## Grantex website enquiries
+
+The Grantex contact form can use this same delivery service instead of a
+separate form vendor. It submits JSON to `POST /api/v1/demo-request` with
+`product=grantex`, `source=grantex_contact`, name, email, company and message.
+The message is required, limited to 5,000 characters and HTML-escaped in mail.
+It is retained in the encrypted delivery payload, not analytics. A filled
+honeypot is refused. Callers cannot choose the SMTP sender, notification
+recipient, tenant or sales-agent authority.
+
+Enable `AGENTICORG_GRANTEX_ENQUIRIES_ENABLED=true` only after local acceptance;
+it defaults off and also requires durable delivery. Existing AgenticOrg
+requests default to `product=agenticorg` and retain their current routing.
+Grantex enquiries create a separately labelled lead, send a Grantex-branded
+notification to the configured marketing inbox and a Grantex confirmation to
+the requester. The shared transport uses the configured authenticated mailbox;
+it does not require a second password. Grantex enquiries never enqueue an AI
+sales-agent action, even if an old job has a pending agent step.
+With durable delivery, confirmations remain addressed to the requester but
+their Reply-To points at the marketing inbox. Staff can reply to notifications
+to reach the requester. Other mail retains its existing reply route. Overrides
+are validated as one mailbox before any real or test delivery.
+
+Cross-origin access is limited to POST/preflight on this public enquiry path
+from the exact Grantex website origins, without credentials. It does not add
+Grantex to the credentialed CORS list for tenant APIs. The browser omits cookies
+and only clears the form after a persisted durable receipt. A failure retains
+the form and offers direct email; neither the receipt nor SMTP acceptance is
+proof of inbox delivery. The existing per-IP throttle and tenant-isolated
+encrypted outbox remain in effect; no model-budget increase is needed.
+
+Roll API, worker and beat to the same release before enabling the API's Grantex
+flag; older workers must not consume the new product payload. Deploy and verify
+the backend before publishing the replacement
+Grantex form. Confirm both mail outcomes and the actual destination inbox with
+one labelled owner-only test; exclude it from prospect/adoption metrics.
+Rollback disables the Grantex flag and keeps the direct-email contact path;
+do not silently restore an unverified third-party form. This shared marketing
+service is not a dependency for authorization, agent conversations or commerce.
+Historical submissions in the retired form vendor are not recovered or replayed
+by this cutover; recovery requires a separate authorized export from that account.
+
+Before enabling durable intake on a fresh installation, provision the
+server-owned marketing tenant through the operator's existing provisioning
+process and verify its key configuration. Do not let anonymous input create
+tenants or bypass a failed key lookup. Local acceptance must seed that synthetic
+tenant explicitly; a missing tenant is a setup failure, not successful delivery.
+
 ## Durable processing and recovery
 
 Apply `v6z85_lead_delivery_spend` before enabling the durable flag. The flag

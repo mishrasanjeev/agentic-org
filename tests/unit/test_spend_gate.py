@@ -155,4 +155,5 @@ def test_gate_runs_inside_authentication_and_cors():
 
     order = [m.cls.__name__ for m in app.user_middleware]
     assert order[0] == "RequestIDMiddleware" and order[-1] == "SpendRequestGate"
-    assert order.index("CORSMiddleware") == len(order) - 2 and order.index("GrantexAuthMiddleware") < len(order) - 1
+    assert order.index("MarketingCORSMiddleware") == len(order) - 2
+    assert order.index("GrantexAuthMiddleware") < len(order) - 1

@@ -6,10 +6,10 @@ import logging as _logging
 from contextlib import asynccontextmanager
 
 from fastapi import Depends, FastAPI
-from fastapi.middleware.cors import CORSMiddleware
 
 from api.error_handlers import register_error_handlers
 from api.middleware import DeprecationHeaderMiddleware
+from api.middleware.marketing_cors import MarketingCORSMiddleware
 from api.middleware.request_id import RequestIDMiddleware
 from api.middleware.spend_gate import SpendRequestGate
 from api.route_enforcement import enforce_route_metadata
@@ -274,7 +274,7 @@ _cors_origins = (
 # found before its body is read; on, an import body is bounded as it streams.
 app.add_middleware(SpendRequestGate)
 app.add_middleware(
-    CORSMiddleware,
+    MarketingCORSMiddleware,
     allow_origins=_cors_origins,
     allow_credentials=True,
     allow_methods=["*"],
