@@ -15,8 +15,11 @@ import socket
 import subprocess
 import sys
 import tempfile
+from functools import partial
 from pathlib import Path
 from types import ModuleType
+
+import pytest
 
 ROOT = Path(__file__).resolve().parents[3]
 
@@ -69,6 +72,37 @@ def test_the_multiprocess_probe_reads_a_metrics_body() -> None:
         ]
     )
     assert probe._sum(body, "agenticorg_mp_probe_total{") == 8.0
+
+
+@pytest.mark.skipif(not hasattr(os, "fork"), reason="requires a platform with os.fork")
+def test_the_probe_main_is_measured_and_restores_metrics_state(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    import prometheus_client
+    import prometheus_client.values as values
+
+    from observability import metrics_export
+
+    registry = prometheus_client.CollectorRegistry()
+    registered = set(prometheus_client.REGISTRY._names_to_collectors)
+    previous_value_class = values.ValueClass
+    monkeypatch.setattr(prometheus_client, "Counter", partial(prometheus_client.Counter, registry=registry))
+    monkeypatch.setattr(prometheus_client, "Gauge", partial(prometheus_client.Gauge, registry=registry))
+    monkeypatch.setattr(values, "ValueClass", previous_value_class)
+    monkeypatch.setenv("PROMETHEUS_MULTIPROC_DIR", str(tmp_path))
+    monkeypatch.setenv("METRICS_PORT", str(_free_port()))
+    monkeypatch.delenv("PORT", raising=False)
+    probe = _load("probe_metrics_multiprocess")
+    try:
+        assert probe.main() == 0
+        assert values.ValueClass is previous_value_class
+        assert os.environ["PROMETHEUS_MULTIPROC_DIR"] == str(tmp_path)
+        assert set(prometheus_client.REGISTRY._names_to_collectors) == registered
+    finally:
+        metrics_export.stop_metrics_server()
+    output = capsys.readouterr().out
+    assert "start method: fork\n" in output
+    assert "multiprocess aggregation OK" in output
 
 
 def test_the_gate_probe_catches_every_mutation_and_restores_the_tree() -> None:

@@ -122,6 +122,11 @@ contract tests check this pairing. The metrics aggregation probe deliberately us
 a fork context to match the worker's prefork behavior; it does not change the
 application's global multiprocessing defaults.
 
+The standard probe regression also exercises its main function with an isolated
+metrics registry, so pytest's coverage includes the prefork path. A standalone
+probe run is useful runtime evidence but does not substitute for the coverage
+data produced by the standard test command.
+
 Keep the ordinary browser suite's default decision-service configuration separate
 from the decision-enabled `make e2e-decisions` setup. Run `make seed-cases` first
 and set `AGENTICORG_E2E_REQUIRE_GOVERNED_CASES=true` to fail rather than skip when

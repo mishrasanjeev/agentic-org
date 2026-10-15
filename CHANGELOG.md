@@ -17,6 +17,8 @@
   spend intelligence is enabled; the feature remains off by default.
 - Cover local grant refusal and the real signed-grant permission check separately
   in the optional local authorization-service integration suite.
+- Exercise the prefork probe in the standard coverage process with an isolated
+  metrics registry, while retaining its separate-process CLI regression.
 
 ## Unreleased - Verified enquiry delivery and protected spend accounting
 
