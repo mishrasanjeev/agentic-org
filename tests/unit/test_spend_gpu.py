@@ -7,6 +7,7 @@ import asyncio
 import importlib.util
 import json
 import re
+import sys
 import uuid
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
@@ -245,13 +246,30 @@ class TestGpuPoolSettings:
         assert Settings.model_fields["spend_gpu_pools_json"].default == ""
 
     def test_deeply_nested_json_is_refused_naming_the_setting(self):
-        deep = "[" * 100_000 + "]" * 100_000  # beyond the parser's nesting limit: RecursionError, not ValueError
+        deep = "[" * 100_000 + "]" * 100_000
         with pytest.raises(ValueError, match="spend_gpu_pools_json: not valid JSON"):
             parse_spend_gpu_pools(deep)
         for field in ("spend_gpu_pools_json", "spend_provider_billing_timezones_json"):
             with pytest.raises(ValidationError) as info:
                 Settings(spend_intelligence_enabled=True, **{field: deep})
             assert f"{field}: not valid JSON" in str(info.value) and "[[[" not in str(info.value)
+
+    @pytest.mark.parametrize("recursion_limit", [1000, 200_000])
+    def test_spend_json_depth_is_bounded_independently_of_python_recursion(self, recursion_limit):
+        deep = "[" * 300 + "]" * 300
+        previous = sys.getrecursionlimit()
+        try:
+            sys.setrecursionlimit(recursion_limit)
+            with pytest.raises(ValueError, match="spend_gpu_pools_json: not valid JSON"):
+                parse_spend_gpu_pools(deep)
+            for field in ("spend_gpu_pools_json", "spend_provider_billing_timezones_json"):
+                with pytest.raises(ValidationError) as info:
+                    Settings(spend_intelligence_enabled=True, **{field: deep})
+                assert f"{field}: not valid JSON" in str(info.value)
+                assert "[[[" not in str(info.value)
+                assert getattr(Settings(spend_intelligence_enabled=False, **{field: deep}), field) == deep
+        finally:
+            sys.setrecursionlimit(previous)
 
     def test_the_settings_sku_pattern_is_the_spend_one(self):
         from core.config import SPEND_SKU_PATTERN

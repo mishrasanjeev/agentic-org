@@ -87,7 +87,7 @@ Production and staging configuration rejects them.
 ## Tests and checks
 
 `make test` and `make check` run inside the `agenticorg-tools` image
-(`Dockerfile.tools`: Python 3.12 like CI, the project's runtime and dev
+(`Dockerfile.tools`: Python 3.14 like the runtime, the project's runtime and dev
 dependencies, pip-audit and the pinned gitleaks). The checkout is mounted into
 the container, so editing code never needs a rebuild; the image is rebuilt from
 cache only when `pyproject.toml` or `requirements-dev.txt` changes. The first
@@ -109,6 +109,28 @@ and `check-denylist` compare against
 `BASE_REF` (default `origin/main`) and fail if it does not resolve, so fetch
 first in a fresh clone. `check-pip-audit` needs network access to the
 vulnerability database.
+
+When updating dependencies, move coupled release families together: OpenTelemetry
+API/SDK/exporters and instrumentation must resolve to compatible versions, and
+LangChain integrations must meet the pinned core package's minimum version.
+`make check` audits the project and both requirements manifests; an installation
+failure is a failed gate, not an empty vulnerability report.
+
+Both Docker browser runners must use the version of `@playwright/test` recorded
+in `ui/package-lock.json`, with the published image digest pinned. The dependency
+contract tests check this pairing. The metrics aggregation probe deliberately uses
+a fork context to match the worker's prefork behavior; it does not change the
+application's global multiprocessing defaults.
+
+The standard probe regression also exercises its main function with an isolated
+metrics registry, so pytest's coverage includes the prefork path. A standalone
+probe run is useful runtime evidence but does not substitute for the coverage
+data produced by the standard test command.
+
+Keep the ordinary browser suite's default decision-service configuration separate
+from the decision-enabled `make e2e-decisions` setup. Run `make seed-cases` first
+and set `AGENTICORG_E2E_REQUIRE_GOVERNED_CASES=true` to fail rather than skip when
+the governed-case prerequisites are missing. The CI jobs exercise both modes.
 
 The integration suites start the stack's `postgres` and `redis` services if
 they are not running, and use a separate database, `agenticorg_test`, dropped

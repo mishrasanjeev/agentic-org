@@ -32,7 +32,7 @@ import pytest
 from langchain_core.messages import HumanMessage, SystemMessage
 from structlog.testing import capture_logs
 
-from auth.grant_enforcement import EnforcementMode
+from auth.grant_enforcement import DenialReason, EnforcementMode, GrantCallContext, check_tool_grant
 from auth.run_grants import RunGrant, resolve_run_grant
 from core.test_doubles.scripted_model import final, tool_call
 
@@ -179,8 +179,8 @@ async def test_warn_runs_every_call_and_records_the_ungranted_ones(grantex_env, 
     )
     assert called == ["list_contacts", "create_contact", "query"]
     events = [(e["tool"], e["reason"]) for e in logs if e["event"] == "grant_enforcement_would_deny"]
-    # list_contacts and query are granted (read); create_contact needs write.
-    assert events == [("create_contact", "permission_insufficient")]
+    # Warn records both the local scope check and the SDK's signed-grant check.
+    assert events == [("create_contact", "tool_not_granted"), ("create_contact", "permission_insufficient")]
     assert result["status"] == "completed"
 
 
@@ -198,9 +198,29 @@ async def test_deny_runs_granted_calls_and_refuses_an_ungranted_one(grantex_env,
     assert called == ["list_contacts"]
     assert result["status"] == "failed"
     assert result["hitl_trigger"] == ""
-    assert result["grant_denial"]["reason"] == "permission_insufficient"
+    assert result["grant_denial"]["reason"] == "tool_not_granted"
     assert result["grant_denial"]["tool"] == "create_contact"
-    assert [e["reason"] for e in logs if e["event"] == "grant_enforcement_denied"] == ["permission_insufficient"]
+    assert [e["reason"] for e in logs if e["event"] == "grant_enforcement_denied"] == ["tool_not_granted"]
+
+
+async def test_the_real_signed_grant_independently_refuses_write_permission(grantex_env, monkeypatch):
+    from auth.token_pool import token_pool
+
+    monkeypatch.setattr(token_pool, "lazy_redis", False)
+    grant = await resolve_run_grant(
+        tenant_id=TENANT, agent_id=AGENT, grantex_config=grantex_env["registration"], mode=EnforcementMode.DENY
+    )
+    assert grant.token and grant.source in {"minted", "pool_cache"}
+    check = await check_tool_grant(
+        mode=EnforcementMode.DENY,
+        grant_token=grant.token,
+        connector="hubspot",
+        tool="create_contact",
+        context=GrantCallContext(tenant_id=TENANT, agent_id=AGENT, runtime="integration"),
+    )
+    assert check.dispatch_allowed is False
+    assert check.denial is not None
+    assert check.denial.reason is DenialReason.PERMISSION_INSUFFICIENT
 
 
 async def test_deny_refuses_a_connector_the_grant_does_not_cover(grantex_env, scripted_model, monkeypatch):

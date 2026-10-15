@@ -91,16 +91,18 @@ def main() -> int:
     _COUNTER.labels(who="parent").inc(5)
     _GAUGE.labels(who="parent").set(5)
 
+    # Python 3.14 defaults to forkserver; this probe must mirror Celery prefork.
+    context = multiprocessing.get_context("fork")
     children = []
     for value in (3, 7):
-        process = multiprocessing.Process(target=_child, args=(value,))
+        process = context.Process(target=_child, args=(value,))
         process.start()
         children.append(process)
     for process in children:
         process.join()
 
     failures: list[str] = []
-    print(f"start method: {multiprocessing.get_start_method()}")
+    print(f"start method: {context.get_start_method()}")
     print(f"sample files written: {len(glob.glob(os.path.join(directory, '*.db')))}")
 
     port = metrics_export.start_metrics_server(serving_port=0)
