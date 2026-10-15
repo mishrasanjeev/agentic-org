@@ -56,7 +56,7 @@ grantex==0.7.2
 # ─── HTTP Client & DNS ───────────────────────────────────────────────────────
 httpx==0.28.1
 mcp==1.30.0
-dnspython==2.8.0
+dnspython==2.9.0
 # Twilio webhook signatures are protocol-defined HMAC-SHA1. Delegate
 # canonicalisation and validation to the maintained SDK.
 twilio==9.11.2
