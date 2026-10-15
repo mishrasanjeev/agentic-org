@@ -61,7 +61,8 @@ async def test_demo_receipt_on_fresh_schema_keeps_required_lead_defaults(monkeyp
             """), {"id": demo_delivery.MARKETING_TENANT})
         request = Request({"type": "http", "client": ("198.51.100.15", 1), "headers": []})
         response = await demo.submit_demo_request(
-            demo.DemoRequest(name="Synthetic lead defaults", email=email, product=product, message="Synthetic question"),
+            demo.DemoRequest(name="Synthetic lead defaults", email=email, product=product,
+                             message="Synthetic question"),
             request, MagicMock(),
         )
         assert response["lead_id"] is not None
