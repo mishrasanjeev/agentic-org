@@ -446,7 +446,7 @@
     "public_exempt_reason": null,
     "rate_limit": "demo-seed",
     "scope": "demo.seed.control_plane.write",
-    "source_line": 95,
+    "source_line": 123,
     "tenant_required": true
   },
   {
@@ -5504,7 +5504,7 @@
     "public_exempt_reason": "public-lead-capture-email-and-sales-agent-trigger",
     "rate_limit": "demo-request-public",
     "scope": "public:demo_request.external_input.write",
-    "source_line": 156,
+    "source_line": 188,
     "tenant_required": false
   },
   {
