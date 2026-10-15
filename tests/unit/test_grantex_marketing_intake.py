@@ -51,13 +51,57 @@ def test_branding_and_notification_recipient_are_server_owned(monkeypatch):
     with patch.object(demo, "send_email", return_value=True) as send:
         assert demo._send_email_notification(body)
         assert send.call_args.args[0] == "marketing@example.org"
+        assert send.call_args.kwargs["reply_to"] == "buyer@example.org"
         assert send.call_args.args[1].startswith("Grantex Demo Request")
         assert "&lt;img" in send.call_args.args[2]
         assert "<img" not in send.call_args.args[2]
         assert demo._send_trial_confirmation(body)
         assert send.call_args.args[0] == "buyer@example.org"
+        assert send.call_args.kwargs["reply_to"] == "marketing@example.org"
         assert send.call_args.args[1] == "Grantex demo request received"
         assert "AgenticOrg" not in send.call_args.args[2]
+
+
+def test_rejected_address_never_leaks_to_transport_logs(caplog):
+    from core.email import send_email
+
+    with patch("core.email.validate_email_domain", return_value=(False, "private diagnostic example.org")), \
+            patch("core.email.smtplib.SMTP_SSL") as connect:
+        assert send_email("buyer@example.org", "Receipt", "<p>Received</p>") is False
+    connect.assert_not_called()
+    assert "email_recipient_domain_rejected" in caplog.text
+    assert "buyer@example.org" not in caplog.text
+    assert "private diagnostic" not in caplog.text
+
+
+@pytest.mark.parametrize("reply_to", [None, "marketing@example.org"])
+def test_transport_preserves_default_reply_route_and_accepts_marketing_override(monkeypatch, reply_to):
+    from core.email import send_email
+
+    monkeypatch.setenv("AGENTICORG_ENV", "production")
+    monkeypatch.setenv("AGENTICORG_TEST_FAKE_MAIL", "")
+    monkeypatch.setenv("AGENTICORG_SMTP_HOST", "smtp.example.org")
+    monkeypatch.setenv("AGENTICORG_SMTP_LOGIN", "sender@example.org")
+    monkeypatch.setenv("AGENTICORG_DEMO_SENDER", "sender@example.org")
+    monkeypatch.setenv("AGENTICORG_GMAIL_APP_PASSWORD", "synthetic-local-only")
+    with patch("core.email.validate_email_domain", return_value=(True, "OK")), \
+            patch("core.email.smtplib.SMTP_SSL") as connect:
+        assert send_email("buyer@example.org", "Receipt", "<p>Received</p>", reply_to=reply_to)
+    message = connect.return_value.__enter__.return_value.send_message.call_args.args[0]
+    assert message["To"] == "buyer@example.org"
+    assert message["Reply-To"] == (reply_to or "sender@example.org")
+
+
+@pytest.mark.parametrize("reply_to", ["", "one@example.org,two@example.org", "a@example.org\r\nBcc: b@example.org"])
+def test_reply_header_injection_is_refused_before_fake_mail(monkeypatch, reply_to):
+    from core.email import send_email
+    from core.test_doubles import fake_mail
+
+    monkeypatch.setenv("AGENTICORG_TEST_FAKE_MAIL", "1")
+    with patch("core.email.validate_email_domain", return_value=(True, "OK")), \
+            patch.object(fake_mail, "capture") as capture:
+        assert send_email("buyer@example.org", "Receipt", "<p>Received</p>", reply_to=reply_to) is False
+    capture.assert_not_called()
 
 
 @pytest.mark.asyncio

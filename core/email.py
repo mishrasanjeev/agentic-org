@@ -5,6 +5,8 @@ import os
 import re
 import smtplib
 import ssl
+from email.errors import HeaderParseError
+from email.headerregistry import Address
 from email.mime.text import MIMEText
 
 import dns.resolver
@@ -53,7 +55,7 @@ def validate_email_domain(email: str) -> tuple[bool, str]:
     return True, "OK"
 
 
-def send_email(to: str, subject: str, html: str) -> bool:
+def send_email(to: str, subject: str, html: str, *, reply_to: str | None = None) -> bool:
     """Send HTML email through the configured SMTP transport.
 
     Gmail over implicit TLS remains the default. Passwordless plaintext SMTP is
@@ -65,10 +67,22 @@ def send_email(to: str, subject: str, html: str) -> bool:
     # asserting "invalid domain → no send" stay accurate even when
     # the fake is active. Foundation #8 forbids the false-green
     # pattern where a fake masks a production validation contract.
-    is_valid, reason = validate_email_domain(to)
+    is_valid, _reason = validate_email_domain(to)
     if not is_valid:
-        logger.warning("Skipping email to %s: %s", to, reason)
+        logger.warning("email_recipient_domain_rejected")
         return False
+
+    reply_address = None
+    if reply_to is not None:
+        try:
+            address = Address(addr_spec=reply_to)
+        except (ValueError, HeaderParseError):
+            logger.warning("email_reply_address_rejected")
+            return False
+        if not address.username or not address.domain:
+            logger.warning("email_reply_address_rejected")
+            return False
+        reply_address = address.addr_spec
 
     # Foundation #7 PR-B: hermetic-CI seam. When the env flag is
     # set, capture the email in-process instead of opening a real
@@ -116,7 +130,7 @@ def send_email(to: str, subject: str, html: str) -> bool:
     msg = MIMEText(html, "html")
     msg["Subject"] = subject
     msg["From"] = f"AgenticOrg <{display_sender}>"
-    msg["Reply-To"] = display_sender
+    msg["Reply-To"] = reply_address or display_sender
     msg["To"] = to
     try:
         tls_context = ssl.create_default_context()

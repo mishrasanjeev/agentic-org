@@ -131,15 +131,22 @@ async def seed_demo_data(tenant_id: str = Depends(get_current_tenant)):
     return {"status": "seeded", "tenant_id": tenant_id, **result}
 
 
-def _send_email_notification(body: DemoRequest) -> bool:
-    """Send demo request notification email via shared email utility."""
+def _marketing_recipient() -> str | None:
     try:
         recipient = Address(addr_spec=os.getenv("AGENTICORG_DEMO_NOTIFY_TO", NOTIFY_TO).strip())
     except (ValueError, HeaderParseError):
         logger.warning("Invalid marketing notification recipient; notification not sent")
-        return False
+        return None
     if not recipient.username or not recipient.domain:
         logger.warning("Missing marketing notification recipient; notification not sent")
+        return None
+    return recipient.addr_spec
+
+
+def _send_email_notification(body: DemoRequest) -> bool:
+    """Send demo request notification email via shared email utility."""
+    recipient = _marketing_recipient()
+    if recipient is None:
         return False
     subject = f"{body.product_name} Demo Request - {body.name} ({body.effective_role or 'Not specified'})"
     company = escape(body.effective_company or "-")
@@ -159,7 +166,9 @@ def _send_email_notification(body: DemoRequest) -> bool:
 <td style="padding:8px;white-space:pre-wrap;">{escape(body.message or '-')}</td></tr>
 </table>
 <p style="color:#666;font-size:12px;margin-top:20px;">{body.product_name} enquiry</p>"""
-    return send_email(recipient.addr_spec, subject, html)
+    if demo_delivery.enabled() or body.product == "grantex":
+        return send_email(recipient, subject, html, reply_to=body.email)
+    return send_email(recipient, subject, html)
 
 
 def _send_trial_confirmation(body: DemoRequest) -> bool:
@@ -172,6 +181,11 @@ def _send_trial_confirmation(body: DemoRequest) -> bool:
 <p>Our team will contact you with next steps. No password or OAuth token is required by email.</p>
 <p style="color:#666;font-size:12px;margin-top:20px;">{body.product_name}</p>"""
     subject = f"{product} request received" if body.product == "grantex" else f"AgenticOrg {product} request received"
+    if demo_delivery.enabled() or body.product == "grantex":
+        recipient = _marketing_recipient()
+        if recipient is None:
+            return False
+        return send_email(body.email, subject, html, reply_to=recipient)
     return send_email(body.email, subject, html)
 
 
@@ -247,7 +261,7 @@ async def submit_demo_request(body: DemoRequest, request: Request, background_ta
             dup = existing.fetchone()
             if dup:
                 lead_id = str(dup[0])
-                logger.info("Lead already exists: %s (%s)", lead_id, body.email)
+                logger.info("Marketing lead already exists: %s product=%s", lead_id, body.product)
             else:
                 new_id = _uuid.uuid4()
                 # ORM defaults are required by fresh Alembic-managed schemas;
@@ -260,7 +274,7 @@ async def submit_demo_request(body: DemoRequest, request: Request, background_ta
                 ))
                 await session.commit()
                 lead_id = str(new_id)
-                logger.info("Lead created in pipeline: %s (%s)", lead_id, body.email)
+                logger.info("Marketing lead created: %s product=%s", lead_id, body.product)
     # enterprise-gate: broad-except-ok reason=demo-lead-sidecar-failure-keeps-request-saved
     except Exception as exc:
         logger.error("Failed to create lead in pipeline (non-blocking): %s", type(exc).__name__)
