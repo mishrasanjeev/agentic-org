@@ -12,6 +12,9 @@
   enabled by this dependency release.
 - Exclude the optional proprietary-APM dependency bump under the existing
   open-source-only policy; its previous declared baseline is unchanged.
+- Bound GPU-pool and provider-billing-zone JSON parsing independently of the
+  interpreter recursion limit. Oversized nesting is rejected consistently while
+  spend intelligence is enabled; the feature remains off by default.
 
 ## Unreleased - Verified enquiry delivery and protected spend accounting
 

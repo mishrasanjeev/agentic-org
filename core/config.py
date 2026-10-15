@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 import os
 import re
 from dataclasses import dataclass
@@ -13,6 +12,7 @@ from urllib.parse import urlsplit, urlunsplit
 from zoneinfo import ZoneInfo
 
 from pydantic import Field, model_validator
+from pydantic_core import from_json
 from pydantic_settings import BaseSettings
 
 STRICT_ENVS = frozenset({"production", "prod", "staging", "stage", "preview"})
@@ -166,8 +166,9 @@ def parse_spend_gpu_pools(raw: str | None) -> tuple[SpendGpuPool, ...]:
     if not text:
         return ()
     try:
-        data = json.loads(text)
-    except (ValueError, RecursionError) as exc:  # nesting too deep for the parser raises RecursionError
+        # Keep nesting bounded even when another library raises Python's recursion limit.
+        data = from_json(text)
+    except (ValueError, RecursionError) as exc:
         raise ValueError("spend_gpu_pools_json: not valid JSON") from exc
     if not isinstance(data, list):
         raise ValueError("spend_gpu_pools_json: must be a JSON list of pools")
@@ -835,8 +836,8 @@ class Settings(BaseSettings):
         raw = (self.spend_provider_billing_timezones_json or "").strip()
         if raw:
             try:
-                zones = json.loads(raw)
-            except (ValueError, RecursionError) as exc:  # nesting too deep for the parser raises RecursionError
+                zones = from_json(raw)
+            except (ValueError, RecursionError) as exc:
                 raise ValueError("spend_provider_billing_timezones_json: not valid JSON") from exc
             if not isinstance(zones, dict):
                 raise ValueError("spend_provider_billing_timezones_json: must be a JSON object of provider to zone")

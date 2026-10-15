@@ -28,6 +28,11 @@ or the GPU pools do not parse. Off, none of these settings is read except
 `AGENTICORG_SPEND_AUDIT_COMMERCIAL_FILTER`, which applies whatever the switch
 says because audit rows outlive it.
 
+The two JSON settings use Pydantic Core's bounded JSON parser. Excessive nesting
+is refused as `<setting>: not valid JSON`, even if another library raises
+Python's recursion limit; the error does not quote the supplied JSON. This does
+not enable spend intelligence or change the accepted pool and time-zone schemas.
+
 Phase 1 is API-only: there is no spend screen in the application. Spend
 dashboards, budgets, spend alerts, forecasting, statements and month close are
 later phases.
