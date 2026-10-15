@@ -7,6 +7,9 @@
   and test tooling. Reconcile overlapping UI lockfile updates as one graph.
 - Keep API contracts, migrations, provider execution, public discovery, budgets,
   tenant isolation and marketing delivery settings unchanged.
+- Keep the multiprocess metrics probe's sample files on native temporary
+  storage rather than a Docker Desktop bind mount; retain its aggregation,
+  dead-worker cleanup and process-state restoration checks.
 
 ## Unreleased - Shared marketing SMTP intake
 
