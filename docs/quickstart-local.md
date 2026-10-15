@@ -406,3 +406,7 @@ Use the same variables with `make ps`, `make logs` and the smoke test.
   mounted checkout does not support every file operation a Linux filesystem
   does, and `tests/regression/test_claude_mistakes.py::test_self_visible_to_pytest`
   (which runs pytest in a subprocess) fails there while passing on Linux.
+  Multiprocess metrics probes keep their sample files in the container's
+  native temporary directory: cross-process memory-mapped values on a host
+  bind mount can read as zero even when all sample files exist. Do not move
+  `PROMETHEUS_MULTIPROC_DIR` onto the mounted checkout for these probes.

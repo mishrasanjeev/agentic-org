@@ -76,7 +76,7 @@ def test_the_multiprocess_probe_reads_a_metrics_body() -> None:
 
 @pytest.mark.skipif(not hasattr(os, "fork"), reason="requires a platform with os.fork")
 def test_the_probe_main_is_measured_and_restores_metrics_state(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
     import prometheus_client
     import prometheus_client.values as values
@@ -89,17 +89,20 @@ def test_the_probe_main_is_measured_and_restores_metrics_state(
     monkeypatch.setattr(prometheus_client, "Counter", partial(prometheus_client.Counter, registry=registry))
     monkeypatch.setattr(prometheus_client, "Gauge", partial(prometheus_client.Gauge, registry=registry))
     monkeypatch.setattr(values, "ValueClass", previous_value_class)
-    monkeypatch.setenv("PROMETHEUS_MULTIPROC_DIR", str(tmp_path))
     monkeypatch.setenv("METRICS_PORT", str(_free_port()))
     monkeypatch.delenv("PORT", raising=False)
     probe = _load("probe_metrics_multiprocess")
-    try:
-        assert probe.main() == 0
-        assert values.ValueClass is previous_value_class
-        assert os.environ["PROMETHEUS_MULTIPROC_DIR"] == str(tmp_path)
-        assert set(prometheus_client.REGISTRY._names_to_collectors) == registered
-    finally:
-        metrics_export.stop_metrics_server()
+    # Docker Desktop host mounts can return stale cross-process mmap reads.
+    # Keep the samples on native temporary storage, as the worker does.
+    with tempfile.TemporaryDirectory(prefix="agenticorg-prometheus-test-", dir=tempfile.gettempdir()) as directory:
+        monkeypatch.setenv("PROMETHEUS_MULTIPROC_DIR", directory)
+        try:
+            assert probe.main() == 0
+            assert values.ValueClass is previous_value_class
+            assert os.environ["PROMETHEUS_MULTIPROC_DIR"] == directory
+            assert set(prometheus_client.REGISTRY._names_to_collectors) == registered
+        finally:
+            metrics_export.stop_metrics_server()
     output = capsys.readouterr().out
     assert "start method: fork\n" in output
     assert "multiprocess aggregation OK" in output
