@@ -74,7 +74,7 @@ langgraph==1.2.14
 langchain==1.4.4
 # LangChain 1.4.4 requires core >=1.6.9; OpenAI 1.7 requires >=1.6.8.
 langchain-core==1.6.9
-langchain-google-genai==4.4.0
+langchain-google-genai==4.4.1
 langchain-anthropic==1.7.5
 langchain-openai==1.7.0
 # Exact pins, kept in step with pyproject: the sealed checkpoint saver
