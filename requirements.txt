@@ -36,7 +36,7 @@ asyncpg==0.32.0
 psycopg[binary]==3.3.6
 psycopg-pool==3.3.3
 alembic==1.20.0
-pgvector==0.5.0
+pgvector==0.5.1
 
 # ─── Cache, Task Queue & Message Broker ──────────────────────────────────────
 redis[hiredis]==6.4.0
