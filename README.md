@@ -103,6 +103,11 @@ Malformed PDF/Office files are refused before replacement. See
 [Knowledge and OCR](docs/user-guide/knowledge-and-ocr.md) for status meanings,
 citations and recovery limits. For a reasoning-only agent, disable suggested
 tools and leave tool/connector selection empty; this does not bypass tenant budgets.
+Provider charges and quotas still apply. Use structured output for confidence,
+keep review thresholds intact, and include explanation calls and provider retries
+in any test spending allowance. See [Create agents](docs/user-guide/create-agents.md)
+and [Run and chat](docs/user-guide/run-and-chat.md) for bounded acceptance steps
+and the opt-in direct-run explanation history.
 
 The dashboard's Recent Activity queries audit records. The separate internal
 live-feed pipeline persists events per tenant *when published* and can replay

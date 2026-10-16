@@ -792,6 +792,15 @@ if [[ -n "${DEPLOY_KNOWLEDGE_UPLOAD_RECOVERY:-}" ]]; then
   BACKGROUND_UPDATE_ENV_VARS+=",${RECOVERY_ENV}"
 fi
 
+# Direct-run explanations read existing audit evidence; preserve the installed opt-in.
+if [[ -n "${DEPLOY_AGENT_EXPLANATION_AUDIT:-}" ]]; then
+  case "$DEPLOY_AGENT_EXPLANATION_AUDIT" in
+    true|false) ;;
+    *) echo "::error::DEPLOY_AGENT_EXPLANATION_AUDIT must be true or false." >&2; exit 1 ;;
+  esac
+  API_UPDATE_ENV_VARS+=",AGENTICORG_AGENT_EXPLANATION_AUDIT_ENABLED=${DEPLOY_AGENT_EXPLANATION_AUDIT}"
+fi
+
 # Optional model rollout: preserve installed service overrides unless both are supplied.
 DEPLOY_LLM_PRIMARY="${AGENTICORG_DEPLOY_LLM_PRIMARY:-}"
 DEPLOY_LLM_FALLBACK="${AGENTICORG_DEPLOY_LLM_FALLBACK:-}"

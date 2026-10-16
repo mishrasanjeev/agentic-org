@@ -31,6 +31,20 @@ agent-level retry. An agent's monthly budget is not a per-call provider price
 guarantee; bound the model, context, output and number of calls separately for
 a cost-capped acceptance test.
 
+Provider billing, account eligibility and quotas still apply, including to
+economy models. Check current provider pricing rather than assuming a routing
+tier is free. Zero agent retries does not disable a provider SDK's transport
+retries. Explanation generation can make a separate model request, so include
+that request and its retry/output limits in a test's total spending allowance.
+
+For a small reasoning check, use a personal shadow agent, a pinned model,
+**Disabled - Use selected model** routing, no tools/connectors, zero retries and
+no voice. Ask a synthetic arithmetic question with an independently checked
+answer. Return structured JSON such as `{"answer": 8, "confidence": 0.95}`.
+Do not lower a review threshold just to obtain a completed result. A confidence
+written inside prose is not a structured confidence field; a correct short
+answer can still require review. A self-reported score is not measured accuracy.
+
 ## A prompt structure that operators can maintain
 
 ```text

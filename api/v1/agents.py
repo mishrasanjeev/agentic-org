@@ -5681,7 +5681,7 @@ async def get_latest_explanation(
     caller: Caller | None = Depends(caller_from_request),
 ):
     """Derive a real, human-readable explanation of the agent's most recent
-    run from stored `AgentTaskResult` data.
+    run from stored `AgentTaskResult` data, or direct-run audit evidence when enabled.
 
     Replaces the mock explanation that used to live in the UI
     (`ui/src/pages/AgentDetail.tsx`, removed in PR-C1). Returns the empty
@@ -5702,6 +5702,7 @@ async def get_latest_explanation(
         "completed_at": ISO str | None,
       }
     """
+    from core.config import settings
     from core.models.agent_task_result import AgentTaskResult
 
     tid = _uuid.UUID(tenant_id)
@@ -5723,6 +5724,27 @@ async def get_latest_explanation(
                 .limit(1)
             )
         ).scalar_one_or_none()
+
+        # Direct /run writes an agent.run audit row, not AgentTaskResult.
+        # Keep the same authenticated agent visibility boundary and use only
+        # the existing tenant/agent index; no provider call or history rewrite.
+        if settings.agent_explanation_audit_enabled:
+            direct_run = (
+                await session.execute(
+                    select(AuditLog)
+                    .where(
+                        AuditLog.tenant_id == tid,
+                        AuditLog.agent_id == agent_id,
+                        AuditLog.event_type == "agent.run",
+                        AuditLog.resource_type == "task_result",
+                        AuditLog.action == "execute",
+                    )
+                    .order_by(AuditLog.created_at.desc(), AuditLog.id.desc())
+                    .limit(1)
+                )
+            ).scalar_one_or_none()
+            if direct_run is not None and (row is None or direct_run.created_at > row.created_at):
+                return _direct_run_explanation(direct_run)
 
     if row is None:
         return {
@@ -5777,6 +5799,39 @@ async def get_latest_explanation(
         "hitl_required": row.hitl_required,
         "hitl_decision": row.hitl_decision,
         "duration_ms": row.duration_ms,
+        "completed_at": row.created_at.isoformat() if row.created_at else None,
+    }
+
+
+def _direct_run_explanation(row: AuditLog) -> dict[str, Any]:
+    """Explain recorded facts only: legacy audits do not contain tool-call details."""
+    import math
+
+    details = row.details if isinstance(row.details, dict) else {}
+    raw_confidence = details.get("confidence")
+    confidence = None
+    if isinstance(raw_confidence, (int, float)) and not isinstance(raw_confidence, bool):
+        if 0 <= raw_confidence <= 1 and math.isfinite(raw_confidence):
+            confidence = float(raw_confidence)
+    bullets = [f"Recorded runtime status: {row.outcome}."]
+    if confidence is not None:
+        bullets.append(f"Confidence was {round(confidence * 100)}% ({row.outcome}).")
+    bullets.append("Tool-call details were not captured in this run record.")
+    hitl_required = row.outcome == "hitl_triggered" or details.get("has_hitl") is True
+    if hitl_required:
+        bullets.append("Review outcome is available in Approvals; no decision is inferred here.")
+    return {
+        "has_run": True,
+        "run_id": row.resource_id,
+        "status": row.outcome,
+        "confidence": confidence,
+        "bullets": bullets,
+        "tools_cited": [],
+        "tool_usage_recorded": False,
+        "record_source": "direct_run_audit",
+        "hitl_required": hitl_required,
+        "hitl_decision": None,
+        "duration_ms": 0,
         "completed_at": row.created_at.isoformat() if row.created_at else None,
     }
 

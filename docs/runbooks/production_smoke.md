@@ -182,6 +182,33 @@ python scripts/prod_smoke_check.py
 
 Do not enable `AGENTICORG_PROD_SMOKE_ENABLE_COST_RISKY=1` unless the owner explicitly approves the specific check and accepts any provider usage cost.
 
+## Bounded Real Reasoning Acceptance
+
+Obtain a total spending allowance and an owner-controlled workspace before a
+paid test. Use a personal shadow agent with no tools, connectors, voice, output
+repair schema or previous conversation. Pin an available model, disable routing
+and set agent retries to zero. Bound the input, model output and provider SDK
+transport retries. Include the separate explanation-generation request in the
+allowance; a zero retry setting is not a promise of one provider request.
+
+Use synthetic arithmetic with an independently checked answer. First confirm a
+review trigger is respected. Then request valid JSON with numeric `answer` and
+`confidence` and inspect the recorded status and output without lowering the
+review threshold. Record token counts and model-price estimates separately from
+invoice-confirmed charges; a UI rounded to cents is not evidence of a free run.
+Do not rerun just to produce a screenshot. Preserve an existing successful run
+for read-only post-deploy verification, then remove only disposable test data.
+
+The direct-run explanation history is an independent read-only opt-in:
+`AGENTICORG_AGENT_EXPLANATION_AUDIT_ENABLED` defaults to false. The Cloud Run
+helper accepts `DEPLOY_AGENT_EXPLANATION_AUDIT=true` or `false` for the API only;
+omitting it preserves the installed value. It reads existing indexed audit rows
+after the same tenant and agent visibility checks, performs no model call and
+does not rewrite history. Legacy records have unknown tool-call details and
+review decisions must be checked in Approvals. Disable the flag to restore the
+previous read behavior. Do not change paused-agent, runtime, tenant-budget,
+public-discovery or provider-execution controls as part of this smoke test.
+
 ## Secret Handling
 
 The smoke script must never print secrets, tokens, cookies, auth headers, signatures, connector credentials, raw signed secrets, or raw provider credentials. Missing credentials produce explicit `SKIPPED` results with variable names only.
