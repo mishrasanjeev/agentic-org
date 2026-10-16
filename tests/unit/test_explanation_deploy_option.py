@@ -20,7 +20,7 @@ def test_explanation_option_is_explicit_api_only(value):
     block = source.split("# Direct-run explanations read existing audit evidence;", 1)[1].split(
         "# Optional model rollout:",
         1,
-    )[0]
+    )[0].partition("\n")[2]
     env = dict(os.environ)
     env.pop("DEPLOY_AGENT_EXPLANATION_AUDIT", None)
     if value is not None:
@@ -29,7 +29,7 @@ def test_explanation_option_is_explicit_api_only(value):
         [
             bash,
             "-c",
-            "API_UPDATE_ENV_VARS=base\nBACKGROUND_UPDATE_ENV_VARS=worker\n"
+            "set -euo pipefail\nAPI_UPDATE_ENV_VARS=base\nBACKGROUND_UPDATE_ENV_VARS=worker\n"
             + block
             + '\nprintf "%s\\n%s\\n" "$API_UPDATE_ENV_VARS" "$BACKGROUND_UPDATE_ENV_VARS"',
         ],
@@ -43,5 +43,6 @@ def test_explanation_option_is_explicit_api_only(value):
         assert "must be true or false" in result.stderr
     else:
         assert result.returncode == 0
+        assert result.stderr == ""
         expected = "base" if value is None else f"base,AGENTICORG_AGENT_EXPLANATION_AUDIT_ENABLED={value}"
         assert result.stdout.splitlines() == [expected, "worker"]
