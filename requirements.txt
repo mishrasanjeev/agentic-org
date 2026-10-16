@@ -70,7 +70,7 @@ anthropic==0.125.0
 openai==2.54.0
 
 # ─── LangChain & LangGraph (Agent Runtime) ──────────────────────────────────
-langgraph==1.2.14
+langgraph==1.2.15
 langchain==1.4.4
 # LangChain 1.4.4 requires core >=1.6.9; OpenAI 1.7 requires >=1.6.8.
 langchain-core==1.6.9
