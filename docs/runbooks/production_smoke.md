@@ -2,6 +2,21 @@
 
 This runbook defines a cost-capped authenticated production smoke process for the existing AgenticOrg production services. It does not provision infrastructure, change production traffic, or run paid provider checks by default.
 
+## Coordinated Dependency Releases
+
+Validate provider integrations and their `langchain-core` floor as one resolved
+set in both project metadata and pinned requirements. Graph, checkpoint and
+Postgres-checkpoint updates also require reviewing the sealed saver's overridden
+methods and the upstream migration list. Keep exact-version refusal enabled;
+replay encrypted persistence, pending-write ordering, process restart/resume,
+tampering refusal and tenant isolation against local Postgres before rollout.
+An unchanged migration list needs no new schema revision. A passing individual
+dependency PR does not replace combined-release tests.
+
+Capture current deployment controls before rollout and compare them afterwards.
+Do not enable the optional explanation-history reader or change paused-agent,
+runtime, budget, payment or discovery controls as part of a dependency release.
+
 Historical reference state (not a current production inventory):
 
 - Production app commit: `46798ad20c82ee02cdf76e362f16f92c7163c081`
