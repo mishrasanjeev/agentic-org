@@ -13,7 +13,7 @@ from datetime import UTC, datetime, timedelta
 import httpx
 import pytest
 from sqlalchemy import create_engine, text
-from sqlalchemy.engine import make_url
+from sqlalchemy.engine import URL, make_url
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from sqlalchemy.pool import NullPool
 
@@ -25,14 +25,48 @@ DB_URL = os.getenv("AGENTICORG_DB_URL", "")
 pytestmark = pytest.mark.skipif(not DB_URL, reason="requires a local PostgreSQL test database")
 
 
-@pytest.fixture(scope="module")
-def recovery_database():
+def _recovery_base(database_url: str) -> URL:
     from scripts.reset_test_database import safe_test_database_name
 
-    safe_test_database_name(DB_URL)
+    base = make_url(database_url)
+    checked_url = database_url
+    # CI names its loopback parent database "test"; only the generated _test
+    # database below is migrated or dropped, never the configured parent.
+    if os.getenv("CI") == "true" and base.host in {"localhost", "127.0.0.1"} and base.database == "test":
+        checked_url = base.set(database="agenticorg_test").render_as_string(hide_password=False)
+    safe_test_database_name(checked_url)
+    return base
+
+
+@pytest.mark.parametrize(
+    ("ci", "url", "allowed"),
+    [
+        ("true", "postgresql+asyncpg://test:test@localhost:5432/test", True),
+        ("true", "postgresql+asyncpg://test:test@127.0.0.1:5432/test", True),
+        ("false", "postgresql+asyncpg://test:test@localhost:5432/test", False),
+        ("true", "postgresql+asyncpg://test:test@database.example:5432/test", False),
+        ("true", "postgresql+asyncpg://test:test@localhost:5432/production", False),
+        ("true", "postgresql+asyncpg://test:test@localhost:5432/test?dbname=production", False),
+        ("false", "postgresql+asyncpg://test:test@postgres:5432/agenticorg_test", True),
+        ("true", "sqlite:///test", False),
+    ],
+)
+def test_recovery_database_parent_guard(monkeypatch, ci, url, allowed):
+    from scripts.reset_test_database import UnsafeDatabaseURLError
+
+    monkeypatch.setenv("CI", ci)
+    if allowed:
+        assert _recovery_base(url).database == make_url(url).database
+    else:
+        with pytest.raises(UnsafeDatabaseURLError):
+            _recovery_base(url)
+
+
+@pytest.fixture(scope="module")
+def recovery_database():
+    base = _recovery_base(DB_URL)
     suffix = uuid.uuid4().hex
     name, role = f"knowledge_recovery_{suffix}_test", f"knowledge_recovery_{suffix}"
-    base = make_url(DB_URL)
     admin = create_engine(base.set(drivername="postgresql", database="postgres"), isolation_level="AUTOCOMMIT")
     url = base.set(database=name).render_as_string(hide_password=False)
     try:
