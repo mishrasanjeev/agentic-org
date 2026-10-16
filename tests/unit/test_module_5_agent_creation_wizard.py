@@ -180,9 +180,15 @@ def test_tc_crt_004_can_next_gates_each_step_with_concrete_check() -> None:
     # Step 2 — prompt requires non-empty text.
     assert "step === 2" in can_next_block
     assert "promptText.trim().length > 0" in can_next_block
-    # Step 3 — behavior requires max_retries >= 1 AND llmModel set.
+    # Step 3 allows no retries, but rejects fractional or out-of-range values.
     assert "step === 3" in can_next_block
-    assert "maxRetries >= 1 && llmModel.trim().length > 0" in can_next_block
+    for check in (
+        "Number.isInteger(maxRetries)",
+        "maxRetries >= 0",
+        "maxRetries <= 10",
+        "llmModel.trim().length > 0",
+    ):
+        assert check in can_next_block
 
 
 # ─────────────────────────────────────────────────────────────────

@@ -102,6 +102,14 @@ with the Docker-backed [local multichannel simulation](https://github.com/mishra
 It uses fresh PostgreSQL, local Mailpit delivery, real Tesseract, and optional
 real Playwright Chromium while keeping paid calls and production mutations off.
 
+Knowledge upload status distinguishes extraction from searchable indexing.
+With opt-in upload recovery, transient native embedding failures retry on the
+existing worker; the previous searchable copy remains until replacement succeeds.
+Malformed PDF/Office files are refused before replacement. See
+[Knowledge and OCR](https://github.com/mishrasanjeev/agentic-org/blob/main/docs/user-guide/knowledge-and-ocr.md) for status meanings,
+citations and recovery limits. For a reasoning-only agent, disable suggested
+tools and leave tool/connector selection empty; this does not bypass tenant budgets.
+
 The dashboard's Recent Activity queries audit records. The separate internal
 live-feed pipeline persists events per tenant *when published* and can replay
 them by sequence after a WebSocket interruption. Its only writer is the
@@ -1123,6 +1131,13 @@ Unlinked senders do not acquire your permissions. Their text enters a review inb
 
 #### Credentials belong to you
 
+A completed channel delivery proves only the configured target ran. A workflow
+that copies the message is a transport test, not proof of AI reasoning or tool
+execution. For reasoning acceptance, select a dedicated tool-free agent with a
+working tenant AI credential, send a synthetic question with a known answer and
+inspect the model usage and output in run history. Agree on a spending limit
+before making a paid model call. Do not reuse customer workflows for that test.
+
 Enter secrets only in the signed-in credential form. Never put tokens, API keys, webhook secrets, passwords or one-time link commands in chat, prompts, repository files or support screenshots. To arrange assisted testing, share only the provider name, account approval status, test sender or destination you authorize, and a sanitized request ID. Use the credential form or your organization's approved secret-management process for the secret itself. Choose dedicated test accounts, minimum permissions and spending limits.
 
 The first version accepts bounded text messages. Images, files and voice notes on these messaging callbacks do not start tasks. Use the knowledge-upload and voice setup paths for document processing and calls. Native messaging replies, when enabled, contain task status only. Results stay in the authenticated AgenticOrg inbox; private knowledge and tool outputs are not broadcast to the channel. Email and generic gateways have no native outbound reply in this version.
@@ -1376,6 +1391,15 @@ Use a natural-language description to generate a candidate, configure an agent m
 
 Personal and shared visibility depend on your role. Administrators can configure shared tenant agents; a personal agent is not exempt from tenant policy. A reporting hierarchy is for routing, not permission inheritance.
 
+For a reasoning-only agent, clear **Use suggested tools when none selected** and
+leave Authorized Tools and connectors empty. The API equivalent is
+`use_default_tools: false`, `authorized_tools: []`, `connector_ids: []`.
+This does not disable tenant policy, budget checks or review requirements.
+Zero retries is supported when you want a failed attempt to stop without an
+agent-level retry. An agent's monthly budget is not a per-call provider price
+guarantee; bound the model, context, output and number of calls separately for
+a cost-capped acceptance test.
+
 #### A prompt structure that operators can maintain
 
 ```text
@@ -1493,7 +1517,15 @@ Audio and video are not document uploads. File size, pages, decompressed pixels 
 
 Each search result shows the document and, where recorded, its citation: page, sheet, cell range, paragraph or heading. **Open excerpt** shows the whole cited passage, with **Previous** and **Next** for the neighbouring passages. Where the deployment turns on query transformation (`AGENTICORG_KNOWLEDGE_QUERY_TRANSFORM_ENABLED`, off by default), **How this was retrieved** lists each retrieval step. Documents uploaded from this page are shared with the whole tenant. An API upload can name a domain (`?domain=`), and then users limited to other domains do not see that document.
 
-If a duplicate dialog appears, choose the appropriate supported action deliberately. Replacement extraction is performed before old content is removed, but you should still verify that search returns the intended version. Do not leave two conflicting policies current without an explicit effective-date rule.
+If a duplicate dialog appears, choose **Replace** to index a new version before retiring the previous searchable copy, **Keep both** for a deliberate second copy, or **Cancel** to leave it unchanged. A failed replacement does not retire the original. Verify that search returns the intended version; do not leave conflicting policies current without an effective-date rule.
+
+| Status | Meaning | Next step |
+| --- | --- | --- |
+| Processing | Stored, but not yet confirmed searchable | The page refreshes while processing. Do not repeatedly upload the same file. |
+| Indexed | Indexing succeeded | Search a distinctive phrase and open its cited excerpt. |
+| Failed | Indexing did not succeed | Inspect the error, then upload again and choose Replace. The prior good copy is retained. |
+
+Where the administrator enables native upload recovery, temporary embedding timeouts, connection failures, rate limits and server errors receive at most four retries after the initial attempt, with delays of 30, 60, 120 and 240 seconds. The existing worker checks once a minute, so these are minimum delays, not completion guarantees. Invalid files, authorization errors and permanent indexing errors are not automatically retried. Large extractions outside the recovery storage bound and external RAGFlow indexing use the normal upload path instead. Your administrator can confirm which path is enabled.
 
 ```flow
 Approved upload | Size and type are validated before parsing.

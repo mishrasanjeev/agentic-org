@@ -58,7 +58,7 @@ async function openPersonaStep() {
   return (await screen.findByTestId("agent-domain")) as HTMLSelectElement;
 }
 
-async function walkToReviewAndCreate() {
+async function walkToReviewAndCreate(toolFree = false) {
   fireEvent.change(screen.getByPlaceholderText("e.g. Priya, Arjun, Maya"), { target: { value: "Ledger Bot" } });
   fireEvent.click(screen.getByRole("button", { name: "Next" }));
   await screen.findByText("Step 2: Role");
@@ -67,6 +67,10 @@ async function walkToReviewAndCreate() {
   fireEvent.change(screen.getByPlaceholderText(/You are the/), { target: { value: "You reconcile ledgers." } });
   fireEvent.click(screen.getByRole("button", { name: "Next" }));
   await screen.findByText("Step 4: Behavior");
+  if (toolFree) {
+    fireEvent.click(screen.getByLabelText("Use suggested tools when none selected"));
+    fireEvent.change(screen.getByDisplayValue("3"), { target: { value: "0" } });
+  }
   fireEvent.click(screen.getByRole("button", { name: "Next" }));
   await screen.findByText("Step 5: Review");
   await act(async () => {
@@ -85,6 +89,15 @@ describe("AgentCreate ownership (bug sheet 2026-09-14)", () => {
       return Promise.resolve({ data: { tools: [] } });
     });
     mockPost.mockResolvedValue({ data: { agent_id: "new-agent" } });
+  });
+
+  it("explicit reasoning-only creation sends no suggested tools and permits zero retries", async () => {
+    setUser("admin", "all");
+    await openPersonaStep();
+    await walkToReviewAndCreate(true);
+    await waitFor(() => expect(mockPost).toHaveBeenCalledWith("/agents", expect.objectContaining({
+      use_default_tools: false, max_retries: 0, authorized_tools: undefined, connector_ids: undefined,
+    })));
   });
 
   it("CFO: domain locked to finance, personal note shown, no visibility select", async () => {

@@ -24,6 +24,7 @@ from __future__ import annotations
 
 import hashlib
 import uuid as _uuid
+from contextlib import nullcontext
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -61,6 +62,17 @@ class IngestResult:
     source_object_id: str | None = None
     source_object_type: str | None = None
     errors: list[str] = field(default_factory=list)
+    retryable: bool = False
+
+
+def transient_embedding_failure(exc: Exception) -> bool:
+    import httpx
+
+    if isinstance(exc, (httpx.TransportError, TimeoutError)):
+        return True
+    return isinstance(exc, httpx.HTTPStatusError) and (
+        exc.response.status_code == 429 or exc.response.status_code >= 500
+    )
 
 
 def _chunk_spans(
@@ -71,44 +83,45 @@ def _chunk_spans(
     """Split extracted spans into embedding-ready chunks.
 
     Each input span may produce multiple chunks (when long) or be
-    concatenated with neighbours (when short) so retrieval chunks land
-    in the 120-1500 char band that embedding models retrieve well.
+    concatenated with neighbours (when short). The minimum is a packing
+    target, not a reason to discard an accepted document or its short tail.
     Provenance of the FIRST span in a merged chunk is preserved.
     """
     out: list[tuple[str, ExtractedSpan]] = []
     buffer = ""
     buffer_provenance: ExtractedSpan | None = None
     for span in spans:
-        if not span.text:
+        remaining = span.text.strip()
+        if not remaining:
             continue
-        # Split very long spans on sentence boundaries
-        remaining = span.text
+        pieces: list[str] = []
         while len(remaining) > max_chars:
-            # Find the last period/newline before max_chars
             cut = remaining.rfind(". ", 0, max_chars)
             if cut < min_chars:
                 cut = remaining.rfind("\n", 0, max_chars)
-            if cut < min_chars:
-                cut = max_chars
-            out.append((remaining[: cut + 1].strip(), span))
-            remaining = remaining[cut + 1 :].lstrip()
-        # Accumulate short tail
-        if len(remaining) < min_chars and not buffer:
-            buffer = remaining
-            buffer_provenance = span
-            continue
-        if buffer and buffer_provenance is not None:
-            combined = (buffer + "\n\n" + remaining).strip()
-            if len(combined) >= min_chars:
-                out.append((combined, buffer_provenance))
-            buffer = ""
-            buffer_provenance = None
-            continue
-        if remaining.strip():
-            out.append((remaining.strip(), span))
+            end = cut + 1 if cut >= min_chars else max_chars
+            pieces.append(remaining[:end].strip())
+            remaining = remaining[end:].lstrip()
+        if remaining:
+            pieces.append(remaining)
+        for piece in pieces:
+            if buffer and buffer_provenance is not None:
+                combined = buffer + "\n\n" + piece
+                if len(combined) <= max_chars:
+                    buffer = combined
+                    if len(buffer) >= min_chars:
+                        out.append((buffer, buffer_provenance))
+                        buffer, buffer_provenance = "", None
+                    continue
+                out.append((buffer, buffer_provenance))
+                buffer, buffer_provenance = "", None
+            if len(piece) < min_chars:
+                buffer, buffer_provenance = piece, span
+            else:
+                out.append((piece, span))
 
-    if buffer and buffer_provenance is not None and len(buffer.strip()) >= min_chars:
-        out.append((buffer.strip(), buffer_provenance))
+    if buffer and buffer_provenance is not None:
+        out.append((buffer, buffer_provenance))
 
     return out
 
@@ -126,6 +139,13 @@ async def _resolve_embedding_profile(
     when the tenant has no setting. Never raises — a corrupt setting
     returns defaults with a logged warning.
     """
+    from core.embeddings import BGE_M3_MODEL, model_dim, rag_use_bge_m3, serving_identity
+
+    if rag_use_bge_m3():
+        identity = serving_identity()
+        provider = "tei" if identity and identity[0] == "tei" else "local"
+        return (provider, BGE_M3_MODEL, model_dim(BGE_M3_MODEL))
+
     from core.ai_providers import get_effective_ai_setting
 
     try:
@@ -206,6 +226,7 @@ async def ingest_document(
     source_object_id: str | None = None,
     source_object_type: str | None = None,
     metadata: dict[str, Any] | None = None,
+    session: Any = None,
     extracted_content: ExtractedContent | None = None,
 ) -> IngestResult:
     """Ingest one artifact end-to-end.
@@ -287,6 +308,8 @@ async def ingest_document(
     provider, model, dimensions = await _resolve_embedding_profile(tenant_id)
     try:
         vectors = await _embed_chunks([c[0] for c in chunks], model=model)
+        if len(vectors) != len(chunks):
+            raise ValueError("embedding vector count does not match chunk count")
     # enterprise-gate: broad-except-ok reason=rag-embedding-failure-returns-ingest-result-with-errors
     except Exception as exc:
         logger.exception("rag_embed_failed")
@@ -301,7 +324,8 @@ async def ingest_document(
             embedding_dimensions=dimensions,
             source_object_id=source_object_id,
             source_object_type=source_object_type,
-            errors=[f"embedding failed: {type(exc).__name__}: {exc}"],
+            errors=[f"embedding failed: {type(exc).__name__}"],
+            retryable=transient_embedding_failure(exc),
         )
 
     # 4. Persist
@@ -318,7 +342,8 @@ async def ingest_document(
     # Provenance (core/lineage): the chunks noted after the rows are committed, when lineage is on.
     lineage_on = provenance.enabled()
     chain_chunks: list[tuple[str, str]] = []
-    async with async_session_factory() as session:
+    owns_session = session is None
+    async with async_session_factory() if owns_session else nullcontext(session) as session:
         # Parent document row — one per artifact. This is the row the
         # knowledge_documents.embedding column has existed on since
         # v4_8_6; we also stamp mime_type / embedding_model /
@@ -411,7 +436,10 @@ async def ingest_document(
         # Without this line every INSERT rolls back and the whole
         # ingestion is a silent no-op even though we increment
         # chunks_indexed and log success. Commit explicitly.
-        await session.commit()
+        if owns_session:
+            await session.commit()
+        else:
+            await session.flush()
 
     if lineage_on:
         await provenance.on_ingest(

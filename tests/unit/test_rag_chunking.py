@@ -48,7 +48,7 @@ class TestLayout:
         assert [s.heading for s in spans] == ["1. Eligibility"] * 3 + ["2. Limits"] * 2
         assert paragraphs_of("   ") == []
 
-    def test_a_docx_keeps_heading_styles_and_table_rows_under_their_section(self):
+    def test_a_docx_keeps_heading_styles_and_table_rows_under_their_section(self, monkeypatch):
         from core.rag import extractors
 
         class _P:
@@ -75,15 +75,11 @@ class TestLayout:
 
         import docx as docx_module
 
-        original = docx_module.Document
-        docx_module.Document = lambda _stream: _Doc()  # type: ignore[assignment]
-        extractors._validate_zip_container = lambda _stream: None  # type: ignore[assignment]
-        try:
-            content = extractors._extract_docx(
-                b"zip", "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-            )
-        finally:
-            docx_module.Document = original  # type: ignore[assignment]
+        monkeypatch.setattr(docx_module, "Document", lambda _stream: _Doc())
+        monkeypatch.setattr(extractors, "_validate_zip_container", lambda _stream: None)
+        content = extractors._extract_docx(
+            b"zip", "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+        )
         kinds = [(s.kind, s.paragraph, s.heading) for s in content.spans]
         assert kinds[:4] == [
             ("heading", 1, "Credit policy"),

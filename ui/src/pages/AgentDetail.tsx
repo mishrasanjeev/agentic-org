@@ -340,16 +340,16 @@ export default function AgentDetail() {
   return (
     <div className="space-y-6">
       {/* Persona Header */}
-      <div className="flex justify-between items-start">
-        <div className="flex items-center gap-4">
+      <div className="flex flex-col gap-4 xl:flex-row xl:justify-between xl:items-start">
+        <div className="flex min-w-0 items-center gap-4">
           {agent.avatar_url ? (
-            <img src={agent.avatar_url} alt={displayName} className="w-16 h-16 rounded-full object-cover" />
+            <img src={agent.avatar_url} alt={displayName} className="w-16 h-16 shrink-0 rounded-full object-cover" />
           ) : (
-            <div className="w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center text-2xl font-bold text-primary">
+            <div className="w-16 h-16 shrink-0 rounded-full bg-primary/10 flex items-center justify-center text-2xl font-bold text-primary">
               {displayName.charAt(0).toUpperCase()}
             </div>
           )}
-          <div>
+          <div className="min-w-0 break-words">
             <h2 className="text-2xl font-bold">{displayName}</h2>
             <p className="text-sm text-muted-foreground">
               {agent.designation || agent.agent_type.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase())} | {agent.domain || "Unknown domain"}
@@ -379,8 +379,8 @@ export default function AgentDetail() {
             </div>
           </div>
         </div>
-        <div className="flex flex-col items-end gap-2">
-          <div className="flex gap-2">
+        <div className="flex min-w-0 flex-col gap-2 xl:items-end">
+          <div className="flex flex-wrap gap-2 xl:justify-end">
             {canManage && (
             <>
             {agent.status === "paused" ? (
@@ -454,7 +454,7 @@ export default function AgentDetail() {
         </div>
       </div>
 
-      <div className="grid grid-cols-5 gap-4">
+      <div data-testid="agent-metrics" className="grid grid-cols-2 gap-4 sm:grid-cols-3 xl:grid-cols-5 [&>*]:min-w-0 [&_h3]:break-words">
         <Card><CardHeader><CardTitle className="text-sm text-muted-foreground">Status</CardTitle></CardHeader>
           <CardContent><Badge variant={(statusColor[agent.status] || "default") as any}>{agent.status || "unknown"}</Badge></CardContent></Card>
         <Card><CardHeader><CardTitle className="text-sm text-muted-foreground">Version</CardTitle></CardHeader>
@@ -492,9 +492,9 @@ export default function AgentDetail() {
         </Card>
       )}
 
-      <div className="flex gap-4 border-b pb-2">
+      <div className="flex gap-4 overflow-x-auto border-b pb-2">
         {(["overview", "config", "prompt", "shadow", "cost", "scopes", "learning", "voice"] as const).map((tab) => (
-          <button key={tab} onClick={() => { setActiveTab(tab); setActionError(null); }} className={`px-3 py-1 text-sm font-medium capitalize ${activeTab === tab ? "border-b-2 border-primary" : "text-muted-foreground"}`}>
+          <button key={tab} onClick={() => { setActiveTab(tab); setActionError(null); }} className={`shrink-0 px-3 py-1 text-sm font-medium capitalize ${activeTab === tab ? "border-b-2 border-primary" : "text-muted-foreground"}`}>
             {tab}
           </button>
         ))}

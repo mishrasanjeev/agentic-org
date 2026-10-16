@@ -310,8 +310,9 @@ class TestAgentToDict:
 
 
 class TestCreateAgent:
+    @pytest.mark.parametrize("use_default_tools", [True, False])
     @pytest.mark.asyncio
-    async def test_create_agent_returns_id_and_status(self, mock_session, tenant_id):
+    async def test_create_agent_returns_id_and_status(self, mock_session, tenant_id, use_default_tools):
         from api.v1.agents import create_agent
 
         # Build a body mock that mimics AgentCreate
@@ -332,6 +333,8 @@ class TestCreateAgent:
         body.hitl_policy.model_dump.return_value = {"condition": "confidence < 0.88"}
         body.max_retries = 3
         body.authorized_tools = []
+        body.use_default_tools = use_default_tools
+        body.connector_ids = []
         body.output_schema = None
         body.initial_status = "shadow"
         body.shadow_comparison_agent = None
@@ -364,7 +367,10 @@ class TestCreateAgent:
             side_effect=[mock_tenant_result, mock_count_result, MagicMock(), MagicMock()]
         )
 
-        with patch("api.v1.agents.get_tenant_session") as mock_gts:
+        with (
+            patch("api.v1.agents.get_tenant_session") as mock_gts,
+            patch("api.v1.agents._derive_default_tools", return_value=["read_synthetic"]),
+        ):
             mock_gts.return_value = _make_tenant_session_ctx(mock_session)
             result = await create_agent(body=body, tenant_id=tenant_id)
 
@@ -372,6 +378,12 @@ class TestCreateAgent:
         assert result["status"] == "shadow"
         assert result["version"] == "1.0.0"
         assert result["token_issued"] is True
+        from core.models.agent import Agent
+
+        created = next(call.args[0] for call in mock_session.add.call_args_list if isinstance(call.args[0], Agent))
+        assert bool(created.authorized_tools) is use_default_tools
+        if not use_default_tools:
+            assert created.connector_ids == []
 
     @pytest.mark.asyncio
     async def test_create_agent_with_parent_id(self, mock_session, tenant_id):

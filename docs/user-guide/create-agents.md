@@ -22,6 +22,15 @@ Use a natural-language description to generate a candidate, configure an agent m
 
 Personal and shared visibility depend on your role. Administrators can configure shared tenant agents; a personal agent is not exempt from tenant policy. A reporting hierarchy is for routing, not permission inheritance.
 
+For a reasoning-only agent, clear **Use suggested tools when none selected** and
+leave Authorized Tools and connectors empty. The API equivalent is
+`use_default_tools: false`, `authorized_tools: []`, `connector_ids: []`.
+This does not disable tenant policy, budget checks or review requirements.
+Zero retries is supported when you want a failed attempt to stop without an
+agent-level retry. An agent's monthly budget is not a per-call provider price
+guarantee; bound the model, context, output and number of calls separately for
+a cost-capped acceptance test.
+
 ## A prompt structure that operators can maintain
 
 ```text

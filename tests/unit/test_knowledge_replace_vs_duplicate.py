@@ -5,7 +5,7 @@ to replace it" while the backend duplicate-box simply added another
 document with the same filename — it did not replace anything. The
 frontend now offers an honest "Replace / Upload as second copy" choice
 and the backend has a real ``?replace=true`` path that soft-deletes the
-existing document before ingesting the new one.
+existing document only after the replacement indexes successfully.
 
 We don't drive the full upload via TestClient here because that requires
 a live DB; we just pin the route signature and the mutual-exclusion

@@ -114,12 +114,13 @@ def test_a_paused_agent_is_refused_with_409_when_on_and_runs_when_off(monkeypatc
 
 
 @pytest.mark.parametrize("endpoint", [_run_endpoint, _chat_endpoint], ids=["run", "chat"])
-def test_a_retired_agent_stays_refused_with_the_setting_off(monkeypatch, endpoint):
+@pytest.mark.parametrize("status", ["retired", "deleted"])
+def test_a_retired_agent_stays_refused_with_the_setting_off(monkeypatch, endpoint, status):
     monkeypatch.setattr(agent_status.settings, "paused_agents_refused", False)
     agent = _paused_agent()
-    agent.status = "retired"
+    agent.status = status
     refused = endpoint(agent)
-    assert refused is not None and refused.status_code == 409 and "retired" in refused.detail
+    assert refused is not None and refused.status_code == 409 and status in refused.detail
 
 
 @pytest.mark.parametrize(("on", "expect_config"), [(False, True), (True, False)])

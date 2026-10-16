@@ -28,8 +28,8 @@ def inactive_agent_statuses() -> frozenset[str]:
 
 def refusal_for(status: str | None) -> str | None:
     """The message a run of an agent in ``status`` is refused with, or None."""
-    if status == "retired":
-        return "Cannot run a retired agent"
+    if status in NEVER_RUNS:
+        return f"Cannot run a {status} agent"
     if status == "paused" and paused_agents_refused():
         return "Agent is paused"
     return None

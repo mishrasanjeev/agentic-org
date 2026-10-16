@@ -80,7 +80,22 @@ describe("KnowledgeBase", () => {
     vi.spyOn(window, "alert").mockImplementation(() => {});
   });
   afterEach(() => {
+    vi.useRealTimers();
     vi.restoreAllMocks();
+  });
+
+  it("refreshes processing documents and stops polling when indexing completes", async () => {
+    vi.useFakeTimers();
+    armFetches();
+    render(<KnowledgeBase />);
+    await act(async () => { await Promise.resolve(); });
+    expect(screen.getByText("gamma.pdf")).toBeInTheDocument();
+    armFetches(THREE_DOCS.map((doc) => ({ ...doc, status: "indexed" })));
+    await act(async () => { await vi.advanceTimersByTimeAsync(5_000); });
+    expect(screen.queryByText("processing")).not.toBeInTheDocument();
+    const count = mockGet.mock.calls.length;
+    await act(async () => { await vi.advanceTimersByTimeAsync(10_000); });
+    expect(mockGet.mock.calls.length).toBe(count);
   });
 
   it("renders the uploaded date from uploaded_at (TC_010)", async () => {

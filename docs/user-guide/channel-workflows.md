@@ -16,6 +16,13 @@ Unlinked senders do not acquire your permissions. Their text enters a review inb
 
 ## Credentials belong to you
 
+A completed channel delivery proves only the configured target ran. A workflow
+that copies the message is a transport test, not proof of AI reasoning or tool
+execution. For reasoning acceptance, select a dedicated tool-free agent with a
+working tenant AI credential, send a synthetic question with a known answer and
+inspect the model usage and output in run history. Agree on a spending limit
+before making a paid model call. Do not reuse customer workflows for that test.
+
 Enter secrets only in the signed-in credential form. Never put tokens, API keys, webhook secrets, passwords or one-time link commands in chat, prompts, repository files or support screenshots. To arrange assisted testing, share only the provider name, account approval status, test sender or destination you authorize, and a sanitized request ID. Use the credential form or your organization's approved secret-management process for the secret itself. Choose dedicated test accounts, minimum permissions and spending limits.
 
 The first version accepts bounded text messages. Images, files and voice notes on these messaging callbacks do not start tasks. Use the knowledge-upload and voice setup paths for document processing and calls. Native messaging replies, when enabled, contain task status only. Results stay in the authenticated AgenticOrg inbox; private knowledge and tool outputs are not broadcast to the channel. Email and generic gateways have no native outbound reply in this version.

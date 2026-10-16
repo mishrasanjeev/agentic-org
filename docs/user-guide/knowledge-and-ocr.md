@@ -29,7 +29,15 @@ Audio and video are not document uploads. File size, pages, decompressed pixels 
 
 Each search result shows the document and, where recorded, its citation: page, sheet, cell range, paragraph or heading. **Open excerpt** shows the whole cited passage, with **Previous** and **Next** for the neighbouring passages. Where the deployment turns on query transformation (`AGENTICORG_KNOWLEDGE_QUERY_TRANSFORM_ENABLED`, off by default), **How this was retrieved** lists each retrieval step. Documents uploaded from this page are shared with the whole tenant. An API upload can name a domain (`?domain=`), and then users limited to other domains do not see that document.
 
-If a duplicate dialog appears, choose the appropriate supported action deliberately. Replacement extraction is performed before old content is removed, but you should still verify that search returns the intended version. Do not leave two conflicting policies current without an explicit effective-date rule.
+If a duplicate dialog appears, choose **Replace** to index a new version before retiring the previous searchable copy, **Keep both** for a deliberate second copy, or **Cancel** to leave it unchanged. A failed replacement does not retire the original. Verify that search returns the intended version; do not leave conflicting policies current without an effective-date rule.
+
+| Status | Meaning | Next step |
+| --- | --- | --- |
+| Processing | Stored, but not yet confirmed searchable | The page refreshes while processing. Do not repeatedly upload the same file. |
+| Indexed | Indexing succeeded | Search a distinctive phrase and open its cited excerpt. |
+| Failed | Indexing did not succeed | Inspect the error, then upload again and choose Replace. The prior good copy is retained. |
+
+Where the administrator enables native upload recovery, temporary embedding timeouts, connection failures, rate limits and server errors receive at most four retries after the initial attempt, with delays of 30, 60, 120 and 240 seconds. The existing worker checks once a minute, so these are minimum delays, not completion guarantees. Invalid files, authorization errors and permanent indexing errors are not automatically retried. Large extractions outside the recovery storage bound and external RAGFlow indexing use the normal upload path instead. Your administrator can confirm which path is enabled.
 
 ```flow
 Approved upload | Size and type are validated before parsing.

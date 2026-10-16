@@ -1,5 +1,26 @@
 # Changelog
 
+## Unreleased - Knowledge upload recovery and tool-free agents
+
+- Refuse direct runs and chat requests against soft-deleted agents, consistent
+  with existing workflow/routing rules; paused-agent policy remains configurable.
+- List uploaded documents once rather than also listing their native chunks;
+  apply the caller's domain visibility to legacy native document listings.
+
+- Preserve short extracted documents, neighbouring spans and trailing text in
+  sentence chunks. Report the actual multilingual embedding model and dimension.
+- Refuse malformed/password-protected PDF and malformed Office packages with a
+  controlled extraction error rather than an internal server error.
+- Retain the previous searchable document until replacement indexing succeeds;
+  retire its metadata and native chunks together.
+- Add opt-in `AGENTICORG_KNOWLEDGE_UPLOAD_RECOVERY_ENABLED` (default off): bounded
+  retries of transient native embedding failures on the existing maintenance
+  worker. Pending uploads are not reported as indexed; the document list refreshes
+  while processing. No raw files, new tables or new cloud services are introduced.
+- Allow explicit tool-free agent creation with `use_default_tools=false` and no
+  selected tools/connectors. Omitted options preserve suggested-tool defaults.
+  The creation wizard accepts zero retries; tenant budgets and action controls remain.
+
 ## Unreleased - Coordinated dependency maintenance
 
 - Refresh PDF extraction, validation, vector storage, DNS, Google authentication

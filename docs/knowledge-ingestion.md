@@ -42,7 +42,7 @@ band:
 
 | Strategy | What it does |
 |---|---|
-| `sentence` (default) | The original behaviour: cut at sentence boundaries into a 120 to `chunk_size` band and merge short neighbours. Layout is not consulted. A tenant that has set nothing is chunked exactly as before. |
+| `sentence` (default) | Cut at sentence boundaries up to `chunk_size`, packing short neighbours where possible. The 120-character target never discards a nonempty short document or tail. Provenance comes from the first span. |
 | `paragraph` | One chunk per paragraph, table row or list item; short consecutive paragraphs under the same heading merge up to the band; a long paragraph is cut at sentence boundaries. A chunk never crosses a heading. |
 | `heading` | Spans are grouped under their nearest heading until the band is full, and each chunk starts with the heading's text, so a retrieved chunk says which section it came from. A chunk never crosses a heading. |
 
@@ -52,6 +52,21 @@ heuristic over line shape; a document whose titles end with a full stop or run t
 is read as paragraphs only, which the `sentence` and `paragraph` strategies handle as before.
 
 ## Search: filters and re-ranking
+
+Native uploads can use bounded durable recovery with
+`AGENTICORG_KNOWLEDGE_UPLOAD_RECOVERY_ENABLED=true` (default off). The existing
+maintenance worker and beat must run the same release and flag as the API.
+Transient embedding errors get four retries after the first attempt; permanent
+input/auth errors fail without retry. Pending text/provenance is limited to
+4 MiB and 10,000 spans and removed at a terminal result or deletion. Raw upload
+files are not stored by this recovery path. Larger extractions and RAGFlow use
+the normal path. The old searchable copy is not retired until replacement
+indexing succeeds. See the [acceptance runbook](runbooks/production_smoke.md#knowledge-indexing-acceptance).
+
+Use `citation.document_id` from a search hit to open its excerpt. The upload
+metadata ID identifies a different row. Exact source filters use the full
+`citation.source`, including revision/chunk suffixes; a filename alone is not
+that filter value.
 
 `POST /knowledge/search` takes optional `filters` (`core/rag/filters.py`): `category`, `source`
 and `file_type` (lists; a document matches any value), and a `created_from` / `created_to` date
