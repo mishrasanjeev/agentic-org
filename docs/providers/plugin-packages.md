@@ -47,6 +47,12 @@ Names are compared after PEP 503 normalisation, so `Acme_KYB_AgenticOrg` and
 the API loads plugins during startup, and each worker process loads them when
 it starts.
 
+Verification plugins with tenant-specific accounts can opt into
+[`for_tenant(UUID)` construction](writing-a-verification-provider.md#tenant-scoped-construction).
+Governed cases and bound provider inboxes supply server-resolved tenant context;
+an unconfigured tenant must not inherit another tenant's credentials. This does
+not enable the plugin, configure an account, or turn on governed cases.
+
 ## What happens at startup
 
 Native connectors, agents and providers register first. Then, for each entry point in each
@@ -76,8 +82,9 @@ and counted in the `agenticorg_plugin_load_total{group, outcome}` metric, where
 
 ## Providers
 
-A provider is created by calling its class with no arguments, so it reads its
-own configuration (for example from environment variables) in `__init__`.
+By default a provider is created by calling its class with no arguments, so it
+reads its own configuration in `__init__`. A plugin can instead opt into the
+tenant-scoped `for_tenant(UUID)` constructor described above.
 Declare `name` and `capabilities` as class attributes: they are validated when
 the entry point is registered, before the class is constructed. An instance may
 narrow its capabilities, never widen them. When the constructor raises, only

@@ -6,6 +6,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
+from uuid import UUID, uuid4
 
 import pytest
 
@@ -91,6 +92,66 @@ def test_a_factory_that_raises_fails_closed_with_a_reason() -> None:
     assert caught.value.reason == "construction_failed"
     assert caught.value.detail == "needs_config: RuntimeError"
     assert "ACME_KYB_API_URL" not in str(caught.value)
+
+
+def test_scoped_plugin_requires_an_authenticated_uuid_and_never_uses_default_credentials() -> None:
+    seen: list[UUID] = []
+
+    class ScopedProvider(AcmeKybProvider):
+        name = "scoped_kyb"
+
+        def __init__(self) -> None:
+            raise AssertionError("unscoped constructor must never run")
+
+        @classmethod
+        def for_tenant(cls, tenant_id: UUID) -> VerificationProvider:
+            seen.append(tenant_id)
+            return object.__new__(cls)
+
+    ProviderRegistry.register_plugin(ScopedProvider)
+    with pytest.raises(ProviderRegistryError, match="tenant_required"):
+        ProviderRegistry.create("scoped_kyb")
+    with pytest.raises(ProviderRegistryError, match="tenant_required"):
+        ProviderRegistry.create("scoped_kyb", tenant_id=str(uuid4()))  # type: ignore[arg-type]
+    assert not seen
+    first, second = uuid4(), uuid4()
+    ProviderRegistry.create("scoped_kyb", tenant_id=first)
+    ProviderRegistry.create("scoped_kyb", tenant_id=second)
+    assert seen == [first, second]
+
+
+def test_scoped_plugin_configuration_failure_does_not_leak_or_fall_back() -> None:
+    class ScopedProvider(AcmeKybProvider):
+        name = "scoped_kyb"
+
+        @classmethod
+        def for_tenant(cls, tenant_id: UUID) -> VerificationProvider:
+            raise ValueError("sensitive configuration")
+
+    ProviderRegistry.register_plugin(ScopedProvider)
+    with pytest.raises(ProviderRegistryError) as caught:
+        ProviderRegistry.create("scoped_kyb", tenant_id=uuid4())
+    assert caught.value.reason == "construction_failed"
+    assert "sensitive configuration" not in str(caught.value)
+
+
+def test_case_runtime_passes_its_tenant_to_scoped_plugin() -> None:
+    from core.cases.runtime import CaseRuntime
+
+    seen: list[UUID] = []
+
+    class ScopedProvider(AcmeKybProvider):
+        name = "scoped_kyb"
+
+        @classmethod
+        def for_tenant(cls, tenant_id: UUID) -> VerificationProvider:
+            seen.append(tenant_id)
+            return cls()
+
+    ProviderRegistry.register_plugin(ScopedProvider)
+    tenant = uuid4()
+    assert CaseRuntime().provider_for("scoped_kyb", tenant).name == "scoped_kyb"
+    assert seen == [tenant]
 
 
 @pytest.mark.parametrize(

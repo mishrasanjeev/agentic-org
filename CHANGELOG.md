@@ -24,6 +24,16 @@
   selected tools/connectors. Omitted options preserve suggested-tool defaults.
   The creation wizard accepts zero retries; tenant budgets and action controls remain.
 
+## Unreleased - Tenant-scoped verification plugins
+
+- Allow verification plugins to declare a `for_tenant(UUID)` constructor.
+  Governed investigations, screening and authenticated provider-event handling
+  pass their server-resolved tenant to it. Missing context refuses construction
+  without falling back to shared credentials; existing zero-argument providers
+  and injected runtime factories retain their behavior.
+- Plugin loading and governed cases remain default-off. No provider credentials,
+  production policies or verification capabilities are enabled by this change.
+
 ## Unreleased - Coordinated dependency maintenance
 
 - Refresh PDF extraction, validation, vector storage, DNS, Google authentication

@@ -130,7 +130,7 @@ async def receive_provider_webhook(
         raise CaseError("webhook_body_too_large", status=413)
     await runtime.require_enabled(tenant_id)
     try:
-        provider = runtime.provider_factory(provider_name)
+        provider = runtime.provider_for(provider_name, tenant_id)
     # enterprise-gate: broad-except-ok reason=unknown-or-unavailable-provider-fails-closed-as-not-found
     except Exception as exc:
         logger.warning("provider_webhook_provider_unavailable", provider=provider_name, error=type(exc).__name__)
