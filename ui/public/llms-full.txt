@@ -109,6 +109,11 @@ Malformed PDF/Office files are refused before replacement. See
 [Knowledge and OCR](https://github.com/mishrasanjeev/agentic-org/blob/main/docs/user-guide/knowledge-and-ocr.md) for status meanings,
 citations and recovery limits. For a reasoning-only agent, disable suggested
 tools and leave tool/connector selection empty; this does not bypass tenant budgets.
+Provider charges and quotas still apply. Use structured output for confidence,
+keep review thresholds intact, and include explanation calls and provider retries
+in any test spending allowance. See [Create agents](https://github.com/mishrasanjeev/agentic-org/blob/main/docs/user-guide/create-agents.md)
+and [Run and chat](https://github.com/mishrasanjeev/agentic-org/blob/main/docs/user-guide/run-and-chat.md) for bounded acceptance steps
+and the opt-in direct-run explanation history.
 
 The dashboard's Recent Activity queries audit records. The separate internal
 live-feed pipeline persists events per tenant *when published* and can replay
@@ -1400,6 +1405,20 @@ agent-level retry. An agent's monthly budget is not a per-call provider price
 guarantee; bound the model, context, output and number of calls separately for
 a cost-capped acceptance test.
 
+Provider billing, account eligibility and quotas still apply, including to
+economy models. Check current provider pricing rather than assuming a routing
+tier is free. Zero agent retries does not disable a provider SDK's transport
+retries. Explanation generation can make a separate model request, so include
+that request and its retry/output limits in a test's total spending allowance.
+
+For a small reasoning check, use a personal shadow agent, a pinned model,
+**Disabled - Use selected model** routing, no tools/connectors, zero retries and
+no voice. Ask a synthetic arithmetic question with an independently checked
+answer. Return structured JSON such as `{"answer": 8, "confidence": 0.95}`.
+Do not lower a review threshold just to obtain a completed result. A confidence
+written inside prose is not a structured confidence field; a correct short
+answer can still require review. A self-reported score is not measured accuracy.
+
 #### A prompt structure that operators can maintain
 
 ```text
@@ -1467,6 +1486,15 @@ Read the run status and output together. Look for source references, missing fac
 | External action confirmation | A connected system reports an outcome | Validate identity, amount/scope and authoritative reference |
 
 The exact status vocabulary varies by run resource. Preserve the returned state rather than translating every non-error response into success.
+
+The **Why did the agent do this?** panel reads stored evidence, without making a
+new model request. Operators can enable direct-run audit history with
+`AGENTICORG_AGENT_EXPLANATION_AUDIT_ENABLED=true` (default off). With it enabled,
+a direct **Run Agent** result is visible after refresh as well as results from
+the durable task store; the newest record wins. Legacy audit records may lack
+tool-call details. The panel reports that absence rather than inventing a
+successful tool call or claiming no tools ran. Review decisions remain in
+**Approvals**; a historical review trigger is not a current approval decision.
 
 #### Follow-ups and retries
 
