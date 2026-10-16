@@ -47,6 +47,12 @@ Names are compared after PEP 503 normalisation, so `Acme_KYB_AgenticOrg` and
 the API loads plugins during startup, and each worker process loads them when
 it starts.
 
+Verification plugins with tenant-specific accounts can opt into
+[`for_tenant(UUID)` construction](writing-a-verification-provider.md#tenant-scoped-construction).
+Governed cases and bound provider inboxes supply server-resolved tenant context;
+an unconfigured tenant must not inherit another tenant's credentials. This does
+not enable the plugin, configure an account, or turn on governed cases.
+
 ## What happens at startup
 
 Native connectors, agents and providers register first. Then, for each entry point in each

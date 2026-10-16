@@ -79,10 +79,10 @@ def _default_session_factory(tenant_id: uuid.UUID) -> AbstractAsyncContextManage
     return get_tenant_session(tenant_id)
 
 
-def _default_provider(name: str) -> VerificationProvider:
+def _default_provider(name: str, *, tenant_id: uuid.UUID | None = None) -> VerificationProvider:
     from connectors.providers.registry import ProviderRegistry
 
-    return ProviderRegistry.create(name)
+    return ProviderRegistry.create(name, tenant_id=tenant_id)
 
 
 async def _default_flag(tenant_id: uuid.UUID) -> bool:
@@ -151,6 +151,12 @@ class CaseRuntime:
             enabled = False
         if not enabled:
             raise CaseError("governed_cases_disabled", status=404)
+
+    def provider_for(self, name: str, tenant_id: uuid.UUID) -> VerificationProvider:
+        """Pass the stored case tenant to scoped plugins; preserve injected legacy factories."""
+        if self.provider_factory is _default_provider:
+            return _default_provider(name, tenant_id=tenant_id)
+        return self.provider_factory(name)
 
     def authorizer_for(self, tenant_id: str, case_ref: str, role: str, purpose: str) -> ToolAuthorizer:
         """The grant check for one agent run. A missing factory, or ``None`` from one, is refused, never passed on."""
@@ -278,7 +284,7 @@ async def investigate_case(
         failure = "policy_not_configured"
     else:
         try:
-            provider = runtime.provider_factory(provider_name)
+            provider = runtime.provider_for(provider_name, tenant)
         # enterprise-gate: broad-except-ok reason=provider-construction-failure-fails-the-case-closed
         except Exception as exc:
             logger.error("governed_case_provider_unavailable", case_ref=case_ref, error=type(exc).__name__)
@@ -424,7 +430,7 @@ async def dispose_screening_hits(
 
     # Before the provider is built: no disposition run starts without its grant check.
     authorizer = runtime.authorizer_for(str(tenant), case_ref, "screening_disposition", purpose)
-    provider = runtime.provider_factory(provider_name)
+    provider = runtime.provider_for(provider_name, tenant)
     proposed: list[dict[str, Any]] = []
     records: list[dict[str, Any]] = []
     excerpts: list[dict[str, Any]] = []

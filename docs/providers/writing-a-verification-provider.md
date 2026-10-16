@@ -177,8 +177,27 @@ The rules every method follows:
   `event_id`.
 - **Credentials.** Read them from the environment or your secret manager when
   the provider is constructed. The registry constructs a plugin by calling its
-  class with no arguments; a constructor that raises is reported as
+  class with no arguments unless it declares `for_tenant` below; a constructor that raises is reported as
   `construction_failed` and the provider is not used.
+
+### Tenant-scoped construction
+
+An account-scoped plugin can declare a synchronous `@classmethod
+for_tenant(cls, tenant_id: UUID) -> VerificationProvider`. The governed-case
+runtime passes the authenticated, database-resolved case tenant on investigations
+and screening runs. Provider webhook handling passes the inbox tenant only after
+its path token and tenant feature gate have been verified. Resolve credentials
+from an operator-controlled binding for that exact tenant, never a default
+account or a caller-supplied configuration value.
+
+`ProviderRegistry.create(name, tenant_id=tenant_uuid)` calls that constructor.
+Calling a scoped plugin without a UUID refuses with `tenant_required`; a
+constructor failure is `construction_failed` with only the exception type.
+There is no fallback to the zero-argument constructor. Return the same named
+provider with only the capabilities the tenant's account is entitled to use.
+Constructors should do no network I/O; defer async secret or provider I/O to
+deadline-bound methods. Existing providers without `for_tenant` still use their
+zero-argument constructor. Plugin loading and governed cases remain off by default.
 
 ## The conformance suite
 

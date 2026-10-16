@@ -17,6 +17,7 @@ a reason code.
 from __future__ import annotations
 
 import re
+import uuid
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any, ClassVar, Literal
@@ -104,14 +105,17 @@ class ProviderRegistry:
         return sorted(name for name, r in cls._providers.items() if include_unavailable or r.is_available())
 
     @classmethod
-    def create(cls, name: str) -> VerificationProvider:
+    def create(cls, name: str, *, tenant_id: uuid.UUID | None = None) -> VerificationProvider:
         registration = cls._providers.get(name)
         if registration is None:
             raise ProviderRegistryError("unknown_provider", f"no provider named {name!r}")
         if not registration.is_available():
             raise ProviderRegistryError("unavailable", f"provider {name!r} cannot be created in this environment")
+        tenant_factory = getattr(registration.factory, "for_tenant", None)
+        if tenant_factory is not None and (not isinstance(tenant_id, uuid.UUID) or not callable(tenant_factory)):
+            raise ProviderRegistryError("tenant_required", f"{name}: an authenticated tenant is required")
         try:
-            provider = registration.factory()
+            provider = tenant_factory(tenant_id) if tenant_factory is not None else registration.factory()
         # enterprise-gate: broad-except-ok reason=provider-factory-failure-is-reported-as-construction-failed
         except Exception as exc:  # noqa: BLE001
             # Only the exception type: a constructor's message can carry configuration or credentials.
