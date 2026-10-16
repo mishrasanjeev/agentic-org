@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """Execute the actual optional deploy block without contacting a cloud service."""
 
 import os

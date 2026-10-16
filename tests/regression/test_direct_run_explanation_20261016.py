@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """A direct Run Agent result must be explainable without another model call."""
 
 from contextlib import asynccontextmanager
