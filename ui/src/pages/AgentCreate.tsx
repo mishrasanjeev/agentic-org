@@ -728,7 +728,7 @@ export default function AgentCreate() {
                   <p className="text-xs text-muted-foreground mt-1">
                     {llmProvider && llmProvider !== "gemini"
                       ? "This provider needs a BYO API key under Settings > AI Credentials (openai_compatible also needs base_url). Runs fail with a clear error until it is configured."
-                      : "Gemini is always available - no additional API key needed."}
+                      : "Provider billing, quotas and credential requirements apply. Configure a workspace key in AI Credentials if your administrator has not provided access."}
                   </p>
                 </div>
                 <div>
@@ -740,18 +740,13 @@ export default function AgentCreate() {
                     className="border rounded px-3 py-2 text-sm w-full mt-1"
                   >
                     <option value="auto">Auto (Recommended)</option>
-                    <option value="tier1">Economy - Gemini Flash (Free)</option>
+                    <option value="tier1">Economy - Gemini Flash</option>
                     <option value="tier2">Standard - Gemini Pro</option>
                     <option value="tier3">Premium - Claude/GPT-4o</option>
                     <option value="disabled">Disabled - Use selected model</option>
                   </select>
                   <p className="text-xs text-muted-foreground mt-1">
-                    Estimated cost per 1K tokens:{" "}
-                    {llmRouting === "auto" && "varies by task complexity"}
-                    {llmRouting === "tier1" && "~$0.00 (free tier)"}
-                    {llmRouting === "tier2" && "~$0.30"}
-                    {llmRouting === "tier3" && "~$3.00"}
-                    {llmRouting === "disabled" && "depends on selected model above"}
+                    Usage depends on the selected model, input, output and any retries. Check current provider pricing and your workspace budget; a routing tier does not guarantee free usage.
                   </p>
                 </div>
                 <div>

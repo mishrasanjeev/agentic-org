@@ -393,6 +393,8 @@ class Settings(BaseSettings):
     # header is added and nothing is measured.
     task_queue_timing_enabled: bool = False
     tracing_timeline_retention_days: int = 30
+    # Read direct agent runs from existing tenant audit rows in the explanation panel.
+    agent_explanation_audit_enabled: bool = False
     # Tamper-evident audit: the sealing task links each tenant's audit rows
     # into a hash chain (chain_seq, chain_prev, chain_hash) so a removed,
     # reordered or edited row breaks verification. Off by default; the status

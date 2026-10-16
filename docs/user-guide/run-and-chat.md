@@ -30,6 +30,15 @@ Read the run status and output together. Look for source references, missing fac
 
 The exact status vocabulary varies by run resource. Preserve the returned state rather than translating every non-error response into success.
 
+The **Why did the agent do this?** panel reads stored evidence, without making a
+new model request. Operators can enable direct-run audit history with
+`AGENTICORG_AGENT_EXPLANATION_AUDIT_ENABLED=true` (default off). With it enabled,
+a direct **Run Agent** result is visible after refresh as well as results from
+the durable task store; the newest record wins. Legacy audit records may lack
+tool-call details. The panel reports that absence rather than inventing a
+successful tool call or claiming no tools ran. Review decisions remain in
+**Approvals**; a historical review trigger is not a current approval decision.
+
 ## Follow-ups and retries
 
 Chat passes earlier turns to a follow-up only when the deployment turns on conversational services (`AGENTICORG_CONVERSATION_V2_ENABLED`, off by default). While it is off, each message runs on its own even though the panel shows the earlier messages, so repeat the document, case and company reference every time. While it is on, recent turns from the same user, company and agent reach the agent as context; another user, company or agent does not share them. Do not ask an agent to "ignore the earlier policy" to unblock a refusal.

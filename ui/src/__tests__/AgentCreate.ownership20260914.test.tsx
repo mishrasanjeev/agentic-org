@@ -68,6 +68,8 @@ async function walkToReviewAndCreate(toolFree = false) {
   fireEvent.click(screen.getByRole("button", { name: "Next" }));
   await screen.findByText("Step 4: Behavior");
   if (toolFree) {
+    expect(screen.queryByText(/Gemini is always available|Gemini Flash \(Free\)|Estimated cost per 1K tokens/)).not.toBeInTheDocument();
+    expect(screen.getByText(/Provider billing, quotas and credential requirements apply/)).toBeInTheDocument();
     fireEvent.click(screen.getByLabelText("Use suggested tools when none selected"));
     fireEvent.change(screen.getByDisplayValue("3"), { target: { value: "0" } });
   }

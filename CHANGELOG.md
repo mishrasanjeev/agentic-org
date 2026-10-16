@@ -1,5 +1,17 @@
 # Changelog
 
+## Unreleased - Direct-run explanation evidence
+
+- Add opt-in `AGENTICORG_AGENT_EXPLANATION_AUDIT_ENABLED` (default off) so the
+  explanation panel can read direct-run audit evidence rather than reporting
+  that an agent has never run. Preserve tenant/personal visibility and select
+  the newest recorded run. Do not invent missing tool usage or review decisions.
+- Preserve this opt-in during Cloud Run releases unless explicitly selected with
+  `DEPLOY_AGENT_EXPLANATION_AUDIT=true|false`; only the API uses this read option.
+- Remove unconditional free/credential-free Gemini claims and stale routing-price
+  labels. Document structured confidence and total spending allowances including
+  explanation requests and provider transport retries.
+
 ## Unreleased - Knowledge upload recovery and tool-free agents
 
 - Refuse direct runs and chat requests against soft-deleted agents, consistent
