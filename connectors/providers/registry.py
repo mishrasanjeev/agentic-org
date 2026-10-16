@@ -111,7 +111,11 @@ class ProviderRegistry:
             raise ProviderRegistryError("unknown_provider", f"no provider named {name!r}")
         if not registration.is_available():
             raise ProviderRegistryError("unavailable", f"provider {name!r} cannot be created in this environment")
-        tenant_factory = getattr(registration.factory, "for_tenant", None)
+        try:
+            tenant_factory = getattr(registration.factory, "for_tenant", None)
+        # enterprise-gate: broad-except-ok reason=provider-factory-lookup-failure-is-redacted
+        except Exception as exc:  # noqa: BLE001
+            raise ProviderRegistryError("construction_failed", f"{name}: {type(exc).__name__}") from exc
         if tenant_factory is not None and (not isinstance(tenant_id, uuid.UUID) or not callable(tenant_factory)):
             raise ProviderRegistryError("tenant_required", f"{name}: an authenticated tenant is required")
         try:
