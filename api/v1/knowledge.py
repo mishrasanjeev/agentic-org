@@ -1,8 +1,7 @@
-"""Knowledge Base API — backed by RAGFlow for vector search and document management.
+"""Tenant-scoped knowledge uploads, native retrieval and optional managed indexing.
 
-When RAGFLOW_API_URL is set, all operations proxy to the RAGFlow instance.
-When RAGFlow is unavailable, falls back to PostgreSQL document storage
-with basic keyword search (no vector embeddings).
+PostgreSQL stores upload state and native indexed chunks. An optional managed
+index is subject to residency checks; retrieval preserves caller domain limits.
 """
 
 from __future__ import annotations
@@ -11,7 +10,7 @@ import os
 import time
 import uuid
 from datetime import UTC, date, datetime
-from typing import Any
+from typing import Annotated, Any
 
 import structlog
 from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile
@@ -450,7 +449,7 @@ async def _db_find_existing_by_filename(
     this tenant, or None. Used to block duplicate uploads (TC_011)."""
     from uuid import UUID as _UUID
 
-    from sqlalchemy import select
+    from sqlalchemy import case, select
 
     from core.database import get_tenant_session
     from core.models.document import Document
@@ -464,6 +463,11 @@ async def _db_find_existing_by_filename(
                 Document.filename == filename,
                 Document.status != "deleted",
             )
+            .order_by(
+                case((Document.status == "indexed", 0), (Document.status == "ready", 1), else_=2),
+                Document.created_at.desc(),
+                Document.id,
+            )
             .limit(1)
         )
         row = result.scalar_one_or_none()
@@ -474,7 +478,24 @@ async def _db_find_existing_by_filename(
             "filename": row.filename,
             "size_bytes": row.size_bytes,
             "status": _normalize_status(row.status),
+            "domain": (row.metadata_ or {}).get("domain"),
         }
+
+
+async def _db_may_mutate_document(tenant_id: str, doc_id: str, domains: list[str]) -> bool:
+    from sqlalchemy import select
+
+    from core.database import get_tenant_session
+    from core.models.document import Document
+
+    tid, document_id = uuid.UUID(tenant_id), uuid.UUID(doc_id)
+    async with get_tenant_session(tid) as session:
+        row = (
+            await session.execute(
+                select(Document.metadata_["domain"].astext).where(Document.tenant_id == tid, Document.id == document_id)
+            )
+        ).first()
+    return row is not None and knowledge_access.may_see(row[0], domains)
 
 
 async def _db_store_doc(tenant_id: str, doc: dict[str, Any]) -> None:
@@ -649,6 +670,7 @@ async def upload_document(
             "Mutually exclusive with allow_duplicate=true."
         ),
     ),
+    user_domains: Annotated[list[str] | None, Depends(get_user_domains)] = None,
 ):
     """Upload a document to the knowledge base.
 
@@ -660,6 +682,10 @@ async def upload_document(
       - ``?allow_duplicate=true``        → add a second doc with same name
       - ``?replace=true``                → index new, then retire existing
     """
+    domains = knowledge_access.normalise_domains(user_domains)
+    if not knowledge_access.may_see(domain, domains):
+        raise HTTPException(403, "You cannot upload knowledge into this domain.")
+
     # SEC-2026-05-P1-005 (PR-D): validate the upload BEFORE any byte is
     # read. ``validate_upload`` raises HTTPException(415) on disallowed
     # MIME / extension and HTTPException(413) on declared-size overrun.
@@ -740,7 +766,7 @@ async def upload_document(
 
         # Filename-level dedup. Caller can opt out with
         # ?allow_duplicate=true (adds a second copy) or ?replace=true
-        # (deletes the old one first).
+        # (retires the old one after the new copy is indexed).
         #
         # Codex 2026-04-22 release-signoff review (TC_006 residual): the
         # old body treated any dedup-lookup failure as "no duplicate,
@@ -767,6 +793,8 @@ async def upload_document(
                     },
                 ) from exc
             if existing is not None:
+                if not knowledge_access.may_see(existing.get("domain"), domains):
+                    raise HTTPException(404, "Document not found")
                 raise HTTPException(
                     status_code=409,
                     detail={
@@ -799,6 +827,8 @@ async def upload_document(
                     },
                 ) from exc
             if existing is not None:
+                if not knowledge_access.may_see(existing.get("domain"), domains):
+                    raise HTTPException(404, "Document not found")
                 replaces_doc_id = existing["document_id"]
 
         extracted_text = extracted_content.full_text()
@@ -1145,8 +1175,20 @@ async def list_documents(
     idempotency="idempotent-delete-by-document-id",
     audit_event="knowledge.documents.delete",
 )
-async def delete_document(doc_id: str, tenant_id: str = Depends(get_current_tenant)):
+async def delete_document(doc_id: str, tenant_id: str = Depends(get_current_tenant),
+    user_domains: Annotated[list[str] | None, Depends(get_user_domains)] = None,
+):
     """Delete a document from the knowledge base."""
+    domains = knowledge_access.normalise_domains(user_domains)
+    if domains is not None:
+        try:
+            visible = await _db_may_mutate_document(tenant_id, doc_id, domains)
+        except ValueError as exc:
+            raise HTTPException(404, "Document not found") from exc
+        except _DB_READ_ERRORS as exc:
+            raise HTTPException(503, "Could not authorize document deletion. Please retry.") from exc
+        if not visible:
+            raise HTTPException(404, "Document not found")
     ragflow_deleted = False
     # Deletion is not residency-gated (see _ragflow_allowed).
     if _ragflow_available():

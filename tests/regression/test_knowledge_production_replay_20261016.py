@@ -7,6 +7,7 @@ import asyncio
 import io
 import zipfile
 from types import SimpleNamespace
+from unittest.mock import AsyncMock
 from uuid import UUID
 
 import pytest
@@ -14,7 +15,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from reportlab.pdfgen import canvas
 
-from api.deps import get_current_tenant
+from api.deps import get_current_tenant, get_user_domains
 from api.v1 import knowledge
 from core.rag.extractors import ExtractedSpan, UnsupportedMimeType, extract
 from core.rag.ingest import _chunk_spans
@@ -114,3 +115,70 @@ def test_valid_zip_with_invalid_office_contents_is_a_controlled_refusal(suffix) 
         archive.writestr("[Content_Types].xml", "<invalid")
     with pytest.raises(UnsupportedMimeType):
         extract(stream.getvalue(), "application/octet-stream", f"invalid.{suffix}")
+
+
+def _domain_client():
+    app = FastAPI()
+    app.include_router(knowledge.router, prefix="/api/v1")
+    app.dependency_overrides[get_current_tenant] = lambda: str(UUID(int=101))
+    app.dependency_overrides[get_user_domains] = lambda: ["hr"]
+    return TestClient(app, raise_server_exceptions=False)
+
+
+def test_upload_to_a_foreign_domain_is_refused_before_extraction_or_storage(monkeypatch):
+    def forbidden_extraction(*_args, **_kwargs):
+        pytest.fail("A forbidden domain upload must be refused before extraction")
+
+    monkeypatch.setattr("core.rag.extractors.extract", forbidden_extraction)
+    store = AsyncMock()
+    monkeypatch.setattr(knowledge, "_db_store_doc", store)
+    with _domain_client() as client:
+        response = client.post(
+            "/api/v1/knowledge/upload?domain=finance",
+            files={"file": ("synthetic.txt", b"Synthetic policy.", "text/plain")},
+        )
+    assert response.status_code == 403
+    store.assert_not_awaited()
+
+
+@pytest.mark.parametrize("suffix", ["", "?replace=true"])
+def test_a_hidden_filename_never_discloses_or_retires_its_document(monkeypatch, suffix):
+    existing = {"document_id": str(UUID(int=202)), "domain": "finance"}
+    monkeypatch.setattr(knowledge, "_db_find_existing_by_filename", AsyncMock(return_value=existing))
+    store = AsyncMock()
+    monkeypatch.setattr(knowledge, "_db_store_doc", store)
+    with _domain_client() as client:
+        response = client.post(
+            "/api/v1/knowledge/upload" + suffix,
+            files={"file": ("synthetic.txt", b"Synthetic policy.", "text/plain")},
+        )
+    assert response.status_code == 404
+    assert existing["document_id"] not in response.text
+    store.assert_not_awaited()
+
+
+def test_limited_delete_is_authorized_before_remote_index_deletion(monkeypatch):
+    monkeypatch.setattr(knowledge, "_ragflow_available", lambda: True)
+    visible = AsyncMock(return_value=False)
+    monkeypatch.setattr(knowledge, "_db_may_mutate_document", visible, raising=False)
+    remote_delete = AsyncMock(return_value=True)
+    monkeypatch.setattr(knowledge, "_ragflow_delete", remote_delete)
+    with _domain_client() as client:
+        response = client.delete("/api/v1/knowledge/documents/" + str(UUID(int=202)))
+    assert response.status_code == 404
+    visible.assert_awaited_once_with(str(UUID(int=101)), str(UUID(int=202)), ["hr"])
+    remote_delete.assert_not_awaited()
+
+
+@pytest.mark.parametrize(
+    "error,status", [(RuntimeError("synthetic unavailable database"), 503), (ValueError("invalid id"), 404)]
+)
+def test_delete_authorization_errors_never_fall_back_to_remote_deletion(monkeypatch, error, status):
+    monkeypatch.setattr(knowledge, "_ragflow_available", lambda: True)
+    monkeypatch.setattr(knowledge, "_db_may_mutate_document", AsyncMock(side_effect=error))
+    remote_delete = AsyncMock(return_value=True)
+    monkeypatch.setattr(knowledge, "_ragflow_delete", remote_delete)
+    with _domain_client() as client:
+        response = client.delete("/api/v1/knowledge/documents/" + str(UUID(int=202)))
+    assert response.status_code == status
+    remote_delete.assert_not_awaited()

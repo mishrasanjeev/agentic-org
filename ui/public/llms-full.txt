@@ -1519,6 +1519,12 @@ Each search result shows the document and, where recorded, its citation: page, s
 
 If a duplicate dialog appears, choose **Replace** to index a new version before retiring the previous searchable copy, **Keep both** for a deliberate second copy, or **Cancel** to leave it unchanged. A failed replacement does not retire the original. Verify that search returns the intended version; do not leave conflicting policies current without an effective-date rule.
 
+Replacement selects the current indexed revision ahead of failed or processing
+attempts, so retrying a failed upload does not leave the previous good copy current.
+
+Domain-limited users cannot upload into another domain or replace/delete a document
+they cannot see. A hidden document is not disclosed by a duplicate-filename response.
+
 | Status | Meaning | Next step |
 | --- | --- | --- |
 | Processing | Stored, but not yet confirmed searchable | The page refreshes while processing. Do not repeatedly upload the same file. |

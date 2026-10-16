@@ -6,13 +6,16 @@
   with existing workflow/routing rules; paused-agent policy remains configurable.
 - List uploaded documents once rather than also listing their native chunks;
   apply the caller's domain visibility to legacy native document listings.
+- Apply the same domain boundary to upload, filename collisions, replacement and
+  deletion, before any document write or remote-index deletion.
 
 - Preserve short extracted documents, neighbouring spans and trailing text in
   sentence chunks. Report the actual multilingual embedding model and dimension.
 - Refuse malformed/password-protected PDF and malformed Office packages with a
   controlled extraction error rather than an internal server error.
 - Retain the previous searchable document until replacement indexing succeeds;
-  retire its metadata and native chunks together.
+  retire its metadata and native chunks together. Prefer the current indexed
+  revision over abandoned failed attempts when selecting a replacement.
 - Add opt-in `AGENTICORG_KNOWLEDGE_UPLOAD_RECOVERY_ENABLED` (default off): bounded
   retries of transient native embedding failures on the existing maintenance
   worker. Pending uploads are not reported as indexed; the document list refreshes

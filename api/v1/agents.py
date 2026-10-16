@@ -2903,7 +2903,9 @@ async def replace_agent(
             and prompt_output_schema.enabled()
             and (body.output_schema or None) != (agent.output_schema or None)
         ):
-            raise HTTPException(409, "The output schema is locked on active agents. Clone this agent to make changes.")
+            raise HTTPException(
+                409, "The output schema is locked on active agents. Clone this agent to make changes."
+            )
 
         # Core fields
         agent.name = body.name
@@ -3179,11 +3181,11 @@ async def update_agent(
         if "prompt_variables" in update_data:
             agent.prompt_variables = update_data["prompt_variables"]
         if "authorized_tools" in update_data or (
-            "connector_ids" in update_data and any(tool.startswith("mcp_") for tool in (agent.authorized_tools or []))
+            "connector_ids" in update_data
+            and any(tool.startswith("mcp_") for tool in (agent.authorized_tools or []))
         ):
             invalid = await _validate_selected_tools(
-                update_data.get("authorized_tools", agent.authorized_tools or []),
-                tenant_id,
+                update_data.get("authorized_tools", agent.authorized_tools or []), tenant_id,
                 update_data.get("connector_ids", agent.connector_ids or []) or [],
             )
             if invalid:
@@ -4542,7 +4544,9 @@ async def set_agent_output_schema(
             raise HTTPException(404, "Agent not found")
         require_agent_mutable(agent, _effective_caller(caller, user_domains))
         if agent.status == "active":
-            raise HTTPException(409, "The output schema is locked on active agents. Clone this agent to make changes.")
+            raise HTTPException(
+                409, "The output schema is locked on active agents. Clone this agent to make changes."
+            )
         config = dict(agent.config or {})
         if schema is None:
             config.pop(prompt_output_schema.INLINE_KEY, None)

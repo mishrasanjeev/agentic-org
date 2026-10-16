@@ -689,7 +689,7 @@ export default function KnowledgeBase() {
                   <td className="p-3">
                     <Badge variant={STATUS_BADGE[doc.status] || "secondary"}>{doc.status}</Badge>
                     {doc.ingestion_error === "embedding_temporarily_unavailable" && doc.status === "processing" && (
-                      <span className="block text-xs text-muted-foreground mt-1">Indexing service warming up. Retry pending.</span>
+                      <span className="block text-xs text-muted-foreground mt-1">Indexing temporarily unavailable. Retry pending.</span>
                     )}
                     {doc.status === "failed" && (
                       <span className="block text-xs text-destructive mt-1">Not searchable. Upload again and choose Replace.</span>

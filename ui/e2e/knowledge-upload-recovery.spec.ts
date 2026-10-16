@@ -36,6 +36,38 @@ test.describe("Knowledge upload and tool-free creation @knowledge @agent-create"
     }
   });
 
+  test("a transient indexing failure stays processing and recovers through the real worker", async ({ page, request }) => {
+    test.skip(process.env.E2E_TRANSIENT_EMBEDDING_FIXTURE !== "1", "Requires the controlled local transient embedding fixture.");
+    test.setTimeout(150_000);
+    const marker = `synthetic-browser-recovery-${Date.now()}`;
+    const filename = `${marker}.txt`;
+    let documentId: string | undefined;
+    try {
+      await page.goto(`${APP}/dashboard/knowledge`);
+      await expect(page.getByRole("heading", { name: "Knowledge Base", exact: true })).toBeVisible();
+      const response = page.waitForResponse((res) => res.url().includes("/knowledge/upload") && res.request().method() === "POST");
+      await page.locator('input[type="file"]').setInputFiles({ name: filename, mimeType: "text/plain", buffer: Buffer.from(`TRANSIENT COLD ${marker} review code 40722.`) });
+      const upload = await response;
+      expect(upload.status()).toBe(201);
+      const accepted = await upload.json();
+      documentId = accepted.document_id;
+      expect(accepted.status).toBe("processing");
+      const row = page.getByRole("row").filter({ hasText: filename });
+      await expect(row).toContainText("processing");
+      await expect(row).toContainText("Indexing temporarily unavailable. Retry pending.");
+      await expect(row).toContainText("indexed", { timeout: 120_000 });
+      await expect(row).not.toContainText("Retry pending");
+      await page.getByPlaceholder("Test a query against the knowledge base...").fill(marker);
+      await page.getByRole("button", { name: "Search", exact: true }).click();
+      await expect(page.getByTestId("kb-search-result").filter({ hasText: marker }).first()).toContainText("40722");
+    } finally {
+      if (documentId) {
+        const removed = await request.delete(`${APP}/api/v1/knowledge/documents/${documentId}`, { headers: { Authorization: `Bearer ${E2E_TOKEN}` } });
+        expect(removed.ok()).toBeTruthy();
+      }
+    }
+  });
+
   test("the manual wizard can create a reasoning-only agent with zero retries", async ({ page, request }) => {
     let agentId: string | undefined;
     try {

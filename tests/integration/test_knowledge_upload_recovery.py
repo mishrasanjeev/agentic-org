@@ -4,13 +4,16 @@
 from __future__ import annotations
 
 import os
+import subprocess
+import sys
 import uuid
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime, timedelta
 
 import httpx
 import pytest
-from sqlalchemy import text
+from sqlalchemy import create_engine, text
+from sqlalchemy.engine import make_url
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from sqlalchemy.pool import NullPool
 
@@ -22,12 +25,57 @@ DB_URL = os.getenv("AGENTICORG_DB_URL", "")
 pytestmark = pytest.mark.skipif(not DB_URL, reason="requires a local PostgreSQL test database")
 
 
+@pytest.fixture(scope="module")
+def recovery_database():
+    from scripts.reset_test_database import safe_test_database_name
+
+    safe_test_database_name(DB_URL)
+    suffix = uuid.uuid4().hex
+    name, role = f"knowledge_recovery_{suffix}_test", f"knowledge_recovery_{suffix}"
+    base = make_url(DB_URL)
+    admin = create_engine(base.set(drivername="postgresql", database="postgres"), isolation_level="AUTOCOMMIT")
+    url = base.set(database=name).render_as_string(hide_password=False)
+    try:
+        with admin.connect() as connection:
+            connection.execute(text(f"CREATE DATABASE {name}"))  # noqa: S608 - generated test identifier
+            connection.execute(text(f"CREATE ROLE {role} NOLOGIN NOSUPERUSER NOBYPASSRLS"))
+        migrated = subprocess.run(
+            [sys.executable, "scripts/alembic_migrate.py"],
+            env={**os.environ, "AGENTICORG_DB_URL": url},
+            capture_output=True,
+            text=True,
+            timeout=240,
+            check=False,
+        )
+        assert migrated.returncode == 0, migrated.stderr[-4000:]
+        scoped_admin = create_engine(base.set(drivername="postgresql", database=name))
+        try:
+            with scoped_admin.begin() as connection:
+                connection.execute(text(f"GRANT USAGE ON SCHEMA public TO {role}"))
+                connection.execute(
+                    text(
+                        "GRANT SELECT, INSERT, UPDATE, DELETE ON "
+                        f"documents, knowledge_documents, knowledge_chunk_sources TO {role}"
+                    )
+                )
+                connection.execute(text(f"GRANT SELECT ON tenant_ai_settings TO {role}"))
+        finally:
+            scoped_admin.dispose()
+        yield url, role
+    finally:
+        with admin.connect() as connection:
+            connection.execute(text(f"DROP DATABASE IF EXISTS {name} WITH (FORCE)"))  # noqa: S608
+            connection.execute(text(f"DROP ROLE IF EXISTS {role}"))
+        admin.dispose()
+
+
 @pytest.mark.asyncio
-async def test_timeout_recovers_atomically_without_losing_original_or_crossing_tenants(monkeypatch):
-    engine = create_async_engine(DB_URL, poolclass=NullPool)
+async def test_timeout_recovers_atomically_without_losing_original_or_crossing_tenants(monkeypatch, recovery_database):
+    database_url, role = recovery_database
+    engine = create_async_engine(database_url, poolclass=NullPool)
     sessions = async_sessionmaker(engine, expire_on_commit=False)
     tenant, foreign = uuid.uuid4(), uuid.uuid4()
-    old_id, new_id = uuid.uuid4(), uuid.uuid4()
+    old_id, new_id, failed_id = uuid.uuid4(), uuid.uuid4(), uuid.uuid4()
     content = ExtractedContent(
         spans=[ExtractedSpan(text="Synthetic new policy code 40721.", page=2)],
         mime_type="text/plain",
@@ -39,7 +87,8 @@ async def test_timeout_recovers_atomically_without_losing_original_or_crossing_t
     @asynccontextmanager
     async def scoped(tid):
         async with sessions() as session, session.begin():
-            await session.execute(text("SELECT set_config('app.tenant_id', :tid, true)"), {"tid": str(tid)})
+            await session.execute(text(f"SET LOCAL ROLE {role}"))
+            await session.execute(text("SELECT set_config('agenticorg.tenant_id', :tid, true)"), {"tid": str(tid)})
             yield session
 
     monkeypatch.setattr(upload_recovery, "get_tenant_session", scoped)
@@ -74,6 +123,12 @@ async def test_timeout_recovers_atomically_without_losing_original_or_crossing_t
             )
             session.add(
                 Document(
+                    id=failed_id, tenant_id=tenant, name="policy.txt", filename="policy.txt", status="failed",
+                    metadata_={"domain": "finance"},
+                )
+            )
+            session.add(
+                Document(
                     id=new_id,
                     tenant_id=tenant,
                     name="policy.txt",
@@ -85,6 +140,8 @@ async def test_timeout_recovers_atomically_without_losing_original_or_crossing_t
                     },
                 )
             )
+        async with scoped(foreign) as session:
+            assert await session.get(Document, new_id) is None
         assert await upload_recovery.process(foreign, new_id, now=now) == "skipped"
         assert calls == 0
         assert await upload_recovery.process(tenant, new_id, now=now) == "processing"
@@ -111,8 +168,13 @@ async def test_timeout_recovers_atomically_without_losing_original_or_crossing_t
             assert len(chunks) == 1 and "40721" in chunks[0][0] and chunks[0][1] == 384
         from api.v1 import knowledge
 
+        assert not await knowledge._db_may_mutate_document(str(tenant), str(new_id), ["hr"])
+        assert await knowledge._db_may_mutate_document(str(tenant), str(new_id), ["finance"])
+        assert not await knowledge._db_may_mutate_document(str(foreign), str(new_id), ["finance"])
+        current = await knowledge._db_find_existing_by_filename(str(tenant), "policy.txt")
+        assert current["document_id"] == str(new_id)
         listing = await knowledge.list_documents(page=1, per_page=100, tenant_id=str(tenant), user_domains=None)
-        assert [item.document_id for item in listing.items] == [str(new_id)]
+        assert {item.document_id for item in listing.items} == {str(new_id), str(failed_id)}
         restricted = await knowledge.list_documents(page=1, per_page=100, tenant_id=str(tenant), user_domains=["hr"])
         assert restricted.total == 0
         assert await upload_recovery.process(tenant, new_id, now=now + timedelta(minutes=20)) == "skipped"
