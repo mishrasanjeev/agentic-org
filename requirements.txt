@@ -80,7 +80,7 @@ langchain-openai==1.7.0
 # Exact pins, kept in step with pyproject: the sealed checkpoint saver
 # (core/langgraph/checkpoint_postgres.py) is verified against these versions.
 langgraph-checkpoint-postgres==3.1.2
-langgraph-checkpoint==4.2.0
+langgraph-checkpoint==4.3.0
 langsmith==0.14.1
 
 # ─── Google Cloud Platform ───────────────────────────────────────────────────
