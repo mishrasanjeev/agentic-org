@@ -450,6 +450,8 @@ class Settings(BaseSettings):
     # re-embeds stale chunks and records missing entities, bounded per call.
     # Off by default: off, the endpoint is not found.
     knowledge_reindex_enabled: bool = False
+    # Durable bounded recovery of transient upload-index failures on the existing worker.
+    knowledge_upload_recovery_enabled: bool = False
     # AI asset inventory (core/governance/inventory.py): GET /governance/inventory
     # and its bill-of-materials export, tenant-admin only. Off by default: off,
     # the endpoints are not found and nothing is read.

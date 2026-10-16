@@ -781,6 +781,17 @@ UI_UPDATE_ENV_VARS="GIT_SHA=${DEPLOY_SHA}"
 # verification (image digest + AGENTICORG_GIT_SHA) applies to them too.
 BACKGROUND_UPDATE_ENV_VARS="AGENTICORG_GIT_SHA=${DEPLOY_SHA}"
 
+# Preserve deployed recovery policy unless the operator explicitly chooses a value.
+if [[ -n "${DEPLOY_KNOWLEDGE_UPLOAD_RECOVERY:-}" ]]; then
+  case "$DEPLOY_KNOWLEDGE_UPLOAD_RECOVERY" in
+    true|false) ;;
+    *) echo "::error::DEPLOY_KNOWLEDGE_UPLOAD_RECOVERY must be true or false." >&2; exit 1 ;;
+  esac
+  RECOVERY_ENV="AGENTICORG_KNOWLEDGE_UPLOAD_RECOVERY_ENABLED=${DEPLOY_KNOWLEDGE_UPLOAD_RECOVERY}"
+  API_UPDATE_ENV_VARS+=",${RECOVERY_ENV}"
+  BACKGROUND_UPDATE_ENV_VARS+=",${RECOVERY_ENV}"
+fi
+
 # Optional model rollout: preserve installed service overrides unless both are supplied.
 DEPLOY_LLM_PRIMARY="${AGENTICORG_DEPLOY_LLM_PRIMARY:-}"
 DEPLOY_LLM_FALLBACK="${AGENTICORG_DEPLOY_LLM_FALLBACK:-}"

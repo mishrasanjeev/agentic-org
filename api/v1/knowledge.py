@@ -1,8 +1,7 @@
-"""Knowledge Base API — backed by RAGFlow for vector search and document management.
+"""Tenant-scoped knowledge uploads, native retrieval and optional managed indexing.
 
-When RAGFLOW_API_URL is set, all operations proxy to the RAGFlow instance.
-When RAGFlow is unavailable, falls back to PostgreSQL document storage
-with basic keyword search (no vector embeddings).
+PostgreSQL stores upload state and native indexed chunks. An optional managed
+index is subject to residency checks; retrieval preserves caller domain limits.
 """
 
 from __future__ import annotations
@@ -11,7 +10,7 @@ import os
 import time
 import uuid
 from datetime import UTC, date, datetime
-from typing import Any
+from typing import Annotated, Any
 
 import structlog
 from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile
@@ -450,7 +449,7 @@ async def _db_find_existing_by_filename(
     this tenant, or None. Used to block duplicate uploads (TC_011)."""
     from uuid import UUID as _UUID
 
-    from sqlalchemy import select
+    from sqlalchemy import case, select
 
     from core.database import get_tenant_session
     from core.models.document import Document
@@ -464,6 +463,11 @@ async def _db_find_existing_by_filename(
                 Document.filename == filename,
                 Document.status != "deleted",
             )
+            .order_by(
+                case((Document.status == "indexed", 0), (Document.status == "ready", 1), else_=2),
+                Document.created_at.desc(),
+                Document.id,
+            )
             .limit(1)
         )
         row = result.scalar_one_or_none()
@@ -474,7 +478,24 @@ async def _db_find_existing_by_filename(
             "filename": row.filename,
             "size_bytes": row.size_bytes,
             "status": _normalize_status(row.status),
+            "domain": (row.metadata_ or {}).get("domain"),
         }
+
+
+async def _db_may_mutate_document(tenant_id: str, doc_id: str, domains: list[str]) -> bool:
+    from sqlalchemy import select
+
+    from core.database import get_tenant_session
+    from core.models.document import Document
+
+    tid, document_id = uuid.UUID(tenant_id), uuid.UUID(doc_id)
+    async with get_tenant_session(tid) as session:
+        row = (
+            await session.execute(
+                select(Document.metadata_["domain"].astext).where(Document.tenant_id == tid, Document.id == document_id)
+            )
+        ).first()
+    return row is not None and knowledge_access.may_see(row[0], domains)
 
 
 async def _db_store_doc(tenant_id: str, doc: dict[str, Any]) -> None:
@@ -645,11 +666,11 @@ async def upload_document(
         description=(
             "TC_007 / Codex 2026-04-22 review: when True, soft-delete any "
             "existing document with the same filename (RAGFlow + DB) "
-            "before ingesting the new one, so users who want 'replace' "
-            "actually get replace instead of a second identical row. "
+            "only after the replacement has indexed successfully. "
             "Mutually exclusive with allow_duplicate=true."
         ),
     ),
+    user_domains: Annotated[list[str] | None, Depends(get_user_domains)] = None,
 ):
     """Upload a document to the knowledge base.
 
@@ -659,8 +680,12 @@ async def upload_document(
     Dedup policy:
       - default (neither flag)           → 409 Conflict on filename match
       - ``?allow_duplicate=true``        → add a second doc with same name
-      - ``?replace=true``                → soft-delete existing, ingest new
+      - ``?replace=true``                → index new, then retire existing
     """
+    domains = knowledge_access.normalise_domains(user_domains)
+    if not knowledge_access.may_see(domain, domains):
+        raise HTTPException(403, "You cannot upload knowledge into this domain.")
+
     # SEC-2026-05-P1-005 (PR-D): validate the upload BEFORE any byte is
     # read. ``validate_upload`` raises HTTPException(415) on disallowed
     # MIME / extension and HTTPException(413) on declared-size overrun.
@@ -741,7 +766,7 @@ async def upload_document(
 
         # Filename-level dedup. Caller can opt out with
         # ?allow_duplicate=true (adds a second copy) or ?replace=true
-        # (deletes the old one first).
+        # (retires the old one after the new copy is indexed).
         #
         # Codex 2026-04-22 release-signoff review (TC_006 residual): the
         # old body treated any dedup-lookup failure as "no duplicate,
@@ -768,6 +793,8 @@ async def upload_document(
                     },
                 ) from exc
             if existing is not None:
+                if not knowledge_access.may_see(existing.get("domain"), domains):
+                    raise HTTPException(404, "Document not found")
                 raise HTTPException(
                     status_code=409,
                     detail={
@@ -782,12 +809,8 @@ async def upload_document(
                     },
                 )
 
-        # Real replace path — matches the UI's "Replace" modal action.
-        # Previously the UI alerted "check the duplicate box to replace it",
-        # but the duplicate box only added another copy — the existing
-        # document was never touched. Now replace=true soft-deletes the
-        # existing document in both RAGFlow and the DB mirror before
-        # ingesting the new one, so the UI copy and backend agree.
+        replaces_doc_id: str | None = None
+        # Keep the searchable original until the replacement is indexed.
         if replace:
             try:
                 existing = await _db_find_existing_by_filename(tenant_id, filename)
@@ -804,52 +827,9 @@ async def upload_document(
                     },
                 ) from exc
             if existing is not None:
-                old_doc_id = existing["document_id"]
-                # Deletion is not residency-gated (see _ragflow_allowed).
-                if _ragflow_available():
-                    try:
-                        await _ragflow_delete(tenant_id, old_doc_id)
-                    except _RAGFLOW_ERRORS as exc:
-                        logger.warning(
-                            "replace_ragflow_delete_failed",
-                            doc_id=old_doc_id,
-                            error=str(exc),
-                        )
-                try:
-                    from uuid import UUID as _UUID
-
-                    from sqlalchemy import update
-
-                    from core.database import get_tenant_session
-                    from core.models.document import Document
-
-                    tid = _UUID(tenant_id)
-                    async with get_tenant_session(tid) as session:
-                        await session.execute(
-                            update(Document)
-                            .where(
-                                Document.id == _UUID(old_doc_id),
-                                Document.tenant_id == tid,
-                            )
-                            .values(status="deleted")
-                        )
-                except _DB_WRITE_ERRORS as exc:
-                    logger.error(
-                        "replace_db_soft_delete_failed",
-                        doc_id=old_doc_id,
-                        error=str(exc),
-                    )
-                    raise HTTPException(
-                        status_code=503,
-                        detail={
-                            "error": "replace_soft_delete_failed",
-                            "message": (
-                                "Could not safely mark the existing document as deleted. "
-                                "Refusing the replacement rather than returning a false success."
-                            ),
-                            "document_id": old_doc_id,
-                        },
-                    ) from exc
+                if not knowledge_access.may_see(existing.get("domain"), domains):
+                    raise HTTPException(404, "Document not found")
+                replaces_doc_id = existing["document_id"]
 
         extracted_text = extracted_content.full_text()
 
@@ -870,6 +850,16 @@ async def upload_document(
         domain = domain if isinstance(domain, str) and domain else None
         if domain:
             doc_metadata["domain"] = domain
+
+        from core.rag import upload_recovery
+
+        recovery_job = (
+            upload_recovery.prepare(extracted_content, replaces=replaces_doc_id)
+            if upload_recovery.enabled() and not _ragflow_available()
+            else None
+        )
+        if recovery_job:
+            doc_metadata[upload_recovery.KEY] = recovery_job
 
         doc: dict[str, Any] = {
             "document_id": doc_id,
@@ -935,33 +925,42 @@ async def upload_document(
     try:
         from core.rag import UnsupportedMimeType, ingest_document
 
-        ingest_result = await ingest_document(
-            tenant_id=tenant_id,
-            title=filename,
-            stream=content,
-            mime_type=(file.content_type or ""),
-            filename=filename,
-            source=f"upload://{filename}",
-            source_object_id=doc["document_id"],
-            source_object_type="upload",
-            extracted_content=extracted_content,
-            metadata={"domain": domain} if domain else None,
-        )
-        logger.info(
-            "kb_ingest_multimodal",
-            doc_id=doc["document_id"],
-            chunks_indexed=ingest_result.chunks_indexed,
-            embedding_model=ingest_result.embedding_model,
-            errors=ingest_result.errors,
-        )
-        if ingest_result.chunks_indexed > 0:
-            ingestion_status = "indexed"
+        if recovery_job:
+            from uuid import UUID
+
+            await upload_recovery.process(UUID(tenant_id), UUID(doc["document_id"]))
+            current_status, ingestion_error = await upload_recovery.state(UUID(tenant_id), UUID(doc["document_id"]))
+            doc["status"] = current_status
+            native_index_pending = False
+            ingestion_status = current_status
         else:
-            # ingest_document reports extraction/chunking/embedding failures
-            # as a result with zero chunks instead of raising. Zero chunks
-            # means nothing is searchable, so never call that "indexed".
-            ingestion_status = "failed"
-            ingestion_error = (ingest_result.errors or ["no_chunks_indexed"])[0]
+            ingest_result = await ingest_document(
+                tenant_id=tenant_id,
+                title=filename,
+                stream=content,
+                mime_type=(file.content_type or ""),
+                filename=filename,
+                source=f"upload://{filename}",
+                source_object_id=doc["document_id"],
+                source_object_type="upload",
+                extracted_content=extracted_content,
+                metadata={"domain": domain} if domain else None,
+            )
+            logger.info(
+                "kb_ingest_multimodal",
+                doc_id=doc["document_id"],
+                chunks_indexed=ingest_result.chunks_indexed,
+                embedding_model=ingest_result.embedding_model,
+                errors=ingest_result.errors,
+            )
+            if ingest_result.chunks_indexed > 0:
+                ingestion_status = "indexed"
+            else:
+                # ingest_document reports extraction/chunking/embedding failures
+                # as a result with zero chunks instead of raising. Zero chunks
+                # means nothing is searchable, so never call that "indexed".
+                ingestion_status = "failed"
+                ingestion_error = (ingest_result.errors or ["no_chunks_indexed"])[0]
     except UnsupportedMimeType as exc:
         # Defensive fallback. Extraction preflight above should make this
         # unreachable, but keep a truthful partial-index result if an
@@ -976,6 +975,17 @@ async def upload_document(
         ingestion_error = "unsupported_mime_type"
     # enterprise-gate: broad-except-ok reason=multimodal-ingest-failure-is-exposed-in-upload-response
     except Exception as exc:
+        if recovery_job:
+            raise HTTPException(
+                503,
+                detail={
+                    "error": "document_index_recovery_pending",
+                    "message": (
+                        "The upload is stored and will be retried. Refresh its status before uploading another copy."
+                    ),
+                    "document_id": doc["document_id"],
+                },
+            ) from exc
         # Any other failure (embedding model down, DB hiccup) — log,
         # don't fail the upload after the durable document row landed.
         # The response explicitly marks the partial index failure so
@@ -1005,6 +1015,23 @@ async def upload_document(
                     "document_id": doc["document_id"],
                 },
             ) from exc
+
+    if replaces_doc_id and not recovery_job and doc["status"] == DOC_STATUS_INDEXED:
+        from uuid import UUID
+
+        from core.database import get_tenant_session
+
+        if _ragflow_available():
+            try:
+                removed = await _ragflow_delete(tenant_id, replaces_doc_id)
+            except _RAGFLOW_ERRORS as exc:
+                raise HTTPException(
+                    503, "The new copy is indexed, but the old remote copy could not be retired."
+                ) from exc
+            if not removed:
+                raise HTTPException(503, "The new copy is indexed, but the old remote copy could not be retired.")
+        async with get_tenant_session(UUID(tenant_id)) as session:
+            await upload_recovery.retire(session, UUID(tenant_id), replaces_doc_id)
 
     return DocumentOut(
         document_id=doc["document_id"],
@@ -1089,15 +1116,18 @@ async def list_documents(
         from core.database import get_tenant_session as _gts
 
         tid = _UUID(tenant_id)
+        acl_sql, acl_params = knowledge_access.sql_clause(domains, alias="d")
         async with _gts(tid) as session:
             kd_result = await session.execute(
                 _sqtext(
-                    "SELECT id, title, category, file_type, token_count, created_at "
-                    "FROM knowledge_documents "
-                    "WHERE tenant_id = :tid AND status = 'ready' "
-                    "ORDER BY created_at DESC"
+                    "SELECT d.id, d.title, d.category, d.file_type, d.token_count, d.created_at "
+                    "FROM knowledge_documents d "
+                    f"WHERE d.tenant_id = :tid AND d.status = 'ready'{acl_sql} "  # noqa: S608  # nosec B608
+                    "AND NOT EXISTS (SELECT 1 FROM documents parent WHERE parent.tenant_id = d.tenant_id "
+                    "AND parent.id::text = d.source_object_id) "
+                    "ORDER BY d.created_at DESC"
                 ),
-                {"tid": str(tid)},
+                {"tid": str(tid), **acl_params},
             )
             for row in kd_result.fetchall():
                 docs.append(
@@ -1124,6 +1154,7 @@ async def list_documents(
             content_type=d.get("content_type"),
             size_bytes=d.get("size_bytes", d.get("size", 0)),
             status=_normalize_status(d.get("status")),
+            ingestion_error=(d.get("metadata") or {}).get("ingestion_error"),
             created_at=d.get("created_at", ""),
             uploaded_at=d.get("uploaded_at") or d.get("created_at", ""),
             extraction_method=(d.get("metadata") or {}).get("extraction_method"),
@@ -1144,8 +1175,20 @@ async def list_documents(
     idempotency="idempotent-delete-by-document-id",
     audit_event="knowledge.documents.delete",
 )
-async def delete_document(doc_id: str, tenant_id: str = Depends(get_current_tenant)):
+async def delete_document(doc_id: str, tenant_id: str = Depends(get_current_tenant),
+    user_domains: Annotated[list[str] | None, Depends(get_user_domains)] = None,
+):
     """Delete a document from the knowledge base."""
+    domains = knowledge_access.normalise_domains(user_domains)
+    if domains is not None:
+        try:
+            visible = await _db_may_mutate_document(tenant_id, doc_id, domains)
+        except ValueError as exc:
+            raise HTTPException(404, "Document not found") from exc
+        except _DB_READ_ERRORS as exc:
+            raise HTTPException(503, "Could not authorize document deletion. Please retry.") from exc
+        if not visible:
+            raise HTTPException(404, "Document not found")
     ragflow_deleted = False
     # Deletion is not residency-gated (see _ragflow_allowed).
     if _ragflow_available():
@@ -1171,7 +1214,9 @@ async def delete_document(doc_id: str, tenant_id: str = Depends(get_current_tena
         document_uuid = _UUID(doc_id)
         async with get_tenant_session(tid) as session:
             result = await session.execute(
-                update(Document).where(Document.id == document_uuid, Document.tenant_id == tid).values(status="deleted")
+                update(Document)
+                .where(Document.id == document_uuid, Document.tenant_id == tid)
+                .values(status="deleted", metadata_=Document.metadata_.op("-")("index_recovery"))
             )
             await session.execute(
                 _sqtext(

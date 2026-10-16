@@ -52,6 +52,7 @@ app = Celery(
         "core.tasks.gateway_tasks",
         "core.tasks.health_snapshot",
         "core.tasks.invoice_tasks",
+        "core.tasks.knowledge_tasks",
         "core.tasks.lineage_tasks",
         "core.tasks.memory_tasks",
         "core.tasks.report_tasks",
@@ -87,6 +88,7 @@ app.conf.update(
         "core.tasks.report_tasks.cleanup_old_reports": {"queue": "maintenance"},
         "core.tasks.workflow_tasks.*": {"queue": "workflows"},
         "core.tasks.channel_tasks.*": {"queue": "workflows"},
+        "core.tasks.knowledge_tasks.*": {"queue": "maintenance"},
         # Retain the historical short task names so messages already in
         # Redis remain executable during rolling deploys.
         "resume_workflow_wait": {"queue": "workflows"},
@@ -101,6 +103,11 @@ app.conf.update(
 
 # ── Beat schedule — periodic tasks ──────────────────────────────────
 app.conf.beat_schedule = {
+    "knowledge-upload-recovery": {
+        "task": "core.tasks.knowledge_tasks.sweep",
+        "schedule": 60.0,
+        "options": {"queue": "maintenance"},
+    },
     "sweep-demo-delivery": {
         "task": "core.tasks.demo_tasks.sweep",
         "schedule": 60.0,

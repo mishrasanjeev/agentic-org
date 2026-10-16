@@ -29,6 +29,40 @@ processing under the existing nonfatal production metrics policy; that was
 recovery, not a substitute for the import-order fix. Never weaken vault checks
 or rely on an early HTTP listener to hide a startup exception.
 
+## Knowledge Indexing Acceptance
+
+Use a dedicated synthetic workspace and compare extraction, document status,
+retrieval and excerpt separately. Search returns chunk citation IDs; use that
+`citation.document_id` for the excerpt, not the upload's metadata ID. Source
+filters require the exact `citation.source`, including its chunk suffix.
+
+Replay native TXT/CSV/PDF/DOCX/XLSX/PPTX and real PNG/scanned-PDF OCR in the
+runtime image, not an image lacking the OCR executables. Check short content,
+provenance, malformed/password-protected input, failed replacement preservation,
+successful old-chunk retirement, deletion and a second-tenant refusal.
+
+For an explicitly approved recovery rollout, set
+`DEPLOY_KNOWLEDGE_UPLOAD_RECOVERY=true` on the migration-first deployment helper.
+It applies the default-off runtime flag consistently to API, worker and beat.
+Unset preserves deployed settings; `false` stops new retries. Roll back to a
+release containing the same recovery contract or disable the flag deliberately;
+do not silently strand processing rows under an older worker.
+
+The existing maintenance queue checks pending native uploads every minute,
+at most ten due rows per tenant per sweep. Each document has one initial attempt
+and at most four transient retries. A row lock covers native indexing,
+replacement and final status. Pending extracted spans are bounded to 4 MiB and
+10,000 spans, contain no raw upload file, and are removed on success, permanent
+failure or deletion. Authorization/input errors do not retry. Recovery does not
+change embedding model, vector dimension or request timeout. Verify the actual
+production serving profile, especially 1024-dimensional multilingual deployments;
+a 384-dimensional local fixture is not proof of that live profile.
+
+Cold-service timeout tests belong in local Docker with a controlled provider.
+Do not stop production embeddings to manufacture a failure. After deployment,
+verify the flag on all three services, worker task registration and real
+upload/search/excerpt success; list untested cold-start paths explicitly.
+
 ## No-New-Infra Policy
 
 Do not create new GCP infrastructure for smoke readiness unless the owner separately approves a costed proposal. This includes Cloud Run services, jobs, databases, queues, schedulers, buckets, VPC resources, Artifact Registry repositories, Pub/Sub topics, or service accounts.

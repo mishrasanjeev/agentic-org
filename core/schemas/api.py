@@ -70,6 +70,7 @@ class AgentCreate(BaseModel):
     system_prompt_text: str | None = None
     prompt_variables: dict[str, str] = {}
     authorized_tools: list[str] = []
+    use_default_tools: bool = True
     hitl_policy: HITLPolicyConfig = Field(default_factory=lambda: HITLPolicyConfig(condition="confidence < 0.88"))
     confidence_floor: float = Field(0.88, ge=0.0, le=1.0)
     max_retries: int = 3

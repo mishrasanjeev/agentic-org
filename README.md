@@ -96,6 +96,14 @@ with the Docker-backed [local multichannel simulation](docs/local-multichannel-s
 It uses fresh PostgreSQL, local Mailpit delivery, real Tesseract, and optional
 real Playwright Chromium while keeping paid calls and production mutations off.
 
+Knowledge upload status distinguishes extraction from searchable indexing.
+With opt-in upload recovery, transient native embedding failures retry on the
+existing worker; the previous searchable copy remains until replacement succeeds.
+Malformed PDF/Office files are refused before replacement. See
+[Knowledge and OCR](docs/user-guide/knowledge-and-ocr.md) for status meanings,
+citations and recovery limits. For a reasoning-only agent, disable suggested
+tools and leave tool/connector selection empty; this does not bypass tenant budgets.
+
 The dashboard's Recent Activity queries audit records. The separate internal
 live-feed pipeline persists events per tenant *when published* and can replay
 them by sequence after a WebSocket interruption. Its only writer is the

@@ -143,6 +143,7 @@ export default function AgentCreate() {
   const llmModelOptions = selectableModels(llmRegistry, llmProvider);
   const [llmRouting, setLlmRouting] = useState("auto");
   const [authorizedTools, setAuthorizedTools] = useState<string[]>([]);
+  const [useDefaultTools, setUseDefaultTools] = useState(true);
   const [availableTools, setAvailableTools] = useState<string[]>([]);
   const [voiceEnabled, setVoiceEnabled] = useState(false);
   const [composioExpanded, setComposioExpanded] = useState(false);
@@ -313,7 +314,7 @@ export default function AgentCreate() {
     if (step === 0) return employeeName.trim().length > 0 && (!domainLocked || domainOptions.length > 0);
     if (step === 1) return finalType.trim().length > 0;
     if (step === 2) return promptText.trim().length > 0;
-    if (step === 3) return maxRetries >= 1 && llmModel.trim().length > 0;
+    if (step === 3) return Number.isInteger(maxRetries) && maxRetries >= 0 && maxRetries <= 10 && llmModel.trim().length > 0;
     return true;
   }
 
@@ -410,6 +411,7 @@ export default function AgentCreate() {
         parent_agent_id: parentAgentId || undefined,
         reporting_to: reportingTo || undefined,
         authorized_tools: authorizedTools.length > 0 ? authorizedTools : undefined,
+        use_default_tools: useDefaultTools,
         // UR-Bug-1: connector linkage chosen in Step 4. Empty means
         // "tenant-default lookup" server-side; non-empty restricts the
         // agent to the named connector instances.
@@ -763,7 +765,7 @@ export default function AgentCreate() {
                 </div>
                 <div>
                   <label className="text-sm font-medium">Max Retries</label>
-                  <input type="number" min={1} max={10} value={maxRetries} onChange={(e) => setMaxRetries(Number(e.target.value))} className="border rounded px-3 py-2 text-sm w-24 mt-1" />
+                  <input type="number" min={0} max={10} value={maxRetries} onChange={(e) => setMaxRetries(Number(e.target.value))} className="border rounded px-3 py-2 text-sm w-24 mt-1" />
                 </div>
                 {/* Connectors (UR-Bug-1) */}
                 <div>
@@ -869,7 +871,9 @@ export default function AgentCreate() {
                       </div>
                     </div>
                   ) : (
-                    <p className="text-xs text-amber-600 mb-2">No tools selected. Default tools will be assigned based on agent type.</p>
+                    <p className="text-xs text-muted-foreground mb-2">
+                      {useDefaultTools ? "No tools selected. Suggested tools enabled." : "No tools selected. Reasoning only."}
+                    </p>
                   )}
                   <select
                     onChange={(e) => {
@@ -941,12 +945,10 @@ export default function AgentCreate() {
                   </div>
                 </div>
 
-                {authorizedTools.length === 0 && (
-                  <div className="rounded-lg bg-amber-50 border border-amber-200 px-4 py-3 text-sm text-amber-800">
-                    <p className="font-medium">No tools selected</p>
-                    <p className="text-xs mt-1">This agent won't be able to call any tools. Default tools will be assigned based on agent type, but you may want to explicitly select tools for better control.</p>
-                  </div>
-                )}
+                <label className="flex items-center gap-2 text-sm">
+                  <input type="checkbox" checked={useDefaultTools} onChange={(event) => setUseDefaultTools(event.target.checked)} />
+                  Use suggested tools when none selected
+                </label>
 
                 {authorizedTools.some((t) => getToolPermission(t) === "DELETE" || getToolPermission(t) === "ADMIN") && (
                   <div className="rounded-lg bg-yellow-50 border border-yellow-300 px-4 py-3 text-sm text-yellow-800">

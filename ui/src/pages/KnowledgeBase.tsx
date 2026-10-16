@@ -26,6 +26,7 @@ interface KBDocument {
   ocr_applied?: boolean;
   ocr_confidence?: number | null;
   created_at?: string;
+  ingestion_error?: string | null;
 }
 
 interface KBStats {
@@ -208,7 +209,7 @@ function DuplicateDecisionModal({
         </p>
         <div className="flex flex-col gap-2">
           <Button onClick={() => onDecide("replace")} className="w-full">
-            Replace existing (old version is deleted + reindexed)
+            Replace existing
           </Button>
           <Button
             onClick={() => onDecide("keep_both")}
@@ -270,8 +271,8 @@ export default function KnowledgeBase() {
     [],
   );
 
-  const fetchData = useCallback(async () => {
-    setLoading(true);
+  const fetchData = useCallback(async (silent = false) => {
+    if (!silent) setLoading(true);
     try {
       const [docsRes, statsRes] = await Promise.allSettled([
         api.get("/knowledge/documents"),
@@ -292,7 +293,7 @@ export default function KnowledgeBase() {
             d.status as string,
           )
             ? d.status
-            : "indexed") as KBDocument["status"],
+            : d.status === "ready" ? "indexed" : "failed") as KBDocument["status"],
           size_bytes: Number(d.size_bytes ?? 0),
           uploaded_at: String(
             d.uploaded_at ?? d.created_at ?? "",
@@ -301,12 +302,13 @@ export default function KnowledgeBase() {
           extraction_method: typeof d.extraction_method === "string" ? d.extraction_method : null,
           ocr_applied: d.ocr_applied === true,
           ocr_confidence: typeof d.ocr_confidence === "number" ? d.ocr_confidence : null,
+          ingestion_error: typeof d.ingestion_error === "string" ? d.ingestion_error : null,
         }),
       );
       const s = statsRes.status === "fulfilled" ? statsRes.value.data : null;
 
-      setDocuments(docs);
-      setStats(s || null);
+      if (!silent || docsRes.status === "fulfilled") setDocuments(docs);
+      if (!silent || statsRes.status === "fulfilled") setStats(s || null);
     } catch {
       setDocuments([]);
       setStats(null);
@@ -318,6 +320,13 @@ export default function KnowledgeBase() {
   useEffect(() => {
     fetchData();
   }, [fetchData]);
+
+  const hasProcessing = documents.some((document) => document.status === "processing");
+  useEffect(() => {
+    if (!hasProcessing) return;
+    const timer = window.setInterval(() => { void fetchData(true); }, 5_000);
+    return () => window.clearInterval(timer);
+  }, [fetchData, hasProcessing]);
 
   /* ---- Upload ---- */
 
@@ -495,7 +504,7 @@ export default function KnowledgeBase() {
       )}
       <div className="flex justify-between items-center">
         <h2 className="text-2xl font-bold">Knowledge Base</h2>
-        <Button variant="outline" onClick={fetchData}>Refresh</Button>
+        <Button variant="outline" onClick={() => { void fetchData(); }}>Refresh</Button>
       </div>
 
       {/* Stats */}
@@ -679,6 +688,12 @@ export default function KnowledgeBase() {
                   <td className="p-3 font-medium">{doc.filename}</td>
                   <td className="p-3">
                     <Badge variant={STATUS_BADGE[doc.status] || "secondary"}>{doc.status}</Badge>
+                    {doc.ingestion_error === "embedding_temporarily_unavailable" && doc.status === "processing" && (
+                      <span className="block text-xs text-muted-foreground mt-1">Indexing temporarily unavailable. Retry pending.</span>
+                    )}
+                    {doc.status === "failed" && (
+                      <span className="block text-xs text-destructive mt-1">Not searchable. Upload again and choose Replace.</span>
+                    )}
                   </td>
                   <td className="p-3">{formatBytes(doc.size_bytes ?? 0)}</td>
                   <td className="p-3">

@@ -1879,7 +1879,7 @@ async def create_agent(
     # fix for UR-Bug-1 downstream: a Gmail agent should default to Gmail
     # tools, not the static type map's union).
     tools = body.authorized_tools
-    if not tools:
+    if not tools and body.use_default_tools:
         tools = _derive_default_tools(
             body.agent_type,
             body.domain,
@@ -1889,6 +1889,8 @@ async def create_agent(
         list(body.connector_ids)
         if body.connector_ids
         else list(_AGENT_TYPE_DEFAULT_CONNECTOR_IDS.get(body.agent_type, []))
+        if body.use_default_tools
+        else []
     )
 
     # Validate user-provided tools against the registry (skip for auto-populated)

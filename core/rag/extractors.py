@@ -23,12 +23,14 @@ import re
 import shutil
 import subprocess
 import tempfile
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from email import policy
 from email.parser import BytesParser
 from html.parser import HTMLParser
 from pathlib import Path
 from typing import Any
+from zipfile import BadZipFile
 
 MAX_PDF_PAGES = int(os.getenv("AGENTICORG_RAG_MAX_PDF_PAGES", "500"))
 MAX_OCR_PAGES = int(os.getenv("AGENTICORG_RAG_MAX_OCR_PAGES", "100"))
@@ -271,11 +273,18 @@ def _extract_json(stream: bytes, mime_type: str) -> ExtractedContent:
 def _extract_pdf(stream: bytes, mime_type: str) -> ExtractedContent:
     try:
         from pypdf import PdfReader  # type: ignore[import-untyped]
+        from pypdf.errors import PdfReadError
     except ImportError as exc:  # pragma: no cover
         raise UnsupportedMimeType("PDF extraction requires pypdf; add it to pyproject dependencies") from exc
 
-    reader = PdfReader(io.BytesIO(stream))
-    if len(reader.pages) > MAX_PDF_PAGES:
+    try:
+        reader = PdfReader(io.BytesIO(stream))
+        if reader.is_encrypted and not reader.decrypt(""):
+            raise UnsupportedMimeType("PDF is password protected; upload an approved decrypted copy")
+        page_count = len(reader.pages)
+    except PdfReadError as exc:
+        raise UnsupportedMimeType("PDF could not be read safely; upload a complete, valid PDF") from exc
+    if page_count > MAX_PDF_PAGES:
         raise UnsupportedMimeType(f"PDF exceeds the {MAX_PDF_PAGES}-page extraction limit")
     spans: list[ExtractedSpan] = []
     low_text_pages: list[int] = []
@@ -309,7 +318,7 @@ def _extract_pdf(stream: bytes, mime_type: str) -> ExtractedContent:
         extraction_method="pypdf+ocr" if low_text_pages else "pypdf",
         total_chars=sum(len(s.text) for s in spans),
         extra={
-            "page_count": len(reader.pages),
+            "page_count": page_count,
             "ocr_pages": low_text_pages,
             "ocr_mean_confidence": (round(sum(ocr_confidences) / len(ocr_confidences), 2) if ocr_confidences else None),
         },
@@ -317,6 +326,15 @@ def _extract_pdf(stream: bytes, mime_type: str) -> ExtractedContent:
 
 
 # ── Word ─────────────────────────────────────────────────────────────
+
+
+def _read_office(reader: Callable[[bytes, str], ExtractedContent], stream: bytes, mime_type: str) -> ExtractedContent:
+    from lxml.etree import XMLSyntaxError
+
+    try:
+        return reader(stream, mime_type)
+    except (XMLSyntaxError, BadZipFile, KeyError, ValueError, EOFError) as exc:
+        raise UnsupportedMimeType("Office document contains an invalid or incomplete package") from exc
 
 
 def _extract_docx(stream: bytes, mime_type: str) -> ExtractedContent:
@@ -650,7 +668,7 @@ def _extract_legacy_office(stream: bytes, suffix: str, mime_type: str) -> Extrac
         converted = Path(directory) / f"source.{target_suffix}"
         if completed.returncode != 0 or not converted.exists():
             raise UnsupportedMimeType("LibreOffice could not convert the uploaded document")
-        result = extractor(converted.read_bytes(), mime_type)
+        result = _read_office(extractor, converted.read_bytes(), mime_type)
         result.extraction_method = f"libreoffice+{result.extraction_method}"
         return result
 
@@ -711,11 +729,17 @@ def extract(stream: bytes, mime_type: str, filename: str = "") -> ExtractedConte
     if mt == "application/pdf" or suffix == "pdf":
         return _extract_pdf(stream, mt or "application/pdf")
     if mt in ("application/vnd.openxmlformats-officedocument.wordprocessingml.document",) or suffix == "docx":
-        return _extract_docx(stream, mt or "application/vnd.openxmlformats-officedocument.wordprocessingml.document")
+        return _read_office(
+            _extract_docx, stream, mt or "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+        )
     if mt in ("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",) or suffix == "xlsx":
-        return _extract_xlsx(stream, mt or "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+        return _read_office(
+            _extract_xlsx, stream, mt or "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        )
     if mt == "application/vnd.openxmlformats-officedocument.presentationml.presentation" or suffix == "pptx":
-        return _extract_pptx(stream, mt or "application/vnd.openxmlformats-officedocument.presentationml.presentation")
+        return _read_office(
+            _extract_pptx, stream, mt or "application/vnd.openxmlformats-officedocument.presentationml.presentation"
+        )
     if mt == "application/rtf" or suffix == "rtf":
         return _extract_rtf(stream, mt or "application/rtf")
     if suffix in {"doc", "xls", "ppt", "odt", "ods", "odp"}:
