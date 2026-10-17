@@ -343,7 +343,11 @@ test("overview and table guides are accessible at compact and tablet widths", as
       .analyze();
     expect(home.violations.map((violation) => violation.id)).toEqual([]);
     await page.goto("/docs/knowledge-and-ocr");
-    await expect(page.locator(".docs-prose table")).toBeVisible();
+    const tables = page.locator(".docs-prose table");
+    await expect(tables.first()).toBeVisible();
+    for (const table of await tables.all()) {
+      await expect(table).toBeVisible();
+    }
     expect(
       await page.evaluate(
         () => document.documentElement.scrollWidth <= document.documentElement.clientWidth + 1,
