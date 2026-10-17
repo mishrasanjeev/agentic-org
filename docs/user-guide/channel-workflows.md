@@ -44,8 +44,8 @@ See [WhatsApp setup](https://developers.facebook.com/docs/whatsapp/cloud-api/get
 ## Telegram
 
 **Already connected? Reuse it.** Open the existing connection under **Channels**
-instead of saving the same bot as a second connection. The inbox's **Destination**
-link shows the configured agent or workflow. A bot has one Telegram webhook;
+instead of saving the same bot as a second connection. Preserve its configured
+agent or workflow destination. A bot has one Telegram webhook;
 creating another AgenticOrg connection does not move that webhook or replace the
 existing target. Keep an unused duplicate disabled.
 

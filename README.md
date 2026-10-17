@@ -58,7 +58,7 @@ Follow the [channel account and workflow guide](docs/user-guide/channel-workflow
 for account creation, callback registration, sender linking and verification.
 Local wire-contract tests are not proof of real provider-account delivery.
 Reuse an existing Telegram connection for an already connected bot; a second
-connection must not overwrite its webhook. The inbox identifies its destination.
+connection must not overwrite its webhook. Keep its configured destination unchanged.
 Verify real model reasoning separately from transport-only workflows, and do not
 claim a combined Telegram-to-Gemini flow unless one delivery proves both.
 

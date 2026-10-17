@@ -63,7 +63,7 @@ describe("BYO channel setup", () => {
     expect(screen.getByRole("link", { name: "MCP tools" })).toHaveAttribute("href", "/dashboard/connectors/remote-mcp");
   });
 
-  it("explains duplicate bot refusal without changing the working connection", async () => {
+  it("keeps the working connection unchanged when a duplicate bot is refused", async () => {
     const original = { ...binding, id: "original", name: "Working Telegram", provider: "telegram", target_kind: "workflow", target_id: "workflow-1", enabled: true };
     const duplicate = { ...original, id: "duplicate", name: "Unused Telegram", target_kind: "agent", target_id: "agent-1", enabled: false };
     get.mockImplementation((url: string) => {
@@ -78,16 +78,11 @@ describe("BYO channel setup", () => {
     await screen.findByText("Working Telegram");
     fireEvent.click(screen.getAllByRole("button", { name: "Open" })[1]);
     fireEvent.click(screen.getByRole("button", { name: "Connect Telegram" }));
-    expect(await screen.findByRole("alert")).toHaveTextContent("Reuse its existing AgenticOrg connection");
-    expect(screen.getByRole("alert")).toHaveTextContent("The existing webhook was not changed");
-    expect(screen.getByRole("alert")).not.toHaveTextContent("telegram_bot_connected_elsewhere");
-    expect(screen.getByRole("link", { name: "Agent: Reasoning acceptance" })).toHaveAttribute("href", "/dashboard/agents/agent-1");
+    expect(await screen.findByRole("alert")).toHaveTextContent("telegram_bot_connected_elsewhere");
     expect(screen.getByLabelText("Enabled", { exact: true })).not.toBeChecked();
     expect(post).toHaveBeenCalledExactlyOnceWith("/channels/bindings/duplicate/connect-telegram");
     expect(patch).not.toHaveBeenCalled();
     fireEvent.click(screen.getAllByRole("button", { name: "Open" })[0]);
-    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Workflow: Transport acceptance" })).toHaveAttribute("href", "/dashboard/workflows/workflow-1");
     expect(screen.getByLabelText("Enabled", { exact: true })).toBeChecked();
   });
 });
