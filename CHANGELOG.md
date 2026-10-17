@@ -9,6 +9,8 @@
   substitute for a fresh delegated run grant. External caller authority remains
   an additional restriction. This is not cryptographic per-case purpose binding
   or a network-egress control.
+- Apply the isolation minimum before A2A/MCP type routes choose their legacy
+  compatibility path, so valid registered agents are selected before minting.
 
 ## Dependency Compatibility (2026-10-17)
 

@@ -5,11 +5,12 @@ import asyncio
 import time
 import uuid
 from dataclasses import replace
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from auth.grant_enforcement import EnforcementMode
+from auth.grant_enforcement import EnforcementMode, deployment_default_mode
 from auth.run_grants import refresh_run_grant, resolve_run_grant
 from auth.token_pool import GrantMintError, RunGrantToken, TokenPool
 from core.config import settings
@@ -132,3 +133,75 @@ async def test_isolated_mint_failure_stays_closed_even_with_a_static_grant(monke
     assert grant.mode is EnforcementMode.DENY
     assert not grant.token
     assert grant.missing_sub_reason == "mint_failed"
+
+
+@pytest.mark.parametrize("default_mode", ["off", "warn", "deny"])
+@pytest.mark.parametrize("isolated", [False, True])
+def test_isolation_is_a_deployment_minimum_before_entry_point_routing(monkeypatch, default_mode, isolated):
+    monkeypatch.setattr(settings, "grants_isolate_run_tokens", isolated)
+    monkeypatch.setattr(settings, "grants_enforce_closed", default_mode)
+    assert deployment_default_mode() is (EnforcementMode.DENY if isolated else EnforcementMode(default_mode))
+
+
+@pytest.mark.parametrize("runtime", ["a2a", "mcp"])
+@pytest.mark.parametrize("default_mode", ["off", "warn"])
+async def test_type_routes_select_and_isolate_authority_before_legacy_shortcut(monkeypatch, runtime, default_mode):
+    from api.v1 import agents
+
+    monkeypatch.setattr(settings, "grants_isolate_run_tokens", True)
+    monkeypatch.setattr(settings, "grants_enforce_closed", default_mode)
+    tenant_id, agent_id = str(uuid.uuid4()), str(uuid.uuid4())
+    row = SimpleNamespace(id=agent_id, config={"grantex": {
+        "grant_token": "synthetic-static", "grantex_agent_id": "registered-a", "grantex_scopes": ["data:read"],
+    }})
+    select = AsyncMock(return_value=row)
+    mint = AsyncMock(side_effect=[
+        RunGrantToken(f"synthetic-{i}", f"grnt_{i}", time.time() + 900, "minted", 900) for i in range(2)
+    ])
+    with (
+        patch("core.feature_flags.load_flag_rows_strict", AsyncMock(return_value=SimpleNamespace(
+            global_row=None, tenant_row=None,
+        ))),
+        patch.object(agents, "_select_agent_for_type", select),
+        patch("auth.token_pool.token_pool.get_run_grant_token", mint),
+    ):
+        grants = [await agents._resolve_run_grant_for_type(
+            tenant_id=tenant_id, agent_type="analyst", company_id=None,
+            caller_token="synthetic-caller", caller_agent_id="caller-agent", runtime=runtime,
+        ) for _ in range(2)]
+    assert select.await_count == 2
+    assert mint.await_count == 2
+    assert all(g.mode is EnforcementMode.DENY and g.agent_id == agent_id for g in grants)
+    assert [g.token for g in grants] == ["synthetic-0", "synthetic-1"]
+    assert all(g.caller_token == "synthetic-caller" for g in grants)
+    assert grants[0].isolation_key != grants[1].isolation_key
+
+
+@pytest.mark.parametrize("runtime", ["a2a", "mcp"])
+@pytest.mark.parametrize("lookup_failure", [False, True])
+async def test_isolated_type_routes_fail_closed_without_a_selected_agent(monkeypatch, runtime, lookup_failure):
+    from api.v1 import agents
+
+    monkeypatch.setattr(settings, "grants_isolate_run_tokens", True)
+    monkeypatch.setattr(settings, "grants_enforce_closed", "off")
+    select = (
+        AsyncMock(side_effect=RuntimeError("synthetic lookup failure"))
+        if lookup_failure else AsyncMock(return_value=None)
+    )
+    mint = AsyncMock()
+    with (
+        patch("core.feature_flags.load_flag_rows_strict", AsyncMock(return_value=SimpleNamespace(
+            global_row=None, tenant_row=None,
+        ))),
+        patch.object(agents, "_select_agent_for_type", select),
+        patch("auth.token_pool.token_pool.get_run_grant_token", mint),
+    ):
+        grant = await agents._resolve_run_grant_for_type(
+            tenant_id=str(uuid.uuid4()), agent_type="analyst", company_id=None,
+            caller_token="", caller_agent_id="", runtime=runtime,
+        )
+    select.assert_awaited_once()
+    mint.assert_not_awaited()
+    assert grant.mode is EnforcementMode.DENY
+    assert not grant.token
+    assert grant.missing_sub_reason == ("lookup_failed" if lookup_failure else "no_agent")
