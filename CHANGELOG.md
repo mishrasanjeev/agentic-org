@@ -1,5 +1,15 @@
 # Changelog
 
+## Dependency Compatibility (2026-10-17)
+
+- Updated the provider, graph runtime, UI components and development tools together.
+  The provider integrations require `langchain-core>=1.6.10`; installing them
+  independently with the previous requirements pin could fail dependency resolution.
+- Reverified the encrypted checkpoint saver against `langgraph-checkpoint==4.3.0`
+  and `langgraph-checkpoint-postgres==3.1.3`. Exact-version refusal, encrypted
+  storage, thread binding and existing configuration defaults remain unchanged.
+  The upstream schema migration list is unchanged; no new migration is needed.
+
 ## Unreleased - Direct-run explanation evidence
 
 - Add opt-in `AGENTICORG_AGENT_EXPLANATION_AUDIT_ENABLED` (default off) so the

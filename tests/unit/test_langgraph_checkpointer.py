@@ -273,7 +273,7 @@ def test_pinned_checkpoint_library_versions() -> None:
     # shipping a revision that applies them.
     from core.langgraph.checkpoint_postgres import VERIFIED_LIBRARY_VERSIONS
 
-    assert VERIFIED_LIBRARY_VERSIONS == {"langgraph-checkpoint-postgres": "3.1.2", "langgraph-checkpoint": "4.2.0"}
+    assert VERIFIED_LIBRARY_VERSIONS == {"langgraph-checkpoint-postgres": "3.1.3", "langgraph-checkpoint": "4.3.0"}
     pyproject = (REPO / "pyproject.toml").read_text(encoding="utf-8")
     requirements = (REPO / "requirements.txt").read_text(encoding="utf-8").splitlines()
     for package, pinned in VERIFIED_LIBRARY_VERSIONS.items():
@@ -285,11 +285,16 @@ def test_pinned_checkpoint_library_versions() -> None:
 
 UNVERIFIED = [
     (
-        {"langgraph-checkpoint-postgres": "3.2.0", "langgraph-checkpoint": "4.2.0"},
+        {"langgraph-checkpoint-postgres": "3.2.0", "langgraph-checkpoint": "4.3.0"},
         "langgraph-checkpoint-postgres is 3.2.0",
     ),
-    ({"langgraph-checkpoint-postgres": "3.1.2", "langgraph-checkpoint": "4.3.1"}, "langgraph-checkpoint is 4.3.1"),
-    ({"langgraph-checkpoint-postgres": "3.1.2"}, "langgraph-checkpoint is missing"),
+    ({"langgraph-checkpoint-postgres": "3.1.3", "langgraph-checkpoint": "4.3.1"}, "langgraph-checkpoint is 4.3.1"),
+    ({"langgraph-checkpoint-postgres": "3.1.3"}, "langgraph-checkpoint is missing"),
+    (
+        {"langgraph-checkpoint-postgres": "3.1.2", "langgraph-checkpoint": "4.3.0"},
+        "langgraph-checkpoint-postgres is 3.1.2",
+    ),
+    ({"langgraph-checkpoint-postgres": "3.1.3", "langgraph-checkpoint": "4.2.0"}, "langgraph-checkpoint is 4.2.0"),
 ]
 
 
@@ -326,6 +331,23 @@ def test_migration_ddl_is_the_library_migration_list() -> None:
     library = [_normalise(sql) for sql in AsyncPostgresSaver.MIGRATIONS]
     ours = [_normalise(sql) for sql in migration.CHECKPOINT_MIGRATIONS]
     assert ours == library
+
+
+def test_pending_write_replay_preserves_task_path_order_and_thread_binding() -> None:
+    from core.langgraph.checkpoint_postgres import SealedAsyncPostgresSaver
+
+    saver = object.__new__(SealedAsyncPostgresSaver)
+    saver.serde = cp.SealedSerializer(cp.VaultKeyringCipher([Fernet.generate_key()]))
+    rows = []
+    with cp.checkpoint_binding(THREAD_A, ""):
+        for task_id, task_path, value in [("a", "2", "second"), ("z", "1", "first")]:
+            type_name, blob = saver.serde.dumps_typed(value)
+            rows.append((task_id.encode(), b"messages", type_name.encode(), blob, task_path.encode(), b"0"))
+        assert saver._load_writes(rows) == [("z", "messages", "first"), ("a", "messages", "second")]
+        assert saver._load_writes(None) == []
+    with cp.checkpoint_binding(THREAD_B, ""), pytest.raises(cp.CheckpointIntegrityError) as exc_info:
+        saver._load_writes(rows)
+    assert exc_info.value.reason == "checkpoint_binding_mismatch"
 
 
 def test_migration_revision_chain_and_stamp() -> None:

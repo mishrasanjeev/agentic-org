@@ -82,13 +82,13 @@ dependencies = [
     "mcp>=1.30.0,<2",
     # Twilio webhook signatures are protocol-defined HMAC-SHA1. Delegate
     # canonicalisation and constant-time validation to the maintained SDK.
-    "twilio>=9.11.2",
+    "twilio>=9.12.0",
     # Billing checkout is a production request path. Keep the Stripe SDK in
     # base deps so Docker's `pip install .[v4]` image can create Checkout
     # Sessions when STRIPE_SECRET_KEY and price IDs are configured.
     "stripe>=15.6.1",
     # langchain-google-genai 4.4.x requires the google-genai 2.x API line.
-    "google-genai>=2.29.0",
+    "google-genai>=2.30.0",
     "anthropic>=0.125.0",
     "openai>=2.54.0",
     "google-cloud-storage>=2.18.0",
@@ -103,17 +103,17 @@ dependencies = [
     "opentelemetry-instrumentation-fastapi>=0.66b1",
     "wrapt>=1.17.3",
     "prometheus-client>=0.26.0",
-    "langgraph>=1.2.14",
+    "langgraph>=1.2.15",
     "langchain>=1.4.4",
     "langchain-google-genai>=4.4.1",
-    "langchain-anthropic>=1.7.5",
-    "langchain-openai>=1.7.0",
+    "langchain-anthropic>=1.7.6",
+    "langchain-openai>=1.7.1",
     # Exact pins: core/langgraph/checkpoint_postgres.py overrides saver internals
     # of these versions and refuses to start the Postgres store with any other.
-    "langgraph-checkpoint-postgres==3.1.2",
-    "langgraph-checkpoint==4.2.0",
+    "langgraph-checkpoint-postgres==3.1.3",
+    "langgraph-checkpoint==4.3.0",
     "grantex>=0.7.2",
-    "langsmith>=0.14.1",
+    "langsmith>=0.14.8",
     "pypdf>=6.20.0",
     # Canonical document extraction. The production image below ships the
     # matching Tesseract, Poppler, and LibreOffice system dependencies.
@@ -181,7 +181,7 @@ dev = [
     "ruff>=0.17.0",
     "mypy>=1.20.2",
     "bandit>=1.9.4",
-    "pre-commit>=4.6.2",
+    "pre-commit>=4.7.0",
     # Needed by tests that PR-D2 un-skipped (test_pii_redaction,
     # test_v490_reqs). Kept out of the default `project.dependencies`
     # so the wheel stays lean for downstream SDK consumers.
