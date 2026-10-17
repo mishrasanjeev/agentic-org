@@ -745,6 +745,9 @@ class Settings(BaseSettings):
     # ``grants.enforce_closed.deny`` feature flags. An unknown value fails
     # startup. Env: AGENTICORG_GRANTS_ENFORCE_CLOSED.
     grants_enforce_closed: Literal["off", "warn", "deny"] = "off"
+    # Opt-in separate delegated grant per server-created run authorization.
+    # Enabling this also forces deny mode and refuses legacy static agent tokens.
+    grants_isolate_run_tokens: bool = False
     # Lifetime requested for a per-run grant delegated from the root grant
     # (auth/token_pool.py). At least 300 s: a grant is handed out only with
     # max(120 s, 10%) left, so a shorter lifetime would mint on nearly every

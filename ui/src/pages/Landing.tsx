@@ -636,6 +636,19 @@ export default function Landing() {
       {/* ============================================================ */}
       {/* 2c. OPEN AGENTIC COMMERCE PROTOCOL                            */}
       {/* ============================================================ */}
+      <section aria-labelledby="agent-security-heading" className="border-y border-emerald-200 bg-emerald-50 py-8">
+        <div className="mx-auto flex max-w-7xl flex-col gap-5 px-4 sm:px-6 lg:flex-row lg:items-center lg:justify-between lg:px-8">
+          <div className="max-w-3xl">
+            <h2 id="agent-security-heading" className="text-xl font-bold text-slate-900">Agent security beyond prompts</h2>
+            <p className="mt-2 text-sm leading-relaxed text-slate-700">Start with one bounded workflow: scoped tools, reviewable evidence and human-owned decisions. Our CERT-In response separates product controls from the deployment and tenant policies you must verify.</p>
+          </div>
+          <div className="flex shrink-0 flex-col items-start gap-3">
+            <Link to="/blog/cert-in-ai-agent-security" className="inline-flex min-h-11 items-center gap-2 py-2 text-sm font-semibold text-emerald-900 underline underline-offset-4">Read the security response<ArrowRight className="h-4 w-4" aria-hidden="true" /></Link>
+            <Link to="/docs/cert-in-agent-security" className="inline-flex min-h-11 items-center gap-2 py-2 text-sm font-semibold text-slate-900">Plan a controlled pilot<ArrowRight className="h-4 w-4" aria-hidden="true" /></Link>
+          </div>
+        </div>
+      </section>
+
       <section id="evaluation-paths" className="py-14 bg-white border-b border-slate-200">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <h2 className="text-2xl font-bold text-slate-900">Start with your team's first useful workflow</h2>

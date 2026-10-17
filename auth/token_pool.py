@@ -275,6 +275,7 @@ class TokenPool:
         grantex_agent_id: str,
         scopes: list[str],
         ttl_seconds: int | None = None,
+        isolation_key: str | None = None,
     ) -> RunGrantToken:
         """Return a usable grant token for one agent run, minting one if needed.
 
@@ -287,7 +288,12 @@ class TokenPool:
             raise GrantMintError("agent_not_registered", "agent has no registered Grantex agent id or scopes")
         ttl = int(ttl_seconds or settings.grants_run_token_ttl_seconds)
 
-        cache_key = self._run_grant_cache_key(tenant_id, agent_id, grantex_agent_id, scopes)
+        if isolation_key is not None and (
+            not isinstance(isolation_key, str) or len(isolation_key) != 32
+            or any(c not in "0123456789abcdef" for c in isolation_key)
+        ):
+            raise GrantMintError("invalid_isolation_key", "isolation key must be a server-created UUID hex value")
+        cache_key = self._run_grant_cache_key(tenant_id, agent_id, grantex_agent_id, scopes, isolation_key)
         cached = await self._cached_run_grant(cache_key)
         if cached is not None:
             return cached
@@ -302,9 +308,14 @@ class TokenPool:
             return minted
 
     @staticmethod
-    def _run_grant_cache_key(tenant_id: str, agent_id: str, grantex_agent_id: str, scopes: list[str]) -> str:
+    def _run_grant_cache_key(
+        tenant_id: str, agent_id: str, grantex_agent_id: str, scopes: list[str], isolation_key: str | None = None
+    ) -> str:
         digest = hashlib.sha256(
-            json.dumps([grantex_agent_id, sorted(scopes)], separators=(",", ":")).encode()
+            json.dumps(
+                [grantex_agent_id, sorted(scopes), isolation_key] if isolation_key is not None
+                else [grantex_agent_id, sorted(scopes)], separators=(",", ":")
+            ).encode()
         ).hexdigest()[:24]
         return f"grant:run:{tenant_id}:{agent_id}:{digest}"
 

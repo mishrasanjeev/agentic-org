@@ -29,6 +29,9 @@ COPY observability/workload.py observability/timeline.py ../observability/
 COPY docs/ ../docs/
 COPY SECURITY.md docker-compose.yml ../
 COPY core/rbac.py ../core/rbac.py
+COPY auth/run_grants.py auth/token_pool.py ../auth/
+COPY core/config.py ../core/config.py
+COPY core/security/egress.py ../core/security/egress.py
 COPY sdk/README.md ../sdk/README.md
 COPY sdk-ts/README.md ../sdk-ts/README.md
 COPY mcp-server/README.md ../mcp-server/README.md

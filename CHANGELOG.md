@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased - Isolated run authorization
+
+- Add opt-in `AGENTICORG_GRANTS_ISOLATE_RUN_TOKENS` (default off). When on,
+  authorization resolution forces deny mode and obtains separate short-lived
+  delegated grants for separate server-created run authorization contexts.
+  Refresh preserves that isolation key; legacy static agent tokens do not
+  substitute for a fresh delegated run grant. External caller authority remains
+  an additional restriction. This is not cryptographic per-case purpose binding
+  or a network-egress control.
+
 ## Dependency Compatibility (2026-10-17)
 
 - Updated the provider, graph runtime, UI components and development tools together.
