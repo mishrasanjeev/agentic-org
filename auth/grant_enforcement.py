@@ -177,6 +177,8 @@ def clear_mode_cache() -> None:
 
 
 def deployment_default_mode() -> EnforcementMode:
+    if settings.grants_isolate_run_tokens:
+        return EnforcementMode.DENY
     return EnforcementMode(settings.grants_enforce_closed)
 
 

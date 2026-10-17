@@ -5,7 +5,7 @@ from __future__ import annotations
 
 import asyncio
 import uuid
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any
 
 import structlog
@@ -72,6 +72,7 @@ class CaseGrantAuthorizer:
     case_ref: str
     role: str
     purpose: str
+    isolation_key: str = field(default_factory=lambda: uuid.uuid4().hex, repr=False)
 
     async def authorize(self, *, connector: str, tool: str) -> ToolDecision:
         if self.role not in CASE_AGENT_ROLES:
@@ -107,6 +108,7 @@ class CaseGrantAuthorizer:
                 grantex_config=config,
                 mode=EnforcementMode.DENY,
                 runtime="governed_case",
+                isolation_key=self.isolation_key,
             )
         check = await check_run_grant(
             grant,

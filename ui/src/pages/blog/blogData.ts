@@ -9,9 +9,77 @@ export interface BlogPost {
   category: string;
   keywords: string[];
   content: string[];
+  references?: { title: string; url: string }[];
+  statusNote?: string;
+  pilotChecklist?: string[];
 }
 
 export const BLOG_POSTS: BlogPost[] = [
+  {
+    slug: "cert-in-ai-agent-security",
+    title: "Agent Security Beyond Prompts: A Practical Response to CERT-In",
+    description: "How to bound an agent workflow with scoped tools, run authorization, human review, restricted networks and evidence, without confusing product controls with compliance.",
+    date: "2026-10-17",
+    author: "AgenticOrg Team",
+    authorRole: "Product and Engineering",
+    readTime: "9 min read",
+    category: "Security",
+    keywords: ["AI agent security", "CERT-In CIAD-2026-0049", "least privilege", "agent governance", "human approval", "bounded agent pilot"],
+    statusNote: "Merchant onboarding remains sandbox-only, with live verification and activation disabled. New run-isolation controls are opt-in; tenant and operator deployment gates still require configuration and evidence.",
+    pilotChecklist: [
+      "Choose one read-only exception workflow and a named process owner.",
+      "Use synthetic records, a small approved tool set and short-lived authority.",
+      "Demonstrate wrong-tenant, missing-approval, revoked-grant and denied-network refusals.",
+      "Retain the revision, effective flags and test evidence before requesting wider access.",
+    ],
+    content: [
+      "## The Advisory Is About Real Access, Not Just Model Behavior",
+      "CERT-In issued Critical Advisory CIAD-2026-0049 on 15 October 2026, addressing unauthorized access by agents under evaluation and misuse of open-source agentic tools. Its warning makes an important engineering distinction: conventional exposures such as stolen credentials, broad permissions and reachable APIs remain dangerous when an agent operates them.",
+      "A prompt saying 'do not access production' is not a network restriction. A model's confidence is not authorization. A completed API call is not a legitimate business decision. Our response is to separate these boundaries and require evidence at each one.",
+      "This article is an implementation and deployment guide, not a claim of CERT-In endorsement, certification, regulatory compliance or permission to perform financial transactions. Source capability, enabled configuration and a tested customer deployment are distinct statuses.",
+      "Advisory detail-page availability was intermittent when checked on 17 October 2026. If a detail link is unavailable, the official 2026 advisory index in the references lists both titles and issue dates.",
+      "## What AgenticOrg Specifically Does",
+      "AgenticOrg coordinates a bounded business workflow: receive the case, retrieve approved evidence through configured tools, identify missing items, assemble a cited work product, route the exception to a responsible person and record the outcome and handoff. The output is an evidence bundle and an explicit handoff with unresolved conditions visible.",
+      "For example, a merchant-onboarding analyst receives an application whose declared owner differs from a registry result. The agent can organize the application and permitted source records, highlight the inconsistency and draft a request for the missing evidence. It should not invent a verified owner, clear an unresolved screening hit, approve the merchant or activate payment processing.",
+      "The reviewer needs the source, retrieval time, missing evidence and policy version, not a confident summary alone. An unavailable provider capability must remain unavailable. A failed lookup must not be translated into a clean screening result. Changing the evidence after an approval request must require a fresh decision under the applicable workflow.",
+      "A useful first pilot measures assembly time, missing-information rate, reviewer corrections and reopened exceptions on a reviewed synthetic sample. We are not asserting a numerical productivity or accuracy gain from a few successful test cases.",
+      "## Where Grantex Adds A Real Boundary",
+      "Grantex is justified where delegated tool authority must be scoped, time-limited, verified and revocable independently of the agent. A trusted tool gateway checks the expected authority before making a protected call. Decision grants can carry a verified human decision where that integration is configured. These are enforceable boundaries, not extra names in an architecture diagram.",
+      "Grantex is not required merely to summarize a local public document. It also does not replace a registry or screening provider, the bank's transaction engine, cloud IAM or an incident-response team. If a tool accepts a stolen upstream key directly, the underlying system must revoke that key and close the bypass.",
+      "For irreversible financial effects, the executor still checks an exact approved business record, beneficiary, amount, currency, freshness, replay state and cumulative limits. An agent's draft or a generic approval must not independently initiate or approve a high-impact transfer. CERT-In's related Critical Advisory CIAD-2026-0046, issued 9 October 2026, addresses payment and disbursement API threats.",
+      "## A New Opt-In Run Authorization Boundary",
+      "AgenticOrg's source adds AGENTICORG_GRANTS_ISOLATE_RUN_TOKENS. When enabled, separate server-created authorization contexts use separate run-grant cache entries. A static configured grant is not substituted for a fresh context. A supplied caller grant remains an additional restriction rather than a shortcut around fresh authorization, and a minting failure refuses the protected work.",
+      "The compatibility default remains off. Operators must configure an appropriate short lifetime and explicitly enable the setting after validation. This change does not create an OS sandbox, automatically revoke every grant when a run ends, or cryptographically bind pooled tokens to a case ID or purpose. Those limitations remain visible in the deployment guide.",
+      "The focused regression suite runs with synthetic credentials and Docker networking disabled. Such tests demonstrate the exercised cache and resolution paths; they do not prove that every external tool, browser or worker in a production deployment is confined.",
+      "## Restrict The Process, Not Only Its HTTP Helper",
+      "URL validation and DNS-pinned transports protect the call paths that actually use them. They are not a universal network firewall. Browsers, shell commands, subprocesses, workers, telemetry clients and installed packages need independent network-layer restrictions. Cloud routing through a VPC is not itself a destination allowlist.",
+      "Use default-deny workload networking with explicit destinations and ports, narrowly permitted DNS, separate identities and synthetic data. Prevent the workload from editing its own policy or creating an unrestricted sibling. Test an allowed destination, a denied destination, a redirect and an alternative execution path. Keep the deny evidence alongside the effective deployed configuration.",
+      "If a run encounters an unexpected third-party credential, stop the run and escalate without testing whether the credential works. Preserve controlled evidence and rotate a compromised credential at its actual issuer. Log masking and repository secret scanning do not by themselves implement runtime quarantine across later runs.",
+      "## Tenant-Owned Identity And Human Review",
+      "Each tenant should configure its own approved SSO/OIDC identity provider, exact redirect configuration and least-privilege administrator groups. Enforce MFA in that provider's application policy and demonstrate both allowed and refused sign-ins. A metadata connectivity test does not prove an authenticated human, correct group mapping or the required factor.",
+      "Tenant administrators must not acquire platform-operator authority merely by controlling their own IdP. Protect platform administration separately and retain an independent, tested containment path. Machine credentials, emergency access and the ability to change SSO enforcement remain privileged assets requiring their own controls.",
+      "In a sensitive case workflow, keep investigation, review and final execution distinct. AgenticOrg may prepare evidence and a proposed disposition. A named authorized human reviews it. The downstream institution determines what the signed handoff authorizes and validates the final effect. Unresolved evidence is a review hold, not an activation signal.",
+      "## Monitoring Must Lead To An Owned Response",
+      "Maintain an inventory of agents, tools, schedules, integrations, credential references and endpoints with named owners. Reconcile it against actual cloud assets and remove dormant surfaces only after checking dependencies. An application catalog is not automatic discovery of every system.",
+      "Centralize security-relevant events with tenant context, action, destination, result, policy version and correlation identifiers, while excluding raw secrets and sensitive bodies. Alert on enumeration, bulk reads, unexpected destinations and repeated denials. Test notification delivery and escalation; a configured chart or a per-minute quota is not evidence of a functioning irregularity response.",
+      "For the applicable security logs, verifying at least 180 days of storage retention, routing, exclusions and reader/writer controls is an operator acceptance gate, not a claim that AgenticOrg automatically supplies retained cloud logs. A seven-year application audit setting does not prove that cloud request logs have the same retention. Already expired history remains unavailable after a retention change, and hash-linked evidence does not make storage undeletable.",
+      "When unauthorized access is suspected, preserve evidence, contain access, investigate alternative paths and remediate root causes. Retest externally after rotation and recovery. The incident owner must assess applicable CERT-In reporting duties with the appropriate advisers; installing this product does not fulfill those duties.",
+      "## Current Evidence And Explicit Limits",
+      "The merchant-onboarding work discussed in our pilot remains sandbox-only. It is not a commercially cleared onboarding service: merchant activation and live verification remain disabled. Positive validated ownership, complete screening coverage, regional entitlements, an approved decision policy and privacy/operational gates require separate evidence and authorization before any future launch.",
+      "Existing tenant/tool controls and the new run-isolation source option are useful layers. Global credential quarantine, organization-wide API discovery, workload-wide egress enforcement, tenant MFA policy and incident-response clearance must not be advertised as automatically completed features. The control register names the responsible owner and acceptance evidence for each boundary.",
+      "## Start With One Safe Workflow",
+      "Choose one read-only exception workflow, one owner, synthetic records and a small tool allowlist. Set a measurable outcome and explicit stop conditions. Demonstrate wrong-tenant refusal, missing authority, expired grants, changed evidence, absent approval and denied network access before expanding permissions.",
+      "Promote only after the process owner, tenant administrator, security operator and downstream-system owner approve their own gates. Use the deployment guide and adoption checklist below to retain the effective flags, test timestamps, revision, logs and unresolved gaps. Security evidence is part of the pilot deliverable, not an appendix added after activation.",
+    ],
+    references: [
+      { title: "CERT-In CIAD-2026-0049: AI Agents as Attack Vectors", url: "https://www.cert-in.org.in/s2cMainServlet?pageid=PUBVLNOTES02&VLCODE=CIAD-2026-0049" },
+      { title: "CERT-In CIAD-2026-0046: Payment and Disbursement API Threats", url: "https://www.cert-in.org.in/s2cMainServlet?pageid=PUBVLNOTES02&VLCODE=CIAD-2026-0046" },
+      { title: "CERT-In: Official 2026 Advisory Index", url: "https://www.cert-in.org.in/s2cMainServlet?pageid=PUBADVLIST02&year=2026" },
+      { title: "AgenticOrg: Agent Security Deployment and Evidence Guide", url: "https://agenticorg.ai/docs/cert-in-agent-security" },
+      { title: "AgenticOrg: Adoption Checklist", url: "https://agenticorg.ai/docs/adoption-checklist" },
+      { title: "Grantex: Delegated Authority and Security Boundaries", url: "https://grantex.dev/blog/cert-in-ai-agent-security" },
+    ],
+  },
   {
     slug: "merchant-self-service-oacp-commerce-config",
     title: "Merchant Self-Service Config for OACP Commerce",

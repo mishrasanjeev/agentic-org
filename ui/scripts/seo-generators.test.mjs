@@ -44,6 +44,20 @@ const baseHtml = [
   '<div id="root"></div></body></html>',
 ].join("");
 
+test("CERT-In response retains official references and honest deployment boundaries in crawlable HTML", () => {
+  const { manifest: site, routes } = loadRouteDescriptors();
+  const route = routes.find((item) => item.path === "/blog/cert-in-ai-agent-security");
+  assert.ok(route);
+  assert.equal(route.references.length, 6);
+  const html = renderStaticHtml(baseHtml, route, site, routes);
+  const doc = new JSDOM(html).window.document;
+  assert.ok(doc.querySelector('a[href*="VLCODE=CIAD-2026-0049"]'));
+  assert.ok(doc.querySelector('a[href*="VLCODE=CIAD-2026-0046"]'));
+  assert.match(doc.body.textContent, /compatibility default remains off/);
+  assert.match(doc.body.textContent, /sandbox-only/);
+  assert.match(doc.body.textContent, /not a claim of CERT-In endorsement/);
+});
+
 test("inline JSON-LD CSP hashes are deterministic", () => {
   assert.equal(
     cspHash(""),

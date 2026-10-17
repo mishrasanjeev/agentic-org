@@ -167,10 +167,32 @@ export default function BlogPost() {
 
       {/* Article Content */}
       <article className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
-        <div className="prose prose-slate prose-lg max-w-none">
+        {post.pilotChecklist && (
+          <section aria-labelledby="article-start" className="mb-8 border-b border-slate-200 pb-8">
+            <h2 id="article-start" className="text-2xl font-bold text-slate-900">Start with a bounded pilot</h2>
+            {post.statusNote && <p className="mt-3 text-sm leading-relaxed text-slate-700">{post.statusNote}</p>}
+            <ol className="mt-4 list-decimal space-y-2 pl-5 text-slate-700">
+              {post.pilotChecklist.map((item) => <li key={item} className="pl-1 leading-relaxed">{item}</li>)}
+            </ol>
+          </section>
+        )}
+        {post.references && (
+          <details className="mb-8 border-b border-slate-200 pb-3">
+            <summary className="min-h-11 cursor-pointer py-3 font-semibold text-slate-900">In this guide</summary>
+            <nav aria-label="Article contents">
+              <ul className="grid gap-x-6 sm:grid-cols-2">
+                {post.content.map((paragraph, i) => paragraph.startsWith('## ') && (
+                  <li key={i}><a href={`#article-section-${i}`} className="flex min-h-11 items-center py-2 text-sm text-blue-700 underline underline-offset-4">{paragraph.slice(3)}</a></li>
+                ))}
+                <li><a href="#article-references" className="flex min-h-11 items-center py-2 text-sm text-blue-700 underline underline-offset-4">References and implementation guides</a></li>
+              </ul>
+            </nav>
+          </details>
+        )}
+        <div className="prose prose-slate prose-lg max-w-none break-words">
           {post.content.map((paragraph, i) => {
             if (paragraph.startsWith("## ")) {
-              return <h2 key={i} className="text-2xl font-bold text-slate-900 mt-10 mb-4">{paragraph.slice(3)}</h2>;
+              return <h2 id={`article-section-${i}`} key={i} className="text-2xl font-bold text-slate-900 mt-10 mb-4">{paragraph.slice(3)}</h2>;
             }
             if (paragraph.startsWith("**") && paragraph.endsWith("**")) {
               return <h3 key={i} className="text-lg font-bold text-slate-800 mt-6 mb-2">{paragraph.slice(2, -2)}</h3>;
@@ -188,6 +210,19 @@ export default function BlogPost() {
             return <p key={i} className="text-slate-700 leading-relaxed mb-4">{paragraph}</p>;
           })}
         </div>
+
+        {post.references && (
+          <section aria-labelledby="article-references" className="mt-10 border-t border-slate-200 pt-8">
+            <h2 id="article-references" className="text-xl font-bold text-slate-900">References and implementation guides</h2>
+            <ul className="mt-4 space-y-3">
+              {post.references.map((reference) => (
+                <li key={reference.url}>
+                  <a href={reference.url} className="inline-flex min-h-11 items-center break-words py-2 text-blue-700 underline underline-offset-4">{reference.title}</a>
+                </li>
+              ))}
+            </ul>
+          </section>
+        )}
 
         {/* Tags */}
         <div className="mt-12 pt-8 border-t">

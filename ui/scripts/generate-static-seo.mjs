@@ -177,6 +177,13 @@ function parseSections(block) {
   }));
 }
 
+function parseReferences(block) {
+  const marker = /\breferences:\s*\[/.exec(block);
+  if (!marker) return [];
+  return extractObjectBlocks("export const REFERENCES = " + block.slice(marker.index + "references:".length), "REFERENCES")
+    .map((reference) => ({ title: stringField(reference, "title"), url: stringField(reference, "url") }));
+}
+
 export function loadRouteDescriptors(root = UI_ROOT) {
   const manifest = readPublicSite(root);
   const repoRoot = resolve(root, "..");
@@ -211,6 +218,9 @@ export function loadRouteDescriptors(root = UI_ROOT) {
         authorRole: stringField(block, "authorRole"),
         keywords: stringArrayField(block, "keywords"),
         content: stringArrayField(block, "content"),
+        references: parseReferences(block),
+        statusNote: stringField(block, "statusNote"),
+        pilotChecklist: stringArrayField(block, "pilotChecklist"),
       };
     });
 
@@ -540,6 +550,15 @@ export function renderStaticHtml(baseHtml, route, manifest, allRoutes = []) {
     : route.path === "/blog" ? "blog"
     : route.path === "/resources" ? "resource"
     : "";
+  const referenceHtml = route.references?.length
+    ? '<section><h2>References and implementation guides</h2><ul>' + route.references.map((reference) =>
+      '<li><a href="' + escapeHtml(reference.url) + '">' + escapeHtml(reference.title) + '</a></li>',
+    ).join('') + '</ul></section>'
+    : '';
+  const pilotHtml = route.pilotChecklist?.length
+    ? '<section><h2>Start with a bounded pilot</h2><p>' + escapeHtml(route.statusNote || '') + '</p><ol>'
+      + route.pilotChecklist.map((item) => '<li>' + escapeHtml(item) + '</li>').join('') + '</ol></section>'
+    : '';
   const directoryHtml = directoryKind
     ? "<section><h2>Explore " + escapeHtml(site.name) + "</h2><ul>" +
       allRoutes.filter((item) =>
@@ -557,7 +576,7 @@ export function renderStaticHtml(baseHtml, route, manifest, allRoutes = []) {
     '<noscript><main data-static-seo="true"' + (route.bodyHtml ? ' class="docs-site docs-prose" style="max-width:850px;margin:32px auto;padding:20px"' : "") + '><nav aria-label="Breadcrumb">' +
     crumbHtml + "</nav><h1>" + escapeHtml(route.name || route.title) +
     "</h1><p>" + escapeHtml(route.summary || route.description) + "</p>" +
-    (route.bodyHtml || "") + sectionHtml + articleHtml + faqHtml + directoryHtml + '<p><a href="' + escapeHtml(url) + '">View this page on ' +
+    (route.bodyHtml || "") + pilotHtml + sectionHtml + articleHtml + referenceHtml + faqHtml + directoryHtml + '<p><a href="' + escapeHtml(url) + '">View this page on ' +
     escapeHtml(site.name) + "</a></p></main></noscript>";
   return html.replace(
     '<div id="root"></div>',

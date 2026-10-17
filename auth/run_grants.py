@@ -73,6 +73,7 @@ class RunGrant:
     agent_id: str = ""
     grantex_agent_id: str = ""
     scopes: tuple[str, ...] = ()
+    isolation_key: str = ""
     # A Grantex token the caller authenticated with that belongs to a
     # different agent than the one this run executes. Every tool call must be
     # allowed by BOTH this token and the run agent's grant (``check_run_grant``),
@@ -202,6 +203,7 @@ async def resolve_run_grant(
     caller_token: str | None = "",
     caller_agent_id: str | None = "",
     caller_required: bool = False,
+    isolation_key: str | None = None,
 ) -> RunGrant:
     """Resolve the enforcement mode and grant token for one agent run.
 
@@ -217,11 +219,22 @@ async def resolve_run_grant(
         mode = await resolve_enforcement_mode(tenant_id)
     supplied = (supplied_token or "").strip()
     caller = (caller_token or "").strip()
+    from core.config import settings
+
+    isolated = settings.grants_isolate_run_tokens
+    if isolated:
+        mode = EnforcementMode.DENY
+        isolation_key = isolation_key or uuid.uuid4().hex
+        if supplied:
+            if caller and caller != supplied:
+                return RunGrant(mode=mode, source="none", missing_sub_reason="ambiguous_external_grants")
+            caller, supplied = supplied, ""
+            caller_agent_id = caller_agent_id or agent_id
 
     if mode is EnforcementMode.OFF:
         legacy_token = supplied_token or caller_token or ""
         return RunGrant(mode=mode, token=legacy_token, source="supplied" if legacy_token.strip() else "")
-    if caller and not supplied and caller_agent_id and str(caller_agent_id) == str(agent_id or ""):
+    if not isolated and caller and not supplied and caller_agent_id and str(caller_agent_id) == str(agent_id or ""):
         supplied, caller = caller, ""
     grant = await _resolve_run_agent_grant(
         mode=mode,
@@ -230,6 +243,7 @@ async def resolve_run_grant(
         supplied=supplied,
         grantex_config=grantex_config,
         runtime=runtime,
+        isolation_key=isolation_key if isolated else None,
     )
     if caller:
         logger.info(
@@ -260,6 +274,7 @@ async def _resolve_run_agent_grant(
     supplied: str,
     grantex_config: Mapping[str, Any] | None,
     runtime: str,
+    isolation_key: str | None = None,
 ) -> RunGrant:
     if supplied:
         return RunGrant(mode=mode, token=supplied, source="supplied")
@@ -292,7 +307,7 @@ async def _resolve_run_agent_grant(
             return _missing("lookup_failed")
 
     legacy = grantex_config.get("grant_token")
-    if isinstance(legacy, str) and legacy.strip():
+    if isolation_key is None and isinstance(legacy, str) and legacy.strip():
         return RunGrant(mode=mode, token=legacy.strip(), source="agent_config")
 
     from auth.token_pool import GrantMintError, token_pool
@@ -305,6 +320,7 @@ async def _resolve_run_agent_grant(
             agent_id=agent,
             grantex_agent_id=str(grantex_config.get("grantex_agent_id") or ""),
             scopes=scopes,
+            **({"isolation_key": isolation_key} if isolation_key is not None else {}),
         )
     except GrantMintError as exc:
         return _missing(exc.sub_reason)
@@ -323,6 +339,7 @@ async def _resolve_run_agent_grant(
         agent_id=agent,
         grantex_agent_id=str(grantex_config.get("grantex_agent_id") or ""),
         scopes=tuple(scopes),
+        isolation_key=isolation_key or "",
     )
 
 
@@ -349,6 +366,7 @@ async def refresh_run_grant(run_grant: RunGrant) -> RunGrant:
             grantex_agent_id=run_grant.grantex_agent_id,
             scopes=list(run_grant.scopes),
             ttl_seconds=run_grant.ttl_seconds or None,
+            **({"isolation_key": run_grant.isolation_key} if run_grant.isolation_key else {}),
         )
     except GrantMintError as exc:
         logger.warning("run_grant_refresh_failed", sub_reason=exc.sub_reason, agent_id=run_grant.agent_id)
