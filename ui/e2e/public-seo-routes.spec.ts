@@ -1,6 +1,52 @@
 // SPDX-License-Identifier: Apache-2.0
 import { expect, test } from "@playwright/test";
 
+test("CERT-In workflows and sandbox boundaries are available without JavaScript", async ({ browser, baseURL, request }) => {
+  const path = "/blog/cert-in-ai-agent-security";
+  const response = await request.get(path);
+  expect(response.status()).toBe(200);
+  expect(await response.text()).toContain("cert-in-accountable-handoffs.png");
+  const context = await browser.newContext({ javaScriptEnabled: false });
+  try {
+    const page = await context.newPage();
+    await page.goto(`${baseURL}${path}`);
+    await expect(page.getByRole("heading", { level: 1 })).toHaveText("AgenticOrg and CERT-In: make the handoffs accountable");
+    await expect(page.getByRole("figure")).toHaveCount(3);
+    await expect(page.getByText("The merchant example is illustrative and sandbox-only.", { exact: false })).toBeVisible();
+    await expect(page.getByText("Live verification and activation stay disabled.", { exact: false })).toBeVisible();
+    await expect(page.getByRole("link", { name: "CERT-In CIAD-2026-0049: AI Agents as Attack Vectors" })).toHaveAttribute("href", /VLCODE=CIAD-2026-0049$/);
+  } finally {
+    await context.close();
+  }
+});
+
+for (const width of [320, 768, 1440]) {
+  test(`CERT-In workflows fit and the contents work by keyboard at ${width}px`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 900 });
+    await page.goto("/blog/cert-in-ai-agent-security");
+    const figures = page.getByRole("figure");
+    await expect(figures).toHaveCount(3);
+    for (const figure of await figures.all()) {
+      await expect(figure.getByRole("listitem")).toHaveCount(4);
+    }
+    await expect(page.getByText("Illustrative containment design / deployment validation required", { exact: true })).toBeVisible();
+    for (const link of await page.locator("footer a").all()) {
+      const bounds = await link.boundingBox();
+      expect(bounds?.height).toBeGreaterThanOrEqual(44);
+    }
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+    const contents = page.locator("summary");
+    await contents.focus();
+    await page.keyboard.press("Enter");
+    await expect(contents.locator("..")).toHaveAttribute("open", "");
+    const link = page.getByRole("link", { name: "Workflow 1: prepare the exception, not the verdict", exact: true });
+    await link.focus();
+    await page.keyboard.press("Enter");
+    await expect(page).toHaveURL(/#article-section-/);
+    await expect(page.getByRole("heading", { name: "Workflow 1: prepare the exception, not the verdict", exact: true })).toBeInViewport();
+  });
+}
+
 test("public content is available in HTML without JavaScript", async ({ browser, baseURL }) => {
   const context = await browser.newContext({ javaScriptEnabled: false });
   try {

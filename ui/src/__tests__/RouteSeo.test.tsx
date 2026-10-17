@@ -231,7 +231,7 @@ describe("detail page metadata", () => {
     );
     expect(document.querySelector('meta[property="og:image"]')).toHaveAttribute(
       "content",
-      "https://agenticorg.ai/og-image.png",
+      "https://agenticorg.ai" + (post.socialImage || "/og-image.png"),
     );
     const script = document.querySelector('script[type="application/ld+json"]');
     const schema = JSON.parse(script?.textContent ?? "{}") as {

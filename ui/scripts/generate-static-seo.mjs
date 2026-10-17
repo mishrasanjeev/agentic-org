@@ -221,6 +221,7 @@ export function loadRouteDescriptors(root = UI_ROOT) {
         references: parseReferences(block),
         statusNote: stringField(block, "statusNote"),
         pilotChecklist: stringArrayField(block, "pilotChecklist"),
+        socialImage: stringField(block, "socialImage") || undefined,
       };
     });
 
@@ -425,7 +426,7 @@ function buildJsonLd(route, manifest) {
           }
         : { "@type": "Organization", name: route.author || site.legalName || site.name },
       publisher: { "@id": organizationId },
-      image: site.defaultImage || undefined,
+      image: route.socialImage ? canonicalUrl(site, route.socialImage) : site.defaultImage || undefined,
       keywords: route.keywords && route.keywords.length
         ? route.keywords.join(", ")
         : undefined,
@@ -473,7 +474,7 @@ function stripRouteMetadata(html) {
 export function renderStaticHtml(baseHtml, route, manifest, allRoutes = []) {
   const site = manifest.site;
   const url = canonicalUrl(site, route.path);
-  const image = site.defaultImage;
+  const image = route.socialImage ? canonicalUrl(site, route.socialImage) : site.defaultImage;
   const imageAlt = route.path === "/"
     ? "AgenticOrg governed enterprise AI agent platform"
     : route.name + " - " + site.name;

@@ -48,14 +48,19 @@ test("CERT-In response retains official references and honest deployment boundar
   const { manifest: site, routes } = loadRouteDescriptors();
   const route = routes.find((item) => item.path === "/blog/cert-in-ai-agent-security");
   assert.ok(route);
-  assert.equal(route.references.length, 6);
+  assert.equal(route.references.length, 7);
   const html = renderStaticHtml(baseHtml, route, site, routes);
   const doc = new JSDOM(html).window.document;
   assert.ok(doc.querySelector('a[href*="VLCODE=CIAD-2026-0049"]'));
   assert.ok(doc.querySelector('a[href*="VLCODE=CIAD-2026-0046"]'));
-  assert.match(doc.body.textContent, /compatibility default remains off/);
+  assert.match(doc.body.textContent, /remains default-off/);
   assert.match(doc.body.textContent, /sandbox-only/);
-  assert.match(doc.body.textContent, /not a claim of CERT-In endorsement/);
+  assert.match(doc.body.textContent, /not CERT-In endorsement/);
+  const image = "https://agenticorg.ai/blog/cert-in-accountable-handoffs.png";
+  assert.equal(doc.querySelector('meta[property="og:image"]').content, image);
+  assert.equal(doc.querySelector('meta[name="twitter:image"]').content, image);
+  const schema = JSON.parse(doc.querySelector('script[type="application/ld+json"]').textContent);
+  assert.equal(schema['@graph'].find(node => node['@type'] === 'BlogPosting').image, image);
 });
 
 test("inline JSON-LD CSP hashes are deterministic", () => {
