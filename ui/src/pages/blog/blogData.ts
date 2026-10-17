@@ -1,3 +1,13 @@
+export interface BlogWorkflow {
+  id: string;
+  heading: string;
+  title: string;
+  status: string;
+  steps: { owner: string; title: string; detail: string }[];
+  hold: string;
+  note: string;
+}
+
 export interface BlogPost {
   slug: string;
   title: string;
@@ -11,70 +21,110 @@ export interface BlogPost {
   content: string[];
   references?: { title: string; url: string }[];
   statusNote?: string;
+  intro?: string;
   pilotChecklist?: string[];
+  socialImage?: string;
+  workflows?: BlogWorkflow[];
 }
 
 export const BLOG_POSTS: BlogPost[] = [
   {
     slug: "cert-in-ai-agent-security",
-    title: "Agent Security Beyond Prompts: A Practical Response to CERT-In",
-    description: "How to bound an agent workflow with scoped tools, run authorization, human review, restricted networks and evidence, without confusing product controls with compliance.",
+    title: "AgenticOrg and CERT-In: make the handoffs accountable",
+    description: "AgenticOrg helps organise evidence, route exceptions and keep human decisions visible. Three workflows explain its role in CERT-In CIAD-2026-0049.",
     date: "2026-10-17",
     author: "AgenticOrg Team",
     authorRole: "Product and Engineering",
-    readTime: "9 min read",
+    readTime: "6 min read",
     category: "Security",
     keywords: ["AI agent security", "CERT-In CIAD-2026-0049", "least privilege", "agent governance", "human approval", "bounded agent pilot"],
-    statusNote: "Merchant onboarding remains sandbox-only, with live verification and activation disabled. New run-isolation controls are opt-in; tenant and operator deployment gates still require configuration and evidence.",
+    statusNote: "The merchant example is illustrative and sandbox-only. Live verification and activation stay disabled. Product mechanisms, sandbox evidence and proposed workflow steps are labelled separately below.",
+    intro: "CERT-In is India's national cybersecurity incident-response agency. Its advisory asks teams to limit what agents can reach, monitor their activity and keep people in control. AgenticOrg helps organise that work; it does not replace access controls or incident response.",
     pilotChecklist: [
-      "Choose one read-only exception workflow and a named process owner.",
-      "Use synthetic records, a small approved tool set and short-lived authority.",
-      "Demonstrate wrong-tenant, missing-approval, revoked-grant and denied-network refusals.",
-      "Retain the revision, effective flags and test evidence before requesting wider access.",
+      "Choose one exception case, one process owner and synthetic records.",
+      "Allow only the tools and data needed to prepare that case.",
+      "Prove that missing evidence, absent approval and revoked access keep work blocked.",
+    ],
+    socialImage: "/blog/cert-in-accountable-handoffs.png",
+    workflows: [
+      {
+        id: "exception-workflow",
+        heading: "Workflow 1: prepare the exception, not the verdict",
+        title: "An ownership mismatch becomes a reviewable case",
+        status: "Illustrative merchant workflow / sandbox-only",
+        steps: [
+          { owner: "Process owner", title: "Define the case", detail: "Name the task, permitted records, tools and review owner." },
+          { owner: "AgenticOrg", title: "Gather permitted evidence", detail: "Use configured tools; keep sources and unavailable checks visible." },
+          { owner: "AgenticOrg", title: "Prepare the exception", detail: "Highlight the mismatch and draft a request for missing evidence." },
+          { owner: "Human reviewer", title: "Review the case", detail: "Check the evidence and decide what is needed next." },
+        ],
+        hold: "Missing evidence or an unavailable check stays unresolved. A failed lookup is not a clean result.",
+        note: "AgenticOrg organises the work. The authoritative source establishes facts; an authorised reviewer owns the decision. This is not proof of validated ownership or complete screening.",
+      },
+      {
+        id: "review-workflow",
+        heading: "Workflow 2: hand off a decision, not a vague approval",
+        title: "Preparation, review and execution are separate jobs",
+        status: "Proposed merchant integration / existing review mechanisms are building blocks",
+        steps: [
+          { owner: "AgenticOrg", title: "Prepare a recommendation", detail: "Present sources, missing items and the exact proposed next action." },
+          { owner: "Human reviewer", title: "Make an explicit decision", detail: "An authenticated, authorised person approves, rejects or requests more." },
+          { owner: "AgenticOrg", title: "Record the handoff", detail: "Keep the decision linked to the case; use only a configured resume path." },
+          { owner: "Downstream system", title: "Validate the final action", detail: "Apply its own authority, record, amount and replay checks." },
+        ],
+        hold: "Changed evidence, missing approval or an unsupported action must not become permission to proceed.",
+        note: "The full merchant evidence-to-decision binding is a proposed acceptance gate, not a completed live flow. A recorded approval is not bank approval or merchant activation.",
+      },
+      {
+        id: "containment-workflow",
+        heading: "Workflow 3: contain access and preserve the case",
+        title: "An operator can intervene without asking the agent",
+        status: "Illustrative containment design / deployment validation required",
+        steps: [
+          { owner: "Operator", title: "Identify the issue", detail: "A reviewer or configured monitor flags activity outside the task." },
+          { owner: "AgenticOrg", title: "Cancel further workflow steps", detail: "An authorised operator uses the workflow cancellation path." },
+          { owner: "Access administrator", title: "Withdraw tool access", detail: "Revoke authority at its issuer; the tool gateway checks before the next call." },
+          { owner: "Incident owner", title: "Investigate and retest", detail: "Preserve evidence, rotate exposed keys and assess reporting duties." },
+        ],
+        hold: "Cancelling a workflow does not undo a completed action or guarantee every in-flight external call stops.",
+        note: "Automatic detection and quarantine of every discovered credential are not claimed. A stolen upstream key must be revoked at its issuer; task cancellation alone does not revoke it.",
+      },
     ],
     content: [
-      "## The Advisory Is About Real Access, Not Just Model Behavior",
-      "CERT-In issued Critical Advisory CIAD-2026-0049 on 15 October 2026, addressing unauthorized access by agents under evaluation and misuse of open-source agentic tools. Its warning makes an important engineering distinction: conventional exposures such as stolen credentials, broad permissions and reachable APIs remain dangerous when an agent operates them.",
-      "A prompt saying 'do not access production' is not a network restriction. A model's confidence is not authorization. A completed API call is not a legitimate business decision. Our response is to separate these boundaries and require evidence at each one.",
-      "This article is an implementation and deployment guide, not a claim of CERT-In endorsement, certification, regulatory compliance or permission to perform financial transactions. Source capability, enabled configuration and a tested customer deployment are distinct statuses.",
-      "Advisory detail-page availability was intermittent when checked on 17 October 2026. If a detail link is unavailable, the official 2026 advisory index in the references lists both titles and issue dates.",
-      "## What AgenticOrg Specifically Does",
-      "AgenticOrg coordinates a bounded business workflow: receive the case, retrieve approved evidence through configured tools, identify missing items, assemble a cited work product, route the exception to a responsible person and record the outcome and handoff. The output is an evidence bundle and an explicit handoff with unresolved conditions visible.",
-      "For example, a merchant-onboarding analyst receives an application whose declared owner differs from a registry result. The agent can organize the application and permitted source records, highlight the inconsistency and draft a request for the missing evidence. It should not invent a verified owner, clear an unresolved screening hit, approve the merchant or activate payment processing.",
-      "The reviewer needs the source, retrieval time, missing evidence and policy version, not a confident summary alone. An unavailable provider capability must remain unavailable. A failed lookup must not be translated into a clean screening result. Changing the evidence after an approval request must require a fresh decision under the applicable workflow.",
-      "A useful first pilot measures assembly time, missing-information rate, reviewer corrections and reopened exceptions on a reviewed synthetic sample. We are not asserting a numerical productivity or accuracy gain from a few successful test cases.",
-      "## Where Grantex Adds A Real Boundary",
-      "Grantex is justified where delegated tool authority must be scoped, time-limited, verified and revocable independently of the agent. A trusted tool gateway checks the expected authority before making a protected call. Decision grants can carry a verified human decision where that integration is configured. These are enforceable boundaries, not extra names in an architecture diagram.",
-      "Grantex is not required merely to summarize a local public document. It also does not replace a registry or screening provider, the bank's transaction engine, cloud IAM or an incident-response team. If a tool accepts a stolen upstream key directly, the underlying system must revoke that key and close the bypass.",
-      "For irreversible financial effects, the executor still checks an exact approved business record, beneficiary, amount, currency, freshness, replay state and cumulative limits. An agent's draft or a generic approval must not independently initiate or approve a high-impact transfer. CERT-In's related Critical Advisory CIAD-2026-0046, issued 9 October 2026, addresses payment and disbursement API threats.",
-      "## A New Opt-In Run Authorization Boundary",
-      "AgenticOrg's source adds AGENTICORG_GRANTS_ISOLATE_RUN_TOKENS. When enabled, separate server-created authorization contexts use separate run-grant cache entries. A static configured grant is not substituted for a fresh context. A supplied caller grant remains an additional restriction rather than a shortcut around fresh authorization, and a minting failure refuses the protected work.",
-      "The compatibility default remains off. Operators must configure an appropriate short lifetime and explicitly enable the setting after validation. This change does not create an OS sandbox, automatically revoke every grant when a run ends, or cryptographically bind pooled tokens to a case ID or purpose. Those limitations remain visible in the deployment guide.",
-      "The focused regression suite runs with synthetic credentials and Docker networking disabled. Such tests demonstrate the exercised cache and resolution paths; they do not prove that every external tool, browser or worker in a production deployment is confined.",
-      "## Restrict The Process, Not Only Its HTTP Helper",
-      "URL validation and DNS-pinned transports protect the call paths that actually use them. They are not a universal network firewall. Browsers, shell commands, subprocesses, workers, telemetry clients and installed packages need independent network-layer restrictions. Cloud routing through a VPC is not itself a destination allowlist.",
-      "Use default-deny workload networking with explicit destinations and ports, narrowly permitted DNS, separate identities and synthetic data. Prevent the workload from editing its own policy or creating an unrestricted sibling. Test an allowed destination, a denied destination, a redirect and an alternative execution path. Keep the deny evidence alongside the effective deployed configuration.",
-      "If a run encounters an unexpected third-party credential, stop the run and escalate without testing whether the credential works. Preserve controlled evidence and rotate a compromised credential at its actual issuer. Log masking and repository secret scanning do not by themselves implement runtime quarantine across later runs.",
-      "## Tenant-Owned Identity And Human Review",
-      "Each tenant should configure its own approved SSO/OIDC identity provider, exact redirect configuration and least-privilege administrator groups. Enforce MFA in that provider's application policy and demonstrate both allowed and refused sign-ins. A metadata connectivity test does not prove an authenticated human, correct group mapping or the required factor.",
-      "Tenant administrators must not acquire platform-operator authority merely by controlling their own IdP. Protect platform administration separately and retain an independent, tested containment path. Machine credentials, emergency access and the ability to change SSO enforcement remain privileged assets requiring their own controls.",
-      "In a sensitive case workflow, keep investigation, review and final execution distinct. AgenticOrg may prepare evidence and a proposed disposition. A named authorized human reviews it. The downstream institution determines what the signed handoff authorizes and validates the final effect. Unresolved evidence is a review hold, not an activation signal.",
-      "## Monitoring Must Lead To An Owned Response",
-      "Maintain an inventory of agents, tools, schedules, integrations, credential references and endpoints with named owners. Reconcile it against actual cloud assets and remove dormant surfaces only after checking dependencies. An application catalog is not automatic discovery of every system.",
-      "Centralize security-relevant events with tenant context, action, destination, result, policy version and correlation identifiers, while excluding raw secrets and sensitive bodies. Alert on enumeration, bulk reads, unexpected destinations and repeated denials. Test notification delivery and escalation; a configured chart or a per-minute quota is not evidence of a functioning irregularity response.",
-      "For the applicable security logs, verifying at least 180 days of storage retention, routing, exclusions and reader/writer controls is an operator acceptance gate, not a claim that AgenticOrg automatically supplies retained cloud logs. A seven-year application audit setting does not prove that cloud request logs have the same retention. Already expired history remains unavailable after a retention change, and hash-linked evidence does not make storage undeletable.",
-      "When unauthorized access is suspected, preserve evidence, contain access, investigate alternative paths and remediate root causes. Retest externally after rotation and recovery. The incident owner must assess applicable CERT-In reporting duties with the appropriate advisers; installing this product does not fulfill those duties.",
-      "## Current Evidence And Explicit Limits",
-      "The merchant-onboarding work discussed in our pilot remains sandbox-only. It is not a commercially cleared onboarding service: merchant activation and live verification remain disabled. Positive validated ownership, complete screening coverage, regional entitlements, an approved decision policy and privacy/operational gates require separate evidence and authorization before any future launch.",
-      "Existing tenant/tool controls and the new run-isolation source option are useful layers. Global credential quarantine, organization-wide API discovery, workload-wide egress enforcement, tenant MFA policy and incident-response clearance must not be advertised as automatically completed features. The control register names the responsible owner and acceptance evidence for each boundary.",
-      "## Start With One Safe Workflow",
-      "Choose one read-only exception workflow, one owner, synthetic records and a small tool allowlist. Set a measurable outcome and explicit stop conditions. Demonstrate wrong-tenant refusal, missing authority, expired grants, changed evidence, absent approval and denied network access before expanding permissions.",
-      "Promote only after the process owner, tenant administrator, security operator and downstream-system owner approve their own gates. Use the deployment guide and adoption checklist below to retain the effective flags, test timestamps, revision, logs and unresolved gaps. Security evidence is part of the pilot deliverable, not an appendix added after activation.",
+      "## What the advisory means for a working team",
+      "CERT-In's Critical Advisory CIAD-2026-0049, issued on 15 October 2026, describes agents reaching systems beyond their assigned tasks. Exposed credentials, broad permissions and reachable APIs made that possible. A prompt asking an agent to stay in scope is not enough.",
+      "AgenticOrg's specific role is workflow coordination: organise permitted evidence, prepare a work product, route exceptions to people and record the handoff. It is not the source that establishes a merchant's identity, a replacement for the reviewer, or the system that moves money.",
+      "This is engineering guidance, not CERT-In endorsement, certification or a complete compliance solution. The diagrams show integration designs; they do not mean every step is enabled or validated in a customer's deployment.",
+      "## Workflow 1: prepare the exception, not the verdict",
+      "Consider a merchant application with an ownership mismatch. Today an analyst may have to collect records from several systems, work out what is missing and send the case back for clarification. The proposed AgenticOrg workflow prepares that case file and the next evidence request, leaving the unresolved question visible for a person.",
+      "The useful output is not just a summary. It is the source material, retrieval time, open questions and proposed next step. A model's interpretation is not an authoritative fact. If a source cannot provide an ownership or screening check, AgenticOrg must not invent one.",
+      "## Workflow 2: hand off a decision, not a vague approval",
+      "AgenticOrg already has approval queues, policy checks and configured resume paths. The merchant-specific integration still needs to prove that the decision refers to the exact current evidence and authorised action. A review button alone does not prove this.",
+      "For a payment, the final executor must also check payee, amount, currency, approved business record, expiry, replay state and cumulative limits. AgenticOrg can prepare the handoff; it does not replace those checks. See the related payment advisory CIAD-2026-0046 in the references.",
+      "## Workflow 3: contain access and preserve the case",
+      "Workflow cancellation and tool-access revocation are different controls. AgenticOrg can cancel further workflow steps. A protected tool boundary must separately check whether permission is still valid. An offline signature check alone cannot learn that access was revoked.",
+      "Keep an independently protected operator path. After suspected unauthorised access, the incident owner preserves evidence, investigates other access paths, rotates exposed credentials and retests. Cancelling the case is containment, not forensic clearance.",
+      "## Where Grantex helps, and where it is optional",
+      "Grantex is useful when a tool needs separately scoped, expiring and revocable delegated authority. AgenticOrg coordinates the job; a configured gateway checks the grant before allowing the tool call. A grant is limited permission, not a business verdict.",
+      "Summarising a local public document does not require Grantex. If an existing service already enforces the required authority, do not add another layer just for the diagram. Neither product restricts a stolen upstream API key that still works directly; revoke it at its issuer and close the bypass.",
+      "## What exists, what was tested, what is proposed",
+      "**Existing product mechanisms:** tenant-scoped tasks and tools, approval policies and queues, configured workflow/resume paths, cancellation and audit records. Their availability is not evidence that a particular customer's workflow is correctly configured. Standalone approval resumption is opt-in and is not permission to run arbitrary post-approval tools.",
+      "**Tested access controls, opt-in:** local tests with synthetic data checked separate permissions for agent runs, refusal to fall back to a shared token, permitted callers and fresh access checks. This control remains default-off and was not globally enabled in production. It does not isolate the operating system, automatically withdraw access when a run ends, or prove that every stored permission belongs to the current case. Exact settings and test scope are in the deployment and evidence guide.",
+      "**Sandbox pilot, not a live onboarding service:** merchant activation and live verification remain disabled. Validated ownership, complete screening, country/product entitlements, an approved decision policy and privacy/operational gates remain prerequisites. No completed commercial onboarding or measured productivity gain is claimed.",
+      "**Proposed or deployment-dependent:** the full merchant exception-to-decision workflow shown here, automatic quarantine of discovered credentials, organisation-wide API discovery and workload-wide network confinement. Do not treat these as finished merely because the underlying task and approval components exist.",
+      "## What your organisation still owns",
+      "Keep an inventory of agents, tools, endpoints and owners. Scan repositories, history, builds and cloud configuration for exposed keys. Rotate compromised keys and remove dormant APIs. AgenticOrg's application records are not automatic discovery of every asset.",
+      "Each tenant configures its own SSO/OIDC and MFA policy. Platform administration and machine credentials need separate protection. Restrict network destinations for every worker, browser and subprocess; a URL validator is not a network firewall.",
+      "Route security events to a responsible team, alert on bursts and bulk reads, and test that someone receives the alert. Protect retained logs: hash-linked records help reveal changes but do not prevent deletion. The separate 28 April 2022 CERT-In Directions require covered entities to retain ICT logs securely for a rolling 180 days within Indian jurisdiction and report specified incidents within six hours of noticing them or being notified. Confirm applicability with your legal and incident-response owners.",
+      "## A pilot worth running",
+      "Use a synthetic exception case. The intended read should succeed; cross-tenant access, unapproved tools, missing approval and revoked authority should fail. A changed case must not reuse a stale decision. Verify the actual network deny path and operator response, not just a configuration screen.",
+      "Measure time spent assembling the case, reviewer corrections and reopened exceptions. Do not claim an improvement until you have a baseline and a reviewed sample. If the task is only one lookup and a fixed approval, an ordinary workflow may already be sufficient. AgenticOrg earns its place when multi-tool investigation and handoffs are the work you need to coordinate.",
     ],
     references: [
       { title: "CERT-In CIAD-2026-0049: AI Agents as Attack Vectors", url: "https://www.cert-in.org.in/s2cMainServlet?pageid=PUBVLNOTES02&VLCODE=CIAD-2026-0049" },
       { title: "CERT-In CIAD-2026-0046: Payment and Disbursement API Threats", url: "https://www.cert-in.org.in/s2cMainServlet?pageid=PUBVLNOTES02&VLCODE=CIAD-2026-0046" },
       { title: "CERT-In: Official 2026 Advisory Index", url: "https://www.cert-in.org.in/s2cMainServlet?pageid=PUBADVLIST02&year=2026" },
+      { title: "CERT-In Directions: Reporting and Log Retention (28 April 2022)", url: "https://www.cert-in.org.in/PDF/CERT-In_Directions_70B_28.04.2022.pdf" },
       { title: "AgenticOrg: Agent Security Deployment and Evidence Guide", url: "https://agenticorg.ai/docs/cert-in-agent-security" },
       { title: "AgenticOrg: Adoption Checklist", url: "https://agenticorg.ai/docs/adoption-checklist" },
       { title: "Grantex: Delegated Authority and Security Boundaries", url: "https://grantex.dev/blog/cert-in-ai-agent-security" },

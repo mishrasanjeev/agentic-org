@@ -1,0 +1,106 @@
+/* SPDX-License-Identifier: Apache-2.0 */
+.workflow-article {
+  color-scheme: light;
+  --background: 0 0% 100%;
+  --foreground: 222 47% 11%;
+  --muted-foreground: 215 18% 42%;
+  --border: 214 32% 91%;
+  --workflow-agent: #176448;
+  --workflow-human: #865109;
+  --workflow-external: #2459a6;
+  --workflow-hold: #7c3c12;
+  color: hsl(var(--foreground));
+  letter-spacing: 0;
+}
+
+.workflow-article > .blog-post-header {
+  background: hsl(var(--background));
+  border-bottom: 1px solid hsl(var(--border));
+  padding: 30px 0 32px;
+}
+
+.workflow-article .blog-post-header h1 {
+  color: hsl(var(--foreground));
+  font-size: 38px;
+  line-height: 1.2;
+  max-width: 850px;
+  text-wrap: balance;
+}
+
+.workflow-article .blog-post-header .text-slate-400,
+.workflow-article .blog-post-header .text-slate-500,
+.workflow-article .blog-post-header .text-white:not(h1) {
+  color: hsl(var(--muted-foreground));
+}
+
+.workflow-article .blog-post-header a {
+  min-height: 44px;
+  color: var(--workflow-external);
+}
+
+.workflow-article .blog-category {
+  background: transparent;
+  color: var(--workflow-external);
+  padding: 0;
+  border-radius: 0;
+}
+
+.workflow-article .blog-post-header .blog-avatar { display: none; }
+.workflow-article .article-summary {
+  max-width: 760px;
+  margin-top: 22px;
+  color: hsl(var(--foreground));
+  font-size: 20px;
+  line-height: 1.65;
+}
+
+.workflow-article article { padding-top: 30px; }
+.workflow-article .article-context { max-width: 72ch; margin-bottom: 28px; font-size: 17px; line-height: 1.8; }
+.workflow-article article > .prose > p { max-width: 72ch; font-size: 17px; line-height: 1.8; }
+.workflow-article article > .prose > h2 { margin-top: 48px; text-wrap: balance; }
+.workflow-article .blog-pilot-list { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 24px; }
+.workflow-article .blog-pilot-list li { padding-left: 3px; }
+.workflow-article .blog-topics-label { color: hsl(var(--muted-foreground)); letter-spacing: 0; }
+
+.blog-workflow { margin: 24px 0 28px; padding: 24px 0; border-block: 1px solid hsl(var(--border)); }
+.blog-workflow figcaption h3 { margin: 0; font-size: 20px; font-weight: 650; line-height: 1.4; }
+.blog-workflow .workflow-status { margin: 8px 0 24px; color: hsl(var(--muted-foreground)); font-size: 13px; line-height: 1.6; }
+.workflow-steps { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 28px; list-style: none; margin: 0; padding: 0; }
+.workflow-steps li { min-width: 0; position: relative; padding-top: 14px; border-top: 1px solid var(--workflow-external); }
+.workflow-steps li[data-owner="AgenticOrg"] { border-color: var(--workflow-agent); }
+.workflow-steps li[data-owner="Human reviewer"] { border-color: var(--workflow-human); }
+.workflow-steps .workflow-owner { margin: 0 0 10px; font-size: 13px; font-weight: 650; line-height: 1.5; color: var(--workflow-external); }
+.workflow-steps [data-owner="AgenticOrg"] .workflow-owner { color: var(--workflow-agent); }
+.workflow-steps [data-owner="Human reviewer"] .workflow-owner { color: var(--workflow-human); }
+.workflow-steps h4 { margin: 0 0 10px; font-size: 16px; font-weight: 650; line-height: 1.4; color: hsl(var(--foreground)); }
+.workflow-steps .workflow-detail { margin: 0; font-size: 14px; line-height: 1.7; color: hsl(var(--foreground)); }
+.workflow-next { position: absolute; top: 40px; right: -23px; color: hsl(var(--muted-foreground)); }
+.workflow-arrow-down { display: none; }
+.blog-workflow .workflow-hold { margin: 24px 0 14px; padding: 14px 16px; background: #fff7ed; color: var(--workflow-hold); font-size: 14px; line-height: 1.7; }
+.blog-workflow .workflow-note { max-width: 90ch; margin: 0; color: hsl(var(--muted-foreground)); font-size: 13px; line-height: 1.75; }
+.workflow-next-step { margin-top: 44px; padding: 28px 0; border-block: 1px solid hsl(var(--border)); }
+.workflow-next-step h2 { font-size: 24px; font-weight: 700; line-height: 1.3; margin-bottom: 14px; }
+.workflow-next-step p { max-width: 70ch; line-height: 1.8; }
+.workflow-next-step a { display: inline-flex; align-items: center; min-height: 44px; margin-top: 12px; color: var(--workflow-external); text-decoration: underline; text-underline-offset: 4px; }
+.workflow-article .related-post-link { border-radius: 8px; }
+.workflow-article footer [data-testid="product-ownership"] > p:last-child { align-items: center; }
+.workflow-article footer a { display: inline-flex; align-items: center; min-height: 44px; }
+
+@media (max-width: 760px) {
+  .workflow-article .blog-post-header h1 { font-size: 30px; }
+  .workflow-article .article-summary { font-size: 18px; }
+  .workflow-article .blog-pilot-list { grid-template-columns: 1fr; gap: 12px; }
+  .workflow-steps { grid-template-columns: 1fr; gap: 28px; }
+  .workflow-steps li { padding-top: 12px; }
+  .workflow-steps .workflow-owner { margin-bottom: 6px; }
+  .workflow-steps h4 { margin-bottom: 6px; }
+  .workflow-next { top: auto; right: auto; left: 0; bottom: -25px; }
+  .workflow-arrow-right { display: none; }
+  .workflow-arrow-down { display: block; }
+  .blog-workflow figcaption h3 { font-size: 19px; }
+}
+
+@media print {
+  .blog-workflow { break-inside: avoid; }
+  .workflow-article .related-post-link, .workflow-next-step { display: none; }
+}

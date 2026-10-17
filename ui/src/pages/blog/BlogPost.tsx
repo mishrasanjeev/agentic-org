@@ -1,8 +1,12 @@
 import { Link, Navigate, useParams } from "react-router";
+import { Fragment } from "react";
 import { Helmet } from "react-helmet-async";
+import { ArrowLeft } from "lucide-react";
 import ProductOwnership from "../../components/ProductOwnership";
 import publicSite from "../../content/publicSite.json";
 import { BLOG_POSTS } from "./blogData";
+import BlogWorkflow from "./BlogWorkflow";
+import "./blogWorkflows.css";
 
 const SITE_URL = "https://agenticorg.ai";
 const SOCIAL_IMAGE = SITE_URL + "/og-image.png";
@@ -26,6 +30,8 @@ export default function BlogPost() {
   }
 
   const canonical = SITE_URL + "/blog/" + post.slug;
+  const hasWorkflows = Boolean(post.workflows?.length);
+  const socialImage = post.socialImage ? SITE_URL + post.socialImage : SOCIAL_IMAGE;
   const pageTitle = post.title + " | AgenticOrg Blog";
   const breadcrumbId = canonical + "#breadcrumb";
   const isFounderArticle = post.author === publicSite.site.inventorOwner;
@@ -51,7 +57,7 @@ export default function BlogPost() {
         "@id": canonical + "#article",
         headline: post.title,
         description: post.description,
-        image: SOCIAL_IMAGE,
+        image: socialImage,
         datePublished: post.date,
         articleSection: post.category,
         keywords: post.keywords,
@@ -97,7 +103,7 @@ export default function BlogPost() {
   };
 
   return (
-    <div className="min-h-screen bg-white">
+    <div className={`min-h-screen bg-white${hasWorkflows ? " workflow-article" : ""}`}>
       <Helmet htmlAttributes={{ lang: "en-IN" }}>
         <title>{pageTitle}</title>
         <meta name="description" content={post.description} />
@@ -112,7 +118,7 @@ export default function BlogPost() {
         <meta property="og:title" content={pageTitle} />
         <meta property="og:description" content={post.description} />
         <meta property="og:url" content={canonical} />
-        <meta property="og:image" content={SOCIAL_IMAGE} />
+        <meta property="og:image" content={socialImage} />
         <meta property="og:image:width" content="1200" />
         <meta property="og:image:height" content="630" />
         <meta property="og:image:alt" content={post.title} />
@@ -126,23 +132,21 @@ export default function BlogPost() {
         <meta name="twitter:title" content={pageTitle} />
         <meta name="twitter:description" content={post.description} />
         <meta name="twitter:url" content={canonical} />
-        <meta name="twitter:image" content={SOCIAL_IMAGE} />
+        <meta name="twitter:image" content={socialImage} />
         <meta name="twitter:image:alt" content={post.title} />
         <script type="application/ld+json">{JSON.stringify(structuredData)}</script>
       </Helmet>
 
       {/* Header */}
-      <header className="bg-slate-900 py-16">
-        <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
+      <header className="blog-post-header bg-slate-900 py-16">
+        <div className={`${hasWorkflows ? "max-w-5xl" : "max-w-3xl"} mx-auto px-4 sm:px-6 lg:px-8`}>
           <Link to="/blog" className="inline-flex items-center gap-2 mb-6 text-slate-400 hover:text-white transition-colors text-sm">
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-            </svg>
+            <ArrowLeft className="h-4 w-4" aria-hidden="true" />
             All Posts
           </Link>
 
           <div className="flex items-center gap-3 mb-4">
-            <span className="text-xs font-semibold px-2.5 py-1 rounded-full bg-blue-500/20 text-blue-300">
+            <span className="blog-category text-xs font-semibold px-2.5 py-1 rounded-full bg-blue-500/20 text-blue-300">
               {post.category}
             </span>
             <span className="text-xs text-slate-500">{post.date}</span>
@@ -152,9 +156,10 @@ export default function BlogPost() {
           <h1 className="text-3xl sm:text-4xl font-extrabold text-white leading-tight">
             {post.title}
           </h1>
+          {hasWorkflows && <p className="article-summary">{post.description}</p>}
 
           <div className="mt-6 flex items-center gap-3">
-            <div className="w-8 h-8 rounded-full bg-gradient-to-br from-blue-500 to-teal-500 flex items-center justify-center text-white text-sm font-bold">
+            <div className="blog-avatar w-8 h-8 rounded-full bg-gradient-to-br from-blue-500 to-teal-500 flex items-center justify-center text-white text-sm font-bold">
               A
             </div>
             <div>
@@ -166,12 +171,13 @@ export default function BlogPost() {
       </header>
 
       {/* Article Content */}
-      <article className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
+      <article className={`${hasWorkflows ? "max-w-5xl" : "max-w-3xl"} mx-auto px-4 sm:px-6 lg:px-8 py-12`}>
+        {post.intro && <p className="article-context">{post.intro}</p>}
         {post.pilotChecklist && (
           <section aria-labelledby="article-start" className="mb-8 border-b border-slate-200 pb-8">
             <h2 id="article-start" className="text-2xl font-bold text-slate-900">Start with a bounded pilot</h2>
             {post.statusNote && <p className="mt-3 text-sm leading-relaxed text-slate-700">{post.statusNote}</p>}
-            <ol className="mt-4 list-decimal space-y-2 pl-5 text-slate-700">
+            <ol className={`${hasWorkflows ? "blog-pilot-list" : "space-y-2"} mt-4 list-decimal pl-5 text-slate-700`}>
               {post.pilotChecklist.map((item) => <li key={item} className="pl-1 leading-relaxed">{item}</li>)}
             </ol>
           </section>
@@ -192,7 +198,12 @@ export default function BlogPost() {
         <div className="prose prose-slate prose-lg max-w-none break-words">
           {post.content.map((paragraph, i) => {
             if (paragraph.startsWith("## ")) {
-              return <h2 id={`article-section-${i}`} key={i} className="text-2xl font-bold text-slate-900 mt-10 mb-4">{paragraph.slice(3)}</h2>;
+              return <Fragment key={i}>
+                <h2 id={`article-section-${i}`} className="text-2xl font-bold text-slate-900 mt-10 mb-4">{paragraph.slice(3)}</h2>
+                {post.workflows?.filter((workflow) => workflow.heading === paragraph.slice(3)).map((workflow) => (
+                  <BlogWorkflow key={workflow.id} workflow={workflow} />
+                ))}
+              </Fragment>;
             }
             if (paragraph.startsWith("**") && paragraph.endsWith("**")) {
               return <h3 key={i} className="text-lg font-bold text-slate-800 mt-6 mb-2">{paragraph.slice(2, -2)}</h3>;
@@ -226,7 +237,7 @@ export default function BlogPost() {
 
         {/* Tags */}
         <div className="mt-12 pt-8 border-t">
-          <p className="text-xs text-slate-400 uppercase tracking-wide mb-3">Topics</p>
+          <p className="blog-topics-label text-xs text-slate-400 uppercase tracking-wide mb-3">Topics</p>
           <div className="flex flex-wrap gap-2">
             {post.keywords.map((kw) => (
               <span key={kw} className="text-xs bg-slate-100 text-slate-600 px-3 py-1.5 rounded-full">
@@ -250,7 +261,13 @@ export default function BlogPost() {
         )}
 
         {/* CTA */}
-        <div className="mt-12 bg-gradient-to-r from-blue-50 to-cyan-50 rounded-2xl p-8 text-center border border-blue-100">
+        {hasWorkflows ? (
+          <aside className="workflow-next-step" aria-labelledby="workflow-next-step">
+            <h2 id="workflow-next-step">Start with one exception you can keep under control.</h2>
+            <p>Use synthetic records, a named reviewer and explicit refusal tests. The deployment guide lists the settings, evidence and owners needed before expanding access.</p>
+            <Link to="/docs/cert-in-agent-security">Use the deployment and evidence checklist</Link>
+          </aside>
+        ) : <div className="mt-12 bg-gradient-to-r from-blue-50 to-cyan-50 rounded-2xl p-8 text-center border border-blue-100">
           <h3 className="text-xl font-bold text-slate-900 mb-2">Ready to try it?</h3>
           <p className="text-sm text-slate-600 mb-6">Explore the public playground, or create an account to evaluate an agent with your own approved data and controls.</p>
           <div className="flex justify-center gap-4">
@@ -261,14 +278,14 @@ export default function BlogPost() {
               Try Playground
             </Link>
           </div>
-        </div>
+        </div>}
 
         {/* Related Posts */}
         <div className="mt-12">
           <h3 className="text-lg font-bold text-slate-900 mb-4">More from AgenticOrg</h3>
           <div className="grid sm:grid-cols-2 gap-4">
             {BLOG_POSTS.filter((p) => p.slug !== post.slug).slice(0, 2).map((related) => (
-              <Link key={related.slug} to={`/blog/${related.slug}`} className="block border border-slate-200 rounded-xl p-4 hover:shadow-md transition-all">
+              <Link key={related.slug} to={`/blog/${related.slug}`} className="related-post-link block border border-slate-200 rounded-xl p-4 hover:shadow-md transition-all">
                 <span className="text-xs font-semibold text-blue-600">{related.category}</span>
                 <h4 className="text-sm font-bold text-slate-900 mt-1 leading-snug">{related.title}</h4>
                 <p className="text-xs text-slate-500 mt-2">{related.readTime}</p>
