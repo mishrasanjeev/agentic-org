@@ -39,6 +39,7 @@ export default function Channels() {
   const [notice, setNotice] = useState("");
   const provider = providers.find((item) => item.id === providerId);
   const selectedProvider = providers.find((item) => item.id === selected?.provider);
+  const selectedTarget = (selected?.target_kind === "agent" ? agents : workflows).find((item) => item.id === selected?.target_id);
 
   async function reload() {
     const response = await api.get("/channels");
@@ -81,7 +82,12 @@ export default function Channels() {
   }, [command, expiresAt]);
   async function action(work: () => Promise<void>) {
     setBusy(true); setError(""); setNotice("");
-    try { await work(); } catch (err) { setError(extractApiError(err, "Channel operation failed")); }
+    try { await work(); } catch (err) {
+      const message = extractApiError(err, "Channel operation failed");
+      setError(message === "telegram_bot_connected_elsewhere"
+        ? "This bot already has a different webhook. Reuse its existing AgenticOrg connection, or use a dedicated bot if it belongs to another app. The existing webhook was not changed."
+        : message);
+    }
     finally { setBusy(false); }
   }
   async function save(event: FormEvent) {
@@ -106,7 +112,7 @@ export default function Channels() {
   return <main className="space-y-6 min-w-0">
     <header className="flex flex-wrap items-center justify-between gap-3 border-b pb-4">
       <div><h1 className="text-2xl font-semibold">Channels</h1><a href="/docs/channel-workflows" className="text-sm underline">Account setup guide</a></div>
-      <Button onClick={() => { setCreating(true); setRotating(false); setStep(0); setCredentials({}); setName(""); setProviderId(""); setTarget(""); setReply(false); }}><Plus size={16} className="mr-2" />Connect channel</Button>
+      <Button onClick={() => { setError(""); setNotice(""); setCreating(true); setRotating(false); setStep(0); setCredentials({}); setName(""); setProviderId(""); setTarget(""); setReply(false); }}><Plus size={16} className="mr-2" />Connect channel</Button>
     </header>
     {error && <p role="alert" className="border-l-4 border-red-600 bg-red-50 p-3 text-sm text-red-900 break-words">{error}</p>}
     {notice && <p role="status" className="border-l-4 border-green-600 bg-green-50 p-3 text-sm text-green-900">{notice}</p>}
@@ -137,13 +143,14 @@ export default function Channels() {
     </section>}
     <section aria-label="Your channel connections" className="overflow-x-auto">
       <table className="w-full text-left text-sm"><thead className="border-b"><tr><th className="py-3 pr-4">Connection</th><th className="pr-4">Channel</th><th className="pr-4">Status</th><th>Inbox</th></tr></thead>
-        <tbody>{bindings.map((item) => <tr className="border-b" key={item.id}><td className="py-3 pr-4 font-medium break-words">{item.name}</td><td className="pr-4">{providers.find((entry) => entry.id === item.provider)?.label || item.provider}</td><td className="pr-4">{item.enabled ? "Enabled" : "Disabled"}</td><td><Button variant="outline" onClick={() => { setSelected(item); setCommand(""); setRotating(false); setCredentials({}); setDeliveries([]); }}>Open</Button></td></tr>)}</tbody></table>
+        <tbody>{bindings.map((item) => <tr className="border-b" key={item.id}><td className="py-3 pr-4 font-medium break-words">{item.name}</td><td className="pr-4">{providers.find((entry) => entry.id === item.provider)?.label || item.provider}</td><td className="pr-4">{item.enabled ? "Enabled" : "Disabled"}</td><td><Button variant="outline" onClick={() => { setError(""); setNotice(""); setSelected(item); setCommand(""); setRotating(false); setCredentials({}); setDeliveries([]); }}>Open</Button></td></tr>)}</tbody></table>
       {!bindings.length && <p className="py-6 text-sm text-muted-foreground">No channel connections</p>}
     </section>
     {selected && <section className="space-y-4 border-t pt-5" aria-label="Channel inbox">
       <div className="flex flex-wrap items-center justify-between gap-3"><h2 className="text-lg font-semibold break-words">{selected.name}</h2><label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={selected.enabled} disabled={busy} onChange={() => action(async () => {
         const response = await api.patch(`/channels/bindings/${selected.id}`, { enabled: !selected.enabled }); setSelected(response.data); setCommand(""); await reload();
       })} />Enabled</label></div>
+      <p className="text-sm break-words">Destination: <Link className="underline" to={`/dashboard/${selected.target_kind === "agent" ? "agents" : "workflows"}/${selected.target_id}`}>{selected.target_kind === "agent" ? "Agent" : "Workflow"}: {selectedTarget?.name || "View destination"}</Link></p>
       <div className="flex items-start gap-2"><label className="flex-1 min-w-0 text-sm">Callback URL<input className={inputClass} readOnly value={selected.callback_url} /></label><Button className="mt-6 shrink-0" variant="outline" title="Copy callback URL" aria-label="Copy callback URL" onClick={() => action(async () => { await navigator.clipboard.writeText(selected.callback_url); setNotice("Callback copied"); })}><Copy size={16} /></Button></div>
       <div className="flex flex-wrap items-center gap-4"><Button variant="outline" disabled={busy} onClick={() => { setCreating(false); setCredentials({}); setRotating(!rotating); }}><KeyRound size={16} className="mr-2" />Replace credentials</Button>
         {selected.provider === "telegram" && <Button disabled={busy} onClick={() => action(async () => {

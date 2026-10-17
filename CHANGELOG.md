@@ -131,6 +131,11 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
 
 ## [Unreleased]
 
+- Explain duplicate Telegram webhook refusals without replacing the working bot
+  connection, and show the selected channel destination. Add regression coverage
+  and guidance distinguishing real reasoning, message transport and combined
+  channel-to-model acceptance without changing deployment controls.
+
 ### Documentation - existing-user commercialization policy
 - Clarify that existing and new covered users require a commercialization
   agreement, with no account-age exemption. Self-use remains free of a software

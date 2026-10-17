@@ -63,6 +63,10 @@ Native channel replies are optional status notices, not private result exports.
 Follow the [channel account and workflow guide](https://github.com/mishrasanjeev/agentic-org/blob/main/docs/user-guide/channel-workflows.md)
 for account creation, callback registration, sender linking and verification.
 Local wire-contract tests are not proof of real provider-account delivery.
+Reuse an existing Telegram connection for an already connected bot; a second
+connection must not overwrite its webhook. The inbox identifies its destination.
+Verify real model reasoning separately from transport-only workflows, and do not
+claim a combined Telegram-to-Gemini flow unless one delivery proves both.
 
 The production platform currently includes governed agent/workflow execution,
 document ingestion with scanned-document OCR, signed Twilio voice with
@@ -1163,9 +1167,50 @@ See [WhatsApp setup](https://developers.facebook.com/docs/whatsapp/cloud-api/get
 
 #### Telegram
 
+**Already connected? Reuse it.** Open the existing connection under **Channels**
+instead of saving the same bot as a second connection. The inbox's **Destination**
+link shows the configured agent or workflow. A bot has one Telegram webhook;
+creating another AgenticOrg connection does not move that webhook or replace the
+existing target. Keep an unused duplicate disabled.
+
 Open [BotFather](https://t.me/BotFather), send `/newbot`, and follow its prompts to create a dedicated bot. In AgenticOrg, choose Telegram and the destination agent or workflow, enter the bot token, select **Generate secret**, and save. Select **Connect Telegram**: AgenticOrg checks the bot account, registers the HTTPS callback and verifies its registration before enabling the connection. Tokens never need to appear in a browser URL or terminal command. A bot already connected to another application is refused; use a dedicated bot rather than overwriting that application's callback.
 
+If setup reports `telegram_bot_connected_elsewhere`, its registered webhook does
+not match the new connection. This is a safety refusal, not evidence that the
+working bot is broken. The existing webhook is not overwritten. Open the original
+AgenticOrg connection if you own it; otherwise use a different, dedicated bot.
+Do not rotate working credentials, call `deleteWebhook`, poll `getUpdates`, or
+replace a production callback just to make an acceptance test pass.
+
 Open a private conversation with the bot, generate **Link my messaging account** in AgenticOrg and send the displayed command from that private account. Then send a small, read-only task. Groups and channel posts deliberately do not inherit a human account's authority. Localhost callbacks cannot be registered with Telegram; use the deployed HTTPS service for the real account test. AgenticOrg supplies `secret_token` and requires the resulting `X-Telegram-Bot-Api-Secret-Token` header. Registration is not proof of delivery: confirm a real message and completed run in the inbox. See the [Bot API](https://core.telegram.org/bots/api#setwebhook).
+
+### Prove reasoning and delivery separately
+
+1. Record the existing connection's destination before testing. A copy-only
+   workflow proves message transport, not a model call. Leave a working route
+   unchanged unless its owner explicitly authorizes a different destination.
+2. For a real reasoning check, use a personal, tool-free shadow agent, a working
+   Gemini credential, an explicit model and zero agent retries. Ask a short
+   synthetic question, such as `(23 * 7) - 19`, without supplying its answer.
+   Request structured JSON with numeric `answer` and `confidence`; check the
+   independently calculated answer of 142 without lowering the review threshold.
+3. For the existing Telegram path, send one uniquely labeled message from the
+   linked private account. Match its new inbox delivery, configured run result
+   and the status notice actually received in Telegram. Do not submit an unsigned
+   or fabricated callback as proof of a real Telegram delivery.
+4. Call the combined Telegram-to-Gemini path verified only if that same delivery
+   invokes the configured reasoning agent or an actual model step. Two independent
+   successful tests must not be described as a combined reasoning integration.
+5. Keep an approved total spending allowance. Zero agent retries does not disable
+   SDK transport retries or the separate explanation request. Include those calls
+   and thinking/output tokens in the bound; a recorded reasoning estimate is not
+   the complete provider invoice. Do not change deployment flags or tenant limits
+   to get a passing result.
+
+Telegram's native reply is a status notice. The computed answer, reasoning and
+private data remain in the authenticated inbox or agent result, not the Telegram
+message. A provider-accepted send and the recipient's confirmation are separate
+pieces of delivery evidence.
 
 #### Viber
 
