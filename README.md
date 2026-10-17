@@ -57,6 +57,10 @@ Native channel replies are optional status notices, not private result exports.
 Follow the [channel account and workflow guide](docs/user-guide/channel-workflows.md)
 for account creation, callback registration, sender linking and verification.
 Local wire-contract tests are not proof of real provider-account delivery.
+Reuse an existing Telegram connection for an already connected bot; a second
+connection must not overwrite its webhook. Keep its configured destination unchanged.
+Verify real model reasoning separately from transport-only workflows, and do not
+claim a combined Telegram-to-Gemini flow unless one delivery proves both.
 
 The production platform currently includes governed agent/workflow execution,
 document ingestion with scanned-document OCR, signed Twilio voice with

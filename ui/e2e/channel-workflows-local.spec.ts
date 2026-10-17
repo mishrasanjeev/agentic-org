@@ -71,6 +71,12 @@ test("BYO channel setup and documentation on desktop and mobile", async ({ page,
     await page.getByRole("button", { name: "Connect Telegram", exact: true }).click();
     await expect(page.getByRole("alert")).toContainText("telegram_setup_rejected");
     await expect(page.getByLabel("Enabled", { exact: true })).not.toBeChecked();
+    await page.route("**/channels/bindings/*/connect-telegram", (route) => route.fulfill({
+      status: 409, contentType: "application/json", body: JSON.stringify({ detail: "telegram_bot_connected_elsewhere" }),
+    }));
+    await page.getByRole("button", { name: "Connect Telegram", exact: true }).click();
+    await expect(page.getByRole("alert")).toContainText("telegram_bot_connected_elsewhere");
+    await expect(page.getByLabel("Enabled", { exact: true })).not.toBeChecked();
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBeTruthy();
     await page.screenshot({ path: testInfo.outputPath(`telegram-setup-${viewport.width}.png`), fullPage: true });
     await page.goto("/docs/channel-workflows");

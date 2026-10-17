@@ -10,9 +10,9 @@ let role = "admin";
 const binding = { id: "binding-1", name: "My inbox", provider: "signed_webhook", target_kind: "agent", target_id: "agent-1", enabled: false, auto_reply: false, callback_url: "https://example.test/callback" };
 
 vi.mock("@/contexts/AuthContext", () => ({ useAuth: () => ({ user: { role } }) }));
-vi.mock("@/lib/api", () => ({
+vi.mock("@/lib/api", async (importOriginal) => ({
+  ...await importOriginal<typeof import("@/lib/api")>(),
   default: { get: (...args: unknown[]) => get(...args), post: (...args: unknown[]) => post(...args), patch: (...args: unknown[]) => patch(...args) },
-  extractApiError: (_error: unknown, fallback: string) => fallback,
 }));
 import Channels from "@/pages/Channels";
 
@@ -61,5 +61,28 @@ describe("BYO channel setup", () => {
     expect(get).not.toHaveBeenCalledWith("/workflows", expect.anything());
     expect(screen.queryByRole("link", { name: "AI credentials" })).not.toBeInTheDocument();
     expect(screen.getByRole("link", { name: "MCP tools" })).toHaveAttribute("href", "/dashboard/connectors/remote-mcp");
+  });
+
+  it("keeps the working connection unchanged when a duplicate bot is refused", async () => {
+    const original = { ...binding, id: "original", name: "Working Telegram", provider: "telegram", target_kind: "workflow", target_id: "workflow-1", enabled: true };
+    const duplicate = { ...original, id: "duplicate", name: "Unused Telegram", target_kind: "agent", target_id: "agent-1", enabled: false };
+    get.mockImplementation((url: string) => {
+      if (url === "/channels/catalog") return Promise.resolve({ data: { providers: [{ id: "telegram", label: "Telegram", fields: ["access_token", "webhook_secret"], guide: "/docs/channel-workflows", reply: true, identity_link: true }] } });
+      if (url === "/channels") return Promise.resolve({ data: { bindings: [original, duplicate] } });
+      if (url === "/workflows") return Promise.resolve({ data: { items: [{ id: "workflow-1", name: "Transport acceptance" }] } });
+      if (url.endsWith("/deliveries")) return Promise.resolve({ data: { deliveries: [] } });
+      return Promise.resolve({ data: { items: [{ id: "agent-1", name: "Reasoning acceptance" }] } });
+    });
+    post.mockRejectedValue({ response: { status: 409, data: { detail: "telegram_bot_connected_elsewhere" } } });
+    page();
+    await screen.findByText("Working Telegram");
+    fireEvent.click(screen.getAllByRole("button", { name: "Open" })[1]);
+    fireEvent.click(screen.getByRole("button", { name: "Connect Telegram" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("telegram_bot_connected_elsewhere");
+    expect(screen.getByLabelText("Enabled", { exact: true })).not.toBeChecked();
+    expect(post).toHaveBeenCalledExactlyOnceWith("/channels/bindings/duplicate/connect-telegram");
+    expect(patch).not.toHaveBeenCalled();
+    fireEvent.click(screen.getAllByRole("button", { name: "Open" })[0]);
+    expect(screen.getByLabelText("Enabled", { exact: true })).toBeChecked();
   });
 });

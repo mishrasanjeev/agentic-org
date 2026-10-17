@@ -224,6 +224,28 @@ review decisions must be checked in Approvals. Disable the flag to restore the
 previous read behavior. Do not change paused-agent, runtime, tenant-budget,
 public-discovery or provider-execution controls as part of this smoke test.
 
+### Reuse the Existing Telegram Connection
+
+Record the original connection's enabled state, destination and callback before
+the test. A bot accepts one webhook. `telegram_bot_connected_elsewhere` on a new
+connection is the expected refusal when the old callback is still registered;
+it does not mean the original integration is unhealthy. Reuse the original
+connection. Do not rotate its credentials, overwrite its webhook, delete that
+webhook or use polling to bypass this control. Leave an unused duplicate disabled.
+
+Use one uniquely labeled private message from an approved, linked sender. Match
+the inbox delivery and run result, then confirm the status notice in Telegram.
+A workflow that copies text is transport evidence only. Record an independent
+real Gemini result separately; claim a combined path only when that exact channel
+delivery invokes a model. The answer remains inside authenticated AgenticOrg.
+
+Retain sanitized timestamps, model, outcome, token counts and cost estimates, not
+credentials, link commands, sender identifiers, tenant identifiers or raw provider
+payloads. Include auxiliary explanation requests and SDK retries in the approved
+spending bound. Do not enable an audit reader, spend instrumentation or any other
+feature flag merely to collect this evidence. Source an unchanged deployment
+baseline before and after the test and preserve all existing controls.
+
 ## Secret Handling
 
 The smoke script must never print secrets, tokens, cookies, auth headers, signatures, connector credentials, raw signed secrets, or raw provider credentials. Missing credentials produce explicit `SKIPPED` results with variable names only.
