@@ -1263,7 +1263,7 @@ function ConfigTab({ agent, onUpdated, canManage }: { agent: Agent; onUpdated: (
                 <label htmlFor="agent-thinking-level" className="text-sm text-muted-foreground">Gemini thinking</label>
                 <select id="agent-thinking-level" value={editThinkingLevel} onChange={(e) => setEditThinkingLevel(e.target.value)} className="border rounded px-3 py-1.5 text-sm">
                   <option value="">Provider default</option>
-                  <option value="medium">Medium (additional billed thinking tokens)</option>
+                  <option value="medium">Medium (billed thinking)</option>
                 </select>
               </div>
             )}

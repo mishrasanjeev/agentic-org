@@ -741,7 +741,7 @@ export default function AgentCreate() {
                     <label htmlFor="agent-thinking-level" className="text-sm font-medium">Gemini thinking</label>
                     <select id="agent-thinking-level" value={thinkingLevel} onChange={(e) => setThinkingLevel(e.target.value)} className="border rounded px-3 py-2 text-sm w-full mt-1">
                       <option value="">Provider default</option>
-                      <option value="medium">Medium (additional billed thinking tokens)</option>
+                      <option value="medium">Medium (billed thinking)</option>
                     </select>
                   </div>
                 )}
