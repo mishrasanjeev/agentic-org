@@ -11,6 +11,8 @@
   task, prompt, model, credentials, feature flags and execution controls unchanged.
   Validate model/profile compatibility, retain the profile on approval/debug
   resume, and distinguish it in replay keys. No migration or global opt-in.
+  Carry saved opt-ins through workflow agent loading, legacy sales and the voice
+  text bridge without changing unconfigured paths or enabling channels.
 - Include thinking tokens in native router totals and legacy cost estimates,
   without double counting the optional detailed spend meter. Medium thinking can
   increase output-token cost and latency; existing limits still apply. Older

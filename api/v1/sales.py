@@ -380,6 +380,12 @@ async def _run_sales_agent_on_lead(
         "system_prompt_text": agent_row.system_prompt_text,
     }
 
+    from core.llm.gemini_config import thinking_profile
+
+    profile = thinking_profile(getattr(agent_row, "llm_config", None))
+    if profile:
+        agent_config.update(llm_model=agent_row.llm_model, llm_config=profile)
+
     import core.agents  # noqa: F401
     agent_instance = AgentRegistry.create_from_config(agent_config)
     agent_instance.bind_caller(caller)

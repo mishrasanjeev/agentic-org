@@ -497,7 +497,8 @@ async def test_sales_process_lead_passes_the_request_caller_to_the_agent_run():
     assert run.await_args.kwargs["caller"] == CallerGrant(token=CALLER, agent_id=CALLER_AGENT)
 
 
-async def test_sales_agent_run_binds_the_caller_before_executing():
+@pytest.mark.parametrize("thinking_level", [None, "medium"])
+async def test_sales_agent_run_binds_the_caller_before_executing(thinking_level):
     from api.v1 import sales
 
     lead = MagicMock(id=uuid.uuid4())
@@ -509,6 +510,8 @@ async def test_sales_agent_run_binds_the_caller_before_executing():
         hitl_condition="",
         output_schema=None,
         system_prompt_text="",
+        llm_model="gemini-3.5-flash-lite",
+        llm_config={"thinking_level": thinking_level},
     )
     results = [MagicMock(), MagicMock()]
     results[0].scalar_one_or_none.return_value = lead
@@ -531,11 +534,17 @@ async def test_sales_agent_run_binds_the_caller_before_executing():
     with (
         patch.object(sales, "get_tenant_session", return_value=ctx),
         patch.object(sales, "_lead_to_dict", return_value={"id": str(lead.id)}),
-        patch.object(sales.AgentRegistry, "create_from_config", return_value=agent),
+        patch.object(sales.AgentRegistry, "create_from_config", return_value=agent) as create,
     ):
         await sales._run_sales_agent_on_lead(tenant_id=TENANT, lead_id=str(lead.id), caller=caller)
     assert order[:2] == [f"bind:{CALLER_AGENT}", "execute"]
     agent.bind_caller.assert_called_once_with(caller)
+    config = create.call_args.args[0]
+    if thinking_level is None:
+        assert "llm_config" not in config and "llm_model" not in config
+    else:
+        assert config["llm_config"]["thinking_level"] == thinking_level
+        assert config["llm_model"] == "gemini-3.5-flash-lite"
 
 
 @pytest.mark.parametrize("route", ["run_automated_followups", "seed_target_prospects", "import_leads_csv"])

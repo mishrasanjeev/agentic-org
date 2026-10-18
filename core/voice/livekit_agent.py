@@ -89,6 +89,9 @@ class VoiceAgentWorker:
         from core.langgraph.runner import run_agent
 
         cfg = self.agent_config
+        from core.llm.gemini_config import thinking_profile
+
+        profile = thinking_profile(cfg.get("llm_config"))
 
         task_input = {
             "action": "voice_conversation",
@@ -110,6 +113,7 @@ class VoiceAgentWorker:
                 # Pinned provider from the agent row (bug sheet 2026-09-14 #31);
                 # None keeps model-name inference for legacy configs.
                 llm_provider=cfg.get("llm_provider") or (cfg.get("llm_config") or {}).get("provider"),
+                **({"llm_model": cfg.get("llm_model", ""), **profile} if profile else {}),
             )
 
         # Persist thread for multi-turn conversations

@@ -733,8 +733,9 @@ def _run_resume_spec(
 
 def _thinking_profile(agent_config: dict[str, Any]) -> dict[str, str]:
     """Only the saved agent config supplies this option, never task inputs."""
-    level = (agent_config.get("llm_config") or {}).get("thinking_level")
-    return {"thinking_level": level} if level is not None else {}
+    from core.llm.gemini_config import thinking_profile
+
+    return thinking_profile(agent_config.get("llm_config"))
 
 
 def _debug_resume_spec(agent_config: dict[str, Any], connector_ids: Any) -> dict[str, Any]:

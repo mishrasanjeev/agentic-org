@@ -145,6 +145,7 @@ def test_saved_profile_is_optional_validated_and_snapshot_for_resume():
     from core.schemas.api import AgentUpdate, LLMConfig
 
     assert LLMConfig(model=MODEL).thinking_level is None
+    assert LLMConfig(model=f" {MODEL} ", provider=" Gemini ", thinking_level="medium").model == MODEL
     saved = AgentUpdate(llm={"model": MODEL, "provider": "gemini", "thinking_level": "medium"})
     agent = {"llm_model": MODEL, "llm_config": saved.llm.model_dump()}
     assert _thinking_profile(agent) == {"thinking_level": "medium"}
@@ -237,3 +238,115 @@ async def test_legacy_agent_reason_and_synthesis_keep_saved_opt_in(monkeypatch, 
             assert "thinking_level" not in call.kwargs
         else:
             assert call.kwargs["thinking_level"] == level
+
+
+@pytest.mark.parametrize(
+    "config,expected",
+    [
+        (None, {}),
+        ({}, {}),
+        ({"thinking_level": None}, {}),
+        ({"thinking_level": "medium"}, {"thinking_level": "medium"}),
+    ],
+)
+def test_profile_extraction_never_invents_opt_in(config, expected):
+    from core.llm.gemini_config import thinking_profile
+
+    assert thinking_profile(config) == expected
+    with pytest.raises(ValueError, match="Unsupported"):
+        thinking_profile({"thinking_level": "high"})
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("level", [None, "medium"])
+async def test_workflow_loads_saved_profile_and_ignores_step_supplied_profile(
+    monkeypatch, workflow_company_scope, level
+):
+    import uuid
+
+    from core import database
+    from core.agents.registry import AgentRegistry
+    from core.schemas.messages import TaskResult
+    from workflows import step_types
+
+    aid = uuid.uuid4()
+    row = SimpleNamespace(
+        id=aid,
+        tenant_id=uuid.UUID(workflow_company_scope["tenant_id"]),
+        company_id=uuid.UUID(workflow_company_scope["company_id"]),
+        domain="ops",
+        status="shadow",
+        agent_type="synthetic_acceptance",
+        authorized_tools=[],
+        prompt_variables={},
+        hitl_condition="",
+        output_schema=None,
+        llm_model=MODEL,
+        llm_config={"thinking_level": level},
+        cost_controls={},
+        system_prompt_text=PROMPT,
+    )
+    result = MagicMock()
+    result.scalar_one_or_none.return_value = row
+    session = SimpleNamespace(execute=AsyncMock(return_value=result))
+    ctx = AsyncMock()
+    ctx.__aenter__.return_value = session
+    monkeypatch.setattr(database, "get_tenant_session", lambda *_: ctx)
+    monkeypatch.setattr(step_types, "_llm_available_for_workflow", lambda: True)
+    monkeypatch.setattr(step_types, "_fake_llm_allowed", lambda: False)
+    create = AgentRegistry.create_from_config
+    captured = []
+
+    def build(config):
+        agent = create(config)
+        captured.append(agent.llm_thinking_level)
+
+        async def execute(task):
+            return TaskResult(
+                message_id="synthetic-result",
+                correlation_id=task.correlation_id,
+                workflow_run_id=task.workflow_run_id,
+                step_id=task.step_id,
+                agent_id=task.target_agent.agent_id,
+                status="completed",
+                output={"synthetic": True},
+                confidence=1,
+            )
+
+        agent.execute = execute
+        return agent
+
+    monkeypatch.setattr(AgentRegistry, "create_from_config", build)
+    output = await step_types.execute_step(
+        {
+            "id": "synthetic",
+            "type": "agent",
+            "agent_id": str(aid),
+            "inputs": {},
+            "llm_config": {"thinking_level": "high"},
+        },
+        {**workflow_company_scope, "id": "synthetic-run", "context": {}},
+    )
+    assert output["status"] == "completed"
+    assert captured == [level]
+    assert session.execute.await_count == 1
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("level", [None, "medium"])
+async def test_voice_text_bridge_preserves_defaults_or_saved_opt_in_without_calling_provider(monkeypatch, level):
+    from core.langgraph import runner
+    from core.voice.livekit_agent import VoiceAgentWorker
+
+    run = AsyncMock(return_value={"status": "completed", "output": {"text": "synthetic"}})
+    monkeypatch.setattr(runner, "run_agent", run)
+    worker = VoiceAgentWorker(
+        {"agent_id": "synthetic", "tenant_id": TENANT, "llm_model": MODEL, "llm_config": {"thinking_level": level}}
+    )
+    assert await worker.handle_call(None, "synthetic local text turn") == "synthetic"
+    kwargs = run.await_args.kwargs
+    assert kwargs["tenant_id"] == TENANT
+    if level is None:
+        assert "thinking_level" not in kwargs and "llm_model" not in kwargs
+    else:
+        assert kwargs["thinking_level"] == level and kwargs["llm_model"] == MODEL

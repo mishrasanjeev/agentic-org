@@ -230,6 +230,10 @@ in its authenticated agent configuration). Both runtime clients then request
 agents without an explicit profile keep the provider default. Set the field to
 `null` to restore that default. No global flag or environment change is required.
 Other models reject this profile rather than silently applying or ignoring it.
+Saved profiles also travel through workflow agent loading, approval/debug resume,
+legacy sales-agent execution and the text-to-agent voice bridge. Generic chat,
+type-only A2A/MCP calls and agents with no saved profile keep their old defaults.
+Voice bridge regression tests do not place a call or certify a live voice account.
 The provider defaults to minimal
 thinking; its temperature/top-p/top-k parameters are ignored. Keep the exact
 system prompt, assembled task, redaction and selected model fixed when isolating

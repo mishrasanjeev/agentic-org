@@ -30,8 +30,11 @@ class LLMConfig(BaseModel):
     def _thinking_matches_model(self) -> LLMConfig:
         from core.llm.gemini_config import validate_thinking_level
 
+        if self.thinking_level is not None:
+            self.model = self.model.strip()
         validate_thinking_level(self.model, self.thinking_level)
-        if self.thinking_level is not None and self.provider not in {None, "gemini"}:
+        provider = str(self.provider or "").strip().lower()
+        if self.thinking_level is not None and provider not in {"", "gemini"}:
             raise ValueError("thinking_level requires the Gemini provider")
         return self
 
