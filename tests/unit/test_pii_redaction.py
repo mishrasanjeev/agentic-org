@@ -81,6 +81,28 @@ def _scan_pattern_child(pattern: re.Pattern[str], text: str, connection: Connect
         connection.close()
 
 
+def _measure_redaction_child(connection: Connection, start: Event) -> None:
+    from core.pii.redactor import PIIRedactor
+
+    try:
+        redactor = PIIRedactor()
+        text = (
+            "Name: Rajesh Kumar, Email: rajesh@example.com, "
+            "Phone: +91 9876543210, Aadhaar: 1234 5678 9012, "
+            "PAN: ABCDE1234F, GSTIN: 22AAAAA0000A1Z5"
+        )
+        redactor.redact(text)
+        connection.send({"ready": True})
+        if not start.wait(timeout=20):
+            return
+        began = time.perf_counter()
+        for _ in range(10):
+            redactor.redact(text)
+        connection.send((time.perf_counter() - began) / 10 * 1000)
+    finally:
+        connection.close()
+
+
 # ---------------------------------------------------------------------------
 # Tests
 # ---------------------------------------------------------------------------
@@ -174,22 +196,28 @@ class TestWithPresidio:
         assert len(token_map) >= 2
 
     def test_performance_under_50ms(self) -> None:
-        from core.pii.redactor import PIIRedactor
-
-        redactor = PIIRedactor()
-        text = (
-            "Name: Rajesh Kumar, Email: rajesh@example.com, "
-            "Phone: +91 9876543210, Aadhaar: 1234 5678 9012, "
-            "PAN: ABCDE1234F, GSTIN: 22AAAAA0000A1Z5"
-        )
-        # Warm-up
-        redactor.redact(text)
-
-        start = time.perf_counter()
-        for _ in range(10):
-            redactor.redact(text)
-        elapsed_ms = (time.perf_counter() - start) / 10 * 1000
-
+        # Measure warmed runtime code, not suite history or parent coverage tracing.
+        context = multiprocessing.get_context("spawn")
+        reader, writer = context.Pipe(duplex=False)
+        start = context.Event()
+        process = context.Process(target=_measure_redaction_child, args=(writer, start), daemon=True)
+        try:
+            process.start()
+            writer.close()
+            assert reader.poll(20), "redactor process did not finish bounded startup"
+            assert reader.recv() == {"ready": True}
+            start.set()
+            process.join(timeout=2)
+            assert not process.is_alive(), "redaction measurement exceeded its two-second deadline"
+            assert process.exitcode == 0
+            assert reader.poll(), "redactor process returned no measurement"
+            elapsed_ms = reader.recv()
+        finally:
+            if process.is_alive():
+                process.kill()
+                process.join(timeout=2)
+            reader.close()
+            writer.close()
         assert elapsed_ms < 50, f"Redaction took {elapsed_ms:.1f}ms, expected <50ms"
 
 
