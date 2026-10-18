@@ -337,3 +337,75 @@ def test_signed_channel_to_durable_workflow_and_revocation():
         else:
             pytest.fail("Paused agent was not refused by channel dispatch")
         checked(client.patch(f"/channels/bindings/{bid}", json={"enabled": False}))
+
+
+def test_telegram_reply_settings_cannot_cross_tenant_or_target_boundaries():
+    assert urlsplit(BASE).hostname in {"127.0.0.1", "localhost", "api"}
+    with (
+        httpx.Client(base_url=BASE + "/api/v1", timeout=60) as owner,
+        httpx.Client(base_url=BASE + "/api/v1", timeout=60) as other,
+    ):
+        targets = []
+        for client in (owner, other):
+            run = uuid.uuid4().hex[:12]
+            signup = checked(
+                client.post(
+                    "/auth/signup",
+                    json={
+                        "org_name": f"Reply isolation {run}",
+                        "admin_name": "Reply Test Admin",
+                        "admin_email": f"reply-isolation-{run}@example.test",
+                        "password": secrets.token_urlsafe(24) + "aA9!",
+                    },
+                ),
+                201,
+            )
+            client.cookies.clear()
+            client.headers["Authorization"] = "Bearer " + signup["access_token"]
+            agent = checked(
+                client.post(
+                    "/agents",
+                    json={
+                        "name": "Synthetic reply isolation",
+                        "agent_type": "custom",
+                        "domain": "ops",
+                        "initial_status": "shadow",
+                        "system_prompt_text": "Answer synthetic tasks without tools.",
+                        "authorized_tools": [],
+                        "llm_routing": "disabled",
+                        "llm": {"model": "vllm:scripted/final-only"},
+                    },
+                ),
+                201,
+            )
+            targets.append(agent["agent_id"])
+        binding = checked(
+            owner.post(
+                "/channels",
+                json={
+                    "name": "Private isolation bot",
+                    "provider": "telegram",
+                    "target_kind": "agent",
+                    "target_id": targets[0],
+                    "credentials": {"access_token": "123:synthetic", "webhook_secret": secrets.token_hex(32)},
+                },
+            ),
+            201,
+        )
+        path = f"/channels/bindings/{binding['id']}"
+        assert other.patch(path, json={"reply_mode": "agent_answer"}).status_code == 404
+        assert other.get(path + "/deliveries").status_code == 404
+        assert (
+            owner.patch(
+                path,
+                json={
+                    "target_kind": "agent",
+                    "target_id": targets[1],
+                    "reply_mode": "agent_answer",
+                },
+            ).status_code
+            == 404
+        )
+        unchanged = next(row for row in checked(owner.get("/channels"))["bindings"] if row["id"] == binding["id"])
+        assert unchanged["target_id"] == targets[0] and unchanged["reply_mode"] == "status"
+        assert unchanged["enabled"] is False

@@ -273,7 +273,16 @@ Use one uniquely labeled private message from an approved, linked sender. Match
 the inbox delivery and run result, then confirm the status notice in Telegram.
 A workflow that copies text is transport evidence only. Record an independent
 real Gemini result separately; claim a combined path only when that exact channel
-delivery invokes a model. The answer remains inside authenticated AgenticOrg.
+delivery invokes a model. Status-only remains the default. For an explicitly
+approved answer-reply test, record the original destination and reply settings,
+select the tool-free test agent and `reply_mode=agent_answer` in Channels, and
+enable Send replies. Ask one complete synthetic question from the linked private
+account; verify the same inbox run and the actual answer received in Telegram.
+Restore the recorded settings unless the owner approved keeping the new route.
+Do not change flags, credentials, webhook registration or tenant limits. Verify
+that approval-pending, unlinked, revoked and secret-bearing results do not export
+an answer locally before this account-backed test. Legacy queued messages must
+stay status-only. Apply the additive reply-mode migration before new workers.
 
 Retain sanitized timestamps, model, outcome, token counts and cost estimates, not
 credentials, link commands, sender identifiers, tenant identifiers or raw provider

@@ -45,11 +45,12 @@
     },
     {
       "slug": "channel-workflows",
+      "reviewed": "2026-10-18",
       "title": "Connect your channels to agents and workflows",
       "description": "Bring your own provider account, protect credentials, link a private sender, and run bounded tasks from messaging, email, voice or signed gateways.",
       "group": "Connect And Extend",
       "audience": "Agent creators and administrators",
-      "sources": ["ui/src/pages/Channels.tsx", "api/v1/channels.py", "core/channels/runtime.py", "core/channels/providers.py", "api/v1/voice_runtime.py"]
+      "sources": ["ui/src/pages/Channels.tsx", "api/v1/channels.py", "core/channels/runtime.py", "core/channels/replies.py", "core/channels/providers.py", "api/v1/voice_runtime.py"]
     },
     {
       "slug": "concepts",

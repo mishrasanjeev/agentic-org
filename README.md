@@ -60,13 +60,17 @@ Telegram, Viber, inbound Mailgun email or signed gateway to an agent or workflow
 Credentials are encrypted, callbacks are authenticated, unlinked messages require
 review, and private sender links delegate only your current permissions. Existing
 Twilio voice/call setup and remote MCP tool discovery remain separate integrations.
-Native channel replies are optional status notices, not private result exports.
+Native channel replies default to optional status notices. Telegram agent
+connections can opt into bounded final-answer replies for the linked private
+sender under **Channels > Reply content**. Traces and tool-call records stay in
+AgenticOrg; approvals, sender authorization and tenant controls still apply.
 
 Follow the [channel account and workflow guide](docs/user-guide/channel-workflows.md)
 for account creation, callback registration, sender linking and verification.
 Local wire-contract tests are not proof of real provider-account delivery.
 Reuse an existing Telegram connection for an already connected bot; a second
-connection must not overwrite its webhook. Keep its configured destination unchanged.
+connection must not overwrite its webhook. Change its destination through
+**Save settings** only when authorized and no tasks are queued or running.
 Verify real model reasoning separately from transport-only workflows, and do not
 claim a combined Telegram-to-Gemini flow unless one delivery proves both.
 

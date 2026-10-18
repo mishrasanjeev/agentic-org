@@ -1,14 +1,14 @@
 // SPDX-License-Identifier: Apache-2.0
 import { useEffect, useState, type FormEvent } from "react";
 import { Link } from "react-router";
-import { ArrowLeft, ArrowRight, Check, Copy, KeyRound, Mail, Mic, Plug, Plus, RefreshCw } from "lucide-react";
+import { ArrowLeft, ArrowRight, Check, Copy, KeyRound, Mail, Mic, Plug, Plus, RefreshCw, Save } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import api, { extractApiError } from "@/lib/api";
 import { useAuth } from "@/contexts/AuthContext";
 import { isAdminUser } from "@/lib/roles";
 
 interface Provider { id: string; label: string; fields: string[]; guide: string; reply: boolean; identity_link: boolean }
-interface Binding { id: string; name: string; provider: string; target_kind: string; target_id: string; enabled: boolean; auto_reply: boolean; callback_url: string }
+interface Binding { id: string; name: string; provider: string; target_kind: string; target_id: string; enabled: boolean; auto_reply: boolean; reply_mode?: "status" | "agent_answer"; callback_url: string }
 interface Target { id: string; name: string }
 interface Delivery { id: string; text: string; status: string; error_code?: string; result?: unknown; created_at: string }
 const inputClass = "mt-1 w-full rounded border bg-background px-3 py-2 text-sm";
@@ -29,6 +29,9 @@ export default function Channels() {
   const [target, setTarget] = useState("");
   const [credentials, setCredentials] = useState<Record<string, string>>({});
   const [reply, setReply] = useState(false);
+  const [editKind, setEditKind] = useState("agent");
+  const [editTarget, setEditTarget] = useState("");
+  const [editReplyMode, setEditReplyMode] = useState("status");
   const [rotating, setRotating] = useState(false);
   const [selected, setSelected] = useState<Binding | null>(null);
   const [deliveries, setDeliveries] = useState<Delivery[]>([]);
@@ -40,6 +43,13 @@ export default function Channels() {
   const provider = providers.find((item) => item.id === providerId);
   const selectedProvider = providers.find((item) => item.id === selected?.provider);
 
+  useEffect(() => {
+    if (selected) {
+      setEditKind(selected.target_kind); setEditTarget(selected.target_id);
+      setEditReplyMode(selected.reply_mode || "status");
+    }
+  }, [selected]);
+
   async function reload() {
     const response = await api.get("/channels");
     setBindings(response.data.bindings);
@@ -47,15 +57,27 @@ export default function Channels() {
   }
   useEffect(() => {
     let active = true;
+    async function loadTargets(path: "/agents" | "/workflows") {
+      const items: Target[] = [];
+      let page = 1;
+      let pages: number;
+      do {
+        const response = await api.get(path, { params: { page, per_page: 100 } });
+        items.push(...(response.data.items || []));
+        pages = Number(response.data.pages || page);
+        page += 1;
+      } while (active && page <= pages);
+      return items;
+    }
     (async () => {
       try {
         const catalog = await api.get("/channels/catalog");
         const channels = await api.get("/channels");
-        const agentList = await api.get("/agents", { params: { page_size: 100 } });
-        const workflowList = admin ? await api.get("/workflows", { params: { page_size: 100 } }) : null;
+        const agentList = await loadTargets("/agents");
+        const workflowList = admin ? await loadTargets("/workflows") : [];
         if (active) {
           setProviders(catalog.data.providers); setBindings(channels.data.bindings);
-          setAgents(agentList.data.items || []); setWorkflows(workflowList?.data.items || []);
+          setAgents(agentList); setWorkflows(workflowList);
         }
       } catch (err) { if (active) setError(extractApiError(err, "Could not load channel setup")); }
     })();
@@ -140,10 +162,30 @@ export default function Channels() {
         <tbody>{bindings.map((item) => <tr className="border-b" key={item.id}><td className="py-3 pr-4 font-medium break-words">{item.name}</td><td className="pr-4">{providers.find((entry) => entry.id === item.provider)?.label || item.provider}</td><td className="pr-4">{item.enabled ? "Enabled" : "Disabled"}</td><td><Button variant="outline" onClick={() => { setSelected(item); setCommand(""); setRotating(false); setCredentials({}); setDeliveries([]); }}>Open</Button></td></tr>)}</tbody></table>
       {!bindings.length && <p className="py-6 text-sm text-muted-foreground">No channel connections</p>}
     </section>
-    {selected && <section className="space-y-4 border-t pt-5" aria-label="Channel inbox">
+    {selected && !creating && <section className="space-y-4 border-t pt-5" aria-label="Channel inbox">
       <div className="flex flex-wrap items-center justify-between gap-3"><h2 className="text-lg font-semibold break-words">{selected.name}</h2><label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={selected.enabled} disabled={busy} onChange={() => action(async () => {
         const response = await api.patch(`/channels/bindings/${selected.id}`, { enabled: !selected.enabled }); setSelected(response.data); setCommand(""); await reload();
       })} />Enabled</label></div>
+      <form aria-label="Destination and reply settings" className="max-w-xl space-y-3" onSubmit={(event) => {
+        event.preventDefault(); void action(async () => {
+          const route = editKind !== selected.target_kind || editTarget !== selected.target_id
+            ? { target_kind: editKind, target_id: editTarget } : {};
+          const response = await api.patch(`/channels/bindings/${selected.id}`, { ...route, reply_mode: editReplyMode });
+          setSelected(response.data); await reload(); setNotice("Destination and reply settings saved.");
+        });
+      }}>
+        <label className="block text-sm">Destination type<select className={inputClass} value={editKind} disabled={busy} onChange={(event) => {
+          setEditKind(event.target.value); setEditTarget(""); setEditReplyMode("status");
+        }}><option value="agent">Agent</option>{admin && <option value="workflow">Workflow</option>}</select></label>
+        <label className="block text-sm">{editKind === "agent" ? "Agent" : "Workflow"}<select required className={inputClass} disabled={busy} value={editTarget} onChange={(event) => setEditTarget(event.target.value)}>
+          <option value="">Choose destination</option>{(editKind === "agent" ? agents : workflows).map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
+        </select></label>
+        {selected.provider === "telegram" && <label className="block text-sm">Reply content<select className={inputClass} disabled={busy} value={editReplyMode} onChange={(event) => setEditReplyMode(event.target.value)}>
+          <option value="status">Task status only</option>{editKind === "agent" && <option value="agent_answer">Agent answer (private linked chats)</option>}
+        </select></label>}
+        {editReplyMode === "agent_answer" && <p className="text-sm text-amber-800 dark:text-amber-300" role="note">Final answers leave your workspace and are sent to Telegram. Enable only for content permitted in that channel.</p>}
+        <Button type="submit" disabled={busy || !editTarget}><Save size={16} className="mr-2" />Save settings</Button>
+      </form>
       <div className="flex items-start gap-2"><label className="flex-1 min-w-0 text-sm">Callback URL<input className={inputClass} readOnly value={selected.callback_url} /></label><Button className="mt-6 shrink-0" variant="outline" title="Copy callback URL" aria-label="Copy callback URL" onClick={() => action(async () => { await navigator.clipboard.writeText(selected.callback_url); setNotice("Callback copied"); })}><Copy size={16} /></Button></div>
       <div className="flex flex-wrap items-center gap-4"><Button variant="outline" disabled={busy} onClick={() => { setCreating(false); setCredentials({}); setRotating(!rotating); }}><KeyRound size={16} className="mr-2" />Replace credentials</Button>
         {selected.provider === "telegram" && <Button disabled={busy} onClick={() => action(async () => {
@@ -152,7 +194,7 @@ export default function Channels() {
         })}><Plug size={16} className="mr-2" />Connect Telegram</Button>}
         {selectedProvider?.reply && <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={selected.auto_reply} disabled={busy} onChange={() => action(async () => {
           const response = await api.patch(`/channels/bindings/${selected.id}`, { auto_reply: !selected.auto_reply }); setSelected(response.data); await reload();
-        })} />Task-status replies</label>}</div>
+        })} />Send replies</label>}</div>
       {rotating && selectedProvider && <form className="max-w-xl space-y-3 border-y py-4" aria-label="Replace channel credentials" onSubmit={(event) => { event.preventDefault(); void action(async () => {
         const response = await api.patch(`/channels/bindings/${selected.id}`, { credentials }); setSelected(response.data); setCredentials({}); setRotating(false); setCommand(""); await reload();
         setNotice("Credentials replaced. Connection disabled and sender links revoked. Update the provider callback settings before enabling again.");

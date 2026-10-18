@@ -163,6 +163,27 @@ services:
       grantex:
         condition: service_healthy
 
+  # Durable channel intake and recovery sweeps need the same scheduler as production.
+  beat:
+    image: agenticorg-api:dev
+    pull_policy: never
+    environment: *backend-env
+    command: celery -A core.tasks.celery_app beat --loglevel=info --schedule=/tmp/celerybeat-schedule --pidfile=/tmp/celerybeat.pid
+    healthcheck:
+      # Beat does not serve HTTP; verify its explicit scheduler process instead.
+      test: ["CMD", "python", "-c", "import os; from pathlib import Path; os.kill(int(Path('/tmp/celerybeat.pid').read_text().strip()), 0)"]
+      interval: 10s
+      timeout: 5s
+      start_period: 20s
+      retries: 3
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+
   # The mock verification provider as its own service, so the provider seam is
   # exercised over the network (connectors/providers/mock). It refuses to start
   # unless AGENTICORG_ENV is local, development or test. Its /v1/admin endpoints

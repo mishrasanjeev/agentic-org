@@ -1,5 +1,19 @@
 # Changelog
 
+## Unreleased - Configurable Telegram answer replies
+
+- Add per-connection opt-in final-answer replies for linked private Telegram
+  agent chats. Existing connections and queued messages stay status-only.
+  No global feature flag or deployment-control default changes.
+- Recheck sender delegation, current tenant/owner and agent access before
+  disclosure. Keep approvals, errors, traces, tool-call records and recognized
+  secret-bearing outputs out of answer replies. Bound plain-text replies and
+  retain one-attempt delivery without replaying model execution on send failure.
+- Let channel owners edit an authorized destination through Channels without
+  replacing credentials or webhook settings; reject changes while work is queued.
+- Document disclosure limits, opt-out, provider-account verification and safe
+  acceptance/restoration steps. Migration adds status-default consent snapshots.
+
 ## Unreleased - Gemini reasoning request correction
 
 - Add per-agent opt-in medium thinking for `gemini-3.5-flash-lite`, saved in the

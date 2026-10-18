@@ -25,7 +25,7 @@ before making a paid model call. Do not reuse customer workflows for that test.
 
 Enter secrets only in the signed-in credential form. Never put tokens, API keys, webhook secrets, passwords or one-time link commands in chat, prompts, repository files or support screenshots. To arrange assisted testing, share only the provider name, account approval status, test sender or destination you authorize, and a sanitized request ID. Use the credential form or your organization's approved secret-management process for the secret itself. Choose dedicated test accounts, minimum permissions and spending limits.
 
-The first version accepts bounded text messages. Images, files and voice notes on these messaging callbacks do not start tasks. Use the knowledge-upload and voice setup paths for document processing and calls. Native messaging replies, when enabled, contain task status only. Results stay in the authenticated AgenticOrg inbox; private knowledge and tool outputs are not broadcast to the channel. Email and generic gateways have no native outbound reply in this version.
+The channel callbacks accept bounded text messages. Images, files and voice notes do not start tasks. Use the knowledge-upload and voice setup paths for document processing and calls. Native replies default to task status only. Telegram agent connections may explicitly opt into final answers as described below; other messaging channels keep status-only replies. Email and generic gateways have no native outbound reply in this version.
 
 ## Google reasoning model
 
@@ -44,8 +44,8 @@ See [WhatsApp setup](https://developers.facebook.com/docs/whatsapp/cloud-api/get
 ## Telegram
 
 **Already connected? Reuse it.** Open the existing connection under **Channels**
-instead of saving the same bot as a second connection. Preserve its configured
-agent or workflow destination. A bot has one Telegram webhook;
+instead of saving the same bot as a second connection. Record its configured
+agent or workflow destination before any authorized change. A bot has one Telegram webhook;
 creating another AgenticOrg connection does not move that webhook or replace the
 existing target. Keep an unused duplicate disabled.
 
@@ -83,10 +83,61 @@ Open a private conversation with the bot, generate **Link my messaging account**
    the complete provider invoice. Do not change deployment flags or tenant limits
    to get a passing result.
 
-Telegram's native reply is a status notice. The computed answer, reasoning and
-private data remain in the authenticated inbox or agent result, not the Telegram
-message. A provider-accepted send and the recipient's confirmation are separate
-pieces of delivery evidence.
+Telegram's default reply is a status notice. For final-answer delivery, explicitly
+select the opt-in mode below and verify the answer actually received, not just
+a completed status. Reasoning traces and tool-call records remain in AgenticOrg.
+A provider-accepted send and recipient confirmation are separate delivery evidence.
+
+### Let your linked private chat receive the answer
+
+1. Open your existing Telegram connection in **Channels**. Record the original
+   destination and reply settings if this is a temporary test.
+2. Choose **Agent** as the destination type and an agent you can manage. Choose
+   **Agent answer (private linked chats)** under **Reply content**, then select
+   **Save settings**. Enable **Send replies**. A busy destination cannot be
+   changed until queued/running messages finish.
+3. Read the disclosure notice: final answers leave your workspace and reach
+   Telegram. Use only an agent and content your organization permits there.
+   This setting is per connection, not a tenant-wide switch or model permission.
+4. Use the existing private sender link. Send the complete question as **one**
+   message, such as: "There are 7, 11 and 13 items. Remove the 11-item box, then
+   remove 2 more items. How many remain?" The expected answer is 18.
+5. Verify the completed inbox run, selected agent/model and actual Telegram
+   answer. Restore the original destination/reply settings after temporary tests.
+
+```flow
+Linked private message | The existing signature, sender delegation and tenant checks apply. | Owner: Channel owner
+Saved agent runs | Existing model, budget, tool and approval policies remain in force. | Owner: AgenticOrg
+Completed final answer | Only canonical final output is eligible; no traces or tool-call envelopes. | Owner: AgenticOrg
+Recheck disclosure permission | Consent at receipt and send, current owner, sender link and agent access must still match. | Owner: AgenticOrg | If blocked: Review the result in the authenticated inbox.
+Receive the answer | One plain-text send attempt, bounded to 1,900 UTF-16 units with a shortening notice. | Owner: Telegram
+```
+
+`reply_mode="agent_answer"` is an explicit opt-in on a Telegram **agent**
+connection; `reply_mode="status"` is the default. Existing connections and queued
+messages remain status-only after upgrade. Enabling answer mode does not export
+old results. Workflow targets and other providers do not support answer mode.
+Changing a workflow destination requires an administrator. API clients may PATCH
+both `target_kind` and `target_id` together; a foreign/unmanageable target is
+refused. Management requires an authenticated human owner, not a machine/API-key
+identity. Neither route changes nor reply mode replacement rotates credentials,
+changes the webhook or relinks a sender.
+
+An unlinked sender, expired/revoked link, inaccessible or paused agent, pending
+approval, error, missing answer or recognized secret-like/private envelope does
+not produce an answer reply. Results remain in the authenticated inbox; a safe
+status/review notice may be sent instead. Guard patterns are defense in depth,
+not a complete data-loss-prevention guarantee: administrators must restrict what
+the agent may answer. Final answers can contain sensitive business information
+even when no credential pattern is detected. Long answers are shortened, not
+split into repeated sends. Provider timeouts are uncertain delivery, never a
+reason to rerun the model or resend blindly. Disabling **Send replies**, switching
+back to **Task status only**, or disabling the connection stops future answer
+attempts; it cannot retract a message already accepted by Telegram.
+
+Self-managed deployments need both the channel worker and the periodic beat
+scheduler. The local Docker stack starts both. An inbox that stays pending can
+indicate a missing scheduler or broker; do not repeatedly submit the same task.
 
 ## Viber
 
