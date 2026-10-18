@@ -40,10 +40,10 @@ describe("public documentation", () => {
       }),
     ).toBeInTheDocument();
     const directory = screen.getByRole("main");
-    for (const group of manual.groups)
-      expect(
-        within(directory).getByRole("heading", { name: group }),
-      ).toBeInTheDocument();
+    const groupHeadings = within(directory).getAllByRole("heading", { level: 2 });
+    expect(groupHeadings).toHaveLength(manual.groups.length);
+    for (const [index, group] of manual.groups.entries())
+      expect(groupHeadings[index]).toHaveAccessibleName(group);
     expect(
       within(directory).getAllByRole("heading", { level: 3 }),
     ).toHaveLength(manual.articles.length);
