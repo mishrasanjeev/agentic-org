@@ -1080,6 +1080,10 @@ function ConfigTab({ agent, onUpdated, canManage }: { agent: Agent; onUpdated: (
   const [saveError, setSaveError] = useState<string | null>(null);
   const [editLlmProvider, setEditLlmProvider] = useState(agent.llm_provider || "");
   const [editLlmModel, setEditLlmModel] = useState(agent.llm_model || "");
+  const [editThinkingLevel, setEditThinkingLevel] = useState(agent.llm_config?.thinking_level || "");
+  const supportsThinking = (!editLlmProvider || editLlmProvider === "gemini") &&
+    editLlmModel.replace(/^models\//, "") === "gemini-3.5-flash-lite";
+  useEffect(() => { if (!supportsThinking) setEditThinkingLevel(""); }, [supportsThinking]);
   const [editMaxRetries, setEditMaxRetries] = useState(agent.max_retries ?? 3);
   const [editHitlCondition, setEditHitlCondition] = useState(agent.hitl_condition || "");
   const [editConfidenceFloor, setEditConfidenceFloor] = useState(
@@ -1103,6 +1107,7 @@ function ConfigTab({ agent, onUpdated, canManage }: { agent: Agent; onUpdated: (
     setEditTools(agent.authorized_tools || []);
     setEditLlmProvider(agent.llm_provider || inferProviderForModel(llmRegistry, agent.llm_model));
     setEditLlmModel(agent.llm_model || "");
+    setEditThinkingLevel(agent.llm_config?.thinking_level || "");
     setEditDomain(agent.domain || "");
     setEditMaxRetries(agent.max_retries ?? 3);
     setEditHitlCondition(agent.hitl_condition || "");
@@ -1123,7 +1128,11 @@ function ConfigTab({ agent, onUpdated, canManage }: { agent: Agent; onUpdated: (
         payload.domain = editDomain;
       }
       if (editLlmModel.trim()) {
-        payload.llm = { model: editLlmModel.trim(), provider: editLlmProvider.trim() || undefined };
+        payload.llm = {
+          ...agent.llm_config,
+          model: editLlmModel.trim(), provider: editLlmProvider.trim() || undefined,
+          thinking_level: supportsThinking && editThinkingLevel ? editThinkingLevel : null,
+        };
       }
       if (editHitlCondition) {
         payload.hitl_policy = { condition: editHitlCondition };
@@ -1151,6 +1160,8 @@ function ConfigTab({ agent, onUpdated, canManage }: { agent: Agent; onUpdated: (
   const configRows: Array<{ label: string; value: string }> = [
     { label: "LLM Provider", value: agent.llm_provider || "Inferred from model" },
     { label: "LLM Model", value: agent.llm_model || "Not specified" },
+    ...(agent.llm_model?.replace(/^models\//, "") === "gemini-3.5-flash-lite"
+      ? [{ label: "Gemini thinking", value: agent.llm_config?.thinking_level || "Provider default" }] : []),
     { label: "Max Retries", value: agent.max_retries != null ? String(agent.max_retries) : "Default" },
     { label: "Retry Backoff", value: agent.retry_backoff || "Default" },
     { label: "HITL Condition", value: agent.hitl_condition || "None" },
@@ -1247,6 +1258,15 @@ function ConfigTab({ agent, onUpdated, canManage }: { agent: Agent; onUpdated: (
               )}
             </div>
 
+            {supportsThinking && (
+              <div className="flex flex-col gap-1">
+                <label htmlFor="agent-thinking-level" className="text-sm text-muted-foreground">Gemini thinking</label>
+                <select id="agent-thinking-level" value={editThinkingLevel} onChange={(e) => setEditThinkingLevel(e.target.value)} className="border rounded px-3 py-1.5 text-sm">
+                  <option value="">Provider default</option>
+                  <option value="medium">Medium (additional billed thinking tokens)</option>
+                </select>
+              </div>
+            )}
             {/* Max Retries */}
             <div className="flex flex-col gap-1">
               <label className="text-sm text-muted-foreground">Max Retries</label>

@@ -725,9 +725,16 @@ def _run_resume_spec(
         "connector_names": connector_names_for_tools,
         "llm_model": agent_config.get("llm_model", ""),
         "llm_provider": _pinned_llm_provider(agent_config.get("llm_provider"), agent_config.get("llm_config")),
+        **_thinking_profile(agent_config),
         "company_id": str(agent_config["company_id"]) if agent_config.get("company_id") else None,
         "domain": agent_config.get("domain", "ops"),
     }
+
+
+def _thinking_profile(agent_config: dict[str, Any]) -> dict[str, str]:
+    """Only the saved agent config supplies this option, never task inputs."""
+    level = (agent_config.get("llm_config") or {}).get("thinking_level")
+    return {"thinking_level": level} if level is not None else {}
 
 
 def _debug_resume_spec(agent_config: dict[str, Any], connector_ids: Any) -> dict[str, Any]:
@@ -3282,7 +3289,8 @@ async def update_agent(
             # stale provider can never disagree with the new model.
             agent.llm_provider = update_data["llm"].get("provider")
             agent.llm_fallback = update_data["llm"].get("fallback_model")
-            agent.llm_config = update_data["llm"]
+            routing = {"routing": agent.llm_config["routing"]} if (agent.llm_config or {}).get("routing") else {}
+            agent.llm_config = {**routing, **update_data["llm"]}
         # Persona fields
         if "employee_name" in update_data:
             agent.employee_name = update_data["employee_name"]
@@ -4019,6 +4027,7 @@ async def run_agent(
                 },
                 llm_model=agent_config.get("llm_model", ""),
                 llm_provider=_pinned_llm_provider(agent_config.get("llm_provider"), agent_config.get("llm_config")),
+                **_thinking_profile(agent_config),
                 confidence_floor=float(review_learning["effective_confidence_floor"]),
                 hitl_condition=(
                     "" if review_learning["confidence_condition_suppressed"] else agent_config.get("hitl_condition", "")

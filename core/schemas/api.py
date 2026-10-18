@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Any
+from typing import Any, Literal
 from uuid import UUID
 
 from pydantic import BaseModel, Field, field_validator, model_validator
@@ -24,6 +24,16 @@ class LLMConfig(BaseModel):
     fallback_model: str = Field(default_factory=fallback_model)
     temperature: float = 0.1
     context_strategy: str = "sliding_16k"
+    thinking_level: Literal["medium"] | None = None
+
+    @model_validator(mode="after")
+    def _thinking_matches_model(self) -> LLMConfig:
+        from core.llm.gemini_config import validate_thinking_level
+
+        validate_thinking_level(self.model, self.thinking_level)
+        if self.thinking_level is not None and self.provider not in {None, "gemini"}:
+            raise ValueError("thinking_level requires the Gemini provider")
+        return self
 
     @model_validator(mode="after")
     def _provider_matches_model(self) -> LLMConfig:

@@ -88,8 +88,11 @@ observations, not proof that wrapping always fails.
 Holding the original prepared prompt and selected model fixed, explicit medium
 and high thinking each returned `18`. The provider documents minimal thinking as
 the default for this model and recommends medium/high for multi-step reasoning.
-The correction requests medium in both runtime clients and does not rewrite the
-prompt, task or answer. The native cost estimate now includes thinking tokens
+The correction offers a per-agent opt-in medium profile in both runtime clients
+and does not rewrite the prompt, task or answer. Existing agents and generic calls
+retain the provider default. The profile is stored in existing agent configuration,
+validated against the selected model and retained on approval/debug resume. Replay
+records distinguish explicit profiles. The native cost estimate now includes thinking tokens
 even without optional spend intelligence; its detailed meter still counts them
 only once.
 

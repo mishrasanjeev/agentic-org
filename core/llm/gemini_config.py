@@ -4,13 +4,25 @@
 from typing import Any
 
 
-def generation_config(model: str, temperature: float, max_tokens: int) -> dict[str, Any]:
+def validate_thinking_level(model: str, thinking_level: str | None) -> None:
+    """An explicit profile must not silently apply to another model or provider."""
+    if thinking_level is not None and (
+        thinking_level != "medium" or model.removeprefix("models/") != "gemini-3.5-flash-lite"
+    ):
+        raise ValueError("thinking_level supports medium only for gemini-3.5-flash-lite")
+
+
+def generation_config(
+    model: str, temperature: float, max_tokens: int, thinking_level: str | None = None
+) -> dict[str, Any]:
+    validate_thinking_level(model, thinking_level)
     config: dict[str, Any] = {"max_output_tokens": max_tokens}
     if model.removeprefix("models/") == "gemini-3.5-flash-lite":
-        # Minimal is the provider default; autonomous multi-step reasoning needs medium/high.
+        # Omission preserves the provider default. Extra thinking is per-agent opt-in.
         # Sampling parameters are ignored for this model. Keep older models unchanged.
         # https://ai.google.dev/gemini-api/docs/generate-content/whats-new-gemini-3.6
-        config["thinking_config"] = {"thinking_level": "medium"}
+        if thinking_level is not None:
+            config["thinking_config"] = {"thinking_level": thinking_level}
     else:
         config["temperature"] = temperature
     return config

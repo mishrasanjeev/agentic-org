@@ -303,6 +303,7 @@ async def run_agent(
     output_schema_json: dict[str, Any] | None = None,
     limits: dict[str, Any] | None = None,
     breakpoints: list[str] | None = None,
+    thinking_level: str | None = None,
 ) -> dict[str, Any]:
     """Run a LangGraph agent and return the result.
 
@@ -530,6 +531,7 @@ async def run_agent(
             output_schema_json=output_schema_json,
             pseudonymiser=pseudonymiser,
             limits=limits,
+            **({"thinking_level": thinking_level} if thinking_level is not None else {}),
         )
     finally:
         reset_prefetched_llm_credential(credential_token)
@@ -965,6 +967,7 @@ async def resume_agent(
     output_schema: str | None = None,
     output_schema_json: dict[str, Any] | None = None,
     limits: dict[str, Any] | None = None,
+    thinking_level: str | None = None,
 ) -> dict[str, Any]:
     """Resume a paused agent after HITL decision.
 
@@ -1079,6 +1082,7 @@ async def resume_agent(
             output_schema=output_schema,
             output_schema_json=output_schema_json,
             limits=limits,
+            **({"thinking_level": thinking_level} if thinking_level is not None else {}),
         )
     finally:
         reset_prefetched_llm_credential(credential_token)

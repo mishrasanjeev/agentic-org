@@ -669,6 +669,7 @@ class LLMRouter:
         max_tokens: int = 4096,
         tenant_id: str | None = None,
         pseudonymiser: PseudonymSession | None = None,
+        thinking_level: str | None = None,
     ) -> LLMResponse:
         """Send completion request with automatic failover.
 
@@ -721,6 +722,8 @@ class LLMRouter:
             temp = temperature if temperature is not None else self.temperature
             # Only forward tenant_id when set so existing _call_model call shapes stay stable.
             scope = {"tenant_id": tenant_id} if tenant_id else {}
+            if thinking_level is not None:
+                scope["thinking_level"] = thinking_level
             # Tamper-evident records: digests of the prompt and of what the
             # model is sent (after pseudonymisation), never the content.
             prompt_digest = prompt_digest_of(messages)
@@ -816,8 +819,13 @@ class LLMRouter:
         temperature: float,
         max_tokens: int,
         tenant_id: str | None = None,
+        thinking_level: str | None = None,
     ) -> LLMResponse:
         start = time.monotonic()
+        from core.llm.gemini_config import validate_thinking_level
+
+        validate_thinking_level(model, thinking_level)
+        profile = {"thinking_level": thinking_level} if thinking_level is not None else {}
 
         # Validate the model name FIRST so the fake LLM preserves
         # the same contract as the real providers. Without this,
@@ -855,7 +863,9 @@ class LLMRouter:
         if mode is not model_replay.ModelMode.LIVE:
 
             async def _live_call() -> dict[str, Any]:
-                response = await self._call_provider(model, messages, temperature, max_tokens, start, tenant_id)
+                response = await self._call_provider(
+                    model, messages, temperature, max_tokens, start, tenant_id, **profile
+                )
                 return asdict(response)
 
             payload = await model_replay.replay_router_call(
@@ -865,6 +875,7 @@ class LLMRouter:
                 max_tokens=max_tokens,
                 live_call=_live_call,
                 mode=mode,
+                **profile,
             )
             return LLMResponse(**payload)
 
@@ -879,7 +890,7 @@ class LLMRouter:
             )
             return LLMResponse(**payload)
 
-        return await self._call_provider(model, messages, temperature, max_tokens, start, tenant_id)
+        return await self._call_provider(model, messages, temperature, max_tokens, start, tenant_id, **profile)
 
     async def _call_provider(
         self,
@@ -889,16 +900,27 @@ class LLMRouter:
         max_tokens: int,
         start: float,
         tenant_id: str | None,
+        thinking_level: str | None = None,
     ) -> LLMResponse:
         if "gemini" in model:
-            return await self._call_gemini(model, messages, temperature, max_tokens, start, tenant_id=tenant_id)
+            profile = {"thinking_level": thinking_level} if thinking_level is not None else {}
+            return await self._call_gemini(
+                model, messages, temperature, max_tokens, start, tenant_id=tenant_id, **profile
+            )
         elif "claude" in model:
             return await self._call_claude(model, messages, temperature, max_tokens, start, tenant_id=tenant_id)
         else:  # gpt
             return await self._call_openai(model, messages, temperature, max_tokens, start, tenant_id=tenant_id)
 
     async def _call_gemini(
-        self, model, messages, temperature, max_tokens, start, tenant_id: str | None = None
+        self,
+        model,
+        messages,
+        temperature,
+        max_tokens,
+        start,
+        tenant_id: str | None = None,
+        thinking_level: str | None = None,
     ) -> LLMResponse:
         """Call Google Gemini via the google.genai SDK.
 
@@ -930,7 +952,7 @@ class LLMRouter:
 
         from core.llm.gemini_config import generation_config
 
-        config = generation_config(model, temperature, max_tokens)
+        config = generation_config(model, temperature, max_tokens, thinking_level)
         if system_instruction:
             config["system_instruction"] = system_instruction
 

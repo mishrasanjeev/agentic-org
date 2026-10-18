@@ -32,7 +32,7 @@ def test_langgraph_builds_reasoning_request_not_minimal_default(monkeypatch, mod
     credential = MagicMock(return_value="synthetic-key")
     monkeypatch.setattr(llm_factory, "_resolve_cloud_api_key", credential)
     # Use the installed adapter's real request serializer, without network access.
-    llm = llm_factory._build_gemini_model(model, 0.1, 4096, TENANT)
+    llm = llm_factory._build_gemini_model(model, 0.1, 4096, TENANT, thinking_level="medium")
     assert isinstance(llm, ChatGoogleGenerativeAI)
     config = llm._prepare_params(stop=None).model_dump(exclude_none=True)
     assert str(config["thinking_config"]["thinking_level"]).lower().endswith("medium")
@@ -64,9 +64,7 @@ async def test_native_gemini_matches_reasoning_and_counts_thought_cost_once(monk
     response = SimpleNamespace(
         text='{"answer":18,"confidence":1.0}',
         candidates=[],
-        usage_metadata=SimpleNamespace(
-            prompt_token_count=410, candidates_token_count=19, thoughts_token_count=592
-        ),
+        usage_metadata=SimpleNamespace(prompt_token_count=410, candidates_token_count=19, thoughts_token_count=592),
     )
     generate = AsyncMock(return_value=response)
     client = SimpleNamespace(aio=SimpleNamespace(models=SimpleNamespace(generate_content=generate)))
@@ -81,7 +79,9 @@ async def test_native_gemini_matches_reasoning_and_counts_thought_cost_once(monk
         {"role": "system", "content": _with_reference_resolution_guidance(PROMPT)},
         {"role": "user", "content": _build_user_message({"action": "run", "inputs": {"task": TASK}, "context": {}})},
     ]
-    result = await router.LLMRouter()._call_gemini(MODEL, messages, 0.1, 4096, 0.0, tenant_id=TENANT)
+    result = await router.LLMRouter()._call_gemini(
+        MODEL, messages, 0.1, 4096, 0.0, tenant_id=TENANT, thinking_level="medium"
+    )
     kwargs = generate.call_args.kwargs
     assert kwargs["config"]["thinking_config"] == {"thinking_level": "medium"}
     assert "temperature" not in kwargs["config"]
@@ -115,3 +115,125 @@ def test_missing_tenant_credential_still_fails_closed(monkeypatch):
     monkeypatch.setattr(llm_factory, "_resolve_cloud_api_key", lambda *_: "")
     with pytest.raises(LLMProviderConfigurationError, match="not configured"):
         llm_factory._build_gemini_model(MODEL, 0.1, 4096, TENANT)
+
+
+def test_unspecified_profile_preserves_provider_default_in_both_clients(monkeypatch):
+    from core.langgraph import llm_factory
+    from core.llm.gemini_config import generation_config
+
+    monkeypatch.setattr(llm_factory, "_resolve_cloud_api_key", lambda *_: "synthetic-key")
+    llm = llm_factory._build_gemini_model(MODEL, 0.1, 4096, TENANT)
+    config = llm._prepare_params(stop=None).model_dump(exclude_none=True)
+    assert "thinking_config" not in config
+    assert "thinking_config" not in generation_config(MODEL, 0.1, 4096)
+
+
+@pytest.mark.parametrize("level", ["high", "low", "", 123, True])
+def test_api_refuses_unavailable_profiles(level):
+    from pydantic import ValidationError
+
+    from core.schemas.api import LLMConfig
+
+    with pytest.raises(ValidationError):
+        LLMConfig(model=MODEL, thinking_level=level)
+
+
+def test_saved_profile_is_optional_validated_and_snapshot_for_resume():
+    from pydantic import ValidationError
+
+    from api.v1.agents import _run_resume_spec, _thinking_profile
+    from core.schemas.api import AgentUpdate, LLMConfig
+
+    assert LLMConfig(model=MODEL).thinking_level is None
+    saved = AgentUpdate(llm={"model": MODEL, "provider": "gemini", "thinking_level": "medium"})
+    agent = {"llm_model": MODEL, "llm_config": saved.llm.model_dump()}
+    assert _thinking_profile(agent) == {"thinking_level": "medium"}
+    review = {"effective_confidence_floor": 0.88, "confidence_condition_suppressed": False}
+    assert _run_resume_spec(agent, review, [], [])["thinking_level"] == "medium"
+    assert _thinking_profile({"inputs": {"thinking_level": "medium"}}) == {}
+    assert "thinking_level" not in _run_resume_spec({}, review, [], [])
+    for model in ("gpt-4o", "gemini-2.5-flash", "not-a-model"):
+        with pytest.raises(ValidationError):
+            AgentUpdate(llm={"model": model, "thinking_level": "medium"})
+    assert AgentUpdate(llm={"model": MODEL, "thinking_level": None}).llm.thinking_level is None
+
+
+def test_profile_is_explicit_at_factory_and_cannot_cross_provider_or_local_mode(monkeypatch):
+    from core.langgraph import llm_factory
+
+    monkeypatch.setenv("AGENTICORG_LLM_MODE", "cloud")
+    monkeypatch.setenv("AGENTICORG_MODEL_MODE", "live")
+    builder = MagicMock()
+    monkeypatch.setattr(llm_factory, "_build_gemini_model", builder)
+    llm_factory.create_chat_model(model=MODEL, provider="gemini", tenant_id=TENANT, thinking_level="medium")
+    builder.assert_called_once_with(MODEL, 0.1, 4096, TENANT, thinking_level="medium")
+    with pytest.raises(ValueError, match="Gemini"):
+        llm_factory.create_chat_model(model=MODEL, provider="openai_compatible", thinking_level="medium")
+    monkeypatch.setenv("AGENTICORG_LLM_MODE", "local")
+    with pytest.raises(ValueError, match="cloud Gemini"):
+        llm_factory.create_chat_model(model=MODEL, thinking_level="medium")
+    assert builder.call_count == 1
+
+
+def test_replay_identity_distinguishes_profile_without_changing_default_keys():
+    from langchain_core.messages import HumanMessage
+
+    from core.model_replay import ReplayChatModel, request_key
+
+    messages = [HumanMessage(content=TASK)]
+    default = ReplayChatModel(model_name=MODEL)
+    medium = ReplayChatModel(model_name=MODEL, thinking_level="medium")
+    old_key = request_key(MODEL, messages, tools=[], params={"temperature": 0.1, "max_tokens": 4096, "stop": None})
+    assert default._request(messages, None)[0] == old_key
+    assert medium._request(messages, None)[0] != old_key
+
+
+@pytest.mark.asyncio
+async def test_native_replay_does_not_reuse_default_response_for_opt_in(tmp_path):
+    from core.model_replay import ModelMode, cassette_scope, replay_router_call
+
+    messages = [{"role": "user", "content": TASK}]
+    live = AsyncMock(side_effect=[{"content": "default"}, {"content": "medium"}])
+    with cassette_scope(tmp_path):
+        for level, expected in ((None, "default"), ("medium", "medium")):
+            for mode in (ModelMode.RECORD, ModelMode.REPLAY):
+                result = await replay_router_call(
+                    model=MODEL,
+                    messages=messages,
+                    temperature=0.1,
+                    max_tokens=4096,
+                    live_call=live,
+                    mode=mode,
+                    thinking_level=level,
+                )
+                assert result["content"] == expected
+    assert live.await_count == 2
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("level", [None, "medium"])
+async def test_legacy_agent_reason_and_synthesis_keep_saved_opt_in(monkeypatch, level):
+    from core.agents import base
+    from core.agents.registry import AgentRegistry
+    from core.llm.router import LLMResponse
+
+    config = {
+        "id": "synthetic-agent",
+        "tenant_id": TENANT,
+        "agent_type": "synthetic_acceptance",
+        "llm_model": MODEL,
+        "system_prompt_text": PROMPT,
+        "llm_config": {"thinking_level": level},
+    }
+    agent = AgentRegistry.create_from_config(config)
+    complete = AsyncMock(return_value=LLMResponse(content='{"answer":18,"confidence":1.0}', model=MODEL))
+    monkeypatch.setattr(base.llm_router, "complete", complete)
+    await agent._reason({"task": TASK}, [])
+    await agent._synthesize_with_tools({"task": TASK}, {"answer": 18}, [{"result": "synthetic"}], [])
+    assert complete.await_count == 2
+    for call in complete.await_args_list:
+        assert call.kwargs["tenant_id"] == TENANT
+        if level is None:
+            assert "thinking_level" not in call.kwargs
+        else:
+            assert call.kwargs["thinking_level"] == level

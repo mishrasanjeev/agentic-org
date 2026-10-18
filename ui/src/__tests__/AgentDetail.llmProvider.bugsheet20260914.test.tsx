@@ -162,7 +162,7 @@ describe("AgentDetail Config tab LLM picker (bug sheet 2026-09-14 #34)", () => {
     await waitFor(() => expect(mockPatch).toHaveBeenCalledTimes(1));
     expect(mockPatch).toHaveBeenCalledWith(
       "/agents/a1",
-      expect.objectContaining({ llm: { model: "claude-sonnet-4-5-20250929", provider: "anthropic" } }),
+      expect.objectContaining({ llm: { model: "claude-sonnet-4-5-20250929", provider: "anthropic", thinking_level: null } }),
     );
   });
 
@@ -184,7 +184,7 @@ describe("AgentDetail Config tab LLM picker (bug sheet 2026-09-14 #34)", () => {
     await waitFor(() => expect(mockPatch).toHaveBeenCalledTimes(1));
     expect(mockPatch).toHaveBeenCalledWith(
       "/agents/a1",
-      expect.objectContaining({ llm: { model: "my-local-llm", provider: "openai_compatible" } }),
+      expect.objectContaining({ llm: { model: "my-local-llm", provider: "openai_compatible", thinking_level: null } }),
     );
   });
 
@@ -198,5 +198,41 @@ describe("AgentDetail Config tab LLM picker (bug sheet 2026-09-14 #34)", () => {
     expect(model.tagName).toBe("INPUT");
     expect(model.value).toBe("gpt-4o");
     expect(document.querySelectorAll("select[data-testid='llm-model']").length).toBe(0);
+  });
+
+  it("opts in only the edited agent and preserves its other model settings", async () => {
+    const geminiAgent = {
+      ...AGENT, llm_model: "gemini-3.5-flash-lite", llm_provider: "gemini",
+      llm_config: { model: "gemini-3.5-flash-lite", provider: "gemini", temperature: 0.3,
+        fallback_model: "gemini-3.5-flash-lite", context_strategy: "sliding_16k", routing: "disabled" },
+    };
+    mockGet.mockImplementation((url: string) => url === "/agents/a1"
+      ? Promise.resolve({ data: geminiAgent }) : routeGet(url, false));
+    await openConfigEditor();
+    const thinking = screen.getByRole("combobox", { name: "Gemini thinking" });
+    expect(thinking).toHaveValue("");
+    fireEvent.change(thinking, { target: { value: "medium" } });
+    await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Save Config" })); });
+    expect(mockPatch).toHaveBeenCalledWith("/agents/a1", expect.objectContaining({
+      llm: { ...geminiAgent.llm_config, thinking_level: "medium" },
+      max_retries: 3, confidence_floor: 0.88,
+    }));
+  });
+
+  it("restores provider defaults and removes the profile on a model switch", async () => {
+    const geminiAgent = { ...AGENT, llm_model: "gemini-3.5-flash-lite", llm_provider: "gemini",
+      llm_config: { model: "gemini-3.5-flash-lite", thinking_level: "medium" } };
+    mockGet.mockImplementation((url: string) => url === "/agents/a1"
+      ? Promise.resolve({ data: geminiAgent }) : routeGet(url, false));
+    await openConfigEditor();
+    expect(screen.getByRole("combobox", { name: "Gemini thinking" })).toHaveValue("medium");
+    fireEvent.change(screen.getByRole("combobox", { name: "Gemini thinking" }), { target: { value: "" } });
+    await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Save Config" })); });
+    expect(mockPatch.mock.calls[0][1].llm.thinking_level).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Edit" }));
+    fireEvent.change(screen.getByTestId("llm-model"), { target: { value: "gemini-2.5-flash" } });
+    expect(screen.queryByRole("combobox", { name: "Gemini thinking" })).toBeNull();
+    await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Save Config" })); });
+    expect(mockPatch.mock.calls[1][1].llm.thinking_level).toBeNull();
   });
 });

@@ -2,10 +2,15 @@
 
 ## Unreleased - Gemini reasoning request correction
 
-- Request medium thinking explicitly for `gemini-3.5-flash-lite` in both runtime
-  clients; omit its ignored sampling temperature. The provider's minimal default
+- Add per-agent opt-in medium thinking for `gemini-3.5-flash-lite`, saved in the
+  existing LLM configuration and editable during agent creation or configuration.
+  Existing agents and generic calls retain the provider default. Both runtime
+  clients honor explicit profiles; omit this model's ignored sampling temperature.
+  The provider's minimal default
   returned incorrect arithmetic for the exact wrapped acceptance task. Keep the
   task, prompt, model, credentials, feature flags and execution controls unchanged.
+  Validate model/profile compatibility, retain the profile on approval/debug
+  resume, and distinguish it in replay keys. No migration or global opt-in.
 - Include thinking tokens in native router totals and legacy cost estimates,
   without double counting the optional detailed spend meter. Medium thinking can
   increase output-token cost and latency; existing limits still apply. Older

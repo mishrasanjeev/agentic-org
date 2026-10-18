@@ -223,8 +223,14 @@ disable redaction, change review thresholds, or accept a different answer to
 make the check green. A local detector fix is not a successful production
 reasoning replay: record those two outcomes separately.
 
-For `gemini-3.5-flash-lite`, both the LangGraph adapter and native Gemini router
-request `thinking_config.thinking_level=medium`. The provider defaults to minimal
+For `gemini-3.5-flash-lite`, opt in the synthetic acceptance agent only through
+**Config > Edit > Gemini thinking > Medium** (or `llm.thinking_level="medium"`
+in its authenticated agent configuration). Both runtime clients then request
+`thinking_config.thinking_level=medium`. Existing agents, generic calls and new
+agents without an explicit profile keep the provider default. Set the field to
+`null` to restore that default. No global flag or environment change is required.
+Other models reject this profile rather than silently applying or ignoring it.
+The provider defaults to minimal
 thinking; its temperature/top-p/top-k parameters are ignored. Keep the exact
 system prompt, assembled task, redaction and selected model fixed when isolating
 reasoning settings. Do not infer that a transport adapter rewrote the answer

@@ -286,6 +286,7 @@ class ReplayChatModel(BaseChatModel):
     model_name: str
     temperature: float = 0.1
     max_tokens: int = 4096
+    thinking_level: str | None = None
     live_factory: Callable[[], BaseChatModel] | None = Field(default=None, exclude=True)
     tool_schemas: list[dict[str, Any]] = Field(default_factory=list)
     bound_tools: list[Any] = Field(default_factory=list, exclude=True)
@@ -311,7 +312,9 @@ class ReplayChatModel(BaseChatModel):
         )
 
     def _request(self, messages: list[BaseMessage], stop: list[str] | None) -> tuple[str, dict[str, Any]]:
-        params = {"temperature": self.temperature, "max_tokens": self.max_tokens, "stop": stop}
+        params: dict[str, Any] = {"temperature": self.temperature, "max_tokens": self.max_tokens, "stop": stop}
+        if self.thinking_level is not None:
+            params["thinking_level"] = self.thinking_level
         key = request_key(self.model_name, messages, tools=self.tool_schemas, params=params)
         return key, _render(self.model_name, messages, self.tool_schemas, params)
 
@@ -376,12 +379,15 @@ async def replay_router_call(
     max_tokens: int,
     live_call: Callable[[], Awaitable[dict[str, Any]]],
     mode: ModelMode | None = None,
+    thinking_level: str | None = None,
 ) -> dict[str, Any]:
     """Record or replay one ``LLMRouter`` completion; returns ``LLMResponse`` fields."""
     mode = mode or current_mode()
     if mode is ModelMode.LIVE:
         return await live_call()
-    params = {"temperature": temperature, "max_tokens": max_tokens}
+    params: dict[str, Any] = {"temperature": temperature, "max_tokens": max_tokens}
+    if thinking_level is not None:
+        params["thinking_level"] = thinking_level
     key = request_key(model, messages, tools=[], params=params)
     request = _render(model, messages, [], params)
     if mode is ModelMode.REPLAY:

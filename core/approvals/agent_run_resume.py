@@ -302,6 +302,7 @@ async def resume_approved_agent_run(tenant_id: uuid.UUID, hitl_id: uuid.UUID) ->
                 company_id=spec.get("company_id"),
                 domain=spec.get("domain"),
                 llm_provider=spec.get("llm_provider"),
+                **({"thinking_level": spec["thinking_level"]} if spec.get("thinking_level") is not None else {}),
                 require_paused=True,
                 **bound_grant,
             )

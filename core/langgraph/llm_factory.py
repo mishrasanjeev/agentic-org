@@ -128,6 +128,7 @@ def create_chat_model(
     routing_config: dict | None = None,
     tenant_id: str | None = None,
     provider: str | None = None,
+    thinking_level: str | None = None,
 ) -> BaseChatModel:
     """Create a LangChain ChatModel, optionally using smart routing.
 
@@ -170,6 +171,13 @@ def create_chat_model(
     ``core.model_replay``) the model is wrapped for cassettes, and the real
     model is only built when a live call is made.
     """
+    from core.llm.gemini_config import validate_thinking_level
+
+    validate_thinking_level(model or _resolve_model(model), thinking_level)
+    selected_provider = _normalise_provider(provider or (routing_config or {}).get("provider"))
+    if thinking_level is not None and selected_provider not in {None, "gemini"}:
+        raise ValueError("thinking_level requires the Gemini provider")
+    profile = {"thinking_level": thinking_level} if thinking_level is not None else {}
     mode = model_replay.current_mode()
     if mode is not model_replay.ModelMode.LIVE:
         pinned = _normalise_provider(provider or (routing_config or {}).get("provider"))
@@ -177,6 +185,7 @@ def create_chat_model(
             model_name=f"{pinned}/{model}" if pinned else (model or "default"),
             temperature=temperature,
             max_tokens=max_tokens,
+            **profile,
             live_factory=lambda: _create_live_chat_model(
                 model,
                 temperature,
@@ -185,6 +194,7 @@ def create_chat_model(
                 routing_config=routing_config,
                 tenant_id=tenant_id,
                 provider=provider,
+                **profile,
             ),
         )
     return _create_live_chat_model(
@@ -195,6 +205,7 @@ def create_chat_model(
         routing_config=routing_config,
         tenant_id=tenant_id,
         provider=provider,
+        **profile,
     )
 
 
@@ -207,11 +218,21 @@ def _create_live_chat_model(
     routing_config: dict | None,
     tenant_id: str | None,
     provider: str | None,
+    thinking_level: str | None = None,
 ) -> BaseChatModel:
     routing_config = routing_config or {}
     routing_mode = routing_config.get("routing", os.getenv("AGENTICORG_LLM_ROUTING", "auto"))
     llm_mode = _get_llm_mode()
     provider = _normalise_provider(provider or routing_config.get("provider"))
+    if thinking_level is not None:
+        # An explicit profile pins the model; routing/local overrides cannot discard it.
+        from core.llm.gemini_config import validate_thinking_level
+
+        resolved = model or _resolve_model(model)
+        validate_thinking_level(resolved, thinking_level)
+        if provider not in {None, "gemini"} or llm_mode != "cloud":
+            raise ValueError("thinking_level requires cloud Gemini")
+        return _build_gemini_model(resolved, temperature, max_tokens, tenant_id, thinking_level=thinking_level)
 
     # ── Handle explicit ollama:/vllm: prefixes regardless of mode ────
     if model.startswith("ollama:"):
@@ -357,7 +378,11 @@ def _resolve_cloud_api_key(provider: str, tenant_id: str | None = None) -> str:
 
 
 def _build_gemini_model(
-    model_name: str, temperature: float, max_tokens: int, tenant_id: str | None
+    model_name: str,
+    temperature: float,
+    max_tokens: int,
+    tenant_id: str | None,
+    thinking_level: str | None = None,
 ) -> BaseChatModel:
     api_key = _resolve_cloud_api_key("gemini", tenant_id)
     if not api_key:
@@ -370,7 +395,7 @@ def _build_gemini_model(
     return ChatGoogleGenerativeAI(
         model=model_name,
         google_api_key=api_key,
-        **generation_config(model_name, temperature, max_tokens),
+        **generation_config(model_name, temperature, max_tokens, thinking_level),
     )
 
 
