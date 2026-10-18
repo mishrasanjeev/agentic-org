@@ -49,6 +49,7 @@ class BindingIn(BaseModel):
     target_id: uuid.UUID
     credentials: dict[str, SecretStr]
     auto_reply: bool = False
+    reply_mode: Literal["status", "agent_answer"] = "status"
 
 
 class BindingUpdate(BaseModel):
@@ -56,6 +57,9 @@ class BindingUpdate(BaseModel):
     enabled: bool | None = None
     auto_reply: bool | None = None
     credentials: dict[str, SecretStr] | None = None
+    reply_mode: Literal["status", "agent_answer"] | None = None
+    target_kind: Literal["agent", "workflow"] | None = None
+    target_id: uuid.UUID | None = None
 
 
 async def _actor(request: Request, tenant_id: uuid.UUID) -> User:
@@ -101,6 +105,7 @@ def _out(row: ChannelBinding) -> dict:
         "target_id": str(row.target_id),
         "enabled": row.enabled,
         "auto_reply": row.auto_reply,
+        "reply_mode": getattr(row, "reply_mode", "status"),
         "credentials_configured": True,
         "callback_url": f"{origin}/api/v1/channels/webhooks/{row.tenant_id}/{row.id}",
     }
@@ -159,6 +164,7 @@ async def list_bindings(request: Request, tenant_id: str = Depends(get_current_t
 async def create_binding(body: BindingIn, request: Request, tenant_id: str = Depends(get_current_tenant)) -> dict:
     tid = uuid.UUID(tenant_id)
     user = await _actor(request, tid)
+    _validate_reply_mode(body.provider, body.target_kind, body.reply_mode)
     try:
         credentials = validate_credentials(
             body.provider, {k: v.get_secret_value() for k, v in body.credentials.items()}
@@ -191,12 +197,18 @@ async def create_binding(body: BindingIn, request: Request, tenant_id: str = Dep
         target_id=body.target_id,
         credentials_ciphertext=ciphertext,
         auto_reply=body.auto_reply,
+        reply_mode=body.reply_mode,
         enabled=False,
     )
     async with get_tenant_session(tid) as session:
         session.add(row)
         await session.flush()
     return _out(row)
+
+
+def _validate_reply_mode(provider: str, target_kind: str, mode: str) -> None:
+    if mode == "agent_answer" and (provider != "telegram" or target_kind != "agent"):
+        raise HTTPException(422, "Agent-answer replies require a Telegram agent destination")
 
 
 @router.patch("/bindings/{binding_id}")
@@ -214,6 +226,8 @@ async def update_binding(
     tid = uuid.UUID(tenant_id)
     user = await _actor(request, tid)
     binding = await _binding(tid, binding_id, user)
+    if (body.target_kind is None) != (body.target_id is None):
+        raise HTTPException(422, "Provide both destination type and destination ID")
     ciphertext = None
     if body.credentials is not None:
         try:
@@ -237,6 +251,38 @@ async def update_binding(
         )
         if row is None:
             raise HTTPException(404, "Channel not found")
+        kind = body.target_kind or row.target_kind
+        target_id = body.target_id or row.target_id
+        mode = body.reply_mode or getattr(row, "reply_mode", "status")
+        _validate_reply_mode(row.provider, kind, mode)
+        if body.target_id is not None:
+            if kind == "agent":
+                target = await session.scalar(select(Agent).where(Agent.tenant_id == tid, Agent.id == target_id))
+                require_agent_mutable(target, caller_from_request(request))
+            else:
+                if user.role != "admin":
+                    raise HTTPException(403, "Workflow channel bindings require a tenant admin")
+                target = await session.scalar(
+                    select(WorkflowDefinition).where(
+                        WorkflowDefinition.tenant_id == tid, WorkflowDefinition.id == target_id
+                    )
+                )
+                if target is None or not target.is_active:
+                    raise HTTPException(404, "Active workflow not found")
+            active = await session.scalar(
+                select(ChannelDelivery.id)
+                .where(
+                    ChannelDelivery.tenant_id == tid,
+                    ChannelDelivery.binding_id == binding_id,
+                    ChannelDelivery.status.in_(["pending", "processing"]),
+                )
+                .limit(1)
+            )
+            if active is not None:
+                raise HTTPException(409, "Wait for queued channel tasks before changing destination")
+            row.target_kind, row.target_id = kind, target_id
+        if body.reply_mode is not None:
+            row.reply_mode = mode
         if body.enabled is not None:
             row.enabled = body.enabled
         if body.auto_reply is not None:

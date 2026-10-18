@@ -16,6 +16,7 @@ from sqlalchemy import select
 from starlette.requests import Request
 
 from core.channels.providers import CATALOG, ChannelError, Message, send_reply
+from core.channels.replies import final_answer
 from core.crypto.tenant_secrets import decrypt_for_tenant, encrypt_with_kek, resolve_tenant_kek
 from core.database import get_tenant_session
 from core.models.channel import ChannelBinding, ChannelDelivery, ChannelSenderLink
@@ -123,6 +124,9 @@ async def receive(binding: ChannelBinding, message: Message) -> str:
                 user_id=linked.user_id if linked else None,
                 delegation_id=linked.id if linked else None,
                 status=status,
+                reply_mode=getattr(current, "reply_mode", "status")
+                if getattr(current, "auto_reply", False)
+                else "status",
             )
         )
     return status
@@ -151,6 +155,54 @@ def _request_for_user(user: User) -> Request:
         "sub": str(user.id),
     }
     return request
+
+
+async def _answer_authorized(binding: ChannelBinding, receipt: ChannelDelivery, message: dict) -> bool:
+    """Recheck private-sender delegation and current target access after execution."""
+    from core.models.agent import Agent
+    from core.ownership import require_agent_mutable
+
+    now = datetime.now(UTC)
+    async with get_tenant_session(binding.tenant_id) as session:
+        user = await session.scalar(
+            select(User).where(
+                User.tenant_id == binding.tenant_id,
+                User.id == receipt.user_id,
+                User.status == "active",
+            )
+        )
+        if (
+            user is None
+            or user.id != binding.owner_user_id
+            or (user.sessions_invalid_before and user.sessions_invalid_before > receipt.updated_at)
+        ):
+            return False
+        link = await session.scalar(
+            select(ChannelSenderLink).where(
+                ChannelSenderLink.tenant_id == binding.tenant_id,
+                ChannelSenderLink.binding_id == binding.id,
+                ChannelSenderLink.id == receipt.delegation_id,
+                ChannelSenderLink.user_id == user.id,
+                ChannelSenderLink.sender_hash == sender_hash(binding.id, message["sender"]),
+                ChannelSenderLink.challenge_hash.is_(None),
+                ChannelSenderLink.expires_at > now,
+            )
+        )
+        if link is None or (user.sessions_invalid_before and user.sessions_invalid_before > link.created_at):
+            return False
+        if not (set(get_scopes_for_role(user.role)) & {"agents:write", "agenticorg:admin"}):
+            return False
+        target = await session.scalar(
+            select(Agent).where(
+                Agent.tenant_id == binding.tenant_id,
+                Agent.id == binding.target_id,
+            )
+        )
+        try:
+            require_agent_mutable(target, caller_from_request(_request_for_user(user)))
+        except HTTPException:
+            return False
+        return target is not None and target.status in {"active", "shadow"}
 
 
 def execution_status(result: dict[str, Any]) -> tuple[str, str | None]:
@@ -238,7 +290,7 @@ async def dispatch_one(tenant_id: uuid.UUID, binding_id: uuid.UUID) -> str:
         receipt.status, receipt.updated_at = "processing", now
         delivery_id = receipt.id
     message = None
-    result: dict[str, Any]
+    result: dict[str, Any] = {}
     try:
         message = await unseal(receipt.message_ciphertext)
         request = _request_for_user(user)
@@ -321,17 +373,34 @@ async def dispatch_one(tenant_id: uuid.UUID, binding_id: uuid.UUID) -> str:
         and CATALOG[binding.provider]["reply"]
         and live_binding is not None
         and live_binding.enabled
+        and getattr(live_binding, "auto_reply", binding.auto_reply)
         and live_binding.credentials_ciphertext == binding.credentials_ciphertext
     ):
-        # Only send a status notice. Tool outputs or private knowledge never leak into the provider channel.
         try:
             credentials = await unseal(binding.credentials_ciphertext)
+            text = (
+                f"Task status: {status.replace('_', ' ')}. Open AgenticOrg to view the result or approve the next step."
+            )
+            answer_requested = (
+                binding.provider == "telegram"
+                and binding.target_kind == "agent"
+                and getattr(binding, "reply_mode", "status") == "agent_answer"
+                and getattr(receipt, "reply_mode", "status") == "agent_answer"
+                and getattr(live_binding, "reply_mode", "status") == "agent_answer"
+                and live_binding.target_kind == binding.target_kind
+                and live_binding.target_id == binding.target_id
+            )
+            if answer_requested and status == "completed":
+                answer = final_answer(result, credentials)
+                if answer is not None and await _answer_authorized(binding, receipt, message):
+                    text = answer
+                else:
+                    text = "Task status: completed. Answer withheld; open AgenticOrg to review the result."
             await send_reply(
                 binding.provider,
                 credentials,
                 message["sender"],
-                f"Task status: {status.replace('_', ' ')}. "
-                "Open AgenticOrg to view the result or approve the next step.",
+                text,
             )
         except ChannelError:
             async with get_tenant_session(tenant_id) as session:

@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import importlib
 import os
 import subprocess
 import sys
@@ -12,6 +13,8 @@ from pathlib import Path
 
 import pytest
 from alembic.config import Config
+from alembic.migration import MigrationContext
+from alembic.operations import Operations
 from alembic.script import ScriptDirectory
 from fastapi import HTTPException
 from sqlalchemy import select, text
@@ -126,10 +129,13 @@ async def test_all_channel_tables_enforce_scope_and_owner(as_rls_role: _Db) -> N
                         {"table": table},
                     ).one()
                 ) == (True, True)
-                assert conn.scalar(
-                    text("SELECT count(*) FROM pg_policies WHERE tablename=:table AND policyname=:policy"),
-                    {"table": table, "policy": f"{table}_tenant_isolation"},
-                ) == 1
+                assert (
+                    conn.scalar(
+                        text("SELECT count(*) FROM pg_policies WHERE tablename=:table AND policyname=:policy"),
+                        {"table": table, "policy": f"{table}_tenant_isolation"},
+                    )
+                    == 1
+                )
     for tenant, own_binding in ((tenant_a, binding_a), (tenant_b, binding_b)):
         async with get_tenant_session(tenant) as session:
             role = (
@@ -180,3 +186,74 @@ async def test_all_channel_tables_enforce_scope_and_owner(as_rls_role: _Db) -> N
             async with get_tenant_session(tenant_a) as session:
                 session.add(forbidden_row)
                 await session.flush()
+
+
+async def test_reply_mode_migration_preserves_legacy_defaults_and_rls(migrated_db: _Db, monkeypatch) -> None:
+    migration = importlib.import_module("migrations.versions.v6_z86_telegram_answers")
+    with migrated_db.owner.connect() as conn:
+        transaction = conn.begin()
+        try:
+            monkeypatch.setattr(migration, "op", Operations(MigrationContext.configure(conn)))
+            # Simulate the populated pre-upgrade shape, not just an already stamped DB.
+            conn.execute(text("ALTER TABLE channel_bindings DROP COLUMN reply_mode CASCADE"))
+            conn.execute(text("ALTER TABLE channel_deliveries DROP COLUMN reply_mode"))
+            tenant, user, binding = (uuid.uuid4() for _ in range(3))
+            conn.execute(
+                text(
+                    "INSERT INTO tenants (id,name,slug,plan,data_region,settings) "
+                    "VALUES (:id,:name,:slug,:plan,:region,:settings)"
+                ),
+                tenant_row(str(tenant)),
+            )
+            conn.execute(
+                text(
+                    "INSERT INTO users (id,tenant_id,email,name,role,status,mfa_enabled) "
+                    "VALUES (:id,:tenant_id,:email,:name,'admin','active',false)"
+                ),
+                admin_user_row(str(tenant), str(user), f"reply-{user.hex}@example.test"),
+            )
+            conn.execute(
+                text(
+                    "INSERT INTO channel_bindings "
+                    "(id,tenant_id,owner_user_id,name,provider,target_kind,target_id,credentials_ciphertext) "
+                    "VALUES (:id,:tenant,:user,'Legacy bot','telegram','agent',:target,'sealed')"
+                ),
+                {"id": binding, "tenant": tenant, "user": user, "target": uuid.uuid4()},
+            )
+            conn.execute(
+                text(
+                    "INSERT INTO channel_deliveries "
+                    "(id,tenant_id,binding_id,event_id,content_hash,message_ciphertext) "
+                    "VALUES (:id,:tenant,:binding,'old-event','hash','sealed')"
+                ),
+                {"id": uuid.uuid4(), "tenant": tenant, "binding": binding},
+            )
+            migration.upgrade()
+            migration.upgrade()
+            migration.downgrade()
+            assert (
+                conn.scalar(text("SELECT reply_mode FROM channel_bindings WHERE id=:id"), {"id": binding}) == "status"
+            )
+            assert (
+                conn.scalar(text("SELECT reply_mode FROM channel_deliveries WHERE binding_id=:id"), {"id": binding})
+                == "status"
+            )
+            for table in ("channel_bindings", "channel_deliveries"):
+                assert tuple(
+                    conn.execute(
+                        text(
+                            "SELECT relrowsecurity,relforcerowsecurity FROM pg_class WHERE oid=CAST(:table AS regclass)"
+                        ),
+                        {"table": table},
+                    ).one()
+                ) == (True, True)
+            with pytest.raises(DBAPIError), conn.begin_nested():
+                conn.execute(
+                    text("UPDATE channel_bindings SET reply_mode='export_everything' WHERE id=:id"), {"id": binding}
+                )
+            # Empty installations without channel tables must not fail or create partial tables.
+            conn.execute(text("DROP TABLE channel_deliveries,channel_sender_links,channel_bindings CASCADE"))
+            migration.upgrade()
+            assert conn.scalar(text("SELECT to_regclass('public.channel_bindings')")) is None
+        finally:
+            transaction.rollback()

@@ -30,6 +30,7 @@ class ChannelBinding(BaseModel):
     __table_args__ = (
         UniqueConstraint("tenant_id", "id"),
         CheckConstraint("target_kind IN ('agent','workflow')"),
+        CheckConstraint("reply_mode IN ('status','agent_answer')", name="ck_channel_reply_mode"),
         Index("ix_channel_bindings_owner", "tenant_id", "owner_user_id"),
         Index("ix_channel_bindings_owner_fk", "owner_user_id"),
     )
@@ -43,6 +44,7 @@ class ChannelBinding(BaseModel):
     credentials_ciphertext: Mapped[str] = mapped_column(Text, nullable=False)
     enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default=text("false"))
     auto_reply: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default=text("false"))
+    reply_mode: Mapped[str] = mapped_column(String(16), nullable=False, default="status", server_default="status")
     created_at: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), server_default=func.now(), nullable=False)
 
 
@@ -82,6 +84,7 @@ class ChannelDelivery(BaseModel):
     user_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=True)
     delegation_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
     human_approved: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default=text("false"))
+    reply_mode: Mapped[str] = mapped_column(String(16), nullable=False, default="status", server_default="status")
     status: Mapped[str] = mapped_column(
         String(32), nullable=False, default="needs_review", server_default="needs_review"
     )
