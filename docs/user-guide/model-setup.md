@@ -28,6 +28,17 @@ Tenant administrators can use the [Model Gateway](/docs/model-gateway) for scope
 
 Test a short task with the target company selected. Then test an agent or workflow using that same context. Do not validate a tenant/global key and assume company-specific resolution works identically.
 
+For `gemini-3.5-flash-lite`, **Gemini thinking** offers **Provider default** or
+**Medium (billed thinking)** in the creation wizard's Behavior step and in an
+existing agent's **Config > Edit** screen. Provider default is unchanged for
+existing agents and agents without an explicit choice. Medium applies to the
+configured agent's supported Gemini reasoning, not every workspace or generic chat.
+Thinking uses billed output tokens; budget for the additional token use and
+response time within your existing limits. It is not an answer-accuracy guarantee.
+Choose **Provider default** and save to remove the opt-in. API clients use
+`llm.thinking_level="medium"`, or `null` to restore the default; incompatible
+model/profile combinations are rejected. No global feature flag is needed.
+
 ## Rotate without losing the operating context
 
 Record which agents and environments use the credential. Use the supported rotation action, test a bounded run, and monitor failures. Do not remove an old provider account before confirming all scheduled and integration-driven consumers have switched. Never log raw keys in a rotation report.

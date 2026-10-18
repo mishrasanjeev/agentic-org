@@ -65,6 +65,10 @@ class AgentRegistry:
             cost_controls=config.get("cost_controls"),
         )
 
+        from core.llm.gemini_config import thinking_profile
+
+        instance.llm_thinking_level = thinking_profile(config.get("llm_config")).get("thinking_level")
+
         # Override prompt if inline text provided (custom agents or persona-modified)
         system_prompt_text = config.get("system_prompt_text")
         if system_prompt_text:

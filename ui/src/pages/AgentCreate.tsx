@@ -127,6 +127,10 @@ export default function AgentCreate() {
   // picker cannot offer ids the backend rejects; provider is sent explicitly.
   const [llmProvider, setLlmProvider] = useState("gemini");
   const [llmModel, setLlmModel] = useState("gemini-3.5-flash-lite");
+  const [thinkingLevel, setThinkingLevel] = useState("");
+  const supportsThinking = (!llmProvider || llmProvider === "gemini") &&
+    llmModel.replace(/^models\//, "") === "gemini-3.5-flash-lite";
+  useEffect(() => { if (!supportsThinking) setThinkingLevel(""); }, [supportsThinking]);
   const { registry: llmRegistry, defaultModel } = useLlmRegistry();
   const appliedDefault = useRef(false);
   const modelEdited = useRef(false);
@@ -406,6 +410,7 @@ export default function AgentCreate() {
           model: llmModel.trim(),
           provider: llmProvider.trim() || undefined,
           fallback_model: llmModel.trim(),
+          ...(supportsThinking && thinkingLevel ? { thinking_level: thinkingLevel } : {}),
         },
         llm_routing: llmRouting,
         parent_agent_id: parentAgentId || undefined,
@@ -731,6 +736,15 @@ export default function AgentCreate() {
                       : "Provider billing, quotas and credential requirements apply. Configure a workspace key in AI Credentials if your administrator has not provided access."}
                   </p>
                 </div>
+                {supportsThinking && (
+                  <div>
+                    <label htmlFor="agent-thinking-level" className="text-sm font-medium">Gemini thinking</label>
+                    <select id="agent-thinking-level" value={thinkingLevel} onChange={(e) => setThinkingLevel(e.target.value)} className="border rounded px-3 py-2 text-sm w-full mt-1">
+                      <option value="">Provider default</option>
+                      <option value="medium">Medium (billed thinking)</option>
+                    </select>
+                  </div>
+                )}
                 <div>
                   <label className="text-sm font-medium">LLM Routing</label>
                   <select
@@ -1026,6 +1040,7 @@ export default function AgentCreate() {
                   <div><span className="text-muted-foreground">Max Retries:</span> {maxRetries}</div>
                   <div><span className="text-muted-foreground">LLM Provider:</span> {llmProvider || "inferred from model"}</div>
                   <div><span className="text-muted-foreground">LLM Model:</span> {llmModel}</div>
+                  {supportsThinking && <div><span className="text-muted-foreground">Gemini thinking:</span> {thinkingLevel || "Provider default"}</div>}
                   {reportingTo && <div><span className="text-muted-foreground">Reports To:</span> {reportingTo}</div>}
                   {specialization && <div className="col-span-2"><span className="text-muted-foreground">Specialization:</span> {specialization}</div>}
                   {Object.keys(routingFilter).length > 0 && (

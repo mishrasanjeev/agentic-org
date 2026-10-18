@@ -96,13 +96,13 @@ def _paused_state() -> dict:
     }
 
 
-async def _run(tenant_id: str, thread_id: str | None) -> tuple[dict, MagicMock]:
+async def _run(tenant_id: str, thread_id: str | None, *, thinking_level=None) -> tuple[dict, MagicMock]:
     compiled = MagicMock()
     compiled.ainvoke = AsyncMock(return_value=_paused_state())
     graph = MagicMock()
     graph.compile = MagicMock(return_value=compiled)
     with (
-        patch.object(runner, "build_agent_graph", return_value=graph),
+        patch.object(runner, "build_agent_graph", return_value=graph) as build,
         patch.object(runner, "prefetch_llm_credential", new=AsyncMock(return_value=None)),
         patch("core.billing.metering.gate_agent_run", new=AsyncMock(return_value=None)),
     ):
@@ -115,7 +115,9 @@ async def _run(tenant_id: str, thread_id: str | None) -> tuple[dict, MagicMock]:
             authorized_tools=[],
             task_input={"action": "process", "inputs": {}, "context": {}},
             thread_id=thread_id,
+            thinking_level=thinking_level,
         )
+    compiled.build = build
     return result, compiled
 
 
@@ -146,7 +148,7 @@ async def test_postgres_backend_refuses_a_run_without_a_tenant(monkeypatch: pyte
     assert exc_info.value.reason == "checkpoint_thread_tenant_invalid"
 
 
-async def _resume(tenant_id: str | None, thread_id: str) -> tuple[dict, MagicMock]:
+async def _resume(tenant_id: str | None, thread_id: str, *, thinking_level=None) -> tuple[dict, MagicMock]:
     compiled = MagicMock()
     compiled.ainvoke = AsyncMock(return_value={"status": "completed", "messages": []})
     graph = MagicMock()
@@ -162,9 +164,22 @@ async def _resume(tenant_id: str | None, thread_id: str) -> tuple[dict, MagicMoc
             system_prompt="s",
             authorized_tools=[],
             tenant_id=tenant_id,
+            thinking_level=thinking_level,
         )
     compiled.build = build
     return result, compiled
+
+
+@pytest.mark.parametrize("thinking_level", [None, "medium"])
+async def test_saved_thinking_profile_reaches_initial_and_resumed_graph_only_when_set(thinking_level):
+    _, initial = await _run(TENANT_A, None, thinking_level=thinking_level)
+    _, resumed = await _resume(TENANT_A, ti.new_thread_id(TENANT_A), thinking_level=thinking_level)
+    for compiled in (initial, resumed):
+        args = compiled.build.call_args.kwargs
+        if thinking_level is None:
+            assert "thinking_level" not in args
+        else:
+            assert args["thinking_level"] == thinking_level
 
 
 async def test_resume_of_another_tenants_thread_is_refused_before_any_checkpoint_read() -> None:
@@ -209,8 +224,9 @@ def test_hitl_row_constraint_ties_the_thread_to_the_rows_tenant() -> None:
     from core.models.hitl import HITLQueue
 
     constraints = {c.name: str(c.sqltext) for c in HITLQueue.__table__.constraints if isinstance(c, CheckConstraint)}
-    assert "starts_with(checkpoint_thread_id, 'tenant:' || tenant_id::text || ':')" in (
-        constraints["ck_hitl_queue_checkpoint_thread_tenant"]
+    assert (
+        "starts_with(checkpoint_thread_id, 'tenant:' || tenant_id::text || ':')"
+        in (constraints["ck_hitl_queue_checkpoint_thread_tenant"])
     )
     assert HITLQueue.__table__.c.checkpoint_thread_id.nullable
 

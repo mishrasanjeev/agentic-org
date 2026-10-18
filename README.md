@@ -46,6 +46,14 @@ Billing limits and list prices come from [core/billing/catalog.py](core/billing/
 New agents default to `gemini-3.5-flash-lite`; explicitly selected models remain
 unchanged. Save your Google or other provider key in the protected AI credential
 settings. Model selection, fallback and company scope remain configurable.
+For this model, **Agent Configuration > Gemini thinking** offers an optional
+medium profile for multi-step reasoning. Existing agents and generic calls keep
+the provider default; no global flag or default is changed. The API equivalent is
+`llm.thinking_level="medium"`; set it to `null` to restore the provider default.
+Both runtime clients honor explicit profiles. Thinking is billed
+as output tokens; budget for its additional token use and response time within
+existing limits. It is not a correctness guarantee. Older model settings and all feature flags remain
+unchanged. See [reasoning acceptance](docs/runbooks/production_smoke.md#bounded-real-reasoning-acceptance).
 
 The **Channels** dashboard connects your own WhatsApp Cloud API, Meta Messenger,
 Telegram, Viber, inbound Mailgun email or signed gateway to an agent or workflow.

@@ -413,6 +413,7 @@ async def _advance_claimed(agent: Any, thread_id: str, tenant_id: str, caller: C
                 company_id=spec.get("company_id"),
                 domain=spec.get("domain"),
                 llm_provider=spec.get("llm_provider"),
+                **({"thinking_level": spec["thinking_level"]} if spec.get("thinking_level") is not None else {}),
                 require_paused=True,
                 debug={"mode": mode, "breakpoints": claim.breakpoints},
                 output_schema=spec.get("output_schema"),

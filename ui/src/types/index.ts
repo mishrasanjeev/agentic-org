@@ -8,6 +8,11 @@ export interface Agent {
   shadow_accuracy_current: number | null; created_at: string;
   description?: string; hitl_condition?: string; authorized_tools?: string[];
   llm_model?: string; llm_provider?: string | null; max_retries?: number; retry_backoff?: string;
+  llm_config?: {
+    model?: string; provider?: string | null; fallback_model?: string;
+    temperature?: number; context_strategy?: string; thinking_level?: "medium" | null;
+    routing?: string;
+  } | null;
   shadow_min_samples?: number; shadow_accuracy_floor?: number;
   cost_controls?: {
     monthly_cap_usd?: number;

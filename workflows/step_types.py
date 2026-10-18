@@ -164,6 +164,9 @@ async def _load_workflow_agent_config(agent_id: str, tenant_id: str) -> dict[str
     if agent is None or agent.status in inactive_agent_statuses():
         return {}
 
+    from core.llm.gemini_config import thinking_profile
+
+    profile = thinking_profile(getattr(agent, "llm_config", None))
     return {
         "id": str(agent.id),
         "tenant_id": str(agent.tenant_id),
@@ -175,6 +178,7 @@ async def _load_workflow_agent_config(agent_id: str, tenant_id: str) -> dict[str
         "hitl_condition": agent.hitl_condition or "",
         "output_schema": agent.output_schema,
         "llm_model": agent.llm_model,
+        **({"llm_config": profile} if profile else {}),
         "cost_controls": agent.cost_controls or {},
         "system_prompt_text": agent.system_prompt_text or "",
         # Bug sheet 2026-09-14 row 30: ownership, checked by
@@ -708,6 +712,7 @@ async def _execute_agent(step: dict, state: dict) -> dict[str, Any]:
                 else stored_config.get("system_prompt_text", "")
             ),
             "llm_model": step.get("llm_model") or stored_config.get("llm_model"),
+            **({"llm_config": stored_config["llm_config"]} if stored_config.get("llm_config") else {}),
             "cost_controls": (step["cost_controls"] if "cost_controls" in step else stored_config.get("cost_controls")),
         }
 
@@ -723,6 +728,7 @@ async def _execute_agent(step: dict, state: dict) -> dict[str, Any]:
                 llm_model=config.get("llm_model"),
             )
             agent_instance.confidence_floor = 0.0
+            agent_instance.llm_thinking_level = (config.get("llm_config") or {}).get("thinking_level")
         else:
             agent_instance = AgentRegistry.create_from_config(config)
 

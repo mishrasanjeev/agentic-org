@@ -399,6 +399,7 @@ def build_agent_graph(
     output_schema: str | None = None,
     output_schema_json: dict[str, Any] | None = None,
     limits: dict[str, Any] | None = None,
+    thinking_level: str | None = None,
 ) -> StateGraph:
     """Build a compiled LangGraph agent graph.
 
@@ -474,7 +475,8 @@ def build_agent_graph(
             # reach the factory, otherwise ``o1-mini`` falls back to Gemini and
             # ``openai_compatible`` never resolves the tenant's base_url.
             with use_prefetched_llm_credentials(prefetched_credentials):
-                llm = create_chat_model(model=llm_model, tenant_id=tenant_id or None, provider=llm_provider)
+                profile = {"thinking_level": thinking_level} if thinking_level is not None else {}
+                llm = create_chat_model(model=llm_model, tenant_id=tenant_id or None, provider=llm_provider, **profile)
             _llm_cache["instance"] = llm.bind_tools(tools) if tools else llm
         return _llm_cache["instance"]
 

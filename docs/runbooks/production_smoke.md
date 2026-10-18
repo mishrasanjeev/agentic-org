@@ -223,6 +223,33 @@ disable redaction, change review thresholds, or accept a different answer to
 make the check green. A local detector fix is not a successful production
 reasoning replay: record those two outcomes separately.
 
+For `gemini-3.5-flash-lite`, opt in the synthetic acceptance agent only through
+**Config > Edit > Gemini thinking > Medium** (or `llm.thinking_level="medium"`
+in its authenticated agent configuration). Both runtime clients then request
+`thinking_config.thinking_level=medium`. Existing agents, generic calls and new
+agents without an explicit profile keep the provider default. Set the field to
+`null` to restore that default. No global flag or environment change is required.
+Other models reject this profile rather than silently applying or ignoring it.
+Saved profiles also travel through workflow agent loading, approval/debug resume,
+legacy sales-agent execution and the text-to-agent voice bridge. Generic chat,
+type-only A2A/MCP calls and agents with no saved profile keep their old defaults.
+Voice bridge regression tests do not place a call or certify a live voice account.
+The provider defaults to minimal
+thinking; its temperature/top-p/top-k parameters are ignored. Keep the exact
+system prompt, assembled task, redaction and selected model fixed when isolating
+reasoning settings. Do not infer that a transport adapter rewrote the answer
+unless the captured model boundary proves it. The installed adapter's actual
+request serializer is covered by regression tests, not just a constructor mock.
+See Google's [model guidance](https://ai.google.dev/gemini-api/docs/generate-content/whats-new-gemini-3.6).
+
+Thinking tokens are billed at the output rate. Native router totals and estimated
+cost include them even when optional spend intelligence is off; when on, its
+detailed usage keeps candidate output and thinking separate to avoid double
+counting. LangGraph uses the adapter's output usage, which includes reasoning.
+Reserve for the automatic explanation and transport retries as well. Medium
+thinking can increase latency and cost, and model-reported confidence remains
+unverified. Never substitute a scripted response for real-provider acceptance.
+
 The direct-run explanation history is an independent read-only opt-in:
 `AGENTICORG_AGENT_EXPLANATION_AUDIT_ENABLED` defaults to false. The Cloud Run
 helper accepts `DEPLOY_AGENT_EXPLANATION_AUDIT=true` or `false` for the API only;

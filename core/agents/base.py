@@ -86,6 +86,7 @@ class BaseAgent:
         self.output_schema = output_schema
         self.tool_gateway = tool_gateway
         self.llm_model = llm_model
+        self.llm_thinking_level: str | None = None
         self.cost_controls = cost_controls or {}
         self._system_prompt: str | None = None
         # PRD F-1: the grant this agent's tool calls are checked against,
@@ -344,7 +345,11 @@ class BaseAgent:
         model_override = self._resolve_llm_model()
         trace.append(f"Calling LLM for reasoning (model: {model_override or 'default'})")
         response: LLMResponse = await llm_router.complete(
-            messages, model_override=model_override, tenant_id=self.tenant_id, **_with_pseudonymiser(pseudonymiser)
+            messages,
+            model_override=model_override,
+            tenant_id=self.tenant_id,
+            **({"thinking_level": self.llm_thinking_level} if self.llm_thinking_level is not None else {}),
+            **_with_pseudonymiser(pseudonymiser),
         )
         trace.append(f"LLM responded: {response.model}, {response.tokens_used} tokens")
 
@@ -556,7 +561,11 @@ class BaseAgent:
         ]
         model_override = self._resolve_llm_model()
         response: LLMResponse = await llm_router.complete(
-            messages, model_override=model_override, tenant_id=self.tenant_id, **_with_pseudonymiser(pseudonymiser)
+            messages,
+            model_override=model_override,
+            tenant_id=self.tenant_id,
+            **({"thinking_level": self.llm_thinking_level} if self.llm_thinking_level is not None else {}),
+            **_with_pseudonymiser(pseudonymiser),
         )
         trace.append(f"Synthesis LLM: {response.model}, {response.tokens_used} tokens")
 

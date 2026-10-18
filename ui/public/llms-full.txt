@@ -52,6 +52,14 @@ Billing limits and list prices come from [core/billing/catalog.py](https://githu
 New agents default to `gemini-3.5-flash-lite`; explicitly selected models remain
 unchanged. Save your Google or other provider key in the protected AI credential
 settings. Model selection, fallback and company scope remain configurable.
+For this model, **Agent Configuration > Gemini thinking** offers an optional
+medium profile for multi-step reasoning. Existing agents and generic calls keep
+the provider default; no global flag or default is changed. The API equivalent is
+`llm.thinking_level="medium"`; set it to `null` to restore the provider default.
+Both runtime clients honor explicit profiles. Thinking is billed
+as output tokens; budget for its additional token use and response time within
+existing limits. It is not a correctness guarantee. Older model settings and all feature flags remain
+unchanged. See [reasoning acceptance](https://github.com/mishrasanjeev/agentic-org/blob/main/docs/runbooks/production_smoke.md#bounded-real-reasoning-acceptance).
 
 The **Channels** dashboard connects your own WhatsApp Cloud API, Meta Messenger,
 Telegram, Viber, inbound Mailgun email or signed gateway to an agent or workflow.
@@ -1339,6 +1347,17 @@ Tenant administrators can use the [Model Gateway](/docs/model-gateway) for scope
 
 Test a short task with the target company selected. Then test an agent or workflow using that same context. Do not validate a tenant/global key and assume company-specific resolution works identically.
 
+For `gemini-3.5-flash-lite`, **Gemini thinking** offers **Provider default** or
+**Medium (billed thinking)** in the creation wizard's Behavior step and in an
+existing agent's **Config > Edit** screen. Provider default is unchanged for
+existing agents and agents without an explicit choice. Medium applies to the
+configured agent's supported Gemini reasoning, not every workspace or generic chat.
+Thinking uses billed output tokens; budget for the additional token use and
+response time within your existing limits. It is not an answer-accuracy guarantee.
+Choose **Provider default** and save to remove the opt-in. API clients use
+`llm.thinking_level="medium"`, or `null` to restore the default; incompatible
+model/profile combinations are rejected. No global feature flag is needed.
+
 #### Rotate without losing the operating context
 
 Record which agents and environments use the credential. Use the supported rotation action, test a bounded run, and monitor failures. Do not remove an old provider account before confirming all scheduled and integration-driven consumers have switched. Never log raw keys in a rotation report.
@@ -1546,6 +1565,11 @@ to guess a hidden operand or turn protection off. Explicit counts such as
 `7, 11 and 13 items` must remain quantities, while dates and identifiers remain
 protected. Report an incorrect result with its request reference, without
 copying personal data into a support ticket.
+
+For an agent using `gemini-3.5-flash-lite`, the optional per-agent thinking setting
+is described in [Model and credential setup](/docs/model-setup). Test the same
+request before and after a reviewed configuration change; extra thinking and
+model-reported confidence are not substitutes for checking the answer.
 
 The **Why did the agent do this?** panel reads stored evidence, without making a
 new model request. Operators can enable direct-run audit history with

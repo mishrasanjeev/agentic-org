@@ -1,5 +1,27 @@
 # Changelog
 
+## Unreleased - Gemini reasoning request correction
+
+- Add per-agent opt-in medium thinking for `gemini-3.5-flash-lite`, saved in the
+  existing LLM configuration and editable during agent creation or configuration.
+  Existing agents and generic calls retain the provider default. Both runtime
+  clients honor explicit profiles; omit this model's ignored sampling temperature.
+  The provider's minimal default
+  returned incorrect arithmetic for the exact wrapped acceptance task. Keep the
+  task, prompt, model, credentials, feature flags and execution controls unchanged.
+  Validate model/profile compatibility, retain the profile on approval/debug
+  resume, and distinguish it in replay keys. No migration or global opt-in.
+  Carry saved opt-ins through workflow agent loading, legacy sales and the voice
+  text bridge without changing unconfigured paths or enabling channels.
+- Include thinking tokens in native router totals and legacy cost estimates,
+  without double counting the optional detailed spend meter. Medium thinking can
+  increase output-token cost and latency; existing limits still apply. Older
+  Gemini models retain their supported sampling settings. This is not an answer
+  guarantee or a task-specific arithmetic patch.
+- Add real SDK request-serialization, tenant credential, budget and exact-input
+  regressions. Real-provider Docker and production results must be recorded
+  independently of scripted CI responses before closing issue #1715.
+
 ## Unreleased - Documentation learning path
 
 - Restore the first-agent guide's next step to workspace and role setup. Keep
