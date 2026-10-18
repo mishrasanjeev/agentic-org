@@ -76,6 +76,36 @@ reasoning replay. Do not replace the initial failed evidence with
 an easier task or combine independent Telegram/model passes into a claim of a
 single model-backed channel run.
 
+## Follow-up Reasoning Investigation (Issue #1715)
+
+The first quantity correction preserved every operand, but its production replay
+still returned `4`. Controlled local Docker comparisons reproduced `4` through
+both the native Google SDK and installed LangChain adapter with the same original
+prepared prompt. Removing the platform guidance while retaining the wrapper
+returned `16`; plain task text returned `18`. These are prompt-sensitivity
+observations, not proof that wrapping always fails.
+
+Holding the original prepared prompt and selected model fixed, explicit medium
+and high thinking each returned `18`. The provider documents minimal thinking as
+the default for this model and recommends medium/high for multi-step reasoning.
+The correction requests medium in both runtime clients and does not rewrite the
+prompt, task or answer. The native cost estimate now includes thinking tokens
+even without optional spend intelligence; its detailed meter still counts them
+only once.
+
+A real-provider local runner/graph replay then returned `18`, completed with no
+tool calls, using the real full NLP redactor and the patched request factory.
+This diagnostic used the existing platform credential, isolated billing/database
+fixtures and no automatic explanation. It is not owner-workspace production
+acceptance. Regression tests inspect the real SDK request serializer, preserve
+the exact task's operands, verify tenant credential selection and older-model
+compatibility, and test cost accounting with optional spend both on and off.
+
+The initial failed evidence above is retained. Consult
+[issue #1715](https://github.com/mishrasanjeev/agentic-org/issues/1715) for the
+post-rollout exact-task result, immutable release and unchanged-control evidence.
+Close it only after the bounded real owner-workspace replay returns `18`.
+
 ## Limits
 
 No external customer data, provider account mutations, paid voice, payments,

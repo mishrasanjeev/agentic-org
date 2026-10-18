@@ -365,11 +365,12 @@ def _build_gemini_model(
 
     from langchain_google_genai import ChatGoogleGenerativeAI
 
+    from core.llm.gemini_config import generation_config
+
     return ChatGoogleGenerativeAI(
         model=model_name,
-        temperature=temperature,
-        max_output_tokens=max_tokens,
         google_api_key=api_key,
+        **generation_config(model_name, temperature, max_tokens),
     )
 
 

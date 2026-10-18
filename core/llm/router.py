@@ -928,10 +928,9 @@ class LLMRouter:
             elif m["role"] == "assistant":
                 contents.append({"role": "model", "parts": [{"text": m["content"]}]})
 
-        config = {
-            "temperature": temperature,
-            "max_output_tokens": max_tokens,
-        }
+        from core.llm.gemini_config import generation_config
+
+        config = generation_config(model, temperature, max_tokens)
         if system_instruction:
             config["system_instruction"] = system_instruction
 
@@ -947,12 +946,15 @@ class LLMRouter:
         usage = getattr(response, "usage_metadata", None)
         input_tokens = getattr(usage, "prompt_token_count", 0) or 0
         output_tokens = getattr(usage, "candidates_token_count", 0) or 0
-        total_tokens = input_tokens + output_tokens
+        thoughts_tokens = max(0, _count(usage, "thoughts_token_count") or 0)
+        total_tokens = input_tokens + output_tokens + thoughts_tokens
 
         # Cost — looked up from GEMINI_PRICE_PER_1M so flash-lite,
         # flash, and pro each get their actual price (the previous
         # branch counted flash-lite at flash prices, ~2x reality).
-        cost = gemini_cost_usd(model, input_tokens, output_tokens)
+        # Keep candidate output separate: the optional detailed spend meter adds
+        # thoughts from raw usage, while this legacy cost must include them too.
+        cost = gemini_cost_usd(model, input_tokens, output_tokens + thoughts_tokens)
 
         return LLMResponse(
             content=response.text,

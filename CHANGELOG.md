@@ -1,5 +1,20 @@
 # Changelog
 
+## Unreleased - Gemini reasoning request correction
+
+- Request medium thinking explicitly for `gemini-3.5-flash-lite` in both runtime
+  clients; omit its ignored sampling temperature. The provider's minimal default
+  returned incorrect arithmetic for the exact wrapped acceptance task. Keep the
+  task, prompt, model, credentials, feature flags and execution controls unchanged.
+- Include thinking tokens in native router totals and legacy cost estimates,
+  without double counting the optional detailed spend meter. Medium thinking can
+  increase output-token cost and latency; existing limits still apply. Older
+  Gemini models retain their supported sampling settings. This is not an answer
+  guarantee or a task-specific arithmetic patch.
+- Add real SDK request-serialization, tenant credential, budget and exact-input
+  regressions. Real-provider Docker and production results must be recorded
+  independently of scripted CI responses before closing issue #1715.
+
 ## Unreleased - Documentation learning path
 
 - Restore the first-agent guide's next step to workspace and role setup. Keep
