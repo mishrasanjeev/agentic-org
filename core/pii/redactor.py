@@ -50,15 +50,14 @@ _VALID_MODES = {PII_MODE_BEFORE_LLM, PII_MODE_LOGS_ONLY, PII_MODE_DISABLED}
 
 _SPACY_MODEL = "en_core_web_sm"
 
-# Anchor scans at whitespace/identifier-run boundaries, not at every element
-# of a malformed numeric list or email local part.
+# Possessive runs and boundary anchors prevent rescanning malformed user input.
 _COUNTED_QUANTITIES = re.compile(
-    r"(?:(?<![\d\s,])\s+|(?<![\w\s,./:-]))"
-    r"(?P<counts>\d+(?:\s*,\s*\d+)*(?:(?:\s*,\s*|\s+)and\s+\d+)?)"
-    r"\s+(?:more\s+)?(?:items?|units?|boxes?|records?|rows?|requests?|tokens?)\b",
+    r"(?:(?<![\d\s,])\s++|(?<![\w\s,./:-]))"
+    r"(?P<counts>\d++(?:\s*+,\s*+\d++)*+(?:(?:\s*+,\s*+|\s++)and\s++\d++)?)"
+    r"\s++(?:more\s++)?(?:items?|units?|boxes?|records?|rows?|requests?|tokens?)\b",
     re.IGNORECASE,
 )
-_EMAIL_PATTERN = re.compile(r"(?<![A-Za-z0-9._%+-])[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b")
+_EMAIL_PATTERN = re.compile(r"(?<![A-Za-z0-9._%+-])[A-Za-z0-9._%+-]++@[A-Za-z0-9.-]+\.[A-Za-z]{2,}+\b")
 _TEMPORAL_CONTEXT = re.compile(
     r"\b(?:dob|birth|birthday|born|date|time|appointment|meeting|calendar)\b",
     re.IGNORECASE,

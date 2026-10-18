@@ -11,7 +11,7 @@ from core.config import settings
 PATTERNS = [
     # Email
     (
-        re.compile(r"(?<![a-zA-Z0-9._%+-])[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}"),
+        re.compile(r"(?<![a-zA-Z0-9._%+-])[a-zA-Z0-9._%+-]++@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}+"),
         lambda m: m.group()[:2] + "***@***",
     ),
     # Indian phone (+91 or 10 digits)

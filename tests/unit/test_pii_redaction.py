@@ -317,20 +317,42 @@ class TestQuantityDateFalsePositives:
 
 class TestPatternScanSafety:
     @pytest.mark.parametrize(
+        ("text", "expected"),
+        [
+            ("buyer@sub.example.test.", ["buyer@sub.example.test"]),
+            ("+buyer@example.test, jo.tester@example.test", ["+buyer@example.test", "jo.tester@example.test"]),
+            ("buyer@example.test0", []),
+            ("buyer@invalid", []),
+            ("buyer@example.test-foo", ["buyer@example.test"]),
+            ("buyer@example.test_foo", []),
+        ],
+    )
+    def test_possessive_email_parts_preserve_match_boundaries(self, text: str, expected: list[str]) -> None:
+        from core.pii.redactor import _EMAIL_PATTERN
+
+        assert [match.group() for match in _EMAIL_PATTERN.finditer(text)] == expected
+
+    @pytest.mark.parametrize(
         ("name", "text", "expected"),
         [
             ("_COUNTED_QUANTITIES", "11, " * 16000 + "unmatched", []),
             ("_COUNTED_QUANTITIES", "11" + " " * 64000 + "unmatched", []),
+            ("_COUNTED_QUANTITIES", " " * 64000 + "unmatched", []),
+            ("_COUNTED_QUANTITIES", "0" * 64000 + " unmatched", []),
             ("_COUNTED_QUANTITIES", ", ".join(["11"] * 4000) + " items", [(0, 15998)]),
             ("_COUNTED_QUANTITIES", "7 items 11 items", [(0, 1), (8, 10)]),
             ("_EMAIL_PATTERN", "a." * 32000 + "buyer@invalid", []),
             ("_EMAIL_PATTERN", "a." * 32000 + "buyer@example.test", [(0, 64018)]),
+            ("_EMAIL_PATTERN", "%" * 64000 + "@invalid", []),
+            ("_EMAIL_PATTERN", "buyer@" + "a." * 16000 + "0", []),
             ("gateway_email", "a." * 32000 + "buyer@invalid", []),
             ("gateway_email", "a" * 64000, []),
+            ("gateway_email", "%" * 64000 + "@invalid", []),
         ],
         ids=(
-            "malformed-list", "whitespace", "large-valid-list", "adjacent-counts", "invalid-email", "large-valid-email",
-            "gateway-invalid-email", "gateway-no-address",
+            "malformed-list", "whitespace", "only-whitespace", "only-digits", "large-valid-list", "adjacent-counts",
+            "invalid-email", "large-valid-email", "percent-local-part", "invalid-domain", "gateway-invalid-email",
+            "gateway-no-address", "gateway-percent-local-part",
         ),
     )
     def test_pattern_scan_has_a_hard_process_deadline(

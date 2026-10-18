@@ -60,7 +60,9 @@ restoration. This tightens coverage; it does not disable an existing detector.
 Adversarial scan tests also cover malformed long lists, long whitespace runs
 and long email-like strings. Boundary-anchored matchers avoid repeatedly
 rescanning each list element or local-part segment. Separate-process deadlines
-guard this behavior without counting interpreter startup as parsing time.
+also cover the scanner-reported repeated spaces, zeros and percent characters,
+without counting interpreter startup as parsing time. Possessive runs prevent
+backtracking within those quantities and email parts.
 The existing 50 ms typical-input benchmark measures a warmed redactor in a
 fresh child process, separate from parent-suite tracing and retained test state;
 its time limit is unchanged.
