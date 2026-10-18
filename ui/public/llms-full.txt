@@ -68,6 +68,11 @@ connection must not overwrite its webhook. Keep its configured destination uncha
 Verify real model reasoning separately from transport-only workflows, and do not
 claim a combined Telegram-to-Gemini flow unless one delivery proves both.
 
+Acceptance checks validate the actual answer as well as the terminal status.
+A completed, high-confidence model run can still be wrong; compare numeric
+results independently and preserve PII protections while diagnosing it. See the
+[bounded production acceptance runbook](https://github.com/mishrasanjeev/agentic-org/blob/main/docs/runbooks/production_smoke.md#bounded-real-reasoning-acceptance).
+
 The production platform currently includes governed agent/workflow execution,
 document ingestion with scanned-document OCR, signed Twilio voice with
 provider-managed STT/TTS, tenant-scoped browser RPA, Python and TypeScript SDKs,
@@ -1533,6 +1538,14 @@ Read the run status and output together. Look for source references, missing fac
 | External action confirmation | A connected system reports an outcome | Validate identity, amount/scope and authoritative reference |
 
 The exact status vocabulary varies by run resource. Preserve the returned state rather than translating every non-error response into success.
+
+A completed status and high confidence do not establish answer accuracy. For a
+numeric task, check the operands and calculation independently. Pre-model PII
+protection can replace sensitive values with placeholders; do not ask the agent
+to guess a hidden operand or turn protection off. Explicit counts such as
+`7, 11 and 13 items` must remain quantities, while dates and identifiers remain
+protected. Report an incorrect result with its request reference, without
+copying personal data into a support ticket.
 
 The **Why did the agent do this?** panel reads stored evidence, without making a
 new model request. Operators can enable direct-run audit history with

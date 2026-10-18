@@ -214,6 +214,15 @@ invoice-confirmed charges; a UI rounded to cents is not evidence of a free run.
 Do not rerun just to produce a screenshot. Preserve an existing successful run
 for read-only post-deploy verification, then remove only disposable test data.
 
+Treat incorrect arithmetic as a failed acceptance even when the run completes
+with high confidence. Replay the exact task through the local production-image
+PII detector before retrying the paid call. A detector can mistake a bare count
+for `DATE_TIME`; the quantity regression exercises the real runner message and
+keeps dates, contact details and overlapping identifiers protected. Do not
+disable redaction, change review thresholds, or accept a different answer to
+make the check green. A local detector fix is not a successful production
+reasoning replay: record those two outcomes separately.
+
 The direct-run explanation history is an independent read-only opt-in:
 `AGENTICORG_AGENT_EXPLANATION_AUDIT_ENABLED` defaults to false. The Cloud Run
 helper accepts `DEPLOY_AGENT_EXPLANATION_AUDIT=true` or `false` for the API only;

@@ -30,6 +30,14 @@ Read the run status and output together. Look for source references, missing fac
 
 The exact status vocabulary varies by run resource. Preserve the returned state rather than translating every non-error response into success.
 
+A completed status and high confidence do not establish answer accuracy. For a
+numeric task, check the operands and calculation independently. Pre-model PII
+protection can replace sensitive values with placeholders; do not ask the agent
+to guess a hidden operand or turn protection off. Explicit counts such as
+`7, 11 and 13 items` must remain quantities, while dates and identifiers remain
+protected. Report an incorrect result with its request reference, without
+copying personal data into a support ticket.
+
 The **Why did the agent do this?** panel reads stored evidence, without making a
 new model request. Operators can enable direct-run audit history with
 `AGENTICORG_AGENT_EXPLANATION_AUDIT_ENABLED=true` (default off). With it enabled,

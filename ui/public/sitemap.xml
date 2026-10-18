@@ -289,10 +289,6 @@
     <lastmod>2026-10-02</lastmod>
   </url>
   <url>
-    <loc>https://agenticorg.ai/docs/cert-in-agent-security</loc>
-    <lastmod>2026-10-17</lastmod>
-  </url>
-  <url>
     <loc>https://agenticorg.ai/docs/workspace-and-roles</loc>
     <lastmod>2026-10-11</lastmod>
   </url>
@@ -375,6 +371,10 @@
   <url>
     <loc>https://agenticorg.ai/docs/security-and-data</loc>
     <lastmod>2026-10-11</lastmod>
+  </url>
+  <url>
+    <loc>https://agenticorg.ai/docs/cert-in-agent-security</loc>
+    <lastmod>2026-10-17</lastmod>
   </url>
   <url>
     <loc>https://agenticorg.ai/docs/billing-and-support</loc>

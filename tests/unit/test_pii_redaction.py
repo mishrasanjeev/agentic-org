@@ -178,6 +178,97 @@ class TestWithPresidio:
         assert elapsed_ms < 50, f"Redaction took {elapsed_ms:.1f}ms, expected <50ms"
 
 
+class TestQuantityDateFalsePositives:
+    def test_reserved_domain_email_is_fully_redacted_with_real_detector(self) -> None:
+        from core.pii.redactor import PIIRedactor
+
+        redactor = PIIRedactor()
+        if redactor._analyzer is None:
+            pytest.skip("Full local Presidio model is required for this regression")
+        text = "Write to jo.tester@example.test only."
+
+        redacted, token_map = redactor.redact(text)
+
+        assert "jo.tester@example.test" in token_map.values()
+        assert "jo.tester" not in redacted
+        assert ".test" not in redacted
+        assert redactor.deanonymize(redacted, token_map) == text
+
+    def test_arithmetic_task_keeps_all_operands_with_real_detector(self) -> None:
+        from core.langgraph.runner import _build_user_message
+        from core.pii.redactor import PIIRedactor
+
+        redactor = PIIRedactor()
+        if redactor._analyzer is None:
+            pytest.skip("Full local Presidio model is required for this regression")
+        task = (
+            "QA-AGENT-20261018 synthetic arithmetic only. There are 7, 11 and 13 items. "
+            "Remove the 11-item box, then remove 2 more items. How many remain? "
+            "Use no tools or external data; do not send messages, make calls, execute "
+            "payments or perform any other action."
+        )
+        text = _build_user_message({"action": "run", "inputs": {"task": task}, "context": {}})
+        redacted, token_map = redactor.redact(text)
+
+        assert "7, 11 and 13 items" in redacted
+        assert "11-item box" in redacted
+        assert "2 more items" in redacted
+        assert "11" not in token_map.values()
+
+    @pytest.mark.parametrize("quantity", ["11 items", "7, 11 and 13 units", "11 more boxes"])
+    def test_only_quantity_date_false_positives_are_ignored(self, quantity: str) -> None:
+        from core.pii.redactor import PIIRedactor
+
+        text = f"Count {quantity}. Date of birth: 11 May 1984. Contact buyer@example.test."
+        count_start = text.index("11")
+        birth_start = text.index("11 May")
+        email_start = text.index("buyer@")
+        redactor = PIIRedactor()
+        redactor._analyzer = MagicMock()
+        redactor._analyzer.analyze.return_value = [
+            _make_mock_result("DATE_TIME", count_start, count_start + 2),
+            _make_mock_result("DATE_TIME", birth_start, birth_start + len("11 May 1984")),
+            _make_mock_result("EMAIL_ADDRESS", email_start, email_start + len("buyer@example.test")),
+        ]
+
+        redacted, token_map = redactor.redact(text)
+
+        assert quantity in redacted
+        assert "11 May 1984" not in redacted
+        assert "buyer@example.test" not in redacted
+        assert set(token_map.values()) == {"11 May 1984", "buyer@example.test"}
+
+    @pytest.mark.parametrize(
+        ("text", "entity_type", "value"),
+        [
+            ("Birth day: 11", "DATE_TIME", "11"),
+            ("Birth day: 11 items", "DATE_TIME", "11"),
+            ("DOB: 1984 records", "DATE_TIME", "1984"),
+            ("Meeting at 11 tokens", "DATE_TIME", "11"),
+            ("Meeting on 11/10/2026", "DATE_TIME", "11/10/2026"),
+            ("Count 11 items", "BANK_ACCOUNT", "11"),
+            ("Count 11 items", "PHONE_NUMBER", "11"),
+        ],
+    )
+    def test_dates_and_stronger_identifiers_remain_protected(
+        self, text: str, entity_type: str, value: str,
+    ) -> None:
+        from core.pii.redactor import PIIRedactor
+
+        start = text.index(value)
+        redactor = PIIRedactor()
+        redactor._analyzer = MagicMock()
+        redactor._analyzer.analyze.return_value = [
+            _make_mock_result(entity_type, start, start + len(value)),
+        ]
+
+        redacted, token_map = redactor.redact(text)
+
+        assert value not in redacted
+        assert list(token_map.values()) == [value]
+        assert redactor.deanonymize(redacted, token_map) == text
+
+
 class TestWithMocks:
     """Tests that work without Presidio installed (mock-based)."""
 
