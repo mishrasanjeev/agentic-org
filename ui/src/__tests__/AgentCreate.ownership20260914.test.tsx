@@ -58,7 +58,7 @@ async function openPersonaStep() {
   return (await screen.findByTestId("agent-domain")) as HTMLSelectElement;
 }
 
-async function walkToReviewAndCreate(toolFree = false) {
+async function walkToReviewAndCreate(toolFree = false, thinkingProfile = "") {
   fireEvent.change(screen.getByPlaceholderText("e.g. Priya, Arjun, Maya"), { target: { value: "Ledger Bot" } });
   fireEvent.click(screen.getByRole("button", { name: "Next" }));
   await screen.findByText("Step 2: Role");
@@ -67,6 +67,9 @@ async function walkToReviewAndCreate(toolFree = false) {
   fireEvent.change(screen.getByPlaceholderText(/You are the/), { target: { value: "You reconcile ledgers." } });
   fireEvent.click(screen.getByRole("button", { name: "Next" }));
   await screen.findByText("Step 4: Behavior");
+  const thinking = screen.getByRole("combobox", { name: "Gemini thinking" });
+  expect(thinking).toHaveValue("");
+  if (thinkingProfile) fireEvent.change(thinking, { target: { value: thinkingProfile } });
   if (toolFree) {
     expect(screen.queryByText(/Gemini is always available|Gemini Flash \(Free\)|Estimated cost per 1K tokens/)).not.toBeInTheDocument();
     expect(screen.getByText(/Provider billing, quotas and credential requirements apply/)).toBeInTheDocument();
@@ -100,6 +103,17 @@ describe("AgentCreate ownership (bug sheet 2026-09-14)", () => {
     await waitFor(() => expect(mockPost).toHaveBeenCalledWith("/agents", expect.objectContaining({
       use_default_tools: false, max_retries: 0, authorized_tools: undefined, connector_ids: undefined,
     })));
+    expect(mockPost.mock.calls[0][1].llm).not.toHaveProperty("thinking_level");
+  });
+
+  it("new agents keep defaults unless their creator explicitly opts in", async () => {
+    setUser("admin", "all");
+    await openPersonaStep();
+    await walkToReviewAndCreate(true, "medium");
+    expect(mockPost).toHaveBeenCalledWith("/agents", expect.objectContaining({
+      max_retries: 0, use_default_tools: false,
+      llm: expect.objectContaining({ model: "gemini-3.5-flash-lite", provider: "gemini", thinking_level: "medium" }),
+    }));
   });
 
   it("CFO: domain locked to finance, personal note shown, no visibility select", async () => {
