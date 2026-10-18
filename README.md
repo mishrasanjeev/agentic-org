@@ -47,9 +47,9 @@ New agents default to `gemini-3.5-flash-lite`; explicitly selected models remain
 unchanged. Save your Google or other provider key in the protected AI credential
 settings. Model selection, fallback and company scope remain configurable.
 For this model, both runtime clients explicitly request medium thinking for
-multi-step reasoning instead of the provider's minimal default. Thinking uses
-output tokens and can increase cost and latency within existing limits; it is
-not a correctness guarantee. Older model settings and all feature flags remain
+multi-step reasoning instead of the provider's minimal default. Thinking is billed
+as output tokens; budget for its additional token use and response time within
+existing limits. It is not a correctness guarantee. Older model settings and all feature flags remain
 unchanged. See [reasoning acceptance](docs/runbooks/production_smoke.md#bounded-real-reasoning-acceptance).
 
 The **Channels** dashboard connects your own WhatsApp Cloud API, Meta Messenger,
