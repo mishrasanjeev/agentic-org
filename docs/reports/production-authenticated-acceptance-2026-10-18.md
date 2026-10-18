@@ -57,6 +57,11 @@ addresses as UPI handles. Complete email matches now participate in the same
 overlap resolution, preserving the entire protected value for round-trip
 restoration. This tightens coverage; it does not disable an existing detector.
 
+Adversarial scan tests also cover malformed long lists, long whitespace runs
+and long email-like strings. Boundary-anchored matchers avoid repeatedly
+rescanning each list element or local-part segment. Separate-process deadlines
+guard this behavior without counting interpreter startup as parsing time.
+
 Acceptance of the correction requires deployment and a bounded, exact-task
 reasoning replay. Do not replace the initial failed evidence with
 an easier task or combine independent Telegram/model passes into a claim of a

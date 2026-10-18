@@ -15,7 +15,11 @@ can run even when presidio is not installed (mocked path).
 from __future__ import annotations
 
 import json
+import multiprocessing
+import re
 import time
+from multiprocessing.connection import Connection
+from multiprocessing.synchronize import Event
 from typing import Any
 from unittest.mock import MagicMock
 
@@ -64,6 +68,17 @@ def _make_mock_result(entity_type: str, start: int, end: int, score: float = 0.8
     r.end = end
     r.score = score
     return r
+
+
+def _scan_pattern_child(pattern: re.Pattern[str], text: str, connection: Connection, start: Event) -> None:
+    try:
+        connection.send({"ready": True})
+        if not start.wait(timeout=20):
+            return
+        group = "counts" if "counts" in pattern.groupindex else 0
+        connection.send([match.span(group) for match in pattern.finditer(text)])
+    finally:
+        connection.close()
 
 
 # ---------------------------------------------------------------------------
@@ -179,18 +194,19 @@ class TestWithPresidio:
 
 
 class TestQuantityDateFalsePositives:
-    def test_reserved_domain_email_is_fully_redacted_with_real_detector(self) -> None:
+    @pytest.mark.parametrize("email", ["jo.tester@example.test", "+buyer@example.test"])
+    def test_reserved_domain_email_is_fully_redacted_with_real_detector(self, email: str) -> None:
         from core.pii.redactor import PIIRedactor
 
         redactor = PIIRedactor()
         if redactor._analyzer is None:
             pytest.skip("Full local Presidio model is required for this regression")
-        text = "Write to jo.tester@example.test only."
+        text = f"Write to {email} only."
 
         redacted, token_map = redactor.redact(text)
 
-        assert "jo.tester@example.test" in token_map.values()
-        assert "jo.tester" not in redacted
+        assert email in token_map.values()
+        assert email.split("@")[0] not in redacted
         assert ".test" not in redacted
         assert redactor.deanonymize(redacted, token_map) == text
 
@@ -215,7 +231,7 @@ class TestQuantityDateFalsePositives:
         assert "2 more items" in redacted
         assert "11" not in token_map.values()
 
-    @pytest.mark.parametrize("quantity", ["11 items", "7, 11 and 13 units", "11 more boxes"])
+    @pytest.mark.parametrize("quantity", ["11 items", "7, 11 and 13 units", "7, 11, and 13 units", "11 more boxes"])
     def test_only_quantity_date_false_positives_are_ignored(self, quantity: str) -> None:
         from core.pii.redactor import PIIRedactor
 
@@ -245,6 +261,8 @@ class TestQuantityDateFalsePositives:
             ("Birth day: 11 items", "DATE_TIME", "11"),
             ("DOB: 1984 records", "DATE_TIME", "1984"),
             ("Meeting at 11 tokens", "DATE_TIME", "11"),
+            ("Time 11 tokens", "DATE_TIME", "11"),
+            ("Birth 11 items", "DATE_TIME", "11"),
             ("Meeting on 11/10/2026", "DATE_TIME", "11/10/2026"),
             ("Count 11 items", "BANK_ACCOUNT", "11"),
             ("Count 11 items", "PHONE_NUMBER", "11"),
@@ -267,6 +285,51 @@ class TestQuantityDateFalsePositives:
         assert value not in redacted
         assert list(token_map.values()) == [value]
         assert redactor.deanonymize(redacted, token_map) == text
+
+
+class TestPatternScanSafety:
+    @pytest.mark.parametrize(
+        ("name", "text", "expected"),
+        [
+            ("_COUNTED_QUANTITIES", "11, " * 4000 + "unmatched", []),
+            ("_COUNTED_QUANTITIES", "11" + " " * 16000 + "unmatched", []),
+            ("_COUNTED_QUANTITIES", ", ".join(["11"] * 4000) + " items", [(0, 15998)]),
+            ("_COUNTED_QUANTITIES", "7 items 11 items", [(0, 1), (8, 10)]),
+            ("_EMAIL_PATTERN", "a." * 8000 + "buyer@invalid", []),
+            ("_EMAIL_PATTERN", "a." * 8000 + "buyer@example.test", [(0, 16018)]),
+        ],
+        ids=(
+            "malformed-list", "whitespace", "large-valid-list", "adjacent-counts", "invalid-email", "large-valid-email",
+        ),
+    )
+    def test_pattern_scan_has_a_hard_process_deadline(
+        self, name: str, text: str, expected: list[tuple[int, int]],
+    ) -> None:
+        from core.pii import redactor
+
+        context = multiprocessing.get_context("spawn")
+        reader, writer = context.Pipe(duplex=False)
+        start = context.Event()
+        process = context.Process(
+            target=_scan_pattern_child, args=(getattr(redactor, name), text, writer, start), daemon=True,
+        )
+        try:
+            process.start()
+            writer.close()
+            assert reader.poll(20), "pattern process did not finish bounded startup"
+            assert reader.recv() == {"ready": True}
+            start.set()
+            process.join(timeout=2)
+            assert not process.is_alive(), "pattern scan exceeded its two-second deadline"
+            assert process.exitcode == 0
+            assert reader.poll(), "pattern process returned no outcome"
+            assert reader.recv() == expected
+        finally:
+            if process.is_alive():
+                process.kill()
+                process.join(timeout=2)
+            reader.close()
+            writer.close()
 
 
 class TestWithMocks:

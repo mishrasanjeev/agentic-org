@@ -50,12 +50,15 @@ _VALID_MODES = {PII_MODE_BEFORE_LLM, PII_MODE_LOGS_ONLY, PII_MODE_DISABLED}
 
 _SPACY_MODEL = "en_core_web_sm"
 
+# Anchor scans at whitespace/identifier-run boundaries, not at every element
+# of a malformed numeric list or email local part.
 _COUNTED_QUANTITIES = re.compile(
-    r"(?<![\w./:-])(?P<counts>\d+(?:\s*,\s*\d+)*(?:\s*,?\s+and\s+\d+)?)"
+    r"(?:(?<![\d\s,])\s+|(?<![\w\s,./:-]))"
+    r"(?P<counts>\d+(?:\s*,\s*\d+)*(?:(?:\s*,\s*|\s+)and\s+\d+)?)"
     r"\s+(?:more\s+)?(?:items?|units?|boxes?|records?|rows?|requests?|tokens?)\b",
     re.IGNORECASE,
 )
-_EMAIL_PATTERN = re.compile(r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b")
+_EMAIL_PATTERN = re.compile(r"(?<![A-Za-z0-9._%+-])[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b")
 _TEMPORAL_CONTEXT = re.compile(
     r"\b(?:dob|birth|birthday|born|date|time|appointment|meeting|calendar)\b",
     re.IGNORECASE,
@@ -278,7 +281,7 @@ class PIIRedactor:
         count_spans = {
             (match.start("counts") + number.start(), match.start("counts") + number.end())
             for match in _COUNTED_QUANTITIES.finditer(text)
-            if not _TEMPORAL_CONTEXT.search(text[max(0, match.start() - 64):match.start()])
+            if not _TEMPORAL_CONTEXT.search(text[max(0, match.start("counts") - 64):match.start("counts")])
             for number in re.finditer(r"\d+", match.group("counts"))
         }
         results = [
