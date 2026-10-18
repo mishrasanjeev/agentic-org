@@ -30,15 +30,6 @@
       ]
     },
     {
-      "slug": "cert-in-agent-security",
-      "title": "Agent security deployment and evidence",
-      "description": "Map CERT-In guidance to product controls, tenant-owned SSO, run authorization, operator responsibilities and negative acceptance tests.",
-      "group": "Govern And Operate",
-      "audience": "Tenant administrators, security and deployment operators",
-      "reviewed": "2026-10-17",
-      "sources": ["auth/run_grants.py", "auth/token_pool.py", "core/security/egress.py", "core/config.py"]
-    },
-    {
       "slug": "workspace-and-roles",
       "title": "Workspace, companies and roles",
       "description": "Set up your organization, invite colleagues, choose the right company, and understand why different users see different controls.",
@@ -301,6 +292,15 @@
         "docs/data-classification.md",
         "docs/governance/README.md"
       ]
+    },
+    {
+      "slug": "cert-in-agent-security",
+      "title": "Agent security deployment and evidence",
+      "description": "Map CERT-In guidance to product controls, tenant-owned SSO, run authorization, operator responsibilities and negative acceptance tests.",
+      "group": "Govern And Operate",
+      "audience": "Tenant administrators, security and deployment operators",
+      "reviewed": "2026-10-17",
+      "sources": ["auth/run_grants.py", "auth/token_pool.py", "core/security/egress.py", "core/config.py"]
     },
     {
       "slug": "billing-and-support",

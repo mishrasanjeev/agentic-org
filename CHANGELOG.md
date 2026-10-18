@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased - Documentation learning path
+
+- Restore the first-agent guide's next step to workspace and role setup. Keep
+  deployment-security guidance with the other governance guides without removing
+  its page, search entry or canonical URL. Add a rendered-navigation regression.
+
 ## Unreleased - Isolated run authorization
 
 - Add opt-in `AGENTICORG_GRANTS_ISOLATE_RUN_TOKENS` (default off). When on,

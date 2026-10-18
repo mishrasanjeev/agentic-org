@@ -87,6 +87,28 @@ describe("public documentation", () => {
     ).toBeInTheDocument();
   });
 
+  it("keeps the first-agent learning path connected to workspace setup", () => {
+    open("/docs/first-agent");
+    const pagination = screen.getByRole("navigation", {
+      name: "Previous and next guide",
+    });
+    expect(
+      within(pagination).getByRole("link", { name: /Next/ }),
+    ).toHaveAttribute("href", "/docs/workspace-and-roles");
+    const security = manual.articles.find(
+      (guide) => guide.slug === "cert-in-agent-security",
+    );
+    expect(security?.group).toBe("Govern And Operate");
+    const guideNavigation = screen.getByRole("navigation", {
+      name: "Documentation guides",
+    });
+    expect(
+      within(guideNavigation).getByRole("link", {
+        name: "Agent security deployment and evidence",
+      }),
+    ).toHaveAttribute("href", "/docs/cert-in-agent-security");
+  });
+
   it("shows an actionable empty search and clears it with Escape", () => {
     open();
     fireEvent.change(screen.getByRole("searchbox"), {
