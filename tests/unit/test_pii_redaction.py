@@ -291,27 +291,37 @@ class TestPatternScanSafety:
     @pytest.mark.parametrize(
         ("name", "text", "expected"),
         [
-            ("_COUNTED_QUANTITIES", "11, " * 4000 + "unmatched", []),
-            ("_COUNTED_QUANTITIES", "11" + " " * 16000 + "unmatched", []),
+            ("_COUNTED_QUANTITIES", "11, " * 16000 + "unmatched", []),
+            ("_COUNTED_QUANTITIES", "11" + " " * 64000 + "unmatched", []),
             ("_COUNTED_QUANTITIES", ", ".join(["11"] * 4000) + " items", [(0, 15998)]),
             ("_COUNTED_QUANTITIES", "7 items 11 items", [(0, 1), (8, 10)]),
-            ("_EMAIL_PATTERN", "a." * 8000 + "buyer@invalid", []),
-            ("_EMAIL_PATTERN", "a." * 8000 + "buyer@example.test", [(0, 16018)]),
+            ("_EMAIL_PATTERN", "a." * 32000 + "buyer@invalid", []),
+            ("_EMAIL_PATTERN", "a." * 32000 + "buyer@example.test", [(0, 64018)]),
+            ("gateway_email", "a." * 32000 + "buyer@invalid", []),
+            ("gateway_email", "a" * 64000, []),
         ],
         ids=(
             "malformed-list", "whitespace", "large-valid-list", "adjacent-counts", "invalid-email", "large-valid-email",
+            "gateway-invalid-email", "gateway-no-address",
         ),
     )
     def test_pattern_scan_has_a_hard_process_deadline(
         self, name: str, text: str, expected: list[tuple[int, int]],
     ) -> None:
-        from core.pii import redactor
+        if name == "gateway_email":
+            from core.tool_gateway.pii_masker import PATTERNS
+
+            pattern = PATTERNS[0][0]
+        else:
+            from core.pii import redactor
+
+            pattern = getattr(redactor, name)
 
         context = multiprocessing.get_context("spawn")
         reader, writer = context.Pipe(duplex=False)
         start = context.Event()
         process = context.Process(
-            target=_scan_pattern_child, args=(getattr(redactor, name), text, writer, start), daemon=True,
+            target=_scan_pattern_child, args=(pattern, text, writer, start), daemon=True,
         )
         try:
             process.start()
@@ -330,6 +340,18 @@ class TestPatternScanSafety:
                 process.join(timeout=2)
             reader.close()
             writer.close()
+
+    @pytest.mark.parametrize("email", ["jo.tester@example.test", "+buyer@example.test"])
+    def test_gateway_still_masks_complete_email_values(self, email: str, monkeypatch: pytest.MonkeyPatch) -> None:
+        from core.tool_gateway import pii_masker
+
+        monkeypatch.setattr(pii_masker.settings, "pii_masking", True)
+        masked = pii_masker.mask_string(f"Contact {email} only.")
+
+        assert email not in masked
+        assert "example.test" not in masked
+        assert "***@***" in masked
+        assert masked.startswith("Contact ") and masked.endswith(" only.")
 
 
 class TestWithMocks:
