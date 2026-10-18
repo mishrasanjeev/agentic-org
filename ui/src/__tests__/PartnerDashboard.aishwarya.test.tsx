@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -103,9 +103,9 @@ describe("PartnerDashboard Aishwarya 2026-05-06 regressions", () => {
   it("renders trial expiry, inactive N/A health, active-only workload, and all active deadline day badges", async () => {
     renderDashboard();
 
-    await waitFor(() => expect(mockGet).toHaveBeenCalledWith("/partner-dashboard"));
-
-    expect(screen.getAllByText("Trial - 5 days left")).toHaveLength(2);
+    const trialBadges = await screen.findAllByText("Trial - 5 days left");
+    expect(mockGet).toHaveBeenCalledWith("/partner-dashboard");
+    expect(trialBadges).toHaveLength(2);
     expect(screen.getByText("N/A")).toBeInTheDocument();
     expect(screen.getAllByText("Active clients with no pending filings").length).toBeGreaterThan(0);
     expect(screen.getByText("20 days left")).toBeInTheDocument();
