@@ -38,6 +38,11 @@ to guess a hidden operand or turn protection off. Explicit counts such as
 protected. Report an incorrect result with its request reference, without
 copying personal data into a support ticket.
 
+For an agent using `gemini-3.5-flash-lite`, the optional per-agent thinking setting
+is described in [Model and credential setup](/docs/model-setup). Test the same
+request before and after a reviewed configuration change; extra thinking and
+model-reported confidence are not substitutes for checking the answer.
+
 The **Why did the agent do this?** panel reads stored evidence, without making a
 new model request. Operators can enable direct-run audit history with
 `AGENTICORG_AGENT_EXPLANATION_AUDIT_ENABLED=true` (default off). With it enabled,
