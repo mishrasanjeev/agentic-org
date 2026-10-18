@@ -255,3 +255,8 @@ def test_local_stack_starts_the_channel_scheduler_with_the_same_runtime():
     assert "celery -A core.tasks.celery_app beat" in beat["command"]
     assert beat["depends_on"]["migrate"]["condition"] == "service_completed_successfully"
     assert beat["environment"] == services["worker"]["environment"]
+    assert "--pidfile=/tmp/celerybeat.pid" in beat["command"]
+    assert beat["healthcheck"].get("disable") is not True
+    assert beat["healthcheck"]["test"][:2] == ["CMD", "python"]
+    assert "celerybeat.pid" in beat["healthcheck"]["test"][3]
+    assert "os.kill" in beat["healthcheck"]["test"][3]
