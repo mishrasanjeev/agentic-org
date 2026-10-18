@@ -37,7 +37,11 @@ test("Telegram answer opt-in and route restoration use real owner-scoped APIs", 
   const original = await created.json();
   expect(original.reply_mode).toBe("status");
   const errors: string[] = [];
+  const agentRequests: string[] = [];
   page.on("pageerror", (error) => errors.push(error.message));
+  page.on("request", (request) => {
+    if (new URL(request.url()).pathname === "/api/v1/agents") agentRequests.push(request.url());
+  });
   for (const viewport of [{ width: 1440, height: 1000 }, { width: 390, height: 844 }]) {
     await page.setViewportSize(viewport);
     await page.goto("/dashboard/channels");
@@ -71,4 +75,5 @@ test("Telegram answer opt-in and route restoration use real owner-scoped APIs", 
     auto_reply: true, callback_url: original.callback_url,
   });
   expect(errors).toEqual([]);
+  expect(agentRequests.some((url) => new URL(url).searchParams.get("per_page") === "100")).toBeTruthy();
 });

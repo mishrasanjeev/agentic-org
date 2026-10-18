@@ -57,15 +57,27 @@ export default function Channels() {
   }
   useEffect(() => {
     let active = true;
+    async function loadTargets(path: "/agents" | "/workflows") {
+      const items: Target[] = [];
+      let page = 1;
+      let pages: number;
+      do {
+        const response = await api.get(path, { params: { page, per_page: 100 } });
+        items.push(...(response.data.items || []));
+        pages = Number(response.data.pages || page);
+        page += 1;
+      } while (active && page <= pages);
+      return items;
+    }
     (async () => {
       try {
         const catalog = await api.get("/channels/catalog");
         const channels = await api.get("/channels");
-        const agentList = await api.get("/agents", { params: { page_size: 100 } });
-        const workflowList = admin ? await api.get("/workflows", { params: { page_size: 100 } }) : null;
+        const agentList = await loadTargets("/agents");
+        const workflowList = admin ? await loadTargets("/workflows") : [];
         if (active) {
           setProviders(catalog.data.providers); setBindings(channels.data.bindings);
-          setAgents(agentList.data.items || []); setWorkflows(workflowList?.data.items || []);
+          setAgents(agentList); setWorkflows(workflowList);
         }
       } catch (err) { if (active) setError(extractApiError(err, "Could not load channel setup")); }
     })();

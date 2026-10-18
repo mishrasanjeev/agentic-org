@@ -126,4 +126,18 @@ describe("BYO channel setup", () => {
     expect(screen.getByLabelText("Enabled", { exact: true })).not.toBeChecked();
     expect(post).not.toHaveBeenCalled();
   });
+
+  it("loads subsequent destination pages with the supported per_page parameter", async () => {
+    get.mockImplementation((url: string, config?: { params?: { page: number } }) => {
+      if (url === "/channels/catalog") return Promise.resolve({ data: { providers: [] } });
+      if (url === "/channels") return Promise.resolve({ data: { bindings: [binding] } });
+      if (url.endsWith("/deliveries")) return Promise.resolve({ data: { deliveries: [] } });
+      return Promise.resolve({ data: { pages: 2, items: [{ id: `agent-${config?.params?.page}`, name: `Destination page ${config?.params?.page}` }] } });
+    });
+    page();
+    fireEvent.click(await screen.findByRole("button", { name: /^Open$/ }));
+    expect(await screen.findByRole("option", { name: "Destination page 2" })).toBeInTheDocument();
+    expect(get).toHaveBeenCalledWith("/agents", { params: { page: 2, per_page: 100 } });
+    expect(get).toHaveBeenCalledWith("/workflows", { params: { page: 2, per_page: 100 } });
+  });
 });
