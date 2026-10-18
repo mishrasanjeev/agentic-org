@@ -44,6 +44,8 @@ All ports bind to `127.0.0.1` only.
   worker wait for it
 - **api** — the FastAPI application
 - **worker** — the Celery worker for workflows, reports and delivery
+- **beat** - the periodic scheduler for durable channel intake and recovery sweeps;
+  it shares the API/worker image and starts only after migrations complete
 - **ui** — the console, served by nginx, proxying `/api` and `/ws` to the API
 - **mock-provider** — the fixture-backed `mock` verification provider as a
   separate HTTP service; the API and worker reach it at

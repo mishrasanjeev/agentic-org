@@ -119,7 +119,8 @@ messages remain status-only after upgrade. Enabling answer mode does not export
 old results. Workflow targets and other providers do not support answer mode.
 Changing a workflow destination requires an administrator. API clients may PATCH
 both `target_kind` and `target_id` together; a foreign/unmanageable target is
-refused. Neither route changes nor reply mode replacement rotates credentials,
+refused. Management requires an authenticated human owner, not a machine/API-key
+identity. Neither route changes nor reply mode replacement rotates credentials,
 changes the webhook or relinks a sender.
 
 An unlinked sender, expired/revoked link, inaccessible or paused agent, pending
@@ -133,6 +134,10 @@ split into repeated sends. Provider timeouts are uncertain delivery, never a
 reason to rerun the model or resend blindly. Disabling **Send replies**, switching
 back to **Task status only**, or disabling the connection stops future answer
 attempts; it cannot retract a message already accepted by Telegram.
+
+Self-managed deployments need both the channel worker and the periodic beat
+scheduler. The local Docker stack starts both. An inbox that stays pending can
+indicate a missing scheduler or broker; do not repeatedly submit the same task.
 
 ## Viber
 

@@ -87,6 +87,8 @@ def test_own_credentials_cannot_be_echoed_and_unicode_is_bounded():
         "mode_disabled",
         "reply_disabled",
         "target_changed",
+        "binding_owner_changed",
+        "provider_changed",
         "approval",
         "private_output",
         "missing_user",
@@ -114,6 +116,10 @@ async def test_dispatch_rechecks_consent_authority_and_sends_answer_once(monkeyp
         live.auto_reply = False
     if mode == "target_changed":
         live.target_id = uuid.uuid4()
+    if mode == "binding_owner_changed":
+        live.owner_user_id = uuid.uuid4()
+    if mode == "provider_changed":
+        live.provider = "viber"
     initial = Session(scalar=[b, None, receipt, user, state.delegation])
     target = Session(scalar=[state.target])
     saved, current = Session(gets=[receipt]), Session(gets=[live])
@@ -236,3 +242,16 @@ async def test_answer_consent_is_snapshotted_only_when_replies_were_enabled(monk
         == "pending"
     )
     assert session.added[0].reply_mode == expected
+
+
+def test_local_stack_starts_the_channel_scheduler_with_the_same_runtime():
+    from pathlib import Path
+
+    import yaml
+
+    services = yaml.safe_load((Path(__file__).resolve().parents[2] / "docker-compose.dev.yml").read_text())["services"]
+    beat = services["beat"]
+    assert beat["image"] == services["worker"]["image"] == services["api"]["image"]
+    assert "celery -A core.tasks.celery_app beat" in beat["command"]
+    assert beat["depends_on"]["migrate"]["condition"] == "service_completed_successfully"
+    assert beat["environment"] == services["worker"]["environment"]

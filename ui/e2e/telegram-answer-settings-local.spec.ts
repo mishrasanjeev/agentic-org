@@ -22,6 +22,7 @@ test("Telegram answer opt-in and route restoration use real owner-scoped APIs", 
   } });
   expect(agent.status()).toBe(201);
   const aid = (await agent.json()).agent_id;
+  expect(aid).toMatch(/^[0-9a-f-]{36}$/);
   const workflow = await page.request.post("/api/v1/workflows", { headers, data: {
     name: `Reply workflow ${run}`,
     definition: { steps: [{ id: "check", name: "Check request", type: "condition", condition: "true" }] },
@@ -44,7 +45,9 @@ test("Telegram answer opt-in and route restoration use real owner-scoped APIs", 
     const settings = page.getByRole("form", { name: "Destination and reply settings" });
     await expect(settings.getByLabel("Reply content")).toHaveValue("status");
     await settings.getByLabel("Destination type").selectOption("agent");
-    await settings.getByLabel("Agent", { exact: true }).selectOption(aid);
+    const agentSelect = settings.getByRole("combobox", { name: "Agent", exact: true });
+    await expect(agentSelect.locator(`option[value="${aid}"]`)).toHaveText(`Reply agent ${run}`);
+    await agentSelect.selectOption(aid);
     await settings.getByLabel("Reply content").selectOption("agent_answer");
     await expect(settings.getByRole("note")).toContainText("Final answers leave your workspace");
     await settings.getByRole("button", { name: "Save settings" }).click();
@@ -57,7 +60,7 @@ test("Telegram answer opt-in and route restoration use real owner-scoped APIs", 
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBeTruthy();
     await page.screenshot({ path: testInfo.outputPath(`telegram-answers-${viewport.width}.png`), fullPage: true });
     await settings.getByLabel("Destination type").selectOption("workflow");
-    await settings.getByLabel("Workflow", { exact: true }).selectOption(wid);
+    await settings.getByRole("combobox", { name: "Workflow", exact: true }).selectOption(wid);
     await expect(settings.getByLabel("Reply content")).toHaveValue("status");
     await settings.getByRole("button", { name: "Save settings" }).click();
     await expect(page.getByRole("status")).toContainText("settings saved");

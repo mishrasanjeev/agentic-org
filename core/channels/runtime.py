@@ -387,6 +387,8 @@ async def dispatch_one(tenant_id: uuid.UUID, binding_id: uuid.UUID) -> str:
                 and getattr(binding, "reply_mode", "status") == "agent_answer"
                 and getattr(receipt, "reply_mode", "status") == "agent_answer"
                 and getattr(live_binding, "reply_mode", "status") == "agent_answer"
+                and live_binding.owner_user_id == binding.owner_user_id
+                and live_binding.provider == binding.provider
                 and live_binding.target_kind == binding.target_kind
                 and live_binding.target_id == binding.target_id
             )
