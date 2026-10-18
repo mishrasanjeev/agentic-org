@@ -29,6 +29,27 @@ the UI or API alone leaves callbacks queued without a consumer.
 4. Confirm an approved account-backed test plan. Credentials go through the
    protected UI or approved secret-management process, never chat or Git.
 
+### Opt-in Telegram answer upgrade
+
+Apply `v6z86_telegram_answers` before rolling the API and workers. Its additive
+columns retain status-only defaults on existing bindings and receipts. No global
+feature flag needs enabling. Deploy all runtime services and the UI from the
+same tested release while preserving existing environment controls and limits.
+
+Test the default status path, consent captured at receipt, linked private-sender
+authorization rechecked after execution, pending approvals, revocation and
+provider-send failure locally. A send failure must not replay the agent. The
+account-backed smoke must compare the actual Telegram answer with the same
+authenticated inbox run, not just a generic completion notice. Use a dedicated
+tool-free agent, an approved total model allowance and one complete synthetic
+message. Record/restore destination, reply mode and Send replies according to
+the owner's instructions. Do not rotate credentials or replace a bot webhook.
+
+Only final output is eligible for export. Treat the opt-in as permission to send
+that output to Telegram, not a data-loss-prevention guarantee. Trace/tool-call
+records remain private and recognized secret-bearing output is withheld. Schema
+step-back retains the consent columns; old workers continue status-only replies.
+
 ## Reasoning default rollout
 
 Existing service environment overrides survive an image rollout. To apply the
