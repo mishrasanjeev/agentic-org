@@ -212,4 +212,20 @@ describe("AgentDetail ownership controls (bug sheet 2026-09-14)", () => {
     expect(screen.getByTestId("agent-visibility-badge")).toHaveTextContent("Shared");
     expect(screen.getByTestId("agent-visibility-toggle")).toHaveTextContent("Make personal");
   });
+
+  it("submits the current arithmetic task verbatim rather than a previous sample", async () => {
+    setUser(OWNER_ID, "cfo", "finance");
+    mockPost.mockResolvedValue({ data: { status: "completed", confidence: 1, output: { answer: 18 } } });
+    renderPage();
+    await screen.findByText("Ledger Agent");
+    fireEvent.click(screen.getByRole("button", { name: "Run Agent" }));
+    const task = "There are 7, 11 and 13 items. Remove the 11-item box, then remove 2 more items. How many remain?";
+    fireEvent.change(screen.getByPlaceholderText("What should the agent do?"), { target: { value: task } });
+    fireEvent.click(screen.getByRole("button", { name: /^Run$/ }));
+
+    await waitFor(() => expect(mockPost).toHaveBeenCalledWith("/agents/a1/run", {
+      action: "run", inputs: { task },
+    }));
+    expect(await screen.findByText("Agent run completed.")).toBeInTheDocument();
+  });
 });

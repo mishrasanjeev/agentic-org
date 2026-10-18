@@ -62,6 +62,11 @@ connection must not overwrite its webhook. Keep its configured destination uncha
 Verify real model reasoning separately from transport-only workflows, and do not
 claim a combined Telegram-to-Gemini flow unless one delivery proves both.
 
+Acceptance checks validate the actual answer as well as the terminal status.
+A completed, high-confidence model run can still be wrong; compare numeric
+results independently and preserve PII protections while diagnosing it. See the
+[bounded production acceptance runbook](docs/runbooks/production_smoke.md#bounded-real-reasoning-acceptance).
+
 The production platform currently includes governed agent/workflow execution,
 document ingestion with scanned-document OCR, signed Twilio voice with
 provider-managed STT/TTS, tenant-scoped browser RPA, Python and TypeScript SDKs,

@@ -19,6 +19,7 @@ import importlib.util
 import os
 import re
 import threading
+from types import SimpleNamespace
 from typing import Any
 
 import structlog
@@ -49,11 +50,24 @@ _VALID_MODES = {PII_MODE_BEFORE_LLM, PII_MODE_LOGS_ONLY, PII_MODE_DISABLED}
 
 _SPACY_MODEL = "en_core_web_sm"
 
+# Possessive runs and boundary anchors prevent rescanning malformed user input.
+_COUNTED_QUANTITIES = re.compile(
+    r"(?:(?<![\d\s,])\s++|(?<![\w\s,./:-]))"
+    r"(?P<counts>\d++(?:\s*+,\s*+\d++)*+(?:(?:\s*+,\s*+|\s++)and\s++\d++)?)"
+    r"\s++(?:more\s++)?(?:items?|units?|boxes?|records?|rows?|requests?|tokens?)\b",
+    re.IGNORECASE,
+)
+_EMAIL_PATTERN = re.compile(r"(?<![A-Za-z0-9._%+-])[A-Za-z0-9._%+-]++@[A-Za-z0-9.-]+\.[A-Za-z]{2,}+\b")
+_TEMPORAL_CONTEXT = re.compile(
+    r"\b(?:dob|birth|birthday|born|date|time|appointment|meeting|calendar)\b",
+    re.IGNORECASE,
+)
+
 _REGEX_FALLBACK_PATTERNS: tuple[tuple[str, re.Pattern[str]], ...] = (
     ("AADHAAR", re.compile(r"\b\d{4}\s\d{4}\s\d{4}\b")),
     ("GSTIN", re.compile(r"\b\d{2}[A-Z]{5}\d{4}[A-Z][A-Z0-9]Z[A-Z0-9]\b")),
     ("PAN", re.compile(r"\b[A-Z]{5}\d{4}[A-Z]\b")),
-    ("EMAIL", re.compile(r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b")),
+    ("EMAIL", _EMAIL_PATTERN),
     ("UPI", re.compile(r"\b[A-Za-z0-9._-]{2,}@[A-Za-z][A-Za-z0-9._-]{2,}\b")),
     ("PHONE", re.compile(r"(?:\+91[\s-]?)?[6-9]\d{9}\b")),
 )
@@ -259,6 +273,27 @@ class PIIRedactor:
 
         # Analyze
         results = self._analyzer.analyze(text=text, language="en")
+
+        # A bare count in an explicit quantity list is not a date. Keep every
+        # other entity, including dates with explicit temporal context and
+        # overlapping identifiers.
+        count_spans = {
+            (match.start("counts") + number.start(), match.start("counts") + number.end())
+            for match in _COUNTED_QUANTITIES.finditer(text)
+            if not _TEMPORAL_CONTEXT.search(text[max(0, match.start("counts") - 64):match.start("counts")])
+            for number in re.finditer(r"\d+", match.group("counts"))
+        }
+        results = [
+            result for result in results
+            if result.entity_type != "DATE_TIME" or (result.start, result.end) not in count_spans
+        ]
+
+        # Full email matches must outrank a shorter UPI match, including on
+        # reserved/internal domains not recognized by the NLP email detector.
+        results.extend(
+            SimpleNamespace(entity_type="EMAIL_ADDRESS", start=match.start(), end=match.end(), score=1.0)
+            for match in _EMAIL_PATTERN.finditer(text)
+        )
 
         if not results:
             return text, {}

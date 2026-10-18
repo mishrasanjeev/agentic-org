@@ -15,7 +15,11 @@ can run even when presidio is not installed (mocked path).
 from __future__ import annotations
 
 import json
+import multiprocessing
+import re
 import time
+from multiprocessing.connection import Connection
+from multiprocessing.synchronize import Event
 from typing import Any
 from unittest.mock import MagicMock
 
@@ -64,6 +68,39 @@ def _make_mock_result(entity_type: str, start: int, end: int, score: float = 0.8
     r.end = end
     r.score = score
     return r
+
+
+def _scan_pattern_child(pattern: re.Pattern[str], text: str, connection: Connection, start: Event) -> None:
+    try:
+        connection.send({"ready": True})
+        if not start.wait(timeout=20):
+            return
+        group = "counts" if "counts" in pattern.groupindex else 0
+        connection.send([match.span(group) for match in pattern.finditer(text)])
+    finally:
+        connection.close()
+
+
+def _measure_redaction_child(connection: Connection, start: Event) -> None:
+    from core.pii.redactor import PIIRedactor
+
+    try:
+        redactor = PIIRedactor()
+        text = (
+            "Name: Rajesh Kumar, Email: rajesh@example.com, "
+            "Phone: +91 9876543210, Aadhaar: 1234 5678 9012, "
+            "PAN: ABCDE1234F, GSTIN: 22AAAAA0000A1Z5"
+        )
+        redactor.redact(text)
+        connection.send({"ready": True})
+        if not start.wait(timeout=20):
+            return
+        began = time.perf_counter()
+        for _ in range(10):
+            redactor.redact(text)
+        connection.send((time.perf_counter() - began) / 10 * 1000)
+    finally:
+        connection.close()
 
 
 # ---------------------------------------------------------------------------
@@ -159,23 +196,212 @@ class TestWithPresidio:
         assert len(token_map) >= 2
 
     def test_performance_under_50ms(self) -> None:
+        # Measure warmed runtime code, not suite history or parent coverage tracing.
+        context = multiprocessing.get_context("spawn")
+        reader, writer = context.Pipe(duplex=False)
+        start = context.Event()
+        process = context.Process(target=_measure_redaction_child, args=(writer, start), daemon=True)
+        try:
+            process.start()
+            writer.close()
+            assert reader.poll(20), "redactor process did not finish bounded startup"
+            assert reader.recv() == {"ready": True}
+            start.set()
+            process.join(timeout=2)
+            assert not process.is_alive(), "redaction measurement exceeded its two-second deadline"
+            assert process.exitcode == 0
+            assert reader.poll(), "redactor process returned no measurement"
+            elapsed_ms = reader.recv()
+        finally:
+            if process.is_alive():
+                process.kill()
+                process.join(timeout=2)
+            reader.close()
+            writer.close()
+        assert elapsed_ms < 50, f"Redaction took {elapsed_ms:.1f}ms, expected <50ms"
+
+
+class TestQuantityDateFalsePositives:
+    @pytest.mark.parametrize("email", ["jo.tester@example.test", "+buyer@example.test"])
+    def test_reserved_domain_email_is_fully_redacted_with_real_detector(self, email: str) -> None:
         from core.pii.redactor import PIIRedactor
 
         redactor = PIIRedactor()
-        text = (
-            "Name: Rajesh Kumar, Email: rajesh@example.com, "
-            "Phone: +91 9876543210, Aadhaar: 1234 5678 9012, "
-            "PAN: ABCDE1234F, GSTIN: 22AAAAA0000A1Z5"
+        if redactor._analyzer is None:
+            pytest.skip("Full local Presidio model is required for this regression")
+        text = f"Write to {email} only."
+
+        redacted, token_map = redactor.redact(text)
+
+        assert email in token_map.values()
+        assert email.split("@")[0] not in redacted
+        assert ".test" not in redacted
+        assert redactor.deanonymize(redacted, token_map) == text
+
+    def test_arithmetic_task_keeps_all_operands_with_real_detector(self) -> None:
+        from core.langgraph.runner import _build_user_message
+        from core.pii.redactor import PIIRedactor
+
+        redactor = PIIRedactor()
+        if redactor._analyzer is None:
+            pytest.skip("Full local Presidio model is required for this regression")
+        task = (
+            "QA-AGENT-20261018 synthetic arithmetic only. There are 7, 11 and 13 items. "
+            "Remove the 11-item box, then remove 2 more items. How many remain? "
+            "Use no tools or external data; do not send messages, make calls, execute "
+            "payments or perform any other action."
         )
-        # Warm-up
-        redactor.redact(text)
+        text = _build_user_message({"action": "run", "inputs": {"task": task}, "context": {}})
+        redacted, token_map = redactor.redact(text)
 
-        start = time.perf_counter()
-        for _ in range(10):
-            redactor.redact(text)
-        elapsed_ms = (time.perf_counter() - start) / 10 * 1000
+        assert "7, 11 and 13 items" in redacted
+        assert "11-item box" in redacted
+        assert "2 more items" in redacted
+        assert "11" not in token_map.values()
 
-        assert elapsed_ms < 50, f"Redaction took {elapsed_ms:.1f}ms, expected <50ms"
+    @pytest.mark.parametrize("quantity", ["11 items", "7, 11 and 13 units", "7, 11, and 13 units", "11 more boxes"])
+    def test_only_quantity_date_false_positives_are_ignored(self, quantity: str) -> None:
+        from core.pii.redactor import PIIRedactor
+
+        text = f"Count {quantity}. Date of birth: 11 May 1984. Contact buyer@example.test."
+        count_start = text.index("11")
+        birth_start = text.index("11 May")
+        email_start = text.index("buyer@")
+        redactor = PIIRedactor()
+        redactor._analyzer = MagicMock()
+        redactor._analyzer.analyze.return_value = [
+            _make_mock_result("DATE_TIME", count_start, count_start + 2),
+            _make_mock_result("DATE_TIME", birth_start, birth_start + len("11 May 1984")),
+            _make_mock_result("EMAIL_ADDRESS", email_start, email_start + len("buyer@example.test")),
+        ]
+
+        redacted, token_map = redactor.redact(text)
+
+        assert quantity in redacted
+        assert "11 May 1984" not in redacted
+        assert "buyer@example.test" not in redacted
+        assert set(token_map.values()) == {"11 May 1984", "buyer@example.test"}
+
+    @pytest.mark.parametrize(
+        ("text", "entity_type", "value"),
+        [
+            ("Birth day: 11", "DATE_TIME", "11"),
+            ("Birth day: 11 items", "DATE_TIME", "11"),
+            ("DOB: 1984 records", "DATE_TIME", "1984"),
+            ("Meeting at 11 tokens", "DATE_TIME", "11"),
+            ("Time 11 tokens", "DATE_TIME", "11"),
+            ("Birth 11 items", "DATE_TIME", "11"),
+            ("Meeting on 11/10/2026", "DATE_TIME", "11/10/2026"),
+            ("Count 11 items", "BANK_ACCOUNT", "11"),
+            ("Count 11 items", "PHONE_NUMBER", "11"),
+        ],
+    )
+    def test_dates_and_stronger_identifiers_remain_protected(
+        self, text: str, entity_type: str, value: str,
+    ) -> None:
+        from core.pii.redactor import PIIRedactor
+
+        start = text.index(value)
+        redactor = PIIRedactor()
+        redactor._analyzer = MagicMock()
+        redactor._analyzer.analyze.return_value = [
+            _make_mock_result(entity_type, start, start + len(value)),
+        ]
+
+        redacted, token_map = redactor.redact(text)
+
+        assert value not in redacted
+        assert list(token_map.values()) == [value]
+        assert redactor.deanonymize(redacted, token_map) == text
+
+
+class TestPatternScanSafety:
+    @pytest.mark.parametrize(
+        ("text", "expected"),
+        [
+            ("buyer@sub.example.test.", ["buyer@sub.example.test"]),
+            ("+buyer@example.test, jo.tester@example.test", ["+buyer@example.test", "jo.tester@example.test"]),
+            ("buyer@example.test0", []),
+            ("buyer@invalid", []),
+            ("buyer@example.test-foo", ["buyer@example.test"]),
+            ("buyer@example.test_foo", []),
+        ],
+    )
+    def test_possessive_email_parts_preserve_match_boundaries(self, text: str, expected: list[str]) -> None:
+        from core.pii.redactor import _EMAIL_PATTERN
+
+        assert [match.group() for match in _EMAIL_PATTERN.finditer(text)] == expected
+
+    @pytest.mark.parametrize(
+        ("name", "text", "expected"),
+        [
+            ("_COUNTED_QUANTITIES", "11, " * 16000 + "unmatched", []),
+            ("_COUNTED_QUANTITIES", "11" + " " * 64000 + "unmatched", []),
+            ("_COUNTED_QUANTITIES", " " * 64000 + "unmatched", []),
+            ("_COUNTED_QUANTITIES", "0" * 64000 + " unmatched", []),
+            ("_COUNTED_QUANTITIES", ", ".join(["11"] * 4000) + " items", [(0, 15998)]),
+            ("_COUNTED_QUANTITIES", "7 items 11 items", [(0, 1), (8, 10)]),
+            ("_EMAIL_PATTERN", "a." * 32000 + "buyer@invalid", []),
+            ("_EMAIL_PATTERN", "a." * 32000 + "buyer@example.test", [(0, 64018)]),
+            ("_EMAIL_PATTERN", "%" * 64000 + "@invalid", []),
+            ("_EMAIL_PATTERN", "buyer@" + "a." * 16000 + "0", []),
+            ("gateway_email", "a." * 32000 + "buyer@invalid", []),
+            ("gateway_email", "a" * 64000, []),
+            ("gateway_email", "%" * 64000 + "@invalid", []),
+        ],
+        ids=(
+            "malformed-list", "whitespace", "only-whitespace", "only-digits", "large-valid-list", "adjacent-counts",
+            "invalid-email", "large-valid-email", "percent-local-part", "invalid-domain", "gateway-invalid-email",
+            "gateway-no-address", "gateway-percent-local-part",
+        ),
+    )
+    def test_pattern_scan_has_a_hard_process_deadline(
+        self, name: str, text: str, expected: list[tuple[int, int]],
+    ) -> None:
+        if name == "gateway_email":
+            from core.tool_gateway.pii_masker import PATTERNS
+
+            pattern = PATTERNS[0][0]
+        else:
+            from core.pii import redactor
+
+            pattern = getattr(redactor, name)
+
+        context = multiprocessing.get_context("spawn")
+        reader, writer = context.Pipe(duplex=False)
+        start = context.Event()
+        process = context.Process(
+            target=_scan_pattern_child, args=(pattern, text, writer, start), daemon=True,
+        )
+        try:
+            process.start()
+            writer.close()
+            assert reader.poll(20), "pattern process did not finish bounded startup"
+            assert reader.recv() == {"ready": True}
+            start.set()
+            process.join(timeout=2)
+            assert not process.is_alive(), "pattern scan exceeded its two-second deadline"
+            assert process.exitcode == 0
+            assert reader.poll(), "pattern process returned no outcome"
+            assert reader.recv() == expected
+        finally:
+            if process.is_alive():
+                process.kill()
+                process.join(timeout=2)
+            reader.close()
+            writer.close()
+
+    @pytest.mark.parametrize("email", ["jo.tester@example.test", "+buyer@example.test"])
+    def test_gateway_still_masks_complete_email_values(self, email: str, monkeypatch: pytest.MonkeyPatch) -> None:
+        from core.tool_gateway import pii_masker
+
+        monkeypatch.setattr(pii_masker.settings, "pii_masking", True)
+        masked = pii_masker.mask_string(f"Contact {email} only.")
+
+        assert email not in masked
+        assert "example.test" not in masked
+        assert "***@***" in masked
+        assert masked.startswith("Contact ") and masked.endswith(" only.")
 
 
 class TestWithMocks:

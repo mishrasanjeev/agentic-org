@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import multiprocessing
 from multiprocessing.connection import Connection
+from multiprocessing.synchronize import Event
 
 import pytest
 
@@ -28,8 +29,11 @@ def _parse(entry: str, template: str):
     return getattr(rules, entry)(template)
 
 
-def _parse_child(entry: str, template: str, connection: Connection) -> None:
+def _parse_child(entry: str, template: str, connection: Connection, start: Event) -> None:
     try:
+        connection.send({"ready": True})
+        if not start.wait(timeout=10):
+            return
         _parse(entry, template)
     except rules.PersonalisationError as exc:
         connection.send({"status": exc.status, "code": exc.code})
@@ -56,10 +60,15 @@ def test_hostile_templates_fail_closed_with_a_process_deadline(entry, template, 
     # A separate process can be killed even when a matcher holds the interpreter lock.
     context = multiprocessing.get_context("spawn")
     reader, writer = context.Pipe(duplex=False)
-    process = context.Process(target=_parse_child, args=(entry, template, writer), daemon=True)
+    start = context.Event()
+    process = context.Process(target=_parse_child, args=(entry, template, writer, start), daemon=True)
     try:
         process.start()
         writer.close()
+        assert reader.poll(10), "parser process did not finish bounded startup"
+        assert reader.recv() == {"ready": True}
+        # Measure hostile parsing, not Python spawn/import latency on a busy host.
+        start.set()
         process.join(timeout=2)
         if process.is_alive():
             pytest.fail(f"{entry} exceeded the two-second hostile-template deadline")
@@ -74,6 +83,32 @@ def test_hostile_templates_fail_closed_with_a_process_deadline(entry, template, 
         writer.close()
     assert outcome["status"] == 422
     assert outcome["code"] == code
+
+
+def test_hostile_parser_waits_for_the_parent_to_start_its_deadline():
+    context = multiprocessing.get_context("spawn")
+    reader, writer = context.Pipe(duplex=False)
+    start = context.Event()
+    process = context.Process(target=_parse_child, args=("placeholders", "{{a", writer, start), daemon=True)
+    try:
+        process.start()
+        writer.close()
+        assert reader.poll(10), "parser process did not finish bounded startup"
+        assert reader.recv() == {"ready": True}
+        assert not reader.poll(0.05), "parser ran before its deadline was started"
+        assert process.is_alive()
+        start.set()
+        process.join(timeout=2)
+        assert not process.is_alive(), "parser exceeded its two-second deadline"
+        assert process.exitcode == 0
+        assert reader.poll(), "parser process returned no outcome"
+        assert reader.recv() == {"status": 422, "code": "template_invalid"}
+    finally:
+        if process.is_alive():
+            process.kill()
+            process.join(timeout=2)
+        reader.close()
+        writer.close()
 
 
 @pytest.mark.parametrize("entry", ENTRIES)
