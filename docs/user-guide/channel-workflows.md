@@ -159,7 +159,7 @@ answer disclosure. A change during the run requires review, not a silent handoff
 of earlier text to another agent. Existing routing correlations stay intact;
 they are not execution checkpoints.
 
-```workflow
+```flow
 Private question | Send one complete question to the linked bot. | Owner: User
 Readable model input | Keep Unicode text readable while applying normal PII protections. | Owner: AgenticOrg
 Bounded recent context | Same workspace, connection, linked user, delegation and agent/company only. | Owner: AgenticOrg

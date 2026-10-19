@@ -87,6 +87,24 @@ describe("public documentation", () => {
     ).toBeInTheDocument();
   });
 
+  it("renders the private Hindi follow-up workflow as a process map", () => {
+    open("/docs/channel-workflows");
+    const main = screen.getByRole("main");
+    expect(within(main).getByRole("heading", {
+      name: "Follow-up questions and Hindi replies",
+    })).toBeInTheDocument();
+    const maps = within(main).getAllByRole("list", { name: "Process map" });
+    const followup = maps.find((map) => map.textContent?.includes("Readable model input"));
+    expect(followup).toBeDefined();
+    expect(followup).toHaveTextContent("Bounded recent context");
+    expect(followup).toHaveTextContent("Independent agent run");
+    expect(followup).toHaveTextContent("Actual answer");
+    expect(main).toHaveTextContent("four completed question/answer pairs");
+    expect(main).toHaveTextContent("30 minutes");
+    expect(main).toHaveTextContent("नीलकमल");
+    expect(main).toHaveTextContent("बैंगनी");
+  });
+
   it("keeps the first-agent learning path connected to workspace setup", () => {
     open("/docs/first-agent");
     const pagination = screen.getByRole("navigation", {
