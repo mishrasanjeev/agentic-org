@@ -4,6 +4,8 @@
 
 - Require patched libx11 in both UI runtime images after the container scan
   reported CVE-2026-88806. Keep scanner policy and production controls unchanged.
+- Run synchronous LangGraph regression helpers through the loop-safe database
+  bridge and assert zero shared-pool guard trips; keep the debt baseline unchanged.
 - Preserve the authenticated binding-scoped sender hash inside encrypted intake
   for final-answer authorization across API/worker service keys. Keep live sender
   revocation and tenant/owner/agent checks; withhold older receipts without this
