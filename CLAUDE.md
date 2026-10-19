@@ -73,6 +73,14 @@ Commerce ledger and arbiter flags: `AGENTICORG_AUDIT_CHAIN_DEFAULT_ON` (default 
 audit chain of every tenant with a commerce merchant config while
 `AGENTICORG_AUDIT_CHAIN_ENABLED` is off). The commerce `audit_event` check follows
 `AGENTICORG_ROUTE_ENFORCEMENT_MODE` (`enforce` by default, `log` to stage).
+`AGENTICORG_ARBITER_REQUIRE_VERIFIED_AUTHORITY` (rule `buyer_authority_verified` refuses
+caller-asserted buyer authority; on in strict runtimes; opt-out `false`) and
+`AGENTICORG_ARBITER_REQUIRE_GRANTEX_GRANT` (an allow is consumable only with a verified Grantex
+countersignature, else `grantex_grant_missing`; on in strict runtimes; opt-out `false`);
+`AGENTICORG_ARBITER_GRANTEX_POST_ENABLED` (unset: follows the grant flag);
+`AGENTICORG_AUDIT_WITNESS_ENABLED` and `AGENTICORG_OACP_RETENTION_APPLY_ENABLED` (default off).
+Grantex calls happen after the decision's transaction commits, never inside one, and never wait
+or retry.
 
 **No human legs in commerce decisions.** The commerce arbiter (`core/commerce/arbiter.py`) is a
 deterministic policy function: it seals `allow` or `refuse`, never "pending", reads no clock

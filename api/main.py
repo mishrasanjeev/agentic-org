@@ -37,6 +37,7 @@ from api.v1 import (
     channels,
     chat,
     client_portal,
+    commerce_ledger,
     commerce_public,
     commerce_runtime,
     companies,
@@ -324,6 +325,7 @@ app.include_router(channels.router, prefix="/api/v1")
 app.include_router(channels.webhook_router, prefix="/api/v1")
 app.include_router(connectors.router, prefix="/api/v1", tags=["Connectors"])
 app.include_router(commerce_public.public_router, prefix="/api/v1", tags=["Public Commerce"])
+app.include_router(commerce_ledger.router, prefix="/api/v1", tags=["Commerce Ledger"])
 app.include_router(commerce_runtime.merchant_config_router, prefix="/api/v1", tags=["Commerce Runtime"])
 app.include_router(commerce_runtime.router, prefix="/api/v1", tags=["Commerce Runtime"])
 app.include_router(oauth_connector.router, prefix="/api/v1", tags=["Connectors"])

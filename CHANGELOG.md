@@ -11,6 +11,38 @@
   runtimes pass the rule and record `buyer_authority_source: caller_asserted` in the decision.
   Opt-out: `AGENTICORG_ARBITER_REQUIRE_VERIFIED_AUTHORITY=false` (the decision still records
   `caller_asserted`). Docs: `docs/oacp/arbiter-ledger.md#rules`.
+- **Breaking for strict runtimes: an allow needs a Grantex countersignature to be consumed.**
+  After each arbiter decision commits, AgenticOrg posts it to Grantex `POST
+  /v1/commerce/oacp/arbiter-decisions` (contract body: `failing_rule` rules, six evidence keys,
+  the decision time) and, for an allow, verifies the returned `decision+jwt` against the pinned
+  Grantex JWKS (`approver_auth == policy_arbiter`, `action_hash == payload_hash`,
+  `decision_request == decision_id`) and attaches its `jti` to the decision. With
+  `AGENTICORG_ARBITER_REQUIRE_GRANTEX_GRANT` unset, strict runtimes consume only countersigned
+  allows; an allow without one is refused `grantex_grant_missing` at once (no waiting, no retry;
+  the caller asks for a new decision). Purchase prepare and POS handoff responses carry
+  `grantex_countersignature`. Posting follows `AGENTICORG_ARBITER_GRANTEX_POST_ENABLED` (unset:
+  the grant flag). Opt-out: `AGENTICORG_ARBITER_REQUIRE_GRANTEX_GRANT=false`.
+- Ledger routes under `/api/v1/commerce/runtime/ledger` (tenant admin): ledger events, arbiter
+  decisions, operator decisions bound to an arbiter decision (annotation only: they never change
+  an outcome or execute anything), review manifests, retention dispositions, what retention would
+  delete, and an export bundle. Each write route records its declared ledger event.
+- Offline-verifiable export (`GET /api/v1/commerce/runtime/ledger/export`) and
+  `scripts/verify_ledger.py <export.json>`: recomputes the chain with no database and no network
+  and reports the first break (`sequence_gap`, `previous_link`, `link_hash`, `truncated`,
+  `anchor_mismatch`, `witness_countersignature`); exit 1 on a break. Row signatures are HMAC, so
+  they are checked offline only with `--audit-secret-env`. The chain link arithmetic moved to
+  `core/governance/audit_chain_link.py` (no dependencies) so the verifier loads it by path.
+- Retention: a daily task on the shared Celery app (`apply-oacp-retention`, behind
+  `AGENTICORG_OACP_RETENTION_APPLY_ENABLED`, default off) deletes review manifests whose
+  disposition is due, through `oacp_delete_due_manifest` (SECURITY DEFINER, tenant-bound) and the
+  manifest trigger's one DELETE transition, which re-checks every due condition; each deletion is
+  ledgered.
+- Witness checkpoints: with `AGENTICORG_AUDIT_WITNESS_ENABLED` (default off) each sealed chain
+  head is posted to Grantex `POST /v1/audit/witness-checkpoints`; the verified countersignature is
+  stored in `audit_chain_witness_checkpoints`, and a `409 WITNESS_FORK` is logged as an
+  irregularity with its fork evidence stored.
+- Migration `v6z88_commerce_ledger` (unreleased, extended): `audit_chain_witness_checkpoints`
+  (forced RLS, append-only), `oacp_manifest_retention_guard` and `oacp_delete_due_manifest`.
 
 ## Unreleased - Commerce ledger and arbiter (G9-G13)
 

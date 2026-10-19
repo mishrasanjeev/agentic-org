@@ -61,20 +61,43 @@ async def _seal_audit_chains_async(*, max_rounds: int = MAX_ROUNDS) -> dict:
         scope = "commerce"
     else:
         return {"enabled": False, "tenants": 0, "sealed": 0, "errors": 0}
+    from core.governance.audit_witness import witness_head
+
     sealed = 0
     errors = 0
+    witnessed: dict[str, int] = {}
     for tenant_id in tenant_ids:
         try:
+            tenant_sealed = 0
+            outcome = None
             for _ in range(max(1, max_rounds)):
                 outcome = await audit_chain.seal(tenant_id)
-                sealed += outcome.sealed
+                tenant_sealed += outcome.sealed
                 if not outcome.more:
                     break
+            sealed += tenant_sealed
         # enterprise-gate: broad-except-ok reason=one-tenants-sealing-failure-never-stops-the-sweep
         except Exception as exc:
             errors += 1
             logger.warning("audit_chain_seal_failed", tenant_id=str(tenant_id), error_type=type(exc).__name__)
-    logger.info("audit_chains_sealed", tenants=len(tenant_ids), sealed=sealed, errors=errors, scope=scope)
+            continue
+        if tenant_sealed and outcome is not None:
+            # After the sealing committed: the new head goes to Grantex (AGENTICORG_AUDIT_WITNESS_ENABLED).
+            try:
+                answer = await witness_head(
+                    tenant_id,
+                    head_seq=outcome.head.seq,
+                    head_hash=outcome.head.hash,
+                    anchored_at=outcome.head.sealed_at,
+                )
+            # enterprise-gate: broad-except-ok reason=a-witness-failure-never-undoes-or-stops-the-sealing-logged
+            except Exception as exc:
+                logger.warning("audit_chain_witness_failed", tenant_id=str(tenant_id), error_type=type(exc).__name__)
+                answer = {"status": "error"}
+            witnessed[answer["status"]] = witnessed.get(answer["status"], 0) + 1
+    logger.info(
+        "audit_chains_sealed", tenants=len(tenant_ids), sealed=sealed, errors=errors, scope=scope, witness=witnessed
+    )
     return {"enabled": True, "tenants": len(tenant_ids), "sealed": sealed, "errors": errors}
 
 

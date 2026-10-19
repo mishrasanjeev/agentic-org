@@ -43,6 +43,7 @@ DECISION_REFUSAL_CODES: tuple[str, ...] = (
     "decision_payload_mismatch",
     "decision_expired",
     "decision_consumed",
+    "grantex_grant_missing",
 )
 
 
@@ -125,15 +126,19 @@ async def require_allow_decision(
     payload_hash: str,
     action: str,
     now: datetime | None = None,
+    require_grantex_grant: bool | None = None,
 ) -> Any:
     """Consume ``decision_id`` for ``action`` on ``payload_hash`` or raise ``DecisionRefusedError``.
 
     Single use: the UPDATE only matches an unconsumed row, so two executors
     presenting the same decision cannot both pass. The consumption is sealed to
-    the ledger in the same transaction.
+    the ledger in the same transaction. With ``AGENTICORG_ARBITER_REQUIRE_GRANTEX_GRANT``
+    on (unset: strict runtimes), only an allow with a verified Grantex grant
+    attached matches; one without is refused ``grantex_grant_missing`` at once.
     """
     from sqlalchemy import update
 
+    from core.config import arbiter_require_grantex_grant_enabled
     from core.models.commerce_arbiter import CommerceArbiterDecisionRow
 
     if not decision_id:
@@ -141,25 +146,29 @@ async def require_allow_decision(
     moment = now or datetime.now(UTC)
     tenant = _tenant_uuid(tenant_id)
     table = CommerceArbiterDecisionRow
+    grant_required = arbiter_require_grantex_grant_enabled() if require_grantex_grant is None else require_grantex_grant
+    conditions = [
+        table.decision_id == decision_id,
+        table.tenant_id == tenant,
+        table.action == action,
+        table.payload_hash == payload_hash,
+        table.outcome == "allow",
+        table.consumed_at.is_(None),
+        table.expires_at > moment,
+    ]
+    if grant_required:
+        conditions.append(table.grantex_grant_jti.is_not(None))
     consumed = (
         await session.execute(
             update(table)
-            .where(
-                table.decision_id == decision_id,
-                table.tenant_id == tenant,
-                table.action == action,
-                table.payload_hash == payload_hash,
-                table.outcome == "allow",
-                table.consumed_at.is_(None),
-                table.expires_at > moment,
-            )
+            .where(*conditions)
             .values(consumed_at=moment)
             .returning(table.decision_id, table.merchant_id, table.seller_agent_id, table.buyer_agent_id)
         )
     ).first()
     if consumed is None:
         row = await get_decision(session, tenant, decision_id)
-        raise _refusal_for(row, action=action, payload_hash=payload_hash, now=moment)
+        raise _refusal_for(row, action=action, payload_hash=payload_hash, now=moment, grant_required=grant_required)
     await record_commerce_event(
         session,
         tenant_id=tenant,
@@ -176,7 +185,9 @@ async def require_allow_decision(
     return consumed
 
 
-def _refusal_for(row: Any, *, action: str, payload_hash: str, now: datetime) -> DecisionRefusedError:
+def _refusal_for(
+    row: Any, *, action: str, payload_hash: str, now: datetime, grant_required: bool = False
+) -> DecisionRefusedError:
     if row is None:
         return DecisionRefusedError("decision_not_found", "The decision does not exist in this tenant.")
     if row.outcome != "allow":
@@ -189,6 +200,11 @@ def _refusal_for(row: Any, *, action: str, payload_hash: str, now: datetime) -> 
         return DecisionRefusedError("decision_consumed", "The decision was already used.")
     if row.expires_at <= now:
         return DecisionRefusedError("decision_expired", "The decision has expired; request a new one.")
+    if grant_required and getattr(row, "grantex_grant_jti", None) is None:
+        return DecisionRefusedError(
+            "grantex_grant_missing",
+            "The allow decision has no verified Grantex countersignature; request a new decision.",
+        )
     return DecisionRefusedError("decision_consumed", "The decision was already used.")
 
 

@@ -95,3 +95,27 @@ class AuditChainAnchor(BaseModel):
     head_seq: Mapped[int] = mapped_column(BigInteger, nullable=False)
     head_hash: Mapped[str] = mapped_column(String(64), nullable=False)
     sealed_at: Mapped[datetime | None] = mapped_column(TIMESTAMP(timezone=True), nullable=True)
+
+
+class AuditChainWitnessCheckpoint(BaseModel):
+    """A chain head Grantex witnessed (``witnessed``: its countersignature) or refused as a fork (``fork``).
+
+    Row-level security: tenant-scoped, append-only (``v6z88_commerce_ledger``).
+    """
+
+    __tablename__ = "audit_chain_witness_checkpoints"
+    __table_args__ = (
+        Index("ux_audit_chain_witness_head", "tenant_id", "head_seq", "head_hash", "status", unique=True),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    tenant_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
+    head_seq: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    head_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    anchored_at: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), nullable=False)
+    status: Mapped[str] = mapped_column(String(16), nullable=False)
+    witness_id: Mapped[str | None] = mapped_column(String(160), nullable=True)
+    countersignature: Mapped[str | None] = mapped_column(Text, nullable=True)
+    witnessed_at: Mapped[datetime | None] = mapped_column(TIMESTAMP(timezone=True), nullable=True)
+    fork_evidence: Mapped[dict | None] = mapped_column(JSONB(none_as_null=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), nullable=False, server_default=func.now())

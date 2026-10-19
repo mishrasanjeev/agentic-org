@@ -30,6 +30,7 @@ from core.commerce.arbiter import (
     decide,
     merchant_limits_from_config,
 )
+from core.commerce.arbiter_grantex import countersign_decision
 from core.commerce.arbiter_store import (
     DecisionRefusedError,
     decision_refusal_blocker,
@@ -1581,6 +1582,8 @@ async def prepare_purchase_handoff(
                 "consumed_decision_id": body.decision_id if consumed else None,
             },
         )
+    # After the decision's transaction committed: no transaction is held across the Grantex call.
+    countersignature = await countersign_decision(decision)
     if consumed:
         result = prepare_purchase_or_mandate_handoff(**preparation_args, live_execution_enabled=True)
     response: dict[str, Any] = {**result.__dict__}
@@ -1604,6 +1607,7 @@ async def prepare_purchase_handoff(
         "arbiter_decision": decision.to_public(),
         "ledger_ref": ledger_ref,
         "escalation": escalation,
+        "grantex_countersignature": countersignature.to_dict(),
         "decision_consumed": consumed,
         "live_execution_requested": body.decision_id is not None,
         "live_execution_env_enabled": live_execution_env_enabled,
@@ -1787,11 +1791,14 @@ async def create_offline_pos_handoff(
                 "consumed_decision_id": body.decision_id if created else None,
             },
         )
+    # After the decision's transaction committed: no transaction is held across the Grantex call.
+    countersignature = await countersign_decision(decision)
     escalation = await _escalate(tenant_id, decision, merchant_config)
     decided = {
         "arbiter_decision": decision.to_public(),
         "ledger_ref": ledger_ref,
         "escalation": escalation,
+        "grantex_countersignature": countersignature.to_dict(),
         "allowed_to_execute": False,
         "no_payment_execution": True,
         "non_authoritative_for_transaction": True,

@@ -14,8 +14,19 @@ else changed) and the Grantex countersignature reference being attached
 
 ``oacp_operator_decision_records``, ``oacp_audit_review_manifest_records`` and
 ``oacp_retention_disposition_decision_records`` become append-only: their
-trigger refuses every UPDATE and DELETE (no transition is defined; their
-writes are mirrored into the chained audit_log by core/commerce/ledger.py).
+trigger refuses every UPDATE and DELETE (their writes are mirrored into the
+chained audit_log by core/commerce/ledger.py). One transition is defined, on
+``oacp_audit_review_manifest_records`` only: the retention task
+(core/commerce/oacp_retention.py) may DELETE a manifest whose retention is due
+under a named disposition decision (trigger ``oacp_manifest_retention_guard``,
+which checks the due conditions itself), through the SECURITY DEFINER function
+``oacp_delete_due_manifest`` so the application role needs no DELETE grant
+(docs/oacp/arbiter-ledger.md).
+
+``audit_chain_witness_checkpoints`` keeps each chain head Grantex witnessed
+(core/governance/audit_witness.py): the countersignature and its witness id,
+or the fork evidence of a refused head. Tenant-scoped under forced row-level
+security and append-only.
 
 The audit_log append-only trigger is (re)installed with the sealing transition
 (the same text as core.governance.audit_chain.SEAL_TRIGGER_SQL): a database
@@ -75,6 +86,86 @@ _OACP_RECORD_GUARD_SQL = """CREATE OR REPLACE FUNCTION oacp_record_reject_mutati
 BEGIN
     RAISE EXCEPTION
       '% is append-only — UPDATE/DELETE rejected', TG_TABLE_NAME
+      USING ERRCODE = 'insufficient_privilege';
+END;
+$$ LANGUAGE plpgsql;"""
+
+# The one DELETE transition on review manifests: the session names a disposition
+# decision (transaction-local GUC agenticorg.oacp_retention_disposition) and the
+# trigger itself checks that the decision makes this manifest due. Everything else
+# is refused as before. The same text as core.commerce.oacp_retention.MANIFEST_RETENTION_GUARD_SQL.
+_MANIFEST_RETENTION_GUARD_SQL = """CREATE OR REPLACE FUNCTION oacp_manifest_retention_guard() RETURNS trigger AS $$
+DECLARE
+    disposition_id text := current_setting('agenticorg.oacp_retention_disposition', true);
+BEGIN
+    IF TG_OP = 'DELETE'
+       AND disposition_id IS NOT NULL AND disposition_id <> ''
+       AND OLD.tenant_id = NULLIF(current_setting('agenticorg.tenant_id', true), '')
+       AND OLD.retention_class <> 'legal_hold_candidate'
+       AND OLD.retain_until <= now()
+       AND EXISTS (
+           SELECT 1 FROM oacp_retention_disposition_decision_records d
+           WHERE d.disposition_decision_id = disposition_id
+             AND d.decision_kind = 'approve_future_retention_review'
+             AND d.tenant_id = OLD.tenant_id
+             AND d.merchant_id = OLD.merchant_id
+             AND (d.seller_agent_id IS NULL OR d.seller_agent_id = OLD.seller_agent_id)
+             AND (d.buyer_agent_id IS NULL OR d.buyer_agent_id = OLD.buyer_agent_id)
+             AND d.retention_class = OLD.retention_class
+             AND d.retain_until <= now()
+             AND OLD.retain_until <= d.retain_until
+             AND NOT EXISTS (
+                 SELECT 1 FROM oacp_retention_disposition_decision_records h
+                 WHERE h.tenant_id = d.tenant_id
+                   AND h.merchant_id = d.merchant_id
+                   AND (
+                       (h.decision_kind IN ('approve_future_legal_hold_review', 'block_unsafe_disposition')
+                        AND h.retention_class = d.retention_class)
+                       OR (h.decision_kind IN ('reject_disposition', 'defer_until_recheck')
+                           AND h.source_summary_id = d.source_summary_id)
+                   )
+             )
+       )
+    THEN
+        RETURN OLD;
+    END IF;
+    RAISE EXCEPTION
+      '% is append-only — UPDATE/DELETE rejected', TG_TABLE_NAME
+      USING ERRCODE = 'insufficient_privilege';
+END;
+$$ LANGUAGE plpgsql;"""
+
+# How the retention task deletes: as the table owner (SECURITY DEFINER), so the
+# application role needs no DELETE privilege on the append-only table. Row-level
+# security still binds the DELETE to the session's tenant and the trigger above
+# still checks that the named disposition makes the row due. The same text as
+# core.commerce.oacp_retention.DELETE_DUE_MANIFEST_SQL.
+_DELETE_DUE_MANIFEST_SQL = """CREATE OR REPLACE FUNCTION oacp_delete_due_manifest(
+    p_disposition_id text, p_manifest_id text
+)
+RETURNS boolean
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public, pg_temp
+AS $$
+DECLARE
+    deleted integer;
+BEGIN
+    PERFORM set_config('agenticorg.oacp_retention_disposition', p_disposition_id, true);
+    -- The definer may bypass row-level security: bind the tenant explicitly.
+    DELETE FROM oacp_audit_review_manifest_records
+    WHERE manifest_id = p_manifest_id
+      AND tenant_id = NULLIF(current_setting('agenticorg.tenant_id', true), '');
+    GET DIAGNOSTICS deleted = ROW_COUNT;
+    PERFORM set_config('agenticorg.oacp_retention_disposition', '', true);
+    RETURN deleted = 1;
+END;
+$$;"""
+
+_WITNESS_GUARD_SQL = """CREATE OR REPLACE FUNCTION audit_chain_witness_reject_mutation() RETURNS trigger AS $$
+BEGIN
+    RAISE EXCEPTION
+      'audit_chain_witness_checkpoints is append-only — UPDATE/DELETE rejected'
       USING ERRCODE = 'insufficient_privilege';
 END;
 $$ LANGUAGE plpgsql;"""
@@ -161,6 +252,68 @@ def upgrade() -> None:
             END $$;
         """)
 
+    op.execute(_MANIFEST_RETENTION_GUARD_SQL)
+    op.execute("""
+        DO $$ BEGIN
+            IF to_regclass('public.oacp_audit_review_manifest_records') IS NOT NULL THEN
+                DROP TRIGGER IF EXISTS oacp_audit_review_manifest_records_append_only
+                    ON oacp_audit_review_manifest_records;
+                CREATE TRIGGER oacp_audit_review_manifest_records_append_only
+                BEFORE UPDATE OR DELETE ON oacp_audit_review_manifest_records
+                FOR EACH ROW EXECUTE FUNCTION oacp_manifest_retention_guard();
+            END IF;
+        END $$;
+    """)
+    op.execute(_DELETE_DUE_MANIFEST_SQL)
+
+    op.execute("""
+        CREATE TABLE IF NOT EXISTS audit_chain_witness_checkpoints (
+            id UUID PRIMARY KEY,
+            tenant_id UUID NOT NULL,
+            head_seq BIGINT NOT NULL,
+            head_hash VARCHAR(64) NOT NULL,
+            anchored_at TIMESTAMPTZ NOT NULL,
+            status VARCHAR(16) NOT NULL,
+            witness_id VARCHAR(160) NULL,
+            countersignature TEXT NULL,
+            witnessed_at TIMESTAMPTZ NULL,
+            fork_evidence JSONB NULL,
+            created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+            CONSTRAINT ck_audit_chain_witness_status CHECK (status IN ('witnessed', 'fork')),
+            CONSTRAINT ck_audit_chain_witness_hash CHECK (head_hash ~ '^[0-9a-f]{64}$'),
+            CONSTRAINT ck_audit_chain_witness_seq CHECK (head_seq >= 1),
+            CONSTRAINT ck_audit_chain_witness_shape CHECK (
+                (status = 'witnessed' AND witness_id IS NOT NULL AND countersignature IS NOT NULL
+                 AND witnessed_at IS NOT NULL AND fork_evidence IS NULL)
+                OR (status = 'fork' AND fork_evidence IS NOT NULL)
+            )
+        );
+    """)
+    op.execute(
+        "CREATE UNIQUE INDEX IF NOT EXISTS ux_audit_chain_witness_head "
+        "ON audit_chain_witness_checkpoints(tenant_id, head_seq, head_hash, status);"
+    )
+    op.execute("ALTER TABLE audit_chain_witness_checkpoints ENABLE ROW LEVEL SECURITY;")
+    op.execute("ALTER TABLE audit_chain_witness_checkpoints FORCE ROW LEVEL SECURITY;")
+    op.execute(
+        "DROP POLICY IF EXISTS audit_chain_witness_checkpoints_tenant_isolation ON audit_chain_witness_checkpoints;"
+    )
+    op.execute("""
+        CREATE POLICY audit_chain_witness_checkpoints_tenant_isolation
+        ON audit_chain_witness_checkpoints
+        USING (tenant_id::text = current_setting('agenticorg.tenant_id', true))
+        WITH CHECK (tenant_id::text = current_setting('agenticorg.tenant_id', true));
+    """)
+    op.execute(_WITNESS_GUARD_SQL)
+    op.execute(
+        "DROP TRIGGER IF EXISTS audit_chain_witness_checkpoints_append_only ON audit_chain_witness_checkpoints;"
+    )
+    op.execute("""
+        CREATE TRIGGER audit_chain_witness_checkpoints_append_only
+        BEFORE UPDATE OR DELETE ON audit_chain_witness_checkpoints
+        FOR EACH ROW EXECUTE FUNCTION audit_chain_witness_reject_mutation();
+    """)
+
     op.execute(_SEAL_TRIGGER_SQL)
     op.execute("""
         DO $$ BEGIN
@@ -185,5 +338,9 @@ def downgrade() -> None:
             END $$;
         """)
     op.execute("DROP FUNCTION IF EXISTS oacp_record_reject_mutation();")
+    op.execute("DROP FUNCTION IF EXISTS oacp_delete_due_manifest(text, text);")
+    op.execute("DROP FUNCTION IF EXISTS oacp_manifest_retention_guard();")
+    op.execute("DROP TABLE IF EXISTS audit_chain_witness_checkpoints;")
+    op.execute("DROP FUNCTION IF EXISTS audit_chain_witness_reject_mutation();")
     op.execute("DROP TABLE IF EXISTS commerce_arbiter_decisions;")
     op.execute("DROP FUNCTION IF EXISTS commerce_arbiter_decisions_guard();")

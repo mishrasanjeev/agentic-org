@@ -230,6 +230,7 @@ def test_every_commerce_write_route_declares_its_ledger_event() -> None:
     assert "POST /api/v1/commerce/runtime/pos/offline/handoffs" in writes
     assert "PUT /api/v1/commerce/runtime/merchant-configs/{merchant_id}" in writes
     assert "POST /api/v1/a2a/message:send" in writes
+    assert "POST /api/v1/commerce/runtime/ledger/decisions/{decision_id}/operator-decisions" in writes
     assert "DELETE /api/v1/a2a/commerce/buyer-access/{access_id}" in writes
     assert len(writes) >= 21
 
@@ -237,9 +238,9 @@ def test_every_commerce_write_route_declares_its_ledger_event() -> None:
 def test_every_declared_commerce_write_event_is_written_by_its_handler() -> None:
     """Each commerce write handler (or a helper it calls) names its declared event in a ledger call."""
     from api.main import app
-    from api.v1 import a2a_interop, commerce_runtime
+    from api.v1 import a2a_interop, commerce_ledger, commerce_runtime
 
-    sources = inspect.getsource(commerce_runtime) + inspect.getsource(a2a_interop)
+    sources = inspect.getsource(commerce_runtime) + inspect.getsource(a2a_interop) + inspect.getsource(commerce_ledger)
     for route in app.routes:
         if not isinstance(route, APIRoute) or not any(is_commerce_write_route(route.path, m) for m in route.methods):
             continue

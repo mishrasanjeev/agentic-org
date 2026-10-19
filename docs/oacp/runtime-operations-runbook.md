@@ -12,6 +12,30 @@ Strict artifact verification (`AGENTICORG_OACP_VERIFY_STRICT`, on by default in 
 
 Then deploy AgenticOrg and run `POST /api/v1/commerce/runtime/artifacts/refresh` for each live merchant and seller agent, so legacy rows are replaced by verified ones. If AgenticOrg must ship first, set `AGENTICORG_OACP_VERIFY_STRICT=false` for that deployment as a recorded operator decision and unset it once the three items are live and the refresh has run.
 
+## Commerce Ledger, Countersignature And Witness
+
+Deploy order: Grantex with `POST /v1/commerce/oacp/arbiter-decisions` and `POST
+/v1/audit/witness-checkpoints` (migration `134_commerce_ledger.sql`) and the tenant in
+`COMMERCE_C6Z_AUTHORITY_SERVICE_TENANTS`, then AgenticOrg. In strict runtimes the AgenticOrg
+release refuses caller-asserted buyer authority (`AGENTICORG_ARBITER_REQUIRE_VERIFIED_AUTHORITY`)
+and consumes only countersigned allows (`AGENTICORG_ARBITER_REQUIRE_GRANTEX_GRANT`); both are on
+by default there. Witnessing (`AGENTICORG_AUDIT_WITNESS_ENABLED`) and retention
+(`AGENTICORG_OACP_RETENTION_APPLY_ENABLED`) are off until switched on.
+
+Checks after deploy:
+
+1. A POS handoff without `decision_id` returns `grantex_countersignature.status: granted` (or
+   `recorded` for a refusal); the repeat with `decision_id` creates the packet.
+2. `GET /api/v1/commerce/runtime/ledger/decisions` lists the decisions with `grantex_grant_jti`.
+3. `GET /api/v1/commerce/runtime/ledger/export > export.json` and `python
+   scripts/verify_ledger.py export.json` exits 0.
+4. With witnessing on, after the next sealing (every 5 minutes) `audit_chain_witness_checkpoints`
+   has a `witnessed` row for the tenant and the export carries it.
+
+Monitor `commerce_arbiter_countersign_unavailable`, `commerce_arbiter_grant_irregularity`,
+`audit_chain_witness_unavailable`, `audit_chain_witness_irregularity`, `oacp_retention_applied`
+and `oacp_retention_disposition_failed`.
+
 ## Smoke Test
 
 ```mermaid
@@ -84,7 +108,15 @@ Set `OACP_LAUNCH_EXTERNAL_CHECKS=true` only when Shopify, Grantex, and Plural/Pi
 4. Stop Shopify sync jobs.
 5. Ask Grantex to remove tenant allowlist or rotate token if needed.
 6. Disable Offline POS handoff creation for affected merchant if POS evidence is stale or callback verification fails.
-7. Re-run smoke before re-enabling.
+7. Commerce arbiter and ledger (recorded operator decisions, set per deployment and unset once
+   the cause is fixed): Grantex unreachable or misconfigured, so every executing call is refused
+   `grantex_grant_missing`: `AGENTICORG_ARBITER_REQUIRE_GRANTEX_GRANT=false` (posting continues
+   while `AGENTICORG_ARBITER_GRANTEX_POST_ENABLED` is unset or true). Caller-asserted buyer
+   authority must be accepted before Phase 4: `AGENTICORG_ARBITER_REQUIRE_VERIFIED_AUTHORITY=false`.
+   Witness posting misbehaving: `AGENTICORG_AUDIT_WITNESS_ENABLED=false` (sealing is unaffected).
+   Retention deleting unexpectedly: `AGENTICORG_OACP_RETENTION_APPLY_ENABLED=false`; deletions
+   already made are on the ledger (`commerce.oacp.retention.manifest_deleted`).
+8. Re-run smoke before re-enabling.
 
 ## Merchant Config Smoke
 
