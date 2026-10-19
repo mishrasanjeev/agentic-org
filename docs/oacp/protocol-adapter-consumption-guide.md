@@ -16,6 +16,9 @@ AgenticOrg consumes Grantex `protocol_adapter` artifacts and generates buyer-saf
 | MCP | ChatGPT/Claude-style clients | Tool calls still hit AgenticOrg runtime checks. |
 | OpenAPI | Gemini/Perplexity-style clients | Buyer-safe request/response schema only. |
 
+UCP checkout sessions, carts and orders are not adapter payloads: they are served by the UCP REST
+binding behind `AGENTICORG_UCP_CHECKOUT_ENABLED` ([UCP checkout, cart and order](ucp-checkout.md)).
+
 ```mermaid
 flowchart TD
   cache[OACP cache] --> adapters[Adapter generator]

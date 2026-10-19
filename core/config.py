@@ -414,6 +414,10 @@ class Settings(BaseSettings):
     # commerce ledger (core/commerce/ledger.py) is tamper-evident. Off by
     # default. Env: AGENTICORG_AUDIT_CHAIN_DEFAULT_ON.
     audit_chain_default_on: bool = False
+    # UCP transactions (api/v1/commerce_ucp.py): checkout sessions, carts and
+    # orders at https://<merchant serving host>/ucp. Off by default: every /ucp
+    # route answers 404 while off. Env: AGENTICORG_UCP_CHECKOUT_ENABLED.
+    ucp_checkout_enabled: bool = False
     # Synthetic checks (observability/synthetic.py): the scheduled sweep runs
     # each tenant's due probes (model, knowledge, guardrail, audit chain) and
     # stores a result per run. Off by default; a check can be run by hand

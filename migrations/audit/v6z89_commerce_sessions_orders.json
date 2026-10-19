@@ -1,0 +1,22 @@
+{
+  "revision": "v6z89_commerce_sessions_orders",
+  "table": "commerce_order_webhook_subscriptions",
+  "columns": [
+    "signing_keys_encrypted"
+  ],
+  "rollback_doc": "The table is new in this revision and starts empty, so rollback does not transform or discard pre-existing ciphertext. Disable the merchant's order webhook subscriptions through the API first; the tables can then be dropped manually once no undelivered webhook depends on them.",
+  "dry_run": false,
+  "started_at": "2026-10-19T21:43:36.495336+00:00",
+  "row_counts": {
+    "commerce_order_webhook_subscriptions": 0
+  },
+  "decrypt_post_sample": {
+    "signing_keys_encrypted": 0
+  },
+  "decrypt_pre_sample": {
+    "signing_keys_encrypted": 0
+  },
+  "pre_count": 0,
+  "post_count": 0,
+  "completed_at": "2026-10-19T21:43:36.544046+00:00"
+}

@@ -1,5 +1,59 @@
 # Changelog
 
+## Unreleased - UCP checkout, cart and order (G21, G22, G25, G27, G29-G32, G35)
+
+- UCP REST binding at `https://<merchant serving host>/ucp` (`api/v1/commerce_ucp.py`), behind
+  `AGENTICORG_UCP_CHECKOUT_ENABLED` (default off: every `/ucp` route answers 404). Checkout
+  sessions (`POST /ucp/checkout-sessions` 201, `GET`, `PUT` full replacement, `/complete`,
+  `/cancel`), carts (`POST /ucp/carts` 201, `GET`, `PUT`, `/cancel`) and `GET /ucp/orders/{id}`,
+  for UCP `2026-04-08` (default) and `2026-08-25` (`AGENTICORG_UCP_VERSIONS`). The merchant is
+  resolved from `Host` inside the tenant of the platform's API key (`ucp:read` / `ucp:write`);
+  `provider_policy.ucp.serving_host` names the host. Docs: `docs/oacp/ucp-checkout.md`.
+- `UCP-Agent` is parsed as an RFC 8941 dictionary, the platform profile fetched over public HTTPS
+  without redirects (cached 60 s to 1 h), its version checked (`version_unsupported`) and
+  capabilities intersected with orphaned extensions pruned; responses echo the version and the
+  relevant active capabilities. The UCP status machine, the totals rule (one `subtotal`, one
+  `total`, signed minor units), business outcomes as 200 with `messages[]`, and
+  `Idempotency-Key` (same body replays, different body 409, storage failure 503) are enforced.
+- Complete runs the commerce arbiter (action `session_complete`) on the session payload hash and
+  executes only through a registered executor (`core/commerce/executors/`) that receives a
+  decision consumed by `require_allow_decision`. No executor is registered in this release:
+  Complete answers `executor_unavailable` and the session stays `ready_for_complete`.
+  `ai.agenticorg.commerce.decide_only` issues a decision without executing; `decision_id`
+  presents one. Two concurrent Completes execute once.
+- Carts: one-call conversion with `cart_id` (an open session for the cart is returned),
+  `cart.id` omitted on update (2026-08-25), `continue_url` as a UCP permalink on the merchant's
+  `permalink_endpoint`.
+- Orders: one per completed session, `GET /ucp/orders/{id}` for the originating platform, and
+  full-snapshot order webhooks to the platform's `config.webhook_url` and merchant subscriptions,
+  RFC 9421 signed (ES256 through an injected merchant key signer; nothing is sent without a key),
+  with `Webhook-Id`/`Webhook-Timestamp` stable across retries, an outbox, retries with backoff
+  and dead letters. Merchant runtime endpoints under `/api/v1/commerce/runtime/ucp` manage
+  subscriptions (including an `acp_hmac` variant using the case push HMAC scheme), deliveries and
+  order events. `register_order_event_listener` and `register_payload_renderer` are the hooks for
+  the ACP order event mapping.
+- Quantities are integer step counts with `quantity_unit` (`unit`, `scale` <= 15, `increment`),
+  bounded at 2^53-1, exact integer amounts, visible conversion or recoverable rejection of a
+  mismatched unit (G29). Fulfillment: shipping and pickup destinations, options from the
+  merchant's Shopify delivery profiles, multi-destination and method combinations per release
+  (G30). Payment: PAN, network token and handler token credentials (never stored or echoed),
+  `ucp.request_constraints` emitted and enforced, payment authentication actions, split payments
+  and payment terms (2026-08-25), token binding, AP2 merchant authorization when a merchant key
+  exists (G31). Buyer consent as the `dev.ucp.consent.*` purpose map, from session-provided
+  consent marked `source: platform` (G32). Loyalty from Shopify customer metafields and
+  attribution on the session (G25).
+- Payment handlers (`core/commerce/payment_handlers/`): a Plural tokenised-instrument handler whose
+  config carries the merchant's `mandate_capability` (rails, cap, instrument types) and the
+  allowance (`max_amount` = the cap); it accepts tokens, never a PAN, and executes nothing.
+  Risk signals sent with Complete are recorded on the ledger (keys and SHA-256) (G35).
+- Every UCP write records its ledger event; `/ucp/` joins the commerce ledger route prefixes and
+  `ucp` is an enforced route-scope family.
+- Migration `v6z89_commerce_sessions_orders` (after `v6z88_commerce_ledger`):
+  `commerce_checkout_sessions`, `commerce_carts`, `commerce_orders`,
+  `commerce_order_webhook_subscriptions`, `commerce_order_webhook_deliveries` and
+  `commerce_ucp_idempotency`, each with ENABLE + FORCE row-level security and a tenant policy
+  with `WITH CHECK`; forward-only (downgrade keeps the data).
+
 ## Unreleased - Commerce ledger and arbiter (G9-G13)
 
 - **Breaking: `live_execution_approved` is ignored.** `POST /api/v1/commerce/runtime/purchase/prepare`

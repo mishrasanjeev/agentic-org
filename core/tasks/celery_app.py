@@ -61,6 +61,7 @@ app = Celery(
         "core.tasks.synthetic_tasks",
         "core.tasks.timeline_tasks",
         "core.tasks.token_refresh",
+        "core.tasks.ucp_order_webhook_tasks",
         "core.tasks.workflow_tasks",
     ],
 )
@@ -122,6 +123,13 @@ app.conf.beat_schedule = {
         # Governed case hand-off retries and missed kicks (core/cases/push.py).
         # A no-op unless AGENTICORG_CASE_PUSH_SWEEP_ENABLED is true.
         "task": "core.tasks.case_push_tasks.sweep_case_pushes",
+        "schedule": 30.0,
+        "options": {"queue": "delivery"},
+    },
+    "sweep-ucp-order-webhooks": {
+        # UCP order webhook retries and missed kicks, and expired Idempotency-Key
+        # records (core/commerce/ucp). A no-op unless AGENTICORG_UCP_CHECKOUT_ENABLED.
+        "task": "core.tasks.ucp_order_webhook_tasks.sweep_order_webhooks",
         "schedule": 30.0,
         "options": {"queue": "delivery"},
     },
