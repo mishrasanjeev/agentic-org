@@ -47,6 +47,7 @@ that needed it.
 | `mandate_present_unexpired` | Mandate reference and hash present, expiry after the decision time. Not evaluated for `mandate_request`. | `mandate_missing`, `mandate_expiry_missing`, `mandate_expired` |
 | `consent_active` | Consent reference present, status `active` or `granted`. | `consent_missing`, `consent_<status>` |
 | `passport_amount_cap` | Commerce Passport reference, cap, currency and expiry present; unexpired; same currency as the order; cap at least the order amount (minor units). | `passport_missing`, `passport_cap_missing`, `passport_expiry_missing`, `passport_expired`, `order_amount_missing`, `passport_currency_mismatch`, `passport_amount_cap_exceeded` |
+| `buyer_authority_verified` | The buyer authority (mandate, consent, passport) carries a server-side verification ref, or verified authority is not required (`AGENTICORG_ARBITER_REQUIRE_VERIFIED_AUTHORITY`, on in strict runtimes). | `buyer_authority_caller_asserted` |
 | `oacp_artifacts_valid` | For each required family (catalog snapshot, price, inventory, policy, mandate capability, protocol adapter; policy and mandate capability for `mandate_request`) an artifact in scope that the ES256 verifier accepted (`oacp-artifact-jws-v1;` ref with an `oacp-` key), fresh, unexpired, with a `fresh` revocation snapshot. | `artifact_missing:<family>`, `artifact_revoked:<family>`, `artifact_unverified:<family>`, `artifact_revocation_unknown:<family>`, `artifact_expired:<family>`, `artifact_stale:<family>` |
 | `merchant_limits` | Merchant config `provider_policy.arbiter` sets `max_order_amount_minor_units`, `currency_allowlist`, `max_quantity_per_order`, and the order is within them. | `merchant_limits_missing`, `order_amount_missing`, `currency_not_allowed`, `quantity_cap_exceeded`, `order_amount_cap_exceeded` |
 
@@ -54,6 +55,23 @@ Mandate, consent and passport references arrive in the request's `buyer_authorit
 Grantex-signed mandates and passports are verified server-side (Phase 4), they are
 caller-asserted evidence: they are hashed into the decision and the ledger, never treated as
 credentials, and a missing value refuses.
+
+Fail closed until Phase 4: rule `buyer_authority_verified` needs a server-side verification ref
+for that evidence. No code path produces one yet and the request body cannot carry one
+(`buyer_authority` refuses unknown members), so:
+
+- strict runtimes (production, staging, preview and unrecognised `AGENTICORG_ENV` labels, the
+  same detection as `AGENTICORG_OACP_VERIFY_STRICT`) refuse every purchase handoff, POS handoff
+  and mandate request with `failing_rule: buyer_authority_verified`
+  (`reason: buyer_authority_caller_asserted`);
+- local, dev, test and ci runtimes, or any runtime with
+  `AGENTICORG_ARBITER_REQUIRE_VERIFIED_AUTHORITY=false`, pass the rule and record
+  `buyer_authority_source: caller_asserted` in the decision (`arbiter_decision`, the stored
+  `evidence` and the ledger row).
+
+`AGENTICORG_ARBITER_REQUIRE_VERIFIED_AUTHORITY` set explicitly wins in either direction. The
+rule is part of the decision id material, so the same request decided under the two settings
+gets two different decision ids. The policy version is `commerce-arbiter-v2`.
 
 Merchant configuration (under `provider_policy`):
 

@@ -93,7 +93,7 @@ from core.commerce.offline_pos_bridge import (
     simulate_offline_pos_confirmation,
     verify_offline_pos_callback_signature,
 )
-from core.config import oacp_verify_strict_enabled
+from core.config import arbiter_require_verified_authority_enabled, oacp_verify_strict_enabled
 from core.crypto import encrypt_for_tenant
 from core.crypto.tenant_secrets import decrypt_for_tenant
 from core.database import get_tenant_session
@@ -3078,6 +3078,10 @@ def _arbiter_context(
         ),
         artifacts=artifact_evidence_from_records(cache_records),
         merchant_limits=merchant_limits_from_config(merchant_config),
+        # No server-side verification of buyer authority exists before Phase 4 mandates:
+        # the request's references are caller-asserted (rule buyer_authority_verified).
+        authority_verification_ref=None,
+        require_verified_authority=arbiter_require_verified_authority_enabled(),
     )
 
 

@@ -77,7 +77,7 @@ async def persist_decision(session: Any, decision: Decision) -> dict[str, Any]:
         "rules_evaluated": list(decision.rules_evaluated),
         "failing_rule": decision.failing_rule,
         "rule_results": [result.to_dict() for result in decision.rule_results],
-        "evidence": decision.evidence,
+        "evidence": {**decision.evidence, "buyer_authority_source": decision.buyer_authority_source},
         "evidence_hashes": list(decision.evidence_hashes),
         "policy_version": decision.policy_version,
         "decided_at": decision.decided_at,
@@ -223,6 +223,10 @@ _REQUIRED_CONFIG: dict[str, str] = {
     "consent_active": "buyer_authority.consent_ref and an active consent_status",
     "passport_amount_cap": (
         "buyer_authority.passport_ref, passport_max_amount_minor_units, passport_currency, passport_expires_at"
+    ),
+    "buyer_authority_verified": (
+        "Server-verified buyer mandate, consent and passport (Phase 4); until then "
+        "AGENTICORG_ARBITER_REQUIRE_VERIFIED_AUTHORITY=false accepts caller-asserted authority"
     ),
     "oacp_artifacts_valid": "Verified, fresh, unrevoked OACP artifacts for every required family",
     "merchant_limits": (

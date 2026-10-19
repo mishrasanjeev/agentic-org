@@ -1,5 +1,17 @@
 # Changelog
 
+## Unreleased - Commerce ledger routes, offline export and Grantex countersignature (G14-G16)
+
+- **Breaking for strict runtimes: caller-asserted buyer authority is refused.** The commerce
+  arbiter has a new rule, `buyer_authority_verified` (policy `commerce-arbiter-v2`): mandate,
+  consent and passport evidence must carry a server-side verification ref, which only Phase 4
+  mandates will provide. With `AGENTICORG_ARBITER_REQUIRE_VERIFIED_AUTHORITY` unset, production,
+  staging, preview and unrecognised runtimes refuse every purchase handoff, POS handoff and
+  mandate request with `failing_rule: buyer_authority_verified`; local, dev, test and ci
+  runtimes pass the rule and record `buyer_authority_source: caller_asserted` in the decision.
+  Opt-out: `AGENTICORG_ARBITER_REQUIRE_VERIFIED_AUTHORITY=false` (the decision still records
+  `caller_asserted`). Docs: `docs/oacp/arbiter-ledger.md#rules`.
+
 ## Unreleased - Commerce ledger and arbiter (G9-G13)
 
 - **Breaking: `live_execution_approved` is ignored.** `POST /api/v1/commerce/runtime/purchase/prepare`
