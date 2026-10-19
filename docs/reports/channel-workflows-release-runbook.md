@@ -45,6 +45,14 @@ tool-free agent, an approved total model allowance and one complete synthetic
 message. Record/restore destination, reply mode and Send replies according to
 the owner's instructions. Do not rotate credentials or replace a bot webhook.
 
+Include a real PostgreSQL regression with different API and worker signing
+keys. Sender proof must come from authenticated intake inside tenant-encrypted
+message data, remain connection-scoped, and still match the live delegated link.
+Do not fix answer rejection by copying service keys, bypassing sender checks or
+changing feature flags. Missing/malformed proof, an expired/revoked link or a
+changed owner/target must still withhold the answer. Receipts from before the
+proof was introduced are not backfilled or replayed.
+
 Only final output is eligible for export. Treat the opt-in as permission to send
 that output to Telegram, not a data-loss-prevention guarantee. Trace/tool-call
 records remain private and recognized secret-bearing output is withheld. Schema

@@ -2,6 +2,10 @@
 
 ## Unreleased - Configurable Telegram answer replies
 
+- Preserve the authenticated binding-scoped sender hash inside encrypted intake
+  for final-answer authorization across API/worker service keys. Keep live sender
+  revocation and tenant/owner/agent checks; withhold older receipts without this
+  proof. No key, feature-flag, budget, webhook or credential changes required.
 - Add per-connection opt-in final-answer replies for linked private Telegram
   agent chats. Existing connections and queued messages stay status-only.
   No global feature flag or deployment-control default changes.
