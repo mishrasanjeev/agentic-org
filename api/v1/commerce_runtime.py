@@ -90,6 +90,7 @@ from core.security.egress import (
     EgressValidationError,
     build_pinned_async_transport,
     validate_public_url,
+    validate_public_url_async,
 )
 
 logger = logging.getLogger(__name__)
@@ -2418,7 +2419,7 @@ async def _exchange_shopify_oauth_code(body: ShopifyConnectorCredentialRequest) 
     shop_domain = _normalize_shopify_domain_for_api(body.shop_domain)
     token_url = f"https://{shop_domain}/admin/oauth/access_token"
     try:
-        validate_public_url(
+        await validate_public_url_async(
             token_url,
             allowed_schemes=("https",),
             allowed_domains=("myshopify.com",),

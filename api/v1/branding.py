@@ -24,7 +24,7 @@ from sqlalchemy import select
 
 from api.deps import get_current_tenant, require_tenant_admin
 from api.route_metadata import route_meta
-from core.database import async_session_factory, get_tenant_session
+from core.database import get_platform_session, get_tenant_session
 from core.models.branding import TenantBranding
 
 logger = structlog.get_logger()
@@ -211,7 +211,9 @@ async def get_public_branding(
     found = False
     public: BrandingOut = _public_view(_DEFAULT_BRANDING)
 
-    async with async_session_factory() as session:
+    # Public branding lookup by custom domain / slug happens before any
+    # tenant is known: platform context (tenant_branding platform-read, v6z87).
+    async with get_platform_session() as session:
         if host:
             result = await session.execute(
                 select(TenantBranding).where(TenantBranding.custom_domain == host)

@@ -104,7 +104,6 @@ async def test_company_context_rejects_malicious_company_string_before_company_e
             ):
                 pass
 
-    assert mock_session.execute.await_count == 1
-    statement, params = mock_session.execute.call_args.args
-    assert "agenticorg.tenant_id" in getattr(statement, "text", str(statement))
-    assert params == {"tenant_id": TENANT_ID}
+    # Both ids are validated up front: nothing reaches the database when the
+    # company id is malformed (pre-fix the tenant GUC was bound first).
+    assert mock_session.execute.await_count == 0

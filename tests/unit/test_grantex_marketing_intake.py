@@ -36,7 +36,7 @@ async def test_grantex_requires_both_explicit_rollout_flags(monkeypatch, enabled
     monkeypatch.setenv("AGENTICORG_GRANTEX_ENQUIRIES_ENABLED", str(enabled))
     monkeypatch.setenv("AGENTICORG_DEMO_DURABLE_DELIVERY_ENABLED", str(durable))
     request = Request({"type": "http", "client": ("198.51.100.15", 1), "headers": []})
-    with patch.object(demo, "async_session_factory") as database:
+    with patch.object(demo, "get_platform_session") as database:
         with pytest.raises(HTTPException) as error:
             await demo.submit_demo_request(enquiry(), request, MagicMock())
     assert error.value.status_code == 503

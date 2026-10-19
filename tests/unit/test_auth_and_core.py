@@ -251,7 +251,7 @@ class TestGetProfile:
         mock_session = AsyncMock()
         mock_session.execute = AsyncMock(return_value=mock_result)
 
-        with patch("api.v1.org.async_session_factory") as mock_factory:
+        with patch("api.v1.org.get_tenant_session") as mock_factory:
             mock_factory.return_value.__aenter__ = AsyncMock(return_value=mock_session)
             mock_factory.return_value.__aexit__ = AsyncMock(return_value=False)
             result = await get_profile(mock_request)
@@ -293,7 +293,7 @@ class TestListMembers:
         mock_session = AsyncMock()
         mock_session.execute = AsyncMock(return_value=mock_result)
 
-        with patch("api.v1.org.async_session_factory") as mock_factory:
+        with patch("api.v1.org.get_tenant_session") as mock_factory:
             mock_factory.return_value.__aenter__ = AsyncMock(return_value=mock_session)
             mock_factory.return_value.__aexit__ = AsyncMock(return_value=False)
             result = await list_members(mock_request)
@@ -311,7 +311,7 @@ class TestListMembers:
         mock_session = AsyncMock()
         mock_session.execute = AsyncMock(return_value=mock_result)
 
-        with patch("api.v1.org.async_session_factory") as mock_factory:
+        with patch("api.v1.org.get_tenant_session") as mock_factory:
             mock_factory.return_value.__aenter__ = AsyncMock(return_value=mock_session)
             mock_factory.return_value.__aexit__ = AsyncMock(return_value=False)
             result = await list_members(mock_request)
@@ -336,7 +336,7 @@ class TestUpdateOnboarding:
         mock_session.execute = AsyncMock(return_value=mock_result)
         mock_session.commit = AsyncMock()
 
-        with patch("api.v1.org.async_session_factory") as mock_factory:
+        with patch("api.v1.org.get_tenant_session") as mock_factory:
             mock_factory.return_value.__aenter__ = AsyncMock(return_value=mock_session)
             mock_factory.return_value.__aexit__ = AsyncMock(return_value=False)
             body = OnboardingUpdate(onboarding_step=3)
@@ -359,7 +359,7 @@ class TestUpdateOnboarding:
         mock_session.execute = AsyncMock(return_value=mock_result)
         mock_session.commit = AsyncMock()
 
-        with patch("api.v1.org.async_session_factory") as mock_factory:
+        with patch("api.v1.org.get_tenant_session") as mock_factory:
             mock_factory.return_value.__aenter__ = AsyncMock(return_value=mock_session)
             mock_factory.return_value.__aexit__ = AsyncMock(return_value=False)
             body = OnboardingUpdate(onboarding_complete=True)
@@ -389,7 +389,7 @@ class TestDeactivateMember:
         mock_session.commit = AsyncMock()
         mock_session.add = MagicMock()
 
-        with patch("api.v1.org.async_session_factory") as mock_factory:
+        with patch("api.v1.org.get_tenant_session") as mock_factory:
             mock_factory.return_value.__aenter__ = AsyncMock(return_value=mock_session)
             mock_factory.return_value.__aexit__ = AsyncMock(return_value=False)
             result = await deactivate_member(user_id, mock_request)
@@ -414,7 +414,7 @@ class TestDeactivateMember:
         mock_session = AsyncMock()
         mock_session.execute = AsyncMock(return_value=mock_result)
 
-        with patch("api.v1.org.async_session_factory") as mock_factory:
+        with patch("api.v1.org.get_tenant_session") as mock_factory:
             mock_factory.return_value.__aenter__ = AsyncMock(return_value=mock_session)
             mock_factory.return_value.__aexit__ = AsyncMock(return_value=False)
             with pytest.raises(HTTPException) as exc_info:
@@ -436,7 +436,7 @@ class TestDeactivateMember:
         mock_session = AsyncMock()
         mock_session.execute = AsyncMock(return_value=mock_result)
 
-        with patch("api.v1.org.async_session_factory") as mock_factory:
+        with patch("api.v1.org.get_tenant_session") as mock_factory:
             mock_factory.return_value.__aenter__ = AsyncMock(return_value=mock_session)
             mock_factory.return_value.__aexit__ = AsyncMock(return_value=False)
             with pytest.raises(HTTPException) as exc_info:

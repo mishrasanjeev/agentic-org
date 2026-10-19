@@ -28,12 +28,14 @@ class TestREQ03RLSSessionFix:
         assert "async_session_factory" not in content, f"{module_path} must not use async_session_factory"
 
     def test_branding_uses_both_correctly(self):
-        """branding.py uses async_session_factory for public route and get_tenant_session for admin."""
+        """branding.py uses get_platform_session for the public route and get_tenant_session for admin."""
         from pathlib import Path
         content = Path("api/v1/branding.py").read_text()
         assert "get_tenant_session" in content
-        # async_session_factory is allowed for the public /branding GET (no tenant context)
-        assert "async_session_factory" in content
+        # The public /branding GET (no tenant context) goes through the explicit
+        # platform helper, never the raw session factory.
+        assert "get_platform_session" in content
+        assert "async_session_factory" not in content
 
     def test_sso_admin_uses_tenant_session(self):
         """SSO admin CRUD endpoints use get_tenant_session."""

@@ -45,6 +45,38 @@
   (`tests/integration/test_oacp_grantex_conformance.py`, skipped unless
   `AGENTICORG_GRANTEX_CONFORMANCE_URL` is set). No migration.
 
+## Unreleased - Database sessions ready for a NOBYPASSRLS application role
+
+- Bind tenant or platform context at the raw-session sites that still opened
+  `async_session_factory()` without one, so the API and workers can run as a
+  `NOSUPERUSER NOBYPASSRLS` role (FINDINGS A-105). Tenant work uses
+  `get_tenant_session` / the new `bind_tenant_context`; pre-auth lookups
+  (signup, login, password reset, API-key prefix, Grantex agent DID, SSO and
+  branding discovery, health probes) use the new `get_platform_session`.
+- Migration `v6z87_platform_ctx_policies`: one permissive `SELECT`-only
+  policy on `sso_configs`, `tenant_branding` and `agents` that honours
+  `agenticorg.platform_ctx = '1'`. Tenant policies are unchanged; no platform
+  write policy exists.
+- Report schedule claims run per tenant (the RPA dispatcher's pattern), the
+  synthetic-check sweep no longer reads `synthetic_checks` across tenants, the
+  A/B variant helpers require `tenant_id`, CDC event-store writes and lists
+  require and bind the event's tenant, and audit entries bind their tenant.
+  The cross-tenant spend CLI raises under a non-bypass role instead of
+  reporting zero.
+- Startup logs the database role's RLS posture (`DB_ROLE_BYPASSES_RLS`
+  warning for a superuser or `BYPASSRLS` role). `AGENTICORG_REQUIRE_NOBYPASSRLS_ROLE=1`
+  (default off) refuses such a role; `AGENTICORG_SKIP_DB_ROLE_RLS_CHECK=1`
+  skips the probe.
+- Add `scripts/create_app_role.sql` and `docs/RLS_APP_ROLE.md`. Moving
+  production `AGENTICORG_DB_URL` to the application role is an operator step
+  documented there; this change does not perform it.
+- Egress URL validation inside async code uses `validate_public_url_async`
+  (non-blocking DNS) for connectors, OIDC, JWKS, AI-provider probes and base
+  URLs, commerce runtime calls and the lineage feed fetch.
+- Regression guards: `tests/regression/test_raw_session_inventory.py`
+  (every remaining raw session is justified), `tests/regression/test_egress_async_callers.py`,
+  and the Postgres proof `tests/integration/test_rls_nobypass_role.py`.
+
 ## Unreleased - Unicode input and private Telegram follow-ups
 
 - Preserve Unicode in model-facing JSON before privacy scanning, including

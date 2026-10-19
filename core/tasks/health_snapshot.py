@@ -26,7 +26,7 @@ import structlog
 from sqlalchemy import text
 
 from core.config import settings
-from core.database import async_session_factory
+from core.database import get_platform_session
 from core.tasks.async_runner import run_async
 from core.tasks.celery_app import app
 
@@ -46,7 +46,7 @@ def _deployed_commit() -> str:
 
 async def _probe_db() -> str:
     try:
-        async with async_session_factory() as session:
+        async with get_platform_session() as session:
             await session.execute(text("SELECT 1"))
         return "healthy"
     # enterprise-gate: broad-except-ok reason=health-snapshot-db-probe-records-unhealthy
@@ -87,7 +87,7 @@ async def _record_snapshot_async() -> dict:
 
     commit = _deployed_commit()
 
-    async with async_session_factory() as session:
+    async with get_platform_session() as session:
         await session.execute(
             text(
                 "INSERT INTO health_check_history "

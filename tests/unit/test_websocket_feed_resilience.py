@@ -137,7 +137,7 @@ async def test_api_key_recheck_uses_verified_record_without_bcrypt(feed_runtime,
         async def execute(self, _query):
             return SimpleNamespace(scalar_one_or_none=lambda: key)
 
-    monkeypatch.setattr(feed, "async_session_factory", Session)
+    monkeypatch.setattr(feed, "get_platform_session", Session)
     original = {
         "credential_kind": "api_key",
         "claims": {"agenticorg:api_key_id": key_id},
@@ -186,7 +186,7 @@ async def test_api_key_recheck_refuses_every_changed_credential(feed_runtime, mo
         key.scopes = ["feed.read", "agenticorg:admin"]
     elif change == "scopes_narrowed":
         key.scopes = []
-    monkeypatch.setattr(feed, "async_session_factory", _api_key_session(None if change == "missing" else key))
+    monkeypatch.setattr(feed, "get_platform_session", _api_key_session(None if change == "missing" else key))
     original = {
         "credential_kind": "api_key",
         "claims": {"agenticorg:api_key_id": str(uuid.uuid4())},
@@ -206,7 +206,7 @@ async def test_api_key_recheck_accepts_a_future_expiry(feed_runtime, monkeypatch
     key = SimpleNamespace(
         status="active", tenant_id=tenant_id, expires_at=datetime.now(UTC) + timedelta(hours=1), scopes=["feed.read"]
     )
-    monkeypatch.setattr(feed, "async_session_factory", _api_key_session(key))
+    monkeypatch.setattr(feed, "get_platform_session", _api_key_session(key))
     original = {
         "credential_kind": "api_key",
         "claims": {"agenticorg:api_key_id": str(uuid.uuid4())},
@@ -217,7 +217,7 @@ async def test_api_key_recheck_accepts_a_future_expiry(feed_runtime, monkeypatch
 
 @pytest.mark.asyncio
 async def test_api_key_recheck_fails_closed_when_the_database_errors(feed_runtime, monkeypatch) -> None:
-    monkeypatch.setattr(feed, "async_session_factory", _api_key_session(ConnectionError("database unavailable")))
+    monkeypatch.setattr(feed, "get_platform_session", _api_key_session(ConnectionError("database unavailable")))
     original = {
         "credential_kind": "api_key",
         "claims": {"agenticorg:api_key_id": str(uuid.uuid4())},

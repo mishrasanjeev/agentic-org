@@ -419,6 +419,12 @@ async def seed_ca_demo(session: AsyncSession, tenant_id: uuid.UUID | None = None
     if tenant_id is None:
         tenant_id = await _ensure_demo_tenant(session)
 
+    # Everything below writes tenant-scoped (RLS WITH CHECK) rows: bind the
+    # demo tenant's context so the seed also works under a NOBYPASSRLS role.
+    from core.database import bind_tenant_context
+
+    await bind_tenant_context(session, tenant_id)
+
     await _ensure_demo_user(session, tenant_id, demo_user)
     await _ensure_demo_role_users(session, tenant_id, role_users)
 

@@ -23,7 +23,7 @@ from auth.one_time_codes import issue as issue_code
 from auth.one_time_codes import peek as peek_code
 from core.auth_state import invalidate_user_session_state
 from core.config import settings
-from core.database import async_session_factory
+from core.database import get_tenant_session
 from core.email import send_invite_email
 from core.models.tenant import Tenant
 from core.models.user import User
@@ -71,6 +71,14 @@ def _decode_invite_claims(token: str) -> dict:
     return claims
 
 
+def _invite_tenant_id(claims: dict) -> uuid.UUID:
+    """Tenant the invite was minted for — the RLS scope for accept/preview."""
+    try:
+        return uuid.UUID(str(claims.get("agenticorg:tenant_id") or ""))
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid invite token - missing tenant") from None
+
+
 class InviteRequest(BaseModel):
     email: str = Field(..., min_length=3, max_length=255)
     name: str = Field(default="", max_length=255)
@@ -104,7 +112,7 @@ class OnboardingUpdate(BaseModel):
 async def get_profile(request: Request):
     """Return tenant info and settings for the current user's organization."""
     tenant_id = _get_tenant_id(request)
-    async with async_session_factory() as session:
+    async with get_tenant_session(uuid.UUID(tenant_id)) as session:
         result = await session.execute(
             select(Tenant).where(Tenant.id == uuid.UUID(tenant_id))
         )
@@ -134,7 +142,7 @@ async def get_profile(request: Request):
 async def list_members(request: Request):
     """List all users in the current tenant."""
     tenant_id = _get_tenant_id(request)
-    async with async_session_factory() as session:
+    async with get_tenant_session(uuid.UUID(tenant_id)) as session:
         result = await session.execute(
             select(User).where(
                 User.tenant_id == uuid.UUID(tenant_id),
@@ -178,7 +186,7 @@ async def invite_member(body: InviteRequest, request: Request):
     inviter_email = getattr(request.state, "user_sub", "unknown")
     email = body.email.strip().lower()
 
-    async with async_session_factory() as session:
+    async with get_tenant_session(uuid.UUID(tenant_id)) as session:
         existing = await session.execute(
             select(User).where(
                 User.tenant_id == uuid.UUID(tenant_id),
@@ -273,7 +281,7 @@ async def get_invite_info(token: str | None = None, code: str | None = None):
     claims = _decode_invite_claims(token)
     user_id = claims["agenticorg:user_id"]
 
-    async with async_session_factory() as session:
+    async with get_tenant_session(_invite_tenant_id(claims)) as session:
         result = await session.execute(
             select(User, Tenant)
             .join(Tenant, Tenant.id == User.tenant_id)
@@ -318,7 +326,7 @@ async def accept_invite(body: AcceptInviteRequest):
     user_id = claims["agenticorg:user_id"]
     _validate_password(body.password)
 
-    async with async_session_factory() as session:
+    async with get_tenant_session(_invite_tenant_id(claims)) as session:
         result = await session.execute(select(User).where(User.id == uuid.UUID(user_id)))
         user = result.scalar_one_or_none()
         if not user:
@@ -385,7 +393,7 @@ async def update_onboarding(body: OnboardingUpdate, request: Request):
     """Update onboarding step or completion flag in tenant settings."""
     tenant_id = _get_tenant_id(request)
 
-    async with async_session_factory() as session:
+    async with get_tenant_session(uuid.UUID(tenant_id)) as session:
         result = await session.execute(
             select(Tenant).where(Tenant.id == uuid.UUID(tenant_id))
         )
@@ -423,7 +431,7 @@ async def deactivate_member(user_id: str, request: Request):
     tenant_id = _get_tenant_id(request)
     current_user_email = getattr(request.state, "user_sub", "")
 
-    async with async_session_factory() as session:
+    async with get_tenant_session(uuid.UUID(tenant_id)) as session:
         result = await session.execute(
             select(User).where(
                 User.id == uuid.UUID(user_id),

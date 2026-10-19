@@ -36,6 +36,7 @@ from core.security.egress import (
     EgressValidationError,
     build_pinned_async_transport,
     validate_public_url,
+    validate_public_url_async,
 )
 
 logger = structlog.get_logger()
@@ -102,7 +103,7 @@ class OIDCProvider:
         if self._discovery is not None:
             return self._discovery
         url = f"{self.issuer}/.well-known/openid-configuration"
-        self._validate_provider_endpoint(url, "discovery_url")
+        await self._validate_provider_endpoint_async(url, "discovery_url")
         async with httpx.AsyncClient(
             timeout=10,
             transport=build_pinned_async_transport(require_dns=True),
@@ -119,7 +120,7 @@ class OIDCProvider:
         if self._jwks is not None and time.time() - self._jwks_fetched_at < 600:
             return self._jwks
         disc = await self._discover()
-        self._validate_provider_endpoint(str(disc["jwks_uri"]), "jwks_uri")
+        await self._validate_provider_endpoint_async(str(disc["jwks_uri"]), "jwks_uri")
         async with httpx.AsyncClient(
             timeout=10,
             transport=build_pinned_async_transport(require_dns=True),
@@ -166,7 +167,7 @@ class OIDCProvider:
         """Exchange the authorization code for tokens + verify ID token."""
         disc = await self._discover()
         token_endpoint = disc["token_endpoint"]
-        self._validate_provider_endpoint(str(token_endpoint), "token_endpoint")
+        await self._validate_provider_endpoint_async(str(token_endpoint), "token_endpoint")
 
         async with httpx.AsyncClient(
             timeout=15,
@@ -238,6 +239,25 @@ class OIDCProvider:
     ) -> str:
         try:
             validate_public_url(
+                str(url or "").strip(),
+                allowed_schemes=("https",),
+                require_dns=require_dns,
+                allowed_hosts=(self._issuer_host,),
+            )
+        except EgressValidationError as exc:
+            raise ValueError(f"OIDC {field} must stay on the configured issuer host") from exc
+        return str(url)
+
+    async def _validate_provider_endpoint_async(
+        self,
+        url: str,
+        field: str,
+        *,
+        require_dns: bool | None = None,
+    ) -> str:
+        """Async twin for the request-path callers (DNS via ``loop.getaddrinfo``)."""
+        try:
+            await validate_public_url_async(
                 str(url or "").strip(),
                 allowed_schemes=("https",),
                 require_dns=require_dns,

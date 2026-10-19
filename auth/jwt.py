@@ -14,7 +14,7 @@ from jwt import PyJWK, PyJWTError
 
 from core.config import is_strict_runtime_env, settings
 from core.http_retry import DEFAULT_HTTP_TIMEOUT_SECONDS, retry_http_async
-from core.security.egress import EgressValidationError, validate_public_url
+from core.security.egress import EgressValidationError, validate_public_url_async
 
 logger = logging.getLogger(__name__)
 
@@ -271,10 +271,12 @@ async def _fetch_jwks() -> dict[str, Any]:
     if not settings.jwt_public_key_url:
         raise ValueError("JWKS URL not configured (AGENTICORG_JWT_PUBLIC_KEY_URL is empty)")
     try:
-        jwks_url = validate_public_url(
-            settings.jwt_public_key_url,
-            allowed_schemes=("https",),
-            require_dns=False,
+        jwks_url = (
+            await validate_public_url_async(
+                settings.jwt_public_key_url,
+                allowed_schemes=("https",),
+                require_dns=False,
+            )
         ).url
     except EgressValidationError as exc:
         raise ValueError("JWKS URL must be a public HTTPS URL") from exc

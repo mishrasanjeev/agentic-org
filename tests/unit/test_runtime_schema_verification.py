@@ -25,11 +25,15 @@ class _FakeScalars:
 
 
 class _FakeResult:
-    def __init__(self, values: list[str] | None = None) -> None:
+    def __init__(self, values: list[str] | None = None, row: tuple | None = None) -> None:
         self._values = values or []
+        self._row = row
 
     def scalars(self) -> _FakeScalars:
         return _FakeScalars(self._values)
+
+    def first(self) -> tuple | None:
+        return self._row
 
 
 class _FakeConnection:
@@ -43,6 +47,9 @@ class _FakeConnection:
         self.statements.append(sql)
         if "SELECT version_num FROM alembic_version" in sql:
             return _FakeResult(self.versions)
+        if "FROM pg_roles" in sql:
+            # Role posture probe (verify_db_role_rls_posture): a plain app role.
+            return _FakeResult(row=("agenticorg_app", False, False))
         return _FakeResult()
 
     async def scalar(self, statement: object) -> bool:

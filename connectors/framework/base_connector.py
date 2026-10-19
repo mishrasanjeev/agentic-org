@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import abc
+import inspect
 import re
 from collections.abc import Callable
 from typing import Any
@@ -15,6 +16,7 @@ from core.security.egress import (
     EgressValidationError,
     build_pinned_async_transport,
     validate_public_url,
+    validate_public_url_async,
 )
 
 logger = structlog.get_logger()
@@ -58,9 +60,13 @@ class _GuardedAsyncClient(httpx.AsyncClient):
     async def send(self, request: httpx.Request, *args: Any, **kwargs: Any) -> httpx.Response:
         url = str(request.url)
         if self._egress_validator is not None:
-            self._egress_validator(url)
+            # Validators may be sync (tests, legacy overrides) or async
+            # (the default connector path, which resolves DNS off-loop).
+            outcome = self._egress_validator(url)
+            if inspect.isawaitable(outcome):
+                await outcome
         else:
-            _validate_connector_egress_url(
+            await _validate_connector_egress_url_async(
                 url,
                 connector_name=self._connector_name,
                 require_dns=self._require_dns,
@@ -311,7 +317,7 @@ class BaseConnector(abc.ABC):
             transport=transport,
             connector_name=self.name,
             require_dns=require_dns,
-            egress_validator=lambda url: self._validate_connector_egress_url(
+            egress_validator=lambda url: self._validate_connector_egress_url_async(
                 url,
                 require_dns=require_dns,
             ),
@@ -439,6 +445,19 @@ class BaseConnector(abc.ABC):
     def _validate_connector_egress_url(self, url: str, *, require_dns: bool = True) -> None:
         _validate_connector_egress_url(url, connector_name=self.name, require_dns=require_dns)
 
+    async def _validate_connector_egress_url_async(self, url: str, *, require_dns: bool = True) -> None:
+        """Per-request egress check on the async send path (DNS via ``loop.getaddrinfo``)."""
+        await _validate_connector_egress_url_async(url, connector_name=self.name, require_dns=require_dns)
+
+
+def _raise_connector_egress_blocked(connector_name: str, exc: EgressValidationError) -> None:
+    logger.warning(
+        "connector_egress_blocked",
+        connector=connector_name,
+        reason=exc.reason,
+    )
+    raise ValueError("Connector egress URL must be a public http(s) endpoint") from exc
+
 
 def _validate_connector_egress_url(url: str, *, connector_name: str, require_dns: bool) -> None:
     if not url:
@@ -446,9 +465,14 @@ def _validate_connector_egress_url(url: str, *, connector_name: str, require_dns
     try:
         validate_public_url(url, allowed_schemes=("https",), require_dns=require_dns)
     except EgressValidationError as exc:
-        logger.warning(
-            "connector_egress_blocked",
-            connector=connector_name,
-            reason=exc.reason,
-        )
-        raise ValueError("Connector egress URL must be a public http(s) endpoint") from exc
+        _raise_connector_egress_blocked(connector_name, exc)
+
+
+async def _validate_connector_egress_url_async(url: str, *, connector_name: str, require_dns: bool) -> None:
+    """Async twin of ``_validate_connector_egress_url`` for the request hot path."""
+    if not url:
+        return
+    try:
+        await validate_public_url_async(url, allowed_schemes=("https",), require_dns=require_dns)
+    except EgressValidationError as exc:
+        _raise_connector_egress_blocked(connector_name, exc)

@@ -28,7 +28,7 @@ from connectors.framework.base_connector import BaseConnector
 from core.security.egress import (
     EgressValidationError,
     build_pinned_async_transport,
-    validate_public_url,
+    validate_public_url_async,
 )
 
 logger = structlog.get_logger()
@@ -298,6 +298,12 @@ class TallyConnector(BaseConnector):
             return
         super()._validate_connector_egress_url(url, require_dns=require_dns)
 
+    async def _validate_connector_egress_url_async(self, url: str, *, require_dns: bool = True) -> None:
+        # Same exact local-only exception on the async request path.
+        if not self._use_bridge and _is_direct_local_tally_url(url):
+            return
+        await super()._validate_connector_egress_url_async(url, require_dns=require_dns)
+
     def _register_tools(self):
         self._tool_registry["post_voucher"] = self.post_voucher
         self._tool_registry["get_ledger_balance"] = self.get_ledger_balance
@@ -387,7 +393,7 @@ class TallyConnector(BaseConnector):
 
         request_id = str(uuid.uuid4())
         try:
-            validate_public_url(
+            await validate_public_url_async(
                 self._bridge_url,
                 allowed_schemes=("https",),
                 require_dns=True,

@@ -35,6 +35,7 @@ from core.security.egress import (
     EgressValidationError,
     build_pinned_async_transport,
     validate_public_url,
+    validate_public_url_async,
 )
 
 SHOPIFY_ENV_VARS: tuple[str, ...] = (
@@ -575,7 +576,7 @@ class ShopifyAdminGraphQLClient:
             raise C6ZRuntimeValidationError("max_pages must be between 1 and 20")
 
         try:
-            validate_public_url(
+            await validate_public_url_async(
                 self.graphql_url,
                 allowed_schemes=("https",),
                 allowed_domains=("myshopify.com",),
@@ -949,7 +950,7 @@ async def send_grantex_authority_request(
         }
     base_url = source["GRANTEX_COMMERCE_BASE_URL"].rstrip("/")
     try:
-        validate_public_url(
+        await validate_public_url_async(
             f"{base_url}/v1/commerce/oacp/c6z/authority-requests",
             require_dns=transport is None,
         )
@@ -1723,7 +1724,7 @@ async def verify_plural_pine_mandate_capability(
         client_transport = transport or build_pinned_async_transport(require_dns=True)
         async with httpx.AsyncClient(timeout=20.0, transport=client_transport) as client:
             if explicit_capability_url:
-                validate_public_url(
+                await validate_public_url_async(
                     explicit_capability_url,
                     allowed_schemes=("https",),
                     require_dns=transport is None,
@@ -1732,7 +1733,7 @@ async def verify_plural_pine_mandate_capability(
                 response.raise_for_status()
                 body = response.json()
             else:
-                validate_public_url(
+                await validate_public_url_async(
                     f"{_plural_pine_base_url(source)}/auth/v1/token",
                     allowed_schemes=("https",),
                     require_dns=transport is None,

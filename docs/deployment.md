@@ -291,7 +291,11 @@ See [`.env.example`](../.env.example) for the complete reference.
 
 **Required for production:**
 - `ANTHROPIC_API_KEY` — Claude API key
-- `AGENTICORG_DB_URL` — PostgreSQL connection string
+- `AGENTICORG_DB_URL` — PostgreSQL connection string. Row-level security is
+  enforced only when the API and workers connect as a `NOBYPASSRLS` role
+  (`agenticorg_app`, created by `scripts/create_app_role.sql`); the migrate job
+  keeps the schema-owner URL. The switch is an operator step: see
+  [`RLS_APP_ROLE.md`](RLS_APP_ROLE.md).
 - `AGENTICORG_REDIS_URL` — Redis connection string
 - `AGENTICORG_SECRET_KEY` — 32+ char random string for HMAC signing
 - `AGENTICORG_VAULT_KEYRING` — credential-vault keys, `id:secret,...`, active key
