@@ -14,8 +14,8 @@ from cryptography.hazmat.primitives.asymmetric import ec
 from core.cases.push import SigningKey, verify_signature
 from core.commerce.ucp import httpsig, orders, webhooks
 from core.commerce.ucp.renderers import render_order
-from tests import ucp_fixtures as uf
 from tests import ucp_schema
+from tests import ucp_txn_fixtures as uf
 
 TENANT = str(uuid.UUID("00000000-0000-4000-8000-0000000000a7"))
 NOW = datetime(2026, 10, 20, 12, 0, tzinfo=UTC)

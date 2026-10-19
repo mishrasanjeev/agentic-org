@@ -16,7 +16,7 @@ from sqlalchemy.exc import DBAPIError
 
 from core.commerce import executors
 from core.commerce.ucp import handlers
-from tests import ucp_fixtures as uf
+from tests import ucp_txn_fixtures as uf
 from tests.integration.test_rls_nobypass_role import RLS_DB_URL, _app_role_sessions, env  # noqa: F401
 
 pytestmark = pytest.mark.skipif(

@@ -14,8 +14,8 @@ from core.commerce.ucp.capabilities import DEFAULT_REGISTRY, RegistryContext
 from core.commerce.ucp.checkout import EngineDeps, RequestError, evaluate
 from core.commerce.ucp.items import ProductEvidenceCatalog
 from core.commerce.ucp.negotiation import negotiate
-from tests import ucp_fixtures as uf
 from tests import ucp_schema
+from tests import ucp_txn_fixtures as uf
 
 TENANT = str(uuid.UUID("00000000-0000-4000-8000-0000000000a2"))
 

@@ -41,6 +41,7 @@ from api.v1 import (
     commerce_public,
     commerce_runtime,
     commerce_ucp,
+    commerce_ucp_publishing,
     companies,
     compliance,
     composio,
@@ -106,6 +107,7 @@ from api.v1 import (
     tenant_ai_settings,
     tool_registry,
     txn,
+    ucp_discovery,
     voice,
     voice_runtime,
     webhooks,
@@ -332,6 +334,10 @@ app.include_router(commerce_runtime.router, prefix="/api/v1", tags=["Commerce Ru
 app.include_router(commerce_ucp.runtime_router, prefix="/api/v1", tags=["Commerce Runtime"])
 # UCP REST binding at https://<merchant serving host>/ucp (AGENTICORG_UCP_CHECKOUT_ENABLED).
 app.include_router(commerce_ucp.router)
+app.include_router(commerce_ucp_publishing.router, prefix="/api/v1", tags=["Commerce UCP"])
+# UCP business surfaces live at the merchant serving host's root (/.well-known/ucp, /ucp/...).
+app.include_router(ucp_discovery.well_known_router)
+app.include_router(ucp_discovery.ucp_router)
 app.include_router(oauth_connector.router, prefix="/api/v1", tags=["Connectors"])
 app.include_router(compliance.router, prefix="/api/v1", tags=["Compliance"])
 app.include_router(config.router, prefix="/api/v1", tags=["Config"])

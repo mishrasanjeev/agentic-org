@@ -79,6 +79,11 @@ RATE_LIMIT_CLASSES: dict[str, tuple[int, int]] = {
     "customer-agent-public": (30, 60),
     "customer-agent": (120, 60),
     "branding-public-lookup": (120, 60),
+    # UCP business profile and catalog/location reads on a merchant serving host
+    # (api/v1/ucp_discovery.py), per client IP. Not "public-*": a limiter outage
+    # degrades to allow-with-warning so platform discovery keeps working.
+    "ucp-discovery": (600, 60),
+    "ucp-catalog-read": (120, 60),
     "push-public-config": (60, 60),
     "healthcheck": (600, 60),
     "infra-health-probe": (600, 60),
@@ -418,7 +423,9 @@ COMMERCE_LEDGER_ROUTE_PREFIXES: tuple[str, ...] = (
     "/api/v1/commerce/",
     "/api/v1/public/commerce/",
     "/api/v1/a2a/commerce/",
-    "/ucp/",
+    # UCP transaction writes (api/v1/commerce_ucp.py); catalog and location POSTs are reads.
+    "/ucp/checkout-sessions",
+    "/ucp/carts",
 )
 COMMERCE_LEDGER_ROUTE_PATHS: frozenset[str] = frozenset({"/api/v1/a2a/message:send"})
 

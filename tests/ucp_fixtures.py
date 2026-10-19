@@ -1,353 +1,216 @@
 # SPDX-License-Identifier: Apache-2.0
-"""Synthetic UCP scope for tests: a merchant on merchant.example, platform profiles, fakes for every dependency."""
+"""Synthetic merchant, key and artifact fixtures for the UCP tests (example.com hosts, generated keys)."""
 
 from __future__ import annotations
 
-import copy
-import json
-import uuid
-from collections.abc import Mapping, Sequence
+import asyncio
 from datetime import UTC, datetime, timedelta
+from types import SimpleNamespace
 from typing import Any
 
-from cryptography.hazmat.primitives.asymmetric import ec
+import pytest
 
-from core.commerce import executors
-from core.commerce.ucp import handlers
-from core.commerce.ucp.httpsig import LocalEs256Signer
-from core.commerce.ucp.items import ProductEvidenceCatalog
-from core.commerce.ucp.merchant import MerchantUcp, merchant_ucp_from_config
-from core.commerce.ucp.shopify_reads import DeliveryRate
-from tests import commerce_arbiter_fixtures as fx
+from core.commerce import merchant_keys
+from core.commerce.oacp_artifacts import OACP_ARTIFACT_TTLS_SECONDS, OacpPersistentArtifactCacheRecord
+from core.commerce.ucp.catalog import REQUIRED_CATALOG_ARTIFACTS
+from core.commerce.ucp.state import with_ucp_state
 
+TENANT_ID = "11111111-1111-1111-1111-111111111111"
+MERCHANT_ID = "merchant_1"
+SELLER_AGENT_ID = "seller_agent_1"
 HOST = "shop.merchant.example"
-PLATFORM_PROFILE = "https://platform.example/profiles/shopper.json"
-WEBHOOK_URL = "https://platform.example/webhooks/ucp/orders"
-SKU = "TOTE-1"
-ALL_CAPABILITIES = (
-    "dev.ucp.shopping.checkout",
-    "dev.ucp.shopping.cart",
-    "dev.ucp.shopping.order",
-    "dev.ucp.shopping.fulfillment",
-    "dev.ucp.shopping.buyer_consent",
-    "dev.ucp.common.loyalty",
-)
-R25_EXTRA = (
-    "dev.ucp.common.payment.authentication",
-    "dev.ucp.common.payment.split_payments",
-    "dev.ucp.common.payment.terms",
+NAMESPACE = "example.merchant.shop"
+NOW = datetime(2026, 10, 20, 9, 0, tzinfo=UTC)
+ATTESTATION_REF = "agenticorg:ucp-attestation:0123456789abcdef0123456789abcdef"
+PUBLIC_DISCOVERY_ARTIFACT_ID = "oacp_art_public_discovery"
+VERIFIED_REF = (
+    "oacp-artifact-jws-v1;kid=oacp-20261019-0123456789abcdef;payload_hash=ab;status=valid;"
+    "verified_at=2026-10-19T10:00:00Z"
 )
 
 
-def ucp_settings(**overrides: Any) -> dict[str, Any]:
-    settings: dict[str, Any] = {
-        "serving_host": HOST,
-        "currency": "INR",
-        "executor": "test_executor",
-        "links": [
-            {"type": "privacy_policy", "url": "https://merchant.example/privacy"},
-            {"type": "terms_of_service", "url": "https://merchant.example/terms"},
-        ],
-        "fulfillment": {"shipping": True, "pickup": True, "multi_destination": [], "method_combinations": []},
-        "loyalty": {
-            "claim": "com.merchant.rewards",
-            "name": "Merchant Rewards",
-            "metafield_namespace": "loyalty",
-            "reward_currency": {"name": "Points", "code": "PTS", "decimal_places": 0},
-            "earn_points_per_major_unit": 2,
-        },
-        "mandate_capability": {
-            "rails": ["card", "upi"],
-            "max_amount_minor_units": 50000,
-            "currency": "INR",
-            "instrument_types": ["card"],
-        },
-        "split_payments": {"allowed_combinations": [[{"types": ["card"], "min": 1, "max": 2}]]},
-        "payment_terms": [
-            {
-                "id": "pay_in_two",
-                "title": "Pay in two",
-                "schedules": [
-                    {"id": "s1", "type": "installment", "description": "Today", "share_bps": 5000},
-                    {
-                        "id": "s2",
-                        "type": "installment",
-                        "description": "In 30 days",
-                        "share_bps": 5000,
-                        "due_in_days": 30,
-                    },
-                ],
-            }
-        ],
-        "payment_authentication": {"allowed_origins": ["https://payments.example"]},
-        "permalink_endpoint": "https://merchant.example/buy",
-        "quantity_units": {"FABRIC-1": {"unit": "MTR", "scale": 1, "display_text": "metre", "increment": 5}},
-    }
-    settings.update(overrides)
-    return settings
+def fake_tenant_encryption(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Replace the tenant KEK envelope with a reversible test wrapper (no KMS, no database)."""
+
+    async def _encrypt(pem: str, tenant_id: str) -> str:
+        assert tenant_id == TENANT_ID
+        return "test-envelope:" + pem[::-1]
+
+    async def _decrypt(ciphertext: str) -> str:
+        assert ciphertext.startswith("test-envelope:")
+        return ciphertext[len("test-envelope:") :][::-1]
+
+    monkeypatch.setattr(merchant_keys, "_encrypt_private_key", _encrypt)
+    monkeypatch.setattr(merchant_keys, "_decrypt_private_key", _decrypt)
 
 
-def merchant_config(tenant_id: str, **ucp_overrides: Any) -> dict[str, Any]:
-    config = fx.merchant_config()
-    config["merchant_display_name"] = "Example Store"
-    config["offline_pos_stores"] = [
-        {
-            "store_id": "store-1",
-            "display_name": "Example Store Pune",
-            "city": "Pune",
-            "country_code": "IN",
-            "enabled": True,
-        }
-    ]
-    config["payment_providers"] = [
-        {"provider_key": "plural_pine", "provider_type": "plural_pine", "enabled": True, "environment": "sandbox"}
-    ]
-    config["provider_policy"]["ucp"] = ucp_settings(**ucp_overrides)
-    config["tenant_id"] = tenant_id
-    return config
+def key_record(now: datetime = NOW) -> dict[str, Any]:
+    return asyncio.run(merchant_keys.new_merchant_key_record(TENANT_ID, now=now))
 
 
-def merchant(tenant_id: str, **ucp_overrides: Any) -> MerchantUcp:
-    resolved = merchant_ucp_from_config(merchant_config(tenant_id, **ucp_overrides), tenant_id=tenant_id)
-    assert resolved is not None
-    return resolved
-
-
-def products(tenant_id: str) -> list[dict[str, Any]]:
-    base = fx.products(tenant_id)
-    extra = copy.deepcopy(base[0])
-    extra["title"] = "Canvas Fabric"
-    extra["product_ref"] = "agenticorg:shopify_product:fabric"
-    extra["variants"] = [
-        {
-            **dict(base[0]["variants"][0]),
-            "variant_id": "gid://shopify/ProductVariant/2",
-            "sku": "FABRIC-1",
-            "price": "12.00",
-            "inventory_quantity_snapshot": 40,
-        }
-    ]
-    sold_out = copy.deepcopy(base[0])
-    sold_out["title"] = "Sold Out Mug"
-    sold_out["variants"] = [
-        {
-            **dict(base[0]["variants"][0]),
-            "variant_id": "gid://shopify/ProductVariant/3",
-            "sku": "MUG-0",
-            "price": "9.00",
-            "inventory_quantity_snapshot": 0,
-        }
-    ]
-    return [*base, extra, sold_out]
-
-
-def platform_profile(version: str = "2026-04-08", *, capabilities: Sequence[str] | None = None) -> dict[str, Any]:
-    names = list(capabilities if capabilities is not None else ALL_CAPABILITIES)
-    if capabilities is None and version >= "2026-08-25":
-        names += list(R25_EXTRA)
-    caps: dict[str, list[dict[str, Any]]] = {}
-    for name in names:
-        entry: dict[str, Any] = {"version": version, "spec": "https://ucp.dev/spec", "schema": "https://ucp.dev/schema"}
-        if name == "dev.ucp.shopping.order":
-            entry["config"] = {"webhook_url": WEBHOOK_URL}
-        caps[name] = [entry]
-    return {"ucp": {"version": version, "services": {}, "capabilities": caps, "payment_handlers": {}}}
-
-
-class StaticResolver:
-    def __init__(self, resolved: MerchantUcp) -> None:
-        self.merchant = resolved
-
-    async def resolve(self, *, host: str, tenant_id: str) -> MerchantUcp | None:
-        if host.split(":")[0].lower() == self.merchant.serving_host and tenant_id == self.merchant.tenant_id:
-            return self.merchant
-        return None
-
-
-class FakeShopifyReads:
-    def __init__(self, metafields: dict[str, str] | None = None, *, fail: bool = False) -> None:
-        self.metafields = (
-            metafields
-            if metafields is not None
-            else {"member_id": "M-100", "tier_id": "gold", "tier_name": "Gold", "tier_benefits": "ship:Free shipping"}
-        )
-        self.fail = fail
-        self.lookups: list[tuple[str, str]] = []
-
-    async def customer_loyalty_metafields(self, *, email: str, namespace: str) -> dict[str, str] | None:
-        self.lookups.append((email, namespace))
-        if self.fail:
-            raise RuntimeError("shopify unavailable")
-        return self.metafields if email == "buyer@example.com" else None
-
-    async def delivery_rates(self) -> list[DeliveryRate]:
-        return RATES
-
-
-RATES = [
-    DeliveryRate(
-        id="ship-std",
-        title="Standard",
-        description="3-5 days",
-        amount_minor_units=5000,
-        currency="INR",
-        countries=("IN",),
-        rest_of_world=False,
-    ),
-    DeliveryRate(
-        id="ship-exp",
-        title="Express",
-        description="1-2 days",
-        amount_minor_units=12000,
-        currency="INR",
-        countries=("IN",),
-        rest_of_world=False,
-    ),
-]
-
-
-class FakeExecutor:
-    name = "test_executor"
-
-    def __init__(self, result: executors.ExecutionResult | None = None) -> None:
-        self.result = result or executors.ExecutionResult(status="completed", provider_order_ref="prov-1")
-        self.calls: list[tuple[executors.ExecutionCheckout, executors.ConsumedDecision]] = []
-
-    async def execute(self, session: executors.ExecutionCheckout, decision: executors.ConsumedDecision):
-        self.calls.append((session, decision))
-        return self.result
-
-
-def signer() -> LocalEs256Signer:
-    return LocalEs256Signer(ec.generate_private_key(ec.SECP256R1()), kid="merchant-test-key")
-
-
-def runtime(
-    tenant_id: str,
-    *,
-    resolved: MerchantUcp | None = None,
-    profile: Mapping[str, Any] | None = None,
-    reads: FakeShopifyReads | None = None,
-    signing: LocalEs256Signer | None = None,
-    config: Mapping[str, Any] | None = None,
-    now: datetime | None = None,
-    kicks: list[uuid.UUID] | None = None,
-) -> handlers.UcpRuntime:
-    resolved = resolved or merchant(tenant_id)
-    profile_doc = dict(profile or platform_profile())
-    shopify = reads or FakeShopifyReads()
-
-    async def _fetch(_url: str) -> Any:
-        return json.loads(json.dumps(profile_doc))
-
-    async def _products(_m: MerchantUcp) -> list[dict[str, Any]]:
-        return products(tenant_id)
-
-    async def _rates(_m: MerchantUcp) -> list[DeliveryRate]:
-        return await shopify.delivery_rates()
-
-    async def _reads(_m: MerchantUcp) -> FakeShopifyReads:
-        return shopify
-
-    async def _scope(_m: MerchantUcp) -> tuple[list[Any], dict[str, Any]]:
-        return fx.cache_records(tenant_id, now=now), dict(config or merchant_config(tenant_id))
-
-    return handlers.UcpRuntime(
-        resolver=StaticResolver(resolved),
-        catalog_for=lambda _m: ProductEvidenceCatalog(_products),
-        rates_for=lambda _m: _rates,
-        shopify_reads_for=_reads,
-        arbiter_scope=_scope,
-        signer=lambda: signing,
-        fetcher=_fetch,
-        clock=(lambda: now) if now else (lambda: datetime.now(UTC)),
-        after_commit=(lambda tenant: kicks.append(tenant)) if kicks is not None else None,
-        supported_versions=("2026-04-08", "2026-08-25"),
-    )
-
-
-def request(
-    tenant_id: str, body: Any = None, *, key: str | None = None, agent: str | None = None, host: str = HOST
-) -> handlers.UcpRequest:
-    raw = b"" if body is None else json.dumps(body).encode()
-    return handlers.UcpRequest(
-        tenant_id=tenant_id,
-        host=host,
-        ucp_agent=agent if agent is not None else f'profile="{PLATFORM_PROFILE}"',
-        raw_body=raw,
-        idempotency_key=key,
-    )
-
-
-def create_body(quantity: int = 1, item_id: str = SKU, **extra: Any) -> dict[str, Any]:
-    body: dict[str, Any] = {"line_items": [{"item": {"id": item_id}, "quantity": quantity}]}
-    body.update(extra)
-    return body
-
-
-SHIPPING = {
-    "methods": [
-        {
-            "type": "shipping",
-            "destinations": [
-                {
-                    "id": "dest_1",
-                    "street_address": "1 MG Road",
-                    "address_locality": "Pune",
-                    "postal_code": "411001",
-                    "address_country": "IN",
-                }
-            ],
-            "selected_destination_id": "dest_1",
-            "groups": [{"selected_option_id": "ship-std"}],
-        }
-    ]
-}
-
-
-def token_payment(**credential: Any) -> dict[str, Any]:
+def published_state(keys: list[dict[str, Any]], *, host: str = HOST, namespace: str = NAMESPACE) -> dict[str, Any]:
     return {
-        "instruments": [
-            {
-                "id": "instr_1",
-                "handler_id": "plural_tokenized",
-                "type": "card",
-                "display": {"brand": "visa", "last_digits": "4242"},
-                "credential": {"type": "plural_pine_token", "token": "tok_example_1", **credential},
-            }
-        ]
+        "serving_host": host,
+        "attestation": {
+            "method": "dns_txt",
+            "host": host,
+            "record_name": f"_agenticorg-ucp.{host}",
+            "record_value_sha256": "0" * 64,
+            "verified_at": "2026-10-19T08:00:00Z",
+            "verified_by": {"actor_type": "user", "actor_id": "operator@merchant.example"},
+            "ref": ATTESTATION_REF,
+        },
+        "namespace": namespace,
+        "published": {"published_at": "2026-10-19T08:05:00Z", "namespace": namespace},
+        "signing_keys": keys,
+        "verified_public_discovery": {
+            "artifact_id": PUBLIC_DISCOVERY_ARTIFACT_ID,
+            "verifier_result_ref": VERIFIED_REF,
+            "captured_at": "2026-10-19T08:10:00Z",
+            "publication_allowed": True,
+            "serving_host": host,
+            "namespace_attestation_ref": ATTESTATION_REF,
+        },
     }
 
 
-def authority(now: datetime | None = None, **overrides: Any) -> dict[str, Any]:
-    moment = now or datetime.now(UTC)
-    values = fx.buyer_authority(now=moment)
-    values["passport_max_amount_minor_units"] = 100000
-    values.update(overrides)
-    return values
+LIVE_DISCOVERY = frozenset({"oacp_art_public_discovery"})
 
 
-def complete_body(
-    now: datetime | None = None,
-    *,
-    decision_id: str | None = None,
-    decide_only: bool = False,
-    payment: dict[str, Any] | None = None,
-    **extra: Any,
-) -> dict[str, Any]:
-    vendor: dict[str, Any] = {"buyer_authority": authority(now)}
-    if decision_id:
-        vendor["decision_id"] = decision_id
-    if decide_only:
-        vendor["decide_only"] = True
-    body = {"payment": payment or token_payment(), "ai.agenticorg.commerce": vendor}
-    body.update(extra)
-    return body
+def serve_state(row: Any, *, host: str = HOST, now: datetime = NOW, live: Any = LIVE_DISCOVERY) -> Any:
+    from core.commerce.ucp.profile import merchant_serve_state
+
+    return merchant_serve_state(row, host=host, now=now, live_public_discovery_ids=set(live))
 
 
-def iso(value: datetime) -> str:
+def merchant_row(state: dict[str, Any] | None = None, *, stores: list[dict[str, Any]] | None = None) -> Any:
+    return SimpleNamespace(
+        config_id="commerce_config_test",
+        tenant_id=TENANT_ID,
+        merchant_id=MERCHANT_ID,
+        seller_agent_id=SELLER_AGENT_ID,
+        offline_pos_stores=stores or [],
+        public_publishing=with_ucp_state({"enabled": False}, state or {}),
+    )
+
+
+def _iso(value: datetime) -> str:
     return value.isoformat().replace("+00:00", "Z")
 
 
-def soon(minutes: int = 5) -> datetime:
-    return datetime.now(UTC) + timedelta(minutes=minutes)
+def cache_record(
+    artifact_type: str,
+    *,
+    ref: str | None = VERIFIED_REF,
+    now: datetime | None = None,
+    expires_in: timedelta = timedelta(minutes=2),
+    buyer_agent_id: str | None = None,
+) -> OacpPersistentArtifactCacheRecord:
+    now = now or datetime.now(UTC)
+    return OacpPersistentArtifactCacheRecord(
+        cache_record_id=f"cache_{artifact_type}",
+        artifact_id=f"oacp_art_{artifact_type}",
+        artifact_type=artifact_type,  # type: ignore[arg-type]
+        authority="grantex.internal.oacp.authority",
+        issuer="grantex.internal.oacp.authority",
+        scope_kind="seller_agent",
+        tenant_id=TENANT_ID,
+        merchant_id=MERCHANT_ID,
+        seller_agent_id=SELLER_AGENT_ID,
+        buyer_agent_id=buyer_agent_id,
+        source_refs=("agenticorg:shopify:evidence:abc:redacted",),
+        evidence_refs=("agenticorg:shopify:evidence:abc:redacted",),
+        generated_at=_iso(now - timedelta(minutes=1)),
+        cached_at=_iso(now - timedelta(minutes=1)),
+        expires_at=_iso(now + expires_in),
+        freshness_status="fresh",
+        revocation_snapshot_status="fresh",
+        revocation_snapshot_observed_at=_iso(now - timedelta(seconds=10)),
+        ttl_policy_seconds=min(OACP_ARTIFACT_TTLS_SECONDS[artifact_type], 300),  # type: ignore[index]
+        risk_tier="low",
+        revocation_snapshot_age_seconds=10,
+        verifier_result_ref=ref,
+    )
+
+
+def catalog_records(**kwargs: Any) -> list[OacpPersistentArtifactCacheRecord]:
+    return [cache_record(kind, **kwargs) for kind in REQUIRED_CATALOG_ARTIFACTS]
+
+
+def synced_products() -> list[dict[str, Any]]:
+    return [
+        {
+            "product_ref": "shopify_product:aaaaaaaaaaaaaaaaaaaaaaaa:redacted",
+            "title": "Canvas Tote",
+            "description": "<p>Sturdy cotton <b>tote</b> bag.</p>",
+            "vendor": "Merchant Example",
+            "product_type": "Bags",
+            "status": "ACTIVE",
+            "images": [{"url": "https://cdn.merchant.example/tote.jpg", "alt_text": "Tote"}],
+            "variants": [
+                {
+                    "variant_id": "gid://shopify/ProductVariant/1001",
+                    "sku": "TOTE-NAT",
+                    "title": "Natural",
+                    "price": "1299.00",
+                    "compare_at_price": "1499.00",
+                    "currency": "INR",
+                    "inventory_quantity_snapshot": 4,
+                    "selected_options": [{"name": "Colour", "value": "Natural"}],
+                },
+                {
+                    "variant_id": "gid://shopify/ProductVariant/1002",
+                    "sku": "TOTE-BLK",
+                    "title": "Black",
+                    "price": "1399.00",
+                    "currency": None,
+                    "inventory_quantity_snapshot": 0,
+                    "selected_options": [{"name": "Colour", "value": "Black"}],
+                },
+            ],
+            "_evidence_currency": "INR",
+        },
+        {
+            "product_ref": "shopify_product:bbbbbbbbbbbbbbbbbbbbbbbb:redacted",
+            "title": "Linen Apron",
+            "description": None,
+            "product_type": "Kitchen",
+            "status": "ACTIVE",
+            "variants": [
+                {
+                    "variant_id": "gid://shopify/ProductVariant/2001",
+                    "sku": "APRON-1",
+                    "title": "Default Title",
+                    "price": "899",
+                    "currency": "INR",
+                    "inventory_quantity_snapshot": 9,
+                }
+            ],
+        },
+        {
+            "product_ref": "shopify_product:cccccccccccccccccccccccc:redacted",
+            "title": "Draft Mug",
+            "status": "DRAFT",
+            "variants": [{"variant_id": "gid://shopify/ProductVariant/3001", "price": "10", "currency": "INR"}],
+        },
+    ]
+
+
+def store_with_hours() -> dict[str, Any]:
+    return {
+        "store_id": "store_pune_1",
+        "display_name": "Merchant Example Pune",
+        "enabled": True,
+        "city": "Pune",
+        "country_code": "IN",
+        "location": {
+            "timezone": "Asia/Kolkata",
+            "address": {"street_address": "1 Example Road", "postal_code": "411001", "address_country": "IN"},
+            "geo": {"latitude": 18.52, "longitude": 73.85},
+            "hours": [
+                {"day": day, "opens": "10:00", "closes": "20:00"}
+                for day in ("monday", "tuesday", "wednesday", "thursday", "friday", "saturday")
+            ],
+            "exception_hours": [{"valid_from": "2026-10-21", "valid_through": "2026-10-21", "title": "Festival"}],
+        },
+    }

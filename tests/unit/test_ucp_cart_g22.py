@@ -15,8 +15,8 @@ from core.commerce.ucp.handlers import _cart_as_checkout_body
 from core.commerce.ucp.items import ProductEvidenceCatalog
 from core.commerce.ucp.negotiation import negotiate
 from core.commerce.ucp.renderers import render_cart
-from tests import ucp_fixtures as uf
 from tests import ucp_schema
+from tests import ucp_txn_fixtures as uf
 
 TENANT = str(uuid.UUID("00000000-0000-4000-8000-0000000000a8"))
 

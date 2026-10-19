@@ -18,6 +18,42 @@
     "tenant_required": false
   },
   {
+    "audit_event": "none-public-ucp-profile",
+    "auth_required": false,
+    "function": "ucp_business_profile",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/.well-known/ucp api/v1/ucp_discovery.py:ucp_business_profile",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/ucp_discovery.py",
+    "path": "/api/v1/.well-known/ucp",
+    "public_exempt_reason": "ucp-business-profile-public-by-spec-host-bound",
+    "rate_limit": "ucp-discovery",
+    "scope": "public:ucp.profile.read",
+    "source_line": 276,
+    "tenant_required": false
+  },
+  {
+    "audit_event": "none-public-ucp-profile",
+    "auth_required": false,
+    "function": "ucp_leaf_profile",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/.well-known/ucp/{version} api/v1/ucp_discovery.py:ucp_leaf_profile",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/ucp_discovery.py",
+    "path": "/api/v1/.well-known/ucp/{version}",
+    "public_exempt_reason": "ucp-leaf-profile-public-by-spec-host-bound",
+    "rate_limit": "ucp-discovery",
+    "scope": "public:ucp.profile.read",
+    "source_line": 293,
+    "tenant_required": false
+  },
+  {
     "audit_event": "none-public-discovery",
     "auth_required": false,
     "function": "agent_card",
@@ -3038,7 +3074,7 @@
     "public_exempt_reason": null,
     "rate_limit": "commerce-runtime-write",
     "scope": "commerce.runtime.artifacts.cache",
-    "source_line": 975,
+    "source_line": 1009,
     "tenant_required": true
   },
   {
@@ -3056,7 +3092,7 @@
     "public_exempt_reason": null,
     "rate_limit": "commerce-runtime-external",
     "scope": "commerce.runtime.artifacts.refresh",
-    "source_line": 996,
+    "source_line": 1030,
     "tenant_required": true
   },
   {
@@ -3074,7 +3110,7 @@
     "public_exempt_reason": null,
     "rate_limit": "commerce-runtime-external",
     "scope": "commerce.runtime.grantex.authority_request",
-    "source_line": 931,
+    "source_line": 949,
     "tenant_required": true
   },
   {
@@ -3092,7 +3128,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "commerce.runtime.bridges.a2a.read",
-    "source_line": 1303,
+    "source_line": 1453,
     "tenant_required": true
   },
   {
@@ -3110,7 +3146,7 @@
     "public_exempt_reason": null,
     "rate_limit": "commerce-buyer-session",
     "scope": "commerce.runtime.bridges.openapi.ask",
-    "source_line": 1272,
+    "source_line": 1422,
     "tenant_required": true
   },
   {
@@ -3128,7 +3164,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "commerce.runtime.bridges.openapi.read",
-    "source_line": 1290,
+    "source_line": 1440,
     "tenant_required": true
   },
   {
@@ -3146,7 +3182,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "commerce.runtime.bridges.surfaces.read",
-    "source_line": 1316,
+    "source_line": 1466,
     "tenant_required": true
   },
   {
@@ -3164,7 +3200,7 @@
     "public_exempt_reason": null,
     "rate_limit": "commerce-webhook",
     "scope": "commerce.runtime.bridges.telegram.webhook",
-    "source_line": 1361,
+    "source_line": 1511,
     "tenant_required": true
   },
   {
@@ -3182,7 +3218,7 @@
     "public_exempt_reason": null,
     "rate_limit": "commerce-buyer-session",
     "scope": "commerce.runtime.bridges.web.ask",
-    "source_line": 1254,
+    "source_line": 1404,
     "tenant_required": true
   },
   {
@@ -3200,7 +3236,7 @@
     "public_exempt_reason": null,
     "rate_limit": "commerce-webhook",
     "scope": "commerce.runtime.bridges.whatsapp.webhook",
-    "source_line": 1329,
+    "source_line": 1479,
     "tenant_required": true
   },
   {
@@ -3218,205 +3254,7 @@
     "public_exempt_reason": null,
     "rate_limit": "commerce-buyer-session",
     "scope": "commerce.runtime.buyer_sessions.ask",
-    "source_line": 1228,
-    "tenant_required": true
-  },
-  {
-    "audit_event": "commerce.runtime.ledger.decisions.read",
-    "auth_required": true,
-    "function": "list_arbiter_decisions",
-    "idempotency": "read-only",
-    "key": "GET /api/v1/commerce/runtime/ledger/decisions api/v1/commerce_ledger.py:list_arbiter_decisions",
-    "metadata_present": true,
-    "methods": [
-      "GET"
-    ],
-    "module": "api/v1/commerce_ledger.py",
-    "path": "/api/v1/commerce/runtime/ledger/decisions",
-    "public_exempt_reason": null,
-    "rate_limit": "standard",
-    "scope": "commerce.runtime.ledger.read",
-    "source_line": 257,
-    "tenant_required": true
-  },
-  {
-    "audit_event": "commerce.runtime.ledger.decision.read",
-    "auth_required": true,
-    "function": "read_arbiter_decision",
-    "idempotency": "read-only",
-    "key": "GET /api/v1/commerce/runtime/ledger/decisions/{decision_id} api/v1/commerce_ledger.py:read_arbiter_decision",
-    "metadata_present": true,
-    "methods": [
-      "GET"
-    ],
-    "module": "api/v1/commerce_ledger.py",
-    "path": "/api/v1/commerce/runtime/ledger/decisions/{decision_id}",
-    "public_exempt_reason": null,
-    "rate_limit": "standard",
-    "scope": "commerce.runtime.ledger.read",
-    "source_line": 287,
-    "tenant_required": true
-  },
-  {
-    "audit_event": "commerce.runtime.ledger.operator_decision.read",
-    "auth_required": true,
-    "function": "list_operator_decisions",
-    "idempotency": "read-only",
-    "key": "GET /api/v1/commerce/runtime/ledger/decisions/{decision_id}/operator-decisions api/v1/commerce_ledger.py:list_operator_decisions",
-    "metadata_present": true,
-    "methods": [
-      "GET"
-    ],
-    "module": "api/v1/commerce_ledger.py",
-    "path": "/api/v1/commerce/runtime/ledger/decisions/{decision_id}/operator-decisions",
-    "public_exempt_reason": null,
-    "rate_limit": "standard",
-    "scope": "commerce.runtime.ledger.read",
-    "source_line": 309,
-    "tenant_required": true
-  },
-  {
-    "audit_event": "commerce.runtime.ledger.operator_decision.create",
-    "auth_required": true,
-    "function": "create_operator_decision",
-    "idempotency": "arbiter-decision-kind-reviewer-time",
-    "key": "POST /api/v1/commerce/runtime/ledger/decisions/{decision_id}/operator-decisions api/v1/commerce_ledger.py:create_operator_decision",
-    "metadata_present": true,
-    "methods": [
-      "POST"
-    ],
-    "module": "api/v1/commerce_ledger.py",
-    "path": "/api/v1/commerce/runtime/ledger/decisions/{decision_id}/operator-decisions",
-    "public_exempt_reason": null,
-    "rate_limit": "commerce-runtime-write",
-    "scope": "commerce.runtime.ledger.operator_decisions.write",
-    "source_line": 331,
-    "tenant_required": true
-  },
-  {
-    "audit_event": "commerce.runtime.ledger.events.read",
-    "auth_required": true,
-    "function": "list_ledger_events",
-    "idempotency": "read-only",
-    "key": "GET /api/v1/commerce/runtime/ledger/events api/v1/commerce_ledger.py:list_ledger_events",
-    "metadata_present": true,
-    "methods": [
-      "GET"
-    ],
-    "module": "api/v1/commerce_ledger.py",
-    "path": "/api/v1/commerce/runtime/ledger/events",
-    "public_exempt_reason": null,
-    "rate_limit": "standard",
-    "scope": "commerce.runtime.ledger.read",
-    "source_line": 234,
-    "tenant_required": true
-  },
-  {
-    "audit_event": "commerce.runtime.ledger.export.read",
-    "auth_required": true,
-    "function": "export_ledger",
-    "idempotency": "read-only",
-    "key": "GET /api/v1/commerce/runtime/ledger/export api/v1/commerce_ledger.py:export_ledger",
-    "metadata_present": true,
-    "methods": [
-      "GET"
-    ],
-    "module": "api/v1/commerce_ledger.py",
-    "path": "/api/v1/commerce/runtime/ledger/export",
-    "public_exempt_reason": null,
-    "rate_limit": "standard",
-    "scope": "commerce.runtime.ledger.read",
-    "source_line": 465,
-    "tenant_required": true
-  },
-  {
-    "audit_event": "commerce.runtime.ledger.manifests.read",
-    "auth_required": true,
-    "function": "list_review_manifests",
-    "idempotency": "read-only",
-    "key": "GET /api/v1/commerce/runtime/ledger/manifests api/v1/commerce_ledger.py:list_review_manifests",
-    "metadata_present": true,
-    "methods": [
-      "GET"
-    ],
-    "module": "api/v1/commerce_ledger.py",
-    "path": "/api/v1/commerce/runtime/ledger/manifests",
-    "public_exempt_reason": null,
-    "rate_limit": "standard",
-    "scope": "commerce.runtime.ledger.read",
-    "source_line": 434,
-    "tenant_required": true
-  },
-  {
-    "audit_event": "commerce.runtime.ledger.manifest.create",
-    "auth_required": true,
-    "function": "create_review_manifest",
-    "idempotency": "bundle-generated-at-retention-class",
-    "key": "POST /api/v1/commerce/runtime/ledger/manifests api/v1/commerce_ledger.py:create_review_manifest",
-    "metadata_present": true,
-    "methods": [
-      "POST"
-    ],
-    "module": "api/v1/commerce_ledger.py",
-    "path": "/api/v1/commerce/runtime/ledger/manifests",
-    "public_exempt_reason": null,
-    "rate_limit": "commerce-runtime-write",
-    "scope": "commerce.runtime.ledger.manifests.write",
-    "source_line": 393,
-    "tenant_required": true
-  },
-  {
-    "audit_event": "commerce.runtime.ledger.retention.read",
-    "auth_required": true,
-    "function": "list_retention_dispositions",
-    "idempotency": "read-only",
-    "key": "GET /api/v1/commerce/runtime/ledger/retention/dispositions api/v1/commerce_ledger.py:list_retention_dispositions",
-    "metadata_present": true,
-    "methods": [
-      "GET"
-    ],
-    "module": "api/v1/commerce_ledger.py",
-    "path": "/api/v1/commerce/runtime/ledger/retention/dispositions",
-    "public_exempt_reason": null,
-    "rate_limit": "standard",
-    "scope": "commerce.runtime.ledger.read",
-    "source_line": 552,
-    "tenant_required": true
-  },
-  {
-    "audit_event": "commerce.runtime.ledger.retention.disposition.create",
-    "auth_required": true,
-    "function": "create_retention_disposition",
-    "idempotency": "dry-run-packet-kind-reviewer-time",
-    "key": "POST /api/v1/commerce/runtime/ledger/retention/dispositions api/v1/commerce_ledger.py:create_retention_disposition",
-    "metadata_present": true,
-    "methods": [
-      "POST"
-    ],
-    "module": "api/v1/commerce_ledger.py",
-    "path": "/api/v1/commerce/runtime/ledger/retention/dispositions",
-    "public_exempt_reason": null,
-    "rate_limit": "commerce-runtime-write",
-    "scope": "commerce.runtime.ledger.retention.write",
-    "source_line": 503,
-    "tenant_required": true
-  },
-  {
-    "audit_event": "commerce.runtime.ledger.retention.due.read",
-    "auth_required": true,
-    "function": "list_due_retention",
-    "idempotency": "read-only",
-    "key": "GET /api/v1/commerce/runtime/ledger/retention/due api/v1/commerce_ledger.py:list_due_retention",
-    "metadata_present": true,
-    "methods": [
-      "GET"
-    ],
-    "module": "api/v1/commerce_ledger.py",
-    "path": "/api/v1/commerce/runtime/ledger/retention/due",
-    "public_exempt_reason": null,
-    "rate_limit": "standard",
-    "scope": "commerce.runtime.ledger.read",
-    "source_line": 575,
+    "source_line": 1378,
     "tenant_required": true
   },
   {
@@ -3434,7 +3272,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "commerce.runtime.merchant_config.read",
-    "source_line": 475,
+    "source_line": 493,
     "tenant_required": true
   },
   {
@@ -3452,7 +3290,7 @@
     "public_exempt_reason": null,
     "rate_limit": "commerce-runtime-write",
     "scope": "commerce.runtime.merchant_config.write",
-    "source_line": 405,
+    "source_line": 420,
     "tenant_required": true
   },
   {
@@ -3470,7 +3308,133 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "commerce.runtime.merchant_config.read",
-    "source_line": 516,
+    "source_line": 534,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "commerce.ucp.status.read",
+    "auth_required": true,
+    "function": "get_ucp_publishing_status",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/commerce/runtime/merchant-configs/{merchant_id}/ucp api/v1/commerce_ucp_publishing.py:get_ucp_publishing_status",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/commerce_ucp_publishing.py",
+    "path": "/api/v1/commerce/runtime/merchant-configs/{merchant_id}/ucp",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "commerce.runtime.merchant_config.read",
+    "source_line": 166,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "commerce.ucp.keys.provision",
+    "auth_required": true,
+    "function": "provision_ucp_signing_key",
+    "idempotency": "no-op-when-an-active-key-exists",
+    "key": "POST /api/v1/commerce/runtime/merchant-configs/{merchant_id}/ucp/keys api/v1/commerce_ucp_publishing.py:provision_ucp_signing_key",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/commerce_ucp_publishing.py",
+    "path": "/api/v1/commerce/runtime/merchant-configs/{merchant_id}/ucp/keys",
+    "public_exempt_reason": null,
+    "rate_limit": "credential-write",
+    "scope": "commerce.runtime.merchant_config.write",
+    "source_line": 363,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "commerce.ucp.keys.rotate",
+    "auth_required": true,
+    "function": "rotate_ucp_signing_key",
+    "idempotency": "each-call-rotates",
+    "key": "POST /api/v1/commerce/runtime/merchant-configs/{merchant_id}/ucp/keys/rotate api/v1/commerce_ucp_publishing.py:rotate_ucp_signing_key",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/commerce_ucp_publishing.py",
+    "path": "/api/v1/commerce/runtime/merchant-configs/{merchant_id}/ucp/keys/rotate",
+    "public_exempt_reason": null,
+    "rate_limit": "credential-write",
+    "scope": "commerce.runtime.merchant_config.write",
+    "source_line": 382,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "commerce.ucp.publish",
+    "auth_required": true,
+    "function": "publish_ucp_profile",
+    "idempotency": "republish-overwrites-published-state",
+    "key": "POST /api/v1/commerce/runtime/merchant-configs/{merchant_id}/ucp/publish api/v1/commerce_ucp_publishing.py:publish_ucp_profile",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/commerce_ucp_publishing.py",
+    "path": "/api/v1/commerce/runtime/merchant-configs/{merchant_id}/ucp/publish",
+    "public_exempt_reason": null,
+    "rate_limit": "commerce-runtime-write",
+    "scope": "commerce.runtime.merchant_config.write",
+    "source_line": 435,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "commerce.ucp.serving_host.challenge",
+    "auth_required": true,
+    "function": "request_serving_host_challenge",
+    "idempotency": "replaces-pending-challenge",
+    "key": "POST /api/v1/commerce/runtime/merchant-configs/{merchant_id}/ucp/serving-host api/v1/commerce_ucp_publishing.py:request_serving_host_challenge",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/commerce_ucp_publishing.py",
+    "path": "/api/v1/commerce/runtime/merchant-configs/{merchant_id}/ucp/serving-host",
+    "public_exempt_reason": null,
+    "rate_limit": "commerce-runtime-write",
+    "scope": "commerce.runtime.merchant_config.write",
+    "source_line": 187,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "commerce.ucp.serving_host.verify",
+    "auth_required": true,
+    "function": "verify_serving_host",
+    "idempotency": "re-verifies-pending-challenge",
+    "key": "POST /api/v1/commerce/runtime/merchant-configs/{merchant_id}/ucp/serving-host/verify api/v1/commerce_ucp_publishing.py:verify_serving_host",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/commerce_ucp_publishing.py",
+    "path": "/api/v1/commerce/runtime/merchant-configs/{merchant_id}/ucp/serving-host/verify",
+    "public_exempt_reason": null,
+    "rate_limit": "commerce-runtime-external",
+    "scope": "commerce.runtime.merchant_config.write",
+    "source_line": 235,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "commerce.ucp.unpublish",
+    "auth_required": true,
+    "function": "unpublish_ucp_profile",
+    "idempotency": "no-op-when-unpublished",
+    "key": "POST /api/v1/commerce/runtime/merchant-configs/{merchant_id}/ucp/unpublish api/v1/commerce_ucp_publishing.py:unpublish_ucp_profile",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/commerce_ucp_publishing.py",
+    "path": "/api/v1/commerce/runtime/merchant-configs/{merchant_id}/ucp/unpublish",
+    "public_exempt_reason": null,
+    "rate_limit": "commerce-runtime-write",
+    "scope": "commerce.runtime.merchant_config.write",
+    "source_line": 486,
     "tenant_required": true
   },
   {
@@ -3488,7 +3452,7 @@
     "public_exempt_reason": null,
     "rate_limit": "commerce-webhook",
     "scope": "commerce.runtime.pos.offline.confirmations.write",
-    "source_line": 1875,
+    "source_line": 2039,
     "tenant_required": true
   },
   {
@@ -3506,7 +3470,7 @@
     "public_exempt_reason": null,
     "rate_limit": "commerce-runtime-write",
     "scope": "commerce.runtime.pos.offline.handoffs.write",
-    "source_line": 1675,
+    "source_line": 1842,
     "tenant_required": true
   },
   {
@@ -3524,7 +3488,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "commerce.runtime.pos.offline.read",
-    "source_line": 1630,
+    "source_line": 1797,
     "tenant_required": true
   },
   {
@@ -3542,7 +3506,7 @@
     "public_exempt_reason": null,
     "rate_limit": "commerce-runtime-write",
     "scope": "commerce.runtime.pos.offline.simulator.write",
-    "source_line": 1935,
+    "source_line": 2099,
     "tenant_required": true
   },
   {
@@ -3560,7 +3524,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "commerce.runtime.products.read",
-    "source_line": 1980,
+    "source_line": 2144,
     "tenant_required": true
   },
   {
@@ -3578,7 +3542,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "commerce.runtime.protocol_adapters.read",
-    "source_line": 1428,
+    "source_line": 1578,
     "tenant_required": true
   },
   {
@@ -3596,7 +3560,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "commerce.runtime.protocol_adapters.read",
-    "source_line": 1459,
+    "source_line": 1629,
     "tenant_required": true
   },
   {
@@ -3614,7 +3578,7 @@
     "public_exempt_reason": null,
     "rate_limit": "commerce-runtime-external",
     "scope": "commerce.runtime.providers.plural_pine.verify",
-    "source_line": 1391,
+    "source_line": 1541,
     "tenant_required": true
   },
   {
@@ -3632,7 +3596,7 @@
     "public_exempt_reason": null,
     "rate_limit": "commerce-runtime-write",
     "scope": "commerce.runtime.purchase.prepare",
-    "source_line": 1487,
+    "source_line": 1657,
     "tenant_required": true
   },
   {
@@ -3650,7 +3614,7 @@
     "public_exempt_reason": null,
     "rate_limit": "commerce-runtime-write",
     "scope": "commerce.runtime.shopify.credentials.write",
-    "source_line": 550,
+    "source_line": 568,
     "tenant_required": true
   },
   {
@@ -3668,7 +3632,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "commerce.runtime.shopify.credentials.read",
-    "source_line": 678,
+    "source_line": 696,
     "tenant_required": true
   },
   {
@@ -3686,7 +3650,7 @@
     "public_exempt_reason": null,
     "rate_limit": "commerce-runtime-write",
     "scope": "commerce.runtime.seller_agents.write",
-    "source_line": 333,
+    "source_line": 345,
     "tenant_required": true
   },
   {
@@ -3704,7 +3668,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "commerce.runtime.seller_agents.read",
-    "source_line": 385,
+    "source_line": 400,
     "tenant_required": true
   },
   {
@@ -3722,7 +3686,7 @@
     "public_exempt_reason": null,
     "rate_limit": "connector-bulk",
     "scope": "commerce.runtime.shopify.sync",
-    "source_line": 749,
+    "source_line": 767,
     "tenant_required": true
   },
   {
@@ -3740,133 +3704,7 @@
     "public_exempt_reason": null,
     "rate_limit": "commerce-webhook",
     "scope": "commerce.runtime.shopify.webhook",
-    "source_line": 828,
-    "tenant_required": true
-  },
-  {
-    "audit_event": "commerce.ucp.order_webhook_delivery.replay",
-    "auth_required": true,
-    "function": "replay_order_webhook_delivery",
-    "idempotency": "subscription-target",
-    "key": "POST /api/v1/commerce/runtime/ucp/order-webhook-deliveries/{delivery_id}/replay api/v1/commerce_ucp.py:replay_order_webhook_delivery",
-    "metadata_present": true,
-    "methods": [
-      "POST"
-    ],
-    "module": "api/v1/commerce_ucp.py",
-    "path": "/api/v1/commerce/runtime/ucp/order-webhook-deliveries/{delivery_id}/replay",
-    "public_exempt_reason": null,
-    "rate_limit": "commerce-runtime-write",
-    "scope": "commerce.runtime.ucp.deliveries.write",
-    "source_line": 571,
-    "tenant_required": true
-  },
-  {
-    "audit_event": null,
-    "auth_required": true,
-    "function": "list_order_webhook_subscriptions",
-    "idempotency": "read-only",
-    "key": "GET /api/v1/commerce/runtime/ucp/order-webhook-subscriptions api/v1/commerce_ucp.py:list_order_webhook_subscriptions",
-    "metadata_present": true,
-    "methods": [
-      "GET"
-    ],
-    "module": "api/v1/commerce_ucp.py",
-    "path": "/api/v1/commerce/runtime/ucp/order-webhook-subscriptions",
-    "public_exempt_reason": null,
-    "rate_limit": "standard",
-    "scope": "commerce.runtime.ucp.subscriptions.read",
-    "source_line": 405,
-    "tenant_required": true
-  },
-  {
-    "audit_event": "commerce.ucp.order_webhook_subscription.create",
-    "auth_required": true,
-    "function": "create_order_webhook_subscription",
-    "idempotency": "subscription-target",
-    "key": "POST /api/v1/commerce/runtime/ucp/order-webhook-subscriptions api/v1/commerce_ucp.py:create_order_webhook_subscription",
-    "metadata_present": true,
-    "methods": [
-      "POST"
-    ],
-    "module": "api/v1/commerce_ucp.py",
-    "path": "/api/v1/commerce/runtime/ucp/order-webhook-subscriptions",
-    "public_exempt_reason": null,
-    "rate_limit": "commerce-runtime-write",
-    "scope": "commerce.runtime.ucp.subscriptions.write",
-    "source_line": 428,
-    "tenant_required": true
-  },
-  {
-    "audit_event": "commerce.ucp.order_webhook_subscription.update",
-    "auth_required": true,
-    "function": "update_order_webhook_subscription",
-    "idempotency": "subscription-target",
-    "key": "PATCH /api/v1/commerce/runtime/ucp/order-webhook-subscriptions/{subscription_id} api/v1/commerce_ucp.py:update_order_webhook_subscription",
-    "metadata_present": true,
-    "methods": [
-      "PATCH"
-    ],
-    "module": "api/v1/commerce_ucp.py",
-    "path": "/api/v1/commerce/runtime/ucp/order-webhook-subscriptions/{subscription_id}",
-    "public_exempt_reason": null,
-    "rate_limit": "commerce-runtime-write",
-    "scope": "commerce.runtime.ucp.subscriptions.write",
-    "source_line": 469,
-    "tenant_required": true
-  },
-  {
-    "audit_event": "commerce.ucp.order_webhook_subscription.rotate_key",
-    "auth_required": true,
-    "function": "rotate_order_webhook_subscription_key",
-    "idempotency": "subscription-target",
-    "key": "POST /api/v1/commerce/runtime/ucp/order-webhook-subscriptions/{subscription_id}/rotate-key api/v1/commerce_ucp.py:rotate_order_webhook_subscription_key",
-    "metadata_present": true,
-    "methods": [
-      "POST"
-    ],
-    "module": "api/v1/commerce_ucp.py",
-    "path": "/api/v1/commerce/runtime/ucp/order-webhook-subscriptions/{subscription_id}/rotate-key",
-    "public_exempt_reason": null,
-    "rate_limit": "commerce-runtime-write",
-    "scope": "commerce.runtime.ucp.subscriptions.write",
-    "source_line": 500,
-    "tenant_required": true
-  },
-  {
-    "audit_event": "commerce.ucp.order.update",
-    "auth_required": true,
-    "function": "record_order_event",
-    "idempotency": "subscription-target",
-    "key": "POST /api/v1/commerce/runtime/ucp/orders/{order_id}/events api/v1/commerce_ucp.py:record_order_event",
-    "metadata_present": true,
-    "methods": [
-      "POST"
-    ],
-    "module": "api/v1/commerce_ucp.py",
-    "path": "/api/v1/commerce/runtime/ucp/orders/{order_id}/events",
-    "public_exempt_reason": null,
-    "rate_limit": "commerce-runtime-write",
-    "scope": "commerce.runtime.ucp.orders.write",
-    "source_line": 616,
-    "tenant_required": true
-  },
-  {
-    "audit_event": null,
-    "auth_required": true,
-    "function": "list_order_webhook_deliveries",
-    "idempotency": "read-only",
-    "key": "GET /api/v1/commerce/runtime/ucp/orders/{order_id}/webhook-deliveries api/v1/commerce_ucp.py:list_order_webhook_deliveries",
-    "metadata_present": true,
-    "methods": [
-      "GET"
-    ],
-    "module": "api/v1/commerce_ucp.py",
-    "path": "/api/v1/commerce/runtime/ucp/orders/{order_id}/webhook-deliveries",
-    "public_exempt_reason": null,
-    "rate_limit": "standard",
-    "scope": "commerce.runtime.ucp.deliveries.read",
-    "source_line": 534,
+    "source_line": 846,
     "tenant_required": true
   },
   {
@@ -12240,184 +12078,76 @@
     "tenant_required": true
   },
   {
-    "audit_event": "commerce.ucp.cart.create",
-    "auth_required": true,
-    "function": "create_cart",
-    "idempotency": "idempotency-key-header",
-    "key": "POST /api/v1/ucp/carts api/v1/commerce_ucp.py:create_cart",
-    "metadata_present": true,
-    "methods": [
-      "POST"
-    ],
-    "module": "api/v1/commerce_ucp.py",
-    "path": "/api/v1/ucp/carts",
-    "public_exempt_reason": null,
-    "rate_limit": "ucp-platform",
-    "scope": "ucp.cart.write",
-    "source_line": 285,
-    "tenant_required": true
-  },
-  {
-    "audit_event": null,
-    "auth_required": true,
-    "function": "get_cart",
+    "audit_event": "none-public-ucp-catalog-lookup",
+    "auth_required": false,
+    "function": "ucp_catalog_lookup",
     "idempotency": "read-only",
-    "key": "GET /api/v1/ucp/carts/{cart_id} api/v1/commerce_ucp.py:get_cart",
-    "metadata_present": true,
-    "methods": [
-      "GET"
-    ],
-    "module": "api/v1/commerce_ucp.py",
-    "path": "/api/v1/ucp/carts/{cart_id}",
-    "public_exempt_reason": null,
-    "rate_limit": "ucp-platform",
-    "scope": "ucp.cart.read",
-    "source_line": 297,
-    "tenant_required": true
-  },
-  {
-    "audit_event": "commerce.ucp.cart.update",
-    "auth_required": true,
-    "function": "update_cart",
-    "idempotency": "idempotency-key-header",
-    "key": "PUT /api/v1/ucp/carts/{cart_id} api/v1/commerce_ucp.py:update_cart",
-    "metadata_present": true,
-    "methods": [
-      "PUT"
-    ],
-    "module": "api/v1/commerce_ucp.py",
-    "path": "/api/v1/ucp/carts/{cart_id}",
-    "public_exempt_reason": null,
-    "rate_limit": "ucp-platform",
-    "scope": "ucp.cart.write",
-    "source_line": 310,
-    "tenant_required": true
-  },
-  {
-    "audit_event": "commerce.ucp.cart.cancel",
-    "auth_required": true,
-    "function": "cancel_cart",
-    "idempotency": "idempotency-key-header",
-    "key": "POST /api/v1/ucp/carts/{cart_id}/cancel api/v1/commerce_ucp.py:cancel_cart",
+    "key": "POST /api/v1/ucp/catalog/lookup api/v1/ucp_discovery.py:ucp_catalog_lookup",
     "metadata_present": true,
     "methods": [
       "POST"
     ],
-    "module": "api/v1/commerce_ucp.py",
-    "path": "/api/v1/ucp/carts/{cart_id}/cancel",
-    "public_exempt_reason": null,
-    "rate_limit": "ucp-platform",
-    "scope": "ucp.cart.write",
-    "source_line": 323,
-    "tenant_required": true
+    "module": "api/v1/ucp_discovery.py",
+    "path": "/api/v1/ucp/catalog/lookup",
+    "public_exempt_reason": "ucp-catalog-public-access-level-verified-artifacts-only",
+    "rate_limit": "ucp-catalog-read",
+    "scope": "public:ucp.catalog.read",
+    "source_line": 370,
+    "tenant_required": false
   },
   {
-    "audit_event": "commerce.ucp.checkout.create",
-    "auth_required": true,
-    "function": "create_checkout_session",
-    "idempotency": "idempotency-key-header",
-    "key": "POST /api/v1/ucp/checkout-sessions api/v1/commerce_ucp.py:create_checkout_session",
-    "metadata_present": true,
-    "methods": [
-      "POST"
-    ],
-    "module": "api/v1/commerce_ucp.py",
-    "path": "/api/v1/ucp/checkout-sessions",
-    "public_exempt_reason": null,
-    "rate_limit": "ucp-platform",
-    "scope": "ucp.checkout.write",
-    "source_line": 213,
-    "tenant_required": true
-  },
-  {
-    "audit_event": null,
-    "auth_required": true,
-    "function": "get_checkout_session",
+    "audit_event": "none-public-ucp-catalog-search",
+    "auth_required": false,
+    "function": "ucp_catalog_search",
     "idempotency": "read-only",
-    "key": "GET /api/v1/ucp/checkout-sessions/{session_id} api/v1/commerce_ucp.py:get_checkout_session",
-    "metadata_present": true,
-    "methods": [
-      "GET"
-    ],
-    "module": "api/v1/commerce_ucp.py",
-    "path": "/api/v1/ucp/checkout-sessions/{session_id}",
-    "public_exempt_reason": null,
-    "rate_limit": "ucp-platform",
-    "scope": "ucp.checkout.read",
-    "source_line": 225,
-    "tenant_required": true
-  },
-  {
-    "audit_event": "commerce.ucp.checkout.update",
-    "auth_required": true,
-    "function": "update_checkout_session",
-    "idempotency": "idempotency-key-header",
-    "key": "PUT /api/v1/ucp/checkout-sessions/{session_id} api/v1/commerce_ucp.py:update_checkout_session",
-    "metadata_present": true,
-    "methods": [
-      "PUT"
-    ],
-    "module": "api/v1/commerce_ucp.py",
-    "path": "/api/v1/ucp/checkout-sessions/{session_id}",
-    "public_exempt_reason": null,
-    "rate_limit": "ucp-platform",
-    "scope": "ucp.checkout.write",
-    "source_line": 240,
-    "tenant_required": true
-  },
-  {
-    "audit_event": "commerce.ucp.checkout.cancel",
-    "auth_required": true,
-    "function": "cancel_checkout_session",
-    "idempotency": "idempotency-key-header",
-    "key": "POST /api/v1/ucp/checkout-sessions/{session_id}/cancel api/v1/commerce_ucp.py:cancel_checkout_session",
+    "key": "POST /api/v1/ucp/catalog/search api/v1/ucp_discovery.py:ucp_catalog_search",
     "metadata_present": true,
     "methods": [
       "POST"
     ],
-    "module": "api/v1/commerce_ucp.py",
-    "path": "/api/v1/ucp/checkout-sessions/{session_id}/cancel",
-    "public_exempt_reason": null,
-    "rate_limit": "ucp-platform",
-    "scope": "ucp.checkout.write",
-    "source_line": 270,
-    "tenant_required": true
+    "module": "api/v1/ucp_discovery.py",
+    "path": "/api/v1/ucp/catalog/search",
+    "public_exempt_reason": "ucp-catalog-public-access-level-verified-artifacts-only",
+    "rate_limit": "ucp-catalog-read",
+    "scope": "public:ucp.catalog.read",
+    "source_line": 311,
+    "tenant_required": false
   },
   {
-    "audit_event": "commerce.ucp.checkout.complete",
-    "auth_required": true,
-    "function": "complete_checkout_session",
-    "idempotency": "idempotency-key-header",
-    "key": "POST /api/v1/ucp/checkout-sessions/{session_id}/complete api/v1/commerce_ucp.py:complete_checkout_session",
-    "metadata_present": true,
-    "methods": [
-      "POST"
-    ],
-    "module": "api/v1/commerce_ucp.py",
-    "path": "/api/v1/ucp/checkout-sessions/{session_id}/complete",
-    "public_exempt_reason": null,
-    "rate_limit": "ucp-platform",
-    "scope": "ucp.checkout.write",
-    "source_line": 255,
-    "tenant_required": true
-  },
-  {
-    "audit_event": null,
-    "auth_required": true,
-    "function": "get_order",
+    "audit_event": "none-public-ucp-location-lookup",
+    "auth_required": false,
+    "function": "ucp_location_lookup",
     "idempotency": "read-only",
-    "key": "GET /api/v1/ucp/orders/{order_id} api/v1/commerce_ucp.py:get_order",
+    "key": "POST /api/v1/ucp/locations/lookup api/v1/ucp_discovery.py:ucp_location_lookup",
     "metadata_present": true,
     "methods": [
-      "GET"
+      "POST"
     ],
-    "module": "api/v1/commerce_ucp.py",
-    "path": "/api/v1/ucp/orders/{order_id}",
-    "public_exempt_reason": null,
-    "rate_limit": "ucp-platform",
-    "scope": "ucp.order.read",
-    "source_line": 335,
-    "tenant_required": true
+    "module": "api/v1/ucp_discovery.py",
+    "path": "/api/v1/ucp/locations/lookup",
+    "public_exempt_reason": "ucp-location-public-store-hours-and-address-only",
+    "rate_limit": "ucp-catalog-read",
+    "scope": "public:ucp.location.read",
+    "source_line": 483,
+    "tenant_required": false
+  },
+  {
+    "audit_event": "none-public-ucp-location-search",
+    "auth_required": false,
+    "function": "ucp_location_search",
+    "idempotency": "read-only",
+    "key": "POST /api/v1/ucp/locations/search api/v1/ucp_discovery.py:ucp_location_search",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/ucp_discovery.py",
+    "path": "/api/v1/ucp/locations/search",
+    "public_exempt_reason": "ucp-location-public-store-hours-and-address-only",
+    "rate_limit": "ucp-catalog-read",
+    "scope": "public:ucp.location.read",
+    "source_line": 433,
+    "tenant_required": false
   },
   {
     "audit_event": "voice.calls.list",

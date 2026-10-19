@@ -57,8 +57,11 @@ decision to set it to `false`.
    `AGENTICORG_AUDIT_WITNESS_ENABLED=false`, `AGENTICORG_OACP_RETENTION_APPLY_ENABLED=false`.
    Migration `v6z88_commerce_ledger` is not rolled back in production: its tables are
    append-only evidence.
-7. Set `AGENTICORG_UCP_CHECKOUT_ENABLED=false` to stop UCP checkout, cart and order traffic (every `/ucp` route answers 404 and the order-webhook sweep stops; stored sessions, orders and undelivered webhooks are kept). To stop one platform only, revoke the API key the merchant issued to it; to stop one merchant's webhooks, disable its subscriptions (`PATCH /api/v1/commerce/runtime/ucp/order-webhook-subscriptions/{id}`).
-8. Re-enable only after smoke tests pass.
+7. Stop public UCP discovery: `AGENTICORG_UCP_PROFILE_ENABLED=false` makes `/.well-known/ucp`
+   and `/ucp/*` answer 404 for every merchant (default off); for one merchant use
+   `POST /api/v1/commerce/runtime/merchant-configs/{merchant_id}/ucp/unpublish`.
+8. Set `AGENTICORG_UCP_CHECKOUT_ENABLED=false` to stop UCP checkout, cart and order traffic (every `/ucp` route answers 404 and the order-webhook sweep stops; stored sessions, orders and undelivered webhooks are kept). To stop one platform only, revoke the API key the merchant issued to it; to stop one merchant's webhooks, disable its subscriptions (`PATCH /api/v1/commerce/runtime/ucp/order-webhook-subscriptions/{id}`).
+9. Re-enable only after smoke tests pass.
 
 ## UCP Smoke
 
@@ -68,6 +71,15 @@ With `AGENTICORG_UCP_CHECKOUT_ENABLED=true` on staging and a merchant whose `pro
 - A repeat with the same `Idempotency-Key` and body returns the same session; a different body returns 409.
 - Complete without a registered executor returns `executor_unavailable` and the session stays `ready_for_complete`.
 - The commerce ledger shows `commerce.ucp.checkout.create` and `commerce.ucp.checkout.complete` rows for the tenant.
+
+## Flags
+
+| Flag | Default | Effect |
+| --- | --- | --- |
+| `AGENTICORG_UCP_PROFILE_ENABLED` | `false` | UCP profile, catalog and location routes; UCP signing key at onboarding; enabled `public_discovery_state` artifacts accepted. |
+| `AGENTICORG_UCP_VERSIONS` | `2026-04-08` | UCP releases served; the newest is `/.well-known/ucp`, older ones are leaf profiles. |
+| `AGENTICORG_UCP_KEY_ROTATION_GRACE_DAYS` | `7` | Days a rotated-out UCP signing key stays published (minimum 7). |
+| `AGENTICORG_UCP_CHECKOUT_ENABLED` | `false` | UCP checkout, cart and order routes (`/ucp/checkout-sessions`, `/ucp/carts`, `/ucp/orders`) and the order-webhook sweep. |
 
 ## POS Smoke
 

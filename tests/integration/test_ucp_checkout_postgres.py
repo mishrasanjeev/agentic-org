@@ -21,7 +21,7 @@ from sqlalchemy.pool import NullPool
 from core.commerce import executors
 from core.commerce.ucp import handlers, webhooks
 from core.commerce.ucp.httpsig import verify_request_signature
-from tests import ucp_fixtures as uf
+from tests import ucp_txn_fixtures as uf
 
 
 @pytest.fixture(scope="module", autouse=True)

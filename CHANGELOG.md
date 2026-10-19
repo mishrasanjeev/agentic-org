@@ -98,6 +98,41 @@
 - Migration `v6z88_commerce_ledger` (unreleased, extended): `audit_chain_witness_checkpoints`
   (forced RLS, append-only), `oacp_manifest_retention_guard` and `oacp_delete_due_manifest`.
 
+## Unreleased - UCP business profile, catalog and locations (G17, G18, G19, G20, G23, G26, G28)
+
+- `GET /.well-known/ucp` (and `/.well-known/ucp/{version}` leaf profiles) on a merchant's serving
+  host, behind `AGENTICORG_UCP_PROFILE_ENABLED` (default off; every route answers 404 while off).
+  The merchant is chosen by the `Host` header only; the host must carry a DNS TXT attestation, the
+  merchant must have opted in (operator publish) and hold an active signing key, and a verified,
+  fresh `public_discovery_state` artifact must allow publication for that host. UCP 2026-04-08 by
+  default; `AGENTICORG_UCP_VERSIONS=2026-04-08,2026-08-25` serves 2026-08-25 at `/.well-known/ucp`
+  with the 2026-04-08 leaf in `ucp.supported_versions`. `Cache-Control: public, max-age=300`, ETag,
+  no redirects. Capabilities are only the ones served, from a registry later surfaces register into.
+- `POST /ucp/catalog/search` and `/ucp/catalog/lookup` (`dev.ucp.shopping.catalog.*`) in the UCP
+  item schema of the requested release, served only from verified (ES256), fresh OACP catalog,
+  price and inventory artifacts; otherwise `catalog_unavailable`. 2026-08-25 responses carry
+  `policies[]` mapped from the verified OACP `policy` artifact (`core/commerce/ucp/policies.py`).
+- `POST /ucp/locations/search` and `/ucp/locations/lookup` (`dev.ucp.common.location.*`, 2026-08-25)
+  from POS stores; stores accept an optional `location` block (timezone, address, geo, regular and
+  exception hours), validated on save and evaluated in the store's timezone across DST.
+- Per-merchant ES256 signing keys (`core/commerce/merchant_keys.py`): generated at onboarding
+  while the profile flag is on, or by `POST .../merchant-configs/{id}/ucp/keys`; private key
+  encrypted for the tenant; rotation (`.../ucp/keys/rotate`) keeps the old key published for
+  `AGENTICORG_UCP_KEY_ROTATION_GRACE_DAYS` (default 7). Profiles publish `signing_keys[]` +
+  `keys[]` (2026-04-08) or `keys[]` (2026-08-25).
+- Serving-host attestation and namespace authority binding: `POST .../ucp/serving-host`,
+  `.../serving-host/verify` (async DNS), `.../publish` (namespace bound to the attested host; vendor
+  entries outside it refused), `.../unpublish`, `GET .../ucp`. A published merchant's Grantex
+  authority request carries `public_discovery_requested`, `serving_host` and
+  `namespace_attestation_ref`; an enabled `public_discovery_state` artifact is accepted into the
+  cache only with the profile flag on.
+- **Changed: the `ucp_style_capability_profile` protocol-adapter surface is removed.** Its free-text
+  capability list is replaced by `ucp_business_profile`, the spec-shaped profile, generated only for
+  a published merchant (`unavailable_surfaces` says why otherwise). Clients reading the old surface
+  read `ucp_business_profile` instead.
+- Merchant-config upserts carry the server-managed UCP state over unchanged and never accept it from
+  the request; responses omit the signing-key ciphertext. No migration.
+
 ## Unreleased - Commerce ledger and arbiter (G9-G13)
 
 - **Breaking: `live_execution_approved` is ignored.** `POST /api/v1/commerce/runtime/purchase/prepare`

@@ -1,10 +1,11 @@
 # SPDX-License-Identifier: Apache-2.0
-"""Universal Commerce Protocol (UCP) business-side transactions: checkout, cart and order.
+"""Universal Commerce Protocol (UCP) business surfaces.
 
-The handlers in ``core.commerce.ucp.handlers`` are transport-neutral: the REST
-binding (``api/v1/commerce_ucp.py``) calls them, and an MCP binding can call
-the same functions (UCP has no separate JSON-RPC transport; MCP and Embedded
-are its JSON-RPC bindings). Version-specific shapes are rendered by one module
-per UCP release in ``core.commerce.ucp.renderers``; the stored state is
-version-neutral.
+Profile, catalog and locations are rendered from verified OACP artifacts
+(``profile``, ``catalog``, ``locations``). Transactions (checkout, cart and
+order) run through the transport-neutral handlers in
+``core.commerce.ucp.handlers``: the REST binding (``api/v1/commerce_ucp.py``)
+calls them and an MCP binding can call the same functions (UCP has no separate
+JSON-RPC transport). Transaction shapes are drawn by one module per release in
+``core.commerce.ucp.renderers``.
 """

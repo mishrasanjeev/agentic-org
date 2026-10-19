@@ -14,8 +14,8 @@ from core.commerce.payment_handlers.plural import HANDLER_ID, HANDLER_NAME
 from core.commerce.ucp import payment as p
 from core.commerce.ucp.capabilities import DEFAULT_REGISTRY
 from core.commerce.ucp.renderers import v2026_08_25
-from tests import ucp_fixtures as uf
 from tests import ucp_schema
+from tests import ucp_txn_fixtures as uf
 
 TENANT = str(uuid.UUID("00000000-0000-4000-8000-0000000000a5"))
 

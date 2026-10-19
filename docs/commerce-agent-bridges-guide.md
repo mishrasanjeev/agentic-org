@@ -54,7 +54,8 @@ Use `GET /api/v1/commerce/runtime/protocol-adapters` for all surfaces or
 Available surfaces:
 
 - `schema_org_product_offer_jsonld`
-- `ucp_style_capability_profile`
+- `ucp_business_profile` (the published UCP business profile; absent, with
+  `unavailable_surfaces.ucp_business_profile`, until the merchant is published)
 - `acp_style_commerce_interaction_profile`
 - `ap2_style_mandate_payment_evidence_profile`
 - `a2a_agent_card_task_metadata`
