@@ -49,7 +49,13 @@ from core.commerce.c6z_runtime_vertical import (
 from core.commerce.oacp_artifacts import (
     DurableOacpArtifactCacheRepository,
     OacpArtifactCacheRepositoryQuery,
+    OacpArtifactScope,
     evaluate_oacp_persistent_artifact_cache_record,
+)
+from core.commerce.oacp_grantex_trust import (
+    OacpGrantexArtifactVerifier,
+    default_oacp_grantex_verifier,
+    split_grantex_artifact,
 )
 from core.commerce.oacp_merchant_config import (
     MerchantCommerceConfigError,
@@ -65,6 +71,7 @@ from core.commerce.offline_pos_bridge import (
     simulate_offline_pos_confirmation,
     verify_offline_pos_callback_signature,
 )
+from core.config import oacp_verify_strict_enabled
 from core.crypto import encrypt_for_tenant
 from core.crypto.tenant_secrets import decrypt_for_tenant
 from core.database import get_tenant_session
@@ -93,6 +100,11 @@ router = APIRouter(
 )
 
 MERCHANT_COMMERCE_CONFIG_SCOPE = "commerce.merchant_config.write"
+
+
+def _oacp_artifact_verifier() -> OacpGrantexArtifactVerifier:
+    """The Grantex OACP verifier pinned to configuration (tests replace this)."""
+    return default_oacp_grantex_verifier()
 
 
 def require_merchant_commerce_config_write(request: Request) -> None:
@@ -841,15 +853,75 @@ async def cache_grantex_artifacts(
     tenant_id: str = Depends(get_current_tenant),
 ) -> dict[str, Any]:
     now_iso = _now_iso()
+    strict = oacp_verify_strict_enabled()
+    verifier = _oacp_artifact_verifier()
+    # Every artifact is verified (detached ES256 JWS against the pinned Grantex
+    # JWKS, scope, TTL, Token Status List) before the database session opens.
+    # Strict mode refuses the whole issuance when any artifact fails, so a
+    # partly verified set is never cached.
+    verifier_refs: list[str | None] = []
+    refusals: list[dict[str, Any]] = []
+    for artifact in body.artifacts:
+        envelope, payload = split_grantex_artifact(artifact)
+        payload_scope = payload if isinstance(payload, Mapping) else {}
+        result = await verifier.verify(
+            envelope,
+            payload,
+            expected_scope=OacpArtifactScope(
+                tenant_id=tenant_id,
+                merchant_id=str(payload_scope.get("merchant_id") or ""),
+                seller_agent_id=str(payload_scope.get("seller_agent_id") or ""),
+                buyer_agent_id="",
+            ),
+            now_iso=now_iso,
+        )
+        if result.get("valid") is True:
+            verifier_refs.append(cast(str, result["verifier_result_ref"]))
+            continue
+        verifier_refs.append(None)
+        refusals.append(
+            {
+                "artifact_id": result.get("artifact_id"),
+                "refusal_code": result.get("refusal_code"),
+                "message": result.get("message"),
+            }
+        )
+    if refusals:
+        logger.warning(
+            "oacp_artifact_verification_irregularity tenant=%s strict=%s refused=%d codes=%s",
+            tenant_id,
+            strict,
+            len(refusals),
+            sorted({str(item["refusal_code"]) for item in refusals}),
+        )
+        if strict:
+            raise HTTPException(
+                status_code=422,
+                detail={
+                    "status": "artifact_verification_refused",
+                    "records_stored": 0,
+                    "records_rejected": len(body.artifacts),
+                    "refusals": refusals,
+                    "verification_mode": "strict",
+                    "allowed_to_execute": False,
+                    "non_authoritative_for_transaction": True,
+                },
+            )
+    verification_summary = {
+        "mode": "strict" if strict else "log_only",
+        "verified": sum(1 for ref in verifier_refs if ref is not None),
+        "refused": refusals,
+    }
     async with get_tenant_session(_tenant_uuid(tenant_id)) as session:
         repo = DurableOacpArtifactCacheRepository(session)
         store_results: list[dict[str, Any]] = []
         cache_records = []
-        for artifact in body.artifacts:
+        for artifact, verifier_result_ref in zip(body.artifacts, verifier_refs, strict=True):
             record = build_cache_record_from_grantex_artifact(
                 artifact,
                 cached_at=now_iso,
                 buyer_agent_id=body.buyer_agent_id,
+                verifier_result_ref=verifier_result_ref,
             )
             if record.tenant_id != tenant_id:
                 raise HTTPException(403, "Artifact tenant scope mismatch")
@@ -886,6 +958,7 @@ async def cache_grantex_artifacts(
         "records_stored": len(store_results),
         "records_rejected": 0,
         "store_results": store_results,
+        "verification": verification_summary,
         "allowed_to_execute": False,
         "non_authoritative_for_transaction": True,
     }

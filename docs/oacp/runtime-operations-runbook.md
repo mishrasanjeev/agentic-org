@@ -42,7 +42,7 @@ Set `OACP_LAUNCH_EXTERNAL_CHECKS=true` only when Shopify, Grantex, and Plural/Pi
 3. Shopify connector status and read-only sync.
 4. Shopify webhook signed test marks source stale/refresh-required.
 5. Grantex authority request returns 11 artifacts or an exact refusal.
-6. Artifact cache count and buyer answer with source/freshness labels.
+6. Artifact cache count, `verification.mode` `strict` with `verification.refused` empty, each record's `verifier_result_ref` starting `oacp-artifact-jws-v1;`, and a buyer answer with source/freshness labels.
 7. Public catalog page, product page, catalog JSON, Schema.org JSON-LD, sitemap, and llms.txt when merchant publishing is enabled.
 8. Protocol adapter endpoints and MCP seller fact read.
 9. A2A agent card and OpenAPI bridge schema.
@@ -56,6 +56,7 @@ Set `OACP_LAUNCH_EXTERNAL_CHECKS=true` only when Shopify, Grantex, and Plural/Pi
 - Shopify sync failures.
 - Grantex authority status and refusal codes.
 - Cache freshness distribution.
+- `oacp_artifact_verification_irregularity` warnings and `artifact_verification_refused` 422s by refusal code (Grantex JWKS or status list unreachable shows as `issuer_key_untrusted` / `revocation_status_unavailable`).
 - Buyer answer source labels.
 - Bridge route errors.
 - Provider capability status.
@@ -69,6 +70,7 @@ Set `OACP_LAUNCH_EXTERNAL_CHECKS=true` only when Shopify, Grantex, and Plural/Pi
 1. Disable buyer surfaces for affected merchant.
 2. Disable merchant public publishing in merchant commerce config, or set `OACP_PUBLIC_CATALOG_PLATFORM_DISABLED=true` for a platform-wide stop.
 3. Mark affected cache records stale.
+   If strict OACP verification refuses every Grantex issuance because Grantex is not yet issuing ES256-signed artifacts, the recorded operator decision is `AGENTICORG_OACP_VERIFY_STRICT=false` for that deployment until Grantex deploys; artifacts are then cached without a `verifier_result_ref` and every failure is logged as an irregularity. Set it back (unset) once `verification.refused` is empty.
 4. Stop Shopify sync jobs.
 5. Ask Grantex to remove tenant allowlist or rotate token if needed.
 6. Disable Offline POS handoff creation for affected merchant if POS evidence is stale or callback verification fails.

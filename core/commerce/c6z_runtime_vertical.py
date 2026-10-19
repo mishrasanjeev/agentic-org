@@ -969,7 +969,16 @@ def build_cache_record_from_grantex_artifact(
     *,
     cached_at: str,
     buyer_agent_id: str | None = None,
+    verifier_result_ref: str | None = None,
 ) -> OacpPersistentArtifactCacheRecord:
+    """Map one Grantex issuance item to a cache record.
+
+    ``verifier_result_ref`` is the reference returned by
+    ``OacpGrantexArtifactVerifier.verify`` for this artifact (profile, kid,
+    payload hash, verification time). It is never read from the artifact and
+    never defaulted: an artifact that was not verified is cached without one,
+    and a record without one cannot back a final commitment.
+    """
     envelope = cast(Mapping[str, Any], artifact.get("envelope") or artifact)
     payload = cast(
         Mapping[str, Any],
@@ -1017,7 +1026,7 @@ def build_cache_record_from_grantex_artifact(
         risk_tier="low",
         blocked_capabilities=("checkout", "payment", "order", "mandate", "shipping"),
         unsupported_capabilities=("execution", "public_discovery", "live_provider"),
-        verifier_result_ref=str(artifact.get("verifier_result_ref") or f"{artifact_id}:verified"),
+        verifier_result_ref=verifier_result_ref,
         allowed_to_execute=False,
         non_authoritative_for_transaction=True,
         no_checkout_payment_enablement=True,

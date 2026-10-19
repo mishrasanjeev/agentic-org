@@ -15,6 +15,8 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING, Any, Literal, Protocol, cast
 
+from core.commerce.oacp_jws import OacpJwsVerification, verify_oacp_artifact_jws
+
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -155,7 +157,6 @@ OfflineAction = Literal[
     "policy_override",
     "emergency_disable",
 ]
-IssuerKeyState = Literal["active", "retired", "revoked"]
 PersistentCacheScopeKind = Literal["buyer_agent", "seller_agent", "tenant", "merchant"]
 PersistentCacheActionIntent = Literal["non_binding_preview", "prepare_only", "final_commitment"]
 PersistentCacheEvaluationStatus = Literal[
@@ -236,9 +237,15 @@ OACP_ARTIFACT_TTLS_SECONDS: dict[ArtifactType, int] = {
     "public_discovery": 15 * 60,
     "mandate_capability": 2 * 60,
     "commitment_evidence": 5 * 60,
-    "revocation": 0,
+    # Grantex issues a revocation artifact that lives until the revoked artifact
+    # would have expired (at least 5 minutes, at most 24 hours).
+    "revocation": 24 * 60 * 60,
     "protocol_adapter": 24 * 60 * 60,
 }
+
+# Tolerated issuer/relying-party clock difference on issued_at and not_before
+# (the same 60 s Grantex applies). Expiry is never extended.
+OACP_CLOCK_SKEW_SECONDS = 60
 
 OACP_REVOCATION_SNAPSHOT_MAX_AGE_SECONDS: dict[RiskTier, int | None] = {
     "informational": 24 * 60 * 60,
@@ -888,16 +895,6 @@ class OfflineCommitmentInput:
 
 
 @dataclass(frozen=True)
-class OacpIssuerKeyMetadata:
-    issuer: str
-    issuer_key_id: str
-    algorithm: str
-    state: IssuerKeyState
-    not_before: str | None = None
-    expires_at: str | None = None
-
-
-@dataclass(frozen=True)
 class OacpArtifactScope:
     tenant_id: str
     merchant_id: str
@@ -905,35 +902,22 @@ class OacpArtifactScope:
     buyer_agent_id: str
 
 
-@dataclass(frozen=True)
-class OacpRevocationSnapshot:
-    observed_at: str
-    age_seconds: int
-    revoked_artifact_ids: frozenset[str] = field(default_factory=frozenset)
-    revoked_subject_ids: frozenset[str] = field(default_factory=frozenset)
-
-
-DetachedJwsVerifier = Callable[[dict[str, Any]], bool]
+# Steps 1-6 of the OACP verification order: (envelope, payload, jwks,
+# expected_issuer=...) -> OacpJwsVerification. The default is the local
+# ES256 detached-JWS verifier; the Grantex Python SDK verifier has the same
+# shape and replaces it once that SDK release is published.
+DetachedJwsVerifier = Callable[..., OacpJwsVerification]
 
 
 @dataclass(frozen=True)
 class OacpArtifactVerificationInput:
     envelope: dict[str, Any]
     payload: Any
-    issuer_keys: list[OacpIssuerKeyMetadata]
+    jwks: Mapping[str, Any] | None
+    expected_issuer: str
     now_iso: str
-    revocation_snapshot: OacpRevocationSnapshot
     expected_scope: OacpArtifactScope
-    risk_tier: RiskTier
-    verify_detached_jws: DetachedJwsVerifier
-
-
-@dataclass(frozen=True)
-class OacpCachedArtifact:
-    cache_key: str
-    envelope: dict[str, Any]
-    payload: Any
-    verified_at: str
+    verify_detached_jws: DetachedJwsVerifier = verify_oacp_artifact_jws
 
 
 @dataclass(frozen=True)
@@ -1434,19 +1418,6 @@ def _is_detached_jws(signature: str | None) -> bool:
         return False
     parts = signature.split(".")
     return len(parts) == 3 and bool(parts[0]) and parts[1] == "" and bool(parts[2])
-
-
-def _find_issuer_key(
-    envelope: dict[str, Any],
-    issuer_keys: list[OacpIssuerKeyMetadata],
-) -> OacpIssuerKeyMetadata | None:
-    issuer = _string_field(envelope, "issuer")
-    issuer_key_id = _string_field(envelope, "issuer_key_id")
-    signature_alg = _string_field(envelope, "signature_alg")
-    for key in issuer_keys:
-        if key.issuer == issuer and key.issuer_key_id == issuer_key_id and key.algorithm == signature_alg:
-            return key
-    return None
 
 
 def _scope_matches(envelope: dict[str, Any], expected_scope: OacpArtifactScope) -> bool:
@@ -3920,11 +3891,36 @@ def verify_agenticorg_c6w9_execution_handoff_dry_run(
 
 
 def verify_oacp_artifact(input_data: OacpArtifactVerificationInput) -> dict[str, Any]:
-    envelope = input_data.envelope
+    """Verify one Grantex OACP artifact (steps 1-7 of the cross-repo order).
+
+    Steps 1-6 (detached JWS structure, ES256, payload hash, protected header,
+    JWKS key, ECDSA signature) run first through ``verify_detached_jws``, so a
+    tampered or unsigned artifact is refused before any other field is
+    trusted. Step 7 then checks type, safety, payload fields, timestamps, TTL
+    and scope. Step 8 (Token Status List) needs network I/O and is run by
+    ``core.commerce.oacp_grantex_trust`` after this returns valid.
+    """
+    envelope = input_data.envelope if isinstance(input_data.envelope, dict) else {}
     artifact_id = _string_field(envelope, "artifact_id")
+
+    jws = input_data.verify_detached_jws(
+        envelope,
+        input_data.payload,
+        input_data.jwks,
+        expected_issuer=input_data.expected_issuer,
+    )
+    if not jws.valid:
+        refusal = _artifact_refusal(
+            artifact_id,
+            str(jws.refusal_code or "detached_jws_verification_failed"),
+            jws.message,
+        )
+        refusal["issuer_key_id"] = jws.issuer_key_id
+        refusal["kid_not_found"] = jws.kid_not_found
+        return refusal
+
     artifact_type = _string_field(envelope, "artifact_type")
     subject_id = _string_field(envelope, "subject_id")
-
     if artifact_id is None or artifact_type is None or subject_id is None:
         return _artifact_refusal(artifact_id, "artifact_missing_or_invalid", "Artifact envelope is incomplete.")
     if artifact_type not in OACP_ARTIFACT_TTLS_SECONDS:
@@ -3957,7 +3953,8 @@ def verify_oacp_artifact(input_data: OacpArtifactVerificationInput) -> dict[str,
     not_before = _parse_iso(_string_field(envelope, "not_before"))
     if now is None or issued_at is None or expires_at is None:
         return _artifact_refusal(artifact_id, "artifact_missing_or_invalid", "Artifact contains invalid timestamps.")
-    if not_before is not None and now < not_before:
+    skew = timedelta(seconds=OACP_CLOCK_SKEW_SECONDS)
+    if (not_before is not None and now + skew < not_before) or now + skew < issued_at:
         return _artifact_refusal(artifact_id, "artifact_not_yet_valid", "Artifact is not yet valid.")
     if now > expires_at:
         return _artifact_refusal(artifact_id, "artifact_expired_or_stale", "Artifact has expired.")
@@ -3971,37 +3968,6 @@ def verify_oacp_artifact(input_data: OacpArtifactVerificationInput) -> dict[str,
             "Artifact TTL exceeds the pinned default.",
         )
 
-    max_revocation_age = OACP_REVOCATION_SNAPSHOT_MAX_AGE_SECONDS[input_data.risk_tier]
-    if max_revocation_age is None or input_data.revocation_snapshot.age_seconds > max_revocation_age:
-        return _artifact_refusal(artifact_id, "revocation_snapshot_stale", "Revocation snapshot is too stale.")
-    if (
-        artifact_id in input_data.revocation_snapshot.revoked_artifact_ids
-        or subject_id in input_data.revocation_snapshot.revoked_subject_ids
-    ):
-        return _artifact_refusal(artifact_id, "artifact_revoked", "Artifact or subject is revoked.")
-
-    if _string_field(envelope, "signature_alg") != OACP_ARTIFACT_SIGNATURE_PROFILE["first_algorithm"]:
-        return _artifact_refusal(artifact_id, "signature_algorithm_unsupported", "Signature algorithm is unsupported.")
-    signature = _string_field(envelope, "signature")
-    if not _is_detached_jws(signature):
-        return _artifact_refusal(artifact_id, "signature_missing_or_placeholder", "Detached JWS signature is missing.")
-
-    payload_hash = hash_oacp_payload(input_data.payload)
-    if payload_hash != _string_field(envelope, "payload_hash"):
-        return _artifact_refusal(artifact_id, "payload_hash_mismatch", "Payload hash does not match artifact.")
-
-    issuer_key = _find_issuer_key(envelope, input_data.issuer_keys)
-    if issuer_key is None:
-        return _artifact_refusal(artifact_id, "issuer_key_untrusted", "Issuer key is not trusted.")
-    key_not_before = _parse_iso(issuer_key.not_before)
-    key_expires_at = _parse_iso(issuer_key.expires_at)
-    if (
-        issuer_key.state != "active"
-        or (key_not_before is not None and now < key_not_before)
-        or (key_expires_at is not None and now > key_expires_at)
-    ):
-        return _artifact_refusal(artifact_id, "issuer_key_inactive", "Issuer key is not active.")
-
     if not _scope_matches(envelope, input_data.expected_scope):
         return _artifact_refusal(artifact_id, "artifact_scope_mismatch", "Artifact is outside expected scope.")
 
@@ -4013,20 +3979,6 @@ def verify_oacp_artifact(input_data: OacpArtifactVerificationInput) -> dict[str,
             "artifact_missing_or_invalid",
             "Artifact schema or policy version is missing.",
         )
-
-    signature_ok = input_data.verify_detached_jws(
-        {
-            "canonical_payload": canonicalize_oacp_payload(input_data.payload),
-            "payload_hash": payload_hash,
-            "artifact_id": artifact_id,
-            "issuer": _string_field(envelope, "issuer"),
-            "issuer_key_id": _string_field(envelope, "issuer_key_id"),
-            "signature_alg": _string_field(envelope, "signature_alg"),
-            "signature": signature,
-        }
-    )
-    if not signature_ok:
-        return _artifact_refusal(artifact_id, "detached_jws_verification_failed", "Detached JWS verification failed.")
 
     cache_key = build_oacp_artifact_cache_key(
         tenant_id=input_data.expected_scope.tenant_id,
@@ -4044,8 +3996,10 @@ def verify_oacp_artifact(input_data: OacpArtifactVerificationInput) -> dict[str,
         "artifact_id": artifact_id,
         "artifact_type": artifact_type,
         "cache_key": cache_key,
-        "payload_hash": payload_hash,
+        "issuer_key_id": jws.issuer_key_id,
+        "payload_hash": jws.payload_hash,
         "expires_at": _string_field(envelope, "expires_at"),
+        "verified_at": input_data.now_iso,
     }
 
 
@@ -9165,66 +9119,6 @@ class DurableOacpAuditReviewManifestRepository:
             manifests,
             query=query,
             generated_at=generated_at,
-        )
-
-
-class OacpArtifactCache:
-    def __init__(self) -> None:
-        self._items: dict[str, OacpCachedArtifact] = {}
-
-    def put_verified(self, input_data: OacpArtifactVerificationInput) -> dict[str, Any]:
-        result = verify_oacp_artifact(input_data)
-        if not result["valid"]:
-            return result
-
-        cache_key = str(result["cache_key"])
-        self._items[cache_key] = OacpCachedArtifact(
-            cache_key=cache_key,
-            envelope=input_data.envelope,
-            payload=input_data.payload,
-            verified_at=input_data.now_iso,
-        )
-        return result
-
-    def get_verified(
-        self,
-        *,
-        scope: OacpArtifactScope,
-        artifact_type: ArtifactType,
-        artifact_id: str,
-        schema_version: str,
-        policy_version: str,
-        issuer_keys: list[OacpIssuerKeyMetadata],
-        now_iso: str,
-        revocation_snapshot: OacpRevocationSnapshot,
-        risk_tier: RiskTier,
-        verify_detached_jws: DetachedJwsVerifier,
-    ) -> dict[str, Any]:
-        cache_key = build_oacp_artifact_cache_key(
-            tenant_id=scope.tenant_id,
-            merchant_id=scope.merchant_id,
-            seller_agent_id=scope.seller_agent_id,
-            buyer_agent_id=scope.buyer_agent_id,
-            artifact_type=artifact_type,
-            artifact_id=artifact_id,
-            schema_version=schema_version,
-            policy_version=policy_version,
-        )
-        cached = self._items.get(cache_key)
-        if cached is None:
-            return _artifact_refusal(artifact_id, "artifact_missing_or_invalid", "Artifact is not present in cache.")
-
-        return verify_oacp_artifact(
-            OacpArtifactVerificationInput(
-                envelope=cached.envelope,
-                payload=cached.payload,
-                issuer_keys=issuer_keys,
-                now_iso=now_iso,
-                revocation_snapshot=revocation_snapshot,
-                expected_scope=scope,
-                risk_tier=risk_tier,
-                verify_detached_jws=verify_detached_jws,
-            )
         )
 
 

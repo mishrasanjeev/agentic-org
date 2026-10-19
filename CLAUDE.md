@@ -66,6 +66,9 @@ values against the specification text, not memory.
 **Feature flags.** Every behaviour change on an existing path ships behind a flag that
 defaults off. New endpoints may ship enabled behind authentication. A deliberate default
 flip is recorded in `CHANGELOG.md` as a breaking change with an explicit opt-out.
+Flags with a strict-runtime default: `AGENTICORG_OACP_VERIFY_STRICT` (OACP artifact
+verification refuses caching; on in strict runtimes, log-only in local/dev/test/ci;
+opt-out `false`).
 
 **Local first, then production.** Everything runs locally with `make dev` (Docker) before it
 is merged. A production deployment happens only after its exit criterion is green in CI and

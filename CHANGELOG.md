@@ -1,5 +1,41 @@
 # Changelog
 
+## Unreleased - OACP artifact verification before caching (G5)
+
+- **Breaking for strict runtimes.** `POST /api/v1/commerce/runtime/artifacts/cache`
+  now verifies every Grantex OACP artifact before caching it: ES256 detached JWS
+  (protected header `oacp-artifact+jws`, RFC 8785 signing input of the envelope
+  without `signature`) against the Grantex JWKS pinned in configuration, payload
+  hash, issuer, scope, TTL, and the Token Status List entry the envelope names.
+  With `AGENTICORG_OACP_VERIFY_STRICT` on (the default in production, staging,
+  preview and unrecognised environments) one failure returns `422
+  artifact_verification_refused` and nothing from that issuance is cached.
+  Grantex artifacts signed with the legacy template string are refused until the
+  Grantex OACP signing release is deployed. Opt-out: set
+  `AGENTICORG_OACP_VERIFY_STRICT=false`; verification still runs, failures are
+  logged as `oacp_artifact_verification_irregularity` and those artifacts are
+  cached without a `verifier_result_ref`. Local, dev, test and ci runtimes
+  default to that log-only mode.
+- Stop stamping `verifier_result_ref = "<artifact_id>:verified"` on every cached
+  artifact and stop accepting a caller-supplied `verifier_result_ref`. Verified
+  records carry `oacp-artifact-jws-v1;kid=…;payload_hash=…;status=valid;verified_at=…`.
+- The Grantex JWKS is fetched asynchronously over the DNS-pinning egress
+  transport (5 s timeout, 300 s cache, 60 s negative cache, one refresh on an
+  unknown kid). Status lists are fetched only from the issuer or Grantex API
+  origin over https, verified as `statuslist+jwt`, cached within their `ttl`;
+  revoked and suspended entries and unreachable lists refuse the artifact.
+- Match Grantex's OACP issuance: `revocation` artifacts may live 24 h (was 0),
+  and `issued_at` / `not_before` tolerate 60 s of clock skew (expiry does not).
+  A status list Grantex has not made public (404) refuses the artifact.
+- `verify_oacp_artifact` follows the cross-repo verification order (signature
+  checks first) and takes a JWKS instead of caller-supplied key metadata and a
+  stub signature callback. The unwired in-memory `OacpArtifactCache` class and
+  its key-metadata and revocation-snapshot types are removed.
+- Shared vectors `tests/fixtures/oacp/oacp-artifact-jws-v1.json` (synthetic key)
+  and a conformance test against a running Grantex
+  (`tests/integration/test_oacp_grantex_conformance.py`, skipped unless
+  `AGENTICORG_GRANTEX_CONFORMANCE_URL` is set). No migration.
+
 ## Unreleased - Unicode input and private Telegram follow-ups
 
 - Preserve Unicode in model-facing JSON before privacy scanning, including

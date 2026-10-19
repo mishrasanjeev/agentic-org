@@ -59,8 +59,9 @@ flowchart LR
   merchant[Merchant] --> seller[AgenticOrg Seller Agent]
   seller --> systems[Merchant systems]
   seller --> grantex[Grantex OACP Authority]
-  grantex --> artifacts[Signed artifacts]
-  artifacts --> cache[AgenticOrg durable OACP cache]
+  grantex --> artifacts[OACP artifacts]
+  artifacts --> verify[ES256 JWS and status-list verification]
+  verify --> cache[AgenticOrg durable OACP cache]
   cache --> buyer
   buyer -. approved capability verification .-> provider[Provider/fintech rail]
 ```

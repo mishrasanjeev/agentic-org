@@ -7,8 +7,6 @@ from core.commerce.oacp_artifacts import (
     OACP_C6W3_VALID_ARTIFACT_FIXTURES,
     OacpArtifactScope,
     OacpArtifactVerificationInput,
-    OacpIssuerKeyMetadata,
-    OacpRevocationSnapshot,
     evaluate_agenticorg_artifact_runtime_use,
     evaluate_required_artifacts_for_final_commitment,
     hash_oacp_payload,
@@ -17,21 +15,6 @@ from core.commerce.oacp_artifacts import (
 )
 
 C6W3_DOC_PATH = Path("docs/reports/commerce-agent-c6w3-oacp-artifact-consumer-behavior.md")
-
-
-def _verify_detached_jws(_input_data: dict[str, object]) -> bool:
-    return True
-
-
-def _issuer_key() -> OacpIssuerKeyMetadata:
-    return OacpIssuerKeyMetadata(
-        issuer="grantex",
-        issuer_key_id="kid_C6W3_stub",
-        algorithm="ES256",
-        state="active",
-        not_before="2026-06-11T00:00:00.000Z",
-        expires_at="2026-06-12T00:00:00.000Z",
-    )
 
 
 def _scope() -> OacpArtifactScope:
@@ -86,43 +69,30 @@ def test_c6w3_refuses_invalid_private_missing_scope_and_time_bad_artifacts() -> 
     )["refusal_code"] == "artifact_not_yet_valid"
 
 
-def test_c6w3_refuses_revoked_and_out_of_scope_artifacts_through_local_verifier() -> None:
-    price = OACP_C6W3_VALID_ARTIFACT_FIXTURES["price"]
-    verification = OacpArtifactVerificationInput(
-        envelope=price["envelope"],
-        payload=price["payload"],
-        issuer_keys=[_issuer_key()],
-        now_iso="2026-06-11T00:01:00.000Z",
-        revocation_snapshot=OacpRevocationSnapshot(
-            observed_at="2026-06-11T00:00:30.000Z",
-            age_seconds=30,
-            revoked_artifact_ids=frozenset({"price_C6W3"}),
-        ),
-        expected_scope=_scope(),
-        risk_tier="medium",
-        verify_detached_jws=_verify_detached_jws,
-    )
-    assert verify_oacp_artifact(verification)["refusal_code"] == "artifact_revoked"
+def test_c6w3_stub_signed_fixtures_are_refused_by_the_local_verifier() -> None:
+    """The C6W3 fixtures carry a stub detached JWS; the verifier refuses them on the signature.
 
-    out_of_scope = OacpArtifactVerificationInput(
-        envelope=price["envelope"],
-        payload=price["payload"],
-        issuer_keys=[_issuer_key()],
-        now_iso="2026-06-11T00:01:00.000Z",
-        revocation_snapshot=OacpRevocationSnapshot(
-            observed_at="2026-06-11T00:00:30.000Z",
-            age_seconds=30,
-        ),
-        expected_scope=OacpArtifactScope(
-            tenant_id="cten_C6W3",
-            merchant_id="mch_C6W3",
-            seller_agent_id="seller_C6W3",
-            buyer_agent_id="other_buyer",
-        ),
-        risk_tier="medium",
-        verify_detached_jws=_verify_detached_jws,
-    )
-    assert verify_oacp_artifact(out_of_scope)["refusal_code"] == "artifact_scope_mismatch"
+    Before the ES256 verifier landed, ``verify_oacp_artifact`` delegated step 6 to a
+    caller-supplied callback that tests stubbed to ``True``. The fixtures now never
+    pass: no published key verifies them.
+    """
+    for fixture in OACP_C6W3_VALID_ARTIFACT_FIXTURES.values():
+        result = verify_oacp_artifact(
+            OacpArtifactVerificationInput(
+                envelope=fixture["envelope"],
+                payload=fixture["payload"],
+                jwks={"keys": []},
+                expected_issuer=str(fixture["envelope"].get("issuer") or ""),
+                now_iso="2026-06-11T00:01:00.000Z",
+                expected_scope=_scope(),
+            )
+        )
+        assert result["valid"] is False
+        assert result["refusal_code"] in {
+            "signature_missing_or_placeholder",
+            "detached_jws_verification_failed",
+            "issuer_key_untrusted",
+        }
 
 
 def test_c6w3_refuses_final_commitments_when_required_artifacts_are_absent() -> None:
