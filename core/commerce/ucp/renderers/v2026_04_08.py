@@ -119,3 +119,8 @@ def expectation(raw: Mapping[str, Any]) -> dict[str, Any]:
 
 def order_extras(out: dict[str, Any], snapshot: Mapping[str, Any]) -> None:
     return None
+
+
+def policies(out: dict[str, Any], items: Sequence[Mapping[str, Any]]) -> None:
+    """2026-04-08 has no ``policies[]``."""
+    return None

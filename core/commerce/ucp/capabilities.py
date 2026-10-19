@@ -1,16 +1,15 @@
 # SPDX-License-Identifier: Apache-2.0
-"""A minimal capability registry: which UCP capabilities and payment handlers a merchant serves.
+"""The transaction capabilities (checkout, cart, order and their extensions) and their payment handlers.
 
-The profile publisher renders ``/.well-known/ucp`` from the same registry the
-transaction handlers negotiate against, so a capability is advertised only
-when its handlers exist. This module defines the interface and the
-registrations for the transaction capabilities (checkout, cart, order and
-their extensions); the profile work owns the catalog and location entries and
-merges its registry with this one (seam: ``CapabilityRegistry``).
-
-An entry's ``available`` predicate is evaluated per merchant: an extension
-whose settings are missing (no loyalty programme, no split-payment
-combinations, no signing key for AP2) is not advertised and not negotiated.
+Each ``CapabilityEntry`` says, per merchant, whether the capability is
+available (an extension whose settings are missing, such as no loyalty
+programme, no split-payment combinations or no signing key for AP2, is not),
+its parents, its business config and which responses carry it.
+``publish_to_profile_registry`` registers every entry and every payment
+handler with the profile registry (``core.commerce.ucp.registry.ucp_registry``),
+served only while ``AGENTICORG_UCP_CHECKOUT_ENABLED`` is on, so
+``/.well-known/ucp`` advertises exactly what the transaction handlers
+negotiate and serve.
 """
 
 from __future__ import annotations
@@ -261,3 +260,93 @@ def _register_defaults(registry: Registry) -> None:
 
 DEFAULT_REGISTRY = Registry()
 _register_defaults(DEFAULT_REGISTRY)
+
+
+# --- publication through the profile registry ----------------------------------------------------
+
+_ROOT_SPEC_PAGES = {
+    v.CHECKOUT: ("checkout", "shopping/checkout"),
+    v.CART: ("cart", "shopping/cart"),
+    v.ORDER: ("order", "shopping/order"),
+}
+
+
+def merchant_for_context(ctx: Any) -> MerchantUcp | None:
+    """The merchant settings a profile render context carries (pure: no I/O)."""
+    from core.commerce.ucp.merchant import merchant_ucp_from_config
+
+    if not ctx.merchant_config:
+        return None
+    return merchant_ucp_from_config(
+        ctx.merchant_config,
+        tenant_id=ctx.tenant_id,
+        serving_host=ctx.host,
+        namespace=ctx.namespace,
+        signing_available=True,
+    )
+
+
+def _checkout_enabled() -> bool:
+    from core.config import settings
+
+    return bool(getattr(settings, "ucp_checkout_enabled", False))
+
+
+def publish_to_profile_registry(source: Registry = DEFAULT_REGISTRY, target: Any = None) -> None:
+    """Register the transaction capabilities and payment handlers with the profile registry (idempotent)."""
+    from core.commerce.ucp.registry import (
+        SHOPPING_SERVICE,
+        UcpCapabilityRegistration,
+        UcpPaymentHandlerRegistration,
+        ucp_registry,
+    )
+
+    registry = target if target is not None else ucp_registry
+    for entry in source._capabilities.values():
+        if entry.name in registry.capabilities:
+            continue
+
+        def _served(ctx: Any, entry: CapabilityEntry = entry) -> bool:
+            if not _checkout_enabled() or ctx.version not in entry.versions:
+                return False
+            merchant = merchant_for_context(ctx)
+            return merchant is not None and entry.available(merchant, RegistryContext(merchant_signing_available=True))
+
+        def _config(ctx: Any, entry: CapabilityEntry = entry) -> dict[str, Any] | None:
+            merchant = merchant_for_context(ctx)
+            return None if merchant is None else entry.config(merchant, ctx.version)
+
+        pages = _ROOT_SPEC_PAGES.get(entry.name)
+        spec_urls = (
+            {
+                v.V2026_04_08: f"https://ucp.dev/{v.V2026_04_08}/specification/{pages[0]}",
+                v.V2026_08_25: f"https://ucp.dev/{v.V2026_08_25}/specification/{pages[1]}",
+            }
+            if pages
+            else {}
+        )
+        registry.register_capability(
+            UcpCapabilityRegistration(
+                name=entry.name,
+                service=SHOPPING_SERVICE,
+                spec_urls={k: val for k, val in spec_urls.items() if k in entry.versions},
+                schema_urls={version: v.schema_url(version, entry.name) for version in entry.versions},
+                extends=entry.extends,
+                extends_by_version=dict(entry.extends_by_version),
+                served=_served,
+                config=_config,
+            )
+        )
+    from core.commerce.payment_handlers import registered_handlers
+
+    for name, handler in registered_handlers().items():
+        if name in registry.payment_handlers:
+            continue
+
+        def _entries(ctx: Any, handler: Any = handler) -> list[dict[str, Any]]:
+            merchant = merchant_for_context(ctx)
+            if not _checkout_enabled() or merchant is None:
+                return []
+            return [entry.render() for entry in handler.entries(merchant, ctx.version)]
+
+        registry.register_payment_handler(UcpPaymentHandlerRegistration(name=name, entries=_entries))

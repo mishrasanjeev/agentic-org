@@ -41,7 +41,6 @@ R25_EXTRA = (
 
 def ucp_settings(**overrides: Any) -> dict[str, Any]:
     settings: dict[str, Any] = {
-        "serving_host": HOST,
         "currency": "INR",
         "executor": "test_executor",
         "links": [
@@ -108,7 +107,9 @@ def merchant_config(tenant_id: str, **ucp_overrides: Any) -> dict[str, Any]:
 
 
 def merchant(tenant_id: str, **ucp_overrides: Any) -> MerchantUcp:
-    resolved = merchant_ucp_from_config(merchant_config(tenant_id, **ucp_overrides), tenant_id=tenant_id)
+    resolved = merchant_ucp_from_config(
+        merchant_config(tenant_id, **ucp_overrides), tenant_id=tenant_id, serving_host=HOST
+    )
     assert resolved is not None
     return resolved
 

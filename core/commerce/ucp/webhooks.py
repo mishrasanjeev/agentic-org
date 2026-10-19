@@ -50,7 +50,7 @@ from sqlalchemy import select
 from core.cases.push import PushSettings, SigningKey, decrypt_keys, retry_delay, sign, validate_endpoint_url
 from core.commerce.ledger import commerce_payload_hash
 from core.commerce.ucp import releases as v
-from core.commerce.ucp.httpsig import MerchantSigner, SigningKeyUnavailableError, sign_request
+from core.commerce.ucp.httpsig import MerchantKeyStoreSigner, MerchantSigner, SigningKeyUnavailableError, sign_request
 from core.commerce.ucp.orders import OrderEvent
 from core.commerce.ucp.renderers import render_order
 
@@ -69,12 +69,13 @@ class WebhookSubscriptionError(ValueError):
 
 # --- signer and payload renderers -------------------------------------------------------------
 
-_signer: MerchantSigner | None = None
+# enterprise-gate: process-local-ok reason=import-time-signer-wiring-identical-on-every-replica
+_signer: MerchantSigner | None = MerchantKeyStoreSigner()
 PayloadRenderer = Callable[[OrderEvent], dict[str, Any]]
 
 
 def set_merchant_signer(signer: MerchantSigner | None) -> None:
-    """Install the merchant key signer (the merchant key store wires this at start-up)."""
+    """Replace the merchant signer (default: the merchant key store's active P-256 key)."""
     global _signer
     _signer = signer
 
@@ -399,6 +400,7 @@ class OrderWebhookDispatcher:
                         "scheme": sub.scheme,
                         "keys": keys,
                         "merchant_id": row.merchant_id,
+                        "seller_agent_id": order.seller_agent_id,
                         "business_profile": f"https://{order.serving_host}/.well-known/ucp",
                         # The event time: every retry of one revision repeats it with the Webhook-Id.
                         "event_timestamp": int(row.created_at.timestamp()),
@@ -473,6 +475,7 @@ class OrderWebhookDispatcher:
                     signer=signer,
                     tenant_id=str(tenant_id),
                     merchant_id=item["merchant_id"],
+                    seller_agent_id=item["seller_agent_id"],
                     created=timestamp,
                 )
             except SigningKeyUnavailableError:

@@ -146,6 +146,7 @@ async def test_signed_request_verifies_and_tampering_fails() -> None:
         signer=signer,
         tenant_id=TENANT,
         merchant_id="m",
+        seller_agent_id="s",
         created=1760000000,
     )
     assert 'keyid="kid-1"' in headers["Signature-Input"] and "alg=" not in headers["Signature-Input"]
@@ -174,6 +175,7 @@ async def test_signed_request_verifies_and_tampering_fails() -> None:
             signer=_NoKey(),
             tenant_id=TENANT,
             merchant_id="m",
+            seller_agent_id="s",
             created=1,
         )
 
@@ -185,7 +187,7 @@ async def test_detached_jws_for_ap2_merchant_authorization() -> None:
     key = ec.generate_private_key(ec.SECP256R1())
     signer = httpsig.LocalEs256Signer(key, "kid-ap2")
     checkout = {"id": "chk_1", "totals": [{"type": "total", "amount": 1}]}
-    jws = await httpsig.detached_jws(checkout, signer=signer, tenant_id=TENANT, merchant_id="m")
+    jws = await httpsig.detached_jws(checkout, signer=signer, tenant_id=TENANT, merchant_id="m", seller_agent_id="s")
     header, empty, signature = jws.split(".")
     assert empty == ""
     signing_input = f"{header}.{b64url_encode(canonicalize_bytes(checkout))}".encode()

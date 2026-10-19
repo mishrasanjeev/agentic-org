@@ -164,3 +164,30 @@ async def test_idempotency_in_progress_is_409(monkeypatch) -> None:
     response = await handlers.run("create_checkout", uf.runtime(TENANT), uf.request(TENANT, uf.create_body(), key="k1"))
     assert response.status == 409
     assert response.body["messages"][0]["code"] == "idempotency_key_in_progress"
+
+
+def test_ucp_transaction_routes_accept_the_platform_api_key_in_x_api_key(monkeypatch) -> None:
+    from fastapi.responses import JSONResponse
+
+    from auth.grantex_middleware import GrantexAuthMiddleware
+
+    async def _fake_api_key(self, request, call_next, token, client_ip):
+        return JSONResponse({"token": token})
+
+    monkeypatch.setattr(GrantexAuthMiddleware, "_handle_api_key", _fake_api_key)
+    app = FastAPI()
+    app.add_middleware(GrantexAuthMiddleware)
+
+    @app.get("/ucp/carts/{cart_id}")
+    async def _cart(cart_id: str) -> dict:
+        return {"cart": cart_id}
+
+    @app.get("/api/v1/agents")
+    async def _agents() -> dict:
+        return {}
+
+    client = TestClient(app)
+    accepted = client.get("/ucp/carts/c1", headers={"X-API-Key": "ao_sk_platformkey123"})
+    assert accepted.json() == {"token": "ao_sk_platformkey123"}
+    assert client.get("/ucp/carts/c1", headers={"X-API-Key": "not-a-key"}).status_code == 401
+    assert client.get("/api/v1/agents", headers={"X-API-Key": "ao_sk_platformkey123"}).status_code == 401

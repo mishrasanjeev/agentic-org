@@ -65,6 +65,7 @@ from core.commerce.ucp.orders import (
 from core.commerce.ucp.payment import Instrument, PaymentRequestError, completion_messages, parse_payment, token_binding
 from core.commerce.ucp.renderers import SessionView, render_cart, render_checkout, render_order
 from core.commerce.ucp.shopify_reads import ShopifyReads
+from core.commerce.ucp.versions import configured_ucp_versions
 
 logger = structlog.get_logger()
 
@@ -133,6 +134,10 @@ class UcpRuntime:
     supported_versions: tuple[str, ...] | None = None
     # Buyer authority for a completion whose request carries none (the mandate work supplies
     # server-verified mandates here). None in production today: the request must carry it.
+    # policies[] for checkout, cart and order responses (production: the verified OACP policy artifact).
+    policies_for: Callable[[MerchantUcp], Awaitable[Sequence[Mapping[str, Any]]]] | None = None
+    # The capability names the merchant's profile advertises for a release (production: the profile registry).
+    published: Callable[[MerchantUcp, str], set[str]] | None = None
     authority_provider: Callable[[MerchantUcp, Mapping[str, Any]], Awaitable[Mapping[str, Any] | None]] | None = None
 
 
@@ -159,8 +164,8 @@ async def _merchant(runtime: UcpRuntime, req: UcpRequest) -> MerchantUcp:
     return merchant
 
 
-def _registry_context(runtime: UcpRuntime) -> RegistryContext:
-    return RegistryContext(merchant_signing_available=runtime.signer() is not None)
+def _registry_context(runtime: UcpRuntime, merchant: MerchantUcp) -> RegistryContext:
+    return RegistryContext(merchant_signing_available=merchant.signing_available and runtime.signer() is not None)
 
 
 async def _negotiate(runtime: UcpRuntime, req: UcpRequest, merchant: MerchantUcp, resource: str) -> Negotiated:
@@ -169,13 +174,14 @@ async def _negotiate(runtime: UcpRuntime, req: UcpRequest, merchant: MerchantUcp
             ucp_agent=req.ucp_agent,
             merchant=merchant,
             registry=runtime.registry,
-            context=_registry_context(runtime),
+            context=_registry_context(runtime, merchant),
             resource=resource,
             fetcher=runtime.fetcher,
             supported_versions=runtime.supported_versions,
+            published=(lambda version: runtime.published(merchant, version)) if runtime.published else None,
         )
     except NegotiationError as exc:
-        versions = runtime.supported_versions or v.supported_ucp_versions()
+        versions = runtime.supported_versions or configured_ucp_versions()
         raise _AbortError(_discovery_error(exc, versions[0])) from exc
 
 
@@ -304,6 +310,13 @@ def _session_view(row: Any, now: datetime, *, order_permalink: str | None = None
     )
 
 
+async def _policies(runtime: UcpRuntime, merchant: MerchantUcp, negotiated: Negotiated) -> list[dict[str, Any]]:
+    """The merchant's ``policies[]`` (2026-08-25 only; none without a usable verified policy artifact)."""
+    if negotiated.version < v.V2026_08_25 or runtime.policies_for is None:
+        return []
+    return list(await runtime.policies_for(merchant))
+
+
 async def _render_checkout(
     runtime: UcpRuntime,
     row: Any,
@@ -318,6 +331,7 @@ async def _render_checkout(
     permalink = state.get("order_permalink_url")
     handlers = runtime.registry.payment_handlers(merchant, negotiated.version)
     body = render_checkout(
+        policies=await _policies(runtime, merchant, negotiated),
         session=_session_view(row, now, order_permalink=permalink),
         state=state,
         negotiated=negotiated,
@@ -333,7 +347,11 @@ async def _render_checkout(
             try:
                 body["ap2"] = {
                     "merchant_authorization": await detached_jws(
-                        body, signer=signer, tenant_id=merchant.tenant_id, merchant_id=merchant.merchant_id
+                        body,
+                        signer=signer,
+                        tenant_id=merchant.tenant_id,
+                        merchant_id=merchant.merchant_id,
+                        seller_agent_id=merchant.seller_agent_id,
                     )
                 }
             except SigningKeyUnavailableError:
@@ -794,9 +812,12 @@ async def _apply_execution(
             selected_term = (state.get("payment") or {}).get("selected_term_id")
             if selected_term:
                 accepted = next((t for t in state.get("payment_terms") or [] if t["id"] == selected_term), None)
+            order_policies = await _policies(runtime, merchant, negotiated)
             snapshot = build_order_snapshot(
                 order_id=order_id, checkout_id=row.id, merchant=merchant, state=state, accepted_term=accepted
             )
+            if order_policies:
+                snapshot["policies"] = order_policies
             session.add(
                 CommerceOrderRow(
                     id=order_id,
@@ -1001,7 +1022,12 @@ async def create_cart(
             {"line_items": len(evaluation.state["line_items"])},
         )
     body_out = render_cart(
-        cart_id=cart_id, state=evaluation.state, negotiated=negotiated, merchant=merchant, expires_at=row.expires_at
+        policies=await _policies(runtime, merchant, negotiated),
+        cart_id=cart_id,
+        state=evaluation.state,
+        negotiated=negotiated,
+        merchant=merchant,
+        expires_at=row.expires_at,
     )
     return UcpResponse(status=201, body=body_out, recorded=True, resource_id=cart_id)
 
@@ -1016,7 +1042,12 @@ async def get_cart(
     return UcpResponse(
         status=200,
         body=render_cart(
-            cart_id=row.id, state=row.state, negotiated=negotiated, merchant=merchant, expires_at=row.expires_at
+            policies=await _policies(runtime, merchant, negotiated),
+            cart_id=row.id,
+            state=row.state,
+            negotiated=negotiated,
+            merchant=merchant,
+            expires_at=row.expires_at,
         ),
     )
 
@@ -1049,7 +1080,12 @@ async def update_cart(
         row.updated_at = now
         await _record(session, req, merchant, EVENTS["update_cart"], "success", row.id, {"revision": row.revision})
         rendered = render_cart(
-            cart_id=row.id, state=row.state, negotiated=negotiated, merchant=merchant, expires_at=row.expires_at
+            policies=await _policies(runtime, merchant, negotiated),
+            cart_id=row.id,
+            state=row.state,
+            negotiated=negotiated,
+            merchant=merchant,
+            expires_at=row.expires_at,
         )
     return UcpResponse(status=200, body=rendered, recorded=True, resource_id=row.id)
 
@@ -1067,7 +1103,12 @@ async def cancel_cart(
         row.updated_at = now
         await _record(session, req, merchant, EVENTS["cancel_cart"], "success", row.id, {"status": "canceled"})
         rendered = render_cart(
-            cart_id=row.id, state=row.state, negotiated=negotiated, merchant=merchant, expires_at=row.expires_at
+            policies=await _policies(runtime, merchant, negotiated),
+            cart_id=row.id,
+            state=row.state,
+            negotiated=negotiated,
+            merchant=merchant,
+            expires_at=row.expires_at,
         )
     return UcpResponse(status=200, body=rendered, recorded=True, resource_id=row.id)
 

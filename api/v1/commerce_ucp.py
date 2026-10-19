@@ -42,8 +42,9 @@ from api.route_metadata import route_meta
 from core.commerce.c6z_runtime_vertical import ShopifyCredentials
 from core.commerce.ledger import commerce_payload_hash, record_commerce_event, record_commerce_event_in_own_transaction
 from core.commerce.ucp import handlers
+from core.commerce.ucp.capabilities import publish_to_profile_registry
 from core.commerce.ucp.items import ProductEvidenceCatalog
-from core.commerce.ucp.merchant import MerchantUcp, TenantConfigHostResolver
+from core.commerce.ucp.merchant import MerchantUcp, PublishedHostResolver
 from core.commerce.ucp.shopify_reads import ShopifyAdminReads, ShopifyReads
 from core.commerce.ucp.webhooks import (
     WebhookSubscriptionError,
@@ -57,6 +58,10 @@ from core.config import settings
 from core.database import get_tenant_session
 
 logger = structlog.get_logger()
+
+# The transaction capabilities and payment handlers appear in /.well-known/ucp while
+# AGENTICORG_UCP_CHECKOUT_ENABLED is on (served predicates read the flag per render).
+publish_to_profile_registry()
 
 
 def require_ucp_checkout_enabled() -> None:
@@ -148,16 +153,56 @@ def _rates_for(merchant: MerchantUcp) -> Any:
     return _rates
 
 
+def _published_capabilities(merchant: MerchantUcp, version: str) -> set[str]:
+    """What the merchant's profile advertises for ``version`` (the profile registry decides, no I/O)."""
+    from core.commerce.ucp.registry import UcpServeContext, ucp_registry
+
+    ctx = UcpServeContext(
+        host=merchant.serving_host,
+        version=version,
+        tenant_id=merchant.tenant_id,
+        merchant_id=merchant.merchant_id,
+        seller_agent_id=merchant.seller_agent_id,
+        namespace=merchant.namespace,
+        location_count=len(merchant.pickup_locations),
+        merchant_config=merchant.raw_config,
+    )
+    return ucp_registry.served_capability_names(ctx)
+
+
+async def _policies(merchant: MerchantUcp) -> list[dict[str, Any]]:
+    """``policies[]`` from the policy snapshot taken at verified caching, while its artifact stays usable."""
+    from core.commerce.ucp.catalog import usable_artifact_ids
+    from core.commerce.ucp.policies import map_oacp_policy_to_ucp_policies
+    from core.commerce.ucp.state import ucp_state
+    from core.commerce.ucp.store import load_shared_cache_records
+
+    snapshot = ucp_state(merchant.raw_config.get("public_publishing")).get("verified_policy")
+    if not isinstance(snapshot, dict) or not isinstance(snapshot.get("policy"), dict):
+        return []
+    records = await load_shared_cache_records(
+        tenant_id=merchant.tenant_id, merchant_id=merchant.merchant_id, seller_agent_id=merchant.seller_agent_id
+    )
+    now_iso = datetime.now(UTC).isoformat().replace("+00:00", "Z")
+    if snapshot.get("artifact_id") not in usable_artifact_ids(
+        cache_records=records, now_iso=now_iso, artifact_type="policy"
+    ):
+        return []
+    return map_oacp_policy_to_ucp_policies(snapshot["policy"], vendor_namespace=merchant.namespace)
+
+
 def build_runtime() -> handlers.UcpRuntime:
     """The production wiring (tests replace ``runtime_factory``)."""
     return handlers.UcpRuntime(
-        resolver=TenantConfigHostResolver(),
+        resolver=PublishedHostResolver(),
         catalog_for=lambda _merchant: ProductEvidenceCatalog(_products),
         rates_for=_rates_for,
         shopify_reads_for=_shopify_reads,
         arbiter_scope=_arbiter_scope,
         signer=merchant_signer,
         after_commit=kick_dispatch,
+        published=_published_capabilities,
+        policies_for=_policies,
     )
 
 

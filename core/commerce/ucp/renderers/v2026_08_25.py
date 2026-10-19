@@ -151,3 +151,9 @@ def expectation(raw: Mapping[str, Any]) -> dict[str, Any]:
 def order_extras(out: dict[str, Any], snapshot: Mapping[str, Any]) -> None:
     if snapshot.get("accepted_term"):
         out["payment"] = {"accepted_term": dict(snapshot["accepted_term"])}
+
+
+def policies(out: dict[str, Any], items: Sequence[Mapping[str, Any]]) -> None:
+    """``policies[]`` from the merchant's verified OACP policy (``map_oacp_policy_to_ucp_policies``)."""
+    if items:
+        out["policies"] = [dict(item) for item in items]

@@ -31,6 +31,8 @@ from core.commerce.ucp.merchant import MerchantUcp
 HANDLER_NAME = "ai.agenticorg.payment.plural_tokenized"
 HANDLER_ID = "plural_tokenized"
 HANDLER_VERSION = "2026-10-20"
+# The handler's config schema, authority-bound to the handler name (agenticorg.ai -> ai.agenticorg).
+HANDLER_SCHEMA = "https://agenticorg.ai/ucp/handlers/plural-tokenized/2026-10-20/config.json"
 TOKEN_CREDENTIAL = "plural_pine_token"
 
 
@@ -63,7 +65,7 @@ class PluralTokenizedInstrumentHandler:
                 name=HANDLER_NAME,
                 id=HANDLER_ID,
                 version=HANDLER_VERSION,
-                schema=None,
+                schema=HANDLER_SCHEMA,
                 spec=None,
                 available_instruments=tuple({"type": t} for t in types),
                 config=config,

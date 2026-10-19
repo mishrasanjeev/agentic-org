@@ -14,7 +14,19 @@ import uuid
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import TIMESTAMP, BigInteger, Boolean, ForeignKey, Index, Integer, String, func, text
+from sqlalchemy import (
+    TIMESTAMP,
+    BigInteger,
+    Boolean,
+    CheckConstraint,
+    ForeignKey,
+    Index,
+    Integer,
+    String,
+    UniqueConstraint,
+    func,
+    text,
+)
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -26,6 +38,20 @@ class CommerceCheckoutSessionRow(BaseModel):
     __table_args__ = (
         Index("ix_commerce_checkout_sessions_scope", "tenant_id", "merchant_id", text("created_at DESC")),
         Index("ix_commerce_checkout_sessions_status", "tenant_id", "status", "expires_at"),
+        Index(
+            "uq_commerce_checkout_sessions_open_cart",
+            "tenant_id",
+            "merchant_id",
+            "cart_id",
+            unique=True,
+            postgresql_where=text("cart_id IS NOT NULL AND status NOT IN ('completed', 'canceled')"),
+        ),
+        CheckConstraint(
+            "status IN ('incomplete', 'requires_escalation', 'ready_for_complete', "
+            "'complete_in_progress', 'completed', 'canceled')",
+            name="ck_commerce_checkout_sessions_status",
+        ),
+        CheckConstraint("(status = 'completed') = (order_id IS NOT NULL)", name="ck_commerce_checkout_sessions_order"),
     )
 
     id: Mapped[str] = mapped_column(String(80), primary_key=True)
@@ -51,7 +77,10 @@ class CommerceCheckoutSessionRow(BaseModel):
 
 class CommerceCartRow(BaseModel):
     __tablename__ = "commerce_carts"
-    __table_args__ = (Index("ix_commerce_carts_scope", "tenant_id", "merchant_id", text("created_at DESC")),)
+    __table_args__ = (
+        Index("ix_commerce_carts_scope", "tenant_id", "merchant_id", text("created_at DESC")),
+        CheckConstraint("status IN ('active', 'canceled')", name="ck_commerce_carts_status"),
+    )
 
     id: Mapped[str] = mapped_column(String(80), primary_key=True)
     tenant_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
@@ -72,7 +101,11 @@ class CommerceCartRow(BaseModel):
 
 class CommerceOrderRow(BaseModel):
     __tablename__ = "commerce_orders"
-    __table_args__ = (Index("ix_commerce_orders_scope", "tenant_id", "merchant_id", text("created_at DESC")),)
+    __table_args__ = (
+        Index("ix_commerce_orders_scope", "tenant_id", "merchant_id", text("created_at DESC")),
+        UniqueConstraint("tenant_id", "checkout_session_id", name="uq_commerce_orders_session"),
+        CheckConstraint("revision >= 1", name="ck_commerce_orders_revision"),
+    )
 
     id: Mapped[str] = mapped_column(String(80), primary_key=True)
     tenant_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
@@ -95,6 +128,18 @@ class CommerceOrderRow(BaseModel):
 
 class CommerceOrderWebhookSubscriptionRow(BaseModel):
     __tablename__ = "commerce_order_webhook_subscriptions"
+    __table_args__ = (
+        UniqueConstraint(
+            "tenant_id", "merchant_id", "url", "scheme", name="uq_commerce_order_webhook_subscriptions_target"
+        ),
+        CheckConstraint("scheme IN ('ucp', 'acp_hmac')", name="ck_commerce_order_webhook_subscriptions_scheme"),
+        CheckConstraint(
+            "source IN ('platform_profile', 'merchant')", name="ck_commerce_order_webhook_subscriptions_source"
+        ),
+        CheckConstraint(
+            "scheme <> 'acp_hmac' OR active_key_id IS NOT NULL", name="ck_commerce_order_webhook_subscriptions_keys"
+        ),
+    )
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True)
     tenant_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
@@ -116,6 +161,20 @@ class CommerceOrderWebhookDeliveryRow(BaseModel):
         Index("ix_commerce_order_webhook_deliveries_due", "tenant_id", "status", "next_attempt_at"),
         Index("ix_commerce_order_webhook_deliveries_order", "tenant_id", "order_id"),
         Index("ix_commerce_order_webhook_deliveries_subscription", "subscription_id"),
+        UniqueConstraint(
+            "tenant_id",
+            "subscription_id",
+            "order_id",
+            "order_revision",
+            name="uq_commerce_order_webhook_deliveries_revision",
+        ),
+        CheckConstraint(
+            "status IN ('pending', 'delivered', 'dead_lettered')", name="ck_commerce_order_webhook_deliveries_status"
+        ),
+        CheckConstraint(
+            "event_type IN ('order.created', 'order.updated')", name="ck_commerce_order_webhook_deliveries_event"
+        ),
+        CheckConstraint("attempts >= 0", name="ck_commerce_order_webhook_deliveries_attempts"),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True)
@@ -143,7 +202,16 @@ class CommerceOrderWebhookDeliveryRow(BaseModel):
 
 class CommerceUcpIdempotencyRow(BaseModel):
     __tablename__ = "commerce_ucp_idempotency"
-    __table_args__ = (Index("ix_commerce_ucp_idempotency_expiry", "tenant_id", "expires_at"),)
+    __table_args__ = (
+        Index("ix_commerce_ucp_idempotency_expiry", "tenant_id", "expires_at"),
+        CheckConstraint("status IN ('pending', 'complete')", name="ck_commerce_ucp_idempotency_status"),
+        CheckConstraint("body_sha256 ~ '^[0-9a-f]{64}$'", name="ck_commerce_ucp_idempotency_body"),
+        CheckConstraint("expires_at >= created_at + interval '24 hours'", name="ck_commerce_ucp_idempotency_retention"),
+        CheckConstraint(
+            "status = 'pending' OR (response_status IS NOT NULL AND response_body IS NOT NULL)",
+            name="ck_commerce_ucp_idempotency_response",
+        ),
+    )
 
     tenant_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True)
     merchant_id: Mapped[str] = mapped_column(String(160), primary_key=True)

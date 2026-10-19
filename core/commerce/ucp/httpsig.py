@@ -33,11 +33,11 @@ from cryptography.hazmat.primitives.asymmetric.utils import decode_dss_signature
 class MerchantSigner(Protocol):
     """Signs with a merchant's active ES256 key; never exposes the private key."""
 
-    async def key_id(self, tenant_id: str, merchant_id: str) -> str | None:
+    async def key_id(self, tenant_id: str, merchant_id: str, seller_agent_id: str) -> str | None:
         """The ``kid`` of the merchant's active signing key (as published in ``keys[]``), or None."""
         ...
 
-    async def sign(self, tenant_id: str, merchant_id: str, data: bytes) -> bytes:
+    async def sign(self, tenant_id: str, merchant_id: str, seller_agent_id: str, data: bytes) -> bytes:
         """The raw ``r||s`` ES256 signature of ``data``."""
         ...
 
@@ -126,6 +126,7 @@ async def sign_request(
     signer: MerchantSigner,
     tenant_id: str,
     merchant_id: str,
+    seller_agent_id: str,
     created: int,
     label: str = DEFAULT_LABEL,
 ) -> dict[str, str]:
@@ -134,12 +135,12 @@ async def sign_request(
     if body is not None:
         out["Content-Digest"] = content_digest(body)
     components = covered_components(url=url, headers=out, has_body=body is not None)
-    kid = await signer.key_id(tenant_id, merchant_id)
+    kid = await signer.key_id(tenant_id, merchant_id, seller_agent_id)
     if not kid:
         raise SigningKeyUnavailableError(merchant_id)
     params = _signature_params(components, created=created, keyid=kid)
     base = signature_base(method=method, url=url, headers=out, components=components, params=params)
-    raw = await signer.sign(tenant_id, merchant_id, base)
+    raw = await signer.sign(tenant_id, merchant_id, seller_agent_id, base)
     out["Signature-Input"] = f"{label}={params}"
     out["Signature"] = f"{label}=:{base64.b64encode(raw).decode('ascii')}:"
     return out
@@ -183,10 +184,10 @@ class LocalEs256Signer:
         self._key = private_key
         self._kid = kid
 
-    async def key_id(self, _tenant_id: str, _merchant_id: str) -> str | None:
+    async def key_id(self, _tenant_id: str, _merchant_id: str, _seller_agent_id: str) -> str | None:
         return self._kid
 
-    async def sign(self, _tenant_id: str, _merchant_id: str, data: bytes) -> bytes:
+    async def sign(self, _tenant_id: str, _merchant_id: str, _seller_agent_id: str, data: bytes) -> bytes:
         der = self._key.sign(data, ec.ECDSA(hashes.SHA256()))
         r, s = decode_dss_signature(der)
         return r.to_bytes(32, "big") + s.to_bytes(32, "big")
@@ -205,7 +206,9 @@ def verify_es256(public_key: ec.EllipticCurvePublicKey, data: bytes, raw: bytes)
     return True
 
 
-async def detached_jws(payload: Any, *, signer: MerchantSigner, tenant_id: str, merchant_id: str) -> str:
+async def detached_jws(
+    payload: Any, *, signer: MerchantSigner, tenant_id: str, merchant_id: str, seller_agent_id: str
+) -> str:
     """RFC 7515 Appendix F detached JWS (ES256) over the RFC 8785 canonical JSON of ``payload``.
 
     The shape of ``ap2.merchant_authorization``: ``<b64url header>..<b64url signature>``
@@ -213,10 +216,36 @@ async def detached_jws(payload: Any, *, signer: MerchantSigner, tenant_id: str, 
     """
     from core.commerce.oacp_jws import canonicalize_bytes
 
-    kid = await signer.key_id(tenant_id, merchant_id)
+    kid = await signer.key_id(tenant_id, merchant_id, seller_agent_id)
     if not kid:
         raise SigningKeyUnavailableError(merchant_id)
     header = b64url(json.dumps({"alg": "ES256", "kid": kid}, separators=(",", ":")).encode("utf-8"))
     signing_input = f"{header}.{b64url(canonicalize_bytes(payload))}".encode("ascii")
-    raw = await signer.sign(tenant_id, merchant_id, signing_input)
+    raw = await signer.sign(tenant_id, merchant_id, seller_agent_id, signing_input)
     return f"{header}..{b64url(raw)}"
+
+
+class MerchantKeyStoreSigner:
+    """``MerchantSigner`` over the merchant key store (``core.commerce.merchant_keys``): the active P-256 key."""
+
+    async def key_id(self, tenant_id: str, merchant_id: str, seller_agent_id: str) -> str | None:
+        from core.commerce.merchant_keys import MerchantKeyError, load_active_signing_key
+
+        try:
+            key = await load_active_signing_key(
+                tenant_id=tenant_id, merchant_id=merchant_id, seller_agent_id=seller_agent_id
+            )
+        except MerchantKeyError:
+            return None
+        return key.kid
+
+    async def sign(self, tenant_id: str, merchant_id: str, seller_agent_id: str, data: bytes) -> bytes:
+        from core.commerce.merchant_keys import MerchantKeyError, load_active_signing_key
+
+        try:
+            key = await load_active_signing_key(
+                tenant_id=tenant_id, merchant_id=merchant_id, seller_agent_id=seller_agent_id
+            )
+        except MerchantKeyError as exc:
+            raise SigningKeyUnavailableError(merchant_id) from exc
+        return key.sign(data)

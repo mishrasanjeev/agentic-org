@@ -132,7 +132,10 @@ def test_rotated_key_stays_published_for_the_grace_window(monkeypatch: pytest.Mo
 def test_registry_emits_only_served_capabilities_and_prunes_orphan_extensions(serve) -> None:
     registry = UcpRegistry()
     registry.services.update(ucp_registry.services)
-    registry.capabilities.update(ucp_registry.capabilities)
+    # The read capabilities only: the transaction ones are registered by api/v1/commerce_ucp.py.
+    registry.capabilities.update(
+        {name: reg for name, reg in ucp_registry.capabilities.items() if ".catalog." in name or ".location." in name}
+    )
     checkout_on = {"value": False}
     registry.register_capability(
         UcpCapabilityRegistration(

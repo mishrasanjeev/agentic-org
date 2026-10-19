@@ -15,14 +15,9 @@ from tests import ucp_txn_fixtures as uf
 TENANT = str(uuid.UUID("00000000-0000-4000-8000-0000000000a3"))
 
 
-def test_sf_dictionary_member_and_parameters() -> None:
-    parsed = n.parse_sf_dictionary('profile="https://a.example/p.json"; version="2026-04-08", x=?1, y=5')
-    assert parsed["profile"].value == "https://a.example/p.json"
-    assert parsed["profile"].params == {"version": "2026-04-08"}
-    assert parsed["x"].value is True and parsed["y"].value == 5
-    for bad in ('profile="unterminated', "Profile=1", 'profile="a",', 'profile="a" junk'):
-        with pytest.raises(ValueError):
-            n.parse_sf_dictionary(bad)
+def test_version_parameter_on_the_profile_member_is_read() -> None:
+    agent = n.parse_ucp_agent('profile="https://a.example/p.json"; version="2026-04-08"')
+    assert (agent.profile_url, agent.declared_version) == ("https://a.example/p.json", "2026-04-08")
 
 
 def test_ucp_agent_requires_absolute_profile_url() -> None:

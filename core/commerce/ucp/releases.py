@@ -10,14 +10,11 @@ https://ucp.dev/<version>/schemas/.
 
 from __future__ import annotations
 
-import os
 import re
 
 V2026_04_08 = "2026-04-08"
 V2026_08_25 = "2026-08-25"
 KNOWN_VERSIONS: tuple[str, ...] = (V2026_04_08, V2026_08_25)
-DEFAULT_VERSIONS: tuple[str, ...] = (V2026_04_08,)
-VERSIONS_ENV = "AGENTICORG_UCP_VERSIONS"
 _VERSION_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 
 # Capability and extension names this server can serve, per release.
@@ -37,14 +34,6 @@ AP2_MANDATE_R08 = "dev.ucp.shopping.ap2_mandate"
 # Action types declared by dev.ucp.common.payment.authentication (2026-08-25 only).
 ACTION_DEVICE_DATA_COLLECTION = "dev.ucp.common.payment.device_data_collection"
 ACTION_THREE_DS_CHALLENGE = "dev.ucp.common.payment.three_ds_challenge"
-
-
-def supported_ucp_versions() -> tuple[str, ...]:
-    """The releases ``AGENTICORG_UCP_VERSIONS`` enables (default ``2026-04-08``); unknown values are ignored."""
-    raw = os.environ.get(VERSIONS_ENV, "")
-    wanted = [part.strip() for part in raw.split(",") if part.strip()]
-    chosen = tuple(version for version in KNOWN_VERSIONS if version in wanted)
-    return chosen or DEFAULT_VERSIONS
 
 
 def is_version(value: object) -> bool:

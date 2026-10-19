@@ -11,8 +11,10 @@ release, for ``dev.ucp.*``), then extensions whose parents are all absent are
 pruned until nothing changes (Intersection Algorithm). Every response echoes
 ``ucp.version`` and the active capabilities relevant to the operation.
 
-A ``version`` parameter on the ``profile`` member (``profile="..."; version=
-"2026-04-08"``) is read as the platform's declared release and refused early
+``UCP-Agent`` is parsed with the profile work's RFC 8941 parser
+(``core.commerce.ucp.versions.parse_ucp_agent``). A ``version`` parameter on
+the ``profile`` member (``profile="..."; version="2026-04-08"``) is read as the
+platform's declared release and refused early
 when this server does not speak it; the fetched profile stays authoritative.
 """
 
@@ -21,7 +23,7 @@ from __future__ import annotations
 import json
 import time
 from collections.abc import Awaitable, Callable, Mapping
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Any
 
 import httpx
@@ -30,6 +32,7 @@ import structlog
 from core.commerce.ucp import releases as v
 from core.commerce.ucp.capabilities import CapabilityEntry, CapabilityRegistry, RegistryContext
 from core.commerce.ucp.merchant import MerchantUcp
+from core.commerce.ucp.versions import configured_ucp_versions
 
 logger = structlog.get_logger()
 
@@ -52,126 +55,6 @@ class NegotiationError(Exception):
         self.content = content
 
 
-# ---------------------------------------------------------------------------
-# RFC 8941 Dictionary (the subset UCP-Agent uses: strings, tokens, integers, booleans, parameters)
-
-
-@dataclass(frozen=True)
-class SfMember:
-    value: Any
-    params: dict[str, Any] = field(default_factory=dict)
-
-
-def parse_sf_dictionary(text: str) -> dict[str, SfMember]:
-    """Parse an RFC 8941 Dictionary (section 4.2.2); raises ValueError on malformed input."""
-    parser = _SfParser(text)
-    out = parser.dictionary()
-    return out
-
-
-_KEY = "_-.*"
-
-
-class _SfParser:
-    def __init__(self, text: str) -> None:
-        self.s = text
-        self.i = 0
-
-    def _ws(self) -> None:
-        while self.i < len(self.s) and self.s[self.i] in " \t":
-            self.i += 1
-
-    def _peek(self) -> str:
-        return self.s[self.i] if self.i < len(self.s) else ""
-
-    def dictionary(self) -> dict[str, SfMember]:
-        out: dict[str, SfMember] = {}
-        self._ws()
-        while self.i < len(self.s):
-            key = self._key()
-            if self._peek() == "=":
-                self.i += 1
-                value = self._bare_item()
-            else:
-                value = True
-            out[key] = SfMember(value, self._params())
-            self._ws()
-            if self.i >= len(self.s):
-                break
-            if self._peek() != ",":
-                raise ValueError("expected ',' between dictionary members")
-            self.i += 1
-            self._ws()
-            if self.i >= len(self.s):
-                raise ValueError("trailing comma")
-        return out
-
-    def _key(self) -> str:
-        start = self.i
-        if not (self._peek().islower() or self._peek() == "*"):
-            raise ValueError("invalid key")
-        while self.i < len(self.s) and (self.s[self.i].islower() or self.s[self.i].isdigit() or self.s[self.i] in _KEY):
-            self.i += 1
-        return self.s[start : self.i]
-
-    def _params(self) -> dict[str, Any]:
-        params: dict[str, Any] = {}
-        while self._peek() == ";":
-            self.i += 1
-            self._ws()
-            key = self._key()
-            if self._peek() == "=":
-                self.i += 1
-                params[key] = self._bare_item()
-            else:
-                params[key] = True
-        return params
-
-    def _bare_item(self) -> Any:
-        ch = self._peek()
-        if ch == '"':
-            return self._string()
-        if ch == "?":
-            self.i += 1
-            flag = self._peek()
-            if flag not in "01" or not flag:
-                raise ValueError("invalid boolean")
-            self.i += 1
-            return flag == "1"
-        if ch == "-" or ch.isdigit():
-            start = self.i
-            self.i += 1
-            while self.i < len(self.s) and (self.s[self.i].isdigit() or self.s[self.i] == "."):
-                self.i += 1
-            text = self.s[start : self.i]
-            return float(text) if "." in text else int(text)
-        if ch.isalpha() or ch == "*":
-            start = self.i
-            while self.i < len(self.s) and (self.s[self.i].isalnum() or self.s[self.i] in "!#$%&'*+-.^_`|~:/"):
-                self.i += 1
-            return self.s[start : self.i]
-        raise ValueError("invalid item")
-
-    def _string(self) -> str:
-        self.i += 1
-        out: list[str] = []
-        while self.i < len(self.s):
-            ch = self.s[self.i]
-            self.i += 1
-            if ch == "\\":
-                if self.i >= len(self.s) or self.s[self.i] not in '"\\':
-                    raise ValueError("invalid escape")
-                out.append(self.s[self.i])
-                self.i += 1
-            elif ch == '"':
-                return "".join(out)
-            elif ord(ch) < 0x20 or ord(ch) > 0x7E:
-                raise ValueError("invalid string character")
-            else:
-                out.append(ch)
-        raise ValueError("unterminated string")
-
-
 @dataclass(frozen=True)
 class UcpAgent:
     profile_url: str
@@ -179,24 +62,23 @@ class UcpAgent:
 
 
 def parse_ucp_agent(header: str | None) -> UcpAgent:
-    """The platform profile URL (and declared release, if any) from ``UCP-Agent``."""
-    if not header or not header.strip():
-        raise NegotiationError("invalid_profile_url", 400, "The UCP-Agent header with a profile URL is required.")
+    """The platform profile URL (and declared release, if any) from ``UCP-Agent`` (RFC 8941 dictionary)."""
+    from core.commerce.ucp.versions import UcpAgentHeaderError
+    from core.commerce.ucp.versions import parse_ucp_agent as parse_header
+
     try:
-        members = parse_sf_dictionary(header.strip())
-    except ValueError as exc:
-        raise NegotiationError("invalid_profile_url", 400, "UCP-Agent is not an RFC 8941 dictionary.") from exc
-    profile = members.get("profile")
-    if profile is None or not isinstance(profile.value, str) or not profile.value:
+        parsed_header = parse_header(header)
+    except (UcpAgentHeaderError, ValueError) as exc:
+        raise NegotiationError("invalid_profile_url", 400, "UCP-Agent is not a valid RFC 8941 dictionary.") from exc
+    if parsed_header is None:
+        raise NegotiationError("invalid_profile_url", 400, "The UCP-Agent header with a profile URL is required.")
+    url = parsed_header.profile
+    if not isinstance(url, str) or not url:
         raise NegotiationError("invalid_profile_url", 400, 'UCP-Agent must carry profile="<url>".')
-    declared = profile.params.get("version")
-    if declared is None and "version" in members:
-        declared = members["version"].value
-    url = profile.value
     parsed = httpx.URL(url) if _looks_absolute(url) else None
     if parsed is None or parsed.scheme not in {"https", "http"} or not parsed.host or parsed.userinfo:
         raise NegotiationError("invalid_profile_url", 400, "The UCP-Agent profile must be an absolute https URL.")
-    return UcpAgent(profile_url=url, declared_version=declared if isinstance(declared, str) else None)
+    return UcpAgent(profile_url=url, declared_version=parsed_header.version)
 
 
 def _looks_absolute(url: str) -> bool:
@@ -360,10 +242,11 @@ async def negotiate(
     resource: str,
     fetcher: ProfileFetcher | None = None,
     supported_versions: tuple[str, ...] | None = None,
+    published: Callable[[str], set[str]] | None = None,
 ) -> Negotiated:
     """Negotiate one request. Raises ``NegotiationError``; ``capabilities_incompatible`` is a 200 business outcome."""
     agent = parse_ucp_agent(ucp_agent)
-    supported = supported_versions or v.supported_ucp_versions()
+    supported = supported_versions or configured_ucp_versions()
     if agent.declared_version is not None and agent.declared_version not in supported:
         raise NegotiationError(
             "version_unsupported", 422, f"UCP version {agent.declared_version} is not supported by this business."
@@ -377,7 +260,12 @@ async def negotiate(
     platform = platform_profile_from_document(agent.profile_url, document)
     if platform.version not in supported:
         raise NegotiationError("version_unsupported", 422, f"UCP version {platform.version} is not supported.")
-    active = intersect(registry.capabilities(merchant, platform.version, context), platform, platform.version)
+    business = registry.capabilities(merchant, platform.version, context)
+    if published is not None:
+        # Negotiate only what the merchant's profile advertises for this release.
+        advertised = published(platform.version)
+        business = [entry for entry in business if entry.name in advertised]
+    active = intersect(business, platform, platform.version)
     root = ROOT_CAPABILITY[resource]
     if root not in active:
         raise NegotiationError(

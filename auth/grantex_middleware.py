@@ -344,6 +344,10 @@ async def check_user_session_state(tenant_id: str, claims: dict[str, Any]) -> st
     return state.rejects_token(float(issued_at) if isinstance(issued_at, int | float) else None)
 
 
+# UCP checkout, cart and order routes (api/v1/commerce_ucp.py) also accept the platform's API key in X-API-Key.
+UCP_TRANSACTION_PREFIXES: tuple[str, ...] = ("/ucp/checkout-sessions", "/ucp/carts", "/ucp/orders")
+
+
 class GrantexAuthMiddleware(BaseHTTPMiddleware):
     """Triple-mode auth: API keys + Grantex RS256 grant tokens + legacy HS256 JWTs."""
 
@@ -447,6 +451,13 @@ class GrantexAuthMiddleware(BaseHTTPMiddleware):
         # still use the HttpOnly cookie path.
         token = ""
         auth_header = request.headers.get("Authorization", "")
+        if not auth_header and request.url.path.startswith(UCP_TRANSACTION_PREFIXES):
+            # UCP platforms authenticate with "a reusable api key allocated to the platform by the
+            # business" in X-API-Key (UCP REST OpenAPI, x_api_key): the tenant API key the merchant
+            # issued, verified exactly like a bearer API key. Only API keys are accepted there.
+            api_key = request.headers.get("X-API-Key", "").strip()
+            if api_key.startswith("ao_sk_"):
+                auth_header = f"Bearer {api_key}"
         if auth_header:
             if not auth_header.startswith("Bearer "):
                 return await self._credential_failure_response(

@@ -176,5 +176,5 @@ def test_plural_handler_absent_without_provider_or_capability() -> None:
     config["payment_providers"] = []
     from core.commerce.ucp.merchant import merchant_ucp_from_config
 
-    no_provider = merchant_ucp_from_config(config, tenant_id=TENANT)
+    no_provider = merchant_ucp_from_config(config, tenant_id=TENANT, serving_host=uf.HOST)
     assert resolve_handler(no_provider, "2026-04-08", HANDLER_ID) is None

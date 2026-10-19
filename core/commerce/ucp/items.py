@@ -1,12 +1,12 @@
 # SPDX-License-Identifier: Apache-2.0
 """Item lookup for checkout and cart pricing: the authoritative title, price, stock and sale basis.
 
-UCP ``item.id`` is the business's item identifier (usually the SKU). The
-default catalog reads the merchant's synced product evidence (the read-only
-Shopify sync stored by the commerce runtime) and matches an item id against a
-variant's SKU, its variant id, or the numeric part of a Shopify variant gid.
-The catalog capability (``dev.ucp.shopping.catalog.*``) belongs to the profile
-work; when it lands, its item source can implement ``ItemCatalog``.
+UCP ``item.id`` is the id the catalog capability publishes for a variant
+(``core.commerce.ucp.catalog.ucp_variant_id``), so an item found through
+``/ucp/catalog/search`` or ``/lookup`` checks out as is; the SKU, the source
+variant id and the numeric part of a Shopify variant gid are accepted too.
+Items are read from the merchant's synced product evidence and priced with the
+catalog's ISO 4217 minor-unit conversion.
 """
 
 from __future__ import annotations
@@ -15,7 +15,7 @@ from collections.abc import Awaitable, Callable, Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any, Protocol
 
-from core.commerce.arbiter import amount_minor_units
+from core.commerce.ucp.catalog import minor_units, ucp_variant_id
 from core.commerce.ucp.merchant import MerchantUcp
 from core.commerce.ucp.quantity import EACH_UNIT, QuantityError, QuantityUnit, parse_quantity_unit
 
@@ -73,7 +73,8 @@ class ProductEvidenceCatalog:
 
 
 def _variant_keys(variant: Mapping[str, Any]) -> set[str]:
-    keys = {str(variant.get("sku") or ""), str(variant.get("variant_id") or "")}
+    """The ids an item may be addressed by: the catalog's UCP variant id first, then the SKU and source ids."""
+    keys = {str(ucp_variant_id(variant) or ""), str(variant.get("sku") or ""), str(variant.get("variant_id") or "")}
     gid = str(variant.get("variant_id") or "")
     if gid.startswith("gid://shopify/ProductVariant/"):
         keys.add(gid.rsplit("/", 1)[-1])
@@ -84,7 +85,7 @@ def _catalog_item(
     merchant: MerchantUcp, product: Mapping[str, Any], variant: Mapping[str, Any], item_id: str
 ) -> CatalogItem | None:
     currency = str(variant.get("currency") or merchant.currency or "").upper()
-    price = amount_minor_units(variant.get("price"), currency, 1) if currency else None
+    price = minor_units(variant.get("price"), currency) if currency else None
     if price is None:
         return None
     unit = EACH_UNIT

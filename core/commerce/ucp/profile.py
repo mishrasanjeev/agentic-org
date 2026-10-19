@@ -14,7 +14,7 @@ from __future__ import annotations
 import hashlib
 import json
 from collections.abc import Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 from types import ModuleType
 from typing import Any
@@ -22,6 +22,7 @@ from typing import Any
 from core.commerce.merchant_keys import active_key_record, merchant_public_jwks
 from core.commerce.ucp import v2026_04_08, v2026_08_25
 from core.commerce.ucp.locations import store_locations
+from core.commerce.ucp.merchant import config_from_row
 from core.commerce.ucp.registry import UcpRegistry, UcpServeContext, ucp_registry
 from core.commerce.ucp.state import attested_host, is_published, public_discovery_allows, ucp_state
 from core.commerce.ucp.versions import UCP_2026_04_08, UCP_2026_08_25, current_ucp_version
@@ -42,6 +43,7 @@ class UcpMerchantServeState:
     jwks: tuple[dict[str, str], ...]
     locations: tuple[dict[str, Any], ...]
     ucp: Mapping[str, Any]
+    config: Mapping[str, Any] = field(default_factory=dict)
 
     def context(self, version: str) -> UcpServeContext:
         return UcpServeContext(
@@ -52,6 +54,7 @@ class UcpMerchantServeState:
             seller_agent_id=self.seller_agent_id,
             namespace=self.namespace,
             location_count=len(self.locations),
+            merchant_config=self.config,
         )
 
 
@@ -93,6 +96,7 @@ def merchant_serve_state(
         jwks=tuple(jwks),
         locations=tuple(store_locations(row.offline_pos_stores or [])),
         ucp=state,
+        config=config_from_row(row),
     )
 
 

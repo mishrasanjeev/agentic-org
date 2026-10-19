@@ -53,6 +53,9 @@ class UcpServeContext:
     seller_agent_id: str
     namespace: str | None
     location_count: int = 0
+    # The merchant commerce config (core.commerce.ucp.merchant.config_from_row) for predicates that
+    # depend on merchant settings, such as the transaction extensions; pure data, no I/O.
+    merchant_config: Mapping[str, Any] | None = None
 
     @property
     def rest_endpoint(self) -> str:
@@ -75,6 +78,11 @@ class UcpCapabilityRegistration:
     extends: tuple[str, ...] = ()
     served: Callable[[UcpServeContext], bool] = _always
     config: Callable[[UcpServeContext], Mapping[str, Any] | None] | None = None
+    # Parents in releases where they differ from ``extends`` (buyer consent: checkout only in 2026-04-08).
+    extends_by_version: Mapping[str, tuple[str, ...]] = field(default_factory=dict)
+
+    def parents(self, version: str) -> tuple[str, ...]:
+        return tuple(self.extends_by_version.get(version, self.extends))
 
     def entry(self, ctx: UcpServeContext) -> dict[str, Any] | None:
         schema = self.schema_urls.get(ctx.version)
@@ -85,8 +93,9 @@ class UcpCapabilityRegistration:
         if spec is not None:
             entry["spec"] = spec
         entry["schema"] = schema
-        if self.extends:
-            entry["extends"] = self.extends[0] if len(self.extends) == 1 else list(self.extends)
+        parents = self.parents(ctx.version)
+        if parents:
+            entry["extends"] = parents[0] if len(parents) == 1 else list(parents)
         if self.config is not None:
             config = self.config(ctx)
             if config:
@@ -185,7 +194,7 @@ class UcpRegistry:
             if not self._entry_allowed(name, entry, ctx):
                 continue
             capabilities[name] = [entry]
-            parents[name] = registration.extends
+            parents[name] = registration.parents(ctx.version)
             service_of[name] = registration.service
         changed = True
         while changed:

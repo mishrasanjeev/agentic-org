@@ -77,6 +77,7 @@ def render_checkout(
     merchant: MerchantUcp,
     handlers: Sequence[PaymentHandlerEntry],
     extra_messages: Sequence[Mapping[str, Any]] = (),
+    policies: Sequence[Mapping[str, Any]] = (),
 ) -> dict[str, Any]:
     version = negotiated.version
     mod = release(version)
@@ -116,6 +117,7 @@ def render_checkout(
     if negotiated.has(v.LOYALTY) and state.get("loyalty"):
         out["loyalty"] = dict(state["loyalty"])
     mod.checkout_extras(out, state, negotiated)
+    mod.policies(out, policies)
     if session.status == "completed" and session.order_id:
         out["order"] = {"id": session.order_id, "permalink_url": session.order_permalink_url}
     return out
@@ -128,6 +130,7 @@ def render_cart(
     negotiated: Negotiated,
     merchant: MerchantUcp,
     expires_at: datetime,
+    policies: Sequence[Mapping[str, Any]] = (),
 ) -> dict[str, Any]:
     version = negotiated.version
     mod = release(version)
@@ -158,6 +161,7 @@ def render_cart(
         out["continue_url"] = state["permalink_url"]
     if negotiated.has(v.LOYALTY) and state.get("loyalty"):
         out["loyalty"] = dict(state["loyalty"])
+    mod.policies(out, policies)
     return out
 
 
@@ -192,4 +196,5 @@ def render_order(*, snapshot: Mapping[str, Any], version: str, capabilities: Map
     if snapshot.get("attribution"):
         out["attribution"] = dict(snapshot["attribution"])
     mod.order_extras(out, snapshot)
+    mod.policies(out, snapshot.get("policies") or ())
     return out

@@ -3,15 +3,15 @@
 
 UCP endpoints are served at ``https://<merchant serving host>/ucp``; the
 merchant is chosen by the request's ``Host`` header, never by a path alias.
-The REST binding is authenticated with a tenant credential the merchant
-issued to the platform, so resolution is done inside the authenticated
-tenant only: a host no merchant config of that tenant serves is unknown (404).
+``PublishedHostResolver`` uses the profile publisher's host index: the host
+must be the merchant's attested serving host, the merchant must be published
+(an active signing key, a live ``public_discovery`` artifact), exactly as for
+``/.well-known/ucp``, and the merchant must belong to the tenant of the
+platform's credential. Anything else is unknown (404).
 
-Merchant settings live in the merchant commerce config under
+Merchant transaction settings live in the merchant commerce config under
 ``provider_policy.ucp`` (a free-form mapping the config normaliser keeps):
 
-``serving_host``
-    The bare host name the merchant's UCP endpoints are served on.
 ``links``
     ``[{type, url, title?}]``; UCP requires ``privacy_policy`` and
     ``terms_of_service`` links for buyer-facing checkouts.
@@ -42,17 +42,11 @@ Merchant settings live in the merchant commerce config under
     permalink binding; cart and escalation ``continue_url`` values are built on it.
 ``checkout_ttl_seconds``
     Session lifetime (default 6 hours, the UCP default).
-
-Seam for the profile work: ``ServingHostResolver`` is the interface; the
-verified-serving-host attestation (namespace authority binding) is checked by
-the profile publisher, and a verified-host field from that work replaces
-``serving_host`` here when the branches merge.
 """
 
 from __future__ import annotations
 
 import re
-import uuid
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from typing import Any, Protocol
@@ -131,6 +125,9 @@ class MerchantUcp:
     quantity_units: dict[str, dict[str, Any]] = field(default_factory=dict)
     permalink_endpoint: str | None = None
     checkout_ttl_seconds: int = DEFAULT_CHECKOUT_TTL_SECONDS
+    # The attested reverse-DNS namespace and whether an active merchant signing key exists.
+    namespace: str | None = None
+    signing_available: bool = False
     raw_config: dict[str, Any] = field(default_factory=dict, repr=False)
 
     @property
@@ -147,11 +144,18 @@ class MerchantUcp:
         return f"{self.base_url}/.well-known/ucp"
 
 
-def merchant_ucp_from_config(config: Mapping[str, Any], *, tenant_id: str) -> MerchantUcp | None:
-    """The merchant's UCP context, or None when the config names no valid serving host."""
+def merchant_ucp_from_config(
+    config: Mapping[str, Any],
+    *,
+    tenant_id: str,
+    serving_host: str | None,
+    namespace: str | None = None,
+    signing_available: bool = False,
+) -> MerchantUcp | None:
+    """The merchant's UCP context on ``serving_host``, or None when the host is not a valid DNS name."""
     policy = config.get("provider_policy") if isinstance(config.get("provider_policy"), Mapping) else {}
     ucp = policy.get("ucp") if isinstance(policy, Mapping) and isinstance(policy.get("ucp"), Mapping) else {}
-    host = normalize_host(ucp.get("serving_host"))
+    host = normalize_host(serving_host)
     if host is None:
         return None
     stores = [
@@ -241,8 +245,23 @@ def merchant_ucp_from_config(config: Mapping[str, Any], *, tenant_id: str) -> Me
         else {},
         permalink_endpoint=_permalink_endpoint(ucp.get("permalink_endpoint")),
         checkout_ttl_seconds=max(60, min(_int(ucp.get("checkout_ttl_seconds")) or DEFAULT_CHECKOUT_TTL_SECONDS, 86400)),
+        namespace=namespace,
+        signing_available=signing_available,
         raw_config=dict(config),
     )
+
+
+def config_from_row(row: Any) -> dict[str, Any]:
+    """The parts of a merchant commerce config row the UCP transaction settings read."""
+    return {
+        "merchant_id": getattr(row, "merchant_id", None),
+        "seller_agent_id": getattr(row, "seller_agent_id", None),
+        "merchant_display_name": getattr(row, "merchant_display_name", None),
+        "offline_pos_stores": list(getattr(row, "offline_pos_stores", None) or []),
+        "payment_providers": list(getattr(row, "payment_providers", None) or []),
+        "provider_policy": dict(getattr(row, "provider_policy", None) or {}),
+        "public_publishing": dict(getattr(row, "public_publishing", None) or {}),
+    }
 
 
 _PERMALINK_ENDPOINT = re.compile(r"^https://[^/?#\s\\@]+(?:/[^?#\s\\]*[^/?#\s\\])?$")
@@ -273,36 +292,42 @@ class ServingHostResolver(Protocol):
     async def resolve(self, *, host: str, tenant_id: str) -> MerchantUcp | None: ...
 
 
-class TenantConfigHostResolver:
-    """Resolves the host against the authenticated tenant's merchant commerce configs (RLS-bound session)."""
+class PublishedHostResolver:
+    """Host -> merchant through the profile publisher's host index; the merchant must be served on that host."""
 
     async def resolve(self, *, host: str, tenant_id: str) -> MerchantUcp | None:
-        from sqlalchemy import select
+        from datetime import UTC, datetime
 
-        from core.database import get_tenant_session
-        from core.models.commerce_c6z_runtime import C6ZMerchantCommerceConfigRow
+        from core.commerce.ucp.authority import normalize_host as attested_form
+        from core.commerce.ucp.catalog import usable_artifact_ids
+        from core.commerce.ucp.profile import merchant_serve_state
+        from core.commerce.ucp.store import find_serving_binding, load_merchant_config_row, load_shared_cache_records
 
-        wanted = normalize_host(host)
+        wanted = attested_form(host)
         if wanted is None:
             return None
-        async with get_tenant_session(uuid.UUID(str(tenant_id))) as session:
-            rows = (
-                await session.scalars(
-                    select(C6ZMerchantCommerceConfigRow).where(C6ZMerchantCommerceConfigRow.tenant_id == str(tenant_id))
-                )
-            ).all()
-        matches = []
-        for row in rows:
-            config = {
-                "merchant_id": row.merchant_id,
-                "seller_agent_id": row.seller_agent_id,
-                "merchant_display_name": row.merchant_display_name,
-                "offline_pos_stores": list(row.offline_pos_stores or []),
-                "payment_providers": list(row.payment_providers or []),
-                "provider_policy": dict(row.provider_policy or {}),
-            }
-            merchant = merchant_ucp_from_config(config, tenant_id=str(tenant_id))
-            if merchant is not None and merchant.serving_host == wanted:
-                matches.append(merchant)
-        # Two configs claiming one host are ambiguous: refuse rather than guess.
-        return matches[0] if len(matches) == 1 else None
+        binding = await find_serving_binding(wanted)
+        if binding is None or binding.tenant_id != str(tenant_id):
+            return None
+        row = await load_merchant_config_row(
+            tenant_id=binding.tenant_id, merchant_id=binding.merchant_id, seller_agent_id=binding.seller_agent_id
+        )
+        if row is None or str(row.tenant_id) != binding.tenant_id:
+            return None
+        now = datetime.now(UTC)
+        records = await load_shared_cache_records(
+            tenant_id=binding.tenant_id, merchant_id=binding.merchant_id, seller_agent_id=binding.seller_agent_id
+        )
+        live = usable_artifact_ids(
+            cache_records=records, now_iso=now.isoformat().replace("+00:00", "Z"), artifact_type="public_discovery"
+        )
+        serve = merchant_serve_state(row, host=wanted, now=now, live_public_discovery_ids=live)
+        if serve is None:
+            return None
+        return merchant_ucp_from_config(
+            config_from_row(row),
+            tenant_id=str(tenant_id),
+            serving_host=wanted,
+            namespace=serve.namespace,
+            signing_available=True,
+        )
