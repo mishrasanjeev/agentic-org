@@ -23,7 +23,18 @@ flowchart TD
 3. Stop Shopify sync.
 4. Remove Grantex tenant allowlist or rotate service token if needed.
 5. Disable POS handoff for the merchant if callback evidence or store metadata is stale.
-6. Re-enable only after smoke tests pass.
+6. Stop public UCP discovery: `AGENTICORG_UCP_PROFILE_ENABLED=false` makes `/.well-known/ucp`
+   and `/ucp/*` answer 404 for every merchant (default off); for one merchant use
+   `POST /api/v1/commerce/runtime/merchant-configs/{merchant_id}/ucp/unpublish`.
+7. Re-enable only after smoke tests pass.
+
+## Flags
+
+| Flag | Default | Effect |
+| --- | --- | --- |
+| `AGENTICORG_UCP_PROFILE_ENABLED` | `false` | UCP profile, catalog and location routes; UCP signing key at onboarding; enabled `public_discovery_state` artifacts accepted. |
+| `AGENTICORG_UCP_VERSIONS` | `2026-04-08` | UCP releases served; the newest is `/.well-known/ucp`, older ones are leaf profiles. |
+| `AGENTICORG_UCP_KEY_ROTATION_GRACE_DAYS` | `7` | Days a rotated-out UCP signing key stays published (minimum 7). |
 
 ## POS Smoke
 

@@ -707,13 +707,14 @@ def test_protocol_adapter_payloads_are_generated_from_cached_artifacts() -> None
     assert payloads["status"] == "adapter_payloads_ready"
     assert set(payloads["surfaces"]) == {
         "schema_org_product_offer_jsonld",
-        "ucp_style_capability_profile",
         "acp_style_commerce_interaction_profile",
         "ap2_style_mandate_payment_evidence_profile",
         "a2a_agent_card_task_metadata",
         "mcp_tool_resource_metadata",
         "openapi_buyer_safe_bridge_schema",
     }
+    # The UCP surface is the published business profile; none is passed here.
+    assert payloads["unavailable_surfaces"] == {"ucp_business_profile": "ucp_profile_not_published"}
     schema_graph = payloads["surfaces"]["schema_org_product_offer_jsonld"]["@graph"]
     assert schema_graph[0]["name"] == "Canvas Tote"
     assert schema_graph[0]["offers"][0]["price"] == "1299.00"

@@ -258,6 +258,11 @@ A source definition is not evidence that a specific tenant has connected the pro
   and approved-domain egress controls. A run remains an explicit external
   action. See [RPA runtime](https://github.com/mishrasanjeev/agentic-org/blob/main/docs/rpa-runtime.md).
 - Outbound notifications and local-model profiles require their supporting services.
+- The UCP business profile (`/.well-known/ucp`, UCP 2026-04-08 and 2026-08-25) with catalog search
+  and lookup and store locations is off by default (`AGENTICORG_UCP_PROFILE_ENABLED`). It serves a merchant
+  only on a DNS-attested serving host, with a per-merchant ES256 signing key, after the merchant opts in
+  and Grantex issues an enabled `public_discovery_state` artifact. Checkout, cart and order are not served
+  yet. See [UCP business profile](https://github.com/mishrasanjeev/agentic-org/blob/main/docs/oacp/ucp-profile.md).
 - AI spend intelligence is off by default. Nothing is metered until `AGENTICORG_SPEND_INTELLIGENCE_ENABLED`
   is set on the API, worker, and beat services. Attribution follows the organisation tree and mappings a
   tenant administrator enters; prices come from the tenant's rate cards, else the deployment's list prices
@@ -377,6 +382,7 @@ A2A Agent Card discovery path.
 | GET /api/v1/health | Service health | Public |
 | GET /api/v1/product-facts | Live version and registry totals | Public |
 | GET /.well-known/agent-card.json | A2A v1 generic Agent Card (after release and ingress configuration) | Public |
+| GET /.well-known/ucp, POST /ucp/catalog/search, /ucp/catalog/lookup, /ucp/locations/* | UCP business profile, catalog and locations on a merchant's verified serving host (off by default) | Public, host-bound |
 | GET /api/v1/a2a/extendedAgentCard | Merchant-specific seller card | Merchant-issued buyer credential |
 | POST /api/v1/a2a/message:send | A2A v1 synchronous text request | Buyer credential for seller Q&A, or scoped tenant credential for non-commerce agents |
 | GET /api/v1/a2a/agent-card | Legacy AgenticOrg discovery card; not A2A v1 | Public |

@@ -414,6 +414,20 @@ class Settings(BaseSettings):
     # commerce ledger (core/commerce/ledger.py) is tamper-evident. Off by
     # default. Env: AGENTICORG_AUDIT_CHAIN_DEFAULT_ON.
     audit_chain_default_on: bool = False
+    # UCP business profile (core/commerce/ucp, api/v1/ucp_discovery.py): off,
+    # GET /.well-known/ucp and the /ucp catalog and location routes answer 404
+    # and merchant onboarding generates no UCP signing key. On, a published
+    # merchant's profile is served on its verified serving host.
+    # Env: AGENTICORG_UCP_PROFILE_ENABLED.
+    ucp_profile_enabled: bool = False
+    # UCP releases served (comma list of YYYY-MM-DD). The newest is the
+    # profile at /.well-known/ucp; older ones are leaf profiles advertised in
+    # ucp.supported_versions. Env: AGENTICORG_UCP_VERSIONS.
+    ucp_versions: str = "2026-04-08"
+    # Days a rotated-out merchant UCP signing key stays in the profile so
+    # verifiers keep accepting signatures made before the rotation (UCP
+    # signatures, Key Rotation: at least 7). Env: AGENTICORG_UCP_KEY_ROTATION_GRACE_DAYS.
+    ucp_key_rotation_grace_days: int = 7
     # Synthetic checks (observability/synthetic.py): the scheduled sweep runs
     # each tenant's due probes (model, knowledge, guardrail, audit chain) and
     # stores a result per run. Off by default; a check can be run by hand

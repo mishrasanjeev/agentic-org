@@ -73,6 +73,11 @@ Commerce ledger and arbiter flags: `AGENTICORG_AUDIT_CHAIN_DEFAULT_ON` (default 
 audit chain of every tenant with a commerce merchant config while
 `AGENTICORG_AUDIT_CHAIN_ENABLED` is off). The commerce `audit_event` check follows
 `AGENTICORG_ROUTE_ENFORCEMENT_MODE` (`enforce` by default, `log` to stage).
+UCP profile flags: `AGENTICORG_UCP_PROFILE_ENABLED` (default off; `/.well-known/ucp` and the
+`/ucp` catalog and location routes answer 404 while off, onboarding generates no UCP signing
+key, and no `public_discovery_state` artifact may enable discovery), `AGENTICORG_UCP_VERSIONS`
+(default `2026-04-08`), `AGENTICORG_UCP_KEY_ROTATION_GRACE_DAYS` (default 7, minimum 7); see
+`docs/oacp/ucp-profile.md`.
 
 **No human legs in commerce decisions.** The commerce arbiter (`core/commerce/arbiter.py`) is a
 deterministic policy function: it seals `allow` or `refuse`, never "pending", reads no clock

@@ -373,6 +373,13 @@ class GrantexAuthMiddleware(BaseHTTPMiddleware):
         "/api/v1/branding",  # Public tenant branding for the login page
         "/api/v1/status",  # Public status page
         "/api/v1/product-facts",  # Public product counts/version for README, Landing, Pricing
+        # UCP business profile and public catalog/location reads, host-bound
+        # (api/v1/ucp_discovery.py; 404 unless AGENTICORG_UCP_PROFILE_ENABLED).
+        "/.well-known/ucp",
+        "/ucp/catalog/search",
+        "/ucp/catalog/lookup",
+        "/ucp/locations/search",
+        "/ucp/locations/lookup",
         "/docs", "/openapi.json", "/redoc",
     }
 
@@ -387,6 +394,7 @@ class GrantexAuthMiddleware(BaseHTTPMiddleware):
         "/api/v1/auth/sso/",  # SSO login + OIDC callback (pre-session)
         "/api/v1/cron/",  # Cloud Scheduler triggers: X-Cron-Key verified by the route
         "/api/v1/customer-agent/",  # Bank-signed customer assertions and the session tokens they issue
+        "/.well-known/ucp/",  # UCP leaf profiles for older supported releases (public by spec)
     )
 
     async def _credential_failure_response(

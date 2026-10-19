@@ -168,7 +168,7 @@ C6Z_BUYER_SURFACE_BRIDGES: tuple[dict[str, Any], ...] = (
 
 PROTOCOL_ADAPTER_SURFACES: tuple[str, ...] = (
     "schema_org_product_offer_jsonld",
-    "ucp_style_capability_profile",
+    "ucp_business_profile",
     "acp_style_commerce_interaction_profile",
     "ap2_style_mandate_payment_evidence_profile",
     "a2a_agent_card_task_metadata",
@@ -858,7 +858,16 @@ def build_grantex_authority_request_payload(
     onboarding_packet: Mapping[str, Any],
     connector_evidence: Mapping[str, Any],
     expected_tenant_id: str | None = None,
+    public_discovery_opt_in: Mapping[str, str] | None = None,
 ) -> dict[str, Any]:
+    """The Grantex C6Z authority request.
+
+    ``public_discovery_opt_in`` (``serving_host``, ``namespace_attestation_ref``)
+    is passed only for a merchant that published its UCP profile with an attested
+    serving host; the request then asks Grantex for an enabled
+    ``public_discovery_state`` artifact. Without it the request is unchanged and
+    keeps ``no_public_discovery_enablement: true``.
+    """
     validate_seller_onboarding_packet(onboarding_packet)
     validate_connector_evidence(connector_evidence)
     if expected_tenant_id is not None and str(onboarding_packet["tenant_id"]) != str(
@@ -872,7 +881,7 @@ def build_grantex_authority_request_payload(
     if connector_evidence["seller_agent_id"] != onboarding_packet["seller_agent_id"]:
         raise C6ZRuntimeValidationError("seller agent scope mismatch")
     source_products = connector_evidence.get("products") or ()
-    return {
+    payload = {
         "request": {
             "request_id": _stable_id("grantex_c6z_request", str(onboarding_packet["packet_id"])),
             "tenant_id": onboarding_packet["tenant_id"],
@@ -919,6 +928,20 @@ def build_grantex_authority_request_payload(
             "no_public_discovery_enablement": True,
         },
     }
+    if public_discovery_opt_in is not None:
+        serving_host = _require_text("serving_host", str(public_discovery_opt_in.get("serving_host") or ""))
+        attestation_ref = _require_text(
+            "namespace_attestation_ref", str(public_discovery_opt_in.get("namespace_attestation_ref") or "")
+        )
+        payload["request"].update(
+            {
+                "public_discovery_requested": True,
+                "no_public_discovery_enablement": False,
+                "serving_host": serving_host,
+                "namespace_attestation_ref": attestation_ref,
+            }
+        )
+    return payload
 
 
 def _authority_scope_list(value: Any) -> list[str]:
@@ -1031,6 +1054,31 @@ async def fetch_grantex_artifact_replay(
     raise C6ZRuntimeValidationError("Grantex replay exceeded the page limit")
 
 
+def public_discovery_enabling_payload(artifact_family: str, payload: Mapping[str, Any]) -> bool:
+    """Whether ``payload`` is the one artifact allowed to enable public discovery.
+
+    Only a ``public_discovery_state`` artifact issued for a merchant that opted
+    in (``public_discovery_publication_allowed: true``, ``public_discovery_state:
+    "enabled"``, the attested ``serving_host`` and ``namespace_attestation_ref``)
+    may carry ``no_public_discovery_enablement: false``, and only while
+    ``AGENTICORG_UCP_PROFILE_ENABLED`` is on; every other artifact must block
+    public discovery as before.
+    """
+    from core.config import settings
+
+    return (
+        bool(getattr(settings, "ucp_profile_enabled", False))
+        and artifact_family == "public_discovery_state"
+        and payload.get("no_public_discovery_enablement") is False
+        and payload.get("public_discovery_state") == "enabled"
+        and payload.get("public_discovery_publication_allowed") is True
+        and isinstance(payload.get("serving_host"), str)
+        and bool(payload.get("serving_host"))
+        and isinstance(payload.get("namespace_attestation_ref"), str)
+        and bool(payload.get("namespace_attestation_ref"))
+    )
+
+
 def build_cache_record_from_grantex_artifact(
     artifact: Mapping[str, Any],
     *,
@@ -1064,7 +1112,9 @@ def build_cache_record_from_grantex_artifact(
         raise C6ZRuntimeValidationError("artifact must not allow execution")
     if payload.get("no_payment_execution") is not True:
         raise C6ZRuntimeValidationError("artifact must block payment execution")
-    if payload.get("no_public_discovery_enablement") is not True:
+    if payload.get("no_public_discovery_enablement") is not True and not public_discovery_enabling_payload(
+        artifact_family, payload
+    ):
         raise C6ZRuntimeValidationError("artifact must block public discovery")
     if contains_private_or_executable_value(payload):
         raise C6ZRuntimeValidationError("artifact payload contains unsafe values")
@@ -1250,8 +1300,16 @@ def generate_protocol_adapter_payloads(
     now_iso: str,
     buyer_agent_id: str | None = None,
     grantex_available: bool = False,
+    ucp_profile: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
-    """Generate buyer-safe protocol adapter payloads from validated OACP cache records."""
+    """Generate buyer-safe protocol adapter payloads from validated OACP cache records.
+
+    ``ucp_business_profile`` is the merchant's UCP business profile exactly as
+    ``/.well-known/ucp`` serves it (``core.commerce.ucp.profile.build_profile``):
+    spec shape, only served capabilities. The caller passes it when the merchant
+    has a published, attested serving host; otherwise the surface is not
+    generated and ``unavailable_surfaces`` says why.
+    """
 
     usable_records, blocked_reasons = _usable_cache_records(
         cache_records=cache_records,
@@ -1284,19 +1342,6 @@ def generate_protocol_adapter_payloads(
             "@graph": graph_products,
             "compatibility": "schema.org_product_offer_jsonld_compatibility_mapping",
             "certification_status": "not_certified_not_published",
-        },
-        "ucp_style_capability_profile": {
-            **adapter_context,
-            "profile": "ucp_style_capability_profile",
-            "capabilities": [
-                "seller_product_question_answering",
-                "catalog_snapshot_listing",
-                "source_freshness_labeling",
-                "prepared_purchase_handoff_explanation",
-            ],
-            "required_evidence": ["catalog_snapshot", "price", "inventory", "policy", "mandate_capability"],
-            "unsupported_capabilities": _unsupported_adapter_capabilities(),
-            "certification_status": "compatibility_mapping_only_not_ucp_certified",
         },
         "acp_style_commerce_interaction_profile": {
             **adapter_context,
@@ -1389,13 +1434,19 @@ def generate_protocol_adapter_payloads(
             },
         },
     }
+    unavailable_surfaces: dict[str, str] = {}
+    if ucp_profile is not None:
+        surfaces["ucp_business_profile"] = json.loads(json.dumps(dict(ucp_profile)))
+    else:
+        unavailable_surfaces["ucp_business_profile"] = "ucp_profile_not_published"
     result = {
         "status": "adapter_payloads_ready",
         "generated_at": now_iso,
         "merchant_id": merchant_id,
         "seller_agent_id": seller_agent_id,
         "buyer_agent_id": buyer_agent_id,
-        "surface_names": list(PROTOCOL_ADAPTER_SURFACES),
+        "surface_names": [name for name in PROTOCOL_ADAPTER_SURFACES if name in surfaces],
+        "unavailable_surfaces": unavailable_surfaces,
         "source_label": "Source: Shopify via Grantex artifact",
         "freshness_label": _freshness_label(usable_records, now_iso),
         "generated_from_artifact_ids": sorted({record.artifact_id for record in usable_records}),
