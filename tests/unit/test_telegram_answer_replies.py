@@ -245,6 +245,22 @@ def test_invalid_modes_and_nontelegram_workflow_cannot_opt_in():
 
 
 @pytest.mark.asyncio
+async def test_sender_proof_stays_out_of_the_authenticated_inbox_response(monkeypatch, state):
+    digest = runtime.sender_hash(state.binding.id, "10001")
+    lookup, listing = Session(scalar=[state.binding]), Session(scalars=[[state.receipt]])
+    database(monkeypatch, channels, state.tid, lookup, listing)
+    monkeypatch.setattr(channels, "_actor", AsyncMock(return_value=state.user))
+    monkeypatch.setattr(
+        channels, "unseal", AsyncMock(return_value={"sender": "10001", "sender_hash": digest, "text": "Task"})
+    )
+    response = await channels.deliveries(state.binding.id, runtime._request_for_user(state.user), str(state.tid))
+    assert response["deliveries"][0]["text"] == "Task"
+    assert "sender" not in response["deliveries"][0]
+    assert "sender_hash" not in response["deliveries"][0]
+    assert digest not in str(response)
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize("send_replies,expected", [(False, "status"), (True, "agent_answer")])
 async def test_answer_consent_is_snapshotted_only_when_replies_were_enabled(monkeypatch, state, send_replies, expected):
     from core.channels.providers import Message

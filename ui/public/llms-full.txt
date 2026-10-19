@@ -70,6 +70,8 @@ Native channel replies default to optional status notices. Telegram agent
 connections can opt into bounded final-answer replies for the linked private
 sender under **Channels > Reply content**. Traces and tool-call records stay in
 AgenticOrg; approvals, sender authorization and tenant controls still apply.
+The encrypted intake carries the authenticated sender identity across services;
+older receipts without that proof remain withheld, even if the agent completed.
 
 Follow the [channel account and workflow guide](https://github.com/mishrasanjeev/agentic-org/blob/main/docs/user-guide/channel-workflows.md)
 for account creation, callback registration, sender linking and verification.
@@ -1277,6 +1279,13 @@ split into repeated sends. Provider timeouts are uncertain delivery, never a
 reason to rerun the model or resend blindly. Disabling **Send replies**, switching
 back to **Task status only**, or disabling the connection stops future answer
 attempts; it cannot retract a message already accepted by Telegram.
+
+If a completed run says **Answer withheld**, inspect the result in AgenticOrg;
+do not blindly retry it. Fresh intake carries an encrypted, connection-bound
+sender proof, so API and worker signing keys need not be identical. Receipts
+created before that proof was added remain withheld; old results are not
+retroactively sent. Recheck sender access and current reply settings before
+authorizing a new task. A fresh message is new execution and may incur model cost.
 
 Self-managed deployments need both the channel worker and the periodic beat
 scheduler. The local Docker stack starts both. An inbox that stays pending can

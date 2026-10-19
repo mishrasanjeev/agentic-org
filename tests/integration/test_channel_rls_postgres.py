@@ -45,6 +45,7 @@ from tests.integration.test_feature_flags_rls_postgres import (
 
 
 @pytest.mark.parametrize("mode", ["answer", "legacy_intake", "mismatched_sender", "revoked_link"])
+@pytest.mark.timeout(300)
 async def test_telegram_answer_uses_authenticated_intake_identity_across_service_keys(
     as_rls_role: _Db, monkeypatch, mode
 ):
@@ -149,6 +150,7 @@ async def test_telegram_answer_uses_authenticated_intake_identity_across_service
     async with get_tenant_session(tenant) as session:
         retained = await session.get(ChannelDelivery, receipt_id)
         assert retained is not None and retained.status == "completed"
+        assert retained.result_ciphertext is not None
         assert (await runtime.unseal(retained.result_ciphertext))["output"]["answer"] == 18
         if mode == "answer":
             assert (await runtime.unseal(retained.message_ciphertext))["sender_hash"] == intake_hash
