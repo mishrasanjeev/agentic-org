@@ -513,6 +513,94 @@ async def test_cdc_webhook_store_is_tenant_bound(env: _Env, monkeypatch) -> None
         await store.mark_processed(event_id, outcome={}, tenant_id=None)
 
 
+# ── 11. least-privilege grants (scripts/create_app_role.sql) ─────────────
+
+
+async def _refused(env: _Env, sql: str, tenant_id: str | None = None) -> str:
+    """Run ``sql`` as the app role (tenant bound, so RLS would let rows through) and return the refusal."""
+    from sqlalchemy.exc import DBAPIError
+
+    async with env.engine.connect() as conn:
+        if tenant_id:
+            await conn.execute(text("SELECT set_config('agenticorg.tenant_id', :tid, true)"), {"tid": tenant_id})
+        with pytest.raises(DBAPIError) as refused:
+            await conn.execute(text(sql))
+    return str(refused.value)
+
+
+@pytest.mark.asyncio
+async def test_app_role_grants_are_least_privilege(env: _Env) -> None:
+    tid = env.tenant_a["tenant_id"]
+    # The agent run above left audit rows that RLS lets this tenant see, so a
+    # zero-row result would not count: each statement must be refused outright.
+    async with env.engine.connect() as conn:
+        await conn.execute(text("SELECT set_config('agenticorg.tenant_id', :tid, true)"), {"tid": tid})
+        assert (await conn.execute(text("SELECT count(*) FROM audit_log"))).scalar_one() >= 1
+
+    denied = (
+        "DELETE FROM audit_log",
+        "UPDATE audit_log SET action = 'edited'",
+        "TRUNCATE audit_log",
+        "TRUNCATE agents",
+        "TRUNCATE users",
+        "DELETE FROM audit_chain_anchors",
+        "UPDATE capability_evidence_records SET tenant_id = tenant_id",
+        "DELETE FROM capability_promotion_events",
+        "UPDATE eval_dataset_versions SET note = note",
+        "DELETE FROM capability_readiness_records",
+        "UPDATE alembic_version SET version_num = version_num",
+        "INSERT INTO alembic_version (version_num) VALUES ('rls_probe')",
+        "SELECT count(*) FROM alembic_migration_progress",
+        "CREATE TABLE rls_privilege_probe (id int)",
+        "ALTER TABLE agents DISABLE ROW LEVEL SECURITY",
+        "CREATE TRIGGER rls_probe BEFORE INSERT ON agents FOR EACH ROW EXECUTE FUNCTION audit_log_reject_mutation()",
+    )
+    for statement in denied:
+        message = await _refused(env, statement, tid)
+        assert "permission denied" in message or "must be owner" in message, (statement, message)
+
+    async with env.engine.connect() as conn:
+        # Schema version stays readable (init_db's head check).
+        assert (await conn.execute(text("SELECT count(*) FROM alembic_version"))).scalar_one() == 1
+        # Restricted functions: only the platform spend total is callable.
+        can_guard = (
+            await conn.execute(
+                text("SELECT has_function_privilege('public.connector_config_company_scope_guard()', 'EXECUTE')")
+            )
+        ).scalar_one()
+        assert can_guard is False
+        spend = (await conn.execute(text("SELECT public.gemini_daily_platform_spend()"))).scalar_one()
+        assert spend is not None and float(spend) >= 0
+
+
+@pytest.mark.asyncio
+async def test_audit_chain_seals_under_column_scoped_update(env: _Env) -> None:
+    from core.governance import audit_chain
+
+    tid = uuid.UUID(env.tenant_a["tenant_id"])
+    outcome = await audit_chain.seal(tid, batch=500)
+    assert outcome.head.seq >= 1
+    result = await audit_chain.verify(tid)
+    assert result.status == "verified", result.to_dict()
+
+    async with env.engine.connect() as conn:
+        has_trigger = (
+            await conn.execute(
+                text(
+                    "SELECT EXISTS (SELECT 1 FROM pg_trigger WHERE tgrelid = 'audit_log'::regclass "
+                    "AND tgname = 'audit_log_immutable' AND NOT tgisinternal)"
+                )
+            )
+        ).scalar_one()
+    if has_trigger:
+        # The chain-column grant does not reopen a sealed row: the trigger
+        # allows only the unsealed -> sealed transition.
+        message = await _refused(
+            env, "UPDATE audit_log SET chain_hash = repeat('0', 64) WHERE chain_seq IS NOT NULL", str(tid)
+        )
+        assert "append-only" in message, message
+
+
 def test_module_runs_serially_on_one_loop() -> None:
     # Guard against pytest-asyncio loop-scope drift: the fixtures above are
     # module-scoped and must share the loop the tests run on.

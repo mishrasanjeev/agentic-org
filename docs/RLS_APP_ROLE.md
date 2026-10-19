@@ -36,14 +36,22 @@ does not create or select database roles.
 
        python scripts/alembic_migrate.py
 
-2. Create the application role (idempotent; re-running re-applies grants).
-   Run it as the owner role so the default privileges cover tables later
-   migrations create:
+2. Create the application role. Run it as the owner role (the migration
+   role), so the default privileges cover tables later migrations create and
+   the platform spend function can be granted (see "Grants" below):
 
        psql "$OWNER_DB_URL" -v app_password="'<strong-password>'" -f scripts/create_app_role.sql
 
-   The last statement prints `rolsuper = f`, `rolbypassrls = f`; both must
-   be `f`. Store the password in the secret manager, never in the repository.
+   The script runs in one transaction. It is idempotent: re-running it
+   revokes and re-applies every grant, so the role converges on exactly the
+   grants below. Its last check raises, and rolls everything back, if the
+   result is broader (a superuser or `BYPASSRLS` role, `CREATE` on the
+   schema, `TRUNCATE` on any table, `UPDATE`/`DELETE` on an append-only
+   table, `EXECUTE` on a restricted function other than the spend total).
+   Re-run it after every migration that adds an append-only table or a
+   function the application calls. The last statement prints
+   `rolsuper = f`, `rolbypassrls = f`; both must be `f`. Store the password
+   in the secret manager, never in the repository.
 
 3. Point the runtime services, and only them, at the new role.
    `core/config.py` uses `env_prefix = "AGENTICORG_"`, so the variable is
@@ -77,13 +85,72 @@ does not create or select database roles.
    role can bypass RLS, so a green run means the flows it covers (signup,
    login, agent list and run, approvals, billing subscription and expiry
    sweep, DSAR, report and RPA schedule claims, compliance cron, API-key
-   lookup, SSO and branding discovery, workflow state, CDC events) work with
-   RLS actually enforced. It writes synthetic tenants; run it against a
+   lookup, SSO and branding discovery, workflow state, CDC events, audit
+   chain sealing) work with RLS actually enforced, and that the role is
+   refused `DELETE` on `audit_log`, `TRUNCATE`, writes to append-only and
+   migration-owned tables, DDL, and the restricted guard functions. It writes synthetic tenants; run it against a
    staging copy, not production data.
 
 Rollback: point the runtime `AGENTICORG_DB_URL` back at the previous role and
-unset `AGENTICORG_REQUIRE_NOBYPASSRLS_ROLE`. The policies and grants are
-additive and need no rollback.
+unset `AGENTICORG_REQUIRE_NOBYPASSRLS_ROLE`. The policies are additive and the
+grants apply only to `agenticorg_app`, so neither needs a rollback. To retire
+the role: `REASSIGN OWNED BY agenticorg_app TO <owner>; DROP OWNED BY
+agenticorg_app; DROP ROLE agenticorg_app;` as the owner, once nothing
+connects as it.
+
+## Grants
+
+`scripts/create_app_role.sql` gives `agenticorg_app` least privilege per
+table class. It revokes everything first, so a re-run removes what an older
+version granted (it used to grant `EXECUTE` on all functions).
+
+| Class | Tables | `agenticorg_app` gets |
+|-------|--------|------------------------|
+| Ordinary | every other table in `public` | `SELECT, INSERT, UPDATE, DELETE` |
+| Append-only | `capability_evidence_records`, `capability_promotion_events` (trigger `prevent_capability_ledger_mutation`), `eval_dataset_versions` (trigger `eval_dataset_versions_immutable`) | `SELECT, INSERT` |
+| Audit log | `audit_log` | `SELECT, INSERT`, `UPDATE (chain_seq, chain_prev, chain_hash, sealed_at)` |
+| No delete | `capability_readiness_records` (trigger refuses `DELETE`), `audit_chain_anchors` | `SELECT, INSERT, UPDATE` |
+| Migration-owned | `alembic_version`, `checkpoint_migrations` | `SELECT` |
+| Migration-only | `alembic_migration_progress` | nothing |
+| Sequences | all | `USAGE, SELECT` |
+| Schema | `public` | `USAGE` (no `CREATE`) |
+
+* **`TRUNCATE`, `REFERENCES` and `TRIGGER` are never granted.** `TRUNCATE`
+  skips row-level security and row triggers.
+* **`audit_log`.** The sealing task (`core.tasks.audit_chain_tasks`) runs on
+  a Celery worker, so after the cut-over it runs as this role. It fills the
+  four chain columns of unsealed rows and upserts `audit_chain_anchors`;
+  the column-level `UPDATE` covers that and its `SELECT ... FOR UPDATE`.
+  The `audit_log_immutable` trigger is what stops a sealed row from being
+  rewritten through those columns. `UPDATE` of any other column and every
+  `DELETE` are refused by privilege, whether or not the trigger is
+  installed.
+* **Functions.** `EXECUTE` is revoked on everything in `public`. Ordinary
+  functions (extension functions, plain trigger functions) keep their
+  default `PUBLIC` `EXECUTE`. The restricted ones, which their migration
+  closes with `REVOKE ... FROM PUBLIC`, stay closed:
+  `guard_capability_ledger_scope()` and `connector_config_company_scope_guard()`
+  (`SECURITY DEFINER` trigger functions; a trigger fires without the caller
+  holding `EXECUTE`). The one restricted function the application calls,
+  `public.gemini_daily_platform_spend()` (v6z85, the platform Gemini cap in
+  `core/llm/router.py`), is granted explicitly. Its owner is the `NOLOGIN`
+  role `agenticorg_spend_aggregate`. A non-superuser installer grants
+  through a temporary membership, as v6z85 does, and the script checks the
+  installer did not keep it. Without this grant the platform cap fails
+  closed (`DailyBudgetExceeded`), so run the script before the cut-over.
+* **Future objects.** `ALTER DEFAULT PRIVILEGES` gives tables that later
+  migrations create (as the role that ran the script) the ordinary row DML,
+  and sequences `USAGE, SELECT`. Functions get no default grant beyond
+  `PUBLIC`. A migration that adds an append-only table, or a restricted
+  function the application calls, must also add it to the script (with a
+  `to_regrole('agenticorg_app')` guard if it narrows the grant in the
+  migration itself). `tests/regression/test_app_role_grants.py` fails CI
+  when a migration adds an append-only trigger, an immutability-style
+  trigger function or a non-trigger `SECURITY DEFINER` function that the
+  script does not classify.
+* **Re-running the script resets per-table grants.** A narrower grant made
+  only in a migration is widened back to the class above on the next run, so
+  every narrowing belongs in the script.
 
 ## Application contract
 

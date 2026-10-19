@@ -25,6 +25,20 @@
 - Add `scripts/create_app_role.sql` and `docs/RLS_APP_ROLE.md`. Moving
   production `AGENTICORG_DB_URL` to the application role is an operator step
   documented there; this change does not perform it.
+- `scripts/create_app_role.sql` grants least privilege: row DML on ordinary
+  tables (never `TRUNCATE`, `REFERENCES` or `TRIGGER`); `SELECT`/`INSERT`
+  only on the append-only tables (`capability_evidence_records`,
+  `capability_promotion_events`, `eval_dataset_versions`); on `audit_log`
+  `SELECT`/`INSERT` plus `UPDATE` of the four hash-chain columns the sealing
+  task fills; no `DELETE` on `capability_readiness_records` or
+  `audit_chain_anchors`; read-only `alembic_version` and
+  `checkpoint_migrations`; no access to `alembic_migration_progress`; and
+  `EXECUTE` only on `public.gemini_daily_platform_spend()` among the
+  restricted functions (default privileges grant no function `EXECUTE`). The
+  script runs in one transaction, re-running it converges on these grants,
+  and it refuses and rolls back a broader result. Guarded by
+  `tests/regression/test_app_role_grants.py` and new cases in the Postgres
+  proof.
 - Egress URL validation inside async code uses `validate_public_url_async`
   (non-blocking DNS) for connectors, OIDC, JWKS, AI-provider probes and base
   URLs, commerce runtime calls and the lineage feed fetch.
