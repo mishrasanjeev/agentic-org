@@ -114,7 +114,7 @@ dependencies = [
     "langgraph-checkpoint==4.3.0",
     "grantex>=0.7.2",
     "langsmith>=0.14.8",
-    "pypdf>=6.20.0",
+    "pypdf>=6.21.0",
     # Canonical document extraction. The production image below ships the
     # matching Tesseract, Poppler, and LibreOffice system dependencies.
     "python-docx>=1.2.0",
