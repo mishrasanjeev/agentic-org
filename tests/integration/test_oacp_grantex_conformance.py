@@ -7,7 +7,10 @@ read:
 - ``AGENTICORG_GRANTEX_CONFORMANCE_TOKEN``: the internal service token the
   c6z authority route and the OACP artifact routes accept (required);
 - ``AGENTICORG_GRANTEX_CONFORMANCE_ISSUER``: the Grantex ``JWT_ISSUER``
-  (defaults to the URL).
+  (defaults to the URL);
+- ``AGENTICORG_GRANTEX_CONFORMANCE_TENANT``: a tenant listed in the Grantex
+  ``COMMERCE_C6Z_AUTHORITY_SERVICE_TENANTS`` (required: the service token is
+  refused for any other tenant).
 
 The Grantex under test needs an active OACP issuer key (``POST
 /v1/commerce/oacp/issuer-keys/rotate`` or ``OACP_AUTO_GENERATE_ISSUER_KEY``
@@ -48,11 +51,22 @@ from core.commerce.oacp_grantex_trust import (
 BASE_URL = os.getenv("AGENTICORG_GRANTEX_CONFORMANCE_URL", "").strip().rstrip("/")
 TOKEN = os.getenv("AGENTICORG_GRANTEX_CONFORMANCE_TOKEN", "").strip()
 ISSUER = (os.getenv("AGENTICORG_GRANTEX_CONFORMANCE_ISSUER", "").strip() or BASE_URL).rstrip("/")
+TENANT = os.getenv("AGENTICORG_GRANTEX_CONFORMANCE_TENANT", "").strip()
 
 pytestmark = pytest.mark.skipif(
-    not BASE_URL or not TOKEN,
-    reason="set AGENTICORG_GRANTEX_CONFORMANCE_URL and AGENTICORG_GRANTEX_CONFORMANCE_TOKEN to run",
+    not BASE_URL or not TOKEN or not TENANT,
+    reason=(
+        "set AGENTICORG_GRANTEX_CONFORMANCE_URL, AGENTICORG_GRANTEX_CONFORMANCE_TOKEN"
+        " and AGENTICORG_GRANTEX_CONFORMANCE_TENANT to run"
+    ),
 )
+
+
+
+@pytest.fixture(autouse=True)
+def _real_http(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Reach the live Grantex: the suite-wide fake-connector httpx patch answers 404 otherwise."""
+    monkeypatch.setenv("AGENTICORG_TEST_FAKE_CONNECTORS", "0")
 
 
 def _iso_now() -> str:
@@ -90,7 +104,7 @@ def _authority_payload(tenant_id: str, merchant_id: str, seller_agent_id: str) -
         requested_grantex_authority_scope={"artifact_families": list(C6Z_ARTIFACT_FAMILIES)},
         artifact_cache_scope={"tenant_id": tenant_id, "merchant_id": merchant_id, "seller_agent_id": seller_agent_id},
         source_freshness_policy={"max_age_seconds": 900},
-        connector_metadata={"shop_domain": "conformance.merchant.example", "credential_ref": "redacted"},
+        connector_metadata={"shop_domain": "demo.myshopify.com", "credential_ref": "redacted"},
     )
     product = {
         "id": "gid://shopify/Product/conformance-1",
@@ -149,7 +163,7 @@ async def _verify_all(verifier: OacpGrantexArtifactVerifier, items: list[dict[st
 
 async def test_issue_replay_verify_revoke_refuse() -> None:
     reset_oacp_trust_caches()
-    tenant_id = str(uuid.uuid4())
+    tenant_id = TENANT
     merchant_id = f"merchant_conf_{uuid.uuid4().hex[:8]}"
     seller_agent_id = f"seller_conf_{uuid.uuid4().hex[:8]}"
     headers = {"Authorization": f"Bearer {TOKEN}"}
