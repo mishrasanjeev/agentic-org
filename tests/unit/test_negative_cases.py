@@ -66,7 +66,7 @@ class TestAuthLogin:
         request = MagicMock()
         request.client.host = "127.0.0.1"
         response = MagicMock()
-        with patch("api.v1.auth.async_session_factory") as mock_sf:
+        with patch("api.v1.auth.get_platform_session") as mock_sf:
             session = AsyncMock()
             session.execute = AsyncMock(return_value=_make_result(scalar_one=None))
             mock_sf.return_value.__aenter__ = AsyncMock(return_value=session)
@@ -88,7 +88,7 @@ class TestAuthLogin:
         request = MagicMock()
         request.client.host = "127.0.0.2"
         response = MagicMock()
-        with patch("api.v1.auth.async_session_factory") as mock_sf:
+        with patch("api.v1.auth.get_platform_session") as mock_sf:
             session = AsyncMock()
             session.execute = AsyncMock(return_value=_make_result(scalar_one=user))
             mock_sf.return_value.__aenter__ = AsyncMock(return_value=session)
@@ -144,7 +144,7 @@ class TestAuthSignup:
         request = MagicMock()
         request.client.host = "127.0.0.4"
         response = MagicMock()
-        with patch("api.v1.auth.async_session_factory") as mock_sf:
+        with patch("api.v1.auth.get_platform_session") as mock_sf:
             session = AsyncMock()
             session.execute = AsyncMock(return_value=_make_result(scalar_one=existing_user))
             mock_sf.return_value.__aenter__ = AsyncMock(return_value=session)
@@ -193,7 +193,7 @@ class TestForgotPassword:
 
         request = MagicMock()
         request.client.host = "127.0.0.5"
-        with patch("api.v1.auth.async_session_factory") as mock_sf:
+        with patch("api.v1.auth.get_platform_session") as mock_sf:
             session = AsyncMock()
             session.execute = AsyncMock(return_value=_make_result(scalar_one=None))
             mock_sf.return_value.__aenter__ = AsyncMock(return_value=session)

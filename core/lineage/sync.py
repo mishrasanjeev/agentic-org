@@ -34,7 +34,12 @@ from sqlalchemy import select
 from core.config import settings
 from core.crypto.tenant_secrets import decrypt_for_tenant, encrypt_for_tenant
 from core.lineage import provenance
-from core.security.egress import EgressValidationError, build_pinned_async_transport, validate_public_url
+from core.security.egress import (
+    EgressValidationError,
+    build_pinned_async_transport,
+    validate_public_url,
+    validate_public_url_async,
+)
 
 logger = structlog.get_logger()
 
@@ -88,7 +93,7 @@ def _transport() -> Any:
 async def fetch_feed(source: dict[str, Any], cursor: str | None, *, token: str | None = None) -> dict[str, Any]:
     """The items the feed holds since the cursor, and the cursor to ask from next time."""
     try:
-        checked = validate_public_url(source["url"])
+        checked = await validate_public_url_async(source["url"])
     except EgressValidationError as exc:
         raise SyncError(422, "url_refused", f"the feed URL is not allowed: {exc.reason}") from None
     headers = {"Accept": "application/json"}

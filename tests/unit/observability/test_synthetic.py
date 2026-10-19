@@ -933,16 +933,22 @@ class TestStorage:
 
 
 class TestTaskPlumbing:
-    def test_tenant_reads_cross_tenants_with_row_security_off(self, scripted):
+    def test_tenant_reads_use_the_catalogue_then_each_tenants_rls_session(self, scripted):
         from core.tasks import synthetic_tasks
 
-        t1 = uuid.uuid4()
-        session = scripted([None, [t1]])
+        t1, t2 = uuid.uuid4(), uuid.uuid4()
+        # Catalogue read (row_security off on ``tenants`` only), then one
+        # tenant-bound probe per tenant: t1 has an enabled check, t2 none.
+        session = scripted([None, [t1, t2], uuid.uuid4(), None])
         assert asyncio.run(synthetic_tasks._tenants_with_checks()) == [t1]
         assert "row_security = off" in str(session.executed[0])
+        assert "FROM tenants" in str(session.executed[1])
+        assert all("synthetic_checks" in str(stmt) for stmt in session.executed[2:])
+        assert all("row_security" not in str(stmt) for stmt in session.executed[2:])
         session = scripted([None, [t1]])
         assert asyncio.run(synthetic_tasks._result_tenants()) == [t1]
         assert "row_security = off" in str(session.executed[0])
+        assert "FROM tenants" in str(session.executed[1])
 
     def test_the_prune_deletes_old_results_per_tenant_and_isolates_a_failure(self, scripted, monkeypatch):
         import contextlib

@@ -1465,6 +1465,14 @@ Remove an entry in the pull request that fixes it.
   application role `NOSUPERUSER NOBYPASSRLS`, DML only), log the running
   role's `rolsuper` / `rolbypassrls` at startup, and document the check in the
   deploy runbook.
+- **Status (2026-10-19):** partly addressed. `scripts/create_app_role.sql`
+  provisions the application role, `init_db()` logs the role's posture
+  (`AGENTICORG_REQUIRE_NOBYPASSRLS_ROLE=1` refuses a bypassing role), every
+  application session binds tenant or platform context, and
+  `tests/integration/test_rls_nobypass_role.py` proves the main flows under
+  the role. Residual: production and the provisioning script still point
+  `AGENTICORG_DB_URL` at the owner role until an operator follows
+  `docs/RLS_APP_ROLE.md`.
 
 ## A-106 — The token pool's revocation listener times out every two seconds
 

@@ -91,7 +91,7 @@ class TestSsoInactiveUserRejected:
         result = MagicMock()
         result.scalar_one_or_none.return_value = existing
         session.execute = AsyncMock(return_value=result)
-        with patch("auth.sso.provisioning.async_session_factory") as sf:
+        with patch("auth.sso.provisioning.get_tenant_session") as sf:
             sf.return_value.__aenter__ = AsyncMock(return_value=session)
             sf.return_value.__aexit__ = AsyncMock(return_value=False)
             with pytest.raises(ValueError, match="not active"):
@@ -106,7 +106,7 @@ class TestSsoInactiveUserRejected:
         result = MagicMock()
         result.scalar_one_or_none.return_value = existing
         session.execute = AsyncMock(return_value=result)
-        with patch("auth.sso.provisioning.async_session_factory") as sf:
+        with patch("auth.sso.provisioning.get_tenant_session") as sf:
             sf.return_value.__aenter__ = AsyncMock(return_value=session)
             sf.return_value.__aexit__ = AsyncMock(return_value=False)
             assert await jit_provision_user(uuid.uuid4(), "okta", {"email": "U@example.com"}) is existing
@@ -173,7 +173,7 @@ class TestForgotPasswordThrottle:
 
         with (
             patch("api.v1.auth.auth_state.check_window_rate", side_effect=fake_rate),
-            patch("api.v1.auth.async_session_factory") as sf,
+            patch("api.v1.auth.get_platform_session") as sf,
         ):
             session = AsyncMock()
             result = MagicMock()
@@ -198,7 +198,7 @@ class TestForgotPasswordThrottle:
 
         with (
             patch("api.v1.auth.auth_state.check_window_rate", new=AsyncMock(return_value=True)),
-            patch("api.v1.auth.async_session_factory") as sf,
+            patch("api.v1.auth.get_platform_session") as sf,
         ):
             out = await forgot_password(ForgotPasswordRequest(email="x@example.com"), _request())
         assert out["status"] == "ok"  # enumeration-safe
@@ -473,7 +473,8 @@ class TestDemoRequestHardening:
         body = DemoRequest(name="A", email="a@example.com")
         with (
             patch("api.v1.demo.auth_state.check_window_rate", new=AsyncMock(return_value=True)),
-            patch("api.v1.demo.async_session_factory") as sf,
+            patch("api.v1.demo.get_platform_session") as sf,
+            patch("api.v1.demo.get_tenant_session"),
             pytest.raises(HTTPException) as exc,
         ):
             await submit_demo_request(body, _request("198.51.100.9"), MagicMock())
@@ -505,7 +506,7 @@ class TestDemoRequestHardening:
         bg = MagicMock()
         with (
             patch("api.v1.demo.auth_state.check_window_rate", new=AsyncMock(return_value=False)),
-            patch("api.v1.demo.async_session_factory") as sf,
+            patch("api.v1.demo.get_platform_session") as sf,
             patch("api.v1.demo.get_tenant_session") as ts,
             patch.object(demo, "_send_email_notification") as notify,
             patch.object(demo, "_send_trial_confirmation") as confirm,

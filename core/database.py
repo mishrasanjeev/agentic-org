@@ -38,7 +38,15 @@ ALEMBIC_VERSION_TABLE = "alembic_version"
 ALEMBIC_CONFIG_PATH = Path(__file__).resolve().parents[1] / "alembic.ini"
 ALLOW_MULTIPLE_ALEMBIC_HEADS_ENV = "AGENTICORG_ALLOW_MULTIPLE_ALEMBIC_HEADS_FOR_MERGE_PR"
 ENABLE_LEGACY_STARTUP_DDL_ENV = "AGENTICORG_ENABLE_LEGACY_STARTUP_DDL"
+SKIP_DB_ROLE_RLS_CHECK_ENV = "AGENTICORG_SKIP_DB_ROLE_RLS_CHECK"
+REQUIRE_NOBYPASSRLS_ROLE_ENV = "AGENTICORG_REQUIRE_NOBYPASSRLS_ROLE"
 TRUTHY_ENV_VALUES = {"1", "true", "yes", "on"}
+
+# Session-local GUC that marks an explicit platform (cross-tenant) context.
+# Only ``get_platform_session`` / ``bind_platform_context`` set it, and only
+# the tables enumerated in migration v6z87 honour it. See
+# docs/RLS_APP_ROLE.md for the operational contract.
+PLATFORM_CTX_GUC = "agenticorg.platform_ctx"
 
 
 class RuntimeSchemaError(RuntimeError):
@@ -402,6 +410,40 @@ async def _bind_tenant_context(session: AsyncSession, tid_str: str, company_str:
     )
 
 
+def _validated_context_strings(tenant_id: UUID | str, company_id: UUID | str | None) -> tuple[str, str]:
+    import re as _re
+
+    tid_str = str(tenant_id)
+    if not _re.fullmatch(_UUID_RE, tid_str):
+        raise ValueError(f"Invalid tenant_id format: {tid_str}")
+    company_str = str(company_id) if company_id is not None else ""
+    if company_str and not _re.fullmatch(_UUID_RE, company_str):
+        raise ValueError(f"Invalid company_id format: {company_str}")
+    return tid_str, company_str
+
+
+async def bind_tenant_context(
+    session: AsyncSession,
+    tenant_id: UUID | str,
+    company_id: UUID | str | None = None,
+) -> None:
+    """Bind tenant (and optional company) RLS context to an already-open session.
+
+    For the handful of flows that legitimately start without a tenant
+    (signup creates the tenant row first; a repository is handed a session
+    factory by its caller) and must then write tenant-scoped rows. The
+    binding lives for the current transaction only, exactly like
+    ``get_tenant_session``.
+    """
+    tid_str, company_str = _validated_context_strings(tenant_id, company_id)
+    await _bind_tenant_context(session, tid_str, company_str)
+
+
+async def bind_platform_context(session: AsyncSession) -> None:
+    """Mark the session's current transaction as explicit platform context."""
+    await session.execute(text(f"SELECT set_config('{PLATFORM_CTX_GUC}', '1', true)"))
+
+
 @asynccontextmanager
 async def get_tenant_session(
     tenant_id: UUID,
@@ -409,22 +451,8 @@ async def get_tenant_session(
 ) -> AsyncGenerator[AsyncSession, None]:
     """Yield a session with exact tenant and optional company RLS context."""
     async with current_session_factory()() as session:
-        import re as _re
-
-        tid_str = str(tenant_id)
-        if not _re.fullmatch(_UUID_RE, tid_str):
-            raise ValueError(f"Invalid tenant_id format: {tid_str}")
-        await session.execute(
-            text("SELECT set_config('agenticorg.tenant_id', :tenant_id, true)"),
-            {"tenant_id": tid_str},
-        )
-        company_str = str(company_id) if company_id is not None else ""
-        if company_str and not _re.fullmatch(_UUID_RE, company_str):
-            raise ValueError(f"Invalid company_id format: {company_str}")
-        await session.execute(
-            text("SELECT set_config('agenticorg.company_id', :company_id, true)"),
-            {"company_id": company_str},
-        )
+        tid_str, company_str = _validated_context_strings(tenant_id, company_id)
+        await _bind_tenant_context(session, tid_str, company_str)
 
         # ``set_config(..., is_local=true)`` lives only for the current
         # transaction. A handler that calls ``session.commit()`` and keeps
@@ -448,6 +476,44 @@ async def get_tenant_session(
             raise
 
 
+@asynccontextmanager
+async def get_platform_session() -> AsyncGenerator[AsyncSession, None]:
+    """Yield a session bound to explicit *platform* (cross-tenant) context.
+
+    This is the single sanctioned way for application code to read or write
+    outside a tenant boundary. Use it only for the documented cross-tenant
+    flows: signup / tenant creation, login-by-email before a tenant is
+    known, pre-auth API-key and Grantex-DID resolution, public SSO / branding
+    discovery, beat tasks enumerating tenants or claiming due schedules,
+    health probes, and operator CLIs. Everything tenant-scoped goes through
+    ``get_tenant_session``.
+
+    Under a ``NOBYPASSRLS`` application role the marker only unlocks the
+    tables whose policies OR-in ``agenticorg.platform_ctx = '1'`` (migration
+    v6z87). Tables without a ``tenant_id`` (``tenants``,
+    ``health_check_history``, ``demo_requests``) carry no RLS and the
+    pre-auth ``users`` / ``api_keys`` policies already allow no-tenant reads,
+    so the marker is deliberately narrow.
+    """
+    async with current_session_factory()() as session:
+        await bind_platform_context(session)
+
+        original_commit = session.commit
+
+        async def _commit_and_rebind() -> None:
+            await original_commit()
+            await bind_platform_context(session)
+
+        session.commit = _commit_and_rebind  # type: ignore[method-assign]
+        try:
+            yield session
+            await original_commit()
+        # enterprise-gate: broad-except-ok reason=platform-session-failure-rolls-back-and-reraises
+        except Exception:
+            await session.rollback()
+            raise
+
+
 async def get_session() -> AsyncGenerator[AsyncSession, None]:
     """Yield a raw session (for non-tenant-scoped operations like health checks)."""
     async with current_session_factory()() as session:
@@ -458,6 +524,58 @@ async def get_session() -> AsyncGenerator[AsyncSession, None]:
         except Exception:
             await session.rollback()
             raise
+
+
+@dataclass(frozen=True)
+class DbRolePosture:
+    """RLS-relevant attributes of the connected database role."""
+
+    role: str
+    superuser: bool
+    bypass_rls: bool
+
+    @property
+    def rls_enforced(self) -> bool:
+        return not (self.superuser or self.bypass_rls)
+
+
+async def get_db_role_posture(conn: AsyncConnection) -> DbRolePosture:
+    row = (
+        await conn.execute(
+            text("SELECT rolname, rolsuper, rolbypassrls FROM pg_roles WHERE rolname = current_user")
+        )
+    ).first()
+    if row is None:  # pragma: no cover - current_user always resolves
+        return DbRolePosture(role="unknown", superuser=False, bypass_rls=False)
+    return DbRolePosture(role=str(row[0]), superuser=bool(row[1]), bypass_rls=bool(row[2]))
+
+
+async def verify_db_role_rls_posture(conn: AsyncConnection) -> DbRolePosture | None:
+    """Report whether the connected role is subject to row-level security.
+
+    RLS is only a control when the connected role is neither a superuser nor
+    ``BYPASSRLS``. A bypassing role logs ``DB_ROLE_BYPASSES_RLS`` as a
+    warning; startup refuses it only with
+    ``AGENTICORG_REQUIRE_NOBYPASSRLS_ROLE=1`` (default off, set once the
+    application role is in place). ``AGENTICORG_SKIP_DB_ROLE_RLS_CHECK=1``
+    skips the probe entirely.
+    """
+    if _truthy_env(SKIP_DB_ROLE_RLS_CHECK_ENV):
+        return None
+    posture = await get_db_role_posture(conn)
+    if posture.rls_enforced:
+        logger.info("db_role_rls_enforced role=%s", posture.role)
+        return posture
+    message = (
+        f"Database role {posture.role!r} is "
+        f"{'a superuser' if posture.superuser else 'BYPASSRLS'}: row-level security "
+        "is NOT enforced for this application. Run the API as a NOBYPASSRLS role "
+        "(scripts/create_app_role.sql, docs/RLS_APP_ROLE.md)."
+    )
+    if _truthy_env(REQUIRE_NOBYPASSRLS_ROLE_ENV):
+        raise RuntimeSchemaError(message)
+    logger.warning("DB_ROLE_BYPASSES_RLS %s", message)
+    return posture
 
 
 def _truthy_env(name: str) -> bool:
@@ -539,6 +657,7 @@ async def init_db() -> None:
     """
     async with engine.begin() as conn:
         await conn.execute(text("SELECT 1"))
+        await verify_db_role_rls_posture(conn)
         if is_strict_runtime_env(settings.env):
             await verify_runtime_schema_current(conn)
             return
@@ -1447,9 +1566,10 @@ async def _seed_demo_ca_companies_if_enabled() -> None:
     try:
         from core.seed_ca_demo import seed_ca_demo
 
-        async with async_session_factory() as session:
+        # Platform context: the seed creates the demo tenant itself and then
+        # binds that tenant's context before writing tenant-scoped rows.
+        async with get_platform_session() as session:
             await seed_ca_demo(session)
-            await session.commit()
     # enterprise-gate: broad-except-ok reason=demo-seed-failure-is-relaxed-env-sidecar-only
     except Exception as exc:
         logger.debug("CA demo seed skipped: %s", exc)

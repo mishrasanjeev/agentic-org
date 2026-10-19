@@ -191,7 +191,7 @@ class TestDurableSubscriptions:
             async def execute(self, stmt):
                 return SimpleNamespace(all=lambda: [(t_past,), (t_future,), (t_stripe,)])
 
-        monkeypatch.setattr("core.database.async_session_factory", lambda: _TenantsSession())
+        monkeypatch.setattr("core.database.get_platform_session", lambda: _session_ctx(_TenantsSession()))
         monkeypatch.setattr(
             "core.database.get_tenant_session", lambda tid: _session_ctx(sessions[tid])
         )

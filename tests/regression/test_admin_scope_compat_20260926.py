@@ -31,10 +31,10 @@ class _PastValidationError(Exception):
 
 
 def _create(monkeypatch: pytest.MonkeyPatch, scopes: list[str]) -> None:
-    def session_factory():
+    def session_factory(*_args, **_kwargs):
         raise _PastValidationError
 
-    monkeypatch.setattr(api_keys, "async_session_factory", session_factory)
+    monkeypatch.setattr(api_keys, "get_tenant_session", session_factory)
     monkeypatch.setattr(api_keys, "_get_tenant_id", lambda _request: "00000000-0000-0000-0000-000000000001")
     monkeypatch.setattr(api_keys, "_get_user_sub", lambda _request: "admin@example.com")
     body = api_keys.CreateKeyRequest(name="example", scopes=scopes)

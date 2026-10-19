@@ -428,16 +428,24 @@ class TestRevocationWriters:
         session = AsyncMock()
         session.execute = AsyncMock(return_value=MagicMock(scalar_one_or_none=MagicMock(return_value=user)))
         session.add = MagicMock()
-        factory = MagicMock()
-        factory.return_value.__aenter__ = AsyncMock(return_value=session)
-        factory.return_value.__aexit__ = AsyncMock(return_value=False)
+        tenant_sessions: list[uuid.UUID] = []
+
+        def factory(tenant_id, company_id=None):
+            tenant_sessions.append(tenant_id)
+            cm = MagicMock()
+            cm.__aenter__ = AsyncMock(return_value=session)
+            cm.__aexit__ = AsyncMock(return_value=False)
+            return cm
+
         request = SimpleNamespace(state=SimpleNamespace(tenant_id=str(tid), user_sub="admin@x.io"))
         invalidate = AsyncMock()
         with (
-            patch("api.v1.org.async_session_factory", factory),
+            patch("api.v1.org.get_tenant_session", factory),
             patch("api.v1.org.invalidate_user_session_state", invalidate),
         ):
             resp = await deactivate_member(str(user.id), request)
+        # RLS: the mutation runs inside the caller's tenant session.
+        assert tenant_sessions == [tid]
         assert resp["status"] == "deactivated"
         assert user.status == "inactive"
         assert isinstance(user.sessions_invalid_before, datetime)

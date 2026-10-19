@@ -198,6 +198,7 @@ def test_audit_signature_is_verifiable_from_persisted_row() -> None:
     )
 
     captured: list[dict] = []
+    bound: list[tuple[str, dict | None]] = []
 
     class _Session:
         async def __aenter__(self):
@@ -208,6 +209,10 @@ def test_audit_signature_is_verifiable_from_persisted_row() -> None:
 
         def add(self, obj):
             captured.append(dict(obj.__dict__))
+
+        async def execute(self, statement, params=None):
+            # RLS: the logger binds the entry's tenant before the INSERT.
+            bound.append((str(statement), params))
 
         async def commit(self):
             return None
@@ -238,6 +243,7 @@ def test_audit_signature_is_verifiable_from_persisted_row() -> None:
 
     assert len(captured) == 1
     entry = captured[0]
+    assert any("agenticorg.tenant_id" in sql for sql, _ in bound)
     assert "id" not in entry  # DB generates it; it is not part of the signature
     assert set(SIGNED_COLUMNS) <= set(entry)
 

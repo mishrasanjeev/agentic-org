@@ -31,7 +31,7 @@ from core.ownership import (
     resolve_new_connector_owner,
 )
 from core.schemas.api import ConnectorCreate, ConnectorUpdate
-from core.security.egress import EgressValidationError, validate_public_url
+from core.security.egress import EgressValidationError, validate_public_url_async
 
 _log = logging.getLogger(__name__)
 
@@ -639,7 +639,7 @@ async def _connector_config_credentials(
         return {}
 
 
-def _assert_public_base_url(base_url: str) -> None:
+async def _assert_public_base_url(base_url: str) -> None:
     """Reject connector base_urls that can become server-side SSRF targets.
 
     SECURITY_AUDIT-2026-04-19 MEDIUM-12: admins could previously set any
@@ -653,7 +653,7 @@ def _assert_public_base_url(base_url: str) -> None:
     if not base_url:
         return
     try:
-        validate_public_url(base_url, allowed_schemes=("https",), require_dns=True)
+        await validate_public_url_async(base_url, allowed_schemes=("https",), require_dns=True)
     except EgressValidationError as exc:
         if exc.reason == "scheme":
             parsed = urlparse(base_url)
@@ -1086,7 +1086,7 @@ async def register_connector(
     normalised_base_url = _normalise_connector_base_url(body.name, body.base_url)
 
     # MEDIUM-12: reject SSRF-capable base_urls before persisting.
-    _assert_public_base_url(normalised_base_url or "")
+    await _assert_public_base_url(normalised_base_url or "")
 
     # Separate secret material from non-secret config.
     # auth_config on the Connector model is deprecated for secrets —
@@ -1625,7 +1625,7 @@ async def update_connector(
                 connector.name,
                 updates["base_url"],
             )
-            _assert_public_base_url(updates["base_url"] or "")
+            await _assert_public_base_url(updates["base_url"] or "")
         new_name = updates.get("name")
         if new_name and new_name != connector.name:
             # (tenant_id, name) is unique; without this pre-check a rename
@@ -2011,7 +2011,7 @@ async def test_connector(
         connector.name,
         connector.base_url or getattr(connector_cls, "base_url", "") or "",
     )
-    _assert_public_base_url(effective_base_url)
+    await _assert_public_base_url(effective_base_url)
 
     # Load credentials from ENCRYPTED connector_configs first,
     # falling back to legacy plaintext auth_config for backward compat.

@@ -14,7 +14,7 @@ from sqlalchemy import select, update
 
 from api.deps import require_scope
 from api.route_metadata import route_meta
-from core.database import async_session_factory
+from core.database import get_tenant_session
 from core.models.api_key import APIKey
 from core.rbac import ADMIN_SCOPE
 
@@ -116,7 +116,7 @@ async def create_api_key(body: CreateKeyRequest, request: Request):
 
     # Look up user by email
     from core.models.user import User
-    async with async_session_factory() as session:
+    async with get_tenant_session(uuid.UUID(tenant_id)) as session:
         result = await session.execute(
             select(User).where(
                 User.tenant_id == uuid.UUID(tenant_id),
@@ -133,7 +133,7 @@ async def create_api_key(body: CreateKeyRequest, request: Request):
         user_id = user.id
 
     # Limit: max 10 active keys per tenant
-    async with async_session_factory() as session:
+    async with get_tenant_session(uuid.UUID(tenant_id)) as session:
         count_result = await session.execute(
             select(APIKey).where(
                 APIKey.tenant_id == uuid.UUID(tenant_id),
@@ -171,7 +171,7 @@ async def create_api_key(body: CreateKeyRequest, request: Request):
         status="active",
     )
 
-    async with async_session_factory() as session:
+    async with get_tenant_session(uuid.UUID(tenant_id)) as session:
         session.add(api_key)
         await session.commit()
         await session.refresh(api_key)
@@ -204,7 +204,7 @@ async def list_api_keys(request: Request):
     """List all API keys for the current tenant (secrets are never returned)."""
     tenant_id = _get_tenant_id(request)
 
-    async with async_session_factory() as session:
+    async with get_tenant_session(uuid.UUID(tenant_id)) as session:
         result = await session.execute(
             select(APIKey)
             .where(APIKey.tenant_id == uuid.UUID(tenant_id))
@@ -244,7 +244,7 @@ async def revoke_api_key(key_id: str, request: Request):
     """Revoke an API key. This is permanent."""
     tenant_id = _get_tenant_id(request)
 
-    async with async_session_factory() as session:
+    async with get_tenant_session(uuid.UUID(tenant_id)) as session:
         result = await session.execute(
             select(APIKey).where(
                 APIKey.id == uuid.UUID(key_id),

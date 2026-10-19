@@ -22,7 +22,7 @@ from core.ai_providers.resolver import ProviderNotConfigured, get_provider_crede
 from core.security.egress import (
     EgressValidationError,
     build_pinned_async_transport,
-    validate_public_url,
+    validate_public_url_async,
 )
 
 logger = structlog.get_logger(__name__)
@@ -36,7 +36,7 @@ _AZURE_API_VERSION_RE = re.compile(r"^\d{4}-\d{2}-\d{2}(-preview)?$")
 
 async def _probe_openai(credential: str, base_url: str | None = None) -> dict[str, Any]:
     """OpenAI + OpenAI-compatible: GET /v1/models (lists available models)."""
-    url = _openai_models_url(base_url)
+    url = await _openai_models_url(base_url)
     async with httpx.AsyncClient(
         timeout=_PROBE_TIMEOUT_S,
         transport=build_pinned_async_transport(require_dns=True),
@@ -65,7 +65,7 @@ async def _probe_azure_openai(
     does not serve ``/v1/models``, so routing Azure through the OpenAI
     probe returned 401/404 for perfectly valid keys.
     """
-    url = _azure_openai_models_url(base_url, api_version)
+    url = await _azure_openai_models_url(base_url, api_version)
     async with httpx.AsyncClient(
         timeout=_PROBE_TIMEOUT_S,
         transport=build_pinned_async_transport(require_dns=True),
@@ -194,20 +194,22 @@ def _classify_http_error(status_code: int) -> str:
     return f"Provider returned unexpected status {status_code}."
 
 
-def _openai_models_url(base_url: str | None) -> str:
+async def _openai_models_url(base_url: str | None) -> str:
     endpoint = (base_url or "https://api.openai.com").rstrip("/")
-    validated = validate_public_url(f"{endpoint}/v1/models", allowed_schemes=("https",), require_dns=True)
+    validated = await validate_public_url_async(
+        f"{endpoint}/v1/models", allowed_schemes=("https",), require_dns=True
+    )
     return validated.url
 
 
-def _azure_openai_models_url(base_url: str, api_version: str | None) -> str:
+async def _azure_openai_models_url(base_url: str, api_version: str | None) -> str:
     version = str(api_version or "").strip() or _AZURE_OPENAI_DEFAULT_API_VERSION
     if not _AZURE_API_VERSION_RE.match(version):
         # Fail closed: a malformed version is an operator config error, not
         # something to paper over with the default.
         raise ValueError("Azure OpenAI provider_config.api_version is malformed")
     endpoint = base_url.rstrip("/")
-    validated = validate_public_url(
+    validated = await validate_public_url_async(
         f"{endpoint}/openai/models?api-version={version}",
         allowed_schemes=("https",),
         require_dns=True,
@@ -215,7 +217,7 @@ def _azure_openai_models_url(base_url: str, api_version: str | None) -> str:
     return validated.url
 
 
-def _validate_openai_probe_base(provider: str, base_url: str | None) -> str | None:
+async def _validate_openai_probe_base(provider: str, base_url: str | None) -> str | None:
     clean = str(base_url or "").strip().rstrip("/")
     if provider == "openai":
         if clean and clean != "https://api.openai.com":
@@ -224,7 +226,7 @@ def _validate_openai_probe_base(provider: str, base_url: str | None) -> str | No
     if provider in {"openai_compatible", "azure_openai"}:
         if not clean:
             raise ValueError(f"{provider} requires provider_config.base_url")
-        validate_public_url(clean, allowed_schemes=("https",), require_dns=True)
+        await validate_public_url_async(clean, allowed_schemes=("https",), require_dns=True)
         return clean
     return clean or None
 
@@ -254,9 +256,9 @@ async def probe_provider(
 
     try:
         if provider == "openai":
-            return await _probe_openai(secret, _validate_openai_probe_base(provider, base_url))
+            return await _probe_openai(secret, await _validate_openai_probe_base(provider, base_url))
         if provider == "openai_compatible":
-            return await _probe_openai(secret, _validate_openai_probe_base(provider, base_url))
+            return await _probe_openai(secret, await _validate_openai_probe_base(provider, base_url))
         if provider == "azure_openai":
             # Azure shape needs endpoint + deployment; require base_url
             if not base_url:
@@ -267,7 +269,7 @@ async def probe_provider(
                         "(your Azure resource endpoint)."
                     ),
                 }
-            validated_base = _validate_openai_probe_base(provider, base_url)
+            validated_base = await _validate_openai_probe_base(provider, base_url)
             return await _probe_azure_openai(
                 secret,
                 str(validated_base),

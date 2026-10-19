@@ -32,7 +32,7 @@ from core.models.tenant_ai_credential import (
     STATUS_ALLOWLIST,
     TenantAICredential,
 )
-from core.security.egress import EgressValidationError, validate_public_url
+from core.security.egress import EgressValidationError, validate_public_url_async
 
 logger = structlog.get_logger(__name__)
 
@@ -204,7 +204,7 @@ async def create_credential(
     from core.crypto.tenant_secrets import encrypt_for_tenant
 
     tid = _uuid.UUID(tenant_id)
-    provider_config = _validate_provider_config(body.provider, body.provider_config)
+    provider_config = await _validate_provider_config(body.provider, body.provider_config)
     prefix, suffix = mask_token(body.api_key)
     ciphertext = await encrypt_for_tenant(body.api_key, tid)
 
@@ -330,7 +330,7 @@ async def update_credential(
         if body.label is not None:
             row.label = body.label
         if body.provider_config is not None:
-            next_provider_config = _validate_provider_config(row.provider, body.provider_config)
+            next_provider_config = await _validate_provider_config(row.provider, body.provider_config)
             current_base_url = str((row.provider_config or {}).get("base_url") or "")
             next_base_url = str((next_provider_config or {}).get("base_url") or "")
             if current_base_url != next_base_url and body.api_key is None:
@@ -514,7 +514,7 @@ def _audit(
         logger.debug("audit_emit_failed", error=str(exc))
 
 
-def _validate_provider_config(provider: str, config: dict[str, Any] | None) -> dict[str, Any] | None:
+async def _validate_provider_config(provider: str, config: dict[str, Any] | None) -> dict[str, Any] | None:
     if config is None:
         return None
     sanitized = dict(config)
@@ -544,7 +544,7 @@ def _validate_provider_config(provider: str, config: dict[str, Any] | None) -> d
                 detail=f"{provider} requires provider_config.base_url",
             )
         try:
-            validated = validate_public_url(base_url, allowed_schemes=("https",), require_dns=True)
+            validated = await validate_public_url_async(base_url, allowed_schemes=("https",), require_dns=True)
         except EgressValidationError as exc:
             raise HTTPException(
                 status_code=400,

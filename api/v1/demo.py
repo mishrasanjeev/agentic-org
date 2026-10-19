@@ -18,7 +18,7 @@ from api.client_ip import client_ip as resolve_client_ip
 from api.deps import get_current_tenant, require_tenant_admin
 from api.route_metadata import route_meta
 from core import auth_state, demo_delivery
-from core.database import async_session_factory, get_tenant_session
+from core.database import get_platform_session, get_tenant_session
 from core.email import send_email
 from core.models.lead_pipeline import LeadPipeline
 
@@ -225,7 +225,8 @@ async def submit_demo_request(body: DemoRequest, request: Request, background_ta
 
     # 1. Store in legacy demo_requests table (schema owned by Alembic
     #    migration v6z14_demo_requests; no request-time DDL).
-    async with async_session_factory() as session:
+    # demo_requests is a platform table (no tenant_id, no RLS).
+    async with get_platform_session() as session:
         await session.execute(
             text(
                 "INSERT INTO demo_requests (name, email, company, role, phone) "

@@ -24,7 +24,7 @@ from auth.grantex_middleware import (
     resolve_grantex_claims,
 )
 from auth.jwt import extract_scopes, extract_tenant_id, validate_token
-from core.database import async_session_factory
+from core.database import get_platform_session, get_tenant_session
 from core.live_feed import (
     BrokerSubscription,
     get_feed_event_broker,
@@ -70,7 +70,8 @@ def _extract_token(websocket: WebSocket) -> str:
 
 async def _claims_from_api_key(token: str) -> dict[str, Any]:
     prefix = f"ao_sk_{token[6:12]}"
-    async with async_session_factory() as session:
+    # Pre-auth prefix lookup (api_keys pre-auth policy): platform context.
+    async with get_platform_session() as session:
         result = await session.execute(
             select(APIKey).where(
                 APIKey.prefix == prefix,
@@ -93,7 +94,7 @@ async def _claims_from_api_key(token: str) -> dict[str, Any]:
     if matched_key.expires_at and matched_key.expires_at < datetime.now(UTC):
         raise WebSocketAuthError("expired_api_key", "API key expired")
 
-    async with async_session_factory() as session:
+    async with get_tenant_session(matched_key.tenant_id) as session:
         await session.execute(
             update(APIKey)
             .where(APIKey.id == matched_key.id)
@@ -169,7 +170,8 @@ async def revalidate_websocket(websocket: WebSocket, path_tenant_id: str, origin
         except (KeyError, TypeError, ValueError) as exc:
             raise WebSocketAuthError("invalid_api_key", "API key is no longer valid") from exc
         try:
-            async with async_session_factory() as session:
+            # Same pre-auth api_keys lookup as the initial handshake: platform context.
+            async with get_platform_session() as session:
                 key = (
                     await session.execute(select(APIKey).where(APIKey.id == key_id))
                 ).scalar_one_or_none()

@@ -42,7 +42,7 @@ from typing import Any
 import structlog
 from sqlalchemy import text
 
-from core.database import async_session_factory
+from core.database import get_platform_session, get_tenant_session
 from core.embeddings import embed_with, model_dim
 
 logger = structlog.get_logger()
@@ -163,13 +163,38 @@ async def _write_batch(
     await session.commit()
 
 
+async def _all_tenant_ids() -> list[uuid.UUID]:
+    """Enumerate tenants under platform context (the only cross-tenant read).
+
+    ``knowledge_documents`` is RLS-enforced, so an all-tenant run walks every
+    tenant inside its own ``get_tenant_session`` instead of issuing one
+    unscoped query that a NOBYPASSRLS role would silently see as empty.
+    """
+    from sqlalchemy import select
+
+    from core.models.tenant import Tenant
+
+    async with get_platform_session() as session:
+        return [row[0] for row in (await session.execute(select(Tenant.id))).all()]
+
+
 async def _verify(tenant_id: uuid.UUID | None) -> int:
     """Return non-zero if the cutover would orphan rows.
 
     Used by the PR-B Alembic migration's pre-flight gate and by
     operators answering "is the backfill done?".
     """
-    async with async_session_factory() as session:
+    if tenant_id is None:
+        worst = 0
+        for tid in await _all_tenant_ids():
+            worst = max(worst, await _verify(tid))
+            if worst == 2:
+                return 2
+        if worst == 0:
+            print("verify: 0 rows would be orphaned by cutover (OK)")
+        return worst
+
+    async with get_tenant_session(tenant_id) as session:
         if not await _column_exists(session, TARGET_COLUMN):
             print(
                 f"verify: column {TARGET_COLUMN} does not exist — "
@@ -179,10 +204,10 @@ async def _verify(tenant_id: uuid.UUID | None) -> int:
             return 2
         orphan_risk = await _count_orphan_risk(session, tenant_id)
         if orphan_risk == 0:
-            print("verify: 0 rows would be orphaned by cutover (OK)")
+            print(f"verify: tenant {tenant_id}: 0 rows would be orphaned by cutover (OK)")
             return 0
         print(
-            f"verify: {orphan_risk} rows have embedding set but "
+            f"verify: tenant {tenant_id}: {orphan_risk} rows have embedding set but "
             f"{TARGET_COLUMN} is still NULL — backfill is not complete",
             file=sys.stderr,
         )
@@ -196,7 +221,14 @@ async def run(
 ) -> int:
     """Main backfill loop. Returns process exit code."""
     _validate_target_dim()
-    async with async_session_factory() as session:
+    if tenant_id is None:
+        for tid in await _all_tenant_ids():
+            rc = await run(tid, batch_size, dry_run)
+            if rc != 0:
+                return rc
+        return 0
+
+    async with get_tenant_session(tenant_id) as session:
         if not await _column_exists(session, TARGET_COLUMN):
             print(
                 f"abort: column {TARGET_COLUMN} does not exist — "
@@ -205,7 +237,7 @@ async def run(
             )
             return 2
         pending = await _count_pending(session, tenant_id)
-    print(f"pending rows: {pending} (model={TARGET_MODEL}, batch={batch_size})")
+    print(f"tenant {tenant_id}: pending rows: {pending} (model={TARGET_MODEL}, batch={batch_size})")
     if dry_run:
         print("dry-run: no writes performed")
         return 0
@@ -215,7 +247,7 @@ async def run(
     written = 0
     started = time.monotonic()
     while True:
-        async with async_session_factory() as session:
+        async with get_tenant_session(tenant_id) as session:
             batch = await _fetch_batch(session, tenant_id, batch_size)
             if not batch:
                 break

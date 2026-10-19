@@ -32,7 +32,7 @@ from core.config import (
     redis_url_from_env,
     settings,
 )
-from core.database import async_session_factory, get_tenant_session
+from core.database import bind_tenant_context, get_platform_session, get_tenant_session
 from core.email import send_password_reset_email, send_welcome_email
 from core.models.tenant import Tenant
 from core.models.user import User
@@ -203,7 +203,9 @@ async def signup(body: SignupRequest, request: Request, response: Response):
     _validate_password(body.password)
     admin_email = body.admin_email.strip().lower()
 
-    async with async_session_factory() as session:
+    # Platform context: the global e-mail / slug uniqueness checks and the
+    # tenant INSERT precede any tenant boundary.
+    async with get_platform_session() as session:
         # Check email not already registered globally (case-insensitive:
         # rows created before normalisation may carry mixed case).
         existing = await session.execute(
@@ -229,6 +231,10 @@ async def signup(body: SignupRequest, request: Request, response: Response):
         )
         session.add(tenant)
         await session.flush()
+
+        # From here on every row is tenant-scoped (users WITH CHECK, seeded
+        # agents / prompt templates): bind the new tenant's RLS context.
+        await bind_tenant_context(session, tenant.id)
 
         # Create admin user
         pw_hash = await _hash_password(body.password)
@@ -430,7 +436,9 @@ async def login(body: LoginRequest, request: Request, response: Response):
         raise HTTPException(status_code=429, detail="Too many login attempts — try again in 1 minute")
 
     email = body.email.strip().lower()
-    async with async_session_factory() as session:
+    # Login by e-mail happens before a tenant is known: platform context
+    # (the pre-auth ``users`` policy allows the no-tenant lookup).
+    async with get_platform_session() as session:
         result = await session.execute(
             select(User).where(func.lower(User.email) == email, User.status == "active")
         )
@@ -525,9 +533,9 @@ async def google_login(body: GoogleLoginRequest, response: Response):
     if not idinfo.get("email_verified"):
         raise HTTPException(status_code=401, detail="Google account email is not verified")
 
-    # Find or create user
+    # Find or create user (pre-tenant lookup by e-mail: platform context)
     new_google_tenant_id: uuid.UUID | None = None
-    async with async_session_factory() as session:
+    async with get_platform_session() as session:
         result = await session.execute(select(User).where(func.lower(User.email) == email))
         users = result.scalars().all()
         if len(users) > 1:
@@ -559,6 +567,7 @@ async def google_login(body: GoogleLoginRequest, response: Response):
             )
             session.add(tenant)
             await session.flush()
+            await bind_tenant_context(session, tenant.id)
 
             user = User(
                 id=uuid.uuid4(),
@@ -653,7 +662,7 @@ async def forgot_password(body: ForgotPasswordRequest, request: Request):
         # Still return success to avoid email enumeration
         return {"status": "ok", "message": "If that email is registered, a reset link has been sent."}
 
-    async with async_session_factory() as session:
+    async with get_platform_session() as session:
         result = await session.execute(
             select(User).where(func.lower(User.email) == email, User.status == "active")
         )

@@ -85,6 +85,11 @@ async def _spend_by_model(since: datetime, provider: str | None) -> list[SpendRo
         "ORDER BY cost_usd DESC"
     )
     async with async_session_factory() as session:
+        # Operator CLI, cross-tenant by design. Under a NOBYPASSRLS role the
+        # FORCE-RLS ``agent_task_results`` would silently read as empty;
+        # this makes PostgreSQL raise instead. Run it as the BYPASSRLS
+        # operator role (docs/RLS_APP_ROLE.md).
+        await session.execute(text("SET LOCAL row_security = off"))
         result = await session.execute(text(q), params)
         return [
             SpendRow(
@@ -120,6 +125,11 @@ async def _spend_by_tenant(
         "LIMIT :limit"
     )
     async with async_session_factory() as session:
+        # Operator CLI, cross-tenant by design. Under a NOBYPASSRLS role the
+        # FORCE-RLS ``agent_task_results`` would silently read as empty;
+        # this makes PostgreSQL raise instead. Run it as the BYPASSRLS
+        # operator role (docs/RLS_APP_ROLE.md).
+        await session.execute(text("SET LOCAL row_security = off"))
         result = await session.execute(text(q), params)
         return [
             SpendRow(

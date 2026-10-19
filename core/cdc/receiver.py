@@ -168,6 +168,7 @@ class CDCEventStore(Protocol):
         *,
         outcome: dict[str, Any],
         replay_status: str | None = None,
+        tenant_id: str | None = None,
     ) -> None:
         ...
 
@@ -180,6 +181,7 @@ class CDCEventStore(Protocol):
         error_message: str,
         error_details: dict[str, Any] | None = None,
         replay_status: str | None = None,
+        tenant_id: str | None = None,
     ) -> None:
         ...
 
@@ -260,6 +262,7 @@ class InMemoryCDCEventStore:
         *,
         outcome: dict[str, Any],
         replay_status: str | None = None,
+        tenant_id: str | None = None,
     ) -> None:
         event = self.repository.records[str(event_id)]
         now = datetime.now(UTC).isoformat()
@@ -281,6 +284,7 @@ class InMemoryCDCEventStore:
         error_message: str,
         error_details: dict[str, Any] | None = None,
         replay_status: str | None = None,
+        tenant_id: str | None = None,
     ) -> None:
         event = self.repository.records[str(event_id)]
         now = datetime.now(UTC).isoformat()
@@ -373,10 +377,27 @@ class InMemoryCDCEventStore:
 
 
 class SqlAlchemyCDCEventStore:
-    """PostgreSQL implementation of CDC event ingestion and replay."""
+    """PostgreSQL implementation of CDC event ingestion and replay.
+
+    ``cdc_events`` / ``cdc_event_dead_letters`` are RLS-enforced, so every
+    transaction binds the event's tenant context before touching rows. The
+    tenant is therefore mandatory on every method (fail closed).
+    """
 
     def __init__(self, session_factory: Any) -> None:
         self._session_factory = session_factory
+
+    @staticmethod
+    async def _bind(session: Any, tenant_uuid: uuid.UUID) -> None:
+        from core.database import bind_tenant_context
+
+        await bind_tenant_context(session, tenant_uuid)
+
+    @staticmethod
+    def _require_tenant(tenant_id: str | None) -> uuid.UUID:
+        if tenant_id is None or not str(tenant_id).strip():
+            raise ValueError("cdc event store operations require a tenant_id")
+        return _coerce_uuid(tenant_id)
 
     async def insert_event(self, event: dict[str, Any]) -> dict[str, Any]:
         from core.models.cdc import CDCEvent
@@ -404,6 +425,7 @@ class SqlAlchemyCDCEventStore:
         }
         async with self._session_factory() as session:
             async with session.begin():
+                await self._bind(session, tenant_uuid)
                 result = await session.execute(
                     pg_insert(CDCEvent).values(**values).on_conflict_do_nothing()
                 )
@@ -454,6 +476,7 @@ class SqlAlchemyCDCEventStore:
         *,
         outcome: dict[str, Any],
         replay_status: str | None = None,
+        tenant_id: str | None = None,
     ) -> None:
         from core.models.cdc import CDCEvent
 
@@ -467,10 +490,14 @@ class SqlAlchemyCDCEventStore:
         }
         if replay_status:
             values["replay_status"] = replay_status
+        tenant_uuid = self._require_tenant(tenant_id)
         async with self._session_factory() as session:
             async with session.begin():
+                await self._bind(session, tenant_uuid)
                 await session.execute(
-                    update(CDCEvent).where(CDCEvent.id == uuid.UUID(str(event_id))).values(**values)
+                    update(CDCEvent)
+                    .where(CDCEvent.id == uuid.UUID(str(event_id)), CDCEvent.tenant_id == tenant_uuid)
+                    .values(**values)
                 )
 
     async def mark_failed(
@@ -482,17 +509,22 @@ class SqlAlchemyCDCEventStore:
         error_message: str,
         error_details: dict[str, Any] | None = None,
         replay_status: str | None = None,
+        tenant_id: str | None = None,
     ) -> None:
         from core.models.cdc import CDCEvent, CDCEventDeadLetter
 
         event_uuid = uuid.UUID(str(event_id))
+        tenant_uuid = self._require_tenant(tenant_id)
         now = datetime.now(UTC)
         details = _json_safe(error_details or {})
         async with self._session_factory() as session:
             async with session.begin():
+                await self._bind(session, tenant_uuid)
                 row = (
                     await session.execute(
-                        select(CDCEvent).where(CDCEvent.id == event_uuid).with_for_update()
+                        select(CDCEvent)
+                        .where(CDCEvent.id == event_uuid, CDCEvent.tenant_id == tenant_uuid)
+                        .with_for_update()
                     )
                 ).scalar_one()
                 row.processed = False
@@ -528,36 +560,55 @@ class SqlAlchemyCDCEventStore:
         limit: int | None = None,
         offset: int = 0,
     ) -> tuple[list[dict[str, Any]], int]:
+        tenant_uuid = self._require_tenant(tenant_id)
+        async with self._session_factory() as session:
+            async with session.begin():
+                await self._bind(session, tenant_uuid)
+                return await self._list_events_bound(
+                    session,
+                    tenant_uuid=tenant_uuid,
+                    connector=connector,
+                    event_type=event_type,
+                    limit=limit,
+                    offset=offset,
+                )
+
+    async def _list_events_bound(
+        self,
+        session: Any,
+        *,
+        tenant_uuid: uuid.UUID,
+        connector: str | None,
+        event_type: str | None,
+        limit: int | None,
+        offset: int,
+    ) -> tuple[list[dict[str, Any]], int]:
         from core.models.cdc import CDCEvent
 
-        async with self._session_factory() as session:
-            query = select(CDCEvent)
-            count_query = select(func.count()).select_from(CDCEvent)
-            if tenant_id is not None:
-                tenant_uuid = _coerce_uuid(tenant_id)
-                query = query.where(CDCEvent.tenant_id == tenant_uuid)
-                count_query = count_query.where(CDCEvent.tenant_id == tenant_uuid)
-            if connector:
-                query = query.where(CDCEvent.connector == connector)
-                count_query = count_query.where(CDCEvent.connector == connector)
-            if event_type:
-                query = query.where(CDCEvent.event_type == event_type)
-                count_query = count_query.where(CDCEvent.event_type == event_type)
+        query = select(CDCEvent).where(CDCEvent.tenant_id == tenant_uuid)
+        count_query = select(func.count()).select_from(CDCEvent).where(CDCEvent.tenant_id == tenant_uuid)
+        if connector:
+            query = query.where(CDCEvent.connector == connector)
+            count_query = count_query.where(CDCEvent.connector == connector)
+        if event_type:
+            query = query.where(CDCEvent.event_type == event_type)
+            count_query = count_query.where(CDCEvent.event_type == event_type)
 
-            total = int((await session.execute(count_query)).scalar_one())
-            query = query.order_by(CDCEvent.received_at.desc(), CDCEvent.created_at.desc()).offset(offset)
-            if limit is not None:
-                query = query.limit(limit)
-            rows = (await session.execute(query)).scalars().all()
+        total = int((await session.execute(count_query)).scalar_one())
+        query = query.order_by(CDCEvent.received_at.desc(), CDCEvent.created_at.desc()).offset(offset)
+        if limit is not None:
+            query = query.limit(limit)
+        rows = (await session.execute(query)).scalars().all()
         return [_cdc_model_to_dict(row) for row in rows], total
 
     async def claim_replay(self, *, tenant_id: str, event_id: str, actor: str) -> dict[str, Any]:
         from core.models.cdc import CDCEvent
 
-        tenant_uuid = _coerce_uuid(tenant_id)
+        tenant_uuid = self._require_tenant(tenant_id)
         event_uuid = uuid.UUID(str(event_id))
         async with self._session_factory() as session:
             async with session.begin():
+                await self._bind(session, tenant_uuid)
                 row = (
                     await session.execute(
                         select(CDCEvent)
@@ -756,6 +807,7 @@ async def handle_cdc_webhook(
         await event_store.mark_processed(
             str(stored_event["id"]),
             outcome={"matched_workflows": matched_workflows, "workflow_count": len(matched_workflows)},
+            tenant_id=str(tenant_id),
         )
         stored_event["processed"] = True
         stored_event["processing_status"] = "processed"
@@ -778,6 +830,7 @@ async def handle_cdc_webhook(
             error_code="trigger_evaluation_failed",
             error_message=str(exc),
             error_details={"exception_type": type(exc).__name__},
+            tenant_id=str(tenant_id),
         )
         stored_event["processing_status"] = "dead_lettered"
         stored_event["processing_outcome"] = {
@@ -870,6 +923,7 @@ async def replay_cdc_event(
                 "replayed_by": actor,
             },
             replay_status="replayed",
+            tenant_id=tenant_id,
         )
         logger.info("cdc_event_replayed", tenant_id=tenant_id, event_id=event_id, actor=actor)
         return {
@@ -887,6 +941,7 @@ async def replay_cdc_event(
             error_message=str(exc),
             error_details={"exception_type": type(exc).__name__, "replayed_by": actor},
             replay_status="failed",
+            tenant_id=tenant_id,
         )
         logger.exception(
             "cdc_event_replay_failed",

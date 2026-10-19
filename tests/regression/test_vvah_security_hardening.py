@@ -124,17 +124,18 @@ async def test_oidc_discovery_rejects_rewritten_jwks_host() -> None:
             await provider.prepare()
 
 
-def test_tenant_ai_provider_config_blocks_bearer_exfiltration_targets() -> None:
+@pytest.mark.asyncio
+async def test_tenant_ai_provider_config_blocks_bearer_exfiltration_targets() -> None:
     from api.v1 import tenant_ai_credentials as creds_api
 
     with pytest.raises(HTTPException, match="api.openai.com"):
-        creds_api._validate_provider_config("openai", {"base_url": "https://attacker.example.com"})
+        await creds_api._validate_provider_config("openai", {"base_url": "https://attacker.example.com"})
 
     with pytest.raises(HTTPException, match="HTTPS public"):
-        creds_api._validate_provider_config("openai_compatible", {"base_url": "http://127.0.0.1:8000"})
+        await creds_api._validate_provider_config("openai_compatible", {"base_url": "http://127.0.0.1:8000"})
 
     with pytest.raises(HTTPException, match="must not contain secrets"):
-        creds_api._validate_provider_config(
+        await creds_api._validate_provider_config(
             "openai_compatible",
             {"base_url": "https://example.com", "api_key": "sk-leak"},
         )

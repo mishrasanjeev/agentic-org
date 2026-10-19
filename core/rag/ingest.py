@@ -329,7 +329,7 @@ async def ingest_document(
         )
 
     # 4. Persist
-    from core.database import async_session_factory
+    from core.database import get_tenant_session
 
     tid = tenant_id if isinstance(tenant_id, _uuid.UUID) else _uuid.UUID(str(tenant_id))
     # AI spend (core/spend/metering.py): the chunks just embedded.
@@ -343,7 +343,7 @@ async def ingest_document(
     lineage_on = provenance.enabled()
     chain_chunks: list[tuple[str, str]] = []
     owns_session = session is None
-    async with async_session_factory() if owns_session else nullcontext(session) as session:
+    async with get_tenant_session(tid) if owns_session else nullcontext(session) as session:
         # Parent document row — one per artifact. This is the row the
         # knowledge_documents.embedding column has existed on since
         # v4_8_6; we also stamp mime_type / embedding_model /

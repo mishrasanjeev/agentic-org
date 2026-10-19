@@ -395,13 +395,27 @@ class TestScheduledReportPoller:
 
     @pytest.mark.asyncio
     async def test_claim_due_schedules_uses_skip_locked_and_advances_next_run(self, monkeypatch):
+        from contextlib import asynccontextmanager
         from datetime import UTC, datetime
 
         from core.tasks import report_tasks as rt
 
         row = self._row()
         session = _FakeSession([row])
-        monkeypatch.setattr("core.database.async_session_factory", lambda: session)
+
+        bound: list[object] = []
+
+        @asynccontextmanager
+        async def _tenant_session(tenant_id, company_id=None):
+            # report_schedules is FORCE-RLS: the claim runs per tenant.
+            bound.append(tenant_id)
+            yield session
+
+        async def _tenants():
+            return [row.tenant_id]
+
+        monkeypatch.setattr(rt, "_all_tenant_ids", _tenants)
+        monkeypatch.setattr("core.database.get_tenant_session", _tenant_session)
 
         before = datetime.now(UTC)
         claimed = await rt._claim_due_schedules()
@@ -410,6 +424,8 @@ class TestScheduledReportPoller:
 
         sql = str(session.statements[0].compile(dialect=postgresql.dialect()))
         assert "FOR UPDATE SKIP LOCKED" in sql
+        assert "report_schedules.tenant_id = " in sql
+        assert bound == [row.tenant_id]
         assert "report_schedules.enabled IS true" in sql
         assert "next_run_at" in sql
         assert row.last_run_at >= before
