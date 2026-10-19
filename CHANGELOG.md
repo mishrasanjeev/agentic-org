@@ -44,6 +44,9 @@
   and a conformance test against a running Grantex
   (`tests/integration/test_oacp_grantex_conformance.py`, skipped unless
   `AGENTICORG_GRANTEX_CONFORMANCE_URL` is set). No migration.
+- `docs/oacp/explainers/launch-rollback-runbook.md` lists
+  `AGENTICORG_OACP_VERIFY_STRICT` with its default, the launch order and the
+  rollback step.
 
 ## Unreleased - Unicode input and private Telegram follow-ups
 
