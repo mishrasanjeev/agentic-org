@@ -193,6 +193,7 @@ async def test_list_agents_is_tenant_scoped(env: _Env, client: AsyncClient) -> N
     assert ids_a and ids_b
     assert ids_a.isdisjoint(ids_b)
     env.tenant_a["agent_id"] = next(iter(ids_a))
+    env.tenant_a["agent_ids"] = sorted(ids_a)
 
     # Tenant B cannot read tenant A's agent by id.
     cross = await client.get(f"/api/v1/agents/{env.tenant_a['agent_id']}", headers=_auth(env.tenant_b["token"]))
@@ -220,12 +221,21 @@ async def test_run_agent_end_to_end_with_fake_chat_model(env: _Env, client: Asyn
         "create_chat_model",
         lambda *a, **k: _FakeChat(responses=['{"summary": "RLS rollout complete", "status": "done"}']),
     )
-    resp = await client.post(
-        f"/api/v1/agents/{env.tenant_a['agent_id']}/run",
-        headers=_auth(env.tenant_a["token"]),
-        json={"inputs": {"query": "Summarise the RLS rollout in one line."}},
-    )
-    assert resp.status_code == 200, resp.text
+    # Seeded agents that need an external connector refuse to dispatch (409
+    # connector_not_ready_for_dispatch) in a database with no connector
+    # configs; run the first seeded agent that has none.
+    resp = None
+    for agent_id in env.tenant_a["agent_ids"]:
+        resp = await client.post(
+            f"/api/v1/agents/{agent_id}/run",
+            headers=_auth(env.tenant_a["token"]),
+            json={"inputs": {"query": "Summarise the RLS rollout in one line."}},
+        )
+        if resp.status_code == 409 and "connector_not_ready_for_dispatch" in resp.text:
+            continue
+        env.tenant_a["agent_id"] = agent_id
+        break
+    assert resp is not None and resp.status_code == 200, resp.text if resp is not None else "no agents"
     body = resp.json()
     # The run either completes or, below the agent's confidence floor, parks
     # for human review (a hitl_queue write) - both persist tenant-scoped rows.
