@@ -109,6 +109,8 @@ version granted (it used to grant `EXECUTE` on all functions).
 | Ordinary | every other table in `public` | `SELECT, INSERT, UPDATE, DELETE` |
 | Append-only | `capability_evidence_records`, `capability_promotion_events` (trigger `prevent_capability_ledger_mutation`), `eval_dataset_versions` (trigger `eval_dataset_versions_immutable`) | `SELECT, INSERT` |
 | Audit log | `audit_log` | `SELECT, INSERT`, `UPDATE (chain_seq, chain_prev, chain_hash, sealed_at)` |
+| Append-only, once `v6z88_commerce_ledger` has run | `commerce_arbiter_decisions` (trigger `commerce_arbiter_decisions_guard`) | `SELECT, INSERT`, `UPDATE (consumed_at, grantex_grant_jti, grantex_recorded_at)` |
+| Append-only, once their `<table>_append_only` trigger exists (v6z88) | `oacp_operator_decision_records`, `oacp_audit_review_manifest_records`, `oacp_retention_disposition_decision_records` (trigger `oacp_record_reject_mutation`) | `SELECT, INSERT` |
 | No delete | `capability_readiness_records` (trigger refuses `DELETE`), `audit_chain_anchors` | `SELECT, INSERT, UPDATE` |
 | Migration-owned | `alembic_version`, `checkpoint_migrations` | `SELECT` |
 | Migration-only | `alembic_migration_progress` | nothing |
@@ -125,6 +127,17 @@ version granted (it used to grant `EXECUTE` on all functions).
   rewritten through those columns. `UPDATE` of any other column and every
   `DELETE` are refused by privilege, whether or not the trigger is
   installed.
+* **Commerce ledger (v6z88).** The script classifies these tables only
+  when they exist (or, for the OACP records, when their append-only trigger
+  exists), so it runs on databases on either side of that migration. The
+  arbiter decision guard allows two one-time transitions: an `allow` row
+  being consumed, and the Grantex countersignature reference being
+  attached. The column grant is exactly those three columns; the trigger
+  refuses any other change through them. Re-run the script after applying
+  v6z88. The final check also refuses any table-level `UPDATE` or `DELETE`
+  that an append-only trigger refuses, on any table, so a later append-only
+  table the script does not yet name fails the run instead of passing
+  silently.
 * **Functions.** `EXECUTE` is revoked on everything in `public`. Ordinary
   functions (extension functions, plain trigger functions) keep their
   default `PUBLIC` `EXECUTE`. The restricted ones, which their migration

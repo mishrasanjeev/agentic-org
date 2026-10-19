@@ -89,6 +89,35 @@ GRANT UPDATE (chain_seq, chain_prev, chain_hash, sealed_at) ON audit_log TO agen
 REVOKE DELETE ON capability_readiness_records FROM agenticorg_app;
 REVOKE DELETE ON audit_chain_anchors FROM agenticorg_app;
 
+-- 5b. Append-only tables from v6z88_commerce_ledger, classified only once
+-- that migration has run (on an older head the tables are absent, or the
+-- OACP record tables are still ordinary and have no append-only trigger).
+-- commerce_arbiter_decisions allows two one-time transitions in its trigger
+-- (commerce_arbiter_decisions_guard): consumed_at filled on an allow row, and
+-- grantex_grant_jti + grantex_recorded_at filled together; the column grant
+-- is exactly those three columns. The OACP decision records define no
+-- transition (oacp_record_reject_mutation).
+DO $$
+BEGIN
+    IF to_regclass('public.commerce_arbiter_decisions') IS NOT NULL THEN
+        REVOKE UPDATE, DELETE ON commerce_arbiter_decisions FROM agenticorg_app;
+        GRANT UPDATE (consumed_at, grantex_grant_jti, grantex_recorded_at)
+            ON commerce_arbiter_decisions TO agenticorg_app;
+    END IF;
+    IF EXISTS (SELECT 1 FROM pg_trigger WHERE NOT tgisinternal
+               AND tgname = 'oacp_operator_decision_records_append_only') THEN
+        REVOKE UPDATE, DELETE ON oacp_operator_decision_records FROM agenticorg_app;
+    END IF;
+    IF EXISTS (SELECT 1 FROM pg_trigger WHERE NOT tgisinternal
+               AND tgname = 'oacp_audit_review_manifest_records_append_only') THEN
+        REVOKE UPDATE, DELETE ON oacp_audit_review_manifest_records FROM agenticorg_app;
+    END IF;
+    IF EXISTS (SELECT 1 FROM pg_trigger WHERE NOT tgisinternal
+               AND tgname = 'oacp_retention_disposition_decision_records_append_only') THEN
+        REVOKE UPDATE, DELETE ON oacp_retention_disposition_decision_records FROM agenticorg_app;
+    END IF;
+END $$;
+
 -- 6. Migration-owned tables. init_db() and the checkpoint store only read
 -- the schema versions; the encrypted-migration progress table is used by
 -- migrations alone.
@@ -163,6 +192,20 @@ BEGIN
        OR has_table_privilege('agenticorg_app', t, 'DELETE');
     IF bad IS NOT NULL THEN
         RAISE EXCEPTION 'agenticorg_app can UPDATE or DELETE append-only tables: %', bad;
+    END IF;
+    -- Any table whose append-only trigger refuses UPDATE (tgtype bit 16) or
+    -- DELETE (bit 8) must not grant that operation at table level, including
+    -- tables a later migration adds before this script learns their names.
+    SELECT string_agg(DISTINCT tg.tgrelid::regclass::text, ', ') INTO bad
+    FROM pg_trigger tg JOIN pg_proc p ON p.oid = tg.tgfoid
+    WHERE NOT tg.tgisinternal
+      AND p.proname IN ('audit_log_reject_mutation', 'prevent_capability_ledger_mutation',
+                        'eval_dataset_versions_immutable', 'commerce_arbiter_decisions_guard',
+                        'oacp_record_reject_mutation')
+      AND ((tg.tgtype & 16 <> 0 AND has_table_privilege('agenticorg_app', tg.tgrelid, 'UPDATE'))
+           OR (tg.tgtype & 8 <> 0 AND has_table_privilege('agenticorg_app', tg.tgrelid, 'DELETE')));
+    IF bad IS NOT NULL THEN
+        RAISE EXCEPTION 'agenticorg_app holds an operation an append-only trigger refuses on: %', bad;
     END IF;
     SELECT string_agg(p.oid::regprocedure::text, ', ') INTO bad
     FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace

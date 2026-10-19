@@ -28,7 +28,10 @@
 - `scripts/create_app_role.sql` grants least privilege: row DML on ordinary
   tables (never `TRUNCATE`, `REFERENCES` or `TRIGGER`); `SELECT`/`INSERT`
   only on the append-only tables (`capability_evidence_records`,
-  `capability_promotion_events`, `eval_dataset_versions`); on `audit_log`
+  `capability_promotion_events`, `eval_dataset_versions`, and, once
+  `v6z88_commerce_ledger` has run, the OACP decision records and
+  `commerce_arbiter_decisions`, the latter with `UPDATE` of only
+  `consumed_at`, `grantex_grant_jti` and `grantex_recorded_at`); on `audit_log`
   `SELECT`/`INSERT` plus `UPDATE` of the four hash-chain columns the sealing
   task fills; no `DELETE` on `capability_readiness_records` or
   `audit_chain_anchors`; read-only `alembic_version` and

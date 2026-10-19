@@ -28,6 +28,15 @@ IMMUTABILITY_FUNCTIONS = {
     "audit_log_reject_mutation",
     "prevent_capability_ledger_mutation",
     "eval_dataset_versions_immutable",
+    # v6z88_commerce_ledger (commerce arbiter decisions, OACP decision records).
+    "commerce_arbiter_decisions_guard",
+    "oacp_record_reject_mutation",
+}
+# Column-scoped UPDATE the script grants on append-only tables, for the one
+# transition each trigger allows.
+TRANSITION_COLUMNS = {
+    "audit_log": {"chain_seq", "chain_prev", "chain_hash", "sealed_at"},
+    "commerce_arbiter_decisions": {"consumed_at", "grantex_grant_jti", "grantex_recorded_at"},
 }
 # A function name that reads like one of the above must be classified here.
 IMMUTABILITY_NAME = re.compile(r"immutable|append_only|reject_mutation|prevent_\w*mutation", re.I)
@@ -41,6 +50,7 @@ NOT_APP_CALLABLE_FUNCTIONS: set[str] = set()
 def _statements() -> list[str]:
     sql = SCRIPT.read_text(encoding="utf-8")
     sql = re.sub(r"--[^\n]*", "", sql)
+    sql = sql.replace("\\gexec", ";")
     sql = re.sub(r"\$\$.*?\$\$", "$$DO$$", sql, flags=re.S)
     sql = "\n".join(line for line in sql.splitlines() if not line.strip().startswith("\\"))
     return [" ".join(part.split()) for part in sql.split(";") if part.strip()]
@@ -57,8 +67,10 @@ def _migrations_text() -> str:
 def _withheld(table: str) -> set[str]:
     """Operations the script revokes on ``table`` after the blanket grant."""
     out: set[str] = set()
-    for statement in _statements():
-        match = re.fullmatch(rf"REVOKE (.+?) ON {table} FROM {ROLE}", statement, flags=re.I)
+    # Plain statements, and the guarded ones inside DO blocks.
+    chunks = _statements() + [" ".join(chunk.split()) for chunk in _do_blocks().split(";")]
+    for statement in chunks:
+        match = re.search(rf"\bREVOKE ([A-Z, ]+?) ON {table} FROM {ROLE}\b", statement, flags=re.I)
         if match:
             privs = match.group(1).upper()
             out |= {"SELECT", "INSERT", "UPDATE", "DELETE"} if privs == "ALL" else {p.strip() for p in privs.split(",")}
@@ -107,13 +119,25 @@ def test_audit_log_update_is_scoped_to_the_seal_columns():
 
     seal_columns = set(re.findall(r"'(\w+)'", re.search(r"ARRAY\[(.*?)\]", SEAL_TRIGGER_SQL).group(1)))
     assert seal_columns == {"chain_seq", "chain_prev", "chain_hash", "sealed_at"}
-    assert {"UPDATE", "DELETE"} <= _withheld("audit_log")
-    column_grants = [
-        s for s in _statements() if re.fullmatch(rf"GRANT UPDATE \((.+)\) ON audit_log TO {ROLE}", s, flags=re.I)
-    ]
-    assert len(column_grants) == 1
-    granted = {c.strip() for c in re.search(r"\((.+)\)", column_grants[0]).group(1).split(",")}
-    assert granted == seal_columns
+    assert seal_columns == TRANSITION_COLUMNS["audit_log"]
+
+
+def test_append_only_column_grants_are_exactly_the_transition_columns():
+    chunks = _statements() + [" ".join(chunk.split()) for chunk in _do_blocks().split(";")]
+    for table, columns in TRANSITION_COLUMNS.items():
+        assert {"UPDATE", "DELETE"} <= _withheld(table), table
+        grants = [m for c in chunks for m in re.findall(rf"GRANT UPDATE \(([^)]+)\) ON {table} TO {ROLE}", c, re.I)]
+        assert len(grants) == 1, (table, grants)
+        assert {c.strip() for c in grants[0].split(",")} == columns, table
+    # No other table gets a column-level grant.
+    granted_tables = {m for c in chunks for m in re.findall(r"GRANT \w+ \([^)]+\) ON (\w+) TO", c, re.I)}
+    assert granted_tables == set(TRANSITION_COLUMNS)
+    # Where the commerce ledger migration is present, its trigger allows exactly these columns.
+    guard = re.search(r"_DECISION_GUARD_SQL = \"\"\"(.*?)\"\"\"", _migrations_text(), re.S)
+    if guard:
+        removed = re.findall(r"to_jsonb\(NEW\) - (ARRAY\[[^\]]*\]|'\w+')", guard.group(1))
+        allowed = set(re.findall(r"'(\w+)'", " ".join(removed)))
+        assert allowed == TRANSITION_COLUMNS["commerce_arbiter_decisions"]
 
 
 def test_every_append_only_trigger_is_mirrored_in_the_grants():
@@ -132,11 +156,18 @@ def test_every_append_only_trigger_is_mirrored_in_the_grants():
             continue
         tables = [table]
         if table.startswith("{"):
-            # An f-string over a loop: ``for table in ("a", "b"):`` just above.
+            # An f-string inside a loop just above: ``for table in ("a", "b"):``
+            # or ``for table in NAMES:`` over a tuple assigned earlier.
             var = table.strip("{}")
-            loops = re.findall(rf"for {var} in \(([^)]*)\)", text[max(0, match.start() - 1500) : match.start()])
+            before = text[: match.start()]
+            loops = re.findall(rf"for {var} in (?:\(([^)]*)\)|([A-Z_]+)):", before[-2000:])
             assert loops, f"cannot resolve {table} for trigger function {function}"
-            tables = re.findall(r"[\"'](\w+)[\"']", loops[-1])
+            names, constant = loops[-1]
+            if constant:
+                assigned = re.findall(rf"\b{constant}\b[^=\n]*=\s*\(([^)]*)\)", before)
+                assert assigned, f"cannot resolve {constant} for trigger function {function}"
+                names = assigned[-1]
+            tables = re.findall(r"[\"'](\w+)[\"']", names)
         refused = {op for op in ("UPDATE", "DELETE") if op in ops.upper()}
         for name in tables:
             found.setdefault(name, set()).update(refused)

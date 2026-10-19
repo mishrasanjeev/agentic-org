@@ -561,6 +561,32 @@ async def test_app_role_grants_are_least_privilege(env: _Env) -> None:
         assert "permission denied" in message or "must be owner" in message, (statement, message)
 
     async with env.engine.connect() as conn:
+        has_arbiter = (
+            await conn.execute(text("SELECT to_regclass('public.commerce_arbiter_decisions') IS NOT NULL"))
+        ).scalar_one()
+    if has_arbiter:
+        # v6z88: append-only except the consumed / countersigned transitions.
+        for statement in (
+            "UPDATE commerce_arbiter_decisions SET outcome = outcome",
+            "DELETE FROM commerce_arbiter_decisions",
+            "TRUNCATE commerce_arbiter_decisions",
+        ):
+            message = await _refused(env, statement, tid)
+            assert "permission denied" in message, (statement, message)
+        async with env.engine.connect() as conn:
+            await conn.execute(text("SELECT set_config('agenticorg.tenant_id', :tid, true)"), {"tid": tid})
+            # The transition columns are writable (no row matches; the privilege check passes).
+            await conn.execute(
+                text("UPDATE commerce_arbiter_decisions SET consumed_at = now() WHERE decision_id = 'rls-none'")
+            )
+            await conn.execute(
+                text(
+                    "UPDATE commerce_arbiter_decisions SET grantex_grant_jti = 'x', grantex_recorded_at = now() "
+                    "WHERE decision_id = 'rls-none'"
+                )
+            )
+
+    async with env.engine.connect() as conn:
         # Schema version stays readable (init_db's head check).
         assert (await conn.execute(text("SELECT count(*) FROM alembic_version"))).scalar_one() == 1
         # Restricted functions: only the platform spend total is callable.
