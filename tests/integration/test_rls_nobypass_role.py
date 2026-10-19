@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """End-to-end proof that the application is correct under a NOBYPASSRLS role.
 
 Runs the real API (httpx ASGI transport) and the real beat/cron coroutines

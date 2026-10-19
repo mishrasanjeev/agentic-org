@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """The NOBYPASSRLS application role gets least-privilege grants.
 
 ``scripts/create_app_role.sql`` used to grant EXECUTE on every function and
