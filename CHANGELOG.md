@@ -24,6 +24,15 @@
   unknown kid). Status lists are fetched only from the issuer or Grantex API
   origin over https, verified as `statuslist+jwt`, cached within their `ttl`;
   revoked and suspended entries and unreachable lists refuse the artifact.
+- Cache rows stamped `<artifact_id>:verified` before this change, and rows cached
+  in log-only mode, no longer count as verified on any runtime read (buyer and
+  bridge answers, protocol adapters, purchase and POS preparation). Strict
+  runtimes refuse them (`artifact_unverified_legacy`, `artifact_unverified`);
+  log-only runtimes log `oacp_cache_record_unverified_irregularity`. New
+  `POST /api/v1/commerce/runtime/artifacts/refresh` re-fetches a scope from
+  Grantex replay and caches it verified. Deploy order: the Grantex signing
+  release, a first OACP issuer key and `OACP_STATUS_LIST_PUBLIC_ENABLED` must be
+  live before strict verification reaches production (or set the opt-out).
 - Match Grantex's OACP issuance: `revocation` artifacts may live 24 h (was 0),
   and `issued_at` / `not_before` tolerate 60 s of clock skew (expiry does not).
   A status list Grantex has not made public (404) refuses the artifact.

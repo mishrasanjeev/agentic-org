@@ -15,7 +15,7 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING, Any, Literal, Protocol, cast
 
-from core.commerce.oacp_jws import OacpJwsVerification, verify_oacp_artifact_jws
+from core.commerce.oacp_jws import OACP_JWS_PROFILE, OacpJwsVerification, verify_oacp_artifact_jws
 
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
@@ -4109,6 +4109,40 @@ def _c6x2_non_enablement_flags_intact(record: OacpPersistentArtifactCacheRecord)
         and record.no_checkout_payment_enablement is True
         and record.no_live_provider_enablement is True
         and record.no_public_discovery_enablement is True
+    )
+
+
+OACP_VERIFIER_RESULT_REF_PREFIX = f"{OACP_JWS_PROFILE};"
+
+
+def is_verified_oacp_cache_record(record: OacpPersistentArtifactCacheRecord) -> bool:
+    """True only for records the ES256 verifier wrote (``oacp-artifact-jws-v1;kid=oacp-...``).
+
+    Rows cached before verification existed carry a stamped ``<artifact_id>:verified``
+    string that proves nothing; rows cached in log-only mode carry no ref.
+    """
+    ref = record.verifier_result_ref
+    return isinstance(ref, str) and ref.startswith(OACP_VERIFIER_RESULT_REF_PREFIX) and ";kid=oacp-" in ref
+
+
+def oacp_cache_record_verification_refusal(record: OacpPersistentArtifactCacheRecord) -> dict[str, Any] | None:
+    """The refusal for a cache record that was not verified, or None when it was.
+
+    ``artifact_unverified_legacy``: a stamped ref from before verification.
+    ``artifact_unverified``: no ref (cached in log-only mode).
+    Both are refreshed through the Grantex replay refresh route.
+    """
+    if is_verified_oacp_cache_record(record):
+        return None
+    legacy = record.verifier_result_ref is not None
+    return _c6x2_cache_refusal(
+        status="blocked",
+        refusal_code="artifact_unverified_legacy" if legacy else "artifact_unverified",
+        message=(
+            "Cached artifact was not verified against the Grantex JWKS; refresh it from Grantex replay "
+            "(POST /api/v1/commerce/runtime/artifacts/refresh)."
+        ),
+        record=record,
     )
 
 

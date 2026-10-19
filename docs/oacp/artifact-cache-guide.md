@@ -38,7 +38,19 @@ The response's `verification` object reports the mode, the number of artifacts v
 
 ## `verifier_result_ref`
 
-A verified artifact's cache record carries `oacp-artifact-jws-v1;kid=<kid>;payload_hash=<hex>;status=valid;verified_at=<time>`. It is written only by the verifier: a `verifier_result_ref` sent in the request body is ignored, and no record is given a default. Records cached before this change carry the old `<artifact_id>:verified` string, which was stamped without any verification; refresh them from Grantex.
+A verified artifact's cache record carries `oacp-artifact-jws-v1;kid=<kid>;payload_hash=<hex>;status=valid;verified_at=<time>`. It is written only by the verifier: a `verifier_result_ref` sent in the request body is ignored, and no record is given a default.
+
+Every runtime read of the cache (buyer answers, bridge answers, protocol adapters, purchase preparation, Offline POS handoffs) goes through `evaluate_runtime_cache_record` in `core/commerce/c6z_runtime_vertical.py`, which counts a record as verified only when its ref has that form:
+
+| Record | Strict runtime | Log-only runtime |
+| --- | --- | --- |
+| `oacp-artifact-jws-v1;kid=oacp-…` ref | used | used |
+| Legacy `<artifact_id>:verified` ref (stamped before verification existed) | refused `artifact_unverified_legacy` | used, `oacp_cache_record_unverified_irregularity` logged |
+| No ref (cached in log-only mode) | refused `artifact_unverified` | used, irregularity logged |
+
+## Refresh From Grantex Replay
+
+`POST /api/v1/commerce/runtime/artifacts/refresh` with `{merchant_id, seller_agent_id, buyer_agent_id?}` reads every issued artifact for the authenticated tenant and that scope from Grantex replay (`GET /v1/commerce/oacp/artifacts`, following `next_cursor`, with the same service token as the authority request), skips expired ones, and caches the rest through the same verification as `/artifacts/cache`. It is the operator path for rows refused as `artifact_unverified_legacy` or `artifact_unverified`. Missing Grantex settings return `blocked_missing_grantex_env`; an unreachable replay returns `502 grantex_replay_unavailable` and changes nothing.
 
 ## Grantex SDK Verifier
 

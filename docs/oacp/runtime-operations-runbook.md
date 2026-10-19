@@ -2,6 +2,16 @@
 
 Canonical end-to-end flow: [OACP end-user flow](end-user-flow.md). Launch closure source of truth: [OACP Runtime Launch Closure PRD](runtime-launch-closure-prd.md).
 
+## Deploy Order For Strict OACP Verification
+
+Strict artifact verification (`AGENTICORG_OACP_VERIFY_STRICT`, on by default in production and staging) refuses to cache any artifact Grantex cannot prove, and refuses to use cache rows that were never verified. Before the AgenticOrg release that carries it reaches production, these must be live on the Grantex side for the same environment:
+
+1. The Grantex OACP signing release (ES256 detached-JWS artifacts, persisted and replayable, revocable).
+2. A first OACP issuer key (`POST /v1/commerce/oacp/issuer-keys/rotate`), so `/.well-known/jwks.json` lists an `oacp-` key.
+3. `OACP_STATUS_LIST_PUBLIC_ENABLED=true`, so `/status/oacp/<list>` is served; while it is off every artifact is refused `revocation_status_unavailable`.
+
+Then deploy AgenticOrg and run `POST /api/v1/commerce/runtime/artifacts/refresh` for each live merchant and seller agent, so legacy rows are replaced by verified ones. If AgenticOrg must ship first, set `AGENTICORG_OACP_VERIFY_STRICT=false` for that deployment as a recorded operator decision and unset it once the three items are live and the refresh has run.
+
 ## Smoke Test
 
 ```mermaid
@@ -42,7 +52,7 @@ Set `OACP_LAUNCH_EXTERNAL_CHECKS=true` only when Shopify, Grantex, and Plural/Pi
 3. Shopify connector status and read-only sync.
 4. Shopify webhook signed test marks source stale/refresh-required.
 5. Grantex authority request returns 11 artifacts or an exact refusal.
-6. Artifact cache count, `verification.mode` `strict` with `verification.refused` empty, each record's `verifier_result_ref` starting `oacp-artifact-jws-v1;`, and a buyer answer with source/freshness labels.
+6. `POST /artifacts/refresh` for the smoke merchant returns `cached`; artifact cache count, `verification.mode` `strict` with `verification.refused` empty, each record's `verifier_result_ref` starting `oacp-artifact-jws-v1;`, and a buyer answer with source/freshness labels.
 7. Public catalog page, product page, catalog JSON, Schema.org JSON-LD, sitemap, and llms.txt when merchant publishing is enabled.
 8. Protocol adapter endpoints and MCP seller fact read.
 9. A2A agent card and OpenAPI bridge schema.
