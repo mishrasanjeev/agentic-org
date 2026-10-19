@@ -10,6 +10,7 @@ import sys
 import uuid
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from unittest.mock import AsyncMock
 
 import pytest
 from alembic.config import Config
@@ -21,7 +22,11 @@ from sqlalchemy import select, text
 from sqlalchemy.exc import DBAPIError
 
 from api.v1.channels import _binding
+from core.channels import runtime
+from core.channels.providers import Message
+from core.config import settings
 from core.database import get_tenant_session
+from core.models.agent import Agent
 from core.models.channel import ChannelBinding, ChannelDelivery, ChannelSenderLink
 from core.models.user import User
 from tests.integration.conftest import admin_user_row, tenant_row
@@ -37,6 +42,118 @@ from tests.integration.test_feature_flags_rls_postgres import (
 from tests.integration.test_feature_flags_rls_postgres import (
     pytestmark as pytestmark,
 )
+
+
+@pytest.mark.parametrize("mode", ["answer", "legacy_intake", "mismatched_sender", "revoked_link"])
+@pytest.mark.timeout(300)
+async def test_telegram_answer_uses_authenticated_intake_identity_across_service_keys(
+    as_rls_role: _Db, monkeypatch, mode
+):
+    from api.v1 import agents
+
+    tenant, owner, agent_id, binding_id, link_id = (uuid.uuid4() for _ in range(5))
+    with as_rls_role.owner.begin() as conn:
+        conn.execute(
+            text(
+                "INSERT INTO tenants (id,name,slug,plan,data_region,settings) "
+                "VALUES (:id,:name,:slug,:plan,:region,:settings)"
+            ),
+            tenant_row(str(tenant)),
+        )
+        conn.execute(
+            text(
+                "INSERT INTO users (id,tenant_id,email,name,role,status,mfa_enabled) "
+                "VALUES (:id,:tenant_id,:email,:name,'admin','active',false)"
+            ),
+            admin_user_row(str(tenant), str(owner), f"reply-{owner.hex}@example.test"),
+        )
+    monkeypatch.setattr(runtime, "resolve_tenant_kek", AsyncMock(return_value=""))
+    monkeypatch.setattr(settings, "secret_key", "synthetic-intake-service-key")
+    intake_hash = runtime.sender_hash(binding_id, "10001")
+    async with get_tenant_session(tenant) as session:
+        session.add(
+            Agent(
+                id=agent_id,
+                tenant_id=tenant,
+                name="Synthetic arithmetic",
+                agent_type="synthetic",
+                domain="ops",
+                system_prompt_ref="synthetic",
+                hitl_condition="confidence < 0.88",
+                status="shadow",
+            )
+        )
+        session.add(
+            ChannelBinding(
+                id=binding_id,
+                tenant_id=tenant,
+                owner_user_id=owner,
+                name="Synthetic Telegram",
+                provider="telegram",
+                target_kind="agent",
+                target_id=agent_id,
+                enabled=True,
+                auto_reply=True,
+                reply_mode="agent_answer",
+                credentials_ciphertext=await runtime.seal({"access_token": "synthetic-only"}, tenant),
+            )
+        )
+    async with get_tenant_session(tenant) as session:
+        binding = await session.get(ChannelBinding, binding_id)
+        session.add(
+            ChannelSenderLink(
+                id=link_id,
+                tenant_id=tenant,
+                binding_id=binding_id,
+                user_id=owner,
+                sender_hash=intake_hash,
+                expires_at=datetime.now(UTC) + timedelta(days=1),
+            )
+        )
+    assert binding is not None
+    question = "There are 7, 11 and 13 items. Remove the 11-item box, then remove 2 more items. How many remain?"
+    message = Message(event_id=f"arithmetic-{mode}", sender="10001", text=question)
+    assert await runtime.receive(binding, message) == "pending"
+    # The real deployment has distinct service signing keys, but common tenant encryption.
+    monkeypatch.setattr(settings, "secret_key", "synthetic-worker-service-key")
+    assert runtime.sender_hash(binding_id, "10001") != intake_hash
+    async with get_tenant_session(tenant) as session:
+        receipt = await session.scalar(select(ChannelDelivery).where(ChannelDelivery.tenant_id == tenant))
+        assert receipt is not None
+        receipt_id = receipt.id
+        protected = await runtime.unseal(receipt.message_ciphertext)
+        if mode == "legacy_intake":
+            protected.pop("sender_hash", None)
+        elif mode == "mismatched_sender":
+            protected["sender_hash"] = "0" * 64
+        if mode in {"legacy_intake", "mismatched_sender"}:
+            receipt.message_ciphertext = await runtime.seal(protected, tenant)
+
+    async def complete(*args, **kwargs):
+        if mode == "revoked_link":
+            async with get_tenant_session(tenant) as session:
+                link = await session.get(ChannelSenderLink, link_id)
+                assert link is not None
+                link.expires_at = datetime.now(UTC) - timedelta(seconds=1)
+        return {"status": "completed", "output": {"answer": 18, "confidence": 1}, "tool_calls": []}
+
+    run = AsyncMock(side_effect=complete)
+    reply = AsyncMock()
+    monkeypatch.setattr(agents, "run_agent", run)
+    monkeypatch.setattr(runtime, "send_reply", reply)
+    assert await runtime.dispatch_one(tenant, binding_id) == "completed"
+    run.assert_awaited_once()
+    reply.assert_awaited_once()
+    assert reply.call_args.args[3] == (
+        "18" if mode == "answer" else "Task status: completed. Answer withheld; open AgenticOrg to review the result."
+    )
+    async with get_tenant_session(tenant) as session:
+        retained = await session.get(ChannelDelivery, receipt_id)
+        assert retained is not None and retained.status == "completed"
+        assert retained.result_ciphertext is not None
+        assert (await runtime.unseal(retained.result_ciphertext))["output"]["answer"] == 18
+        if mode == "answer":
+            assert (await runtime.unseal(retained.message_ciphertext))["sender_hash"] == intake_hash
 
 
 @pytest.mark.timeout(300)

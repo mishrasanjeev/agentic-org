@@ -100,6 +100,8 @@ def test_own_credentials_cannot_be_echoed_and_unicode_is_bounded():
         "session_revoked",
         "link_revoked",
         "provider_failure",
+        "missing_sender_proof",
+        "malformed_sender_proof",
     ],
 )
 async def test_dispatch_rechecks_consent_authority_and_sends_answer_once(monkeypatch, state, mode):
@@ -137,6 +139,8 @@ async def test_dispatch_rechecks_consent_authority_and_sends_answer_once(monkeyp
     if mode == "foreign_target":
         reply_user.role = "developer"
         reply_target.owner_user_id = uuid.uuid4()
+    digest = runtime.sender_hash(b.id, "10001")
+    state.delegation.sender_hash = digest
     auth = Session(
         scalar=[
             None if mode == "missing_user" else reply_user,
@@ -152,12 +156,21 @@ async def test_dispatch_rechecks_consent_authority_and_sends_answer_once(monkeyp
         "tool_calls": [],
     }
     monkeypatch.setattr(agents, "run_agent", AsyncMock(return_value=result))
+    message = {
+        "sender": "10001",
+        "text": "There are 7, 11 and 13 items. Remove 11 and 2. How many remain?",
+        "sender_hash": digest,
+    }
+    if mode == "missing_sender_proof":
+        message.pop("sender_hash")
+    if mode == "malformed_sender_proof":
+        message["sender_hash"] = "not-a-sender-proof"
     monkeypatch.setattr(
         runtime,
         "unseal",
         AsyncMock(
             side_effect=[
-                {"sender": "10001", "text": "There are 7, 11 and 13 items. Remove 11 and 2. How many remain?"},
+                message,
                 {"access_token": "123:synthetic-token", "webhook_secret": "synthetic-secret"},
             ]
         ),
@@ -178,6 +191,8 @@ async def test_dispatch_rechecks_consent_authority_and_sends_answer_once(monkeyp
         assert receipt.error_code == "reply_delivery_unconfirmed"
     if auth.queries:
         assert all(state.tid in query.compile().params.values() for query in auth.queries)
+        if len(auth.queries) > 1:
+            assert digest in auth.queries[1].compile().params.values()
 
 
 @pytest.mark.asyncio
@@ -227,6 +242,22 @@ def test_invalid_modes_and_nontelegram_workflow_cannot_opt_in():
     for provider, kind in [("viber", "agent"), ("telegram", "workflow")]:
         with pytest.raises(HTTPException):
             channels._validate_reply_mode(provider, kind, "agent_answer")
+
+
+@pytest.mark.asyncio
+async def test_sender_proof_stays_out_of_the_authenticated_inbox_response(monkeypatch, state):
+    digest = runtime.sender_hash(state.binding.id, "10001")
+    lookup, listing = Session(scalar=[state.binding]), Session(scalars=[[state.receipt]])
+    database(monkeypatch, channels, state.tid, lookup, listing)
+    monkeypatch.setattr(channels, "_actor", AsyncMock(return_value=state.user))
+    monkeypatch.setattr(
+        channels, "unseal", AsyncMock(return_value={"sender": "10001", "sender_hash": digest, "text": "Task"})
+    )
+    response = await channels.deliveries(state.binding.id, runtime._request_for_user(state.user), str(state.tid))
+    assert response["deliveries"][0]["text"] == "Task"
+    assert "sender" not in response["deliveries"][0]
+    assert "sender_hash" not in response["deliveries"][0]
+    assert digest not in str(response)
 
 
 @pytest.mark.asyncio

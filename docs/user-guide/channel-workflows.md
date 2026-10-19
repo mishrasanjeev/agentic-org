@@ -135,6 +135,13 @@ reason to rerun the model or resend blindly. Disabling **Send replies**, switchi
 back to **Task status only**, or disabling the connection stops future answer
 attempts; it cannot retract a message already accepted by Telegram.
 
+If a completed run says **Answer withheld**, inspect the result in AgenticOrg;
+do not blindly retry it. Fresh intake carries an encrypted, connection-bound
+sender proof, so API and worker signing keys need not be identical. Receipts
+created before that proof was added remain withheld; old results are not
+retroactively sent. Recheck sender access and current reply settings before
+authorizing a new task. A fresh message is new execution and may incur model cost.
+
 Self-managed deployments need both the channel worker and the periodic beat
 scheduler. The local Docker stack starts both. An inbox that stays pending can
 indicate a missing scheduler or broker; do not repeatedly submit the same task.

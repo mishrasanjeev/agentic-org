@@ -64,6 +64,8 @@ Native channel replies default to optional status notices. Telegram agent
 connections can opt into bounded final-answer replies for the linked private
 sender under **Channels > Reply content**. Traces and tool-call records stay in
 AgenticOrg; approvals, sender authorization and tenant controls still apply.
+The encrypted intake carries the authenticated sender identity across services;
+older receipts without that proof remain withheld, even if the agent completed.
 
 Follow the [channel account and workflow guide](docs/user-guide/channel-workflows.md)
 for account creation, callback registration, sender linking and verification.

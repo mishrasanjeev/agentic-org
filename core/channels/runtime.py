@@ -7,6 +7,7 @@ import asyncio
 import hashlib
 import hmac
 import json
+import re
 import uuid
 from datetime import UTC, datetime, timedelta
 from typing import Any
@@ -47,7 +48,10 @@ async def receive(binding: ChannelBinding, message: Message) -> str:
     content_hash = hashlib.sha256(json.dumps(normalized, sort_keys=True).encode()).hexdigest()
     is_link_request = CATALOG[binding.provider]["identity_link"] and message.text.startswith("/link ")
     ciphertext = await seal(
-        {"sender": message.sender, "text": "Account-link request"} if is_link_request else normalized, tid
+        {"sender": message.sender, "text": "Account-link request"}
+        if is_link_request
+        else {**normalized, "sender_hash": digest},
+        tid,
     )
     now = datetime.now(UTC)
     async with get_tenant_session(tid) as session:
@@ -162,6 +166,11 @@ async def _answer_authorized(binding: ChannelBinding, receipt: ChannelDelivery, 
     from core.models.agent import Agent
     from core.ownership import require_agent_mutable
 
+    # Intake authenticated this binding-scoped identity before tenant encryption.
+    # Worker signing keys need not equal the API key; legacy receipts fail closed.
+    digest = message.get("sender_hash")
+    if not isinstance(digest, str) or re.fullmatch(r"[0-9a-f]{64}", digest) is None:
+        return False
     now = datetime.now(UTC)
     async with get_tenant_session(binding.tenant_id) as session:
         user = await session.scalar(
@@ -183,7 +192,7 @@ async def _answer_authorized(binding: ChannelBinding, receipt: ChannelDelivery, 
                 ChannelSenderLink.binding_id == binding.id,
                 ChannelSenderLink.id == receipt.delegation_id,
                 ChannelSenderLink.user_id == user.id,
-                ChannelSenderLink.sender_hash == sender_hash(binding.id, message["sender"]),
+                ChannelSenderLink.sender_hash == digest,
                 ChannelSenderLink.challenge_hash.is_(None),
                 ChannelSenderLink.expires_at > now,
             )

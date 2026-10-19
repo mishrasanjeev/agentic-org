@@ -23,7 +23,6 @@ fix, passing after):
 
 from __future__ import annotations
 
-import asyncio
 import uuid
 from types import SimpleNamespace
 from typing import Any
@@ -38,6 +37,7 @@ from langgraph.errors import GraphInterrupt
 from langgraph.types import Interrupt
 
 from auth.run_grants import NO_RUN_GRANT_FOR_TESTS
+from core.database import run_db_coroutine_sync
 from core.langgraph import runner
 from core.langgraph.agent_graph import (
     _rewrite_tool_call_names,
@@ -50,6 +50,23 @@ from core.langgraph.tool_adapter import (
     _split_connector_tool_ref,
     build_tools_for_agent,
 )
+
+
+@pytest.fixture(autouse=True)
+def no_cross_loop_database_reuse():
+    from core.database import _cross_loop_checkouts_total
+
+    def trips():
+        return sum(
+            sample.value
+            for metric in _cross_loop_checkouts_total.collect()
+            for sample in metric.samples
+            if sample.name.endswith("_total")
+        )
+
+    before = trips()
+    yield
+    assert trips() == before, "These regressions must not reuse the shared pool on a throwaway loop"
 
 
 def _schema_of(tool: Any) -> dict[str, Any]:
@@ -359,8 +376,8 @@ def _run_agent_with(fake_compiled: MagicMock) -> dict[str, Any]:
         patch.object(runner, "build_agent_graph", return_value=fake_graph),
         patch.object(runner, "generate_explanation", new=AsyncMock(return_value={})),
     ):
-        return asyncio.run(
-            runner.run_agent(
+        return run_db_coroutine_sync(
+            lambda: runner.run_agent(
                 agent_id="a-id",
                 agent_type="t",
                 domain="ops",
@@ -467,8 +484,8 @@ class TestSheet36HitlUsage:
         fake_graph = MagicMock()
         fake_graph.compile = MagicMock(return_value=fake_compiled)
         with patch.object(runner, "build_agent_graph", return_value=fake_graph):
-            result = asyncio.run(
-                runner.resume_agent(
+            result = run_db_coroutine_sync(
+                lambda: runner.resume_agent(
                     agent_id="a-id",
                     thread_id="thread-36",
                     decision={"action": "approve"},
@@ -648,8 +665,8 @@ class TestPinnedLlmProviderRuntimeWiring:
             patch.object(runner, "build_agent_graph", return_value=fake_graph) as build,
             patch.object(runner, "generate_explanation", new=AsyncMock(return_value={})),
         ):
-            asyncio.run(
-                runner.run_agent(
+            run_db_coroutine_sync(
+                lambda: runner.run_agent(
                     agent_id="a-id",
                     agent_type="t",
                     domain="ops",
@@ -664,8 +681,8 @@ class TestPinnedLlmProviderRuntimeWiring:
             assert build.call_args.kwargs["llm_provider"] == "openai"
             assert build.call_args.kwargs["tenant_id"] == "00000000-0000-0000-0000-000000000000"
 
-            asyncio.run(
-                runner.resume_agent(
+            run_db_coroutine_sync(
+                lambda: runner.resume_agent(
                     agent_id="a-id",
                     thread_id="t-1",
                     decision={"action": "approve"},
