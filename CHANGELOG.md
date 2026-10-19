@@ -31,13 +31,16 @@
   `capability_promotion_events`, `eval_dataset_versions`, and, once
   `v6z88_commerce_ledger` has run, the OACP decision records and
   `commerce_arbiter_decisions`, the latter with `UPDATE` of only
-  `consumed_at`, `grantex_grant_jti` and `grantex_recorded_at`); on `audit_log`
+  `consumed_at`, `grantex_grant_jti` and `grantex_recorded_at`; every table
+  guarded by a known append-only trigger function is classified by rule, so
+  the script runs on any head); on `audit_log`
   `SELECT`/`INSERT` plus `UPDATE` of the four hash-chain columns the sealing
   task fills; no `DELETE` on `capability_readiness_records` or
   `audit_chain_anchors`; read-only `alembic_version` and
   `checkpoint_migrations`; no access to `alembic_migration_progress`; and
-  `EXECUTE` only on `public.gemini_daily_platform_spend()` among the
-  restricted functions (default privileges grant no function `EXECUTE`). The
+  `EXECUTE` only on the allow-listed restricted functions
+  (`public.gemini_daily_platform_spend()`, and
+  `public.oacp_delete_due_manifest(text, text)` where it exists) (default privileges grant no function `EXECUTE`). The
   script runs in one transaction, re-running it converges on these grants,
   and it refuses and rolls back a broader result. Guarded by
   `tests/regression/test_app_role_grants.py` and new cases in the Postgres

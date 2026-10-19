@@ -75,6 +75,41 @@ REVOKE UPDATE, DELETE ON capability_evidence_records FROM agenticorg_app;
 REVOKE UPDATE, DELETE ON capability_promotion_events FROM agenticorg_app;
 REVOKE UPDATE, DELETE ON eval_dataset_versions FROM agenticorg_app;
 
+-- 3b. The same rule for every table, named or not: a table guarded by one of
+-- these append-only trigger functions loses each operation its trigger
+-- covers (UPDATE: tgtype bit 16, DELETE: bit 8). Functions that do not exist
+-- yet simply match nothing, so the script runs on any head; tables a later
+-- migration guards with a listed function are classified automatically.
+-- Runs before the column grants below: a table-level REVOKE also revokes
+-- column privileges.
+DO $$
+DECLARE
+    r record;
+BEGIN
+    FOR r IN
+        SELECT tg.tgrelid::regclass AS rel,
+               bool_or(tg.tgtype & 16 <> 0) AS refuses_update,
+               bool_or(tg.tgtype & 8 <> 0) AS refuses_delete
+        FROM pg_trigger tg
+        JOIN pg_proc p ON p.oid = tg.tgfoid
+        JOIN pg_class c ON c.oid = tg.tgrelid
+        JOIN pg_namespace n ON n.oid = c.relnamespace
+        WHERE NOT tg.tgisinternal AND n.nspname = 'public'
+          AND p.proname IN ('audit_log_reject_mutation', 'prevent_capability_ledger_mutation',
+                            'eval_dataset_versions_immutable', 'commerce_arbiter_decisions_guard',
+                            'oacp_record_reject_mutation', 'oacp_manifest_retention_guard',
+                            'audit_chain_witness_reject_mutation')
+        GROUP BY tg.tgrelid
+    LOOP
+        IF r.refuses_update THEN
+            EXECUTE format('REVOKE UPDATE ON %s FROM agenticorg_app', r.rel);
+        END IF;
+        IF r.refuses_delete THEN
+            EXECUTE format('REVOKE DELETE ON %s FROM agenticorg_app', r.rel);
+        END IF;
+    END LOOP;
+END $$;
+
 -- 4. audit_log: append-only, except the one transition the sealing task
 -- (core.tasks.audit_chain_tasks, a Celery worker on this role) makes: it
 -- fills the four chain columns of an unsealed row
@@ -116,6 +151,10 @@ BEGIN
                AND tgname = 'oacp_retention_disposition_decision_records_append_only') THEN
         REVOKE UPDATE, DELETE ON oacp_retention_disposition_decision_records FROM agenticorg_app;
     END IF;
+    -- Grantex witness checkpoints of the audit chain head: SELECT, INSERT.
+    IF to_regclass('public.audit_chain_witness_checkpoints') IS NOT NULL THEN
+        REVOKE UPDATE, DELETE ON audit_chain_witness_checkpoints FROM agenticorg_app;
+    END IF;
 END $$;
 
 -- 6. Migration-owned tables. init_db() and the checkpoint store only read
@@ -129,26 +168,41 @@ REVOKE ALL ON alembic_migration_progress FROM agenticorg_app;
 -- functions (extensions, trigger functions) keep their PUBLIC EXECUTE, and
 -- the restricted ones (REVOKE ... FROM PUBLIC in their migration) stay
 -- closed. A trigger fires without EXECUTE on its function. The application
--- calls exactly one restricted function: the v6z85 platform spend total
--- (core/llm/router.py). Its owner is the NOLOGIN aggregation role; a
--- non-superuser installer grants EXECUTE through a temporary membership,
--- the way v6z85 does, and must not keep that membership.
+-- calls the SECURITY DEFINER functions in this allow-list, and no others:
+--
+--   public.gemini_daily_platform_spend()             v6z85, platform Gemini cap
+--                                                    (core/llm/router.py); required
+--   public.oacp_delete_due_manifest(text, text)      v6z88, tenant-bound manifest
+--                                                    retention; granted once it exists
+--
+-- A function owned by the installer is granted directly. One owned by a
+-- NOLOGIN role (the v6z85 aggregation role) is granted through a temporary
+-- membership, the way v6z85 does; the installer must not keep it.
 DO $$
+DECLARE
+    fn text;
+    owner_role name;
 BEGIN
     IF to_regprocedure('public.gemini_daily_platform_spend()') IS NULL THEN
         RAISE EXCEPTION 'public.gemini_daily_platform_spend() is missing: migrate to head first';
     END IF;
-    IF (SELECT rolsuper FROM pg_roles WHERE rolname = current_user) THEN
-        GRANT EXECUTE ON FUNCTION public.gemini_daily_platform_spend() TO agenticorg_app;
-    ELSE
-        EXECUTE format('GRANT agenticorg_spend_aggregate TO %I', current_user);
-        GRANT EXECUTE ON FUNCTION public.gemini_daily_platform_spend() TO agenticorg_app;
-        EXECUTE format('REVOKE agenticorg_spend_aggregate FROM %I', current_user);
-        IF pg_has_role(current_user, 'agenticorg_spend_aggregate', 'USAGE')
-            OR pg_has_role(current_user, 'agenticorg_spend_aggregate', 'SET') THEN
-            RAISE EXCEPTION 'Installer retained aggregate row access';
+    FOREACH fn IN ARRAY ARRAY['public.gemini_daily_platform_spend()',
+                              'public.oacp_delete_due_manifest(text, text)'] LOOP
+        CONTINUE WHEN to_regprocedure(fn) IS NULL;
+        SELECT r.rolname INTO owner_role
+        FROM pg_proc p JOIN pg_roles r ON r.oid = p.proowner
+        WHERE p.oid = to_regprocedure(fn);
+        IF owner_role = current_user OR (SELECT rolsuper FROM pg_roles WHERE rolname = current_user) THEN
+            EXECUTE format('GRANT EXECUTE ON FUNCTION %s TO agenticorg_app', fn);
+        ELSE
+            EXECUTE format('GRANT %I TO %I', owner_role, current_user);
+            EXECUTE format('GRANT EXECUTE ON FUNCTION %s TO agenticorg_app', fn);
+            EXECUTE format('REVOKE %I FROM %I', owner_role, current_user);
+            IF pg_has_role(current_user, owner_role, 'USAGE') OR pg_has_role(current_user, owner_role, 'SET') THEN
+                RAISE EXCEPTION 'Installer retained membership of %', owner_role;
+            END IF;
         END IF;
-    END IF;
+    END LOOP;
 END $$;
 
 -- 8. Objects created later by the role running this script (the schema
@@ -201,7 +255,8 @@ BEGIN
     WHERE NOT tg.tgisinternal
       AND p.proname IN ('audit_log_reject_mutation', 'prevent_capability_ledger_mutation',
                         'eval_dataset_versions_immutable', 'commerce_arbiter_decisions_guard',
-                        'oacp_record_reject_mutation')
+                        'oacp_record_reject_mutation', 'oacp_manifest_retention_guard',
+                        'audit_chain_witness_reject_mutation')
       AND ((tg.tgtype & 16 <> 0 AND has_table_privilege('agenticorg_app', tg.tgrelid, 'UPDATE'))
            OR (tg.tgtype & 8 <> 0 AND has_table_privilege('agenticorg_app', tg.tgrelid, 'DELETE')));
     IF bad IS NOT NULL THEN
@@ -210,7 +265,8 @@ BEGIN
     SELECT string_agg(p.oid::regprocedure::text, ', ') INTO bad
     FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
     WHERE n.nspname = 'public' AND p.prosecdef
-      AND p.oid <> 'public.gemini_daily_platform_spend()'::regprocedure
+      AND p.oid NOT IN (SELECT to_regprocedure(f)::oid FROM unnest(ARRAY['public.gemini_daily_platform_spend()',
+                            'public.oacp_delete_due_manifest(text, text)']) AS f WHERE to_regprocedure(f) IS NOT NULL)
       AND has_function_privilege('agenticorg_app', p.oid, 'EXECUTE');
     IF bad IS NOT NULL THEN
         RAISE EXCEPTION 'agenticorg_app can EXECUTE restricted functions: %', bad;

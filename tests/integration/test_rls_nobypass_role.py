@@ -166,9 +166,7 @@ async def test_signup_creates_tenant_user_and_seeded_defaults(env: _Env, client:
 
 @pytest.mark.asyncio
 async def test_login_by_email_before_tenant_is_known(env: _Env, client: AsyncClient) -> None:
-    resp = await client.post(
-        "/api/v1/auth/login", json={"email": env.tenant_a["email"], "password": _PASSWORD}
-    )
+    resp = await client.post("/api/v1/auth/login", json={"email": env.tenant_a["email"], "password": _PASSWORD})
     assert resp.status_code == 200, resp.text
     body = resp.json()
     assert body["user"]["tenant_id"] == env.tenant_a["tenant_id"]
@@ -251,10 +249,7 @@ async def test_run_agent_end_to_end_with_fake_chat_model(env: _Env, client: Asyn
         )
         audited = (
             await conn.execute(
-                text(
-                    "SELECT count(*) FROM audit_log WHERE event_type = 'agent.run' "
-                    "AND agent_id = CAST(:aid AS uuid)"
-                ),
+                text("SELECT count(*) FROM audit_log WHERE event_type = 'agent.run' AND agent_id = CAST(:aid AS uuid)"),
                 {"aid": env.tenant_a["agent_id"]},
             )
         ).scalar_one()
@@ -585,6 +580,33 @@ async def test_app_role_grants_are_least_privilege(env: _Env) -> None:
                     "WHERE decision_id = 'rls-none'"
                 )
             )
+
+    async with env.engine.connect() as conn:
+        has_witness, has_retention_fn = (
+            await conn.execute(
+                text(
+                    "SELECT to_regclass('public.audit_chain_witness_checkpoints') IS NOT NULL, "
+                    "to_regprocedure('public.oacp_delete_due_manifest(text, text)') IS NOT NULL"
+                )
+            )
+        ).one()
+    if has_witness:
+        for statement in (
+            "UPDATE audit_chain_witness_checkpoints SET tenant_id = tenant_id",
+            "DELETE FROM audit_chain_witness_checkpoints",
+        ):
+            message = await _refused(env, statement, tid)
+            assert "permission denied" in message, (statement, message)
+    if has_retention_fn:
+        # Retention deletes through the tenant-bound definer function, never by a DELETE grant.
+        message = await _refused(env, "DELETE FROM oacp_audit_review_manifest_records", tid)
+        assert "permission denied" in message, message
+        async with env.engine.connect() as conn:
+            assert (
+                await conn.execute(
+                    text("SELECT has_function_privilege('public.oacp_delete_due_manifest(text, text)', 'EXECUTE')")
+                )
+            ).scalar_one() is True
 
     async with env.engine.connect() as conn:
         # Schema version stays readable (init_db's head check).

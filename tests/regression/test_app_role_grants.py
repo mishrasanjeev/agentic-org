@@ -31,6 +31,8 @@ IMMUTABILITY_FUNCTIONS = {
     # v6z88_commerce_ledger (commerce arbiter decisions, OACP decision records).
     "commerce_arbiter_decisions_guard",
     "oacp_record_reject_mutation",
+    "oacp_manifest_retention_guard",
+    "audit_chain_witness_reject_mutation",
 }
 # Column-scoped UPDATE the script grants on append-only tables, for the one
 # transition each trigger allows.
@@ -41,9 +43,14 @@ TRANSITION_COLUMNS = {
 # A function name that reads like one of the above must be classified here.
 IMMUTABILITY_NAME = re.compile(r"immutable|append_only|reject_mutation|prevent_\w*mutation", re.I)
 # Restricted (SECURITY DEFINER, non-trigger) functions: the ones the
-# application calls, and the ones it must not (none yet). Every such function
-# a migration defines must be in one of the two.
-APP_CALLABLE_FUNCTIONS = {"gemini_daily_platform_spend"}
+# application calls (with the module that calls each), and the ones it must
+# not (none yet). Every such function a migration defines must be in one of
+# the two. The script grants the first set where each function exists.
+APP_CALLABLE_FUNCTIONS = {
+    "gemini_daily_platform_spend": "core/llm/router.py",
+    # v6z88_commerce_ledger: tenant-bound retention delete of a due manifest.
+    "oacp_delete_due_manifest": "core/commerce/oacp_retention.py",
+}
 NOT_APP_CALLABLE_FUNCTIONS: set[str] = set()
 
 
@@ -200,16 +207,30 @@ def test_only_the_platform_spend_function_is_granted_execute():
         header = " ".join(match.group(0).upper().split())
         if "SECURITY DEFINER" in header and "RETURNS TRIGGER" not in header:
             definer.add(match.group(1))
-    assert definer == APP_CALLABLE_FUNCTIONS | NOT_APP_CALLABLE_FUNCTIONS, sorted(definer)
-    granted = set(
-        re.findall(
-            r"GRANT EXECUTE ON FUNCTION\s+(?:public\.)?(\w+)\s*\(", _do_blocks() + "\n".join(_statements()), re.I
-        )
-    )
-    assert granted == APP_CALLABLE_FUNCTIONS
-    router = (ROOT / "core" / "llm" / "router.py").read_text(encoding="utf-8")
-    for name in APP_CALLABLE_FUNCTIONS:
-        assert f"public.{name}()" in router
+    assert "gemini_daily_platform_spend" in definer
+    unclassified = definer - set(APP_CALLABLE_FUNCTIONS) - NOT_APP_CALLABLE_FUNCTIONS
+    assert not unclassified, f"classify these SECURITY DEFINER functions: {sorted(unclassified)}"
+    # The script's allow-list (granted where the function exists) is exactly the app-callable set.
+    blocks = _do_blocks()
+    allow = re.search(r"FOREACH fn IN ARRAY ARRAY\[(.*?)\] LOOP", blocks, re.S)
+    assert allow, "function allow-list not found"
+    listed = set(re.findall(r"'public\.(\w+)\(", allow.group(1)))
+    assert listed == set(APP_CALLABLE_FUNCTIONS)
+    # The fail-closed check uses the same list.
+    check = re.search(r"p\.oid NOT IN \(SELECT to_regprocedure\(f\)::oid FROM unnest\(ARRAY\[(.*?)\]\)", blocks, re.S)
+    assert check and set(re.findall(r"'public\.(\w+)\(", check.group(1))) == listed
+    # Every allowed function that a migration on this branch defines is called by the application.
+    for name, caller in APP_CALLABLE_FUNCTIONS.items():
+        if name in definer:
+            assert name in (ROOT / caller).read_text(encoding="utf-8"), (name, caller)
+
+
+def test_trigger_rule_lists_every_immutability_function():
+    blocks = _do_blocks()
+    lists = re.findall(r"p\.proname IN \((.*?)\)", blocks, re.S)
+    assert len(lists) == 2  # the revoke rule (3b) and the fail-closed check
+    for found in lists:
+        assert set(re.findall(r"'(\w+)'", found)) == IMMUTABILITY_FUNCTIONS
 
 
 def test_migration_owned_tables_are_not_writable():
@@ -235,4 +256,4 @@ def test_fail_closed_checks_cover_each_class():
     blocks = _do_blocks()
     for check in ("rolbypassrls", "'TRUNCATE'", "'CREATE'", "prosecdef", "gemini_daily_platform_spend"):
         assert check in blocks, check
-    assert "Installer retained aggregate row access" in blocks
+    assert "Installer retained membership of" in blocks
