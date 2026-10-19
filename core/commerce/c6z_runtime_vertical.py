@@ -997,7 +997,7 @@ async def fetch_grantex_artifact_replay(
     url = f"{base_url}/v1/commerce/oacp/artifacts"
     try:
         # Scheme and host checks only; the pinned transport validates DNS answers asynchronously.
-        validate_public_url(url, require_dns=False)
+        await validate_public_url_async(url, require_dns=False)
     except EgressValidationError as exc:
         raise C6ZRuntimeValidationError("unsafe Grantex replay endpoint") from exc
     client_transport = transport or build_pinned_async_transport(require_dns=True)

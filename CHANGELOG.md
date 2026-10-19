@@ -36,6 +36,9 @@
   `commerce_arbiter_decisions` under forced RLS, append-only triggers, and the `audit_log`
   append-only trigger reinstalled (an empty-schema bootstrap was stamped past the baseline that
   created it). Docs: `docs/oacp/arbiter-ledger.md`.
+- The Grantex replay fetch and the OACP trust endpoint fetch validate their URLs with the
+  async egress validator (`tests/regression/test_egress_async_callers.py`), so no async
+  commerce path calls the synchronous validator.
 
 ## Unreleased - OACP artifact verification before caching (G5)
 
