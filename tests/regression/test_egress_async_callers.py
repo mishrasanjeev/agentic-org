@@ -40,8 +40,13 @@ def _sync_egress_calls_inside_async_defs() -> list[str]:
         for path in sorted((REPO / root).rglob("*.py")):
             if path.name == "egress.py":
                 continue
+            source = path.read_text(encoding="utf-8")
+            # Parse only files that name a sync variant: a whole-tree AST walk
+            # under coverage tracing is slow enough to trip the per-test timeout.
+            if not any(name in source for name in SYNC_VARIANTS):
+                continue
             try:
-                tree = ast.parse(path.read_text(encoding="utf-8"))
+                tree = ast.parse(source)
             except SyntaxError:
                 # Sandbox interpreters older than the repo target skip the file.
                 continue
