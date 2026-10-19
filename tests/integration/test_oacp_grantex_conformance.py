@@ -62,7 +62,6 @@ pytestmark = pytest.mark.skipif(
 )
 
 
-
 @pytest.fixture(autouse=True)
 def _real_http(monkeypatch: pytest.MonkeyPatch) -> None:
     """Reach the live Grantex: the suite-wide fake-connector httpx patch answers 404 otherwise."""
