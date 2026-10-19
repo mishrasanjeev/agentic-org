@@ -284,6 +284,20 @@ class Settings(BaseSettings):
     # failures are logged as irregularities and the artifacts are cached
     # without a verifier_result_ref. Env: AGENTICORG_OACP_VERIFY_STRICT.
     oacp_verify_strict: bool | None = None
+    # Commerce arbiter (core/commerce/arbiter.py), rule buyer_authority_verified:
+    # refuse buyer authority (mandate, consent, passport) that carries no
+    # server-side verification ref. Unset, on in strict runtimes, off in
+    # local/dev/test/ci (the decision then records buyer_authority_source:
+    # caller_asserted). Env: AGENTICORG_ARBITER_REQUIRE_VERIFIED_AUTHORITY.
+    arbiter_require_verified_authority: bool | None = None
+    # An allow decision is consumable only once Grantex countersigned it
+    # (core/commerce/arbiter_grantex.py); without the grant require_allow_decision
+    # refuses grantex_grant_missing. Unset, on in strict runtimes.
+    # Env: AGENTICORG_ARBITER_REQUIRE_GRANTEX_GRANT.
+    arbiter_require_grantex_grant: bool | None = None
+    # Post every arbiter decision to Grantex POST /v1/commerce/oacp/arbiter-decisions.
+    # Unset, follows arbiter_require_grantex_grant. Env: AGENTICORG_ARBITER_GRANTEX_POST_ENABLED.
+    arbiter_grantex_post_enabled: bool | None = None
     # route_meta enforcement (api/route_enforcement.py): "enforce" | "log"
     route_enforcement_mode: str = "enforce"
     # Route scope checks for the A2A and MCP families (FINDINGS A-68). Off, they
@@ -414,6 +428,15 @@ class Settings(BaseSettings):
     # commerce ledger (core/commerce/ledger.py) is tamper-evident. Off by
     # default. Env: AGENTICORG_AUDIT_CHAIN_DEFAULT_ON.
     audit_chain_default_on: bool = False
+    # After each sealing, post the tenant's chain head to Grantex
+    # POST /v1/audit/witness-checkpoints and store the verified countersignature
+    # (core/governance/audit_witness.py). Off by default.
+    # Env: AGENTICORG_AUDIT_WITNESS_ENABLED.
+    audit_witness_enabled: bool = False
+    # The retention task (core/tasks/commerce_ledger_tasks.py) deletes OACP review
+    # manifests whose retention disposition is due (core/commerce/oacp_retention.py).
+    # Off by default. Env: AGENTICORG_OACP_RETENTION_APPLY_ENABLED.
+    oacp_retention_apply_enabled: bool = False
     # UCP transactions (api/v1/commerce_ucp.py): checkout sessions, carts and
     # orders at https://<merchant serving host>/ucp. Off by default: every /ucp
     # route answers 404 while off. Env: AGENTICORG_UCP_CHECKOUT_ENABLED.
@@ -1025,6 +1048,34 @@ def grantex_issuer_for_env(env: str | None = None) -> str:
     except Exception:
         return ""
     return str(_derive_issuer_from_jwks_uri(grantex_jwks_uri_for_env(env))).rstrip("/")
+
+
+def _strict_default_flag(name: str, env: str | None) -> bool:
+    """A tri-state flag: the explicit setting wins; unset, on in strict runtimes (``is_strict_runtime_env``)."""
+    configured_settings = globals().get("settings")
+    explicit = getattr(configured_settings, name, None)
+    if isinstance(explicit, bool):
+        return explicit
+    return is_strict_runtime_env(env if env is not None else getattr(configured_settings, "env", None))
+
+
+def arbiter_require_verified_authority_enabled(env: str | None = None) -> bool:
+    """Whether the arbiter refuses caller-asserted buyer authority (``..._REQUIRE_VERIFIED_AUTHORITY``)."""
+    return _strict_default_flag("arbiter_require_verified_authority", env)
+
+
+def arbiter_require_grantex_grant_enabled(env: str | None = None) -> bool:
+    """Whether an allow needs a verified Grantex grant to be consumed (``..._REQUIRE_GRANTEX_GRANT``)."""
+    return _strict_default_flag("arbiter_require_grantex_grant", env)
+
+
+def arbiter_grantex_post_enabled(env: str | None = None) -> bool:
+    """Whether arbiter decisions are posted to Grantex (``..._GRANTEX_POST_ENABLED``; unset: the grant flag)."""
+    configured_settings = globals().get("settings")
+    explicit = getattr(configured_settings, "arbiter_grantex_post_enabled", None)
+    if isinstance(explicit, bool):
+        return explicit
+    return arbiter_require_grantex_grant_enabled(env)
 
 
 def oacp_verify_strict_enabled(env: str | None = None) -> bool:

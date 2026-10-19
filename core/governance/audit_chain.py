@@ -39,7 +39,6 @@ the commerce ledger (``core.commerce.ledger``) is tamper-evident.
 
 from __future__ import annotations
 
-import hashlib
 import uuid
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
@@ -48,12 +47,13 @@ from typing import Any
 import structlog
 
 from core.config import settings
-from core.tool_gateway.audit_logger import canonical_audit_payload, verify_audit_row
+from core.governance.audit_chain_link import CHAIN_VERSION, GENESIS, link_hash
+from core.tool_gateway.audit_logger import verify_audit_row
 
 logger = structlog.get_logger()
 
-CHAIN_VERSION = "1"
-GENESIS = "0" * 64
+__all__ = ["CHAIN_VERSION", "GENESIS", "link_hash"]  # re-exported: the link arithmetic lives in audit_chain_link
+
 PAGE = 1000
 BREAK_REASONS: tuple[str, ...] = (
     "sequence_gap",
@@ -85,13 +85,6 @@ BEGIN
       USING ERRCODE = 'insufficient_privilege';
 END;
 $$ LANGUAGE plpgsql;"""
-
-
-def link_hash(prev_hash: str, row: Any) -> str:
-    """The link for ``row`` after ``prev_hash``: SHA-256 over the version, that link, the payload and the signature."""
-    signature = str(getattr(row, "signature", None) or "")
-    material = f"{CHAIN_VERSION}|{prev_hash}|{canonical_audit_payload(row)}|{signature}"
-    return hashlib.sha256(material.encode("utf-8")).hexdigest()
 
 
 @dataclass(frozen=True)

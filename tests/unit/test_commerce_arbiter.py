@@ -191,7 +191,8 @@ def test_an_empty_context_refuses_on_the_first_rule() -> None:
     )
     assert decision.outcome == "refuse"
     assert decision.failing_rule == "mandate_present_unexpired"
-    assert all(not result.passed for result in decision.rule_results)
+    # Every evidence rule fails; buyer_authority_verified only refuses when verified authority is required.
+    assert all(not result.passed for result in decision.rule_results if result.rule != "buyer_authority_verified")
 
 
 def test_mandate_request_does_not_require_a_mandate() -> None:
@@ -273,3 +274,72 @@ def test_arbiter_module_has_no_clock_io_or_human_dependency() -> None:
     assert not any(call.endswith((".now", ".utcnow", ".today")) or call in {"time.time", "time.monotonic"}
                    for call in calls)
     assert "pending" not in {arbiter.Outcome.__args__[0], arbiter.Outcome.__args__[1]}
+
+
+# ---------------------------------------------------------------------------
+# buyer_authority_verified (D1): fail closed on caller-asserted authority
+# ---------------------------------------------------------------------------
+
+
+def test_caller_asserted_authority_is_refused_when_verified_authority_is_required() -> None:
+    decision = decide("purchase_handoff", _context(require_verified_authority=True))
+    assert decision.outcome == "refuse"
+    assert decision.failing_rule == "buyer_authority_verified"
+    assert decision.reason == "buyer_authority_caller_asserted"
+    assert decision.to_public()["buyer_authority_source"] == "caller_asserted"
+
+
+def test_caller_asserted_authority_is_recorded_and_allowed_when_not_required() -> None:
+    decision = decide("purchase_handoff", _context(require_verified_authority=False))
+    assert decision.outcome == "allow"
+    assert "buyer_authority_verified" in decision.rules_evaluated
+    assert decision.to_public()["buyer_authority_source"] == "caller_asserted"
+    [result] = [r for r in decision.rule_results if r.rule == "buyer_authority_verified"]
+    assert result.passed and result.reason == "buyer_authority_caller_asserted_accepted"
+
+
+def test_server_verified_authority_passes_the_rule_when_required() -> None:
+    decision = decide(
+        "pos_handoff", _context(require_verified_authority=True, authority_verification_ref="mandate-verification-1")
+    )
+    assert decision.outcome == "allow"
+    assert decision.to_public()["buyer_authority_source"] == "server_verified"
+
+
+def test_the_requirement_changes_the_decision_id() -> None:
+    assert decide("pos_handoff", _context()).decision_id != decide(
+        "pos_handoff", _context(require_verified_authority=True)
+    ).decision_id
+
+
+def test_mandate_request_also_requires_verified_authority() -> None:
+    decision = decide("mandate_request", _context(mandate=None, require_verified_authority=True))
+    assert decision.failing_rule == "buyer_authority_verified"
+
+
+@pytest.mark.parametrize(
+    ("env", "explicit", "expected"),
+    [
+        ("production", None, True),
+        ("staging", None, True),
+        ("preview-unknown", None, True),
+        ("development", None, False),
+        ("test", None, False),
+        ("production", False, False),
+        ("development", True, True),
+    ],
+)
+def test_require_verified_authority_flag_defaults_on_in_strict_runtimes(monkeypatch, env, explicit, expected) -> None:
+    from core import config
+
+    monkeypatch.setattr(config.settings, "arbiter_require_verified_authority", explicit)
+    assert config.arbiter_require_verified_authority_enabled(env) is expected
+
+
+def test_buyer_authority_body_cannot_assert_a_verification_ref() -> None:
+    from pydantic import ValidationError
+
+    from api.v1.commerce_runtime import BuyerAuthorityEvidence
+
+    with pytest.raises(ValidationError):
+        BuyerAuthorityEvidence(authority_verification_ref="forged")  # type: ignore[call-arg]

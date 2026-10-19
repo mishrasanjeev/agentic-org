@@ -191,3 +191,12 @@ class FakeGrantex:
 
     def transport_factory(self) -> Callable[[], httpx.MockTransport]:
         return lambda: httpx.MockTransport(self.handler)
+
+
+def sign_compact_jwt(key: EcSigningKey | RsaSigningKey, claims: Mapping[str, Any], *, typ: str) -> str:
+    """A compact JWS with an attached payload (decision grants, witness countersignatures)."""
+    alg = "ES256" if isinstance(key, EcSigningKey) else "RS256"
+    header_b64 = b64url_encode(json.dumps({"alg": alg, "kid": key.kid, "typ": typ}).encode())
+    claims_b64 = b64url_encode(json.dumps(dict(claims)).encode())
+    signing_input = f"{header_b64}.{claims_b64}".encode("ascii")
+    return f"{header_b64}.{claims_b64}.{b64url_encode(key.sign(signing_input))}"

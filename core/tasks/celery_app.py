@@ -48,6 +48,7 @@ app = Celery(
         "core.tasks.budget_tasks",
         "core.tasks.case_push_tasks",
         "core.tasks.channel_tasks",
+        "core.tasks.commerce_ledger_tasks",
         "core.tasks.demo_tasks",
         "core.tasks.gateway_tasks",
         "core.tasks.health_snapshot",
@@ -230,6 +231,13 @@ app.conf.beat_schedule = {
         # Recomputes every tenant's chain and reports the first break of each.
         "task": "core.tasks.audit_chain_tasks.verify_audit_chains",
         "schedule": crontab(hour=4, minute=0),  # daily at 4:00 AM IST
+        "options": {"queue": "maintenance"},
+    },
+    "apply-oacp-retention": {
+        # Deletes OACP review manifests whose retention disposition is due; a no-op unless
+        # AGENTICORG_OACP_RETENTION_APPLY_ENABLED is true (core/tasks/commerce_ledger_tasks.py).
+        "task": "core.tasks.commerce_ledger_tasks.apply_oacp_retention",
+        "schedule": crontab(hour=4, minute=30),  # daily at 4:30 AM IST
         "options": {"queue": "maintenance"},
     },
     "run-synthetic-checks": {

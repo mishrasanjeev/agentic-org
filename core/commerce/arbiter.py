@@ -27,6 +27,13 @@ Rules:
     ``oacp-artifact-jws-v1;`` verifier ref with an ``oacp-`` key), that is fresh
     (freshness ``fresh``, expiry after ``now``) and whose revocation snapshot is
     ``fresh`` (not revoked, not ambiguous).
+``buyer_authority_verified``
+    The buyer authority (mandate, consent, passport) carries a server-side
+    verification ref. No such ref exists until server-verified mandates land
+    (Phase 4), so the evidence is caller-asserted: with
+    ``require_verified_authority`` (``AGENTICORG_ARBITER_REQUIRE_VERIFIED_AUTHORITY``,
+    on in strict runtimes) the rule refuses; off, it passes and the decision
+    records ``buyer_authority_source: caller_asserted``.
 ``merchant_limits``
     The merchant's arbiter limits are configured and the order is within them:
     a per-order amount cap, a currency allowlist and a per-order quantity cap.
@@ -47,7 +54,7 @@ from typing import Any, Literal
 
 from core.commerce.ledger import commerce_payload_hash, json_safe
 
-POLICY_VERSION = "commerce-arbiter-v1"
+POLICY_VERSION = "commerce-arbiter-v2"
 DECISION_TTL = timedelta(minutes=10)
 
 Action = Literal["purchase_handoff", "mandate_request", "pos_handoff", "session_complete"]
@@ -57,9 +64,19 @@ ACTIONS: tuple[str, ...] = ("purchase_handoff", "mandate_request", "pos_handoff"
 RULE_MANDATE = "mandate_present_unexpired"
 RULE_CONSENT = "consent_active"
 RULE_PASSPORT = "passport_amount_cap"
+RULE_AUTHORITY_VERIFIED = "buyer_authority_verified"
 RULE_ARTIFACTS = "oacp_artifacts_valid"
 RULE_MERCHANT_LIMITS = "merchant_limits"
-RULE_ORDER: tuple[str, ...] = (RULE_MANDATE, RULE_CONSENT, RULE_PASSPORT, RULE_ARTIFACTS, RULE_MERCHANT_LIMITS)
+RULE_ORDER: tuple[str, ...] = (
+    RULE_MANDATE,
+    RULE_CONSENT,
+    RULE_PASSPORT,
+    RULE_AUTHORITY_VERIFIED,
+    RULE_ARTIFACTS,
+    RULE_MERCHANT_LIMITS,
+)
+AUTHORITY_SERVER_VERIFIED = "server_verified"
+AUTHORITY_CALLER_ASSERTED = "caller_asserted"
 
 ACTIVE_CONSENT_STATUSES = frozenset({"active", "granted"})
 VERIFIER_REF_PREFIX = "oacp-artifact-jws-v1;"
@@ -158,6 +175,15 @@ class ArbiterContext:
     passport: PassportEvidence | None = None
     artifacts: tuple[ArtifactEvidence, ...] = ()
     merchant_limits: MerchantLimits | None = None
+    # A server-side verification ref for the buyer authority (none exists before Phase 4;
+    # never taken from the request body). Without one the authority is caller-asserted.
+    authority_verification_ref: str | None = None
+    # Refuse caller-asserted authority (AGENTICORG_ARBITER_REQUIRE_VERIFIED_AUTHORITY): an input, not read here.
+    require_verified_authority: bool = False
+
+    @property
+    def buyer_authority_source(self) -> str:
+        return AUTHORITY_SERVER_VERIFIED if self.authority_verification_ref else AUTHORITY_CALLER_ASSERTED
 
 
 @dataclass(frozen=True)
@@ -195,6 +221,10 @@ class Decision:
     def allowed(self) -> bool:
         return self.outcome == "allow"
 
+    @property
+    def buyer_authority_source(self) -> str:
+        return str(self.extra.get("buyer_authority_source") or AUTHORITY_CALLER_ASSERTED)
+
     def to_public(self) -> dict[str, Any]:
         """The decision as returned to the caller and sealed to the ledger (no raw evidence values)."""
         return {
@@ -206,6 +236,7 @@ class Decision:
             "reason": self.reason,
             "evidence_hashes": list(self.evidence_hashes),
             "payload_hash": self.payload_hash,
+            "buyer_authority_source": self.buyer_authority_source,
             "policy_version": self.policy_version,
             "decided_at": _iso(self.decided_at),
             "expires_at": _iso(self.expires_at),
@@ -258,6 +289,14 @@ def rule_passport_amount_cap(context: ArbiterContext) -> tuple[bool, str]:
     if context.amount_minor_units > passport.max_amount_minor_units:
         return False, "passport_amount_cap_exceeded"
     return True, "within_passport_amount_cap"
+
+
+def rule_buyer_authority_verified(context: ArbiterContext) -> tuple[bool, str]:
+    if context.authority_verification_ref:
+        return True, "buyer_authority_server_verified"
+    if context.require_verified_authority:
+        return False, "buyer_authority_caller_asserted"
+    return True, "buyer_authority_caller_asserted_accepted"
 
 
 def _artifact_in_scope(artifact: ArtifactEvidence, context: ArbiterContext) -> bool:
@@ -323,6 +362,7 @@ _RULES: dict[str, Callable[[ArbiterContext, str], tuple[bool, str]]] = {
     RULE_MANDATE: lambda context, _action: rule_mandate_present_unexpired(context),
     RULE_CONSENT: lambda context, _action: rule_consent_active(context),
     RULE_PASSPORT: lambda context, _action: rule_passport_amount_cap(context),
+    RULE_AUTHORITY_VERIFIED: lambda context, _action: rule_buyer_authority_verified(context),
     RULE_ARTIFACTS: rule_oacp_artifacts_valid,
     RULE_MERCHANT_LIMITS: lambda context, _action: rule_merchant_limits(context),
 }
@@ -375,6 +415,8 @@ def decision_id_for(context: ArbiterContext, action: str, payload_hash: str) -> 
             "action": action,
             "payload_hash": payload_hash,
             "evidence_hashes": list(evidence_hashes(context)),
+            "buyer_authority_source": context.buyer_authority_source,
+            "require_verified_authority": context.require_verified_authority,
             "now": _iso(context.now),
         }
     )
@@ -413,6 +455,7 @@ def decide(action: str, context: ArbiterContext) -> Decision:
         decided_at=context.now,
         expires_at=context.now + DECISION_TTL,
         reason=failing.reason if failing else "all_rules_passed",
+        extra={"buyer_authority_source": context.buyer_authority_source},
     )
 
 
