@@ -2,7 +2,7 @@
 
 **Status:** Mandatory for every bug fix, reopen analysis, and QA-driven PR.
 **Owner:** CLAUDE.md references this file directly.
-**Last updated:** 2026-06-14.
+**Last updated:** 2026-10-19.
 
 This file exists because reopens kept happening on the same bug IDs across three QA sweeps (Aishwarya 21-Apr, 22-Apr AM, 22-Apr PM). The diagnosis — documented in `~/.claude/projects/C--Users-mishr-agentic-org/memory/feedback_shallow_fix_autopsy.md` — was that I (the author) claimed "fixed" when the fix was hypothesis-grade. This skill codifies the process that must be followed so that "fixed" means the user will not see the bug again.
 
@@ -35,6 +35,18 @@ Permitted verdicts and the evidence they require:
 ---
 
 ## Rule 2 — Grep the symptom, not the pointer
+
+For multilingual masking failures, inspect the exact bytes presented to privacy
+analysis, not just the original UI text. Escaped Unicode JSON can trigger false
+identifier detection. Replay the original language through the packaged NLP
+model, preserve genuine PII tests, and sweep all model-facing serializers. For
+conversation bugs, prove the second run actually receives scoped text context;
+passing a thread identifier does not prove checkpoint reuse or memory. Never
+weaken tenant boundaries to make follow-ups work.
+When testing against the shared FastAPI application, restore every dependency
+override after each case (for example with `monkeypatch.setitem`). Replay the
+new test followed by unrelated domain routes; a leaked finance-only override
+must not make later marketing or HR authorization tests fail.
 
 When the bug report or reviewer points at a specific line (`api/v1/chat.py:373`), that line is a hint, not the fix target. Before writing any code:
 

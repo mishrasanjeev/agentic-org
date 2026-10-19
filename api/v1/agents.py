@@ -3542,6 +3542,20 @@ async def run_agent(
                 await _require_agent_runnable(chosen, tenant_id)
                 agent_row = chosen
                 agent_id = chosen.id
+        channel_scope = getattr(request.state, "channel_answer_scope", None)
+        if channel_scope is not None:
+            # Internal channel context may reach only the same answer-only target.
+            # Recheck after routing and DB reload; caller JSON cannot set request state.
+            actual_scope = {
+                "agent_id": str(agent_row.id),
+                "company_id": str(agent_row.company_id) if agent_row.company_id else None,
+            }
+            if (
+                channel_scope != actual_scope
+                or agent_row.authorized_tools != []
+                or (agent_row.config or {}).get("traffic_split") is not None
+            ):
+                raise HTTPException(409, detail={"error": "channel_context_scope_changed"})
         agent_config = _agent_to_dict(agent_row)
         review_learning = agent_config["review_learning"]
         dispatch_connector_ids = _required_connector_ids_for_agent(agent_row)

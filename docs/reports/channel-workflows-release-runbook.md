@@ -58,6 +58,36 @@ that output to Telegram, not a data-loss-prevention guarantee. Trace/tool-call
 records remain private and recognized secret-bearing output is withheld. Schema
 step-back retains the consent columns; old workers continue status-only replies.
 
+## Unicode and bounded answer-context repair
+
+Before releasing a language/context repair, replay the actual Unicode question
+through model-input assembly and the packaged privacy detector. JSON Unicode
+escapes can resemble identifiers to English recognizers; keep natural-language
+Unicode readable rather than bypassing PII scanning. Exercise both direct
+LangGraph and base-agent reasoning/synthesis message construction. Retain email,
+date, credential and numeric-quantity privacy regressions.
+
+For the existing explicit answer-mode opt-in only, verify two private linked
+turns using real PostgreSQL forced RLS and different API/worker signing keys.
+The second run may receive bounded safe text from confirmed replies for the
+same tenant, binding, user, delegation and agent/company. It must still get a
+new execution checkpoint. Test old targets/companies, foreign sender proof,
+expired history, status-only receipts and ambiguous provider sends as exclusions.
+Exclude configured traffic splits and recheck internal context scope after the
+API reloads/resolves the target, before any model call. Verify target/company/tool
+changes refuse dispatch without spending or handing context to an alternate
+agent. Retain the existing routing correlation, distinct from execution state.
+Keep the binding claim until answer acknowledgement is stamped into encrypted
+receipt data so a follow-up cannot race that stamp. Never retry an uncertain
+send or backfill old answers as acknowledged. No schema, flags, keys or budget
+changes are needed; the banking dialogue/action runtime remains unchanged.
+
+Account-backed Hindi/multi-turn acceptance is separate from these local tests.
+Record each run and actual reply, count its model cost against the approved
+remaining allowance, and preserve the owner's current permanent route. Do not
+restore an obsolete test route. Until fresh replies pass, report the language
+bug as open in production, even when the code and local tests pass.
+
 ## Reasoning default rollout
 
 Existing service environment overrides survive an image rollout. To apply the

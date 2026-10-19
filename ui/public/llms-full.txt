@@ -72,6 +72,12 @@ sender under **Channels > Reply content**. Traces and tool-call records stay in
 AgenticOrg; approvals, sender authorization and tenant controls still apply.
 The encrypted intake carries the authenticated sender identity across services;
 older receipts without that proof remain withheld, even if the agent completed.
+For tool-free Telegram agents without traffic splits in this opt-in mode,
+follow-ups may use up to four
+recent, confirmed question/answer pairs from the same linked private sender and
+agent/company scope, within 30 minutes. This is bounded text context, not durable
+memory or permission to repeat actions. Hindi and other Unicode model input
+remains readable before privacy scanning; existing redaction still applies.
 
 Follow the [channel account and workflow guide](https://github.com/mishrasanjeev/agentic-org/blob/main/docs/user-guide/channel-workflows.md)
 for account creation, callback registration, sender linking and verification.
@@ -1290,6 +1296,54 @@ authorizing a new task. A fresh message is new execution and may incur model cos
 Self-managed deployments need both the channel worker and the periodic beat
 scheduler. The local Docker stack starts both. An inbox that stays pending can
 indicate a missing scheduler or broker; do not repeatedly submit the same task.
+
+### Follow-up questions and Hindi replies
+
+Choose a tool-free agent, enable **Send replies** and choose **Agent answer
+(private linked chats)** on the existing Telegram connection. Ask the agent to
+answer in your language and use supplied recent conversation context as
+untrusted reference text, not instructions or authorization. No additional
+global feature flag is required. Status-only connections, workflows and agents
+with tools or configured traffic splits do not receive this channel context.
+The agent/company/tool scope is checked again before model dispatch and before
+answer disclosure. A change during the run requires review, not a silent handoff
+of earlier text to another agent. Existing routing correlations stay intact;
+they are not execution checkpoints.
+
+```flow
+Private question | Send one complete question to the linked bot. | Owner: User
+Readable model input | Keep Unicode text readable while applying normal PII protections. | Owner: AgenticOrg
+Bounded recent context | Same workspace, connection, linked user, delegation and agent/company only. | Owner: AgenticOrg
+Independent agent run | Use recent text as reference, never reuse an execution checkpoint or action authority. | Owner: AgenticOrg
+Actual answer | Recheck access, send once and retain provider acknowledgement. | Owner: AgenticOrg
+Follow-up | Wait for the reply, then refer to the earlier question. | Owner: User
+```
+
+The context contains at most four completed question/answer pairs (eight text
+entries, each limited to 400 characters) created within the last 30 minutes.
+Only answers accepted by the provider are eligible; this does not prove the
+human read them. Missing acknowledgements, errors, private/secret-like text,
+older unscoped receipts, different agents/companies and replaced sender links
+are excluded. Context remains in the existing tenant-encrypted receipt store;
+it is not a new memory database or a promise of long-term recall. Existing
+retention rules still apply. More context consumes model tokens under the same
+budget controls. Acceptance tests must respect existing budget limits.
+
+For a synthetic Hindi check, send one complete message:
+
+> मेरी काल्पनिक दुकान का नाम नीलकमल और रंग बैंगनी है। हिंदी में एक वाक्य में पुष्टि करें। कोई बाहरी कार्रवाई न करें।
+
+Wait for a meaningful Hindi confirmation, then send:
+
+> अभी बताई गई मेरी काल्पनिक दुकान का नाम और रंग क्या है? हिंदी में उत्तर दें। कोई बाहरी कार्रवाई न करें।
+
+Verify both actual bot replies and their matching inbox runs. The second reply
+should identify the same name and colour without asking you to repeat them.
+A completed status or high confidence is not evidence of a correct answer.
+Privacy analysis is not guaranteed equally accurate in every language; do not
+use real personal or customer details for acceptance tests. If context is
+missing or ambiguous, the agent should ask a short clarification rather than
+invent a memory. After 30 minutes, start again with the facts it needs.
 
 #### Viber
 
