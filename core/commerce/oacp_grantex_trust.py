@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """Verify Grantex-issued OACP artifacts before AgenticOrg caches them.
 
 Trust is pinned in configuration, never taken from an artifact:

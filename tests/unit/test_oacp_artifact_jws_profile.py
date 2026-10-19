@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """OACP artifact JWS profile v1: shared vectors and the local verifier.
 
 Every case in tests/fixtures/oacp/oacp-artifact-jws-v1.json must produce the
