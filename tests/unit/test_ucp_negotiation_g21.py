@@ -9,7 +9,7 @@ from typing import Any
 import pytest
 
 from core.commerce.ucp import negotiation as n
-from core.commerce.ucp.registry import DEFAULT_REGISTRY, RegistryContext
+from core.commerce.ucp.capabilities import DEFAULT_REGISTRY, RegistryContext
 from tests import ucp_fixtures as uf
 
 TENANT = str(uuid.UUID("00000000-0000-4000-8000-0000000000a3"))

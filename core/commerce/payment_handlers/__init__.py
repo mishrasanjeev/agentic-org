@@ -20,8 +20,8 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any, Protocol
 
+from core.commerce.ucp.capabilities import DEFAULT_REGISTRY, PaymentHandlerEntry, Registry
 from core.commerce.ucp.merchant import MerchantUcp
-from core.commerce.ucp.registry import DEFAULT_REGISTRY, PaymentHandlerEntry, Registry
 
 
 @dataclass(frozen=True)

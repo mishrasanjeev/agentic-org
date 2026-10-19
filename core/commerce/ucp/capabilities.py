@@ -19,7 +19,7 @@ from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 from typing import Any, Protocol
 
-from core.commerce.ucp import versions as v
+from core.commerce.ucp import releases as v
 from core.commerce.ucp.merchant import MerchantUcp
 
 

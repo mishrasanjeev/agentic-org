@@ -14,8 +14,8 @@ from cryptography.hazmat.primitives.asymmetric import ec
 
 from core.commerce import executors
 from core.commerce.ucp import handlers
-from core.commerce.ucp.catalog import ProductEvidenceCatalog
 from core.commerce.ucp.httpsig import LocalEs256Signer
+from core.commerce.ucp.items import ProductEvidenceCatalog
 from core.commerce.ucp.merchant import MerchantUcp, merchant_ucp_from_config
 from core.commerce.ucp.shopify_reads import DeliveryRate
 from tests import commerce_arbiter_fixtures as fx

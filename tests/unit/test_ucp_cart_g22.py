@@ -9,11 +9,11 @@ from typing import Any
 
 import pytest
 
-from core.commerce.ucp.catalog import ProductEvidenceCatalog
+from core.commerce.ucp.capabilities import DEFAULT_REGISTRY, RegistryContext
 from core.commerce.ucp.checkout import EngineDeps, evaluate, permalink_url
 from core.commerce.ucp.handlers import _cart_as_checkout_body
+from core.commerce.ucp.items import ProductEvidenceCatalog
 from core.commerce.ucp.negotiation import negotiate
-from core.commerce.ucp.registry import DEFAULT_REGISTRY, RegistryContext
 from core.commerce.ucp.renderers import render_cart
 from tests import ucp_fixtures as uf
 from tests import ucp_schema

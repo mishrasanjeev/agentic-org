@@ -24,9 +24,9 @@ from __future__ import annotations
 from typing import Any
 
 from core.commerce.payment_handlers import Allowance, register_payment_handler
-from core.commerce.ucp import versions as v
+from core.commerce.ucp import releases as v
+from core.commerce.ucp.capabilities import PaymentHandlerEntry
 from core.commerce.ucp.merchant import MerchantUcp
-from core.commerce.ucp.registry import PaymentHandlerEntry
 
 HANDLER_NAME = "ai.agenticorg.payment.plural_tokenized"
 HANDLER_ID = "plural_tokenized"

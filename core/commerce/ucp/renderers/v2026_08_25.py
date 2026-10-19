@@ -18,9 +18,9 @@ from collections.abc import Mapping, Sequence
 from typing import Any
 
 from core.commerce.payment_handlers import registered_handlers
+from core.commerce.ucp.capabilities import PaymentHandlerEntry
 from core.commerce.ucp.consent import render_consent
 from core.commerce.ucp.negotiation import Negotiated
-from core.commerce.ucp.registry import PaymentHandlerEntry
 
 VERSION = "2026-08-25"
 

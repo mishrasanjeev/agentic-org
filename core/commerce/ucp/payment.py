@@ -32,7 +32,7 @@ from typing import Any
 from core.commerce.ledger import commerce_payload_hash
 from core.commerce.payment_handlers import resolve_handler, satisfies
 from core.commerce.ucp import messages as msg
-from core.commerce.ucp import versions as v
+from core.commerce.ucp import releases as v
 from core.commerce.ucp.merchant import MerchantUcp
 
 DISPLAY_FIELDS = ("brand", "last_digits", "expiry_month", "expiry_year", "description", "card_art")

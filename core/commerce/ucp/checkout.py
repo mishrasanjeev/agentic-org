@@ -38,10 +38,10 @@ from datetime import datetime
 from typing import Any
 
 from core.commerce.ucp import messages as msg
-from core.commerce.ucp import versions as v
-from core.commerce.ucp.catalog import CatalogItem, ItemCatalog
+from core.commerce.ucp import releases as v
 from core.commerce.ucp.consent import ConsentRequestError, parse_consent
 from core.commerce.ucp.fulfillment import FulfillmentRequestError, RatesSource, build_fulfillment
+from core.commerce.ucp.items import CatalogItem, ItemCatalog
 from core.commerce.ucp.loyalty import loyalty_view
 from core.commerce.ucp.merchant import MerchantUcp
 from core.commerce.ucp.negotiation import Negotiated

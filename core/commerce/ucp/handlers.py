@@ -37,8 +37,10 @@ from core.commerce.arbiter_store import DecisionRefusedError, persist_decision
 from core.commerce.ledger import commerce_payload_hash, record_commerce_event
 from core.commerce.ucp import idempotency
 from core.commerce.ucp import messages as msg
-from core.commerce.ucp import versions as v
-from core.commerce.ucp.authority import (
+from core.commerce.ucp import releases as v
+from core.commerce.ucp.capabilities import DEFAULT_REGISTRY, Registry, RegistryContext
+from core.commerce.ucp.checkout import FROZEN, TERMINAL, EngineDeps, RequestError, evaluate, status_for
+from core.commerce.ucp.completion import (
     CHECKOUT_MANDATE,
     VENDOR_MEMBER,
     AuthorityRequestError,
@@ -48,10 +50,9 @@ from core.commerce.ucp.authority import (
     parse_buyer_authority,
     vendor_member,
 )
-from core.commerce.ucp.catalog import ItemCatalog
-from core.commerce.ucp.checkout import FROZEN, TERMINAL, EngineDeps, RequestError, evaluate, status_for
 from core.commerce.ucp.fulfillment import RatesSource
 from core.commerce.ucp.httpsig import MerchantSigner, SigningKeyUnavailableError, detached_jws
+from core.commerce.ucp.items import ItemCatalog
 from core.commerce.ucp.merchant import MerchantUcp, ServingHostResolver
 from core.commerce.ucp.negotiation import Negotiated, NegotiationError, ProfileFetcher, negotiate
 from core.commerce.ucp.orders import (
@@ -62,7 +63,6 @@ from core.commerce.ucp.orders import (
     new_order_id,
 )
 from core.commerce.ucp.payment import Instrument, PaymentRequestError, completion_messages, parse_payment, token_binding
-from core.commerce.ucp.registry import DEFAULT_REGISTRY, Registry, RegistryContext
 from core.commerce.ucp.renderers import SessionView, render_cart, render_checkout, render_order
 from core.commerce.ucp.shopify_reads import ShopifyReads
 

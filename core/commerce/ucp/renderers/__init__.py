@@ -15,10 +15,10 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
 
-from core.commerce.ucp import versions as v
+from core.commerce.ucp import releases as v
+from core.commerce.ucp.capabilities import PaymentHandlerEntry
 from core.commerce.ucp.merchant import MerchantUcp
 from core.commerce.ucp.negotiation import Negotiated
-from core.commerce.ucp.registry import PaymentHandlerEntry
 from core.commerce.ucp.renderers import v2026_04_08, v2026_08_25
 
 

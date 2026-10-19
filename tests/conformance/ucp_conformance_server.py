@@ -64,11 +64,11 @@ def build_app(data_dir: Path, secret: str, version: str) -> FastAPI:  # noqa: C9
     from core.commerce import executors
     from core.commerce.payment_handlers import Allowance, register_payment_handler
     from core.commerce.ucp import handlers, webhooks
-    from core.commerce.ucp.catalog import CatalogItem
+    from core.commerce.ucp.capabilities import DEFAULT_REGISTRY, PaymentHandlerEntry, RegistryContext
     from core.commerce.ucp.httpsig import LocalEs256Signer
+    from core.commerce.ucp.items import CatalogItem
     from core.commerce.ucp.merchant import merchant_ucp_from_config
     from core.commerce.ucp.quantity import EACH_UNIT
-    from core.commerce.ucp.registry import DEFAULT_REGISTRY, PaymentHandlerEntry, RegistryContext
     from core.commerce.ucp.shopify_reads import DeliveryRate
     from core.config import settings
     from tests import commerce_arbiter_fixtures as fx

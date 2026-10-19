@@ -27,9 +27,9 @@ from typing import Any
 import httpx
 import structlog
 
-from core.commerce.ucp import versions as v
+from core.commerce.ucp import releases as v
+from core.commerce.ucp.capabilities import CapabilityEntry, CapabilityRegistry, RegistryContext
 from core.commerce.ucp.merchant import MerchantUcp
-from core.commerce.ucp.registry import CapabilityEntry, CapabilityRegistry, RegistryContext
 
 logger = structlog.get_logger()
 

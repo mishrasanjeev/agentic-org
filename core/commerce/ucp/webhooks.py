@@ -49,7 +49,7 @@ from sqlalchemy import select
 
 from core.cases.push import PushSettings, SigningKey, decrypt_keys, retry_delay, sign, validate_endpoint_url
 from core.commerce.ledger import commerce_payload_hash
-from core.commerce.ucp import versions as v
+from core.commerce.ucp import releases as v
 from core.commerce.ucp.httpsig import MerchantSigner, SigningKeyUnavailableError, sign_request
 from core.commerce.ucp.orders import OrderEvent
 from core.commerce.ucp.renderers import render_order

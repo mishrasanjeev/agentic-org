@@ -10,10 +10,10 @@ from typing import Any
 import pytest
 
 from core.commerce.ucp import quantity as q
-from core.commerce.ucp.catalog import ProductEvidenceCatalog
+from core.commerce.ucp.capabilities import DEFAULT_REGISTRY, RegistryContext
 from core.commerce.ucp.checkout import EngineDeps, RequestError, evaluate
+from core.commerce.ucp.items import ProductEvidenceCatalog
 from core.commerce.ucp.negotiation import negotiate
-from core.commerce.ucp.registry import DEFAULT_REGISTRY, RegistryContext
 from tests import ucp_fixtures as uf
 from tests import ucp_schema
 

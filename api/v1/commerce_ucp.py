@@ -42,7 +42,7 @@ from api.route_metadata import route_meta
 from core.commerce.c6z_runtime_vertical import ShopifyCredentials
 from core.commerce.ledger import commerce_payload_hash, record_commerce_event, record_commerce_event_in_own_transaction
 from core.commerce.ucp import handlers
-from core.commerce.ucp.catalog import ProductEvidenceCatalog
+from core.commerce.ucp.items import ProductEvidenceCatalog
 from core.commerce.ucp.merchant import MerchantUcp, TenantConfigHostResolver
 from core.commerce.ucp.shopify_reads import ShopifyAdminReads, ShopifyReads
 from core.commerce.ucp.webhooks import (
