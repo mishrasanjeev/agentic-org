@@ -319,7 +319,7 @@ test.describe("C6Z commerce runtime demo", () => {
     const purchaseCall = calls.find((call) =>
       call.path.endsWith("/api/v1/commerce/runtime/purchase/prepare"),
     );
-    expect(purchaseCall?.body.live_execution_approved).toBe(false);
+    expect(purchaseCall?.body.live_execution_approved).toBeUndefined();
 
     const bodyText = await page.locator("body").innerText();
     expect(bodyText).not.toMatch(/create checkout|create order|create mandate|capture payment/i);

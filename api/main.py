@@ -236,10 +236,11 @@ async def lifespan(app: FastAPI):
 _is_strict_runtime = is_strict_runtime_env(settings.env)
 
 app = FastAPI(
-    # route_meta(scope=, rate_limit=) is enforced at request time for every
-    # route (api/route_enforcement.py) — the annotations are no longer
-    # documentation-only.
-    dependencies=[Depends(enforce_route_metadata)],
+    # route_meta(scope=, rate_limit=, audit_event=) is enforced at request
+    # time for every route (api/route_enforcement.py) — the annotations are no
+    # longer documentation-only. scope="function": the commerce ledger check
+    # runs after the handler and before the response is sent.
+    dependencies=[Depends(enforce_route_metadata, scope="function")],
     title="AgenticOrg",
     description=("AI Virtual Employee Platform. Real-time counts: GET /api/v1/product-facts."),
     version=product_facts._version_from_pyproject(),

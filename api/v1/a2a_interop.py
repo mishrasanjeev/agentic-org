@@ -19,6 +19,7 @@ from api.route_metadata import route_meta
 from api.v1 import a2a as legacy_a2a
 from api.v1.commerce_runtime import _answer_buyer_question_for_scope
 from core.commerce.a2a_buyer_access import _QUERYABLE_SELLER_STATES, mint_buyer_token
+from core.commerce.ledger import record_commerce_event, record_commerce_event_in_own_transaction
 from core.database import get_tenant_session
 from core.models.commerce_a2a_buyer_access import CommerceA2ABuyerAccess
 from core.models.commerce_c6z_runtime import C6ZSellerOnboardingPacketRow
@@ -156,6 +157,13 @@ async def create_buyer_access(
             seller_agent_id=body.seller_agent_id, buyer_agent_id=body.buyer_agent_id,
             token_hash=digest, status="active", expires_at=expires_at,
         ))
+        # The ledger keeps the token digest, never the token.
+        await record_commerce_event(
+            session, tenant_id=tenant_id, event="a2a.commerce_buyer_access.create", outcome="success",
+            merchant_id=body.merchant_id, seller_agent_id=body.seller_agent_id, buyer_agent_id=body.buyer_agent_id,
+            payload={"access_id": str(access_id), "token_hash": digest, "expires_at": expires_at},
+            resource_id=str(access_id),
+        )
     return {
         "id": str(access_id), "buyer_agent_id": body.buyer_agent_id,
         "merchant_id": body.merchant_id, "seller_agent_id": body.seller_agent_id,
@@ -199,6 +207,12 @@ async def revoke_buyer_access(
             raise HTTPException(404, "Buyer access not found")
         row.status = "revoked"
         row.revoked_at = datetime.now(UTC)
+        await record_commerce_event(
+            session, tenant_id=tenant_id, event="a2a.commerce_buyer_access.revoke", outcome="success",
+            merchant_id=row.merchant_id, seller_agent_id=row.seller_agent_id, buyer_agent_id=row.buyer_agent_id,
+            payload={"access_id": str(access_id), "status": "revoked", "revoked_at": row.revoked_at},
+            resource_id=str(access_id),
+        )
     return {"id": str(access_id), "status": "revoked"}
 
 
@@ -233,6 +247,7 @@ async def send_message(
     body: A2ASendRequest, request: Request, response: Response,
 ) -> dict[str, Any] | JSONResponse:
     if (version_error := _version_error(request)) is not None:
+        await _record_send(request, outcome="refused", payload={"reason": "version_not_supported"})
         return version_error
     response.headers["Content-Type"] = "application/a2a+json"
     if body.message.task_id or body.configuration.get("taskPushNotificationConfig"):
@@ -277,6 +292,7 @@ async def _answer_seller_message(body: A2ASendRequest, request: Request) -> dict
         question=question,
         action_intent="non_binding_preview",
         grantex_available=False,
+        ledger_event="a2a.message.send",
     )
     return {"text": answer["answer"], "metadata": {
         "status": answer["status"],
@@ -307,6 +323,26 @@ async def _run_internal_agent_message(body: A2ASendRequest, request: Request) ->
         request,
         request.state.tenant_id,
     )
-    if result.get("status") != "completed":
+    status = "completed" if result.get("status") == "completed" else "failed"
+    await _record_send(
+        request,
+        outcome="success" if status == "completed" else "blocked",
+        payload={"message_id": body.message.message_id, "agent_type": agent_type, "status": status},
+    )
+    if status != "completed":
         return {"text": "Agent run did not complete.", "metadata": {"status": "failed"}}
     return {"text": json.dumps(result.get("output") or {}, ensure_ascii=True), "metadata": {"status": "completed"}}
+
+
+async def _record_send(request: Request, *, outcome: str, payload: dict[str, Any]) -> None:
+    """Seal an A2A message that the commerce answer path did not already record."""
+    state = request.state
+    await record_commerce_event_in_own_transaction(
+        tenant_id=state.tenant_id,
+        event="a2a.message.send",
+        outcome=outcome,
+        merchant_id=getattr(state, "buyer_merchant_id", None),
+        seller_agent_id=getattr(state, "buyer_seller_agent_id", None),
+        buyer_agent_id=getattr(state, "buyer_agent_id", None),
+        payload=payload,
+    )

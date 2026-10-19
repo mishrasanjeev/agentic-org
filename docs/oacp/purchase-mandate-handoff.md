@@ -15,6 +15,24 @@ Offline POS Bridge endpoints:
 - `POST /api/v1/commerce/runtime/pos/offline/confirmations`
 - `POST /api/v1/commerce/runtime/pos/offline/simulator/confirm`
 
+## Arbiter Decision
+
+Every call is decided by the commerce arbiter ([arbiter and ledger](arbiter-ledger.md)) and the
+decision is sealed to the ledger. The request carries the buyer's evidence in `buyer_authority`
+(`mandate_ref`, `mandate_hash`, `mandate_expires_at`, `consent_ref`, `consent_status`,
+`passport_ref`, `passport_max_amount_minor_units`, `passport_currency`, `passport_expires_at`);
+the merchant's limits come from its config (`provider_policy.arbiter`).
+
+- A refusal returns `status: prepared_handoff_blocked_arbiter_refused` (or the preparation's own
+  blocker when no handoff could be prepared) with `blocker.code = arbiter_refused` and the
+  `failing_rule`.
+- An allow returns `arbiter_decision.decision_id` and `payload_hash`. Live provider execution
+  needs a second call for the same handoff with `decision_id` (consumed once, within 10 minutes)
+  and `PLURAL_PINE_LIVE_EXECUTION_ENABLED=true`. A different payload is refused
+  `decision_payload_mismatch`; a reused decision `decision_consumed`.
+- `live_execution_approved` is deprecated: it is accepted for one release and ignored (the
+  response lists it in `deprecated_fields_ignored`).
+
 ## Required Fresh Inputs
 
 - Catalog snapshot.
@@ -31,7 +49,9 @@ flowchart TD
   artifacts -->|No| block1[Block: refresh needed]
   artifacts -->|Yes| provider{Provider capability fresh?}
   provider -->|No| block2[Block: provider evidence missing]
-  provider -->|Yes| prepared[Prepared provider-owned handoff]
+  provider -->|Yes| arbiter{Arbiter allow?}
+  arbiter -->|No| block3[Block: arbiter_refused with failing rule]
+  arbiter -->|Yes| prepared[Prepared provider-owned handoff + decision_id]
   prepared --> pos{In-store/POS requested?}
   pos -->|Yes| packet[Offline POS handoff packet]
   packet --> callback[POS confirmation status]

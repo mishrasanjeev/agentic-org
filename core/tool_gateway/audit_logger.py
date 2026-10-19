@@ -77,6 +77,48 @@ def verify_audit_row(row: Any, secret: bytes | None = None) -> bool:
     return hmac.compare_digest(sign_audit_record(row, secret), str(stored))
 
 
+def build_signed_audit_entry(
+    *,
+    tenant_id: Any,
+    event_type: str,
+    actor_type: str,
+    actor_id: str,
+    action: str,
+    outcome: str,
+    details: dict[str, Any],
+    created_at: datetime,
+    resource_type: str | None = None,
+    resource_id: str | None = None,
+    agent_id: Any = None,
+    workflow_run_id: Any = None,
+    trace_id: str = "",
+    secret: bytes | None = None,
+) -> dict[str, Any]:
+    """The column values of one ``audit_log`` row, with its signature.
+
+    For a caller that adds the row to its own session so it commits in the same
+    transaction as the write it records (``core.commerce.ledger``). ``details``
+    is stored as given: mask anything free-form before passing it.
+    """
+    entry: dict[str, Any] = {
+        "tenant_id": tenant_id,
+        "event_type": event_type,
+        "actor_type": actor_type,
+        "actor_id": actor_id,
+        "agent_id": agent_id,
+        "workflow_run_id": workflow_run_id,
+        "resource_type": resource_type,
+        "resource_id": resource_id,
+        "action": action,
+        "outcome": outcome,
+        "details": details,
+        "trace_id": trace_id,
+        "created_at": created_at,
+    }
+    entry["signature"] = sign_audit_record(entry, secret if secret is not None else settings.secret_key.encode())
+    return entry
+
+
 class AuditLogger:
     """Write tamper-evident audit log entries."""
 

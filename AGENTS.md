@@ -69,6 +69,20 @@ flip is recorded in `CHANGELOG.md` as a breaking change with an explicit opt-out
 Flags with a strict-runtime default: `AGENTICORG_OACP_VERIFY_STRICT` (OACP artifact
 verification refuses caching; on in strict runtimes, log-only in local/dev/test/ci;
 opt-out `false`).
+Commerce ledger and arbiter flags: `AGENTICORG_AUDIT_CHAIN_DEFAULT_ON` (default off; seals the
+audit chain of every tenant with a commerce merchant config while
+`AGENTICORG_AUDIT_CHAIN_ENABLED` is off). The commerce `audit_event` check follows
+`AGENTICORG_ROUTE_ENFORCEMENT_MODE` (`enforce` by default, `log` to stage).
+
+**No human legs in commerce decisions.** The commerce arbiter (`core/commerce/arbiter.py`) is a
+deterministic policy function: it seals `allow` or `refuse`, never "pending", reads no clock
+(the decision time is an input), does no I/O and imports nothing from the review queue. No
+commerce path waits for a person. Execution consumes a single-use `allow` `decision_id` bound
+to the exact payload hash; never add a request boolean that approves execution. Human review is
+the merchant's `escalate_to_human` option (off by default): it copies a refusal into
+`hitl_queue` and never changes or delays the outcome. Every commerce write records its
+declared `audit_event` on the commerce ledger in the same transaction
+(`core/commerce/ledger.py`); see `docs/oacp/arbiter-ledger.md`.
 
 **Local first, then production.** Everything runs locally with `make dev` (Docker) before it
 is merged. A production deployment happens only after its exit criterion is green in CI and

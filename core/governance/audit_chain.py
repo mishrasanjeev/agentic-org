@@ -32,6 +32,9 @@ Sealers of one tenant are serialised by a transaction-level advisory lock.
 
 Behind ``AGENTICORG_AUDIT_CHAIN_ENABLED`` (off by default): off, nothing is
 sealed; verification and the status read whatever is sealed either way.
+``AGENTICORG_AUDIT_CHAIN_DEFAULT_ON`` (off by default) seals the chain of every
+tenant with a commerce merchant config even while the global flag is off, so
+the commerce ledger (``core.commerce.ledger``) is tamper-evident.
 """
 
 from __future__ import annotations
@@ -396,6 +399,31 @@ def _check(row: Any, seq: int, expected: int, prev: str) -> str | None:
     return None
 
 
+async def _sealing_enabled(session: Any, tenant_id: uuid.UUID) -> bool:
+    """Whether the sealing task seals this tenant: the global flag, or default-on and a commerce config."""
+    if settings.audit_chain_enabled:
+        return True
+    if not settings.audit_chain_default_on:
+        return False
+    return await has_commerce_config(session, tenant_id)
+
+
+async def has_commerce_config(session: Any, tenant_id: uuid.UUID) -> bool:
+    """Whether the tenant has a commerce merchant config (read in the caller's tenant-bound session)."""
+    from sqlalchemy import select
+
+    from core.models.commerce_c6z_runtime import C6ZMerchantCommerceConfigRow
+
+    row = (
+        await session.execute(
+            select(C6ZMerchantCommerceConfigRow.config_id)
+            .where(C6ZMerchantCommerceConfigRow.tenant_id == str(tenant_id))
+            .limit(1)
+        )
+    ).scalar_one_or_none()
+    return row is not None
+
+
 async def status(tenant_id: uuid.UUID) -> dict[str, Any]:
     """The chain head, how many rows wait for sealing, and whether sealing is on."""
     from core.database import get_tenant_session
@@ -404,8 +432,9 @@ async def status(tenant_id: uuid.UUID) -> dict[str, Any]:
         head = _head_of(await _head_row(session, tenant_id))
         unsealed = await _unsealed_count(session, tenant_id)
         anchor = await _anchor(session, tenant_id)
+        enabled = await _sealing_enabled(session, tenant_id)
     return {
-        "enabled": bool(settings.audit_chain_enabled),
+        "enabled": enabled,
         "head": head.to_dict(),
         "anchor": anchor.to_dict() if anchor else None,
         "unsealed": unsealed,
@@ -420,6 +449,7 @@ async def evidence(tenant_id: uuid.UUID, *, recent: int = 1000) -> dict[str, Any
     section: dict[str, Any] = {"enabled": bool(settings.audit_chain_enabled)}
     try:
         current = await status(tenant_id)
+        section["enabled"] = current["enabled"]
         section["head"] = current["head"]
         section["unsealed"] = current["unsealed"]
     # enterprise-gate: broad-except-ok reason=unreadable-chain-head-degrades-to-unknown-in-the-evidence-package-logged

@@ -13,11 +13,31 @@ from uuid import UUID
 
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, Request
-from pydantic import BaseModel, Field
+from pydantic import AwareDatetime, BaseModel, ConfigDict, Field
 from sqlalchemy import select
 
 from api.deps import get_current_tenant, require_tenant_admin
 from api.route_metadata import route_meta
+from core.commerce.arbiter import (
+    ArbiterContext,
+    ConsentEvidence,
+    Decision,
+    MandateEvidence,
+    PassportEvidence,
+    amount_minor_units,
+    artifact_evidence_from_records,
+    binding_payload,
+    decide,
+    merchant_limits_from_config,
+)
+from core.commerce.arbiter_store import (
+    DecisionRefusedError,
+    decision_refusal_blocker,
+    escalate_refusal,
+    persist_decision,
+    refusal_blocker,
+    require_allow_decision,
+)
 from core.commerce.c6z_runtime_vertical import (
     C6Z_ARTIFACT_FAMILIES,
     GRANTEX_AUTHORITY_ENV_VARS,
@@ -48,6 +68,7 @@ from core.commerce.c6z_runtime_vertical import (
     verify_telegram_webhook_secret,
     verify_whatsapp_webhook_signature,
 )
+from core.commerce.ledger import record_commerce_event, record_commerce_event_in_own_transaction
 from core.commerce.oacp_artifacts import (
     DurableOacpArtifactCacheRepository,
     OacpArtifactCacheRepositoryQuery,
@@ -227,6 +248,26 @@ class MandateCapabilityRequest(BaseModel):
     capability_type: str = "mandate_capability"
 
 
+class BuyerAuthorityEvidence(BaseModel):
+    """The buyer's mandate, consent and Commerce Passport references the arbiter decides on.
+
+    Caller-asserted until Grantex-signed mandates land (Phase 4): each value is
+    sealed into the ledger as evidence, never treated as a credential.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    mandate_ref: str | None = Field(default=None, max_length=200)
+    mandate_hash: str | None = Field(default=None, pattern=r"^[0-9a-f]{64}$")
+    mandate_expires_at: AwareDatetime | None = None
+    consent_ref: str | None = Field(default=None, max_length=200)
+    consent_status: str | None = Field(default=None, max_length=40)
+    passport_ref: str | None = Field(default=None, max_length=200)
+    passport_max_amount_minor_units: int | None = Field(default=None, ge=0)
+    passport_currency: str | None = Field(default=None, min_length=3, max_length=3)
+    passport_expires_at: AwareDatetime | None = None
+
+
 class PurchasePreparationRequest(BaseModel):
     merchant_id: str = Field(min_length=1)
     seller_agent_id: str = Field(min_length=1)
@@ -236,7 +277,12 @@ class PurchasePreparationRequest(BaseModel):
     quantity: int = Field(default=1, ge=1, le=100)
     idempotency_key: str | None = None
     grantex_available: bool = True
-    live_execution_approved: bool = False
+    buyer_authority: BuyerAuthorityEvidence | None = None
+    # An allow decision for this exact handoff (from an earlier call); consumed once.
+    decision_id: str | None = Field(default=None, min_length=1, max_length=80)
+    # Deprecated: accepted for one release and ignored. Live execution now
+    # needs an allow decision_id (core/commerce/arbiter.py).
+    live_execution_approved: bool | None = None
 
 
 class OfflinePosHandoffRequest(BaseModel):
@@ -252,6 +298,9 @@ class OfflinePosHandoffRequest(BaseModel):
     idempotency_key: str | None = None
     grantex_available: bool = True
     expiry_minutes: int = Field(default=15, ge=1, le=60)
+    buyer_authority: BuyerAuthorityEvidence | None = None
+    # An allow decision for this exact POS packet (from an earlier call); consumed once.
+    decision_id: str | None = Field(default=None, min_length=1, max_length=80)
 
 
 class OfflinePosConfirmationRequest(BaseModel):
@@ -309,6 +358,17 @@ async def create_seller_onboarding_packet(
             "blocked_grantex_unavailable",
         }:
             row.status = previous_status
+        await record_commerce_event(
+            session,
+            tenant_id=tenant_id,
+            event="commerce.runtime.seller_onboarding_packet.create",
+            outcome="success",
+            merchant_id=body.merchant_id,
+            seller_agent_id=body.seller_agent_id,
+            buyer_agent_id=None,
+            payload=packet,
+            resource_id=packet["packet_id"],
+        )
     return {"packet": packet, "stored": True}
 
 
@@ -374,6 +434,17 @@ async def upsert_merchant_commerce_config(
                 "blocked_grantex_unavailable",
             }:
                 packet_row.status = previous_status
+        await record_commerce_event(
+            session,
+            tenant_id=tenant_id,
+            event="commerce.runtime.merchant_config.upsert",
+            outcome="success",
+            merchant_id=merchant_id,
+            seller_agent_id=config.get("seller_agent_id"),
+            buyer_agent_id=None,
+            payload=config,
+            resource_id=config["config_id"],
+        )
     return {
         "status": "merchant_config_saved",
         "config": config,
@@ -566,6 +637,17 @@ async def upsert_shopify_connector_credentials(
             api_version=credentials.api_version,
             credential_ref=connector_name,
         )
+        await record_commerce_event(
+            session,
+            tenant_id=tenant_id,
+            event="commerce.runtime.shopify.credentials.upsert",
+            outcome="success",
+            merchant_id=body.merchant_id,
+            seller_agent_id=None,
+            buyer_agent_id=None,
+            payload=config,
+            resource_id=connector_name,
+        )
     return {
         "status": "shopify_connector_configured",
         "merchant_id": body.merchant_id,
@@ -707,6 +789,17 @@ async def sync_shopify_read_only(
                 session.add(row)
             _apply_evidence(row, evidence, hmac_verified=False)
             packet_row.status = "synced"
+        await record_commerce_event(
+            session,
+            tenant_id=tenant_id,
+            event="commerce.runtime.shopify.sync",
+            outcome="blocked" if blocked_exc is not None else "success",
+            merchant_id=packet_row.merchant_id,
+            seller_agent_id=packet_row.seller_agent_id,
+            buyer_agent_id=None,
+            payload=evidence if evidence is not None else {"packet_id": body.packet_id, "status": packet_row.status},
+            resource_id=body.packet_id,
+        )
     if blocked_exc is not None:
         raise blocked_exc
     if evidence is None:
@@ -788,6 +881,26 @@ async def receive_shopify_product_webhook(
                 for packet in packets:
                     packet.status = "cache_refresh_needed"
                     stale_packets_marked += 1
+            await record_commerce_event(
+                session,
+                tenant_id=tenant_id,
+                event="commerce.runtime.shopify.product_update_webhook",
+                outcome="success",
+                merchant_id=None,
+                seller_agent_id=None,
+                buyer_agent_id=None,
+                payload=_webhook_ledger_payload(topic, shop_domain, webhook_id, raw_body, stale_packets_marked),
+            )
+    else:
+        await record_commerce_event_in_own_transaction(
+            tenant_id=tenant_id,
+            event="commerce.runtime.shopify.product_update_webhook",
+            outcome="success",
+            merchant_id=None,
+            seller_agent_id=None,
+            buyer_agent_id=None,
+            payload=_webhook_ledger_payload(topic, shop_domain, webhook_id, raw_body, 0),
+        )
     return {
         "status": "webhook_verified",
         "tenant_id": tenant_id,
@@ -835,6 +948,7 @@ async def request_grantex_authority_artifacts(
         env_resolution = resolve_env(GRANTEX_AUTHORITY_ENV_VARS)
         if not env_resolution.ready:
             packet_row.status = "blocked_grantex_unavailable"
+            await _record_authority_request(session, tenant_id, packet_row, payload, outcome="blocked")
             return {
                 "status": "blocked_missing_grantex_env",
                 "missing_env_vars": list(env_resolution.missing),
@@ -844,6 +958,7 @@ async def request_grantex_authority_artifacts(
                 "non_authoritative_for_transaction": True,
             }
         packet_row.status = "authority_requested"
+        await _record_authority_request(session, tenant_id, packet_row, payload, outcome="success")
     return await send_grantex_authority_request(payload=payload)
 
 
@@ -864,6 +979,7 @@ async def cache_grantex_artifacts(
         body.artifacts,
         tenant_id=tenant_id,
         buyer_agent_id=body.buyer_agent_id,
+        ledger_event="commerce.runtime.artifacts.cache",
     )
 
 
@@ -889,6 +1005,7 @@ async def refresh_grantex_artifacts(
     """
     env_resolution = resolve_env(GRANTEX_AUTHORITY_ENV_VARS)
     if not env_resolution.ready:
+        await _record_refresh_outcome(tenant_id, body, "blocked_missing_grantex_env")
         return {
             "status": "blocked_missing_grantex_env",
             "missing_env_vars": list(env_resolution.missing),
@@ -915,6 +1032,7 @@ async def refresh_grantex_artifacts(
     now = datetime.now(UTC)
     current = [item for item in replayed if _artifact_unexpired(item, now)]
     if not current:
+        await _record_refresh_outcome(tenant_id, body, "no_current_artifacts")
         return {
             "status": "no_current_artifacts",
             "replayed": len(replayed),
@@ -926,6 +1044,7 @@ async def refresh_grantex_artifacts(
         current,
         tenant_id=tenant_id,
         buyer_agent_id=body.buyer_agent_id,
+        ledger_event="commerce.runtime.artifacts.refresh",
     )
     return {**result, "source": "grantex_replay", "replayed": len(replayed)}
 
@@ -947,6 +1066,7 @@ async def _verify_and_cache_grantex_artifacts(
     *,
     tenant_id: str,
     buyer_agent_id: str | None,
+    ledger_event: str,
 ) -> dict[str, Any]:
     now_iso = _now_iso()
     strict = oacp_verify_strict_enabled()
@@ -991,6 +1111,15 @@ async def _verify_and_cache_grantex_artifacts(
             sorted({str(item["refusal_code"]) for item in refusals}),
         )
         if strict:
+            await record_commerce_event_in_own_transaction(
+                tenant_id=tenant_id,
+                event=ledger_event,
+                outcome="refused",
+                merchant_id=None,
+                seller_agent_id=None,
+                buyer_agent_id=buyer_agent_id,
+                payload={"refusals": refusals, "verification_mode": "strict"},
+            )
             raise HTTPException(
                 status_code=422,
                 detail={
@@ -1025,6 +1154,15 @@ async def _verify_and_cache_grantex_artifacts(
             store_results.append(await repo.upsert(record))
         rejected = [result for result in store_results if result.get("stored") is not True]
         if rejected:
+            await record_commerce_event_in_own_transaction(
+                tenant_id=tenant_id,
+                event=ledger_event,
+                outcome="refused",
+                merchant_id=None,
+                seller_agent_id=None,
+                buyer_agent_id=buyer_agent_id,
+                payload={"store_results": store_results},
+            )
             raise HTTPException(
                 status_code=422,
                 detail={
@@ -1049,6 +1187,23 @@ async def _verify_and_cache_grantex_artifacts(
                 ).all()
                 for packet in packets:
                     packet.status = "artifacts_cached"
+        scopes = sorted({(record.merchant_id, record.seller_agent_id) for record in cache_records}, key=str)
+        await record_commerce_event(
+            session,
+            tenant_id=tenant_id,
+            event=ledger_event,
+            outcome="success",
+            merchant_id=scopes[0][0] if len(scopes) == 1 else None,
+            seller_agent_id=scopes[0][1] if len(scopes) == 1 else None,
+            buyer_agent_id=buyer_agent_id,
+            payload={
+                "artifacts": [
+                    {"artifact_id": record.artifact_id, "verifier_result_ref": record.verifier_result_ref}
+                    for record in cache_records
+                ],
+                "verification": verification_summary,
+            },
+        )
     return {
         "status": "cached",
         "records_stored": len(store_results),
@@ -1081,6 +1236,7 @@ async def ask_buyer_product_question(
         question=body.question,
         action_intent=body.action_intent,
         grantex_available=body.grantex_available,
+        ledger_event="commerce.runtime.buyer_session.ask",
     )
     return payload
 
@@ -1098,7 +1254,9 @@ async def ask_web_bridge(
     body: BridgeAskRequest,
     tenant_id: str = Depends(get_current_tenant),
 ) -> dict[str, Any]:
-    return await _bridge_answer(body, tenant_id, default_channel="web")
+    return await _bridge_answer(
+        body, tenant_id, default_channel="web", ledger_event="commerce.runtime.bridge.web.ask"
+    )
 
 
 @router.post("/bridges/openapi/ask")
@@ -1114,7 +1272,9 @@ async def ask_openapi_bridge(
     body: BridgeAskRequest,
     tenant_id: str = Depends(get_current_tenant),
 ) -> dict[str, Any]:
-    return await _bridge_answer(body, tenant_id, default_channel="openapi")
+    return await _bridge_answer(
+        body, tenant_id, default_channel="openapi", ledger_event="commerce.runtime.bridge.openapi.ask"
+    )
 
 
 @router.get("/bridges/openapi/schema")
@@ -1172,7 +1332,9 @@ async def receive_whatsapp_bridge_webhook(
 ) -> dict[str, Any]:
     env_resolution = resolve_env(WHATSAPP_BRIDGE_ENV_VARS)
     if not env_resolution.ready:
-        return _blocked_bridge("whatsapp", env_resolution.missing)
+        return await _blocked_bridge_recorded(
+            tenant_id, "whatsapp", env_resolution.missing, "commerce.runtime.bridge.whatsapp.webhook"
+        )
     raw_body = await request.body()
     if not verify_whatsapp_webhook_signature(
         raw_body,
@@ -1181,7 +1343,9 @@ async def receive_whatsapp_bridge_webhook(
     ):
         raise HTTPException(status_code=401, detail="WhatsApp webhook signature verification failed")
     body = _bridge_body_from_webhook_payload(payload, channel="whatsapp")
-    return await _bridge_answer(body, tenant_id, default_channel="whatsapp")
+    return await _bridge_answer(
+        body, tenant_id, default_channel="whatsapp", ledger_event="commerce.runtime.bridge.whatsapp.webhook"
+    )
 
 
 @router.post("/bridges/telegram/webhook")
@@ -1200,14 +1364,18 @@ async def receive_telegram_bridge_webhook(
 ) -> dict[str, Any]:
     env_resolution = resolve_env(TELEGRAM_BRIDGE_ENV_VARS)
     if not env_resolution.ready:
-        return _blocked_bridge("telegram", env_resolution.missing)
+        return await _blocked_bridge_recorded(
+            tenant_id, "telegram", env_resolution.missing, "commerce.runtime.bridge.telegram.webhook"
+        )
     if not verify_telegram_webhook_secret(
         request.headers.get("x-telegram-bot-api-secret-token"),
         os.environ["TELEGRAM_WEBHOOK_SECRET_TOKEN"],
     ):
         raise HTTPException(status_code=401, detail="Telegram webhook secret token verification failed")
     body = _bridge_body_from_webhook_payload(payload, channel="telegram")
-    return await _bridge_answer(body, tenant_id, default_channel="telegram")
+    return await _bridge_answer(
+        body, tenant_id, default_channel="telegram", ledger_event="commerce.runtime.bridge.telegram.webhook"
+    )
 
 
 @router.post("/providers/plural-pine/mandate-capability/verify")
@@ -1237,6 +1405,9 @@ async def verify_plural_pine_capability(
                 row = C6ZProviderCapabilityEvidenceRow(evidence_id=evidence.evidence_id)
                 session.add(row)
             _apply_capability(row, evidence, tenant_id, body.merchant_id, body.seller_agent_id, body.buyer_agent_id)
+            await _record_capability(session, tenant_id, body, evidence)
+    else:
+        await _record_capability(None, tenant_id, body, evidence)
     return {
         "evidence": evidence.__dict__,
         "env_required": list(PLURAL_PINE_ENV_VARS),
@@ -1316,33 +1487,127 @@ async def prepare_purchase_handoff(
     body: PurchasePreparationRequest,
     tenant_id: str = Depends(get_current_tenant),
 ) -> dict[str, Any]:
+    """Prepare a provider handoff; the commerce arbiter decides on it and the decision is sealed.
+
+    Live provider execution needs an ``allow`` ``decision_id`` from an earlier
+    call for the same handoff payload (consumed once) and
+    ``PLURAL_PINE_LIVE_EXECUTION_ENABLED=true``; the request body boolean
+    ``live_execution_approved`` is ignored.
+    """
+    if body.live_execution_approved is not None:
+        logger.warning(
+            "commerce_purchase_live_execution_approved_deprecated tenant=%s: the field is ignored; "
+            "send decision_id from an allow arbiter decision",
+            tenant_id,
+        )
     cache_records, products, capabilities = await _load_runtime_scope(
         tenant_id=tenant_id,
         merchant_id=body.merchant_id,
         seller_agent_id=body.seller_agent_id,
         buyer_agent_id=body.buyer_agent_id,
     )
+    merchant_config = await _merchant_config_for_arbiter(tenant_id, body.merchant_id, body.seller_agent_id)
     live_execution_env_enabled = os.environ.get("PLURAL_PINE_LIVE_EXECUTION_ENABLED", "").strip().lower() == "true"
-    result = prepare_purchase_or_mandate_handoff(
-        cache_records=cache_records,
-        products=products,
-        capability_evidence=capabilities,
-        tenant_id=tenant_id,
-        merchant_id=body.merchant_id,
-        seller_agent_id=body.seller_agent_id,
-        buyer_agent_id=body.buyer_agent_id,
-        product_ref_or_query=body.product_ref_or_query,
-        variant_id=body.variant_id,
-        quantity=body.quantity,
-        now_iso=_now_iso(),
-        idempotency_key=body.idempotency_key,
-        grantex_available=body.grantex_available,
-        live_execution_enabled=body.live_execution_approved and live_execution_env_enabled,
+    now = datetime.now(UTC)
+    preparation_args: dict[str, Any] = {
+        "cache_records": cache_records,
+        "products": products,
+        "capability_evidence": capabilities,
+        "tenant_id": tenant_id,
+        "merchant_id": body.merchant_id,
+        "seller_agent_id": body.seller_agent_id,
+        "buyer_agent_id": body.buyer_agent_id,
+        "product_ref_or_query": body.product_ref_or_query,
+        "variant_id": body.variant_id,
+        "quantity": body.quantity,
+        "now_iso": _iso(now),
+        "idempotency_key": body.idempotency_key,
+        "grantex_available": body.grantex_available,
+    }
+    result = prepare_purchase_or_mandate_handoff(**preparation_args, live_execution_enabled=False)
+    handoff = result.prepared_handoff
+    payload = binding_payload(
+        "purchase_handoff",
+        handoff
+        if handoff is not None
+        else _request_binding(body, ("product_ref_or_query", "variant_id", "quantity")),
     )
+    decision = decide(
+        "purchase_handoff",
+        _arbiter_context(
+            tenant_id=tenant_id,
+            merchant_id=body.merchant_id,
+            seller_agent_id=body.seller_agent_id,
+            buyer_agent_id=body.buyer_agent_id,
+            now=now,
+            payload=payload,
+            price=None if handoff is None else handoff.get("price_snapshot"),
+            currency=None if handoff is None else handoff.get("currency"),
+            quantity=body.quantity,
+            authority=body.buyer_authority,
+            cache_records=cache_records,
+            merchant_config=merchant_config,
+        ),
+    )
+    consumed = False
+    decision_refusal: DecisionRefusedError | None = None
+    async with get_tenant_session(_tenant_uuid(tenant_id)) as session:
+        ledger_ref = await persist_decision(session, decision)
+        if decision.allowed and handoff is not None and live_execution_env_enabled and body.decision_id:
+            try:
+                await require_allow_decision(
+                    session,
+                    tenant_id=tenant_id,
+                    decision_id=body.decision_id,
+                    payload_hash=decision.payload_hash,
+                    action="purchase_handoff",
+                    now=now,
+                )
+                consumed = True
+            except DecisionRefusedError as exc:
+                decision_refusal = exc
+        await record_commerce_event(
+            session,
+            tenant_id=tenant_id,
+            event="commerce.runtime.purchase.prepare",
+            outcome="success" if consumed else ("refused" if not decision.allowed else "blocked"),
+            merchant_id=body.merchant_id,
+            seller_agent_id=body.seller_agent_id,
+            buyer_agent_id=body.buyer_agent_id,
+            payload=payload,
+            resource_id=decision.decision_id,
+            details={
+                "decision_id": decision.decision_id,
+                "consumed_decision_id": body.decision_id if consumed else None,
+            },
+        )
+    if consumed:
+        result = prepare_purchase_or_mandate_handoff(**preparation_args, live_execution_enabled=True)
+    response: dict[str, Any] = {**result.__dict__}
+    if handoff is not None and not decision.allowed:
+        response["status"] = "prepared_handoff_blocked_arbiter_refused"
+        response["blocker"] = refusal_blocker(
+            decision,
+            unblock_command="POST /api/v1/commerce/runtime/purchase/prepare",
+            doc_reference="docs/oacp/arbiter-ledger.md#rules",
+        )
+    elif decision_refusal is not None:
+        response["status"] = "prepared_handoff_blocked_decision_refused"
+        response["blocker"] = decision_refusal_blocker(
+            decision_refusal,
+            unblock_command="POST /api/v1/commerce/runtime/purchase/prepare without decision_id, then retry with it",
+            doc_reference="docs/oacp/purchase-mandate-handoff.md#arbiter-decision",
+        )
+    escalation = await _escalate(tenant_id, decision, merchant_config)
     return {
-        **result.__dict__,
-        "live_execution_requested": body.live_execution_approved,
+        **response,
+        "arbiter_decision": decision.to_public(),
+        "ledger_ref": ledger_ref,
+        "escalation": escalation,
+        "decision_consumed": consumed,
+        "live_execution_requested": body.decision_id is not None,
         "live_execution_env_enabled": live_execution_env_enabled,
+        "deprecated_fields_ignored": ["live_execution_approved"] if body.live_execution_approved is not None else [],
         "raw_provider_payload_stored": False,
         "allowed_to_execute": False,
         "no_payment_execution": True,
@@ -1407,12 +1672,21 @@ async def create_offline_pos_handoff(
     body: OfflinePosHandoffRequest,
     tenant_id: str = Depends(get_current_tenant),
 ) -> dict[str, Any]:
+    """Build a POS handoff packet; it is stored only against a consumed ``allow`` decision for the same packet.
+
+    Without ``decision_id`` the arbiter decides on the packet and the response
+    carries the decision (``decision_issued``); the caller repeats the request
+    with that ``decision_id`` within the decision TTL. Every call is decided by
+    the arbiter and sealed to the ledger; a refusal is returned as a blocker.
+    """
     cache_records, products, capabilities = await _load_runtime_scope(
         tenant_id=tenant_id,
         merchant_id=body.merchant_id,
         seller_agent_id=body.seller_agent_id,
         buyer_agent_id=body.buyer_agent_id,
     )
+    merchant_config = await _merchant_config_for_arbiter(tenant_id, body.merchant_id, body.seller_agent_id)
+    now = datetime.now(UTC)
     purchase = prepare_purchase_or_mandate_handoff(
         cache_records=cache_records,
         products=products,
@@ -1424,64 +1698,161 @@ async def create_offline_pos_handoff(
         product_ref_or_query=body.product_ref_or_query,
         variant_id=body.variant_id,
         quantity=body.quantity,
-        now_iso=_now_iso(),
+        now_iso=_iso(now),
         idempotency_key=body.idempotency_key,
         grantex_available=body.grantex_available,
         live_execution_enabled=False,
     )
     purchase_payload = {**purchase.__dict__}
+    packet: dict[str, Any] | None = None
+    packet_blocked = False
+    if purchase.prepared_handoff is not None:
+        try:
+            packet = build_offline_pos_handoff_packet(
+                purchase_preparation=purchase_payload,
+                tenant_id=tenant_id,
+                merchant_id=body.merchant_id,
+                seller_agent_id=body.seller_agent_id,
+                store_id=body.store_id,
+                pos_location=body.pos_location,
+                buyer_session_ref=body.buyer_session_ref,
+                now_iso=_iso(now),
+                expiry_minutes=body.expiry_minutes,
+                idempotency_key=body.idempotency_key,
+            )
+        except OfflinePosBridgeError:
+            logger.warning("Offline POS handoff packet blocked by runtime boundary", exc_info=True)
+            packet_blocked = True
+    payload = binding_payload(
+        "pos_handoff",
+        packet
+        if packet is not None
+        else _request_binding(
+            body, ("product_ref_or_query", "variant_id", "quantity", "store_id", "buyer_session_ref")
+        ),
+    )
+    decision = decide(
+        "pos_handoff",
+        _arbiter_context(
+            tenant_id=tenant_id,
+            merchant_id=body.merchant_id,
+            seller_agent_id=body.seller_agent_id,
+            buyer_agent_id=body.buyer_agent_id,
+            now=now,
+            payload=payload,
+            price=None if packet is None else packet.get("displayed_price"),
+            currency=None if packet is None else packet.get("currency"),
+            quantity=body.quantity,
+            authority=body.buyer_authority,
+            cache_records=cache_records,
+            merchant_config=merchant_config,
+        ),
+    )
+    created = False
+    decision_refusal: DecisionRefusedError | None = None
+    async with get_tenant_session(_tenant_uuid(tenant_id)) as session:
+        ledger_ref = await persist_decision(session, decision)
+        if packet is not None and decision.allowed and body.decision_id:
+            try:
+                await require_allow_decision(
+                    session,
+                    tenant_id=tenant_id,
+                    decision_id=body.decision_id,
+                    payload_hash=decision.payload_hash,
+                    action="pos_handoff",
+                    now=now,
+                )
+            except DecisionRefusedError as exc:
+                decision_refusal = exc
+            else:
+                packet["decision_id"] = body.decision_id
+                row = await session.get(C6ZOfflinePosHandoffPacketRow, packet["packet_id"])
+                if row is None:
+                    row = C6ZOfflinePosHandoffPacketRow(packet_id=packet["packet_id"])
+                    session.add(row)
+                _apply_pos_handoff(row, packet, body.buyer_agent_id)
+                created = True
+        await record_commerce_event(
+            session,
+            tenant_id=tenant_id,
+            event="commerce.runtime.pos.offline.handoff.create",
+            outcome="success" if created else ("refused" if not decision.allowed else "blocked"),
+            merchant_id=body.merchant_id,
+            seller_agent_id=body.seller_agent_id,
+            buyer_agent_id=body.buyer_agent_id,
+            payload=payload,
+            resource_id=packet["packet_id"] if packet is not None else decision.decision_id,
+            details={
+                "decision_id": decision.decision_id,
+                "consumed_decision_id": body.decision_id if created else None,
+            },
+        )
+    escalation = await _escalate(tenant_id, decision, merchant_config)
+    decided = {
+        "arbiter_decision": decision.to_public(),
+        "ledger_ref": ledger_ref,
+        "escalation": escalation,
+        "allowed_to_execute": False,
+        "no_payment_execution": True,
+        "non_authoritative_for_transaction": True,
+    }
     if purchase.prepared_handoff is None:
         return {
             "status": "blocked",
             "pos_handoff_created": False,
             "purchase_preparation": purchase_payload,
             "blocker": purchase.blocker,
-            "allowed_to_execute": False,
-            "no_payment_execution": True,
-            "non_authoritative_for_transaction": True,
+            **decided,
         }
-    try:
-        packet = build_offline_pos_handoff_packet(
-            purchase_preparation=purchase_payload,
-            tenant_id=tenant_id,
-            merchant_id=body.merchant_id,
-            seller_agent_id=body.seller_agent_id,
-            store_id=body.store_id,
-            pos_location=body.pos_location,
-            buyer_session_ref=body.buyer_session_ref,
-            now_iso=_now_iso(),
-            expiry_minutes=body.expiry_minutes,
-            idempotency_key=body.idempotency_key,
-        )
-    except OfflinePosBridgeError:
-        logger.warning("Offline POS handoff packet blocked by runtime boundary", exc_info=True)
+    if packet_blocked:
         return {
             "status": "blocked",
             "pos_handoff_created": False,
             "blocker": _offline_pos_handoff_blocker(),
             "purchase_preparation": purchase_payload,
-            "allowed_to_execute": False,
-            "no_payment_execution": True,
-            "non_authoritative_for_transaction": True,
+            **decided,
         }
-    async with get_tenant_session(_tenant_uuid(tenant_id)) as session:
-        row = await session.get(C6ZOfflinePosHandoffPacketRow, packet["packet_id"])
-        if row is None:
-            row = C6ZOfflinePosHandoffPacketRow(packet_id=packet["packet_id"])
-            session.add(row)
-        _apply_pos_handoff(row, packet, body.buyer_agent_id)
+    if not decision.allowed:
+        return {
+            "status": "blocked",
+            "pos_handoff_created": False,
+            "blocker": refusal_blocker(
+                decision,
+                unblock_command="POST /api/v1/commerce/runtime/pos/offline/handoffs",
+                doc_reference="docs/oacp/arbiter-ledger.md#rules",
+            ),
+            "purchase_preparation_status": purchase.status,
+            **decided,
+        }
+    if decision_refusal is not None or not body.decision_id:
+        refusal = decision_refusal or DecisionRefusedError(
+            "decision_id_missing",
+            "Repeat this request with the decision_id of the allow decision above to create the packet.",
+        )
+        return {
+            "status": "decision_issued" if decision_refusal is None else "blocked",
+            "pos_handoff_created": False,
+            "decision_id": decision.decision_id,
+            "payload_hash": decision.payload_hash,
+            "blocker": decision_refusal_blocker(
+                refusal,
+                unblock_command="POST /api/v1/commerce/runtime/pos/offline/handoffs with decision_id",
+                doc_reference="docs/oacp/offline-pos-bridge.md#arbiter-decision",
+            ),
+            "purchase_preparation_status": purchase.status,
+            **decided,
+        }
     return {
         "status": "pos_handoff_packet_ready",
         "pos_handoff_created": True,
         "packet": packet,
+        "decision_id": body.decision_id,
         "purchase_preparation_status": purchase.status,
         "safe_buyer_wording": (
             "I can prepare this for in-store checkout. Store staff or the POS/provider must confirm final "
             "price, inventory, and payment."
         ),
-        "allowed_to_execute": False,
-        "no_payment_execution": True,
-        "non_authoritative_for_transaction": True,
+        **decided,
     }
 
 
@@ -1532,6 +1903,9 @@ async def receive_offline_pos_confirmation(
             session.add(confirmation_row)
         _apply_pos_confirmation(confirmation_row, confirmation, reconciliation.__dict__)
         packet_row.status = "reconciled"
+        await _record_pos_confirmation(
+            session, tenant_id, packet_row, confirmation, "commerce.runtime.pos.offline.confirmation"
+        )
     return {
         "status": "pos_confirmation_reconciled",
         "confirmation": confirmation,
@@ -1573,6 +1947,9 @@ async def simulate_offline_pos_handoff_confirmation(
             session.add(confirmation_row)
         _apply_pos_confirmation(confirmation_row, confirmation, reconciliation.__dict__)
         packet_row.status = "reconciled"
+        await _record_pos_confirmation(
+            session, tenant_id, packet_row, confirmation, "commerce.runtime.pos.offline.simulator.confirm"
+        )
     return {
         "status": "pos_simulator_reconciled",
         "confirmation": confirmation,
@@ -1628,7 +2005,9 @@ async def _answer_buyer_question_for_scope(
     question: str,
     action_intent: str,
     grantex_available: bool,
+    ledger_event: str,
 ) -> tuple[dict[str, Any], Any, list[Any]]:
+    """A non-binding answer from the scope's verified cache; the question and answer are sealed to the ledger."""
     async with get_tenant_session(_tenant_uuid(tenant_id)) as session:
         repo = DurableOacpArtifactCacheRepository(session)
         cache_records = await repo.list_for_scope(
@@ -1708,6 +2087,23 @@ async def _answer_buyer_question_for_scope(
             grantex_available=grantex_available,
             action_intent=cast(Any, action_intent),
             source_label=source_label,
+        )
+        await record_commerce_event(
+            session,
+            tenant_id=tenant_id,
+            event=ledger_event,
+            outcome="refused" if answer.status == "refused" else "success",
+            merchant_id=merchant_id,
+            seller_agent_id=seller_agent_id,
+            buyer_agent_id=buyer_agent_id,
+            payload={
+                "question": question,
+                "action_intent": action_intent,
+                "answer_status": answer.status,
+                "answer": answer.answer,
+                "refusal_reason": answer.refusal_reason,
+            },
+            details={"answer_status": answer.status, "refusal_reason": answer.refusal_reason},
         )
     return (
         {
@@ -1792,6 +2188,7 @@ async def _bridge_answer(
     tenant_id: str,
     *,
     default_channel: str,
+    ledger_event: str,
 ) -> dict[str, Any]:
     channel = body.channel or default_channel
     payload, answer, cache_records = await _answer_buyer_question_for_scope(
@@ -1802,6 +2199,7 @@ async def _bridge_answer(
         question=body.question,
         action_intent=body.action_intent,
         grantex_available=body.grantex_available,
+        ledger_event=ledger_event,
     )
     contract = build_bridge_contract_response(
         channel=channel,
@@ -2608,6 +3006,207 @@ def _validate_shopify_api_version(value: str) -> str:
     if not re.fullmatch(r"\d{4}-\d{2}", text):
         raise HTTPException(status_code=400, detail="Shopify api_version must look like YYYY-MM")
     return text
+
+
+def _iso(value: datetime) -> str:
+    return value.isoformat().replace("+00:00", "Z")
+
+
+def _request_binding(body: BaseModel, fields: Sequence[str]) -> dict[str, Any]:
+    """What an arbiter decision binds when no handoff could be prepared: the request's own scope."""
+    data = body.model_dump()
+    return {
+        name: data.get(name)
+        for name in ("merchant_id", "seller_agent_id", "buyer_agent_id", "idempotency_key", *fields)
+    }
+
+
+async def _merchant_config_for_arbiter(
+    tenant_id: str,
+    merchant_id: str,
+    seller_agent_id: str | None,
+) -> dict[str, Any] | None:
+    row = await _load_merchant_config_row(
+        tenant_id=tenant_id,
+        merchant_id=merchant_id,
+        seller_agent_id=seller_agent_id,
+    )
+    return None if row is None else _row_to_merchant_config(row)
+
+
+def _arbiter_context(
+    *,
+    tenant_id: str,
+    merchant_id: str,
+    seller_agent_id: str,
+    buyer_agent_id: str | None,
+    now: datetime,
+    payload: Mapping[str, Any],
+    price: Any,
+    currency: Any,
+    quantity: int,
+    authority: BuyerAuthorityEvidence | None,
+    cache_records: Sequence[Any],
+    merchant_config: Mapping[str, Any] | None,
+) -> ArbiterContext:
+    """The arbiter's inputs for one request. Missing evidence stays missing: the arbiter refuses on it."""
+    return ArbiterContext(
+        tenant_id=tenant_id,
+        merchant_id=merchant_id,
+        seller_agent_id=seller_agent_id,
+        buyer_agent_id=buyer_agent_id,
+        now=now,
+        payload=payload,
+        amount_minor_units=amount_minor_units(price, currency, quantity),
+        currency=str(currency).upper() if currency else None,
+        quantity=quantity,
+        mandate=None
+        if authority is None
+        else MandateEvidence(
+            ref=authority.mandate_ref, hash=authority.mandate_hash, expires_at=authority.mandate_expires_at
+        ),
+        consent=None
+        if authority is None
+        else ConsentEvidence(ref=authority.consent_ref, status=authority.consent_status),
+        passport=None
+        if authority is None
+        else PassportEvidence(
+            ref=authority.passport_ref,
+            max_amount_minor_units=authority.passport_max_amount_minor_units,
+            currency=authority.passport_currency,
+            expires_at=authority.passport_expires_at,
+        ),
+        artifacts=artifact_evidence_from_records(cache_records),
+        merchant_limits=merchant_limits_from_config(merchant_config),
+    )
+
+
+async def _escalate(
+    tenant_id: str,
+    decision: Decision,
+    merchant_config: Mapping[str, Any] | None,
+) -> dict[str, Any] | None:
+    """The merchant's escalate_to_human option, after the refusal is sealed; never changes the outcome."""
+    limits = merchant_limits_from_config(merchant_config)
+    if limits is None:
+        return None
+    return await escalate_refusal(
+        tenant_id=tenant_id,
+        decision=decision,
+        escalate_to_human=limits.escalate_to_human,
+        review_agent_id=limits.review_agent_id,
+    )
+
+
+async def _record_authority_request(
+    session: Any,
+    tenant_id: str,
+    packet_row: C6ZSellerOnboardingPacketRow,
+    payload: Mapping[str, Any],
+    *,
+    outcome: str,
+) -> None:
+    await record_commerce_event(
+        session,
+        tenant_id=tenant_id,
+        event="commerce.runtime.grantex.authority_request",
+        outcome=outcome,
+        merchant_id=packet_row.merchant_id,
+        seller_agent_id=packet_row.seller_agent_id,
+        buyer_agent_id=None,
+        payload=payload,
+        resource_id=packet_row.packet_id,
+    )
+
+
+async def _record_refresh_outcome(tenant_id: str, body: RefreshArtifactsRequest, status: str) -> None:
+    await record_commerce_event_in_own_transaction(
+        tenant_id=tenant_id,
+        event="commerce.runtime.artifacts.refresh",
+        outcome="blocked",
+        merchant_id=body.merchant_id,
+        seller_agent_id=body.seller_agent_id,
+        buyer_agent_id=body.buyer_agent_id,
+        payload={"status": status, "merchant_id": body.merchant_id, "seller_agent_id": body.seller_agent_id},
+    )
+
+
+async def _record_capability(
+    session: Any,
+    tenant_id: str,
+    body: MandateCapabilityRequest,
+    evidence: Any,
+) -> None:
+    arguments: dict[str, Any] = {
+        "tenant_id": tenant_id,
+        "event": "commerce.runtime.providers.plural_pine.verify",
+        "outcome": "success" if evidence.external_validation_performed else "blocked",
+        "merchant_id": body.merchant_id,
+        "seller_agent_id": body.seller_agent_id,
+        "buyer_agent_id": body.buyer_agent_id,
+        "payload": evidence.__dict__,
+        "resource_id": evidence.evidence_id,
+    }
+    if session is None:
+        await record_commerce_event_in_own_transaction(**arguments)
+    else:
+        await record_commerce_event(session, **arguments)
+
+
+async def _record_pos_confirmation(
+    session: Any,
+    tenant_id: str,
+    packet_row: C6ZOfflinePosHandoffPacketRow,
+    confirmation: Mapping[str, Any],
+    event: str,
+) -> None:
+    await record_commerce_event(
+        session,
+        tenant_id=tenant_id,
+        event=event,
+        outcome="success",
+        merchant_id=packet_row.merchant_id,
+        seller_agent_id=packet_row.seller_agent_id,
+        buyer_agent_id=packet_row.buyer_agent_id,
+        payload=confirmation,
+        resource_id=str(confirmation.get("confirmation_id") or packet_row.packet_id),
+    )
+
+
+async def _blocked_bridge_recorded(
+    tenant_id: str,
+    channel: str,
+    missing_env_vars: tuple[str, ...],
+    event: str,
+) -> dict[str, Any]:
+    blocked = _blocked_bridge(channel, missing_env_vars)
+    await record_commerce_event_in_own_transaction(
+        tenant_id=tenant_id,
+        event=event,
+        outcome="blocked",
+        merchant_id=None,
+        seller_agent_id=None,
+        buyer_agent_id=None,
+        payload=blocked,
+    )
+    return blocked
+
+
+def _webhook_ledger_payload(
+    topic: str,
+    shop_domain: str,
+    webhook_id: str | None,
+    raw_body: bytes,
+    stale_packets_marked: int,
+) -> dict[str, Any]:
+    return {
+        "topic": topic,
+        "shop_domain": shop_domain,
+        "idempotency_key": shopify_webhook_idempotency_key(
+            topic=topic, shop_domain=shop_domain, webhook_id=webhook_id, raw_body=raw_body
+        ),
+        "stale_packets_marked": stale_packets_marked,
+    }
 
 
 def _offline_pos_handoff_blocker() -> dict[str, str]:

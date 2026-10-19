@@ -31,6 +31,7 @@ from core.commerce.oacp_grantex_trust import (
     reset_oacp_trust_caches,
 )
 from core.config import oacp_verify_strict_enabled, settings
+from tests.commerce_ledger_fakes import patch_commerce_ledger
 from tests.oacp_signing import (
     ISSUER,
     JWKS_URI,
@@ -44,6 +45,12 @@ from tests.oacp_signing import (
 )
 
 TENANT_ID = "11111111-1111-1111-1111-111111111111"
+
+
+@pytest.fixture(autouse=True)
+def commerce_ledger_events(monkeypatch: pytest.MonkeyPatch) -> list:
+    """The commerce ledger writes these route tests make (the database session is a fake here)."""
+    return patch_commerce_ledger(monkeypatch, commerce_runtime_api)
 
 
 @pytest.fixture(autouse=True)

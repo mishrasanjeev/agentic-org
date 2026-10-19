@@ -27,14 +27,40 @@ async def _tenant_ids() -> list[Any]:
         return list((await session.scalars(select(Tenant.id))).all())
 
 
+async def _commerce_tenant_ids() -> list[Any]:
+    """Tenants with a commerce merchant config: sealed under AGENTICORG_AUDIT_CHAIN_DEFAULT_ON.
+
+    The catalogue is enumerated as for every sweep, then each tenant is asked
+    inside its own tenant-bound session, so this works under a NOBYPASSRLS role.
+    """
+    from core.database import get_tenant_session
+    from core.governance import audit_chain
+
+    tenant_ids: list[Any] = []
+    for tenant_id in await _tenant_ids():
+        async with get_tenant_session(tenant_id) as session:
+            if await audit_chain.has_commerce_config(session, tenant_id):
+                tenant_ids.append(tenant_id)
+    return tenant_ids
+
+
 async def _seal_audit_chains_async(*, max_rounds: int = MAX_ROUNDS) -> dict:
-    """Seal every tenant's unsealed rows, a bounded number of batches each; a tenant's failure is isolated."""
+    """Seal every tenant's unsealed rows, a bounded number of batches each; a tenant's failure is isolated.
+
+    With ``audit_chain_enabled`` off and ``audit_chain_default_on`` on, only the
+    tenants that have a commerce merchant config are sealed.
+    """
     from core.config import settings
     from core.governance import audit_chain
 
-    if not settings.audit_chain_enabled:
+    if settings.audit_chain_enabled:
+        tenant_ids = await _tenant_ids()
+        scope = "all"
+    elif settings.audit_chain_default_on:
+        tenant_ids = await _commerce_tenant_ids()
+        scope = "commerce"
+    else:
         return {"enabled": False, "tenants": 0, "sealed": 0, "errors": 0}
-    tenant_ids = await _tenant_ids()
     sealed = 0
     errors = 0
     for tenant_id in tenant_ids:
@@ -48,7 +74,7 @@ async def _seal_audit_chains_async(*, max_rounds: int = MAX_ROUNDS) -> dict:
         except Exception as exc:
             errors += 1
             logger.warning("audit_chain_seal_failed", tenant_id=str(tenant_id), error_type=type(exc).__name__)
-    logger.info("audit_chains_sealed", tenants=len(tenant_ids), sealed=sealed, errors=errors)
+    logger.info("audit_chains_sealed", tenants=len(tenant_ids), sealed=sealed, errors=errors, scope=scope)
     return {"enabled": True, "tenants": len(tenant_ids), "sealed": sealed, "errors": errors}
 
 

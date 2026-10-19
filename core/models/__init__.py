@@ -62,6 +62,7 @@ from core.models.channel import ChannelSenderLink as ChannelSenderLink
 from core.models.client_portal import ClientPortalDocument as ClientPortalDocument
 from core.models.client_portal import ClientPortalInvite as ClientPortalInvite
 from core.models.commerce_a2a_buyer_access import CommerceA2ABuyerAccess as CommerceA2ABuyerAccess
+from core.models.commerce_arbiter import CommerceArbiterDecisionRow as CommerceArbiterDecisionRow
 from core.models.commerce_c6z_runtime import C6ZConnectorEvidenceRow as C6ZConnectorEvidenceRow
 from core.models.commerce_c6z_runtime import (
     C6ZMerchantCommerceConfigRow as C6ZMerchantCommerceConfigRow,

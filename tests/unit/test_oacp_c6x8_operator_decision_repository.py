@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import uuid
 from dataclasses import replace
 from pathlib import Path
 
@@ -14,8 +15,10 @@ from core.commerce.oacp_artifacts import (
     build_oacp_cache_operator_decision_record,
     plan_oacp_artifact_cache_maintenance,
 )
+from core.models.audit import AuditLog
 from core.models.oacp_operator_decision import OacpOperatorDecisionRecordRow
 
+TENANT_C6W3 = "6c6e7400-0000-4000-8000-0000000c6e03"
 C6X8_DOC_PATH = Path("docs/reports/commerce-agent-c6x8-oacp-operator-decision-repository.md")
 C6X8_MIGRATION_PATH = Path("migrations/versions/v6_x8_oacp_operator_decisions.py")
 
@@ -36,7 +39,7 @@ def _record(**overrides: object) -> OacpPersistentArtifactCacheRecord:
         authority="grantex_canonical_oacp_artifact_authority",
         issuer="grantex",
         scope_kind="buyer_agent",
-        tenant_id="cten_C6W3",
+        tenant_id=TENANT_C6W3,
         merchant_id="mch_C6W3",
         seller_agent_id="seller_C6W3",
         buyer_agent_id="buyer_C6W3",
@@ -68,7 +71,7 @@ def _review_packet() -> dict[str, object]:
         grantex_available=True,
         action_intent="final_commitment",
         risk_tier="medium",
-        scope_filter=OacpArtifactCacheRepositoryQuery(tenant_id="cten_C6W3"),
+        scope_filter=OacpArtifactCacheRepositoryQuery(tenant_id=TENANT_C6W3),
     )
     return build_oacp_cache_maintenance_dry_run_report(
         maintenance_plan=plan,
@@ -98,6 +101,7 @@ class _FakeScalars:
 class _FakeAsyncSession:
     def __init__(self) -> None:
         self.rows: dict[str, OacpOperatorDecisionRecordRow] = {}
+        self.ledger: list[AuditLog] = []
 
     async def get(
         self,
@@ -106,7 +110,11 @@ class _FakeAsyncSession:
     ) -> OacpOperatorDecisionRecordRow | None:
         return self.rows.get(decision_id)
 
-    def add(self, row: OacpOperatorDecisionRecordRow) -> None:
+    def add(self, row: object) -> None:
+        # New records are mirrored into the commerce ledger (audit_log) in the same session.
+        if isinstance(row, AuditLog):
+            self.ledger.append(row)
+            return
         self.rows[row.decision_id] = row
 
     async def flush(self) -> None:
@@ -141,7 +149,7 @@ async def test_c6x8_durable_repository_upserts_gets_lists_and_evaluates_without_
     assert stored["reviewer_identity_ref"] == "operator_ref_c6x8_reviewer_001"
 
     scoped = await repository.list_decisions_for_scope(
-        OacpOperatorDecisionRepositoryQuery(tenant_id="cten_C6W3", buyer_agent_id="buyer_C6W3"),
+        OacpOperatorDecisionRepositoryQuery(tenant_id=TENANT_C6W3, buyer_agent_id="buyer_C6W3"),
     )
     assert [item["decision_record_id"] for item in scoped] == [decision["decision_record_id"]]
 
@@ -217,3 +225,38 @@ def test_c6x8_docs_capture_durable_repository_scope_and_non_goals() -> None:
     assert "allowed_to_execute = false" in doc
     assert "future_action_allowed = false" in doc
     assert "does not call Grantex live" in doc
+
+
+@pytest.mark.asyncio
+async def test_g13_new_decision_is_mirrored_to_the_ledger_and_cannot_be_rewritten() -> None:
+    """G13: a decision record is written once and sealed into audit_log in the same session."""
+    session = _FakeAsyncSession()
+    repository = DurableOacpOperatorDecisionRepository(session)
+    decision = _decision()
+
+    first = await repository.upsert_decision(decision)
+    assert first["stored"] is True
+    [ledger_row] = session.ledger
+    assert ledger_row.event_type == "commerce.oacp.operator_decision.record"
+    assert ledger_row.resource_type == "commerce_ledger"
+    assert ledger_row.tenant_id == uuid.UUID(TENANT_C6W3)
+    assert len(ledger_row.details["ledger"]["payload_hash"]) == 64
+    assert ledger_row.signature
+
+    again = await repository.upsert_decision({**decision, "reviewer_identity_ref": "operator_ref_c6x8_reviewer_002"})
+    assert again["stored"] is False
+    assert again["refusal_code"] == "record_append_only"
+    assert len(session.ledger) == 1
+
+
+@pytest.mark.asyncio
+async def test_g13_record_without_a_tenant_uuid_is_refused_before_storage() -> None:
+    session = _FakeAsyncSession()
+    repository = DurableOacpOperatorDecisionRepository(session)
+    decision = _decision()
+    scope = dict(decision["scope_summary"])
+    scope["tenant"] = {"cten_not_a_uuid": 1}
+    result = await repository.upsert_decision({**decision, "scope_summary": scope})
+    assert result["stored"] is False
+    assert result["refusal_code"] == "ledger_tenant_invalid"
+    assert session.rows == {} and session.ledger == []

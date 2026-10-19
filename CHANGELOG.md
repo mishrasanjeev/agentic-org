@@ -1,5 +1,42 @@
 # Changelog
 
+## Unreleased - Commerce ledger and arbiter (G9-G13)
+
+- **Breaking: `live_execution_approved` is ignored.** `POST /api/v1/commerce/runtime/purchase/prepare`
+  accepts the body boolean for one more release, logs a deprecation warning and ignores it
+  (`deprecated_fields_ignored` in the response). Live provider execution now needs
+  `decision_id`: call once with `buyer_authority` to get an `allow` arbiter decision, then
+  repeat the identical request with that `decision_id` within 10 minutes (single use), with
+  `PLURAL_PINE_LIVE_EXECUTION_ENABLED=true`. Migration path: send `buyer_authority`, read
+  `arbiter_decision.decision_id`, resend with it.
+- **Breaking: POS handoff packets need an arbiter decision.** `POST
+  /api/v1/commerce/runtime/pos/offline/handoffs` without `decision_id` now returns the decision
+  (`status: decision_issued`, or `blocked` with `arbiter_refused`) and stores no packet; the
+  packet is stored when the same request is repeated with the `allow` `decision_id`. Migration
+  path: two calls, as above. There is no opt-out: a handoff without an `allow` decision is the
+  behaviour this release removes.
+- Commerce arbiter (`core/commerce/arbiter.py`): deterministic `decide(action, context)` over
+  mandate, consent, Commerce Passport cap, verified fresh unrevoked OACP artifacts and merchant
+  limits (`provider_policy.arbiter` in the merchant config), first failure wins, missing input
+  refuses. Decisions are stored append-only in `commerce_arbiter_decisions` and sealed to the
+  ledger; refusals are returned as blockers. No path waits for a person; the merchant option
+  `escalate_to_human` (default false) copies a refusal into `hitl_queue` for review without
+  changing it.
+- Commerce ledger (`core/commerce/ledger.py`): every commerce write route and A2A
+  `message:send` writes a signed `audit_log` row (`resource_type = commerce_ledger`, RFC 8785
+  `payload_hash`) in the same transaction as the write. `route_meta(audit_event=...)` is now
+  enforced on commerce write routes: a route that returns without its event answers 500
+  `commerce_ledger_event_missing` (logged only with `AGENTICORG_ROUTE_ENFORCEMENT_MODE=log`).
+- OACP operator decision, review manifest and retention disposition records are append-only
+  (trigger) and mirrored into the ledger; a repeated record id is refused
+  `record_append_only`, a non-UUID tenant `ledger_tenant_invalid`.
+- `AGENTICORG_AUDIT_CHAIN_DEFAULT_ON` (default off) seals the audit chain of every tenant with a
+  commerce merchant config while `AGENTICORG_AUDIT_CHAIN_ENABLED` is off.
+- Migration `v6z88_commerce_ledger` (after `v6z87_platform_ctx_policies`):
+  `commerce_arbiter_decisions` under forced RLS, append-only triggers, and the `audit_log`
+  append-only trigger reinstalled (an empty-schema bootstrap was stamped past the baseline that
+  created it). Docs: `docs/oacp/arbiter-ledger.md`.
+
 ## Unreleased - OACP artifact verification before caching (G5)
 
 - **Breaking for strict runtimes.** `POST /api/v1/commerce/runtime/artifacts/cache`

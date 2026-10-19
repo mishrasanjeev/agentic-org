@@ -409,6 +409,11 @@ class Settings(BaseSettings):
     # and verification read whatever is sealed either way.
     audit_chain_enabled: bool = False
     audit_chain_seal_batch: int = 5000
+    # With audit_chain_enabled off, still seal the chain of every tenant that
+    # has a commerce merchant config (commerce_c6z_merchant_configs), so the
+    # commerce ledger (core/commerce/ledger.py) is tamper-evident. Off by
+    # default. Env: AGENTICORG_AUDIT_CHAIN_DEFAULT_ON.
+    audit_chain_default_on: bool = False
     # Synthetic checks (observability/synthetic.py): the scheduled sweep runs
     # each tenant's due probes (model, knowledge, guardrail, audit chain) and
     # stores a result per run. Off by default; a check can be run by hand

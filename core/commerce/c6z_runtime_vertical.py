@@ -1615,8 +1615,8 @@ def prepare_purchase_or_mandate_handoff(
                 "PLURAL_PINE_LIVE_EXECUTION_ENABLED=true plus provider-approved merchant/live secret refs"
             ),
             "unblock_command": (
-                "POST /api/v1/commerce/runtime/purchase/prepare with live_execution_approved=true "
-                "after operator approval"
+                "POST /api/v1/commerce/runtime/purchase/prepare with decision_id of an allow decision "
+                "for this handoff (commerce arbiter)"
             ),
             "doc_reference": "docs/runbooks/oacp-shopify-merchant-onboarding.md#pluralpine-p3p-setup",
         }
