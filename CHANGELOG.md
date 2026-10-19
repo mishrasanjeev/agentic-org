@@ -1,5 +1,22 @@
 # Changelog
 
+## Unreleased - Unicode input and private Telegram follow-ups
+
+- Preserve Unicode in model-facing JSON before privacy scanning, including
+  base-agent reasoning and synthesis. Do not disable recognizers or redaction;
+  keep literal user escape sequences as literal data.
+- In the existing explicit Telegram answer-mode opt-in, tool-free agents may
+  use four recent confirmed question/answer pairs, bounded to 30 minutes and
+  the same tenant, binding, linked user/delegation and agent/company. Keep
+  context text-only, tenant-encrypted and subject to existing privacy/budget
+  controls; exclude unsafe, legacy, stale and unconfirmed replies.
+- Exclude traffic-split targets from context and recheck the server-owned
+  answer-only scope after target resolution, before model dispatch. Preserve
+  existing channel routing correlation independently of execution checkpoints.
+- Retain fresh server-owned execution checkpoints and serialize follow-up
+  intake against acknowledgement stamping. No schema, feature-flag, credential,
+  webhook, model-default or execution-control changes.
+
 ## Unreleased - Configurable Telegram answer replies
 
 - Require patched libx11 in both UI runtime images after the container scan

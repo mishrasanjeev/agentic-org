@@ -66,6 +66,12 @@ sender under **Channels > Reply content**. Traces and tool-call records stay in
 AgenticOrg; approvals, sender authorization and tenant controls still apply.
 The encrypted intake carries the authenticated sender identity across services;
 older receipts without that proof remain withheld, even if the agent completed.
+For tool-free Telegram agents without traffic splits in this opt-in mode,
+follow-ups may use up to four
+recent, confirmed question/answer pairs from the same linked private sender and
+agent/company scope, within 30 minutes. This is bounded text context, not durable
+memory or permission to repeat actions. Hindi and other Unicode model input
+remains readable before privacy scanning; existing redaction still applies.
 
 Follow the [channel account and workflow guide](docs/user-guide/channel-workflows.md)
 for account creation, callback registration, sender linking and verification.

@@ -161,7 +161,9 @@ def _request_for_user(user: User) -> Request:
     return request
 
 
-async def _answer_authorized(binding: ChannelBinding, receipt: ChannelDelivery, message: dict) -> bool:
+async def _answer_authorized(
+    binding: ChannelBinding, receipt: ChannelDelivery, message: dict, expected_scope: dict | None = None
+) -> bool:
     """Recheck private-sender delegation and current target access after execution."""
     from core.models.agent import Agent
     from core.ownership import require_agent_mutable
@@ -211,7 +213,96 @@ async def _answer_authorized(binding: ChannelBinding, receipt: ChannelDelivery, 
             require_agent_mutable(target, caller_from_request(_request_for_user(user)))
         except HTTPException:
             return False
-        return target is not None and target.status in {"active", "shadow"}
+        return (
+            target is not None
+            and target.status in {"active", "shadow"}
+            and (expected_scope is None or _conversation_scope(binding, receipt, target) == expected_scope)
+        )
+
+
+def _conversation_scope(binding: ChannelBinding, receipt: ChannelDelivery, target: Any) -> dict | None:
+    # The existing explicit answer-mode opt-in gates text context, never execution state.
+    config = getattr(target, "config", None) or {}
+    if (
+        binding.provider != "telegram"
+        or binding.target_kind != "agent"
+        or not binding.auto_reply
+        or getattr(binding, "reply_mode", "status") != "agent_answer"
+        or getattr(receipt, "reply_mode", "status") != "agent_answer"
+        or getattr(target, "authorized_tools", None) != []
+        or not isinstance(config, dict)
+        or config.get("traffic_split") is not None
+    ):
+        return None
+    return {"agent_id": str(target.id), "company_id": str(target.company_id) if target.company_id else None}
+
+
+def _conversation_pair(
+    prior: ChannelDelivery, message: dict, result: dict, digest: str, scope: dict, credentials: dict
+) -> list[dict[str, str]]:
+    if (
+        prior.error_code
+        or message.get("sender_hash") != digest
+        or message.get("conversation_scope") != scope
+        or message.get("answer_sent") is not True
+        or result.get("agent_id") != scope["agent_id"]
+        or result.get("requested_agent_id") != scope["agent_id"]
+        or result.get("tool_calls")
+        or execution_status(result)[0] != "completed"
+    ):
+        return []
+    question = message.get("text")
+    if not isinstance(question, str):
+        return []
+    safe_question = final_answer({"status": "completed", "output": {"answer": question}}, credentials)
+    answer = final_answer(result, credentials)
+    if safe_question is None or answer is None:
+        return []
+    return [{"role": "user", "text": safe_question}, {"role": "assistant", "text": answer}]
+
+
+async def _recent_answer_context(
+    binding: ChannelBinding, receipt: ChannelDelivery, message: dict, scope: dict, credentials: dict
+) -> dict:
+    from core.conversation.context import context_block
+
+    digest = message.get("sender_hash")
+    if not isinstance(digest, str) or re.fullmatch(r"[0-9a-f]{64}", digest) is None or receipt.delegation_id is None:
+        return {}
+    async with get_tenant_session(binding.tenant_id) as session:
+        rows = (
+            await session.scalars(
+                select(ChannelDelivery)
+                .where(
+                    ChannelDelivery.tenant_id == binding.tenant_id,
+                    ChannelDelivery.binding_id == binding.id,
+                    ChannelDelivery.user_id == receipt.user_id,
+                    ChannelDelivery.delegation_id == receipt.delegation_id,
+                    ChannelDelivery.reply_mode == "agent_answer",
+                    ChannelDelivery.status == "completed",
+                    ChannelDelivery.created_at > datetime.now(UTC) - timedelta(minutes=30),
+                    ChannelDelivery.created_at < receipt.created_at,
+                )
+                .order_by(ChannelDelivery.created_at.desc(), ChannelDelivery.id.desc())
+                .limit(4)
+            )
+        ).all()
+    pairs: list[list[dict[str, str]]] = []
+    for prior in rows:
+        if not prior.result_ciphertext:
+            break
+        pair = _conversation_pair(
+            prior,
+            await unseal(prior.message_ciphertext),
+            await unseal(prior.result_ciphertext),
+            digest,
+            scope,
+            credentials,
+        )
+        if not pair:
+            break
+        pairs.insert(0, pair)
+    return context_block([turn for pair in pairs for turn in pair])
 
 
 def execution_status(result: dict[str, Any]) -> tuple[str, str | None]:
@@ -299,6 +390,9 @@ async def dispatch_one(tenant_id: uuid.UUID, binding_id: uuid.UUID) -> str:
         receipt.status, receipt.updated_at = "processing", now
         delivery_id = receipt.id
     message = None
+    conversation_scope = None
+    conversation_credentials = None
+    confirmed_message = None
     result: dict[str, Any] = {}
     try:
         message = await unseal(receipt.message_ciphertext)
@@ -321,14 +415,22 @@ async def dispatch_one(tenant_id: uuid.UUID, binding_id: uuid.UUID) -> str:
                 if target is None or target.status not in {"shadow", "active"}:
                     raise HTTPException(409, "Channel agent target is not runnable")
 
+            conversation_scope = _conversation_scope(binding, receipt, target)
+            payload: dict[str, Any] = {
+                "inputs": {"task": message["text"]},
+                "correlation_id": f"channel:{binding.id}:{sender_hash(binding.id, message['sender'])}",
+            }
+            if conversation_scope is not None:
+                request.state.channel_answer_scope = conversation_scope
+                conversation_credentials = await unseal(binding.credentials_ciphertext)
+                payload["context"] = await _recent_answer_context(
+                    binding, receipt, message, conversation_scope, conversation_credentials
+                )
             result = await asyncio.wait_for(
                 run_agent(
                     binding.target_id,
                     request,
-                    {
-                        "inputs": {"task": message["text"]},
-                        "thread_id": f"channel:{binding.id}:{sender_hash(binding.id, message['sender'])}",
-                    },
+                    payload,
                     str(tenant_id),
                     get_user_domains(request),
                     caller_from_request(request),
@@ -373,7 +475,10 @@ async def dispatch_one(tenant_id: uuid.UUID, binding_id: uuid.UUID) -> str:
     async with get_tenant_session(tenant_id) as session:
         row = await session.get(ChannelDelivery, delivery_id)
         if row is not None:
-            row.status, row.result_ciphertext, row.error_code = status, sealed_result, error_code
+            # Keep the binding claim until answer delivery is acknowledged; a follow-up
+            # must not race the first turn's context stamp. Ambiguous sends are not retried.
+            row.status = status if conversation_scope is None else "processing"
+            row.result_ciphertext, row.error_code = sealed_result, error_code
     async with get_tenant_session(tenant_id) as session:
         live_binding = await session.get(ChannelBinding, binding_id)
     if (
@@ -386,7 +491,7 @@ async def dispatch_one(tenant_id: uuid.UUID, binding_id: uuid.UUID) -> str:
         and live_binding.credentials_ciphertext == binding.credentials_ciphertext
     ):
         try:
-            credentials = await unseal(binding.credentials_ciphertext)
+            credentials = conversation_credentials or await unseal(binding.credentials_ciphertext)
             text = (
                 f"Task status: {status.replace('_', ' ')}. Open AgenticOrg to view the result or approve the next step."
             )
@@ -403,8 +508,10 @@ async def dispatch_one(tenant_id: uuid.UUID, binding_id: uuid.UUID) -> str:
             )
             if answer_requested and status == "completed":
                 answer = final_answer(result, credentials)
-                if answer is not None and await _answer_authorized(binding, receipt, message):
+                if answer is not None and await _answer_authorized(binding, receipt, message, conversation_scope):
                     text = answer
+                    if conversation_scope is not None:
+                        confirmed_message = {**message, "conversation_scope": conversation_scope, "answer_sent": True}
                 else:
                     text = "Task status: completed. Answer withheld; open AgenticOrg to review the result."
             await send_reply(
@@ -414,8 +521,17 @@ async def dispatch_one(tenant_id: uuid.UUID, binding_id: uuid.UUID) -> str:
                 text,
             )
         except ChannelError:
+            confirmed_message = None
             async with get_tenant_session(tenant_id) as session:
                 row = await session.get(ChannelDelivery, delivery_id)
                 if row:
                     row.error_code = "reply_delivery_unconfirmed"
+    if conversation_scope is not None:
+        confirmed_ciphertext = await seal(confirmed_message, tenant_id) if confirmed_message else None
+        async with get_tenant_session(tenant_id) as session:
+            row = await session.get(ChannelDelivery, delivery_id)
+            if row is not None:
+                row.status = status
+                if confirmed_ciphertext is not None:
+                    row.message_ciphertext = confirmed_ciphertext
     return status

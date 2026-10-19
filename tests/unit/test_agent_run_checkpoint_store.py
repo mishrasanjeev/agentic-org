@@ -7,6 +7,7 @@ from contextlib import asynccontextmanager
 from unittest.mock import AsyncMock, patch
 
 import pytest
+from starlette.requests import Request
 
 from core.langgraph.checkpointer import CheckpointerUnavailableError
 from tests.regression.test_ownership_agents_20260914 import _admin, _agent, _patch_session, _Session
@@ -75,6 +76,10 @@ def test_paused_run_stores_the_server_generated_tenant_thread_on_its_approval(ap
     agent = _agent("finance", agent_type="custom_agent")
     session = _Session(agent)
     runner = _paused()
+    recent_context = {
+        "thread_id": "x",
+        "conversation": [{"role": "user", "text": "मेरी काल्पनिक दुकान का रंग बैंगनी है।"}],
+    }
     with (
         _admin(app) as client,
         _patch_session(session),
@@ -85,12 +90,13 @@ def test_paused_run_stores_the_server_generated_tenant_thread_on_its_approval(ap
         # A client-supplied thread id is ignored: it is not part of the contract.
         resp = client.post(
             f"/api/v1/agents/{agent.id}/run",
-            json={"inputs": {"query": "reconcile"}, "thread_id": "tenant:guess", "context": {"thread_id": "x"}},
+            json={"inputs": {"query": "reconcile"}, "thread_id": "tenant:guess", "context": recent_context},
         )
 
     assert resp.status_code == 200, resp.text
     passed_thread = runner.await_args.kwargs["thread_id"]
     assert thread_belongs_to_tenant(passed_thread, TENANT)
+    assert runner.await_args.kwargs["task_input"]["context"] == recent_context
     (row,) = _hitl_rows(session)
     assert row.checkpoint_thread_id == passed_thread
     assert passed_thread not in resp.text
@@ -111,3 +117,49 @@ def test_approval_without_a_paused_checkpoint_stores_no_thread(app) -> None:
     assert resp.status_code == 200, resp.text
     (row,) = _hitl_rows(session)
     assert row.checkpoint_thread_id is None
+
+
+@pytest.mark.parametrize("change", ["matching", "agent", "company", "tools", "traffic_split", "redirected"])
+def test_channel_context_scope_is_rechecked_before_model_dispatch(app, change, monkeypatch) -> None:
+    from api.v1 import agents
+
+    agent = _agent("finance", agent_type="custom_agent")
+    scope = {"agent_id": str(agent.id), "company_id": None}
+    if change == "agent":
+        scope["agent_id"] = "00000000-0000-0000-0000-000000000002"
+    elif change == "company":
+        scope["company_id"] = "00000000-0000-0000-0000-000000000002"
+    elif change == "tools":
+        agent.authorized_tools = ["synthetic.read"]
+    elif change == "traffic_split":
+        agent.config = {"traffic_split": {"to_agent_id": "00000000-0000-0000-0000-000000000002", "percent": 100}}
+    alternate = _agent("finance", agent_type="custom_agent", status="active")
+    if change == "redirected":
+        agent.status = "active"
+        agent.config = {"traffic_split": {"to_agent_id": str(alternate.id), "percent": 100}}
+
+    def internal_context(request: Request):
+        request.state.channel_answer_scope = scope
+        return ["finance"]
+
+    runner = _paused()
+    with (
+        _admin(app) as client,
+        _patch_session(_Session(agent)),
+        patch("api.v1.agents._resolve_connector_configs", AsyncMock(return_value=({}, []))),
+        patch("core.push.sender.notify_approval_created", AsyncMock()),
+        patch("core.langgraph.runner.run_agent", runner),
+        patch("api.v1.agents.agent_traffic.enabled", return_value=change == "redirected"),
+        patch("api.v1.agents.agent_traffic.choose", return_value=(alternate, "synthetic_split")),
+    ):
+        # The app is shared by other route suites; restore its domain dependency.
+        monkeypatch.setitem(app.dependency_overrides, agents.get_user_domains, internal_context)
+        response = client.post(f"/api/v1/agents/{agent.id}/run", json={"inputs": {"task": "synthetic question"}})
+
+    if change == "matching":
+        assert response.status_code == 200, response.text
+        runner.assert_awaited_once()
+    else:
+        assert response.status_code == 409, response.text
+        assert response.json()["detail"]["error"] == "channel_context_scope_changed"
+        runner.assert_not_awaited()

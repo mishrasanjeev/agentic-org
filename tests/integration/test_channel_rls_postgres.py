@@ -44,6 +44,171 @@ from tests.integration.test_feature_flags_rls_postgres import (
 )
 
 
+@pytest.mark.parametrize(
+    "history_state",
+    [
+        "accepted",
+        "expired",
+        "old_link",
+        "old_agent",
+        "old_company",
+        "foreign_sender",
+        "status_only",
+        "no_ack",
+        "send_failed",
+    ],
+)
+@pytest.mark.timeout(300)
+async def test_telegram_followup_receives_only_its_own_completed_answer_context(
+    as_rls_role: _Db, monkeypatch, history_state
+):
+    from api.v1 import agents
+
+    tenant, owner, agent_id, binding_id, link_id = (uuid.uuid4() for _ in range(5))
+    with as_rls_role.owner.begin() as conn:
+        conn.execute(
+            text(
+                "INSERT INTO tenants (id,name,slug,plan,data_region,settings) "
+                "VALUES (:id,:name,:slug,:plan,:region,:settings)"
+            ),
+            tenant_row(str(tenant)),
+        )
+        conn.execute(
+            text(
+                "INSERT INTO users (id,tenant_id,email,name,role,status,mfa_enabled) "
+                "VALUES (:id,:tenant_id,:email,:name,'admin','active',false)"
+            ),
+            admin_user_row(str(tenant), str(owner), f"conversation-{owner.hex}@example.test"),
+        )
+    monkeypatch.setattr(runtime, "resolve_tenant_kek", AsyncMock(return_value=""))
+    monkeypatch.setattr(settings, "secret_key", "synthetic-conversation-intake-key")
+    digest = runtime.sender_hash(binding_id, "10001")
+    async with get_tenant_session(tenant) as session:
+        session.add(
+            Agent(
+                id=agent_id,
+                tenant_id=tenant,
+                name="Synthetic conversation",
+                agent_type="synthetic",
+                domain="ops",
+                system_prompt_ref="synthetic",
+                hitl_condition="confidence < 0.88",
+                status="shadow",
+            )
+        )
+        session.add(
+            ChannelBinding(
+                id=binding_id,
+                tenant_id=tenant,
+                owner_user_id=owner,
+                name="Synthetic conversation",
+                provider="telegram",
+                target_kind="agent",
+                target_id=agent_id,
+                enabled=True,
+                auto_reply=True,
+                reply_mode="agent_answer",
+                credentials_ciphertext=await runtime.seal({"access_token": "synthetic-only"}, tenant),
+            )
+        )
+    async with get_tenant_session(tenant) as session:
+        binding = await session.get(ChannelBinding, binding_id)
+        session.add(
+            ChannelSenderLink(
+                id=link_id,
+                tenant_id=tenant,
+                binding_id=binding_id,
+                user_id=owner,
+                sender_hash=digest,
+                expires_at=datetime.now(UTC) + timedelta(days=1),
+            )
+        )
+    assert binding is not None
+    seed = "मेरी काल्पनिक दुकान का नाम नीलकमल और रंग बैंगनी है।"
+    first_answer = "आपकी काल्पनिक दुकान नीलकमल है और उसका रंग बैंगनी है।"
+    captured = []
+
+    async def complete(*args, **kwargs):
+        payload = args[2]
+        captured.append(payload)
+        if len(captured) == 2:
+            expected = [{"role": "user", "text": seed}, {"role": "assistant", "text": first_answer}]
+            assert payload.get("context", {}).get("conversation", []) == (
+                expected if history_state == "accepted" else []
+            )
+        assert "thread_id" not in payload  # Every execution still receives a new server-owned checkpoint.
+        assert payload["correlation_id"] == f"channel:{binding_id}:{runtime.sender_hash(binding_id, '10001')}"
+        assert args[1].state.channel_answer_scope == {"agent_id": str(agent_id), "company_id": None}
+        return {
+            "status": "completed",
+            "agent_id": str(agent_id),
+            "requested_agent_id": str(agent_id),
+            "output": {"answer": first_answer, "confidence": 1},
+            "tool_calls": [],
+        }
+
+    async def send(*args):
+        async with get_tenant_session(tenant) as session:
+            row = await session.scalar(
+                select(ChannelDelivery).where(
+                    ChannelDelivery.tenant_id == tenant,
+                    ChannelDelivery.binding_id == binding_id,
+                    ChannelDelivery.event_id == ("context-seed" if len(captured) == 1 else "context-followup"),
+                )
+            )
+            assert row.status == "processing"
+        assert await runtime.dispatch_one(tenant, binding_id) == "busy"
+        if history_state == "send_failed" and len(captured) == 1:
+            from core.channels.providers import ChannelError
+
+            raise ChannelError("synthetic-ambiguous-provider-send")
+
+    reply = AsyncMock(side_effect=send)
+    monkeypatch.setattr(agents, "run_agent", AsyncMock(side_effect=complete))
+    monkeypatch.setattr(runtime, "send_reply", reply)
+    assert await runtime.receive(binding, Message(event_id="context-seed", sender="10001", text=seed)) == "pending"
+    # API and worker signing keys differ; conversation scope must use protected intake identity.
+    monkeypatch.setattr(settings, "secret_key", "synthetic-conversation-worker-key")
+    assert await runtime.dispatch_one(tenant, binding_id) == "completed"
+    assert "conversation" not in captured[0].get("context", {})
+    async with get_tenant_session(tenant) as session:
+        row = await session.scalar(
+            select(ChannelDelivery).where(
+                ChannelDelivery.tenant_id == tenant,
+                ChannelDelivery.binding_id == binding_id,
+                ChannelDelivery.event_id == "context-seed",
+            )
+        )
+        protected = await runtime.unseal(row.message_ciphertext)
+        assert protected.get("answer_sent", False) == (history_state != "send_failed")
+        if history_state == "expired":
+            row.created_at = datetime.now(UTC) - timedelta(minutes=31)
+        elif history_state == "old_link":
+            row.delegation_id = uuid.uuid4()
+        elif history_state == "old_agent":
+            protected["conversation_scope"]["agent_id"] = str(uuid.uuid4())
+        elif history_state == "old_company":
+            protected["conversation_scope"]["company_id"] = str(uuid.uuid4())
+        elif history_state == "foreign_sender":
+            protected["sender_hash"] = "0" * 64
+        elif history_state == "status_only":
+            row.reply_mode = "status"
+        elif history_state == "no_ack":
+            protected.pop("answer_sent")
+        row.message_ciphertext = await runtime.seal(protected, tenant)
+    monkeypatch.setattr(settings, "secret_key", "synthetic-conversation-intake-key")
+    followup = "मेरी दुकान का नाम और रंग क्या था?"
+    followup_status = await runtime.receive(
+        binding, Message(event_id="context-followup", sender="10001", text=followup)
+    )
+    assert followup_status == "pending"
+    monkeypatch.setattr(settings, "secret_key", "synthetic-conversation-worker-key")
+    assert await runtime.dispatch_one(tenant, binding_id) == "completed"
+    assert len(captured) == 2
+    assert reply.await_count == 2
+    assert reply.call_args.args[3] == first_answer
+
+
 @pytest.mark.parametrize("mode", ["answer", "legacy_intake", "mismatched_sender", "revoked_link"])
 @pytest.mark.timeout(300)
 async def test_telegram_answer_uses_authenticated_intake_identity_across_service_keys(

@@ -340,7 +340,7 @@ class BaseAgent:
         """Call LLM with system prompt and task context."""
         messages = [
             {"role": "system", "content": self._system_prompt_for(pseudonymiser)},
-            {"role": "user", "content": json.dumps(context, default=str)},
+            {"role": "user", "content": json.dumps(context, default=str, ensure_ascii=False)},
         ]
         model_override = self._resolve_llm_model()
         trace.append(f"Calling LLM for reasoning (model: {model_override or 'default'})")
@@ -548,13 +548,13 @@ class BaseAgent:
         trace.append("Synthesizing final output with tool results")
         messages = [
             {"role": "system", "content": self._system_prompt_for(pseudonymiser)},
-            {"role": "user", "content": json.dumps(original_context, default=str)},
-            {"role": "assistant", "content": json.dumps(initial_output, default=str)},
+            {"role": "user", "content": json.dumps(original_context, default=str, ensure_ascii=False)},
+            {"role": "assistant", "content": json.dumps(initial_output, default=str, ensure_ascii=False)},
             {
                 "role": "user",
                 "content": (
                     "Tool execution results:\n"
-                    + json.dumps(tool_results, default=str)
+                    + json.dumps(tool_results, default=str, ensure_ascii=False)
                     + "\n\nIncorporate these results into your final JSON response."
                 ),
             },

@@ -1341,8 +1341,8 @@ def _build_user_message(task_input: dict[str, Any]) -> str:
 
     parts = [f"Action: {action}"]
     if inputs:
-        parts.append(f"Inputs: {json.dumps(inputs, default=str)}")
+        parts.append(f"Inputs: {json.dumps(inputs, default=str, ensure_ascii=False)}")
     if context:
-        parts.append(f"Context: {json.dumps(context, default=str)}")
+        parts.append(f"Context: {json.dumps(context, default=str, ensure_ascii=False)}")
 
     return "\n".join(parts)
