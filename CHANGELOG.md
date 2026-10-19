@@ -47,6 +47,17 @@
 - `docs/oacp/explainers/launch-rollback-runbook.md` lists
   `AGENTICORG_OACP_VERIFY_STRICT` with its default, the launch order and the
   rollback step.
+- `scripts/oacp_runtime_launch_check.py` no longer writes
+  `artifact_verifier_summary.valid = <artifact count>` for unsigned local
+  artifacts. It signs them with an ES256 key generated for the run (kid
+  `oacp-launchcheck-<random>`, never stored), runs each through
+  `OacpGrantexArtifactVerifier` against that key's JWKS and an in-process VALID
+  status list, and reports `checked` / `valid` / `invalid` / `status_list_checked`
+  / `refusal_codes` from the verifier results, labelled
+  `verification_mode: local_throwaway_es256_key` and `grantex_issuer: false`.
+  Cache records carry the verifier's `verifier_result_ref`
+  (`cache_records_verified_count`); any refusal exits non-zero. The tracked
+  local evidence is regenerated.
 
 ## Unreleased - Unicode input and private Telegram follow-ups
 
