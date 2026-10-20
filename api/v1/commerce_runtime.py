@@ -965,6 +965,7 @@ async def request_grantex_authority_artifacts(
             connector_evidence=evidence,
             expected_tenant_id=tenant_id,
             public_discovery_opt_in=await _ucp_public_discovery_opt_in(session, tenant_id, packet_row),
+            mandate_capability_evidence=await _mandate_capability_evidence(session, tenant_id, packet),
         )
         env_resolution = resolve_env(GRANTEX_AUTHORITY_ENV_VARS)
         if not env_resolution.ready:
@@ -3490,6 +3491,46 @@ def _apply_evidence(row: C6ZConnectorEvidenceRow, evidence: Mapping[str, Any], *
     row.no_public_discovery_enablement = True
     row.allowed_to_execute = False
     row.non_authoritative_for_transaction = True
+
+
+async def _mandate_capability_evidence(session: Any, tenant_id: str, packet: Mapping[str, Any]) -> dict | None:
+    """The latest Plural capability result as Grantex mandate-capability evidence (G43), or None.
+
+    Behind ``AGENTICORG_GRANTEX_MANDATE_CAPABILITY_EVIDENCE_ENABLED`` (default off). Built from
+    the stored verifier result and the merchant's ``mandate_capability``; never from the request.
+    """
+    from core.commerce import mandate_capability_evidence
+
+    if not settings.grantex_mandate_capability_evidence_enabled:
+        return None
+    merchant_id = str(packet["merchant_id"])
+    seller_agent_id = str(packet.get("seller_agent_id") or _default_seller_agent_id(merchant_id))
+    result = (
+        await session.execute(
+            select(C6ZProviderCapabilityEvidenceRow)
+            .where(
+                C6ZProviderCapabilityEvidenceRow.tenant_id == tenant_id,
+                C6ZProviderCapabilityEvidenceRow.merchant_id == merchant_id,
+                C6ZProviderCapabilityEvidenceRow.provider == "plural_pine",
+            )
+            .order_by(C6ZProviderCapabilityEvidenceRow.checked_at.desc())
+            .limit(1)
+        )
+    ).scalar_one_or_none()
+    if result is None:
+        return None
+    config_id = merchant_config_id(tenant_id, merchant_id, seller_agent_id)
+    config = await session.get(C6ZMerchantCommerceConfigRow, config_id)
+    policy = (config.provider_policy or {}) if config is not None else {}
+    ucp = policy.get("ucp") if isinstance(policy, Mapping) else None
+    capability = ucp.get("mandate_capability") if isinstance(ucp, Mapping) else None
+    return mandate_capability_evidence.build(
+        result,
+        tenant_id=tenant_id,
+        merchant_id=merchant_id,
+        mandate_capability=capability,
+        now=datetime.now(UTC),
+    )
 
 
 def _apply_capability(

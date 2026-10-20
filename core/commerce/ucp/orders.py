@@ -25,7 +25,7 @@ from __future__ import annotations
 import uuid
 from collections.abc import Awaitable, Callable, Mapping, Sequence
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any
 
 from core.commerce.ucp.merchant import MerchantUcp
@@ -38,6 +38,10 @@ REDUCING_ADJUSTMENTS = frozenset({"cancellation", "return"})
 
 class OrderUpdateError(ValueError):
     """An order change that does not apply (unknown line, bad quantity)."""
+
+
+class DuplicateOrderEventError(OrderUpdateError):
+    """A fulfillment event whose id the order already holds (a redelivered source event)."""
 
 
 def new_order_id() -> str:
@@ -142,16 +146,28 @@ def _line_refs(raw: Any, lines: dict[str, dict[str, Any]], *, signed: bool) -> l
     return out
 
 
-def apply_fulfillment_event(snapshot: dict[str, Any], event: Mapping[str, Any], *, now: datetime) -> dict[str, Any]:
-    """Append a fulfillment event (``fulfillment_event.json``) and advance fulfilled quantities."""
+def apply_fulfillment_event(
+    snapshot: dict[str, Any], event: Mapping[str, Any], *, now: datetime, event_id: str | None = None
+) -> dict[str, Any]:
+    """Append a fulfillment event (``fulfillment_event.json``) and advance fulfilled quantities.
+
+    ``event_id`` (a source-derived id, ``core.commerce.fulfillment_tracking``) makes the append
+    idempotent: an id the order already holds raises ``DuplicateOrderEventError``; with it, the
+    event's ``occurred_at`` (the source's time, RFC 3339 with an offset) is kept, otherwise ``now``.
+    """
+    from core.commerce.arbiter import parse_time
+
     lines = {line["id"]: line for line in snapshot["line_items"]}
     event_type = str(event.get("type") or "")
     if not event_type:
         raise OrderUpdateError("type is required")
+    if event_id is not None and any(e.get("id") == event_id for e in snapshot["fulfillment"]["events"]):
+        raise DuplicateOrderEventError("the order already holds this fulfillment event")
     refs = _line_refs(event.get("line_items"), lines, signed=False)
+    occurred = (parse_time(event.get("occurred_at")) if event_id is not None else None) or now
     entry: dict[str, Any] = {
-        "id": f"evt_{uuid.uuid4().hex[:16]}",
-        "occurred_at": now.isoformat().replace("+00:00", "Z"),
+        "id": event_id or f"evt_{uuid.uuid4().hex[:16]}",
+        "occurred_at": occurred.astimezone(UTC).isoformat().replace("+00:00", "Z"),
         "type": event_type,
         "line_items": refs,
     }

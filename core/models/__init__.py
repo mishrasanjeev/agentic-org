@@ -73,6 +73,8 @@ from core.models.commerce_c6z_runtime import (
 from core.models.commerce_c6z_runtime import (
     C6ZSellerOnboardingPacketRow as C6ZSellerOnboardingPacketRow,
 )
+from core.models.commerce_payments import CommerceAfaEvidenceRow as CommerceAfaEvidenceRow
+from core.models.commerce_payments import CommercePaymentOperationRow as CommercePaymentOperationRow
 from core.models.commerce_ucp import CommerceCartRow as CommerceCartRow
 from core.models.commerce_ucp import CommerceCheckoutSessionRow as CommerceCheckoutSessionRow
 from core.models.commerce_ucp import CommerceOrderRow as CommerceOrderRow

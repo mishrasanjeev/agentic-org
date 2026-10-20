@@ -35,6 +35,11 @@ class CapabilityEntry:
     config: Callable[[MerchantUcp, str], dict[str, Any] | None] = lambda _m, _v: None
     # Parents in releases where they differ from ``extends``.
     extends_by_version: tuple[tuple[str, tuple[str, ...]], ...] = ()
+    # A vendor extension's schema on its own registrable domain (dev.ucp.* entries use ucp.dev).
+    schema: str | None = None
+
+    def schema_for(self, version: str) -> str:
+        return self.schema or v.schema_url(version, self.name)
 
     def extends_for(self, version: str) -> tuple[str, ...]:
         return dict(self.extends_by_version).get(version, self.extends)
@@ -48,7 +53,7 @@ class CapabilityEntry:
         return entry
 
     def profile_entry(self, merchant: MerchantUcp, version: str) -> dict[str, Any]:
-        entry: dict[str, Any] = {**self.response_entry(version), "schema": v.schema_url(version, self.name)}
+        entry: dict[str, Any] = {**self.response_entry(version), "schema": self.schema_for(version)}
         config = self.config(merchant, version)
         if config:
             entry["config"] = config
@@ -174,6 +179,17 @@ def _ap2_config(_merchant: MerchantUcp, _version: str) -> dict[str, Any]:
     return {"vp_formats_supported": {"dc+sd-jwt": {}}}
 
 
+def _upi_mandate_available(merchant: MerchantUcp, _context: RegistryContext) -> bool:
+    from core.commerce.india_rails import INSTRUMENT_UPI_AUTOPAY
+
+    capability = merchant.mandate_capability
+    return (
+        capability is not None
+        and capability.upi_autopay is not None
+        and INSTRUMENT_UPI_AUTOPAY in capability.instrument_types
+    )
+
+
 def _register_defaults(registry: Registry) -> None:
     registry.register_capability(CapabilityEntry(name=v.CHECKOUT, versions=ALL, resources=("checkout",)))
     registry.register_capability(CapabilityEntry(name=v.CART, versions=ALL, resources=("cart",)))
@@ -242,6 +258,19 @@ def _register_defaults(registry: Registry) -> None:
             extends=(v.CHECKOUT, v.ORDER),
             resources=("checkout", "order"),
             available=lambda m, _c: bool(m.payment_terms),
+        )
+    )
+    # UPI AutoPay e-mandates: declares the RBI AFA Action type (core.commerce.india_rails).
+    from core.commerce.india_rails import UCP_UPI_MANDATE_EXTENSION, UCP_UPI_MANDATE_SCHEMA
+
+    registry.register_capability(
+        CapabilityEntry(
+            name=UCP_UPI_MANDATE_EXTENSION,
+            versions=R25_ONLY,
+            extends=(v.CHECKOUT,),
+            resources=("checkout",),
+            available=_upi_mandate_available,
+            schema=UCP_UPI_MANDATE_SCHEMA,
         )
     )
     # AP2 needs the merchant's signing key for ap2.merchant_authorization on every response.
@@ -330,7 +359,7 @@ def publish_to_profile_registry(source: Registry = DEFAULT_REGISTRY, target: Any
                 name=entry.name,
                 service=SHOPPING_SERVICE,
                 spec_urls={k: val for k, val in spec_urls.items() if k in entry.versions},
-                schema_urls={version: v.schema_url(version, entry.name) for version in entry.versions},
+                schema_urls={version: entry.schema_for(version) for version in entry.versions},
                 extends=entry.extends,
                 extends_by_version=dict(entry.extends_by_version),
                 served=_served,

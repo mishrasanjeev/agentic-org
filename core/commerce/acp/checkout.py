@@ -81,6 +81,7 @@ EVENTS: dict[str, str] = {
     "execution": "commerce.acp.checkout.execution",
     "order_created": "commerce.acp.order.created",
     "risk_signals": "commerce.acp.payment.risk_signals",
+    "mandates": "commerce.acp.checkout.mandates",
 }
 ALLOWANCE_EVENT = "commerce.acp.delegate_payment.allowance"
 REQUEST_SCHEMAS = {
@@ -125,7 +126,7 @@ _LINK_TYPES = {
     "support": "support",
 }
 _TOTAL_LABELS = {"subtotal": "Subtotal", "fulfillment": "Shipping", "total": "Total"}
-VENDOR_KEYS = ("buyer_authority", "decision_id", "decide_only", "passport_jwt")
+VENDOR_KEYS = ("buyer_authority", "decision_id", "decide_only", "passport_jwt", "mandate_request")
 
 
 @cache
@@ -239,7 +240,9 @@ def _vendor(body: dict[str, Any]) -> dict[str, Any]:
 
 
 def _ucp_vendor(vendor: Mapping[str, Any]) -> dict[str, Any] | None:
-    out = {k: vendor[k] for k in ("buyer_authority", "decision_id", "decide_only") if k in vendor}
+    # mandate_request goes to the UCP Complete unchanged: the same server-requested, locally verified
+    # Intent, Cart and Payment mandates (and the same D1 rule) as a UCP Complete.
+    out = {k: vendor[k] for k in ("buyer_authority", "decision_id", "decide_only", "mandate_request") if k in vendor}
     return out or None
 
 

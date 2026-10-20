@@ -85,7 +85,10 @@ with a synthetic catalog; it does not create a paid transaction.
   client configuration, marketplace/channel approval, credentials, and rollout.
   Protocol payloads and bridge routes do not create those approvals.
 - AgenticOrg does not execute OACP payment capture, mandates, refunds, shipping,
-  inventory holds, or order creation from cached artifacts.
+  inventory holds, or order creation from cached artifacts. The Plural executor
+  charges and refunds only with `PLURAL_PINE_LIVE_EXECUTION_ENABLED=true` and a
+  consumed arbiter decision for the exact session or refund
+  (`docs/oacp/plural-executor.md`).
 - Plural/Pine verification proves configured capability evidence, not a
   completed buyer payment.
 - Voice providers other than the signed Twilio path are not production runtime

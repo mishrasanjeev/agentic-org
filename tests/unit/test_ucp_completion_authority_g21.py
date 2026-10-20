@@ -74,8 +74,14 @@ def test_vendor_member_defaults_and_parses_the_authority() -> None:
         "decision_id": "dec_1",
         "decide_only": True,
         "buyer_authority": {"consent_status": "granted"},
+        "mandate_request": None,
     }
-    assert vendor_member({VENDOR_MEMBER: {}}) == {"decision_id": None, "decide_only": False, "buyer_authority": None}
+    assert vendor_member({VENDOR_MEMBER: {}}) == {
+        "decision_id": None,
+        "decide_only": False,
+        "buyer_authority": None,
+        "mandate_request": None,
+    }
 
 
 @pytest.mark.parametrize(

@@ -28,8 +28,19 @@ Merchant transaction settings live in the merchant commerce config under
 ``payment_authentication``
     ``{allowed_origins: [https origins]}`` (2026-08-25 only).
 ``mandate_capability``
-    ``{rails: [...], max_amount_minor_units, currency, instrument_types: [...]}``:
+    ``{rails: [...], max_amount_minor_units, currency, instrument_types: [...], upi_autopay?}``:
     what the merchant's payment rail accepts for agent-initiated payments.
+    ``upi_autopay`` (``core.commerce.india_rails.parse_upi_autopay_capability``)
+    describes the UPI AutoPay e-mandate the merchant offers (amount rule and
+    limit, frequency, validity, purpose, the AFA authorization URL); with the
+    ``upi_autopay`` instrument type it enables UPI AutoPay instruments.
+``grantex_mandates``
+    ``{tenant_id, merchant_id, rail?, token_type?}``: the Grantex commerce tenant
+    and merchant this merchant's Commerce Passports name, so the server can
+    request and verify Intent, Cart and Payment mandates for a completion
+    (``rail`` defaults to ``plural``, ``token_type`` to ``plural_pine_token``).
+    Without it no mandate is requested and the buyer authority stays
+    caller-asserted.
 ``executor``
     The registered executor that completes this merchant's sessions (none by default).
 ``currency``
@@ -50,6 +61,8 @@ import re
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from typing import Any, Protocol
+
+from core.commerce.india_rails import INSTRUMENT_UPI_AUTOPAY, UpiAutopayCapability, parse_upi_autopay_capability
 
 DEFAULT_CHECKOUT_TTL_SECONDS = 6 * 60 * 60
 _HOST_RE = re.compile(r"^(?=.{1,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z][a-z0-9-]{0,62}$")
@@ -91,15 +104,49 @@ class MandateCapability:
     max_amount_minor_units: int | None
     currency: str | None
     instrument_types: tuple[str, ...]
+    upi_autopay: UpiAutopayCapability | None = None
 
     def to_dict(self) -> dict[str, Any]:
-        return {
+        out: dict[str, Any] = {
             "rails": list(self.rails),
             "max_amount_minor_units": self.max_amount_minor_units,
             "currency": self.currency,
             "instrument_types": list(self.instrument_types),
             "evidence": "merchant_config",
         }
+        if self.upi_autopay is not None:
+            out["upi_autopay"] = self.upi_autopay.to_dict()
+        return out
+
+
+_GRANTEX_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$")
+_MANDATE_RAILS = ("plural", "upi_autopay", "card_network_token")
+
+
+@dataclass(frozen=True)
+class GrantexMandateSettings:
+    """The Grantex commerce tenant and merchant a merchant's mandates are issued under."""
+
+    tenant_id: str
+    merchant_id: str
+    rail: str = "plural"
+    token_type: str = "plural_pine_token"
+
+
+def parse_grantex_mandates(raw: Any) -> GrantexMandateSettings | None:
+    """``provider_policy.ucp.grantex_mandates``, or None when absent or unusable (fail closed: no mandates)."""
+    if not isinstance(raw, Mapping):
+        return None
+    tenant, merchant = raw.get("tenant_id"), raw.get("merchant_id")
+    rail = raw.get("rail", "plural")
+    token_type = raw.get("token_type", "plural_pine_token")
+    if not (isinstance(tenant, str) and _GRANTEX_ID.match(tenant) and isinstance(merchant, str)):
+        return None
+    if not _GRANTEX_ID.match(merchant) or rail not in _MANDATE_RAILS:
+        return None
+    if not isinstance(token_type, str) or not re.fullmatch(r"[a-z][a-z0-9_]{0,63}", token_type):
+        return None
+    return GrantexMandateSettings(tenant_id=tenant, merchant_id=merchant, rail=rail, token_type=token_type)
 
 
 @dataclass(frozen=True)
@@ -119,6 +166,7 @@ class MerchantUcp:
     payment_terms: tuple[dict[str, Any], ...] = ()
     payment_authentication: dict[str, Any] | None = None
     mandate_capability: MandateCapability | None = None
+    grantex_mandates: GrantexMandateSettings | None = None
     payment_providers: tuple[dict[str, Any], ...] = ()
     executor: str | None = None
     currency: str | None = None
@@ -194,11 +242,17 @@ def merchant_ucp_from_config(
     mandate_raw = ucp.get("mandate_capability") if isinstance(ucp.get("mandate_capability"), Mapping) else None
     mandate = None
     if mandate_raw:
+        upi = parse_upi_autopay_capability(mandate_raw.get("upi_autopay"))
+        types = tuple(str(t) for t in _seq(mandate_raw.get("instrument_types")) if t)
+        if upi is None:
+            # A UPI AutoPay instrument is offered only with complete e-mandate terms (fail closed).
+            types = tuple(t for t in types if t != INSTRUMENT_UPI_AUTOPAY)
         mandate = MandateCapability(
             rails=tuple(str(r) for r in _seq(mandate_raw.get("rails")) if r),
             max_amount_minor_units=_int(mandate_raw.get("max_amount_minor_units")),
             currency=str(mandate_raw.get("currency") or "").upper() or None,
-            instrument_types=tuple(str(t) for t in _seq(mandate_raw.get("instrument_types")) if t),
+            instrument_types=types,
+            upi_autopay=upi,
         )
     links = tuple(
         {k: str(v) for k, v in link.items() if k in {"type", "url", "title"} and v}
@@ -236,6 +290,7 @@ def merchant_ucp_from_config(
             dict(ucp["payment_authentication"]) if isinstance(ucp.get("payment_authentication"), Mapping) else None
         ),
         mandate_capability=mandate,
+        grantex_mandates=parse_grantex_mandates(ucp.get("grantex_mandates")),
         payment_providers=tuple(dict(p) for p in (config.get("payment_providers") or []) if isinstance(p, Mapping)),
         executor=str(ucp.get("executor")) if ucp.get("executor") else None,
         currency=str(ucp.get("currency") or "").upper()[:3] or None,
