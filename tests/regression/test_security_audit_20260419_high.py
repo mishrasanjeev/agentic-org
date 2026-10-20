@@ -176,26 +176,27 @@ def test_medium12_connector_base_url_guard():
     assert src.count("_assert_public_base_url(") >= 3
 
 
-def test_medium12_base_url_blocks_private():
+@pytest.mark.asyncio
+async def test_medium12_base_url_blocks_private():
     from fastapi import HTTPException
 
     from api.v1.connectors import _assert_public_base_url
 
     with pytest.raises(HTTPException) as excinfo:
-        _assert_public_base_url("http://127.0.0.1:8080")
+        await _assert_public_base_url("http://127.0.0.1:8080")
     assert excinfo.value.status_code == 400
 
     with pytest.raises(HTTPException) as excinfo:
-        _assert_public_base_url("https://127.0.0.1:8080")
+        await _assert_public_base_url("https://127.0.0.1:8080")
     assert excinfo.value.status_code == 403
 
     with pytest.raises(HTTPException) as excinfo:
-        _assert_public_base_url("https://169.254.169.254/latest/meta-data/")
+        await _assert_public_base_url("https://169.254.169.254/latest/meta-data/")
     assert excinfo.value.status_code == 403
 
     with pytest.raises(HTTPException) as excinfo:
-        _assert_public_base_url("ftp://example.com/")
+        await _assert_public_base_url("ftp://example.com/")
     assert excinfo.value.status_code == 400
 
     # Empty is a no-op — class-level base_url still applies.
-    _assert_public_base_url("")
+    await _assert_public_base_url("")

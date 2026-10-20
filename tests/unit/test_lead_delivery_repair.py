@@ -170,7 +170,7 @@ async def test_receipt_contract_is_gated_and_durable_delivery_never_claimed_earl
     factory = MagicMock()
     factory.return_value.__aenter__ = AsyncMock(return_value=session)
     factory.return_value.__aexit__ = AsyncMock(return_value=False)
-    monkeypatch.setattr(demo, "async_session_factory", factory)
+    monkeypatch.setattr(demo, "get_platform_session", factory)
     monkeypatch.setattr(demo, "get_tenant_session", lambda _: factory())
     monkeypatch.setattr(demo.auth_state, "check_window_rate", AsyncMock(return_value=False))
     request = Request({"type": "http", "client": ("198.51.100.15", 1), "headers": []})

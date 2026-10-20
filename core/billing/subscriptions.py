@@ -385,7 +385,7 @@ async def expire_overdue_plural_subscriptions(now: datetime | None = None) -> di
     from sqlalchemy import select
 
     from core.async_redis import get_async_redis
-    from core.database import async_session_factory, get_tenant_session
+    from core.database import get_platform_session, get_tenant_session
     from core.models.tenant import Tenant
 
     moment = now or datetime.now(UTC)
@@ -393,7 +393,8 @@ async def expire_overdue_plural_subscriptions(now: datetime | None = None) -> di
     checked = 0
     failed = 0
 
-    async with async_session_factory() as session:
+    # Tenant enumeration is the only cross-tenant step: platform context.
+    async with get_platform_session() as session:
         result = await session.execute(select(Tenant.id).where(Tenant.deleted_at.is_(None)))
         tenant_ids = [row[0] for row in result.all()]
 

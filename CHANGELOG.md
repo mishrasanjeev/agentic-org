@@ -1,5 +1,71 @@
 # Changelog
 
+## Unreleased - Database sessions ready for a NOBYPASSRLS application role
+
+- Bind tenant or platform context at the raw-session sites that still opened
+  `async_session_factory()` without one, so the API and workers can run as a
+  `NOSUPERUSER NOBYPASSRLS` role (FINDINGS A-105). Tenant work uses
+  `get_tenant_session` / the new `bind_tenant_context`; pre-auth lookups
+  (signup, login, password reset, API-key prefix, Grantex agent DID, SSO and
+  branding discovery, health probes) use the new `get_platform_session`.
+- Migration `v6z87_platform_ctx_policies`: one permissive `SELECT`-only
+  policy on `sso_configs`, `tenant_branding` and `agents` that honours
+  `agenticorg.platform_ctx = '1'`. Tenant policies are unchanged; no platform
+  write policy exists. It also (re)installs the `audit_log_immutable` trigger
+  with the sealing transition (the same text as
+  `core.governance.audit_chain.SEAL_TRIGGER_SQL`). Databases bootstrapped
+  from an empty schema previously had no trigger outside the local-only
+  startup DDL. Downgrade leaves the trigger installed.
+- Report schedule claims run per tenant (the RPA dispatcher's pattern), the
+  synthetic-check sweep no longer reads `synthetic_checks` across tenants, the
+  A/B variant helpers require `tenant_id`, CDC event-store writes and lists
+  require and bind the event's tenant, and audit entries bind their tenant.
+  The cross-tenant spend CLI raises under a non-bypass role instead of
+  reporting zero.
+- Startup logs the database role's RLS posture (`DB_ROLE_BYPASSES_RLS`
+  warning for a superuser or `BYPASSRLS` role). `AGENTICORG_REQUIRE_NOBYPASSRLS_ROLE=1`
+  (default off) refuses such a role; `AGENTICORG_SKIP_DB_ROLE_RLS_CHECK=1`
+  skips the probe.
+- Add `scripts/create_app_role.sql` and `docs/RLS_APP_ROLE.md`. Moving
+  production `AGENTICORG_DB_URL` to the application role is an operator step
+  documented there; this change does not perform it.
+- `scripts/create_app_role.sql` grants least privilege: row DML on ordinary
+  tables (never `TRUNCATE`, `REFERENCES` or `TRIGGER`); `SELECT`/`INSERT`
+  only on the append-only tables (`capability_evidence_records`,
+  `capability_promotion_events`, `eval_dataset_versions`, and, once
+  `v6z88_commerce_ledger` has run, the OACP decision records and
+  `commerce_arbiter_decisions`, the latter with `UPDATE` of only
+  `consumed_at`, `grantex_grant_jti` and `grantex_recorded_at`; every table
+  guarded by a known append-only trigger function is classified by rule, so
+  the script runs on any head); on `audit_log`
+  `SELECT`/`INSERT` plus `UPDATE` of the four hash-chain columns the sealing
+  task fills; no `DELETE` on `capability_readiness_records` or
+  `audit_chain_anchors`; read-only `alembic_version` and
+  `checkpoint_migrations`; no access to `alembic_migration_progress`; and
+  `EXECUTE` only on the allow-listed restricted functions
+  (`public.gemini_daily_platform_spend()`, and
+  `public.oacp_delete_due_manifest(text, text)` where it exists) (default privileges grant no function `EXECUTE`). The
+  script runs in one transaction, re-running it converges on these grants,
+  and it refuses and rolls back a broader result. Guarded by
+  `tests/regression/test_app_role_grants.py` and new cases in the Postgres
+  proof.
+- Egress URL validation inside async code uses `validate_public_url_async`
+  (non-blocking DNS) for connectors, OIDC, JWKS, AI-provider probes and base
+  URLs, commerce runtime calls and the lineage feed fetch.
+- Regression guards: `tests/regression/test_raw_session_inventory.py`
+  (every remaining raw session is justified), `tests/regression/test_egress_async_callers.py`,
+  and the Postgres proof `tests/integration/test_rls_nobypass_role.py`.
+- The lead delivery Postgres tests no longer patch the removed
+  `api.v1.demo.async_session_factory` (the receipt writes through
+  `get_platform_session`), and the worker-outcome test seeds the marketing
+  tenant itself instead of relying on test order. A regression check keeps
+  `api.v1.demo` on the shared session helpers.
+- The OACP Grantex replay fetch and trust-endpoint fetch (merged from main)
+  validate their URLs with `validate_public_url_async`, as
+  `tests/regression/test_egress_async_callers.py` requires for code inside
+  `async def`; the policy (scheme and host checks, DNS left to the pinned
+  transport) is unchanged.
+
 ## Unreleased - OACP artifact verification before caching (G5)
 
 - **Breaking for strict runtimes.** `POST /api/v1/commerce/runtime/artifacts/cache`

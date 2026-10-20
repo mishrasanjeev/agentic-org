@@ -12,7 +12,7 @@ import uuid
 import structlog
 from sqlalchemy import select
 
-from core.database import async_session_factory
+from core.database import get_tenant_session
 from core.models.sso_config import SSOConfig
 from core.models.user import User
 
@@ -35,7 +35,7 @@ async def jit_provision_user(
 
     name = claims.get("name") or claims.get("preferred_username") or email.split("@")[0]
 
-    async with async_session_factory() as session:
+    async with get_tenant_session(tenant_id) as session:
         # Look up existing user first
         result = await session.execute(
             select(User).where(

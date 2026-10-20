@@ -21,24 +21,22 @@ from dataclasses import dataclass
 import structlog
 from sqlalchemy import select, update
 
-from core.database import async_session_factory, get_tenant_session
+from core.database import get_tenant_session
 from core.models.workflow_variant import WorkflowVariant
 
 logger = structlog.get_logger()
 
 
-def _variant_session(tenant_id: uuid.UUID | str | None, op: str):
-    """Session for ``workflow_variants`` (FORCE-RLS).
+def _variant_session(tenant_id: uuid.UUID | str):
+    """Tenant-bound session for ``workflow_variants`` (FORCE-RLS).
 
-    With a tenant id the exact RLS context is bound. Without one, a raw
-    session is used for callers that predate the tenant argument: under a
-    non-BYPASSRLS role it sees no rows / updates nothing, so it is logged
-    loudly rather than silently. Callers should always pass ``tenant_id``.
+    The tenant is required: a raw session sees no rows and updates nothing
+    under a ``NOBYPASSRLS`` role, so a missing tenant fails closed here
+    instead of silently skipping the A/B split or losing the outcome.
     """
-    if tenant_id is not None:
-        return get_tenant_session(uuid.UUID(str(tenant_id)))
-    logger.warning("workflow_ab_no_tenant_context", op=op)
-    return async_session_factory()
+    if tenant_id is None:
+        raise ValueError("workflow_variants access requires tenant_id")
+    return get_tenant_session(uuid.UUID(str(tenant_id)))
 
 
 @dataclass
@@ -56,20 +54,20 @@ def _bucket(workflow_id: uuid.UUID, subject_id: str) -> int:
 async def pick_variant(
     workflow_id: uuid.UUID,
     subject_id: str,
-    tenant_id: uuid.UUID | str | None = None,
+    *,
+    tenant_id: uuid.UUID | str,
 ) -> VariantPick | None:
     """Return the variant a subject lands on, or None if no active variants.
 
-    ``tenant_id`` binds the RLS context for ``workflow_variants``; when given,
-    the query is additionally pinned to that tenant.
+    ``tenant_id`` binds the RLS context for ``workflow_variants`` and pins
+    the query to that tenant.
     """
-    async with _variant_session(tenant_id, "pick_variant") as session:
+    async with _variant_session(tenant_id) as session:
         stmt = select(WorkflowVariant).where(
             WorkflowVariant.workflow_id == workflow_id,
             WorkflowVariant.is_active.is_(True),
+            WorkflowVariant.tenant_id == uuid.UUID(str(tenant_id)),
         )
-        if tenant_id is not None:
-            stmt = stmt.where(WorkflowVariant.tenant_id == uuid.UUID(str(tenant_id)))
         result = await session.execute(stmt)
         variants = result.scalars().all()
 
@@ -111,7 +109,8 @@ async def pick_variant(
 async def record_outcome(
     variant_id: uuid.UUID,
     success: bool,
-    tenant_id: uuid.UUID | str | None = None,
+    *,
+    tenant_id: uuid.UUID | str,
 ) -> None:
     """Increment run/success/failure counters after a run completes.
 
@@ -125,9 +124,11 @@ async def record_outcome(
         "run_count": WorkflowVariant.run_count + 1,
         counter.key: counter + 1,
     }
-    stmt = update(WorkflowVariant).where(WorkflowVariant.id == variant_id).values(**values)
-    if tenant_id is not None:
-        stmt = stmt.where(WorkflowVariant.tenant_id == uuid.UUID(str(tenant_id)))
-    async with _variant_session(tenant_id, "record_outcome") as session:
+    stmt = (
+        update(WorkflowVariant)
+        .where(WorkflowVariant.id == variant_id, WorkflowVariant.tenant_id == uuid.UUID(str(tenant_id)))
+        .values(**values)
+    )
+    async with _variant_session(tenant_id) as session:
         await session.execute(stmt)
         await session.commit()

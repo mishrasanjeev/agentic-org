@@ -353,12 +353,15 @@ async def prune(session: Any, tenant_id: uuid.UUID, *, now: datetime | None = No
 
 async def prune_all_tenants() -> dict[str, int]:
     """Prune every tenant's expired entries (the scheduled task); a tenant that fails is logged and skipped."""
-    from sqlalchemy import select
+    from sqlalchemy import select, text
 
     from core.database import async_session_factory, get_tenant_session
     from core.models.tenant import Tenant
 
     async with async_session_factory() as session:
+        # ``tenants`` carries no RLS; this only makes PostgreSQL raise rather
+        # than silently filter if that ever changes.
+        await session.execute(text("SET LOCAL row_security = off"))
         tenant_ids = list((await session.execute(select(Tenant.id).where(Tenant.deleted_at.is_(None)))).scalars().all())
     pruned = 0
     failed = 0

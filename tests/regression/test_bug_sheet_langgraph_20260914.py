@@ -515,7 +515,10 @@ class TestSheet40AzureOpenAIProbe:
 
         monkeypatch.setattr(health, "build_pinned_async_transport", lambda **_kw: httpx.MockTransport(handler))
         # Keep the public-HTTPS check but skip live DNS in the unit test.
-        monkeypatch.setattr(health, "validate_public_url", lambda url, **_kw: SimpleNamespace(url=url))
+        async def _validated(url: str, **_kw: Any) -> SimpleNamespace:
+            return SimpleNamespace(url=url)
+
+        monkeypatch.setattr(health, "validate_public_url_async", _validated)
         return seen
 
     @pytest.mark.asyncio
@@ -544,11 +547,12 @@ class TestSheet40AzureOpenAIProbe:
         assert "401" in result["error"]
         assert str(seen[0].url).endswith(f"?api-version={health._AZURE_OPENAI_DEFAULT_API_VERSION}")
 
-    def test_malformed_api_version_fails_closed(self) -> None:
+    @pytest.mark.asyncio
+    async def test_malformed_api_version_fails_closed(self) -> None:
         from core.ai_providers import health
 
         with pytest.raises(ValueError):
-            health._azure_openai_models_url("https://myres.openai.azure.com", "latest; DROP")
+            await health._azure_openai_models_url("https://myres.openai.azure.com", "latest; DROP")
 
     @pytest.mark.asyncio
     async def test_probe_provider_routes_azure_to_azure_probe(self, monkeypatch: pytest.MonkeyPatch) -> None:

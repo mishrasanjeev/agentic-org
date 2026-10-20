@@ -78,7 +78,7 @@ async def close_health_resources() -> None:
 
 async def _db_health_status() -> str:
     try:
-        async with database.async_session_factory() as session:
+        async with database.get_platform_session() as session:
             await asyncio.wait_for(
                 session.execute(text("SELECT 1")),
                 timeout=_DEPENDENCY_HC_TIMEOUT,
@@ -223,7 +223,7 @@ async def _fetch_history(hours: int) -> list[dict]:
     snapshot in those cases.
     """
     try:
-        async with database.async_session_factory() as session:
+        async with database.get_platform_session() as session:
             result = await session.execute(
                 text(
                     "SELECT recorded_at, status, checks, version, commit "

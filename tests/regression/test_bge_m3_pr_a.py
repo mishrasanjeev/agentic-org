@@ -19,6 +19,7 @@ the rollout:
 from __future__ import annotations
 
 import importlib
+import uuid
 
 import pytest
 
@@ -276,6 +277,39 @@ async def _session_cm(session):
     yield session
 
 
+# The backfill is RLS-aware: every tenant runs inside its own tenant session,
+# and an all-tenant run enumerates tenants under platform context first.
+_TENANT = uuid.UUID("66666666-6666-4666-8666-666666666666")
+
+
+def test_backfill_all_tenants_iterates_tenant_sessions(monkeypatch: pytest.MonkeyPatch) -> None:
+    from core import embeddings_backfill as eb
+
+    t1, t2 = uuid.uuid4(), uuid.uuid4()
+
+    async def _tenants():
+        return [t1, t2]
+
+    seen: list[uuid.UUID] = []
+
+    async def _run_one(tid, batch_size, dry_run):
+        seen.append(tid)
+        return 0
+
+    monkeypatch.setattr(eb, "_all_tenant_ids", _tenants)
+    real_run = eb.run
+
+    async def _dispatch(tenant_id, batch_size, dry_run):
+        if tenant_id is None:
+            return await real_run(tenant_id, batch_size, dry_run)
+        return await _run_one(tenant_id, batch_size, dry_run)
+
+    monkeypatch.setattr(eb, "run", _dispatch)
+    monkeypatch.setattr(eb, "_validate_target_dim", lambda: None)
+    assert asyncio.run(real_run(None, 8, True)) == 0
+    assert seen == [t1, t2]
+
+
 def test_backfill_verify_returns_2_when_column_missing(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -283,8 +317,8 @@ def test_backfill_verify_returns_2_when_column_missing(
     from core import embeddings_backfill as eb
 
     session = _make_mock_session(scalar_values=[None])  # column lookup -> None
-    monkeypatch.setattr(eb, "async_session_factory", lambda: _session_cm(session))
-    rc = asyncio.run(eb._verify(None))
+    monkeypatch.setattr(eb, "get_tenant_session", lambda _tid, _cid=None: _session_cm(session))
+    rc = asyncio.run(eb._verify(_TENANT))
     assert rc == 2
 
 
@@ -296,8 +330,8 @@ def test_backfill_verify_returns_0_when_no_orphans(
 
     # First execute: column exists (returns 1). Second: orphan count = 0.
     session = _make_mock_session(scalar_values=[1, 0])
-    monkeypatch.setattr(eb, "async_session_factory", lambda: _session_cm(session))
-    rc = asyncio.run(eb._verify(None))
+    monkeypatch.setattr(eb, "get_tenant_session", lambda _tid, _cid=None: _session_cm(session))
+    rc = asyncio.run(eb._verify(_TENANT))
     assert rc == 0
 
 
@@ -309,8 +343,8 @@ def test_backfill_verify_returns_1_when_orphans_pending(
 
     # column exists (1), 17 rows with old col but no new col
     session = _make_mock_session(scalar_values=[1, 17])
-    monkeypatch.setattr(eb, "async_session_factory", lambda: _session_cm(session))
-    rc = asyncio.run(eb._verify(None))
+    monkeypatch.setattr(eb, "get_tenant_session", lambda _tid, _cid=None: _session_cm(session))
+    rc = asyncio.run(eb._verify(_TENANT))
     assert rc == 1
 
 
@@ -322,9 +356,9 @@ def test_backfill_run_dry_run_does_not_write(
 
     # column exists (1), 5 pending
     session = _make_mock_session(scalar_values=[1, 5])
-    monkeypatch.setattr(eb, "async_session_factory", lambda: _session_cm(session))
+    monkeypatch.setattr(eb, "get_tenant_session", lambda _tid, _cid=None: _session_cm(session))
     with patch.object(eb, "embed_with") as embed_mock:
-        rc = asyncio.run(eb.run(tenant_id=None, batch_size=10, dry_run=True))
+        rc = asyncio.run(eb.run(tenant_id=_TENANT, batch_size=10, dry_run=True))
     assert rc == 0
     embed_mock.assert_not_called()
 
@@ -336,8 +370,8 @@ def test_backfill_run_aborts_when_column_missing(
     from core import embeddings_backfill as eb
 
     session = _make_mock_session(scalar_values=[None])
-    monkeypatch.setattr(eb, "async_session_factory", lambda: _session_cm(session))
-    rc = asyncio.run(eb.run(tenant_id=None, batch_size=10, dry_run=False))
+    monkeypatch.setattr(eb, "get_tenant_session", lambda _tid, _cid=None: _session_cm(session))
+    rc = asyncio.run(eb.run(tenant_id=_TENANT, batch_size=10, dry_run=False))
     assert rc == 2
 
 
@@ -355,7 +389,7 @@ def test_backfill_run_writes_then_terminates_on_empty_batch(
     #  5) (loop iter 2) _fetch_batch -> empty
     fetch_rows = [None, None, [("id-1", "hello"), ("id-2", "world")], None, None, []]
     session = _make_mock_session(scalar_values=[1, 2], fetch_rows=fetch_rows)
-    monkeypatch.setattr(eb, "async_session_factory", lambda: _session_cm(session))
+    monkeypatch.setattr(eb, "get_tenant_session", lambda _tid, _cid=None: _session_cm(session))
 
     def fake_embed(model, texts):
         # Return 1024-dim zero vectors so the float formatting works.
@@ -363,7 +397,7 @@ def test_backfill_run_writes_then_terminates_on_empty_batch(
 
     monkeypatch.setattr(eb, "embed_with", fake_embed)
 
-    rc = asyncio.run(eb.run(tenant_id=None, batch_size=2, dry_run=False))
+    rc = asyncio.run(eb.run(tenant_id=_TENANT, batch_size=2, dry_run=False))
     assert rc == 0
 
 
@@ -375,14 +409,14 @@ def test_backfill_run_returns_1_on_embed_failure(
 
     fetch_rows = [None, None, [("id-1", "hello")]]
     session = _make_mock_session(scalar_values=[1, 1], fetch_rows=fetch_rows)
-    monkeypatch.setattr(eb, "async_session_factory", lambda: _session_cm(session))
+    monkeypatch.setattr(eb, "get_tenant_session", lambda _tid, _cid=None: _session_cm(session))
 
     def boom(_m, _t):
         raise RuntimeError("model not loaded")
 
     monkeypatch.setattr(eb, "embed_with", boom)
 
-    rc = asyncio.run(eb.run(tenant_id=None, batch_size=1, dry_run=False))
+    rc = asyncio.run(eb.run(tenant_id=_TENANT, batch_size=1, dry_run=False))
     assert rc == 1
 
 

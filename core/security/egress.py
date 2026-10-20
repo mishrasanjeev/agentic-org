@@ -173,15 +173,12 @@ def host_matches_domain(host: str, domain: str) -> bool:
     return normalized_host == normalized_domain or normalized_host.endswith(f".{normalized_domain}")
 
 
-def validate_public_url(
+def _parse_public_url(
     url: str,
     *,
-    allowed_schemes: Sequence[str] = ("https",),
-    require_dns: bool | None = None,
-    allowed_hosts: Iterable[str] | None = None,
-    allowed_domains: Iterable[str] | None = None,
-) -> ValidatedUrl:
-    """Validate a tenant-influenced outbound URL before using credentials with it."""
+    allowed_schemes: Sequence[str],
+) -> tuple[str, str]:
+    """Shared, DNS-free part of URL validation: returns ``(scheme, host)``."""
 
     parsed = urlparse(str(url or "").strip())
     scheme = parsed.scheme.lower()
@@ -193,11 +190,15 @@ def validate_public_url(
     host = (parsed.hostname or "").rstrip(".").lower()
     if not host:
         raise EgressValidationError("missing_host", "URL is missing a hostname")
-    validate_public_hostname(
-        host,
-        require_dns=egress_dns_validation_required() if require_dns is None else require_dns,
-    )
+    return scheme, host
 
+
+def _check_host_allowlists(
+    host: str,
+    *,
+    allowed_hosts: Iterable[str] | None,
+    allowed_domains: Iterable[str] | None,
+) -> None:
     if allowed_hosts is not None:
         host_allowlist = {item.rstrip(".").lower() for item in allowed_hosts}
         if host not in host_allowlist:
@@ -206,11 +207,54 @@ def validate_public_url(
         domains = tuple(item.rstrip(".").lower() for item in allowed_domains)
         if not any(host_matches_domain(host, domain) for domain in domains):
             raise EgressValidationError("domain_not_allowed", f"{host!r} is not under an allowed domain")
+
+
+def validate_public_url(
+    url: str,
+    *,
+    allowed_schemes: Sequence[str] = ("https",),
+    require_dns: bool | None = None,
+    allowed_hosts: Iterable[str] | None = None,
+    allowed_domains: Iterable[str] | None = None,
+) -> ValidatedUrl:
+    """Validate a tenant-influenced outbound URL before using credentials with it.
+
+    Synchronous: resolves DNS with ``socket.getaddrinfo`` and therefore
+    blocks the calling thread. Inside ``async def`` use
+    :func:`validate_public_url_async` (enforced by
+    ``tests/regression/test_egress_async_callers.py``).
+    """
+
+    scheme, host = _parse_public_url(url, allowed_schemes=allowed_schemes)
+    validate_public_hostname(
+        host,
+        require_dns=egress_dns_validation_required() if require_dns is None else require_dns,
+    )
+    _check_host_allowlists(host, allowed_hosts=allowed_hosts, allowed_domains=allowed_domains)
     return ValidatedUrl(url=url, scheme=scheme, host=host)
 
 
-def validate_public_hostname(hostname: str, *, require_dns: bool | None = None) -> str:
-    """Validate a hostname for public server-side egress."""
+async def validate_public_url_async(
+    url: str,
+    *,
+    allowed_schemes: Sequence[str] = ("https",),
+    require_dns: bool | None = None,
+    allowed_hosts: Iterable[str] | None = None,
+    allowed_domains: Iterable[str] | None = None,
+) -> ValidatedUrl:
+    """Async twin of :func:`validate_public_url` — same policy, ``loop.getaddrinfo`` for DNS."""
+
+    scheme, host = _parse_public_url(url, allowed_schemes=allowed_schemes)
+    await validate_public_hostname_async(
+        host,
+        require_dns=egress_dns_validation_required() if require_dns is None else require_dns,
+    )
+    _check_host_allowlists(host, allowed_hosts=allowed_hosts, allowed_domains=allowed_domains)
+    return ValidatedUrl(url=url, scheme=scheme, host=host)
+
+
+def _check_hostname_shape(hostname: str) -> str:
+    """Shared, DNS-free hostname policy (loopback names, IP literals)."""
 
     host = str(hostname or "").strip().rstrip(".").lower()
     if not host:
@@ -223,11 +267,43 @@ def validate_public_hostname(hostname: str, *, require_dns: bool | None = None) 
         ip_literal = None
     if ip_literal is not None:
         raise EgressValidationError("ip_literal", f"direct IP URLs are blocked ({host})")
+    return host
+
+
+def validate_public_hostname(hostname: str, *, require_dns: bool | None = None) -> str:
+    """Validate a hostname for public server-side egress."""
+
+    host = _check_hostname_shape(hostname)
     if require_dns is None:
         require_dns = egress_dns_validation_required()
     if require_dns:
         resolve_public_hostname_addresses(host, require_dns=True)
     return host
+
+
+async def validate_public_hostname_async(hostname: str, *, require_dns: bool | None = None) -> str:
+    """Async twin of :func:`validate_public_hostname`."""
+
+    host = _check_hostname_shape(hostname)
+    if require_dns is None:
+        require_dns = egress_dns_validation_required()
+    if require_dns:
+        await resolve_public_hostname_addresses_async(host, require_dns=True)
+    return host
+
+
+def _checked_public_addresses(
+    host: str,
+    addresses: tuple[ipaddress.IPv4Address | ipaddress.IPv6Address, ...],
+) -> tuple[str, ...]:
+    """Shared post-resolution policy: non-empty and no blocked ranges."""
+
+    if not addresses:
+        raise EgressValidationError("unresolvable", host)
+    for address in addresses:
+        if _is_blocked_ip(address):
+            raise EgressValidationError("blocked_ip", f"{host} resolved to {address}")
+    return tuple(str(address) for address in addresses)
 
 
 def resolve_public_hostname_addresses(
@@ -237,18 +313,12 @@ def resolve_public_hostname_addresses(
 ) -> tuple[str, ...]:
     """Return validated public DNS answers for a hostname, or the hostname in non-DNS mode."""
 
-    host = validate_public_hostname(hostname, require_dns=False)
+    host = _check_hostname_shape(hostname)
     if require_dns is None:
         require_dns = egress_dns_validation_required()
     if not require_dns:
         return (host,)
-    addresses = _resolve_host(host)
-    if not addresses:
-        raise EgressValidationError("unresolvable", host)
-    for address in addresses:
-        if _is_blocked_ip(address):
-            raise EgressValidationError("blocked_ip", f"{host} resolved to {address}")
-    return tuple(str(address) for address in addresses)
+    return _checked_public_addresses(host, _resolve_host(host))
 
 
 async def resolve_public_hostname_addresses_async(
@@ -258,18 +328,12 @@ async def resolve_public_hostname_addresses_async(
 ) -> tuple[str, ...]:
     """Async twin of ``resolve_public_hostname_addresses`` (``loop.getaddrinfo``)."""
 
-    host = validate_public_hostname(hostname, require_dns=False)
+    host = _check_hostname_shape(hostname)
     if require_dns is None:
         require_dns = egress_dns_validation_required()
     if not require_dns:
         return (host,)
-    addresses = await _resolve_host_async(host)
-    if not addresses:
-        raise EgressValidationError("unresolvable", host)
-    for address in addresses:
-        if _is_blocked_ip(address):
-            raise EgressValidationError("blocked_ip", f"{host} resolved to {address}")
-    return tuple(str(address) for address in addresses)
+    return _checked_public_addresses(host, await _resolve_host_async(host))
 
 
 def build_pinned_async_transport(*, require_dns: bool = True) -> Any:

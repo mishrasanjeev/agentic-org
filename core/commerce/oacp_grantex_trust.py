@@ -50,7 +50,7 @@ from core.config import grantex_base_url_for_env, grantex_issuer_for_env, grante
 from core.security.egress import (
     EgressValidationError,
     build_pinned_async_transport,
-    validate_public_url,
+    validate_public_url_async,
 )
 
 logger = structlog.get_logger()
@@ -165,7 +165,7 @@ class OacpGrantexArtifactVerifier:
             try:
                 # Scheme, userinfo, IP-literal and local-name checks. DNS answers
                 # are validated asynchronously by the pinned transport.
-                validate_public_url(url, require_dns=False)
+                await validate_public_url_async(url, require_dns=False)
             except EgressValidationError as exc:
                 raise OacpTrustUnavailableError(f"unsafe trust endpoint: {exc}") from exc
         transport = (

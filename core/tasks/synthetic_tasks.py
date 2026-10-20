@@ -17,30 +17,54 @@ logger = structlog.get_logger()
 MAX_PER_TENANT = 10
 
 
-async def _tenants_with_checks() -> list[Any]:
-    """The tenants that have an enabled check (read across tenants; each is then run under its own session)."""
+async def _tenant_catalogue(*, active_only: bool) -> list[Any]:
+    """Tenant ids from the ``tenants`` catalogue, which carries no row-level security.
+
+    ``SET LOCAL row_security = off`` only makes PostgreSQL raise instead of
+    silently filtering; it grants nothing, and ``tenants`` has no policy, so
+    this works under a ``NOBYPASSRLS`` application role.
+    """
     from sqlalchemy import select, text
 
     from core.database import async_session_factory
-    from core.models.synthetic_check import SyntheticCheck
+    from core.models.tenant import Tenant
 
+    statement = select(Tenant.id)
+    if active_only:
+        statement = statement.where(Tenant.deleted_at.is_(None))
     async with async_session_factory() as session:
         await session.execute(text("SET LOCAL row_security = off"))
-        rows = await session.scalars(
-            select(SyntheticCheck.tenant_id).where(SyntheticCheck.enabled.is_(True)).distinct()
-        )
-        return list(rows.all())
+        return list((await session.scalars(statement.order_by(Tenant.id))).all())
+
+
+async def _tenants_with_checks() -> list[Any]:
+    """The tenants that have an enabled check, each read under its own tenant session.
+
+    ``synthetic_checks`` is FORCE-RLS, so the check rows are never read
+    across tenants: the catalogue is enumerated, then each tenant is asked in
+    its own RLS context whether it has an enabled check.
+    """
+    from sqlalchemy import select
+
+    from core.database import get_tenant_session
+    from core.models.synthetic_check import SyntheticCheck
+
+    tenants: list[Any] = []
+    for tenant_id in await _tenant_catalogue(active_only=True):
+        async with get_tenant_session(tenant_id) as session:
+            found = await session.scalar(
+                select(SyntheticCheck.id)
+                .where(SyntheticCheck.tenant_id == tenant_id, SyntheticCheck.enabled.is_(True))
+                .limit(1)
+            )
+        if found is not None:
+            tenants.append(tenant_id)
+    return tenants
 
 
 async def _result_tenants() -> list[Any]:
-    from sqlalchemy import select, text
-
-    from core.database import async_session_factory
-    from core.models.synthetic_check import SyntheticCheckResult
-
-    async with async_session_factory() as session:
-        await session.execute(text("SET LOCAL row_security = off"))
-        return list((await session.scalars(select(SyntheticCheckResult.tenant_id).distinct())).all())
+    """Every tenant, deleted ones included: their results still exist and still age out."""
+    return await _tenant_catalogue(active_only=False)
 
 
 async def _run_synthetic_checks_async(*, max_per_tenant: int = MAX_PER_TENANT) -> dict:

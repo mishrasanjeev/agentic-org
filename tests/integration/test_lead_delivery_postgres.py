@@ -29,6 +29,14 @@ async def migrated_delivery_schema():
     assert result.returncode == 0, result.stderr
 
 
+async def _ensure_marketing_tenant(engine, tenant_id) -> None:
+    async with engine.begin() as conn:
+        await conn.execute(text("""
+            INSERT INTO tenants(id,name,slug,plan,data_region,settings)
+            VALUES (:id,'Synthetic test','lead-defaults-test','free','IN','{}') ON CONFLICT(id) DO NOTHING
+        """), {"id": tenant_id})
+
+
 @pytest.mark.asyncio
 @pytest.mark.parametrize("product", ["agenticorg", "grantex"])
 async def test_demo_receipt_on_fresh_schema_keeps_required_lead_defaults(monkeypatch, product):
@@ -45,8 +53,9 @@ async def test_demo_receipt_on_fresh_schema_keeps_required_lead_defaults(monkeyp
     engine = create_async_engine(url, poolclass=NullPool)
     factory = async_sessionmaker(engine, expire_on_commit=False)
     monkeypatch.setattr(database, "async_session_factory", factory)
+    # submit_demo_request writes demo_requests through get_platform_session,
+    # which resolves current_session_factory(); no module-level factory to patch.
     monkeypatch.setattr(database, "current_session_factory", lambda: factory)
-    monkeypatch.setattr(demo, "async_session_factory", factory)
     monkeypatch.setattr(demo.auth_state, "check_window_rate", AsyncMock(return_value=False))
     monkeypatch.setenv("AGENTICORG_DEMO_DURABLE_DELIVERY_ENABLED", "true")
     monkeypatch.setenv("AGENTICORG_GRANTEX_ENQUIRIES_ENABLED", "true")
@@ -54,11 +63,7 @@ async def test_demo_receipt_on_fresh_schema_keeps_required_lead_defaults(monkeyp
     monkeypatch.setattr(demo_delivery, "enqueue", enqueue)
     email = f"local-{uuid.uuid4().hex}@example.org"
     try:
-        async with engine.begin() as conn:
-            await conn.execute(text("""
-                INSERT INTO tenants(id,name,slug,plan,data_region,settings)
-                VALUES (:id,'Synthetic test','lead-defaults-test','free','IN','{}') ON CONFLICT(id) DO NOTHING
-            """), {"id": demo_delivery.MARKETING_TENANT})
+        await _ensure_marketing_tenant(engine, demo_delivery.MARKETING_TENANT)
         opposite_id = uuid.uuid4()
         async with database.get_tenant_session(demo_delivery.MARKETING_TENANT) as session:
             session.add(demo.LeadPipeline(
@@ -113,6 +118,9 @@ async def test_worker_records_agent_outcome_independently_of_mail(monkeypatch, a
     monkeypatch.setattr("api.v1.sales._run_sales_agent_on_lead", agent)
     lead_id = uuid.uuid4()
     try:
+        # Self-contained: the KEK lookup needs the marketing tenant row, which
+        # must not depend on another test having inserted it first.
+        await _ensure_marketing_tenant(engine, demo_delivery.MARKETING_TENANT)
         job = await demo_delivery.prepare({"name": "Synthetic result", "email": "owner@example.org"}, str(lead_id))
         assert await demo_delivery.dispatch_one(demo_delivery.MARKETING_TENANT, job) == {
             "notification": "smtp_accepted", "confirmation": "failed", "agent": expected,

@@ -1192,10 +1192,9 @@ async def cancel_workflow_run(
 
     # 3. Audit log — control-plane action by a human user.
     try:
-        from core.database import async_session_factory  # noqa: PLC0415
         from core.tool_gateway.audit_logger import AuditLogger  # noqa: PLC0415
 
-        await AuditLogger(async_session_factory).log(
+        await AuditLogger(lambda: get_tenant_session(_uuid.UUID(str(tenant_id)))).log(
             tenant_id=tenant_id,
             workflow_run_id=str(run_id),
             action="workflow_run.cancel",

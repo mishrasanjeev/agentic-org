@@ -284,7 +284,6 @@ async def test_pick_variant_enters_tenant_session(monkeypatch):
     session = _Session()
     factory, entered = _tenant_session_recorder(session)
     monkeypatch.setattr(workflow_ab, "get_tenant_session", factory)
-    monkeypatch.setattr(workflow_ab, "async_session_factory", lambda: pytest.fail("raw session used"))
 
     assert await workflow_ab.pick_variant(uuid.uuid4(), "user-1", tenant_id=str(TENANT)) is None
     assert entered == [TENANT]
@@ -298,7 +297,6 @@ async def test_record_outcome_enters_tenant_session(monkeypatch):
     session = _Session()
     factory, entered = _tenant_session_recorder(session)
     monkeypatch.setattr(workflow_ab, "get_tenant_session", factory)
-    monkeypatch.setattr(workflow_ab, "async_session_factory", lambda: pytest.fail("raw session used"))
 
     await workflow_ab.record_outcome(uuid.uuid4(), success=True, tenant_id=TENANT)
     assert entered == [TENANT]

@@ -207,9 +207,14 @@ class TestInviteStatusGate:
         session = self._session(user)
         with (
             patch(
-                "api.v1.org._decode_invite_claims", return_value={"agenticorg:user_id": str(uid), "sub": "m@acme.io"}
+                "api.v1.org._decode_invite_claims",
+                return_value={
+                    "agenticorg:user_id": str(uid),
+                    "agenticorg:tenant_id": str(user.tenant_id),
+                    "sub": "m@acme.io",
+                },
             ),
-            patch("api.v1.org.async_session_factory", _session_factory(session)),
+            patch("api.v1.org.get_tenant_session", _session_factory(session)),
         ):
             with pytest.raises(HTTPException) as exc:
                 await accept_invite(AcceptInviteRequest(token="tok", password="Passw0rd!"))
@@ -234,9 +239,14 @@ class TestInviteStatusGate:
         session = self._session(user)
         with (
             patch(
-                "api.v1.org._decode_invite_claims", return_value={"agenticorg:user_id": str(uid), "sub": "m@acme.io"}
+                "api.v1.org._decode_invite_claims",
+                return_value={
+                    "agenticorg:user_id": str(uid),
+                    "agenticorg:tenant_id": str(user.tenant_id),
+                    "sub": "m@acme.io",
+                },
             ),
-            patch("api.v1.org.async_session_factory", _session_factory(session)),
+            patch("api.v1.org.get_tenant_session", _session_factory(session)),
         ):
             out = await accept_invite(AcceptInviteRequest(token="tok", password="Passw0rd!"))
         assert user.status == "active"
@@ -248,9 +258,10 @@ class TestInviteStatusGate:
 
         uid = uuid.uuid4()
         user = SimpleNamespace(id=uid, email="m@acme.io", name="M", role="analyst", status="inactive")
+        claims = {"agenticorg:user_id": str(uid), "agenticorg:tenant_id": str(uuid.uuid4())}
         with (
-            patch("api.v1.org._decode_invite_claims", return_value={"agenticorg:user_id": str(uid)}),
-            patch("api.v1.org.async_session_factory", _session_factory(self._session(user))),
+            patch("api.v1.org._decode_invite_claims", return_value=claims),
+            patch("api.v1.org.get_tenant_session", _session_factory(self._session(user))),
         ):
             with pytest.raises(HTTPException) as exc:
                 await get_invite_info(token="tok")
@@ -394,7 +405,7 @@ class TestGoogleLogin:
                 "api.v1.auth.google_id_token.verify_oauth2_token",
                 return_value={"email": "U@X.io", "email_verified": False},
             ),
-            patch("api.v1.auth.async_session_factory", _session_factory(session)),
+            patch("api.v1.auth.get_platform_session", _session_factory(session)),
         ):
             with pytest.raises(HTTPException) as exc:
                 await auth_mod.google_login(auth_mod.GoogleLoginRequest(credential="c"), MagicMock())
@@ -416,7 +427,7 @@ class TestGoogleLogin:
                 "api.v1.auth.google_id_token.verify_oauth2_token",
                 return_value={"email": "U@X.io", "email_verified": True},
             ),
-            patch("api.v1.auth.async_session_factory", _session_factory(session)),
+            patch("api.v1.auth.get_platform_session", _session_factory(session)),
         ):
             with pytest.raises(HTTPException) as exc:
                 await auth_mod.google_login(auth_mod.GoogleLoginRequest(credential="c"), MagicMock())
@@ -452,7 +463,7 @@ class TestEmailNormalisation:
             patch("api.v1.auth._hash_password", AsyncMock(return_value="h")),
             patch("api.v1.auth.seed_tenant_defaults", AsyncMock()),
             patch("api.v1.auth.send_welcome_email", MagicMock()),
-            patch("api.v1.auth.async_session_factory", _session_factory(session)),
+            patch("api.v1.auth.get_platform_session", _session_factory(session)),
         ):
             await auth_mod.signup(body, _request(), MagicMock())
         from core.models.user import User
@@ -472,7 +483,7 @@ class TestEmailNormalisation:
         session.execute = AsyncMock(return_value=result)
         with (
             patch("api.v1.auth._check_rate_limit", AsyncMock(return_value=False)),
-            patch("api.v1.auth.async_session_factory", _session_factory(session)),
+            patch("api.v1.auth.get_platform_session", _session_factory(session)),
         ):
             with pytest.raises(HTTPException):
                 await auth_mod.login(
@@ -483,7 +494,7 @@ class TestEmailNormalisation:
         session.execute.reset_mock()
         with (
             patch("api.v1.auth.auth_state.check_window_rate", AsyncMock(return_value=False)),
-            patch("api.v1.auth.async_session_factory", _session_factory(session)),
+            patch("api.v1.auth.get_platform_session", _session_factory(session)),
         ):
             await auth_mod.forgot_password(auth_mod.ForgotPasswordRequest(email="ADMIN@acme.io"), _request())
         assert "lower(users.email) = 'admin@acme.io'" in _compiled(session.execute.await_args.args[0])
@@ -501,7 +512,7 @@ class TestEmailNormalisation:
         request = SimpleNamespace(state=SimpleNamespace(tenant_id=str(uuid.uuid4()), user_sub="admin@acme.io"))
         body = org_mod.InviteRequest(email=" New.Member@Acme.IO ", role="analyst", domain="finance")
         with (
-            patch("api.v1.org.async_session_factory", _session_factory(session)),
+            patch("api.v1.org.get_tenant_session", _session_factory(session)),
             patch("api.v1.org.issue_code", AsyncMock(return_value="code")),
             patch("api.v1.org.send_invite_email", MagicMock()),
         ):
@@ -629,7 +640,7 @@ class TestSsoDiscovery:
         result = MagicMock()
         result.scalars.return_value.all.return_value = self._configs()
         session.execute = AsyncMock(return_value=result)
-        with patch("api.v1.sso.async_session_factory", _session_factory(session)):
+        with patch("api.v1.sso.get_platform_session", _session_factory(session)):
             out = await list_providers(email="u@ACME.com")
             other = await list_providers(email="u@other.org")
         assert [p["provider_key"] for p in out["providers"]] == ["okta-b"]
@@ -652,7 +663,7 @@ class TestCreateApiKeyPrincipal:
         session.execute = AsyncMock(return_value=result)
         session.add = MagicMock()
         request = SimpleNamespace(state=SimpleNamespace(tenant_id=str(uuid.uuid4()), user_sub="apikey:ao_sk_abc"))
-        with patch("api.v1.api_keys.async_session_factory", _session_factory(session)):
+        with patch("api.v1.api_keys.get_tenant_session", _session_factory(session)):
             with pytest.raises(HTTPException) as exc:
                 await create_api_key(CreateKeyRequest(name="ci"), request)
         assert exc.value.status_code == 403
