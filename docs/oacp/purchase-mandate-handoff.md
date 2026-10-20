@@ -70,6 +70,38 @@ flowchart TD
   callback --> reconcile[Buyer-safe reconciliation]
 ```
 
+## Scheme Token Binding
+
+A `mandate_capability` artifact may carry `token_binding`, the scheme token a buyer agent's payment
+is bound to (`core/commerce/scheme_token_binding.py`, the Python mirror of the Grantex shared type
+in `@grantex/sdk` and the auth service):
+
+```json
+"token_binding": {
+  "scheme": "visa",
+  "token_ref": "tokref_0001",
+  "agent_id": "shopper-01",
+  "merchant_scope": ["merchant.example"],
+  "limits": { "max_amount": 250000, "currency": "INR", "expires_at": "2026-11-01T00:00:00Z" }
+}
+```
+
+- `scheme`: `visa` or `mastercard` (network tokens), `upi_autopay`, or `provider_token` (a payment
+  provider's tokenised instrument behind the provider-neutral interface).
+- `token_ref`: an opaque reference to the token the scheme or provider holds, 1 to 128 characters
+  from `A-Z a-z 0-9 . _ : -`. A run of 13 to 19 digits anywhere is refused: a card number is never
+  a reference, and AgenticOrg never holds the token itself.
+- `agent_id`, `merchant_scope` (1 to 32 merchant ids) and `limits` (`max_amount` in minor units,
+  ISO 4217 `currency`, optional RFC 3339 `expires_at`) must sit inside the capability: the same
+  buyer agent, merchants within its scope, the same currency, a limit no higher than its
+  `max_amount`, and no expiry after the artifact's.
+
+A malformed binding, or one outside its capability, refuses the artifact with
+`token_binding_invalid`; an artifact without the member validates as before. The executor
+interface carries the parsed binding on `ExecutionCheckout.scheme_token_binding` (default `None`)
+for the rail's executor (the Plural executor of the payment-rail work) to present `token_ref` to
+the scheme or provider. Nothing in AgenticOrg executes it.
+
 ## Safe Output
 
 Return product, variant, source refs, freshness, idempotency key, provider evidence ref, and next human/system steps. Do not return checkout/payment URLs or success claims unless an approved external execution path later confirms them.

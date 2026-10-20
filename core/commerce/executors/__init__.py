@@ -20,7 +20,10 @@ from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
-from typing import Any, Literal, Protocol
+from typing import TYPE_CHECKING, Any, Literal, Protocol
+
+if TYPE_CHECKING:
+    from core.commerce.scheme_token_binding import SchemeTokenBinding
 
 SESSION_COMPLETE = "session_complete"
 _GATE = object()
@@ -64,6 +67,12 @@ class ExecutionCheckout:
     instruments: Sequence[ExecutionInstrument]
     token_binding: Mapping[str, Any]
     payload_hash: str
+    # The scheme token binding of the buyer's payment capability (G52,
+    # core/commerce/scheme_token_binding.py), when the verified mandate_capability
+    # artifact carries one: the executor presents token_ref to the scheme or
+    # provider that holds the token, within limits. Not the UCP tokenizer binding
+    # above. None: the payment uses the instrument credential only.
+    scheme_token_binding: SchemeTokenBinding | None = None
 
 
 @dataclass(frozen=True)

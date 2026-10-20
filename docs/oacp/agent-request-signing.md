@@ -231,6 +231,11 @@ With signing off the two inputs are dropped.
 
 Rollout: [launch and rollback runbook](explainers/launch-rollback-runbook.md).
 
+## Scheme token binding (G52)
+
+The payment capability's scheme token binding (`{scheme, token_ref, agent_id, merchant_scope,
+limits}`) is documented with the [purchase and mandate handoff](purchase-mandate-handoff.md#scheme-token-binding).
+
 ## Not implemented
 
 - `Signature-Agent` types `jwks_uri` and `cimd` (no key source configured for them).

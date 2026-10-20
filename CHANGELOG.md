@@ -38,6 +38,14 @@
   carries `agenticPaymentContainer`, optionally `agenticConsumer`, and the Grantex consent record
   object `grantexConsentRecord`, bound to the signature's nonce. The `grantex_consent` and
   `tap_consumer_id_token` inputs are never forwarded as tool arguments.
+- Scheme token binding (G52): `core/commerce/scheme_token_binding.py` mirrors the Grantex
+  `SchemeTokenBinding` `{scheme, token_ref, agent_id, merchant_scope, limits}` (schemes `visa`,
+  `mastercard`, `upi_autopay`, `provider_token`). A `mandate_capability` artifact carrying
+  `token_binding` is now refused with `token_binding_invalid` when the binding is malformed, its
+  `token_ref` holds a run of 13 to 19 digits, or it does not sit inside the capability (agent,
+  merchant scope, currency, cap, expiry), as Grantex already refuses when it issues one. Artifacts
+  without the member are unaffected. `ExecutionCheckout.scheme_token_binding` (default `None`)
+  carries the parsed binding to the rail's executor; nothing executes it here.
 - Dependency: `grantex-agent-httpsig==0.2.0` in `requirements.txt` and `pyproject.toml`. It is not
   on PyPI yet; CI needs the published package.
 - Fixed: the public buyer-safe seller pages and catalog reads under `/api/v1/public/commerce/`
