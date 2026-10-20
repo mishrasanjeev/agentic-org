@@ -1,5 +1,16 @@
 # Changelog
 
+## Unreleased - Playwright 1.64
+
+- Python `playwright` moves from 1.63.0 to 1.64.0 (`[v4]` extra and `requirements-v4.txt`); the
+  API image downloads the matching Chromium build at build time, unchanged.
+- Fixed: `testing/channels/Dockerfile.browser` still used the Playwright 1.63 browser image while
+  the UI test runner it copies from `ui/node_modules` is `@playwright/test` 1.64, so its browsers
+  did not match the runner. It now uses the 1.64 image the compose E2E services already use.
+- The packaging regression test checks that the pyproject floor matches the `requirements-v4.txt`
+  pin, and that every Playwright browser image matches the UI's locked `@playwright/test`
+  version, instead of a hard-coded release.
+
 ## Unreleased - OACP closure documentation and the OACP explainer post
 
 - New blog post "OACP explained: one trust layer under UCP, ACP and AP2"
@@ -770,6 +781,15 @@
   or a network-egress control.
 - Apply the isolation minimum before A2A/MCP type routes choose their legacy
   compatibility path, so valid registered agents are selected before minting.
+
+## Unreleased - Checkpoint store library 3.2.0
+
+- `langgraph-checkpoint-postgres` moves from 3.1.3 to 3.2.0 (exact pin; `langgraph-checkpoint`
+  stays 4.3.0). The encrypted checkpoint saver was reverified against 3.2.0: the release only
+  adds `prune`/`aprune`, which AgenticOrg does not call; `aput`, the blob and write dump paths,
+  checkpoint loading and the upstream schema migration list are unchanged, so no new migration
+  is needed. The saver now refuses 3.1.3 (`checkpoint_library_unverified`), as it does any
+  version other than the verified one.
 
 ## Dependency Compatibility (2026-10-17)
 
