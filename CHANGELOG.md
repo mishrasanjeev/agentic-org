@@ -771,6 +771,15 @@
 - Apply the isolation minimum before A2A/MCP type routes choose their legacy
   compatibility path, so valid registered agents are selected before minting.
 
+## Unreleased - Checkpoint store library 3.2.0
+
+- `langgraph-checkpoint-postgres` moves from 3.1.3 to 3.2.0 (exact pin; `langgraph-checkpoint`
+  stays 4.3.0). The encrypted checkpoint saver was reverified against 3.2.0: the release only
+  adds `prune`/`aprune`, which AgenticOrg does not call; `aput`, the blob and write dump paths,
+  checkpoint loading and the upstream schema migration list are unchanged, so no new migration
+  is needed. The saver now refuses 3.1.3 (`checkpoint_library_unverified`), as it does any
+  version other than the verified one.
+
 ## Dependency Compatibility (2026-10-17)
 
 - Updated the provider, graph runtime, UI components and development tools together.

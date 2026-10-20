@@ -273,7 +273,7 @@ def test_pinned_checkpoint_library_versions() -> None:
     # shipping a revision that applies them.
     from core.langgraph.checkpoint_postgres import VERIFIED_LIBRARY_VERSIONS
 
-    assert VERIFIED_LIBRARY_VERSIONS == {"langgraph-checkpoint-postgres": "3.1.3", "langgraph-checkpoint": "4.3.0"}
+    assert VERIFIED_LIBRARY_VERSIONS == {"langgraph-checkpoint-postgres": "3.2.0", "langgraph-checkpoint": "4.3.0"}
     pyproject = (REPO / "pyproject.toml").read_text(encoding="utf-8")
     requirements = (REPO / "requirements.txt").read_text(encoding="utf-8").splitlines()
     for package, pinned in VERIFIED_LIBRARY_VERSIONS.items():
@@ -285,16 +285,17 @@ def test_pinned_checkpoint_library_versions() -> None:
 
 UNVERIFIED = [
     (
-        {"langgraph-checkpoint-postgres": "3.2.0", "langgraph-checkpoint": "4.3.0"},
-        "langgraph-checkpoint-postgres is 3.2.0",
+        {"langgraph-checkpoint-postgres": "3.2.1", "langgraph-checkpoint": "4.3.0"},
+        "langgraph-checkpoint-postgres is 3.2.1",
     ),
-    ({"langgraph-checkpoint-postgres": "3.1.3", "langgraph-checkpoint": "4.3.1"}, "langgraph-checkpoint is 4.3.1"),
-    ({"langgraph-checkpoint-postgres": "3.1.3"}, "langgraph-checkpoint is missing"),
+    # The previously verified release is refused once the pin moves on.
     (
-        {"langgraph-checkpoint-postgres": "3.1.2", "langgraph-checkpoint": "4.3.0"},
-        "langgraph-checkpoint-postgres is 3.1.2",
+        {"langgraph-checkpoint-postgres": "3.1.3", "langgraph-checkpoint": "4.3.0"},
+        "langgraph-checkpoint-postgres is 3.1.3",
     ),
-    ({"langgraph-checkpoint-postgres": "3.1.3", "langgraph-checkpoint": "4.2.0"}, "langgraph-checkpoint is 4.2.0"),
+    ({"langgraph-checkpoint-postgres": "3.2.0", "langgraph-checkpoint": "4.3.1"}, "langgraph-checkpoint is 4.3.1"),
+    ({"langgraph-checkpoint-postgres": "3.2.0"}, "langgraph-checkpoint is missing"),
+    ({"langgraph-checkpoint-postgres": "3.2.0", "langgraph-checkpoint": "4.2.0"}, "langgraph-checkpoint is 4.2.0"),
 ]
 
 

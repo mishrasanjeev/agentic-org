@@ -14,7 +14,7 @@ the stock saver would persist a bearer credential in plaintext.
 serializer into ``checkpoint_blobs`` instead, and binds every serializer call
 to the thread and namespace it reads or writes (``checkpoint_binding``).
 
-The overrides mirror langgraph-checkpoint-postgres 3.1.3 and import a private
+The overrides mirror langgraph-checkpoint-postgres 3.2.0 and import a private
 type of langgraph-checkpoint 4.3.0. Both are pinned exactly in pyproject and
 requirements, and ``open_sealed_saver`` refuses to start
 (``checkpoint_library_unverified``) with any other installed version.
@@ -48,7 +48,7 @@ from core.langgraph.checkpointer import CheckpointerUnavailableError, checkpoint
 
 CHECKPOINT_TABLES = ("checkpoint_migrations", "checkpoints", "checkpoint_blobs", "checkpoint_writes")
 # The exact versions SealedAsyncPostgresSaver was written and tested against.
-VERIFIED_LIBRARY_VERSIONS = {"langgraph-checkpoint-postgres": "3.1.3", "langgraph-checkpoint": "4.3.0"}
+VERIFIED_LIBRARY_VERSIONS = {"langgraph-checkpoint-postgres": "3.2.0", "langgraph-checkpoint": "4.3.0"}
 
 
 def verify_library_versions() -> None:

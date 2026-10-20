@@ -211,8 +211,11 @@ Operating the Postgres store:
   [vault key rotation](runbooks/vault-key-rotation.md).
 - Each encrypted payload is bound to its thread and namespace; a blob copied
   into another thread fails with `checkpoint_binding_mismatch`.
-- `langgraph-checkpoint-postgres` and `langgraph-checkpoint` are pinned exactly;
-  a different installed version is refused (`checkpoint_library_unverified`).
+- `langgraph-checkpoint-postgres` (3.2.0) and `langgraph-checkpoint` (4.3.0) are
+  pinned exactly; a different installed version is refused
+  (`checkpoint_library_unverified`). Bumping either means reviewing
+  `SealedAsyncPostgresSaver` against the new release and updating
+  `VERIFIED_LIBRARY_VERSIONS` with the pins.
 
 **Detect:**
 - API does not start and logs `langgraph_checkpointer_unavailable reason=...`; runs
