@@ -122,10 +122,20 @@ A cached copy of the status list lasts 30 seconds by default.
 
 ## What Is Switched On Today
 
-Signing and verification are on. The arbiter and ledger are on for every commerce handoff.
-Checkout, payment execution, public UCP discovery, the ACP feed and checkout, mandate requests
-and the agent key registry ship behind switches that default to off. Agent request signatures are
-checked and logged; refusing unsigned requests is a separate switch.
+Status on 20 October 2026.
+
+- **In Grantex production:** every artifact is signed with ES256 under Grantex's first OACP
+  issuer key, the key is published, and the public revocation list is served.
+- **Merged in AgenticOrg's main branch:** signature checks before caching (strict in
+  production), the arbiter and ledger for every commerce handoff and checkout completion, the UCP
+  profile, catalog and checkout, the ACP feed and checkout sessions, and MCP checkout tools.
+  Everything that touches checkout or public discovery ships behind switches that default to off,
+  and no payment executor is installed yet, so no checkout can complete.
+- **Still in review for AgenticOrg:** mandate requests, the Plural payment executor with UPI
+  AutoPay and AFA, and agent request signatures (checked and logged by default; refusing unsigned
+  requests is a separate switch).
+- **Not yet in AgenticOrg production:** the AgenticOrg release described here. It goes to
+  production after the remaining work is merged, with each switch turned on separately.
 
 ## What OACP Is Not
 

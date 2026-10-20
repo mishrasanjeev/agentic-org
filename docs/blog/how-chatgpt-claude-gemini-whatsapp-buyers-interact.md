@@ -1,5 +1,14 @@
 # How ChatGPT, Claude, Gemini, Perplexity, WhatsApp, And Telegram Can Shop Through Seller Agents
 
+> **Update, 20 October 2026.** Since this post was written, Grantex signs every OACP artifact
+> (ES256 detached JWS) and AgenticOrg's `main` branch verifies each one before caching it. A
+> deterministic commerce arbiter decides every purchase handoff, POS handoff and checkout
+> completion (allow or refuse, never waiting for a person), and every commerce change is written
+> to the commerce ledger. UCP and ACP checkout surfaces exist behind flags that default to off,
+> and no payment executor is registered yet. The AgenticOrg changes are not in its production
+> deployment yet. Current state: [OACP explained](oacp-one-trust-layer-under-ucp-acp-ap2.md) and
+> the [truth inventory](../oacp/truth-inventory.md).
+
 ## Summary
 
 Buyer surfaces use different protocols, but they must share one OACP-backed truth path in AgenticOrg. Web, MCP, OpenAPI, A2A, search/crawler, WhatsApp, and Telegram routes must preserve source/freshness labels and commitment boundaries.

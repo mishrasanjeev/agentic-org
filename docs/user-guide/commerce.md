@@ -9,7 +9,7 @@ see the [merchant-services process map](/docs/bfsi-merchant-services#process-map
 Merchant setup | Configure the Seller Commerce Agent and merchant-scoped sources/channels.
 Shopify read-only sync | Fetch real products, variants, images, price and inventory snapshots with approved access.
 Grantex authority | Send the bounded authority request and obtain validated artifacts.
-AgenticOrg cache | Persist artifacts with scope, source, freshness, TTL and revocation posture.
+AgenticOrg cache | Check each artifact's Grantex signature, scope, expiry and revocation status, then persist it with source and freshness.
 Buyer conversation | Answer through configured web/agent/channel bridges from supported evidence.
 Prepared handoff | Ask the authoritative provider, merchant or POS path to confirm its own action.
 ```
@@ -41,6 +41,12 @@ Do not promote stale snapshots into final price, stock, delivery, tax, return or
 The runtime includes bounded protocol-adapter payloads and web/MCP/OpenAPI/A2A/WhatsApp/Telegram bridge routes. Client configuration, provider credentials, platform/marketplace approval and merchant publishing are separate dependencies. A UCP/ACP/schema.org payload does not automatically list a merchant in ChatGPT, Gemini or another marketplace.
 
 Current WooCommerce/ERP/PIM/OMS/WMS/custom-source configuration does not have universal runtime parity with Shopify. Treat each as an integration project until its adapter is implemented and validated.
+
+## Commerce decisions and the ledger
+
+Before a purchase handoff, an Offline POS handoff or a checkout completion goes anywhere, a fixed set of rules decides it: mandate, consent, the buyer's Commerce Passport cap, valid artifacts and the merchant's own limits. The answer is allow or refuse, with the first failing rule as the reason, and it never waits for a person. An allow can be used once, for exactly that payload. Every commerce change is written to the commerce ledger, which an administrator can export and check offline. Optional human review copies a refusal into the review queue without changing it.
+
+UCP and ACP checkout for agent platforms, and the public UCP profile, are switched off by default. Turning them on is an operator step, one at a time. Until a payment executor is installed and switched on, a checkout cannot complete.
 
 ## Payments and offline POS
 

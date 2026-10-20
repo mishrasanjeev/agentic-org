@@ -425,7 +425,7 @@
     },
     {
       "question": "What is OACP in AgenticOrg?",
-      "answer": "The Open Agentic Commerce Protocol boundary separates merchant source facts, Grantex authority artifacts, AgenticOrg's scoped cache, buyer-safe answers, and provider-owned execution. Cached evidence can support discovery and a prepared handoff, but it does not create an order, mandate, payment, inventory hold, refund, or paid state."
+      "answer": "The Open Agentic Commerce Protocol boundary separates merchant source facts, Grantex authority artifacts, AgenticOrg's scoped cache, buyer-safe answers, and provider-owned execution. Cached evidence can support discovery and a prepared handoff, but it does not create an order, mandate, payment, inventory hold, refund, or paid state. Each handoff is decided by fixed rules, allow or refuse, and recorded; checkout surfaces for agent platforms stay off until an operator turns them on."
     },
     {
       "question": "Is Jev available in production?",

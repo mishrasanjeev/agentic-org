@@ -1,5 +1,16 @@
 # Offline POS Bridge: Connecting In-Store Checkout To AI Buyer Agents
 
+> **Update, 20 October 2026.** Since this post was written, Grantex signs every OACP artifact
+> (ES256 detached JWS) and AgenticOrg's `main` branch verifies each one before caching it. A
+> deterministic commerce arbiter decides every purchase handoff, POS handoff and checkout
+> completion (allow or refuse, never waiting for a person), and every commerce change is written
+> to the commerce ledger. UCP and ACP checkout surfaces exist behind flags that default to off,
+> and no payment executor is registered yet. The AgenticOrg changes are not in its production
+> deployment yet. Current state: [OACP explained](oacp-one-trust-layer-under-ucp-acp-ap2.md) and
+> the [truth inventory](../oacp/truth-inventory.md).
+> A POS handoff packet is now stored only against a consumed `allow` decision for that exact
+> packet: the first call returns the decision, the repeat with its `decision_id` stores it.
+
 ## Audience
 
 Merchants, POS/payment partners, commerce developers, and operators evaluating AgenticOrg's OACP-backed commerce runtime.
