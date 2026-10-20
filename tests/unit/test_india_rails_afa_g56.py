@@ -167,7 +167,7 @@ def test_ucp_action_and_acp_mapping_carry_the_same_step() -> None:
 def test_session_complete_evaluates_afa_last_and_purchase_handoff_does_not() -> None:
     assert arbiter.RULES_BY_ACTION["session_complete"] == (*arbiter.RULE_ORDER, "afa_evidence_present")
     assert "afa_evidence_present" not in arbiter.RULES_BY_ACTION["purchase_handoff"]
-    assert arbiter.POLICY_VERSION == "commerce-arbiter-v3"
+    assert arbiter.POLICY_VERSION == "commerce-arbiter-v4"
 
 
 def test_no_upi_instrument_passes_without_afa_input() -> None:

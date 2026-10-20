@@ -34,6 +34,13 @@ Merchant transaction settings live in the merchant commerce config under
     describes the UPI AutoPay e-mandate the merchant offers (amount rule and
     limit, frequency, validity, purpose, the AFA authorization URL); with the
     ``upi_autopay`` instrument type it enables UPI AutoPay instruments.
+``grantex_mandates``
+    ``{tenant_id, merchant_id, rail?, token_type?}``: the Grantex commerce tenant
+    and merchant this merchant's Commerce Passports name, so the server can
+    request and verify Intent, Cart and Payment mandates for a completion
+    (``rail`` defaults to ``plural``, ``token_type`` to ``plural_pine_token``).
+    Without it no mandate is requested and the buyer authority stays
+    caller-asserted.
 ``executor``
     The registered executor that completes this merchant's sessions (none by default).
 ``currency``
@@ -112,6 +119,36 @@ class MandateCapability:
         return out
 
 
+_GRANTEX_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$")
+_MANDATE_RAILS = ("plural", "upi_autopay", "card_network_token")
+
+
+@dataclass(frozen=True)
+class GrantexMandateSettings:
+    """The Grantex commerce tenant and merchant a merchant's mandates are issued under."""
+
+    tenant_id: str
+    merchant_id: str
+    rail: str = "plural"
+    token_type: str = "plural_pine_token"
+
+
+def parse_grantex_mandates(raw: Any) -> GrantexMandateSettings | None:
+    """``provider_policy.ucp.grantex_mandates``, or None when absent or unusable (fail closed: no mandates)."""
+    if not isinstance(raw, Mapping):
+        return None
+    tenant, merchant = raw.get("tenant_id"), raw.get("merchant_id")
+    rail = raw.get("rail", "plural")
+    token_type = raw.get("token_type", "plural_pine_token")
+    if not (isinstance(tenant, str) and _GRANTEX_ID.match(tenant) and isinstance(merchant, str)):
+        return None
+    if not _GRANTEX_ID.match(merchant) or rail not in _MANDATE_RAILS:
+        return None
+    if not isinstance(token_type, str) or not re.fullmatch(r"[a-z][a-z0-9_]{0,63}", token_type):
+        return None
+    return GrantexMandateSettings(tenant_id=tenant, merchant_id=merchant, rail=rail, token_type=token_type)
+
+
 @dataclass(frozen=True)
 class MerchantUcp:
     """One merchant's UCP context, resolved from its commerce config."""
@@ -129,6 +166,7 @@ class MerchantUcp:
     payment_terms: tuple[dict[str, Any], ...] = ()
     payment_authentication: dict[str, Any] | None = None
     mandate_capability: MandateCapability | None = None
+    grantex_mandates: GrantexMandateSettings | None = None
     payment_providers: tuple[dict[str, Any], ...] = ()
     executor: str | None = None
     currency: str | None = None
@@ -251,6 +289,7 @@ def merchant_ucp_from_config(
             dict(ucp["payment_authentication"]) if isinstance(ucp.get("payment_authentication"), Mapping) else None
         ),
         mandate_capability=mandate,
+        grantex_mandates=parse_grantex_mandates(ucp.get("grantex_mandates")),
         payment_providers=tuple(dict(p) for p in (config.get("payment_providers") or []) if isinstance(p, Mapping)),
         executor=str(ucp.get("executor")) if ucp.get("executor") else None,
         currency=str(ucp.get("currency") or "").upper()[:3] or None,

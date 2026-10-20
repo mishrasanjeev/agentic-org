@@ -82,6 +82,9 @@ async def persist_decision(session: Any, decision: Decision) -> dict[str, Any]:
             **decision.evidence,
             "buyer_authority_source": decision.buyer_authority_source,
             "mandate_hashes": decision.extra.get("mandate_hashes"),
+            "mandate_jtis": decision.extra.get("mandate_jtis"),
+            "presence": decision.extra.get("presence"),
+            "authority_verification_ref": decision.extra.get("authority_verification_ref"),
         },
         "evidence_hashes": list(decision.evidence_hashes),
         "policy_version": decision.policy_version,
@@ -247,8 +250,13 @@ _REQUIRED_CONFIG: dict[str, str] = {
         "buyer_authority.passport_ref, passport_max_amount_minor_units, passport_currency, passport_expires_at"
     ),
     "buyer_authority_verified": (
-        "Server-verified buyer mandate, consent and passport (Phase 4); until then "
-        "AGENTICORG_ARBITER_REQUIRE_VERIFIED_AUTHORITY=false accepts caller-asserted authority"
+        "Intent, Cart and Payment mandates from Grantex, verified by the server (UCP Complete with "
+        "ai.agenticorg.commerce.mandate_request); AGENTICORG_ARBITER_REQUIRE_VERIFIED_AUTHORITY=false "
+        "accepts caller-asserted authority"
+    ),
+    "human_not_present_limits": (
+        "merchant config provider_policy.arbiter.human_not_present.max_order_amount_minor_units, and an "
+        "intent mandate max_amount covering the order total"
     ),
     "oacp_artifacts_valid": "Verified, fresh, unrevoked OACP artifacts for every required family",
     "merchant_limits": (

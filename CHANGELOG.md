@@ -1,5 +1,48 @@
 # Changelog
 
+## Unreleased - Server-verified Grantex mandates close D1; not-present rule set; buyer agent on UCP and refund decisions (G41, G44, G45, D1)
+
+- Mandate client (`core/commerce/mandates_client.py`): a UCP Complete carrying
+  `ai.agenticorg.commerce.mandate_request {passport_jwt, presence, description,
+  max_amount_minor_units?, webauthn_assertion?}` asks Grantex for the Intent, Cart and Payment
+  mandates in order with the service token (async, pinned egress transport, async egress
+  validation, 5 s, no redirect, no retry). A `human_present` cart carries the buyer's WebAuthn
+  assertion over `checkout_hash` exactly as the platform sent it; nothing is generated
+  server-side. The checkout response names `ai.agenticorg.commerce.mandate_checkout
+  {checkout, checkout_hash}` for merchants with `provider_policy.ucp.grantex_mandates`. Behind
+  `AGENTICORG_GRANTEX_MANDATES_ENABLED` (default off; enable after the Grantex mandate release).
+- Local verifier (`core/commerce/oacp_mandates.py`): the ordered refusal codes of the Grantex
+  mandate profile (`mandate_malformed` through `mandate_suspended`), the chain rules
+  (`mandate_chain_mismatch`) and the binding to the session (`mandate_binding_mismatch`), using
+  the pinned JWKS and the Token Status List reader of `oacp_grantex_trust` (new
+  `OacpGrantexArtifactVerifier.status_at`, shared with artifacts). Every case of the shared
+  vectors passes (`tests/fixtures/oacp/oacp-mandates-v1.json`, `oacp-mandates-v1-extra.json`).
+- D1 closed: `buyer_authority_verified` passes only with the server-side ref the verifier
+  produced (`oacp-mandate-v1;jti;mandate_hash;verified_at`) naming the decision's own mandate jti
+  and hash; any other ref refuses `buyer_authority_ref_invalid`. The decision's mandate evidence
+  is the payment mandate jti and `mandate_hash` (hex SHA-256 of the compact JWT); the decision
+  and the ledger (`commerce.arbiter.decision`, `commerce.ucp.checkout.mandates`) seal the three
+  jtis and hashes, and the Plural order metadata carries the three hashes.
+- Arbiter policy `commerce-arbiter-v4` (**breaking for decision shape**: `rules_evaluated` gains
+  `human_not_present_limits`, the decision id material gains the presence). A
+  `human_not_present` purchase must be within `provider_policy.arbiter.human_not_present` (lower
+  caps) and the intent mandate cap, and a UPI AutoPay instrument has no AFA-exempt path. No human
+  step: the rule refuses and the refusal is sealed.
+- **Breaking in strict runtimes (sibling path of D1):** UCP session complete now passes
+  `require_verified_authority` like the handoffs, so caller-asserted authority is refused there
+  too. Opt-out: `AGENTICORG_ARBITER_REQUIRE_VERIFIED_AUTHORITY=false`.
+- UCP Complete seals a fresh decision in its own transaction, offers it to Grantex after the
+  commit, then consumes the allow in a second transaction, so a strict runtime that requires the
+  Grantex grant can consume it (before, UCP decisions were never countersigned and strict
+  runtimes refused them `grantex_grant_missing`). A concurrent Complete still gets 409.
+- Buyer agent: UCP sessions record `state.platform.buyer_agent_id` (`ucp_platform:` and 40 hex
+  characters of the SHA-256 of the `UCP-Agent` profile URL) at create time; session-complete
+  decisions name it, and refund decisions name the buyer agent of the order's session, so Grantex
+  can countersign them.
+- Docs: `docs/oacp/mandates.md#grantex-mandates`, `purchase-mandate-handoff.md`,
+  `arbiter-ledger.md` (rules v4), `truth-inventory.md`, the launch and rollback runbook.
+  Live check: `tests/integration/test_grantex_mandates_live.py`.
+
 ## Unreleased - Mandate-capability evidence for Grantex (G43, AgenticOrg side)
 
 - `core/commerce/mandate_capability_evidence.py` builds `oacp.mandate_capability_evidence.v1` from

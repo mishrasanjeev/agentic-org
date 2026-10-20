@@ -82,6 +82,7 @@ With `AGENTICORG_UCP_CHECKOUT_ENABLED=true` on staging and a merchant published 
 | `AGENTICORG_UCP_CHECKOUT_ENABLED` | `false` | UCP checkout, cart and order routes (`/ucp/checkout-sessions`, `/ucp/carts`, `/ucp/orders`) and the order-webhook sweep. |
 | `PLURAL_PINE_LIVE_EXECUTION_ENABLED` | unset (off) | `true` registers the Plural executor (`plural_pine`); UCP Complete then charges through Plural on a consumed `allow`, and order refunds go through Plural. Also gates the purchase handoff's live mode, unchanged. |
 | `AGENTICORG_GRANTEX_MANDATE_CAPABILITY_EVIDENCE_ENABLED` | `false` | Sends the latest Plural capability result as `mandate_capability_evidence` on the Grantex authority request. Enable after the Grantex release that accepts it; disable to stop sending (Grantex then marks the capability `unverified`). |
+| `AGENTICORG_GRANTEX_MANDATES_ENABLED` | `false` | UCP Complete honours `ai.agenticorg.commerce.mandate_request`: Intent, Cart and Payment mandates from Grantex, verified locally, become the arbiter's buyer authority. Off: a `mandate_request` is answered `unavailable` and the authority stays caller-asserted (refused in strict runtimes). |
 | `AGENTICORG_RBI_EMANDATE_AFA_LIMIT_MINOR_UNITS` / `..._HIGHER_LIMIT_MINOR_UNITS` | `1500000` / `10000000` | RBI e-mandate no-AFA limits (paise) for subsequent UPI AutoPay debits. |
 
 ## Plural Execution Launch Order
@@ -113,6 +114,32 @@ and restart.
 To stop one merchant only, remove its `provider_policy.ucp.executor`. Refunds of captured
 orders while execution is off are made in the Plural dashboard and recorded on the order with
 `POST /api/v1/commerce/runtime/ucp/orders/{id}/events` (a `refund` adjustment).
+
+## Grantex Mandates Launch Order
+
+1. Grantex first: the mandate release (migration `135_oacp_mandates.sql`, the five mandate routes
+   and their service-token scopes), an active OACP issuer key, and
+   `OACP_STATUS_LIST_PUBLIC_ENABLED=true` (without it every mandate fails closed with
+   `revocation_status_unavailable`). The AgenticOrg tenant and each merchant's Grantex commerce
+   tenant are in `COMMERCE_C6Z_AUTHORITY_SERVICE_TENANTS`.
+2. Merchant config: `provider_policy.ucp.grantex_mandates {tenant_id, merchant_id}` naming the
+   Grantex commerce tenant and merchant its passports name, and
+   `provider_policy.arbiter.human_not_present.max_order_amount_minor_units` for autonomous
+   purchases (without it every `human_not_present` purchase is refused
+   `not_present_limits_missing`).
+3. Staging: `AGENTICORG_GRANTEX_MANDATES_ENABLED=true`. A Complete with `mandate_request` answers
+   `ai.agenticorg.commerce.mandates.status: verified`; the decision has
+   `buyer_authority_source: server_verified` and a `grantex_countersignature` of `granted`; the
+   ledger shows `commerce.ucp.checkout.mandates` before `commerce.arbiter.decision`; the Plural
+   order metadata carries the three mandate hashes. Run
+   `tests/integration/test_grantex_mandates_live.py` against the staging Grantex.
+4. Production after the owner approves, merchant by merchant through `grantex_mandates`.
+
+Rolling back: set `AGENTICORG_GRANTEX_MANDATES_ENABLED=false` and restart. Complete then answers
+`mandates.status: unavailable` and the authority is caller-asserted: refused in strict runtimes
+(`buyer_authority_verified`) unless `AGENTICORG_ARBITER_REQUIRE_VERIFIED_AUTHORITY=false`.
+Decisions, ledger rows and payment journal rows already written are kept. To stop one merchant,
+remove its `grantex_mandates`.
 
 ## POS Smoke
 

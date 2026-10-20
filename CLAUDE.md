@@ -94,6 +94,14 @@ and `AGENTICORG_RBI_EMANDATE_AFA_HIGHER_LIMIT_MINOR_UNITS`); AFA is the buyer's 
 returned as an action, never waited for (`docs/oacp/mandates.md`).
 `AGENTICORG_GRANTEX_MANDATE_CAPABILITY_EVIDENCE_ENABLED` (default off) sends the Plural capability
 result as `mandate_capability_evidence` on the Grantex authority request.
+`AGENTICORG_GRANTEX_MANDATES_ENABLED` (default off): a UCP Complete with
+`ai.agenticorg.commerce.mandate_request` gets Intent, Cart and Payment mandates from Grantex
+(`core/commerce/mandates_client.py`), verified locally (`core/commerce/oacp_mandates.py`, the shared
+mandate vectors) before the arbiter decides; only that verification sets the arbiter's server-side
+`authority_verification_ref` (rule `buyer_authority_verified`), never a request body. A
+`human_not_present` purchase is held to `provider_policy.arbiter.human_not_present` and the intent
+cap (rule `human_not_present_limits`). A buyer's WebAuthn assertion is passed through from the
+platform, never created server-side. See `docs/oacp/mandates.md`.
 UCP profile flags: `AGENTICORG_UCP_PROFILE_ENABLED` (default off; `/.well-known/ucp` and the
 `/ucp` catalog and location routes answer 404 while off, onboarding generates no UCP signing
 key, and no `public_discovery_state` artifact may enable discovery), `AGENTICORG_UCP_VERSIONS`

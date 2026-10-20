@@ -32,9 +32,10 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 
 from core.commerce import executors
-from core.commerce.arbiter import RULE_AFA, AfaEvidence, decide
+from core.commerce.arbiter import RULE_AFA, AfaEvidence, Decision, decide
 from core.commerce.arbiter_store import DecisionRefusedError, persist_decision
 from core.commerce.ledger import commerce_payload_hash, record_commerce_event
+from core.commerce.oacp_mandates import VerifiedMandateChain
 from core.commerce.ucp import idempotency
 from core.commerce.ucp import messages as msg
 from core.commerce.ucp import releases as v
@@ -47,7 +48,11 @@ from core.commerce.ucp.completion import (
     ap2_mandate_evidence,
     arbiter_context,
     completion_payload,
+    mandate_checkout,
     parse_buyer_authority,
+    platform_buyer_agent_id,
+    session_buyer_agent_id,
+    token_binding_for,
     vendor_member,
 )
 from core.commerce.ucp.fulfillment import RatesSource
@@ -132,13 +137,18 @@ class UcpRuntime:
     after_commit: Callable[[uuid.UUID], None] | None = None
     # None: the releases AGENTICORG_UCP_VERSIONS enables.
     supported_versions: tuple[str, ...] | None = None
-    # Buyer authority for a completion whose request carries none (the mandate work supplies
-    # server-verified mandates here). None in production today: the request must carry it.
     # policies[] for checkout, cart and order responses (production: the verified OACP policy artifact).
     policies_for: Callable[[MerchantUcp], Awaitable[Sequence[Mapping[str, Any]]]] | None = None
     # The capability names the merchant's profile advertises for a release (production: the profile registry).
     published: Callable[[MerchantUcp, str], set[str]] | None = None
+    # Caller-asserted buyer authority for a completion whose request carries none (conformance
+    # harness only; None in production). Server-verified mandates come from mandate_request.
     authority_provider: Callable[[MerchantUcp, Mapping[str, Any]], Awaitable[Mapping[str, Any] | None]] | None = None
+    # The Grantex service client for mandates and countersignatures (production: from the
+    # environment, GRANTEX_COMMERCE_BASE_URL and GRANTEX_COMMERCE_INTERNAL_TOKEN).
+    grantex_client: Callable[[], Any] | None = None
+    # Whether mandate_request is honoured (production: AGENTICORG_GRANTEX_MANDATES_ENABLED).
+    mandates_enabled: Callable[[], bool] | None = None
 
 
 class _AbortError(Exception):
@@ -339,8 +349,24 @@ async def _render_checkout(
         handlers=handlers,
         extra_messages=extra_messages,
     )
-    if vendor:
-        body[VENDOR_MEMBER] = dict(vendor)
+    vendor_out = dict(vendor or {})
+    if merchant.grantex_mandates is not None and row.status == "ready_for_complete":
+        # What the cart mandate and the buyer's passkey assertion bind (challenge = checkout_hash).
+        from core.commerce.oacp_mandates import checkout_hash
+
+        try:
+            checkout = mandate_checkout(
+                session_id=row.id,
+                revision=int(row.revision),
+                state=state,
+                grantex_merchant_id=merchant.grantex_mandates.merchant_id,
+            )
+        except (KeyError, StopIteration, TypeError):
+            checkout = None
+        if checkout is not None:
+            vendor_out["mandate_checkout"] = {"checkout": checkout, "checkout_hash": checkout_hash(checkout)}
+    if vendor_out:
+        body[VENDOR_MEMBER] = vendor_out
     if negotiated.has(v.ap2_mandate_name(negotiated.version)):
         signer = runtime.signer()
         if signer is not None:
@@ -453,6 +479,8 @@ async def create_checkout(
         state["platform"] = {
             "profile_url": negotiated.platform.url,
             "order_webhook_url": negotiated.platform.order_webhook_url(negotiated.version),
+            # The buyer agent every arbiter decision of this session names (Grantex countersigns to it).
+            "buyer_agent_id": platform_buyer_agent_id(negotiated.platform.url),
         }
         row = CommerceCheckoutSessionRow(
             id=session_id,
@@ -589,18 +617,213 @@ async def cancel_checkout(
     return UcpResponse(status=200, body=rendered, recorded=True, resource_id=row.id)
 
 
+MANDATES_EVENT = "commerce.ucp.checkout.mandates"
+
+
+@dataclass(frozen=True)
+class _MandateOutcome:
+    """What became of a ``mandate_request``: ``verified`` (with the chain), ``refused`` or ``unavailable``."""
+
+    status: str
+    code: str | None
+    chain: VerifiedMandateChain | None = None
+    checkout_hash: str | None = None
+    revision: int | None = None
+
+    def to_vendor(self) -> dict[str, Any]:
+        out: dict[str, Any] = {"status": self.status, "code": self.code}
+        if self.chain is not None:
+            out.update(
+                {"jtis": dict(self.chain.jtis), "hashes": dict(self.chain.hashes), "presence": self.chain.presence}
+            )
+        return out
+
+
+def _grantex_client(runtime: UcpRuntime) -> Any:
+    if runtime.grantex_client is not None:
+        return runtime.grantex_client()
+    from core.commerce.grantex_service import grantex_service_client_from_env
+
+    return grantex_service_client_from_env()
+
+
+def _mandates_enabled(runtime: UcpRuntime) -> bool:
+    if runtime.mandates_enabled is not None:
+        return bool(runtime.mandates_enabled())
+    from core.config import settings
+
+    return bool(getattr(settings, "grantex_mandates_enabled", False))
+
+
+async def _request_mandates(
+    runtime: UcpRuntime,
+    req: UcpRequest,
+    merchant: MerchantUcp,
+    session_id: str,
+    request: Mapping[str, Any] | None,
+    instruments: Sequence[Instrument],
+) -> _MandateOutcome | None:
+    """Ask Grantex for the Intent, Cart and Payment mandates of this checkout and verify them locally.
+
+    Runs before the decision's transaction (no HTTP inside one). Every failure
+    leaves the authority unverified, so the arbiter refuses it in strict
+    runtimes; nothing waits and nothing is retried.
+    """
+    from core.commerce.mandates_client import (
+        MandateChainRequest,
+        MandateRequestError,
+        MandateRequestRefusedError,
+        MandateServiceUnavailableError,
+        request_mandate_chain,
+    )
+    from core.commerce.oacp_mandates import MandateExpectation, checkout_hash, trust_sources, verify_mandate_chain
+    from core.database import get_tenant_session
+
+    if request is None:
+        return None
+    settings = merchant.grantex_mandates
+    if not _mandates_enabled(runtime):
+        return _MandateOutcome("unavailable", "mandates_disabled")
+    if settings is None:
+        return _MandateOutcome("unavailable", "grantex_mandates_not_configured")
+    if len(instruments) != 1:
+        return _MandateOutcome("refused", "mandate_single_instrument_required")
+    async with get_tenant_session(_tenant(req)) as session:
+        row = await _load_session(session, req, merchant, session_id, lock=False)
+        state = dict(row.state or {})
+        revision = int(row.revision)
+        currency = str(row.currency or "").upper()
+        ready = row.status == "ready_for_complete"
+    if not ready:
+        return None
+    checkout = mandate_checkout(
+        session_id=session_id, revision=revision, state=state, grantex_merchant_id=settings.merchant_id
+    )
+    digest = checkout_hash(checkout)
+    total = int(checkout["totals"][0]["amount"])
+    client = _grantex_client(runtime)
+    if client is None:
+        return _MandateOutcome("unavailable", "grantex_not_configured")
+    cap = request.get("max_amount_minor_units")
+    try:
+        issued = await request_mandate_chain(
+            MandateChainRequest(
+                tenant_id=settings.tenant_id,
+                passport_jwt=str(request["passport_jwt"]),
+                description=str(request["description"]),
+                max_amount_minor_units=int(cap) if isinstance(cap, int) else total,
+                currency=currency,
+                presence=str(request["presence"]),
+                checkout=checkout,
+                rail=settings.rail,
+                token_binding=token_binding_for(instruments[0].credential_sha256, settings.token_type),
+                webauthn_assertion=request.get("webauthn_assertion"),
+            ),
+            client=client,
+        )
+    except MandateRequestRefusedError as exc:
+        return _MandateOutcome("refused", exc.code, checkout_hash=digest, revision=revision)
+    except MandateServiceUnavailableError:
+        return _MandateOutcome("unavailable", "grantex_unreachable", checkout_hash=digest, revision=revision)
+    except MandateRequestError:
+        return _MandateOutcome("refused", "mandate_request_invalid", checkout_hash=digest, revision=revision)
+    now = runtime.clock()
+    jwks, status_reader, local = trust_sources(client.verifier, now)
+    chain = await verify_mandate_chain(
+        {kind: item.mandate for kind, item in issued.items()},
+        issuer=client.issuer,
+        jwks=jwks,
+        now=now,
+        expected=MandateExpectation(
+            tenant_id=settings.tenant_id,
+            merchant_id=settings.merchant_id,
+            checkout_hash=digest,
+            amount_minor_units=total,
+            currency=currency,
+        ),
+        status_reader=status_reader,
+        allow_local_endpoints=local,
+    )
+    if not chain.valid:
+        logger.warning("ucp_mandate_chain_refused", code=chain.refusal_code, failed_type=chain.failed_type)
+    return _MandateOutcome(
+        "verified" if chain.valid else "refused",
+        None if chain.valid else chain.refusal_code,
+        chain=chain,
+        checkout_hash=digest,
+        revision=revision,
+    )
+
+
+def _bound_mandates(
+    outcome: _MandateOutcome | None, row: Any, state: Mapping[str, Any], merchant: MerchantUcp
+) -> _MandateOutcome | None:
+    """The outcome, refused when the session changed between the mandate request and the decision."""
+    from core.commerce.oacp_mandates import checkout_hash
+
+    if outcome is None or outcome.status != "verified" or merchant.grantex_mandates is None:
+        return outcome
+    current = checkout_hash(
+        mandate_checkout(
+            session_id=row.id,
+            revision=int(row.revision),
+            state=state,
+            grantex_merchant_id=merchant.grantex_mandates.merchant_id,
+        )
+    )
+    if row.revision != outcome.revision or current != outcome.checkout_hash:
+        return _MandateOutcome("refused", "mandate_binding_mismatch", chain=None, revision=outcome.revision)
+    return outcome
+
+
+async def _blocked_response(
+    runtime: UcpRuntime,
+    session: Any,
+    req: UcpRequest,
+    merchant: MerchantUcp,
+    negotiated: Negotiated,
+    row: Any,
+    now: datetime,
+    messages: list[dict[str, Any]],
+    outcome: str = "blocked",
+    **details: Any,
+) -> UcpResponse:
+    await _record(
+        session, req, merchant, EVENTS["complete_checkout"], outcome, row.id, {"reason": messages[0]["code"], **details}
+    )
+    rendered = await _render_checkout(
+        runtime, row, merchant, negotiated, now, extra_messages=messages, vendor=details.get("vendor")
+    )
+    return UcpResponse(status=200, body=rendered, outcome=outcome, recorded=True, resource_id=row.id)
+
+
 async def complete_checkout(
     runtime: UcpRuntime, req: UcpRequest, merchant: MerchantUcp, negotiated: Negotiated, session_id: str | None
 ) -> UcpResponse:
-    """Complete: validate payment, need an executor, decide or consume an allow decision, then execute."""
+    """Complete: validate payment, need an executor, decide (with verified mandates when requested), then execute.
+
+    A fresh decision is sealed in its own transaction; after that commit it is
+    offered to Grantex for countersignature (``countersign_decision``, which
+    never waits), and the allow is consumed in a second transaction, so a
+    strict runtime that requires the Grantex grant can consume it. A decision
+    presented by id (``decide_only`` earlier) is consumed directly.
+    """
+    from core.commerce.arbiter_grantex import countersign_decision
+    from core.config import arbiter_require_verified_authority_enabled
     from core.database import get_tenant_session
 
     body = _object_body(req)
     vendor = vendor_member(body)
     instruments, _term = parse_payment(body.get("payment"))
-    now = runtime.clock()
     version = negotiated.version
-    event = EVENTS["complete_checkout"]
+    mandates = await _request_mandates(
+        runtime, req, merchant, str(session_id), vendor.get("mandate_request"), instruments
+    )
+    now = runtime.clock()
+    decided: Decision | None = None
+    decided_revision: int | None = None
+    deferred: UcpResponse | None = None
+    prepared: Any = None
     async with get_tenant_session(_tenant(req)) as session:
         row = await _load_session(session, req, merchant, str(session_id), lock=True)
         frozen = _frozen_error(row, now, version, "completed")
@@ -609,11 +832,9 @@ async def complete_checkout(
         state = dict(row.state or {})
 
         async def _blocked(messages: list[dict[str, Any]], outcome: str = "blocked", **details: Any) -> UcpResponse:
-            await _record(session, req, merchant, event, outcome, row.id, {"reason": messages[0]["code"], **details})
-            rendered = await _render_checkout(
-                runtime, row, merchant, negotiated, now, extra_messages=messages, vendor=details.get("vendor")
+            return await _blocked_response(
+                runtime, session, req, merchant, negotiated, row, now, messages, outcome, **details
             )
-            return UcpResponse(status=200, body=rendered, outcome=outcome, recorded=True, resource_id=row.id)
 
         if row.status != "ready_for_complete":
             return await _blocked(
@@ -631,6 +852,18 @@ async def complete_checkout(
         )
         if payment_messages:
             return await _blocked(payment_messages)
+        mandates = _bound_mandates(mandates, row, state, merchant)
+        if mandates is not None:
+            await _record(
+                session,
+                req,
+                merchant,
+                MANDATES_EVENT,
+                "success" if mandates.status == "verified" else "refused",
+                row.id,
+                mandates.to_vendor(),
+                payload={"checkout_session_id": row.id, **mandates.to_vendor()},
+            )
         authority = dict(vendor.get("buyer_authority") or state.get("buyer_authority") or {})
         if not authority and runtime.authority_provider is not None:
             authority = dict(await runtime.authority_provider(merchant, state) or {})
@@ -669,8 +902,8 @@ async def complete_checkout(
         )
         payload_hash = commerce_payload_hash(payload)
         decision_id = vendor.get("decision_id")
-        decision_public = None
         afa_input, afa_step = await _afa_scope(session, req, merchant, row, instruments, total)
+        mandate_vendor = mandates.to_vendor() if mandates is not None else None
         if not decision_id:
             cache_records, merchant_config = (
                 await runtime.arbiter_scope(merchant) if runtime.arbiter_scope is not None else ((), None)
@@ -688,22 +921,29 @@ async def complete_checkout(
                     cache_records=cache_records,
                     merchant_config=merchant_config,
                     afa=afa_input,
+                    buyer_agent_id=session_buyer_agent_id(row),
+                    verified_mandates=mandates.chain if mandates is not None else None,
+                    require_verified_authority=arbiter_require_verified_authority_enabled(),
                 ),
             )
             await persist_decision(session, decision)
+            decided, decided_revision = decision, int(row.revision)
             decision_public = decision.to_public()
+            vendor_out: dict[str, Any] = {"decision": decision_public}
+            if mandate_vendor is not None:
+                vendor_out["mandates"] = mandate_vendor
             if decision.failing_rule == RULE_AFA and afa_step is not None:
-                return await _return_afa_step(
+                deferred = await _return_afa_step(
                     runtime, session, req, merchant, negotiated, row, state, afa_step, now, decision_public
                 )
-            if not decision.allowed:
-                return await _blocked(
+            elif not decision.allowed:
+                deferred = await _blocked(
                     [msg.error("arbiter_refused", f"The commerce arbiter refused: {decision.failing_rule}.", path="$")],
                     outcome="refused",
-                    vendor={"decision": decision_public},
+                    vendor=vendor_out,
                 )
-            if vendor.get("decide_only"):
-                return await _blocked(
+            elif vendor.get("decide_only"):
+                deferred = await _blocked(
                     [
                         msg.info(
                             "A sealed allow decision was issued; complete with its decision_id to execute.",
@@ -711,79 +951,85 @@ async def complete_checkout(
                         )
                     ],
                     outcome="allow",
-                    vendor={"decision": decision_public},
+                    vendor=vendor_out,
                 )
-            decision_id = decision.decision_id
-        try:
-            consumed = await executors.consume_decision(
+        else:
+            prepared = await _consume_and_prepare(
                 session,
-                tenant_id=req.tenant_id,
-                merchant_id=merchant.merchant_id,
-                seller_agent_id=merchant.seller_agent_id,
-                decision_id=decision_id,
-                payload_hash=payload_hash,
-            )
-        except DecisionRefusedError as exc:
-            return await _blocked(
-                [msg.error(exc.code, exc.message, path="$")],
-                outcome="refused",
-                vendor={"decision": decision_public} if decision_public else None,
-            )
-        if body.get("signals") is not None:
-            from core.commerce.ucp.checkout import signal_summary
-
-            signals = signal_summary(body.get("signals"))
-            await _record(
-                session,
+                runtime,
                 req,
                 merchant,
-                RISK_SIGNALS_EVENT,
-                "success",
-                row.id,
-                {
-                    "signal_keys": (signals or {}).get("keys"),
-                    "signals_sha256": (signals or {}).get("sha256"),
-                    "handler_ids": sorted({i.handler_id for i in instruments}),
+                negotiated,
+                row,
+                state,
+                now,
+                body=body,
+                instruments=instruments,
+                decision_id=str(decision_id),
+                payload=payload,
+                payload_hash=payload_hash,
+                total=total,
+                executor=executor,
+                afa_input=afa_input,
+                afa_step=afa_step,
+                vendor_out=None,
+            )
+    if decided is not None:
+        # After the decision's commit, outside any transaction: never waits, never retries.
+        client = runtime.grantex_client() if runtime.grantex_client is not None else None
+        countersignature = await countersign_decision(decided, client=client)
+        if deferred is not None:
+            vendor_block = deferred.body.get(VENDOR_MEMBER)
+            if isinstance(vendor_block, dict):
+                vendor_block["grantex_countersignature"] = countersignature.to_dict()
+            return deferred
+        async with get_tenant_session(_tenant(req)) as session:
+            row = await _load_session(session, req, merchant, str(session_id), lock=True)
+            state = dict(row.state or {})
+            # A concurrent Complete that consumed its own decision first moved the session on.
+            frozen = _frozen_error(row, now, version, "completed")
+            if frozen is not None:
+                return frozen
+            if row.status != "ready_for_complete" or row.revision != decided_revision:
+                return await _blocked_response(
+                    runtime,
+                    session,
+                    req,
+                    merchant,
+                    negotiated,
+                    row,
+                    now,
+                    [msg.error("decision_payload_mismatch", "The checkout changed after the decision.", path="$")],
+                    outcome="refused",
+                )
+            prepared = await _consume_and_prepare(
+                session,
+                runtime,
+                req,
+                merchant,
+                negotiated,
+                row,
+                state,
+                now,
+                body=body,
+                instruments=instruments,
+                decision_id=decided.decision_id,
+                payload=payload,
+                payload_hash=payload_hash,
+                total=total,
+                executor=executor,
+                afa_input=afa_input,
+                afa_step=afa_step,
+                vendor_out={
+                    "decision": decided.to_public(),
+                    "grantex_countersignature": countersignature.to_dict(),
+                    **({"mandates": mandate_vendor} if mandate_vendor is not None else {}),
                 },
             )
-        row.status = "complete_in_progress"
-        row.decision_id = consumed.decision_id
-        row.revision = row.revision + 1
-        row.updated_at = now
-        await _record(
-            session,
-            req,
-            merchant,
-            event,
-            "success",
-            row.id,
-            {"decision_id": consumed.decision_id, "payload_hash": payload_hash, "executor": executor.name},
-            payload=payload,
-        )
-        checkout = executors.ExecutionCheckout(
-            session_id=row.id,
-            tenant_id=req.tenant_id,
-            merchant_id=merchant.merchant_id,
-            seller_agent_id=merchant.seller_agent_id,
-            ucp_version=version,
-            currency=str(row.currency),
-            total_minor_units=total,
-            line_items=[dict(li) for li in state["line_items"]],
-            instruments=[
-                executors.ExecutionInstrument(
-                    id=i.id, handler_id=i.handler_id, type=i.type, credential=i.credential, amount_minor_units=i.amount
-                )
-                for i in instruments
-            ],
-            token_binding=token_binding(version, row.id),
-            payload_hash=payload_hash,
-            allowance_max_minor_units=merchant.mandate_capability.max_amount_minor_units
-            if merchant.mandate_capability
-            else None,
-            allowance_currency=merchant.mandate_capability.currency if merchant.mandate_capability else None,
-            upi_mandate_reference=afa_step.reference if afa_step is not None else None,
-            afa_evidence_ref=afa_input.evidence_ref if afa_input is not None else None,
-        )
+    if isinstance(prepared, UcpResponse):
+        return prepared
+    assert prepared is not None
+    checkout, consumed, executor = prepared
     try:
         result = await executor.execute(checkout, consumed)
     # enterprise-gate: broad-except-ok reason=executor-failure-returns-the-session-to-ready-nothing-was-charged-by-us
@@ -795,6 +1041,110 @@ async def complete_checkout(
     return await _apply_execution(
         runtime, req, merchant, negotiated, str(session_id), instruments, result, consumed.decision_id, executor.name
     )
+
+
+async def _consume_and_prepare(
+    session: Any,
+    runtime: UcpRuntime,
+    req: UcpRequest,
+    merchant: MerchantUcp,
+    negotiated: Negotiated,
+    row: Any,
+    state: dict[str, Any],
+    now: datetime,
+    *,
+    body: Mapping[str, Any],
+    instruments: Sequence[Instrument],
+    decision_id: str,
+    payload: Mapping[str, Any],
+    payload_hash: str,
+    total: int,
+    executor: Any,
+    afa_input: AfaEvidence | None,
+    afa_step: Any,
+    vendor_out: Mapping[str, Any] | None,
+) -> tuple[executors.ExecutionCheckout, executors.ConsumedDecision, Any] | UcpResponse:
+    """Consume the allow decision for this exact payload and move the session to ``complete_in_progress``."""
+    event = EVENTS["complete_checkout"]
+    version = negotiated.version
+    try:
+        consumed = await executors.consume_decision(
+            session,
+            tenant_id=req.tenant_id,
+            merchant_id=merchant.merchant_id,
+            seller_agent_id=merchant.seller_agent_id,
+            decision_id=decision_id,
+            payload_hash=payload_hash,
+        )
+    except DecisionRefusedError as exc:
+        return await _blocked_response(
+            runtime,
+            session,
+            req,
+            merchant,
+            negotiated,
+            row,
+            now,
+            [msg.error(exc.code, exc.message, path="$")],
+            outcome="refused",
+            vendor=dict(vendor_out) if vendor_out else None,
+        )
+    if body.get("signals") is not None:
+        from core.commerce.ucp.checkout import signal_summary
+
+        signals = signal_summary(body.get("signals"))
+        await _record(
+            session,
+            req,
+            merchant,
+            RISK_SIGNALS_EVENT,
+            "success",
+            row.id,
+            {
+                "signal_keys": (signals or {}).get("keys"),
+                "signals_sha256": (signals or {}).get("sha256"),
+                "handler_ids": sorted({i.handler_id for i in instruments}),
+            },
+        )
+    row.status = "complete_in_progress"
+    row.decision_id = consumed.decision_id
+    row.revision = row.revision + 1
+    row.updated_at = now
+    await _record(
+        session,
+        req,
+        merchant,
+        event,
+        "success",
+        row.id,
+        {"decision_id": consumed.decision_id, "payload_hash": payload_hash, "executor": executor.name},
+        payload=payload,
+    )
+    checkout = executors.ExecutionCheckout(
+        session_id=row.id,
+        tenant_id=req.tenant_id,
+        merchant_id=merchant.merchant_id,
+        seller_agent_id=merchant.seller_agent_id,
+        ucp_version=version,
+        currency=str(row.currency),
+        total_minor_units=total,
+        line_items=[dict(li) for li in state["line_items"]],
+        instruments=[
+            executors.ExecutionInstrument(
+                id=i.id, handler_id=i.handler_id, type=i.type, credential=i.credential, amount_minor_units=i.amount
+            )
+            for i in instruments
+        ],
+        token_binding=token_binding(version, row.id),
+        payload_hash=payload_hash,
+        allowance_max_minor_units=merchant.mandate_capability.max_amount_minor_units
+        if merchant.mandate_capability
+        else None,
+        allowance_currency=merchant.mandate_capability.currency if merchant.mandate_capability else None,
+        upi_mandate_reference=afa_step.reference if afa_step is not None else None,
+        afa_evidence_ref=afa_input.evidence_ref if afa_input is not None else None,
+    )
+    return checkout, consumed, executor
 
 
 @dataclass(frozen=True)

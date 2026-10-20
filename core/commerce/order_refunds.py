@@ -9,6 +9,9 @@
    (rule ``refund_within_captured``) on the refund payload, and seals it.
 2. After that commit the decision is offered to Grantex for countersignature
    (``arbiter_grantex.countersign_decision``; skipped unless posting is on).
+   The decision names the buyer agent of the order's checkout session (the
+   authenticated platform recorded at create time), so Grantex can bind its
+   grant to it.
 3. In a second transaction the ``allow`` is consumed
    (``executors.consume_decision(..., action="refund")``, which runs
    ``require_allow_decision``; with ``AGENTICORG_ARBITER_REQUIRE_GRANTEX_GRANT``
@@ -89,6 +92,7 @@ async def refund_order(
     reason: str | None,
     now: datetime,
     request_id: str | None = None,
+    grantex_client: Any = None,
 ) -> RefundOutcome:
     from sqlalchemy import select
 
@@ -117,6 +121,7 @@ async def refund_order(
         if not isinstance(executor, PluralExecutor):
             raise RefundRequestError(409, "executor_unavailable")
         state = await payment_state(session, tenant_id=tenant, checkout_session_id=order.checkout_session_id)
+        buyer_agent_id = await _order_buyer_agent_id(session, tenant, order)
         currency = str(order.currency).upper()
         payload = refund_payload(
             order=order,
@@ -132,7 +137,7 @@ async def refund_order(
                 tenant_id=str(tenant_id),
                 merchant_id=order.merchant_id,
                 seller_agent_id=order.seller_agent_id,
-                buyer_agent_id=None,
+                buyer_agent_id=buyer_agent_id,
                 now=now,
                 payload=payload,
                 amount_minor_units=amount_minor_units,
@@ -160,7 +165,7 @@ async def refund_order(
     if not decision.allowed:
         return RefundOutcome(status="refused", reason=str(decision.failing_rule), decision=public)
 
-    await countersign_decision(decision)
+    await countersign_decision(decision, client=grantex_client)
     try:
         async with get_tenant_session(tenant) as session:
             consumed = await executors.consume_decision(
@@ -229,6 +234,26 @@ async def refund_order(
         adjustment_id=entry["id"],
         order_revision=revision,
     )
+
+
+async def _order_buyer_agent_id(session: Any, tenant: uuid.UUID, order: Any) -> str | None:
+    """The buyer agent of the order's checkout session (recorded at create time), else of the order's platform."""
+    from sqlalchemy import select
+
+    from core.commerce.ucp.completion import platform_buyer_agent_id, session_buyer_agent_id
+    from core.models.commerce_ucp import CommerceCheckoutSessionRow
+
+    row = (
+        await session.execute(
+            select(CommerceCheckoutSessionRow).where(
+                CommerceCheckoutSessionRow.tenant_id == tenant,
+                CommerceCheckoutSessionRow.id == order.checkout_session_id,
+            )
+        )
+    ).scalar_one_or_none()
+    if row is not None:
+        return session_buyer_agent_id(row)
+    return platform_buyer_agent_id(getattr(order, "platform_profile_url", None))
 
 
 def _allowance(snapshot: Any) -> int | None:

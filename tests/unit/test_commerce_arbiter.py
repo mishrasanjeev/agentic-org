@@ -191,8 +191,10 @@ def test_an_empty_context_refuses_on_the_first_rule() -> None:
     )
     assert decision.outcome == "refuse"
     assert decision.failing_rule == "mandate_present_unexpired"
-    # Every evidence rule fails; buyer_authority_verified only refuses when verified authority is required.
-    assert all(not result.passed for result in decision.rule_results if result.rule != "buyer_authority_verified")
+    # Every evidence rule fails; buyer_authority_verified only refuses when verified authority is required,
+    # and human_not_present_limits passes while no verified mandate states a presence.
+    passing = {"buyer_authority_verified", "human_not_present_limits"}
+    assert all(not result.passed for result in decision.rule_results if result.rule not in passing)
 
 
 def test_mandate_request_does_not_require_a_mandate() -> None:
@@ -299,11 +301,116 @@ def test_caller_asserted_authority_is_recorded_and_allowed_when_not_required() -
 
 
 def test_server_verified_authority_passes_the_rule_when_required() -> None:
-    decision = decide(
-        "pos_handoff", _context(require_verified_authority=True, authority_verification_ref="mandate-verification-1")
-    )
+    from core.commerce.oacp_mandates import verification_ref
+
+    ref = verification_ref("mandate-1", "b" * 64, NOW)
+    decision = decide("pos_handoff", _context(require_verified_authority=True, authority_verification_ref=ref))
     assert decision.outcome == "allow"
     assert decision.to_public()["buyer_authority_source"] == "server_verified"
+
+
+@pytest.mark.parametrize(
+    "ref",
+    [
+        "mandate-verification-1",  # any string the verifier did not produce
+        "oacp-mandate-v1;jti=other-mandate;mandate_hash=" + "b" * 64 + ";verified_at=2026-10-20T09:00:00.000Z",
+        "oacp-mandate-v1;jti=mandate-1;mandate_hash=" + "c" * 64 + ";verified_at=2026-10-20T09:00:00.000Z",
+    ],
+)
+def test_a_ref_not_bound_to_the_mandate_evidence_never_passes(ref: str) -> None:
+    for required in (True, False):
+        decision = decide(
+            "purchase_handoff", _context(require_verified_authority=required, authority_verification_ref=ref)
+        )
+        assert decision.outcome == "refuse"
+        assert decision.failing_rule == "buyer_authority_verified"
+        assert decision.reason == "buyer_authority_ref_invalid"
+
+
+# ---------------------------------------------------------------------------
+# human_not_present_limits (policy v4): the stricter rule set for autonomous purchases
+# ---------------------------------------------------------------------------
+
+_NOT_PRESENT_LIMITS = MerchantLimits(
+    max_order_amount_minor_units=20000,
+    currency_allowlist=("INR",),
+    max_quantity_per_order=5,
+    not_present_max_order_amount_minor_units=4000,
+    not_present_max_quantity_per_order=3,
+)
+
+
+def _not_present(**overrides: object) -> ArbiterContext:
+    values: dict[str, object] = {
+        "presence": "human_not_present",
+        "intent_max_amount_minor_units": 6000,
+        "intent_currency": "INR",
+        "merchant_limits": _NOT_PRESENT_LIMITS,
+        "amount_minor_units": 3000,
+    }
+    values.update(overrides)
+    return _context(**values)
+
+
+def test_not_present_within_the_lower_caps_is_allowed() -> None:
+    decision = decide("purchase_handoff", _not_present())
+    assert decision.outcome == "allow"
+    [result] = [r for r in decision.rule_results if r.rule == "human_not_present_limits"]
+    assert result.reason == "within_not_present_limits"
+    assert decision.to_public()["mandates"]["presence"] == "human_not_present"
+
+
+@pytest.mark.parametrize(
+    ("overrides", "reason"),
+    [
+        ({"amount_minor_units": 5000}, "not_present_amount_cap_exceeded"),
+        ({"amount_minor_units": 3000, "intent_max_amount_minor_units": 2000}, "intent_cap_below_total"),
+        ({"intent_max_amount_minor_units": None}, "intent_cap_missing"),
+        ({"intent_currency": "USD"}, "intent_currency_mismatch"),
+        ({"quantity": 4}, "not_present_quantity_cap_exceeded"),
+        (
+            {
+                "merchant_limits": MerchantLimits(
+                    max_order_amount_minor_units=20000, currency_allowlist=("INR",), max_quantity_per_order=5
+                )
+            },
+            "not_present_limits_missing",
+        ),
+        ({"presence": "sometimes"}, "presence_unknown"),
+    ],
+)
+def test_not_present_refusals_are_sealed_with_the_failing_rule(overrides: dict[str, object], reason: str) -> None:
+    decision = decide("session_complete", _not_present(**overrides))
+    assert decision.outcome == "refuse"
+    assert decision.failing_rule == "human_not_present_limits"
+    assert decision.reason == reason
+    assert "human_not_present_limits" in decision.rules_evaluated
+
+
+def test_human_present_is_held_to_the_ordinary_limits_only() -> None:
+    decision = decide("purchase_handoff", _not_present(presence="human_present", amount_minor_units=9000))
+    assert decision.outcome == "allow"
+
+
+def test_not_present_upi_autopay_has_no_afa_exempt_path() -> None:
+    from core.commerce.arbiter import AfaEvidence
+
+    upi = {"action": "session_complete", "payment": [{"type": "upi_autopay"}]}
+    subsequent_below_limit = AfaEvidence(
+        debit_kind="subsequent",
+        amount_minor_units=3000,
+        currency="INR",
+        purpose="general",
+        limit_minor_units=1_500_000,
+        higher_limit_minor_units=10_000_000,
+    )
+    present = decide(
+        "session_complete", _not_present(presence="human_present", payload=upi, afa=subsequent_below_limit)
+    )
+    assert present.outcome == "allow"
+    not_present = decide("session_complete", _not_present(payload=upi, afa=subsequent_below_limit))
+    assert not_present.outcome == "refuse"
+    assert (not_present.failing_rule, not_present.reason) == ("afa_evidence_present", "afa_evidence_missing")
 
 
 def test_the_requirement_changes_the_decision_id() -> None:

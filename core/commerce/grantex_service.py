@@ -1,7 +1,8 @@
 # SPDX-License-Identifier: Apache-2.0
 """The AgenticOrg service client for the Grantex routes that countersign AgenticOrg evidence.
 
-Two callers: the commerce arbiter (``core.commerce.arbiter_grantex``, ``POST
+Three callers: the mandate client (``core.commerce.mandates_client``, ``POST
+/v1/commerce/oacp/mandates/intent|cart|payment``), the commerce arbiter (``core.commerce.arbiter_grantex``, ``POST
 /v1/commerce/oacp/arbiter-decisions``) and the audit chain witness
 (``core.governance.audit_witness``, ``POST /v1/audit/witness-checkpoints``).
 Both authenticate with the AgenticOrg service token Grantex already accepts for
@@ -77,6 +78,11 @@ class GrantexServiceClient:
     @property
     def issuer(self) -> str:
         return self._verifier.config.issuer
+
+    @property
+    def verifier(self) -> OacpGrantexArtifactVerifier:
+        """The pinned trust fetcher (JWKS and status lists) answers are verified with."""
+        return self._verifier
 
     async def post_json(self, path: str, body: Mapping[str, Any]) -> GrantexServiceResponse:
         url = f"{self._base_url}{path}"

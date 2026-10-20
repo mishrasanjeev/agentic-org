@@ -292,20 +292,10 @@ class OacpGrantexArtifactVerifier:
             return REVOCATION_STATUS_UNAVAILABLE, "Artifact status list reference is malformed."
         if envelope.get("revocation_status_url") != uri:
             return REVOCATION_STATUS_UNAVAILABLE, "revocation_status_url does not match the status list."
-        origin = _origin(uri)
-        if origin is None or origin not in self._config.status_list_origins:
-            return REVOCATION_STATUS_UNAVAILABLE, "Status list is not served by the pinned Grantex issuer."
-        if not self._config.allow_local_endpoints and not uri.startswith("https://"):
-            return REVOCATION_STATUS_UNAVAILABLE, "Status list URI is not https."
-        now_epoch = _epoch(now_iso)
-        if now_epoch is None:
-            return REVOCATION_STATUS_UNAVAILABLE, "Verification time is invalid."
         try:
-            claims = await self._status_list_claims(uri, jwks, now_epoch)
-            value = token_status_at(claims["status_list"], idx)
-        except (OacpTrustUnavailableError, OacpJwsError, KeyError, TypeError) as exc:
-            logger.warning("oacp_status_list_unavailable", uri=uri, reason=str(exc))
-            return REVOCATION_STATUS_UNAVAILABLE, "Status list is unavailable or invalid."
+            value = await self.status_at(uri, idx, jwks, now_iso)
+        except OacpTrustUnavailableError as exc:
+            return REVOCATION_STATUS_UNAVAILABLE, str(exc)
         if value == _STATUS_VALID:
             return None
         if value == _STATUS_INVALID:
@@ -313,6 +303,29 @@ class OacpGrantexArtifactVerifier:
         if value == _STATUS_SUSPENDED:
             return ARTIFACT_SUSPENDED, "Artifact is suspended on the issuer status list."
         return REVOCATION_STATUS_UNAVAILABLE, "Status list holds an unknown status value."
+
+    async def status_at(self, uri: str, idx: int, jwks: Mapping[str, Any], now_iso: str) -> int:
+        """The Token Status List value at ``idx`` of the pinned list ``uri``; raises ``OacpTrustUnavailableError``.
+
+        The list must be served from the issuer or Grantex API origin pinned in
+        configuration (https unless local endpoints are allowed), verify as a
+        ``statuslist+jwt`` against ``jwks`` and carry the section 5.1 claims.
+        Shared by artifacts (contract section 4) and mandates (section 8).
+        """
+        origin = _origin(uri)
+        if origin is None or origin not in self._config.status_list_origins:
+            raise OacpTrustUnavailableError("Status list is not served by the pinned Grantex issuer.")
+        if not self._config.allow_local_endpoints and not uri.startswith("https://"):
+            raise OacpTrustUnavailableError("Status list URI is not https.")
+        now_epoch = _epoch(now_iso)
+        if now_epoch is None:
+            raise OacpTrustUnavailableError("Verification time is invalid.")
+        try:
+            claims = await self._status_list_claims(uri, jwks, now_epoch)
+            return token_status_at(claims["status_list"], idx)
+        except (OacpTrustUnavailableError, OacpJwsError, KeyError, TypeError) as exc:
+            logger.warning("oacp_status_list_unavailable", uri=uri, reason=str(exc))
+            raise OacpTrustUnavailableError("Status list is unavailable or invalid.") from exc
 
     async def _status_list_claims(self, uri: str, jwks: Mapping[str, Any], now_epoch: float) -> Mapping[str, Any]:
         now = self._clock()

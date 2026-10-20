@@ -28,22 +28,38 @@ Rules:
     (freshness ``fresh``, expiry after ``now``) and whose revocation snapshot is
     ``fresh`` (not revoked, not ambiguous).
 ``buyer_authority_verified``
-    The buyer authority (mandate, consent, passport) carries a server-side
-    verification ref. No such ref exists until server-verified mandates land
-    (Phase 4), so the evidence is caller-asserted: with
-    ``require_verified_authority`` (``AGENTICORG_ARBITER_REQUIRE_VERIFIED_AUTHORITY``,
-    on in strict runtimes) the rule refuses; off, it passes and the decision
-    records ``buyer_authority_source: caller_asserted``.
+    The buyer authority carries a server-side verification ref that the local
+    mandate verifier produced (``core.commerce.oacp_mandates``: the Intent,
+    Cart and Payment mandates verified against the pinned Grantex JWKS and
+    status list, linked, and bound to this checkout), naming the same payment
+    mandate jti and ``mandate_hash`` as the decision's mandate evidence. The
+    server sets it; no request body can. Without one the authority is
+    caller-asserted: with ``require_verified_authority``
+    (``AGENTICORG_ARBITER_REQUIRE_VERIFIED_AUTHORITY``, on in strict runtimes)
+    the rule refuses; off, it passes and the decision records
+    ``buyer_authority_source: caller_asserted``.
 ``merchant_limits``
     The merchant's arbiter limits are configured and the order is within them:
     a per-order amount cap, a currency allowlist and a per-order quantity cap.
+``human_not_present_limits``
+    The stricter rule set for an autonomous purchase. When the verified
+    mandates say ``human_not_present``: the merchant's not-present limits
+    (``provider_policy.arbiter.human_not_present``) must be configured and the
+    order within them (a lower per-order amount cap, and a quantity cap when
+    set), and the intent mandate's ``max_amount`` must cover the order total
+    in its currency. ``human_present`` passes. Without server-verified
+    mandates the presence is unknown and the rule passes as
+    ``presence_unverified`` (``buyer_authority_verified`` governs that case).
+    Still no human step: the rule only refuses.
 ``afa_evidence_present`` (``session_complete`` only, evaluated last)
     When a payment instrument is a UPI AutoPay mandate, the RBI additional
     factor of authentication (AFA) applies (``core.commerce.india_rails``:
     registration and the first debit always, a subsequent debit above the
     RBI e-mandate limit) and server-side AFA evidence must be present. AFA is
     the buyer's out-of-band step; this rule never waits for it, it refuses
-    until the evidence exists. Without a UPI AutoPay instrument it passes.
+    until the evidence exists. A ``human_not_present`` purchase has no
+    AFA-exempt path: the evidence is required whatever the RBI threshold
+    says. Without a UPI AutoPay instrument it passes.
 ``refund_within_captured`` (``refund``, the only rule of that action)
     The refund is positive, in the order currency, and the captured amount
     covers it together with every earlier refund of the order.
@@ -64,7 +80,7 @@ from typing import Any, Literal
 
 from core.commerce.ledger import commerce_payload_hash, json_safe
 
-POLICY_VERSION = "commerce-arbiter-v3"
+POLICY_VERSION = "commerce-arbiter-v4"
 DECISION_TTL = timedelta(minutes=10)
 
 Action = Literal["purchase_handoff", "mandate_request", "pos_handoff", "session_complete", "refund"]
@@ -77,6 +93,7 @@ RULE_PASSPORT = "passport_amount_cap"
 RULE_AUTHORITY_VERIFIED = "buyer_authority_verified"
 RULE_ARTIFACTS = "oacp_artifacts_valid"
 RULE_MERCHANT_LIMITS = "merchant_limits"
+RULE_NOT_PRESENT = "human_not_present_limits"
 RULE_AFA = "afa_evidence_present"
 RULE_REFUND = "refund_within_captured"
 RULE_ORDER: tuple[str, ...] = (
@@ -86,7 +103,10 @@ RULE_ORDER: tuple[str, ...] = (
     RULE_AUTHORITY_VERIFIED,
     RULE_ARTIFACTS,
     RULE_MERCHANT_LIMITS,
+    RULE_NOT_PRESENT,
 )
+PRESENCE_HUMAN_PRESENT = "human_present"
+PRESENCE_HUMAN_NOT_PRESENT = "human_not_present"
 AUTHORITY_SERVER_VERIFIED = "server_verified"
 AUTHORITY_CALLER_ASSERTED = "caller_asserted"
 
@@ -189,6 +209,9 @@ class MerchantLimits:
     max_order_amount_minor_units: int | None
     currency_allowlist: tuple[str, ...]
     max_quantity_per_order: int | None
+    # The stricter limits for human_not_present purchases (provider_policy.arbiter.human_not_present).
+    not_present_max_order_amount_minor_units: int | None = None
+    not_present_max_quantity_per_order: int | None = None
     # Not rules: a refusal is also queued for review when escalate_to_human is on.
     escalate_to_human: bool = False
     review_agent_id: str | None = None
@@ -212,8 +235,9 @@ class ArbiterContext:
     passport: PassportEvidence | None = None
     artifacts: tuple[ArtifactEvidence, ...] = ()
     merchant_limits: MerchantLimits | None = None
-    # A server-side verification ref for the buyer authority (none exists before Phase 4;
-    # never taken from the request body). Without one the authority is caller-asserted.
+    # The server-side verification ref the local mandate verifier produced
+    # (core.commerce.oacp_mandates.verification_ref; never taken from a request body).
+    # Without one the authority is caller-asserted.
     authority_verification_ref: str | None = None
     # Refuse caller-asserted authority (AGENTICORG_ARBITER_REQUIRE_VERIFIED_AUTHORITY): an input, not read here.
     require_verified_authority: bool = False
@@ -224,6 +248,12 @@ class ArbiterContext:
     # The intent, cart and payment mandate hashes (lowercase hex SHA-256 of each compact JWT) once
     # verified mandates exist; sealed with the decision and carried in the provider order metadata.
     mandate_hashes: Mapping[str, str | None] | None = None
+    # The intent, cart and payment mandate jtis, beside their hashes.
+    mandate_jtis: Mapping[str, str | None] | None = None
+    # From server-verified mandates only: the purchase presence and the intent mandate cap.
+    presence: str | None = None
+    intent_max_amount_minor_units: int | None = None
+    intent_currency: str | None = None
 
     @property
     def buyer_authority_source(self) -> str:
@@ -281,6 +311,11 @@ class Decision:
             "evidence_hashes": list(self.evidence_hashes),
             "payload_hash": self.payload_hash,
             "buyer_authority_source": self.buyer_authority_source,
+            "mandates": {
+                "jtis": self.extra.get("mandate_jtis"),
+                "hashes": self.extra.get("mandate_hashes"),
+                "presence": self.extra.get("presence"),
+            },
             "policy_version": self.policy_version,
             "decided_at": _iso(self.decided_at),
             "expires_at": _iso(self.expires_at),
@@ -288,6 +323,12 @@ class Decision:
 
 
 MANDATE_KINDS: tuple[str, ...] = ("intent", "cart", "payment")
+
+
+def mandate_jtis(context: ArbiterContext) -> dict[str, str | None]:
+    """The three mandate jtis (null until verified mandates populate them; never from a request body)."""
+    source = context.mandate_jtis or {}
+    return {kind: (str(source[kind])[:255] if source.get(kind) else None) for kind in MANDATE_KINDS}
 
 
 def mandate_hashes(context: ArbiterContext) -> dict[str, str | None]:
@@ -351,6 +392,13 @@ def rule_passport_amount_cap(context: ArbiterContext) -> tuple[bool, str]:
 
 def rule_buyer_authority_verified(context: ArbiterContext) -> tuple[bool, str]:
     if context.authority_verification_ref:
+        from core.commerce.oacp_mandates import parse_verification_ref
+
+        ref = parse_verification_ref(context.authority_verification_ref)
+        mandate = context.mandate
+        if ref is None or mandate is None or ref["jti"] != mandate.ref or ref["mandate_hash"] != mandate.hash:
+            # A ref the verifier did not produce for this mandate evidence never passes.
+            return False, "buyer_authority_ref_invalid"
         return True, "buyer_authority_server_verified"
     if context.require_verified_authority:
         return False, "buyer_authority_caller_asserted"
@@ -416,6 +464,34 @@ def rule_merchant_limits(context: ArbiterContext) -> tuple[bool, str]:
     return True, "within_merchant_limits"
 
 
+def rule_human_not_present_limits(context: ArbiterContext) -> tuple[bool, str]:
+    presence = context.presence
+    if presence is None:
+        return True, "presence_unverified"
+    if presence == PRESENCE_HUMAN_PRESENT:
+        return True, "human_present"
+    if presence != PRESENCE_HUMAN_NOT_PRESENT:
+        return False, "presence_unknown"
+    limits = context.merchant_limits
+    cap = limits.not_present_max_order_amount_minor_units if limits else None
+    if limits is None or cap is None:
+        return False, "not_present_limits_missing"
+    if context.amount_minor_units is None or not context.currency or context.quantity is None:
+        return False, "order_amount_missing"
+    if context.intent_max_amount_minor_units is None or not context.intent_currency:
+        return False, "intent_cap_missing"
+    if context.intent_currency.upper() != context.currency.upper():
+        return False, "intent_currency_mismatch"
+    if context.amount_minor_units > context.intent_max_amount_minor_units:
+        return False, "intent_cap_below_total"
+    if context.amount_minor_units > cap:
+        return False, "not_present_amount_cap_exceeded"
+    quantity_cap = limits.not_present_max_quantity_per_order
+    if quantity_cap is not None and context.quantity > quantity_cap:
+        return False, "not_present_quantity_cap_exceeded"
+    return True, "within_not_present_limits"
+
+
 def rule_afa_evidence_present(context: ArbiterContext) -> tuple[bool, str]:
     from core.commerce.india_rails import INSTRUMENT_UPI_AUTOPAY, AfaThresholds, afa_requirement
 
@@ -434,7 +510,7 @@ def rule_afa_evidence_present(context: ArbiterContext) -> tuple[bool, str]:
         purpose=afa.purpose,
         thresholds=AfaThresholds(afa.limit_minor_units, afa.higher_limit_minor_units),
     )
-    if not requirement.required:
+    if not requirement.required and context.presence != PRESENCE_HUMAN_NOT_PRESENT:
         return True, f"afa_not_required:{requirement.basis}"
     if afa.evidence_ref:
         return True, "afa_evidence_present"
@@ -464,6 +540,7 @@ _RULES: dict[str, Callable[[ArbiterContext, str], tuple[bool, str]]] = {
     RULE_AUTHORITY_VERIFIED: lambda context, _action: rule_buyer_authority_verified(context),
     RULE_ARTIFACTS: rule_oacp_artifacts_valid,
     RULE_MERCHANT_LIMITS: lambda context, _action: rule_merchant_limits(context),
+    RULE_NOT_PRESENT: lambda context, _action: rule_human_not_present_limits(context),
     RULE_AFA: lambda context, _action: rule_afa_evidence_present(context),
     RULE_REFUND: lambda context, _action: rule_refund_within_captured(context),
 }
@@ -520,6 +597,7 @@ def decision_id_for(context: ArbiterContext, action: str, payload_hash: str) -> 
             "evidence_hashes": list(evidence_hashes(context)),
             "buyer_authority_source": context.buyer_authority_source,
             "require_verified_authority": context.require_verified_authority,
+            "presence": context.presence,
             "now": _iso(context.now),
         }
     )
@@ -561,6 +639,9 @@ def decide(action: str, context: ArbiterContext) -> Decision:
         extra={
             "buyer_authority_source": context.buyer_authority_source,
             "mandate_hashes": mandate_hashes(context),
+            "mandate_jtis": mandate_jtis(context),
+            "presence": context.presence,
+            "authority_verification_ref": context.authority_verification_ref,
         },
     )
 
@@ -657,10 +738,13 @@ def merchant_limits_from_config(config: Mapping[str, Any] | None) -> MerchantLim
     if not isinstance(arbiter, Mapping):
         return None
     allowlist = arbiter.get("currency_allowlist")
+    not_present = arbiter.get("human_not_present") if isinstance(arbiter.get("human_not_present"), Mapping) else {}
     return MerchantLimits(
         max_order_amount_minor_units=_int_or_none(arbiter.get("max_order_amount_minor_units")),
         currency_allowlist=tuple(str(c).upper() for c in allowlist) if isinstance(allowlist, list | tuple) else (),
         max_quantity_per_order=_int_or_none(arbiter.get("max_quantity_per_order")),
+        not_present_max_order_amount_minor_units=_int_or_none(not_present.get("max_order_amount_minor_units")),
+        not_present_max_quantity_per_order=_int_or_none(not_present.get("max_quantity_per_order")),
         escalate_to_human=arbiter.get("escalate_to_human") is True,
         review_agent_id=str(arbiter.get("review_agent_id") or "").strip() or None,
     )

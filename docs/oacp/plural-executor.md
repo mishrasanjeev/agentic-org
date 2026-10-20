@@ -93,8 +93,9 @@ sequenceDiagram
    - `oacp_payload_hash`
    - `oacp_intent_mandate_hash`, `oacp_cart_mandate_hash` and `oacp_payment_mandate_hash`
 
-   The three mandate hashes are present now as empty strings. They are populated from the
-   decision evidence once verified mandates land.
+   The three mandate hashes come from the decision evidence: filled when the completion ran on
+   server-verified Grantex mandates ([Mandates](mandates.md#grantex-mandates)), empty strings
+   otherwise.
 4. **Payment with the tokenised instrument.**
    - A Plural instrument token or network token goes as `CARD` with `card_token_details`.
    - A UPI AutoPay mandate goes as `UPI` with `upi_details` naming the mandate reference.

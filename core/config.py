@@ -469,6 +469,13 @@ class Settings(BaseSettings):
     # Off by default: turn on after the Grantex release that accepts the member.
     # Env: AGENTICORG_GRANTEX_MANDATE_CAPABILITY_EVIDENCE_ENABLED.
     grantex_mandate_capability_evidence_enabled: bool = False
+    # Server-requested OACP mandates (core/commerce/mandates_client.py): a UCP Complete
+    # carrying ai.agenticorg.commerce.mandate_request asks Grantex for Intent, Cart and
+    # Payment mandates and verifies them locally before the arbiter decides. Off by
+    # default: turn on after the Grantex mandate release (Phase 4). While off, a
+    # mandate_request is answered as unavailable and the authority stays caller-asserted.
+    # Env: AGENTICORG_GRANTEX_MANDATES_ENABLED.
+    grantex_mandates_enabled: bool = False
     rbi_emandate_afa_higher_limit_minor_units: int = 10_000_000
     # Synthetic checks (observability/synthetic.py): the scheduled sweep runs
     # each tenant's due probes (model, knowledge, guardrail, audit chain) and
