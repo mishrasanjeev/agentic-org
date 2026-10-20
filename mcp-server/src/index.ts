@@ -9,6 +9,8 @@
  *   - Parse SOPs and submit reviewed shadow candidates
  *   - List agent skills via A2A
  *   - List the native tool catalogue for informational use
+ *   - UCP checkout, cart and order tools when AGENTICORG_UCP_PROFILE_URL names
+ *     a merchant profile that serves them (src/ucp.ts)
  *
  * Connector tools are NOT exposed as direct MCP tools. Agents call
  * connector tools internally via the AgenticOrg runtime - see
@@ -33,11 +35,14 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
+import { registerUcpTools } from "./ucp.js";
 
 const BASE_URL = (process.env.AGENTICORG_BASE_URL ?? "https://app.agenticorg.ai").replace(/\/$/, "");
 const API_KEY = process.env.AGENTICORG_API_KEY ?? "";
 const GRANTEX_TOKEN = process.env.AGENTICORG_GRANTEX_TOKEN ?? "";
 const COMMERCE_ONLY = /^(1|true|yes)$/i.test(process.env.AGENTICORG_MCP_COMMERCE_ONLY ?? "");
+const UCP_PROFILE_URL = process.env.AGENTICORG_UCP_PROFILE_URL ?? "";
+const UCP_AGENT_PROFILE = process.env.AGENTICORG_UCP_AGENT_PROFILE ?? "";
 
 function authHeaders(): Record<string, string> {
   const token = GRANTEX_TOKEN || API_KEY;
@@ -368,6 +373,15 @@ server.tool(
 );
 
 async function main() {
+  // UCP checkout, cart and order tools: registered only when the merchant profile
+  // advertises them (AGENTICORG_UCP_CHECKOUT_ENABLED on at the API). See src/ucp.ts.
+  if (UCP_PROFILE_URL) {
+    await registerUcpTools(server, {
+      profileUrl: UCP_PROFILE_URL,
+      agentProfile: UCP_AGENT_PROFILE || undefined,
+      headers: authHeaders,
+    });
+  }
   const transport = new StdioServerTransport();
   await server.connect(transport);
 }

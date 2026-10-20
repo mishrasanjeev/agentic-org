@@ -6,12 +6,12 @@
     "url": "https://github.com/mishrasanjeev/agentic-org",
     "source": "github"
   },
-  "version": "5.0.0",
+  "version": "5.1.0",
   "packages": [
     {
       "registryType": "npm",
       "identifier": "agenticorg-mcp-server",
-      "version": "5.0.0",
+      "version": "5.1.0",
       "transport": {
         "type": "stdio"
       }
@@ -81,6 +81,46 @@
     {
       "name": "seller.ask_product_question",
       "description": "Ask buyer-safe product questions from cached artifacts; final commitments are refused."
+    },
+    {
+      "name": "create_checkout",
+      "description": "UCP: create a checkout session at the configured merchant; shown only when its profile serves checkout."
+    },
+    {
+      "name": "get_checkout",
+      "description": "UCP: read a checkout session."
+    },
+    {
+      "name": "update_checkout",
+      "description": "UCP: replace a checkout session's contents."
+    },
+    {
+      "name": "complete_checkout",
+      "description": "UCP: two-step Complete; decide_only seals a decision, then its decision_id places the order."
+    },
+    {
+      "name": "cancel_checkout",
+      "description": "UCP: cancel a checkout session."
+    },
+    {
+      "name": "create_cart",
+      "description": "UCP: create a cart; shown only when the merchant profile serves cart."
+    },
+    {
+      "name": "get_cart",
+      "description": "UCP: read a cart."
+    },
+    {
+      "name": "update_cart",
+      "description": "UCP: replace a cart's contents."
+    },
+    {
+      "name": "cancel_cart",
+      "description": "UCP: cancel a cart."
+    },
+    {
+      "name": "get_order",
+      "description": "UCP: read an order created by a completed checkout."
     }
   ],
   "environmentVariables": [
@@ -96,7 +136,17 @@
     },
     {
       "name": "AGENTICORG_MCP_COMMERCE_ONLY",
-      "description": "Set true for buyer-commerce clients so only seller commerce read-only tools are exposed.",
+      "description": "Set true for buyer-commerce clients so only seller commerce tools (and configured UCP tools) are exposed.",
+      "required": false
+    },
+    {
+      "name": "AGENTICORG_UCP_PROFILE_URL",
+      "description": "Merchant UCP profile URL (https://<serving host>/.well-known/ucp); enables the UCP tools it advertises.",
+      "required": false
+    },
+    {
+      "name": "AGENTICORG_UCP_AGENT_PROFILE",
+      "description": "Default platform profile URL sent as UCP-Agent when a UCP tool call omits meta.ucp-agent.",
       "required": false
     }
   ]
