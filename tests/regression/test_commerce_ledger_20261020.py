@@ -238,7 +238,15 @@ def test_every_commerce_write_route_declares_its_ledger_event() -> None:
 def test_every_declared_commerce_write_event_is_written_by_its_handler() -> None:
     """Each commerce write handler (or a helper it calls) names its declared event in a ledger call."""
     from api.main import app
-    from api.v1 import a2a_interop, commerce_ledger, commerce_runtime, commerce_ucp, commerce_ucp_publishing
+    from api.v1 import (
+        a2a_interop,
+        commerce_acp,
+        commerce_ledger,
+        commerce_runtime,
+        commerce_ucp,
+        commerce_ucp_publishing,
+    )
+    from core.commerce.acp import checkout as acp_checkout
     from core.commerce.ucp import handlers as ucp_handlers
 
     sources = (
@@ -248,6 +256,8 @@ def test_every_declared_commerce_write_event_is_written_by_its_handler() -> None
         + inspect.getsource(commerce_ucp_publishing)
         + inspect.getsource(commerce_ucp)
         + inspect.getsource(ucp_handlers)
+        + inspect.getsource(commerce_acp)
+        + inspect.getsource(acp_checkout)
     )
     for route in app.routes:
         if not isinstance(route, APIRoute) or not any(is_commerce_write_route(route.path, m) for m in route.methods):
