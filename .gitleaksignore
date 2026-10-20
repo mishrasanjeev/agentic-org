@@ -94,6 +94,9 @@ c4de4ba34461d69618aa7502f3ccbe64b2d894ab:tests/integration/test_feature_flags_rl
 42e66ffb9ef3f1d7ef7308b1d6437417b2c9bf64:tests/fixtures/oacp/oacp-mandates-v1.json:jwt:89
 42e66ffb9ef3f1d7ef7308b1d6437417b2c9bf64:tests/fixtures/oacp/oacp-mandates-v1.json:jwt:95
 42e66ffb9ef3f1d7ef7308b1d6437417b2c9bf64:tests/grantex_service_fakes.py:jwt:28
+# The same synthetic mandate vectors, as the pinned gitleaks 8.30.1 also reports them (generic-api-key).
+42e66ffb9ef3f1d7ef7308b1d6437417b2c9bf64:tests/fixtures/oacp/oacp-mandates-v1.json:generic-api-key:89
+42e66ffb9ef3f1d7ef7308b1d6437417b2c9bf64:tests/fixtures/oacp/oacp-mandates-v1.json:generic-api-key:182
 
 # Vendored ACP 2026-04-17 checkout schema (upstream specification, Apache-2.0): its
 # example members carry placeholder tokens, not credentials.
