@@ -50,3 +50,6 @@ c4de4ba34461d69618aa7502f3ccbe64b2d894ab:tests/integration/test_feature_flags_rl
 0fd28b2ef5b652e327de0ccd936d08eb37a29694:core/commerce/acp/schemas/2026-04-17/schema.agentic_checkout.json:generic-api-key:325
 0fd28b2ef5b652e327de0ccd936d08eb37a29694:core/commerce/acp/schemas/2026-04-17/schema.agentic_checkout.json:generic-api-key:2126
 0fd28b2ef5b652e327de0ccd936d08eb37a29694:core/commerce/acp/schemas/2026-04-17/schema.agentic_checkout.json:generic-api-key:3628
+# Shared agent-httpsig profile vectors (synthetic, from the Grantex repository): the TAP consumer
+# object's idToken is a placeholder JWT whose signature segment reads "signature-placeholder".
+6d655caca1a735a83423a55a91e49ec3e5344d7f:tests/fixtures/agent_httpsig/agent-httpsig-profile-vectors.json:jwt:163
