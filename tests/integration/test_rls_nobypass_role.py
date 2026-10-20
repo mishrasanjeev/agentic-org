@@ -641,13 +641,22 @@ async def test_audit_chain_seals_under_column_scoped_update(env: _Env) -> None:
                 )
             )
         ).scalar_one()
-    if has_trigger:
-        # The chain-column grant does not reopen a sealed row: the trigger
-        # allows only the unsealed -> sealed transition.
-        message = await _refused(
-            env, "UPDATE audit_log SET chain_hash = repeat('0', 64) WHERE chain_seq IS NOT NULL", str(tid)
-        )
-        assert "append-only" in message, message
+    # v6z87 installs the trigger on every database, including one bootstrapped
+    # from an empty schema; the chain-column grant relies on it.
+    assert has_trigger, "audit_log_immutable is missing: migrate to v6z87_platform_ctx_policies or later"
+    # The chain-column grant does not reopen a sealed row: the trigger allows
+    # only the unsealed -> sealed transition, so none of the chain columns of
+    # a sealed row can be rewritten.
+    for statement in (
+        "UPDATE audit_log SET chain_hash = repeat('0', 64) WHERE chain_seq IS NOT NULL",
+        "UPDATE audit_log SET chain_prev = repeat('0', 64) WHERE chain_seq IS NOT NULL",
+        "UPDATE audit_log SET chain_seq = chain_seq + 1000 WHERE chain_seq IS NOT NULL",
+        "UPDATE audit_log SET sealed_at = now() WHERE chain_seq IS NOT NULL",
+    ):
+        message = await _refused(env, statement, str(tid))
+        assert "append-only" in message, (statement, message)
+    # Nothing above took effect.
+    assert (await audit_chain.verify(tid)).status == "verified"
 
 
 def test_module_runs_serially_on_one_loop() -> None:

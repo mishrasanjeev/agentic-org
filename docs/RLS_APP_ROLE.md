@@ -140,9 +140,11 @@ later head:
   four chain columns of unsealed rows and upserts `audit_chain_anchors`.
   The column-level `UPDATE` covers that and its `SELECT ... FOR UPDATE`.
   The `audit_log_immutable` trigger is what stops a sealed row from being
-  rewritten through those columns. `UPDATE` of any other column and every
-  `DELETE` are refused by privilege, whether or not the trigger is
-  installed.
+  rewritten through those columns. `v6z87_platform_ctx_policies` (re)installs
+  it with exactly `core.governance.audit_chain.SEAL_TRIGGER_SQL`, so a
+  database bootstrapped from an empty schema has it too. Before v6z87, only
+  the local-only legacy startup DDL installed it there. `UPDATE` of any other
+  column and every `DELETE` are refused by privilege as well.
 * **Commerce ledger (v6z88).** The arbiter decision guard allows two
   one-time transitions: an `allow` row being consumed, and the Grantex
   countersignature reference being attached. The column grant is exactly

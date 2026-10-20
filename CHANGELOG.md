@@ -11,7 +11,11 @@
 - Migration `v6z87_platform_ctx_policies`: one permissive `SELECT`-only
   policy on `sso_configs`, `tenant_branding` and `agents` that honours
   `agenticorg.platform_ctx = '1'`. Tenant policies are unchanged; no platform
-  write policy exists.
+  write policy exists. It also (re)installs the `audit_log_immutable` trigger
+  with the sealing transition (the same text as
+  `core.governance.audit_chain.SEAL_TRIGGER_SQL`). Databases bootstrapped
+  from an empty schema previously had no trigger outside the local-only
+  startup DDL. Downgrade leaves the trigger installed.
 - Report schedule claims run per tenant (the RPA dispatcher's pattern), the
   synthetic-check sweep no longer reads `synthetic_checks` across tenants, the
   A/B variant helpers require `tenant_id`, CDC event-store writes and lists
