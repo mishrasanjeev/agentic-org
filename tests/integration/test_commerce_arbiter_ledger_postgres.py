@@ -323,6 +323,9 @@ async def test_rls_hides_decisions_from_another_tenant_for_a_non_bypass_role(db)
                 END IF;
             END $$;
         """))
+        # Other suites drop and recreate the public schema as the owner, which leaves PUBLIC without
+        # USAGE on it; grant it so the probe resolves the table instead of "relation does not exist".
+        await conn.execute(text("GRANT USAGE ON SCHEMA public TO ao_p2_rls_probe"))
         await conn.execute(text("GRANT SELECT, INSERT ON commerce_arbiter_decisions TO ao_p2_rls_probe"))
         await conn.execute(text("""
             INSERT INTO commerce_arbiter_decisions (decision_id, tenant_id, merchant_id, seller_agent_id,

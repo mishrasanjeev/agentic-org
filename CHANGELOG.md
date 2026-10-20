@@ -144,6 +144,10 @@
 
 ## Unreleased - Commerce ledger routes, offline export and Grantex countersignature (G14-G16)
 
+- Tests: the commerce ledger route-table checks walk FastAPI's lazily included routers
+  (`tests/app_routes.py`), so they see every route on the pinned FastAPI 0.143 instead of none,
+  and the arbiter RLS probe is granted USAGE on the `public` schema, which other integration
+  suites recreate without the default grant.
 - `scripts/verify_ledger.py` no longer prints the name of the `--audit-secret-env` variable
   when it is unset, and the operator reference on ledger operator decisions is derived from
   the tenant and the principal subject only (the API key name is never read; API keys already
