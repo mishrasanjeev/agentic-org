@@ -144,6 +144,10 @@
 
 ## Unreleased - Commerce ledger routes, offline export and Grantex countersignature (G14-G16)
 
+- `scripts/verify_ledger.py` no longer prints the name of the `--audit-secret-env` variable
+  when it is unset, and the operator reference on ledger operator decisions is derived from
+  the tenant and the principal subject only (the API key name is never read; API keys already
+  carry `apikey:<prefix>` as their subject).
 - **Breaking for strict runtimes: caller-asserted buyer authority is refused.** The commerce
   arbiter has a new rule, `buyer_authority_verified` (policy `commerce-arbiter-v2`): mandate,
   consent and passport evidence must carry a server-side verification ref, which only Phase 4

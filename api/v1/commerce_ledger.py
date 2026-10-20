@@ -117,7 +117,8 @@ def _iso(value: Any) -> str | None:
 def _reviewer_ref(request: Request, tenant_id: str) -> str:
     """An opaque, stable reference for the authenticated operator (never the raw subject)."""
     state = request.state
-    actor = getattr(state, "user_sub", None) or getattr(state, "api_key_name", None) or "unknown"
+    # The middleware sets ``user_sub`` for every principal (``apikey:<prefix>`` for API keys).
+    actor = getattr(state, "user_sub", None) or "unknown"
     return "operator_ref_" + hashlib.sha256(f"{tenant_id}|{actor}".encode()).hexdigest()[:24]
 
 
