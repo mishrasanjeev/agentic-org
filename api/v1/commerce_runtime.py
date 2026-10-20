@@ -34,6 +34,8 @@ from core.commerce.c6z_runtime_vertical import (
     build_grantex_authority_request_payload,
     build_seller_onboarding_packet,
     build_shopify_connector_evidence,
+    evaluate_runtime_cache_record,
+    fetch_grantex_artifact_replay,
     generate_protocol_adapter_payloads,
     prepare_purchase_or_mandate_handoff,
     resolve_env,
@@ -49,7 +51,12 @@ from core.commerce.c6z_runtime_vertical import (
 from core.commerce.oacp_artifacts import (
     DurableOacpArtifactCacheRepository,
     OacpArtifactCacheRepositoryQuery,
-    evaluate_oacp_persistent_artifact_cache_record,
+    OacpArtifactScope,
+)
+from core.commerce.oacp_grantex_trust import (
+    OacpGrantexArtifactVerifier,
+    default_oacp_grantex_verifier,
+    split_grantex_artifact,
 )
 from core.commerce.oacp_merchant_config import (
     MerchantCommerceConfigError,
@@ -65,6 +72,7 @@ from core.commerce.offline_pos_bridge import (
     simulate_offline_pos_confirmation,
     verify_offline_pos_callback_signature,
 )
+from core.config import oacp_verify_strict_enabled
 from core.crypto import encrypt_for_tenant
 from core.crypto.tenant_secrets import decrypt_for_tenant
 from core.database import get_tenant_session
@@ -94,6 +102,11 @@ router = APIRouter(
 )
 
 MERCHANT_COMMERCE_CONFIG_SCOPE = "commerce.merchant_config.write"
+
+
+def _oacp_artifact_verifier() -> OacpGrantexArtifactVerifier:
+    """The Grantex OACP verifier pinned to configuration (tests replace this)."""
+    return default_oacp_grantex_verifier()
 
 
 def require_merchant_commerce_config_write(request: Request) -> None:
@@ -179,6 +192,12 @@ class GrantexAuthorityRequest(BaseModel):
 
 class CacheArtifactsRequest(BaseModel):
     artifacts: list[dict[str, Any]]
+    buyer_agent_id: str | None = None
+
+
+class RefreshArtifactsRequest(BaseModel):
+    merchant_id: str = Field(min_length=1, max_length=160)
+    seller_agent_id: str = Field(min_length=1, max_length=160)
     buyer_agent_id: str | None = None
 
 
@@ -841,16 +860,164 @@ async def cache_grantex_artifacts(
     body: CacheArtifactsRequest,
     tenant_id: str = Depends(get_current_tenant),
 ) -> dict[str, Any]:
+    return await _verify_and_cache_grantex_artifacts(
+        body.artifacts,
+        tenant_id=tenant_id,
+        buyer_agent_id=body.buyer_agent_id,
+    )
+
+
+@router.post("/artifacts/refresh")
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="commerce.runtime.artifacts.refresh",
+    rate_limit="commerce-runtime-external",
+    idempotency="artifact-id-upsert",
+    audit_event="commerce.runtime.artifacts.refresh",
+)
+async def refresh_grantex_artifacts(
+    body: RefreshArtifactsRequest,
+    tenant_id: str = Depends(get_current_tenant),
+) -> dict[str, Any]:
+    """Re-fetch a scope's issued artifacts from Grantex replay and cache them verified.
+
+    The operator path for cache rows that are refused as ``artifact_unverified_legacy``
+    or ``artifact_unverified``: unexpired issued artifacts are read from
+    ``GET /v1/commerce/oacp/artifacts`` and go through the same verification as
+    ``POST /artifacts/cache``.
+    """
+    env_resolution = resolve_env(GRANTEX_AUTHORITY_ENV_VARS)
+    if not env_resolution.ready:
+        return {
+            "status": "blocked_missing_grantex_env",
+            "missing_env_vars": list(env_resolution.missing),
+            "allowed_to_execute": False,
+            "non_authoritative_for_transaction": True,
+        }
+    try:
+        replayed = await fetch_grantex_artifact_replay(
+            tenant_id=tenant_id,
+            merchant_id=body.merchant_id,
+            seller_agent_id=body.seller_agent_id,
+        )
+    except (C6ZRuntimeValidationError, httpx.HTTPError, ValueError) as exc:
+        logger.warning("oacp_grantex_replay_unavailable tenant=%s reason=%s", tenant_id, type(exc).__name__)
+        raise HTTPException(
+            status_code=502,
+            detail={
+                "status": "grantex_replay_unavailable",
+                "records_stored": 0,
+                "allowed_to_execute": False,
+                "non_authoritative_for_transaction": True,
+            },
+        ) from exc
+    now = datetime.now(UTC)
+    current = [item for item in replayed if _artifact_unexpired(item, now)]
+    if not current:
+        return {
+            "status": "no_current_artifacts",
+            "replayed": len(replayed),
+            "records_stored": 0,
+            "allowed_to_execute": False,
+            "non_authoritative_for_transaction": True,
+        }
+    result = await _verify_and_cache_grantex_artifacts(
+        current,
+        tenant_id=tenant_id,
+        buyer_agent_id=body.buyer_agent_id,
+    )
+    return {**result, "source": "grantex_replay", "replayed": len(replayed)}
+
+
+def _artifact_unexpired(item: Mapping[str, Any], now: datetime) -> bool:
+    envelope, _payload = split_grantex_artifact(item)
+    expires_at = str(envelope.get("expires_at") or "")
+    try:
+        expires = datetime.fromisoformat(expires_at.replace("Z", "+00:00"))
+    except ValueError:
+        return False
+    if expires.tzinfo is None:
+        expires = expires.replace(tzinfo=UTC)
+    return expires > now
+
+
+async def _verify_and_cache_grantex_artifacts(
+    artifacts: Sequence[dict[str, Any]],
+    *,
+    tenant_id: str,
+    buyer_agent_id: str | None,
+) -> dict[str, Any]:
     now_iso = _now_iso()
+    strict = oacp_verify_strict_enabled()
+    verifier = _oacp_artifact_verifier()
+    # Every artifact is verified (detached ES256 JWS against the pinned Grantex
+    # JWKS, scope, TTL, Token Status List) before the database session opens.
+    # Strict mode refuses the whole issuance when any artifact fails, so a
+    # partly verified set is never cached.
+    verifier_refs: list[str | None] = []
+    refusals: list[dict[str, Any]] = []
+    for artifact in artifacts:
+        envelope, payload = split_grantex_artifact(artifact)
+        payload_scope = payload if isinstance(payload, Mapping) else {}
+        result = await verifier.verify(
+            envelope,
+            payload,
+            expected_scope=OacpArtifactScope(
+                tenant_id=tenant_id,
+                merchant_id=str(payload_scope.get("merchant_id") or ""),
+                seller_agent_id=str(payload_scope.get("seller_agent_id") or ""),
+                buyer_agent_id="",
+            ),
+            now_iso=now_iso,
+        )
+        if result.get("valid") is True:
+            verifier_refs.append(cast(str, result["verifier_result_ref"]))
+            continue
+        verifier_refs.append(None)
+        refusals.append(
+            {
+                "artifact_id": result.get("artifact_id"),
+                "refusal_code": result.get("refusal_code"),
+                "message": result.get("message"),
+            }
+        )
+    if refusals:
+        logger.warning(
+            "oacp_artifact_verification_irregularity tenant=%s strict=%s refused=%d codes=%s",
+            tenant_id,
+            strict,
+            len(refusals),
+            sorted({str(item["refusal_code"]) for item in refusals}),
+        )
+        if strict:
+            raise HTTPException(
+                status_code=422,
+                detail={
+                    "status": "artifact_verification_refused",
+                    "records_stored": 0,
+                    "records_rejected": len(artifacts),
+                    "refusals": refusals,
+                    "verification_mode": "strict",
+                    "allowed_to_execute": False,
+                    "non_authoritative_for_transaction": True,
+                },
+            )
+    verification_summary = {
+        "mode": "strict" if strict else "log_only",
+        "verified": sum(1 for ref in verifier_refs if ref is not None),
+        "refused": refusals,
+    }
     async with get_tenant_session(_tenant_uuid(tenant_id)) as session:
         repo = DurableOacpArtifactCacheRepository(session)
         store_results: list[dict[str, Any]] = []
         cache_records = []
-        for artifact in body.artifacts:
+        for artifact, verifier_result_ref in zip(artifacts, verifier_refs, strict=True):
             record = build_cache_record_from_grantex_artifact(
                 artifact,
                 cached_at=now_iso,
-                buyer_agent_id=body.buyer_agent_id,
+                buyer_agent_id=buyer_agent_id,
+                verifier_result_ref=verifier_result_ref,
             )
             if record.tenant_id != tenant_id:
                 raise HTTPException(403, "Artifact tenant scope mismatch")
@@ -887,6 +1054,7 @@ async def cache_grantex_artifacts(
         "records_stored": len(store_results),
         "records_rejected": 0,
         "store_results": store_results,
+        "verification": verification_summary,
         "allowed_to_execute": False,
         "non_authoritative_for_transaction": True,
     }
@@ -1492,7 +1660,7 @@ async def _answer_buyer_question_for_scope(
         for record in cache_records:
             if record.artifact_type != "catalog_snapshot" or record.buyer_agent_id not in (None, buyer_agent_id):
                 continue
-            validation = evaluate_oacp_persistent_artifact_cache_record(
+            validation = evaluate_runtime_cache_record(
                 record=record,
                 now_iso=now_iso,
                 action_intent=cast(Any, action_intent),

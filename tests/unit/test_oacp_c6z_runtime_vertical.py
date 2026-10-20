@@ -132,6 +132,29 @@ def _grantex_artifact() -> dict:
     }
 
 
+class _AcceptingOacpVerifier:
+    """Stands in for the Grantex OACP verifier in repository-store tests.
+
+    Signature, JWKS and status-list verification is covered in
+    tests/unit/test_oacp_artifact_jws_profile.py and
+    tests/regression/test_oacp_cache_verifies_grantex_artifacts_20261019.py.
+    """
+
+    async def verify(self, envelope, payload, *, expected_scope, now_iso):
+        return {
+            "valid": True,
+            "artifact_id": envelope.get("artifact_id"),
+            "verifier_result_ref": (
+                f"oacp-artifact-jws-v1;kid=oacp-test;payload_hash=0;status=valid;verified_at={now_iso}"
+            ),
+        }
+
+
+def _accept_oacp_verification(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(commerce_runtime_api, "_oacp_artifact_verifier", _AcceptingOacpVerifier)
+    monkeypatch.setattr(commerce_runtime_api, "oacp_verify_strict_enabled", lambda: True)
+
+
 def _cache_record(
     *,
     expires_delta: timedelta = timedelta(minutes=5),
@@ -447,6 +470,7 @@ async def test_cache_endpoint_reports_only_successfully_stored_records(monkeypat
 
     monkeypatch.setattr(commerce_runtime_api, "get_tenant_session", fake_session)
     monkeypatch.setattr(commerce_runtime_api, "DurableOacpArtifactCacheRepository", FakeRepository)
+    _accept_oacp_verification(monkeypatch)
 
     result = await commerce_runtime_api.cache_grantex_artifacts(
         commerce_runtime_api.CacheArtifactsRequest(artifacts=[_grantex_artifact()]),
@@ -480,6 +504,7 @@ async def test_cache_endpoint_rejects_failed_repository_store_results(monkeypatc
 
     monkeypatch.setattr(commerce_runtime_api, "get_tenant_session", fake_session)
     monkeypatch.setattr(commerce_runtime_api, "DurableOacpArtifactCacheRepository", FakeRepository)
+    _accept_oacp_verification(monkeypatch)
 
     with pytest.raises(HTTPException) as exc_info:
         await commerce_runtime_api.cache_grantex_artifacts(
@@ -526,6 +551,7 @@ async def test_cache_endpoint_reports_zero_stored_records_for_rolled_back_mixed_
 
     monkeypatch.setattr(commerce_runtime_api, "get_tenant_session", fake_session)
     monkeypatch.setattr(commerce_runtime_api, "DurableOacpArtifactCacheRepository", FakeRepository)
+    _accept_oacp_verification(monkeypatch)
 
     with pytest.raises(HTTPException) as exc_info:
         await commerce_runtime_api.cache_grantex_artifacts(
