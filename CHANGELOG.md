@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased - Fixed: commerce ledger details keep digests intact (G41)
+
+- `record_commerce_event` masked PII in `details` with patterns (a ten-digit phone number, an
+  8 to 18 digit account number) that also matched digit runs inside hex SHA-256 values and
+  `arbdec_<hex>` decision ids, so about one mandate hash in five, and some decision ids, were
+  sealed as `...******...` and could not be matched to the mandate or decision they name. Hex
+  digests (optionally `sha256:`) and opaque `<prefix>_<hex>` / `<prefix>-<hex>` ids are now kept;
+  every other string is masked as before. Rows already sealed are unchanged (append-only).
+  Regression: `tests/regression/test_ledger_digest_masking_20261020.py`.
+
 ## Unreleased - Commerce ledger routes, offline export and Grantex countersignature (G14-G16)
 
 - **Breaking for strict runtimes: caller-asserted buyer authority is refused.** The commerce
