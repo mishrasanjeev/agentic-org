@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /**
  * UCP checkout, cart and order tools (UCP 2026-04-08 MCP binding,
  * services/shopping/mcp.openrpc.json).
