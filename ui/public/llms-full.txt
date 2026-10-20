@@ -407,9 +407,9 @@ A2A Agent Card discovery path.
 | GET /.well-known/agent-card.json | A2A v1 generic Agent Card (after release and ingress configuration) | Public |
 | GET /.well-known/ucp, POST /ucp/catalog/search, /ucp/catalog/lookup, /ucp/locations/* | UCP business profile, catalog and locations on a merchant's verified serving host (off by default) | Public, host-bound |
 | POST /acp/checkout_sessions, GET/POST /acp/checkout_sessions/{id}, /complete, /cancel | ACP checkout sessions on a merchant's verified serving host (off by default) | Tenant API key issued to the agent platform (`acp:read` / `acp:write`) |
-| GET /api/v1/a2a/extendedAgentCard | Merchant-specific seller card | Merchant-issued buyer credential; RFC 9421 agent signature verified (logged, or required in `enforce` mode) |
-| POST /api/v1/a2a/message:send | A2A v1 synchronous text request | Buyer credential for seller Q&A, or scoped tenant credential for non-commerce agents; RFC 9421 agent signature verified (logged, or required in `enforce` mode) |
-| GET /api/v1/public/commerce/sellers/{merchant_id}/... | Public buyer-safe seller page, catalog, product, schema.org, sitemap and llms.txt (merchant opt-in) | Public; RFC 9421 agent signature verified (logged, or required in `enforce` mode) |
+| GET /api/v1/a2a/extendedAgentCard | Merchant-specific seller card | Merchant-issued buyer credential; the agent's RFC 9421 signature is verified (logged, or required in `enforce` mode) |
+| POST /api/v1/a2a/message:send | A2A v1 synchronous text request | Buyer credential for seller Q&A, or scoped tenant credential for non-commerce agents; the agent's RFC 9421 signature is verified (logged, or required in `enforce` mode) |
+| GET /api/v1/public/commerce/sellers/{merchant_id}/... | Public buyer-safe seller page, catalog, product, schema.org, sitemap and llms.txt (merchant opt-in) | Public; the agent's RFC 9421 signature is verified (logged, or required in `enforce` mode) |
 | GET /api/v1/a2a/agent-card | Legacy AgenticOrg discovery card; not A2A v1 | Public |
 | GET /api/v1/a2a/.well-known/agent.json | Legacy discovery alias; not A2A v1 | Public |
 | GET /api/v1/mcp/tools | MCP-compatible agent discovery | Public |

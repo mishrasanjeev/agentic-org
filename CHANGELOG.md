@@ -2,6 +2,8 @@
 
 ## Unreleased - Agent network identity (G47, G48, G49, G51, G52)
 
+- README public-surface table: "the agent's RFC 9421 signature is verified" (the public-claims lint
+  read "9421 agent" as an agent-count claim).
 - The token-binding capability check narrows the capability `max_amount` with `isinstance`
   (booleans and strings still refuse) so the `mypy` gate passes.
 - Tests: the covered-route and public-route checks walk FastAPI's lazily included routers
