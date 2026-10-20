@@ -66,6 +66,12 @@ escapes can resemble identifiers to English recognizers; keep natural-language
 Unicode readable rather than bypassing PII scanning. Exercise both direct
 LangGraph and base-agent reasoning/synthesis message construction. Retain email,
 date, credential and numeric-quantity privacy regressions.
+Also replay the exact follow-up and prior assistant confirmation through the
+packaged detector: readable Unicode alone does not rule out English-NER false
+positives on Hindi grammar. Assert that the entire question remains readable,
+not just that the earlier name and colour survive. Preserve literal quoted
+names, unknown words, custom recognizers and overlapping identifier detections.
+The narrow Hindi grammar guard is not a replacement Hindi language model.
 
 For the existing explicit answer-mode opt-in only, verify two private linked
 turns using real PostgreSQL forced RLS and different API/worker signing keys.

@@ -72,6 +72,9 @@ recent, confirmed question/answer pairs from the same linked private sender and
 agent/company scope, within 30 minutes. This is bounded text context, not durable
 memory or permission to repeat actions. Hindi and other Unicode model input
 remains readable before privacy scanning; existing redaction still applies.
+Targeted Hindi grammar checks distinguish referential name/colour questions
+from named values. This is not a general-purpose Hindi entity-recognition model;
+quoted names, unknown words and structured identifiers retain privacy scanning.
 
 Follow the [channel account and workflow guide](docs/user-guide/channel-workflows.md)
 for account creation, callback registration, sender linking and verification.

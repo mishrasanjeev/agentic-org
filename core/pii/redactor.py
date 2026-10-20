@@ -16,6 +16,7 @@ Configuration via ``AGENTICORG_PII_REDACTION_MODE`` env var:
 from __future__ import annotations
 
 import importlib.util
+import json
 import os
 import re
 import threading
@@ -62,6 +63,68 @@ _TEMPORAL_CONTEXT = re.compile(
     r"\b(?:dob|birth|birthday|born|date|time|appointment|meeting|calendar)\b",
     re.IGNORECASE,
 )
+
+# These productions contain grammatical references, not a slot for a person's
+# or organization's name. Never exempt an unknown word or an overlapping span.
+_HINDI_REFERENCE_QUERY = re.compile(
+    r"(?<![\w\u0900-\u097f])(?:अभी|पहले)\s++(?:बताई|बताया|बताए)\s++(?:गई|गया|गए)\s++"
+    r"(?:मेरी|मेरा|मेरे|हमारी|हमारा|हमारे|आपकी|आपका|आपके)\s++"
+    r"(?:काल्पनिक\s++)?(?:दुकान|कंपनी|वस्तु|खाते|खाता)\s++"
+    r"(?:का|की|के)\s++नाम\s++और\s++रंग\s++क्या\s++(?:है|हैं)\s*+[?।]"
+)
+_HINDI_GRAMMAR_PARTS = (
+    re.compile(r"(?<![\w\u0900-\u097f])उपकरण\s++(?P<grammar>या)\s++बाहरी\s++कार्रवाई(?=[।.!?\s]|$)"),
+    re.compile(r"(?<![\w\u0900-\u097f])याद\s++(?P<grammar>रखा\s++गया\s++है)(?=[।.!?\s]|$)"),
+)
+_JSON_STRING = re.compile(r'"(?:[^"\\]++|\\.)*+"')
+_QUOTED_TEXT = re.compile(r'"[^"]*+"|“[^”]*+”|\'[^\']*+\'|‘[^’]*+’')
+
+
+def _quoted_hindi_grammar(text: str, start: int, end: int) -> bool:
+    """Literal names stay protected, including escaped quotes in JSON utterances."""
+    line_start, line_end = text.rfind("\n", 0, start) + 1, text.find("\n", end)
+    line = text[line_start : line_end if line_end != -1 else len(text)]
+    for prefix in ("Inputs: ", "Context: "):
+        if line.startswith(prefix):
+            line, line_start = line[len(prefix):], line_start + len(prefix)
+    try:
+        json.loads(line)
+    except (ValueError, TypeError, RecursionError):
+        return any(match.start() < end and start < match.end() for match in _QUOTED_TEXT.finditer(text))
+    for token in _JSON_STRING.finditer(line):
+        if token.start() <= start - line_start < end - line_start <= token.end():
+            # Only utterance fields are grammatical reference text. Other
+            # JSON values may be literal entity names, even if they look like a query.
+            if re.search(r'"(?:task|text)"\s*:\s*$', line[:token.start()]) is None:
+                return True
+            decoded = json.loads(token.group())
+            fragment = text[start:end]
+            return any(fragment in match.group() for match in _QUOTED_TEXT.finditer(decoded))
+    return False
+
+
+def _hindi_grammar_spans(text: str) -> list[tuple[int, int]]:
+    spans = [
+        match.span() for match in _HINDI_REFERENCE_QUERY.finditer(text)
+        if not _quoted_hindi_grammar(text, match.start(), match.end())
+    ]
+    spans.extend(
+        match.span("grammar") for pattern in _HINDI_GRAMMAR_PARTS for match in pattern.finditer(text)
+        if not _quoted_hindi_grammar(text, match.start(), match.end())
+    )
+    return spans
+
+
+def _is_hindi_grammar_entity(text: str, result: Any, spans: list[tuple[int, int]] | None = None) -> bool:
+    if result.entity_type not in {"PERSON", "ORGANIZATION"}:
+        return False
+    metadata = getattr(result, "recognition_metadata", None)
+    if not isinstance(metadata, dict) or metadata.get("recognizer_name") != "SpacyRecognizer":
+        return False
+    if spans is None:
+        spans = _hindi_grammar_spans(text)
+    return any(start <= result.start < result.end <= end for start, end in spans)
+
 
 _REGEX_FALLBACK_PATTERNS: tuple[tuple[str, re.Pattern[str]], ...] = (
     ("AADHAAR", re.compile(r"\b\d{4}\s\d{4}\s\d{4}\b")),
@@ -272,7 +335,12 @@ class PIIRedactor:
             return _regex_fallback_redact(text)
 
         # Analyze
-        results = self._analyzer.analyze(text=text, language="en")
+        grammar_spans = _hindi_grammar_spans(text)
+        results = [
+            result
+            for result in self._analyzer.analyze(text=text, language="en")
+            if not _is_hindi_grammar_entity(text, result, grammar_spans)
+        ]
 
         # A bare count in an explicit quantity list is not a date. Keep every
         # other entity, including dates with explicit temporal context and
@@ -355,7 +423,12 @@ class PIIRedactor:
         if self._analyzer is None or not text:
             return []
         results = self._analyzer.analyze(text=text, language="en", entities=entities)
-        return [(result.start, result.end, result.entity_type) for result in results]
+        grammar_spans = _hindi_grammar_spans(text)
+        return [
+            (result.start, result.end, result.entity_type)
+            for result in results
+            if not _is_hindi_grammar_entity(text, result, grammar_spans)
+        ]
 
     def deanonymize(self, text: str, token_map: dict[str, str]) -> str:
         """Restore original PII values in *text* using *token_map*.

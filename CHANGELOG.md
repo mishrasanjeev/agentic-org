@@ -1,5 +1,17 @@
 # Changelog
 
+## Unreleased - Hindi reference-question privacy correction
+
+- Keep unambiguous Hindi reference-question grammar, action conjunctions and
+  confirmation verbs readable when the English NLP recognizer mislabels them
+  as people or organizations. Do not exempt named values, unknown words,
+  custom recognizers or spans crossing the grammatical boundary.
+- Apply the same narrow guard to pre-model redaction and entity lookup used by
+  pseudonymization. Redaction modes, genuine identifier recognizers, feature
+  flags and budgets are unchanged; this is not general Hindi NER coverage.
+- Replay the entire seed and follow-up through the packaged privacy detector,
+  alongside name, quoted-name, email and identifier protection regressions.
+
 ## Unreleased - Unicode input and private Telegram follow-ups
 
 - Preserve Unicode in model-facing JSON before privacy scanning, including
