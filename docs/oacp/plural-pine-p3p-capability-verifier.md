@@ -24,6 +24,33 @@ flowchart LR
 
 The verifier can return available capability evidence, missing-env evidence, non-sandbox blocked evidence, or provider error evidence. Each result is public-safe and redacted.
 
+## Evidence For Grantex
+
+With `AGENTICORG_GRANTEX_MANDATE_CAPABILITY_EVIDENCE_ENABLED=true` (default off), the Grantex C6Z
+authority request (`POST /api/v1/commerce/runtime/authority/grantex/request`) carries the latest
+stored verifier result of the merchant as the top-level member `mandate_capability_evidence`.
+The object (`core/commerce/mandate_capability_evidence.py`, schema
+`oacp.mandate_capability_evidence.v1`) is closed and holds no secrets:
+
+| Member | From |
+| --- | --- |
+| `evidence_id`, `result_status`, `provider_environment`, `external_validation_performed`, `redacted_evidence_ref`, `expires_at` | The verifier result |
+| `verified_at` | The verifier's `checked_at` (UTC, milliseconds) |
+| `rails`, `caps`, `token_types` | The merchant's `provider_policy.ucp.mandate_capability`: `plural` (cap `max_amount_minor_units`, token `plural_pine_token`); `card_network_token` when card instruments are offered (same cap, token `network_token`; a PAN is never accepted); `upi_autopay` with a complete UPI AutoPay block (the mandate limit, INR, token `upi_mandate_token`) |
+| `evidence_hash` | Lowercase hex SHA-256 of the RFC 8785 form of the redacted verifier result |
+| `tenant_id`, `merchant_id` | The packet's scope; a mismatch refuses the request |
+
+Nothing is sent, so Grantex marks the capability `unverified`, when:
+
+- there is no stored result;
+- the result is more than 6 hours old, expired or in the future;
+- the environment is neither `sandbox` nor `production`;
+- the merchant has no cap or currency.
+
+An `available` result makes the Grantex `mandate_capability` artifact `verified`, which the
+Grantex UCP profile needs before it emits checkout. Turn the flag on only after the Grantex
+release that accepts the member.
+
 ## Boundary
 
 Capability evidence is not mandate creation, payment capture, checkout creation, or order success.

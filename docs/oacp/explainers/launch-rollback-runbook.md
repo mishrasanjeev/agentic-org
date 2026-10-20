@@ -81,6 +81,7 @@ With `AGENTICORG_UCP_CHECKOUT_ENABLED=true` on staging and a merchant published 
 | `AGENTICORG_UCP_KEY_ROTATION_GRACE_DAYS` | `7` | Days a rotated-out UCP signing key stays published (minimum 7). |
 | `AGENTICORG_UCP_CHECKOUT_ENABLED` | `false` | UCP checkout, cart and order routes (`/ucp/checkout-sessions`, `/ucp/carts`, `/ucp/orders`) and the order-webhook sweep. |
 | `PLURAL_PINE_LIVE_EXECUTION_ENABLED` | unset (off) | `true` registers the Plural executor (`plural_pine`); UCP Complete then charges through Plural on a consumed `allow`, and order refunds go through Plural. Also gates the purchase handoff's live mode, unchanged. |
+| `AGENTICORG_GRANTEX_MANDATE_CAPABILITY_EVIDENCE_ENABLED` | `false` | Sends the latest Plural capability result as `mandate_capability_evidence` on the Grantex authority request. Enable after the Grantex release that accepts it; disable to stop sending (Grantex then marks the capability `unverified`). |
 | `AGENTICORG_RBI_EMANDATE_AFA_LIMIT_MINOR_UNITS` / `..._HIGHER_LIMIT_MINOR_UNITS` | `1500000` / `10000000` | RBI e-mandate no-AFA limits (paise) for subsequent UPI AutoPay debits. |
 
 ## Plural Execution Launch Order

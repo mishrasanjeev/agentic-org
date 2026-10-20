@@ -463,6 +463,12 @@ class Settings(BaseSettings):
     # Env: AGENTICORG_RBI_EMANDATE_AFA_LIMIT_MINOR_UNITS,
     # AGENTICORG_RBI_EMANDATE_AFA_HIGHER_LIMIT_MINOR_UNITS.
     rbi_emandate_afa_limit_minor_units: int = 1_500_000
+    # Send the latest Plural capability verifier result as
+    # mandate_capability_evidence (oacp.mandate_capability_evidence.v1) on the
+    # Grantex C6Z authority request (core/commerce/mandate_capability_evidence.py).
+    # Off by default: turn on after the Grantex release that accepts the member.
+    # Env: AGENTICORG_GRANTEX_MANDATE_CAPABILITY_EVIDENCE_ENABLED.
+    grantex_mandate_capability_evidence_enabled: bool = False
     rbi_emandate_afa_higher_limit_minor_units: int = 10_000_000
     # Synthetic checks (observability/synthetic.py): the scheduled sweep runs
     # each tenant's due probes (model, knowledge, guardrail, audit chain) and

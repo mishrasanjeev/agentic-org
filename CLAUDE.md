@@ -92,6 +92,8 @@ decision, `session_complete` or `refund`, and journals and ledgers every call; s
 (arbiter rule `afa_evidence_present`; thresholds `AGENTICORG_RBI_EMANDATE_AFA_LIMIT_MINOR_UNITS`
 and `AGENTICORG_RBI_EMANDATE_AFA_HIGHER_LIMIT_MINOR_UNITS`); AFA is the buyer's out-of-band step,
 returned as an action, never waited for (`docs/oacp/mandates.md`).
+`AGENTICORG_GRANTEX_MANDATE_CAPABILITY_EVIDENCE_ENABLED` (default off) sends the Plural capability
+result as `mandate_capability_evidence` on the Grantex authority request.
 UCP profile flags: `AGENTICORG_UCP_PROFILE_ENABLED` (default off; `/.well-known/ucp` and the
 `/ucp` catalog and location routes answer 404 while off, onboarding generates no UCP signing
 key, and no `public_discovery_state` artifact may enable discovery), `AGENTICORG_UCP_VERSIONS`

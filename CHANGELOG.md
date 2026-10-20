@@ -1,5 +1,16 @@
 # Changelog
 
+## Unreleased - Mandate-capability evidence for Grantex (G43, AgenticOrg side)
+
+- `core/commerce/mandate_capability_evidence.py` builds `oacp.mandate_capability_evidence.v1` from
+  the stored Plural capability verifier result and the merchant's `mandate_capability`: rails
+  (`plural`, `card_network_token`, `upi_autopay`), caps per rail, token types, `verified_at`
+  (the verifier's `checked_at`) and an `evidence_hash` over the redacted result. With
+  `AGENTICORG_GRANTEX_MANDATE_CAPABILITY_EVIDENCE_ENABLED=true` (default off) the Grantex C6Z
+  authority request carries it as the top-level member `mandate_capability_evidence`; a stale,
+  expired or capless result sends nothing. Docs:
+  `docs/oacp/plural-pine-p3p-capability-verifier.md#evidence-for-grantex`.
+
 ## Unreleased - Google Merchant Center UCP onboarding runbook (G57)
 
 - New runbook `docs/runbooks/oacp-google-merchant-center-onboarding.md`: the UCP `2026-04-08`

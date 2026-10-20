@@ -172,5 +172,7 @@ issues Intent, Cart and Payment mandates as ES256 JWTs (`oacp-intent-mandate+jwt
 - set the arbiter's server-side verification ref, which closes `buyer_authority_verified`
   (D1).
 
-The seams are already in place: `ArbiterContext.mandate_hashes`, the stored evidence, the
+The Plural capability result already reaches Grantex as `mandate_capability_evidence` on the
+authority request ([capability verifier](plural-pine-p3p-capability-verifier.md#evidence-for-grantex)),
+so the `mandate_capability` artifact can be `verified`. The seams are already in place: `ArbiterContext.mandate_hashes`, the stored evidence, the
 consumed decision and the Plural order metadata.
