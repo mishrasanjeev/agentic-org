@@ -17,25 +17,25 @@ from typing import Any
 from unittest.mock import AsyncMock
 
 import pytest
-from fastapi.routing import APIRoute
 from fastapi.testclient import TestClient
 
 from api.route_metadata import ROUTE_METADATA_ATTR
 from auth.grantex_middleware import GrantexAuthMiddleware
+from tests.app_routes import HttpRoute, http_routes
 
 TENANT = "11111111-1111-4111-8111-111111111111"
 
 
-def _public_routes() -> list[APIRoute]:
+def _public_routes() -> list[HttpRoute]:
     from api.main import app
 
     out = []
-    for route in app.routes:
-        if not isinstance(route, APIRoute):
-            continue
+    for route in http_routes(app):
         meta = getattr(route.endpoint, ROUTE_METADATA_ATTR, None)
         if isinstance(meta, dict) and meta.get("auth_required") is False:
             out.append(route)
+    # The walk must see the public commerce reads; an empty walk would pass vacuously.
+    assert any(route.path.startswith("/api/v1/public/commerce/") for route in out)
     return out
 
 
@@ -53,11 +53,14 @@ def test_every_route_declared_public_is_exempt_in_the_auth_middleware() -> None:
 def test_no_authenticated_route_sits_under_the_public_commerce_prefix() -> None:
     from api.main import app
 
-    for route in app.routes:
-        if isinstance(route, APIRoute) and route.path.startswith("/api/v1/public/commerce/"):
+    checked = 0
+    for route in http_routes(app):
+        if route.path.startswith("/api/v1/public/commerce/"):
             meta = getattr(route.endpoint, ROUTE_METADATA_ATTR)
             assert meta["auth_required"] is False, route.path
             assert route.methods <= {"GET", "HEAD"}, route.path
+            checked += 1
+    assert checked > 0
 
 
 @pytest.fixture()

@@ -162,7 +162,7 @@ def check_token_binding_within_capability(
     if binding.limits.currency != capability.get("currency"):
         raise _fail("token_binding.limits.currency must be the capability currency")
     cap = capability.get("max_amount")
-    if type(cap) not in (int, float) or binding.limits.max_amount > cap:
+    if isinstance(cap, bool) or not isinstance(cap, (int, float)) or binding.limits.max_amount > cap:
         raise _fail("token_binding.limits.max_amount must not exceed the capability max_amount")
     if binding.limits.expires_at is not None and artifact_expires_at is not None:
         binding_expiry = _parse_rfc3339(binding.limits.expires_at)

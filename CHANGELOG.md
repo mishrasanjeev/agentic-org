@@ -2,6 +2,11 @@
 
 ## Unreleased - Agent network identity (G47, G48, G49, G51, G52)
 
+- The token-binding capability check narrows the capability `max_amount` with `isinstance`
+  (booleans and strings still refuse) so the `mypy` gate passes.
+- Tests: the covered-route and public-route checks walk FastAPI's lazily included routers
+  (`tests/app_routes.py`) and fail when they find no route, so they check the real route table on
+  the pinned FastAPI 0.143.
 - Inbound RFC 9421 agent request signatures (`auth/httpsig.py`, `auth/httpsig_keys.py`) on every
   `/api/v1/public/commerce/` read and on `POST /api/v1/a2a/message:send` and
   `GET /api/v1/a2a/extendedAgentCard`, under the Visa Trusted Agent Protocol (`agent-browser-auth`,

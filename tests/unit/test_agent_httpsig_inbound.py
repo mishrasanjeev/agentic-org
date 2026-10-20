@@ -881,9 +881,8 @@ def test_the_product_json_route_is_reached_not_shadowed_by_the_product_page(
 
 
 def test_the_dependency_is_on_every_covered_route() -> None:
-    from fastapi.routing import APIRoute
-
     from api.main import app
+    from tests.app_routes import http_routes
 
     enforceable = {
         "/api/v1/a2a/message:send",
@@ -892,16 +891,17 @@ def test_the_dependency_is_on_every_covered_route() -> None:
         "/api/v1/public/commerce/sellers/{merchant_id}/products/{product_slug}.json",
     }
     seen = set()
-    for route in app.routes:
-        if not isinstance(route, APIRoute):
-            continue
-        calls = {d.call for d in route.dependant.dependencies}
+    public_seen = 0
+    for route in http_routes(app):
+        calls = route.dependency_calls
         if route.path in enforceable:
             assert httpsig.verify_agent_request_signature in calls, route.path
             seen.add(route.path)
         elif route.path.startswith("/api/v1/public/commerce/"):
             assert httpsig.observe_agent_request_signature in calls, route.path
             assert httpsig.verify_agent_request_signature not in calls, route.path
+            public_seen += 1
         else:
             assert httpsig.verify_agent_request_signature not in calls, route.path
     assert seen == enforceable
+    assert public_seen > 0

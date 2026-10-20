@@ -87,6 +87,8 @@ def test_malformed_bindings_are_refused(change: dict[str, Any], message: str) ->
         ({**CAPABILITY, "merchant_scope": ["other.example"]}, None, "merchant_scope"),
         ({**CAPABILITY, "currency": "USD"}, None, "currency"),
         ({**CAPABILITY, "max_amount": 1000}, None, "max_amount"),
+        ({**CAPABILITY, "max_amount": True}, None, "max_amount"),
+        ({**CAPABILITY, "max_amount": "500000"}, None, "max_amount"),
         (CAPABILITY, "2026-10-31T00:00:00Z", "expires_at"),
     ],
 )
