@@ -1,5 +1,24 @@
 # Changelog
 
+## Unreleased - Knowledge upload browser test waits for the worker retry
+
+- Fixed: the production browser test "a short document is indexed, searchable and opens its real
+  cited excerpt" (`ui/e2e/knowledge-upload-recovery.spec.ts`) failed on every post-deploy run of
+  2026-10-20. The hosted embedding service scales to zero; its cold start took about 80 s, the
+  upload's own embedding call gave up after 5 s, and the upload was indexed by the maintenance
+  worker's retry 79-86 s after upload, as designed. The test waited inside the suite's 60 s
+  timeout. It now accepts exactly the two states an accepted upload may be in (`indexed`, or
+  `processing` with a pending retry shown on the page), waits for a final state within a budget
+  derived from the retry schedule, and stops at once on `failed`.
+- Fixed: the spec's cleanup ran in the test body's `finally`, which runs after a timed-out test's
+  request context has closed, so the uploaded document stayed in the production E2E tenant. Its
+  three tests now remove what they created in `afterEach`.
+- `tests/regression/test_knowledge_upload_e2e_budget_20261021.py` replays the cold-start timeline
+  through `core/rag/upload_recovery.py` with the real retry delays, beat period and embedding
+  timeout, and fails if the browser budget no longer covers it.
+- `docs/runbooks/production_smoke.md` says what a cold embedding service looks like after a deploy
+  and when a slow upload is a real failure. No product code changed.
+
 ## Unreleased - Playwright 1.64
 
 - Python `playwright` moves from 1.63.0 to 1.64.0 (`[v4]` extra and `requirements-v4.txt`); the
