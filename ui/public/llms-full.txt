@@ -78,6 +78,10 @@ recent, confirmed question/answer pairs from the same linked private sender and
 agent/company scope, within 30 minutes. This is bounded text context, not durable
 memory or permission to repeat actions. Hindi and other Unicode model input
 remains readable before privacy scanning; existing redaction still applies.
+With `AGENTICORG_PII_HINDI_GRAMMAR_ENABLED=true` (default off), targeted Hindi
+grammar checks distinguish referential name/colour questions
+from named values. This is not a general-purpose Hindi entity-recognition model;
+quoted names, unknown words and structured identifiers retain privacy scanning.
 
 Follow the [channel account and workflow guide](https://github.com/mishrasanjeev/agentic-org/blob/main/docs/user-guide/channel-workflows.md)
 for account creation, callback registration, sender linking and verification.
@@ -1366,6 +1370,12 @@ Wait for a meaningful Hindi confirmation, then send:
 
 Verify both actual bot replies and their matching inbox runs. The second reply
 should identify the same name and colour without asking you to repeat them.
+An answer about an unrelated person or organization is not a passing result,
+even if it repeats the correct facts. With the default-off
+`AGENTICORG_PII_HINDI_GRAMMAR_ENABLED` rollout control enabled, the privacy parser has narrow checks for
+unambiguous Hindi reference-question grammar; named values and identifiers
+remain subject to redaction. These checks do not provide general Hindi NER
+coverage or permission to bypass privacy controls.
 A completed status or high confidence is not evidence of a correct answer.
 Privacy analysis is not guaranteed equally accurate in every language; do not
 use real personal or customer details for acceptance tests. If context is

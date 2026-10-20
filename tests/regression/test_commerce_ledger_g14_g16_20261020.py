@@ -548,6 +548,63 @@ def test_the_cli_verifies_from_a_file_without_importing_the_application(tmp_path
 
 
 
+def _verifier_main(tmp_path: Path, bundle: Any, *args: str) -> tuple[int, dict[str, Any]]:
+    """Run the CLI entry point in process (so coverage sees it) and parse what it printed."""
+    import contextlib
+    import io
+
+    sys.path.insert(0, str(ROOT / "scripts"))
+    try:
+        import verify_ledger
+    finally:
+        sys.path.pop(0)
+    path = tmp_path / "export.json"
+    path.write_text(bundle if isinstance(bundle, str) else json.dumps(bundle), encoding="utf-8")
+    out = io.StringIO()
+    with contextlib.redirect_stdout(out):
+        code = verify_ledger.main([str(path), *args])
+    return code, json.loads(out.getvalue())
+
+
+def test_verifier_cli_exit_codes_in_process(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    clean = _bundle()
+    head = clean["chain"]["head"]
+    assert _verifier_main(tmp_path, clean)[0] == 0
+    assert _verifier_main(tmp_path, clean, "--expected-head", f"{head['seq']}:{head['hash']}")[0] == 0
+    code, report = _verifier_main(tmp_path, clean, "--expected-head", f"{head['seq']}:{'0' * 64}")
+    assert code == 1 and report["status"] != "verified"
+    with pytest.raises(SystemExit):
+        _verifier_main(tmp_path, clean, "--expected-head", "not-a-head")
+    edited = copy.deepcopy(clean)
+    edited["rows"][1]["outcome"] = "refuse"
+    code, report = _verifier_main(tmp_path, edited)
+    assert code == 1 and report["first_break"]["reason"] == "link_hash"
+    assert _verifier_main(tmp_path, {"format": "something-else"})[0] == 2
+    bad_version = copy.deepcopy(clean)
+    bad_version["chain"]["version"] = "99"
+    assert _verifier_main(tmp_path, bad_version)[0] == 2
+    assert _verifier_main(tmp_path, "{not json")[0] == 2
+    no_prev = copy.deepcopy(clean)
+    no_prev["chain"]["from_seq"] = 3
+    no_prev["chain"]["prev_link"] = None
+    code, report = _verifier_main(tmp_path, no_prev)
+    assert code == 1 and report["first_break"]["reason"] == "sequence_gap"
+    gap = copy.deepcopy(clean)
+    del gap["rows"][2]
+    code, report = _verifier_main(tmp_path, gap)
+    assert code == 1 and report["first_break"]["reason"] == "sequence_gap"
+    relinked = copy.deepcopy(clean)
+    relinked["rows"][2]["chain_prev"] = "0" * 64
+    code, report = _verifier_main(tmp_path, relinked)
+    assert code == 1 and report["first_break"]["reason"] == "previous_link"
+    env_name = "AGENTICORG_TEST_LEDGER_SECRET_" + uuid.uuid4().hex.upper()
+    monkeypatch.setenv(env_name, "not-the-audit-secret")
+    code, report = _verifier_main(tmp_path, clean, "--audit-secret-env", env_name)
+    assert code == 1 and report["first_break"]["reason"] == "signature"
+    monkeypatch.delenv(env_name)
+    assert _verifier_main(tmp_path, clean, "--audit-secret-env", env_name)[0] == 2
+
+
 def test_verifier_does_not_echo_the_secret_variable_name(tmp_path: Path) -> None:
     """A missing audit secret exits 2 without printing the variable it was told to read."""
     export = tmp_path / "export.json"

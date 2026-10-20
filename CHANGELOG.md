@@ -154,6 +154,15 @@
 
 ## Unreleased - UCP checkout, cart and order (G21, G22, G25, G27, G29-G32, G35)
 
+- Tests for the UCP and ACP HTTP adapters and their production wiring (unknown host refusals and
+  their ledger events on every route, `Request-Id` echo, Shopify credentials failing closed to no
+  Shopify reads, policies only from a usable verified artifact, the feed export formats and its
+  404/409 answers, error shaping of non-JSON `/acp` errors), the buyer authority and AP2 mandate
+  parsing, the Shopify Admin reads (allowlist, no redirects, GraphQL errors, delivery-profile
+  cache), the order webhook sender (signing, transport failures, the Celery kick and tasks), and,
+  on Postgres, the serving-host index, merchant scope reads, `Idempotency-Key` expiry and pruning,
+  the subscription, rotation, delivery and replay runtime endpoints and dead-lettering. No
+  behaviour change.
 - Type narrowing in the UCP and ACP modules (locations, merchant terms, instruments, fulfilment,
   ACP payment data and policy snapshot) so `mypy` 2.x passes; no behaviour change.
 - UCP REST binding at `https://<merchant serving host>/ucp` (`api/v1/commerce_ucp.py`), behind
@@ -223,6 +232,9 @@
 
 ## Unreleased - Commerce ledger routes, offline export and Grantex countersignature (G14-G16)
 
+- Tests for the retention task, the Grantex service client (size limit, non-JSON and non-object
+  answers, unsafe endpoint, no retry, one JWKS refresh) and the offline verifier's exit codes in
+  process, so each new module meets the new-module coverage floor.
 - Tests: the commerce ledger route-table checks walk FastAPI's lazily included routers
   (`tests/app_routes.py`), so they see every route on the pinned FastAPI 0.143 instead of none,
   and the arbiter RLS probe is granted USAGE on the `public` schema, which other integration
@@ -354,6 +366,20 @@
 - The Grantex replay fetch and the OACP trust endpoint fetch validate their URLs with the
   async egress validator (`tests/regression/test_egress_async_callers.py`), so no async
   commerce path calls the synchronous validator.
+
+## Unreleased - Hindi reference-question privacy correction
+
+- Keep unambiguous Hindi reference-question grammar, action conjunctions and
+  confirmation verbs readable when the English NLP recognizer mislabels them
+  as people or organizations. Do not exempt named values, unknown words,
+  custom recognizers or spans crossing the grammatical boundary.
+- Apply the same narrow guard to pre-model redaction and entity lookup used by
+  pseudonymization behind `AGENTICORG_PII_HINDI_GRAMMAR_ENABLED`, default off.
+  Enable only after privacy regression acceptance; disabling restores previous
+  detection behavior. Existing flags, redaction modes, genuine identifier
+  recognizers and budgets are unchanged; this is not general Hindi NER coverage.
+- Replay the entire seed and follow-up through the packaged privacy detector,
+  alongside name, quoted-name, email and identifier protection regressions.
 
 ## Unreleased - Database sessions ready for a NOBYPASSRLS application role
 

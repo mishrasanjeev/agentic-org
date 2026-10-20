@@ -43,6 +43,13 @@ model, preserve genuine PII tests, and sweep all model-facing serializers. For
 conversation bugs, prove the second run actually receives scoped text context;
 passing a thread identifier does not prove checkpoint reuse or memory. Never
 weaken tenant boundaries to make follow-ups work.
+Preserve and inspect the whole follow-up question and previous assistant reply
+after privacy analysis. English NER can mislabel ordinary Hindi reference
+grammar even when Unicode is readable and earlier named facts survive. A
+deanonymization round trip cannot undo changed question semantics during model
+reasoning. Any grammatical false-positive guard must exclude named values,
+unknown words, custom recognizers and crossing spans; retain genuine PII tests
+and sweep both redaction and entity-lookup/pseudonymization paths.
 When testing against the shared FastAPI application, restore every dependency
 override after each case (for example with `monkeypatch.setitem`). Replay the
 new test followed by unrelated domain routes; a leaked finance-only override
