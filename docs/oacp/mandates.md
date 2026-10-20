@@ -198,7 +198,8 @@ unknown rail (`card_data_refused`, `payment_rail_unsupported`, `token_binding_in
 
 ### How AgenticOrg Requests Them
 
-A UCP Complete opts in with the vendor member `ai.agenticorg.commerce.mandate_request`:
+A UCP Complete opts in with the vendor member `ai.agenticorg.commerce.mandate_request` (an ACP Complete
+sends the same object as `agenticorg_commerce.mandate_request`):
 
 ```json
 {
@@ -334,7 +335,7 @@ step: the rule refuses, and the refusal is sealed with `failing_rule: human_not_
 - A mandate lives at most 600 s and never outlives its checkout passport; longer autonomous
   windows need a longer-lived consent model on the Grantex side.
 - The buyer does not sign the mandate itself: Grantex attests the consent and the passkey.
-- Only the UCP Complete path requests mandates. Purchase, POS and mandate-request handoffs remain
+- Only the UCP and ACP Complete paths request mandates. Purchase, POS and mandate-request handoffs remain
   caller-asserted and are refused in strict runtimes.
 - Mandate revocation is read from the status list at decision time; a mandate revoked after the
   decision does not reverse an execution already made.

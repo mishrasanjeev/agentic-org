@@ -938,7 +938,7 @@ async def complete_checkout(
                 session,
                 req,
                 merchant,
-                MANDATES_EVENT,
+                runtime.events.get("mandates", MANDATES_EVENT),
                 "success" if mandates.status == "verified" else "refused",
                 row.id,
                 mandates.to_vendor(),

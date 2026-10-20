@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased - ACP Complete uses server-verified mandates (G41, D1)
+
+- The ACP vendor extension `agenticorg_commerce` accepts `mandate_request` on complete and passes it to
+  the UCP Complete it runs, so ACP sessions obtain Intent, Cart and Payment mandates from Grantex and
+  are decided on server-verified authority like UCP sessions; strict runtimes refuse caller-asserted
+  authority on ACP too. The mandates are ledgered as `commerce.acp.checkout.mandates`. Tests:
+  `tests/integration/test_acp_checkout_postgres.py` (strict refusal, verified mandates) and
+  `tests/unit/test_acp_checkout_g34.py`.
+- `mandate_capability_evidence` builds its rail list as strings (mypy 2.x); no behaviour change.
+
 ## Unreleased - UPI mandate extension schema hosted at its advertised URL (G56)
 
 - `ui/public/ucp/extensions/upi-mandate/2026-10-20/schema.json` publishes the JSON Schema of the

@@ -101,7 +101,7 @@ def build(
     upi = parse_upi_autopay_capability(capability.get("upi_autopay"))
     if upi is not None and INSTRUMENT_UPI_AUTOPAY in types:
         caps.append({"rail": "upi_autopay", "max_amount": upi.max_amount_minor_units, "currency": "INR"})
-    rails = [cap["rail"] for cap in caps]
+    rails = [str(cap["rail"]) for cap in caps]
     redacted = {
         "evidence_id": get("evidence_id"),
         "provider": "plural_pine",
