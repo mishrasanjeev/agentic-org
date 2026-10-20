@@ -338,7 +338,8 @@ def make_translator(*, vendor: Mapping[str, Any], delegate_state: Mapping[str, A
 def complete_body(body: Mapping[str, Any], vendor: Mapping[str, Any]) -> dict[str, Any]:
     """An ACP complete request as the UCP complete body (one instrument, signals, vendor member)."""
     out: dict[str, Any] = {}
-    payment = body.get("payment_data") if isinstance(body.get("payment_data"), Mapping) else {}
+    raw_payment = body.get("payment_data")
+    payment: Mapping[str, Any] = raw_payment if isinstance(raw_payment, Mapping) else {}
     instrument = payment.get("instrument") if isinstance(payment.get("instrument"), Mapping) else None
     if payment.get("handler_id") and instrument is not None:
         entry: dict[str, Any] = {

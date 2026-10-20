@@ -323,9 +323,10 @@ async def evaluate(
             )
         except FulfillmentRequestError as exc:
             raise RequestError(str(exc)) from exc
+        fulfillment_state = fulfillment.state or {}
         state["fulfillment"] = fulfillment.state
         messages.extend(fulfillment.messages)
-        if any(g.get("selected_option_id") for m in fulfillment.state["methods"] for g in m["groups"]):
+        if any(g.get("selected_option_id") for m in fulfillment_state.get("methods", ()) for g in m["groups"]):
             fulfillment_amount = fulfillment.amount_minor_units
     if resource == "checkout":
         try:

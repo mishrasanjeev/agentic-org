@@ -3164,7 +3164,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "commerce.runtime.acp.feed.read",
-    "source_line": 245,
+    "source_line": 246,
     "tenant_required": true
   },
   {
@@ -12596,7 +12596,7 @@
     "public_exempt_reason": "ucp-catalog-public-access-level-verified-artifacts-only",
     "rate_limit": "ucp-catalog-read",
     "scope": "public:ucp.catalog.read",
-    "source_line": 370,
+    "source_line": 371,
     "tenant_required": false
   },
   {
@@ -12722,7 +12722,7 @@
     "public_exempt_reason": "ucp-location-public-store-hours-and-address-only",
     "rate_limit": "ucp-catalog-read",
     "scope": "public:ucp.location.read",
-    "source_line": 483,
+    "source_line": 484,
     "tenant_required": false
   },
   {
@@ -12740,7 +12740,7 @@
     "public_exempt_reason": "ucp-location-public-store-hours-and-address-only",
     "rate_limit": "ucp-catalog-read",
     "scope": "public:ucp.location.read",
-    "source_line": 433,
+    "source_line": 434,
     "tenant_required": false
   },
   {
