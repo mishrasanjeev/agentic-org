@@ -55,6 +55,11 @@
 - Regression guards: `tests/regression/test_raw_session_inventory.py`
   (every remaining raw session is justified), `tests/regression/test_egress_async_callers.py`,
   and the Postgres proof `tests/integration/test_rls_nobypass_role.py`.
+- The lead delivery Postgres tests no longer patch the removed
+  `api.v1.demo.async_session_factory` (the receipt writes through
+  `get_platform_session`), and the worker-outcome test seeds the marketing
+  tenant itself instead of relying on test order. A regression check keeps
+  `api.v1.demo` on the shared session helpers.
 
 ## Unreleased - OACP artifact verification before caching (G5)
 

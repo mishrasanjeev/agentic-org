@@ -153,3 +153,19 @@ def test_tenant_catalogue_sites_guard_with_row_security_off() -> None:
         source = ast.get_source_segment((ROOT / rel).read_text(encoding="utf-8"), func) or ""
         assert "SET LOCAL row_security = off" in source, (rel, name)
         assert "Tenant" in source, (rel, name)
+
+
+def test_demo_receipt_uses_the_database_session_helpers() -> None:
+    """The demo receipt must not keep a private session factory.
+
+    A module-level ``async_session_factory`` import in ``api.v1.demo`` would
+    bypass both the NOBYPASSRLS platform/tenant binding and the factory that
+    ``tests/integration/test_lead_delivery_postgres.py`` installs through
+    ``core.database.current_session_factory``.
+    """
+    from api.v1 import demo
+    from core import database
+
+    assert not hasattr(demo, "async_session_factory")
+    assert demo.get_platform_session is database.get_platform_session
+    assert demo.get_tenant_session is database.get_tenant_session
