@@ -27,6 +27,7 @@ from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
 from typing import Any
 
 from core.commerce.c6z_runtime_vertical import (
+    DEMO_SOURCE_SYSTEM,
     _redacted_ref,
     contains_private_or_executable_value,
     evaluate_runtime_cache_record,
@@ -146,6 +147,9 @@ def ucp_variant_id(variant: Mapping[str, Any]) -> str | None:
     variant_id = variant.get("variant_id")
     if not isinstance(variant_id, str) or not variant_id:
         return None
+    if variant_id.startswith(f"{DEMO_SOURCE_SYSTEM}:"):
+        # The demo merchant's synthetic variants never carry a Shopify-looking id.
+        return _redacted_ref("synthetic_demo_variant", variant_id)
     return _redacted_ref("shopify_variant", variant_id)
 
 

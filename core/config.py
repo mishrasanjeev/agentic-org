@@ -455,6 +455,13 @@ class Settings(BaseSettings):
     # verifiers keep accepting signatures made before the rotation (UCP
     # signatures, Key Rotation: at least 7). Env: AGENTICORG_UCP_KEY_ROTATION_GRACE_DAYS.
     ucp_key_rotation_grace_days: int = 7
+    # The synthetic demo merchant source (core/commerce/oacp_demo_merchant.py): a
+    # clearly labelled ``synthetic_demo`` connector source for the one demo tenant
+    # that scripts/seed_oacp_demo_merchant.py creates. Off by default: off, every
+    # path accepts Shopify read-only sources only, exactly as before, and a
+    # Grantex artifact naming the synthetic source is refused at caching.
+    # Env: AGENTICORG_OACP_DEMO_MERCHANT_ENABLED.
+    oacp_demo_merchant_enabled: bool = False
     # RBI e-mandate framework 2026 (s.8): a subsequent UPI AutoPay / e-mandate
     # debit above these amounts (minor units, paise) needs the additional factor
     # of authentication; registration and the first debit always do

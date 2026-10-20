@@ -14,10 +14,12 @@ from typing import Any
 from urllib.parse import parse_qsl, urlsplit
 
 from core.commerce.c6z_runtime_vertical import (
+    DEMO_SOURCE_SYSTEM,
     EXECUTION_MARKERS,
     PRIVATE_KEY_MARKERS,
     PRIVATE_VALUE_MARKERS,
     contains_private_or_executable_value,
+    runtime_source_systems,
 )
 from core.commerce.source_precedence import SourcePrecedenceError, validate_provider_policy
 from core.commerce.ucp.locations import LocationConfigError, normalize_location_detail
@@ -31,6 +33,8 @@ SOURCE_CONNECTOR_TYPES: frozenset[str] = frozenset(
         "oms",
         "wms",
         "custom_api",
+        # The synthetic demo merchant's source; refused while AGENTICORG_OACP_DEMO_MERCHANT_ENABLED is off.
+        DEMO_SOURCE_SYSTEM,
     }
 )
 SOURCE_CONNECTOR_MODES: frozenset[str] = frozenset({"read_only", "external_reference"})
@@ -131,7 +135,7 @@ def merchant_config_readiness(config: Mapping[str, Any]) -> dict[str, Any]:
         if not isinstance(connector, Mapping):
             continue
         connector_type = str(connector.get("connector_type") or "")
-        runtime_supported = connector_type in SUPPORTED_RUNTIME_SOURCE_CONNECTORS
+        runtime_supported = _runtime_supported_source(connector_type)
         source_states.append(
             {
                 "connector_key": connector.get("connector_key"),
@@ -239,8 +243,17 @@ def integration_credential_config_name(
     return f"commerce_{suffix}_{digest}"
 
 
+def _runtime_supported_source(connector_type: str) -> bool:
+    return connector_type in SUPPORTED_RUNTIME_SOURCE_CONNECTORS or (
+        connector_type == DEMO_SOURCE_SYSTEM and DEMO_SOURCE_SYSTEM in runtime_source_systems()
+    )
+
+
 def _normalize_source_connector(item: Mapping[str, Any]) -> dict[str, Any]:
     connector_type = _one_of(item.get("connector_type") or item.get("source_system"), SOURCE_CONNECTOR_TYPES)
+    if connector_type == DEMO_SOURCE_SYSTEM and DEMO_SOURCE_SYSTEM not in runtime_source_systems():
+        # Off, the synthetic source is an unknown value exactly as before the demo merchant existed.
+        raise MerchantCommerceConfigError(f"unsupported value {connector_type}")
     mode = _one_of(item.get("mode") or "read_only", SOURCE_CONNECTOR_MODES)
     custody = _one_of(item.get("credential_custody") or "merchant_owned_integration", CREDENTIAL_CUSTODY_OPTIONS)
     connector = {
@@ -256,15 +269,15 @@ def _normalize_source_connector(item: Mapping[str, Any]) -> dict[str, Any]:
         "shop_domain": _safe_text(item.get("shop_domain")),
         "base_url": _safe_text(item.get("base_url")),
         "api_version": _safe_text(item.get("api_version"), fallback=""),
-        "sync_enabled": bool(item.get("sync_enabled", connector_type == "shopify")),
-        "adapter_status": (
-            "runtime_supported" if connector_type in SUPPORTED_RUNTIME_SOURCE_CONNECTORS else "pending_adapter"
-        ),
+        "sync_enabled": bool(item.get("sync_enabled", connector_type in {"shopify", DEMO_SOURCE_SYSTEM})),
+        "adapter_status": "runtime_supported" if _runtime_supported_source(connector_type) else "pending_adapter",
         "raw_payload_stored": False,
         "allowed_to_execute": False,
     }
     if connector_type == "shopify" and mode != "read_only":
         raise MerchantCommerceConfigError("Shopify connector mode must be read_only")
+    if connector_type == DEMO_SOURCE_SYSTEM and mode != "read_only":
+        raise MerchantCommerceConfigError("synthetic demo connector mode must be read_only")
     return connector
 
 

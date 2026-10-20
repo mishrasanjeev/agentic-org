@@ -41,6 +41,7 @@ from core.commerce.arbiter_store import (
 )
 from core.commerce.c6z_runtime_vertical import (
     C6Z_ARTIFACT_FAMILIES,
+    DEMO_SOURCE_SYSTEM,
     GRANTEX_AUTHORITY_ENV_VARS,
     PLURAL_PINE_ENV_VARS,
     SHOPIFY_ENV_VARS,
@@ -61,6 +62,7 @@ from core.commerce.c6z_runtime_vertical import (
     prepare_purchase_or_mandate_handoff,
     resolve_env,
     resolve_shopify_credentials,
+    runtime_source_systems,
     select_protocol_adapter_payload,
     send_grantex_authority_request,
     shopify_webhook_idempotency_key,
@@ -76,6 +78,7 @@ from core.commerce.oacp_artifacts import (
     OacpArtifactCacheRepositoryQuery,
     OacpArtifactScope,
 )
+from core.commerce.oacp_demo_merchant import build_demo_connector_evidence, demo_sourced, demo_tenant_marked
 from core.commerce.oacp_grantex_trust import (
     OacpGrantexArtifactVerifier,
     default_oacp_grantex_verifier,
@@ -436,7 +439,7 @@ async def upsert_merchant_commerce_config(
             await _provision_ucp_key_at_onboarding(row, tenant_id)
         packet: dict[str, Any] | None = None
         primary_source = _primary_source_connector(config)
-        if body.sync_onboarding_packet and primary_source.get("connector_type") == "shopify":
+        if body.sync_onboarding_packet and primary_source.get("connector_type") in runtime_source_systems():
             packet = _build_packet_from_merchant_config(config)
             packet_row = await session.get(C6ZSellerOnboardingPacketRow, packet["packet_id"])
             previous_status = None if packet_row is None else packet_row.status
@@ -1205,6 +1208,11 @@ def _artifact_unexpired(item: Mapping[str, Any], now: datetime) -> bool:
     return expires > now
 
 
+async def _is_demo_tenant(tenant_id: str) -> bool:
+    async with get_tenant_session(_tenant_uuid(tenant_id)) as session:
+        return await demo_tenant_marked(session, tenant_id)
+
+
 async def _verify_and_cache_grantex_artifacts(
     artifacts: Sequence[dict[str, Any]],
     *,
@@ -1276,11 +1284,35 @@ async def _verify_and_cache_grantex_artifacts(
                     "non_authoritative_for_transaction": True,
                 },
             )
+    payloads = [split_grantex_artifact(artifact)[1] for artifact in artifacts]
+    synthetic = demo_sourced([payload for payload in payloads if isinstance(payload, Mapping)])
     verification_summary = {
         "mode": "strict" if strict else "log_only",
         "verified": sum(1 for ref in verifier_refs if ref is not None),
         "refused": refusals,
     }
+    # Synthetic demo artifacts never back a real merchant: only the demo tenant caches them, flag on.
+    if synthetic and (DEMO_SOURCE_SYSTEM not in runtime_source_systems() or not await _is_demo_tenant(tenant_id)):
+        await record_commerce_event_in_own_transaction(
+            tenant_id=tenant_id,
+            event=ledger_event,
+            outcome="refused",
+            merchant_id=None,
+            seller_agent_id=None,
+            buyer_agent_id=buyer_agent_id,
+            payload={"refusal_code": "synthetic_demo_artifact_refused"},
+        )
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "status": "artifact_cache_rejected",
+                "refusal_code": "synthetic_demo_artifact_refused",
+                "records_stored": 0,
+                "records_rejected": len(artifacts),
+                "allowed_to_execute": False,
+                "non_authoritative_for_transaction": True,
+            },
+        )
     async with get_tenant_session(_tenant_uuid(tenant_id)) as session:
         repo = DurableOacpArtifactCacheRepository(session)
         store_results: list[dict[str, Any]] = []
@@ -2602,7 +2634,8 @@ def _merchant_config_from_packet(packet: Mapping[str, Any]) -> dict[str, Any]:
 
 def _build_packet_from_merchant_config(config: Mapping[str, Any]) -> dict[str, Any]:
     source_connector = _primary_source_connector(config)
-    if source_connector.get("connector_type") != "shopify":
+    connector_choice = str(source_connector.get("connector_type") or "")
+    if connector_choice not in runtime_source_systems():
         raise HTTPException(
             status_code=422,
             detail="Seller Commerce Agent runtime packet sync currently supports Shopify source connectors only",
@@ -2622,7 +2655,12 @@ def _build_packet_from_merchant_config(config: Mapping[str, Any]) -> dict[str, A
             else str(first_provider.get("provider_type") or "none")
         )
     connector_metadata = {
-        "credential_ref": source_connector.get("credential_ref") or "tenant_connector_config",
+        # The synthetic demo source has no credential to reference.
+        "credential_ref": (
+            None
+            if connector_choice == DEMO_SOURCE_SYSTEM
+            else source_connector.get("credential_ref") or "tenant_connector_config"
+        ),
         "connector_type": source_connector.get("connector_type"),
         "mode": source_connector.get("mode") or "read_only",
         "shop_domain": source_connector.get("shop_domain"),
@@ -2666,6 +2704,7 @@ def _build_packet_from_merchant_config(config: Mapping[str, Any]) -> dict[str, A
             ],
             "channel_capability_preferences": channel_preferences,
         },
+        connector_choice=connector_choice,
     )
 
 
@@ -2792,6 +2831,54 @@ async def _upsert_shopify_source_in_merchant_config(
     _apply_merchant_config(row, config, merchant_config_readiness(config))
     if new_config:
         await _provision_ucp_key_at_onboarding(row, tenant_id)
+
+
+async def sync_demo_catalog(*, tenant_id: str, packet_id: str) -> dict[str, Any]:
+    """Store the synthetic demo catalog as the packet's connector evidence (the demo merchant's "sync").
+
+    The counterpart of ``POST /seller-agents/shopify/sync`` for the
+    ``synthetic_demo`` source (``core/commerce/oacp_demo_merchant.py``): no
+    external system is read, the evidence row is refreshed in place, and the
+    write is ledgered as ``commerce.runtime.demo_catalog.sync``. Only for a
+    demo packet, with ``AGENTICORG_OACP_DEMO_MERCHANT_ENABLED`` on, in a tenant
+    carrying the demo marker.
+    """
+    async with get_tenant_session(_tenant_uuid(tenant_id)) as session:
+        packet_row = await session.get(C6ZSellerOnboardingPacketRow, packet_id)
+        if packet_row is None or packet_row.tenant_id != tenant_id:
+            raise HTTPException(404, "Seller Commerce Agent onboarding packet not found")
+        if not await demo_tenant_marked(session, tenant_id):
+            raise HTTPException(409, "The synthetic demo catalog belongs to the demo tenant only")
+        try:
+            evidence = build_demo_connector_evidence(packet=_row_to_packet(packet_row), synced_at=_now_iso())
+        except (C6ZRuntimeValidationError, ValueError) as exc:
+            raise HTTPException(422, f"Synthetic demo catalog refused: {exc}") from exc
+        row = await session.get(C6ZConnectorEvidenceRow, evidence["evidence_id"])
+        if row is None:
+            row = C6ZConnectorEvidenceRow(evidence_id=evidence["evidence_id"])
+            session.add(row)
+        _apply_evidence(row, evidence, hmac_verified=False)
+        packet_row.status = "synced"
+        await record_commerce_event(
+            session,
+            tenant_id=tenant_id,
+            event="commerce.runtime.demo_catalog.sync",
+            outcome="success",
+            merchant_id=packet_row.merchant_id,
+            seller_agent_id=packet_row.seller_agent_id,
+            buyer_agent_id=None,
+            payload={key: value for key, value in evidence.items() if key != "products"},
+            resource_id=packet_id,
+        )
+    return {
+        "status": "demo_catalog_stored",
+        "evidence_id": evidence["evidence_id"],
+        "source_evidence_ref": evidence["source_evidence_ref"],
+        "product_count": evidence["product_count"],
+        "variant_count": evidence["variant_count"],
+        "synthetic_data": True,
+        "allowed_to_execute": False,
+    }
 
 
 def _merchant_config_template(
@@ -3457,7 +3544,7 @@ def _apply_packet(row: C6ZSellerOnboardingPacketRow, packet: Mapping[str, Any]) 
     row.merchant_display_name = str(packet["merchant_display_name"])
     row.public_brand_profile = dict(packet["public_brand_profile"])
     row.commerce_categories = list(packet["commerce_categories"])
-    row.connector_choice = "shopify"
+    row.connector_choice = str(packet.get("connector_choice") or "shopify")
     row.connector_mode = "read_only"
     row.requested_grantex_authority_scope = dict(packet["requested_grantex_authority_scope"])
     row.artifact_cache_scope = dict(packet["artifact_cache_scope"])
@@ -3475,7 +3562,7 @@ def _apply_evidence(row: C6ZConnectorEvidenceRow, evidence: Mapping[str, Any], *
     row.tenant_id = str(evidence["tenant_id"])
     row.merchant_id = str(evidence["merchant_id"])
     row.seller_agent_id = str(evidence["seller_agent_id"])
-    row.source_system = "shopify"
+    row.source_system = str(evidence.get("source_system") or "shopify")
     row.source_mode = "read_only"
     row.source_evidence_ref = str(evidence["source_evidence_ref"])
     row.source_observed_at = _parse_dt(str(evidence["source_observed_at"]))
@@ -3649,7 +3736,7 @@ def _row_to_packet(row: C6ZSellerOnboardingPacketRow) -> dict[str, Any]:
 
 
 def _row_to_evidence(row: C6ZConnectorEvidenceRow) -> dict[str, Any]:
-    return {
+    evidence = {
         "evidence_id": row.evidence_id,
         "packet_id": row.packet_id,
         "tenant_id": row.tenant_id,
@@ -3671,6 +3758,10 @@ def _row_to_evidence(row: C6ZConnectorEvidenceRow) -> dict[str, Any]:
         "allowed_to_execute": row.allowed_to_execute,
         "non_authoritative_for_transaction": row.non_authoritative_for_transaction,
     }
+    if row.source_system == DEMO_SOURCE_SYSTEM:
+        # The synthetic demo source carries no external data: say so wherever the evidence goes.
+        evidence["synthetic_data"] = True
+    return evidence
 
 
 def _row_to_capability_summary(row: C6ZProviderCapabilityEvidenceRow) -> dict[str, Any]:

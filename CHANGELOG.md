@@ -1,5 +1,28 @@
 # Changelog
 
+## Unreleased - OACP demo merchant (synthetic)
+
+- New `scripts/seed_oacp_demo_merchant.py`: creates, converges or tears down one clearly labelled
+  synthetic demo merchant ("OACP Demo Merchant", tenant `13bd6961-b1e4-56ca-b242-91fbdfe1b1b0`,
+  admin `demo-admin@demo.agenticorg.example`): 10 invented products in INR with stock, one
+  Bengaluru store with `Asia/Kolkata` hours, a returns policy, the UCP signing key, optional
+  DNS-attested serving host and UCP publish (`--serving-host`), and the Grantex authority request
+  with verified caching of the issued artifacts. Dry run by default (`--apply` writes); every write
+  goes through the route handler and records its commerce ledger event in a tenant-bound session;
+  `--keep-fresh-minutes` re-issues the short-lived artifacts for a showcase; `--teardown` deletes
+  the demo's commerce rows and keeps the append-only ledger. It stops with the tenant id to
+  allowlist when Grantex answers `service_tenant_not_allowed`, and with exit code 4 when Grantex
+  does not accept the synthetic source. Runbook: `docs/runbooks/oacp-demo-merchant.md`.
+- New flag `AGENTICORG_OACP_DEMO_MERCHANT_ENABLED` (default off): the `synthetic_demo` connector
+  source (merchant config, onboarding packet, connector evidence and authority request, which says
+  `synthetic_data: true`). Off, every path accepts Shopify read-only sources only and an artifact
+  naming the synthetic source is refused at caching, exactly as before. On, such an artifact is
+  cached only for a tenant whose catalogue row carries the demo marker; any other tenant gets
+  `422 synthetic_demo_artifact_refused` on the ledger. Shopify payloads are unchanged either way.
+- Onboarding packets and connector evidence rows now store the connector source they carry instead
+  of always writing `shopify` (every existing row is Shopify, so nothing changes for them), and
+  synthetic catalog variants get `synthetic_demo_variant:` UCP item ids.
+
 ## Unreleased - Merchant config object lists
 
 - Fixed: `PUT /api/v1/commerce/runtime/merchant-configs/{merchant_id}` stored every object inside a

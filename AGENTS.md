@@ -107,6 +107,11 @@ UCP profile flags: `AGENTICORG_UCP_PROFILE_ENABLED` (default off; `/.well-known/
 key, and no `public_discovery_state` artifact may enable discovery), `AGENTICORG_UCP_VERSIONS`
 (default `2026-04-08`), `AGENTICORG_UCP_KEY_ROTATION_GRACE_DAYS` (default 7, minimum 7); see
 `docs/oacp/ucp-profile.md`.
+Demo merchant: `AGENTICORG_OACP_DEMO_MERCHANT_ENABLED` (default off; on, the clearly labelled
+`synthetic_demo` connector source is accepted for the one demo tenant that
+`scripts/seed_oacp_demo_merchant.py` creates, and an artifact naming it is cached only for a tenant
+carrying the demo marker; off, only Shopify read-only sources are accepted, as before). Never
+present synthetic data as a merchant system; see `docs/runbooks/oacp-demo-merchant.md`.
 ACP flags: `AGENTICORG_ACP_FEED_ENABLED` (default off; the ACP product feed export answers 404),
 `AGENTICORG_ACP_CHECKOUT_ENABLED` (default off; the `/acp` checkout session routes answer 404; they
 run on the UCP session table, arbiter and executor) and `AGENTICORG_ACP_SIGNATURE_MODE` (`log` by

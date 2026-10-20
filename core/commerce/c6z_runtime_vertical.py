@@ -62,6 +62,12 @@ PLURAL_PINE_OPTIONAL_ENV_VARS: tuple[str, ...] = (
 )
 PLURAL_PINE_SANDBOX_BASE_URL = "https://pluraluat.v2.pinepg.in/api"
 
+SHOPIFY_SOURCE_SYSTEM = "shopify"
+# The clearly labelled synthetic source of the one OACP demo merchant
+# (core/commerce/oacp_demo_merchant.py). Accepted only while
+# AGENTICORG_OACP_DEMO_MERCHANT_ENABLED is on; never a Shopify claim.
+DEMO_SOURCE_SYSTEM = "synthetic_demo"
+
 
 C6Z_ARTIFACT_FAMILIES: tuple[str, ...] = (
     "merchant_profile",
@@ -333,6 +339,26 @@ class PurchasePreparationResult:
     non_authoritative_for_transaction: bool = True
 
 
+def runtime_source_systems() -> frozenset[str]:
+    """Connector sources an onboarding packet, connector evidence and a cached artifact may name.
+
+    Shopify read-only always; the synthetic demo source only while
+    ``AGENTICORG_OACP_DEMO_MERCHANT_ENABLED`` is on.
+    """
+    from core.config import settings
+
+    if bool(getattr(settings, "oacp_demo_merchant_enabled", False)):
+        return frozenset({SHOPIFY_SOURCE_SYSTEM, DEMO_SOURCE_SYSTEM})
+    return frozenset({SHOPIFY_SOURCE_SYSTEM})
+
+
+def artifact_names_demo_source(payload: Mapping[str, Any]) -> bool:
+    """Whether an issued artifact payload names the synthetic demo source (top level or source lineage)."""
+    lineage = payload.get("source_lineage")
+    lineage_source = lineage.get("source_system") if isinstance(lineage, Mapping) else None
+    return DEMO_SOURCE_SYSTEM in (payload.get("source_system"), lineage_source)
+
+
 def resolve_env(required: Sequence[str], env: Mapping[str, str] | None = None) -> C6ZEnvResolution:
     source = os.environ if env is None else env
     missing = tuple(name for name in required if not str(source.get(name, "")).strip())
@@ -421,6 +447,7 @@ def build_seller_onboarding_packet(
     artifact_cache_scope: Mapping[str, Any],
     source_freshness_policy: Mapping[str, Any],
     connector_metadata: Mapping[str, Any] | None = None,
+    connector_choice: str = SHOPIFY_SOURCE_SYSTEM,
 ) -> dict[str, Any]:
     redacted_metadata = redact_connector_metadata(connector_metadata or {})
     cache_scope = dict(artifact_cache_scope)
@@ -435,7 +462,7 @@ def build_seller_onboarding_packet(
         "merchant_display_name": _require_text("merchant_display_name", merchant_display_name),
         "public_brand_profile": dict(public_brand_profile),
         "commerce_categories": tuple(_require_text("commerce_category", value) for value in commerce_categories),
-        "connector_choice": "shopify",
+        "connector_choice": connector_choice,
         "connector_mode": "read_only",
         "requested_grantex_authority_scope": dict(requested_grantex_authority_scope),
         "artifact_cache_scope": cache_scope,
@@ -454,11 +481,17 @@ def build_seller_onboarding_packet(
     return packet
 
 
+def _source_choice_message(field_name: str) -> str:
+    if DEMO_SOURCE_SYSTEM in runtime_source_systems():
+        return f"{field_name} must be shopify or {DEMO_SOURCE_SYSTEM}"
+    return f"{field_name} must be shopify"
+
+
 def validate_seller_onboarding_packet(packet: Mapping[str, Any]) -> None:
     for key in ("tenant_id", "merchant_id", "seller_agent_id", "merchant_display_name"):
         _require_text(key, str(packet.get(key, "")))
-    if packet.get("connector_choice") != "shopify":
-        raise C6ZRuntimeValidationError("connector_choice must be shopify")
+    if packet.get("connector_choice") not in runtime_source_systems():
+        raise C6ZRuntimeValidationError(_source_choice_message("connector_choice"))
     if packet.get("connector_mode") != "read_only":
         raise C6ZRuntimeValidationError("connector_mode must be read_only")
     if not packet.get("commerce_categories"):
@@ -819,8 +852,10 @@ def build_shopify_connector_evidence(
 def validate_connector_evidence(evidence: Mapping[str, Any]) -> None:
     for key in ("tenant_id", "merchant_id", "seller_agent_id", "source_evidence_ref"):
         _require_text(key, str(evidence.get(key, "")))
-    if evidence.get("source_system") != "shopify":
-        raise C6ZRuntimeValidationError("source_system must be shopify")
+    if evidence.get("source_system") not in runtime_source_systems():
+        raise C6ZRuntimeValidationError(_source_choice_message("source_system"))
+    if evidence.get("source_system") == DEMO_SOURCE_SYSTEM and evidence.get("synthetic_data") is not True:
+        raise C6ZRuntimeValidationError("synthetic demo evidence must be marked synthetic_data")
     if evidence.get("source_mode") != "read_only":
         raise C6ZRuntimeValidationError("source_mode must be read_only")
     if evidence.get("raw_payload_stored") is not False:
@@ -886,6 +921,9 @@ def build_grantex_authority_request_payload(
         raise C6ZRuntimeValidationError("merchant scope mismatch")
     if connector_evidence["seller_agent_id"] != onboarding_packet["seller_agent_id"]:
         raise C6ZRuntimeValidationError("seller agent scope mismatch")
+    source_system = str(connector_evidence.get("source_system") or SHOPIFY_SOURCE_SYSTEM)
+    if str(onboarding_packet.get("connector_choice") or SHOPIFY_SOURCE_SYSTEM) != source_system:
+        raise C6ZRuntimeValidationError("connector evidence source does not match the onboarding packet")
     source_products = connector_evidence.get("products") or ()
     payload = {
         "request": {
@@ -895,7 +933,7 @@ def build_grantex_authority_request_payload(
             "seller_agent_id": onboarding_packet["seller_agent_id"],
             "merchant_display_name": onboarding_packet["merchant_display_name"],
             "commerce_categories": onboarding_packet["commerce_categories"],
-            "connector_choice": "shopify",
+            "connector_choice": source_system,
             "connector_mode": "read_only",
             "requested_authority_scope": _authority_scope_list(
                 onboarding_packet["requested_grantex_authority_scope"]
@@ -913,7 +951,7 @@ def build_grantex_authority_request_payload(
             "tenant_id": connector_evidence["tenant_id"],
             "merchant_id": connector_evidence["merchant_id"],
             "seller_agent_id": connector_evidence["seller_agent_id"],
-            "source_system": "shopify",
+            "source_system": source_system,
             "source_evidence_ref": connector_evidence["source_evidence_ref"],
             "source_observed_at": connector_evidence["source_observed_at"],
             "product_count": connector_evidence["product_count"],
@@ -934,6 +972,10 @@ def build_grantex_authority_request_payload(
             "no_public_discovery_enablement": True,
         },
     }
+    if source_system == DEMO_SOURCE_SYSTEM:
+        # Said on the wire, not only in the source name: the catalog is synthetic.
+        payload["request"]["synthetic_data"] = True
+        payload["connector_evidence"]["synthetic_data"] = True
     if mandate_capability_evidence is not None:
         if (
             mandate_capability_evidence.get("tenant_id") != onboarding_packet["tenant_id"]
@@ -1131,6 +1173,8 @@ def build_cache_record_from_grantex_artifact(
         raise C6ZRuntimeValidationError("artifact must block public discovery")
     if contains_private_or_executable_value(payload):
         raise C6ZRuntimeValidationError("artifact payload contains unsafe values")
+    if artifact_names_demo_source(payload) and DEMO_SOURCE_SYSTEM not in runtime_source_systems():
+        raise C6ZRuntimeValidationError("synthetic demo artifacts are not accepted while the demo merchant is off")
     source_ref = _require_text("source_evidence_ref", str(payload.get("source_evidence_ref") or ""))
     return OacpPersistentArtifactCacheRecord(
         cache_record_id=_stable_id("c6z_artifact_cache", artifact_id, tenant_id, merchant_id, seller_agent_id),
