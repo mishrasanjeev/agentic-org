@@ -23,3 +23,9 @@
 # reason = "Built from this repository; its own requirements are audited."
 # owner = "@github-handle"
 # expires = 2026-12-01
+
+[[skip]]
+package = "grantex-agent-httpsig"
+reason = "Not published to PyPI; installed from a pinned commit of the Grantex repository. Its only dependency (cryptography) is audited here."
+owner = "@mishrasanjeev"
+expires = 2027-01-15

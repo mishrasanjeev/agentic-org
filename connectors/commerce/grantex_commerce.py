@@ -11,8 +11,17 @@ from urllib.parse import quote
 import httpx
 
 from connectors.framework.base_connector import BaseConnector
+from core.commerce.agent_request_signing import (
+    AgentSigningError,
+    AgentSigningKey,
+    load_agent_signing_key,
+    new_nonce,
+    sign_agent_request,
+    tap_tag,
+    with_purchase_body_objects,
+)
 from core.commerce.sales_guardrails import normalize_grantex_error, validate_payment_action
-from core.config import grantex_base_url_for_env
+from core.config import grantex_base_url_for_env, settings
 
 TOOL_ALIAS_TO_GRANTEX: dict[str, str] = {
     "merchant_get_profile": "merchant.get_profile",
@@ -35,6 +44,10 @@ REST_READ_ONLY_ENDPOINTS: dict[str, str] = {
 }
 
 IDEMPOTENT_TOOL_ALIASES = frozenset({"cart_create", "payment_create_intent", "checkout_create"})
+# Signed with the TAP payer tag (agent-payer-auth); every other call is browsing (G48).
+PAYMENT_TOOL_ALIASES = frozenset({"payment_create_intent", "checkout_create"})
+# Caller inputs that shape the TAP body objects (G49); never forwarded as tool arguments.
+BODY_OBJECT_PARAMS = ("grantex_consent", "tap_consumer_id_token")
 
 
 class GrantexCommerceConnector(BaseConnector):
@@ -192,10 +205,68 @@ class GrantexCommerceConnector(BaseConnector):
             "refusal": False,
         }
 
+    async def _signing_key(self) -> AgentSigningKey | None:
+        """The tenant agent key (decrypted once per connector instance), or None while signing is off."""
+        if not settings.httpsig_sign_outbound:
+            return None
+        if getattr(self, "_agent_signing_key", None) is None:
+            key = await load_agent_signing_key(self.config)
+            if key is None:
+                raise AgentSigningError("outbound signing is on but no agent signing key is configured")
+            self._agent_signing_key = key
+        return self._agent_signing_key
+
+    async def _send_json(
+        self,
+        method: str,
+        path: str,
+        payload: dict[str, Any] | None,
+        *,
+        purpose: str,
+        body_objects: dict[str, Any] | None = None,
+    ) -> httpx.Response:
+        """Send one request, signed under the TAP profile with the tenant agent key when signing is on."""
+        if not self._client:
+            raise RuntimeError("Connector not connected")
+        key = await self._signing_key()
+        if key is None:
+            if payload is None:
+                return await self._client.request(method, path)
+            return await self._client.request(method, path, json=payload)
+        nonce = new_nonce()
+        if payload is not None and body_objects and body_objects.get("grantex_consent"):
+            payload = with_purchase_body_objects(
+                payload,
+                key=key,
+                nonce=nonce,
+                consent=body_objects["grantex_consent"],
+                consumer_id_token=body_objects.get("tap_consumer_id_token") or None,
+            )
+        content = b"" if payload is None else json.dumps(payload, separators=(",", ":")).encode("utf-8")
+        headers = {"Content-Type": "application/json"} if payload is not None else {}
+        request = self._client.build_request(method, path, content=content or None, headers=headers)
+        request.headers.update(
+            sign_agent_request(
+                method=method, url=str(request.url), body=content, headers=headers, key=key,
+                tag=tap_tag(purpose), nonce=nonce,
+            )
+        )
+        return await self._client.send(request)
+
+    @staticmethod
+    def _signing_refusal(exc: AgentSigningError) -> dict[str, Any]:
+        return {
+            "error": "agent_request_signing_failed",
+            "message": str(exc),
+            "retryable": False,
+            "refusal": True,
+        }
+
     async def _call_mcp_alias(self, alias: str, params: dict[str, Any]) -> dict[str, Any]:
         if not self._client:
             raise RuntimeError("Connector not connected")
         grantex_name = TOOL_ALIAS_TO_GRANTEX[alias]
+        body_objects = {name: params.pop(name) for name in BODY_OBJECT_PARAMS if name in params}
         payload = {
             "jsonrpc": "2.0",
             "id": f"agenticorg-{uuid.uuid4().hex}",
@@ -206,7 +277,13 @@ class GrantexCommerceConnector(BaseConnector):
             },
         }
         try:
-            response = await self._client.post("/mcp", json=payload)
+            response = await self._send_json(
+                "POST", "/mcp", payload,
+                purpose="payment" if alias in PAYMENT_TOOL_ALIASES else "browse",
+                body_objects=body_objects if alias in PAYMENT_TOOL_ALIASES else None,
+            )
+        except AgentSigningError as exc:
+            return self._signing_refusal(exc)
         except httpx.HTTPError:
             return {
                 "error": "grantex_transport_error",
@@ -220,7 +297,9 @@ class GrantexCommerceConnector(BaseConnector):
         if not self._client:
             raise RuntimeError("Connector not connected")
         try:
-            response = await self._client.post(path, json=params)
+            response = await self._send_json("POST", path, params, purpose="browse")
+        except AgentSigningError as exc:
+            return self._signing_refusal(exc)
         except httpx.HTTPError:
             return {
                 "error": "grantex_transport_error",
@@ -238,7 +317,9 @@ class GrantexCommerceConnector(BaseConnector):
         if not self._client:
             raise RuntimeError("Connector not connected")
         try:
-            response = await self._client.get(path)
+            response = await self._send_json("GET", path, None, purpose="browse")
+        except AgentSigningError as exc:
+            return self._signing_refusal(exc)
         except httpx.HTTPError:
             return {
                 "error": "grantex_transport_error",

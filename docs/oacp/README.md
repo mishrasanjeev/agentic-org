@@ -63,6 +63,7 @@ listed above.
 - [UCP business profile, catalog and locations](ucp-profile.md)
 - [UCP checkout, cart and order](ucp-checkout.md)
 - [ACP product feed and checkout sessions](acp-feed-and-sessions.md)
+- [Agent request signing (RFC 9421, Visa TAP, Web Bot Auth)](agent-request-signing.md)
 - [Plural/Pine P3P capability verifier](plural-pine-p3p-capability-verifier.md)
 - [Plural executor](plural-executor.md)
 - [Mandates, UPI AutoPay and RBI AFA](mandates.md)

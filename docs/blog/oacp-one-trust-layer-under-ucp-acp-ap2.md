@@ -129,13 +129,13 @@ Status on 20 October 2026.
 - **Merged in AgenticOrg's main branch:** signature checks before caching (strict in
   production), the arbiter and ledger for every commerce handoff and checkout completion, the UCP
   profile, catalog and checkout, the ACP feed and checkout sessions, MCP checkout tools, Intent,
-  Cart and Payment mandates from Grantex, and the Plural payment executor with UPI AutoPay and
-  AFA. Everything that touches checkout, payment, mandates or public discovery ships behind
-  switches that default to off, so with the defaults no checkout completes and no money moves.
-- **Still in review for AgenticOrg:** agent request signatures (checked and logged by default;
-  refusing unsigned requests is a separate switch).
-- **Not yet in AgenticOrg production:** the AgenticOrg release described here. It goes to
-  production after the remaining work is merged, with each switch turned on separately.
+  Cart and Payment mandates from Grantex, the Plural payment executor with UPI AutoPay and AFA,
+  and agent request signatures (checked and logged by default; refusing unsigned requests is a
+  separate switch). Everything that touches checkout, payment, mandates or public discovery ships
+  behind switches that default to off, so with the defaults no checkout completes and no money
+  moves.
+- **Not yet in AgenticOrg production:** the AgenticOrg release described here. Its production
+  deployment is the next step, after which each switch is turned on separately.
 
 ## What OACP Is Not
 

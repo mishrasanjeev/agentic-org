@@ -17,7 +17,7 @@ This is the canonical AgenticOrg closure PRD for turning OACP from audit-chain p
 | UCP checkout tools in `agenticorg-mcp-server` 5.1.0 | Yes, registered only when the merchant profile lists checkout | Package not yet published |
 | Grantex mandates verified on UCP and ACP Complete | Yes, `AGENTICORG_GRANTEX_MANDATES_ENABLED` default off | Not yet deployed |
 | Plural executor (capture, refunds, webhook reconciliation), UPI AutoPay with RBI AFA, tracking, source precedence | Yes, `PLURAL_PINE_LIVE_EXECUTION_ENABLED` default off | Not yet deployed |
-| Inbound agent request signatures (RFC 9421: TAP, Web Bot Auth) | In review, not on `main` | No |
+| Inbound agent request signatures (RFC 9421: TAP, Web Bot Auth), signed buyer connector, scheme token binding | Yes, `AGENTICORG_HTTPSIG_VERIFY_MODE=log` by default, outbound signing off | Not yet deployed |
 
 On the Grantex side, production runs the OACP signing, persistence, status list, ledger, protocol,
 mandate and network identity releases, issues artifacts under its first OACP issuer key

@@ -1530,6 +1530,20 @@ def validate_oacp_artifact_family(
             "Mandate capability requires direct provider verification.",
         )
 
+    if artifact_type == "mandate_capability" and "token_binding" in payload:
+        # G52: the scheme token binding, parsed and checked against the capability exactly as Grantex does.
+        from core.commerce.scheme_token_binding import (
+            TokenBindingError,
+            check_token_binding_within_capability,
+            parse_scheme_token_binding,
+        )
+
+        try:
+            binding = parse_scheme_token_binding(payload["token_binding"])
+            check_token_binding_within_capability(binding, payload, _string_field(envelope, "expires_at"))
+        except TokenBindingError as exc:
+            return _artifact_refusal(artifact_id, "token_binding_invalid", str(exc))
+
     if (
         artifact_type == "public_discovery"
         and (

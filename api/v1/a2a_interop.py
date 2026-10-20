@@ -18,14 +18,44 @@ from api.deps import get_current_tenant, require_tenant_admin
 from api.route_metadata import route_meta
 from api.v1 import a2a as legacy_a2a
 from api.v1.commerce_runtime import _answer_buyer_question_for_scope
+from auth.httpsig import verify_agent_request_signature
 from core.commerce.a2a_buyer_access import _QUERYABLE_SELLER_STATES, mint_buyer_token
 from core.commerce.ledger import record_commerce_event, record_commerce_event_in_own_transaction
+from core.config import settings
 from core.database import get_tenant_session
 from core.models.commerce_a2a_buyer_access import CommerceA2ABuyerAccess
 from core.models.commerce_c6z_runtime import C6ZSellerOnboardingPacketRow
 
 router = APIRouter(prefix="/a2a", tags=["A2A"])
 discovery_router = APIRouter(tags=["A2A"])
+
+SCHEME_AGENT_IDS_EXTENSION = "https://agenticorg.ai/a2a/extensions/scheme-agent-ids/v1"
+_SCHEME_AGENT_ID_SCHEMES = ("visa_tap", "mastercard_agent_pay")
+
+
+def _scheme_agent_ids() -> list[dict[str, str]]:
+    """AgenticOrg's own scheme agent ids (AGENTICORG_A2A_SCHEME_AGENT_IDS), or [] when unset or malformed (G51)."""
+    raw = str(settings.a2a_scheme_agent_ids or "").strip()
+    if not raw:
+        return []
+    try:
+        value = json.loads(raw)
+    except ValueError:
+        value = None
+    entries: list[dict[str, str]] = []
+    for item in value if isinstance(value, list) else [None]:
+        scheme = item.get("scheme") if isinstance(item, dict) else None
+        agent_id = item.get("agent_id") if isinstance(item, dict) else None
+        if (
+            scheme not in _SCHEME_AGENT_ID_SCHEMES
+            or not isinstance(agent_id, str)
+            or not 0 < len(agent_id) <= 256
+            or set(item) != {"scheme", "agent_id"}
+        ):
+            # A malformed list publishes nothing rather than part of it.
+            return []
+        entries.append({"scheme": scheme, "agent_id": agent_id})
+    return entries
 
 
 def _version_error(request: Request) -> JSONResponse | None:
@@ -77,7 +107,7 @@ def _card(*, merchant_name: str | None = None) -> dict[str, Any]:
             "protocolVersion": "1.0",
         }],
         "version": "1.0.0",
-        "capabilities": {"streaming": False, "pushNotifications": False, "extendedAgentCard": True},
+        "capabilities": _capabilities(),
         "securitySchemes": {"bearer": {"httpAuthSecurityScheme": {
             "scheme": "Bearer",
             "description": (
@@ -92,6 +122,21 @@ def _card(*, merchant_name: str | None = None) -> dict[str, Any]:
     }
 
 
+def _capabilities() -> dict[str, Any]:
+    capabilities: dict[str, Any] = {"streaming": False, "pushNotifications": False, "extendedAgentCard": True}
+    scheme_ids = _scheme_agent_ids()
+    if scheme_ids:
+        # A2A AgentExtension: the payment-network agent ids the Grantex registry attests for this
+        # agent (registry lookup GET /v1/registry/agents?scheme=&scheme_agent_id=).
+        capabilities["extensions"] = [{
+            "uri": SCHEME_AGENT_IDS_EXTENSION,
+            "description": "Payment-network scheme agent ids of this agent, as attested in the Grantex registry.",
+            "required": False,
+            "params": {"scheme_agent_ids": scheme_ids},
+        }]
+    return capabilities
+
+
 @discovery_router.get("/.well-known/agent-card.json")
 @route_meta(
     auth_required=False, tenant_required=False, scope="public:a2a.discovery",
@@ -102,7 +147,9 @@ async def standard_agent_card() -> dict[str, Any]:
     return _card()
 
 
-@router.get("/extendedAgentCard", response_model=dict[str, Any])
+@router.get(
+    "/extendedAgentCard", response_model=dict[str, Any], dependencies=[Depends(verify_agent_request_signature)]
+)
 @route_meta(
     auth_required=True, tenant_required=True, scope="a2a.extended_card.read",
     rate_limit="a2a-task-read", idempotency="read-only",
@@ -235,9 +282,16 @@ class A2ASendRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
     message: A2AMessage
     configuration: dict[str, Any] = Field(default_factory=dict)
+    # Visa TAP body objects and the Grantex consent record a TAP-signed buyer agent may send
+    # (G49); auth/httpsig.py verifies them against the request signature, nothing here reads them.
+    agentic_consumer: dict[str, Any] | None = Field(default=None, alias="agenticConsumer")
+    agentic_payment_container: dict[str, Any] | None = Field(default=None, alias="agenticPaymentContainer")
+    grantex_consent_record: dict[str, Any] | None = Field(default=None, alias="grantexConsentRecord")
 
 
-@router.post("/message:send", response_model=dict[str, Any])
+@router.post(
+    "/message:send", response_model=dict[str, Any], dependencies=[Depends(verify_agent_request_signature)]
+)
 @route_meta(
     auth_required=True, tenant_required=True, scope="a2a.message.send",
     rate_limit="commerce-a2a-buyer", idempotency="read-only-synchronous-message",

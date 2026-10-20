@@ -120,6 +120,20 @@ carrying `a2a:write` and message metadata such as
 must belong to that tenant, and ordinary agent/tool grants still apply.
 `commerce_sales_agent` is excluded from this generic path.
 
+## Agent request signatures
+
+`message:send` and `extendedAgentCard` verify an RFC 9421 HTTP message signature under the Visa
+Trusted Agent Protocol (`agent-browser-auth` / `agent-payer-auth`) or Web Bot Auth
+(`web-bot-auth`) profile in addition to the bearer credential. In the default `log` mode an
+unsigned request is answered as before and logged; with `AGENTICORG_HTTPSIG_VERIFY_MODE=enforce`
+it gets `401` with an `Accept-Signature` field. A verified `message:send` writes an
+`a2a.agent_signature` ledger row with the agent's profile, tag, keyid, Signature-Agent and, when
+the registry lookup is on, its Grantex DID and scheme agent ids. A TAP-signed body may carry the
+`agenticConsumer`, `agenticPaymentContainer` and `grantexConsentRecord` objects; they are verified
+and recorded, never acted on. AgenticOrg's own scheme agent ids appear in the Agent Card as the
+`https://agenticorg.ai/a2a/extensions/scheme-agent-ids/v1` extension when
+`AGENTICORG_A2A_SCHEME_AGENT_IDS` is set. See [agent request signing](oacp/agent-request-signing.md).
+
 ## Limits and rollout
 
 - Synchronous `message:send` text only. No JSON-RPC, gRPC, streaming, push

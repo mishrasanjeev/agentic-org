@@ -8,10 +8,11 @@ Canonical end-to-end flow: [OACP end-user flow](../end-user-flow.md).
   (countersignature, witness, export, retention), the UCP profile, catalog, locations, checkout,
   cart and order routes, the ACP feed and checkout sessions, the MCP UCP checkout tools,
   server-verified Grantex mandates, the Plural executor with refunds and webhook reconciliation,
-  UPI AutoPay with RBI AFA, and per-fact source precedence. With the defaults
+  UPI AutoPay with RBI AFA, per-fact source precedence, and RFC 9421 agent request signatures
+  (TAP and Web Bot Auth; `log` mode by default). With the defaults
   (`PLURAL_PINE_LIVE_EXECUTION_ENABLED` unset) no executor is registered, so no checkout can
-  complete and nothing moves money. Inbound agent request signatures are still in review.
-- **AgenticOrg production** does not run this release yet. Every flag below is at its default
+  complete and nothing moves money.
+- **AgenticOrg production** does not run this release yet; its deployment is the next step. Every flag below is at its default
   there only once the release is deployed; check the deployed commit first.
 - **Grantex production** issues ES256-signed OACP artifacts under its first OACP issuer key
   (`oacp-20261020-12b09be0ba65bd14`), serves its public Token Status List
@@ -61,7 +62,12 @@ set the value, redeploy (settings are read at start-up), and unset it once the c
 | `AGENTICORG_GRANTEX_MANDATES_ENABLED` | Off | After the Grantex mandate release, a live OACP key and the public status list (all live in Grantex production on 2026-10-20) and the merchant's `provider_policy.ucp.grantex_mandates`: see the [Grantex mandates launch order](#grantex-mandates-launch-order). A Complete with `mandate_request` then decides on server-verified Intent, Cart and Payment mandates. | `false` and restart: `mandates.status: unavailable`, the authority is caller-asserted again and strict runtimes refuse it. One merchant: remove its `grantex_mandates`. |
 | `AGENTICORG_GRANTEX_MANDATE_CAPABILITY_EVIDENCE_ENABLED` | Off | After the Grantex release that accepts `mandate_capability_evidence` on the authority request (live in Grantex production on 2026-10-20). | `false`: nothing is sent; Grantex marks the capability `unverified`. |
 | `AGENTICORG_RBI_EMANDATE_AFA_LIMIT_MINOR_UNITS` / `AGENTICORG_RBI_EMANDATE_AFA_HIGHER_LIMIT_MINOR_UNITS` | `1500000` / `10000000` (paise) | Change only when the RBI e-mandate limits change. Subsequent UPI AutoPay debits above the limit need AFA; registration and first debit always do. | Restore the defaults. |
-| `AGENTICORG_HTTPSIG_VERIFY_MODE` | `log` | Not read by `main` yet: inbound agent request-signature verification is in review. Once on the deployed commit, production step 2 below. | `log`. |
+| `AGENTICORG_HTTPSIG_VERIFY_MODE` | `log` | Production step 2 below, after the [agent request signature rollout](#agent-request-signature-rollout). `log` verifies and records signatures on the public commerce reads and the A2A routes and refuses nothing; `enforce` answers 401 to unsigned or invalid requests (503 while the Redis nonce store is down) on the commerce API surfaces only (catalog and product JSON, A2A), never the public pages. | `log`: requests are answered again; signatures are still verified and logged. An unknown value is treated as `log`. |
+| `AGENTICORG_HTTPSIG_AUTHORITIES` | Empty (uses the `Host` header) | Set to the public hosts before `enforce`. | Empty. |
+| `AGENTICORG_HTTPSIG_TAP_KEY_STORE_URLS` / `AGENTICORG_HTTPSIG_SIGNATURE_AGENT_ORIGINS` | Empty (no key resolves) | TAP key-store URL templates (`{keyid}`) and the Web Bot Auth directory origins (include the Grantex origin to trust registry keys). | Empty: every signature is unverifiable (refused only in `enforce`). |
+| `AGENTICORG_HTTPSIG_REGISTRY_LOOKUP_ENABLED` | Off | Records the DID and scheme agent ids of verified agents from the Grantex registry. | `false`: no lookups. |
+| `AGENTICORG_HTTPSIG_SIGN_OUTBOUND` | Off | After the tenant agent key is stored on the `grantex_commerce` connector: the buyer connector signs its requests (TAP); with no usable key the call is refused, never sent unsigned. | `false`: requests go unsigned again. |
+| `AGENTICORG_A2A_SCHEME_AGENT_IDS` | Empty | AgenticOrg's own scheme agent ids in the A2A agent card. | Empty: the card is unchanged. |
 | mcp-server `AGENTICORG_UCP_PROFILE_URL`, `AGENTICORG_UCP_AGENT_PROFILE` | Unset (no UCP tools) | Set per MCP installation to the merchant's `https://<serving host>/.well-known/ucp` and the platform profile URL. | Unset: no UCP tools are registered at the next start. |
 | Merchant `provider_policy.arbiter.escalate_to_human` | `false` | Optional: copies a refusal into `hitl_queue` (needs `review_agent_id`); never changes or delays an outcome. | `false`. |
 
@@ -98,8 +104,8 @@ this order, each followed by its smoke and with its rollback written down before
 
 1. **Route enforcement: `enforce`** (the default). Rollback: `AGENTICORG_ROUTE_ENFORCEMENT_MODE=log`
    for a short, recorded window.
-2. **Agent request signatures: `log`, then `enforce`** once inbound verification is on the
-   deployed commit and the owner records the decision. Rollback:
+2. **Agent request signatures: `log`** (the default) first, **then `enforce`** only after the
+   rollout below shows the expected callers `verified` and the owner records the decision. Rollback:
    `AGENTICORG_HTTPSIG_VERIFY_MODE=log`.
 3. **UCP checkout: `AGENTICORG_UCP_CHECKOUT_ENABLED=true`** for a published merchant; run the UCP
    smoke. Rollback: `false`.
@@ -143,7 +149,32 @@ decision to set it to `false`; UCP and ACP Complete pass with Grantex mandates.
    orders, and payment journal rows.
 7. Stop public UCP discovery, UCP checkout, ACP checkout or the ACP feed with their flags or the
    per-merchant and per-platform steps in the flag reference.
-8. Re-enable only after smoke tests pass.
+8. Agent request signatures: if `AGENTICORG_HTTPSIG_VERIFY_MODE=enforce` refuses legitimate
+   callers, set it back to `log` (requests are answered again; signatures are still verified and
+   logged). Set `AGENTICORG_HTTPSIG_SIGN_OUTBOUND=false` if a merchant edge refuses the buyer
+   agent's signatures; `AGENTICORG_HTTPSIG_REGISTRY_LOOKUP_ENABLED=false` stops registry lookups.
+9. Re-enable only after smoke tests pass.
+
+## Agent Request Signature Rollout
+
+`AGENTICORG_HTTPSIG_VERIFY_MODE` is `log` by default. Roll out in this order:
+
+1. Configure `AGENTICORG_HTTPSIG_AUTHORITIES` (the public hosts), the TAP key-store URL templates
+   (`AGENTICORG_HTTPSIG_TAP_KEY_STORE_URLS`) and the allowed Web Bot Auth directory origins
+   (`AGENTICORG_HTTPSIG_SIGNATURE_AGENT_ORIGINS`, including the Grantex origin to trust registry
+   keys). Redis must be reachable from every API instance (the nonce store).
+2. Staging, `log` mode: send a TAP-signed `message:send` from a test agent whose key is in the
+   configured key store; confirm a 200, an `a2a.agent_signature` ledger row with `outcome:
+   success`, and `agent_request_signature` log lines with `status: verified`. Send the same
+   request again: the log shows `nonce_replayed`. Send an unsigned request: 200 and
+   `status: unsigned` in the log.
+3. Watch the `agent_request_signature` logs in staging until the expected callers are `verified`.
+   `enforce` applies only to the commerce API surfaces (the catalog and product JSON reads and
+   the A2A routes); the public HTML pages, schema.org JSON-LD, sitemap and `llms.txt` are never
+   refused for a signature.
+4. Staging, `enforce`: the unsigned request gets 401 with `Accept-Signature`; the signed one is
+   accepted; with Redis stopped a signed request gets 503.
+5. Production in `log`, then `enforce` only with the owner's recorded decision.
 
 ## UCP Smoke
 
@@ -163,6 +194,7 @@ With `AGENTICORG_ACP_CHECKOUT_ENABLED=true` on staging, a published merchant opt
 - The same key with another body returns 422 `idempotency_conflict`.
 - Complete without a registered executor returns an `unsupported` message; the ledger shows `commerce.acp.checkout.*` rows.
 - With `AGENTICORG_ACP_FEED_ENABLED=true`, `GET /api/v1/commerce/runtime/acp/feed?merchant_id=...&format=csv` returns the CSV, or 409 when verified artifacts are missing.
+
 
 ## Plural Execution Launch Order
 

@@ -4,9 +4,10 @@
 # python:3.14-slim @ 2026-05-01
 FROM python:3.14-slim@sha256:a2b82f3c48559aa0a8446d9af49826b6e2b2016f4cd2afabfe6013ec53729170 AS builder
 WORKDIR /app
-# Build deps for patched Pillow (required by fastembed) and other C extensions
+# Build deps for patched Pillow (required by fastembed) and other C extensions; git for the
+# commit-pinned grantex-agent-httpsig direct reference (requirements.txt, pyproject.toml).
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    gcc g++ libjpeg-dev zlib1g-dev libffi-dev \
+    gcc g++ libjpeg-dev zlib1g-dev libffi-dev git \
     && rm -rf /var/lib/apt/lists/*
 COPY pyproject.toml README.md ./
 COPY core/ core/

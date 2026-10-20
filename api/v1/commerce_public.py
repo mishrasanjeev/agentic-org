@@ -7,11 +7,12 @@ from collections.abc import Mapping
 from typing import Any
 from uuid import UUID
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import HTMLResponse, JSONResponse, PlainTextResponse, Response
 from sqlalchemy import select
 
 from api.route_metadata import route_meta
+from auth.httpsig import observe_agent_request_signature, verify_agent_request_signature
 from core.commerce.oacp_public_publishing import (
     OacpPublicPublishingError,
     build_public_catalog_html,
@@ -30,8 +31,15 @@ from core.models.commerce_c6z_runtime import (
 
 public_router = APIRouter(prefix="/public/commerce", tags=["Public Commerce"])
 
+# Agent request signatures (RFC 9421, Visa TAP and Web Bot Auth profiles, G47) are verified and
+# recorded on every route. AGENTICORG_HTTPSIG_VERIFY_MODE=enforce refuses unsigned requests only on
+# the commerce API reads (the JSON catalog and product); the HTML pages, schema.org JSON-LD,
+# sitemap and llms.txt that crawlers and browsers read unsigned are never refused for it.
+AGENT_API = [Depends(verify_agent_request_signature)]
+PUBLIC_PAGE = [Depends(observe_agent_request_signature)]
 
-@public_router.get("/sellers/{merchant_id}", response_class=HTMLResponse)
+
+@public_router.get("/sellers/{merchant_id}", response_class=HTMLResponse, dependencies=PUBLIC_PAGE)
 @route_meta(
     auth_required=False,
     tenant_required=True,
@@ -54,7 +62,7 @@ async def public_seller_profile_page(
     return HTMLResponse(build_public_catalog_html(snapshot))
 
 
-@public_router.get("/sellers/{merchant_id}/catalog.json")
+@public_router.get("/sellers/{merchant_id}/catalog.json", dependencies=AGENT_API)
 @route_meta(
     auth_required=False,
     tenant_required=True,
@@ -77,33 +85,8 @@ async def public_seller_catalog_json(
     return JSONResponse(snapshot)
 
 
-@public_router.get("/sellers/{merchant_id}/products/{product_slug}", response_class=HTMLResponse)
-@route_meta(
-    auth_required=False,
-    tenant_required=True,
-    scope="public.commerce.product.read",
-    rate_limit="public-read",
-    idempotency="read-only",
-    audit_event="commerce.public.product_page",
-)
-async def public_product_detail_page(
-    merchant_id: str,
-    product_slug: str,
-    tenant_id: str = Query(..., min_length=36, max_length=36),
-    seller_agent_id: str | None = None,
-) -> HTMLResponse:
-    snapshot = await _load_public_catalog_snapshot(
-        tenant_id=tenant_id,
-        merchant_id=merchant_id,
-        seller_agent_id=seller_agent_id,
-    )
-    _raise_if_blocked(snapshot)
-    if find_public_product(snapshot, product_slug) is None:
-        raise HTTPException(status_code=404, detail="Public-safe product not found")
-    return HTMLResponse(build_public_catalog_html(snapshot, product_slug=product_slug))
-
-
-@public_router.get("/sellers/{merchant_id}/products/{product_slug}.json")
+# Registered before the product page: "{product_slug}" would otherwise also match "<slug>.json".
+@public_router.get("/sellers/{merchant_id}/products/{product_slug}.json", dependencies=AGENT_API)
 @route_meta(
     auth_required=False,
     tenant_required=True,
@@ -141,7 +124,35 @@ async def public_product_detail_json(
     )
 
 
-@public_router.get("/sellers/{merchant_id}/schema-org.jsonld")
+@public_router.get(
+    "/sellers/{merchant_id}/products/{product_slug}", response_class=HTMLResponse, dependencies=PUBLIC_PAGE
+)
+@route_meta(
+    auth_required=False,
+    tenant_required=True,
+    scope="public.commerce.product.read",
+    rate_limit="public-read",
+    idempotency="read-only",
+    audit_event="commerce.public.product_page",
+)
+async def public_product_detail_page(
+    merchant_id: str,
+    product_slug: str,
+    tenant_id: str = Query(..., min_length=36, max_length=36),
+    seller_agent_id: str | None = None,
+) -> HTMLResponse:
+    snapshot = await _load_public_catalog_snapshot(
+        tenant_id=tenant_id,
+        merchant_id=merchant_id,
+        seller_agent_id=seller_agent_id,
+    )
+    _raise_if_blocked(snapshot)
+    if find_public_product(snapshot, product_slug) is None:
+        raise HTTPException(status_code=404, detail="Public-safe product not found")
+    return HTMLResponse(build_public_catalog_html(snapshot, product_slug=product_slug))
+
+
+@public_router.get("/sellers/{merchant_id}/schema-org.jsonld", dependencies=PUBLIC_PAGE)
 @route_meta(
     auth_required=False,
     tenant_required=True,
@@ -164,7 +175,7 @@ async def public_schema_org_jsonld(
     return JSONResponse(snapshot["schema_org_jsonld"])
 
 
-@public_router.get("/sellers/{merchant_id}/sitemap.xml")
+@public_router.get("/sellers/{merchant_id}/sitemap.xml", dependencies=PUBLIC_PAGE)
 @route_meta(
     auth_required=False,
     tenant_required=True,
@@ -187,7 +198,7 @@ async def public_seller_sitemap_xml(
     return Response(content=build_public_sitemap_xml(snapshot), media_type="application/xml")
 
 
-@public_router.get("/sellers/{merchant_id}/llms.txt")
+@public_router.get("/sellers/{merchant_id}/llms.txt", dependencies=PUBLIC_PAGE)
 @route_meta(
     auth_required=False,
     tenant_required=True,
