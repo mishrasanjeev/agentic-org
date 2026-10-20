@@ -1,5 +1,21 @@
 # Changelog
 
+## Unreleased - OACP user guide section on the documentation site
+
+- New documentation section "OACP — agentic commerce, made safe" at `/docs` with seven
+  plain-language guides: what OACP is, how it works end to end, a purchase step by step,
+  the merchant setup checklist, safety and trust, the feature switches reference and an FAQ.
+  Each opens with an "In 30 seconds" summary and carries inline SVG diagrams and workflow
+  cards with an owner and an "if blocked" answer per step.
+- User guides can now include diagrams (a `figure` fence naming a registered diagram, rendered
+  in place with its caption kept for readers without scripts and for `llms-full.txt`), a
+  `summary` fence and numbered checklists that continue across sections (`flow start=N`).
+- Guides marked `"colorScheme": "adaptive"` in `docs/user-guide/index.json` follow the
+  reader's light or dark preference; every other guide keeps the light scheme unchanged.
+- The SVG building blocks and the OACP diagrams of the blog explainer moved to
+  `ui/src/components/figures/` so the blog and the docs share them; the blog renders as before.
+- The UI image's build context now includes the `docs/oacp` pages the new guides cite.
+
 ## Unreleased - Playwright 1.64
 
 - Python `playwright` moves from 1.63.0 to 1.64.0 (`[v4]` extra and `requirements-v4.txt`); the

@@ -834,6 +834,13 @@ These names are parsed from connectors. A listing does not prove credentials, su
 - [Seller commerce with an outside A2A buyer](https://agenticorg.ai/docs/seller-a2a-commerce-journey): An interactive third-party buyer transaction map and six checkpoints covering merchant setup, A2A seller access, sourced answers and the Pine Labs Plural payment boundary.
 - [API, SDK, MCP and A2A integration](https://agenticorg.ai/docs/api-sdk-mcp): Connect applications and agent clients with authenticated, scoped APIs; distinguish public discovery from permission to execute.
 - [Self-hosting and deployment handoff](https://agenticorg.ai/docs/self-hosting): Understand hosted versus bank-managed operation, local Docker setup, migration-first releases, backups and operational responsibilities.
+- [What OACP is and why you need it](https://agenticorg.ai/docs/oacp-overview): OACP is one trust layer under UCP, ACP, AP2, Visa TAP, MCP and A2A: your facts stated once, signed, decided by fixed rules and recorded, then rendered into each standard.
+- [How OACP works, end to end](https://agenticorg.ai/docs/oacp-how-it-works): Follow your shop's facts through seven steps: signed by Grantex, verified and kept by AgenticOrg, decided by the arbiter, recorded in the ledger and rendered for every buyer agent.
+- [A purchase, step by step](https://agenticorg.ai/docs/oacp-buyer-journey): Walk through one agent purchase: Intent, Cart and Payment mandates, the buyer's passkey, RBI AFA for UPI AutoPay, the arbiter's decision, the payment and the order.
+- [Merchant setup checklist](https://agenticorg.ai/docs/oacp-merchant-setup): A numbered checklist from Shopify sync and the Grantex allowlist to the DNS TXT step, your UCP profile, checkout, the ACP feed and MCP tools, and what stays off until a payment sandbox run.
+- [Safety and trust](https://agenticorg.ai/docs/oacp-safety-and-trust): Revocation everywhere, the arbiter's eight rules in plain words, the ledger and its offline check, agent request signatures in log and enforce mode, and how to read a refusal.
+- [Feature switches reference](https://agenticorg.ai/docs/oacp-feature-switches): Every OACP switch, its default and what it does, in plain tables, with the safe order for turning them on and how to turn them back off.
+- [OACP FAQ](https://agenticorg.ai/docs/oacp-faq): Short answers to the questions sellers ask: standards, certification, Grantex's role, prices, approvals, outages, revocation, UPI and what is switched on today.
 - [BFSI: business onboarding and KYB review](https://agenticorg.ai/docs/bfsi-business-onboarding): A fictional configured example from business application to evidence investigation, screening review, human decision and signed handoff.
 - [BFSI: reconciliation and finance exceptions](https://agenticorg.ai/docs/bfsi-reconciliation): Configure a read-only reconciliation assistant for synthetic bank and ledger data, review discrepancies, and hand approved corrections to finance.
 - [BFSI: customer service across chat and voice](https://agenticorg.ai/docs/bfsi-customer-service): Build a source-grounded service assistant, classify complaints, prepare responses and escalate sensitive account actions to authorized staff.
@@ -3734,6 +3741,680 @@ Use the repository's reviewed deployment path and migration-first process. Stric
 #### User documentation domain
 
 The public user manual is available under `/docs` in the UI build. `docs.agenticorg.ai` should be a DNS **subdomain**, not a separate nameserver delegation by default. Hosting/TLS must route that hostname to the reviewed UI/static documentation service before publishing the link. The repository's documentation-domain runbook explains the release checks and ownership; no DNS change is made by reading this guide.
+
+
+### What OACP is and why you need it
+
+URL: https://agenticorg.ai/docs/oacp-overview
+Audience: Merchants and business owners. Reviewed: 2026-10-21.
+
+In 30 seconds:
+
+- AI shopping agents use several standards: UCP, ACP, AP2, Visa TAP, Mastercard Agent Pay, Web Bot Auth, MCP and A2A.
+- Wiring each one on its own leaves you with several copies of your prices, rules and logs.
+- OACP is one trust layer underneath them. You state your facts once, Grantex signs them, and AgenticOrg checks, decides and records.
+- Each standard then receives the same facts in its own format. Revoke a fact once and every channel stops using it.
+- OACP feeds the standards. It does not replace them, and it is not a certification.
+
+#### The short version
+
+OACP stands for Open Agentic Commerce Protocol.
+
+It is a safety layer for selling to AI agents. It sits under the agent standards you already hear about. It does not compete with them.
+
+Think of it as one source of truth for your shop. Every agent channel reads from it. Every purchase passes through the same rules. Every decision lands in the same record.
+
+Figure: Five copies versus one layer. On the left, each standard is wired on its own, so the shop keeps five sets of facts, keys and logs. On the right, the shop feeds one OACP layer, and adapters render it for every buyer agent.
+
+#### Why sellers need it
+
+AI agents now shop for people. One agent compares prices. Another fills a cart. A third pays.
+
+Each of those steps has its own standard. If you connect to each standard separately, four problems appear:
+
+- **Many sources of truth.** A price changes in one feed but not another.
+- **Many trust set-ups.** Each integration has its own keys and its own checks.
+- **Many logs.** Nobody can show one clean record of what happened.
+- **No common off switch.** Pull a product in one place and an agent can still buy it somewhere else.
+
+OACP fixes these by putting one layer underneath. You keep your facts in one place. Every channel reads the same signed copy.
+
+#### The standards, in one line each
+
+You do not need to learn these. OACP renders into them for you.
+
+| Standard | What it answers | What OACP gives it |
+| --- | --- | --- |
+| UCP (Universal Commerce Protocol) | Where is the shop, what does it sell, how do I check out? | Your business profile, catalog, checkout and orders |
+| ACP (Agentic Commerce Protocol) | Which products can an agent buy, and how? | A product feed and agent checkout sessions |
+| AP2 (Agent Payments Protocol) | What did the buyer allow the agent to spend? | Intent, Cart and Payment mandates, mapped to AP2 field names |
+| Visa TAP and Web Bot Auth | Which agent is calling, and is it really that agent? | Signature checks on agent requests |
+| Mastercard Agent Pay | Which card-network agent id does this agent have? | The scheme label, recorded from the registry (its wire details are not public) |
+| MCP and A2A | How do agents and tools talk to each other? | Checkout tools for MCP clients and a seller agent for A2A |
+
+Figure: Each standard answers one question. Discovery, checkout, payment permission and agent identity each have their own standard. OACP sits underneath and feeds all of them from the same signed facts.
+
+#### What OACP actually is
+
+OACP is three things working together:
+
+1. **Signed facts.** Your catalog, prices, stock and policies become small signed records. Grantex signs them. Each one has an expiry date and a revocation slot.
+2. **One decision before money moves.** A fixed rule set, called the arbiter, says allow or refuse. No allow, no payment.
+3. **One record.** Every decision and every commerce write is recorded in a signed ledger you can export and check.
+
+Adapters then render those facts into each standard's own format.
+
+#### Who does what
+
+```flow
+Your shop | Stays the source of truth for products, prices, stock and orders. Shopify is the supported source today.
+Grantex | Signs your facts, publishes the signing keys, runs the revocation list and issues buyer mandates.
+AgenticOrg | Checks every signature, decides each purchase with fixed rules, records it and speaks each standard.
+Payment provider | Moves money, and only after an allow decision. Plural is the rail built today.
+```
+
+#### What OACP is not
+
+Honesty matters here, so here is the plain list.
+
+- **Not a replacement.** OACP renders into UCP, ACP and AP2. Buyer agents still speak those standards.
+- **Not a certification.** The groups behind UCP, ACP, AP2 and TAP have not certified or endorsed OACP.
+- **Not regulatory approval.** OACP helps you keep evidence. It does not establish regulatory compliance on its own.
+- **Not AP2's own format.** Mandates are signed JWTs that use AP2 field names, not AP2's SD-JWT format. Passkey signing of the cart is a Grantex extension.
+- **Not switched on by default.** Checkout, payment, mandates and public discovery each sit behind a switch that starts off. See [feature switches](/docs/oacp-feature-switches).
+
+#### Read next
+
+- [How OACP works, end to end](/docs/oacp-how-it-works)
+- [A purchase, step by step](/docs/oacp-buyer-journey)
+- [Merchant setup checklist](/docs/oacp-merchant-setup)
+- The blog post [OACP explained: one trust layer under UCP, ACP and AP2](https://agenticorg.ai/blog/oacp-one-trust-layer-under-ucp-acp-ap2)
+- The technical reference: [OACP runtime docs](https://github.com/mishrasanjeev/agentic-org/blob/main/docs/oacp/README.md)
+
+
+### How OACP works, end to end
+
+URL: https://agenticorg.ai/docs/oacp-how-it-works
+Audience: Merchants, product and platform teams. Reviewed: 2026-10-21.
+
+In 30 seconds:
+
+- Your shop's facts travel through seven steps before an agent sees them.
+- The shop states the facts. Grantex signs them. AgenticOrg checks every signature before it keeps a copy.
+- When an agent wants to buy, the arbiter applies fixed rules and answers allow or refuse at once. Nobody waits for a person.
+- Every decision is recorded in the commerce ledger. Adapters then speak each standard, so every agent gets the same answer.
+- A payment runs only after an allow decision, and only once.
+
+#### The whole flow on one page
+
+Figure: From your shop to every buyer agent. Seven steps: the shop states its facts, Grantex signs them, AgenticOrg verifies and keeps them, the arbiter decides allow or refuse, the ledger records the decision, adapters speak each standard, and buyer agents receive the same answer.
+
+Each step has one owner. The next sections explain them one at a time.
+
+#### Step 1. Your shop states its facts
+
+Your shop already knows its products, prices, stock and policies. AgenticOrg reads them. It does not invent them.
+
+- Shopify is the supported source today. AgenticOrg reads it with read-only access.
+- Your merchant settings add the rest: limits, stores, payment rail and policies.
+- Other systems (WooCommerce, ERP, PIM and others) can be saved as settings. They stay "pending adapter" and are never called.
+
+#### Step 2. Grantex signs each fact
+
+AgenticOrg sends the facts to Grantex and asks for authority. Grantex turns each fact into a signed record, called an artifact.
+
+Every artifact carries:
+
+- a signature (ES256) over the exact content;
+- an expiry time, so old facts stop counting;
+- a slot on a public revocation list, so a fact can be withdrawn.
+
+Grantex publishes the keys that check these signatures, and the revocation list. Anyone can check an artifact with those two public things.
+
+#### Step 3. AgenticOrg checks before it keeps anything
+
+AgenticOrg verifies every artifact before it stores a copy. This is the most important safety step.
+
+Figure: Four checks before a fact is kept. Each artifact must pass the signature check, come from a published Grantex key, be in scope and unexpired, and be valid on the revocation list. Passing artifacts are kept with source and freshness labels. A failure keeps nothing from that batch.
+
+In production, staging and preview, one failed artifact means nothing from that batch is kept. This is called strict mode, and it is on by default there.
+
+#### Step 4. The arbiter decides
+
+When an agent wants to buy, the arbiter decides. It is a fixed set of rules, not a person.
+
+- It answers **allow** or **refuse**. It never answers "pending".
+- An allow is single use. It is bound to the exact cart, price and quantity, and it expires after 10 minutes.
+- A refusal names the first rule that failed, so you know exactly why.
+
+The rules are listed in plain words in [Safety and trust](/docs/oacp-safety-and-trust#what-the-arbiter-checks).
+
+#### Step 5. The ledger records it
+
+Every commerce write and every decision is written to the commerce ledger in the same database transaction.
+
+- Each row is signed.
+- When audit-chain sealing is on, rows are also linked into a hash chain, so a removed or edited row shows up.
+- You can export the ledger and check it on your own computer with `scripts/verify_ledger.py`.
+
+Sealing and outside witnessing are separate switches. Both start off.
+
+#### Step 6. Adapters speak each standard
+
+The same verified facts are rendered into each standard's own shape:
+
+- a UCP business profile at `/.well-known/ucp`, with catalog, checkout and orders;
+- an ACP product feed and ACP checkout sessions;
+- Intent, Cart and Payment mandates with AP2 field names;
+- checkout tools for MCP clients, and a seller agent for A2A.
+
+Each surface has its own switch, so you can turn on one channel at a time.
+
+#### Step 7. Buyer agents get the same answer
+
+Because every channel reads the same signed facts, agents see the same price, the same stock and the same refusals. A payment provider moves money only after an allow decision, and only once.
+
+#### Who does what, at a glance
+
+```flow
+States the facts | Products, prices, stock and policies come from your shop. | Owner: Merchant | If blocked: Reconnect Shopify or fix the merchant settings, then sync again.
+Signs the facts | Each fact becomes a signed, expiring, revocable artifact. | Owner: Grantex | If blocked: AgenticOrg keeps nothing new and asks for a fresh request.
+Verifies and keeps | Signature, key, scope, expiry and revocation are checked before storing. | Owner: AgenticOrg | If blocked: The batch is refused with the exact refusal code.
+Decides | Fixed rules answer allow or refuse at once. | Owner: AgenticOrg arbiter | If blocked: The refusal names the first failing rule.
+Records | The decision and every commerce write go to the ledger. | Owner: AgenticOrg ledger | If blocked: A write route that skips its ledger row is answered as an error.
+Pays | The provider charges once, against a consumed allow decision. | Owner: Payment provider | If blocked: Without a registered executor, checkout stops at executor_unavailable.
+```
+
+#### Where to go deeper
+
+- [A purchase, step by step](/docs/oacp-buyer-journey)
+- [Safety and trust](/docs/oacp-safety-and-trust)
+- Technical references: [artifact cache guide](https://github.com/mishrasanjeev/agentic-org/blob/main/docs/oacp/artifact-cache-guide.md) and [arbiter and ledger](https://github.com/mishrasanjeev/agentic-org/blob/main/docs/oacp/arbiter-ledger.md)
+
+
+### A purchase, step by step
+
+URL: https://agenticorg.ai/docs/oacp-buyer-journey
+Audience: Merchants and agent platform teams. Reviewed: 2026-10-21.
+
+In 30 seconds:
+
+- A buyer's agent finds a product, opens a checkout and asks to complete it.
+- Grantex issues three mandates: Intent (what the buyer allowed), Cart (this exact cart) and Payment (this amount, on this rail).
+- When the buyer is present, their passkey signs the exact cart. In India, a UPI AutoPay payment also needs the buyer's RBI AFA step.
+- AgenticOrg checks the mandates itself, then the arbiter says allow or refuse at once.
+- Only an allow lets the payment provider charge, once. Everything lands in the ledger.
+
+#### The journey in one picture
+
+The example uses a synthetic shop, Merchant Example, and a buyer who allows up to ₹2,000.
+
+Figure: A purchase with mandates. The buyer agent opens a checkout. Grantex issues the Intent, Cart and Payment mandates, the buyer's passkey signs the cart when the buyer is present, and AgenticOrg verifies all three. The arbiter decides; on allow the payment provider charges once and the order is confirmed; everything is recorded.
+
+#### The three mandates, in plain words
+
+A mandate is a signed note of what the buyer allowed. Grantex issues all three. Each lives at most 10 minutes.
+
+| Mandate | Plain meaning | Example |
+| --- | --- | --- |
+| Intent | "My agent may spend up to this much, at these shops." | Up to ₹2,000 at Merchant Example |
+| Cart | "This exact cart, and nothing else." | One office tote, ₹1,499, by its hash |
+| Payment | "Charge this amount, on this rail, to this token." | ₹1,499 by card token on Plural |
+
+The Cart mandate binds the cart by a hash. Change one item or one price and the hash changes, so the mandate no longer matches.
+
+The Payment mandate never holds the card or UPI token itself. It holds a fingerprint of it.
+
+#### Step by step: who does what
+
+```flow
+Find the product | The buyer agent reads the shop's catalog through UCP or the ACP feed. Prices and stock come from verified facts. | Owner: Buyer agent | If blocked: Without fresh verified facts the catalog answers with no products.
+Open a checkout | The agent creates a checkout session. AgenticOrg prices it from the synced catalog and moves it to ready_for_complete. | Owner: Buyer agent and AgenticOrg | If blocked: An unknown or out-of-stock item keeps the session incomplete.
+Intent mandate | Grantex records what the buyer allowed: the description, the spending cap and the shops. | Owner: Grantex | If blocked: Grantex refuses when the buyer's passport cap or consent does not allow it.
+Cart mandate and passkey | Grantex binds the exact cart. When the buyer is present, the buyer's passkey on their own device signs the cart hash. | Owner: Buyer and Grantex | If blocked: A missing, wrong or replayed passkey signature refuses the cart.
+Payment mandate | Grantex binds the amount, the currency, the rail and a fingerprint of the payment token. | Owner: Grantex | If blocked: Card data in the request, or an unknown rail, is refused.
+AgenticOrg verifies | AgenticOrg checks all three signatures, the revocation list and that the chain links to this exact checkout. | Owner: AgenticOrg | If blocked: Any failed check stops the purchase with its refusal code.
+Arbiter decides | Eight fixed rules run in order. The answer is allow or refuse, at once. | Owner: AgenticOrg arbiter | If blocked: The first failing rule is the reason, and it is recorded.
+RBI AFA, India only | A UPI AutoPay payment needs the buyer to approve with their UPI PIN in their own UPI app. AgenticOrg returns that step and waits for nothing. | Owner: Buyer and their bank | If blocked: Completion is refused until verified AFA evidence arrives from the provider.
+Payment | The payment provider charges once, against the consumed allow decision. The three mandate hashes travel with the order. | Owner: Payment provider | If blocked: With payment execution off, checkout stops at executor_unavailable and nothing is charged.
+Order and receipt | The order is created and a signed order update goes to the agent platform. The ledger holds the mandates, the decision and every payment call. | Owner: AgenticOrg and the merchant | If blocked: A failed payment returns the session to ready_for_complete.
+```
+
+#### What the decision can say
+
+Figure: Three possible answers. The arbiter allows, and the payment runs once; or it refuses and names the first failing rule, and nothing is charged; or, for UPI AutoPay, it asks for the buyer's AFA step, and the next attempt gets a fresh decision.
+
+#### When the buyer is not present
+
+Sometimes an agent buys while the person is away. This is called "human not present".
+
+- There is no passkey step, because nobody is there to touch it.
+- The shop must set stricter limits for these purchases, for example a lower amount cap. Without them, every not-present purchase is refused.
+- The Intent mandate's cap must cover the total.
+- For UPI AutoPay, the AFA exemption never applies.
+
+#### RBI AFA for India, in plain words
+
+RBI rules ask for an additional factor of authentication (AFA) on some UPI AutoPay payments.
+
+| Payment | AFA needed? |
+| --- | --- |
+| Setting up the mandate, and the first debit with it | Always |
+| A later debit up to ₹15,000 | No |
+| A later debit up to ₹1,00,000 for insurance premiums, mutual fund subscriptions or credit-card bills | No |
+| A later debit above those amounts | Yes |
+| Amount, currency or debit type unknown | Yes, to stay safe |
+
+A checkout is always a set-up plus a first debit, so AFA always applies there. The limits are settings, so a future RBI change is a configuration change.
+
+#### What is on by default
+
+> The checkout routes, mandates and payment execution each start switched off. With the defaults, a checkout can reach ready_for_complete but never completes, and no money moves. See [feature switches](/docs/oacp-feature-switches).
+
+#### Related guides
+
+- [Safety and trust](/docs/oacp-safety-and-trust)
+- [Merchant setup checklist](/docs/oacp-merchant-setup)
+- Technical references: [mandates, UPI AutoPay and RBI AFA](https://github.com/mishrasanjeev/agentic-org/blob/main/docs/oacp/mandates.md) and [UCP checkout](https://github.com/mishrasanjeev/agentic-org/blob/main/docs/oacp/ucp-checkout.md)
+
+
+### Merchant setup checklist
+
+URL: https://agenticorg.ai/docs/oacp-merchant-setup
+Audience: Merchants and platform operators. Reviewed: 2026-10-21.
+
+In 30 seconds:
+
+- Setup has five phases: connect your shop, connect to Grantex, publish your UCP profile, open sales channels, and payments.
+- Most steps are done once. Each step has an owner and a clear "if blocked" answer.
+- Your UCP profile goes live only after you prove you own the web address with a DNS TXT record.
+- Checkout, the ACP feed and MCP tools each have their own switch, so you can open one channel at a time.
+- Live payment stays off until a payment-provider sandbox run has passed. Nothing charges a buyer before then.
+
+#### The five phases
+
+Figure: Five phases from shop to sales. Connect your shop, connect to Grantex, publish your UCP profile, open sales channels, and finally turn on payments. The last phase stays off until a payment-provider sandbox run has passed.
+
+You will use the **Commerce Runtime** page at `/dashboard/commerce-runtime`. You need the administrator role or the merchant role. A few steps are done by your platform operator, the person who runs your AgenticOrg deployment. Those steps say so.
+
+#### Phase 1. Connect your shop
+
+```flow start=1
+Save your merchant settings | In Commerce Runtime, fill in your merchant identity, source system, buyer channels, payment provider, public publishing and any stores. You can change these later. | Owner: Merchant | If blocked: Check that you have the merchant or administrator role.
+Connect Shopify, read-only | Store your Shopify Admin API credentials through the Shopify connector. AgenticOrg encrypts them and never shows them again. | Owner: Merchant | If blocked: Reconnect Shopify and confirm the status shows the store without secrets.
+Run the first sync | Sync products, variants, prices, images and stock. Compare a few items with Shopify. | Owner: Merchant | If blocked: A missing credential or wrong store domain stops the sync and says why.
+Set your purchase limits | In your settings, set the largest order amount, the allowed currencies and the most items per order. Add stricter limits for purchases made while the buyer is not present. | Owner: Merchant | If blocked: Without limits, the arbiter refuses every purchase with merchant_limits_missing.
+```
+
+#### Phase 2. Connect to Grantex
+
+```flow start=5
+Allow your tenant at Grantex | Your platform operator gives AgenticOrg its Grantex service token and adds your tenant, and your Grantex commerce tenant, to the Grantex allowlist. | Owner: Platform operator | If blocked: Without it, Grantex calls answer unavailable and, in production, no allow decision can be used.
+Request authority | From Commerce Runtime, send the Grantex authority request. Grantex signs your synced facts. | Owner: Merchant | If blocked: A 202 answer means connector evidence is missing; sync again first.
+Verify and keep the facts | Cache the returned artifacts. AgenticOrg checks every signature, key, expiry and revocation slot before it keeps anything. | Owner: AgenticOrg | If blocked: A 422 artifact_verification_refused lists each refusal code; nothing from that batch is kept.
+Ask a test question | Ask your seller agent "Which variants are in stock?" and check that the answer shows its source and freshness. | Owner: Merchant | If blocked: A missing answer means catalog, price or stock facts are missing; refresh them.
+```
+
+#### Phase 3. Publish your UCP profile
+
+Your UCP profile tells buyer agents where your shop is and what it offers. It is served at `https://<your shop host>/.well-known/ucp`.
+
+Figure: The DNS TXT step. AgenticOrg gives you a TXT record name and value. You add it at your DNS provider. AgenticOrg looks it up and, on a match, records that you control the host.
+
+```flow start=9
+Choose your shop host | Ask AgenticOrg for a challenge for your host, for example shop.merchant.example. It returns a TXT record name and value. | Owner: Merchant | If blocked: An IP address or a single-word host is not accepted.
+Add the DNS TXT record | At your DNS provider, add the TXT record _agenticorg-ucp.shop.merchant.example with the value AgenticOrg gave you. | Owner: Merchant | If blocked: DNS changes can take time to spread; wait and try the check again.
+Verify the host | Ask AgenticOrg to check the record. On a match it stores the proof and links the host to your merchant. | Owner: AgenticOrg | If blocked: A host already linked to another tenant is refused.
+Create your signing key | AgenticOrg creates one signing key for your shop. Your profile publishes its public half. Rotated keys stay published for at least 7 days. | Owner: Merchant | If blocked: Publishing is refused with signing_key_missing until a key exists.
+Publish | Record your opt-in to public discovery. The next Grantex authority request asks Grantex to allow discovery for this host. | Owner: Merchant | If blocked: Refusals name the reason, such as serving_host_not_attested.
+Profile goes live | When the UCP profile switch is on and Grantex has issued an allowing discovery artifact, the profile is served. | Owner: Platform operator | If blocked: The profile answers 404 until every condition holds; the UCP status view shows which one is missing.
+```
+
+Your operator must also route your shop host to the AgenticOrg service with the original host name intact.
+
+#### Phase 4. Open your sales channels
+
+Each channel has its own switch. Turn on one, test it, then the next.
+
+```flow start=15
+UCP checkout | The operator turns on UCP checkout and you issue each agent platform its own API key. Agents can then open checkouts at your /ucp address. | Owner: Platform operator and merchant | If blocked: With the switch off, every checkout route answers 404.
+ACP product feed | The operator turns on the ACP feed. You export it as JSON, JSON Lines or CSV and upload the files where the agent platform asks. | Owner: Platform operator and merchant | If blocked: The feed is refused until the catalog's verified facts are fresh.
+ACP checkout | The operator turns on ACP checkout, you opt your shop in, and you issue the platform a key with ACP write access. | Owner: Platform operator and merchant | If blocked: Without your opt-in your ACP routes answer 404.
+MCP checkout tools | On each MCP server install, set the address of your UCP profile. The checkout tools appear only while your profile lists checkout. | Owner: Platform operator | If blocked: No profile address, or checkout off, means no tools are registered.
+Grantex mandates | The operator turns on mandates and you name your Grantex commerce tenant and merchant in your settings. | Owner: Platform operator and merchant | If blocked: Without mandates, production refuses checkout decisions as buyer_authority_verified.
+```
+
+Turn mandates on before payments. In production, a checkout without verified mandates is refused.
+
+#### Phase 5. Payments: off until a sandbox run passes
+
+> Live payment execution stays off. It is turned on only after a full run against the payment provider's sandbox has passed in staging, and then one merchant at a time. Until then, a checkout stops at executor_unavailable and no buyer is charged.
+
+```flow start=20
+Sandbox credentials | The operator stores the provider's sandbox credentials in the secret manager. | Owner: Platform operator | If blocked: Without credentials the sandbox tests are skipped, not passed.
+Staging run | In staging, turn on payment execution for one test merchant and run the sandbox tests and the checkout smoke test. | Owner: Platform operator | If blocked: Any failure keeps payments off.
+Check the ledger | Confirm each payment call comes after a consumed allow decision. | Owner: Platform operator | If blocked: A payment row without a consumed decision is an irregularity; stop and investigate.
+Production, one merchant at a time | After owner approval, name the executor for one merchant and watch its first orders. | Owner: Platform operator | If blocked: Remove the merchant's executor setting to stop it at once.
+```
+
+#### Quick test before you go live
+
+- Ask a buyer question and check the source and freshness label.
+- Open a test checkout and confirm it reaches ready_for_complete.
+- With payments still off, confirm Complete answers executor_unavailable and nothing is charged.
+- Export the ledger and run `scripts/verify_ledger.py` on it.
+
+#### Related guides
+
+- [Feature switches reference](/docs/oacp-feature-switches)
+- [Commerce runtime and Shopify](/docs/commerce)
+- Technical references: [UCP profile](https://github.com/mishrasanjeev/agentic-org/blob/main/docs/oacp/ucp-profile.md), [ACP feed and sessions](https://github.com/mishrasanjeev/agentic-org/blob/main/docs/oacp/acp-feed-and-sessions.md) and the [launch and rollback runbook](https://github.com/mishrasanjeev/agentic-org/blob/main/docs/oacp/explainers/launch-rollback-runbook.md)
+
+
+### Safety and trust
+
+URL: https://agenticorg.ai/docs/oacp-safety-and-trust
+Audience: Merchants, risk and audit teams. Reviewed: 2026-10-21.
+
+In 30 seconds:
+
+- Revoke a fact once and every channel stops using it. If the revocation list cannot be reached, everything refuses.
+- The arbiter checks up to eight fixed rules before money moves. The first rule that fails is the reason, and it is recorded.
+- Every decision is in the commerce ledger. You can export it and check it on your own computer, with no database and no network.
+- Agent requests can carry a signature (Visa TAP or Web Bot Auth). AgenticOrg checks and logs them today; refusing unsigned calls is a separate switch.
+- A refusal is never a mystery: it names the rule, the reason and how to fix it.
+
+#### Revocation everywhere
+
+Sometimes a fact must stop counting at once. A price was wrong. A product was recalled. A buyer withdrew consent.
+
+With OACP you revoke it once. Grantex marks its slot on a public revocation list as invalid. Every place that relies on it checks that list.
+
+Figure: One revoke, every channel. The merchant or operator revokes one fact. Grantex marks it invalid on the status list. AgenticOrg refuses the cached fact, the UCP profile stops offering what relied on it, the arbiter refuses new purchases, and revoking a mandate revokes the mandates built on it. If the list cannot be reached, everything refuses.
+
+Good to know:
+
+- AgenticOrg keeps a copy of the list only briefly: never longer than the list itself allows, and never more than 10 minutes.
+- Revoking a mandate also revokes the mandates built on it.
+- A revocation stops new decisions. It does not undo a payment that already ran.
+
+#### What the arbiter checks
+
+Before a checkout completes, the arbiter runs these rules in a fixed order. Every rule runs. The first one that fails decides the refusal.
+
+Figure: Eight rules, one answer. A purchase passes eight gates in order: mandate, consent, spending cap, verified buyer authority, valid facts, merchant limits, not-present limits and RBI AFA. Passing all gives allow. The first failure gives refuse, with that rule as the reason.
+
+| # | Rule | In plain words | Example refusal |
+| --- | --- | --- | --- |
+| 1 | Mandate present | There is a buyer mandate, and it has not expired. | mandate_expired |
+| 2 | Consent active | The buyer's consent is still active. | consent_missing |
+| 3 | Spending cap | The buyer's Commerce Passport allows this amount, in this currency. | passport_amount_cap_exceeded |
+| 4 | Verified buyer authority | AgenticOrg verified the mandates itself. A claim in the request is not enough in production. | buyer_authority_caller_asserted |
+| 5 | Facts still valid | Catalog, price, stock, policy and other facts are signed, fresh, unexpired and not revoked. | artifact_revoked:price |
+| 6 | Merchant limits | The order is within your amount, currency and quantity limits. | order_amount_cap_exceeded |
+| 7 | Not-present limits | If the buyer is away, your stricter limits and the Intent cap cover the order. | not_present_limits_missing |
+| 8 | RBI AFA | A UPI AutoPay payment has verified AFA evidence when RBI rules need it. | afa_evidence_missing |
+
+A refund has its own single rule: the refund must be positive, in the order's currency, and within what was captured.
+
+#### Nobody waits for a person
+
+The arbiter never answers "pending". It decides at once.
+
+- An allow is single use, bound to the exact cart, and expires after 10 minutes.
+- In production an allow is usable only with a Grantex countersignature. If that is missing, ask for a new decision.
+- You can choose to copy refusals into your review queue. That copy never changes or delays the decision.
+- An operator's note on a decision is only a note. It can never turn a refusal into an allow.
+
+#### The ledger and offline checks
+
+Every commerce write and every decision is recorded in the commerce ledger, in the same transaction as the change itself.
+
+Figure: Check the record yourself. Export the ledger, run the verifier on your own computer, and read one of two answers: verified, or the first break, such as a missing, reordered, edited or truncated row.
+
+```flow
+Export | A tenant administrator downloads the ledger export from the ledger routes. | Owner: Tenant administrator | If blocked: Only administrators of that tenant can export.
+Verify offline | Run python scripts/verify_ledger.py export.json. It uses no database and no network. | Owner: Anyone holding the file | If blocked: Exit code 2 means the file is not a readable export.
+Read the answer | Exit code 0 means verified. Exit code 1 reports the first break, such as sequence_gap or link_hash. | Owner: Auditor or merchant | If blocked: Treat a break as an irregularity, re-export and compare.
+```
+
+Three honest details:
+
+- Rows are signed with a platform secret (HMAC). The offline check verifies the chain links and the witnessed heads. It checks row signatures only when you supply the secret.
+- Rows are chained only for tenants where audit-chain sealing is on. That switch starts off.
+- To catch someone who rewrites the whole file, compare with a head kept outside it: a Grantex witness (its own switch, off by default) or a head you saved yourself with --expected-head.
+
+#### Request signing: which agent is calling?
+
+Agents can sign their HTTP requests (RFC 9421). AgenticOrg understands two public profiles:
+
+- **Visa Trusted Agent Protocol (TAP):** browsing and payment tags, a short window and a one-time nonce.
+- **Web Bot Auth:** the agent's key is found through its published signature agent.
+
+Figure: Log mode and enforce mode. In log mode, the default, every request is answered and its signature status is logged. In enforce mode, unsigned or invalid requests to the commerce API get 401. Public pages are never refused in either mode.
+
+| Mode | Unsigned or bad signature | Good signature |
+| --- | --- | --- |
+| log (default) | Answered, and the status is logged | Answered, logged, and recorded on write routes |
+| enforce | Refused with 401 on the commerce API surfaces | Answered, logged, and recorded on write routes |
+
+Enforce mode covers only the catalog and product JSON reads and the A2A routes. Your public pages, structured data, sitemap and llms.txt are never refused for a missing signature.
+
+#### What a refusal looks like
+
+A refusal always tells you what failed and why. Here is a shortened, synthetic example for a purchase over the buyer's cap:
+
+```json
+{
+  "code": "arbiter_refused",
+  "failing_rule": "passport_amount_cap",
+  "reason": "passport_amount_cap_exceeded",
+  "decision_id": "arbdec_5b0e1c7d2a9f",
+  "action": "The commerce arbiter refused: passport_amount_cap (passport_amount_cap_exceeded).",
+  "required_config": "buyer_authority.passport_ref, passport_max_amount_minor_units, passport_currency, passport_expires_at"
+}
+```
+
+Read it like this:
+
+1. **failing_rule** is the rule from the table above.
+2. **reason** is the exact cause.
+3. **decision_id** finds the sealed decision in the ledger.
+4. **required_config** says what must change before a new attempt.
+
+In a UCP or ACP checkout the decision comes back inside the checkout answer, as a business message. Nothing is charged.
+
+#### Related guides
+
+- [Feature switches reference](/docs/oacp-feature-switches)
+- [OACP FAQ](/docs/oacp-faq)
+- Technical references: [arbiter and ledger](https://github.com/mishrasanjeev/agentic-org/blob/main/docs/oacp/arbiter-ledger.md), [agent request signing](https://github.com/mishrasanjeev/agentic-org/blob/main/docs/oacp/agent-request-signing.md) and [OACP troubleshooting](https://github.com/mishrasanjeev/agentic-org/blob/main/docs/oacp/troubleshooting.md)
+
+
+### Feature switches reference
+
+URL: https://agenticorg.ai/docs/oacp-feature-switches
+Audience: Platform operators and merchants. Reviewed: 2026-10-21.
+
+In 30 seconds:
+
+- Every OACP surface that could expose your shop or move money starts switched off.
+- The safety checks start switched on in production: signature checks, verified buyer authority and the Grantex countersignature.
+- Request signatures start in log mode: checked and logged, never refused, until someone chooses enforce.
+- Switches are settings on the AgenticOrg service. They are read at start-up, so a change needs a restart.
+- Turn them on one at a time, in the order below, and write down how to turn each one back off first.
+
+#### Three kinds of switch
+
+Figure: Safe by default. Safety checks start on in production. Every surface that publishes or moves money starts off. Request signatures start in log mode and move to enforce only by choice.
+
+"Strict runtimes" are production, staging, preview and any unknown environment name. Local, dev, development, test and ci are not strict.
+
+#### Safety checks (on in production)
+
+| Switch | Default | What it does |
+| --- | --- | --- |
+| `AGENTICORG_OACP_VERIFY_STRICT` | On in strict runtimes; log-only elsewhere | Refuses to keep any fact whose signature, key, scope, expiry or revocation check fails. |
+| `AGENTICORG_ARBITER_REQUIRE_VERIFIED_AUTHORITY` | On in strict runtimes | Refuses buyer authority that AgenticOrg did not verify itself (rule 4). |
+| `AGENTICORG_ARBITER_REQUIRE_GRANTEX_GRANT` | On in strict runtimes | An allow decision can be used only with a verified Grantex countersignature. |
+| `AGENTICORG_ARBITER_GRANTEX_POST_ENABLED` | Follows the switch above | Sends each decision to Grantex for its countersignature. |
+| `AGENTICORG_ROUTE_ENFORCEMENT_MODE` | `enforce` | A commerce write that skips its ledger row is answered as an error. `log` only logs it. |
+
+Turning a safety check off weakens the shop's protection. Do it only as a recorded decision, for a short window.
+
+#### Ledger extras (off by default)
+
+| Switch | Default | What it does |
+| --- | --- | --- |
+| `AGENTICORG_AUDIT_CHAIN_DEFAULT_ON` | Off | Links the ledger rows of every commerce tenant into a hash chain (the global `AGENTICORG_AUDIT_CHAIN_ENABLED` does it for all tenants). |
+| `AGENTICORG_AUDIT_WITNESS_ENABLED` | Off | Sends each sealed chain head to Grantex, which countersigns it as an outside witness. |
+| `AGENTICORG_OACP_RETENTION_APPLY_ENABLED` | Off | Lets the daily task delete review manifests whose stored retention decision has come due. |
+
+#### Selling surfaces (off by default)
+
+| Switch | Default | What it does |
+| --- | --- | --- |
+| `AGENTICORG_UCP_PROFILE_ENABLED` | Off | Serves your UCP profile, catalog and store locations. Off, they answer 404. |
+| `AGENTICORG_UCP_VERSIONS` | `2026-04-08` | Which UCP releases are served. Add `2026-08-25` when platforms read it. |
+| `AGENTICORG_UCP_KEY_ROTATION_GRACE_DAYS` | `7` (minimum 7) | How long a rotated-out signing key stays published. |
+| `AGENTICORG_UCP_CHECKOUT_ENABLED` | Off | Serves UCP checkout, cart and order routes. Off, they answer 404. |
+| `AGENTICORG_ACP_FEED_ENABLED` | Off | Lets you export the ACP product feed. |
+| `AGENTICORG_ACP_CHECKOUT_ENABLED` | Off | Serves ACP checkout sessions (your shop must also opt in). |
+| `AGENTICORG_ACP_SIGNATURE_MODE` | `log` | Keep `log`. ACP publishes no signing method yet, so `enforce` would refuse every request. |
+| `OACP_PUBLIC_CATALOG_PLATFORM_DISABLED` | Unset | An operator override that withdraws the public catalog pages for every merchant. |
+
+#### Mandates and payments (off by default)
+
+| Switch | Default | What it does |
+| --- | --- | --- |
+| `AGENTICORG_GRANTEX_MANDATES_ENABLED` | Off | A checkout Complete gets Intent, Cart and Payment mandates from Grantex and verifies them. |
+| `AGENTICORG_GRANTEX_MANDATE_CAPABILITY_EVIDENCE_ENABLED` | Off | Sends your payment-capability check result to Grantex with the authority request. |
+| `PLURAL_PINE_LIVE_EXECUTION_ENABLED` | Off | Registers the Plural executor, so an allowed checkout or refund can actually charge or pay back. |
+| `AGENTICORG_RBI_EMANDATE_AFA_LIMIT_MINOR_UNITS` | `1500000` (₹15,000) | Later UPI AutoPay debits above this need RBI AFA. |
+| `AGENTICORG_RBI_EMANDATE_AFA_HIGHER_LIMIT_MINOR_UNITS` | `10000000` (₹1,00,000) | The higher limit for insurance, mutual fund and credit-card bill debits. |
+
+#### Agent request signatures
+
+| Switch | Default | What it does |
+| --- | --- | --- |
+| `AGENTICORG_HTTPSIG_VERIFY_MODE` | `log` | `log` checks and logs signatures and refuses nothing. `enforce` answers 401 to unsigned calls on the commerce API. |
+| `AGENTICORG_HTTPSIG_AUTHORITIES` | Empty | The public host names a signature must cover. Set before `enforce`. |
+| `AGENTICORG_HTTPSIG_TAP_KEY_STORE_URLS` | Empty | Where Visa TAP keys are looked up. Empty means no TAP key is found. |
+| `AGENTICORG_HTTPSIG_SIGNATURE_AGENT_ORIGINS` | Empty | Which Web Bot Auth signature agents are trusted. |
+| `AGENTICORG_HTTPSIG_REGISTRY_LOOKUP_ENABLED` | Off | Records a verified agent's DID and scheme ids from the Grantex registry. |
+| `AGENTICORG_HTTPSIG_SIGN_OUTBOUND` | Off | Makes AgenticOrg's own buyer agent sign its requests. |
+| `AGENTICORG_A2A_SCHEME_AGENT_IDS` | Empty | AgenticOrg's own scheme agent ids, shown in its A2A agent card. |
+
+#### MCP server and merchant settings
+
+| Setting | Default | What it does |
+| --- | --- | --- |
+| MCP server `AGENTICORG_UCP_PROFILE_URL` and `AGENTICORG_UCP_AGENT_PROFILE` | Unset | Point an MCP install at your UCP profile. Unset, no checkout tools appear. |
+| Merchant `provider_policy.ucp.executor` | None | Names the payment executor for your shop. None means no charge. |
+| Merchant `provider_policy.ucp.grantex_mandates` | None | Names your Grantex commerce tenant and merchant for mandates. |
+| Merchant `provider_policy.acp.checkout_enabled` | False | Your opt-in to ACP checkout. |
+| Merchant `provider_policy.arbiter.escalate_to_human` | False | Copies refusals into your review queue. It never changes or delays a decision. |
+
+#### The order to turn things on
+
+First run the release in staging with route enforcement and signatures in `log`, and UCP checkout and payments off. Then change one switch at a time, each followed by its smoke test.
+
+```flow
+Staging run | Route enforcement log, signatures log, UCP checkout off, payments off. Check the ledger has no missing rows. | Owner: Platform operator | If blocked: Fix every missing ledger row before production.
+Route enforcement | Keep enforce in production, the default. | Owner: Platform operator | If blocked: Use log only for a short, recorded window.
+Request signatures | Start in log. Move to enforce only when the expected callers show as verified and the owner records the decision. | Owner: Platform operator | If blocked: Set log again; requests are answered again.
+UCP profile and checkout | Turn on for a published merchant and run the UCP smoke test. | Owner: Platform operator | If blocked: Set false; routes answer 404 and stored sessions are kept.
+Grantex mandates | Turn on before payments, merchant by merchant. | Owner: Platform operator | If blocked: Set false; production refuses checkout decisions again.
+Payments | Only after the sandbox run passes, one merchant at a time. | Owner: Platform operator | If blocked: Unset and restart; checkout answers executor_unavailable.
+```
+
+The ACP feed and checkout, mandate-capability evidence, witnessing, retention and audit-chain sealing follow the same pattern, one at a time.
+
+#### Turning something back off
+
+Set the switch back and restart the service. For worker tasks (witness, retention, sealing), change the worker and scheduler too.
+
+- Data already written is kept: decisions, ledger rows, sessions, orders and payment records.
+- To stop one merchant only, use its merchant setting instead, for example remove its executor.
+
+The full table, with the exact turn-on condition and rollback for each switch, is in the [launch and rollback runbook](https://github.com/mishrasanjeev/agentic-org/blob/main/docs/oacp/explainers/launch-rollback-runbook.md).
+
+#### Related guides
+
+- [Merchant setup checklist](/docs/oacp-merchant-setup)
+- [Safety and trust](/docs/oacp-safety-and-trust)
+
+
+### OACP FAQ
+
+URL: https://agenticorg.ai/docs/oacp-faq
+Audience: Merchants. Reviewed: 2026-10-21.
+
+In 30 seconds:
+
+- Short answers to the questions sellers ask most about OACP.
+- OACP is a trust layer under UCP, ACP and AP2. It feeds them and does not replace them.
+- Your shop stays the source of truth. Grantex signs. AgenticOrg checks, decides and records. The payment provider moves money.
+- Nothing that publishes your shop or moves money is on by default.
+- For the full picture, start with the overview and the merchant setup checklist.
+
+#### Who does what
+
+Figure: Four roles, clear limits. Your shop owns the facts and orders. Grantex signs facts, runs the revocation list and issues mandates, and never moves money. AgenticOrg verifies, decides and records. The payment provider charges, and only after an allow decision.
+
+#### Do I have to choose between UCP, ACP and OACP?
+
+No. OACP sits underneath. It renders your facts into UCP and ACP, and maps mandates to AP2 field names. Buyer agents keep using the standard they already speak.
+
+#### Is OACP certified or endorsed by the UCP, ACP or AP2 groups?
+
+No. OACP is not a certification, and those groups have not endorsed it. It also does not establish regulatory compliance on its own.
+
+#### What do I need to start?
+
+A Shopify store, the merchant or administrator role in AgenticOrg, and a platform operator who connects your tenant to Grantex. Follow the [merchant setup checklist](/docs/oacp-merchant-setup).
+
+#### Does every buyer question go through Grantex?
+
+No. AgenticOrg answers questions from its own verified copy of your facts. Grantex takes part in purchases: it issues the mandates and countersigns the decision. It never moves money.
+
+#### Can an agent buy something at the wrong price?
+
+OACP is built to refuse it. A decision is bound to the exact cart, price and quantity. Change any of them and the decision no longer matches. Stale, expired or revoked prices are refused.
+
+#### Does a person at my shop approve each order?
+
+No. The arbiter decides at once with fixed rules. You can copy refusals into a review queue, but that never changes or delays a decision.
+
+#### What happens if Grantex is unreachable?
+
+Plain questions can still be answered from facts that are still valid. In production, anything that commits money is refused until Grantex is back. If the revocation list cannot be read, facts are refused.
+
+#### How do I stop selling a product to agents at once?
+
+Revoke the fact that covers it. Grantex marks it invalid, and every channel stops using it. For one channel only, turn that channel's switch off.
+
+#### Does this work with UPI in India?
+
+It is built for it: UPI AutoPay mandates on the Plural rail, with RBI AFA as the buyer's own step in their UPI app. Completion is refused until verified AFA evidence arrives. It has not yet run against the Plural sandbox, and payment execution is off by default.
+
+#### What if the buyer is not present when the agent buys?
+
+There is no passkey step. Your stricter not-present limits apply, and without them the purchase is refused.
+
+#### Can I check the records myself?
+
+Yes. Export the ledger and run `scripts/verify_ledger.py` on your own computer. It needs no database and no network. See [Safety and trust](/docs/oacp-safety-and-trust#the-ledger-and-offline-checks).
+
+#### What is switched on today?
+
+The safety checks are on in production. Every surface that publishes your shop or moves money starts off: the UCP profile and checkout, the ACP feed and checkout, mandates and payment execution. With the defaults no checkout completes and no money moves. See [feature switches](/docs/oacp-feature-switches).
+
+#### Where can I read more?
+
+- [What OACP is](/docs/oacp-overview) and [how it works](/docs/oacp-how-it-works)
+- The blog post [OACP explained: one trust layer under UCP, ACP and AP2](https://agenticorg.ai/blog/oacp-one-trust-layer-under-ucp-acp-ap2)
+- The technical [OACP runtime docs](https://github.com/mishrasanjeev/agentic-org/blob/main/docs/oacp/README.md)
 
 
 ### BFSI: business onboarding and KYB review

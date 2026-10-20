@@ -44,6 +44,41 @@ function parseFlowStep(line) {
   };
 }
 
+// A figure fence names one diagram from the UI's figure registry:
+//   ```figure
+//   oacp-flow | Title | Caption read by screen readers, search and llms.txt
+//   ```
+function parseFigure(content) {
+  const lines = content.trim().split("\n").filter((line) => line.trim());
+  if (lines.length !== 1) throw new Error("A figure fence holds exactly one line.");
+  const [id, title, caption, ...extra] = lines[0].split("|").map((part) => part.trim());
+  if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(id ?? "") || !title || !caption || extra.length)
+    throw new Error(`Figure fences need "id | title | caption": ${lines[0]}`);
+  return { id, title, caption };
+}
+
+// Info string of a flow fence: "flow" or "flow start=N" to continue a numbered checklist.
+function parseFlowInfo(info) {
+  const match = /^flow(?:\s+start=(\d+))?$/.exec(info.trim());
+  if (!match) return null;
+  const start = match[1] ? Number(match[1]) : 1;
+  if (start < 1) throw new Error("A flow starts at 1 or later.");
+  return { start };
+}
+
+// Plain markdown for text-only readers (llms.txt, search): figure and summary fences become prose.
+export function plainGuideMarkdown(markdown) {
+  return markdown
+    .replace(/\r\n?/g, "\n")
+    .replace(/```figure\n([\s\S]*?)```/g, (_whole, body) => {
+      const figure = parseFigure(body);
+      return `Figure: ${figure.title}. ${figure.caption}`;
+    })
+    .replace(/```summary\n([\s\S]*?)```/g, (_whole, body) =>
+      "In 30 seconds:\n\n" +
+      body.trim().split("\n").filter((line) => line.trim()).map((line) => `- ${line.trim()}`).join("\n"));
+}
+
 export function renderGuide(markdown) {
   markdown = markdown.replace(/\r\n?/g, "\n");
   const md = new MarkdownIt({
@@ -52,6 +87,7 @@ export function renderGuide(markdown) {
     typographer: false,
   });
   const headings = [];
+  const figures = [];
   const used = new Set();
   md.renderer.rules.heading_open = (tokens, index) => {
     const title = tokens[index + 1].content;
@@ -65,18 +101,42 @@ export function renderGuide(markdown) {
   };
   const fence = md.renderer.rules.fence;
   md.renderer.rules.fence = (tokens, index, options, env, self) => {
-    if (tokens[index].info.trim() !== "flow")
+    const info = tokens[index].info.trim();
+    if (info === "figure") {
+      const figure = parseFigure(tokens[index].content);
+      if (figures.some((item) => item.id === figure.id))
+        throw new Error(`Duplicate figure in one guide: ${figure.id}`);
+      figures.push(figure);
+      // The UI swaps this placeholder for the diagram; without scripts the caption remains.
+      return (
+        `<figure class="docs-figure" data-docs-figure="${figure.id}" aria-labelledby="docs-figure-${figure.id}-title">` +
+        `<figcaption><p class="docs-figure-title" id="docs-figure-${figure.id}-title">${escape(figure.title)}</p>` +
+        `<p class="docs-figure-caption">${escape(figure.caption)}</p></figcaption></figure>`
+      );
+    }
+    if (info === "summary") {
+      const items = tokens[index].content.trim().split("\n").filter((line) => line.trim());
+      if (!items.length) throw new Error("A summary fence needs at least one line.");
+      return (
+        '<aside class="docs-summary" aria-label="In 30 seconds"><p class="docs-summary-title">In 30 seconds</p><ul>' +
+        items.map((item) => `<li>${md.renderInline(item.trim())}</li>`).join("") +
+        "</ul></aside>"
+      );
+    }
+    const flow = parseFlowInfo(info);
+    if (!flow)
       return fence(tokens, index, options, env, self);
     const steps = tokens[index].content.trim().split("\n")
       .filter((line) => line.trim()).map(parseFlowStep);
     const processMap = steps.some((step) => step.owner);
     if (processMap && steps.some((step) => !step.owner))
       throw new Error("Every process-map step needs an Owner field.");
+    const startAttr = flow.start > 1 ? ` start="${flow.start}"` : "";
     if (processMap) {
       return (
-        '<ol class="docs-flow docs-process-map" aria-label="Process map">' +
+        `<ol class="docs-flow docs-process-map" aria-label="Process map"${startAttr}>` +
         steps.map((step, i) =>
-          `<li><span class="docs-flow-number" aria-hidden="true">${i + 1}</span>` +
+          `<li><span class="docs-flow-number" aria-hidden="true">${i + flow.start}</span>` +
           '<div class="docs-process-content"><div class="docs-process-heading">' +
           `<strong>${escape(step.title)}</strong>` +
           `<span class="docs-process-owner"><span>Owner:</span> ${escape(step.owner)}</span>` +
@@ -91,10 +151,10 @@ export function renderGuide(markdown) {
       );
     }
     return (
-      `<ol class="docs-flow${steps.length === 6 ? " docs-flow-six" : ""}" aria-label="Workflow">` +
+      `<ol class="docs-flow${steps.length === 6 ? " docs-flow-six" : ""}" aria-label="Workflow"${startAttr}>` +
       steps
         .map((step, i) => {
-          return `<li><span class="docs-flow-number">${i + 1}</span><strong>${escape(step.title)}</strong><p>${escape(step.body)}</p></li>`;
+          return `<li><span class="docs-flow-number">${i + flow.start}</span><strong>${escape(step.title)}</strong><p>${escape(step.body)}</p></li>`;
         })
         .join("") +
       "</ol>"
@@ -105,12 +165,13 @@ export function renderGuide(markdown) {
     '<div class="docs-table-scroll" tabindex="0" role="region" aria-label="Reference table"><table>';
   md.renderer.rules.table_close = () => "</table></div>";
   const html = md.render(markdown);
-  const searchText = markdown
-    .replace(/```flow\n|```[a-z]*\n|```/g, " ")
+  const searchText = plainGuideMarkdown(markdown)
+    .replace(/```[a-z]*(?: start=\d+)?\n|```/g, " ")
     .replace(/[#*`|]/g, " ");
   return {
     html,
     headings,
+    figures,
     searchText,
     minutes: Math.max(2, Math.ceil(searchText.split(/\s+/).length / 200)),
   };
@@ -154,8 +215,13 @@ export function loadUserGuides(root = UI_ROOT) {
       if (!existsSync(join(root, "public", image[1])))
         throw new Error(`Missing image: ${image[1]}`);
     }
+    // "adaptive" guides follow the reader's light or dark preference; the rest stay light.
+    const colorScheme = article.colorScheme ?? "light";
+    if (!["light", "adaptive"].includes(colorScheme))
+      throw new Error(`Invalid colorScheme for ${article.slug}: ${colorScheme}`);
     return {
       ...article,
+      colorScheme,
       markdown,
       ...renderGuide(markdown),
       reviewed: article.reviewed ?? manifest.reviewed,
