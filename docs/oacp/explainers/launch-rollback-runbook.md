@@ -44,6 +44,12 @@ Launch order:
 are verified server-side; every handoff there is refused until then unless the owner records the
 decision to set it to `false`.
 
+## Flags
+
+| Flag | Default | Launch | Rollback |
+| --- | --- | --- | --- |
+| `AGENTICORG_OACP_VERIFY_STRICT` | On in production, staging, preview and unrecognised environments; off (log-only) in local, dev, test and ci | Turn on only after the Grantex OACP signing release, a first OACP issuer key and `OACP_STATUS_LIST_PUBLIC_ENABLED=true` are live for the same environment, then run `POST /api/v1/commerce/runtime/artifacts/refresh` for each live merchant and seller agent. Order and detail: [runtime operations runbook](../runtime-operations-runbook.md#deploy-order-for-strict-oacp-verification). | Set `AGENTICORG_OACP_VERIFY_STRICT=false` and redeploy. Verification keeps running and logs `oacp_artifact_verification_irregularity`; record the opt-out as an operator decision and unset it once Grantex is healthy and the refresh has run. |
+
 ## Rollback
 
 1. Disable buyer surfaces for the merchant.
@@ -61,7 +67,8 @@ decision to set it to `false`.
    and `/ucp/*` answer 404 for every merchant (default off); for one merchant use
    `POST /api/v1/commerce/runtime/merchant-configs/{merchant_id}/ucp/unpublish`.
 8. Set `AGENTICORG_UCP_CHECKOUT_ENABLED=false` to stop UCP checkout, cart and order traffic (every `/ucp` route answers 404 and the order-webhook sweep stops; stored sessions, orders and undelivered webhooks are kept). To stop one platform only, revoke the API key the merchant issued to it; to stop one merchant's webhooks, disable its subscriptions (`PATCH /api/v1/commerce/runtime/ucp/order-webhook-subscriptions/{id}`).
-9. Re-enable only after smoke tests pass.
+9. Set `AGENTICORG_ACP_CHECKOUT_ENABLED=false` to stop ACP checkout traffic (every `/acp` route answers 404; stored sessions, orders and undelivered webhooks are kept) and `AGENTICORG_ACP_FEED_ENABLED=false` to stop feed exports. For one merchant set `provider_policy.acp.checkout_enabled` to false; for one agent platform revoke its API key; for one receiver disable its `acp_hmac` subscription. If `AGENTICORG_ACP_SIGNATURE_MODE=enforce` refuses a platform unexpectedly, set it back to `log`.
+10. Re-enable only after smoke tests pass.
 
 ## UCP Smoke
 
@@ -71,6 +78,16 @@ With `AGENTICORG_UCP_CHECKOUT_ENABLED=true` on staging and a merchant published 
 - A repeat with the same `Idempotency-Key` and body returns the same session; a different body returns 409.
 - Complete without a registered executor returns `executor_unavailable` and the session stays `ready_for_complete`.
 - The commerce ledger shows `commerce.ucp.checkout.create` and `commerce.ucp.checkout.complete` rows for the tenant.
+
+## ACP Smoke
+
+With `AGENTICORG_ACP_CHECKOUT_ENABLED=true` on staging, a published merchant opted in (`provider_policy.acp.checkout_enabled`) and an API key with `acp:write`:
+
+- `POST /acp/checkout_sessions` with `API-Version: 2026-04-17` and `Idempotency-Key` returns 201; without `API-Version` it returns 400 `missing_api_version`.
+- `POST /acp/checkout_sessions/{id}` selecting a shipping option returns `ready_for_payment` once a Commerce Passport allowance was issued (`capabilities.payment.handlers[0].config.delegate_payment`).
+- The same key with another body returns 422 `idempotency_conflict`.
+- Complete without a registered executor returns an `unsupported` message; the ledger shows `commerce.acp.checkout.*` rows.
+- With `AGENTICORG_ACP_FEED_ENABLED=true`, `GET /api/v1/commerce/runtime/acp/feed?merchant_id=...&format=csv` returns the CSV, or 409 when verified artifacts are missing.
 
 ## Flags
 
@@ -84,6 +101,9 @@ With `AGENTICORG_UCP_CHECKOUT_ENABLED=true` on staging and a merchant published 
 | `AGENTICORG_GRANTEX_MANDATE_CAPABILITY_EVIDENCE_ENABLED` | `false` | Sends the latest Plural capability result as `mandate_capability_evidence` on the Grantex authority request. Enable after the Grantex release that accepts it; disable to stop sending (Grantex then marks the capability `unverified`). |
 | `AGENTICORG_GRANTEX_MANDATES_ENABLED` | `false` | UCP Complete honours `ai.agenticorg.commerce.mandate_request`: Intent, Cart and Payment mandates from Grantex, verified locally, become the arbiter's buyer authority. Off: a `mandate_request` is answered `unavailable` and the authority stays caller-asserted (refused in strict runtimes). |
 | `AGENTICORG_RBI_EMANDATE_AFA_LIMIT_MINOR_UNITS` / `..._HIGHER_LIMIT_MINOR_UNITS` | `1500000` / `10000000` | RBI e-mandate no-AFA limits (paise) for subsequent UPI AutoPay debits. |
+| `AGENTICORG_ACP_CHECKOUT_ENABLED` | `false` | ACP checkout session routes (`/acp/checkout_sessions`); also runs the order-webhook sweep. |
+| `AGENTICORG_ACP_FEED_ENABLED` | `false` | ACP product feed export (`/api/v1/commerce/runtime/acp/feed`). |
+| `AGENTICORG_ACP_SIGNATURE_MODE` | `log` | `enforce` refuses ACP requests no registered platform verifier accepts. |
 
 ## Plural Execution Launch Order
 

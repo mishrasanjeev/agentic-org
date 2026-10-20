@@ -104,6 +104,8 @@ RATE_LIMIT_CLASSES: dict[str, tuple[int, int]] = {
     "commerce-a2a-buyer": (60, 60),
     # UCP REST binding (api/v1/commerce_ucp.py): a platform's checkout traffic, per tenant.
     "ucp-platform": (600, 60),
+    # ACP checkout sessions (api/v1/commerce_acp.py): an agent platform's checkout traffic, per tenant.
+    "acp-platform": (600, 60),
     "workflow-execution": (60, 60),
     "chat-query": (60, 60),
     "sales-agent-trigger": (20, 60),
@@ -220,6 +222,9 @@ SCOPE_FAMILIES: dict[str, tuple[str, str]] = {
     # No role holds these scopes: the key is given ucp:read (GET) and
     # ucp:write (writes); agenticorg:admin passes as everywhere.
     "ucp": ("ucp:read", "ucp:write"),
+    # ACP checkout sessions (/acp, api/v1/commerce_acp.py): the same model for the
+    # API key a merchant tenant issues to an ACP agent platform.
+    "acp": ("acp:read", "acp:write"),
 }
 
 # Families above that are enforced only while ``route_scope_a2a_mcp`` is on.
@@ -426,6 +431,8 @@ COMMERCE_LEDGER_ROUTE_PREFIXES: tuple[str, ...] = (
     # UCP transaction writes (api/v1/commerce_ucp.py); catalog and location POSTs are reads.
     "/ucp/checkout-sessions",
     "/ucp/carts",
+    # ACP checkout session writes (api/v1/commerce_acp.py).
+    "/acp/checkout_sessions",
 )
 COMMERCE_LEDGER_ROUTE_PATHS: frozenset[str] = frozenset({"/api/v1/a2a/message:send"})
 

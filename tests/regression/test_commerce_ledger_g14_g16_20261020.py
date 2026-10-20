@@ -547,6 +547,96 @@ def test_the_cli_verifies_from_a_file_without_importing_the_application(tmp_path
     )
 
 
+
+def _verifier_main(tmp_path: Path, bundle: Any, *args: str) -> tuple[int, dict[str, Any]]:
+    """Run the CLI entry point in process (so coverage sees it) and parse what it printed."""
+    import contextlib
+    import io
+
+    sys.path.insert(0, str(ROOT / "scripts"))
+    try:
+        import verify_ledger
+    finally:
+        sys.path.pop(0)
+    path = tmp_path / "export.json"
+    path.write_text(bundle if isinstance(bundle, str) else json.dumps(bundle), encoding="utf-8")
+    out = io.StringIO()
+    with contextlib.redirect_stdout(out):
+        code = verify_ledger.main([str(path), *args])
+    return code, json.loads(out.getvalue())
+
+
+def test_verifier_cli_exit_codes_in_process(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    clean = _bundle()
+    head = clean["chain"]["head"]
+    assert _verifier_main(tmp_path, clean)[0] == 0
+    assert _verifier_main(tmp_path, clean, "--expected-head", f"{head['seq']}:{head['hash']}")[0] == 0
+    code, report = _verifier_main(tmp_path, clean, "--expected-head", f"{head['seq']}:{'0' * 64}")
+    assert code == 1 and report["status"] != "verified"
+    with pytest.raises(SystemExit):
+        _verifier_main(tmp_path, clean, "--expected-head", "not-a-head")
+    edited = copy.deepcopy(clean)
+    edited["rows"][1]["outcome"] = "refuse"
+    code, report = _verifier_main(tmp_path, edited)
+    assert code == 1 and report["first_break"]["reason"] == "link_hash"
+    assert _verifier_main(tmp_path, {"format": "something-else"})[0] == 2
+    bad_version = copy.deepcopy(clean)
+    bad_version["chain"]["version"] = "99"
+    assert _verifier_main(tmp_path, bad_version)[0] == 2
+    assert _verifier_main(tmp_path, "{not json")[0] == 2
+    no_prev = copy.deepcopy(clean)
+    no_prev["chain"]["from_seq"] = 3
+    no_prev["chain"]["prev_link"] = None
+    code, report = _verifier_main(tmp_path, no_prev)
+    assert code == 1 and report["first_break"]["reason"] == "sequence_gap"
+    gap = copy.deepcopy(clean)
+    del gap["rows"][2]
+    code, report = _verifier_main(tmp_path, gap)
+    assert code == 1 and report["first_break"]["reason"] == "sequence_gap"
+    relinked = copy.deepcopy(clean)
+    relinked["rows"][2]["chain_prev"] = "0" * 64
+    code, report = _verifier_main(tmp_path, relinked)
+    assert code == 1 and report["first_break"]["reason"] == "previous_link"
+    env_name = "AGENTICORG_TEST_LEDGER_SECRET_" + uuid.uuid4().hex.upper()
+    monkeypatch.setenv(env_name, "not-the-audit-secret")
+    code, report = _verifier_main(tmp_path, clean, "--audit-secret-env", env_name)
+    assert code == 1 and report["first_break"]["reason"] == "signature"
+    monkeypatch.delenv(env_name)
+    assert _verifier_main(tmp_path, clean, "--audit-secret-env", env_name)[0] == 2
+
+
+def test_verifier_does_not_echo_the_secret_variable_name(tmp_path: Path) -> None:
+    """A missing audit secret exits 2 without printing the variable it was told to read."""
+    export = tmp_path / "export.json"
+    export.write_text("{}", encoding="utf-8")
+    env_name = "AGENTICORG_TEST_LEDGER_SECRET_" + uuid.uuid4().hex.upper()
+    result = subprocess.run(  # noqa: S603 - fixed interpreter and repository script
+        [sys.executable, str(ROOT / "scripts" / "verify_ledger.py"), str(export), "--audit-secret-env", env_name],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.returncode == 2
+    assert env_name not in result.stdout + result.stderr
+    assert json.loads(result.stdout)["status"] == "unreadable"
+
+
+def test_reviewer_ref_is_derived_from_the_principal_subject_only() -> None:
+    """The operator reference hashes the tenant and subject; an API key's name is never read."""
+    from types import SimpleNamespace
+
+    from api.v1.commerce_ledger import _reviewer_ref
+
+    tenant = str(uuid.uuid4())
+    by_key = SimpleNamespace(state=SimpleNamespace(user_sub="apikey:ak_1234", api_key_name="ops key"))
+    same_sub = SimpleNamespace(state=SimpleNamespace(user_sub="apikey:ak_1234", api_key_name="renamed"))
+    ref = _reviewer_ref(by_key, tenant)  # type: ignore[arg-type]
+    assert ref.startswith("operator_ref_") and len(ref) == len("operator_ref_") + 24
+    assert ref == _reviewer_ref(same_sub, tenant)  # type: ignore[arg-type]
+    assert "ak_1234" not in ref
+    anonymous = SimpleNamespace(state=SimpleNamespace(api_key_name="ops key"))
+    assert _reviewer_ref(anonymous, tenant) == _reviewer_ref(SimpleNamespace(state=SimpleNamespace()), tenant)  # type: ignore[arg-type]
+
 # ---------------------------------------------------------------------------
 # G14: operator decisions annotate only; routes record their events; nothing waits
 # ---------------------------------------------------------------------------
@@ -644,17 +734,16 @@ def test_v6z88_grants_the_app_role_least_privilege() -> None:
 
 
 def test_ledger_routes_record_their_declared_events() -> None:
-    from fastapi.routing import APIRoute
-
     from api.main import app
     from api.route_enforcement import is_commerce_write_route
     from api.route_metadata import ROUTE_METADATA_ATTR
     from api.v1 import commerce_ledger
+    from tests.app_routes import http_routes
 
     source = inspect.getsource(commerce_ledger)
     writes = 0
-    for route in app.routes:
-        if not isinstance(route, APIRoute) or not route.path.startswith("/api/v1/commerce/runtime/ledger"):
+    for route in http_routes(app):
+        if not route.path.startswith("/api/v1/commerce/runtime/ledger"):
             continue
         for method in route.methods:
             if is_commerce_write_route(route.path, method):

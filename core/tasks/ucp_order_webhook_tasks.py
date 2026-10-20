@@ -4,7 +4,8 @@
 ``dispatch_order_webhooks(tenant_id)`` is kicked right after an order change
 commits. The periodic sweep (every 30 s) covers a missed kick, retries and
 lease expiry, and prunes expired ``Idempotency-Key`` records; it runs only
-while ``AGENTICORG_UCP_CHECKOUT_ENABLED`` is true.
+while ``AGENTICORG_UCP_CHECKOUT_ENABLED`` or ``AGENTICORG_ACP_CHECKOUT_ENABLED``
+is true (ACP sessions share the order entity, the outbox and the records).
 """
 
 from __future__ import annotations
@@ -48,6 +49,6 @@ def dispatch_order_webhooks(tenant_id: str | None = None) -> dict[str, Any]:
 def sweep_order_webhooks() -> dict[str, Any]:
     from core.config import settings
 
-    if not settings.ucp_checkout_enabled:
-        return {"skipped": "ucp_checkout_disabled"}
+    if not (settings.ucp_checkout_enabled or settings.acp_checkout_enabled):
+        return {"skipped": "checkout_disabled"}
     return run_async(_sweep())

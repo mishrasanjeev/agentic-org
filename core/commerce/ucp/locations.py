@@ -245,7 +245,8 @@ def store_locations(offline_pos_stores: Sequence[Mapping[str, Any]]) -> list[dic
         store_id = _text(store.get("store_id"), 160)
         if not store_id:
             continue
-        detail = store.get("location") if isinstance(store.get("location"), Mapping) else {}
+        raw_detail = store.get("location")
+        detail: Mapping[str, Any] = raw_detail if isinstance(raw_detail, Mapping) else {}
         location: dict[str, Any] = {"id": store_id, "name": _text(store.get("display_name"), 200) or store_id}
         address = dict(detail.get("address") or {})
         if "address_locality" not in address and _text(store.get("city")):

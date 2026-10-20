@@ -1,0 +1,83 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agenticorg.ai/ucp/handlers/plural-tokenized/2026-10-20/config.json",
+  "title": "ai.agenticorg.payment.plural_tokenized handler config (2026-10-20)",
+  "description": "Business config of the Plural tokenised-instrument payment handler that AgenticOrg merchants advertise in UCP profiles and ACP checkout sessions. The handler accepts a network token with its cryptogram or a Plural instrument token, never a card number. It describes acceptance only: payment executes through an executor that consumes an allow decision of the commerce arbiter.",
+  "type": "object",
+  "required": ["provider", "environment", "mandate_capability", "accepted_credentials"],
+  "properties": {
+    "provider": {
+      "const": "plural_pine",
+      "description": "The payment rail."
+    },
+    "environment": {
+      "type": "string",
+      "minLength": 1,
+      "description": "The merchant's Plural environment, for example sandbox."
+    },
+    "mandate_capability": {
+      "type": "object",
+      "description": "What the merchant's rail accepts for agent-initiated payments.",
+      "required": ["rails", "max_amount_minor_units", "currency", "instrument_types"],
+      "properties": {
+        "rails": {"type": "array", "items": {"type": "string"}},
+        "max_amount_minor_units": {"type": ["integer", "null"], "minimum": 0},
+        "currency": {"type": ["string", "null"], "pattern": "^[A-Z]{3}$"},
+        "instrument_types": {"type": "array", "items": {"type": "string"}},
+        "evidence": {"type": "string"}
+      }
+    },
+    "accepted_credentials": {
+      "type": "array",
+      "description": "Credential types accepted at completion: card (2026-04-08 network token form), network_token (2026-08-25) and plural_pine_token.",
+      "items": {"enum": ["card", "network_token", "plural_pine_token"]},
+      "minItems": 1,
+      "uniqueItems": true
+    },
+    "allowance": {
+      "type": "object",
+      "description": "The most one completion may charge (minor units), equal to the mandate capability cap.",
+      "required": ["max_amount", "currency"],
+      "properties": {
+        "max_amount": {"type": "integer", "minimum": 0},
+        "currency": {"type": "string", "pattern": "^[A-Z]{3}$"}
+      },
+      "additionalProperties": false
+    },
+    "delegate_payment": {
+      "type": "object",
+      "description": "ACP only: the session's delegate-payment allowance in the DelegatePaymentRequest shape (allowance, risk_signals, metadata), derived by Grantex from the buyer's Commerce Passport. The agent adds payment_method and sends it to the vault.",
+      "required": ["allowance", "risk_signals", "metadata"],
+      "properties": {
+        "allowance": {
+          "type": "object",
+          "required": ["reason", "max_amount", "currency", "checkout_session_id", "merchant_id", "expires_at"],
+          "properties": {
+            "reason": {"const": "one_time"},
+            "max_amount": {"type": "integer", "minimum": 0},
+            "currency": {"type": "string", "pattern": "^[a-z]{3}$"},
+            "checkout_session_id": {"type": "string"},
+            "merchant_id": {"type": "string", "maxLength": 256},
+            "expires_at": {"type": "string", "format": "date-time"}
+          },
+          "additionalProperties": false
+        },
+        "risk_signals": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["type", "score", "action"],
+            "properties": {
+              "type": {"const": "card_testing"},
+              "score": {"type": "integer"},
+              "action": {"enum": ["blocked", "manual_review", "authorized"]}
+            },
+            "additionalProperties": false
+          }
+        },
+        "metadata": {"type": "object", "additionalProperties": {"type": "string"}}
+      },
+      "additionalProperties": false
+    }
+  }
+}

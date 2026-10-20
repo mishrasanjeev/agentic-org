@@ -1,15 +1,5 @@
 # Changelog
 
-## Unreleased - Fixed: commerce ledger details keep digests intact (G41)
-
-- `record_commerce_event` masked PII in `details` with patterns (a ten-digit phone number, an
-  8 to 18 digit account number) that also matched digit runs inside hex SHA-256 values and
-  `arbdec_<hex>` decision ids, so about one mandate hash in five, and some decision ids, were
-  sealed as `...******...` and could not be matched to the mandate or decision they name. Hex
-  digests (optionally `sha256:`) and opaque `<prefix>_<hex>` / `<prefix>-<hex>` ids are now kept;
-  every other string is masked as before. Rows already sealed are unchanged (append-only).
-  Regression: `tests/regression/test_ledger_digest_masking_20261020.py`.
-
 ## Unreleased - UPI mandate extension schema hosted at its advertised URL (G56)
 
 - `ui/public/ucp/extensions/upi-mandate/2026-10-20/schema.json` publishes the JSON Schema of the
@@ -157,8 +147,85 @@
   `SELECT, INSERT` for `agenticorg_app` (classified in `scripts/create_app_role.sql`); the arbiter
   action CHECK admits `refund`. Forward-only.
 
+## Unreleased - ACP product feed, checkout sessions and order events (G33, G34, G35, G37, G38, G40)
+
+- ACP product feed (`core/commerce/acp/feed.py`), behind `AGENTICORG_ACP_FEED_ENABLED` (default off):
+  `GET /api/v1/commerce/runtime/acp/feed?merchant_id=&format=json|jsonl|metadata|csv` for tenant
+  administrators. ACP Feed `Product` JSON per the 2026-04-17 feed schema (validated in tests against
+  the vendored schema file) and the merchant-feed CSV with `availability`, `seller_*`, return and
+  `enable_search` / `enable_checkout` columns. Built only from verified, fresh OACP catalog, price
+  and inventory artifacts (409 otherwise); return terms only from the verified `policy` artifact.
+- ACP checkout sessions at `https://<merchant serving host>/acp/checkout_sessions`
+  (`api/v1/commerce_acp.py`), behind `AGENTICORG_ACP_CHECKOUT_ENABLED` (default off: every `/acp`
+  route answers 404) and the merchant's `provider_policy.acp.checkout_enabled`. Create (201),
+  partial update, get, complete and cancel (405 once not cancelable) run on the UCP session table
+  and operations: one state machine, the same arbiter `session_complete` decision and executor.
+  Sessions are tagged `protocol: acp` and owned by the creating API key (scopes `acp:read` /
+  `acp:write`). ACP 2026-04-17 `Item` has no quantity: a repeated id is one more unit. Docs:
+  `docs/oacp/acp-feed-and-sessions.md`.
+- ACP headers: `API-Version` pinned to `2026-04-17` (`missing_api_version` /
+  `unsupported_api_version` with `supported_versions`); `Idempotency-Key` required on POST, compared as
+  canonical JSON (replay with `Idempotent-Replayed: true`, 422 `idempotency_conflict`, 409
+  `idempotency_in_flight` with `Retry-After`); `Request-Id` echoed; `Signature` / `Timestamp` checked
+  by a verifier registered per agent platform, `AGENTICORG_ACP_SIGNATURE_MODE=log` (default, never
+  refuses) or `enforce`. ACP publishes no signing algorithm, so no verifier ships.
+  An unexpected failure after the key is claimed releases it, so the client can retry.
+- Refusals answered before an ACP route runs (401, 403, 404, 405, 429 from authentication, scope,
+  rate-limit, flag and routing) are ACP `Error` objects on every `/acp` path (`AcpErrorShapeMiddleware`).
+- ACP error mapping (`core/commerce/acp/errors.py`): every internal message code maps to the closed
+  `MessageError` enum, UCP protocol errors to `Error` objects; blocker dicts never reach ACP responses.
+- Capability negotiation: sessions declare the payment handlers served over ACP and the requested
+  extensions that are served (the vendor extension `ai.agenticorg.commerce` for buyer authority,
+  arbiter decisions and the Commerce Passport); the `discount` extension and interventions are not
+  served and are not declared.
+- Delegate-payment allowance per ACP session from Grantex
+  (`POST /v1/commerce/oacp/acp/delegate-payment-allowance`; service token, async pinned transport,
+  no retry, no card data), shown in the handler config in the `DelegatePaymentRequest` shape and
+  sealed on the ledger; Grantex unreachable is an immediate business message; completion needs an
+  issued allowance covering the total.
+- `acp_hmac` order webhook subscriptions now deliver ACP `order_create` / `order_update` events (the
+  full ACP `Order`) signed with `Merchant-Signature` (`t=..,v1=hex(HMAC-SHA256(secret, t.body))`,
+  active key), verified against the shared vectors (`tests/fixtures/acp/merchant-signature-v1.json`).
+  They replace the case-push HMAC headers and the placeholder payload of the unreleased UCP work.
+  The order-webhook sweep also runs while only `AGENTICORG_ACP_CHECKOUT_ENABLED` is on.
+- Order webhook isolation: an `acp_hmac` subscription is bound to the ACP agent platform's API key
+  (`platform_api_key_id`, required) and receives only orders from sessions that key created; a UCP
+  platform's subscription is never reused by another platform naming the same URL. ACP sessions are
+  owned by the calling API key's id (`request.state.api_key_id`).
+
+## Unreleased - UCP handler schema hosting and schema fixtures
+
+- The Plural tokenised-instrument handler's config schema is served at the URL UCP profiles
+  advertise, `https://agenticorg.ai/ucp/handlers/plural-tokenized/2026-10-20/config.json`, with its
+  instrument schema beside it (`instrument.json`), from `ui/public` (static `*.json` in the UI image).
+  A regression test maps both URLs to the files, checks the nginx static rule and validates the
+  handler config the server emits against the hosted schema.
+- Tests: the two vendored UCP schema fixture trees (`tests/fixtures/ucp` and
+  `tests/fixtures/ucp_schemas`) are one, `tests/fixtures/ucp` (published release schemas plus the
+  2026-04-08 discovery profile schema).
+
+## Unreleased - UCP checkout tools in the MCP server (G39)
+
+- `agenticorg-mcp-server` 5.1.0 adds the UCP 2026-04-08 MCP binding tools `create_checkout`,
+  `get_checkout`, `update_checkout`, `complete_checkout`, `cancel_checkout`, `create_cart`,
+  `get_cart`, `update_cart`, `cancel_cart` and `get_order` (the binding's names, not a
+  `checkout.*` prefix). They are registered only when `AGENTICORG_UCP_PROFILE_URL` names a
+  merchant profile whose capabilities include them, which the API publishes only with
+  `AGENTICORG_UCP_CHECKOUT_ENABLED` on; requests go to the profile's same-origin `/ucp` REST
+  endpoint. Nothing changes for a server without that variable.
+- `complete_checkout` needs an allow decision: `decide_only: true` returns a sealed
+  `session_complete` decision without executing, and only a call carrying its `decision_id` can
+  execute (consumed once by the API, bound to the payload hash). A call with neither is refused
+  before any request. Tool annotations mark reads read-only, updates and cancels destructive and
+  idempotent, and Complete destructive and not idempotent.
+- HTTP errors become MCP tool errors with only the UCP `{code, content}`; decisions in results keep
+  only their id, action, outcome, failing rule, payload hash and expiry. The merchant UCP profile
+  does not advertise an MCP transport, since this server is a local stdio adapter. No API change.
+
 ## Unreleased - UCP checkout, cart and order (G21, G22, G25, G27, G29-G32, G35)
 
+- Type narrowing in the UCP and ACP modules (locations, merchant terms, instruments, fulfilment,
+  ACP payment data and policy snapshot) so `mypy` 2.x passes; no behaviour change.
 - UCP REST binding at `https://<merchant serving host>/ucp` (`api/v1/commerce_ucp.py`), behind
   `AGENTICORG_UCP_CHECKOUT_ENABLED` (default off: every `/ucp` route answers 404). Checkout
   sessions (`POST /ucp/checkout-sessions` 201, `GET`, `PUT` full replacement, `/complete`,
@@ -214,8 +281,29 @@
   `commerce_ucp_idempotency`, each with ENABLE + FORCE row-level security and a tenant policy
   with `WITH CHECK`; forward-only (downgrade keeps the data).
 
+## Unreleased - Fixed: commerce ledger details keep digests intact (G41)
+
+- `record_commerce_event` masked PII in `details` with patterns (a ten-digit phone number, an
+  8 to 18 digit account number) that also matched digit runs inside hex SHA-256 values and
+  `arbdec_<hex>` decision ids, so about one mandate hash in five, and some decision ids, were
+  sealed as `...******...` and could not be matched to the mandate or decision they name. Hex
+  digests (optionally `sha256:`) and opaque `<prefix>_<hex>` / `<prefix>-<hex>` ids are now kept;
+  every other string is masked as before. Rows already sealed are unchanged (append-only).
+  Regression: `tests/regression/test_ledger_digest_masking_20261020.py`.
+
 ## Unreleased - Commerce ledger routes, offline export and Grantex countersignature (G14-G16)
 
+- Tests for the retention task, the Grantex service client (size limit, non-JSON and non-object
+  answers, unsafe endpoint, no retry, one JWKS refresh) and the offline verifier's exit codes in
+  process, so each new module meets the new-module coverage floor.
+- Tests: the commerce ledger route-table checks walk FastAPI's lazily included routers
+  (`tests/app_routes.py`), so they see every route on the pinned FastAPI 0.143 instead of none,
+  and the arbiter RLS probe is granted USAGE on the `public` schema, which other integration
+  suites recreate without the default grant.
+- `scripts/verify_ledger.py` no longer prints the name of the `--audit-secret-env` variable
+  when it is unset, and the operator reference on ledger operator decisions is derived from
+  the tenant and the principal subject only (the API key name is never read; API keys already
+  carry `apikey:<prefix>` as their subject).
 - **Breaking for strict runtimes: caller-asserted buyer authority is refused.** The commerce
   arbiter has a new rule, `buyer_authority_verified` (policy `commerce-arbiter-v2`): mandate,
   consent and passport evidence must carry a server-side verification ref, which only Phase 4
@@ -340,51 +428,6 @@
   async egress validator (`tests/regression/test_egress_async_callers.py`), so no async
   commerce path calls the synchronous validator.
 
-## Unreleased - OACP artifact verification before caching (G5)
-
-- **Breaking for strict runtimes.** `POST /api/v1/commerce/runtime/artifacts/cache`
-  now verifies every Grantex OACP artifact before caching it: ES256 detached JWS
-  (protected header `oacp-artifact+jws`, RFC 8785 signing input of the envelope
-  without `signature`) against the Grantex JWKS pinned in configuration, payload
-  hash, issuer, scope, TTL, and the Token Status List entry the envelope names.
-  With `AGENTICORG_OACP_VERIFY_STRICT` on (the default in production, staging,
-  preview and unrecognised environments) one failure returns `422
-  artifact_verification_refused` and nothing from that issuance is cached.
-  Grantex artifacts signed with the legacy template string are refused until the
-  Grantex OACP signing release is deployed. Opt-out: set
-  `AGENTICORG_OACP_VERIFY_STRICT=false`; verification still runs, failures are
-  logged as `oacp_artifact_verification_irregularity` and those artifacts are
-  cached without a `verifier_result_ref`. Local, dev, test and ci runtimes
-  default to that log-only mode.
-- Stop stamping `verifier_result_ref = "<artifact_id>:verified"` on every cached
-  artifact and stop accepting a caller-supplied `verifier_result_ref`. Verified
-  records carry `oacp-artifact-jws-v1;kid=…;payload_hash=…;status=valid;verified_at=…`.
-- The Grantex JWKS is fetched asynchronously over the DNS-pinning egress
-  transport (5 s timeout, 300 s cache, 60 s negative cache, one refresh on an
-  unknown kid). Status lists are fetched only from the issuer or Grantex API
-  origin over https, verified as `statuslist+jwt`, cached within their `ttl`;
-  revoked and suspended entries and unreachable lists refuse the artifact.
-- Cache rows stamped `<artifact_id>:verified` before this change, and rows cached
-  in log-only mode, no longer count as verified on any runtime read (buyer and
-  bridge answers, protocol adapters, purchase and POS preparation). Strict
-  runtimes refuse them (`artifact_unverified_legacy`, `artifact_unverified`);
-  log-only runtimes log `oacp_cache_record_unverified_irregularity`. New
-  `POST /api/v1/commerce/runtime/artifacts/refresh` re-fetches a scope from
-  Grantex replay and caches it verified. Deploy order: the Grantex signing
-  release, a first OACP issuer key and `OACP_STATUS_LIST_PUBLIC_ENABLED` must be
-  live before strict verification reaches production (or set the opt-out).
-- Match Grantex's OACP issuance: `revocation` artifacts may live 24 h (was 0),
-  and `issued_at` / `not_before` tolerate 60 s of clock skew (expiry does not).
-  A status list Grantex has not made public (404) refuses the artifact.
-- `verify_oacp_artifact` follows the cross-repo verification order (signature
-  checks first) and takes a JWKS instead of caller-supplied key metadata and a
-  stub signature callback. The unwired in-memory `OacpArtifactCache` class and
-  its key-metadata and revocation-snapshot types are removed.
-- Shared vectors `tests/fixtures/oacp/oacp-artifact-jws-v1.json` (synthetic key)
-  and a conformance test against a running Grantex
-  (`tests/integration/test_oacp_grantex_conformance.py`, skipped unless
-  `AGENTICORG_GRANTEX_CONFORMANCE_URL` is set). No migration.
-
 ## Unreleased - Database sessions ready for a NOBYPASSRLS application role
 
 - Bind tenant or platform context at the raw-session sites that still opened
@@ -440,6 +483,75 @@
 - Regression guards: `tests/regression/test_raw_session_inventory.py`
   (every remaining raw session is justified), `tests/regression/test_egress_async_callers.py`,
   and the Postgres proof `tests/integration/test_rls_nobypass_role.py`.
+- The lead delivery Postgres tests no longer patch the removed
+  `api.v1.demo.async_session_factory` (the receipt writes through
+  `get_platform_session`), and the worker-outcome test seeds the marketing
+  tenant itself instead of relying on test order. A regression check keeps
+  `api.v1.demo` on the shared session helpers.
+- The OACP Grantex replay fetch and trust-endpoint fetch (merged from main)
+  validate their URLs with `validate_public_url_async`, as
+  `tests/regression/test_egress_async_callers.py` requires for code inside
+  `async def`; the policy (scheme and host checks, DNS left to the pinned
+  transport) is unchanged.
+
+## Unreleased - OACP artifact verification before caching (G5)
+
+- **Breaking for strict runtimes.** `POST /api/v1/commerce/runtime/artifacts/cache`
+  now verifies every Grantex OACP artifact before caching it: ES256 detached JWS
+  (protected header `oacp-artifact+jws`, RFC 8785 signing input of the envelope
+  without `signature`) against the Grantex JWKS pinned in configuration, payload
+  hash, issuer, scope, TTL, and the Token Status List entry the envelope names.
+  With `AGENTICORG_OACP_VERIFY_STRICT` on (the default in production, staging,
+  preview and unrecognised environments) one failure returns `422
+  artifact_verification_refused` and nothing from that issuance is cached.
+  Grantex artifacts signed with the legacy template string are refused until the
+  Grantex OACP signing release is deployed. Opt-out: set
+  `AGENTICORG_OACP_VERIFY_STRICT=false`; verification still runs, failures are
+  logged as `oacp_artifact_verification_irregularity` and those artifacts are
+  cached without a `verifier_result_ref`. Local, dev, test and ci runtimes
+  default to that log-only mode.
+- Stop stamping `verifier_result_ref = "<artifact_id>:verified"` on every cached
+  artifact and stop accepting a caller-supplied `verifier_result_ref`. Verified
+  records carry `oacp-artifact-jws-v1;kid=…;payload_hash=…;status=valid;verified_at=…`.
+- The Grantex JWKS is fetched asynchronously over the DNS-pinning egress
+  transport (5 s timeout, 300 s cache, 60 s negative cache, one refresh on an
+  unknown kid). Status lists are fetched only from the issuer or Grantex API
+  origin over https, verified as `statuslist+jwt`, cached within their `ttl`;
+  revoked and suspended entries and unreachable lists refuse the artifact.
+- Cache rows stamped `<artifact_id>:verified` before this change, and rows cached
+  in log-only mode, no longer count as verified on any runtime read (buyer and
+  bridge answers, protocol adapters, purchase and POS preparation). Strict
+  runtimes refuse them (`artifact_unverified_legacy`, `artifact_unverified`);
+  log-only runtimes log `oacp_cache_record_unverified_irregularity`. New
+  `POST /api/v1/commerce/runtime/artifacts/refresh` re-fetches a scope from
+  Grantex replay and caches it verified. Deploy order: the Grantex signing
+  release, a first OACP issuer key and `OACP_STATUS_LIST_PUBLIC_ENABLED` must be
+  live before strict verification reaches production (or set the opt-out).
+- Match Grantex's OACP issuance: `revocation` artifacts may live 24 h (was 0),
+  and `issued_at` / `not_before` tolerate 60 s of clock skew (expiry does not).
+  A status list Grantex has not made public (404) refuses the artifact.
+- `verify_oacp_artifact` follows the cross-repo verification order (signature
+  checks first) and takes a JWKS instead of caller-supplied key metadata and a
+  stub signature callback. The unwired in-memory `OacpArtifactCache` class and
+  its key-metadata and revocation-snapshot types are removed.
+- Shared vectors `tests/fixtures/oacp/oacp-artifact-jws-v1.json` (synthetic key)
+  and a conformance test against a running Grantex
+  (`tests/integration/test_oacp_grantex_conformance.py`, skipped unless
+  `AGENTICORG_GRANTEX_CONFORMANCE_URL` is set). No migration.
+- `docs/oacp/explainers/launch-rollback-runbook.md` lists
+  `AGENTICORG_OACP_VERIFY_STRICT` with its default, the launch order and the
+  rollback step.
+- `scripts/oacp_runtime_launch_check.py` no longer writes
+  `artifact_verifier_summary.valid = <artifact count>` for unsigned local
+  artifacts. It signs them with an ES256 key generated for the run (kid
+  `oacp-launchcheck-<random>`, never stored), runs each through
+  `OacpGrantexArtifactVerifier` against that key's JWKS and an in-process VALID
+  status list, and reports `checked` / `valid` / `invalid` / `status_list_checked`
+  / `refusal_codes` from the verifier results, labelled
+  `verification_mode: local_throwaway_es256_key` and `grantex_issuer: false`.
+  Cache records carry the verifier's `verifier_result_ref`
+  (`cache_records_verified_count`); any refusal exits non-zero. The tracked
+  local evidence is regenerated.
 
 ## Unreleased - Unicode input and private Telegram follow-ups
 

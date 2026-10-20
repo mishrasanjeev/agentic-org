@@ -11,7 +11,6 @@ from datetime import UTC, datetime
 import pytest
 from cryptography.hazmat.primitives.asymmetric import ec
 
-from core.cases.push import SigningKey, verify_signature
 from core.commerce.ucp import httpsig, orders, webhooks
 from core.commerce.ucp.renderers import render_order
 from tests import ucp_schema
@@ -204,8 +203,8 @@ def test_webhook_identity_is_stable_per_subscription_and_revision() -> None:
     assert webhooks.webhook_id_for(sub, "ord_1", 1) != webhooks.webhook_id_for(sub, "ord_1", 2)
 
 
-def test_acp_hmac_variant_uses_the_case_push_scheme_and_pluggable_payload() -> None:
-    from core.cases.push import sign
+def test_acp_hmac_variant_renders_acp_order_events_and_stays_pluggable() -> None:
+    from core.commerce.acp.orders import acp_order_event
 
     event = orders.OrderEvent(
         event_type=orders.ORDER_CREATED,
@@ -217,16 +216,13 @@ def test_acp_hmac_variant_uses_the_case_push_scheme_and_pluggable_payload() -> N
         ucp_version="2026-04-08",
     )
     payload = webhooks._renderers["acp_hmac"](event)
-    assert payload["type"] == "order.created" and payload["order"]["id"] == "ord_1"
-    body = b"{}"
-    key = SigningKey("k1", "s" * 32)
-    headers = sign(body, event_id="e1", event_type="order.created", timestamp=100, keys=[key])
-    assert verify_signature(headers, body, keys={"k1": "s" * 32}, now=100) == ""
+    assert payload["type"] == "order_create" and payload["data"]["id"] == "ord_1"
+    assert payload["data"]["type"] == "order"
     webhooks.register_payload_renderer("acp_hmac", lambda e: {"acp": e.order_id})
     try:
         assert webhooks._renderers["acp_hmac"](event) == {"acp": "ord_1"}
     finally:
-        webhooks.register_payload_renderer("acp_hmac", webhooks._default_acp_payload)
+        webhooks.register_payload_renderer("acp_hmac", acp_order_event)
     with pytest.raises(ValueError):
         webhooks.register_payload_renderer("smtp", lambda e: {})
 

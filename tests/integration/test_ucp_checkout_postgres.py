@@ -65,8 +65,16 @@ def executor():
 
 
 async def _rows(engine, sql: str, **params) -> list[dict]:
-    async with engine.connect() as conn:
-        return [dict(r) for r in (await conn.execute(text(sql), params)).mappings().all()]
+    """Read evidence rows. Under the NOBYPASSRLS app role (``AGENTICORG_DB_URL``), assertions read through
+    the owner DSN in ``AGENTICORG_TEST_OWNER_DB_URL`` when it is set, so the observer is not tenant-scoped."""
+    owner_url = os.getenv("AGENTICORG_TEST_OWNER_DB_URL")
+    observer = create_async_engine(owner_url, poolclass=NullPool) if owner_url else engine
+    try:
+        async with observer.connect() as conn:
+            return [dict(r) for r in (await conn.execute(text(sql), params)).mappings().all()]
+    finally:
+        if owner_url:
+            await observer.dispose()
 
 
 async def _ledger_events(engine, tenant: str) -> list[str]:

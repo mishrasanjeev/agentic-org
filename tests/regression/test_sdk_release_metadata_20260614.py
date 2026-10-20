@@ -55,7 +55,7 @@ def test_mcp_server_release_metadata_is_lockstep_and_runtime_truthful() -> None:
     server_json = _read_json("mcp-server/server.json")
     readme = (ROOT / "mcp-server" / "README.md").read_text(encoding="utf-8")
 
-    assert package_json["version"] == "5.0.0"
+    assert package_json["version"] == "5.1.0"
     assert package_lock["version"] == package_json["version"]
     assert package_lock["packages"][""]["version"] == package_json["version"]
     assert server_json["version"] == package_json["version"]
@@ -79,6 +79,17 @@ def test_mcp_server_release_metadata_is_lockstep_and_runtime_truthful() -> None:
         "seller.get_inventory_snapshot",
         "seller.get_mandate_capability",
         "seller.ask_product_question",
+        # UCP 2026-04-08 MCP binding; registered only when the merchant profile serves them.
+        "create_checkout",
+        "get_checkout",
+        "update_checkout",
+        "complete_checkout",
+        "cancel_checkout",
+        "create_cart",
+        "get_cart",
+        "update_cart",
+        "cancel_cart",
+        "get_order",
     }
     assert {tool["name"] for tool in server_json["tools"]} == expected_tools
 

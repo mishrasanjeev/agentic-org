@@ -15,8 +15,8 @@ credentials, should not live in CI without a release-gating flow).
   package name.
 - TypeScript SDK release target: `agenticorg-sdk@0.4.0`. The scoped package
   `@agenticorg/sdk` is not currently published.
-- MCP server npm package: `agenticorg-mcp-server@5.0.0`.
-- MCP registry server: `io.github.mishrasanjeev/agenticorg@5.0.0`.
+- MCP server npm package: `agenticorg-mcp-server@5.1.0`.
+- MCP registry server: `io.github.mishrasanjeev/agenticorg@5.1.0`.
 
 These are source release targets, not evidence of publication. Verify each
 registry independently. The MCP major bump is required because `run_agent`

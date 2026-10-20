@@ -337,6 +337,7 @@ async def ucp_catalog_search(request: Request) -> JSONResponse:
     source = verified_catalog_source(cache_records=records, products=products, now_iso=now_iso)
     messages: list[dict[str, Any]] = []
     pagination: dict[str, Any] | None
+    page: list[Any]
     if source.unavailable_reason is not None:
         page, pagination = [], {"has_next_page": False}
         messages.append(catalog_unavailable_message())

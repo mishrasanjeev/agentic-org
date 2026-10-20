@@ -6,9 +6,18 @@ Subscriptions (``commerce_order_webhook_subscriptions``):
 * ``platform_profile`` + ``ucp``: the platform's ``dev.ucp.shopping.order``
   ``config.webhook_url``, registered when a checkout it created completes. It
   receives that platform's orders only.
-* ``merchant`` + ``ucp`` or ``acp_hmac``: endpoints the merchant manages
+* ``merchant`` + ``ucp``: endpoints the merchant itself operates, managed
   through the authenticated runtime API; they receive all the merchant's
   orders.
+* ``merchant`` + ``acp_hmac``: an ACP agent platform's receiver, bound at
+  creation to that platform (``platform_profile_url`` = ``acp:api_key:<key id>``,
+  the API key the platform calls with). It receives only orders from checkout
+  sessions that platform created; never another platform's, a UCP or a direct
+  order. A row without a platform receives nothing.
+
+A platform's subscription is never shared: ``ensure_platform_subscription``
+reuses a row only when it belongs to the same platform, so a platform whose
+profile names another subscriber's URL gets no delivery there (logged).
 
 Delivery (UCP order capability, Events): each order revision is one outbox
 row per subscription, written in the transaction that changed the order. The
@@ -19,10 +28,11 @@ same revision: they identify the event), ``UCP-Agent: profile="<business profile
 @path content-digest content-type ucp-agent``, signed with the merchant key
 through the injected signer; with no signer or no merchant key nothing is
 sent (webhooks MUST be signed) and the row retries until it dead-letters.
-``acp_hmac`` deliveries use the ``core.cases.push`` scheme (HMAC-SHA256 over
-``"<event id>.<timestamp>." + body`` with every key of the subscription); the
-payload renderer for that scheme is pluggable (the ACP order event mapper
-replaces the default).
+``acp_hmac`` deliveries are ACP order events (``core.commerce.acp.orders``:
+``{type: order_create|order_update, data: <full ACP Order>}``) signed with
+``Merchant-Signature: t=<unix>,v1=hex(HMAC-SHA256(secret, t + "." + body))`` under
+the subscription's active shared key, plus ``Request-Id`` (the stable webhook id)
+and ``Timestamp``; payload renderers stay pluggable (``register_payload_renderer``).
 
 The dispatcher follows ``core.cases.push``: lease due rows ``FOR UPDATE SKIP
 LOCKED``, post with no redirects through the DNS-pinned transport, 2xx
@@ -47,7 +57,8 @@ import httpx
 import structlog
 from sqlalchemy import select
 
-from core.cases.push import PushSettings, SigningKey, decrypt_keys, retry_delay, sign, validate_endpoint_url
+from core.cases.push import PushSettings, SigningKey, decrypt_keys, retry_delay, validate_endpoint_url
+from core.commerce.acp.orders import SIGNATURE_HEADER, acp_order_event, merchant_signature
 from core.commerce.ledger import commerce_payload_hash
 from core.commerce.ucp import releases as v
 from core.commerce.ucp.httpsig import MerchantKeyStoreSigner, MerchantSigner, SigningKeyUnavailableError, sign_request
@@ -92,11 +103,7 @@ def ucp_order_body(event: OrderEvent) -> dict[str, Any]:
     )
 
 
-def _default_acp_payload(event: OrderEvent) -> dict[str, Any]:
-    return {"type": event.event_type, "order": ucp_order_body(event)}
-
-
-_renderers: dict[str, PayloadRenderer] = {"ucp": ucp_order_body, "acp_hmac": _default_acp_payload}
+_renderers: dict[str, PayloadRenderer] = {"ucp": ucp_order_body, "acp_hmac": acp_order_event}
 
 
 def register_payload_renderer(scheme: str, renderer: PayloadRenderer) -> None:
@@ -143,14 +150,42 @@ def subscription_view(row: Any) -> dict[str, Any]:
     }
 
 
+ACP_PLATFORM_PREFIX = "acp:api_key:"
+
+
+def acp_platform_id(api_key_id: uuid.UUID | str) -> str:
+    """The platform identity of an ACP agent platform: the id of the API key it calls with."""
+    return f"{ACP_PLATFORM_PREFIX}{uuid.UUID(str(api_key_id))}"
+
+
+def receives_order(sub: Any, order_platform: str | None) -> bool:
+    """Whether a subscription may receive an order created by ``order_platform`` (None: no platform)."""
+    if sub.source == "platform_profile" or sub.scheme == "acp_hmac":
+        return sub.platform_profile_url is not None and sub.platform_profile_url == order_platform
+    return True
+
+
 async def create_subscription(
-    session: Any, *, tenant_id: uuid.UUID, merchant_id: str, url: str, scheme: str, now: datetime
+    session: Any,
+    *,
+    tenant_id: uuid.UUID,
+    merchant_id: str,
+    url: str,
+    scheme: str,
+    now: datetime,
+    platform: str | None = None,
 ) -> tuple[Any, SigningKey | None]:
     """A merchant-managed subscription; an ``acp_hmac`` one gets a fresh key (returned once, stored encrypted)."""
     from core.models.commerce_ucp import CommerceOrderWebhookSubscriptionRow
 
     if scheme not in SCHEMES:
         raise WebhookSubscriptionError("scheme_invalid", "scheme must be ucp or acp_hmac")
+    if scheme == "acp_hmac" and not (platform or "").startswith(ACP_PLATFORM_PREFIX):
+        raise WebhookSubscriptionError(
+            "platform_required", "An acp_hmac subscription is bound to the agent platform's API key."
+        )
+    if scheme != "acp_hmac" and platform is not None:
+        raise WebhookSubscriptionError("platform_invalid", "Only acp_hmac subscriptions are bound to a platform.")
     target = _validated_url(url)
     existing = (
         await session.execute(
@@ -172,7 +207,7 @@ async def create_subscription(
         url=target,
         scheme=scheme,
         source="merchant",
-        platform_profile_url=None,
+        platform_profile_url=platform,
         enabled=True,
         signing_keys_encrypted=await _encrypt_keys(tenant_id, [key]) if key else {},
         active_key_id=key.key_id if key else None,
@@ -218,7 +253,11 @@ async def ensure_platform_subscription(
         )
     ).scalar_one_or_none()
     if row is not None:
-        return row
+        if row.source == "platform_profile" and row.platform_profile_url == platform_profile_url:
+            return row
+        # The URL belongs to another subscriber (another platform or the merchant): never share it.
+        logger.warning("ucp_platform_webhook_url_owned_by_another_subscriber")
+        return None
     row = CommerceOrderWebhookSubscriptionRow(
         id=uuid.uuid4(),
         tenant_id=tenant_id,
@@ -266,7 +305,7 @@ async def enqueue_order_deliveries(
     ).all()
     count = 0
     for sub in rows:
-        if sub.source == "platform_profile" and sub.platform_profile_url != platform_profile_url:
+        if not receives_order(sub, platform_profile_url):
             continue
         payload = _renderers[sub.scheme](event)
         await session.execute(
@@ -450,12 +489,15 @@ class OrderWebhookDispatcher:
         body = json.dumps(item["payload"], separators=(",", ":"), ensure_ascii=False).encode("utf-8")
         timestamp = int(self.clock().timestamp())
         if item["scheme"] == "acp_hmac":
-            # The HMAC scheme signs the attempt time (receivers enforce a tolerance window).
+            # ACP Merchant-Signature signs the attempt time (receivers allow 300 s) with the active key.
             if not item["keys"]:
                 return "signing_key_unavailable", None
-            headers = sign(
-                body, event_id=item["webhook_id"], event_type=item["event_type"], timestamp=timestamp, keys=item["keys"]
-            )
+            headers = {
+                "Content-Type": "application/json",
+                SIGNATURE_HEADER: merchant_signature(item["keys"][0].secret, body, timestamp),
+                "Request-Id": item["webhook_id"],
+                "Timestamp": datetime.fromtimestamp(timestamp, tz=UTC).isoformat().replace("+00:00", "Z"),
+            }
         else:
             signer = self.signer()
             if signer is None:
