@@ -1,9 +1,13 @@
 # SPDX-License-Identifier: Apache-2.0
 """Inbound RFC 9421 agent request signatures: the Visa TAP and Web Bot Auth profiles (G47, G49, G51).
 
-``verify_agent_request_signature`` is a FastAPI dependency on the public
-commerce reads (``api/v1/commerce_public.py``) and the A2A routes
-(``api/v1/a2a_interop.py``). It verifies the request with
+``verify_agent_request_signature`` is a FastAPI dependency on the commerce API
+surfaces: the public commerce JSON reads (``catalog.json`` and the product
+``.json``, ``api/v1/commerce_public.py``) and the A2A routes
+(``api/v1/a2a_interop.py``). ``observe_agent_request_signature`` verifies and
+records the same way but never refuses, whatever the mode: it is on the public
+pages crawlers and browsers read unsigned (the seller and product HTML pages,
+``schema-org.jsonld``, ``sitemap.xml``, ``llms.txt``). Both verify with
 ``grantex_agent_httpsig.verify_with_profile``:
 
 - ``tap`` (Visa Trusted Agent Protocol): ``tag`` ``agent-browser-auth`` or
@@ -391,8 +395,17 @@ async def _ledger(request: Request, check: SignatureCheck, *, outcome: str) -> N
 
 
 async def verify_agent_request_signature(request: Request) -> AgentSignatureIdentity | None:
-    """FastAPI dependency: verify, record, and in enforce mode refuse (see the module docstring)."""
-    mode = verify_mode()
+    """FastAPI dependency for commerce API surfaces: verify, record, and in enforce mode refuse."""
+    return await _verify_and_record(request, enforceable=True)
+
+
+async def observe_agent_request_signature(request: Request) -> AgentSignatureIdentity | None:
+    """FastAPI dependency for public pages: verify and record, never refuse (enforce mode does not apply)."""
+    return await _verify_and_record(request, enforceable=False)
+
+
+async def _verify_and_record(request: Request, *, enforceable: bool) -> AgentSignatureIdentity | None:
+    mode = verify_mode() if enforceable else MODE_LOG
     body = b""
     if request.method not in _READ_METHODS:
         body = await request.body()
@@ -409,6 +422,7 @@ async def verify_agent_request_signature(request: Request) -> AgentSignatureIden
         "path": request.url.path,
         "method": request.method,
         "mode": mode,
+        "enforceable": enforceable,
         "status": check.status,
         "code": check.code,
         "reason": check.reason,
@@ -443,6 +457,7 @@ __all__ = [
     "SignatureCheck",
     "check_request_signature",
     "expected_authority",
+    "observe_agent_request_signature",
     "verify_agent_request_signature",
     "verify_mode",
 ]

@@ -723,20 +723,35 @@ def test_a_tampered_payment_container_is_not_usable_for_payment(a2a: dict[str, A
     assert tap_body["payment_container_problems"] == ["signature_invalid"]
 
 
-def test_public_commerce_reads_log_signed_and_unsigned_requests_without_ledgering(
-    keys: KeyServer, redis: FakeRedis, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def _public_client(keys: KeyServer, monkeypatch: pytest.MonkeyPatch) -> tuple[TestClient, dict[str, Any]]:
     from api.v1 import commerce_public
 
     async def ready(**_: Any) -> dict[str, Any]:
-        return {"status": "public_catalog_ready", "products": []}
+        return {
+            "status": "public_catalog_ready",
+            "products": [],
+            "schema_org_jsonld": {"@context": "https://schema.org"},
+            "source_label": "s",
+            "freshness_label": "f",
+        }
 
     monkeypatch.setattr(commerce_public, "_load_public_catalog_snapshot", ready)
+    monkeypatch.setattr(commerce_public, "build_public_catalog_html", lambda *a, **k: "<html></html>")
+    monkeypatch.setattr(commerce_public, "build_public_sitemap_xml", lambda *a, **k: "<urlset/>")
+    monkeypatch.setattr(commerce_public, "build_public_llms_txt", lambda *a, **k: "# llms")
+    monkeypatch.setattr(commerce_public, "find_public_product", lambda snapshot, slug: {"slug": slug})
+    monkeypatch.setattr(commerce_public, "build_schema_org_jsonld", lambda *a, **k: {})
     app = FastAPI()
     app.include_router(commerce_public.public_router, prefix="/api/v1")
-    client = TestClient(app, base_url="https://merchant.example")
     key = _ed25519()
     keys.tap_keys["tap-key-01"] = {**public_jwk(key), "kid": "tap-key-01"}
+    return TestClient(app, base_url="https://merchant.example"), key
+
+
+def test_public_commerce_reads_log_signed_and_unsigned_requests_without_ledgering(
+    keys: KeyServer, redis: FakeRedis, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    client, key = _public_client(keys, monkeypatch)
     path = f"/api/v1/public/commerce/sellers/merchant.example/catalog.json?tenant_id={TENANT}"
     with capture_logs() as logs:
         assert client.get(path, headers=_tap_sign(key, "https://merchant.example" + path)).status_code == 200
@@ -750,15 +765,69 @@ def test_public_commerce_reads_log_signed_and_unsigned_requests_without_ledgerin
     assert client.get(path, headers=_tap_sign(key, "https://merchant.example" + path)).status_code == 200
 
 
+AGENT_API_PATHS = ("catalog.json", "products/tote.json")
+PUBLIC_PAGE_PATHS = ("", "/products/tote", "/schema-org.jsonld", "/sitemap.xml", "/llms.txt")
+
+
+@pytest.mark.parametrize("suffix", AGENT_API_PATHS)
+def test_enforce_refuses_unsigned_commerce_api_reads(
+    keys: KeyServer, redis: FakeRedis, monkeypatch: pytest.MonkeyPatch, suffix: str
+) -> None:
+    client, _ = _public_client(keys, monkeypatch)
+    monkeypatch.setattr(settings, "httpsig_verify_mode", "enforce")
+    response = client.get(f"/api/v1/public/commerce/sellers/merchant.example/{suffix}?tenant_id={TENANT}")
+    assert response.status_code == 401
+
+
+@pytest.mark.parametrize("suffix", PUBLIC_PAGE_PATHS)
+def test_enforce_never_refuses_public_pages_crawlers_read_unsigned(
+    keys: KeyServer, redis: FakeRedis, monkeypatch: pytest.MonkeyPatch, suffix: str
+) -> None:
+    client, _ = _public_client(keys, monkeypatch)
+    monkeypatch.setattr(settings, "httpsig_verify_mode", "enforce")
+    with capture_logs() as logs:
+        response = client.get(f"/api/v1/public/commerce/sellers/merchant.example{suffix}?tenant_id={TENANT}")
+    assert response.status_code == 200, response.text
+    [entry] = [e for e in logs if e["event"] == "agent_request_signature"]
+    assert (entry["status"], entry["mode"], entry["enforceable"]) == ("unsigned", "log", False)
+
+
+def test_the_product_json_route_is_reached_not_shadowed_by_the_product_page(
+    keys: KeyServer, redis: FakeRedis, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # Before: "/products/{product_slug}" (HTML) was registered first and also matched "tote.json",
+    # so the JSON product route was unreachable and enforce mode never applied to it.
+    client, _ = _public_client(keys, monkeypatch)
+    response = client.get(f"/api/v1/public/commerce/sellers/merchant.example/products/tote.json?tenant_id={TENANT}")
+    assert response.status_code == 200
+    assert response.json()["status"] == "public_product_ready"
+    assert response.json()["product"] == {"slug": "tote"}
+    page = client.get(f"/api/v1/public/commerce/sellers/merchant.example/products/tote?tenant_id={TENANT}")
+    assert page.headers["content-type"].startswith("text/html")
+
+
 def test_the_dependency_is_on_every_covered_route() -> None:
     from fastapi.routing import APIRoute
 
     from api.main import app
 
-    covered = {"/api/v1/a2a/message:send", "/api/v1/a2a/extendedAgentCard"}
+    enforceable = {
+        "/api/v1/a2a/message:send",
+        "/api/v1/a2a/extendedAgentCard",
+        "/api/v1/public/commerce/sellers/{merchant_id}/catalog.json",
+        "/api/v1/public/commerce/sellers/{merchant_id}/products/{product_slug}.json",
+    }
+    seen = set()
     for route in app.routes:
         if not isinstance(route, APIRoute):
             continue
-        uses = any(d.call is httpsig.verify_agent_request_signature for d in route.dependant.dependencies)
-        if route.path.startswith("/api/v1/public/commerce/") or route.path in covered:
-            assert uses, route.path
+        calls = {d.call for d in route.dependant.dependencies}
+        if route.path in enforceable:
+            assert httpsig.verify_agent_request_signature in calls, route.path
+            seen.add(route.path)
+        elif route.path.startswith("/api/v1/public/commerce/"):
+            assert httpsig.observe_agent_request_signature in calls, route.path
+            assert httpsig.verify_agent_request_signature not in calls, route.path
+        else:
+            assert httpsig.verify_agent_request_signature not in calls, route.path
+    assert seen == enforceable

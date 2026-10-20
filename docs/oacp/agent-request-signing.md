@@ -34,11 +34,18 @@ The implementation is the `grantex-agent-httpsig` library (version 0.2.0, `verif
 
 ## Inbound verification (`auth/httpsig.py`)
 
-`verify_agent_request_signature` is a FastAPI dependency on:
+Two FastAPI dependencies verify and record signatures the same way; only the first can refuse:
 
-- every route under `/api/v1/public/commerce/` (`api/v1/commerce_public.py`, all reads), and
-- `POST /api/v1/a2a/message:send` and `GET /api/v1/a2a/extendedAgentCard`
-  (`api/v1/a2a_interop.py`).
+- `verify_agent_request_signature`, on the commerce API surfaces, where `enforce` mode refuses:
+  - `GET /api/v1/public/commerce/sellers/{merchant_id}/catalog.json` and
+    `GET /api/v1/public/commerce/sellers/{merchant_id}/products/{product_slug}.json`
+    (`api/v1/commerce_public.py`);
+  - `POST /api/v1/a2a/message:send` and `GET /api/v1/a2a/extendedAgentCard`
+    (`api/v1/a2a_interop.py`).
+- `observe_agent_request_signature`, on the public pages that search engines and browsers read
+  without signing: the seller and product HTML pages, `schema-org.jsonld` (structured data for
+  search engines), `sitemap.xml` and `llms.txt`. These are never refused for a signature, whatever
+  the mode; their log lines carry `mode: log` and `enforceable: false`.
 
 The tenant-admin buyer-access routes (`/api/v1/a2a/commerce/buyer-access`) are operated by people
 through the dashboard, not by agents, and are not covered.
@@ -76,9 +83,10 @@ An unknown value is treated as `log` and logged. The default `log` changes no re
 this change the routes read no signature; now they read it and write a log line (and, for a
 verified write, one ledger row).
 
-`enforce` applies to every request on the covered routes, including the public seller pages,
-sitemap and `llms.txt` that search engines and browsers read without signing. Turn it on only
-where every expected caller is a signing agent.
+`enforce` applies only to the commerce API surfaces listed above; the public pages stay public.
+
+The product JSON route is registered before the product HTML page: `{product_slug}` would
+otherwise also match `<slug>.json`, which made the JSON route unreachable before this change.
 
 The 401 body is `{"detail": {"error": "agent_signature_required" | "agent_signature_invalid",
 "reason": "<library reason>"}}`. RFC 9421 defines no `WWW-Authenticate` scheme for signatures; its

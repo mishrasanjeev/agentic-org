@@ -263,7 +263,8 @@ A source definition is not evidence that a specific tenant has connected the pro
   release). See [ACP product feed and checkout sessions](docs/oacp/acp-feed-and-sessions.md).
 - Agent request signatures (RFC 9421, Visa Trusted Agent Protocol and Web Bot Auth profiles) are verified
   on the public commerce reads and the A2A routes in `log` mode by default
-  (`AGENTICORG_HTTPSIG_VERIFY_MODE=enforce` refuses unsigned requests); the buyer connector signs its
+  (`AGENTICORG_HTTPSIG_VERIFY_MODE=enforce` refuses unsigned requests on the commerce API surfaces:
+  the catalog and product JSON and the A2A routes, never the public pages); the buyer connector signs its
   requests with the tenant agent key only with `AGENTICORG_HTTPSIG_SIGN_OUTBOUND`. The library
   (`grantex-agent-httpsig` 0.2.0, not on PyPI) is installed from a commit-pinned git reference to the
   Grantex repository, so installs need `git`. See
@@ -333,7 +334,8 @@ The current supported source path is:
 Agents that call the public commerce reads and the A2A routes may sign their requests under the Visa
 Trusted Agent Protocol or Web Bot Auth profiles of RFC 9421; AgenticOrg verifies them, records the
 verified agent identity (on the commerce ledger for writes), and with
-`AGENTICORG_HTTPSIG_VERIFY_MODE=enforce` refuses unsigned ones. See
+`AGENTICORG_HTTPSIG_VERIFY_MODE=enforce` refuses unsigned ones on the commerce API surfaces (the
+public HTML pages, sitemap and `llms.txt` stay public). See
 [docs/oacp/agent-request-signing.md](docs/oacp/agent-request-signing.md).
 
 Start with [docs/oacp/README.md](docs/oacp/README.md) and the [runtime launch closure PRD](docs/oacp/runtime-launch-closure-prd.md).

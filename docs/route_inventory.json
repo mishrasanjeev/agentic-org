@@ -9878,7 +9878,7 @@
     "public_exempt_reason": "public-read-or-doc-route",
     "rate_limit": "public-read",
     "scope": "public.commerce.seller_profile.read",
-    "source_line": 50,
+    "source_line": 51,
     "tenant_required": true
   },
   {
@@ -9896,7 +9896,7 @@
     "public_exempt_reason": "public-read-or-doc-route",
     "rate_limit": "public-read",
     "scope": "public.commerce.catalog.read",
-    "source_line": 73,
+    "source_line": 74,
     "tenant_required": true
   },
   {
@@ -9914,7 +9914,7 @@
     "public_exempt_reason": "public-read-or-doc-route",
     "rate_limit": "public-read",
     "scope": "public.commerce.llms.read",
-    "source_line": 206,
+    "source_line": 210,
     "tenant_required": true
   },
   {
@@ -9932,7 +9932,7 @@
     "public_exempt_reason": "public-read-or-doc-route",
     "rate_limit": "public-read",
     "scope": "public.commerce.product.read",
-    "source_line": 96,
+    "source_line": 138,
     "tenant_required": true
   },
   {
@@ -9950,7 +9950,7 @@
     "public_exempt_reason": "public-read-or-doc-route",
     "rate_limit": "public-read",
     "scope": "public.commerce.product.read",
-    "source_line": 122,
+    "source_line": 98,
     "tenant_required": true
   },
   {
@@ -9968,7 +9968,7 @@
     "public_exempt_reason": "public-read-or-doc-route",
     "rate_limit": "public-read",
     "scope": "public.commerce.schema_org.read",
-    "source_line": 160,
+    "source_line": 164,
     "tenant_required": true
   },
   {
@@ -9986,7 +9986,7 @@
     "public_exempt_reason": "public-read-or-doc-route",
     "rate_limit": "public-read",
     "scope": "public.commerce.sitemap.read",
-    "source_line": 183,
+    "source_line": 187,
     "tenant_required": true
   },
   {

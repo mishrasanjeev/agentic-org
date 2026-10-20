@@ -82,8 +82,9 @@ decision to set it to `false`.
    request again: the log shows `nonce_replayed`. Send an unsigned request: 200 and
    `status: unsigned` in the log.
 3. Watch the `agent_request_signature` logs in staging until the expected callers are `verified`.
-   The mode also covers the public seller pages, sitemap and `llms.txt`, which crawlers read
-   unsigned: stay in `log` while those must remain public.
+   `enforce` applies only to the commerce API surfaces (the catalog and product JSON reads and
+   the A2A routes); the public HTML pages, schema.org JSON-LD, sitemap and `llms.txt` are never
+   refused for a signature.
 4. Staging, `enforce`: the unsigned request gets 401 with `Accept-Signature`; the signed one is
    accepted; with Redis stopped a signed request gets 503.
 5. Production in `log`, then `enforce` only with the owner's recorded decision.
@@ -118,7 +119,7 @@ With `AGENTICORG_ACP_CHECKOUT_ENABLED=true` on staging, a published merchant opt
 | `AGENTICORG_ACP_CHECKOUT_ENABLED` | `false` | ACP checkout session routes (`/acp/checkout_sessions`); also runs the order-webhook sweep. |
 | `AGENTICORG_ACP_FEED_ENABLED` | `false` | ACP product feed export (`/api/v1/commerce/runtime/acp/feed`). |
 | `AGENTICORG_ACP_SIGNATURE_MODE` | `log` | `enforce` refuses ACP requests no registered platform verifier accepts. |
-| `AGENTICORG_HTTPSIG_VERIFY_MODE` | `log` | RFC 9421 agent signatures on the public commerce reads and A2A routes; `enforce` refuses unsigned or invalid requests (401) and answers 503 while the Redis nonce store is down. |
+| `AGENTICORG_HTTPSIG_VERIFY_MODE` | `log` | RFC 9421 agent signatures, verified and recorded on every public commerce route and the A2A routes; `enforce` refuses unsigned or invalid requests (401) on the commerce API surfaces only (catalog and product JSON, A2A), never on the public pages, and answers 503 there while the Redis nonce store is down. |
 | `AGENTICORG_HTTPSIG_AUTHORITIES` | empty | Authorities a signature may cover; empty uses the `Host` header. |
 | `AGENTICORG_HTTPSIG_TAP_KEY_STORE_URLS` | empty | TAP key-store URL templates (`{keyid}`); empty resolves no TAP key. |
 | `AGENTICORG_HTTPSIG_SIGNATURE_AGENT_ORIGINS` | empty | Web Bot Auth directory origins that may be fetched. |

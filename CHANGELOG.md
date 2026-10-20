@@ -17,6 +17,13 @@
   the pinned Grantex JWKS. Async pinned egress, no redirects, 300 s cache, 60 s negative cache.
   Nonces are claimed with one Redis `SET NX` for at least the profile's replay window (8 minutes
   for TAP). Docs: `docs/oacp/agent-request-signing.md`.
+- `enforce` scope: only the commerce API surfaces can refuse (`verify_agent_request_signature` on
+  `catalog.json`, `products/{product_slug}.json`, `message:send`, `extendedAgentCard`). The seller
+  and product HTML pages, `schema-org.jsonld`, `sitemap.xml` and `llms.txt` use
+  `observe_agent_request_signature`, which verifies and records but never refuses. Fixed with it:
+  `GET /api/v1/public/commerce/sellers/{merchant_id}/products/{product_slug}.json` was shadowed by
+  the product HTML route (`{product_slug}` matched `<slug>.json`) and answered HTML; it is now
+  registered first and answers the product JSON.
 - TAP body objects (G49, inbound): after a TAP signature verifies, `agenticConsumer`,
   `agenticPaymentContainer` and `grantexConsentRecord` in a JSON body are checked with
   `verify_tap_body_objects` and recorded (`usable_for_payment`). `POST /api/v1/a2a/message:send`
