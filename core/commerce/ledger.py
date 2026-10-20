@@ -27,6 +27,7 @@ order) and ``ledger_view`` turns one row into the exportable shape.
 from __future__ import annotations
 
 import json
+import re
 import uuid
 from collections.abc import Mapping
 from contextvars import ContextVar
@@ -58,6 +59,26 @@ class RequestLedgerScope:
     actor_type: str = "system"
     actor_id: str = "system"
     recorded: set[str] = field(default_factory=set)
+
+
+# Evidence values that are digests, not personal data: a hex SHA-256 (optionally prefixed
+# ``sha256:``) or an opaque id whose suffix is hex (``arbdec_<hex>``, ``aoc-<hex>``). The PII
+# masker's phone and account patterns match digit runs inside them and would corrupt the
+# evidence the ledger seals (a mandate hash that cannot be matched to its mandate).
+_DIGEST_VALUE = re.compile(r"^(?:sha256:)?[0-9a-f]{64}$|^[a-z][a-z0-9]{1,15}[_-][0-9a-f]{24,64}$")
+
+
+def _mask_details(value: Any) -> Any:
+    """``mask_pii`` for ledger details, keeping digest values intact."""
+    from core.tool_gateway.pii_masker import mask_pii
+
+    if isinstance(value, str):
+        return value if _DIGEST_VALUE.match(value) else mask_pii(value)
+    if isinstance(value, Mapping):
+        return {k: _mask_details(v) for k, v in value.items()}
+    if isinstance(value, list | tuple):
+        return [_mask_details(item) for item in value]
+    return value
 
 
 _scope: ContextVar[RequestLedgerScope | None] = ContextVar("commerce_ledger_scope", default=None)
@@ -155,8 +176,6 @@ async def record_commerce_event(
     """
     from core.models.audit import AuditLog
     from core.tool_gateway.audit_logger import build_signed_audit_entry
-    from core.tool_gateway.pii_masker import mask_pii
-
     tenant = _tenant_uuid(tenant_id)
     if not isinstance(event, str) or not event.startswith(LEDGER_EVENT_PREFIXES) or len(event) > 100:
         raise CommerceLedgerError("commerce ledger events are named commerce.* or a2a.* (at most 100 characters)")
@@ -183,7 +202,7 @@ async def record_commerce_event(
         actor_id=(actor_id or (scope.actor_id if scope else "system"))[:255],
         action=event,
         outcome=outcome,
-        details={**mask_pii(json_safe(dict(details or {}))), "ledger": ledger},
+        details={**_mask_details(json_safe(dict(details or {}))), "ledger": ledger},
         created_at=created_at,
         resource_type=LEDGER_RESOURCE_TYPE,
         resource_id=(resource_id or digest)[:255],

@@ -67,6 +67,8 @@ Outputs:
 - `docs/reports/oacp-runtime-launch-evidence.local.json`
 - `docs/reports/oacp-runtime-launch-evidence.local.md`
 
+The local artifacts are signed with an ES256 key generated for the run (kid `oacp-launchcheck-<random>`, never written to disk) and each one goes through `OacpGrantexArtifactVerifier`, the verifier the cache intake uses: detached JWS, JWKS key, scope, TTL and Token Status List. The JWKS and a status list with every entry VALID are served in process from the synthetic `https://launch-check.issuer.example` origin. `artifact_verifier_summary` reports what the verifier returned (`checked`, `valid`, `invalid`, `status_list_checked`, `refusal_codes`) and is labelled `verification_mode: local_throwaway_es256_key`, `grantex_issuer: false`: it proves the verifier path, not Grantex issuance or a Grantex status list. A non-zero `invalid` count makes the script exit non-zero after printing the summary.
+
 Set `OACP_LAUNCH_EXTERNAL_CHECKS=true` only when Shopify, Grantex, and Plural/Pine credentials are configured for sandbox/live smoke. Missing credentials must be recorded as exact blockers, not converted into success.
 
 ## Production/Sandbox Smoke After Deploy Approval

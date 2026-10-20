@@ -132,6 +132,16 @@
   `commerce_ucp_idempotency`, each with ENABLE + FORCE row-level security and a tenant policy
   with `WITH CHECK`; forward-only (downgrade keeps the data).
 
+## Unreleased - Fixed: commerce ledger details keep digests intact (G41)
+
+- `record_commerce_event` masked PII in `details` with patterns (a ten-digit phone number, an
+  8 to 18 digit account number) that also matched digit runs inside hex SHA-256 values and
+  `arbdec_<hex>` decision ids, so about one mandate hash in five, and some decision ids, were
+  sealed as `...******...` and could not be matched to the mandate or decision they name. Hex
+  digests (optionally `sha256:`) and opaque `<prefix>_<hex>` / `<prefix>-<hex>` ids are now kept;
+  every other string is masked as before. Rows already sealed are unchanged (append-only).
+  Regression: `tests/regression/test_ledger_digest_masking_20261020.py`.
+
 ## Unreleased - Commerce ledger routes, offline export and Grantex countersignature (G14-G16)
 
 - **Breaking for strict runtimes: caller-asserted buyer authority is refused.** The commerce
@@ -258,51 +268,6 @@
   async egress validator (`tests/regression/test_egress_async_callers.py`), so no async
   commerce path calls the synchronous validator.
 
-## Unreleased - OACP artifact verification before caching (G5)
-
-- **Breaking for strict runtimes.** `POST /api/v1/commerce/runtime/artifacts/cache`
-  now verifies every Grantex OACP artifact before caching it: ES256 detached JWS
-  (protected header `oacp-artifact+jws`, RFC 8785 signing input of the envelope
-  without `signature`) against the Grantex JWKS pinned in configuration, payload
-  hash, issuer, scope, TTL, and the Token Status List entry the envelope names.
-  With `AGENTICORG_OACP_VERIFY_STRICT` on (the default in production, staging,
-  preview and unrecognised environments) one failure returns `422
-  artifact_verification_refused` and nothing from that issuance is cached.
-  Grantex artifacts signed with the legacy template string are refused until the
-  Grantex OACP signing release is deployed. Opt-out: set
-  `AGENTICORG_OACP_VERIFY_STRICT=false`; verification still runs, failures are
-  logged as `oacp_artifact_verification_irregularity` and those artifacts are
-  cached without a `verifier_result_ref`. Local, dev, test and ci runtimes
-  default to that log-only mode.
-- Stop stamping `verifier_result_ref = "<artifact_id>:verified"` on every cached
-  artifact and stop accepting a caller-supplied `verifier_result_ref`. Verified
-  records carry `oacp-artifact-jws-v1;kid=…;payload_hash=…;status=valid;verified_at=…`.
-- The Grantex JWKS is fetched asynchronously over the DNS-pinning egress
-  transport (5 s timeout, 300 s cache, 60 s negative cache, one refresh on an
-  unknown kid). Status lists are fetched only from the issuer or Grantex API
-  origin over https, verified as `statuslist+jwt`, cached within their `ttl`;
-  revoked and suspended entries and unreachable lists refuse the artifact.
-- Cache rows stamped `<artifact_id>:verified` before this change, and rows cached
-  in log-only mode, no longer count as verified on any runtime read (buyer and
-  bridge answers, protocol adapters, purchase and POS preparation). Strict
-  runtimes refuse them (`artifact_unverified_legacy`, `artifact_unverified`);
-  log-only runtimes log `oacp_cache_record_unverified_irregularity`. New
-  `POST /api/v1/commerce/runtime/artifacts/refresh` re-fetches a scope from
-  Grantex replay and caches it verified. Deploy order: the Grantex signing
-  release, a first OACP issuer key and `OACP_STATUS_LIST_PUBLIC_ENABLED` must be
-  live before strict verification reaches production (or set the opt-out).
-- Match Grantex's OACP issuance: `revocation` artifacts may live 24 h (was 0),
-  and `issued_at` / `not_before` tolerate 60 s of clock skew (expiry does not).
-  A status list Grantex has not made public (404) refuses the artifact.
-- `verify_oacp_artifact` follows the cross-repo verification order (signature
-  checks first) and takes a JWKS instead of caller-supplied key metadata and a
-  stub signature callback. The unwired in-memory `OacpArtifactCache` class and
-  its key-metadata and revocation-snapshot types are removed.
-- Shared vectors `tests/fixtures/oacp/oacp-artifact-jws-v1.json` (synthetic key)
-  and a conformance test against a running Grantex
-  (`tests/integration/test_oacp_grantex_conformance.py`, skipped unless
-  `AGENTICORG_GRANTEX_CONFORMANCE_URL` is set). No migration.
-
 ## Unreleased - Database sessions ready for a NOBYPASSRLS application role
 
 - Bind tenant or platform context at the raw-session sites that still opened
@@ -358,6 +323,75 @@
 - Regression guards: `tests/regression/test_raw_session_inventory.py`
   (every remaining raw session is justified), `tests/regression/test_egress_async_callers.py`,
   and the Postgres proof `tests/integration/test_rls_nobypass_role.py`.
+- The lead delivery Postgres tests no longer patch the removed
+  `api.v1.demo.async_session_factory` (the receipt writes through
+  `get_platform_session`), and the worker-outcome test seeds the marketing
+  tenant itself instead of relying on test order. A regression check keeps
+  `api.v1.demo` on the shared session helpers.
+- The OACP Grantex replay fetch and trust-endpoint fetch (merged from main)
+  validate their URLs with `validate_public_url_async`, as
+  `tests/regression/test_egress_async_callers.py` requires for code inside
+  `async def`; the policy (scheme and host checks, DNS left to the pinned
+  transport) is unchanged.
+
+## Unreleased - OACP artifact verification before caching (G5)
+
+- **Breaking for strict runtimes.** `POST /api/v1/commerce/runtime/artifacts/cache`
+  now verifies every Grantex OACP artifact before caching it: ES256 detached JWS
+  (protected header `oacp-artifact+jws`, RFC 8785 signing input of the envelope
+  without `signature`) against the Grantex JWKS pinned in configuration, payload
+  hash, issuer, scope, TTL, and the Token Status List entry the envelope names.
+  With `AGENTICORG_OACP_VERIFY_STRICT` on (the default in production, staging,
+  preview and unrecognised environments) one failure returns `422
+  artifact_verification_refused` and nothing from that issuance is cached.
+  Grantex artifacts signed with the legacy template string are refused until the
+  Grantex OACP signing release is deployed. Opt-out: set
+  `AGENTICORG_OACP_VERIFY_STRICT=false`; verification still runs, failures are
+  logged as `oacp_artifact_verification_irregularity` and those artifacts are
+  cached without a `verifier_result_ref`. Local, dev, test and ci runtimes
+  default to that log-only mode.
+- Stop stamping `verifier_result_ref = "<artifact_id>:verified"` on every cached
+  artifact and stop accepting a caller-supplied `verifier_result_ref`. Verified
+  records carry `oacp-artifact-jws-v1;kid=…;payload_hash=…;status=valid;verified_at=…`.
+- The Grantex JWKS is fetched asynchronously over the DNS-pinning egress
+  transport (5 s timeout, 300 s cache, 60 s negative cache, one refresh on an
+  unknown kid). Status lists are fetched only from the issuer or Grantex API
+  origin over https, verified as `statuslist+jwt`, cached within their `ttl`;
+  revoked and suspended entries and unreachable lists refuse the artifact.
+- Cache rows stamped `<artifact_id>:verified` before this change, and rows cached
+  in log-only mode, no longer count as verified on any runtime read (buyer and
+  bridge answers, protocol adapters, purchase and POS preparation). Strict
+  runtimes refuse them (`artifact_unverified_legacy`, `artifact_unverified`);
+  log-only runtimes log `oacp_cache_record_unverified_irregularity`. New
+  `POST /api/v1/commerce/runtime/artifacts/refresh` re-fetches a scope from
+  Grantex replay and caches it verified. Deploy order: the Grantex signing
+  release, a first OACP issuer key and `OACP_STATUS_LIST_PUBLIC_ENABLED` must be
+  live before strict verification reaches production (or set the opt-out).
+- Match Grantex's OACP issuance: `revocation` artifacts may live 24 h (was 0),
+  and `issued_at` / `not_before` tolerate 60 s of clock skew (expiry does not).
+  A status list Grantex has not made public (404) refuses the artifact.
+- `verify_oacp_artifact` follows the cross-repo verification order (signature
+  checks first) and takes a JWKS instead of caller-supplied key metadata and a
+  stub signature callback. The unwired in-memory `OacpArtifactCache` class and
+  its key-metadata and revocation-snapshot types are removed.
+- Shared vectors `tests/fixtures/oacp/oacp-artifact-jws-v1.json` (synthetic key)
+  and a conformance test against a running Grantex
+  (`tests/integration/test_oacp_grantex_conformance.py`, skipped unless
+  `AGENTICORG_GRANTEX_CONFORMANCE_URL` is set). No migration.
+- `docs/oacp/explainers/launch-rollback-runbook.md` lists
+  `AGENTICORG_OACP_VERIFY_STRICT` with its default, the launch order and the
+  rollback step.
+- `scripts/oacp_runtime_launch_check.py` no longer writes
+  `artifact_verifier_summary.valid = <artifact count>` for unsigned local
+  artifacts. It signs them with an ES256 key generated for the run (kid
+  `oacp-launchcheck-<random>`, never stored), runs each through
+  `OacpGrantexArtifactVerifier` against that key's JWKS and an in-process VALID
+  status list, and reports `checked` / `valid` / `invalid` / `status_list_checked`
+  / `refusal_codes` from the verifier results, labelled
+  `verification_mode: local_throwaway_es256_key` and `grantex_issuer: false`.
+  Cache records carry the verifier's `verifier_result_ref`
+  (`cache_records_verified_count`); any refusal exits non-zero. The tracked
+  local evidence is regenerated.
 
 ## Unreleased - Unicode input and private Telegram follow-ups
 

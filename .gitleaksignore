@@ -53,3 +53,8 @@ c4de4ba34461d69618aa7502f3ccbe64b2d894ab:tests/integration/test_feature_flags_rl
 # MCP checkout tool tests: synthetic Idempotency-Key values (constants COMPLETE_KEY, CANCEL_KEY), not credentials.
 88d79d06579c3d2749f134e3264ac41cb83e10c6:mcp-server/test/ucp-checkout-tools.mjs:generic-api-key:12
 88d79d06579c3d2749f134e3264ac41cb83e10c6:mcp-server/test/ucp-checkout-tools.mjs:generic-api-key:13
+
+# Commerce ledger Postgres tests: synthetic purchase idempotency keys (a short label
+# plus a counter) in request bodies, not credentials. Baselined by fingerprint.
+9ff1945d7b64e22ac96f57c74b6239e89a247838:tests/integration/test_commerce_ledger_routes_postgres.py:generic-api-key:123
+0a020a0e631257dd9231c4fa996ac7e3d38e1e15:tests/integration/test_commerce_arbiter_ledger_postgres.py:generic-api-key:91
