@@ -195,7 +195,9 @@ def audit_target(target: Sequence[str], runner: Runner) -> tuple[list[Finding], 
                     )
                 )
     except (ValueError, KeyError, TypeError, AttributeError) as exc:
-        raise AuditError(f"pip-audit {label} produced unreadable output: {exc}") from exc
+        raise AuditError(
+            f"pip-audit {label} produced unreadable output (exit {code}): {exc}: {stderr.strip()[-500:]}"
+        ) from exc
     if code == 1 and not findings:
         raise AuditError(f"pip-audit {label} reported a failure but no vulnerabilities: {stderr.strip()[-500:]}")
     return findings, skipped

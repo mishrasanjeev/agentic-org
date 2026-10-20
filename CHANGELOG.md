@@ -19,7 +19,9 @@
   its own ranges. fastembed imports Pillow only for image embeddings, which the platform does not
   load. `scripts/pip_check.py` replaces `pip check` in both images and accepts only that one broken
   requirement (a fastembed Pillow requirement failing because Pillow is newer). The dependency audit
-  covers `requirements-fastembed.txt` as a fourth target. When a fastembed release accepts Pillow 13,
+  covers `requirements-fastembed.txt` as a fourth target, and its "unreadable output" failure now
+  includes pip-audit's exit code and stderr (pip-audit exits 1 with empty stdout when it cannot
+  finish, which had hidden the cause in CI). When a fastembed release accepts Pillow 13,
   fastembed moves back into `pyproject.toml` and the file and script are deleted.
 - UI: follow-redirects (via axios) moves from 1.16.0 to 1.16.1 through the `overrides` floor
   (`>=1.16.1`), fixing GHSA-q3jh-wrc6-jgq8 and GHSA-8r9p-f939-6h3c (credential headers kept on
