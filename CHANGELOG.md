@@ -60,6 +60,11 @@
   `get_platform_session`), and the worker-outcome test seeds the marketing
   tenant itself instead of relying on test order. A regression check keeps
   `api.v1.demo` on the shared session helpers.
+- The OACP Grantex replay fetch and trust-endpoint fetch (merged from main)
+  validate their URLs with `validate_public_url_async`, as
+  `tests/regression/test_egress_async_callers.py` requires for code inside
+  `async def`; the policy (scheme and host checks, DNS left to the pinned
+  transport) is unchanged.
 
 ## Unreleased - OACP artifact verification before caching (G5)
 
