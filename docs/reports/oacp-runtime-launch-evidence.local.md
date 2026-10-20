@@ -1,19 +1,21 @@
 # OACP Runtime Launch Evidence
 
-- Generated at: `2026-06-30T10:13:50.169372Z`
+- Generated at: `2026-10-19T21:27:53.787208Z`
 - External checks enabled: `False`
 - Tenant: `11111111-1111-1111-1111-111111111111`
 - Merchant: `merchant_oacp_launch_evidence`
 - Seller agent: `seller_agent_oacp_launch`
 - Buyer agent: `buyer_agent_oacp_launch`
 - Packet id: `c6z_onboarding_4dc2161a8d4767ea3bc297f5`
-- Evidence id: `c6z_shopify_evidence_b05dd2a05115737466b57652`
+- Evidence id: `c6z_shopify_evidence_c15527ba3910f02221348fa2`
 
 ## Runtime Proof
 
 - Shopify product/variant counts: `1` / `1`
 - Artifact families: `11`
-- Cache records: `11`
+- Artifact verifier: `11` valid / `0` invalid of `11` checked; status list checked `11`
+- Verifier inputs: `local_throwaway_es256_key`, `local_in_process_status_list_all_valid`, Grantex issuer `False`
+- Cache records: `11` (verified `11`)
 - Buyer answer status: `answered`
 - Adapter status: `adapter_payloads_ready`
 - Bridge artifact refs: `11`

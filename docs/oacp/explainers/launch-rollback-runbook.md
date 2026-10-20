@@ -44,6 +44,12 @@ Launch order:
 are verified server-side; every handoff there is refused until then unless the owner records the
 decision to set it to `false`.
 
+## Flags
+
+| Flag | Default | Launch | Rollback |
+| --- | --- | --- | --- |
+| `AGENTICORG_OACP_VERIFY_STRICT` | On in production, staging, preview and unrecognised environments; off (log-only) in local, dev, test and ci | Turn on only after the Grantex OACP signing release, a first OACP issuer key and `OACP_STATUS_LIST_PUBLIC_ENABLED=true` are live for the same environment, then run `POST /api/v1/commerce/runtime/artifacts/refresh` for each live merchant and seller agent. Order and detail: [runtime operations runbook](../runtime-operations-runbook.md#deploy-order-for-strict-oacp-verification). | Set `AGENTICORG_OACP_VERIFY_STRICT=false` and redeploy. Verification keeps running and logs `oacp_artifact_verification_irregularity`; record the opt-out as an operator decision and unset it once Grantex is healthy and the refresh has run. |
+
 ## Rollback
 
 1. Disable buyer surfaces for the merchant.
