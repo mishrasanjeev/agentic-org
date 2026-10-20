@@ -57,6 +57,24 @@
   `tests/fixtures/ucp_schemas`) are one, `tests/fixtures/ucp` (published release schemas plus the
   2026-04-08 discovery profile schema).
 
+## Unreleased - UCP checkout tools in the MCP server (G39)
+
+- `agenticorg-mcp-server` 5.1.0 adds the UCP 2026-04-08 MCP binding tools `create_checkout`,
+  `get_checkout`, `update_checkout`, `complete_checkout`, `cancel_checkout`, `create_cart`,
+  `get_cart`, `update_cart`, `cancel_cart` and `get_order` (the binding's names, not a
+  `checkout.*` prefix). They are registered only when `AGENTICORG_UCP_PROFILE_URL` names a
+  merchant profile whose capabilities include them, which the API publishes only with
+  `AGENTICORG_UCP_CHECKOUT_ENABLED` on; requests go to the profile's same-origin `/ucp` REST
+  endpoint. Nothing changes for a server without that variable.
+- `complete_checkout` needs an allow decision: `decide_only: true` returns a sealed
+  `session_complete` decision without executing, and only a call carrying its `decision_id` can
+  execute (consumed once by the API, bound to the payload hash). A call with neither is refused
+  before any request. Tool annotations mark reads read-only, updates and cancels destructive and
+  idempotent, and Complete destructive and not idempotent.
+- HTTP errors become MCP tool errors with only the UCP `{code, content}`; decisions in results keep
+  only their id, action, outcome, failing rule, payload hash and expiry. The merchant UCP profile
+  does not advertise an MCP transport, since this server is a local stdio adapter. No API change.
+
 ## Unreleased - UCP checkout, cart and order (G21, G22, G25, G27, G29-G32, G35)
 
 - UCP REST binding at `https://<merchant serving host>/ucp` (`api/v1/commerce_ucp.py`), behind

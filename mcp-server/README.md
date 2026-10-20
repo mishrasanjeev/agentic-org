@@ -20,7 +20,7 @@ also be valid at runtime.
 Pin the reviewed release after confirming it exists in your npm registry:
 
 ```bash
-npm install -g agenticorg-mcp-server@5.0.0
+npm install -g agenticorg-mcp-server@5.1.0
 AGENTICORG_API_KEY=your-key agenticorg-mcp
 ```
 
@@ -36,7 +36,7 @@ An npm release does not update the MCP registry or an installed client.
 Confirm both stores and restart the client after upgrading:
 
 ```bash
-npm view agenticorg-mcp-server@5.0.0 version
+npm view agenticorg-mcp-server@5.1.0 version
 ```
 
 For repository verification:
@@ -60,7 +60,7 @@ stdio entry is:
   "mcpServers": {
     "agenticorg": {
       "command": "npx",
-      "args": ["--yes", "agenticorg-mcp-server@5.0.0"],
+      "args": ["--yes", "agenticorg-mcp-server@5.1.0"],
       "env": {
         "AGENTICORG_API_KEY": "your-api-key",
         "AGENTICORG_BASE_URL": "https://your-reviewed-endpoint.example"
@@ -112,8 +112,65 @@ or infer a company from untrusted content.
 The `seller.*` tools are read-oriented views over cached commerce artifacts.
 Their output can be stale or incomplete and does not authorize checkout,
 payment, order, hold, refund, return, shipping, reservation, or mandate action.
-Set `AGENTICORG_MCP_COMMERCE_ONLY=true` to expose only those seller tools; this
-setting limits the visible tool surface but does not create transaction authority.
+Set `AGENTICORG_MCP_COMMERCE_ONLY=true` to expose only those seller tools (and
+the UCP tools below when configured); this setting limits the visible tool
+surface but does not create transaction authority.
+
+### UCP checkout tools
+
+When `AGENTICORG_UCP_PROFILE_URL` names a merchant's UCP business profile
+(`https://<merchant serving host>/.well-known/ucp`), the server reads that
+profile at startup and registers the UCP 2026-04-08 MCP binding tools for the
+capabilities it advertises. The profile lists checkout, cart and order only
+while the API runs with `AGENTICORG_UCP_CHECKOUT_ENABLED=true`; otherwise, or
+when the profile cannot be read, none of these tools is registered. With both
+UCP releases enabled the server follows the profile's 2026-04-08
+`supported_versions` leaf. Calls go to the profile's `dev.ucp.shopping` REST
+endpoint, which must be on the same origin as the profile (https only), with
+the configured credential (a tenant API key holding `ucp:read`/`ucp:write`).
+
+| Tool | Capability | Annotations | Behavior |
+|---|---|---|---|
+| `create_checkout` | checkout | not read-only, not destructive, not idempotent | Creates a session; nothing is charged. |
+| `get_checkout` | checkout | read-only, idempotent | Reads a session. |
+| `update_checkout` | checkout | destructive, idempotent | Full replacement of the session contents. |
+| `complete_checkout` | checkout | destructive, not idempotent | Two steps, see below. |
+| `cancel_checkout` | checkout | destructive, idempotent | Terminal cancel. |
+| `create_cart` / `get_cart` / `update_cart` / `cancel_cart` | cart | as for checkout | Cart operations. |
+| `get_order` | order | read-only, idempotent | Reads an order created by a completed checkout. |
+
+All UCP tools carry `openWorldHint: true`. Arguments follow the binding:
+`meta` (`ucp-agent.profile` and `idempotency-key`), `id`, and the `checkout` or
+`cart` object. `meta.ucp-agent.profile` defaults to
+`AGENTICORG_UCP_AGENT_PROFILE`; a call with neither is refused before any
+request. `complete_checkout`, `cancel_checkout` and `cancel_cart` require
+`meta.idempotency-key` (a UUID), as the binding does; other writes generate one
+when it is absent.
+
+`complete_checkout` never sends a Complete that could execute without a sealed
+allow decision:
+
+1. Call it with `decide_only: true`. The merchant's commerce arbiter decides
+   `session_complete` for the exact session and payment; nothing executes. The
+   result carries `ai.agenticorg.commerce.decision` with `decision_id`,
+   `outcome` and `expires_at`.
+2. Call it again with that `decision_id` (and the same payment). The API
+   consumes the decision once, bound to the session payload hash; a changed
+   session or credential is refused.
+
+A call with neither, or with both, is refused by this server without contacting
+the API. `decide_only` and `decision_id` may also be sent inside the checkout's
+`ai.agenticorg.commerce` member (with `buyer_authority`); conflicting values are
+refused. Business outcomes (an out-of-stock item, an arbiter refusal,
+`executor_unavailable`) are tool results with UCP `messages[]`, returned in
+`structuredContent` and as text. HTTP errors become MCP tool errors carrying only
+`{status, code, content}` from the UCP error body; nothing else from the response is
+returned. The decision in a result keeps only `decision_id`, `action`, `outcome`,
+`failing_rule`, `payload_hash` and `expires_at`.
+
+These tools are a local stdio adapter: no MCP transport is advertised in the
+merchant's UCP profile. Catalog tools (`search_catalog`, `lookup_catalog`,
+`get_product`) are not exposed.
 
 Direct connector invocation is not exposed by this server. Connector records
 and agent-tool records are discovery data, not proof that provider credentials,
