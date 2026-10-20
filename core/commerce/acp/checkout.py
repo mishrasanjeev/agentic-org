@@ -103,6 +103,7 @@ INPUT_FIELDS = (
     "order_notes",
 )
 UPDATE_FIELDS = ("line_items", "buyer", "fulfillment_details", "selected_fulfillment_options", "order_notes")
+# enterprise-gate: process-local-ok reason=constant-lookup-table-never-mutated
 STATUS_MAP = {
     "incomplete": "not_ready_for_payment",
     "requires_escalation": "requires_escalation",

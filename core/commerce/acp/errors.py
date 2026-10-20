@@ -78,6 +78,7 @@ MESSAGE_WARNING_CODES: frozenset[str] = frozenset(
 # Internal error message code -> ACP MessageError.code. Sources: the UCP state engine
 # (checkout, quantity, fulfillment, payment), completion (AP2, executor, arbiter), decision
 # consumption (core.commerce.arbiter_store) and the ACP binding (allowance, currency).
+# enterprise-gate: process-local-ok reason=constant-lookup-table-never-mutated
 MESSAGE_ERROR_MAP: dict[str, str] = {
     # line items and quantities
     "missing": "missing",
@@ -203,6 +204,7 @@ def map_message(message: Mapping[str, Any]) -> dict[str, Any]:
 
 # (UCP REST status, UCP error code) -> (ACP status, Error.type, Error.code). Writes to a session that
 # can no longer change (completed, canceled, expired or executing) are 405, as ACP specifies for cancel.
+# enterprise-gate: process-local-ok reason=constant-lookup-table-never-mutated
 PROTOCOL_ERROR_MAP: dict[tuple[int, str], tuple[int, str, str]] = {
     (400, "invalid_request"): (400, "invalid_request", "invalid"),
     (404, "not_found"): (404, "invalid_request", "not_found"),
