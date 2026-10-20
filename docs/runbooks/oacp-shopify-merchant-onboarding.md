@@ -4,6 +4,9 @@ Canonical runtime docs: `docs/oacp/README.md` and
 `docs/oacp/end-user-flow.md`. This runbook is retained for operator continuity
 and should follow the current OACP owner split.
 
+To list the merchant on Google AI Mode and Gemini through UCP, continue with the
+[Google Merchant Center UCP onboarding runbook](oacp-google-merchant-center-onboarding.md).
+
 ## Owner Split
 
 | Area | Owner |

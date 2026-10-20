@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased - Google Merchant Center UCP onboarding runbook (G57)
+
+- New runbook `docs/runbooks/oacp-google-merchant-center-onboarding.md`: the UCP `2026-04-08`
+  profile Google targets, AgenticOrg prerequisites and flags, verification against the serving
+  host, the Merchant Center steps (cart transfer; native checkout needs the Google Pay handler,
+  which AgenticOrg does not offer), rollback and residual gaps, from Google's public UCP pages.
+
 ## Unreleased - Multi-source precedence per fact family (G61)
 
 - `provider_policy.source_precedence` sets, per fact family (`price`, `inventory`, `policy`,
