@@ -28,6 +28,8 @@ COPY core/channels/ ../core/channels/
 COPY observability/workload.py observability/timeline.py ../observability/
 COPY docs/ ../docs/
 COPY SECURITY.md docker-compose.yml ../
+# Sources of the licensing guide (docs/user-guide/index.json).
+COPY LICENSE COMMERCIAL-LICENSE.md TRADEMARKS.md ../
 COPY core/rbac.py ../core/rbac.py
 COPY auth/run_grants.py auth/token_pool.py ../auth/
 COPY core/config.py ../core/config.py

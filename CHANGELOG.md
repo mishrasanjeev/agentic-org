@@ -34,6 +34,10 @@
 - `licensing/scope.json` now records the adopted licence, change date and third-party paths; the
   superseded draft custom licence (`licensing/ORCHESTRUM-SELF-USE-COMMERCIAL-1.0-DRAFT.md`) is
   removed. No runtime, billing, API or schema behaviour changes.
+- `scripts/check_migration_required.py` no longer asks for a migration when every changed line of a
+  `core/models/` file is a `#` comment (such as the SPDX header); any other change still needs one.
+- Both UI images copy `LICENSE`, `COMMERCIAL-LICENSE.md` and `TRADEMARKS.md`, the sources of the
+  licensing guide.
 
 ## Unreleased - Playwright 1.64
 

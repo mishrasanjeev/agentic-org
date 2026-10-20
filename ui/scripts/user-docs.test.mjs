@@ -73,6 +73,7 @@ test("both production UI images preserve the repository layout and include autho
     assert.match(dockerfile, /WORKDIR \/app\/ui/);
     assert.match(dockerfile, /COPY docs\/ \.\.\/docs\//);
     assert.match(dockerfile, /COPY --from=builder \/app\/ui\/dist/);
+    assert.match(dockerfile, /COPY LICENSE COMMERCIAL-LICENSE\.md TRADEMARKS\.md \.\.\//);
     assert.match(dockerfile, /COPY api\/v1\/model_gateway\.py \.\.\/api\/v1\/model_gateway\.py/);
     assert.match(dockerfile, /COPY api\/v1\/guardrails\.py \.\.\/api\/v1\/guardrails\.py/);
     assert.match(dockerfile, /COPY api\/v1\/observability\.py \.\.\/api\/v1\/observability\.py/);
