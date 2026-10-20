@@ -808,21 +808,22 @@ Authenticated routes, callbacks, invites, onboarding, and dashboard pages are ap
 
 Titles describe editorial topics. Numerical examples and case-study language are not platform-wide performance guarantees.
 
+- [OACP explained: one trust layer under UCP, ACP and AP2](https://agenticorg.ai/blog/oacp-one-trust-layer-under-ucp-acp-ap2)
 - [AgenticOrg and CERT-In: make the handoffs accountable](https://agenticorg.ai/blog/cert-in-ai-agent-security)
-- [An ownership mismatch becomes a reviewable case](https://agenticorg.ai/blog/merchant-self-service-oacp-commerce-config)
-- [Preparation, review and execution are separate jobs](https://agenticorg.ai/blog/shopify-merchant-seller-commerce-agent-oacp)
-- [An operator can intervene without asking the agent](https://agenticorg.ai/blog/oacp-buyer-channels-seller-agent)
-- [Merchant Self-Service Config for OACP Commerce](https://agenticorg.ai/blog/oacp-artifacts-buyer-safe-commerce-facts)
-- [A Reference Shopify-to-Seller-Agent Readiness Journey](https://agenticorg.ai/blog/provider-owned-pine-bank-handoff-oacp)
-- [Designing Buyer-Channel Adapters for Seller Agents](https://agenticorg.ai/blog/grantex-trust-authority-not-commerce-toll-booth)
-- [How OACP Maps Catalog, Price, Inventory, and Policy into Buyer-Safe Artifacts](https://agenticorg.ai/blog/offline-pos-bridge-agentic-commerce)
-- [How Pine/Plural and Bank-Owned Payment Handoffs Fit into OACP](https://agenticorg.ai/blog/ai-agents-for-ca-firms-gst-tds-automation)
-- [How Grantex Stays a Trust Authority Without Becoming a Transaction Toll Booth](https://agenticorg.ai/blog/virtual-employee-vs-rpa)
-- [Offline POS Bridge: Connecting In-Store Checkout to AI Buyer Agents](https://agenticorg.ai/blog/automated-bank-reconciliation)
-- [Planning AI-Assisted GST, TDS, and Reconciliation Workflows for CA Firms](https://agenticorg.ai/blog/hitl-governance-enterprise-ai)
-- [AI Agents and RPA: Choosing the Right Automation Pattern](https://agenticorg.ai/blog/org-chart-ai-virtual-employees)
-- [Automated Bank Reconciliation: A Pilot Measurement Framework](https://agenticorg.ai/blog/no-code-ai-agent-builder)
-- [Human-in-the-Loop Governance: Why Enterprise AI Needs Human Approval Gates](https://agenticorg.ai/blog/email-triggered-workflows)
+- [Merchant Self-Service Config for OACP Commerce](https://agenticorg.ai/blog/merchant-self-service-oacp-commerce-config)
+- [A Reference Shopify-to-Seller-Agent Readiness Journey](https://agenticorg.ai/blog/shopify-merchant-seller-commerce-agent-oacp)
+- [Designing Buyer-Channel Adapters for Seller Agents](https://agenticorg.ai/blog/oacp-buyer-channels-seller-agent)
+- [How OACP Maps Catalog, Price, Inventory, and Policy into Buyer-Safe Artifacts](https://agenticorg.ai/blog/oacp-artifacts-buyer-safe-commerce-facts)
+- [How Pine/Plural and Bank-Owned Payment Handoffs Fit into OACP](https://agenticorg.ai/blog/provider-owned-pine-bank-handoff-oacp)
+- [How Grantex Stays a Trust Authority Without Becoming a Transaction Toll Booth](https://agenticorg.ai/blog/grantex-trust-authority-not-commerce-toll-booth)
+- [Offline POS Bridge: Connecting In-Store Checkout to AI Buyer Agents](https://agenticorg.ai/blog/offline-pos-bridge-agentic-commerce)
+- [Planning AI-Assisted GST, TDS, and Reconciliation Workflows for CA Firms](https://agenticorg.ai/blog/ai-agents-for-ca-firms-gst-tds-automation)
+- [AI Agents and RPA: Choosing the Right Automation Pattern](https://agenticorg.ai/blog/virtual-employee-vs-rpa)
+- [Automated Bank Reconciliation: A Pilot Measurement Framework](https://agenticorg.ai/blog/automated-bank-reconciliation)
+- [Human-in-the-Loop Governance: Why Enterprise AI Needs Human Approval Gates](https://agenticorg.ai/blog/hitl-governance-enterprise-ai)
+- [Mirror Your Company Org Chart with AI Virtual Employees](https://agenticorg.ai/blog/org-chart-ai-virtual-employees)
+- [No-Code Agent Configuration: A Governed Creation Workflow](https://agenticorg.ai/blog/no-code-ai-agent-builder)
+- [Email-Triggered Workflows: Automate Finance Operations from Your Inbox](https://agenticorg.ai/blog/email-triggered-workflows)
 
 ## Resource index
 
