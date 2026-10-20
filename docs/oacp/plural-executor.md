@@ -2,6 +2,11 @@
 
 Canonical end-to-end flow: [OACP end-user flow](end-user-flow.md).
 
+Status on 2026-10-20: on `main` behind `PLURAL_PINE_LIVE_EXECUTION_ENABLED` (unset, off), not yet
+in the AgenticOrg production deployment; the Plural sandbox end-to-end run is pending sandbox
+credentials. Turn-on order and rollback:
+[launch and rollback runbook](explainers/launch-rollback-runbook.md#plural-execution-launch-order).
+
 The Plural executor (`core/commerce/executors/plural.py`) is the only code that moves money for an
 OACP checkout. It runs only after the commerce arbiter has issued an `allow` decision and that
 decision has been consumed. It calls the Plural (Pine Labs) API directly with the merchant's

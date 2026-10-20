@@ -407,9 +407,11 @@ the publication state, catalog, rates, buyer authority and a fake executor.
 
 - The Plural executor is registered only with `PLURAL_PINE_LIVE_EXECUTION_ENABLED=true`; the
   Plural sandbox end-to-end run (`tests/integration/test_plural_executor_sandbox.py`) is pending
-  sandbox credentials. Pending payments and completed 3DS challenges are not yet reconciled from
-  Plural webhooks ([Plural executor, Residual Gaps](plural-executor.md#residual-gaps)).
-- Buyer authority is caller-asserted; AP2 checkout mandates are not verified yet.
+  sandbox credentials. Pending payments and completed 3DS challenges are reconciled from verified
+  Plural webhooks, with event field names checked only against a fake transport
+  ([Plural executor, Residual Gaps](plural-executor.md#residual-gaps)).
+- Buyer authority is server-verified only through Grantex mandates (`mandate_request` with
+  `AGENTICORG_GRANTEX_MANDATES_ENABLED`); the AP2 `checkout_mandate` itself is not verified.
 - The discount extension (`dev.ucp.shopping.discount`) and identity linking are not served.
 - The permalink browser endpoint itself is not served by AgenticOrg; carts link to the
   merchant's own `permalink_endpoint`.

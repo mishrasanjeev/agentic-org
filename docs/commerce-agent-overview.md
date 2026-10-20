@@ -4,6 +4,15 @@ Supersession note: use `docs/oacp/README.md` and
 `docs/oacp/end-user-flow.md` for the current OACP runtime split. This page is
 retained for historical/contextual Commerce Sales Agent detail.
 
+Update 2026-10-20: `main` now verifies every Grantex artifact (ES256 detached
+JWS) before caching, decides every handoff and checkout Complete with the
+commerce arbiter, records commerce writes on the commerce ledger, and serves
+the UCP business profile, UCP checkout and ACP feed and checkout sessions in
+spec shape, Grantex mandates and a Plural payment executor, all behind flags that
+default to off.
+Rows below that describe UCP-style profiles or future UCP/ACP/AP2 work are
+historical. Current state: `docs/oacp/truth-inventory.md`.
+
 The AgenticOrg Commerce Sales Agent is the buyer and seller AI-agent runtime for
 OACP commerce. It helps merchants prepare seller agents and connector workflows,
 helps buyers inspect artifact-grounded discovery previews, and consumes
@@ -44,10 +53,10 @@ support buyer answers, and where purchase handoff remains provider-owned.
 | C6X4 durable OACP cache | SQL-backed durable cache records scoped by buyer agent, seller agent, tenant, and merchant with TTL, freshness, revocation snapshot, risk tier, non-enablement flags, RLS, and tenant-safe indexes. |
 | C6X5 cache maintenance planner | Deterministic local planner that classifies durable cache records into keep, refresh, evict, purge, quarantine, source refresh, or human-review outcomes. No scheduler and no side effects. |
 | OACP runtime vertical | Implemented: onboarding, encrypted Shopify connector setup, read-only Admin GraphQL sync, Shopify webhook verification, Grantex authority handoff, 11-family artifact cache, buyer answer, protocol adapters, web/MCP/OpenAPI/A2A/WhatsApp/Telegram bridge contracts, Plural/Pine capability metadata, and Offline POS Bridge packet/reconciliation foundation. |
-| Protocol adapters | Runtime endpoints generate Schema.org Product/Offer JSON-LD, UCP-style, ACP-style, AP2-style, A2A, MCP, and OpenAPI compatibility payloads from cached OACP artifacts. No external certification or publication claim. |
+| Protocol adapters | Runtime endpoints generate Schema.org Product/Offer JSON-LD, the merchant's UCP business profile (spec shape, published merchants only), ACP-style, AP2-style, A2A, MCP, and OpenAPI compatibility payloads from verified cached OACP artifacts. No external certification or publication claim. |
 | Purchase preparation | Implemented as a non-executing handoff boundary. It checks OACP freshness, price/inventory snapshots, policy, buyer/session scope, and Plural/Pine capability evidence, then returns a prepared handoff or exact blocker. |
 | Offline POS Bridge | Implemented as non-sensitive handoff packet creation, simulator confirmation, confirmation intake, and reconciliation status. Live POS execution remains provider/POS-owned and externally gated. |
-| Payment execution | Blocked unless separate merchant/provider/legal/security/ops approvals and production flags exist. AgenticOrg does not create checkout, order, payment, mandate, inventory hold, refund, return, or shipment records. |
+| Payment execution | Through the Plural executor only, registered while `PLURAL_PINE_LIVE_EXECUTION_ENABLED` is on (off by default), on a consumed arbiter `allow` for a UCP or ACP checkout or a refund. AgenticOrg does not create inventory holds, returns or shipments; orders exist only for completed checkouts. |
 | Live checkout/payments/Plural | Provider-owned and approval-gated; no success is faked when provider credentials or approvals are missing. |
 | C6H buyer discovery consumer | Read-only sandbox consumer foundation; not public discovery or checkout/payment. |
 

@@ -1,5 +1,29 @@
 # Changelog
 
+## Unreleased - OACP closure documentation and the OACP explainer post
+
+- New blog post "OACP explained: one trust layer under UCP, ACP and AP2"
+  (`/blog/oacp-one-trust-layer-under-ucp-acp-ap2`) with theme-aware figures, a comparison table,
+  a social image and a dated status section (what is on `main`, what is in review, what is in
+  production). Blog posts can carry an optional summary, figures and a next step.
+- Fixed: `ui/public/llms-full.txt` paired blog slugs with titles by position, so every entry after
+  the CERT-In post's nested workflow titles carried another post's title; each entry now takes
+  its own post's title.
+- OACP documentation audited against `main` with a status date of 2026-10-20: the launch closure
+  PRD, truth inventory, end-user and buyer flows, handoff, cache, POS, operations, troubleshooting,
+  explainers, product status, merchant checklist, Shopify runbook, A2A guide, user guide, README
+  and MCP server README. Artifacts are described as ES256-signed and verified before caching
+  (no unqualified "signed" claims), ledger rows as HMAC-signed and hash-chained only once sealing
+  is on, and execution as flag-gated with no payment executor registered, instead of "blocked".
+- `docs/oacp/explainers/launch-rollback-runbook.md` now lists every OACP flag with its default,
+  when to turn it on and its rollback, the staging-equivalent run
+  (`AGENTICORG_ROUTE_ENFORCEMENT_MODE=log`, `AGENTICORG_HTTPSIG_VERIFY_MODE=log`,
+  `AGENTICORG_UCP_CHECKOUT_ENABLED=false`, `PLURAL_PINE_LIVE_EXECUTION_ENABLED=false`) and the
+  production turn-on order, one flag at a time.
+- Older OACP blog posts carry a dated update note; the protocol mapping post no longer describes a
+  UCP-style capability list, and the payment handoff post no longer lists a human confirmation
+  step on the merchant side.
+
 ## Unreleased - Agent network identity (G47, G48, G49, G51, G52)
 
 - README public-surface table: "the agent's RFC 9421 signature is verified" (the public-claims lint

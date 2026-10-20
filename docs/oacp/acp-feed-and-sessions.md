@@ -121,8 +121,8 @@ Translation:
   message on `$.currency` blocks payment.
 
 Completion requires an `allow` decision of the commerce arbiter (action `session_complete`) bound to
-the session payload hash, consumed by a registered executor, exactly as UCP Complete does. No
-executor is registered in this release, so Complete answers an `unsupported` message and the session
+the session payload hash, consumed by a registered executor, exactly as UCP Complete does. With no executor registered
+(`PLURAL_PINE_LIVE_EXECUTION_ENABLED` off, the default) Complete answers an `unsupported` message and the session
 stays `ready_for_payment`.
 
 ### Headers

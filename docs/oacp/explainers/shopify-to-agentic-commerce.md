@@ -11,7 +11,8 @@ Canonical end-to-end flow: [OACP end-user flow](../end-user-flow.md).
 5. Request Grantex OACP artifacts.
 6. Cache artifacts in AgenticOrg.
 7. Enable public catalog and buyer surfaces after source labels and blockers pass smoke tests.
-8. Route purchase intent to prepared provider/POS/merchant handoff or blocker.
+8. Route purchase intent to prepared provider/POS/merchant handoff or blocker; the commerce arbiter decides each handoff and records it on the ledger.
+9. Optional, behind flags that default to off: attest a serving host and publish the UCP business profile, then UCP or ACP checkout sessions for agent platforms ([UCP profile](../ucp-profile.md), [ACP feed and sessions](../acp-feed-and-sessions.md)).
 
 ```mermaid
 flowchart LR

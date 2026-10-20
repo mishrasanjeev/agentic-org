@@ -1,5 +1,16 @@
 # How Pine Labs Plural/P3P And Bank-Owned Mandate Capability Fit Into Agentic Commerce
 
+> **Update, 20 October 2026.** Since this post was written, Grantex signs every OACP artifact
+> (ES256 detached JWS) and AgenticOrg's `main` branch verifies each one before caching it. A
+> deterministic commerce arbiter decides every purchase handoff, POS handoff and checkout
+> completion (allow or refuse, never waiting for a person), and every commerce change is written
+> to the commerce ledger. UCP and ACP checkout, server-verified Grantex mandates and a Plural
+> payment executor exist behind flags that default to off, so with the defaults nothing moves money. The AgenticOrg changes are not in its production
+> deployment yet. Current state: [OACP explained](oacp-one-trust-layer-under-ucp-acp-ap2.md) and
+> the [truth inventory](../oacp/truth-inventory.md).
+> Capability evidence is still not a payment: the Plural executor takes one only with
+> `PLURAL_PINE_LIVE_EXECUTION_ENABLED` on and a consumed arbiter `allow` decision.
+
 ## Summary
 
 AgenticOrg verifies provider-owned Plural/Pine capability metadata and uses redacted evidence refs in purchase preparation. Pine Labs Plural/P3P owns mandate and payment rail execution for the current verifier path. Bank-owned, fintech, and custom provider rails can be configured as provider-owned refs, but they remain non-executing until approved adapters exist.

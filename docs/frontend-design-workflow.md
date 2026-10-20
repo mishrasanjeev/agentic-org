@@ -46,6 +46,26 @@ Example combined run:
 Paste the resulting report summary into the PR description under a
 `## Design review` heading. Reviewers should scan it before approval.
 
+### When the pack cannot run
+
+If the pack is not installed on the machine that prepares the PR, say so
+under `## Design review` and record the manual pass that replaced it:
+screenshots of the changed pages at 390 px and 1440 px in light and dark
+mode, measured contrast for new colour pairs (4.5:1 or higher for text),
+`scrollWidth == clientWidth` at each width, and 44 px touch targets. Run
+the three commands on the next machine that has the pack.
+
+### Blog posts with figures
+
+Posts in `ui/src/pages/blog/blogData.ts` may carry `summary`, `figures` and
+`nextStep`. Figures render from `ui/src/pages/blog/BlogFigure.tsx` as inline
+SVG or a table inside a `<figure>` with a caption; every SVG needs
+`role="img"`, a `<title>` and a `<desc>`, and colours come from the tokens in
+`ui/src/pages/blog/blogFigures.css`, which also define the dark scheme. Keep
+the tokens' contrast and the stacked-table layout at phone width, and extend
+`ui/src/__tests__/BlogFigure.test.tsx` and the figure checks in
+`ui/e2e/public-seo-routes.spec.ts` when a figure type is added.
+
 ## Optional commands
 
 The pack includes 15 more (`/distill`, `/clarify`, `/optimize`,

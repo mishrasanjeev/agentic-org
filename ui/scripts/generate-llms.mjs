@@ -205,13 +205,17 @@ function connectors() {
 function editorial(path, kind) {
   const source = text(path);
   const slugs = [...source.matchAll(/^\s*slug:\s*"([^"]+)"/gm)];
-  const titles = [...source.matchAll(/^\s*title:\s*"([^"]+)"/gm)];
+  // Each entry's title is the first title after its slug. Nested objects (workflows,
+  // figures) carry their own titles, so titles are not paired with slugs by position.
   return unique(
-    slugs.map((slug, index) => ({
-      slug: slug[1],
-      title: titles[index]?.[1] || humanize(slug[1]),
-      kind,
-    })),
+    slugs.map((slug, index) => {
+      const entry = source.slice(slug.index, slugs[index + 1]?.index ?? source.length);
+      return {
+        slug: slug[1],
+        title: entry.match(/^\s*title:\s*"([^"]+)"/m)?.[1] || humanize(slug[1]),
+        kind,
+      };
+    }),
     "slug",
   );
 }

@@ -2,6 +2,10 @@
 
 Canonical end-to-end flow: [OACP end-user flow](end-user-flow.md).
 
+Status on 2026-10-20: on `main` behind `AGENTICORG_GRANTEX_MANDATES_ENABLED` (default off), not
+yet in the AgenticOrg production deployment. Grantex production runs the mandate release with its
+first OACP issuer key and public Token Status List.
+
 This page covers both sides of buyer mandates:
 
 - the Intent, Cart and Payment mandates Grantex issues and AgenticOrg requests and verifies
@@ -259,7 +263,7 @@ Grantex is `unavailable`. Nothing waits.
 ### How AgenticOrg Verifies Them
 
 `core/commerce/oacp_mandates.py`, against the issuer, JWKS and status-list origins pinned in
-configuration (the Phase 1 trust fetcher, `core/commerce/oacp_grantex_trust.py`), never a URL
+configuration (the artifact verifier's trust fetcher, `core/commerce/oacp_grantex_trust.py`), never a URL
 taken from a mandate. Stop at the first failure, with the shared refusal code:
 
 | Step | Check | Refusal |

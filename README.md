@@ -260,11 +260,18 @@ A source definition is not evidence that a specific tenant has connected the pro
   and lookup and store locations is off by default (`AGENTICORG_UCP_PROFILE_ENABLED`). It serves a merchant
   only on a DNS-attested serving host, with a per-merchant ES256 signing key, after the merchant opts in
   and Grantex issues an enabled `public_discovery_state` artifact. See [UCP business profile](docs/oacp/ucp-profile.md).
+- UCP checkout sessions, carts and orders (`/ucp/checkout-sessions`, `/ucp/carts`, `/ucp/orders`,
+  `AGENTICORG_UCP_CHECKOUT_ENABLED`) are off by default. With the flag on, a Complete needs an `allow`
+  decision of the commerce arbiter for the exact session and a registered executor. The Plural executor
+  (capture, refunds, UPI AutoPay with RBI AFA) is registered only with `PLURAL_PINE_LIVE_EXECUTION_ENABLED=true`;
+  otherwise Complete answers `executor_unavailable`. Server-verified Intent, Cart and Payment mandates from
+  Grantex need `AGENTICORG_GRANTEX_MANDATES_ENABLED`. See [UCP checkout, cart and order](docs/oacp/ucp-checkout.md),
+  [Plural executor](docs/oacp/plural-executor.md) and [mandates](docs/oacp/mandates.md).
 - The ACP product feed (`AGENTICORG_ACP_FEED_ENABLED`) and ACP checkout sessions
   (`AGENTICORG_ACP_CHECKOUT_ENABLED`, API version 2026-04-17) are off by default. The feed is built only
   from verified, fresh OACP artifacts; sessions run on the UCP session table, arbiter and executor and need
-  the merchant's opt-in, a Grantex delegate-payment allowance and a registered executor (none in this
-  release). See [ACP product feed and checkout sessions](docs/oacp/acp-feed-and-sessions.md).
+  the merchant's opt-in, a Grantex delegate-payment allowance and a registered executor (the Plural executor,
+  off by default). See [ACP product feed and checkout sessions](docs/oacp/acp-feed-and-sessions.md).
 - Agent request signatures (RFC 9421, Visa Trusted Agent Protocol and Web Bot Auth profiles) are verified
   on the public commerce reads and the A2A routes in `log` mode by default
   (`AGENTICORG_HTTPSIG_VERIFY_MODE=enforce` refuses unsigned requests on the commerce API surfaces:
@@ -294,6 +301,7 @@ A source definition is not evidence that a specific tenant has connected the pro
 ### Explicit non-goals and boundaries
 
 - OACP artifacts do not create orders, reserve inventory, create mandates, capture payments, issue refunds, or prove a paid state.
+- No request field approves commerce execution. Execution consumes a single-use `allow` decision of the deterministic commerce arbiter, and the only payment executor (Plural) is off by default.
 - AgenticOrg does not replace the merchant, bank, payment provider, POS, or SaaS system as its source of record.
 - Cached commerce evidence can support an answer or a prepared handoff; provider-owned execution must be confirmed by the provider.
 - A connector listed in source is not proof of a live customer integration.
@@ -330,10 +338,11 @@ The current supported source path is:
 2. AgenticOrg stores Shopify credentials through the approved custody path.
 3. AgenticOrg performs read-only Shopify Admin GraphQL sync.
 4. Public-safe evidence is submitted to the configured Grantex authority path.
-5. Each issued OACP artifact is verified before it is cached: its ES256 detached JWS against the Grantex JWKS pinned in configuration, its scope and TTL, and its Token Status List entry. In strict runtimes one failure refuses the whole issuance (`AGENTICORG_OACP_VERIFY_STRICT`, on by default there); elsewhere the failure is logged as an irregularity and the artifact is cached without a verifier reference. Until the Grantex release that signs artifacts this way is deployed, strict runtimes refuse Grantex artifacts. See [docs/oacp/artifact-cache-guide.md](docs/oacp/artifact-cache-guide.md).
+5. Each issued OACP artifact is verified before it is cached: its ES256 detached JWS against the Grantex JWKS pinned in configuration, its scope and TTL, and its Token Status List entry. In strict runtimes one failure refuses the whole issuance (`AGENTICORG_OACP_VERIFY_STRICT`, on by default there); elsewhere the failure is logged as an irregularity and the artifact is cached without a verifier reference. Strict verification needs the Grantex environment to sign artifacts this way, publish an `oacp-` key and serve its status list; Grantex production does all three as of 2026-10-20. See [docs/oacp/artifact-cache-guide.md](docs/oacp/artifact-cache-guide.md).
 6. Buyer surfaces answer from valid artifacts and disclose source and freshness.
-7. Purchase intent becomes a non-executing provider, merchant, or POS handoff, or a fail-closed blocker. A deterministic commerce arbiter decides each handoff (mandate, consent, Commerce Passport cap, verified fresh artifacts, merchant limits) and seals `allow` or `refuse`; it never waits for a person. Execution consumes a single-use `allow` `decision_id` bound to the exact handoff payload. Every commerce write leaves a signed, hash-chained ledger row. Until server-verified mandates exist, strict runtimes refuse caller-asserted buyer authority (`AGENTICORG_ARBITER_REQUIRE_VERIFIED_AUTHORITY`), and an allow is consumable only once Grantex has countersigned it (`AGENTICORG_ARBITER_REQUIRE_GRANTEX_GRANT`). Tenant admins read the ledger, annotate decisions, store review manifests and retention dispositions under `/api/v1/commerce/runtime/ledger`, and `scripts/verify_ledger.py` verifies a ledger export offline. See [docs/oacp/arbiter-ledger.md](docs/oacp/arbiter-ledger.md).
-8. Only a verified provider or merchant callback can confirm the external outcome.
+7. Purchase intent becomes a non-executing provider, merchant, or POS handoff, or a fail-closed blocker. A deterministic commerce arbiter decides each handoff (mandate, consent, Commerce Passport cap, verified fresh artifacts, merchant limits) and seals `allow` or `refuse`; it never waits for a person. Execution consumes a single-use `allow` `decision_id` bound to the exact handoff payload. Every commerce write leaves an HMAC-signed ledger row in `audit_log`, hash-chained once audit-chain sealing is on for the tenant (`AGENTICORG_AUDIT_CHAIN_DEFAULT_ON`, off by default). Until server-verified mandates exist, strict runtimes refuse caller-asserted buyer authority (`AGENTICORG_ARBITER_REQUIRE_VERIFIED_AUTHORITY`), and an allow is consumable only once Grantex has countersigned it (`AGENTICORG_ARBITER_REQUIRE_GRANTEX_GRANT`). Tenant admins read the ledger, annotate decisions, store review manifests and retention dispositions under `/api/v1/commerce/runtime/ledger`, and `scripts/verify_ledger.py` verifies a ledger export offline. See [docs/oacp/arbiter-ledger.md](docs/oacp/arbiter-ledger.md).
+8. Agent platforms can use the merchant's UCP business profile, UCP checkout and ACP checkout sessions on a DNS-attested serving host, each behind its own flag (default off). They share one session table, the same arbiter `session_complete` decision and the same executor.
+9. Only a verified provider or merchant callback can confirm the external outcome.
 
 Agents that call the public commerce reads and the A2A routes may sign their requests under the Visa
 Trusted Agent Protocol or Web Bot Auth profiles of RFC 9421; AgenticOrg verifies them, records the
@@ -342,7 +351,7 @@ verified agent identity (on the commerce ledger for writes), and with
 public HTML pages, sitemap and `llms.txt` stay public). See
 [docs/oacp/agent-request-signing.md](docs/oacp/agent-request-signing.md).
 
-Start with [docs/oacp/README.md](docs/oacp/README.md) and the [runtime launch closure PRD](docs/oacp/runtime-launch-closure-prd.md).
+As of 2026-10-20 all of this is on `main`, and the AgenticOrg production deployment of it is next; check the deployed commit before relying on it. Start with [docs/oacp/README.md](docs/oacp/README.md) and the [runtime launch closure PRD](docs/oacp/runtime-launch-closure-prd.md).
 
 ## Requirements
 
@@ -400,6 +409,7 @@ A2A Agent Card discovery path.
 | GET /api/v1/product-facts | Live version and registry totals | Public |
 | GET /.well-known/agent-card.json | A2A v1 generic Agent Card (after release and ingress configuration) | Public |
 | GET /.well-known/ucp, POST /ucp/catalog/search, /ucp/catalog/lookup, /ucp/locations/* | UCP business profile, catalog and locations on a merchant's verified serving host (off by default) | Public, host-bound |
+| POST /ucp/checkout-sessions, GET/PUT /ucp/checkout-sessions/{id}, /complete, /cancel; /ucp/carts; GET /ucp/orders/{id} | UCP checkout, cart and order on a merchant's verified serving host (off by default) | Tenant API key issued to the agent platform (`ucp:read` / `ucp:write`) |
 | POST /acp/checkout_sessions, GET/POST /acp/checkout_sessions/{id}, /complete, /cancel | ACP checkout sessions on a merchant's verified serving host (off by default) | Tenant API key issued to the agent platform (`acp:read` / `acp:write`) |
 | GET /api/v1/a2a/extendedAgentCard | Merchant-specific seller card | Merchant-issued buyer credential; the agent's RFC 9421 signature is verified (logged, or required in `enforce` mode) |
 | POST /api/v1/a2a/message:send | A2A v1 synchronous text request | Buyer credential for seller Q&A, or scoped tenant credential for non-commerce agents; the agent's RFC 9421 signature is verified (logged, or required in `enforce` mode) |

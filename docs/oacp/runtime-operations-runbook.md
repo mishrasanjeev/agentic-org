@@ -12,6 +12,8 @@ Strict artifact verification (`AGENTICORG_OACP_VERIFY_STRICT`, on by default in 
 
 Then deploy AgenticOrg and run `POST /api/v1/commerce/runtime/artifacts/refresh` for each live merchant and seller agent, so legacy rows are replaced by verified ones. If AgenticOrg must ship first, set `AGENTICORG_OACP_VERIFY_STRICT=false` for that deployment as a recorded operator decision and unset it once the three items are live and the refresh has run.
 
+Status on 2026-10-20: in Grantex production all three items are live (first OACP issuer key `oacp-20261020-12b09be0ba65bd14`, `OACP_STATUS_LIST_PUBLIC_ENABLED=true`). Before deploying, confirm the key is still listed in `https://<Grantex API origin>/.well-known/jwks.json` and that a status list URL from a fresh issuance answers 200; staging needs the same check against the staging Grantex. AgenticOrg production does not yet run this release.
+
 ## Commerce Ledger, Countersignature And Witness
 
 Deploy order: Grantex with `POST /v1/commerce/oacp/arbiter-decisions` and `POST
@@ -85,6 +87,8 @@ Set `OACP_LAUNCH_EXTERNAL_CHECKS=true` only when Shopify, Grantex, and Plural/Pi
 10. WhatsApp and Telegram signed webhook smokes when credentials are present.
 11. Pine/Plural capability verifier and purchase prepare handoff/blocker.
 12. Offline POS fake packet 404, unsigned callback rejected/downgraded, signed safe-mode callback accepted.
+13. Arbiter and ledger checks above (decision, countersignature, export verified offline).
+14. Only for a flag turned on in this deployment: the UCP and ACP smokes in the [launch and rollback runbook](explainers/launch-rollback-runbook.md#ucp-smoke). With the UCP and ACP flags off, `/.well-known/ucp` must answer 404, and so must authenticated calls to `/ucp/*` and `/acp/*` (unauthenticated ones are refused earlier with 401).
 
 ## Monitor
 
@@ -100,13 +104,15 @@ Set `OACP_LAUNCH_EXTERNAL_CHECKS=true` only when Shopify, Grantex, and Plural/Pi
 - Offline POS handoff packet creation rate.
 - POS confirmation status mix.
 - Reconciliation outcomes that require inventory or artifact refresh.
+- `commerce_ledger_event_missing` (a commerce write route returned without its ledger event) and arbiter refusals by `failing_rule`.
+- With UCP or ACP on: `executor_unavailable` / `unsupported` Completes, idempotency 409/422 rates, order-webhook dead letters (`GET /api/v1/commerce/runtime/ucp/orders/{order_id}/webhook-deliveries`), and ACP `invalid_signature` 401s in `enforce` mode.
 
 ## Rollback
 
 1. Disable buyer surfaces for affected merchant.
 2. Disable merchant public publishing in merchant commerce config, or set `OACP_PUBLIC_CATALOG_PLATFORM_DISABLED=true` for a platform-wide stop.
 3. Mark affected cache records stale.
-   If strict OACP verification refuses every Grantex issuance because Grantex is not yet issuing ES256-signed artifacts, the recorded operator decision is `AGENTICORG_OACP_VERIFY_STRICT=false` for that deployment until Grantex deploys; artifacts are then cached without a `verifier_result_ref` and every failure is logged as an irregularity. Set it back (unset) once `verification.refused` is empty.
+   If strict OACP verification refuses every Grantex issuance (the Grantex environment is not issuing ES256-signed artifacts, has no `oacp-` key in its JWKS, or does not serve its status list), the recorded operator decision is `AGENTICORG_OACP_VERIFY_STRICT=false` for that deployment until the Grantex side is fixed; artifacts are then cached without a `verifier_result_ref` and every failure is logged as an irregularity. Set it back (unset) once `verification.refused` is empty.
 4. Stop Shopify sync jobs.
 5. Ask Grantex to remove tenant allowlist or rotate token if needed.
 6. Disable Offline POS handoff creation for affected merchant if POS evidence is stale or callback verification fails.
@@ -114,11 +120,13 @@ Set `OACP_LAUNCH_EXTERNAL_CHECKS=true` only when Shopify, Grantex, and Plural/Pi
    the cause is fixed): Grantex unreachable or misconfigured, so every executing call is refused
    `grantex_grant_missing`: `AGENTICORG_ARBITER_REQUIRE_GRANTEX_GRANT=false` (posting continues
    while `AGENTICORG_ARBITER_GRANTEX_POST_ENABLED` is unset or true). Caller-asserted buyer
-   authority must be accepted before Phase 4: `AGENTICORG_ARBITER_REQUIRE_VERIFIED_AUTHORITY=false`.
+   authority must be accepted while no server-verified mandate path exists on the deployed
+   commit: `AGENTICORG_ARBITER_REQUIRE_VERIFIED_AUTHORITY=false`.
    Witness posting misbehaving: `AGENTICORG_AUDIT_WITNESS_ENABLED=false` (sealing is unaffected).
    Retention deleting unexpectedly: `AGENTICORG_OACP_RETENTION_APPLY_ENABLED=false`; deletions
    already made are on the ledger (`commerce.oacp.retention.manifest_deleted`).
-8. Re-run smoke before re-enabling.
+8. UCP and ACP surfaces: set the surface's flag to `false` (each answers 404 while off); per-merchant and per-platform steps are in the [launch and rollback runbook](explainers/launch-rollback-runbook.md#rollback).
+9. Re-run smoke before re-enabling.
 
 ## Merchant Config Smoke
 

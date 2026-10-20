@@ -16,8 +16,14 @@ flowchart TD
 
 ## Can Do
 
-Ask, compare, reason, explain source/freshness, and prepare a non-executing handoff.
+Ask, compare, reason, explain source/freshness, and prepare a non-executing handoff. Where the
+merchant has turned on UCP or ACP checkout (both off by default), a buyer agent can also create
+and update a checkout session; it completes only after the commerce arbiter sealed an `allow`
+decision for that exact session and a registered executor consumed it. The Plural executor is
+registered only while `PLURAL_PINE_LIVE_EXECUTION_ENABLED` is on (off by default).
 
 ## Cannot Do
 
-Invent paid states, create order, create checkout, reserve stock, set up mandate, or call private merchant systems outside approved runtime.
+Invent paid states, treat a session that is not `completed` as an order, reserve stock, set up a
+mandate, or call private merchant systems outside the approved runtime. Nothing a buyer agent
+sends approves execution by itself: there is no request field that does.

@@ -6,7 +6,9 @@ import ProductOwnership from "../../components/ProductOwnership";
 import publicSite from "../../content/publicSite.json";
 import { BLOG_POSTS } from "./blogData";
 import BlogWorkflow from "./BlogWorkflow";
+import BlogFigure from "./BlogFigure";
 import "./blogWorkflows.css";
+import "./blogFigures.css";
 
 const SITE_URL = "https://agenticorg.ai";
 const SOCIAL_IMAGE = SITE_URL + "/og-image.png";
@@ -31,6 +33,9 @@ export default function BlogPost() {
 
   const canonical = SITE_URL + "/blog/" + post.slug;
   const hasWorkflows = Boolean(post.workflows?.length);
+  const hasFigures = Boolean(post.figures?.length);
+  // Workflow and figure posts share the editorial layout; figure posts also follow the reader's dark preference.
+  const isEditorial = hasWorkflows || hasFigures;
   const socialImage = post.socialImage ? SITE_URL + post.socialImage : SOCIAL_IMAGE;
   const pageTitle = post.title + " | AgenticOrg Blog";
   const breadcrumbId = canonical + "#breadcrumb";
@@ -103,7 +108,7 @@ export default function BlogPost() {
   };
 
   return (
-    <div className={`min-h-screen bg-white${hasWorkflows ? " workflow-article" : ""}`}>
+    <div className={`min-h-screen bg-white${isEditorial ? " workflow-article" : ""}${hasFigures ? " figure-article" : ""}`}>
       <Helmet htmlAttributes={{ lang: "en-IN" }}>
         <title>{pageTitle}</title>
         <meta name="description" content={post.description} />
@@ -139,7 +144,7 @@ export default function BlogPost() {
 
       {/* Header */}
       <header className="blog-post-header bg-slate-900 py-16">
-        <div className={`${hasWorkflows ? "max-w-5xl" : "max-w-3xl"} mx-auto px-4 sm:px-6 lg:px-8`}>
+        <div className={`${isEditorial ? "max-w-5xl" : "max-w-3xl"} mx-auto px-4 sm:px-6 lg:px-8`}>
           <Link to="/blog" className="inline-flex items-center gap-2 mb-6 text-slate-400 hover:text-white transition-colors text-sm">
             <ArrowLeft className="h-4 w-4" aria-hidden="true" />
             All Posts
@@ -156,7 +161,7 @@ export default function BlogPost() {
           <h1 className="text-3xl sm:text-4xl font-extrabold text-white leading-tight">
             {post.title}
           </h1>
-          {hasWorkflows && <p className="article-summary">{post.description}</p>}
+          {isEditorial && <p className="article-summary">{post.description}</p>}
 
           <div className="mt-6 flex items-center gap-3">
             <div className="blog-avatar w-8 h-8 rounded-full bg-gradient-to-br from-blue-500 to-teal-500 flex items-center justify-center text-white text-sm font-bold">
@@ -171,13 +176,21 @@ export default function BlogPost() {
       </header>
 
       {/* Article Content */}
-      <article className={`${hasWorkflows ? "max-w-5xl" : "max-w-3xl"} mx-auto px-4 sm:px-6 lg:px-8 py-12`}>
+      <article className={`${isEditorial ? "max-w-5xl" : "max-w-3xl"} mx-auto px-4 sm:px-6 lg:px-8 py-12`}>
+        {post.summary && (
+          <aside className="article-summary-box" aria-labelledby="article-thirty-seconds">
+            <h2 id="article-thirty-seconds">In 30 seconds</h2>
+            <ul>
+              {post.summary.map((item) => <li key={item}>{item}</li>)}
+            </ul>
+          </aside>
+        )}
         {post.intro && <p className="article-context">{post.intro}</p>}
         {post.pilotChecklist && (
           <section aria-labelledby="article-start" className="mb-8 border-b border-slate-200 pb-8">
             <h2 id="article-start" className="text-2xl font-bold text-slate-900">Start with a bounded pilot</h2>
             {post.statusNote && <p className="mt-3 text-sm leading-relaxed text-slate-700">{post.statusNote}</p>}
-            <ol className={`${hasWorkflows ? "blog-pilot-list" : "space-y-2"} mt-4 list-decimal pl-5 text-slate-700`}>
+            <ol className={`${isEditorial ? "blog-pilot-list" : "space-y-2"} mt-4 list-decimal pl-5 text-slate-700`}>
               {post.pilotChecklist.map((item) => <li key={item} className="pl-1 leading-relaxed">{item}</li>)}
             </ol>
           </section>
@@ -202,6 +215,9 @@ export default function BlogPost() {
                 <h2 id={`article-section-${i}`} className="text-2xl font-bold text-slate-900 mt-10 mb-4">{paragraph.slice(3)}</h2>
                 {post.workflows?.filter((workflow) => workflow.heading === paragraph.slice(3)).map((workflow) => (
                   <BlogWorkflow key={workflow.id} workflow={workflow} />
+                ))}
+                {post.figures?.filter((figure) => figure.heading === paragraph.slice(3)).map((figure) => (
+                  <BlogFigure key={figure.id} figure={figure} />
                 ))}
               </Fragment>;
             }
@@ -261,7 +277,13 @@ export default function BlogPost() {
         )}
 
         {/* CTA */}
-        {hasWorkflows ? (
+        {post.nextStep ? (
+          <aside className="workflow-next-step" aria-labelledby="workflow-next-step">
+            <h2 id="workflow-next-step">{post.nextStep.heading}</h2>
+            <p>{post.nextStep.body}</p>
+            <Link to={post.nextStep.href}>{post.nextStep.label}</Link>
+          </aside>
+        ) : hasWorkflows ? (
           <aside className="workflow-next-step" aria-labelledby="workflow-next-step">
             <h2 id="workflow-next-step">Start with one exception you can keep under control.</h2>
             <p>Use synthetic records, a named reviewer and explicit refusal tests. The deployment guide lists the settings, evidence and owners needed before expanding access.</p>

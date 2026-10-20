@@ -69,7 +69,7 @@ export const CONTENT_PAGES: ContentPage[] = [
     ],
     faqs: [
       { q: "Does AgenticOrg move my Shopify source of truth?", a: "No. Shopify remains the source of record. AgenticOrg stores public-safe OACP refs and freshness labels." },
-      { q: "Can the buyer agent complete payment by itself?", a: "No. Payment and mandate rails remain provider-owned. Pine/Plural capability can be verified where configured; bank-owned and other rails require approved adapters before execution." },
+      { q: "Can the buyer agent complete payment by itself?", a: "No. Nothing a buyer agent sends approves a payment. A checkout completes only after the commerce arbiter's fixed rules allow that exact checkout and the Plural payment executor carries it out, and that executor is switched off by default. Payment and mandate rails remain provider-owned; bank-owned and other rails require approved adapters before execution." },
     ],
     relatedSlugs: ["commerce-sales-agent-grantex", "buyer-agents-shop-safely-oacp"],
     cta: { text: "Open the OACP flow", link: "/open-agentic-commerce-protocol" },
@@ -85,7 +85,7 @@ export const CONTENT_PAGES: ContentPage[] = [
     sections: [
       { heading: "Evidence First", body: "Buyer agents use OACP artifacts carrying source refs, TTL, freshness, revocation posture, risk tier, and blocked capabilities before answering." },
       { heading: "What The Agent Can Do", body: "The agent can answer product questions, compare options, show source/freshness, and prepare a non-executing handoff when required evidence is fresh." },
-      { heading: "What The Agent Cannot Do", body: "The agent cannot create orders, capture payment, create checkout, reserve stock, create mandates, or invent provider status from cached artifacts." },
+      { heading: "What The Agent Cannot Do", body: "The agent cannot create orders, capture payment, reserve stock, create mandates, or invent provider status from cached artifacts. Where a merchant turns on UCP or ACP checkout (off by default), an agent can open a checkout session, but it completes only with an allow decision from the commerce arbiter and the Plural payment executor, which is switched off by default." },
     ],
     faqs: [
       { q: "What happens when artifacts are stale?", a: "AgenticOrg refreshes through approved authority paths or refuses the request." },
@@ -122,11 +122,11 @@ export const CONTENT_PAGES: ContentPage[] = [
     keywords: ["OACP mapping", "Schema.org OACP", "ACP AP2 A2A MCP", "agentic commerce protocol"],
     sections: [
       { heading: "Canonical Artifact", body: "OACP artifacts remain the canonical trust input. Adapter payloads are deterministic views derived from source, freshness, policy, and capability fields." },
-      { heading: "Mappings", body: "AgenticOrg can emit Schema.org, UCP-style, ACP-style, AP2-style, A2A, MCP, and OpenAPI payloads from cached artifacts." },
+      { heading: "Mappings", body: "AgenticOrg can emit Schema.org, ACP-style, AP2-style, A2A, MCP, and OpenAPI compatibility payloads from verified cached artifacts. For UCP it renders the merchant's business profile in the published shape, and the UCP and ACP checkout routes are separate surfaces behind switches that default to off." },
       { heading: "Boundary", body: "Compatibility mapping is not official external approval. Public claims require separate partner review and evidence." },
     ],
     faqs: [
-      { q: "Does an adapter create checkout?", a: "No. Adapter payloads are metadata and buyer-safe compatibility views." },
+      { q: "Does an adapter create checkout?", a: "No. Adapter payloads are metadata and buyer-safe compatibility views. Checkout sessions exist only on the UCP and ACP routes, which are off by default." },
       { q: "Can unsupported fields be guessed?", a: "No. Unsupported execution fields are omitted or blocked." },
     ],
     relatedSlugs: ["build-against-oacp-artifacts-bridges", "buyer-agents-shop-safely-oacp"],
@@ -159,9 +159,9 @@ export const CONTENT_PAGES: ContentPage[] = [
     metaDescription: "Operator guide for smoke tests, credentials, channel approvals, monitoring, and rollback for OACP commerce runtime.",
     keywords: ["OACP runbook", "agentic commerce launch", "commerce rollback", "OACP smoke test"],
     sections: [
-      { heading: "Launch Smoke", body: "Save merchant commerce config, create or sync onboarding packet, store Shopify credentials, run read-only sync, request Grantex authority, cache artifacts, ask buyer question, check bridge matrix, verify Plural/Pine capability, and prepare purchase handoff." },
+      { heading: "Launch Smoke", body: "Save merchant commerce config, create or sync onboarding packet, store Shopify credentials, run read-only sync, request Grantex authority, cache verified artifacts, ask buyer question, check bridge matrix, verify Plural/Pine capability, prepare a purchase handoff and check its arbiter decision on the ledger." },
       { heading: "Monitoring", body: "Watch Shopify sync failures, Grantex authority blockers, cache freshness, source-label regressions, bridge errors, provider capability status, and purchase-preparation blockers." },
-      { heading: "Rollback", body: "Disable buyer surfaces, mark cache stale, stop Shopify sync, remove Grantex tenant allowlist or rotate service token, and re-enable only after smoke tests pass." },
+      { heading: "Rollback", body: "Disable buyer surfaces, mark cache stale, stop Shopify sync, remove Grantex tenant allowlist or rotate service token, turn off the UCP or ACP switch involved, and re-enable only after smoke tests pass. Every switch has a recorded rollback in the runbook." },
     ],
     faqs: [
       { q: "What is the fastest rollback?", a: "Disable buyer surfaces and mark cache records stale while the authority path is reviewed." },
@@ -177,17 +177,17 @@ export const CONTENT_PAGES: ContentPage[] = [
     metaTitle: "Commerce Sales Agent with Grantex Controls | AgenticOrg",
     metaDescription: "How AgenticOrg's Commerce Sales Agent uses OACP-governed commerce tools, artifact cache controls, consent, Commerce Passports, and provider-owned checkout handoff boundaries.",
     keywords: ["commerce sales agent", "Grantex commerce", "agentic commerce", "commerce passport", "AI shopping agent safety"],
-    heroStat: { value: "0", label: "Provider rail executions by AgenticOrg" },
+    heroStat: { value: "0", label: "Payments without an arbiter allow decision" },
     sections: [
       { heading: "A Commerce Agent With A Control Layer", body: "AgenticOrg's Commerce Sales Agent is designed to help users ask product questions, compare grounded catalog results, draft carts, request consent, and follow checkout status without taking payment-provider control.\n\nThe OACP runtime boundary is split: Grantex owns trust/artifact authority, AgenticOrg owns buyer and seller agent runtime, merchant systems own commerce facts, and provider rails own payment or mandate execution." },
       { heading: "How The Flow Works", body: "The flow is intentionally staged: user question -> grounded product data -> inventory check -> cart draft -> consent or policy check -> provider-owned handoff or refusal -> status from merchant/provider evidence.\n\nAgenticOrg does not mint payment success locally. It can verify provider-owned capability metadata and prepare a handoff when configured, but provider abstraction, live execution approval, amount caps, audit, and reconciliation must remain with the approved authority and provider systems." },
       { heading: "Latest OACP Runtime Vertical", body: "AgenticOrg now has a concrete Shopify-to-OACP runtime path: merchant self-service commerce config, Seller Commerce Agent onboarding, encrypted merchant-scoped Shopify credential setup, read-only Admin GraphQL sync for products, variants, images, price, status, and inventory snapshots, Grantex C6Z authority requests, 11-family OACP artifact cache intake, buyer Q&A from cache, protocol adapter payload generation, bridge readiness endpoints, and merchant-controlled public catalog publishing.\n\nCache records are scoped by buyer agent, seller agent, tenant, and merchant and are evaluated for TTL, freshness, revocation posture, source refs, risk tier, and non-execution flags before buyer answers or prepared handoffs are produced." },
-      { heading: "Current Readiness Posture", body: "The current runtime can answer product questions from cached OACP artifacts, expose Schema.org/UCP-style/ACP-style/AP2-style/A2A/MCP/OpenAPI compatibility payloads, and verify Pine Labs Plural/P3P mandate capability metadata when credentials are configured.\n\nThis does not mean universal production checkout or live payments are enabled. AgenticOrg prepares a provider handoff or returns an exact blocker; it does not fake paid states, create orders, reserve inventory, publish public OACP certification claims, or execute provider payment rails without merchant, provider, channel, and rollout approval." },
+      { heading: "Current Readiness Posture", body: "The current runtime can answer product questions from cached OACP artifacts, expose Schema.org, ACP-style, AP2-style, A2A, MCP and OpenAPI compatibility payloads and the merchant's UCP business profile, and verify Pine Labs Plural/P3P mandate capability metadata when credentials are configured.\n\nThis does not mean universal production checkout or live payments are enabled. AgenticOrg prepares a provider handoff or returns an exact blocker; it does not fake paid states, create orders, reserve inventory, publish public OACP certification claims, or execute provider payment rails without merchant, provider, channel, and rollout approval." },
       { heading: "What Users Should Expect", body: "The agent can help explain products and prepare a cart, but payment-affecting steps require Grantex consent and policy checks. Amount caps, merchant status, trusted agent checks, and passport state determine whether a checkout path may continue.\n\nIf a required consent or fixture is missing, the evaluated path records a skipped or blocked case instead of pretending that hosted evidence passed." },
       { heading: "What Operators Should Watch", body: "Operators should review merchant config readiness, source evidence, Grantex authority blockers, provider capability evidence, bank/provider adapter status, channel approvals, POS bridge state, and public publishing state. Payment execution remains provider-owned and approval-gated." },
     ],
     faqs: [
-      { q: "Does AgenticOrg execute payment providers directly for commerce?", a: "No. AgenticOrg can verify provider-owned capability metadata and prepare provider-owned handoffs where configured, but it does not execute payment rails or claim payment success." },
+      { q: "Does AgenticOrg execute payment providers directly for commerce?", a: "Only through its Plural executor, which is switched off by default. With it on, a UCP or ACP checkout is charged through Plural once, and only after the commerce arbiter allowed that exact checkout. Otherwise AgenticOrg verifies provider-owned capability metadata and prepares provider-owned handoffs; it never claims payment success without the provider's confirmation." },
       { q: "Is payment execution live for every merchant?", a: "No. The runtime can prepare provider-owned handoffs only when a merchant, provider or bank, channel, and environment are configured and approved. Otherwise it fails closed with blockers." },
       { q: "Why can production discovery metadata appear before production readiness?", a: "Production MCP/A2A commerce metadata may be visible, but Grantex production Commerce V1 discovery remains disabled/fail-closed. The metadata should be gated or explicitly reviewed before any production discovery readiness decision." },
     ],

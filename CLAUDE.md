@@ -120,6 +120,10 @@ routes, never the public HTML pages, schema.org JSON-LD, sitemap or `llms.txt`),
 `AGENTICORG_HTTPSIG_SIGNATURE_AGENT_ORIGINS` (empty by default: no key resolves),
 `AGENTICORG_HTTPSIG_REGISTRY_LOOKUP_ENABLED` and `AGENTICORG_HTTPSIG_SIGN_OUTBOUND` (default off) and
 `AGENTICORG_A2A_SCHEME_AGENT_IDS` (empty); see `docs/oacp/agent-request-signing.md`.
+Every OACP flag's default, turn-on order and rollback, and the staging run
+(`AGENTICORG_ROUTE_ENFORCEMENT_MODE=log`, `AGENTICORG_HTTPSIG_VERIFY_MODE=log`,
+`AGENTICORG_UCP_CHECKOUT_ENABLED=false`, `PLURAL_PINE_LIVE_EXECUTION_ENABLED=false`) are in
+`docs/oacp/explainers/launch-rollback-runbook.md`; keep that table current when a flag changes.
 
 **No human legs in commerce decisions.** The commerce arbiter (`core/commerce/arbiter.py`) is a
 deterministic policy function: it seals `allow` or `refuse`, never "pending", reads no clock

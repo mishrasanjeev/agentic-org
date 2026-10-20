@@ -1,5 +1,9 @@
 # Agent request signing (RFC 9421, Visa TAP, Web Bot Auth)
 
+Status on 2026-10-20: on `main` with `AGENTICORG_HTTPSIG_VERIFY_MODE=log` (the default) and
+outbound signing off; not yet in the AgenticOrg production deployment. Turn-on order and
+rollback: [launch and rollback runbook](explainers/launch-rollback-runbook.md#agent-request-signature-rollout).
+
 AgenticOrg verifies the HTTP message signatures of agents that call its public commerce reads and
 its A2A routes, and signs the requests its own buyer agent sends. Both directions use RFC 9421
 HTTP Message Signatures under two public profiles:
@@ -29,8 +33,7 @@ The implementation is the `grantex-agent-httpsig` library (version 0.2.0, `verif
 > one), `[tool.hatch.metadata] allow-direct-references` is on, every image that installs the
 > Python dependencies has `git`, and `config/pip-audit-exceptions.toml` carries a reviewed
 > `[[skip]]` for it (pip-audit cannot look it up on PyPI). The commit must exist on GitHub before
-> CI can install it. The sha is the Grantex Phase 5 branch head for now and moves to the Grantex
-> `main` merge commit once Phase 5 lands there.
+> CI can install it. As of 2026-10-20 the pinned commit is in the history of Grantex `main`.
 
 ## Inbound verification (`auth/httpsig.py`)
 

@@ -158,6 +158,12 @@ allow decision:
    consumes the decision once, bound to the session payload hash; a changed
    session or credential is refused.
 
+Both steps need a payment executor registered in the API for the merchant: the
+Plural executor, which the API registers only with
+`PLURAL_PINE_LIVE_EXECUTION_ENABLED=true` (off by default). Without it Complete
+answers `executor_unavailable` (a business outcome, below) and the session
+stays `ready_for_complete`.
+
 A call with neither, or with both, is refused by this server without contacting
 the API. `decide_only` and `decision_id` may also be sent inside the checkout's
 `ai.agenticorg.commerce` member (with `buyer_authority`); conflicting values are

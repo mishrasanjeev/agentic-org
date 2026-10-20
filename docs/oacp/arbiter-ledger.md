@@ -2,9 +2,11 @@
 
 Canonical end-to-end flow: [OACP end-user flow](end-user-flow.md).
 
-Every commerce write leaves a signed, hash-chained ledger row, and every commitment-bound
-action (purchase handoff, POS handoff, and later mandate request and session complete) is
-decided by a deterministic arbiter before anything executes.
+Every commerce write leaves an HMAC-signed ledger row (hash-chained once the sealing task covers
+the tenant: `AGENTICORG_AUDIT_CHAIN_ENABLED` or `AGENTICORG_AUDIT_CHAIN_DEFAULT_ON`, both off by
+default), and every commitment-bound action (purchase handoff, POS handoff, UCP and ACP checkout
+Complete, refund, and later mandate request) is decided by a deterministic arbiter before anything
+executes.
 
 **No human legs.** The arbiter is a pure policy function. It seals `allow` or `refuse`; it never
 waits for a person and never returns "pending". Human review is a merchant option that only
@@ -60,7 +62,7 @@ that needed it.
 | `afa_evidence_present` (`session_complete` only, last) | No UPI AutoPay instrument in the payload; or RBI AFA does not apply (a subsequent debit within the limit; never for `human_not_present`); or server-side AFA evidence is present ([Mandates](mandates.md#the-arbiter-rule-afa_evidence_present)). | `afa_input_missing`, `afa_evidence_missing` |
 | `refund_within_captured` (`refund`, its only rule) | The refund is positive, in the order currency, and the captured amount covers it with every earlier refund that has not failed. | `refund_input_missing`, `refund_amount_invalid`, `refund_currency_mismatch`, `order_not_captured`, `refund_exceeds_captured` |
 
-Buyer authority has two sources. On a UCP Complete with `mandate_request`, the server requests
+Buyer authority has two sources. On a UCP or ACP Complete with `mandate_request` (`AGENTICORG_GRANTEX_MANDATES_ENABLED` on), the server requests
 the Intent, Cart and Payment mandates from Grantex and verifies them itself; only a verified,
 linked and bound chain becomes the mandate, consent and passport evidence, with the
 verification ref `oacp-mandate-v1;jti=<payment jti>;mandate_hash=<hex>;verified_at=<time>`
@@ -138,14 +140,14 @@ Merchant configuration (under `provider_policy`):
    wait for it and the decision does not change. Off (the default), nothing touches
    `hitl_queue`.
 
-UCP session complete uses the same guard with the `session_complete` action. A fresh decision is
-sealed in its own transaction; after that commit it is offered to Grantex; then the allow is
-consumed in a second transaction (the session must still be `ready_for_complete` at the decided
-revision, else `decision_payload_mismatch`). So a strict runtime that requires the Grantex grant
-can consume it. A refund of a captured order is decided with the `refund` action and
-consumed by the same guard before the Plural executor calls Plural
-([Plural executor, Refunds](plural-executor.md#refunds)). A mandate request route arrives with Phase 4 mandates; the arbiter
-already defines the `mandate_request` rule set.
+UCP and ACP session complete use the same guard with the `session_complete` action. A fresh
+decision is sealed in its own transaction; after that commit it is offered to Grantex; then the
+allow is consumed in a second transaction (the session must still be `ready_for_complete` at the
+decided revision, else `decision_payload_mismatch`). So a strict runtime that requires the
+Grantex grant can consume it. A refund of a captured order is decided with the `refund` action
+and consumed by the same guard before the Plural executor calls Plural
+([Plural executor, Refunds](plural-executor.md#refunds)). No mandate request route exists on
+`main`; the arbiter already defines the `mandate_request` rule set.
 
 ## Append-Only Storage: Choice And Alternative
 
@@ -194,7 +196,7 @@ has a 5 s timeout, and is never retried.
 - A refusal is recorded by Grantex and gets no token (`grantex_countersignature.status:
   recorded`).
 - An allow gets a `decision+jwt` grant in the machine profile. It is verified against the
-  Grantex JWKS pinned in configuration (the Phase 1 trust fetcher and its caches): issuer,
+  Grantex JWKS pinned in configuration (the artifact verifier's trust fetcher and its caches): issuer,
   audience `urn:grantex:decision`, `approver_auth: policy_arbiter`, `action_hash ==
   payload_hash`, `decision_request == decision_id`, `sub == buyer_agent_id`, no `acr`,
   unexpired and at most 10 minutes after the decision. Its `jti` is then attached to the decision

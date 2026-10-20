@@ -1,5 +1,14 @@
 # The Buyer Journey From Question To Prepared Purchase Handoff
 
+> **Update, 20 October 2026.** Since this post was written, Grantex signs every OACP artifact
+> (ES256 detached JWS) and AgenticOrg's `main` branch verifies each one before caching it. A
+> deterministic commerce arbiter decides every purchase handoff, POS handoff and checkout
+> completion (allow or refuse, never waiting for a person), and every commerce change is written
+> to the commerce ledger. UCP and ACP checkout, server-verified Grantex mandates and a Plural
+> payment executor exist behind flags that default to off, so with the defaults nothing moves money. The AgenticOrg changes are not in its production
+> deployment yet. Current state: [OACP explained](oacp-one-trust-layer-under-ucp-acp-ap2.md) and
+> the [truth inventory](../oacp/truth-inventory.md).
+
 ## Summary
 
 OACP lets a buyer journey move from discovery to prepared purchase handoff without faking checkout, payment, order, or mandate success.

@@ -4,6 +4,11 @@ Canonical end-to-end flow: [OACP end-user flow](end-user-flow.md).
 
 AgenticOrg caches Grantex OACP artifacts as public-safe refs scoped by tenant, merchant, seller agent, buyer agent, artifact family, and source refs. `POST /api/v1/commerce/runtime/artifacts/cache` verifies every artifact before it opens a database session; what "verified" means, and what happens when verification fails, is set out below.
 
+Status on 2026-10-20: this verifier is on `main` but not yet in the AgenticOrg production
+deployment. Grantex production has what strict verification needs: ES256-signed artifacts, an
+`oacp-` issuer key in its JWKS and its public Token Status List. After AgenticOrg deploys, run the
+refresh below for each live scope so rows cached before verification existed are replaced.
+
 ## Verification Before Caching
 
 The verifier is `core/commerce/oacp_grantex_trust.py` (network and caching) over `core/commerce/oacp_jws.py` and `verify_oacp_artifact` in `core/commerce/oacp_artifacts.py` (no I/O). It applies the OACP artifact JWS profile v1 in this order, and the first failure is the refusal code:

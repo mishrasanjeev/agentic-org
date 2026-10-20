@@ -57,14 +57,18 @@ Capability evidence is not mandate creation, payment capture, checkout creation,
 The verifier never moves money, whatever the flags say.
 
 Payment execution is a separate component: the [Plural executor](plural-executor.md). It runs
-only while `PLURAL_PINE_LIVE_EXECUTION_ENABLED=true` and only on a consumed arbiter `allow`
-decision. The merchant's `mandate_capability`, the configuration this verifier's evidence
-describes, sets the executor's allowance:
+only while `PLURAL_PINE_LIVE_EXECUTION_ENABLED=true` (off by default) and only on a consumed
+arbiter `allow` decision. The merchant's `mandate_capability`, the configuration this verifier's
+evidence describes, sets the executor's allowance:
 
 - `max_amount_minor_units` is the most one payment may charge;
 - `currency` is the currency it charges in;
 - with a complete `upi_autopay` block, UPI AutoPay e-mandates are offered
   ([Mandates](mandates.md)).
+
+The UCP and ACP Plural tokenised-instrument payment handler (`plural_tokenized`) only advertises
+the instrument, the rails and cap, and the allowance a checkout must stay within; it executes
+nothing itself.
 
 Grantex may verify or sign non-sensitive evidence refs. It does not execute provider rails;
 the decision to execute directly from AgenticOrg rather than through Grantex Commerce V1 is
