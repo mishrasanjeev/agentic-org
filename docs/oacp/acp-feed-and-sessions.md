@@ -73,7 +73,8 @@ The ACP Feed API itself is a push API the agent platform hosts (`POST /feeds`,
 
 At `https://<merchant serving host>/acp`, authenticated with `Authorization: Bearer` and the tenant
 API key the merchant issued to the agent platform (scopes `acp:read`, `acp:write`; no role holds
-them). The merchant is resolved from `Host` exactly as for UCP: an attested, published serving
+them; the session, its idempotency records and its order events are bound to that key, and any other
+credential type is refused with 403). The merchant is resolved from `Host` exactly as for UCP: an attested, published serving
 host inside the tenant of the credential.
 
 | Operation | Route | Success |
@@ -141,7 +142,7 @@ per-path scope).
 ACP recommends `Signature` and `Timestamp` but publishes no algorithm, canonical form, signed fields
 or key distribution: they are arranged out of band with each agent platform. Verification is
 therefore pluggable: `core.commerce.acp.headers.register_signature_verifier(platform, verifier)`
-registers a verifier for one platform (`apikey:<prefix>` of its API key), checked with a 300 second
+registers a verifier for one platform (`acp:api_key:<key id>`, the API key it calls with), checked with a 300 second
 `Timestamp` window. No verifier ships. In the default `log` mode the outcome (`absent`,
 `no_verifier`, `stale_timestamp`, `invalid`, `verified`) is logged and nothing is refused; `enforce`
 refuses everything a registered verifier does not accept, which today is every request.
@@ -209,13 +210,15 @@ not expired, covering the total (`maximum_exceeded` otherwise).
 
 Orders created from ACP sessions are the UCP order entity. A merchant subscribes an ACP agent
 platform's receiver with an `acp_hmac` webhook subscription
-(`POST /api/v1/commerce/runtime/ucp/order-webhook-subscriptions`, `scheme: acp_hmac`; the shared
-secret is shown once). Each order revision is delivered as
+(`POST /api/v1/commerce/runtime/ucp/order-webhook-subscriptions`, `scheme: acp_hmac`,
+`platform_api_key_id`: the API key the merchant issued to that platform; the shared secret is
+shown once). The subscription receives only orders from checkout sessions that key created: never
+another platform's, a UCP or a direct order. Each order revision is delivered as
 `{type: order_create | order_update, data: <full ACP Order>}` with
 `Merchant-Signature: t=<unix>,v1=hex(HMAC-SHA256(secret, t + "." + body))`, `Request-Id` (stable per
 revision) and `Timestamp`, through the UCP outbox (retries, dead letters, replay). Signing uses the
 subscription's active key only (one `v1` per header): after a key rotation the receiver switches
-secret at once. Merchant subscriptions receive all of the merchant's orders. The signature matches
+secret at once. Only the merchant's own `ucp` subscriptions receive all of its orders. The signature matches
 the shared vectors in `tests/fixtures/acp/merchant-signature-v1.json`.
 
 ### Ledger events

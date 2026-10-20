@@ -73,11 +73,17 @@ runtime_factory = build_runtime
 
 
 def _platform(request: Request) -> str:
-    """The calling platform: the authenticated credential's subject (``apikey:<prefix>`` for an API key)."""
-    subject = getattr(request.state, "user_sub", None) or getattr(request.state, "agent_id", None)
-    if not subject:
-        raise HTTPException(status_code=403, detail="No platform identity on this credential")
-    return f"acp:{subject}"[:2048]
+    """The calling agent platform: the API key it authenticated with (``acp:api_key:<key id>``).
+
+    ACP platforms are machine credentials the merchant issued; sessions, idempotency records and order
+    webhooks are bound to that key. Any other credential has no platform identity here.
+    """
+    from core.commerce.ucp.webhooks import acp_platform_id
+
+    key_id = getattr(request.state, "api_key_id", None)
+    if getattr(request.state, "auth_mode", None) != "api_key" or not key_id:
+        raise HTTPException(status_code=403, detail="ACP checkout needs the API key issued to the agent platform")
+    return acp_platform_id(key_id)
 
 
 async def _call(operation: str, request: Request, tenant_id: str, session_id: str | None = None) -> JSONResponse:

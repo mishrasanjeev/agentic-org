@@ -33,6 +33,7 @@ def _app(scopes: list[str]) -> FastAPI:
         request.state.auth_mode = "api_key"
         request.state.api_key_name = "platform-key"
         request.state.user_sub = "apikey:ao_sk_platform"
+        request.state.api_key_id = "00000000-0000-4000-8000-00000000a001"
         return await call_next(request)
 
     app.include_router(commerce_acp.router)

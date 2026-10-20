@@ -152,6 +152,7 @@ async def test_create_update_complete_on_the_shared_session_table_with_signed_ac
             url="https://agent.example/agentic_checkout/webhooks/order_events",
             scheme="acp_hmac",
             now=datetime.now(UTC),
+            platform=af.PLATFORM,
         )
     session_body = await _ready(runtime, tenant)
     assert session_body["status"] == "ready_for_payment", session_body["messages"]
@@ -275,7 +276,7 @@ async def test_sessions_belong_to_their_protocol_and_platform(db):
     runtime = af.runtime(tenant)
     created = await acp.run(af.request("create", tenant, af.create_body()), runtime)
     session_id = created.body["id"]
-    other = await acp.run(af.request("get", tenant, session_id=session_id, platform="acp:apikey:other"), runtime)
+    other = await acp.run(af.request("get", tenant, session_id=session_id, platform=af.OTHER_PLATFORM), runtime)
     assert other.status == 404 and other.body == {
         "type": "invalid_request",
         "code": "not_found",
@@ -412,3 +413,113 @@ async def test_an_unexpected_failure_releases_the_idempotency_key(db, monkeypatc
     monkeypatch.setattr(acp, "_operation", real)
     retried = await acp.run(af.request("create", tenant, af.create_body(), key="k-crash"), runtime)
     assert retried.status == 201
+
+
+async def _subscribe(tenant: str, merchant_id: str, url: str, scheme: str, platform: str | None = None):
+    from core.database import get_tenant_session
+
+    async with get_tenant_session(uuid.UUID(tenant)) as session:
+        row, _key = await webhooks.create_subscription(
+            session,
+            tenant_id=uuid.UUID(tenant),
+            merchant_id=merchant_id,
+            url=url,
+            scheme=scheme,
+            now=datetime.now(UTC),
+            platform=platform,
+        )
+        return row.id
+
+
+async def _deliveries(engine, tenant: str) -> dict:
+    rows = await _rows(
+        engine, "SELECT subscription_id, order_id FROM commerce_order_webhook_deliveries WHERE tenant_id = :t", t=tenant
+    )
+    out: dict = {}
+    for r in rows:
+        out.setdefault(r["subscription_id"], set()).add(r["order_id"])
+    return out
+
+
+@pytest.mark.asyncio
+async def test_acp_order_events_reach_only_the_platform_that_created_the_session(db, executor, plain_webhook_keys):
+    """Replays the cross-platform leak: platform B's receiver, a UCP order and the merchant endpoint."""
+    tenant = str(uuid.uuid4())
+    runtime_a = af.runtime(tenant, grantex=_grantex())
+    merchant_id = runtime_a.ucp.resolver.merchant.merchant_id
+    sub_a = await _subscribe(tenant, merchant_id, "https://agent-a.example/orders", "acp_hmac", af.PLATFORM)
+    sub_b = await _subscribe(tenant, merchant_id, "https://agent-b.example/orders", "acp_hmac", af.OTHER_PLATFORM)
+    own = await _subscribe(tenant, merchant_id, "https://merchant.example/orders", "ucp")
+    session_body = await _ready(runtime_a, tenant)
+    done = await acp.run(
+        af.request("complete", tenant, af.complete_body(vendor=_vendor()), session_id=session_body["id"]), runtime_a
+    )
+    acp_order = done.body["order"]["id"]
+    # A UCP platform's order on the same merchant.
+    ucp_runtime = uf.runtime(tenant, resolved=af.merchant(tenant))
+    created = await handlers.run(
+        "create_checkout", ucp_runtime, uf.request(tenant, uf.create_body(fulfillment=uf.SHIPPING))
+    )
+    ucp_done = await handlers.run(
+        "complete_checkout", ucp_runtime, uf.request(tenant, uf.complete_body()), created.body["id"]
+    )
+    ucp_order = ucp_done.body["order"]["id"]
+    # An order update must follow the same rule.
+    await handlers.apply_order_change(
+        tenant_id=tenant,
+        order_id=acp_order,
+        fulfillment_event={"type": "shipped", "line_items": [{"id": "li_1", "quantity": 1}]},
+        adjustment=None,
+        now=datetime.now(UTC),
+    )
+    deliveries = await _deliveries(db, tenant)
+    assert deliveries[sub_a] == {acp_order}
+    assert sub_b not in deliveries
+    assert deliveries[own] == {acp_order, ucp_order}
+    # The UCP platform's own subscription (from its profile) got its order only.
+    platform_subs = await _rows(
+        db,
+        "SELECT id FROM commerce_order_webhook_subscriptions WHERE tenant_id = :t AND source = 'platform_profile'",
+        t=tenant,
+    )
+    assert [deliveries.get(r["id"]) for r in platform_subs] == [{ucp_order}]
+
+
+@pytest.mark.asyncio
+async def test_acp_hmac_subscriptions_must_name_their_platform(db):
+    tenant = str(uuid.uuid4())
+    with pytest.raises(webhooks.WebhookSubscriptionError) as missing:
+        await _subscribe(tenant, "m", "https://agent.example/orders", "acp_hmac")
+    assert missing.value.code == "platform_required"
+    with pytest.raises(webhooks.WebhookSubscriptionError) as wrong:
+        await _subscribe(tenant, "m", "https://merchant.example/orders", "ucp", af.PLATFORM)
+    assert wrong.value.code == "platform_invalid"
+
+
+@pytest.mark.asyncio
+async def test_a_ucp_platform_never_reuses_another_platforms_webhook_subscription(db, executor):
+    """Platform B's profile names platform A's webhook URL: B's orders must not be queued to A's subscription."""
+    tenant = str(uuid.uuid4())
+    runtime = uf.runtime(tenant, resolved=af.merchant(tenant))
+    other_profile = "https://platform-b.example/profiles/shopper.json"
+
+    async def _complete(agent: str | None) -> str:
+        created = await handlers.run(
+            "create_checkout", runtime, uf.request(tenant, uf.create_body(fulfillment=uf.SHIPPING), agent=agent)
+        )
+        assert created.status == 201, created.body
+        done = await handlers.run(
+            "complete_checkout", runtime, uf.request(tenant, uf.complete_body(), agent=agent), created.body["id"]
+        )
+        assert done.body["status"] == "completed", done.body
+        return done.body["order"]["id"]
+
+    order_a = await _complete(None)
+    order_b = await _complete(f'profile="{other_profile}"')
+    subs = await _rows(
+        db, "SELECT id, platform_profile_url FROM commerce_order_webhook_subscriptions WHERE tenant_id = :t", t=tenant
+    )
+    assert [s["platform_profile_url"] for s in subs] == [uf.PLATFORM_PROFILE]
+    deliveries = await _deliveries(db, tenant)
+    assert deliveries == {subs[0]["id"]: {order_a}}
+    assert order_b not in {o for orders in deliveries.values() for o in orders}

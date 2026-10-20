@@ -39,6 +39,10 @@
   active key), verified against the shared vectors (`tests/fixtures/acp/merchant-signature-v1.json`).
   They replace the case-push HMAC headers and the placeholder payload of the unreleased UCP work.
   The order-webhook sweep also runs while only `AGENTICORG_ACP_CHECKOUT_ENABLED` is on.
+- Order webhook isolation: an `acp_hmac` subscription is bound to the ACP agent platform's API key
+  (`platform_api_key_id`, required) and receives only orders from sessions that key created; a UCP
+  platform's subscription is never reused by another platform naming the same URL. ACP sessions are
+  owned by the calling API key's id (`request.state.api_key_id`).
 
 ## Unreleased - UCP handler schema hosting and schema fixtures
 

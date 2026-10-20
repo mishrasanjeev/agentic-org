@@ -591,6 +591,8 @@ class GrantexAuthMiddleware(BaseHTTPMiddleware):
             request.state.agent_id = None
             request.state.user_sub = f"apikey:{matched_key.prefix}"
             request.state.api_key_name = matched_key.name
+            # The key's identity (not a secret): commerce platforms are bound to the key that called.
+            request.state.api_key_id = str(matched_key.id)
             request.state.auth_mode = "api_key"
 
             await clear_auth_failures(client_ip)

@@ -181,6 +181,10 @@ verified). Risk signals sent with Complete are recorded as `commerce.ucp.payment
   `POST /api/v1/commerce/runtime/ucp/order-webhook-deliveries/{id}/replay`, and
   `POST /api/v1/commerce/runtime/ucp/orders/{id}/events` (a fulfillment event or an adjustment;
   sends the new snapshot).
+- Order isolation: a platform's own subscription (from its profile) receives only that platform's
+  orders and is never shared with another platform that names the same URL (no delivery, logged);
+  an `acp_hmac` subscription is bound to one ACP platform's API key (`platform_api_key_id`) and
+  receives only that platform's orders; only the merchant's own `ucp` subscriptions receive all.
 - A subscription with `scheme: acp_hmac` receives ACP order events (`order_create` /
   `order_update` with the full ACP `Order`) signed with ACP `Merchant-Signature` under its active
   shared key; the key is shown once and stored encrypted with the tenant key. See

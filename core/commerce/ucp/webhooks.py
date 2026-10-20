@@ -6,9 +6,18 @@ Subscriptions (``commerce_order_webhook_subscriptions``):
 * ``platform_profile`` + ``ucp``: the platform's ``dev.ucp.shopping.order``
   ``config.webhook_url``, registered when a checkout it created completes. It
   receives that platform's orders only.
-* ``merchant`` + ``ucp`` or ``acp_hmac``: endpoints the merchant manages
+* ``merchant`` + ``ucp``: endpoints the merchant itself operates, managed
   through the authenticated runtime API; they receive all the merchant's
   orders.
+* ``merchant`` + ``acp_hmac``: an ACP agent platform's receiver, bound at
+  creation to that platform (``platform_profile_url`` = ``acp:api_key:<key id>``,
+  the API key the platform calls with). It receives only orders from checkout
+  sessions that platform created; never another platform's, a UCP or a direct
+  order. A row without a platform receives nothing.
+
+A platform's subscription is never shared: ``ensure_platform_subscription``
+reuses a row only when it belongs to the same platform, so a platform whose
+profile names another subscriber's URL gets no delivery there (logged).
 
 Delivery (UCP order capability, Events): each order revision is one outbox
 row per subscription, written in the transaction that changed the order. The
@@ -141,14 +150,42 @@ def subscription_view(row: Any) -> dict[str, Any]:
     }
 
 
+ACP_PLATFORM_PREFIX = "acp:api_key:"
+
+
+def acp_platform_id(api_key_id: uuid.UUID | str) -> str:
+    """The platform identity of an ACP agent platform: the id of the API key it calls with."""
+    return f"{ACP_PLATFORM_PREFIX}{uuid.UUID(str(api_key_id))}"
+
+
+def receives_order(sub: Any, order_platform: str | None) -> bool:
+    """Whether a subscription may receive an order created by ``order_platform`` (None: no platform)."""
+    if sub.source == "platform_profile" or sub.scheme == "acp_hmac":
+        return sub.platform_profile_url is not None and sub.platform_profile_url == order_platform
+    return True
+
+
 async def create_subscription(
-    session: Any, *, tenant_id: uuid.UUID, merchant_id: str, url: str, scheme: str, now: datetime
+    session: Any,
+    *,
+    tenant_id: uuid.UUID,
+    merchant_id: str,
+    url: str,
+    scheme: str,
+    now: datetime,
+    platform: str | None = None,
 ) -> tuple[Any, SigningKey | None]:
     """A merchant-managed subscription; an ``acp_hmac`` one gets a fresh key (returned once, stored encrypted)."""
     from core.models.commerce_ucp import CommerceOrderWebhookSubscriptionRow
 
     if scheme not in SCHEMES:
         raise WebhookSubscriptionError("scheme_invalid", "scheme must be ucp or acp_hmac")
+    if scheme == "acp_hmac" and not (platform or "").startswith(ACP_PLATFORM_PREFIX):
+        raise WebhookSubscriptionError(
+            "platform_required", "An acp_hmac subscription is bound to the agent platform's API key."
+        )
+    if scheme != "acp_hmac" and platform is not None:
+        raise WebhookSubscriptionError("platform_invalid", "Only acp_hmac subscriptions are bound to a platform.")
     target = _validated_url(url)
     existing = (
         await session.execute(
@@ -170,7 +207,7 @@ async def create_subscription(
         url=target,
         scheme=scheme,
         source="merchant",
-        platform_profile_url=None,
+        platform_profile_url=platform,
         enabled=True,
         signing_keys_encrypted=await _encrypt_keys(tenant_id, [key]) if key else {},
         active_key_id=key.key_id if key else None,
@@ -216,7 +253,11 @@ async def ensure_platform_subscription(
         )
     ).scalar_one_or_none()
     if row is not None:
-        return row
+        if row.source == "platform_profile" and row.platform_profile_url == platform_profile_url:
+            return row
+        # The URL belongs to another subscriber (another platform or the merchant): never share it.
+        logger.warning("ucp_platform_webhook_url_owned_by_another_subscriber")
+        return None
     row = CommerceOrderWebhookSubscriptionRow(
         id=uuid.uuid4(),
         tenant_id=tenant_id,
@@ -264,7 +305,7 @@ async def enqueue_order_deliveries(
     ).all()
     count = 0
     for sub in rows:
-        if sub.source == "platform_profile" and sub.platform_profile_url != platform_profile_url:
+        if not receives_order(sub, platform_profile_url):
             continue
         payload = _renderers[sub.scheme](event)
         await session.execute(
