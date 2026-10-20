@@ -216,6 +216,13 @@ def test_only_the_platform_spend_function_is_granted_execute():
     assert allow, "function allow-list not found"
     listed = set(re.findall(r"'public\.(\w+)\(", allow.group(1)))
     assert listed == set(APP_CALLABLE_FUNCTIONS)
+    # Each allowed function is closed to PUBLIC wherever the script grants it, so one created
+    # before the application role existed is not left callable by every role.
+    loop = blocks[allow.end() :]
+    loop = loop[: loop.index("END LOOP")]
+    revokes = loop.count("EXECUTE format('REVOKE ALL ON FUNCTION %s FROM PUBLIC', fn);")
+    grants = loop.count("EXECUTE format('GRANT EXECUTE ON FUNCTION %s TO agenticorg_app', fn);")
+    assert grants and revokes == grants
     # The fail-closed check uses the same list.
     check = re.search(r"p\.oid NOT IN \(SELECT to_regprocedure\(f\)::oid FROM unnest\(ARRAY\[(.*?)\]\)", blocks, re.S)
     assert check and set(re.findall(r"'public\.(\w+)\(", check.group(1))) == listed

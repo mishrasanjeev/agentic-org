@@ -192,10 +192,14 @@ BEGIN
         SELECT r.rolname INTO owner_role
         FROM pg_proc p JOIN pg_roles r ON r.oid = p.proowner
         WHERE p.oid = to_regprocedure(fn);
+        -- Closed to PUBLIC here too, so a function created before this role
+        -- existed is not left callable by every role.
         IF owner_role = current_user OR (SELECT rolsuper FROM pg_roles WHERE rolname = current_user) THEN
+            EXECUTE format('REVOKE ALL ON FUNCTION %s FROM PUBLIC', fn);
             EXECUTE format('GRANT EXECUTE ON FUNCTION %s TO agenticorg_app', fn);
         ELSE
             EXECUTE format('GRANT %I TO %I', owner_role, current_user);
+            EXECUTE format('REVOKE ALL ON FUNCTION %s FROM PUBLIC', fn);
             EXECUTE format('GRANT EXECUTE ON FUNCTION %s TO agenticorg_app', fn);
             EXECUTE format('REVOKE %I FROM %I', owner_role, current_user);
             IF pg_has_role(current_user, owner_role, 'USAGE') OR pg_has_role(current_user, owner_role, 'SET') THEN
