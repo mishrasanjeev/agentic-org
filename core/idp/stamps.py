@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 """Stamp and seal detection on a page image: regions of coloured ink that are not text.
 
 A stamp or a seal is a block of saturated ink (blue, purple, red, green) on

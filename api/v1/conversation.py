@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 """Conversational services: banking turns with slot filling and confirmation, the intent catalogue, and the session."""
 
 from __future__ import annotations

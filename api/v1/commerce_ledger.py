@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 """Commerce ledger routes: read the ledger and arbiter decisions, annotate them, export, retain.
 
 Everything is tenant-scoped through the authenticated tenant (``get_current_tenant``)

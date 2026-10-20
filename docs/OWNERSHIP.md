@@ -8,8 +8,15 @@ AgenticOrg is owned by **Orchestrum Technologies LLP**.
 
 ## Repository And License
 
-The AgenticOrg source repository is distributed under the Apache License 2.0.
-The license grants the permissions stated in [LICENSE](../LICENSE); it does not
+From 21 October 2026 the AgenticOrg source repository is licensed under the
+PolyForm Noncommercial License 1.0.0. Only self use is free; commercial use of any
+sort needs a written agreement with Orchestrum Technologies LLP (see
+[COMMERCIAL-LICENSE.md](../COMMERCIAL-LICENSE.md)). Versions published before that
+date remain available under the Apache License 2.0 they were released with.
+"AgenticOrg" and "Grantex" are trademarks of Orchestrum Technologies LLP (see
+[TRADEMARKS.md](../TRADEMARKS.md)).
+
+The licence grants the permissions stated in [LICENSE](../LICENSE); it does not
 replace the ownership and attribution statement above. The repository
 [NOTICE](../NOTICE) carries the same canonical ownership record.
 

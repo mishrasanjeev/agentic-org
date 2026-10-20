@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 """Typed prompt parameters: declarations, template checks, value resolution, rendering and the endpoints."""
 
 from __future__ import annotations

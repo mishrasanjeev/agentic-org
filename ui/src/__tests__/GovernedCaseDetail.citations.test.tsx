@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: Apache-2.0
+// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 // Citations a reviewer can check (PRD §3 US-1, A-6): the passage behind a citation can be read,
 // and a cited record the run never fetched is called out rather than presented as traced.
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";

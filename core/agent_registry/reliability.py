@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 """Ratings, reliability metrics and certification status for an agent's card.
 
 **Reliability** is read from the agent's stored task results over a window

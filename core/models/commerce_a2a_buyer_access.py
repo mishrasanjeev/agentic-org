@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 """Merchant-issued, revocable A2A buyer credentials."""
 
 from __future__ import annotations

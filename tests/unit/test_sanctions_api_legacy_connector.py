@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 """The deprecated ``sanctions_api`` connector keeps the behaviour tenants configured it for.
 
 ``sanctions_api`` is a separate legacy connector, not an alias of ``sanctions_screening``: the

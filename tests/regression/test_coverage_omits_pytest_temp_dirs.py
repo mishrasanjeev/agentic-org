@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 """Coverage must not measure files that tests write under pytest's temp dirs.
 
 ``--basetemp=codex-pytest-basetemp`` puts ``tmp_path`` inside the checkout,

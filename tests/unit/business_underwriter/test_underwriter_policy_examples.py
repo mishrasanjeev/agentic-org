@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 """The example onboarding policies only read evidence the underwriter produces.
 
 A policy rule whose evidence path is never resolved fires as indeterminate on

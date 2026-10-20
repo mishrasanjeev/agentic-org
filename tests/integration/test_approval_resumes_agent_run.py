@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 """Approving a standalone run through the API resumes it from Postgres (PRD F-2).
 
 Real Postgres, the real run and approval endpoints, the scripted model, and

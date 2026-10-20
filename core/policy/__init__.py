@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 """Deterministic case policy engine.
 
 Versioned YAML policies are loaded strictly (every error is found at load) and

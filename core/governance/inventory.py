@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 """The AI asset inventory: what a tenant runs, who owns it, which version, at which risk tier.
 
 An AI bill of materials assembled live from the tenant's configuration,

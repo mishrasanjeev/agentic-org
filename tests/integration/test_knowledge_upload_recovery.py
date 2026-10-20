@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 """Upload recovery and replacement against real tenant-scoped PostgreSQL transactions."""
 
 from __future__ import annotations

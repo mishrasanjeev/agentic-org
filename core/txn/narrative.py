@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 """Suspicious-transaction narratives: a draft from a finding and its evidence, by a model or from the facts.
 
 A narrative tells an investigator what was seen, over which period, on

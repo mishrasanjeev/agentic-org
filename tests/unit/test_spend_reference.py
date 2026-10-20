@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 """Spend reference data: the organisation tree, mappings, aliases, rate cards, commitments, FX, imports, audit,
 the migration and the settings."""
 

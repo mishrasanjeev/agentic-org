@@ -1,5 +1,40 @@
 # Changelog
 
+## Unreleased - Licence change to PolyForm Noncommercial 1.0.0
+
+### Breaking - licence
+
+- From 21 October 2026 AgenticOrg is licensed under the PolyForm Noncommercial License 1.0.0
+  (SPDX `PolyForm-Noncommercial-1.0.0`) instead of the Apache License 2.0. The licensor is
+  Orchestrum Technologies LLP. Only self use is free; commercial use of any sort, including
+  internal business use, hosting, resale, embedding in a product and consulting delivery, needs
+  prior approval and a written agreement with Orchestrum Technologies LLP
+  (`COMMERCIAL-LICENSE.md`, sanjeev@orchestrum.in).
+- The new terms apply to every version published on or after 21 October 2026, including all
+  later updates. Versions published before that date remain available under the Apache License
+  2.0 they were released with. Existing and new users alike need a written agreement to use a
+  version from 21 October 2026 onward commercially.
+- New `TRADEMARKS.md`: "AgenticOrg" and "Grantex", and their names and logos, are trademarks of
+  Orchestrum Technologies LLP; commercial use of the names, logos, hosted services or brand needs
+  Orchestrum's prior written approval with any version, including earlier ones.
+- `LICENSE` holds the official PolyForm Noncommercial 1.0.0 text with two `Required Notice:` lines;
+  `NOTICE`, `LICENSING.md`, `docs/OWNERSHIP.md`, the terms of service, the public licensing page
+  (`/docs/licensing`), every public footer, the README, the SDK and MCP server READMEs, structured
+  data and `llms.txt` state the new licence. `sdk/`, `sdk-ts/` and `mcp-server/` carry a copy of
+  `LICENSE` so published packages include it.
+- Every first-party SPDX header is now `PolyForm-Noncommercial-1.0.0`, and
+  `scripts/check_license_headers.py` requires that identifier on new source files. Package
+  metadata (`pyproject.toml`, `sdk/pyproject.toml`, `ui`, `sdk-ts` and `mcp-server` `package.json`)
+  declares `PolyForm-Noncommercial-1.0.0` and no longer carries the OSI Apache classifier.
+- Third-party material keeps its own licence: the vendored UCP schemas (`tests/fixtures/ucp/`) and
+  ACP schemas (`core/commerce/acp/schemas/`) remain Apache License 2.0, with the licence text in
+  `LICENSES/Apache-2.0.txt`.
+- `CONTRIBUTING.md` adds a contributor licence: contributors keep their copyright and allow
+  Orchestrum to license contributions under PolyForm Noncommercial 1.0.0 and commercially.
+- `licensing/scope.json` now records the adopted licence, change date and third-party paths; the
+  superseded draft custom licence (`licensing/ORCHESTRUM-SELF-USE-COMMERCIAL-1.0-DRAFT.md`) is
+  removed. No runtime, billing, API or schema behaviour changes.
+
 ## Unreleased - Playwright 1.64
 
 - Python `playwright` moves from 1.63.0 to 1.64.0 (`[v4]` extra and `requirements-v4.txt`); the
@@ -3840,7 +3875,7 @@ is 4.8.0; versions 4.1 to 4.8 have no sections of their own.
   `main` and weekly over the full history, plus a pre-commit hook and a
   `scripts/preflight.sh` step (`SKIP_SECRETS=1` to skip). See "Secret
   scanning" in `CONTRIBUTING.md`.
-- New source files must carry `SPDX-License-Identifier: Apache-2.0` in their
+- New source files must carry `SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0` in their
   first five lines; enforced on pull requests and in `scripts/preflight.sh`.
   Existing files are unaffected. See "Licence headers" in `CONTRIBUTING.md`.
 - Container scanning of both the API and console images on every pull

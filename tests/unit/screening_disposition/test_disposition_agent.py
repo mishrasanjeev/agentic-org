@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 """A-7 / US-3 Screening Disposition: per-identifier comparison, cited evidence, rationale, no automatic closure."""
 
 from __future__ import annotations

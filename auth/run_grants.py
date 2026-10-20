@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 """Resolve the grant an agent run carries (PRD F-1).
 
 ``resolve_run_grant`` decides the run's ``grants.enforce_closed`` mode and,

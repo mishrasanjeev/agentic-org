@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 """An approved clause of the clause library (``core/content/clauses.py``)."""
 
 from __future__ import annotations

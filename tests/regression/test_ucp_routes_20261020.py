@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 """G21 routes: the /ucp REST binding is flag-gated (404 off), scope-checked (ucp:read / ucp:write), and every
 write records its declared commerce ledger event, including refusals answered without a business write."""
 

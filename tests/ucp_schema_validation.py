@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 """Validate emitted UCP documents against the published UCP JSON Schemas.
 
 ``tests/fixtures/ucp/<release>/`` is the one vendored copy of the UCP schemas

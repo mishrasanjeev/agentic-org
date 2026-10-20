@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 """PRD F-1 — lifecycle of per-run grants and keeping enforcement from being skipped.
 
 Acceptance criteria covered here:

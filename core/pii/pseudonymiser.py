@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 """Reversible pseudonymisation of personal data before model calls (PRD F-5).
 
 When the per-tenant flag ``pseudonymisation.pre_model`` is on, names, dates of

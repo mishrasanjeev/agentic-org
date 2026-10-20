@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 """The server-managed UCP state inside a merchant commerce config.
 
 Stored under ``public_publishing["ucp"]`` of ``commerce_c6z_merchant_configs``

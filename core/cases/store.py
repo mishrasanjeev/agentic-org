@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 """Persistence for governed cases: create, read, list, transition and save agent results.
 
 Every function takes a tenant-scoped session (``core.database.get_tenant_session``) *and* filters

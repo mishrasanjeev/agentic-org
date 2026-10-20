@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 """The content service framework: a registry of services, each with a schema, a guardrail profile and a dataset.
 
 A service turns a validated input into a JSON output that matches its output

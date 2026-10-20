@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 """UCP on a real Postgres: the serving-host index, the merchant scope reads, Idempotency-Key records, the merchant
 runtime API for order webhook subscriptions and deliveries, and the dispatcher's dead-letter paths (G21, G27).
 

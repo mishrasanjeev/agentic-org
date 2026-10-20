@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 """G37: ACP order_create / order_update events from the order entity, Merchant-Signature checked against the
 shared Grantex vectors, and the acp_hmac webhook delivery signing with it."""
 

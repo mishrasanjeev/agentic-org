@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 """Content services: governed drafting, structured summarisation and obligation extraction as APIs.
 
 ``services``: the framework (registry, guardrail profile, model call, schema

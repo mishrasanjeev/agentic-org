@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 """Narrative to payload: a schema-shaped JSON object from free text, and the same object as XML.
 
 The target schema is given inline, named from the tenant's schema registry,

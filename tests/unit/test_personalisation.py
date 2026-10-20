@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 """Personalisation: consent validity, refusals recorded, rules by priority, allowed attributes, encrypted profiles."""
 
 from __future__ import annotations

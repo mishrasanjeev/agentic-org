@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 """The NOBYPASSRLS application role gets least-privilege grants.
 
 ``scripts/create_app_role.sql`` used to grant EXECUTE on every function and

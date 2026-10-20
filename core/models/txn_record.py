@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 """One movement on one account for transaction intelligence (``core/txn/records.py``)."""
 
 from __future__ import annotations

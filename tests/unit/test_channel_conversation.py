@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 """Answer-mode context is text-only, bounded and isolated from execution state."""
 
 import uuid

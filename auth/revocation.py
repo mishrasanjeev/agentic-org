@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 """Grant revocation on the platform side: the pool, the authority service's feed and the middleware.
 
 A grant token is unexpired for as long as its ``exp`` says, so withdrawing

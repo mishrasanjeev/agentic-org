@@ -1,5 +1,15 @@
 # AgenticOrg Python SDK changelog
 
+## Unreleased
+
+### Breaking - licence
+- From 21 October 2026 this package is licensed under the PolyForm Noncommercial License 1.0.0
+  (SPDX `PolyForm-Noncommercial-1.0.0`). Only self use is free; commercial use of any sort needs a
+  written agreement with Orchestrum Technologies LLP (sanjeev@orchestrum.in). The next published
+  version is the first under these terms; versions published before 21 October 2026, up to 0.4.0,
+  remain available under the Apache License 2.0 they were released with. The package now ships
+  the `LICENSE` file.
+
 ## 0.4.0 - 2026-10-09
 
 Runtime surface release.

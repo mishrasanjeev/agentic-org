@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 """UCP 2026-08-25 document shapes.
 
 Differences from 2026-04-08 that live here: signing keys are published only in

@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 """The policy console: every policy of a tenant in one shape, written and dry-run in one place.
 
 Policies already live where they are enforced: routing, access and limit

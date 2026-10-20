@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 """PRD A-8 on PostgreSQL: governed case lifecycle, agent runtime through the tool gateway, workflow and API.
 
 Runs the ``v6z25_governed_cases`` migration (idempotent) against ``AGENTICORG_DB_URL`` and drives

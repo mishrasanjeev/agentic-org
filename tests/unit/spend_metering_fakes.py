@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 """An in-memory session for the non-token metering services (storage samples, GPU allocation).
 
 It extends the usage fake (``tests/unit/spend_usage_fakes.py``) with what

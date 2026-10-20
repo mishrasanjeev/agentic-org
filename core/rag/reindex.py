@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 """Incremental re-indexing of the knowledge base.
 
 A chunk is stale when its embedding was made by a model other than the one

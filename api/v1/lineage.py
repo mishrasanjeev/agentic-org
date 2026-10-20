@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 """Provenance and lineage: what a kept thing came from, which version it is, and what was done to it.
 
 ``POST /lineage`` notes a chain of nodes and the steps between them, for

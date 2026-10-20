@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: Apache-2.0
+// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 /**
  * Guardrails console: the mode banners, the rule list, add, edit, enable and
  * delete with the payloads the API expects, and the dry run.

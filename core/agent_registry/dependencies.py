@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 """The dependency graph of an agent: what it is made of and what it depends on, as nodes and edges.
 
 Assembled from the agent's configuration and the registry, never from a run:

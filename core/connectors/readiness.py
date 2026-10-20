@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 """Buyer-safe operational readiness projection for a registered connector."""
 
 from __future__ import annotations

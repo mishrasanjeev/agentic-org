@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 """Runtime guardrails: configurable input, retrieval, output and action checks.
 
 See :mod:`core.governance.guardrails.engine` for the evaluation pipeline and

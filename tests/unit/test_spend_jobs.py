@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 """Spend maintenance jobs: follow-up work merged or queued (never dropped), one running job per kind,
 the heartbeat and the sweep, and retries of transient failures."""
 

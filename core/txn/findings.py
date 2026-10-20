@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 """Findings: what the detectors raised, kept once each, and the disposition a person gives them.
 
 A finding is kept under its fingerprint (kind, entity, the rows behind

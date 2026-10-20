@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 """Pre-model pseudonymisation on both model paths (PRD F-5, flag ``pseudonymisation.pre_model``).
 
 Acceptance criteria covered here:

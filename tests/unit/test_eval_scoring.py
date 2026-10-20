@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 """Model-graded scorers: the judges, what they are sent, how a verdict is read and how a failure is kept apart."""
 
 from __future__ import annotations

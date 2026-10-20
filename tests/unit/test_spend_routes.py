@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 """The spend routes: not found while off, the flow while on, bounded bodies, the scope family, admin writes,
 commercial reads and the read view."""
 

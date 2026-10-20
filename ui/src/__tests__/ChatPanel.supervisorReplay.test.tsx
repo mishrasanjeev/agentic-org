@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: Apache-2.0
+// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 /**
  * The chat shows a supervisor's replies from the caller's own session: on reopening (replies sent while the
  * panel was closed) and when the live feed says one arrived (the feed never carries the text).

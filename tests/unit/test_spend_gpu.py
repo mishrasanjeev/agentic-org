@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 """GPU node hours: pool hours, cross-tenant allocation, the operator command, settings, tasks, routes and migration."""
 
 from __future__ import annotations

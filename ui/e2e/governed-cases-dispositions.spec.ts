@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: Apache-2.0
+// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 /**
  * Screening disposition review against the local development stack (PRD §3
  * US-3). The dispositions come from the Screening Disposition agent's run in

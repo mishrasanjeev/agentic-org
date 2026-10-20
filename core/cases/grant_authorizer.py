@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 """Grant checks for provider calls made by governed-case agents."""
 
 from __future__ import annotations

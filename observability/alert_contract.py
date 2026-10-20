@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 """What each committed alert reads, declared once so it cannot silently stop being emitted.
 
 The gap this closes is A-56's mirror image. A-56 was instruments nobody could read; the failure

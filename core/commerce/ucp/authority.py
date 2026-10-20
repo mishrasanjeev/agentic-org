@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 """UCP namespace authority binding and the serving-host attestation.
 
 Authority binding (UCP 2026-08-25 overview, Authority Binding, Derivation

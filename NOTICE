@@ -6,7 +6,29 @@ Inventor / Owner: Sanjeev Kumar
 Primary contact: sanjeev@orchestrum.in
 Secondary contact: mishra.sanjeev@gmail.com
 
-AgenticOrg source code is distributed under the Apache License 2.0. See the
-LICENSE file for the license terms. Product ownership, authorship, invention,
-trademark, and other intellectual-property statements are distinct from the
-permissions granted under that license.
+From 21 October 2026, AgenticOrg is licensed under the PolyForm Noncommercial
+License 1.0.0 (SPDX: PolyForm-Noncommercial-1.0.0). See the LICENSE file.
+Self use is free. Commercial use of any sort requires a prior written agreement
+with Orchestrum Technologies LLP; see COMMERCIAL-LICENSE.md.
+
+These terms apply to every version published on or after 21 October 2026,
+including all later updates. Versions published before that date remain
+available under the Apache License 2.0 they were released with.
+
+"AgenticOrg" and "Grantex", and their names and logos, are trademarks of
+Orchestrum Technologies LLP; see TRADEMARKS.md. No software licence in this
+repository grants trademark rights.
+
+Third-party material keeps its own licence:
+
+- tests/fixtures/ucp/: Universal Commerce Protocol JSON Schemas, copied
+  unchanged from https://ucp.dev, Apache License 2.0.
+- core/commerce/acp/schemas/: Agentic Commerce Protocol JSON Schemas, copied
+  unchanged from the agentic-commerce-protocol specification repository,
+  Apache License 2.0.
+- Dependencies installed from package registries are licensed by their own
+  authors under their own terms.
+
+Product ownership, authorship, invention, trademark, and other
+intellectual-property statements are distinct from the permissions granted
+under any software licence.

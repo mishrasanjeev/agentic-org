@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 """Walk an application's HTTP routes the same way on every supported FastAPI release.
 
 FastAPI 0.141 and later keep included routers lazy: ``app.routes`` holds

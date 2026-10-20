@@ -14,7 +14,7 @@
   ],
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
-  "license": "Apache-2.0",
+  "license": "PolyForm-Noncommercial-1.0.0",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/mishrasanjeev/agentic-org.git"

@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 """ACP REST binding: checkout sessions at ``https://<merchant serving host>/acp`` and the product feed export.
 
 Checkout sessions (ACP API version ``2026-04-17``), behind

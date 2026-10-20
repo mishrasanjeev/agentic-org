@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 """Registered Grantex scopes that enforcement can satisfy, and a pool refresh Grantex serves.
 
 Acceptance criteria covered here:

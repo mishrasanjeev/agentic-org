@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 """Failover is bounded and never bypasses policy or explicit model selection."""
 
 import asyncio

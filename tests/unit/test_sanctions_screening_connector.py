@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 """The provider-neutral sanctions screening connector, and grants under the deprecated ``sanctions_api`` id.
 
 The screening connector used to call one commercial screening service directly.

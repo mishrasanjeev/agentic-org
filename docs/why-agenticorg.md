@@ -9,7 +9,7 @@ A comprehensive comparison of **AgenticOrg** against manual operations, custom-b
 1. [AgenticOrg vs Manual Operations](#1-agenticorg-vs-manual-operations)
 2. [AgenticOrg vs Build-Your-Own](#2-agenticorg-vs-build-your-own)
 3. [AgenticOrg vs Competitors](#3-agenticorg-vs-competitors)
-4. [Why Open Source Matters for Indian Enterprises](#4-why-open-source-matters-for-indian-enterprises)
+4. [Why Source Availability and Self-Hosting Matter for Indian Enterprises](#4-why-source-availability-and-self-hosting-matter-for-indian-enterprises)
 5. [Enterprise-Grade by Default](#5-enterprise-grade-by-default)
 
 ---
@@ -84,7 +84,7 @@ Building an AI agent platform from scratch is a common temptation for engineerin
 | Compliance | Build from scratch | **SOC2/GDPR/DPDP built-in** |
 | AI governance | Design from scratch | **HITL, shadow mode, audit trail** |
 | India-specific integrations | Research + build each | **GSTN, EPFO, Darwinbox, Keka, MCA** |
-| Maintenance burden | Ongoing team of 5-8 | **Community-maintained, Apache 2.0** |
+| Maintenance burden | Ongoing team of 5-8 | **Maintained by Orchestrum Technologies LLP** |
 | Shadow mode for validation | Must architect yourself | **Mandatory, built into lifecycle** |
 | Scaling | Custom HPA, load testing | **Auto-scaling with cost controls** |
 
@@ -142,13 +142,13 @@ graph LR
 | Feature | UiPath | ServiceNow | Power Automate | AgenticOrg |
 |---------|--------|------------|----------------|------------|
 | AI-native agents | No (RPA bots) | Limited | Copilot only | **24 specialist agents** |
-| Open source | No | No | No | **Apache 2.0** |
+| Source available | No | No | No | **Yes: PolyForm Noncommercial 1.0.0; commercial use by written agreement** |
 | Self-hosted | No | No | No | **Yes, your infrastructure** |
 | India connectors | Limited | Limited | Limited | **GSTN, EPFO, Darwinbox, Keka, MCA** |
 | HITL governance | Basic | Basic | None | **Orchestrator-level, unskippable** |
 | Shadow mode | No | No | No | **Mandatory before production** |
 | Data sovereignty | Cloud-only | Cloud-only | Cloud-only | **Your infrastructure, your data** |
-| Pricing | $420/robot/year | $$$$/year | $15/user/month | **Free (self-hosted)** |
+| Pricing | $420/robot/year | $$$$/year | $15/user/month | **Self use free; commercial use by written agreement** |
 | Kill switch | Restart process | Ticket-based | None | **< 30 sec, token revocation** |
 | Audit trail | Limited | Partial | Minimal | **HMAC-signed, WORM, 7-year** |
 | LLM backbone | Not AI-native | Limited AI | GPT only | **Claude + GPT-4o fallback** |
@@ -182,9 +182,11 @@ graph TB
 
 ---
 
-## 4. Why Open Source Matters for Indian Enterprises
+## 4. Why Source Availability and Self-Hosting Matter for Indian Enterprises
 
-Indian enterprises face unique regulatory, compliance, and data sovereignty requirements. Open source is not a nice-to-have — it is a strategic imperative.
+Indian enterprises face unique regulatory, compliance, and data sovereignty requirements. Being able to read the source and run it on your own infrastructure is not a nice-to-have — it is a strategic imperative.
+
+AgenticOrg is source-available under the PolyForm Noncommercial License 1.0.0. Only self use is free; commercial use of any sort, including internal business use, needs a written agreement with Orchestrum Technologies LLP. See [COMMERCIAL-LICENSE.md](../COMMERCIAL-LICENSE.md).
 
 ### Data Stays in India
 
@@ -195,11 +197,9 @@ Indian enterprises face unique regulatory, compliance, and data sovereignty requ
 
 ### No Vendor Lock-in
 
-- Apache 2.0 license — use, modify, distribute freely
-- No per-user pricing that scales against you
-- No annual license negotiations
+- Full source available to read, audit and modify under your agreement
 - Switch hosting providers at will
-- Fork and customize for your specific needs
+- Customize for your specific needs
 
 ### Full Audit Trail for Regulatory Compliance
 
@@ -225,13 +225,11 @@ AgenticOrg ships with native support for India-specific systems and regulations:
 | **Darwinbox** | HRMS sync — payroll, attendance, performance |
 | **Keka HR** | Payroll, leave, reimbursement, TDS workings |
 
-### Deploy Unlimited Agents — Free
+### Deploy on Your Own Infrastructure
 
-- No per-agent licensing fees
-- No per-user seats
-- No per-transaction charges
-- Your only cost is infrastructure (compute, storage, LLM API calls)
-- A mid-size enterprise can run 50+ agents for under INR 10L/year total infra cost
+- Commercial use is covered by one written agreement with Orchestrum Technologies LLP
+- Infrastructure (compute, storage, LLM API calls) is yours to choose and size
+- Self use for personal study and non-commercial research is free
 
 ```mermaid
 graph LR
@@ -243,16 +241,14 @@ graph LR
         P5["+ support contracts"]
     end
 
-    subgraph OpenSource["AgenticOrg Pricing"]
-        O1["Apache 2.0 = Free"]
-        O2["50+ agents: INR 0"]
-        O3["54 connectors: INR 0"]
-        O4["Infra: < INR 10L/year"]
-        O5["Total: < INR 10L/year"]
+    subgraph SourceAvailable["AgenticOrg Pricing"]
+        O1["Self use: free"]
+        O2["Commercial use: written agreement"]
+        O3["Infra: your choice"]
     end
 
     style Proprietary fill:#fce4ec,stroke:#c62828,color:#000
-    style OpenSource fill:#e8f5e9,stroke:#2e7d32,color:#000
+    style SourceAvailable fill:#e8f5e9,stroke:#2e7d32,color:#000
 ```
 
 ---
@@ -338,7 +334,7 @@ flowchart LR
 | **Governance** | 10 non-negotiable constraints enforced at architecture level |
 | **India** | Native GSTN, EPFO, Darwinbox, Keka, MCA integrations |
 | **Sovereignty** | Self-hosted, data never leaves your infrastructure |
-| **License** | Apache 2.0 — free forever, no vendor lock-in |
+| **License** | PolyForm Noncommercial 1.0.0 — self use free; commercial use by written agreement with Orchestrum Technologies LLP |
 | **Compliance** | SOC2, GDPR, DPDP, RBI — built-in, not bolted-on |
 | **Agents** | 24 specialists + NEXUS orchestrator, ready to deploy in < 1 day |
 

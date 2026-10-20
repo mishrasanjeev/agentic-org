@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 """Structured-output enforcement: an agent that declares an output schema never returns a payload that fails it.
 
 An agent's output schema is either a JSON Schema stored with the agent (its

@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 """Grantex enquiry routing must not widen tenant, email or agent authority."""
 import json
 from unittest.mock import AsyncMock, MagicMock, patch

@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 """A kept recording with its segments, speakers and encrypted transcript (``core/speech/store.py``)."""
 
 from __future__ import annotations

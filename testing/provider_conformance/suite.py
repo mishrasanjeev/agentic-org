@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 """The pytest face of the conformance suite: subclass it and provide ``conformance_target``."""
 
 from __future__ import annotations

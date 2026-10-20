@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 """A-6: extraction runs out of process, without network, under a wall-clock limit, and fails closed."""
 
 from __future__ import annotations

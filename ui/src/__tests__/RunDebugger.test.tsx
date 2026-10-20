@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: Apache-2.0
+// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 /**
  * The debugging console for one run: steps, the selected state, inspection by path, and step/continue while paused.
  */

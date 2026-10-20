@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 """Knowledge document domain.
 
 Revision ID: v6z51_knowledge_document_domain

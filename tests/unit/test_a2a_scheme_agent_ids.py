@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 """AgenticOrg's own scheme agent ids in its A2A agent card (G51).
 
 AgenticOrg serves no ``/.well-known/agent-registry.json`` (that document is the

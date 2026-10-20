@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 """Reconcile the owners an applicant declared against a provider's ownership graph.
 
 Pure and deterministic: no model, no I/O. Names are compared after normalisation (Unicode NFKC,

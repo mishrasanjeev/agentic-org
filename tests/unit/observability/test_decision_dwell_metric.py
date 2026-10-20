@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 """The authoritative dwell: the one measured by the approval page, not by a browser.
 
 The rubber-stamping alert stands or falls on this series. The console's own render-to-submit

@@ -1,2 +1,2 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 """Development-only services for the local stack (docker-compose.dev.yml)."""

@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 """Standalone A2A HTTP+JSON buyer; imports no AgenticOrg application code."""
 
 from __future__ import annotations

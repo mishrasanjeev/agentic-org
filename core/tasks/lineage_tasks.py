@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 """The periodic sweep of sync sources (``core/lineage/sync.py``): every tenant's due sources, run in turn.
 
 A no-op unless ``AGENTICORG_LINEAGE_ENABLED`` and

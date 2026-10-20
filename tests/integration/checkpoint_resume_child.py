@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 """Child process for ``test_hitl_checkpoint_restart_resume.py``.
 
 Plays the part of a freshly started API or worker: a new interpreter with no

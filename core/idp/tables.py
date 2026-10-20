@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 """Table extraction: columns from the gaps between words, for text-layer and OCR pages alike.
 
 The extractor groups a page's lines into a table when several consecutive

@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 """AI spend intelligence: reference data, rupee pricing, usage records and their coverage.
 
 ``/spend/org-nodes`` keeps the organisation tree spend rolls up through,

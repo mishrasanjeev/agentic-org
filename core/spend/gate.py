@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 """The Gate 1 status of a month: attributed spend and provider reconciliation, both strict.
 
 Gate 1, the exit criterion of Phase 1, is met for a month when both hold:

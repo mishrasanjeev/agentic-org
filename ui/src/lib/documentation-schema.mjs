@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: Apache-2.0
+// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 // Shared by the interactive reader and static HTML so route changes keep the
 // same truthful metadata without requiring unsafe-inline CSP permissions.
 export function buildDocumentationSchema(site, article, reviewed) {

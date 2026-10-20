@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 """§8.3 adversarial: injected instructions change no underwriter tool call and no policy outcome.
 
 The mock provider's hostile fixtures carry instructions in a company name, a screening alias and

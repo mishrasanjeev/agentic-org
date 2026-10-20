@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 """The Business Onboarding Underwriter.
 
 One run investigates one business application and hands off a cited memo for a human decision:

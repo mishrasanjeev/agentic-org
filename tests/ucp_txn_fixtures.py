@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 """Synthetic UCP scope for tests: a merchant on merchant.example, platform profiles, fakes for every dependency."""
 
 from __future__ import annotations

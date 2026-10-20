@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 """Operator overrides: halt or throttle a model, agent, workflow or the tool pipeline.
 
 Revision ID: v6z32_operator_overrides

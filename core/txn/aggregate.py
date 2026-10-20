@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 """Entity-centric aggregation: an account, a customer or a counterparty with everything booked against it in one view.
 
 The view sums what came in and went out, counts the movements, splits

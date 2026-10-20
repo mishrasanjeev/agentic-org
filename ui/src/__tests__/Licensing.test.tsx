@@ -1,33 +1,52 @@
-// SPDX-License-Identifier: Apache-2.0
+// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 import { render, screen } from "@testing-library/react";
 import { HelmetProvider } from "react-helmet-async";
 import { MemoryRouter } from "react-router";
 import { describe, expect, it } from "vitest";
+import ProductOwnership from "../components/ProductOwnership";
 import Terms from "../pages/legal/Terms";
 
-describe("self-use and commercialization notice", () => {
-  it("records policy publication approval without inventing software adoption", () => {
+describe("PolyForm Noncommercial licence notice", () => {
+  it("states the licence, the free self use and the written-agreement requirement", () => {
     render(<HelmetProvider><MemoryRouter><Terms /></MemoryRouter></HelmetProvider>);
-    const notice = screen.getByRole("heading", { name: "Prospective licensing policy" }).nextElementSibling;
-    expect(notice).toHaveTextContent("Publication approved; software adoption pending");
-    expect(notice).toHaveTextContent("personal/internal use would be free");
-    expect(notice).toHaveTextContent("agreement with Orchestrum Technologies LLP");
-    expect(notice).toHaveTextContent("Current Apache-2.0 rights remain unchanged");
-    expect(notice).toHaveTextContent("hosted plans, infrastructure and provider costs are separate");
-    expect(screen.getByRole("link", { name: "licensing policy" })).toHaveAttribute("href", "/docs/licensing");
+    const notice = screen.getByRole("heading", { name: "Software licence" }).nextElementSibling;
+    expect(notice).toHaveTextContent("source-available under the PolyForm Noncommercial License 1.0.0");
+    expect(notice).toHaveTextContent("Only self use is free");
+    expect(notice).toHaveTextContent(
+      "Commercial use of any sort needs prior approval and a written agreement with Orchestrum Technologies LLP",
+    );
+    expect(notice).toHaveTextContent("internal business use");
+    expect(screen.getByRole("link", { name: "licensing and commercial use" })).toHaveAttribute(
+      "href",
+      "/docs/licensing",
+    );
     expect(screen.getAllByRole("link", { name: "sanjeev@orchestrum.in" })).toSatisfy(
       (links: HTMLElement[]) => links.every((link) => link.getAttribute("href") === "mailto:sanjeev@orchestrum.in"),
     );
   });
 
-  it("includes existing covered users without backdating obligations or revoking grants", () => {
+  it("covers existing users and earlier versions without claiming to revoke the earlier grant", () => {
     render(<HelmetProvider><MemoryRouter><Terms /></MemoryRouter></HelmetProvider>);
-    const notice = screen.getByText(/The policy includes existing and new covered users/);
-    expect(notice).toHaveTextContent("An older account is not an exemption");
-    expect(notice).toHaveTextContent("must obtain a commercial agreement");
-    expect(notice).toHaveTextContent("notice and acceptance required by their current contract");
-    expect(notice).toHaveTextContent("An existing agreement already authorizing the offering is sufficient");
-    expect(notice).toHaveTextContent("does not backdate obligations or withdraw prior Apache-2.0 permissions");
-    expect(notice).toHaveTextContent("Self-use remains free of a software license fee");
+    const change = screen.getByText(/applies to every version published on or after 21 October 2026/);
+    expect(change).toHaveTextContent("including all later updates");
+    expect(change).toHaveTextContent(
+      "Versions published before that date remain available under the Apache License 2.0 they were released with",
+    );
+    expect(change).toHaveTextContent("Existing and new users alike need a written agreement");
+    expect(change.textContent ?? "").not.toMatch(/revok|withdraw/i);
+    expect(screen.getByText(/are trademarks of Orchestrum/)).toHaveTextContent(
+      "needs prior written approval with any version",
+    );
+  });
+
+  it("puts the licence in every public footer through the ownership disclosure", () => {
+    render(<ProductOwnership />);
+    const licence = screen.getByTestId("product-licence");
+    expect(licence).toHaveTextContent("Licence: PolyForm Noncommercial 1.0.0");
+    expect(licence).toHaveTextContent("Self use is free; commercial use needs a written agreement");
+    expect(screen.getByRole("link", { name: "Licensing and commercial use" })).toHaveAttribute(
+      "href",
+      "/docs/licensing",
+    );
   });
 });

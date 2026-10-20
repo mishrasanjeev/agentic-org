@@ -6,7 +6,7 @@ AgenticOrg is owned by **Orchestrum Technologies LLP**. Inventor / Owner:
 **Sanjeev Kumar**. Contact: [sanjeev@orchestrum.in](mailto:sanjeev@orchestrum.in)
 or [mishra.sanjeev@gmail.com](mailto:mishra.sanjeev@gmail.com).
 **Effective Date:** March 21, 2026
-**Last Updated:** October 13, 2026 (existing-user policy clarification)
+**Last Updated:** October 21, 2026 (software licence changed to PolyForm Noncommercial 1.0.0)
 
 These Terms of Service ("Terms") govern your access to and use of the AgenticOrg platform at agenticorg.ai (the "Service") provided by Orchestrum Technologies LLP ("we", "us", "our"). By accessing or using the Service, you agree to be bound by these Terms.
 
@@ -14,35 +14,23 @@ These Terms of Service ("Terms") govern your access to and use of the AgenticOrg
 
 ## 1. Software License
 
-AgenticOrg is open-source software licensed under the **Apache License, Version 2.0** (the "License"). You may obtain a copy of the License at:
-
-https://www.apache.org/licenses/LICENSE-2.0
-
-Subject to the terms of the Apache 2.0 License, you are free to use, modify, and distribute the software. The License applies to the software source code. These Terms govern your use of the hosted Service at agenticorg.ai.
-
-### Approved prospective policy (software adoption pending)
-
-Personal/internal use would be free; commercializing the platform would require
-an agreement with Orchestrum Technologies LLP. Agreements:
+AgenticOrg software is source-available under the **PolyForm Noncommercial License 1.0.0**
+(the "License"): https://polyformproject.org/licenses/noncommercial/1.0.0 and the
+repository [LICENSE](../LICENSE). Only self use is free. Commercial use of any sort,
+including internal business use, hosting, resale, embedding in a product and consulting
+delivery, requires Orchestrum's prior approval and a written agreement with Orchestrum
+Technologies LLP. See [COMMERCIAL-LICENSE.md](../COMMERCIAL-LICENSE.md); agreements:
 [sanjeev@orchestrum.in](mailto:sanjeev@orchestrum.in).
-The [licensing policy](user-guide/licensing.md) records the owner's publication
-and legal-review approval. No effective date or covered software release has been approved.
-Existing Apache-2.0 grants, hosted-service plans and provider charges are unchanged.
 
-The policy includes existing and new covered users. Existing hosted customers
-must obtain a commercial agreement for continued covered commercialization after
-the required notice and acceptance under their current contract and applicable
-law. An existing agreement already authorizing the offering is sufficient.
-Account age alone is not an exemption; publishing this notice does not backdate
-obligations, replace signed contracts or restrict prior Apache-2.0 permissions.
-Self-use remains free of a software license fee; hosted and provider charges are
-separate.
+The License applies to every version published on or after 21 October 2026, including all
+later updates. Versions published before that date remain available under the Apache License
+2.0 they were released with. Existing and new users alike need a written agreement to use a
+version published on or after 21 October 2026 commercially.
 
-The concrete transition uses a separate source-available license for eligible
-future platform material, with exact release/file scope. Legacy code and published
-SDK/protocol grants keep their licenses. Hosted resale, OEM access and brand
-permissions need their own applicable agreement; that does not restrict independent
-use of Apache-licensed code. See [usage and licensing](../LICENSING.md).
+The License applies to the software. These Terms govern your use of the hosted Service at
+agenticorg.ai; a hosted plan or signed agreement you have accepted governs that Service.
+Commercial use of the AgenticOrg or Grantex names, logos, hosted services or brand requires
+our prior written approval with any version; see section 6.2.
 
 ---
 
@@ -119,11 +107,11 @@ Upon account termination, we will delete Your Data within 90 days, except for au
 
 ## 6. Intellectual Property
 
-### 6.1 Open-Source Software
-The AgenticOrg software is licensed under Apache 2.0. Your rights to the software are governed by that license.
+### 6.1 Software Licence
+The AgenticOrg software is licensed under the PolyForm Noncommercial License 1.0.0 (see section 1). Your rights to the software are governed by that licence, by any written commercial agreement you have signed with Orchestrum Technologies LLP and, for versions published before 21 October 2026, by the Apache License 2.0 they were released with.
 
-### 6.2 Service Trademarks
-"AgenticOrg" and associated logos are identified as marks of Orchestrum Technologies LLP. You may not use these marks without our prior written consent.
+### 6.2 Trademarks
+"AgenticOrg" and "Grantex", and their names and logos, are trademarks of Orchestrum Technologies LLP. Any commercial use of the names, logos, hosted services or brand, including with versions published before 21 October 2026, requires our prior written approval. See [TRADEMARKS.md](../TRADEMARKS.md).
 
 ### 6.3 Feedback
 If you provide feedback or suggestions about the Service, we may use them without restriction or obligation to you.

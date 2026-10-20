@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 """The business console: the catalogue and its bounds, the store, the effective values, and where they take effect."""
 
 from __future__ import annotations

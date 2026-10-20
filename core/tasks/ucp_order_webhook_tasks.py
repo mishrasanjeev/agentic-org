@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 """Celery entry points that deliver UCP order webhooks (``core.commerce.ucp.webhooks``).
 
 ``dispatch_order_webhooks(tenant_id)`` is kicked right after an order change

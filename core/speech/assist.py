@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 """Live agent assist: a call as it happens, turn by turn, with the checklist, the mood, the knowledge and the next step.
 
 A live session is opened when a call starts and takes each turn as it

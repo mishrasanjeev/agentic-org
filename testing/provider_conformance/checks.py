@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 """The conformance checks. Each is an async function of a :class:`CheckContext` that returns when the
 provider conforms and raises :class:`ConformanceFailure` - with the check id, the provider and a
 reason a person can act on - when it does not, or :class:`ConformanceSkip` when the target cannot

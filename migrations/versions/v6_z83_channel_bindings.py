@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 """Private encrypted channel bindings, sender links and intake. No existing rows rewritten."""
 
 from alembic import op

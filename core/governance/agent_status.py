@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 """Which agent statuses may run.
 
 The console's pause sets an agent's status to ``paused``. Routing already skips

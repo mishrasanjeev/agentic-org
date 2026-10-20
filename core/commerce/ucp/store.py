@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 """Database reads and writes behind the UCP surfaces.
 
 Host resolution runs before any tenant is known. The verified serving host is

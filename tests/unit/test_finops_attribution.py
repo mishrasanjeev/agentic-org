@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 """Use-case attribution: every cost carries a business unit, department, application and use case."""
 
 from __future__ import annotations

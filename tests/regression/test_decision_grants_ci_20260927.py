@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 """The cross-repository decision-grant join runs in CI, and so do the governed-case suites.
 
 ``ui/e2e/decision-grants.spec.ts`` (``make e2e-decisions``) proves the join between the console,

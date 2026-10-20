@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 """G21 wiring: the transaction capabilities and payment handlers appear in /.well-known/ucp only while the
 checkout flag is on, negotiation uses what the profile advertises, and Host resolution goes through the
 attested serving-host index of a published merchant in the caller's tenant."""

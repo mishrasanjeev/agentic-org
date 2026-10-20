@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 """The checkout payment model: instruments, credentials, split payments, terms, actions and token binding.
 
 * ``payment.instruments[]`` need ``id``, ``handler_id`` (a handler entry this

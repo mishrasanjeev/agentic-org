@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 """Regulatory risk tiers: the controls each tier forces on an agent, and the checks that enforce them.
 
 An agent's registry card carries a risk tier (``low``, ``medium``, ``high``,

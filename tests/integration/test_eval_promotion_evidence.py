@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 """Promotion evidence is selected tenant-safely from real PostgreSQL rows."""
 
 from __future__ import annotations

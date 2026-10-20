@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 """Metadata filters for knowledge search: which documents a query may match, as SQL the search paths share.
 
 A search may be narrowed by the fields every knowledge document carries:

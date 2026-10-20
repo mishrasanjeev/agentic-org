@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 """Spend attribution: server-owned resolution through source mappings and the organisation tree."""
 
 from __future__ import annotations

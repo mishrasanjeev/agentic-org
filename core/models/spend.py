@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 """Spend reference data: the organisation tree, source mappings, rate cards, model aliases, commitments, FX rates.
 
 Written by ``core/spend/`` (migration ``v6z79_spend_reference``). An empty

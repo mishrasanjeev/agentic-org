@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 from __future__ import annotations
 
 import subprocess
@@ -7,6 +7,8 @@ from pathlib import Path
 import pytest
 
 from scripts import check_license_headers as check
+
+HEADER_LINE = "# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0\n"
 
 
 def _git(repo: Path, *args: str) -> str:
@@ -42,11 +44,30 @@ def _run(repo: Path, capsys: pytest.CaptureFixture[str]) -> tuple[int, str]:
 
 
 def test_new_source_file_with_header_passes(repo: Path, capsys: pytest.CaptureFixture[str]) -> None:
-    _commit(repo, {"core/new_module.py": "# SPDX-License-Identifier: Apache-2.0\nVALUE = 1\n"})
+    _commit(repo, {"core/new_module.py": HEADER_LINE + "VALUE = 1\n"})
 
     code, _ = _run(repo, capsys)
 
     assert code == 0
+
+
+def test_header_constant_is_the_polyform_noncommercial_identifier() -> None:
+    assert check.HEADER == "SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0"
+
+
+def test_new_source_file_with_the_retired_apache_identifier_fails(
+    repo: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    # From 2026-10-21 first-party source is PolyForm-Noncommercial-1.0.0; a new file that
+    # copies an older Apache-2.0 header must not pass.
+    retired = "# SPDX-License-" + "Identifier: Apache-2.0\n"
+    _commit(repo, {"core/copied_header.py": retired + "VALUE = 1\n"})
+
+    code, out = _run(repo, capsys)
+
+    assert code == 1
+    assert "core/copied_header.py" in out
+    assert check.HEADER in out
 
 
 def test_new_source_file_without_header_fails_and_is_named(repo: Path, capsys: pytest.CaptureFixture[str]) -> None:
@@ -60,7 +81,7 @@ def test_new_source_file_without_header_fails_and_is_named(repo: Path, capsys: p
 
 
 def test_header_after_shebang_is_accepted(repo: Path, capsys: pytest.CaptureFixture[str]) -> None:
-    _commit(repo, {"scripts/tool.sh": "#!/usr/bin/env bash\n# SPDX-License-Identifier: Apache-2.0\necho ok\n"})
+    _commit(repo, {"scripts/tool.sh": "#!/usr/bin/env bash\n" + HEADER_LINE + "echo ok\n"})
 
     code, _ = _run(repo, capsys)
 
@@ -68,7 +89,7 @@ def test_header_after_shebang_is_accepted(repo: Path, capsys: pytest.CaptureFixt
 
 
 def test_header_below_the_first_lines_is_rejected(repo: Path, capsys: pytest.CaptureFixture[str]) -> None:
-    body = "\n".join(["x = 1"] * (check.HEADER_WINDOW + 1)) + "\n# SPDX-License-Identifier: Apache-2.0\n"
+    body = "\n".join(["x = 1"] * (check.HEADER_WINDOW + 1)) + "\n" + HEADER_LINE
     _commit(repo, {"core/late_header.py": body})
 
     code, out = _run(repo, capsys)

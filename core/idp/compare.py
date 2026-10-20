@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 """Version comparison: two kept documents of the same type, field by field, page text by page, table by table.
 
 A resubmitted statement, a corrected form or a new agreement version is

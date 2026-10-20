@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 """Only the exact ``agenticorg:admin`` scope is admin.
 
 Six admin checks matched ``startswith("agenticorg:admin")``. Registration gives

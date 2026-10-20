@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 """Regulatory risk tiers: the controls a tier forces, enforced whatever the separate switches say."""
 
 from __future__ import annotations

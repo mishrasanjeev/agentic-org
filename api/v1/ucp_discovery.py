@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 """Public UCP business surfaces served on a merchant's verified serving host.
 
 * ``GET /.well-known/ucp`` - the business profile for the newest configured

@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 """Case hand-off: push endpoint configuration, dead letters, REST retrieval and inbound provider webhooks.
 
 Endpoint configuration and dead-letter routes are tenant-admin only. A signing secret is returned

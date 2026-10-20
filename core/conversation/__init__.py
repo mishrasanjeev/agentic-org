@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 """Conversational services for banking: intents, slot filling, confirmation and governed execution.
 
 ``intents``: the banking intent catalogue, entity extraction and recognition.

@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 """The monthly partitions of ``spend_usage_records``.
 
 Partitions are created by migrations only: strict runtimes forbid DDL at

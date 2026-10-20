@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: Apache-2.0
+// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 /**
  * The governed-case decision, end to end across both systems (PRD 8.4 steps 5
  * and 6, PRD G-3, `spec/decision-grant.md`).

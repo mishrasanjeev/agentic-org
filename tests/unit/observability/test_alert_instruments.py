@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 """Every instrument a committed alert reads must still be emitted (FINDINGS A-56).
 
 A-56 was instruments nobody could read. The failure that replaces it is subtler and looks

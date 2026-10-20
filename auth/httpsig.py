@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 """Inbound RFC 9421 agent request signatures: the Visa TAP and Web Bot Auth profiles (G47, G49, G51).
 
 ``verify_agent_request_signature`` is a FastAPI dependency on the commerce API

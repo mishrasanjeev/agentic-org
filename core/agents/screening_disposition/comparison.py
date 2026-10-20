@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 """Per-identifier comparison of a screened subject with a screening hit, and the proposed outcome.
 
 Deterministic: the same subject and hit always give the same comparisons, outcome and confidence

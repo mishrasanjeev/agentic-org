@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 """CI guard: new source files must carry an SPDX licence identifier.
 
 Every source file *added* between a base ref and a head ref must contain
-``SPDX-License-Identifier: Apache-2.0`` within its first few lines (a shebang
+``SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0`` within its first few lines (a shebang
 or encoding line may come first). Files that existed before the check are not
 required to gain a header when they are edited.
 
@@ -23,7 +23,7 @@ import subprocess
 import sys
 from pathlib import Path, PurePosixPath
 
-HEADER = "SPDX-License-Identifier: Apache-2.0"
+HEADER = "SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0"
 HEADER_WINDOW = 5
 SOURCE_SUFFIXES = frozenset({".py", ".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs", ".sh"})
 EXCLUDED_PREFIXES = ("tests/cassettes/",)
@@ -106,7 +106,7 @@ def main(argv: list[str] | None = None) -> int:
         print(f"New source files without '{HEADER}' in their first {HEADER_WINDOW} lines:")
         for name in missing:
             print(f"  {name}")
-        print("Add a comment line, for example '# SPDX-License-Identifier: Apache-2.0'.")
+        print("Add a comment line, for example '# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0'.")
         return 1
     return 0
 

@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 """Scheme token binding on the payment capability (G52).
 
 Before G52 a ``mandate_capability`` artifact had no way to say which scheme

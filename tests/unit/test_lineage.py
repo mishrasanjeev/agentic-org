@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 """Provenance and lineage, part 1: nodes and steps, chains kept once, traces and descriptions, the hooks, the routes."""
 
 from __future__ import annotations

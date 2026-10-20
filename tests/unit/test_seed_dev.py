@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 """Development seed (scripts/seed_dev.py): guards and dataset, without a database."""
 
 from __future__ import annotations

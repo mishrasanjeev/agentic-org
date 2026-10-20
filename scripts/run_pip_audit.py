@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 """Dependency vulnerability audit with dated, reviewed exceptions.
 
 Runs ``pip-audit`` over the project metadata and both requirements files (the

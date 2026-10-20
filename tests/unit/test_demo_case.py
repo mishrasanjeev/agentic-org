@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 """The governed-case demo (scripts/demo_case.py), without a database, Grantex or Docker:
 every step runs against fakes of the runtime, the evidence service, the audit log and the
 ``grantex-evidence`` CLI, and the script fails at the first step whose outcome is not the

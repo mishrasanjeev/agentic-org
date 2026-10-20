@@ -78,10 +78,11 @@ bypass permissions.
 
 ## When you get stuck
 
-For current license rights and the approved prospective policy, read
-[Usage and licensing](/docs/licensing). Software adoption still needs an exact
-release/file scope. Existing Apache-2.0 rights remain unchanged; hosted
-plans, infrastructure and provider usage may have separate charges.
+AgenticOrg is source-available under the PolyForm Noncommercial License 1.0.0:
+only self use is free, and commercial use of any sort needs a written agreement
+with Orchestrum Technologies LLP. Read [Licensing and commercial use](/docs/licensing)
+before you use it in a business. Hosted plans, infrastructure and provider usage
+may have separate charges.
 
 Use [Troubleshooting](/docs/troubleshooting) to isolate the issue. Record the screen, time, selected company, action and safe error code. Never send passwords, API keys or raw customer files in a support ticket.
 

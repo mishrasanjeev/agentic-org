@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 """Multi-turn context: what earlier turns an agent sees, and references a banking turn resolves from the last action.
 
 The chat history is stored per user, company and agent (``api/v1/chat.py``).

@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 """Durable marketing delivery and a scalar-only platform spend capability.
 
 The runtime never inherits aggregation privileges or SET ROLE access. Existing

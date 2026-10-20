@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 """The ``mock`` verification provider: fixture-backed, in-process or over HTTP.
 
 - :class:`MockProvider` runs in-process.

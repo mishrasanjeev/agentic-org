@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 """A provider shipped as its own package is discovered through its entry point and registered.
 
 The package below is written to a temporary directory exactly as the provider guide describes it;

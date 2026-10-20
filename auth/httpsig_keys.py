@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 """Key resolution, replay claims and registry lookups for inbound agent request signatures (G47, G51).
 
 Every network read here is async, over the DNS-pinning egress transport

@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 """The daily OACP retention task: off by default, and one tenant's failure never stops the sweep."""
 
 from __future__ import annotations

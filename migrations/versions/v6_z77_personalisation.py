@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 """Personalisation: consents, profiles, rules and render events.
 
 Revision ID: v6z77_personalisation

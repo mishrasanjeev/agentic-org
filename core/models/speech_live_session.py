@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 """A live call session for agent assist: turns encrypted, flags raised, the closing report (core/speech/assist.py)."""
 
 from __future__ import annotations

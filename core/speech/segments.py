@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 """Who spoke when: speech segments from a recording's energy, and speakers from channels or from clustering.
 
 A stereo call recording carries one party per channel, so the channel

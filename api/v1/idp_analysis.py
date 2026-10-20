@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 """Document analysis: cross-document reconciliation, stamp and seal checks, and the analysis report."""
 
 from __future__ import annotations

@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 """Speech, part 2: analytics from the words and timings, summaries from the model or the words, store, routes."""
 
 from __future__ import annotations

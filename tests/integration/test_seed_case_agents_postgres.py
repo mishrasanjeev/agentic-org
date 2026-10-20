@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 """The governed-case seed's case agents against real Postgres and the real grant path.
 
 Replays the defect: after ``make seed`` the development tenant had no agent for either case role,

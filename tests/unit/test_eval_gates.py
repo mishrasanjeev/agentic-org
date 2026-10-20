@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 """Promotion gates and the model comparison: a prompt is promoted only when its evaluation says so."""
 
 from __future__ import annotations

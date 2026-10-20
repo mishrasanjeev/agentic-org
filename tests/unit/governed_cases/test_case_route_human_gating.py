@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 """Who may act on a governed case: the four actions a person is accountable for need a human session.
 
 Scope enforcement (``api.route_enforcement._check_scope``) refuses an agent token that lacks the

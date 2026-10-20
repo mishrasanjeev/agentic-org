@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 """Deterministic facts derived from provider data: screening parties and policy evidence fields.
 
 Everything a recommendation depends on is computed here from provider responses, the

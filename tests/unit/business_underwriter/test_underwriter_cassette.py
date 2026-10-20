@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 """§8.2 record and replay: the underwriter's narrative call replays from a reviewed cassette.
 
 The cassette under ``tests/cassettes/test_underwriter_cassette/`` is the recorded model exchange

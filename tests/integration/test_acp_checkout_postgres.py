@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 """ACP checkout sessions on a real Postgres over the UCP session table (G34, G35, G37, G38, G40).
 
 Every response is validated against the ACP 2026-04-17 ``CheckoutSession`` / ``CheckoutSessionWithOrder`` schema.

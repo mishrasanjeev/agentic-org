@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 ARG CHECKS_BASE=agenticorg-tools:dev
 FROM ${CHECKS_BASE}
 COPY --from=agenticorg-channel-ui-tools:local /usr/local/bin/node /usr/local/bin/node

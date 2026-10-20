@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 """Run spans: the finished spans of one agent run, stored for the console's waterfall.
 
 Written by ``observability.timeline`` at the end of an agent run while the

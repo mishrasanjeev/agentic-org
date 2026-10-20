@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 """v6z87 (re)installs the audit_log append-only trigger with the sealing transition.
 
 The application role holds ``UPDATE`` on the four audit chain columns so the

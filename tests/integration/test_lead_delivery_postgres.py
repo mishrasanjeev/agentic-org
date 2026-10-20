@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 """Real Postgres isolation and replay checks for the marketing outbox."""
 from __future__ import annotations
 

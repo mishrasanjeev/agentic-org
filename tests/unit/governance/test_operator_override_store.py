@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 """Operator override store paths: loading, caching, placing and releasing overrides.
 
 Database sessions and Redis are faked; what is checked is what each path reads,

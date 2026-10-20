@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: Apache-2.0
+// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 // Synthetic governed case documents shaped like the published schemas (schemas/examples).
 // Every name is invented and every identifier is from a reserved range.
 import type {

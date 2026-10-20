@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 """Maker-checker for agent prompts: the person who changed a prompt does not put it into production.
 
 An agent's prompt cannot be edited while the agent is active; it is edited on

@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 """Per-model limits for the model gateway: concurrency and request rate.
 
 One row per provider (``model`` NULL) or per model. ``max_concurrency`` caps

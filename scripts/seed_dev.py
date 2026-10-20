@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 """Seed the local development stack (``make seed``).
 
 Creates, or brings back to the seeded state, one development tenant:

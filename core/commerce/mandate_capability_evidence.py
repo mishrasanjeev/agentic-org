@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 """Mandate-capability evidence for the Grantex C6Z authority request (``oacp.mandate_capability_evidence.v1``).
 
 Grantex binds this object into the signed ``mandate_capability`` artifact: with

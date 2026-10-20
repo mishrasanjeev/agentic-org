@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 """One guarded model call for a governed case agent.
 
 Governed case agents use the model to write prose only. :func:`call_case_model` sends a versioned

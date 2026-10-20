@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 """Routing records for the model gateway.
 
 Revision ID: v6z36_model_gateway_records

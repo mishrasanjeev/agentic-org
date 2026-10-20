@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 """UCP catalog search and lookup from verified OACP artifacts (G23) and the policy mapper (G26)."""
 
 from __future__ import annotations

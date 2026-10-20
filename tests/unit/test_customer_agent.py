@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 """The bank-operated customer agent: sessions, the autonomy ladder, explanations, turns and the routes."""
 
 from __future__ import annotations

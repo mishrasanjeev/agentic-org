@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: Apache-2.0
+// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 /**
  * Calls: the recordings list with the overview, a call's speakers, summary, analytics and transcript, summarising.
  */

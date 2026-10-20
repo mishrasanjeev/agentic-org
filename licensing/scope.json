@@ -1,20 +1,33 @@
 {
-  "schema_version": 1,
+  "schema_version": 2,
   "product": "AgenticOrg",
-  "status": "approved_for_publication",
+  "status": "adopted",
   "licensor": "Orchestrum Technologies LLP",
   "commercial_contact": "sanjeev@orchestrum.in",
-  "proposed_license_id": "LicenseRef-Orchestrum-Self-Use-Commercial-1.0",
-  "license_text": "licensing/ORCHESTRUM-SELF-USE-COMMERCIAL-1.0-DRAFT.md",
-  "reference_baseline_commit": "3154cdcc5784324763678b88bfc29f29826e956a",
-  "reference_baseline_is_cutoff": false,
-  "release_version": null,
-  "effective_date": null,
-  "covered_files": [],
-  "owner_approval_reference": "owner-publication-approval-2026-10-12",
-  "legal_review_reference": "owner-attested-legal-review-2026-10-12",
-  "publication_approved_on": "2026-10-12",
-  "existing_grants_policy": "preserve",
-  "third_party_licenses_policy": "retain_original",
-  "sdk_and_protocol_policy": "preserve_published_grants; explicit_scope_required_for_future_changes"
+  "license_id": "PolyForm-Noncommercial-1.0.0",
+  "license_text": "LICENSE",
+  "license_url": "https://polyformproject.org/licenses/noncommercial/1.0.0",
+  "effective_date": "2026-10-21",
+  "applies_to": "every version published on or after the effective date, including all later updates",
+  "earlier_versions": {
+    "license_id": "Apache-2.0",
+    "policy": "versions published before the effective date remain available under the license they were released with"
+  },
+  "commercial_terms": "COMMERCIAL-LICENSE.md",
+  "trademarks": "TRADEMARKS.md",
+  "covered": "all first-party files in the repository",
+  "third_party": [
+    {
+      "path": "tests/fixtures/ucp/",
+      "description": "Universal Commerce Protocol JSON Schemas, copied unchanged",
+      "license_id": "Apache-2.0",
+      "license_text": "LICENSES/Apache-2.0.txt"
+    },
+    {
+      "path": "core/commerce/acp/schemas/",
+      "description": "Agentic Commerce Protocol JSON Schemas, copied unchanged",
+      "license_id": "Apache-2.0",
+      "license_text": "LICENSES/Apache-2.0.txt"
+    }
+  ]
 }

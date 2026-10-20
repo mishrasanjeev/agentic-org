@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 """Model access policies, per-model limits and weighted routing targets for the model gateway.
 
 Revision ID: v6z35_model_access_limits

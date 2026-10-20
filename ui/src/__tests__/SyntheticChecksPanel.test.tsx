@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: Apache-2.0
+// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 /**
  * Synthetic checks panel: the list, the scheduled-runs notice, run now, results, toggle and add.
  */

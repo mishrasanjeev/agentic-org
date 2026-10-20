@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 """The guardrail hooks at each call site: scope, pass-through when off, transforms, blocks, and the evidence section."""
 
 from __future__ import annotations

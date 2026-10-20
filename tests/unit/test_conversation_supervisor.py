@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 """Conversational services: the escalation hand-off, the supervisor's view, takeover and the held session."""
 
 from __future__ import annotations

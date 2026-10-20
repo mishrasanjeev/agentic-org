@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 """Model gateway endpoints: routing policies, access policies, per-model limits and a dry-run evaluation.
 
 Tenant administrators only. A routing policy says which provider, model, cost

@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 """Document processing: pages and boxes, classification, bundle splitting, fields, tables, routing and the routes."""
 
 from __future__ import annotations

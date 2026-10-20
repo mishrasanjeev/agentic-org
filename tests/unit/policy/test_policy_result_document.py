@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 """A PolicyResult renders as a schema-valid policy_result document naming the inputs each fired rule read."""
 
 from __future__ import annotations

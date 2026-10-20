@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 """The bank's own agent for the bank's own customers.
 
 Off by default (``AGENTICORG_CUSTOMER_AGENT_ENABLED``). On, a bank's channel

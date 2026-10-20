@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 """Per-tenant email webhook URLs: the tenant comes from the path, never from the payload.
 
 SendGrid, Mailchimp and MoEngage each sign with one key for the whole deployment, so a valid

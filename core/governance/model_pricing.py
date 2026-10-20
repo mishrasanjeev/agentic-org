@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 """List prices per model, in USD per million tokens, for cost comparison and cost-aware routing.
 
 The table carries the published list price of every catalogue model the

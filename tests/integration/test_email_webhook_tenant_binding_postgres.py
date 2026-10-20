@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 """Per-tenant email webhook URLs on PostgreSQL, through the real app and the real wait store.
 
 A tenant admin with a human session reads the tenant's URLs; a signed MoEngage event posted to

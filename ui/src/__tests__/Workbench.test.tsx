@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: Apache-2.0
+// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 /**
  * Workbench shell: the index of held workbenches, a workbench's tabs with counts, the drafts panel.
  */

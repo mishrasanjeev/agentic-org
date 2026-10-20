@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 """Per-model limits for the model gateway: concurrency leases and request rates.
 
 A tenant administrator sets, per provider or per model, how many model calls

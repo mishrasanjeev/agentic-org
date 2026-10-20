@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 """The guardrail engine: flag-only and enforced evaluation, blocks, caching, audited rule changes."""
 
 from __future__ import annotations

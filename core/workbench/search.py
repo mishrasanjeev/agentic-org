@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 """Workbench search: cases, documents, customers and accounts in one query, with facets and boolean filters.
 
 A query is words and quoted phrases, every one of which must match (a

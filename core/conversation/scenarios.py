@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 """Scenario templates: what a conversation offers next once an action has run.
 
 A scenario chains intents into a multi-step flow without a model: a raised

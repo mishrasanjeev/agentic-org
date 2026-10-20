@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 """Reading a model's answer out of the shapes chat models return it in.
 
 A LangChain message's ``content`` is a string, or a list of content blocks:

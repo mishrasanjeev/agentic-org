@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 """Enforce what the committed alert rules must satisfy, without needing Prometheus installed.
 
 ``promtool`` checks that a rule file parses and that its expressions do what a fixture says. It

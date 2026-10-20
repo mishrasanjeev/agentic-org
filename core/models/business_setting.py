@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 """A tenant's value for a business console setting (``core/workbench/console.py``)."""
 
 from __future__ import annotations

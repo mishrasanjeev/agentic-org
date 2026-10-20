@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 """Long-term memory with retention controls and erasure per subject.
 
 A run already has a short-term memory: its thread, kept by the checkpointer

@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 """Rule-driven clause assembly: a document built from an approved clause library by deterministic rules.
 
 A clause belongs to document types, sits in a category with an order, and

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 """Sample governed cases for the local development stack (``make seed-cases``).
 
 Needs ``make dev`` and ``make seed``. For the seeded development tenant it:

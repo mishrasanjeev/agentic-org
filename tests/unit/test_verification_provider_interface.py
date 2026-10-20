@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 """A-1: the VerificationProvider interface, capability model, deadlines and error taxonomy."""
 
 from __future__ import annotations

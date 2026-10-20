@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 """Per-merchant ES256 signing keys for UCP (profile ``keys[]``, RFC 9421 signatures, detached JWS).
 
 Each merchant commerce config holds its signing keys in the server-managed UCP

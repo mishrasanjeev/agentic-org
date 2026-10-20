@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 """The policy console: one shape for every policy, written through the stores' own writers, dry-run across points."""
 
 from __future__ import annotations

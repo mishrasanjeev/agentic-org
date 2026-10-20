@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 """Commerce ledger: arbiter decisions, append-only OACP decision tables and the audit_log seal trigger.
 
 Revision ID: v6z88_commerce_ledger

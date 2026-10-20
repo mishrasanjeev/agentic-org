@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 """Time-ordered ids for usage records.
 
 A usage record's id is a UUID in the version 7 layout: 48 bits of Unix

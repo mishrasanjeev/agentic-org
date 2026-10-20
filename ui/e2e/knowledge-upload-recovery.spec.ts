@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: Apache-2.0
+// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 import { expect, test } from "./helpers/test";
 import { APP, E2E_TOKEN, authenticate, requireAuth } from "./helpers/auth";
 

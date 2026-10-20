@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 """Spend maintenance jobs: a ``spend_jobs`` row and a Celery task on the ``maintenance`` queue.
 
 Long operations never run inside an HTTP request: a route enqueues a job

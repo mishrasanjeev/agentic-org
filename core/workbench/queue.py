@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 """The unified review queue: everything waiting for a person, in one list, with edit before approval.
 
 Four kinds of item wait in four stores: approvals in the human-in-the-loop

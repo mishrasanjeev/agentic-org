@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 """The agent registry: an agent's card and its governance lifecycle.
 
 **The card** is what a reviewer, an auditor or another team needs to know

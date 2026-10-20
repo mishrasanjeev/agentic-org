@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 """`run_async` picks its loop by the role of the process, and survives a fork.
 
 A worker process uses one persistent loop, which is safe because it is the

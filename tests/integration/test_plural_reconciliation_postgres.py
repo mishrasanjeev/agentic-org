@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 """Plural 3-D Secure and pending payments reconciled from verified webhooks, on a real Postgres (G55).
 
 The Plural API is the MockTransport fake that counts every request; events are

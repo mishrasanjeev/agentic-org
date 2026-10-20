@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 """The evidence sink: records built from a run's record and posted to the Grantex evidence
 service; the grant id carried from the authorizer through the gateway; the sink off by
 default and never failing a case."""

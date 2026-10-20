@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 """Source sets for the content services: inline texts, and approved knowledge-base documents the caller may see."""
 
 from __future__ import annotations

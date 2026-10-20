@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 """Long-term memory: entries with retention, recalled into runs, remembered from outputs, erased per subject."""
 
 from __future__ import annotations

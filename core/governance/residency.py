@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 """Residency enforcement: keep processing inside the configured data region.
 
 A tenant's ``data_region`` (governance config: IN, EU or US) selects where its data

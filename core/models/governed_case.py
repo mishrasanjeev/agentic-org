@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 """Governed business cases and their state transitions (see ``core.cases``)."""
 
 from __future__ import annotations

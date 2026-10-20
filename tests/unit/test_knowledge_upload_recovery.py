@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 """Bounded upload recovery: state transitions, source safety, retries and worker wiring."""
 
 from __future__ import annotations

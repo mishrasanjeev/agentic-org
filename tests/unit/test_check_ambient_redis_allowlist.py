@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 """The ambient-Redis allowlist only shrinks (scripts/check_ambient_redis_allowlist.py)."""
 
 from __future__ import annotations

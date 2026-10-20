@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 """PRD F-1 — ``grants.enforce_closed`` mode resolution against real Postgres.
 
 Uses the production ``get_tenant_session`` and ``feature_flags`` table, so the

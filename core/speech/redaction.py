@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 """Spoken sensitive data: card numbers, codes, CVVs and PINs found in timed words, cut from transcript and audio.
 
 Speech comes as digits, number words ("four one two three"), "double" and

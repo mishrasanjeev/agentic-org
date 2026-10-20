@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 """PRD F-1c — a grant denial ends the run as failed and never leaks into later turns.
 
 Acceptance criteria covered here:

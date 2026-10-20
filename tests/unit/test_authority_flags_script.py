@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 """``scripts/authority_flags.py`` - the operator tool for reserved feature flags.
 
 The tenant session is faked; the Postgres behaviour is covered by

@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 """Startup role-posture probe and the platform / tenant binding helpers (FINDINGS A-105)."""
 
 from __future__ import annotations

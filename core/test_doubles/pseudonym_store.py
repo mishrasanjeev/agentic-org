@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 """In-memory pseudonym map store for tests.
 
 Behaves like ``core.pii.pseudonymiser.DatabasePseudonymMapStore`` without a

@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 """Ratings, reliability metrics and certification on the card, and their endpoints."""
 
 from __future__ import annotations

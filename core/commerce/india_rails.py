@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 """India payment rails: UPI AutoPay e-mandates and the RBI additional factor of authentication (AFA).
 
 Pure functions and constants: no I/O, no clock (dates and amounts are inputs).

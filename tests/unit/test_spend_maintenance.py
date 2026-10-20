@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 """Rollups, coverage, the maintenance jobs (FX settlement, restatement, re-attribution, commitment recompute),
 the ledger comparison and backfill."""
 

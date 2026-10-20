@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 """The commerce arbiter (G11): every rule allows on good input and refuses on each bad or missing input."""
 
 from __future__ import annotations

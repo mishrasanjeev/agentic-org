@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 """Content services, part 2: narrative to payload, policy-grounded responses, tone adaptation, clause assembly."""
 
 from __future__ import annotations

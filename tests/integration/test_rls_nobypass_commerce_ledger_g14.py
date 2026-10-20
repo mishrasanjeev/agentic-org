@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 """G14-G16 under the NOBYPASSRLS application role: witness checkpoints, retention, operator decisions, grants.
 
 Uses the fixtures of ``test_rls_nobypass_role`` (app-role engine, every session routed to it).

@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 """Approving a standalone run resumes it from its checkpoint (PRD F-2, flag approvals.resume_agent_runs)."""
 
 from __future__ import annotations

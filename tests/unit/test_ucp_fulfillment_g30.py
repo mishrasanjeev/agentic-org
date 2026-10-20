@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 """G30: fulfillment methods, shipping and pickup destinations, options from Shopify delivery profiles, config."""
 
 from __future__ import annotations

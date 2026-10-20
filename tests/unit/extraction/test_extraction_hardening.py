@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 """A-6 review hardening: pathological worker output, the full isolation deny set, async temp dirs, safe tokens."""
 
 from __future__ import annotations

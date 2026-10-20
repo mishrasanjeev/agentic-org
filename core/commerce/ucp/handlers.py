@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 """Transport-neutral UCP operations: checkout, cart and order.
 
 Every operation takes a ``UcpRequest`` (the authenticated tenant, the request

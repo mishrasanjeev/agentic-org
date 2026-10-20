@@ -229,11 +229,13 @@ boundaries as the Python client.
 
 ## License
 
-Apache-2.0
+PolyForm Noncommercial License 1.0.0 (SPDX `PolyForm-Noncommercial-1.0.0`); see [LICENSE](LICENSE).
 
-The [approved prospective platform policy](https://agenticorg.ai/docs/licensing)
-awaits software-release adoption; this SDK's Apache-2.0 rights remain unchanged.
-The platform policy includes existing and new covered users; existing hosted
-customers transition through required notice and acceptance. Self-use is free
-of a software license fee, not of hosting or provider charges.
-Commercial agreements: [sanjeev@orchestrum.in](mailto:sanjeev@orchestrum.in).
+**Only self use is free. Commercial use of any sort needs a written agreement with
+Orchestrum Technologies LLP**: see
+[COMMERCIAL-LICENSE.md](https://github.com/mishrasanjeev/agentic-org/blob/main/COMMERCIAL-LICENSE.md)
+and write to [sanjeev@orchestrum.in](mailto:sanjeev@orchestrum.in). These terms apply to every
+version published on or after 21 October 2026, including all updates; versions published
+before that date remain available under the Apache License 2.0 they were released with.
+"AgenticOrg" and "Grantex" are trademarks of Orchestrum Technologies LLP
+([TRADEMARKS.md](https://github.com/mishrasanjeev/agentic-org/blob/main/TRADEMARKS.md)).

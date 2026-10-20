@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 """Outbound buyer-agent request signatures (G48) and TAP body objects on purchase intents (G49).
 
 Before G48 the Grantex Commerce buyer connector sent every request unsigned:

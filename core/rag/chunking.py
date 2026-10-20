@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 """Chunking strategies: how extracted spans become the chunks that are embedded and retrieved.
 
 Three strategies, chosen per tenant (``chunk_strategy`` in the tenant AI

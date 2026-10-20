@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 """The unified review queue: list, inspect, edit before approval, decide.
 
 The queue shows a caller the kinds of item a held workbench shows and

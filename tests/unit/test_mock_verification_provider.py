@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 """A-3: the in-process mock provider - scenarios, determinism, faults, deadlines and webhooks."""
 
 from __future__ import annotations

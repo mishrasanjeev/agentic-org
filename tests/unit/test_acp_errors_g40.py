@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 """G40: every internal message code and UCP protocol error maps to an ACP ``MessageError`` / ``Error`` with the
 exact 2026-04-17 enums; no internal code is left unmapped."""
 

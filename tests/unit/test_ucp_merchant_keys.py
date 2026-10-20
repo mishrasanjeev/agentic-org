@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 """Per-merchant ES256 UCP signing keys (G19)."""
 
 from __future__ import annotations

@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 """`core.database.run_db_coroutine_sync`: a private engine per synchronous call.
 
 The database side (a real pool, poisoned or not) is in

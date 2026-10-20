@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 """Channel authority and durable-state branches, without external side effects.
 
 Database outcomes are scripted here; PostgreSQL RLS and HTTP/worker integration

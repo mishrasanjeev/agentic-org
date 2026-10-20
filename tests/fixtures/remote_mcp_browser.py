@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 """Local Docker browser fixture. Never a production entrypoint.
 
 Runs the real API/auth/DB and an official SDK server with synthetic tools.

@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 """Signed audit rows for every change to spend reference data.
 
 Each change is written in the same tenant transaction as the change itself,

@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 """Maker-checker for prompt templates: a change waits for a second person before it takes effect.
 
 While maker-checker is on for a tenant, creating, changing, rolling back or

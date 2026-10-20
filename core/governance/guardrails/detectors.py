@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 """Detectors the guardrail engine runs, and the transforms it applies to what they find.
 
 Each detector reads a text and returns the spans it found with a kind and a

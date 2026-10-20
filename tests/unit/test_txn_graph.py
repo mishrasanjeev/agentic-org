@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 """Transaction intelligence, part 2: the fund-flow graph across hops, its paths, the export and the routes."""
 
 from __future__ import annotations

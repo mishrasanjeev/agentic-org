@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 # Nightly re-record of model cassettes (.github/workflows/cassette-rerecord.yml).
 #
 # Re-runs every test that uses the `model_cassette` fixture with

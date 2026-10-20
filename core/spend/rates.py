@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 """Rate cards: effective-dated prices, refused overlaps, corrections instead of edits.
 
 A card prices one key ``(provider, usage_type, model_sku, unit, source)``

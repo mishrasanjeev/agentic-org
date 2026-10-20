@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 """Default tool lists name only tools a connector registers (PRD §7 F-3).
 
 A default naming a tool no connector registers is never bound at run time,

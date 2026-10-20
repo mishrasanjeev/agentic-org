@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 """AI spend intelligence tasks (``core/spend/``): spilled usage, maintenance jobs and the daily sweeps.
 
 ``persist_usage`` writes usage events the in-process writer could not (a

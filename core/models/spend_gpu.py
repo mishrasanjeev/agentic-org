@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 """Spend GPU: in-house pool node hours and each tenant's allocated share of them.
 
 Written by ``core/spend/gpu.py`` (migration ``v6z81_spend_gpu``). An empty

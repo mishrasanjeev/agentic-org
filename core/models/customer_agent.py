@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 """The customer agent's own records: customer sessions, mandates and prepared actions.
 
 A bank's customer never holds a platform credential. The bank authenticates

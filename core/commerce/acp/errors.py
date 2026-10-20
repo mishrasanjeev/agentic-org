@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 """ACP error objects and the mapping from internal codes (G40).
 
 ACP 2026-04-17 has two error shapes (``schema.agentic_checkout.json``):

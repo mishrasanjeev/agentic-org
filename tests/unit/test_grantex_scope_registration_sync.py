@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 """PRD F-1 — stored Grantex scopes never run ahead of the agent's registration.
 
 * ``PATCH /agents/{id}`` pushes the recomputed scopes of a registered agent to

@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 """Scripted chat model for testing agent graph mechanics without model text.
 
 Graph behaviour - routing to tools, retries, interrupts and resume - should be

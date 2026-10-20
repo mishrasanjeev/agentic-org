@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 """The business console: the rules, thresholds and routing a bank changes without a release, per tenant.
 
 The catalogue fixes what may be changed and within what bounds: the

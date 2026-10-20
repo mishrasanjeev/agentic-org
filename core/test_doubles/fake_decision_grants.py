@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 """An in-memory decision service for tests (PRD G-3).
 
 It behaves like the Grantex auth service's decision-grant API as far as the platform can see it:

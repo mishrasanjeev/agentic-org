@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 """Evaluation datasets: named, versioned sets of reference cases a tenant keeps.
 
 A dataset is a name and a sequence of versions. A version is a list of cases

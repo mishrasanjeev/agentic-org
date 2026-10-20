@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 """The conversation runtime: sessions, the chat hook, and execution through an agent's governed tools.
 
 A session is one dialogue per channel, company, agent and user, kept in

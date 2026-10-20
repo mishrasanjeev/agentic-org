@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 """Content services: the catalogue, drafting, summarisation, extraction, the drafts queue and dataset install."""
 
 from __future__ import annotations

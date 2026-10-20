@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 """Graceful fallbacks: what the user is told when an answer cannot be given, and when to offer a person.
 
 A fallback names what happened in plain words (the systems did not answer in

@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 """G33/G34 routes: /acp checkout sessions and the feed export are flag-gated (404 off), scope-checked
 (acp:read / acp:write), answer ACP Error objects, and every write records its declared ledger event,
 including refusals answered before any business write."""

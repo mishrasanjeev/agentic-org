@@ -1648,7 +1648,7 @@ export default function Landing() {
             <div className="text-center mb-16">
               <div className="inline-flex items-center gap-2 bg-slate-800/80 border border-slate-700 rounded-full px-4 py-1.5 mb-6">
                 <span className="w-2 h-2 bg-blue-400 rounded-full animate-pulse" />
-                <span className="text-slate-300 text-sm">Open-Source SDKs: Apache 2.0</span>
+                <span className="text-slate-300 text-sm">Source-available SDKs: PolyForm Noncommercial 1.0.0</span>
               </div>
               <h2 className="text-3xl sm:text-4xl font-bold text-white">Build With AgenticOrg</h2>
               <p className="mt-4 text-lg text-slate-400 max-w-2xl mx-auto">
@@ -2029,12 +2029,12 @@ $ agenticorg sop deploy \\
 
           <div className="border-t border-slate-800 pt-8 flex flex-col sm:flex-row items-center justify-between gap-4">
             <p className="text-sm text-slate-500">
-              &copy; 2026 Orchestrum Technologies LLP. See usage and licensing for release-specific terms.
+              &copy; 2026 Orchestrum Technologies LLP. PolyForm Noncommercial 1.0.0: self use is free; commercial use needs a written agreement.
             </p>
             <div className="flex flex-wrap items-center justify-center gap-x-6 gap-y-2">
               <a href="/privacy" className="text-sm text-slate-500 hover:text-slate-300 transition-colors">Privacy</a>
               <a href="/terms" className="text-sm text-slate-500 hover:text-slate-300 transition-colors">Terms</a>
-              <Link to="/docs/licensing" className="text-sm text-slate-400 hover:text-slate-300 transition-colors">Usage &amp; licensing</Link>
+              <Link to="/docs/licensing" className="text-sm text-slate-400 hover:text-slate-300 transition-colors">Licensing &amp; commercial use</Link>
               <span className="text-sm text-slate-600">agenticorg.ai</span>
             </div>
           </div>

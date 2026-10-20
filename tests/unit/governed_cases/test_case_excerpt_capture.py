@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 """Capturing the passage behind a citation (PRD A-6, FINDINGS A-48).
 
 A provider cites an ``excerpt_ref`` on its evidence. Without the passage itself a reviewer can

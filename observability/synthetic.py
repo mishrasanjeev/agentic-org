@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 """Synthetic checks: scheduled probes of a tenant's own paths, with a stored result each run.
 
 A check names a probe kind, its configuration and an interval. Six kinds:
