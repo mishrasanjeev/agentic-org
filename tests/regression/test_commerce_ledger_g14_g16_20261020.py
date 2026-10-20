@@ -677,17 +677,16 @@ def test_v6z88_grants_the_app_role_least_privilege() -> None:
 
 
 def test_ledger_routes_record_their_declared_events() -> None:
-    from fastapi.routing import APIRoute
-
     from api.main import app
     from api.route_enforcement import is_commerce_write_route
     from api.route_metadata import ROUTE_METADATA_ATTR
     from api.v1 import commerce_ledger
+    from tests.app_routes import http_routes
 
     source = inspect.getsource(commerce_ledger)
     writes = 0
-    for route in app.routes:
-        if not isinstance(route, APIRoute) or not route.path.startswith("/api/v1/commerce/runtime/ledger"):
+    for route in http_routes(app):
+        if not route.path.startswith("/api/v1/commerce/runtime/ledger"):
             continue
         for method in route.methods:
             if is_commerce_write_route(route.path, method):

@@ -16,7 +16,6 @@ from typing import Any
 
 import pytest
 from fastapi import Depends, FastAPI, HTTPException
-from fastapi.routing import APIRoute
 from fastapi.testclient import TestClient
 
 from api.route_enforcement import enforce_route_metadata, is_commerce_write_route
@@ -26,6 +25,7 @@ from core.commerce.ledger import CommerceLedgerError, commerce_payload_hash, rec
 from core.config import settings
 from core.models.audit import AuditLog
 from core.tool_gateway.audit_logger import verify_audit_row
+from tests.app_routes import http_routes
 
 TENANT = "11111111-1111-4111-8111-111111111111"
 
@@ -215,9 +215,7 @@ def test_every_commerce_write_route_declares_its_ledger_event() -> None:
     from api.main import app
 
     writes: dict[str, str] = {}
-    for route in app.routes:
-        if not isinstance(route, APIRoute):
-            continue
+    for route in http_routes(app):
         for method in route.methods:
             if not is_commerce_write_route(route.path, method):
                 continue
@@ -241,12 +239,15 @@ def test_every_declared_commerce_write_event_is_written_by_its_handler() -> None
     from api.v1 import a2a_interop, commerce_ledger, commerce_runtime
 
     sources = inspect.getsource(commerce_runtime) + inspect.getsource(a2a_interop) + inspect.getsource(commerce_ledger)
-    for route in app.routes:
-        if not isinstance(route, APIRoute) or not any(is_commerce_write_route(route.path, m) for m in route.methods):
+    checked = 0
+    for route in http_routes(app):
+        if not any(is_commerce_write_route(route.path, m) for m in route.methods):
             continue
         event = getattr(route.endpoint, ROUTE_METADATA_ATTR)["audit_event"]
         # The declaration plus at least one ledger use of the same name.
         assert sources.count(f'"{event}"') >= 2, event
+        checked += 1
+    assert checked >= 21
 
 
 # ---------------------------------------------------------------------------
