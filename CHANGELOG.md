@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased - UPI mandate extension schema hosted at its advertised URL (G56)
+
+- `ui/public/ucp/extensions/upi-mandate/2026-10-20/schema.json` publishes the JSON Schema of the
+  UCP vendor extension `ai.agenticorg.payment.upi_mandate` at
+  `https://agenticorg.ai/ucp/extensions/upi-mandate/2026-10-20/schema.json`, the URL the profile
+  advertises (served by the UI image like the Plural handler config schema). It declares the
+  Action `ai.agenticorg.payment.upi_mandate_authorization` and the mandate terms. A regression
+  test maps the advertised URL to the file and the nginx static rule, and validates the Action the
+  server emits against it.
+
 ## Unreleased - Plural 3-D Secure and pending payments reconciled from verified webhooks (G55)
 
 - A verified Plural order event relayed to `POST /api/v1/commerce/runtime/ucp/plural/events`

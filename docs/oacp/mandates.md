@@ -122,7 +122,10 @@ and ledgers `commerce.ucp.payment.afa_requested`.
 
 - **UCP 2026-08-25, with the vendor extension `ai.agenticorg.payment.upi_mandate` negotiated.**
   The extension extends checkout and is advertised only to merchants offering UPI AutoPay. Its
-  schema URL is on agenticorg.ai. The session becomes `incomplete` and carries the Action
+  schema, `https://agenticorg.ai/ucp/extensions/upi-mandate/2026-10-20/schema.json`, is published
+  by the UI image from `ui/public/ucp/extensions/upi-mandate/2026-10-20/schema.json` (the mapping
+  and the emitted Action are checked by
+  `tests/regression/test_upi_mandate_schema_hosting_20261020.py`). The session becomes `incomplete` and carries the Action
   `ai.agenticorg.payment.upi_mandate_authorization`:
   `{id, config: {payment_instrument_id, url, mandate_reference, mandate: {amount_rule, amount,
   currency, frequency, start_date, end_date, purpose}}}`. It also carries a `recoverable` error
