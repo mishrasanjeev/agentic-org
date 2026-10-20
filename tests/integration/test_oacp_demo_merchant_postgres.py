@@ -34,7 +34,6 @@ import pytest
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from sqlalchemy.pool import NullPool
-from starlette.requests import Request
 
 from core.commerce.oacp_demo_merchant import (
     DEMO_ADMIN_USER_ID,
@@ -56,7 +55,7 @@ from tests.oacp_signing import (
 
 LIVE_URL = os.getenv("AGENTICORG_GRANTEX_DEMO_LIVE_URL", "").strip().rstrip("/")
 LIVE = bool(LIVE_URL and os.getenv("GRANTEX_COMMERCE_INTERNAL_TOKEN"))
-HOST = "shop-demo.example.com"
+HOST = "nilgiritea.agenticorg.ai"
 FAMILY_TYPES: tuple[tuple[str, str, int], ...] = (
     ("merchant_profile", "merchant_capability", 24 * 3600),
     ("seller_agent_card", "seller_agent_capability", 6 * 3600),
@@ -298,16 +297,6 @@ def _summary(out: str) -> dict[str, Any]:
     return json.loads(lines[-1])["summary"]
 
 
-def _request(path: str, *, method: str = "GET", body: Mapping[str, Any] | None = None) -> Request:
-    raw = json.dumps(body or {}).encode()
-
-    async def receive() -> dict[str, Any]:
-        return {"type": "http.request", "body": raw, "more_body": False}
-
-    headers = [(b"host", HOST.encode()), (b"content-type", b"application/json")]
-    return Request({"type": "http", "method": method, "path": path, "headers": headers, "query_string": b""}, receive)
-
-
 def test_dry_run_writes_nothing(seed) -> None:
     before = _snapshot()
     assert seed() == 0
@@ -395,7 +384,7 @@ def test_seed_converges_serves_and_tears_down(seed, capsys) -> None:
             merchant_id=DEMO_MERCHANT_ID,
             seller_agent_id=DEMO_SELLER_AGENT_ID,
             buyer_agent_id=None,
-            question="Do you have a copper tumbler?",
+            question="Do you have masala chai?",
             action_intent="non_binding_preview",
             grantex_available=True,
             ledger_event="commerce.runtime.buyer_session.ask",
@@ -466,8 +455,10 @@ def test_seed_converges_serves_and_tears_down(seed, capsys) -> None:
 
 
 @pytest.mark.skipif(LIVE, reason="the in-process issuer emulates public-discovery issuance")
-def test_serving_host_is_attested_published_and_served(seed, capsys, monkeypatch) -> None:
-    from api.v1 import commerce_ucp_publishing, ucp_discovery
+def test_serving_host_is_attested_published_and_served_through_the_app(seed, capsys, monkeypatch) -> None:
+    """``nilgiritea.agenticorg.ai`` end to end through the real app and its middleware (Host preserved)."""
+    from api.v1 import commerce_ucp_publishing
+    from core.config import settings
 
     satisfied = {"value": False}
 
@@ -475,41 +466,131 @@ def test_serving_host_is_attested_published_and_served(seed, capsys, monkeypatch
         return satisfied["value"]
 
     monkeypatch.setattr(commerce_ucp_publishing, "dns_challenge_satisfied", _dns)
+    assert seed("--apply") == 0
+    capsys.readouterr()
+
+    # Step 1: request the challenge and print the exact record; a rerun reprints the same one.
     assert seed("--apply", "--serving-host", HOST) == 0
     first = _summary(capsys.readouterr().out)
     record = first["dns_record_to_create"]
     assert record["name"] == f"_agenticorg-ucp.{HOST}" and record["type"] == "TXT"
+    assert record["host_in_zone"] == "_agenticorg-ucp.nilgiritea" and record["zone"] == "agenticorg.ai"
     assert record["value"].startswith("agenticorg-ucp-verify=")
-    assert any("TXT record not visible yet" in action for action in first["actions"])
+    assert seed("--apply", "--serving-host", HOST) == 0
+    assert _summary(capsys.readouterr().out)["dns_record_to_create"] == record
 
-    # The rerun reuses the pending challenge (the TXT value does not change), verifies and publishes.
+    # Step 2 before propagation: reported, nothing published.
+    assert seed("--apply", "--verify-host") == 0
+    early = _summary(capsys.readouterr().out)
+    assert any("not verified (dns_txt_record_not_found)" in action for action in early["actions"])
+    assert early["state"]["ucp"]["published"] is False
+
+    # Step 2 after propagation: attested, published under ai.agenticorg.nilgiritea, artifacts re-issued with the opt-in.
     satisfied["value"] = True
-    assert seed("--apply", "--serving-host", HOST, "--refresh-artifacts") == 0
-    second = _summary(capsys.readouterr().out)
-    assert second["dns_record_to_create"] == record
-    assert second["state"]["ucp"]["serving_host"] == HOST and second["state"]["ucp"]["published"] is True
-    assert second["state"]["ucp"]["public_discovery_allowed"] is True
+    assert seed("--apply", "--verify-host") == 0
+    done = _summary(capsys.readouterr().out)
+    assert done["state"]["ucp"]["serving_host"] == HOST and done["state"]["ucp"]["published"] is True
+    assert done["state"]["ucp"]["namespace"] == "ai.agenticorg.nilgiritea"
+    assert done["state"]["ucp"]["public_discovery_allowed"] is True
     last = seed.grantex.requests[-1]["request"]
     assert last["public_discovery_requested"] is True and last["serving_host"] == HOST
 
-    async def _public() -> tuple[Any, Any]:
-        profile = await ucp_discovery.ucp_business_profile(_request("/.well-known/ucp"))
-        search = await ucp_discovery.ucp_catalog_search(
-            _request("/ucp/catalog/search", method="POST", body={"query": "tumbler", "context": {"currency": "INR"}})
-        )
-        return profile, search
+    key = _create_platform_key(["ucp:read", "ucp:write", "acp:read", "acp:write"])
+    monkeypatch.setattr(settings, "ucp_checkout_enabled", True)
+    monkeypatch.setattr(settings, "acp_checkout_enabled", True)
+    from api.main import app
+    from core.commerce.ucp import negotiation
+    from tests import acp_fixtures, ucp_txn_fixtures
 
-    profile, search = asyncio.run(_public())
-    assert profile.status_code == 200
-    document = json.loads(profile.body)
-    assert document["ucp"]["version"]
-    body = json.loads(search.body)
-    titles = [product["title"] for product in body.get("products") or []]
-    assert titles == ["Demo Copper Tumbler 300 ml"], body
+    async def _platform_profile(_url: str) -> dict[str, Any]:
+        return ucp_txn_fixtures.platform_profile()  # the demo platform's profile, served in process
+
+    monkeypatch.setattr(negotiation, "default_profile_fetcher", _platform_profile)
+
+    async def _through_the_app() -> dict[str, httpx.Response]:
+        transport = httpx.ASGITransport(app=app, client=("192.0.2.10", 443))
+        base = {"host": HOST}
+        agent = {"UCP-Agent": 'profile="https://platform.example/.well-known/ucp"'}
+        async with httpx.AsyncClient(transport=transport, base_url=f"https://{HOST}") as client:
+            return {
+                "profile": await client.get("/.well-known/ucp", headers=base),
+                "search": await client.post(
+                    "/ucp/catalog/search",
+                    headers=base,
+                    json={"query": "masala", "context": {"currency": "INR"}},
+                ),
+                "locations": await client.post("/ucp/locations/search", headers=base, json={}),
+                "ucp_checkout": await client.post(
+                    "/ucp/checkout-sessions",
+                    headers={**base, **agent, "X-API-Key": key, "Idempotency-Key": uuid.uuid4().hex},
+                    json={"line_items": [{"item": {"id": "NTH-MASALA-250"}, "quantity": 1}]},
+                ),
+                "ucp_checkout_unauthenticated": await client.post(
+                    "/ucp/checkout-sessions",
+                    headers={**base, **agent, "Idempotency-Key": uuid.uuid4().hex},
+                    json={"line_items": [{"item": {"id": "NTH-MASALA-250"}, "quantity": 1}]},
+                ),
+                "acp_checkout": await client.post(
+                    "/acp/checkout_sessions",
+                    headers={
+                        **base,
+                        "Authorization": f"Bearer {key}",
+                        "API-Version": "2026-04-17",
+                        "Idempotency-Key": uuid.uuid4().hex,
+                    },
+                    json=acp_fixtures.create_body("NTH-MASALA-250"),
+                ),
+                "unknown_host": await client.get("/.well-known/ucp", headers={"host": "other.agenticorg.ai"}),
+            }
+
+    responses = asyncio.run(_through_the_app())
+    assert responses["profile"].status_code == 200, responses["profile"].text
+    profile = responses["profile"].json()
+    assert profile["ucp"]["version"] and "https://nilgiritea.agenticorg.ai/ucp" in json.dumps(profile)
+    assert responses["search"].status_code == 200, responses["search"].text
+    assert [p["title"] for p in responses["search"].json().get("products") or []] == ["Masala Chai Blend"]
+    assert responses["locations"].status_code == 200, responses["locations"].text
+    assert responses["ucp_checkout"].status_code == 201, responses["ucp_checkout"].text
+    session = responses["ucp_checkout"].json()
+    assert session["currency"] == "INR" and session["line_items"][0]["item"]["id"] == "NTH-MASALA-250"
+    assert responses["ucp_checkout_unauthenticated"].status_code == 401
+    assert responses["acp_checkout"].status_code == 201, responses["acp_checkout"].text
+    assert responses["unknown_host"].status_code == 404
 
     assert seed("--teardown", "--apply") == 0
     capsys.readouterr()
     assert _scalar("SELECT settings ? 'ucp_serving_hosts' FROM tenants WHERE id::text = :t", t=DEMO_TENANT_ID) is False
+
+
+def _create_platform_key(scopes: list[str]) -> str:
+    """A tenant API key for the demo tenant, stored the way the API-key route stores one."""
+    from api.v1.api_keys import _generate_api_key
+
+    full_key, prefix, key_hash = _generate_api_key()
+
+    async def _insert() -> None:
+        engine = create_async_engine(os.environ["AGENTICORG_DB_URL"], poolclass=NullPool)
+        try:
+            async with engine.begin() as conn:
+                await conn.execute(
+                    text(
+                        "INSERT INTO api_keys (id, tenant_id, user_id, name, prefix, key_hash, scopes, status) "
+                        "VALUES (:id, :t, :u, 'demo platform', :p, :h, :s, 'active')"
+                    ),
+                    {
+                        "id": uuid.uuid4(),
+                        "t": uuid.UUID(DEMO_TENANT_ID),
+                        "u": uuid.UUID(DEMO_ADMIN_USER_ID),
+                        "p": prefix,
+                        "h": key_hash,
+                        "s": scopes,
+                    },
+                )
+        finally:
+            await engine.dispose()
+
+    asyncio.run(_insert())
+    return full_key
 
 
 @pytest.mark.skipif(LIVE, reason="replays Grantex refusals with the in-process issuer")

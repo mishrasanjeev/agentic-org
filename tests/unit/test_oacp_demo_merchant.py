@@ -139,7 +139,8 @@ def test_catalog_is_synthetic_inr_with_stock_and_no_shopify_ids() -> None:
     products = demo_catalog_products(tenant_id=DEMO_TENANT_ID, synced_at=_iso(NOW))
     variants = [variant for product in products for variant in product["variants"]]
     assert 8 <= len(products) <= 12
-    assert all(product["title"].startswith("Demo ") for product in products)
+    assert all(product["description"].startswith("Synthetic demo product.") for product in products)
+    assert all(product["vendor"] == "Nilgiri Tea House (synthetic demo)" for product in products)
     assert all(product["source_system"] == DEMO_SOURCE_SYSTEM and product["synthetic_data"] for product in products)
     assert all(variant["currency"] == DEMO_CURRENCY == "INR" for variant in variants)
     assert all(isinstance(variant["inventory_quantity_snapshot"], int) for variant in variants)
@@ -166,7 +167,7 @@ def test_store_has_asia_kolkata_hours_for_every_day() -> None:
         "saturday",
         "sunday",
     }
-    assert store["enabled"] is True and store["country_code"] == "IN"
+    assert store["enabled"] is True and store["country_code"] == "IN" and store["city"] == "Ooty"
 
 
 @pytest.mark.usefixtures("demo_off")
@@ -265,10 +266,10 @@ def test_demo_config_keeps_links_and_never_names_a_payment_executor() -> None:
     assert "executor" not in ucp_policy
     assert config["source_connectors"][0]["connector_type"] == DEMO_SOURCE_SYSTEM
     assert config["source_connectors"][0]["adapter_status"] == "runtime_supported"
-    merchant = merchant_ucp_from_config(config, tenant_id=DEMO_TENANT_ID, serving_host="shop-demo.example.com")
+    merchant = merchant_ucp_from_config(config, tenant_id=DEMO_TENANT_ID, serving_host="nilgiritea.agenticorg.ai")
     assert merchant is not None and merchant.executor is None and merchant.currency == "INR"
     assert {link["type"] for link in merchant.links} == {"privacy_policy", "terms_of_service", "refund_policy"}
-    assert merchant.fulfillment.pickup is True and merchant.pickup_locations[0]["id"] == "demo_store_bengaluru"
+    assert merchant.fulfillment.pickup is True and merchant.pickup_locations[0]["id"] == "nilgiri_tea_house_ooty"
 
 
 @pytest.mark.usefixtures("demo_on")
@@ -288,7 +289,7 @@ def test_cache_record_accepts_a_demo_artifact_only_with_the_flag_on() -> None:
 
 
 def test_ucp_variant_ids_name_their_source() -> None:
-    assert ucp_variant_id({"variant_id": f"{DEMO_SOURCE_SYSTEM}:variant:DEMO-MUG-350"}).startswith(
+    assert ucp_variant_id({"variant_id": f"{DEMO_SOURCE_SYSTEM}:variant:NTH-MASALA-250"}).startswith(
         "synthetic_demo_variant:"
     )
     assert ucp_variant_id({"variant_id": "gid://shopify/ProductVariant/11"}).startswith("shopify_variant:")
@@ -296,7 +297,7 @@ def test_ucp_variant_ids_name_their_source() -> None:
 
 def test_tenant_marker_merges_and_keeps_the_host_index() -> None:
     existing = {
-        "ucp_serving_hosts": {"shop-demo.example.com": {"merchant_id": DEMO_MERCHANT_ID}},
+        "ucp_serving_hosts": {"nilgiritea.agenticorg.ai": {"merchant_id": DEMO_MERCHANT_ID}},
         DEMO_TENANT_MARKER: {"synthetic": True, "created_at": "2026-10-01T00:00:00Z", "torn_down_at": "x"},
     }
     merged = demo_tenant_settings(existing, now_iso="2026-10-21T00:00:00Z")

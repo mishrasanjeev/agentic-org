@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: Apache-2.0
-"""Create, converge or tear down the one synthetic OACP demo merchant.
+"""Create, converge or tear down the one synthetic OACP demo merchant, "Nilgiri Tea House".
 
 Runs inside the production API image as a one-off Cloud Run job (see
 docs/runbooks/oacp-demo-merchant.md) with the API's environment
@@ -10,7 +10,8 @@ Dry run by default: it reads, prints what it would do and writes nothing.
 
     python scripts/seed_oacp_demo_merchant.py                      # dry run
     python scripts/seed_oacp_demo_merchant.py --apply              # create or converge
-    python scripts/seed_oacp_demo_merchant.py --apply --serving-host shop-demo.example.com
+    python scripts/seed_oacp_demo_merchant.py --apply --serving-host nilgiritea.agenticorg.ai  # prints the TXT
+    python scripts/seed_oacp_demo_merchant.py --apply --verify-host  # after DNS propagates: attest, publish
     python scripts/seed_oacp_demo_merchant.py --apply --keep-fresh-minutes 60
     python scripts/seed_oacp_demo_merchant.py --teardown           # what a teardown would delete
     python scripts/seed_oacp_demo_merchant.py --teardown --apply
@@ -18,18 +19,19 @@ Dry run by default: it reads, prints what it would do and writes nothing.
 What ``--apply`` converges (each step is skipped when already in place, so a
 rerun never duplicates anything):
 
-1. the demo tenant "OACP Demo Merchant" (fixed id, slug ``oacp-demo-merchant``,
+1. the demo tenant "Nilgiri Tea House (OACP demo)" (fixed id, slug ``nilgiri-tea-house-demo``,
    marked synthetic in ``tenants.settings``), refusing a slug or id it did not
    create;
 2. one admin user ``demo-admin@demo.agenticorg.example``; it gets a password
    only from ``AGENTICORG_OACP_DEMO_ADMIN_PASSWORD`` (mount it from Secret
    Manager), which is never printed;
 3. the merchant commerce config (``PUT .../merchant-configs/{id}`` handler: the
-   ``synthetic_demo`` source, one Bengaluru store with Asia/Kolkata hours, a
+   ``synthetic_demo`` source, 10 teas and accessories in INR, one Ooty store with Asia/Kolkata hours, a
    returns policy, INR, no payment executor) and its onboarding packet;
 4. the merchant's UCP signing key (``POST .../ucp/keys`` handler);
-5. with ``--serving-host``: the DNS TXT challenge, its verification and the
-   UCP publish (the TXT record to create is printed; no DNS is invented);
+5. with ``--serving-host``: the DNS TXT challenge, printed as the exact record to
+   create (no DNS is invented); with ``--verify-host``, in a later run once the
+   record resolves: the attestation, the UCP publish and fresh artifacts;
 6. the synthetic catalog evidence, the Grantex authority request and the
    verified caching of the issued artifacts (``POST .../authority/grantex/request``
    and ``POST .../artifacts/cache`` handlers), whenever a required artifact
@@ -448,10 +450,27 @@ async def ensure_signing_key(report: Report) -> None:
     report.actions.append("ucp signing key: provisioned")
 
 
-async def ensure_serving_host(host: str, report: Report) -> None:
-    """DNS TXT challenge, verification and publish for an operator-controlled serving host."""
-    from fastapi import HTTPException
+def dns_record(challenge: Mapping[str, Any]) -> dict[str, str]:
+    """The TXT record the operator creates, also as the host label inside the parent zone."""
+    name = str(challenge["record_name"])
+    labels = name.split(".")
+    zone = ".".join(labels[-2:])
+    return {
+        "name": name,
+        "type": "TXT",
+        "value": str(challenge["record_value"]),
+        "zone": zone,
+        "host_in_zone": ".".join(labels[:-2]),
+    }
 
+
+async def request_serving_host(host: str, report: Report) -> None:
+    """Step 1 of the public profile: the DNS TXT challenge for an operator-controlled host, printed.
+
+    Reuses a pending challenge for the same host (the record value never changes
+    between runs). Nothing is verified here: run ``--verify-host`` once the
+    record resolves.
+    """
     from api.v1 import commerce_ucp_publishing as publishing
     from core.commerce.oacp_demo_merchant import DEMO_MERCHANT_ID, DEMO_SELLER_AGENT_ID, DEMO_TENANT_ID
     from core.commerce.ucp.authority import normalize_host
@@ -459,24 +478,48 @@ async def ensure_serving_host(host: str, report: Report) -> None:
     wanted = normalize_host(host)
     if wanted is None:
         raise SeedError(EXIT_REFUSED, "--serving-host must be a registered DNS name (no IP literal, port or path)")
+    ucp = (await read_state()).ucp
+    if ucp.get("serving_host") == wanted:
+        report.actions.append(f"serving host {wanted}: already attested")
+        return
+    challenge = ucp.get("pending_challenge")
+    if challenge and challenge.get("host") == wanted:
+        report.dns_record = dns_record(challenge)
+        report.actions.append(
+            f"serving host {wanted}: DNS challenge pending; create the TXT record, then --verify-host"
+        )
+        return
+    created = await _ledgered(
+        "commerce.ucp.serving_host.challenge",
+        lambda: publishing.request_serving_host_challenge(
+            DEMO_MERCHANT_ID,
+            publishing.ServingHostRequest(host=wanted, seller_agent_id=DEMO_SELLER_AGENT_ID),
+            _operator_request(),
+            tenant_id=DEMO_TENANT_ID,
+        ),
+    )
+    record = created["dns_record"]
+    report.dns_record = dns_record({"record_name": record["name"], "record_value": record["value"]})
+    report.actions.append(f"serving host {wanted}: DNS challenge created; create the TXT record, then --verify-host")
+
+
+async def verify_host_and_publish(report: Report) -> bool:
+    """Step 2: verify the pending challenge (async DNS lookup), then publish the UCP profile.
+
+    Returns whether the merchant is published on an attested host. A record that
+    does not resolve yet is reported, not an error: rerun after propagation.
+    """
+    from fastapi import HTTPException
+
+    from api.v1 import commerce_ucp_publishing as publishing
+    from core.commerce.oacp_demo_merchant import DEMO_MERCHANT_ID, DEMO_SELLER_AGENT_ID, DEMO_TENANT_ID
+
     state = await read_state()
-    ucp = state.ucp
-    if ucp.get("serving_host") != wanted:
-        challenge = ucp.get("pending_challenge")
-        if not challenge or challenge.get("host") != wanted:
-            created = await _ledgered(
-                "commerce.ucp.serving_host.challenge",
-                lambda: publishing.request_serving_host_challenge(
-                    DEMO_MERCHANT_ID,
-                    publishing.ServingHostRequest(host=wanted, seller_agent_id=DEMO_SELLER_AGENT_ID),
-                    _operator_request(),
-                    tenant_id=DEMO_TENANT_ID,
-                ),
-            )
-            report.dns_record = dict(created["dns_record"])
-            report.actions.append(f"serving host {wanted}: DNS challenge created")
-        else:
-            report.dns_record = {"name": challenge["record_name"], "type": "TXT", "value": challenge["record_value"]}
+    if not state.ucp.get("serving_host"):
+        challenge = state.ucp.get("pending_challenge")
+        if not challenge:
+            raise SeedError(EXIT_REFUSED, "--verify-host needs a pending challenge: run --serving-host <host> first")
+        report.dns_record = dns_record(challenge)
         try:
             await _ledgered(
                 "commerce.ucp.serving_host.verify",
@@ -490,25 +533,30 @@ async def ensure_serving_host(host: str, report: Report) -> None:
         except HTTPException as exc:
             if exc.status_code != 409:
                 raise
-            report.actions.append(f"serving host {wanted}: TXT record not visible yet; create it and rerun")
-            return
-        report.actions.append(f"serving host {wanted}: attested")
+            reason = exc.detail.get("reason") if isinstance(exc.detail, Mapping) else str(exc.detail)
+            report.actions.append(
+                f"serving host {challenge.get('host')}: not verified ({reason}); rerun after DNS propagates"
+            )
+            return False
+        report.actions.append(f"serving host {challenge.get('host')}: attested")
         state = await read_state()
-    if not state.ucp.get("published"):
-        result = await _ledgered(
-            "commerce.ucp.publish",
-            lambda: publishing.publish_ucp_profile(
-                DEMO_MERCHANT_ID,
-                publishing.PublishRequest(seller_agent_id=DEMO_SELLER_AGENT_ID),
-                _operator_request(),
-                tenant_id=DEMO_TENANT_ID,
-            ),
-        )
-        if not result.get("published"):
-            raise SeedError(EXIT_FAILED, f"UCP publish refused: {result.get('refusal')}")
-        report.actions.append(f"ucp profile on {wanted}: published")
-    else:
-        report.actions.append(f"ucp profile on {wanted}: already published")
+    host = state.ucp.get("serving_host")
+    if state.ucp.get("published"):
+        report.actions.append(f"ucp profile on {host}: already published")
+        return True
+    result = await _ledgered(
+        "commerce.ucp.publish",
+        lambda: publishing.publish_ucp_profile(
+            DEMO_MERCHANT_ID,
+            publishing.PublishRequest(seller_agent_id=DEMO_SELLER_AGENT_ID),
+            _operator_request(),
+            tenant_id=DEMO_TENANT_ID,
+        ),
+    )
+    if not result.get("published"):
+        raise SeedError(EXIT_FAILED, f"UCP publish refused: {result.get('refusal')}")
+    report.actions.append(f"ucp profile on {host}: published (namespace {(result.get('ucp') or {}).get('namespace')})")
+    return True
 
 
 def _grantex_error_code(response: Any) -> str | None:
@@ -707,10 +755,16 @@ async def run(args: argparse.Namespace, environ: Mapping[str, str]) -> dict[str,
     state = await read_state()
     await ensure_merchant_config(state, report)
     await ensure_signing_key(report)
+    refresh = args.refresh_artifacts
     if args.serving_host:
-        await ensure_serving_host(args.serving_host, report)
+        await request_serving_host(args.serving_host, report)
+    if args.verify_host:
+        published_before = bool((await read_state()).ucp.get("published"))
+        # A newly published merchant needs new artifacts: the request now carries the opt-in.
+        published = await verify_host_and_publish(report)
+        refresh = refresh or (published and not published_before)
     state = await read_state()
-    if needs_issuance(state, refresh=args.refresh_artifacts):
+    if needs_issuance(state, refresh=refresh):
         await issue_and_cache_artifacts(report)
     else:
         report.actions.append("artifacts: every family has a usable verified record; nothing issued")
@@ -759,9 +813,9 @@ def plan(state: DemoState, args: argparse.Namespace) -> list[str]:
         "ucp signing key: " + ("present" if state.active_kid else "would provision"),
     ]
     if args.serving_host:
-        steps.append(
-            f"serving host {args.serving_host}: would challenge, verify (after the TXT record exists) and publish"
-        )
+        steps.append(f"serving host {args.serving_host}: would request (or reprint) the DNS TXT challenge")
+    if args.verify_host:
+        steps.append("serving host: would verify the pending TXT challenge and publish the UCP profile")
     steps.append(
         "artifacts: "
         + (
@@ -830,6 +884,11 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         "--serving-host", help="an operator-controlled DNS name to attest and publish the UCP profile on"
     )
     parser.add_argument(
+        "--verify-host",
+        action="store_true",
+        help="verify the pending serving-host TXT challenge, publish the UCP profile and refresh the artifacts",
+    )
+    parser.add_argument(
         "--refresh-artifacts", action="store_true", help="request new artifacts even if usable ones exist"
     )
     parser.add_argument(
@@ -839,7 +898,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         help=f"after seeding, re-issue artifacts every {KEEP_FRESH_INTERVAL_SECONDS} s for this many minutes",
     )
     args = parser.parse_args(argv)
-    if args.teardown and (args.serving_host or args.refresh_artifacts or args.keep_fresh_minutes):
+    if args.teardown and (args.serving_host or args.verify_host or args.refresh_artifacts or args.keep_fresh_minutes):
         parser.error("--teardown takes only --apply")
     if not 0 <= args.keep_fresh_minutes <= MAX_KEEP_FRESH_MINUTES:
         parser.error(f"--keep-fresh-minutes must be between 0 and {MAX_KEEP_FRESH_MINUTES}")

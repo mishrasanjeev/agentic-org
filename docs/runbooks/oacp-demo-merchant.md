@@ -1,17 +1,19 @@
-# OACP Demo Merchant (Synthetic)
+# OACP Demo Merchant: Nilgiri Tea House (Synthetic)
 
-One clearly labelled demo merchant for showing OACP end to end in a running environment without
-a real store: `scripts/seed_oacp_demo_merchant.py` creates it, keeps it converged and tears it
-down. Everything it creates is invented.
+One clearly labelled demo merchant, the invented tea retailer "Nilgiri Tea House", for showing
+OACP end to end in a running environment without a real store.
+`scripts/seed_oacp_demo_merchant.py` creates it, keeps it converged and tears it down. Everything
+it creates is invented.
 
 | What | Value |
 | --- | --- |
-| Tenant | "OACP Demo Merchant", slug `oacp-demo-merchant`, id `13bd6961-b1e4-56ca-b242-91fbdfe1b1b0` (fixed, so Grantex can be allowlisted before the first run), marked `settings.oacp_demo_merchant.synthetic = true` |
+| Tenant | "Nilgiri Tea House (OACP demo)", slug `nilgiri-tea-house-demo`, id `13bd6961-b1e4-56ca-b242-91fbdfe1b1b0` (fixed, so Grantex can be allowlisted before the first run), marked `settings.oacp_demo_merchant.synthetic = true` |
 | Admin user | `demo-admin@demo.agenticorg.example` (reserved `.example` domain); a password only from `AGENTICORG_OACP_DEMO_ADMIN_PASSWORD`, never printed |
-| Merchant | `oacp_demo_merchant`, seller agent `seller_agent_oacp_demo` |
-| Catalog | 10 products, 11 variants, prices in INR, stock snapshots (one variant out of stock), every title starting "Demo"; connector source `synthetic_demo`, never Shopify |
-| Store | "OACP Demo Store, Bengaluru (synthetic)", hours in `Asia/Kolkata` for every day |
-| Policies | returns summary in the brand profile; privacy, terms and returns links under `https://demo.agenticorg.example/` (nothing is hosted there) |
+| Merchant | `nilgiri_tea_house`, seller agent `seller_agent_nilgiri_tea`, display name "Nilgiri Tea House (synthetic demo)" |
+| Catalog | 10 teas and tea accessories, 11 variants, prices in INR, stock snapshots (one tea out of stock), every description starting "Synthetic demo product"; connector source `synthetic_demo`, never Shopify |
+| Store | "Nilgiri Tea House, Ooty (synthetic demo)", invented street address, hours in `Asia/Kolkata` for every day |
+| Policies | returns summary in the brand profile; privacy, terms and returns links and product images under `https://demo.agenticorg.example/` (nothing is hosted there) |
+| Public host | `nilgiritea.agenticorg.ai`, UCP vendor namespace `ai.agenticorg.nilgiritea`, attested by DNS TXT |
 | Payment | no payment executor on the merchant config, so no checkout can charge whatever `PLURAL_PINE_LIVE_EXECUTION_ENABLED` says |
 
 The synthetic source is accepted only while `AGENTICORG_OACP_DEMO_MERCHANT_ENABLED=true`. A
@@ -30,7 +32,7 @@ sources only, as before. Design: `core/commerce/oacp_demo_merchant.py`.
      tenant. A Grantex that accepts Shopify sources only refuses with
      `unsupported_or_enabling_authority_request`; the seed then stops with exit code 4 and nothing
      is cached. The seed never presents the synthetic catalog as Shopify;
-   - for the public UCP profile only: `OACP_PUBLIC_DISCOVERY_ISSUANCE_ENABLED=true`.
+   - for the public UCP profile: `OACP_PUBLIC_DISCOVERY_ISSUANCE_ENABLED=true`.
 3. **Secret Manager** (optional, for signing in to the console as the demo admin):
 
    ```
@@ -60,7 +62,10 @@ Set on **both** `agenticorg-api` and `agenticorg-worker` (and on the seed job):
 | `AGENTICORG_AUDIT_CHAIN_DEFAULT_ON` | `true` (optional) | Seals the ledger of every tenant with a commerce merchant config, so the demo's export verifies offline |
 | `PLURAL_PINE_LIVE_EXECUTION_ENABLED` | unset or `false` | No money moves; the seed job refuses to run with it on |
 
-Flags already on stay on. Settings are read at start-up, so a change needs a new revision.
+Flags already on stay on. Settings are read at start-up, so a change needs a new revision. The API
+has no host allowlist: a request for `nilgiritea.agenticorg.ai` reaches the same middleware as any
+other host, `/.well-known/ucp` and the `/ucp` catalog and location reads are public, and the UCP
+and ACP checkout routes take the merchant-issued API key.
 
 ## Seed Job (one-time setup)
 
@@ -114,20 +119,50 @@ password (no console sign-in). After a new deploy, point the job at the new imag
    artifacts issued and verified, what is usable now and what is enabled. Rerunning converges:
    nothing is created twice, and artifacts are requested only when a family has no usable one.
 
-4. **Optional: public UCP profile.** Pick a host you control (for example `demo-shop.<your
-   domain>`). Run:
+4. **Public host `nilgiritea.agenticorg.ai`** (UCP profile, catalog and locations, UCP REST and ACP
+   checkout). These routes find the merchant by the `Host` header, so the host must reach
+   `agenticorg-api` directly with the header preserved, not through `agenticorg-ui` (its nginx
+   rewrites `Host` and has no `/.well-known/ucp` or `/ucp` proxy).
 
-   ```
-   gcloud run jobs execute agenticorg-oacp-demo-seed --project=$PROJECT --region=$REGION --wait \
-     --args=scripts/seed_oacp_demo_merchant.py,--apply,--serving-host=<host>
-   ```
+   a. Map the host straight to the API service:
 
-   The summary's `dns_record_to_create` is the TXT record to publish
-   (`_agenticorg-ucp.<host>` = `agenticorg-ucp-verify=...`); rerunning reuses the same challenge.
-   Also route `<host>` to `agenticorg-api` (a Cloud Run domain mapping or the load balancer), since
-   the UCP and ACP routes find the merchant by the `Host` header. Once the record resolves, rerun the
-   same command: the host is attested, the profile published, and the next authority request asks
-   Grantex for an enabled `public_discovery_state` artifact. No DNS is ever invented by the seed.
+      ```
+      gcloud beta run domain-mappings create --service=agenticorg-api \
+        --domain=nilgiritea.agenticorg.ai --project=$PROJECT --region=$REGION
+      ```
+
+   b. At Namecheap (Domain List, `agenticorg.ai`, Advanced DNS) add a **CNAME Record**: host
+      `nilgiritea`, value `ghs.googlehosted.com.`. Cloud Run issues the managed certificate once it
+      resolves; `gcloud beta run domain-mappings describe --domain=nilgiritea.agenticorg.ai
+      --project=$PROJECT --region=$REGION` then shows `CertificateProvisioned` true.
+
+   c. Request the attestation challenge. The seed prints the exact record and changes nothing else:
+
+      ```
+      gcloud run jobs execute agenticorg-oacp-demo-seed --project=$PROJECT --region=$REGION --wait \
+        --args=scripts/seed_oacp_demo_merchant.py,--apply,--serving-host=nilgiritea.agenticorg.ai
+      ```
+
+      The summary's `dns_record_to_create` holds `name` (`_agenticorg-ucp.nilgiritea.agenticorg.ai`),
+      `type` (`TXT`), `value` (`agenticorg-ucp-verify=...`) and `host_in_zone`
+      (`_agenticorg-ucp.nilgiritea`). Rerunning the same command reprints the same challenge. The
+      seed never creates or invents DNS.
+
+   d. At Namecheap add a **TXT Record**: host `_agenticorg-ucp.nilgiritea`, value the printed
+      `agenticorg-ucp-verify=...` string. Check it: `dig +short TXT _agenticorg-ucp.nilgiritea.agenticorg.ai`.
+
+   e. After propagation, complete the attestation and publish (a separate run):
+
+      ```
+      gcloud run jobs execute agenticorg-oacp-demo-seed --project=$PROJECT --region=$REGION --wait \
+        --args=scripts/seed_oacp_demo_merchant.py,--apply,--verify-host
+      ```
+
+      It looks the TXT record up, records the attestation, publishes the profile under
+      `ai.agenticorg.nilgiritea` and requests new artifacts carrying the public-discovery opt-in. If
+      the record is not visible yet, the summary says `not verified (dns_txt_record_not_found)`:
+      rerun later. The profile is served once Grantex issues an enabled `public_discovery_state`
+      artifact.
 
 5. **Before a showcase**, keep the artifacts fresh (inventory artifacts live 60 s, prices 5 min,
    public discovery 15 min):
@@ -146,9 +181,9 @@ password (no console sign-in). After a new deploy, point the job at the new imag
 
 ## What Works Where
 
-| Surface | Without `--serving-host` | With an attested, published host |
+| Surface | Before the host is published | On `https://nilgiritea.agenticorg.ai` once published |
 | --- | --- | --- |
-| Buyer Q&A, products, protocol adapter payloads, purchase preparation (arbiter), ledger export | yes (tenant API key or admin session) | yes |
+| Buyer Q&A, products, protocol adapter payloads, purchase preparation (arbiter), ledger export | yes (tenant API key or admin session, on `app.agenticorg.ai`) | yes |
 | ACP product feed (`/api/v1/commerce/runtime/acp/feed`) | yes, while the artifacts are fresh | yes |
 | MCP `seller.*` tools (Q&A bridges) | yes (`AGENTICORG_API_KEY`) | yes |
 | `/.well-known/ucp`, `/ucp/catalog/*`, `/ucp/locations/*` | 404 | yes |
@@ -160,22 +195,29 @@ With a demo-tenant API key or admin session token in `$TOKEN`:
 
 ```
 API=https://app.agenticorg.ai/api/v1/commerce/runtime
-M='merchant_id=oacp_demo_merchant&seller_agent_id=seller_agent_oacp_demo'
-curl -s -H "Authorization: Bearer $TOKEN" "$API/merchant-configs/oacp_demo_merchant?seller_agent_id=seller_agent_oacp_demo"
+M='merchant_id=nilgiri_tea_house&seller_agent_id=seller_agent_nilgiri_tea'
+curl -s -H "Authorization: Bearer $TOKEN" "$API/merchant-configs/nilgiri_tea_house?seller_agent_id=seller_agent_nilgiri_tea"
 curl -s -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' -X POST "$API/buyer-sessions/ask" \
-  -d '{"merchant_id":"oacp_demo_merchant","seller_agent_id":"seller_agent_oacp_demo","question":"Do you have a copper tumbler?"}'
+  -d '{"merchant_id":"nilgiri_tea_house","seller_agent_id":"seller_agent_nilgiri_tea","question":"Do you have masala chai?"}'
 curl -s -H "Authorization: Bearer $TOKEN" "$API/acp/feed?$M&format=json"   # 409 once inventory lapses
 curl -s -H "Authorization: Bearer $TOKEN" "$API/protocol-adapters?$M"
 curl -s -H "Authorization: Bearer $TOKEN" "$API/ledger/export"
 ```
 
 The answer's `source_label` reads "Source: synthetic local demo catalog; not externally verified".
-With a published host:
+On the published host (`$KEY` is a demo-tenant API key with the `ucp:*` and `acp:*` scopes; a UCP
+checkout fetches the platform profile named in `UCP-Agent`, so use your demo platform's real
+profile URL):
 
 ```
-curl -s https://<host>/.well-known/ucp
-curl -s -X POST https://<host>/ucp/catalog/search -H 'Content-Type: application/json' \
-  -d '{"query":"tumbler","context":{"currency":"INR"}}'
+H=https://nilgiritea.agenticorg.ai
+curl -s $H/.well-known/ucp
+curl -s -X POST $H/ucp/catalog/search -H 'Content-Type: application/json' \
+  -d '{"query":"masala","context":{"currency":"INR"}}'
+curl -s -X POST $H/ucp/locations/search -H 'Content-Type: application/json' -d '{}'
+curl -s -X POST $H/ucp/checkout-sessions -H "X-API-Key: $KEY" -H "Idempotency-Key: $(uuidgen)" \
+  -H 'UCP-Agent: profile="https://<your demo platform>/.well-known/ucp"' -H 'Content-Type: application/json' \
+  -d '{"line_items":[{"item":{"id":"NTH-MASALA-250"},"quantity":1}]}'
 ```
 
 ## Teardown
@@ -191,9 +233,11 @@ It deletes the demo tenant's merchant config, onboarding packet, catalog evidenc
 POS packets, checkout sessions, carts, orders and their webhooks; removes the serving-host index;
 deactivates the admin user; and records `commerce.runtime.demo_merchant.teardown`. The append-only
 ledger (audit log, arbiter decisions, OACP decision records, payment records) is evidence and is
-kept. Then remove the tenant id from the Grantex allowlist, delete the TXT record and the domain
-mapping, and unset `AGENTICORG_OACP_DEMO_MERCHANT_ENABLED` if no demo is planned. Issued artifacts
-expire within 24 hours. A later `--apply` re-creates the demo on the same tenant.
+kept. Then remove the tenant id from the Grantex allowlist, delete the Namecheap TXT and CNAME
+records and the domain mapping (`gcloud beta run domain-mappings delete
+--domain=nilgiritea.agenticorg.ai --project=$PROJECT --region=$REGION`), and unset
+`AGENTICORG_OACP_DEMO_MERCHANT_ENABLED` if no demo is planned. Issued artifacts expire within 24
+hours. A later `--apply` re-creates the demo on the same tenant.
 
 ## Exit Codes
 
@@ -201,15 +245,16 @@ expire within 24 hours. A later `--apply` re-creates the demo on the same tenant
 | --- | --- |
 | 0 | Done (or the dry-run plan was printed) |
 | 1 | Failed (Grantex unreachable, an artifact refused at caching, ...): the summary says which |
-| 2 | Refused before any write: flag off, missing settings, Plural live on in the job, a short admin password, or a tenant id or slug or admin email the seed did not create |
+| 2 | Refused before any write: flag off, missing settings, Plural live on in the job, a short admin password, `--verify-host` without a challenge, or a tenant id, slug or admin email the seed did not create |
 | 3 | Grantex does not allow the demo tenant: add the printed id to `COMMERCE_C6Z_AUTHORITY_SERVICE_TENANTS` |
 | 4 | Grantex does not accept the synthetic demo source yet |
 
 ## Cost and Safety
 
 - No cost beyond normal: one short job execution, a few hundred rows, one Grantex request per
-  refresh (a keep-fresh hour is about 80 requests and 880 short-lived artifacts).
-- Synthetic only: invented names, `.example` addresses and URLs, no real people, no secrets in the
-  output (the admin password never leaves Secret Manager and the job's environment).
+  refresh (a keep-fresh hour is about 80 requests and 880 short-lived artifacts), one domain mapping.
+- Synthetic only: invented names, an invented address, `.example` addresses and URLs, no real
+  people, no secrets in the output (the admin password never leaves Secret Manager and the job's
+  environment).
 - Plural live execution stays off; the demo merchant names no executor, so even with it on no demo
   checkout can complete a payment.

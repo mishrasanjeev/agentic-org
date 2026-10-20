@@ -3,16 +3,22 @@
 ## Unreleased - OACP demo merchant (synthetic)
 
 - New `scripts/seed_oacp_demo_merchant.py`: creates, converges or tears down one clearly labelled
-  synthetic demo merchant ("OACP Demo Merchant", tenant `13bd6961-b1e4-56ca-b242-91fbdfe1b1b0`,
-  admin `demo-admin@demo.agenticorg.example`): 10 invented products in INR with stock, one
-  Bengaluru store with `Asia/Kolkata` hours, a returns policy, the UCP signing key, optional
-  DNS-attested serving host and UCP publish (`--serving-host`), and the Grantex authority request
-  with verified caching of the issued artifacts. Dry run by default (`--apply` writes); every write
+  synthetic demo merchant, the invented tea retailer "Nilgiri Tea House" (tenant
+  `13bd6961-b1e4-56ca-b242-91fbdfe1b1b0`, admin `demo-admin@demo.agenticorg.example`): 10 teas and
+  accessories in INR with stock, one Ooty store with `Asia/Kolkata` hours, a returns policy, the UCP
+  signing key, the Grantex authority request with verified caching of the issued artifacts, and the
+  public host in two runs: `--serving-host nilgiritea.agenticorg.ai` prints the exact DNS TXT record
+  to create, `--verify-host` attests it after propagation and publishes the UCP profile
+  (namespace `ai.agenticorg.nilgiritea`). Dry run by default (`--apply` writes); every write
   goes through the route handler and records its commerce ledger event in a tenant-bound session;
   `--keep-fresh-minutes` re-issues the short-lived artifacts for a showcase; `--teardown` deletes
   the demo's commerce rows and keeps the append-only ledger. It stops with the tenant id to
   allowlist when Grantex answers `service_tenant_not_allowed`, and with exit code 4 when Grantex
-  does not accept the synthetic source. Runbook: `docs/runbooks/oacp-demo-merchant.md`.
+  does not accept the synthetic source. Runbook (with the Cloud Run domain mapping straight to
+  `agenticorg-api` and the DNS records): `docs/runbooks/oacp-demo-merchant.md`. A Postgres test
+  drives the real app on `Host: nilgiritea.agenticorg.ai`: profile, catalog and location reads,
+  a UCP checkout and an ACP checkout session with a merchant-issued API key; no app change was
+  needed for the host.
 - New flag `AGENTICORG_OACP_DEMO_MERCHANT_ENABLED` (default off): the `synthetic_demo` connector
   source (merchant config, onboarding packet, connector evidence and authority request, which says
   `synthetic_data: true`). Off, every path accepts Shopify read-only sources only and an artifact

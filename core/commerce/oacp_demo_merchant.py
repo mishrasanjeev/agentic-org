@@ -1,11 +1,11 @@
 # SPDX-License-Identifier: Apache-2.0
-"""The one synthetic OACP demo merchant: a clearly labelled demo tenant, catalog and store.
+"""The one synthetic OACP demo merchant, "Nilgiri Tea House": a clearly labelled demo tenant, catalog and store.
 
 ``scripts/seed_oacp_demo_merchant.py`` creates (or converges, or tears down)
 one demo tenant so the OACP surfaces can be shown end to end with invented
 data. Nothing here pretends to be a Shopify store: the catalog is the
 ``synthetic_demo`` connector source (``core.commerce.c6z_runtime_vertical.
-DEMO_SOURCE_SYSTEM``), every product title starts with "Demo", every address
+DEMO_SOURCE_SYSTEM``), every product description starts "Synthetic demo product", every address
 is invented, and the authority request tells Grantex ``synthetic_data: true``.
 
 The source is accepted only while ``AGENTICORG_OACP_DEMO_MERCHANT_ENABLED`` is
@@ -38,106 +38,111 @@ from core.commerce.c6z_runtime_vertical import (
 DEMO_SEED_NAMESPACE = uuid.uuid5(uuid.NAMESPACE_URL, "https://demo.agenticorg.example/oacp-demo-merchant")
 DEMO_TENANT_ID = str(uuid.uuid5(DEMO_SEED_NAMESPACE, "tenant"))
 DEMO_ADMIN_USER_ID = str(uuid.uuid5(DEMO_SEED_NAMESPACE, "user:demo-admin"))
-DEMO_TENANT_SLUG = "oacp-demo-merchant"
-DEMO_TENANT_NAME = "OACP Demo Merchant"
+DEMO_TENANT_SLUG = "nilgiri-tea-house-demo"
+DEMO_TENANT_NAME = "Nilgiri Tea House (OACP demo)"
 DEMO_TENANT_MARKER = "oacp_demo_merchant"
-DEMO_MERCHANT_ID = "oacp_demo_merchant"
-DEMO_SELLER_AGENT_ID = "seller_agent_oacp_demo"
-DEMO_DISPLAY_NAME = "OACP Demo Merchant (synthetic)"
+DEMO_MERCHANT_ID = "nilgiri_tea_house"
+DEMO_SELLER_AGENT_ID = "seller_agent_nilgiri_tea"
+DEMO_DISPLAY_NAME = "Nilgiri Tea House (synthetic demo)"
 DEMO_EMAIL_DOMAIN = "demo.agenticorg.example"
 DEMO_ADMIN_EMAIL = f"demo-admin@{DEMO_EMAIL_DOMAIN}"
-DEMO_ADMIN_NAME = "OACP Demo Admin (synthetic)"
+DEMO_ADMIN_NAME = "Nilgiri Tea House demo admin (synthetic)"
 DEMO_CURRENCY = "INR"
-DEMO_STORE_ID = "demo_store_bengaluru"
+DEMO_STORE_ID = "nilgiri_tea_house_ooty"
+# The serving host the owner maps to the API for the public UCP profile (attested by DNS TXT, never
+# invented by the seed); its UCP vendor namespace is the host reversed.
+DEMO_SERVING_HOST = "nilgiritea.agenticorg.ai"
+DEMO_NAMESPACE = "ai.agenticorg.nilgiritea"
+# Policy pages and product images are placeholders under the reserved demo domain; nothing is hosted there.
 DEMO_SITE = f"https://{DEMO_EMAIL_DOMAIN}"
 DEMO_SEEDED_BY = "scripts/seed_oacp_demo_merchant.py"
 DEMO_RETURNS_POLICY = (
-    "Synthetic demo policy: unused items in original packaging can be returned within 7 days of delivery "
+    "Synthetic demo policy: sealed tea and unused accessories can be returned within 7 days of delivery "
     "for a refund to the original payment method. No real goods are sold by this demo merchant."
 )
 
-# (sku, product title, product type, description, (variant title, price INR, stock), ...)
+# (key, product title, product type, description, ((sku, variant title, price INR, stock), ...))
 _CATALOG: tuple[tuple[str, str, str, str, tuple[tuple[str, str, str, int], ...]], ...] = (
     (
-        "DEMO-BOTTLE",
-        "Demo Terracotta Water Bottle 1 L",
-        "Kitchen",
-        "Synthetic demo product. Hand-thrown terracotta bottle that keeps water cool.",
-        (("DEMO-BOTTLE-1L", "1 L", "649.00", 40),),
+        "NTH-FROST",
+        "Nilgiri Frost Black Tea",
+        "Black tea",
+        "Synthetic demo product. Brisk winter-flush black tea with a bright, clean cup.",
+        (("NTH-FROST-100", "100 g loose leaf", "349.00", 60), ("NTH-FROST-250", "250 g loose leaf", "799.00", 25)),
     ),
     (
-        "DEMO-TOTE",
-        "Demo Handloom Cotton Tote",
-        "Bags",
-        "Synthetic demo product. Handloom cotton tote with an inner pocket.",
-        (("DEMO-TOTE-IND", "Indigo", "499.00", 25), ("DEMO-TOTE-MAD", "Madder red", "549.00", 0)),
+        "NTH-GREEN",
+        "Doddabetta Green Tea",
+        "Green tea",
+        "Synthetic demo product. Pan-fired green tea with a light, grassy finish.",
+        (("NTH-GREEN-100", "100 g loose leaf", "399.00", 40),),
     ),
     (
-        "DEMO-DIYA",
-        "Demo Brass Diya Set of 4",
-        "Home decor",
-        "Synthetic demo product. Four small brass lamps for festive evenings.",
-        (("DEMO-DIYA-4", "Set of 4", "899.00", 12),),
+        "NTH-WHITE",
+        "Silver Tips White Tea",
+        "White tea",
+        "Synthetic demo product. Hand-picked silver buds, delicate and sweet.",
+        (("NTH-WHITE-50", "50 g", "1299.00", 8),),
     ),
     (
-        "DEMO-NOTEBOOK",
-        "Demo Recycled Paper Notebook A5",
-        "Stationery",
-        "Synthetic demo product. 160 pages of recycled cotton paper, dotted grid.",
-        (("DEMO-NOTEBOOK-A5", "A5 dotted", "249.00", 120),),
+        "NTH-OOLONG",
+        "Blue Mountain Oolong",
+        "Oolong tea",
+        "Synthetic demo product. Lightly oxidised oolong with floral notes.",
+        (("NTH-OOLONG-100", "100 g", "899.00", 0),),
     ),
     (
-        "DEMO-ORGANISER",
-        "Demo Bamboo Desk Organiser",
-        "Stationery",
-        "Synthetic demo product. Five-slot bamboo organiser for pens and cards.",
-        (("DEMO-ORGANISER-5", "Five slots", "1299.00", 8),),
+        "NTH-MASALA",
+        "Masala Chai Blend",
+        "Spiced tea",
+        "Synthetic demo product. Black tea with cardamom, ginger, clove and cinnamon.",
+        (("NTH-MASALA-250", "250 g", "449.00", 75),),
     ),
     (
-        "DEMO-TUMBLER",
-        "Demo Copper Tumbler 300 ml",
-        "Kitchen",
-        "Synthetic demo product. Hammered copper tumbler with a lacquered rim.",
-        (("DEMO-TUMBLER-300", "300 ml", "749.00", 30),),
+        "NTH-HOMEMADE",
+        "Hill Station Homemade Chocolate Tea",
+        "Flavoured tea",
+        "Synthetic demo product. Black tea with cocoa nibs from the hills.",
+        (("NTH-HOMEMADE-100", "100 g", "499.00", 30),),
     ),
     (
-        "DEMO-MAT",
-        "Demo Jute Floor Mat 60 x 90 cm",
-        "Home decor",
-        "Synthetic demo product. Braided natural jute mat for doorways.",
-        (("DEMO-MAT-6090", "60 x 90 cm", "1099.00", 6),),
+        "NTH-SAMPLER",
+        "Nilgiri Estate Sampler, 6 Teas",
+        "Gift set",
+        "Synthetic demo product. Six 25 g pouches from six imagined estates.",
+        (("NTH-SAMPLER-6", "6 x 25 g", "999.00", 15),),
     ),
     (
-        "DEMO-MUG",
-        "Demo Stoneware Coffee Mug",
-        "Kitchen",
-        "Synthetic demo product. Glazed stoneware mug, 350 ml.",
-        (("DEMO-MUG-350", "350 ml", "399.00", 50),),
+        "NTH-KETTLE",
+        "Cast Iron Tea Kettle 800 ml",
+        "Accessories",
+        "Synthetic demo product. Enamel-lined cast iron kettle with a removable infuser.",
+        (("NTH-KETTLE-800", "800 ml", "2499.00", 5),),
     ),
     (
-        "DEMO-CUSHION",
-        "Demo Block-Print Cushion Cover",
-        "Home decor",
-        "Synthetic demo product. Hand block-printed cotton cover, 40 x 40 cm.",
-        (("DEMO-CUSHION-40", "40 x 40 cm", "599.00", 18),),
+        "NTH-INFUSER",
+        "Stainless Steel Tea Infuser",
+        "Accessories",
+        "Synthetic demo product. Fine-mesh infuser that fits most mugs.",
+        (("NTH-INFUSER-1", "Standard", "199.00", 120),),
     ),
     (
-        "DEMO-TIFFIN",
-        "Demo Steel Lunch Box, 3 Tier",
-        "Kitchen",
-        "Synthetic demo product. Three stacked stainless steel containers with a clip.",
-        (("DEMO-TIFFIN-3", "3 tier", "1499.00", 10),),
+        "NTH-CADDY",
+        "Tin Tea Caddy",
+        "Accessories",
+        "Synthetic demo product. Airtight tin caddy with an inner lid.",
+        (("NTH-CADDY-250", "250 g capacity", "299.00", 45),),
     ),
 )
 
 _STORE_HOURS: tuple[tuple[str, str, str], ...] = (
-    ("monday", "10:00", "20:00"),
-    ("tuesday", "10:00", "20:00"),
-    ("wednesday", "10:00", "20:00"),
-    ("thursday", "10:00", "20:00"),
-    ("friday", "10:00", "20:00"),
-    ("saturday", "10:00", "21:00"),
-    ("sunday", "11:00", "18:00"),
+    ("monday", "09:00", "19:00"),
+    ("tuesday", "09:00", "19:00"),
+    ("wednesday", "09:00", "19:00"),
+    ("thursday", "09:00", "19:00"),
+    ("friday", "09:00", "19:00"),
+    ("saturday", "09:00", "20:00"),
+    ("sunday", "10:00", "18:00"),
 )
 
 
@@ -193,25 +198,25 @@ async def demo_tenant_marked(session: Any, tenant_id: str) -> bool:
 
 
 def demo_store() -> dict[str, Any]:
-    """One invented store in Bengaluru with UCP location hours in Asia/Kolkata."""
+    """One invented tea shop in Ooty with UCP location hours in Asia/Kolkata."""
     return {
         "store_id": DEMO_STORE_ID,
-        "display_name": "OACP Demo Store, Bengaluru (synthetic)",
+        "display_name": "Nilgiri Tea House, Ooty (synthetic demo)",
         "pos_provider": "merchant_pos",
         "enabled": True,
-        "city": "Bengaluru",
+        "city": "Ooty",
         "country_code": "IN",
         "staff_review_required": True,
         "location": {
             "timezone": "Asia/Kolkata",
             "address": {
-                "street_address": "1 Demo Street",
-                "address_locality": "Bengaluru",
-                "address_region": "Karnataka",
-                "postal_code": "560001",
+                "street_address": "1 Demo Tea Lane",
+                "address_locality": "Ooty",
+                "address_region": "Tamil Nadu",
+                "postal_code": "643001",
                 "address_country": "IN",
             },
-            "geo": {"latitude": 12.9716, "longitude": 77.5946},
+            "geo": {"latitude": 11.4102, "longitude": 76.6950},
             "hours": [{"day": day, "opens": opens, "closes": closes} for day, opens, closes in _STORE_HOURS],
         },
     }
@@ -224,14 +229,14 @@ def demo_merchant_config_body() -> dict[str, Any]:
         "merchant_display_name": DEMO_DISPLAY_NAME,
         "public_brand_profile": {
             "display_name": DEMO_DISPLAY_NAME,
-            "description": "Synthetic demo merchant for showing OACP end to end. No real goods or payments.",
+            "description": "Synthetic demo tea retailer for showing OACP end to end. No real goods or payments.",
             "synthetic_data": True,
             "website": DEMO_SITE,
             # The returns policy link is under provider_policy.ucp.links: the onboarding
             # packet's unsafe-value check reads a dotted host plus path as a compact JWS.
             "return_policy_summary": DEMO_RETURNS_POLICY,
         },
-        "commerce_categories": ["home_and_kitchen", "stationery"],
+        "commerce_categories": ["tea", "tea_accessories"],
         "source_connectors": [
             {
                 "connector_key": f"{DEMO_SOURCE_SYSTEM}:catalog",

@@ -73,7 +73,8 @@ def test_dry_run_and_teardown_need_no_grantex_settings() -> None:
 @pytest.mark.parametrize(
     "argv",
     [
-        ["--teardown", "--serving-host", "shop-demo.example.com"],
+        ["--teardown", "--serving-host", "nilgiritea.agenticorg.ai"],
+        ["--teardown", "--verify-host"],
         ["--teardown", "--refresh-artifacts"],
         ["--keep-fresh-minutes", "5"],
         ["--apply", "--keep-fresh-minutes", str(seed.MAX_KEEP_FRESH_MINUTES + 1)],
@@ -117,3 +118,16 @@ def test_issuance_converges_on_usable_artifacts() -> None:
     assert seed.needs_issuance(state, refresh=True) is True
     state.usable_types.pop("inventory")
     assert seed.needs_issuance(state, refresh=False) is True
+
+
+def test_dns_record_names_the_txt_host_inside_the_parent_zone() -> None:
+    record = seed.dns_record(
+        {"record_name": "_agenticorg-ucp.nilgiritea.agenticorg.ai", "record_value": "agenticorg-ucp-verify=abc"}
+    )
+    assert record == {
+        "name": "_agenticorg-ucp.nilgiritea.agenticorg.ai",
+        "type": "TXT",
+        "value": "agenticorg-ucp-verify=abc",
+        "zone": "agenticorg.ai",
+        "host_in_zone": "_agenticorg-ucp.nilgiritea",
+    }
