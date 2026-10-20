@@ -53,7 +53,7 @@ def test_flag_off_refuses_before_any_database_work(monkeypatch: pytest.MonkeyPat
             "missing Grantex settings: GRANTEX_COMMERCE_INTERNAL_TOKEN",
         ),
         ({**READY_ENV, "PLURAL_PINE_LIVE_EXECUTION_ENABLED": "true"}, "PLURAL_PINE_LIVE_EXECUTION_ENABLED is on"),
-        ({**READY_ENV, seed.ADMIN_PASSWORD_ENV: "short"}, "at least 16 characters"),
+        ({**READY_ENV, seed.ADMIN_LOGIN_ENV: "short"}, "at least 16 characters"),
     ],
 )
 def test_apply_refusals(monkeypatch: pytest.MonkeyPatch, capsys, environ: dict[str, str], expected: str) -> None:

@@ -69,8 +69,8 @@ EXIT_REFUSED = 2
 EXIT_GRANTEX_TENANT_NOT_ALLOWED = 3
 EXIT_GRANTEX_DEMO_SOURCE_UNSUPPORTED = 4
 
-ADMIN_PASSWORD_ENV = "AGENTICORG_OACP_DEMO_ADMIN_PASSWORD"
-MIN_ADMIN_PASSWORD_LENGTH = 16
+ADMIN_LOGIN_ENV = "AGENTICORG_OACP_DEMO_ADMIN_PASSWORD"
+MIN_ADMIN_LOGIN_LENGTH = 16
 OPERATOR_ACTOR_ID = "scripts/seed_oacp_demo_merchant.py"
 KEEP_FRESH_INTERVAL_SECONDS = 45
 MAX_KEEP_FRESH_MINUTES = 240
@@ -116,7 +116,7 @@ class DemoState:
     tenant_marked: bool = False
     tenant_settings: dict[str, Any] = field(default_factory=dict)
     admin_exists: bool = False
-    admin_has_password: bool = False
+    admin_can_sign_in: bool = False
     config_exists: bool = False
     config_converged: bool = False
     packet_exists: bool = False
@@ -133,7 +133,7 @@ class Report:
     actions: list[str] = field(default_factory=list)
     artifacts: dict[str, Any] = field(default_factory=dict)
     dns_record: dict[str, str] | None = None
-    admin_password: str = "not_set"
+    admin_login: str = "not_set"
     plural_live: bool = False
 
 
@@ -185,9 +185,8 @@ def check_preconditions(*, apply: bool, teardown: bool, environ: Mapping[str, st
             blockers.append("missing Grantex settings: " + ", ".join(missing))
         if _truthy(environ.get("PLURAL_PINE_LIVE_EXECUTION_ENABLED")):
             blockers.append("PLURAL_PINE_LIVE_EXECUTION_ENABLED is on in this job; the demo runs with Plural live off")
-        password = environ.get(ADMIN_PASSWORD_ENV)
-        if password is not None and 0 < len(password) < MIN_ADMIN_PASSWORD_LENGTH:
-            blockers.append(f"{ADMIN_PASSWORD_ENV} must be at least {MIN_ADMIN_PASSWORD_LENGTH} characters")
+        if 0 < len(environ.get(ADMIN_LOGIN_ENV) or "") < MIN_ADMIN_LOGIN_LENGTH:
+            blockers.append(f"{ADMIN_LOGIN_ENV} must be at least {MIN_ADMIN_LOGIN_LENGTH} characters")
     return blockers
 
 
@@ -251,7 +250,7 @@ async def read_state() -> DemoState:
     async with get_tenant_session(tenant_uuid) as session:
         user = await session.get(User, uuid.UUID(DEMO_ADMIN_USER_ID))
         state.admin_exists = user is not None
-        state.admin_has_password = bool(user is not None and user.password_hash)
+        state.admin_can_sign_in = bool(user is not None and user.password_hash)
         row = await session.get(
             C6ZMerchantCommerceConfigRow, merchant_config_id(DEMO_TENANT_ID, DEMO_MERCHANT_ID, DEMO_SELLER_AGENT_ID)
         )
@@ -384,7 +383,7 @@ async def ensure_admin_user(report: Report, environ: Mapping[str, str]) -> None:
     from core.database import get_tenant_session
     from core.models.user import User
 
-    password = environ.get(ADMIN_PASSWORD_ENV) or ""
+    password = environ.get(ADMIN_LOGIN_ENV) or ""
     async with get_tenant_session(uuid.UUID(DEMO_TENANT_ID)) as session:
         user = await session.get(User, uuid.UUID(DEMO_ADMIN_USER_ID))
         if user is None:
@@ -404,15 +403,15 @@ async def ensure_admin_user(report: Report, environ: Mapping[str, str]) -> None:
                 bcrypt.checkpw, password.encode("utf-8"), str(user.password_hash).encode("utf-8")
             )
             if matches:
-                report.admin_password = "unchanged (matches the secret)"
+                report.admin_login = "unchanged (matches the secret)"
             else:
                 user.password_hash = await asyncio.to_thread(
                     lambda: bcrypt.hashpw(password.encode("utf-8"), bcrypt.gensalt(rounds=12)).decode("ascii")
                 )
-                report.admin_password = f"set from {ADMIN_PASSWORD_ENV} (not shown)"
+                report.admin_login = f"set from {ADMIN_LOGIN_ENV} (not shown)"
         else:
-            report.admin_password = (
-                "unchanged" if user.password_hash else f"not set: login disabled until {ADMIN_PASSWORD_ENV} is provided"
+            report.admin_login = (
+                "unchanged" if user.password_hash else f"not set: login disabled until {ADMIN_LOGIN_ENV} is provided"
             )
 
 
@@ -843,7 +842,7 @@ def summary(report: Report, state: DemoState | None, extra: Mapping[str, Any] | 
         "tenant_slug": DEMO_TENANT_SLUG,
         "merchant_id": DEMO_MERCHANT_ID,
         "seller_agent_id": DEMO_SELLER_AGENT_ID,
-        "admin_user": {"email": DEMO_ADMIN_EMAIL, "password": report.admin_password},
+        "admin_user": {"email": DEMO_ADMIN_EMAIL, "login": report.admin_login},
         "grantex_allowlist": f"COMMERCE_C6Z_AUTHORITY_SERVICE_TENANTS must include {DEMO_TENANT_ID}",
         "actions": report.actions,
         "artifacts_this_run": report.artifacts,

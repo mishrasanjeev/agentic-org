@@ -434,7 +434,7 @@ def test_seed_converges_serves_and_tears_down(seed, capsys) -> None:
 
     # The admin password comes only from the secret, is stored hashed and never printed.
     secret = "placeholder-" + uuid.uuid4().hex
-    assert seed("--apply", **{seed.module.ADMIN_PASSWORD_ENV: secret}) == 0
+    assert seed("--apply", **{seed.module.ADMIN_LOGIN_ENV: secret}) == 0
     out = capsys.readouterr().out
     assert secret not in out and "set from AGENTICORG_OACP_DEMO_ADMIN_PASSWORD" in out
     stored = _scalar("SELECT password_hash FROM users WHERE id::text = :u", u=DEMO_ADMIN_USER_ID)
