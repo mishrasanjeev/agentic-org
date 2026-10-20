@@ -154,7 +154,8 @@ def merchant_ucp_from_config(
 ) -> MerchantUcp | None:
     """The merchant's UCP context on ``serving_host``, or None when the host is not a valid DNS name."""
     policy = config.get("provider_policy") if isinstance(config.get("provider_policy"), Mapping) else {}
-    ucp = policy.get("ucp") if isinstance(policy, Mapping) and isinstance(policy.get("ucp"), Mapping) else {}
+    raw_ucp = policy.get("ucp") if isinstance(policy, Mapping) else None
+    ucp: Mapping[str, Any] = raw_ucp if isinstance(raw_ucp, Mapping) else {}
     host = normalize_host(serving_host)
     if host is None:
         return None

@@ -211,7 +211,8 @@ async def load_feed(*, tenant_id: str, merchant_id: str, seller_agent_id: str, n
     )
     now_iso = now.isoformat().replace("+00:00", "Z")
     state = ucp_state(config.get("public_publishing"))
-    snapshot = state.get("verified_policy") if isinstance(state.get("verified_policy"), dict) else {}
+    raw_snapshot = state.get("verified_policy")
+    snapshot: dict[str, Any] = raw_snapshot if isinstance(raw_snapshot, dict) else {}
     policy = None
     if snapshot.get("artifact_id") in usable_artifact_ids(
         cache_records=records, now_iso=now_iso, artifact_type="policy"

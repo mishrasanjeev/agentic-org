@@ -107,7 +107,8 @@ def parse_payment(raw: Any) -> tuple[list[Instrument], str | None]:
         amount = item.get("amount")
         if amount is not None and (isinstance(amount, bool) or not isinstance(amount, int) or amount < 0):
             raise PaymentRequestError(f"payment.instruments[{index}].amount must be a non-negative integer")
-        display = item.get("display") if isinstance(item.get("display"), Mapping) else {}
+        raw_display = item.get("display")
+        display: Mapping[str, Any] = raw_display if isinstance(raw_display, Mapping) else {}
         out.append(
             Instrument(
                 id=str(item["id"])[:120],

@@ -77,6 +77,8 @@
 
 ## Unreleased - UCP checkout, cart and order (G21, G22, G25, G27, G29-G32, G35)
 
+- Type narrowing in the UCP and ACP modules (locations, merchant terms, instruments, fulfilment,
+  ACP payment data and policy snapshot) so `mypy` 2.x passes; no behaviour change.
 - UCP REST binding at `https://<merchant serving host>/ucp` (`api/v1/commerce_ucp.py`), behind
   `AGENTICORG_UCP_CHECKOUT_ENABLED` (default off: every `/ucp` route answers 404). Checkout
   sessions (`POST /ucp/checkout-sessions` 201, `GET`, `PUT` full replacement, `/complete`,
