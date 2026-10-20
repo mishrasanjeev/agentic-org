@@ -37,30 +37,35 @@ import re
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from datetime import UTC
+from types import MappingProxyType
 from typing import Any
 
 from core.commerce.arbiter import parse_time
 
-STATUS_MAP: dict[str, str] = {
-    "label_printed": "processing",
-    "label_purchased": "processing",
-    "confirmed": "processing",
-    "ready_for_pickup": "processing",
-    "carrier_picked_up": "in_transit",
-    "in_transit": "in_transit",
-    "out_for_delivery": "in_transit",
-    "delayed": "in_transit",
-    "attempted_delivery": "failed_attempt",
-    "delivered": "delivered",
-    "picked_up": "picked_up",
-    "failure": "undeliverable",
-}
-DESCRIPTIONS: dict[str, str] = {
-    "ready_for_pickup": "Ready for pickup",
-    "out_for_delivery": "Out for delivery",
-    "delayed": "Delayed",
-    "carrier_picked_up": "Picked up by the carrier",
-}
+STATUS_MAP: Mapping[str, str] = MappingProxyType(
+    {
+        "label_printed": "processing",
+        "label_purchased": "processing",
+        "confirmed": "processing",
+        "ready_for_pickup": "processing",
+        "carrier_picked_up": "in_transit",
+        "in_transit": "in_transit",
+        "out_for_delivery": "in_transit",
+        "delayed": "in_transit",
+        "attempted_delivery": "failed_attempt",
+        "delivered": "delivered",
+        "picked_up": "picked_up",
+        "failure": "undeliverable",
+    }
+)
+DESCRIPTIONS: Mapping[str, str] = MappingProxyType(
+    {
+        "ready_for_pickup": "Ready for pickup",
+        "out_for_delivery": "Out for delivery",
+        "delayed": "Delayed",
+        "carrier_picked_up": "Picked up by the carrier",
+    }
+)
 _SLUG = re.compile(r"[^a-z0-9]+")
 
 
@@ -107,8 +112,11 @@ def _match_lines(order: Mapping[str, Any], shopify_lines: Any) -> list[dict[str,
     lines = [line for line in order.get("line_items") or [] if isinstance(line, Mapping)]
     if not isinstance(shopify_lines, list) or not shopify_lines:
         # A fulfillment with no line items covers the whole order (Shopify fulfills all open lines).
-        return [{"id": line["id"], "quantity": int(line["quantity"]["total"])} for line in lines
-                if int(line["quantity"]["total"]) > 0]
+        return [
+            {"id": line["id"], "quantity": int(line["quantity"]["total"])}
+            for line in lines
+            if int(line["quantity"]["total"]) > 0
+        ]
     out: dict[str, int] = {}
     for raw in shopify_lines:
         if not isinstance(raw, Mapping):
