@@ -73,6 +73,12 @@ from core.models.commerce_c6z_runtime import (
 from core.models.commerce_c6z_runtime import (
     C6ZSellerOnboardingPacketRow as C6ZSellerOnboardingPacketRow,
 )
+from core.models.commerce_ucp import CommerceCartRow as CommerceCartRow
+from core.models.commerce_ucp import CommerceCheckoutSessionRow as CommerceCheckoutSessionRow
+from core.models.commerce_ucp import CommerceOrderRow as CommerceOrderRow
+from core.models.commerce_ucp import CommerceOrderWebhookDeliveryRow as CommerceOrderWebhookDeliveryRow
+from core.models.commerce_ucp import CommerceOrderWebhookSubscriptionRow as CommerceOrderWebhookSubscriptionRow
+from core.models.commerce_ucp import CommerceUcpIdempotencyRow as CommerceUcpIdempotencyRow
 from core.models.company import Company as Company
 from core.models.compliance_deadline import ComplianceDeadline as ComplianceDeadline
 from core.models.connector import Connector as Connector

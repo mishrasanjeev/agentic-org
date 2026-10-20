@@ -70,6 +70,7 @@ from core.commerce.c6z_runtime_vertical import (
     verify_whatsapp_webhook_signature,
 )
 from core.commerce.ledger import record_commerce_event, record_commerce_event_in_own_transaction
+from core.commerce.merchant_keys import active_key_record, add_active_key, new_merchant_key_record
 from core.commerce.oacp_artifacts import (
     DurableOacpArtifactCacheRepository,
     OacpArtifactCacheRepositoryQuery,
@@ -94,7 +95,19 @@ from core.commerce.offline_pos_bridge import (
     simulate_offline_pos_confirmation,
     verify_offline_pos_callback_signature,
 )
-from core.config import arbiter_require_verified_authority_enabled, oacp_verify_strict_enabled
+from core.commerce.ucp.catalog import usable_artifact_ids
+from core.commerce.ucp.profile import build_profile, merchant_serve_state
+from core.commerce.ucp.state import (
+    attested_host,
+    carry_ucp_state,
+    public_discovery_opt_in,
+    public_publishing_view,
+    ucp_state,
+    with_ucp_state,
+)
+from core.commerce.ucp.store import load_shared_cache_records
+from core.commerce.ucp.versions import configured_ucp_versions, current_ucp_version
+from core.config import arbiter_require_verified_authority_enabled, oacp_verify_strict_enabled, settings
 from core.crypto import encrypt_for_tenant
 from core.crypto.tenant_secrets import decrypt_for_tenant
 from core.database import get_tenant_session
@@ -345,10 +358,13 @@ async def create_seller_onboarding_packet(
         config = _merchant_config_from_packet(packet)
         readiness = merchant_config_readiness(config)
         config_row = await session.get(C6ZMerchantCommerceConfigRow, config["config_id"])
+        new_config = config_row is None
         if config_row is None:
             config_row = C6ZMerchantCommerceConfigRow(config_id=config["config_id"])
             session.add(config_row)
         _apply_merchant_config(config_row, config, readiness)
+        if new_config:
+            await _provision_ucp_key_at_onboarding(config_row, tenant_id)
         if previous_status in {
             "sync_ready",
             "synced",
@@ -411,10 +427,13 @@ async def upsert_merchant_commerce_config(
     readiness = merchant_config_readiness(config)
     async with get_tenant_session(_tenant_uuid(tenant_id)) as session:
         row = await session.get(C6ZMerchantCommerceConfigRow, config["config_id"])
+        new_config = row is None
         if row is None:
             row = C6ZMerchantCommerceConfigRow(config_id=config["config_id"])
             session.add(row)
         _apply_merchant_config(row, config, readiness)
+        if new_config:
+            await _provision_ucp_key_at_onboarding(row, tenant_id)
         packet: dict[str, Any] | None = None
         primary_source = _primary_source_connector(config)
         if body.sync_onboarding_packet and primary_source.get("connector_type") == "shopify":
@@ -945,6 +964,7 @@ async def request_grantex_authority_artifacts(
             onboarding_packet=packet,
             connector_evidence=evidence,
             expected_tenant_id=tenant_id,
+            public_discovery_opt_in=await _ucp_public_discovery_opt_in(session, tenant_id, packet_row),
         )
         env_resolution = resolve_env(GRANTEX_AUTHORITY_ENV_VARS)
         if not env_resolution.ready:
@@ -961,6 +981,21 @@ async def request_grantex_authority_artifacts(
         packet_row.status = "authority_requested"
         await _record_authority_request(session, tenant_id, packet_row, payload, outcome="success")
     return await send_grantex_authority_request(payload=payload)
+
+
+async def _ucp_public_discovery_opt_in(
+    session: Any, tenant_id: str, packet_row: C6ZSellerOnboardingPacketRow
+) -> dict[str, str] | None:
+    """The merchant's UCP public-discovery opt-in for the authority request (flag on, published, attested)."""
+    if not getattr(settings, "ucp_profile_enabled", False) or not hasattr(session, "get"):
+        return None
+    config_row = await session.get(
+        C6ZMerchantCommerceConfigRow,
+        merchant_config_id(tenant_id, packet_row.merchant_id, packet_row.seller_agent_id),
+    )
+    if config_row is None:
+        return None
+    return public_discovery_opt_in(ucp_state(config_row.public_publishing))
 
 
 @router.post("/artifacts/cache")
@@ -1048,6 +1083,113 @@ async def refresh_grantex_artifacts(
         ledger_event="commerce.runtime.artifacts.refresh",
     )
     return {**result, "source": "grantex_replay", "replayed": len(replayed)}
+
+
+_UCP_POLICY_SNAPSHOT_FIELDS: tuple[str, ...] = (
+    "return_policy_summary",
+    "return_policy_url",
+    "warranty_policy_summary",
+    "warranty_policy_url",
+    "fulfillment_policy_summary",
+    "fulfillment_policy_url",
+    "cancellation_policy_summary",
+    "cancellation_policy_url",
+    "support_policy_summary",
+    "support_policy_url",
+)
+
+
+async def _capture_verified_policy_snapshots(
+    session: Any,
+    *,
+    tenant_id: str,
+    artifacts: Sequence[dict[str, Any]],
+    verifier_refs: Sequence[str | None],
+    cache_records: Sequence[Any],
+    now_iso: str,
+) -> None:
+    """Keep the public terms of verified, buyer-agnostic ``policy`` and ``public_discovery`` artifacts for UCP.
+
+    Cache rows store no payload; the UCP catalog maps this snapshot (G26) only
+    while the artifact it came from is still a verified, fresh cache record.
+    """
+    for artifact, verifier_result_ref, record in zip(artifacts, verifier_refs, cache_records, strict=True):
+        if verifier_result_ref is None or record.buyer_agent_id is not None:
+            continue
+        if record.artifact_type not in {"policy", "public_discovery"}:
+            continue
+        _envelope, payload = split_grantex_artifact(artifact)
+        if not isinstance(payload, Mapping):
+            continue
+        if record.artifact_type == "public_discovery":
+            await _capture_public_discovery_snapshot(
+                session,
+                tenant_id=tenant_id,
+                record=record,
+                payload=payload,
+                verifier_result_ref=verifier_result_ref,
+                now_iso=now_iso,
+            )
+            continue
+        policy = {
+            field: payload[field]
+            for field in _UCP_POLICY_SNAPSHOT_FIELDS
+            if isinstance(payload.get(field), str) and payload[field].strip()
+        }
+        if not policy or not record.merchant_id or not record.seller_agent_id:
+            continue
+        row = await session.get(
+            C6ZMerchantCommerceConfigRow,
+            merchant_config_id(tenant_id, record.merchant_id, record.seller_agent_id),
+        )
+        if row is None:
+            continue
+        state = ucp_state(row.public_publishing)
+        state["verified_policy"] = {
+            "artifact_id": record.artifact_id,
+            "verifier_result_ref": verifier_result_ref,
+            "captured_at": now_iso,
+            "policy": policy,
+        }
+        row.public_publishing = with_ucp_state(row.public_publishing, state)
+
+
+async def _capture_public_discovery_snapshot(
+    session: Any,
+    *,
+    tenant_id: str,
+    record: Any,
+    payload: Mapping[str, Any],
+    verifier_result_ref: str,
+    now_iso: str,
+) -> None:
+    """Keep what a verified ``public_discovery_state`` artifact says about publishing the UCP profile.
+
+    The latest verified artifact replaces the snapshot, so a later "disabled"
+    issuance withdraws publication. The profile route also requires the
+    artifact to still be a verified, fresh cache record.
+    """
+    if not record.merchant_id or not record.seller_agent_id:
+        return
+    row = await session.get(
+        C6ZMerchantCommerceConfigRow,
+        merchant_config_id(tenant_id, record.merchant_id, record.seller_agent_id),
+    )
+    if row is None:
+        return
+    host = payload.get("serving_host")
+    attestation_ref = payload.get("namespace_attestation_ref")
+    state = ucp_state(row.public_publishing)
+    state["verified_public_discovery"] = {
+        "artifact_id": record.artifact_id,
+        "verifier_result_ref": verifier_result_ref,
+        "captured_at": now_iso,
+        "publication_allowed": payload.get("public_discovery_publication_allowed") is True
+        and payload.get("public_discovery_state") == "enabled",
+        "serving_host": host if isinstance(host, str) else None,
+        "namespace_attestation_ref": attestation_ref if isinstance(attestation_ref, str) else None,
+    }
+    row.public_publishing = with_ucp_state(row.public_publishing, state)
 
 
 def _artifact_unexpired(item: Mapping[str, Any], now: datetime) -> bool:
@@ -1188,6 +1330,15 @@ async def _verify_and_cache_grantex_artifacts(
                 ).all()
                 for packet in packets:
                     packet.status = "artifacts_cached"
+        if getattr(settings, "ucp_profile_enabled", False) and hasattr(session, "get"):
+            await _capture_verified_policy_snapshots(
+                session,
+                tenant_id=tenant_id,
+                artifacts=artifacts,
+                verifier_refs=verifier_refs,
+                cache_records=cache_records,
+                now_iso=now_iso,
+            )
         scopes = sorted({(record.merchant_id, record.seller_agent_id) for record in cache_records}, key=str)
         await record_commerce_event(
             session,
@@ -1444,7 +1595,27 @@ async def get_protocol_adapter_payloads(
         seller_agent_id=seller_agent_id,
         buyer_agent_id=buyer_agent_id,
         now_iso=_now_iso(),
+        ucp_profile=await _published_ucp_profile(tenant_id, merchant_id, seller_agent_id),
     )
+
+
+async def _published_ucp_profile(tenant_id: str, merchant_id: str, seller_agent_id: str) -> dict[str, Any] | None:
+    """The merchant's UCP business profile as /.well-known/ucp serves it, or None when not published."""
+    row = await _load_merchant_config_row(tenant_id=tenant_id, merchant_id=merchant_id, seller_agent_id=seller_agent_id)
+    if row is None:
+        return None
+    host = attested_host(ucp_state(row.public_publishing))
+    if host is None:
+        return None
+    records = await load_shared_cache_records(
+        tenant_id=tenant_id, merchant_id=merchant_id, seller_agent_id=str(row.seller_agent_id)
+    )
+    live = usable_artifact_ids(cache_records=records, now_iso=_now_iso(), artifact_type="public_discovery")
+    serve = merchant_serve_state(row, host=host, now=datetime.now(UTC), live_public_discovery_ids=live)
+    if serve is None:
+        return None
+    versions = configured_ucp_versions()
+    return build_profile(serve, version=current_ucp_version(versions), versions=versions)
 
 
 @router.get("/protocol-adapters/{surface}")
@@ -2575,6 +2746,7 @@ async def _upsert_shopify_source_in_merchant_config(
         config["config_id"] = merchant_config_id(tenant_id, merchant_id, str(config["seller_agent_id"]))
         row = C6ZMerchantCommerceConfigRow(config_id=config["config_id"])
         session.add(row)
+        new_config = True
     else:
         config = _row_to_merchant_config(row)
         sources = [
@@ -2615,7 +2787,10 @@ async def _upsert_shopify_source_in_merchant_config(
             status=str(config.get("status") or "configured"),
         )
         config["config_id"] = row.config_id
+        new_config = False
     _apply_merchant_config(row, config, merchant_config_readiness(config))
+    if new_config:
+        await _provision_ucp_key_at_onboarding(row, tenant_id)
 
 
 def _merchant_config_template(
@@ -2655,6 +2830,28 @@ def _merchant_config_template(
     }
 
 
+async def _provision_ucp_key_at_onboarding(row: C6ZMerchantCommerceConfigRow, tenant_id: str) -> None:
+    """Give a newly onboarded merchant its UCP ES256 signing key (AGENTICORG_UCP_PROFILE_ENABLED only).
+
+    A key-generation failure does not block onboarding: it is logged and the
+    operator provisions the key with POST .../merchant-configs/{id}/ucp/keys.
+    """
+    if not getattr(settings, "ucp_profile_enabled", False):
+        return
+    state = ucp_state(row.public_publishing)
+    if active_key_record(state.get("signing_keys") or []) is not None:
+        return
+    now = datetime.now(UTC)
+    try:
+        record = await new_merchant_key_record(tenant_id, now=now)
+    # enterprise-gate: broad-except-ok reason=key generation failure is logged; the operator provisions the key later
+    except Exception:
+        logger.warning("ucp_onboarding_key_generation_failed tenant=%s", tenant_id)
+        return
+    state["signing_keys"] = add_active_key([], record, now=now)
+    row.public_publishing = with_ucp_state(row.public_publishing, state)
+
+
 def _apply_merchant_config(
     row: C6ZMerchantCommerceConfigRow,
     config: Mapping[str, Any],
@@ -2670,7 +2867,9 @@ def _apply_merchant_config(
     row.buyer_channels = dict(config.get("buyer_channels") or {})
     row.payment_providers = [dict(item) for item in config.get("payment_providers") or []]
     row.offline_pos_stores = [dict(item) for item in config.get("offline_pos_stores") or []]
-    row.public_publishing = dict(config.get("public_publishing") or {})
+    # The UCP state (serving-host attestation, signing keys) is server-managed:
+    # a config upsert never sets it and always carries the stored one over.
+    row.public_publishing = carry_ucp_state(row.public_publishing, config.get("public_publishing"))
     row.source_freshness_policy = dict(config.get("source_freshness_policy") or {})
     row.provider_policy = dict(config.get("provider_policy") or {})
     row.readiness = dict(readiness)
@@ -2694,7 +2893,7 @@ def _row_to_merchant_config(row: C6ZMerchantCommerceConfigRow) -> dict[str, Any]
         "buyer_channels": row.buyer_channels or {},
         "payment_providers": row.payment_providers or [],
         "offline_pos_stores": row.offline_pos_stores or [],
-        "public_publishing": row.public_publishing or {},
+        "public_publishing": public_publishing_view(row.public_publishing),
         "source_freshness_policy": row.source_freshness_policy or {},
         "provider_policy": row.provider_policy or {},
         "status": row.status,

@@ -1,0 +1,42 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agenticorg.ai/ucp/handlers/plural-tokenized/2026-10-20/instrument.json",
+  "title": "ai.agenticorg.payment.plural_tokenized instrument (2026-10-20)",
+  "description": "The payment instrument an agent presents to the Plural tokenised-instrument handler at completion: a Plural instrument token (for example the vault token an ACP delegate_payment call returned) or a network token with its cryptogram. A card number (fpan or pan) is refused.",
+  "type": "object",
+  "required": ["type", "credential"],
+  "properties": {
+    "type": {"const": "card"},
+    "credential": {
+      "oneOf": [
+        {
+          "type": "object",
+          "required": ["type", "token"],
+          "properties": {
+            "type": {"const": "plural_pine_token"},
+            "token": {"type": "string", "minLength": 1}
+          }
+        },
+        {
+          "type": "object",
+          "required": ["type", "card_number_type", "number"],
+          "properties": {
+            "type": {"const": "card"},
+            "card_number_type": {"const": "network_token"},
+            "number": {"type": "string", "minLength": 1},
+            "cryptogram": {"type": "string"}
+          }
+        },
+        {
+          "type": "object",
+          "required": ["type", "number", "cryptogram"],
+          "properties": {
+            "type": {"const": "network_token"},
+            "number": {"type": "string", "minLength": 1},
+            "cryptogram": {"type": "string", "minLength": 1}
+          }
+        }
+      ]
+    }
+  }
+}

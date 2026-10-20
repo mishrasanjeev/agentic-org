@@ -9,12 +9,15 @@ AgenticOrg consumes Grantex `protocol_adapter` artifacts and generates buyer-saf
 | Adapter | Consumer | Runtime rule |
 | --- | --- | --- |
 | Schema.org | Search and product discovery clients | Product/Offer data must cite OACP source/freshness. |
-| UCP-style | Capability clients | Compatibility mapping only. |
+| UCP | UCP platforms | `ucp_business_profile` is the merchant's published UCP business profile in spec shape (only served capabilities); generated only for a published merchant. The public profile and catalog are in [UCP business profile](ucp-profile.md). |
 | ACP-style | Commerce client previews | Does not create checkout/payment. |
 | AP2-style | Mandate/evidence clients | Does not create mandate/payment. |
 | A2A | Agent discovery | Agent card metadata only. |
 | MCP | ChatGPT/Claude-style clients | Tool calls still hit AgenticOrg runtime checks. |
 | OpenAPI | Gemini/Perplexity-style clients | Buyer-safe request/response schema only. |
+
+UCP checkout sessions, carts and orders are not adapter payloads: they are served by the UCP REST
+binding behind `AGENTICORG_UCP_CHECKOUT_ENABLED` ([UCP checkout, cart and order](ucp-checkout.md)).
 
 ```mermaid
 flowchart TD
@@ -24,6 +27,7 @@ flowchart TD
   adapters --> openapi[OpenAPI]
   adapters --> a2a[A2A]
   adapters --> ap2[AP2-style]
+  adapters --> ucp[UCP business profile]
 ```
 
 ## Unsupported Fields

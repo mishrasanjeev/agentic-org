@@ -1,5 +1,151 @@
 # Changelog
 
+## Unreleased - ACP product feed, checkout sessions and order events (G33, G34, G35, G37, G38, G40)
+
+- ACP product feed (`core/commerce/acp/feed.py`), behind `AGENTICORG_ACP_FEED_ENABLED` (default off):
+  `GET /api/v1/commerce/runtime/acp/feed?merchant_id=&format=json|jsonl|metadata|csv` for tenant
+  administrators. ACP Feed `Product` JSON per the 2026-04-17 feed schema (validated in tests against
+  the vendored schema file) and the merchant-feed CSV with `availability`, `seller_*`, return and
+  `enable_search` / `enable_checkout` columns. Built only from verified, fresh OACP catalog, price
+  and inventory artifacts (409 otherwise); return terms only from the verified `policy` artifact.
+- ACP checkout sessions at `https://<merchant serving host>/acp/checkout_sessions`
+  (`api/v1/commerce_acp.py`), behind `AGENTICORG_ACP_CHECKOUT_ENABLED` (default off: every `/acp`
+  route answers 404) and the merchant's `provider_policy.acp.checkout_enabled`. Create (201),
+  partial update, get, complete and cancel (405 once not cancelable) run on the UCP session table
+  and operations: one state machine, the same arbiter `session_complete` decision and executor.
+  Sessions are tagged `protocol: acp` and owned by the creating API key (scopes `acp:read` /
+  `acp:write`). ACP 2026-04-17 `Item` has no quantity: a repeated id is one more unit. Docs:
+  `docs/oacp/acp-feed-and-sessions.md`.
+- ACP headers: `API-Version` pinned to `2026-04-17` (`missing_api_version` /
+  `unsupported_api_version` with `supported_versions`); `Idempotency-Key` required on POST, compared as
+  canonical JSON (replay with `Idempotent-Replayed: true`, 422 `idempotency_conflict`, 409
+  `idempotency_in_flight` with `Retry-After`); `Request-Id` echoed; `Signature` / `Timestamp` checked
+  by a verifier registered per agent platform, `AGENTICORG_ACP_SIGNATURE_MODE=log` (default, never
+  refuses) or `enforce`. ACP publishes no signing algorithm, so no verifier ships.
+  An unexpected failure after the key is claimed releases it, so the client can retry.
+- Refusals answered before an ACP route runs (401, 403, 404, 405, 429 from authentication, scope,
+  rate-limit, flag and routing) are ACP `Error` objects on every `/acp` path (`AcpErrorShapeMiddleware`).
+- ACP error mapping (`core/commerce/acp/errors.py`): every internal message code maps to the closed
+  `MessageError` enum, UCP protocol errors to `Error` objects; blocker dicts never reach ACP responses.
+- Capability negotiation: sessions declare the payment handlers served over ACP and the requested
+  extensions that are served (the vendor extension `ai.agenticorg.commerce` for buyer authority,
+  arbiter decisions and the Commerce Passport); the `discount` extension and interventions are not
+  served and are not declared.
+- Delegate-payment allowance per ACP session from Grantex
+  (`POST /v1/commerce/oacp/acp/delegate-payment-allowance`; service token, async pinned transport,
+  no retry, no card data), shown in the handler config in the `DelegatePaymentRequest` shape and
+  sealed on the ledger; Grantex unreachable is an immediate business message; completion needs an
+  issued allowance covering the total.
+- `acp_hmac` order webhook subscriptions now deliver ACP `order_create` / `order_update` events (the
+  full ACP `Order`) signed with `Merchant-Signature` (`t=..,v1=hex(HMAC-SHA256(secret, t.body))`,
+  active key), verified against the shared vectors (`tests/fixtures/acp/merchant-signature-v1.json`).
+  They replace the case-push HMAC headers and the placeholder payload of the unreleased UCP work.
+  The order-webhook sweep also runs while only `AGENTICORG_ACP_CHECKOUT_ENABLED` is on.
+- Order webhook isolation: an `acp_hmac` subscription is bound to the ACP agent platform's API key
+  (`platform_api_key_id`, required) and receives only orders from sessions that key created; a UCP
+  platform's subscription is never reused by another platform naming the same URL. ACP sessions are
+  owned by the calling API key's id (`request.state.api_key_id`).
+
+## Unreleased - UCP handler schema hosting and schema fixtures
+
+- The Plural tokenised-instrument handler's config schema is served at the URL UCP profiles
+  advertise, `https://agenticorg.ai/ucp/handlers/plural-tokenized/2026-10-20/config.json`, with its
+  instrument schema beside it (`instrument.json`), from `ui/public` (static `*.json` in the UI image).
+  A regression test maps both URLs to the files, checks the nginx static rule and validates the
+  handler config the server emits against the hosted schema.
+- Tests: the two vendored UCP schema fixture trees (`tests/fixtures/ucp` and
+  `tests/fixtures/ucp_schemas`) are one, `tests/fixtures/ucp` (published release schemas plus the
+  2026-04-08 discovery profile schema).
+
+## Unreleased - UCP checkout tools in the MCP server (G39)
+
+- `agenticorg-mcp-server` 5.1.0 adds the UCP 2026-04-08 MCP binding tools `create_checkout`,
+  `get_checkout`, `update_checkout`, `complete_checkout`, `cancel_checkout`, `create_cart`,
+  `get_cart`, `update_cart`, `cancel_cart` and `get_order` (the binding's names, not a
+  `checkout.*` prefix). They are registered only when `AGENTICORG_UCP_PROFILE_URL` names a
+  merchant profile whose capabilities include them, which the API publishes only with
+  `AGENTICORG_UCP_CHECKOUT_ENABLED` on; requests go to the profile's same-origin `/ucp` REST
+  endpoint. Nothing changes for a server without that variable.
+- `complete_checkout` needs an allow decision: `decide_only: true` returns a sealed
+  `session_complete` decision without executing, and only a call carrying its `decision_id` can
+  execute (consumed once by the API, bound to the payload hash). A call with neither is refused
+  before any request. Tool annotations mark reads read-only, updates and cancels destructive and
+  idempotent, and Complete destructive and not idempotent.
+- HTTP errors become MCP tool errors with only the UCP `{code, content}`; decisions in results keep
+  only their id, action, outcome, failing rule, payload hash and expiry. The merchant UCP profile
+  does not advertise an MCP transport, since this server is a local stdio adapter. No API change.
+
+## Unreleased - UCP checkout, cart and order (G21, G22, G25, G27, G29-G32, G35)
+
+- The UCP publishing ledger actor for an API key is the authenticated subject (`apikey:<prefix>`),
+  never the key's name, and the `X-API-Key` header is read through a named constant; no credential
+  reaches a ledger hash.
+- Tests for the UCP and ACP HTTP adapters and their production wiring (unknown host refusals and
+  their ledger events on every route, `Request-Id` echo, Shopify credentials failing closed to no
+  Shopify reads, policies only from a usable verified artifact, the feed export formats and its
+  404/409 answers, error shaping of non-JSON `/acp` errors), the buyer authority and AP2 mandate
+  parsing, the Shopify Admin reads (allowlist, no redirects, GraphQL errors, delivery-profile
+  cache), the order webhook sender (signing, transport failures, the Celery kick and tasks), and,
+  on Postgres, the serving-host index, merchant scope reads, `Idempotency-Key` expiry and pruning,
+  the subscription, rotation, delivery and replay runtime endpoints and dead-lettering. No
+  behaviour change.
+- Type narrowing in the UCP and ACP modules (locations, merchant terms, instruments, fulfilment,
+  ACP payment data and policy snapshot) so `mypy` 2.x passes; no behaviour change.
+- UCP REST binding at `https://<merchant serving host>/ucp` (`api/v1/commerce_ucp.py`), behind
+  `AGENTICORG_UCP_CHECKOUT_ENABLED` (default off: every `/ucp` route answers 404). Checkout
+  sessions (`POST /ucp/checkout-sessions` 201, `GET`, `PUT` full replacement, `/complete`,
+  `/cancel`), carts (`POST /ucp/carts` 201, `GET`, `PUT`, `/cancel`) and `GET /ucp/orders/{id}`,
+  for UCP `2026-04-08` (default) and `2026-08-25` (`AGENTICORG_UCP_VERSIONS`). The merchant is
+  resolved from `Host` through the attested serving-host index of the profile work (published
+  merchants only) and must belong to the tenant of the platform's API key (`X-API-Key` or
+  bearer; scopes `ucp:read` / `ucp:write`). The transaction capabilities and payment handlers
+  are advertised in `/.well-known/ucp` while the flag is on, and 2026-08-25 responses carry
+  `policies[]` from the verified policy artifact. Docs: `docs/oacp/ucp-checkout.md`.
+- `UCP-Agent` is parsed as an RFC 8941 dictionary, the platform profile fetched over public HTTPS
+  without redirects (cached 60 s to 1 h), its version checked (`version_unsupported`) and
+  capabilities intersected with orphaned extensions pruned; responses echo the version and the
+  relevant active capabilities. The UCP status machine, the totals rule (one `subtotal`, one
+  `total`, signed minor units), business outcomes as 200 with `messages[]`, and
+  `Idempotency-Key` (same body replays, different body 409, storage failure 503) are enforced.
+- Complete runs the commerce arbiter (action `session_complete`) on the session payload hash and
+  executes only through a registered executor (`core/commerce/executors/`) that receives a
+  decision consumed by `require_allow_decision`. No executor is registered in this release:
+  Complete answers `executor_unavailable` and the session stays `ready_for_complete`.
+  `ai.agenticorg.commerce.decide_only` issues a decision without executing; `decision_id`
+  presents one. Two concurrent Completes execute once.
+- Carts: one-call conversion with `cart_id` (an open session for the cart is returned),
+  `cart.id` omitted on update (2026-08-25), `continue_url` as a UCP permalink on the merchant's
+  `permalink_endpoint`.
+- Orders: one per completed session, `GET /ucp/orders/{id}` for the originating platform, and
+  full-snapshot order webhooks to the platform's `config.webhook_url` and merchant subscriptions,
+  RFC 9421 signed (ES256 through an injected merchant key signer; nothing is sent without a key),
+  with `Webhook-Id`/`Webhook-Timestamp` stable across retries, an outbox, retries with backoff
+  and dead letters. Merchant runtime endpoints under `/api/v1/commerce/runtime/ucp` manage
+  subscriptions (including an `acp_hmac` variant using the case push HMAC scheme), deliveries and
+  order events. `register_order_event_listener` and `register_payload_renderer` are the hooks for
+  the ACP order event mapping.
+- Quantities are integer step counts with `quantity_unit` (`unit`, `scale` <= 15, `increment`),
+  bounded at 2^53-1, exact integer amounts, visible conversion or recoverable rejection of a
+  mismatched unit (G29). Fulfillment: shipping and pickup destinations, options from the
+  merchant's Shopify delivery profiles, multi-destination and method combinations per release
+  (G30). Payment: PAN, network token and handler token credentials (never stored or echoed),
+  `ucp.request_constraints` emitted and enforced, payment authentication actions, split payments
+  and payment terms (2026-08-25), token binding, AP2 merchant authorization when a merchant key
+  exists (G31). Buyer consent as the `dev.ucp.consent.*` purpose map, from session-provided
+  consent marked `source: platform` (G32). Loyalty from Shopify customer metafields and
+  attribution on the session (G25).
+- Payment handlers (`core/commerce/payment_handlers/`): a Plural tokenised-instrument handler whose
+  config carries the merchant's `mandate_capability` (rails, cap, instrument types) and the
+  allowance (`max_amount` = the cap); it accepts tokens, never a PAN, and executes nothing.
+  Risk signals sent with Complete are recorded on the ledger (keys and SHA-256) (G35).
+- Every UCP write records its ledger event; `/ucp/` joins the commerce ledger route prefixes and
+  `ucp` is an enforced route-scope family.
+- Migration `v6z89_commerce_sessions_orders` (after `v6z88_commerce_ledger`):
+  `commerce_checkout_sessions`, `commerce_carts`, `commerce_orders`,
+  `commerce_order_webhook_subscriptions`, `commerce_order_webhook_deliveries` and
+  `commerce_ucp_idempotency`, each with ENABLE + FORCE row-level security and a tenant policy
+  with `WITH CHECK`; forward-only (downgrade keeps the data).
+
 ## Unreleased - Fixed: commerce ledger details keep digests intact (G41)
 
 - `record_commerce_event` masked PII in `details` with patterns (a ten-digit phone number, an
@@ -71,6 +217,41 @@
   `commerce_arbiter_decisions` the role keeps only `UPDATE (consumed_at, grantex_grant_jti,
   grantex_recorded_at)` for the two one-time transitions. Same rules as
   `scripts/create_app_role.sql`.
+
+## Unreleased - UCP business profile, catalog and locations (G17, G18, G19, G20, G23, G26, G28)
+
+- `GET /.well-known/ucp` (and `/.well-known/ucp/{version}` leaf profiles) on a merchant's serving
+  host, behind `AGENTICORG_UCP_PROFILE_ENABLED` (default off; every route answers 404 while off).
+  The merchant is chosen by the `Host` header only; the host must carry a DNS TXT attestation, the
+  merchant must have opted in (operator publish) and hold an active signing key, and a verified,
+  fresh `public_discovery_state` artifact must allow publication for that host. UCP 2026-04-08 by
+  default; `AGENTICORG_UCP_VERSIONS=2026-04-08,2026-08-25` serves 2026-08-25 at `/.well-known/ucp`
+  with the 2026-04-08 leaf in `ucp.supported_versions`. `Cache-Control: public, max-age=300`, ETag,
+  no redirects. Capabilities are only the ones served, from a registry later surfaces register into.
+- `POST /ucp/catalog/search` and `/ucp/catalog/lookup` (`dev.ucp.shopping.catalog.*`) in the UCP
+  item schema of the requested release, served only from verified (ES256), fresh OACP catalog,
+  price and inventory artifacts; otherwise `catalog_unavailable`. 2026-08-25 responses carry
+  `policies[]` mapped from the verified OACP `policy` artifact (`core/commerce/ucp/policies.py`).
+- `POST /ucp/locations/search` and `/ucp/locations/lookup` (`dev.ucp.common.location.*`, 2026-08-25)
+  from POS stores; stores accept an optional `location` block (timezone, address, geo, regular and
+  exception hours), validated on save and evaluated in the store's timezone across DST.
+- Per-merchant ES256 signing keys (`core/commerce/merchant_keys.py`): generated at onboarding
+  while the profile flag is on, or by `POST .../merchant-configs/{id}/ucp/keys`; private key
+  encrypted for the tenant; rotation (`.../ucp/keys/rotate`) keeps the old key published for
+  `AGENTICORG_UCP_KEY_ROTATION_GRACE_DAYS` (default 7). Profiles publish `signing_keys[]` +
+  `keys[]` (2026-04-08) or `keys[]` (2026-08-25).
+- Serving-host attestation and namespace authority binding: `POST .../ucp/serving-host`,
+  `.../serving-host/verify` (async DNS), `.../publish` (namespace bound to the attested host; vendor
+  entries outside it refused), `.../unpublish`, `GET .../ucp`. A published merchant's Grantex
+  authority request carries `public_discovery_requested`, `serving_host` and
+  `namespace_attestation_ref`; an enabled `public_discovery_state` artifact is accepted into the
+  cache only with the profile flag on.
+- **Changed: the `ucp_style_capability_profile` protocol-adapter surface is removed.** Its free-text
+  capability list is replaced by `ucp_business_profile`, the spec-shaped profile, generated only for
+  a published merchant (`unavailable_surfaces` says why otherwise). Clients reading the old surface
+  read `ucp_business_profile` instead.
+- Merchant-config upserts carry the server-managed UCP state over unchanged and never accept it from
+  the request; responses omit the signing-key ciphertext. No migration.
 
 ## Unreleased - Commerce ledger and arbiter (G9-G13)
 

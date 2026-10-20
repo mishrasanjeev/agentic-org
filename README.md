@@ -221,7 +221,7 @@ the [feature reference](docs/finops/spend-intelligence.md) and the
 | Integrations | Native connector registry plus optional integration gateways; actual availability depends on credentials, scopes, provider access, and tenant configuration |
 | Knowledge and channels | Native and OCR document ingestion/search, reports, notifications, signed Twilio voice calls, RPA, and other configured channels |
 | Developer access | REST API, Python SDK and CLI, TypeScript SDK, MCP server, legacy A2A-shaped task APIs, and source-implemented A2A v1 HTTP+JSON synchronous text |
-| Commerce | Merchant-scoped Shopify read-only sync, OACP artifact intake/cache, buyer-safe answers, public catalog surfaces, and prepared provider or POS handoffs |
+| Commerce | Merchant-scoped Shopify read-only sync, OACP artifact intake/cache, buyer-safe answers, public catalog surfaces, prepared provider or POS handoffs, and flag-gated UCP and ACP surfaces (ACP feed, checkout sessions and order events) |
 | Operations | PostgreSQL, Redis, object storage, observability hooks, migrations, security checks, and Cloud Run deployment tooling |
 | AI spend intelligence | Off by default; API-only organisation tree, source mappings, rate cards, FX to INR, commitments, attributed usage records for model calls and non-token usage, daily rollups, coverage, invoice reconciliation, maker-checker acceptance, and the Gate 1 status |
 
@@ -256,6 +256,15 @@ A source definition is not evidence that a specific tenant has connected the pro
   and approved-domain egress controls. A run remains an explicit external
   action. See [RPA runtime](docs/rpa-runtime.md).
 - Outbound notifications and local-model profiles require their supporting services.
+- The UCP business profile (`/.well-known/ucp`, UCP 2026-04-08 and 2026-08-25) with catalog search
+  and lookup and store locations is off by default (`AGENTICORG_UCP_PROFILE_ENABLED`). It serves a merchant
+  only on a DNS-attested serving host, with a per-merchant ES256 signing key, after the merchant opts in
+  and Grantex issues an enabled `public_discovery_state` artifact. See [UCP business profile](docs/oacp/ucp-profile.md).
+- The ACP product feed (`AGENTICORG_ACP_FEED_ENABLED`) and ACP checkout sessions
+  (`AGENTICORG_ACP_CHECKOUT_ENABLED`, API version 2026-04-17) are off by default. The feed is built only
+  from verified, fresh OACP artifacts; sessions run on the UCP session table, arbiter and executor and need
+  the merchant's opt-in, a Grantex delegate-payment allowance and a registered executor (none in this
+  release). See [ACP product feed and checkout sessions](docs/oacp/acp-feed-and-sessions.md).
 - AI spend intelligence is off by default. Nothing is metered until `AGENTICORG_SPEND_INTELLIGENCE_ENABLED`
   is set on the API, worker, and beat services. Attribution follows the organisation tree and mappings a
   tenant administrator enters; prices come from the tenant's rate cards, else the deployment's list prices
@@ -375,6 +384,8 @@ A2A Agent Card discovery path.
 | GET /api/v1/health | Service health | Public |
 | GET /api/v1/product-facts | Live version and registry totals | Public |
 | GET /.well-known/agent-card.json | A2A v1 generic Agent Card (after release and ingress configuration) | Public |
+| GET /.well-known/ucp, POST /ucp/catalog/search, /ucp/catalog/lookup, /ucp/locations/* | UCP business profile, catalog and locations on a merchant's verified serving host (off by default) | Public, host-bound |
+| POST /acp/checkout_sessions, GET/POST /acp/checkout_sessions/{id}, /complete, /cancel | ACP checkout sessions on a merchant's verified serving host (off by default) | Tenant API key issued to the agent platform (`acp:read` / `acp:write`) |
 | GET /api/v1/a2a/extendedAgentCard | Merchant-specific seller card | Merchant-issued buyer credential |
 | POST /api/v1/a2a/message:send | A2A v1 synchronous text request | Buyer credential for seller Q&A, or scoped tenant credential for non-commerce agents |
 | GET /api/v1/a2a/agent-card | Legacy AgenticOrg discovery card; not A2A v1 | Public |

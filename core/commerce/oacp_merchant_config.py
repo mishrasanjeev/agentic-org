@@ -19,6 +19,7 @@ from core.commerce.c6z_runtime_vertical import (
     PRIVATE_VALUE_MARKERS,
     contains_private_or_executable_value,
 )
+from core.commerce.ucp.locations import LocationConfigError, normalize_location_detail
 
 SOURCE_CONNECTOR_TYPES: frozenset[str] = frozenset(
     {
@@ -319,7 +320,7 @@ def _normalize_channels(items: Mapping[str, Mapping[str, Any] | bool]) -> dict[s
 
 def _normalize_pos_store(item: Mapping[str, Any]) -> dict[str, Any]:
     store_id = _safe_id(item.get("store_id"), "store_id")
-    return {
+    store = {
         "store_id": store_id,
         "display_name": _safe_text(item.get("display_name"), fallback=store_id),
         "pos_provider": _safe_text(item.get("pos_provider"), fallback="merchant_pos"),
@@ -331,6 +332,13 @@ def _normalize_pos_store(item: Mapping[str, Any]) -> dict[str, Any]:
         "raw_payload_stored": False,
         "allowed_to_execute": False,
     }
+    if item.get("location") is not None:
+        # UCP Location detail (address, geo, timezone, regular and exception hours).
+        try:
+            store["location"] = normalize_location_detail(item.get("location"))
+        except LocationConfigError as exc:
+            raise MerchantCommerceConfigError(f"store {store_id}: {exc}") from exc
+    return store
 
 
 def _normalize_public_publishing(item: Mapping[str, Any]) -> dict[str, Any]:

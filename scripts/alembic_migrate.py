@@ -69,6 +69,12 @@ REQUIRED_RUNTIME_TABLES = frozenset(
         # and consume them synchronously.
         "audit_chain_witness_checkpoints",
         "commerce_arbiter_decisions",
+        # UCP checkout sessions, carts, orders and idempotency records (v6z89):
+        # every UCP write reads or writes them synchronously.
+        "commerce_checkout_sessions",
+        "commerce_carts",
+        "commerce_orders",
+        "commerce_ucp_idempotency",
     }
 )
 

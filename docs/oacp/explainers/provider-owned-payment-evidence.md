@@ -17,6 +17,19 @@ flowchart LR
 
 OACP artifacts and cache records must not contain provider tokens, POS secrets, card data, bank data, checkout URLs, payment URLs, raw POS payloads, or raw provider response bodies.
 
+## ACP Delegated Payment
+
+ACP checkout sessions never receive card data. The agent sends the buyer's payment method to the
+vault with the session's delegate-payment allowance, which AgenticOrg obtains from Grantex (derived
+from the buyer's Commerce Passport amount cap) and shows in the payment handler's config in the
+`DelegatePaymentRequest` shape (`allowance`, `risk_signals`, `metadata`). AgenticOrg sends Grantex
+only the tenant, the passport, the session, the merchant and the currency; it keeps the passport as
+a SHA-256 and seals each allowance request (with the risk-signal digest) on the commerce ledger. At
+completion the agent presents the vault token as a Plural instrument token; a card number is refused.
+Payment still executes only through an executor that consumes an arbiter `allow` decision, and no
+executor is registered in this release. See
+[ACP product feed and checkout sessions](../acp-feed-and-sessions.md#delegate-payment-allowance-g35).
+
 ## Offline POS Evidence
 
 Offline POS Bridge evidence is reference-only. `payment_confirmed` and `receipt_available` require verified callback evidence and a non-sensitive provider/POS evidence ref. Simulator confirmations are useful for tests but must not be described as live paid states.

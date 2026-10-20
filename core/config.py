@@ -437,6 +437,40 @@ class Settings(BaseSettings):
     # manifests whose retention disposition is due (core/commerce/oacp_retention.py).
     # Off by default. Env: AGENTICORG_OACP_RETENTION_APPLY_ENABLED.
     oacp_retention_apply_enabled: bool = False
+    # UCP transactions (api/v1/commerce_ucp.py): checkout sessions, carts and
+    # orders at https://<merchant serving host>/ucp. Off by default: every /ucp
+    # route answers 404 while off. Env: AGENTICORG_UCP_CHECKOUT_ENABLED.
+    ucp_checkout_enabled: bool = False
+    # UCP business profile (core/commerce/ucp, api/v1/ucp_discovery.py): off,
+    # GET /.well-known/ucp and the /ucp catalog and location routes answer 404
+    # and merchant onboarding generates no UCP signing key. On, a published
+    # merchant's profile is served on its verified serving host.
+    # Env: AGENTICORG_UCP_PROFILE_ENABLED.
+    ucp_profile_enabled: bool = False
+    # UCP releases served (comma list of YYYY-MM-DD). The newest is the
+    # profile at /.well-known/ucp; older ones are leaf profiles advertised in
+    # ucp.supported_versions. Env: AGENTICORG_UCP_VERSIONS.
+    ucp_versions: str = "2026-04-08"
+    # Days a rotated-out merchant UCP signing key stays in the profile so
+    # verifiers keep accepting signatures made before the rotation (UCP
+    # signatures, Key Rotation: at least 7). Env: AGENTICORG_UCP_KEY_ROTATION_GRACE_DAYS.
+    ucp_key_rotation_grace_days: int = 7
+    # ACP product feed (core/commerce/acp/feed.py): the tenant-admin feed export
+    # under /api/v1/commerce/runtime/acp/feed answers 404 while off. The feed is
+    # generated only from verified, fresh OACP artifacts.
+    # Env: AGENTICORG_ACP_FEED_ENABLED.
+    acp_feed_enabled: bool = False
+    # ACP checkout sessions (api/v1/commerce_acp.py) at
+    # https://<merchant serving host>/acp/checkout_sessions, over the UCP session
+    # table. Off by default: every /acp route answers 404 while off. Independent
+    # of AGENTICORG_UCP_CHECKOUT_ENABLED so each protocol is enabled on its own.
+    # Env: AGENTICORG_ACP_CHECKOUT_ENABLED.
+    acp_checkout_enabled: bool = False
+    # ACP request signatures (Signature + Timestamp headers): "log" records what
+    # arrived and never refuses; "enforce" refuses a request that a verifier
+    # registered for the calling platform does not accept (none ships: ACP
+    # publishes no signing algorithm). Env: AGENTICORG_ACP_SIGNATURE_MODE.
+    acp_signature_mode: str = "log"
     # Synthetic checks (observability/synthetic.py): the scheduled sweep runs
     # each tenant's due probes (model, knowledge, guardrail, audit chain) and
     # stores a result per run. Off by default; a check can be run by hand

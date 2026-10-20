@@ -344,6 +344,12 @@ async def check_user_session_state(tenant_id: str, claims: dict[str, Any]) -> st
     return state.rejects_token(float(issued_at) if isinstance(issued_at, int | float) else None)
 
 
+# UCP checkout, cart and order routes (api/v1/commerce_ucp.py) also accept the platform's API key in X-API-Key.
+UCP_TRANSACTION_PREFIXES: tuple[str, ...] = ("/ucp/checkout-sessions", "/ucp/carts", "/ucp/orders")
+# The header a UCP platform presents the merchant-issued tenant API key in (UCP REST x_api_key).
+UCP_PLATFORM_KEY_HEADER = "X-API-Key"
+
+
 class GrantexAuthMiddleware(BaseHTTPMiddleware):
     """Triple-mode auth: API keys + Grantex RS256 grant tokens + legacy HS256 JWTs."""
 
@@ -373,6 +379,13 @@ class GrantexAuthMiddleware(BaseHTTPMiddleware):
         "/api/v1/branding",  # Public tenant branding for the login page
         "/api/v1/status",  # Public status page
         "/api/v1/product-facts",  # Public product counts/version for README, Landing, Pricing
+        # UCP business profile and public catalog/location reads, host-bound
+        # (api/v1/ucp_discovery.py; 404 unless AGENTICORG_UCP_PROFILE_ENABLED).
+        "/.well-known/ucp",
+        "/ucp/catalog/search",
+        "/ucp/catalog/lookup",
+        "/ucp/locations/search",
+        "/ucp/locations/lookup",
         "/docs", "/openapi.json", "/redoc",
     }
 
@@ -387,6 +400,7 @@ class GrantexAuthMiddleware(BaseHTTPMiddleware):
         "/api/v1/auth/sso/",  # SSO login + OIDC callback (pre-session)
         "/api/v1/cron/",  # Cloud Scheduler triggers: X-Cron-Key verified by the route
         "/api/v1/customer-agent/",  # Bank-signed customer assertions and the session tokens they issue
+        "/.well-known/ucp/",  # UCP leaf profiles for older supported releases (public by spec)
     )
 
     async def _credential_failure_response(
@@ -439,6 +453,13 @@ class GrantexAuthMiddleware(BaseHTTPMiddleware):
         # still use the HttpOnly cookie path.
         token = ""
         auth_header = request.headers.get("Authorization", "")
+        if not auth_header and request.url.path.startswith(UCP_TRANSACTION_PREFIXES):
+            # UCP platforms authenticate with "a reusable api key allocated to the platform by the
+            # business" in X-API-Key (UCP REST OpenAPI, x_api_key): the tenant API key the merchant
+            # issued, verified exactly like a bearer API key. Only API keys are accepted there.
+            presented = request.headers.get(UCP_PLATFORM_KEY_HEADER, "").strip()
+            if presented.startswith("ao_sk_"):
+                auth_header = f"Bearer {presented}"
         if auth_header:
             if not auth_header.startswith("Bearer "):
                 return await self._credential_failure_response(
@@ -572,6 +593,8 @@ class GrantexAuthMiddleware(BaseHTTPMiddleware):
             request.state.agent_id = None
             request.state.user_sub = f"apikey:{matched_key.prefix}"
             request.state.api_key_name = matched_key.name
+            # The key's identity (not a secret): commerce platforms are bound to the key that called.
+            request.state.api_key_id = str(matched_key.id)
             request.state.auth_mode = "api_key"
 
             await clear_auth_failures(client_ip)

@@ -37,9 +37,12 @@ from api.v1 import (
     channels,
     chat,
     client_portal,
+    commerce_acp,
     commerce_ledger,
     commerce_public,
     commerce_runtime,
+    commerce_ucp,
+    commerce_ucp_publishing,
     companies,
     compliance,
     composio,
@@ -105,6 +108,7 @@ from api.v1 import (
     tenant_ai_settings,
     tool_registry,
     txn,
+    ucp_discovery,
     voice,
     voice_runtime,
     webhooks,
@@ -293,6 +297,8 @@ app.add_middleware(
 # and BEFORE the route handler.
 app.add_middleware(CSRFMiddleware)
 app.add_middleware(GrantexAuthMiddleware)
+# ACP routes answer every pre-route refusal (auth, scope, rate limit, flag) as an ACP Error.
+app.add_middleware(commerce_acp.AcpErrorShapeMiddleware)
 app.add_middleware(DeprecationHeaderMiddleware)
 # Outermost (last add_middleware): binds request_id into structlog
 # contextvars before auth/CSRF run so every log line of the request —
@@ -328,6 +334,16 @@ app.include_router(commerce_public.public_router, prefix="/api/v1", tags=["Publi
 app.include_router(commerce_ledger.router, prefix="/api/v1", tags=["Commerce Ledger"])
 app.include_router(commerce_runtime.merchant_config_router, prefix="/api/v1", tags=["Commerce Runtime"])
 app.include_router(commerce_runtime.router, prefix="/api/v1", tags=["Commerce Runtime"])
+app.include_router(commerce_ucp.runtime_router, prefix="/api/v1", tags=["Commerce Runtime"])
+# UCP REST binding at https://<merchant serving host>/ucp (AGENTICORG_UCP_CHECKOUT_ENABLED).
+app.include_router(commerce_ucp.router)
+app.include_router(commerce_ucp_publishing.router, prefix="/api/v1", tags=["Commerce UCP"])
+app.include_router(commerce_acp.runtime_router, prefix="/api/v1", tags=["Commerce Runtime"])
+# ACP checkout sessions at https://<merchant serving host>/acp (AGENTICORG_ACP_CHECKOUT_ENABLED).
+app.include_router(commerce_acp.router)
+# UCP business surfaces live at the merchant serving host's root (/.well-known/ucp, /ucp/...).
+app.include_router(ucp_discovery.well_known_router)
+app.include_router(ucp_discovery.ucp_router)
 app.include_router(oauth_connector.router, prefix="/api/v1", tags=["Connectors"])
 app.include_router(compliance.router, prefix="/api/v1", tags=["Compliance"])
 app.include_router(config.router, prefix="/api/v1", tags=["Config"])

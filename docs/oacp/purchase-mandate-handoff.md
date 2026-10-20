@@ -33,6 +33,18 @@ the merchant's limits come from its config (`provider_policy.arbiter`).
 - `live_execution_approved` is deprecated: it is accepted for one release and ignored (the
   response lists it in `deprecated_fields_ignored`).
 
+## UCP Session Complete
+
+A UCP checkout ([UCP checkout, cart and order](ucp-checkout.md)) uses the same arbiter with action
+`session_complete`. The decision binds the session payload (session id and revision, totals, line
+items, fulfillment selections, and each payment instrument's handler, type and credential
+SHA-256). `buyer_authority` travels in the vendor member `ai.agenticorg.commerce` of the complete
+body; `{"decide_only": true}` returns the decision without executing and a later Complete may
+present its `decision_id`. Execution happens only through a registered executor, which receives a
+decision consumed by `require_allow_decision`; with `AGENTICORG_UCP_CHECKOUT_ENABLED` off the
+routes are 404, and with it on but no executor registered (this release) Complete answers
+`executor_unavailable` without deciding.
+
 ## Required Fresh Inputs
 
 - Catalog snapshot.

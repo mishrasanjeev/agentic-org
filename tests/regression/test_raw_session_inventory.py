@@ -32,6 +32,8 @@ ALLOWED: dict[tuple[str, str], str] = {
     ("core/billing/budget_evaluator.py", "evaluate_budget_alerts"): TENANT_CATALOGUE,
     ("core/billing/invoice_generator.py", "generate_invoices_for_period"): TENANT_CATALOGUE,
     ("core/cases/push.py", "_all_tenant_ids"): TENANT_CATALOGUE,
+    ("core/commerce/ucp/webhooks.py", "_tenants_with_pending"): TENANT_CATALOGUE,
+    ("core/commerce/ucp/idempotency.py", "prune_expired"): TENANT_CATALOGUE,
     ("core/cron/compliance_alerts.py", "run_compliance_alert_cron"): TENANT_CATALOGUE,
     ("core/lineage/sync.py", "sweep"): TENANT_CATALOGUE,
     ("core/memory/long_term.py", "prune_all_tenants"): TENANT_CATALOGUE,

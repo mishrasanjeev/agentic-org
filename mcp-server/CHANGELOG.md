@@ -1,5 +1,22 @@
 # agenticorg-mcp-server changelog
 
+## 5.1.0 - 2026-10-20
+
+### Added
+- UCP 2026-04-08 MCP binding tools: `create_checkout`, `get_checkout`,
+  `update_checkout`, `complete_checkout`, `cancel_checkout`, `create_cart`,
+  `get_cart`, `update_cart`, `cancel_cart` and `get_order`. They are registered
+  only when `AGENTICORG_UCP_PROFILE_URL` names a merchant profile that
+  advertises the capability (the API lists it only with
+  `AGENTICORG_UCP_CHECKOUT_ENABLED` on), and call the profile's same-origin
+  REST endpoint.
+- `complete_checkout` is two-step: `decide_only: true` returns a sealed
+  decision without executing, and only a call carrying that `decision_id`
+  can place the order. A call with neither is refused locally.
+- `AGENTICORG_UCP_AGENT_PROFILE` sets the default platform profile sent as
+  `UCP-Agent`.
+- HTTP errors map to MCP tool errors with only the UCP `code` and `content`.
+
 ## 5.0.0 - 2026-10-09
 
 ### Breaking

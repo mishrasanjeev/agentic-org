@@ -209,9 +209,9 @@ class TestRouteTableCoverage:
 
         known = {s for scopes in ROLE_SCOPES.values() for s in scopes}
         for family, (read_scope, write_scope) in SCOPE_FAMILIES.items():
-            if family in {"a2a", "mcp"}:
-                # Machine entry points behind AGENTICORG_ROUTE_SCOPE_A2A_MCP:
-                # API keys and agent grants hold these scopes, no role does.
+            if family in {"a2a", "mcp", "ucp", "acp"}:
+                # Machine entry points (A2A and MCP behind AGENTICORG_ROUTE_SCOPE_A2A_MCP;
+                # UCP and ACP commerce platforms): API keys and agent grants hold these scopes, no role does.
                 assert read_scope in GRANTABLE_ROUTE_SCOPES and write_scope in GRANTABLE_ROUTE_SCOPES
                 assert read_scope not in known and write_scope not in known
                 continue
