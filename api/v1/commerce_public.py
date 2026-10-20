@@ -7,11 +7,12 @@ from collections.abc import Mapping
 from typing import Any
 from uuid import UUID
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import HTMLResponse, JSONResponse, PlainTextResponse, Response
 from sqlalchemy import select
 
 from api.route_metadata import route_meta
+from auth.httpsig import verify_agent_request_signature
 from core.commerce.oacp_public_publishing import (
     OacpPublicPublishingError,
     build_public_catalog_html,
@@ -28,7 +29,13 @@ from core.models.commerce_c6z_runtime import (
     C6ZSellerOnboardingPacketRow,
 )
 
-public_router = APIRouter(prefix="/public/commerce", tags=["Public Commerce"])
+# Agent request signatures (RFC 9421, Visa TAP and Web Bot Auth profiles) are verified on every
+# public read and logged; AGENTICORG_HTTPSIG_VERIFY_MODE=enforce refuses unsigned requests (G47).
+public_router = APIRouter(
+    prefix="/public/commerce",
+    tags=["Public Commerce"],
+    dependencies=[Depends(verify_agent_request_signature)],
+)
 
 
 @public_router.get("/sellers/{merchant_id}", response_class=HTMLResponse)

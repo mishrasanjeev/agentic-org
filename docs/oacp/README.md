@@ -47,6 +47,7 @@ authority.
 - [Protocol adapter consumption guide](protocol-adapter-consumption-guide.md)
 - [UCP business profile, catalog and locations](ucp-profile.md)
 - [ACP product feed and checkout sessions](acp-feed-and-sessions.md)
+- [Agent request signing (RFC 9421, Visa TAP, Web Bot Auth)](agent-request-signing.md)
 - [Plural/Pine P3P capability verifier](plural-pine-p3p-capability-verifier.md)
 - [Purchase/mandate handoff](purchase-mandate-handoff.md)
 - [Offline POS bridge](offline-pos-bridge.md)

@@ -261,6 +261,12 @@ A source definition is not evidence that a specific tenant has connected the pro
   from verified, fresh OACP artifacts; sessions run on the UCP session table, arbiter and executor and need
   the merchant's opt-in, a Grantex delegate-payment allowance and a registered executor (none in this
   release). See [ACP product feed and checkout sessions](docs/oacp/acp-feed-and-sessions.md).
+- Agent request signatures (RFC 9421, Visa Trusted Agent Protocol and Web Bot Auth profiles) are verified
+  on the public commerce reads and the A2A routes in `log` mode by default
+  (`AGENTICORG_HTTPSIG_VERIFY_MODE=enforce` refuses unsigned requests); the buyer connector signs its
+  requests with the tenant agent key only with `AGENTICORG_HTTPSIG_SIGN_OUTBOUND`. The library
+  (`grantex-agent-httpsig` 0.2.0) must be published before CI can install it. See
+  [agent request signing](docs/oacp/agent-request-signing.md).
 - AI spend intelligence is off by default. Nothing is metered until `AGENTICORG_SPEND_INTELLIGENCE_ENABLED`
   is set on the API, worker, and beat services. Attribution follows the organisation tree and mappings a
   tenant administrator enters; prices come from the tenant's rate cards, else the deployment's list prices
@@ -323,6 +329,12 @@ The current supported source path is:
 7. Purchase intent becomes a non-executing provider, merchant, or POS handoff, or a fail-closed blocker. A deterministic commerce arbiter decides each handoff (mandate, consent, Commerce Passport cap, verified fresh artifacts, merchant limits) and seals `allow` or `refuse`; it never waits for a person. Execution consumes a single-use `allow` `decision_id` bound to the exact handoff payload. Every commerce write leaves a signed, hash-chained ledger row. Until server-verified mandates exist, strict runtimes refuse caller-asserted buyer authority (`AGENTICORG_ARBITER_REQUIRE_VERIFIED_AUTHORITY`), and an allow is consumable only once Grantex has countersigned it (`AGENTICORG_ARBITER_REQUIRE_GRANTEX_GRANT`). Tenant admins read the ledger, annotate decisions, store review manifests and retention dispositions under `/api/v1/commerce/runtime/ledger`, and `scripts/verify_ledger.py` verifies a ledger export offline. See [docs/oacp/arbiter-ledger.md](docs/oacp/arbiter-ledger.md).
 8. Only a verified provider or merchant callback can confirm the external outcome.
 
+Agents that call the public commerce reads and the A2A routes may sign their requests under the Visa
+Trusted Agent Protocol or Web Bot Auth profiles of RFC 9421; AgenticOrg verifies them, records the
+verified agent identity (on the commerce ledger for writes), and with
+`AGENTICORG_HTTPSIG_VERIFY_MODE=enforce` refuses unsigned ones. See
+[docs/oacp/agent-request-signing.md](docs/oacp/agent-request-signing.md).
+
 Start with [docs/oacp/README.md](docs/oacp/README.md) and the [runtime launch closure PRD](docs/oacp/runtime-launch-closure-prd.md).
 
 ## Requirements
@@ -382,8 +394,9 @@ A2A Agent Card discovery path.
 | GET /.well-known/agent-card.json | A2A v1 generic Agent Card (after release and ingress configuration) | Public |
 | GET /.well-known/ucp, POST /ucp/catalog/search, /ucp/catalog/lookup, /ucp/locations/* | UCP business profile, catalog and locations on a merchant's verified serving host (off by default) | Public, host-bound |
 | POST /acp/checkout_sessions, GET/POST /acp/checkout_sessions/{id}, /complete, /cancel | ACP checkout sessions on a merchant's verified serving host (off by default) | Tenant API key issued to the agent platform (`acp:read` / `acp:write`) |
-| GET /api/v1/a2a/extendedAgentCard | Merchant-specific seller card | Merchant-issued buyer credential |
-| POST /api/v1/a2a/message:send | A2A v1 synchronous text request | Buyer credential for seller Q&A, or scoped tenant credential for non-commerce agents |
+| GET /api/v1/a2a/extendedAgentCard | Merchant-specific seller card | Merchant-issued buyer credential; RFC 9421 agent signature verified (logged, or required in `enforce` mode) |
+| POST /api/v1/a2a/message:send | A2A v1 synchronous text request | Buyer credential for seller Q&A, or scoped tenant credential for non-commerce agents; RFC 9421 agent signature verified (logged, or required in `enforce` mode) |
+| GET /api/v1/public/commerce/sellers/{merchant_id}/... | Public buyer-safe seller page, catalog, product, schema.org, sitemap and llms.txt (merchant opt-in) | Public; RFC 9421 agent signature verified (logged, or required in `enforce` mode) |
 | GET /api/v1/a2a/agent-card | Legacy AgenticOrg discovery card; not A2A v1 | Public |
 | GET /api/v1/a2a/.well-known/agent.json | Legacy discovery alias; not A2A v1 | Public |
 | GET /api/v1/mcp/tools | MCP-compatible agent discovery | Public |

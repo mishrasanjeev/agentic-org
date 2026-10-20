@@ -471,6 +471,37 @@ class Settings(BaseSettings):
     # registered for the calling platform does not accept (none ships: ACP
     # publishes no signing algorithm). Env: AGENTICORG_ACP_SIGNATURE_MODE.
     acp_signature_mode: str = "log"
+    # Inbound RFC 9421 agent request signatures (auth/httpsig.py) on the public
+    # commerce reads and the A2A routes, under the Visa TAP and Web Bot Auth
+    # profiles. "log" (default) verifies what arrives, records it and never
+    # refuses; "enforce" refuses an unsigned or invalid request with 401 and a
+    # request whose replay check cannot run (Redis down) with 503.
+    # Env: AGENTICORG_HTTPSIG_VERIFY_MODE.
+    httpsig_verify_mode: str = "log"
+    # Comma list of the authorities (host[:port], default port omitted) a signed
+    # request may cover as @authority. Empty: the request's Host header.
+    # Env: AGENTICORG_HTTPSIG_AUTHORITIES.
+    httpsig_authorities: str = ""
+    # Comma list of https URL templates of TAP key stores, each holding
+    # "{keyid}" (for example https://keys.example/keys/{keyid}). Empty: no TAP
+    # key resolves. Env: AGENTICORG_HTTPSIG_TAP_KEY_STORE_URLS.
+    httpsig_tap_key_store_urls: str = ""
+    # Comma list of https origins whose Web Bot Auth key directory
+    # (/.well-known/http-message-signatures-directory) may be fetched for a
+    # Signature-Agent. Empty: no Web Bot Auth key resolves.
+    # Env: AGENTICORG_HTTPSIG_SIGNATURE_AGENT_ORIGINS.
+    httpsig_signature_agent_origins: str = ""
+    # Look a verified agent up in the Grantex registry to record its scheme
+    # agent ids (G51). Off by default. Env: AGENTICORG_HTTPSIG_REGISTRY_LOOKUP_ENABLED.
+    httpsig_registry_lookup_enabled: bool = False
+    # Sign the Grantex Commerce buyer connector's outbound requests with the
+    # tenant agent key under the TAP profile (G48). Off by default.
+    # Env: AGENTICORG_HTTPSIG_SIGN_OUTBOUND.
+    httpsig_sign_outbound: bool = False
+    # AgenticOrg's own scheme agent ids, published in the A2A agent card (G51):
+    # a JSON list of {"scheme": "visa_tap"|"mastercard_agent_pay", "agent_id": "..."}.
+    # Empty: nothing is published. Env: AGENTICORG_A2A_SCHEME_AGENT_IDS.
+    a2a_scheme_agent_ids: str = ""
     # Synthetic checks (observability/synthetic.py): the scheduled sweep runs
     # each tenant's due probes (model, knowledge, guardrail, audit chain) and
     # stores a result per run. Off by default; a check can be run by hand

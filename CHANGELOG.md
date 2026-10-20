@@ -2,6 +2,44 @@
 
 ## Unreleased - Agent network identity (G47, G48, G49, G51, G52)
 
+- Inbound RFC 9421 agent request signatures (`auth/httpsig.py`, `auth/httpsig_keys.py`) on every
+  `/api/v1/public/commerce/` read and on `POST /api/v1/a2a/message:send` and
+  `GET /api/v1/a2a/extendedAgentCard`, under the Visa Trusted Agent Protocol (`agent-browser-auth`,
+  `agent-payer-auth`) and Web Bot Auth (`web-bot-auth`) profiles of `grantex-agent-httpsig` 0.2.0.
+  `AGENTICORG_HTTPSIG_VERIFY_MODE=log` (default) verifies and records and never refuses; `enforce`
+  refuses an unsigned or invalid request with 401 and `Accept-Signature` (RFC 9421 section 5.1)
+  and answers 503 while the Redis nonce store is down. Default `log` changes no response; it adds a
+  structured log line per request and, for a verified write, an `a2a.agent_signature` ledger row.
+  Keys: TAP by keyid from pinned key-store URL templates (`AGENTICORG_HTTPSIG_TAP_KEY_STORE_URLS`);
+  Web Bot Auth by (Signature-Agent URL, keyid) from allow-listed https directory origins
+  (`AGENTICORG_HTTPSIG_SIGNATURE_AGENT_ORIGINS`), only keys with a valid directory response
+  signature; the Grantex registry directory through its platform countersignature checked against
+  the pinned Grantex JWKS. Async pinned egress, no redirects, 300 s cache, 60 s negative cache.
+  Nonces are claimed with one Redis `SET NX` for at least the profile's replay window (8 minutes
+  for TAP). Docs: `docs/oacp/agent-request-signing.md`.
+- TAP body objects (G49, inbound): after a TAP signature verifies, `agenticConsumer`,
+  `agenticPaymentContainer` and `grantexConsentRecord` in a JSON body are checked with
+  `verify_tap_body_objects` and recorded (`usable_for_payment`). `POST /api/v1/a2a/message:send`
+  accepts the three optional members.
+- Scheme agent ids (G51): with `AGENTICORG_HTTPSIG_REGISTRY_LOOKUP_ENABLED` (default off) a verified
+  agent is looked up in the Grantex registry (`GET /v1/registry/agents?scheme=visa_tap&scheme_agent_id=`
+  for TAP, `?key_thumbprint=` for registry-directory keys; async, cached) and its DID and scheme
+  agent ids are recorded. `AGENTICORG_A2A_SCHEME_AGENT_IDS` publishes AgenticOrg's own ids in the A2A
+  agent card as the `https://agenticorg.ai/a2a/extensions/scheme-agent-ids/v1` extension.
+  AgenticOrg serves no `/.well-known/agent-registry.json`.
+- Outbound signing (G48): with `AGENTICORG_HTTPSIG_SIGN_OUTBOUND` (default off) the Grantex Commerce
+  buyer connector signs every request with the tenant agent key under the TAP profile
+  (`agent-payer-auth` for payment intents and checkouts, `agent-browser-auth` otherwise; `@method`,
+  `@authority`, `@path`, `content-digest`; a fresh nonce per request) and, when configured, adds a
+  Web Bot Auth signature with `Signature-Agent`. The key is a JWK sealed with the tenant crypto
+  helpers in the connector configuration (`agent_signing_key_encrypted`); with signing on and no
+  usable key the call is refused, never sent unsigned.
+- TAP body objects (G49, outbound): a payment intent or checkout made with a granted Grantex consent
+  carries `agenticPaymentContainer`, optionally `agenticConsumer`, and the Grantex consent record
+  object `grantexConsentRecord`, bound to the signature's nonce. The `grantex_consent` and
+  `tap_consumer_id_token` inputs are never forwarded as tool arguments.
+- Dependency: `grantex-agent-httpsig==0.2.0` in `requirements.txt` and `pyproject.toml`. It is not
+  on PyPI yet; CI needs the published package.
 - Fixed: the public buyer-safe seller pages and catalog reads under `/api/v1/public/commerce/`
   (`api/v1/commerce_public.py`, all `GET`, `route_meta(auth_required=False)`, documented as public in
   `docs/commerce-agent-bridges-guide.md`) answered `401 Missing session cookie or Authorization

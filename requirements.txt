@@ -52,6 +52,8 @@ cryptography>=50.0.2
 PyJWT[crypto]==2.15.1
 passlib[bcrypt]==1.7.4
 grantex==0.7.2
+# RFC 9421 agent request signatures (Visa TAP, Web Bot Auth): auth/httpsig.py, core/commerce/agent_request_signing.py
+grantex-agent-httpsig==0.2.0
 
 # ─── HTTP Client & DNS ───────────────────────────────────────────────────────
 httpx==0.28.1
