@@ -15,7 +15,7 @@ import subprocess
 import sys
 import time
 import uuid
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 import pytest
 from sqlalchemy import text
@@ -82,8 +82,11 @@ def fake():
         executors.unregister_executor(executor.name)
 
 
-async def _rows(engine, sql: str, **params) -> list[dict]:
+async def _rows(engine, sql: str, *, tenant: str | None = None, **params) -> list[dict]:
+    """Rows read inside the tenant's RLS context, so the module also runs as the NOBYPASSRLS app role."""
     async with engine.connect() as conn:
+        if tenant is not None:
+            await conn.execute(text("SELECT set_config('agenticorg.tenant_id', :t, false)"), {"t": tenant})
         return [dict(r) for r in (await conn.execute(text(sql), params)).mappings().all()]
 
 
@@ -92,6 +95,7 @@ async def _events(engine, tenant: str) -> list[str]:
         engine,
         "SELECT event_type FROM audit_log WHERE tenant_id = :t AND resource_type = 'commerce_ledger' "
         "ORDER BY created_at, id",
+        tenant=tenant,
         t=tenant,
     )
     return [r["event_type"] for r in rows]
@@ -131,19 +135,27 @@ async def test_complete_charges_through_plural_with_decision_id_and_ledgers_ever
         "/api/pay/v1/orders/v1-ord-1/payments",
         "/api/pay/v1/orders/v1-ord-1/capture",
     ]
-    session_row = (await _rows(db, "SELECT * FROM commerce_checkout_sessions WHERE id = :s", s=session["id"]))[0]
+    sql = "SELECT * FROM commerce_checkout_sessions WHERE id = :s"
+    session_row = (await _rows(db, sql, tenant=tenant, s=session["id"]))[0]
     decision_id = session_row["decision_id"]
-    decision = (await _rows(db, "SELECT * FROM commerce_arbiter_decisions WHERE decision_id = :d", d=decision_id))[0]
+    decision = (
+        await _rows(db, "SELECT * FROM commerce_arbiter_decisions WHERE decision_id = :d", tenant=tenant, d=decision_id)
+    )[0]
     assert decision["consumed_at"] is not None and decision["outcome"] == "allow"
     assert "afa_evidence_present" in decision["rules_evaluated"]
     assert set(decision["evidence"]["mandate_hashes"]) == {"intent", "cart", "payment"}
     metadata = json.loads(fake.api_calls[0].content)["purchase_details"]["merchant_metadata"]
     assert metadata["oacp_decision_id"] == decision_id
     assert metadata["oacp_payload_hash"] == decision["payload_hash"]
-    order = (await _rows(db, "SELECT * FROM commerce_orders WHERE checkout_session_id = :s", s=session["id"]))[0]
+    order = (
+        await _rows(db, "SELECT * FROM commerce_orders WHERE checkout_session_id = :s", tenant=tenant, s=session["id"])
+    )[0]
     assert order["provider_order_ref"] == "v1-ord-1" and order["executor"] == "plural_pine"
     operations = await _rows(
-        db, "SELECT operation, phase, decision_id FROM commerce_payment_operations WHERE tenant_id = :t", t=tenant
+        db,
+        "SELECT operation, phase, decision_id FROM commerce_payment_operations WHERE tenant_id = :t",
+        tenant=tenant,
+        t=tenant,
     )
     assert {(o["operation"], o["phase"]) for o in operations} == {
         (op, phase) for op in ("create_order", "create_payment", "capture") for phase in ("requested", "succeeded")
@@ -172,7 +184,8 @@ async def test_refused_decision_makes_no_plural_call(db, fake):
     assert refused.body["status"] == "ready_for_complete"
     assert refused.body["ai.agenticorg.commerce"]["decision"]["failing_rule"] == "merchant_limits"
     assert fake.requests == []
-    assert await _rows(db, "SELECT 1 FROM commerce_payment_operations WHERE tenant_id = :t", t=tenant) == []
+    sql = "SELECT 1 FROM commerce_payment_operations WHERE tenant_id = :t"
+    assert await _rows(db, sql, tenant=tenant, t=tenant) == []
 
 
 @pytest.mark.asyncio
@@ -227,15 +240,18 @@ async def test_refunds_need_a_fresh_refund_decision_and_stay_within_the_capture(
     assert first.status == "succeeded", first
     assert first.decision["action"] == "refund" and first.decision["outcome"] == "allow"
     calls = len(fake.requests)
-    over = await refund_order(tenant_id=tenant, order_id=order_id, amount_minor_units=5000, reason=None, now=now)
+    later = now + timedelta(seconds=1)
+    over = await refund_order(tenant_id=tenant, order_id=order_id, amount_minor_units=5000, reason=None, now=later)
     assert over.status == "refused" and over.reason == "refund_within_captured"
     assert len(fake.requests) == calls
-    rest = await refund_order(tenant_id=tenant, order_id=order_id, amount_minor_units=4500, reason=None, now=now)
+    last = now + timedelta(seconds=2)
+    rest = await refund_order(tenant_id=tenant, order_id=order_id, amount_minor_units=4500, reason=None, now=last)
     assert rest.status == "succeeded"
     decisions = await _rows(
         db,
         "SELECT outcome, consumed_at FROM commerce_arbiter_decisions WHERE tenant_id = :t AND action = 'refund' "
         "ORDER BY decided_at",
+        tenant=tenant,
         t=tenant,
     )
     assert [d["outcome"] for d in decisions] == ["allow", "refuse", "allow"]
@@ -275,7 +291,7 @@ async def test_upi_autopay_needs_afa_evidence_before_the_session_can_complete(db
             headers={**signed_headers(body, timestamp=now), "webhook-signature": "v1,AAAA"},
             secret=WEBHOOK_SECRET,
         )
-    rows = await _rows(db, "SELECT phase FROM commerce_afa_evidence WHERE tenant_id = :t", t=tenant)
+    rows = await _rows(db, "SELECT phase FROM commerce_afa_evidence WHERE tenant_id = :t", tenant=tenant, t=tenant)
     assert [r["phase"] for r in rows] == ["requested"]
     still = await _complete(runtime, tenant, session["id"], "afa-2", payment=payment)
     assert still.status == 200 and still.body["status"] != "completed"
@@ -294,6 +310,7 @@ async def test_upi_autopay_needs_afa_evidence_before_the_session_can_complete(db
         db,
         "SELECT outcome, failing_rule FROM commerce_arbiter_decisions WHERE tenant_id = :t AND action = "
         "'session_complete' ORDER BY decided_at",
+        tenant=tenant,
         t=tenant,
     )
     assert decisions[0]["failing_rule"] == "afa_evidence_present" and decisions[-1]["outcome"] == "allow"
@@ -326,10 +343,16 @@ async def test_payment_records_are_append_only_and_tenant_scoped(db, fake):
     session = await _session(runtime, tenant)
     await _complete(runtime, tenant, session["id"], "complete-ao")
     async with db.connect() as conn:
-        with pytest.raises(Exception, match="append-only"):
+        # The trigger refuses as the owner; the app role does not even hold UPDATE.
+        with pytest.raises(Exception, match="append-only|permission denied"):
             await conn.execute(
                 text("UPDATE commerce_payment_operations SET phase = 'failed' WHERE tenant_id = :t"), {"t": tenant}
             )
+    sql = "SELECT id FROM commerce_payment_operations WHERE tenant_id = :t"
+    assert await _rows(db, sql, tenant=tenant, t=tenant)
+    if "agenticorg_app" in os.environ["AGENTICORG_DB_URL"]:
+        # Under the NOBYPASSRLS role another tenant's context sees none of these rows.
+        assert await _rows(db, sql, tenant=str(uuid.uuid4()), t=tenant) == []
     flags = await _rows(
         db,
         "SELECT relname, relrowsecurity, relforcerowsecurity FROM pg_class "
@@ -347,7 +370,8 @@ async def test_a_redelivered_shopify_fulfillment_is_recorded_once(db, fake):
     session = await _session(runtime, tenant)
     done = await _complete(runtime, tenant, session["id"], "complete-tr")
     order_id = done.body["order"]["id"]
-    snapshot = (await _rows(db, "SELECT snapshot FROM commerce_orders WHERE id = :o", o=order_id))[0]["snapshot"]
+    sql = "SELECT snapshot FROM commerce_orders WHERE id = :o"
+    snapshot = (await _rows(db, sql, tenant=tenant, o=order_id))[0]["snapshot"]
     payload = {"id": 9001, "status": "success", "tracking_company": "Acme Express", "tracking_numbers": ["AX1"]}
     normalised = normalise_shopify_fulfillment(payload, snapshot)
     now = datetime.now(UTC)
