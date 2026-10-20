@@ -2,7 +2,7 @@
 
 Canonical end-to-end flow: [OACP end-user flow](../end-user-flow.md).
 
-Pine Labs Plural/P3P owns mandate and payment rail execution. POS/payment providers own in-store payment and receipt confirmation. AgenticOrg verifies capability metadata, accepts verified POS/provider callbacks, and stores redacted evidence refs.
+Pine Labs Plural/P3P owns mandate and payment rail execution. POS/payment providers own in-store payment and receipt confirmation. AgenticOrg verifies capability metadata, accepts verified POS/provider callbacks, and stores redacted evidence refs. Before any handoff or checkout may proceed, the commerce arbiter decides it and seals the decision to the ledger ([arbiter and ledger](../arbiter-ledger.md)).
 
 ```mermaid
 flowchart LR
@@ -27,7 +27,8 @@ only the tenant, the passport, the session, the merchant and the currency; it ke
 a SHA-256 and seals each allowance request (with the risk-signal digest) on the commerce ledger. At
 completion the agent presents the vault token as a Plural instrument token; a card number is refused.
 Payment still executes only through an executor that consumes an arbiter `allow` decision, and no
-executor is registered in this release. See
+executor is registered on `main` (status 2026-10-20), so no ACP or UCP Complete can take a
+payment. See
 [ACP product feed and checkout sessions](../acp-feed-and-sessions.md#delegate-payment-allowance-g35).
 
 ## Offline POS Evidence

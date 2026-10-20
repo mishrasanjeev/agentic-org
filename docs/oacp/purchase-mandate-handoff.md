@@ -26,10 +26,17 @@ the merchant's limits come from its config (`provider_policy.arbiter`).
 - A refusal returns `status: prepared_handoff_blocked_arbiter_refused` (or the preparation's own
   blocker when no handoff could be prepared) with `blocker.code = arbiter_refused` and the
   `failing_rule`.
-- An allow returns `arbiter_decision.decision_id` and `payload_hash`. Live provider execution
-  needs a second call for the same handoff with `decision_id` (consumed once, within 10 minutes)
-  and `PLURAL_PINE_LIVE_EXECUTION_ENABLED=true`. A different payload is refused
-  `decision_payload_mismatch`; a reused decision `decision_consumed`.
+- An allow returns `arbiter_decision.decision_id` and `payload_hash`, with
+  `status: prepared_handoff_blocked_live_execution_disabled`. A second call for the same handoff
+  with `decision_id` (consumed once, within 10 minutes) while
+  `PLURAL_PINE_LIVE_EXECUTION_ENABLED=true` returns `status: prepared_provider_handoff`: the
+  provider-owned handoff is released for routing to Plural/Pine. This route never calls the
+  provider and never moves money (`allowed_to_execute: false`, `no_payment_execution: true`). A
+  different payload is refused `decision_payload_mismatch`; a reused decision `decision_consumed`.
+- In strict runtimes buyer authority sent in the body is caller-asserted, so rule
+  `buyer_authority_verified` refuses every purchase handoff unless
+  `AGENTICORG_ARBITER_REQUIRE_VERIFIED_AUTHORITY=false` is set as a recorded operator decision
+  ([arbiter and ledger](arbiter-ledger.md#rules)).
 - `live_execution_approved` is deprecated: it is accepted for one release and ignored (the
   response lists it in `deprecated_fields_ignored`).
 
@@ -42,8 +49,9 @@ SHA-256). `buyer_authority` travels in the vendor member `ai.agenticorg.commerce
 body; `{"decide_only": true}` returns the decision without executing and a later Complete may
 present its `decision_id`. Execution happens only through a registered executor, which receives a
 decision consumed by `require_allow_decision`; with `AGENTICORG_UCP_CHECKOUT_ENABLED` off the
-routes are 404, and with it on but no executor registered (this release) Complete answers
-`executor_unavailable` without deciding.
+routes are 404, and with it on but no executor registered Complete answers
+`executor_unavailable` without deciding (status 2026-10-20: no executor is registered on
+`main`). ACP checkout sessions use the same Complete path.
 
 ## Required Fresh Inputs
 
@@ -72,7 +80,7 @@ flowchart TD
 
 ## Safe Output
 
-Return product, variant, source refs, freshness, idempotency key, provider evidence ref, and next human/system steps. Do not return checkout/payment URLs or success claims unless an approved external execution path later confirms them.
+Return product, variant, source refs, freshness, idempotency key, provider evidence ref, the arbiter decision, and the next system steps. Do not return checkout/payment URLs or success claims unless an approved execution path later confirms them.
 
 ## Offline POS Output
 

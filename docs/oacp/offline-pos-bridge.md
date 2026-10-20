@@ -42,6 +42,13 @@ that exact packet ([arbiter and ledger](arbiter-ledger.md)):
 Every call, its decision and the consumption are sealed to the commerce ledger. This is a
 breaking change for callers that created packets in one call (see `CHANGELOG.md`).
 
+The `buyer_authority` in the request is caller-asserted. In strict runtimes (production, staging,
+preview) rule `buyer_authority_verified` therefore refuses every POS handoff, and an `allow` is
+consumable only once Grantex has countersigned it, unless the operator records the opt-outs
+`AGENTICORG_ARBITER_REQUIRE_VERIFIED_AUTHORITY=false` and
+`AGENTICORG_ARBITER_REQUIRE_GRANTEX_GRANT=false`
+([arbiter and ledger](arbiter-ledger.md#flags)).
+
 ## What Works Now
 
 | Capability | Runtime status |

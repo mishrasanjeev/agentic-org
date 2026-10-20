@@ -95,6 +95,12 @@ ACP flags: `AGENTICORG_ACP_FEED_ENABLED` (default off; the ACP product feed expo
 run on the UCP session table, arbiter and executor) and `AGENTICORG_ACP_SIGNATURE_MODE` (`log` by
 default; `enforce` refuses requests no registered platform verifier accepts); see
 `docs/oacp/acp-feed-and-sessions.md`.
+Payment execution: `PLURAL_PINE_LIVE_EXECUTION_ENABLED` (unset: off; with a consumed `allow` it
+releases a prepared purchase handoff, and only a registered executor may take a payment). Every
+OACP flag's default, turn-on order and rollback, and the staging run
+(`AGENTICORG_ROUTE_ENFORCEMENT_MODE=log`, `AGENTICORG_HTTPSIG_VERIFY_MODE=log`,
+`AGENTICORG_UCP_CHECKOUT_ENABLED=false`, `PLURAL_PINE_LIVE_EXECUTION_ENABLED=false`) are in
+`docs/oacp/explainers/launch-rollback-runbook.md`; keep that table current when a flag changes.
 
 **No human legs in commerce decisions.** The commerce arbiter (`core/commerce/arbiter.py`) is a
 deterministic policy function: it seals `allow` or `refuse`, never "pending", reads no clock

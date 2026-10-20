@@ -1,8 +1,8 @@
 # A2A interoperability and seller commerce access
 
 For product ownership and contact, see [the canonical notice](OWNERSHIP.md).
-This guide describes repository source as of 2026-09-30; verify the deployed
-commit before using these routes in production.
+This guide describes repository source on `main` as of 2026-10-20; verify the
+deployed commit before using these routes in production.
 
 For a runnable local synthetic seller with three catalog products and a
 standalone external buyer process, see the [A2A commerce demo](a2a-commerce-demo.md).
@@ -22,7 +22,8 @@ sequenceDiagram
   participant B as External A2A buyer agent
   M->>S: Onboard seller and sync catalog
   S->>G: Request canonical OACP artifacts
-  G-->>S: Signed, scoped artifacts
+  G-->>S: ES256-signed, scoped artifacts
+  S->>S: Verify each artifact before caching
   M->>S: Issue buyer credential (one-time display)
   B->>S: GET public Agent Card
   B->>S: GET extended Agent Card with credential
@@ -37,6 +38,12 @@ non-binding question through Grantex. Shopify and other merchant systems own
 operational facts; Grantex owns trust, policy, and artifact authority; the
 payment provider owns mandate and payment execution. An A2A answer never
 creates an order, hold, payment, mandate, refund, or other commitment.
+
+Every `message:send` and every buyer-access issue or revoke is recorded on
+the commerce ledger in the same transaction (`a2a.*` events; see
+[arbiter and ledger](oacp/arbiter-ledger.md)). In strict runtimes the seller
+answers only from cache records whose Grantex artifact passed ES256
+verification ([artifact cache guide](oacp/artifact-cache-guide.md)).
 
 ## Supported wire contract
 

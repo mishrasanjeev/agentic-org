@@ -28,4 +28,9 @@ The verifier can return available capability evidence, missing-env evidence, non
 
 Capability evidence is not mandate creation, payment capture, checkout creation, or order success.
 
+Status on 2026-10-20: no code path on `main` calls Plural to create an order, capture a payment or
+refund. The UCP and ACP Plural tokenised-instrument payment handler (`plural_tokenized`) only
+advertises the instrument, the `mandate_capability` rails and cap, and the allowance a checkout
+must stay within; a Complete still needs a registered executor, and none is registered.
+
 Grantex may verify or sign non-sensitive evidence refs. It does not execute provider rails.

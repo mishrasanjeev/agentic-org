@@ -5,7 +5,11 @@ Supersession note: the canonical AgenticOrg OACP runtime docs now live in
 `docs/oacp/end-user-flow.md`. This root-level page is retained as
 historical/contextual detail.
 
-Status: current runtime closure guide, updated 2026-06-19.
+Status: runtime closure guide written 2026-06-19. Update 2026-10-20: Grantex
+now signs artifacts (ES256 detached JWS) and AgenticOrg `main` verifies each
+one before caching, decides every handoff with the commerce arbiter, records it
+on the commerce ledger, and serves UCP and ACP surfaces behind flags that
+default to off. Read the canonical pages for current behaviour.
 
 OACP in AgenticOrg is the runtime path for seller and buyer agents. The current
 shipping path is live-data capable for read-only Shopify catalog evidence,
@@ -34,7 +38,8 @@ own payment or mandate execution.
 5. AgenticOrg sends redacted connector evidence to Grantex through the C6Z
    authority endpoint. Production should use the dedicated Grantex
    AgenticOrg-authority service token, tenant-allowlisted on the Grantex side.
-6. Grantex validates the request and issues internal OACP artifacts.
+6. Grantex validates the request and issues OACP artifacts (ES256-signed in
+   Grantex production since 2026-10-20).
 7. AgenticOrg validates and caches the artifacts for non-binding use until TTL,
    revocation, freshness, scope, risk, or final-commitment rules require
    refresh.
@@ -71,7 +76,9 @@ AgenticOrg exposes a runtime surface matrix at:
 
 ## Launch Boundaries
 
-- Public discovery remains disabled.
+- Public discovery remains disabled unless the merchant publishes a UCP
+  business profile (`AGENTICORG_UCP_PROFILE_ENABLED`, default off) and
+  Grantex issues an enabled `public_discovery_state` artifact.
 - `allowed_to_execute=false`.
 - No checkout, payment, order, mandate, refund, return, shipment, inventory
   hold, provider execution, merchant-private mutation, or live rail is enabled

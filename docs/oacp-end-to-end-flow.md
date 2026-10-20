@@ -5,6 +5,11 @@ Supersession note: the canonical AgenticOrg OACP runtime docs now live in
 `docs/oacp/end-user-flow.md`. This page is retained as historical/contextual
 runtime detail and should not override the current owner split.
 
+Update 2026-10-20: since this page was written, `main` gained ES256
+verification of every Grantex artifact before caching, the commerce arbiter
+and ledger, and flag-gated UCP and ACP checkout surfaces (no payment executor
+is registered). The current state is in `docs/oacp/truth-inventory.md`.
+
 AgenticOrg owns the buyer/seller agent runtime. Grantex owns OACP trust,
 protocol policy, canonical artifacts, signing, and verification. Shopify stays
 the merchant source of record. Pine Labs Plural/P3P owns mandate and payment
@@ -21,9 +26,9 @@ flowchart LR
   onboard --> sync[Read-only Shopify Admin GraphQL sync]
   sync --> evidence[Redacted catalog, price, inventory evidence refs]
   evidence --> grantex[Grantex C6Z OACP authority]
-  grantex --> artifacts[Signed/internal OACP artifact families]
-  artifacts --> cache[AgenticOrg tenant-scoped artifact cache]
-  cache --> adapters[Schema.org/UCP/ACP/AP2/A2A/MCP/OpenAPI payloads]
+  grantex --> artifacts[ES256-signed OACP artifact families]
+  artifacts --> cache[AgenticOrg verifies, then caches per tenant scope]
+  cache --> adapters[Schema.org, UCP profile, ACP-style, AP2-style, A2A, MCP, OpenAPI payloads]
   cache --> buyer[Buyer Q&A with source and freshness labels]
   buyer --> purchase[Purchase preparation]
   purchase --> pine[Pine Labs Plural/P3P capability verification]

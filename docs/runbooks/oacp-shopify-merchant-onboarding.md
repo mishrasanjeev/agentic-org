@@ -27,8 +27,10 @@ and should follow the current OACP owner split.
    `POST /api/v1/commerce/runtime/seller-agents/shopify/sync`.
 5. Request Grantex authority:
    `POST /api/v1/commerce/runtime/authority/grantex/request`.
-6. Cache returned artifacts:
-   `POST /api/v1/commerce/runtime/artifacts/cache`.
+6. Cache returned artifacts (each is verified first; in strict runtimes one failure stores
+   nothing): `POST /api/v1/commerce/runtime/artifacts/cache`. To re-fetch a scope from Grantex
+   replay, for example after the verification release is deployed:
+   `POST /api/v1/commerce/runtime/artifacts/refresh`.
 7. Generate adapter payloads:
    `GET /api/v1/commerce/runtime/protocol-adapters`.
 8. Ask buyer questions:
@@ -36,13 +38,22 @@ and should follow the current OACP owner split.
 9. Verify Pine/Plural capability:
    `POST /api/v1/commerce/runtime/providers/plural-pine/mandate-capability/verify`.
 10. Attempt purchase preparation:
-   `POST /api/v1/commerce/runtime/purchase/prepare`.
+   `POST /api/v1/commerce/runtime/purchase/prepare`. The commerce arbiter decides it; an `allow`
+   returns a `decision_id` that a second call for the same handoff consumes once.
 11. Check Offline POS readiness when in-store handoff is offered:
    `GET /api/v1/commerce/runtime/pos/offline/readiness`.
 12. Create a non-executing POS handoff packet:
-   `POST /api/v1/commerce/runtime/pos/offline/handoffs`.
+   `POST /api/v1/commerce/runtime/pos/offline/handoffs` (first call returns `decision_issued`
+   with a `decision_id`; the repeat with that `decision_id` stores the packet).
 13. Run simulator confirmation for local smoke only:
    `POST /api/v1/commerce/runtime/pos/offline/simulator/confirm`.
+14. Check the ledger: `GET /api/v1/commerce/runtime/ledger/events` and
+   `GET /api/v1/commerce/runtime/ledger/decisions`.
+15. Optional, behind `AGENTICORG_UCP_PROFILE_ENABLED` (default off): claim and verify a serving
+   host (`POST /api/v1/commerce/runtime/merchant-configs/{merchant_id}/ucp/serving-host`, then
+   `.../serving-host/verify` after adding the DNS TXT record), create a signing key
+   (`.../ucp/keys`) and publish (`.../ucp/publish`). See `docs/oacp/ucp-profile.md`; checkout
+   flags follow `docs/oacp/explainers/launch-rollback-runbook.md`.
 
 ## Required Config
 
@@ -52,13 +63,15 @@ and should follow the current OACP owner split.
 | Shopify read-only sync | Merchant Shopify Admin token or OAuth code exchange material with product read scopes. |
 | Shopify webhooks | `SHOPIFY_WEBHOOK_SECRET`. |
 | Grantex authority | `GRANTEX_COMMERCE_BASE_URL`, `GRANTEX_COMMERCE_INTERNAL_TOKEN`, tenant allowlist in Grantex. |
+| Artifact verification | `AGENTICORG_GRANTEX_ISSUER` (or `GRANTEX_BASE_URL`); the Grantex environment must list an `oacp-` key in its JWKS and serve its status list. `AGENTICORG_OACP_VERIFY_STRICT` is on in strict runtimes. |
+| Commerce arbiter | Merchant config `provider_policy.arbiter` limits; in strict runtimes Grantex countersignature of allows (`AGENTICORG_ARBITER_REQUIRE_GRANTEX_GRANT`) and refusal of caller-asserted buyer authority (`AGENTICORG_ARBITER_REQUIRE_VERIFIED_AUTHORITY`). |
 | ChatGPT/Claude/Gemini/Perplexity bridges | `AGENTICORG_API_KEY` and platform approval/config. |
 | WhatsApp | `WHATSAPP_BUSINESS_ACCESS_TOKEN`, `WHATSAPP_BUSINESS_PHONE_NUMBER_ID`, `WHATSAPP_WEBHOOK_VERIFY_TOKEN`, `WHATSAPP_APP_SECRET`. |
 | Telegram | `TELEGRAM_BOT_TOKEN`, `TELEGRAM_WEBHOOK_SECRET_TOKEN`. |
 | Public catalog publishing | Merchant commerce config `public_publishing.enabled=true`; optional public base URL; `OACP_PUBLIC_CATALOG_PLATFORM_DISABLED=true` disables all merchants. |
 | Plural/Pine P3P setup | `PLURAL_PINE_CLIENT_ID`, `PLURAL_PINE_CLIENT_SECRET`, `PLURAL_PINE_ENVIRONMENT=sandbox`, optional `PLURAL_PINE_CAPABILITY_URL`. |
 | Offline POS handoff | Store/POS location metadata. Simulator is available locally; real provider needs `OFFLINE_POS_PROVIDER_ID` and `OFFLINE_POS_WEBHOOK_SECRET`. |
-| Live provider flow | External merchant/provider/legal/security/ops approval plus `PLURAL_PINE_LIVE_EXECUTION_ENABLED=true`. |
+| Live provider flow | External merchant/provider/legal/security/ops approval plus `PLURAL_PINE_LIVE_EXECUTION_ENABLED=true` and a consumed arbiter `allow` decision. On `main` this releases a prepared provider-owned handoff; no payment executor is registered. |
 
 ## Safe Failure Mode
 

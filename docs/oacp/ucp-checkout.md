@@ -22,7 +22,7 @@ a platform negotiates exactly what the profile lists.
 - **On:** checkout sessions, carts and orders are served. A checkout completes only when the
   merchant's UCP settings name a registered executor **and** the commerce arbiter seals an
   `allow` decision for the exact session payload, which the executor consumes once. No executor is
-  registered in this release, so with the flag on a valid Complete answers the business message
+  registered on `main` (status 2026-10-20), so with the flag on a valid Complete answers the business message
   `executor_unavailable` and the session stays `ready_for_complete`; the Plural executor arrives
   with the payment-rail work (`core/commerce/executors/plural.py`).
 

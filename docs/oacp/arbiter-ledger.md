@@ -2,9 +2,11 @@
 
 Canonical end-to-end flow: [OACP end-user flow](end-user-flow.md).
 
-Every commerce write leaves a signed, hash-chained ledger row, and every commitment-bound
-action (purchase handoff, POS handoff, and later mandate request and session complete) is
-decided by a deterministic arbiter before anything executes.
+Every commerce write leaves an HMAC-signed ledger row (hash-chained once the sealing task covers
+the tenant: `AGENTICORG_AUDIT_CHAIN_ENABLED` or `AGENTICORG_AUDIT_CHAIN_DEFAULT_ON`, both off by
+default), and every commitment-bound action (purchase handoff, POS handoff, UCP and ACP checkout
+Complete, and later mandate request) is decided by a deterministic arbiter before anything
+executes.
 
 **No human legs.** The arbiter is a pure policy function. It seals `allow` or `refuse`; it never
 waits for a person and never returns "pending". Human review is a merchant option that only
@@ -58,11 +60,11 @@ that needed it.
 | `merchant_limits` | Merchant config `provider_policy.arbiter` sets `max_order_amount_minor_units`, `currency_allowlist`, `max_quantity_per_order`, and the order is within them. | `merchant_limits_missing`, `order_amount_missing`, `currency_not_allowed`, `quantity_cap_exceeded`, `order_amount_cap_exceeded` |
 
 Mandate, consent and passport references arrive in the request's `buyer_authority` object. Until
-Grantex-signed mandates and passports are verified server-side (Phase 4), they are
+Grantex-signed mandates and passports are verified server-side (in review, not on `main`), they are
 caller-asserted evidence: they are hashed into the decision and the ledger, never treated as
 credentials, and a missing value refuses.
 
-Fail closed until Phase 4: rule `buyer_authority_verified` needs a server-side verification ref
+Fail closed until then: rule `buyer_authority_verified` needs a server-side verification ref
 for that evidence. No code path produces one yet and the request body cannot carry one
 (`buyer_authority` refuses unknown members), so:
 
@@ -117,9 +119,9 @@ Merchant configuration (under `provider_policy`):
    wait for it and the decision does not change. Off (the default), nothing touches
    `hitl_queue`.
 
-Session complete arrives with the checkout sessions of Phase 3; it uses the same guard with the
-`session_complete` action. A mandate request route arrives with Phase 4 mandates; the arbiter
-already defines the `mandate_request` rule set.
+Session complete (UCP and ACP checkout Complete) uses the same guard with the `session_complete`
+action. No mandate request route exists on `main` yet; the arbiter already defines the
+`mandate_request` rule set.
 
 ## Append-Only Storage: Choice And Alternative
 
@@ -168,7 +170,7 @@ has a 5 s timeout, and is never retried.
 - A refusal is recorded by Grantex and gets no token (`grantex_countersignature.status:
   recorded`).
 - An allow gets a `decision+jwt` grant in the machine profile. It is verified against the
-  Grantex JWKS pinned in configuration (the Phase 1 trust fetcher and its caches): issuer,
+  Grantex JWKS pinned in configuration (the artifact verifier's trust fetcher and its caches): issuer,
   audience `urn:grantex:decision`, `approver_auth: policy_arbiter`, `action_hash ==
   payload_hash`, `decision_request == decision_id`, `sub == buyer_agent_id`, no `acr`,
   unexpired and at most 10 minutes after the decision. Its `jti` is then attached to the decision

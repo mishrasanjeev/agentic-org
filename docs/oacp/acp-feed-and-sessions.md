@@ -122,7 +122,7 @@ Translation:
 
 Completion requires an `allow` decision of the commerce arbiter (action `session_complete`) bound to
 the session payload hash, consumed by a registered executor, exactly as UCP Complete does. No
-executor is registered in this release, so Complete answers an `unsupported` message and the session
+executor is registered on `main` (status 2026-10-20), so Complete answers an `unsupported` message and the session
 stays `ready_for_payment`.
 
 ### Headers

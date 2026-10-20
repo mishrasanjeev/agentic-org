@@ -96,7 +96,7 @@
     },
     {
       "name": "complete_checkout",
-      "description": "UCP: two-step Complete; decide_only seals a decision, then its decision_id places the order."
+      "description": "UCP: two-step Complete; decide_only seals a decision, then its decision_id completes through the merchant's registered executor."
     },
     {
       "name": "cancel_checkout",

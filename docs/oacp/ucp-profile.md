@@ -54,7 +54,7 @@ All of these must hold, otherwise every route answers `404`:
    parameter selects a merchant.
 3. The merchant opted in (operator `publish`).
 4. The merchant has an active ES256 signing key.
-5. A verified (ES256, Phase 1), fresh and unrevoked `public_discovery_state`
+5. A verified (ES256 detached JWS), fresh and unrevoked `public_discovery_state`
    artifact from Grantex allows publication for that host and that
    attestation reference.
 
