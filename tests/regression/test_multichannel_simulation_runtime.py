@@ -128,11 +128,38 @@ def test_production_image_packages_playwright_and_chromium() -> None:
     pyproject = (REPO / "pyproject.toml").read_text(encoding="utf-8")
     dockerfile = (REPO / "Dockerfile").read_text(encoding="utf-8")
 
-    assert '"playwright>=1.63.0,<2"' in pyproject
+    # The image installs the version-matched Chromium for whatever Playwright
+    # the [v4] extra resolves to, so the invariant is that the pyproject floor
+    # and the requirements-v4 pin name the same release.
+    pins = [
+        line.split("==", 1)[1].strip()
+        for line in (REPO / "requirements-v4.txt").read_text(encoding="utf-8").splitlines()
+        if line.startswith("playwright==")
+    ]
+    assert len(pins) == 1
+    assert f'"playwright>={pins[0]},<2"' in pyproject
     assert '"rpa",' in pyproject
     assert "python -m playwright install chromium" in dockerfile
     assert "python -m playwright install-deps chromium" in dockerfile
     assert "PLAYWRIGHT_BROWSERS_PATH=/opt/playwright-browsers" in dockerfile
+
+
+def test_playwright_browser_images_match_the_ui_test_runner() -> None:
+    # The channel browser image and the compose E2E services run the UI's
+    # @playwright/test from ui/node_modules; the image must ship the browser
+    # build of that same release or every launch fails.
+    import json
+    import re
+
+    lock = json.loads((REPO / "ui/package-lock.json").read_text(encoding="utf-8"))
+    runner = lock["packages"]["node_modules/@playwright/test"]["version"]
+    sources = [
+        (REPO / "testing/channels/Dockerfile.browser").read_text(encoding="utf-8"),
+        (REPO / "docker-compose.dev.yml").read_text(encoding="utf-8"),
+    ]
+    tags = [tag for text in sources for tag in re.findall(r"mcr\.microsoft\.com/playwright:v([0-9.]+)-", text)]
+    assert tags
+    assert set(tags) == {runner}
 
 
 def test_simulation_guards_partial_compose_startup_with_cleanup() -> None:

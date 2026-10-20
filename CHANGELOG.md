@@ -1,5 +1,16 @@
 # Changelog
 
+## Unreleased - Playwright 1.64
+
+- Python `playwright` moves from 1.63.0 to 1.64.0 (`[v4]` extra and `requirements-v4.txt`); the
+  API image downloads the matching Chromium build at build time, unchanged.
+- Fixed: `testing/channels/Dockerfile.browser` still used the Playwright 1.63 browser image while
+  the UI test runner it copies from `ui/node_modules` is `@playwright/test` 1.64, so its browsers
+  did not match the runner. It now uses the 1.64 image the compose E2E services already use.
+- The packaging regression test checks that the pyproject floor matches the `requirements-v4.txt`
+  pin, and that every Playwright browser image matches the UI's locked `@playwright/test`
+  version, instead of a hard-coded release.
+
 ## Unreleased - OACP closure documentation and the OACP explainer post
 
 - New blog post "OACP explained: one trust layer under UCP, ACP and AP2"
