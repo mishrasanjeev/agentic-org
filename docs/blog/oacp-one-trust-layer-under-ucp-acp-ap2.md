@@ -128,12 +128,12 @@ Status on 20 October 2026.
   issuer key, the key is published, and the public revocation list is served.
 - **Merged in AgenticOrg's main branch:** signature checks before caching (strict in
   production), the arbiter and ledger for every commerce handoff and checkout completion, the UCP
-  profile, catalog and checkout, the ACP feed and checkout sessions, and MCP checkout tools.
-  Everything that touches checkout or public discovery ships behind switches that default to off,
-  and no payment executor is installed yet, so no checkout can complete.
-- **Still in review for AgenticOrg:** mandate requests, the Plural payment executor with UPI
-  AutoPay and AFA, and agent request signatures (checked and logged by default; refusing unsigned
-  requests is a separate switch).
+  profile, catalog and checkout, the ACP feed and checkout sessions, MCP checkout tools, Intent,
+  Cart and Payment mandates from Grantex, and the Plural payment executor with UPI AutoPay and
+  AFA. Everything that touches checkout, payment, mandates or public discovery ships behind
+  switches that default to off, so with the defaults no checkout completes and no money moves.
+- **Still in review for AgenticOrg:** agent request signatures (checked and logged by default;
+  refusing unsigned requests is a separate switch).
 - **Not yet in AgenticOrg production:** the AgenticOrg release described here. It goes to
   production after the remaining work is merged, with each switch turned on separately.
 

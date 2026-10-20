@@ -8,7 +8,8 @@ Update 2026-10-20: `main` now verifies every Grantex artifact (ES256 detached
 JWS) before caching, decides every handoff and checkout Complete with the
 commerce arbiter, records commerce writes on the commerce ledger, and serves
 the UCP business profile, UCP checkout and ACP feed and checkout sessions in
-spec shape behind flags that default to off; no payment executor is registered.
+spec shape, Grantex mandates and a Plural payment executor, all behind flags that
+default to off.
 Rows below that describe UCP-style profiles or future UCP/ACP/AP2 work are
 historical. Current state: `docs/oacp/truth-inventory.md`.
 
@@ -55,7 +56,7 @@ support buyer answers, and where purchase handoff remains provider-owned.
 | Protocol adapters | Runtime endpoints generate Schema.org Product/Offer JSON-LD, the merchant's UCP business profile (spec shape, published merchants only), ACP-style, AP2-style, A2A, MCP, and OpenAPI compatibility payloads from verified cached OACP artifacts. No external certification or publication claim. |
 | Purchase preparation | Implemented as a non-executing handoff boundary. It checks OACP freshness, price/inventory snapshots, policy, buyer/session scope, and Plural/Pine capability evidence, then returns a prepared handoff or exact blocker. |
 | Offline POS Bridge | Implemented as non-sensitive handoff packet creation, simulator confirmation, confirmation intake, and reconciliation status. Live POS execution remains provider/POS-owned and externally gated. |
-| Payment execution | Not available on `main`: no payment executor is registered, so a UCP or ACP checkout (flag-gated, off by default) cannot complete. AgenticOrg does not create payment, mandate, inventory hold, refund, return, or shipment records; orders exist only for completed checkouts. |
+| Payment execution | Through the Plural executor only, registered while `PLURAL_PINE_LIVE_EXECUTION_ENABLED` is on (off by default), on a consumed arbiter `allow` for a UCP or ACP checkout or a refund. AgenticOrg does not create inventory holds, returns or shipments; orders exist only for completed checkouts. |
 | Live checkout/payments/Plural | Provider-owned and approval-gated; no success is faked when provider credentials or approvals are missing. |
 | C6H buyer discovery consumer | Read-only sandbox consumer foundation; not public discovery or checkout/payment. |
 

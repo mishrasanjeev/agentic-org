@@ -7,8 +7,8 @@ runtime detail and should not override the current owner split.
 
 Update 2026-10-20: since this page was written, `main` gained ES256
 verification of every Grantex artifact before caching, the commerce arbiter
-and ledger, and flag-gated UCP and ACP checkout surfaces (no payment executor
-is registered). The current state is in `docs/oacp/truth-inventory.md`.
+and ledger, and flag-gated UCP and ACP checkout surfaces, Grantex mandates and a
+Plural payment executor (all off by default). The current state is in `docs/oacp/truth-inventory.md`.
 
 AgenticOrg owns the buyer/seller agent runtime. Grantex owns OACP trust,
 protocol policy, canonical artifacts, signing, and verification. Shopify stays

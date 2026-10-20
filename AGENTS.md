@@ -85,6 +85,23 @@ UCP transaction flags: `AGENTICORG_UCP_CHECKOUT_ENABLED` (default off; the `/ucp
 order routes answer 404 while off). A UCP
 checkout completes only through a registered executor that consumes a `session_complete` `allow`
 decision (`core/commerce/executors/`); see `docs/oacp/ucp-checkout.md`.
+Payment execution: `PLURAL_PINE_LIVE_EXECUTION_ENABLED` (unset: off; `true` registers the Plural
+executor, `core/commerce/executors/plural.py`, which calls Plural only with a consumed `allow`
+decision, `session_complete` or `refund`, and journals and ledgers every call; see
+`docs/oacp/plural-executor.md`). UPI AutoPay needs RBI AFA evidence before a session completes
+(arbiter rule `afa_evidence_present`; thresholds `AGENTICORG_RBI_EMANDATE_AFA_LIMIT_MINOR_UNITS`
+and `AGENTICORG_RBI_EMANDATE_AFA_HIGHER_LIMIT_MINOR_UNITS`); AFA is the buyer's out-of-band step,
+returned as an action, never waited for (`docs/oacp/mandates.md`).
+`AGENTICORG_GRANTEX_MANDATE_CAPABILITY_EVIDENCE_ENABLED` (default off) sends the Plural capability
+result as `mandate_capability_evidence` on the Grantex authority request.
+`AGENTICORG_GRANTEX_MANDATES_ENABLED` (default off): a UCP Complete with
+`ai.agenticorg.commerce.mandate_request` gets Intent, Cart and Payment mandates from Grantex
+(`core/commerce/mandates_client.py`), verified locally (`core/commerce/oacp_mandates.py`, the shared
+mandate vectors) before the arbiter decides; only that verification sets the arbiter's server-side
+`authority_verification_ref` (rule `buyer_authority_verified`), never a request body. A
+`human_not_present` purchase is held to `provider_policy.arbiter.human_not_present` and the intent
+cap (rule `human_not_present_limits`). A buyer's WebAuthn assertion is passed through from the
+platform, never created server-side. See `docs/oacp/mandates.md`.
 UCP profile flags: `AGENTICORG_UCP_PROFILE_ENABLED` (default off; `/.well-known/ucp` and the
 `/ucp` catalog and location routes answer 404 while off, onboarding generates no UCP signing
 key, and no `public_discovery_state` artifact may enable discovery), `AGENTICORG_UCP_VERSIONS`
@@ -95,9 +112,7 @@ ACP flags: `AGENTICORG_ACP_FEED_ENABLED` (default off; the ACP product feed expo
 run on the UCP session table, arbiter and executor) and `AGENTICORG_ACP_SIGNATURE_MODE` (`log` by
 default; `enforce` refuses requests no registered platform verifier accepts); see
 `docs/oacp/acp-feed-and-sessions.md`.
-Payment execution: `PLURAL_PINE_LIVE_EXECUTION_ENABLED` (unset: off; with a consumed `allow` it
-releases a prepared purchase handoff, and only a registered executor may take a payment). Every
-OACP flag's default, turn-on order and rollback, and the staging run
+Every OACP flag's default, turn-on order and rollback, and the staging run
 (`AGENTICORG_ROUTE_ENFORCEMENT_MODE=log`, `AGENTICORG_HTTPSIG_VERIFY_MODE=log`,
 `AGENTICORG_UCP_CHECKOUT_ENABLED=false`, `PLURAL_PINE_LIVE_EXECUTION_ENABLED=false`) are in
 `docs/oacp/explainers/launch-rollback-runbook.md`; keep that table current when a flag changes.

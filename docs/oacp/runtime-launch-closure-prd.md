@@ -15,7 +15,8 @@ This is the canonical AgenticOrg closure PRD for turning OACP from audit-chain p
 | UCP checkout, cart, order and order webhooks | Yes, `AGENTICORG_UCP_CHECKOUT_ENABLED` default off | Not yet deployed |
 | ACP product feed and checkout sessions | Yes, `AGENTICORG_ACP_FEED_ENABLED` / `AGENTICORG_ACP_CHECKOUT_ENABLED` default off | Not yet deployed |
 | UCP checkout tools in `agenticorg-mcp-server` 5.1.0 | Yes, registered only when the merchant profile lists checkout | Package not yet published |
-| Payment executor (Plural), server-verified mandates, UPI AutoPay with RBI AFA | In review, not on `main` | No |
+| Grantex mandates verified on UCP and ACP Complete | Yes, `AGENTICORG_GRANTEX_MANDATES_ENABLED` default off | Not yet deployed |
+| Plural executor (capture, refunds, webhook reconciliation), UPI AutoPay with RBI AFA, tracking, source precedence | Yes, `PLURAL_PINE_LIVE_EXECUTION_ENABLED` default off | Not yet deployed |
 | Inbound agent request signatures (RFC 9421: TAP, Web Bot Auth) | In review, not on `main` | No |
 
 On the Grantex side, production runs the OACP signing, persistence, status list, ledger, protocol,
@@ -67,6 +68,7 @@ Implemented in repo (`main`):
 - Commerce ledger: an HMAC-signed `audit_log` row for every commerce write; hash-chained when audit-chain sealing is on; ledger routes, operator decisions, review manifests, retention and an export that `scripts/verify_ledger.py` verifies offline.
 - Offline POS handoff packet (stored only against a consumed `allow` decision), signed callback verification, replay-safe semantics, simulator confirmation, and staff-review fallback.
 - UCP business profile, catalog, locations, checkout sessions, carts, orders and signed order webhooks, and ACP feed and checkout sessions, each behind its own flag (default off).
+- Grantex mandates verified on Complete, the Plural executor (capture, refunds, webhook reconciliation), UPI AutoPay with RBI AFA, refund orchestration, Shopify tracking normalisation and per-fact source precedence, behind flags that default to off.
 - Redacted local evidence runner: `python scripts/oacp_runtime_launch_check.py`.
 
 Not proven without external credentials/approvals:
@@ -91,8 +93,8 @@ Not proven without external credentials/approvals:
 | Protocol adapters | `/protocol-adapters`: Schema.org, UCP business profile (spec shape), ACP-style and AP2-style compatibility mappings, A2A, MCP, OpenAPI. | Implemented |
 | Commerce arbiter and ledger | `core/commerce/arbiter.py`, `core/commerce/ledger.py`, `/api/v1/commerce/runtime/ledger/*`, `scripts/verify_ledger.py`. | Implemented |
 | UCP profile, catalog, locations | `/.well-known/ucp`, `/ucp/catalog/*`, `/ucp/locations/*`. | Implemented, `AGENTICORG_UCP_PROFILE_ENABLED` |
-| UCP checkout, cart, order | `/ucp/checkout-sessions`, `/ucp/carts`, `/ucp/orders`. | Implemented, `AGENTICORG_UCP_CHECKOUT_ENABLED`; no executor on `main` |
-| ACP feed and checkout | `/api/v1/commerce/runtime/acp/feed`, `/acp/checkout_sessions`. | Implemented, `AGENTICORG_ACP_FEED_ENABLED` / `AGENTICORG_ACP_CHECKOUT_ENABLED`; no executor on `main` |
+| UCP checkout, cart, order | `/ucp/checkout-sessions`, `/ucp/carts`, `/ucp/orders`. | Implemented, `AGENTICORG_UCP_CHECKOUT_ENABLED`; completes only with the Plural executor on |
+| ACP feed and checkout | `/api/v1/commerce/runtime/acp/feed`, `/acp/checkout_sessions`. | Implemented, `AGENTICORG_ACP_FEED_ENABLED` / `AGENTICORG_ACP_CHECKOUT_ENABLED`; completes only with the Plural executor on |
 | Public catalog publishing | Public seller/catalog/product/schema/sitemap/llms routes. | Implemented, merchant enabled only |
 | MCP seller facts and UCP checkout tools | `mcp-server` `seller.*` tools; UCP checkout tools (5.1.0) when the profile lists checkout. | Implemented |
 | ChatGPT/Claude | MCP package and app/operator docs. | Repo-ready, external listing approval needed |
@@ -100,7 +102,9 @@ Not proven without external credentials/approvals:
 | Perplexity/search | Crawlable pages, Schema.org, sitemap, llms.txt. | Implemented when publishing enabled |
 | WhatsApp | Meta verify token, X-Hub-Signature-256, outbound Business Cloud API path. | Implemented, credentials needed |
 | Telegram | Secret token verification and sendMessage path. | Implemented, credentials needed |
-| Pine/Plural | Sandbox verifier and prepared handoff/blocker. | Implemented, provider credentials needed; payment executor in review |
+| Pine/Plural | Sandbox verifier, prepared handoff/blocker, and the Plural executor for UCP and ACP Complete and refunds. | Implemented; executor behind `PLURAL_PINE_LIVE_EXECUTION_ENABLED`; sandbox end-to-end run pending provider credentials |
+| Mandates | Grantex Intent, Cart and Payment mandates requested and verified locally on Complete. | Implemented, `AGENTICORG_GRANTEX_MANDATES_ENABLED` |
+| Google Merchant Center | `docs/runbooks/oacp-google-merchant-center-onboarding.md`. | Runbook |
 | Offline POS | Signed callback enforcement when secret exists; unsigned does not confirm paid/order; packet stored only against an `allow` decision. | Implemented |
 | Evidence | Redacted JSON/MD evidence generated by launch runner. | Implemented |
 
@@ -132,4 +136,4 @@ git diff --check origin/main...HEAD
 
 ## Launch Readiness Rule
 
-Launch-ready means one real Shopify merchant or dev store completes onboarding, credential storage, read-only sync, Grantex authority issuance/refusal, verified caching, buyer answer, public catalog generation when enabled, protocol adapter output, MCP seller facts, Pine/Plural capability success or exact credential blocker, an arbiter decision sealed to the ledger for the purchase handoff, and POS signed callback smoke with redacted evidence. A UCP or ACP launch additionally needs an attested serving host, a published profile, the staging flag order in the launch and rollback runbook, and a registered executor before any Complete can succeed. Anything less is repo-ready or sandbox-ready, not launch-complete.
+Launch-ready means one real Shopify merchant or dev store completes onboarding, credential storage, read-only sync, Grantex authority issuance/refusal, verified caching, buyer answer, public catalog generation when enabled, protocol adapter output, MCP seller facts, Pine/Plural capability success or exact credential blocker, an arbiter decision sealed to the ledger for the purchase handoff, and POS signed callback smoke with redacted evidence. A UCP or ACP launch additionally needs an attested serving host, a published profile, the staging flag order in the launch and rollback runbook, and Grantex mandates plus the Plural executor (with the sandbox run) before any Complete can succeed. Anything less is repo-ready or sandbox-ready, not launch-complete.

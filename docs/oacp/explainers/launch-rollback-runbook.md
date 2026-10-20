@@ -6,8 +6,11 @@ Canonical end-to-end flow: [OACP end-user flow](../end-user-flow.md).
 
 - **`main`** carries artifact verification before caching, the commerce arbiter and ledger
   (countersignature, witness, export, retention), the UCP profile, catalog, locations, checkout,
-  cart and order routes, the ACP feed and checkout sessions, and the MCP UCP checkout tools. No
-  payment executor is registered, so no checkout can complete and nothing on `main` moves money.
+  cart and order routes, the ACP feed and checkout sessions, the MCP UCP checkout tools,
+  server-verified Grantex mandates, the Plural executor with refunds and webhook reconciliation,
+  UPI AutoPay with RBI AFA, and per-fact source precedence. With the defaults
+  (`PLURAL_PINE_LIVE_EXECUTION_ENABLED` unset) no executor is registered, so no checkout can
+  complete and nothing moves money. Inbound agent request signatures are still in review.
 - **AgenticOrg production** does not run this release yet. Every flag below is at its default
   there only once the release is deployed; check the deployed commit first.
 - **Grantex production** issues ES256-signed OACP artifacts under its first OACP issuer key
@@ -41,7 +44,7 @@ set the value, redeploy (settings are read at start-up), and unset it once the c
 | --- | --- | --- | --- |
 | `AGENTICORG_OACP_VERIFY_STRICT` | On in strict runtimes; log-only elsewhere | After the Grantex environment issues ES256 artifacts, lists an `oacp-` key and serves its status list (true in Grantex production on 2026-10-20); then `POST /api/v1/commerce/runtime/artifacts/refresh` per live scope. Detail: [runtime operations runbook](../runtime-operations-runbook.md#deploy-order-for-strict-oacp-verification). | `false`: verification still runs and logs `oacp_artifact_verification_irregularity`; refused artifacts are cached without a `verifier_result_ref`. |
 | `AGENTICORG_ROUTE_ENFORCEMENT_MODE` | `enforce` | Stays `enforce` in production. Staging runs `log` first (see below) to find commerce write routes that return without their ledger event. | `log`: a missing ledger event (`commerce_ledger_event_missing`) is logged instead of answering 500. `log` also turns route-metadata scope denials into warnings, so use it only for a short, recorded window. |
-| `AGENTICORG_ARBITER_REQUIRE_VERIFIED_AUTHORITY` | On in strict runtimes | On by default. On `main` purchase and POS handoffs carry caller-asserted authority, so strict runtimes refuse them (`buyer_authority_verified`); checkout Complete does not apply this rule on `main`. | `false`: caller-asserted authority is accepted and recorded as `buyer_authority_source: caller_asserted`. |
+| `AGENTICORG_ARBITER_REQUIRE_VERIFIED_AUTHORITY` | On in strict runtimes | On by default. Purchase and POS handoffs carry caller-asserted authority, so strict runtimes refuse them (`buyer_authority_verified`); a UCP or ACP Complete passes only with server-verified Grantex mandates (`AGENTICORG_GRANTEX_MANDATES_ENABLED`). | `false`: caller-asserted authority is accepted and recorded as `buyer_authority_source: caller_asserted`. |
 | `AGENTICORG_ARBITER_REQUIRE_GRANTEX_GRANT` | On in strict runtimes | After Grantex's arbiter-decision route, the service token and the tenant allowlist are live, and staging shows `grantex_countersignature.status: granted` on allows. | `false`: an allow is consumable without a countersignature; posting continues while the post flag is unset or true. |
 | `AGENTICORG_ARBITER_GRANTEX_POST_ENABLED` | Unset: follows the grant flag | Set `true` in staging with the grant flag `false` to prove countersignatures before requiring them. | `false`: stop posting decisions to Grantex (only with the grant flag `false`, or every allow is refused `grantex_grant_missing`). |
 | `AGENTICORG_AUDIT_CHAIN_DEFAULT_ON` | Off | After `v6z88_commerce_ledger`: seals the audit chain of every tenant with a commerce merchant config (or use the global `AGENTICORG_AUDIT_CHAIN_ENABLED`). | `false`: sealing stops for those tenants; sealed rows stay sealed. |
@@ -54,7 +57,10 @@ set the value, redeploy (settings are read at start-up), and unset it once the c
 | `AGENTICORG_ACP_FEED_ENABLED` | Off | After verified, fresh catalog, price and inventory artifacts exist for the merchant. | `false`: the feed export answers 404. |
 | `AGENTICORG_ACP_CHECKOUT_ENABLED` | Off | After the UCP checkout step, with the merchant's `provider_policy.acp.checkout_enabled` and an API key holding `acp:write` for the agent platform. | `false`: every `/acp` route answers 404 (an ACP `Error`); sessions, orders and undelivered webhooks are kept. One merchant: `provider_policy.acp.checkout_enabled=false`. One platform: revoke its API key. One receiver: disable its `acp_hmac` subscription. |
 | `AGENTICORG_ACP_SIGNATURE_MODE` | `log` | Keep `log`: ACP publishes no signing algorithm, so no platform verifier ships and `enforce` refuses every request. | `log`. |
-| `PLURAL_PINE_LIVE_EXECUTION_ENABLED` | Unset (off) | Production step 4 below. On `main` it only releases a prepared purchase handoff (`prepared_provider_handoff`) after a consumed `allow`; no executor is registered and no route calls Plural to take a payment. | Unset or `false`: purchase preparation returns `prepared_handoff_blocked_live_execution_disabled` again. |
+| `PLURAL_PINE_LIVE_EXECUTION_ENABLED` | Unset (off) | Production step 4 below, after the [Plural execution launch order](#plural-execution-launch-order). `true` registers the Plural executor (`plural_pine`): a UCP or ACP Complete then charges through Plural on a consumed `allow` for a merchant whose `provider_policy.ucp.executor` names it, and order refunds go through Plural. It also releases a prepared purchase handoff (`prepared_provider_handoff`); that route never calls Plural. | Unset or `false` and restart: the executor is not registered, Complete answers `executor_unavailable`, refunds answer 409; captured orders and journal rows are kept. One merchant: remove its `provider_policy.ucp.executor`. |
+| `AGENTICORG_GRANTEX_MANDATES_ENABLED` | Off | After the Grantex mandate release, a live OACP key and the public status list (all live in Grantex production on 2026-10-20) and the merchant's `provider_policy.ucp.grantex_mandates`: see the [Grantex mandates launch order](#grantex-mandates-launch-order). A Complete with `mandate_request` then decides on server-verified Intent, Cart and Payment mandates. | `false` and restart: `mandates.status: unavailable`, the authority is caller-asserted again and strict runtimes refuse it. One merchant: remove its `grantex_mandates`. |
+| `AGENTICORG_GRANTEX_MANDATE_CAPABILITY_EVIDENCE_ENABLED` | Off | After the Grantex release that accepts `mandate_capability_evidence` on the authority request (live in Grantex production on 2026-10-20). | `false`: nothing is sent; Grantex marks the capability `unverified`. |
+| `AGENTICORG_RBI_EMANDATE_AFA_LIMIT_MINOR_UNITS` / `AGENTICORG_RBI_EMANDATE_AFA_HIGHER_LIMIT_MINOR_UNITS` | `1500000` / `10000000` (paise) | Change only when the RBI e-mandate limits change. Subsequent UPI AutoPay debits above the limit need AFA; registration and first debit always do. | Restore the defaults. |
 | `AGENTICORG_HTTPSIG_VERIFY_MODE` | `log` | Not read by `main` yet: inbound agent request-signature verification is in review. Once on the deployed commit, production step 2 below. | `log`. |
 | mcp-server `AGENTICORG_UCP_PROFILE_URL`, `AGENTICORG_UCP_AGENT_PROFILE` | Unset (no UCP tools) | Set per MCP installation to the merchant's `https://<serving host>/.well-known/ucp` and the platform profile URL. | Unset: no UCP tools are registered at the next start. |
 | Merchant `provider_policy.arbiter.escalate_to_human` | `false` | Optional: copies a refusal into `hitl_queue` (needs `review_agent_id`); never changes or delays an outcome. | `false`. |
@@ -73,8 +79,8 @@ PLURAL_PINE_LIVE_EXECUTION_ENABLED=false
 
 Check:
 
-1. Migrations ran on start-up to a single Alembic head (`v6z89_commerce_sessions_orders` on
-   `main`), and `scripts/create_app_role.sql` converged.
+1. Migrations ran on start-up to a single Alembic head (`v6z90_mandates_rails` on `main`), and
+   `scripts/create_app_role.sql` converged.
 2. The launch smoke above, `POST /artifacts/refresh` for the smoke merchant with
    `verification.mode: strict` and `verification.refused` empty.
 3. No `commerce_ledger_event_missing` warning in the logs for the run (in `enforce` mode each
@@ -97,11 +103,15 @@ this order, each followed by its smoke and with its rollback written down before
    `AGENTICORG_HTTPSIG_VERIFY_MODE=log`.
 3. **UCP checkout: `AGENTICORG_UCP_CHECKOUT_ENABLED=true`** for a published merchant; run the UCP
    smoke. Rollback: `false`.
-4. **Plural execution: `PLURAL_PINE_LIVE_EXECUTION_ENABLED=true`** only once a payment executor is
-   on the deployed commit and its own launch order is complete. Rollback: unset.
+4. **Plural execution: `PLURAL_PINE_LIVE_EXECUTION_ENABLED=true`** only after the
+   [Plural execution launch order](#plural-execution-launch-order) passed in staging, with
+   production Plural credentials, merchant by merchant through `provider_policy.ucp.executor`.
+   Rollback: unset and restart.
 
-The remaining flags (UCP profile, ACP feed and checkout, witness, retention, audit-chain default)
-follow the "Turn on" column above, one at a time, each with its rollback.
+The remaining flags (UCP profile, ACP feed and checkout, Grantex mandates, mandate-capability
+evidence, witness, retention, audit-chain default) follow the "Turn on" column above, one at a
+time, each with its rollback. Grantex mandates come before Plural execution: without them strict
+runtimes refuse every checkout decision (`buyer_authority_verified`).
 
 ## Commerce Ledger Launch Order
 
@@ -116,9 +126,9 @@ follow the "Turn on" column above, one at a time, each with its rollback.
 5. Switch on `AGENTICORG_OACP_RETENTION_APPLY_ENABLED` after checking
    `GET /api/v1/commerce/runtime/ledger/retention/due`.
 
-`AGENTICORG_ARBITER_REQUIRE_VERIFIED_AUTHORITY` stays on in production. While the deployed commit
-has no server-verified mandate path, every handoff there is refused unless the owner records the
-decision to set it to `false`.
+`AGENTICORG_ARBITER_REQUIRE_VERIFIED_AUTHORITY` stays on in production. Purchase and POS handoffs
+have no server-verified mandate path, so they are refused there unless the owner records the
+decision to set it to `false`; UCP and ACP Complete pass with Grantex mandates.
 
 ## Rollback
 
@@ -128,8 +138,9 @@ decision to set it to `false`.
 4. Remove Grantex tenant allowlist or rotate service token if needed.
 5. Disable POS handoff for the merchant if callback evidence or store metadata is stale.
 6. Commerce ledger: set the flag of the misbehaving part as in the flag reference above.
-   Migrations `v6z88_commerce_ledger` and `v6z89_commerce_sessions_orders` are not rolled back in
-   production: their tables are append-only evidence and stored sessions and orders.
+   Migrations `v6z88_commerce_ledger`, `v6z89_commerce_sessions_orders` and `v6z90_mandates_rails`
+   are not rolled back in production: their tables are append-only evidence, stored sessions and
+   orders, and payment journal rows.
 7. Stop public UCP discovery, UCP checkout, ACP checkout or the ACP feed with their flags or the
    per-merchant and per-platform steps in the flag reference.
 8. Re-enable only after smoke tests pass.
@@ -140,7 +151,7 @@ With `AGENTICORG_UCP_CHECKOUT_ENABLED=true` on staging and a merchant published 
 
 - `POST /ucp/checkout-sessions` with `UCP-Agent` and the platform's tenant API key (`X-API-Key`, scope `ucp:write`) returns 201 and `ready_for_complete` once fulfillment is selected.
 - A repeat with the same `Idempotency-Key` and body returns the same session; a different body returns 409.
-- Complete without a registered executor returns `executor_unavailable` and the session stays `ready_for_complete`.
+- Complete without a registered executor returns `executor_unavailable` and the session stays `ready_for_complete` (with Plural execution on, follow the Plural execution launch order instead).
 - The commerce ledger shows `commerce.ucp.checkout.create` and `commerce.ucp.checkout.complete` rows for the tenant.
 
 ## ACP Smoke
@@ -153,6 +164,61 @@ With `AGENTICORG_ACP_CHECKOUT_ENABLED=true` on staging, a published merchant opt
 - Complete without a registered executor returns an `unsupported` message; the ledger shows `commerce.acp.checkout.*` rows.
 - With `AGENTICORG_ACP_FEED_ENABLED=true`, `GET /api/v1/commerce/runtime/acp/feed?merchant_id=...&format=csv` returns the CSV, or 409 when verified artifacts are missing.
 
+## Plural Execution Launch Order
+
+1. Migration `v6z90_mandates_rails` (payment operation records, AFA evidence, the `refund`
+   arbiter action). Re-run `scripts/create_app_role.sql` so the two new append-only tables are
+   classified.
+2. Plural credentials in the secret manager: `PLURAL_PINE_CLIENT_ID`,
+   `PLURAL_PINE_CLIENT_SECRET`, `PLURAL_PINE_ENVIRONMENT=sandbox`, `PLURAL_PINE_WEBHOOK_SECRET`.
+3. Staging: `PLURAL_PINE_LIVE_EXECUTION_ENABLED=true` with `AGENTICORG_UCP_CHECKOUT_ENABLED=true`.
+   Set one test merchant's `provider_policy.ucp.executor` to `plural_pine`. Run
+   `tests/integration/test_plural_executor_sandbox.py` and the UCP smoke below. Then check the
+   ledger: `commerce.arbiter.decision.consumed` comes before each run of
+   `commerce.plural.create_order`, `commerce.plural.create_payment` and
+   `commerce.plural.capture`.
+4. Production: only after the owner approves the runbook, with
+   `PLURAL_PINE_ENVIRONMENT=production` and production credentials. Enable merchants one at a
+   time through their `executor` setting.
+
+Rolling back Plural execution: unset `PLURAL_PINE_LIVE_EXECUTION_ENABLED` (or set it to `false`)
+and restart.
+
+- The executor is no longer registered.
+- UCP Complete answers `executor_unavailable` and the session stays `ready_for_complete`.
+- Refunds answer `409 executor_unavailable`.
+- Captured orders, journal rows and AFA evidence are kept: they are append-only payment evidence
+  and `v6z90_mandates_rails` is not rolled back.
+
+To stop one merchant only, remove its `provider_policy.ucp.executor`. Refunds of captured
+orders while execution is off are made in the Plural dashboard and recorded on the order with
+`POST /api/v1/commerce/runtime/ucp/orders/{id}/events` (a `refund` adjustment).
+
+## Grantex Mandates Launch Order
+
+1. Grantex first: the mandate release (migration `135_oacp_mandates.sql`, the five mandate routes
+   and their service-token scopes), an active OACP issuer key, and
+   `OACP_STATUS_LIST_PUBLIC_ENABLED=true` (without it every mandate fails closed with
+   `revocation_status_unavailable`). The AgenticOrg tenant and each merchant's Grantex commerce
+   tenant are in `COMMERCE_C6Z_AUTHORITY_SERVICE_TENANTS`.
+2. Merchant config: `provider_policy.ucp.grantex_mandates {tenant_id, merchant_id}` naming the
+   Grantex commerce tenant and merchant its passports name, and
+   `provider_policy.arbiter.human_not_present.max_order_amount_minor_units` for autonomous
+   purchases (without it every `human_not_present` purchase is refused
+   `not_present_limits_missing`).
+3. Staging: `AGENTICORG_GRANTEX_MANDATES_ENABLED=true`. A Complete with `mandate_request` answers
+   `ai.agenticorg.commerce.mandates.status: verified`; the decision has
+   `buyer_authority_source: server_verified` and a `grantex_countersignature` of `granted`; the
+   ledger shows `commerce.ucp.checkout.mandates` before `commerce.arbiter.decision`; the Plural
+   order metadata carries the three mandate hashes. Run
+   `tests/integration/test_grantex_mandates_live.py` against the staging Grantex.
+4. Production after the owner approves, merchant by merchant through `grantex_mandates`.
+
+Rolling back: set `AGENTICORG_GRANTEX_MANDATES_ENABLED=false` and restart. Complete then answers
+`mandates.status: unavailable` and the authority is caller-asserted: refused in strict runtimes
+(`buyer_authority_verified`) unless `AGENTICORG_ARBITER_REQUIRE_VERIFIED_AUTHORITY=false`.
+Decisions, ledger rows and payment journal rows already written are kept. To stop one merchant,
+remove its `grantex_mandates`.
 ## POS Smoke
 
 - Create a handoff packet from prepared purchase output (two calls: the decision, then the packet with its `decision_id`).

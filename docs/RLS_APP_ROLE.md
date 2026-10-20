@@ -109,8 +109,9 @@ version granted (it used to grant `EXECUTE` on all functions).
 | Ordinary | every other table in `public` | `SELECT, INSERT, UPDATE, DELETE` |
 | Append-only | `capability_evidence_records`, `capability_promotion_events` (trigger `prevent_capability_ledger_mutation`), `eval_dataset_versions` (trigger `eval_dataset_versions_immutable`) | `SELECT, INSERT` |
 | Audit log | `audit_log` | `SELECT, INSERT`, `UPDATE (chain_seq, chain_prev, chain_hash, sealed_at)` |
-| Append-only by rule (any table) | every table whose trigger uses `audit_log_reject_mutation`, `prevent_capability_ledger_mutation`, `eval_dataset_versions_immutable`, `commerce_arbiter_decisions_guard`, `oacp_record_reject_mutation`, `oacp_manifest_retention_guard` or `audit_chain_witness_reject_mutation` | loses each operation its trigger covers |
+| Append-only by rule (any table) | every table whose trigger uses `audit_log_reject_mutation`, `prevent_capability_ledger_mutation`, `eval_dataset_versions_immutable`, `commerce_arbiter_decisions_guard`, `oacp_record_reject_mutation`, `oacp_manifest_retention_guard`, `audit_chain_witness_reject_mutation` or `commerce_payment_record_reject_mutation` | loses each operation its trigger covers |
 | Append-only, v6z88 | `oacp_operator_decision_records`, `oacp_audit_review_manifest_records`, `oacp_retention_disposition_decision_records`, `audit_chain_witness_checkpoints` | `SELECT, INSERT` |
+| Append-only, v6z90 | `commerce_payment_operations`, `commerce_afa_evidence` (trigger `commerce_payment_record_reject_mutation`) | `SELECT, INSERT` |
 | Append-only with a transition, v6z88 | `commerce_arbiter_decisions` | `SELECT, INSERT`, `UPDATE (consumed_at, grantex_grant_jti, grantex_recorded_at)` |
 | No delete | `capability_readiness_records` (trigger refuses `DELETE`), `audit_chain_anchors` | `SELECT, INSERT, UPDATE` |
 | Migration-owned | `alembic_version`, `checkpoint_migrations` | `SELECT` |

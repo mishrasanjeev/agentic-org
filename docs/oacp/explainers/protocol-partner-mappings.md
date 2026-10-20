@@ -82,8 +82,12 @@ AP2 appears in two places:
   2026-08-25; advertised only with an active merchant signing key), checkout responses carry
   `ap2.merchant_authorization`, a detached ES256 JWS by the merchant's UCP key over the RFC 8785
   JSON of the checkout, and Complete requires an `ap2.checkout_mandate` whose SHA-256 becomes the
-  arbiter's mandate hash. On `main` the checkout mandate itself is not verified
+  arbiter's mandate hash. The checkout mandate itself is not verified
   ([UCP checkout](../ucp-checkout.md#residual-gaps)).
+- **Grantex mandates.** With `AGENTICORG_GRANTEX_MANDATES_ENABLED`, a UCP or ACP Complete obtains
+  Intent, Cart and Payment mandates from Grantex: JWTs mapped to AP2 field names (not AP2's
+  SD-JWT format), verified locally, whose hashes reach the arbiter, the ledger and the Plural
+  order metadata ([Mandates](../mandates.md)).
 - **AP2-style mapping.** `ap2_style_mandate_payment_evidence_profile` lists the provider evidence
   a mandate needs (capability status, evidence ref, webhook verification, idempotency,
   reconciliation). It creates no mandate.

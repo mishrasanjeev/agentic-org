@@ -45,6 +45,59 @@ e3d046d9ab275c2054f198b4c2be323214a0aebe:docs/reports/commerce-agent-real-stagin
 c4de4ba34461d69618aa7502f3ccbe64b2d894ab:tests/integration/test_feature_flags_rls_postgres.py:generic-api-key:120
 # Synthetic OACP artifact JWS vector (attached-payload refusal case, test key only).
 15b35ec2499a735adbf50201f12e48354d8e07c4:tests/fixtures/oacp/oacp-artifact-jws-v1.json:jwt:875
+# Synthetic OACP mandate test vectors (keys generated and discarded) and a placeholder passport in the fake Grantex.
+42e66ffb9ef3f1d7ef7308b1d6437417b2c9bf64:tests/fixtures/oacp/oacp-mandates-v1-extra.json:jwt:23
+42e66ffb9ef3f1d7ef7308b1d6437417b2c9bf64:tests/fixtures/oacp/oacp-mandates-v1-extra.json:jwt:29
+42e66ffb9ef3f1d7ef7308b1d6437417b2c9bf64:tests/fixtures/oacp/oacp-mandates-v1-extra.json:jwt:34
+42e66ffb9ef3f1d7ef7308b1d6437417b2c9bf64:tests/fixtures/oacp/oacp-mandates-v1-extra.json:jwt:39
+42e66ffb9ef3f1d7ef7308b1d6437417b2c9bf64:tests/fixtures/oacp/oacp-mandates-v1.json:jwt:106
+42e66ffb9ef3f1d7ef7308b1d6437417b2c9bf64:tests/fixtures/oacp/oacp-mandates-v1.json:jwt:111
+42e66ffb9ef3f1d7ef7308b1d6437417b2c9bf64:tests/fixtures/oacp/oacp-mandates-v1.json:jwt:116
+42e66ffb9ef3f1d7ef7308b1d6437417b2c9bf64:tests/fixtures/oacp/oacp-mandates-v1.json:jwt:121
+42e66ffb9ef3f1d7ef7308b1d6437417b2c9bf64:tests/fixtures/oacp/oacp-mandates-v1.json:jwt:126
+42e66ffb9ef3f1d7ef7308b1d6437417b2c9bf64:tests/fixtures/oacp/oacp-mandates-v1.json:jwt:131
+42e66ffb9ef3f1d7ef7308b1d6437417b2c9bf64:tests/fixtures/oacp/oacp-mandates-v1.json:jwt:137
+42e66ffb9ef3f1d7ef7308b1d6437417b2c9bf64:tests/fixtures/oacp/oacp-mandates-v1.json:jwt:142
+42e66ffb9ef3f1d7ef7308b1d6437417b2c9bf64:tests/fixtures/oacp/oacp-mandates-v1.json:jwt:147
+42e66ffb9ef3f1d7ef7308b1d6437417b2c9bf64:tests/fixtures/oacp/oacp-mandates-v1.json:jwt:152
+42e66ffb9ef3f1d7ef7308b1d6437417b2c9bf64:tests/fixtures/oacp/oacp-mandates-v1.json:jwt:157
+42e66ffb9ef3f1d7ef7308b1d6437417b2c9bf64:tests/fixtures/oacp/oacp-mandates-v1.json:jwt:162
+42e66ffb9ef3f1d7ef7308b1d6437417b2c9bf64:tests/fixtures/oacp/oacp-mandates-v1.json:jwt:167
+42e66ffb9ef3f1d7ef7308b1d6437417b2c9bf64:tests/fixtures/oacp/oacp-mandates-v1.json:jwt:172
+42e66ffb9ef3f1d7ef7308b1d6437417b2c9bf64:tests/fixtures/oacp/oacp-mandates-v1.json:jwt:177
+42e66ffb9ef3f1d7ef7308b1d6437417b2c9bf64:tests/fixtures/oacp/oacp-mandates-v1.json:jwt:182
+42e66ffb9ef3f1d7ef7308b1d6437417b2c9bf64:tests/fixtures/oacp/oacp-mandates-v1.json:jwt:187
+42e66ffb9ef3f1d7ef7308b1d6437417b2c9bf64:tests/fixtures/oacp/oacp-mandates-v1.json:jwt:192
+42e66ffb9ef3f1d7ef7308b1d6437417b2c9bf64:tests/fixtures/oacp/oacp-mandates-v1.json:jwt:197
+42e66ffb9ef3f1d7ef7308b1d6437417b2c9bf64:tests/fixtures/oacp/oacp-mandates-v1.json:jwt:202
+42e66ffb9ef3f1d7ef7308b1d6437417b2c9bf64:tests/fixtures/oacp/oacp-mandates-v1.json:jwt:207
+42e66ffb9ef3f1d7ef7308b1d6437417b2c9bf64:tests/fixtures/oacp/oacp-mandates-v1.json:jwt:212
+42e66ffb9ef3f1d7ef7308b1d6437417b2c9bf64:tests/fixtures/oacp/oacp-mandates-v1.json:jwt:218
+42e66ffb9ef3f1d7ef7308b1d6437417b2c9bf64:tests/fixtures/oacp/oacp-mandates-v1.json:jwt:224
+42e66ffb9ef3f1d7ef7308b1d6437417b2c9bf64:tests/fixtures/oacp/oacp-mandates-v1.json:jwt:230
+42e66ffb9ef3f1d7ef7308b1d6437417b2c9bf64:tests/fixtures/oacp/oacp-mandates-v1.json:jwt:236
+42e66ffb9ef3f1d7ef7308b1d6437417b2c9bf64:tests/fixtures/oacp/oacp-mandates-v1.json:jwt:243
+42e66ffb9ef3f1d7ef7308b1d6437417b2c9bf64:tests/fixtures/oacp/oacp-mandates-v1.json:jwt:244
+42e66ffb9ef3f1d7ef7308b1d6437417b2c9bf64:tests/fixtures/oacp/oacp-mandates-v1.json:jwt:245
+42e66ffb9ef3f1d7ef7308b1d6437417b2c9bf64:tests/fixtures/oacp/oacp-mandates-v1.json:jwt:250
+42e66ffb9ef3f1d7ef7308b1d6437417b2c9bf64:tests/fixtures/oacp/oacp-mandates-v1.json:jwt:251
+42e66ffb9ef3f1d7ef7308b1d6437417b2c9bf64:tests/fixtures/oacp/oacp-mandates-v1.json:jwt:252
+42e66ffb9ef3f1d7ef7308b1d6437417b2c9bf64:tests/fixtures/oacp/oacp-mandates-v1.json:jwt:257
+42e66ffb9ef3f1d7ef7308b1d6437417b2c9bf64:tests/fixtures/oacp/oacp-mandates-v1.json:jwt:258
+42e66ffb9ef3f1d7ef7308b1d6437417b2c9bf64:tests/fixtures/oacp/oacp-mandates-v1.json:jwt:259
+42e66ffb9ef3f1d7ef7308b1d6437417b2c9bf64:tests/fixtures/oacp/oacp-mandates-v1.json:jwt:264
+42e66ffb9ef3f1d7ef7308b1d6437417b2c9bf64:tests/fixtures/oacp/oacp-mandates-v1.json:jwt:265
+42e66ffb9ef3f1d7ef7308b1d6437417b2c9bf64:tests/fixtures/oacp/oacp-mandates-v1.json:jwt:270
+42e66ffb9ef3f1d7ef7308b1d6437417b2c9bf64:tests/fixtures/oacp/oacp-mandates-v1.json:jwt:271
+42e66ffb9ef3f1d7ef7308b1d6437417b2c9bf64:tests/fixtures/oacp/oacp-mandates-v1.json:jwt:77
+42e66ffb9ef3f1d7ef7308b1d6437417b2c9bf64:tests/fixtures/oacp/oacp-mandates-v1.json:jwt:83
+42e66ffb9ef3f1d7ef7308b1d6437417b2c9bf64:tests/fixtures/oacp/oacp-mandates-v1.json:jwt:89
+42e66ffb9ef3f1d7ef7308b1d6437417b2c9bf64:tests/fixtures/oacp/oacp-mandates-v1.json:jwt:95
+42e66ffb9ef3f1d7ef7308b1d6437417b2c9bf64:tests/grantex_service_fakes.py:jwt:28
+# The same synthetic mandate vectors, as the pinned gitleaks 8.30.1 also reports them (generic-api-key).
+42e66ffb9ef3f1d7ef7308b1d6437417b2c9bf64:tests/fixtures/oacp/oacp-mandates-v1.json:generic-api-key:89
+42e66ffb9ef3f1d7ef7308b1d6437417b2c9bf64:tests/fixtures/oacp/oacp-mandates-v1.json:generic-api-key:182
+
 # Vendored ACP 2026-04-17 checkout schema (upstream specification, Apache-2.0): its
 # example members carry placeholder tokens, not credentials.
 0fd28b2ef5b652e327de0ccd936d08eb37a29694:core/commerce/acp/schemas/2026-04-17/schema.agentic_checkout.json:generic-api-key:325

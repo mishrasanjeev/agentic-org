@@ -6,7 +6,10 @@ UCP ``item.id`` is the id the catalog capability publishes for a variant
 ``/ucp/catalog/search`` or ``/lookup`` checks out as is; the SKU, the source
 variant id and the numeric part of a Shopify variant gid are accepted too.
 Items are read from the merchant's synced product evidence and priced with the
-catalog's ISO 4217 minor-unit conversion.
+catalog's ISO 4217 minor-unit conversion. Price, stock and title go through the
+merchant's per-fact-family source precedence
+(``core.commerce.source_precedence.products_with_precedence``), exactly as the
+catalog routes do; without a precedence table or saved facts Shopify's stand.
 """
 
 from __future__ import annotations
@@ -15,6 +18,7 @@ from collections.abc import Awaitable, Callable, Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any, Protocol
 
+from core.commerce.source_precedence import products_with_precedence
 from core.commerce.ucp.catalog import minor_units, ucp_variant_id
 from core.commerce.ucp.merchant import MerchantUcp
 from core.commerce.ucp.quantity import EACH_UNIT, QuantityError, QuantityUnit, parse_quantity_unit
@@ -58,7 +62,8 @@ class ProductEvidenceCatalog:
         wanted = {str(item_id) for item_id in item_ids if item_id}
         if not wanted:
             return {}
-        products = await self._loader(merchant)
+        policy = merchant.raw_config.get("provider_policy") if isinstance(merchant.raw_config, Mapping) else None
+        products = products_with_precedence(await self._loader(merchant), policy)
         found: dict[str, CatalogItem] = {}
         for product in products:
             for variant in product.get("variants") or ():

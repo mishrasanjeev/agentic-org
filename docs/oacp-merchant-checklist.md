@@ -21,7 +21,9 @@ are not in the AgenticOrg production deployment yet.
 - Flag-gated, optional: UCP serving host attested by DNS TXT record, signing key generated and
   profile published; UCP or ACP checkout enabled only after the staging run in the
   [launch and rollback runbook](oacp/explainers/launch-rollback-runbook.md).
-- Live provider execution approval documented separately before any production payment flow. No
-  payment executor is registered on `main`.
+- Live provider execution approval documented separately before any production payment flow; the
+  Plural executor stays off (`PLURAL_PINE_LIVE_EXECUTION_ENABLED`) until then.
+- Flag-gated, optional: Grantex mandates (`provider_policy.ucp.grantex_mandates`, lower
+  `human_not_present` caps) and, for UPI AutoPay, a complete `mandate_capability.upi_autopay` block.
 - Rollback owner named for disabling channels, revoking artifacts, unpublishing the UCP profile,
   turning off checkout flags, and disabling provider handoff.

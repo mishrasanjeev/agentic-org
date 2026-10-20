@@ -158,8 +158,9 @@ allow decision:
    consumes the decision once, bound to the session payload hash; a changed
    session or credential is refused.
 
-Both steps need a payment executor registered in the API for the merchant. As
-of 2026-10-20 none is registered on the API's `main` branch, so Complete
+Both steps need a payment executor registered in the API for the merchant: the
+Plural executor, which the API registers only with
+`PLURAL_PINE_LIVE_EXECUTION_ENABLED=true` (off by default). Without it Complete
 answers `executor_unavailable` (a business outcome, below) and the session
 stays `ready_for_complete`.
 

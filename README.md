@@ -262,9 +262,11 @@ A source definition is not evidence that a specific tenant has connected the pro
   and Grantex issues an enabled `public_discovery_state` artifact. See [UCP business profile](docs/oacp/ucp-profile.md).
 - UCP checkout sessions, carts and orders (`/ucp/checkout-sessions`, `/ucp/carts`, `/ucp/orders`,
   `AGENTICORG_UCP_CHECKOUT_ENABLED`) are off by default. With the flag on, a Complete needs an `allow`
-  decision of the commerce arbiter for the exact session and a registered executor; none is registered
-  in this repository yet, so Complete answers `executor_unavailable`. See
-  [UCP checkout, cart and order](docs/oacp/ucp-checkout.md).
+  decision of the commerce arbiter for the exact session and a registered executor. The Plural executor
+  (capture, refunds, UPI AutoPay with RBI AFA) is registered only with `PLURAL_PINE_LIVE_EXECUTION_ENABLED=true`;
+  otherwise Complete answers `executor_unavailable`. Server-verified Intent, Cart and Payment mandates from
+  Grantex need `AGENTICORG_GRANTEX_MANDATES_ENABLED`. See [UCP checkout, cart and order](docs/oacp/ucp-checkout.md),
+  [Plural executor](docs/oacp/plural-executor.md) and [mandates](docs/oacp/mandates.md).
 - The ACP product feed (`AGENTICORG_ACP_FEED_ENABLED`) and ACP checkout sessions
   (`AGENTICORG_ACP_CHECKOUT_ENABLED`, API version 2026-04-17) are off by default. The feed is built only
   from verified, fresh OACP artifacts; sessions run on the UCP session table, arbiter and executor and need
@@ -291,7 +293,7 @@ A source definition is not evidence that a specific tenant has connected the pro
 ### Explicit non-goals and boundaries
 
 - OACP artifacts do not create orders, reserve inventory, create mandates, capture payments, issue refunds, or prove a paid state.
-- No request field approves commerce execution. Execution consumes a single-use `allow` decision of the deterministic commerce arbiter, and no payment executor is registered in this repository yet.
+- No request field approves commerce execution. Execution consumes a single-use `allow` decision of the deterministic commerce arbiter, and the only payment executor (Plural) is off by default.
 - AgenticOrg does not replace the merchant, bank, payment provider, POS, or SaaS system as its source of record.
 - Cached commerce evidence can support an answer or a prepared handoff; provider-owned execution must be confirmed by the provider.
 - A connector listed in source is not proof of a live customer integration.
@@ -334,7 +336,7 @@ The current supported source path is:
 8. Agent platforms can use the merchant's UCP business profile, UCP checkout and ACP checkout sessions on a DNS-attested serving host, each behind its own flag (default off). They share one session table, the same arbiter `session_complete` decision and the same executor.
 9. Only a verified provider or merchant callback can confirm the external outcome.
 
-As of 2026-10-20 steps 5, 7 and 8 are on `main` but not in the AgenticOrg production deployment; check the deployed commit before relying on them. Start with [docs/oacp/README.md](docs/oacp/README.md) and the [runtime launch closure PRD](docs/oacp/runtime-launch-closure-prd.md).
+As of 2026-10-20 steps 5, 7 and 8, mandates and the Plural executor are on `main` but not in the AgenticOrg production deployment; check the deployed commit before relying on them. Start with [docs/oacp/README.md](docs/oacp/README.md) and the [runtime launch closure PRD](docs/oacp/runtime-launch-closure-prd.md).
 
 ## Requirements
 

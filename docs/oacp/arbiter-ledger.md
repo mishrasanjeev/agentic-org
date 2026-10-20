@@ -5,7 +5,7 @@ Canonical end-to-end flow: [OACP end-user flow](end-user-flow.md).
 Every commerce write leaves an HMAC-signed ledger row (hash-chained once the sealing task covers
 the tenant: `AGENTICORG_AUDIT_CHAIN_ENABLED` or `AGENTICORG_AUDIT_CHAIN_DEFAULT_ON`, both off by
 default), and every commitment-bound action (purchase handoff, POS handoff, UCP and ACP checkout
-Complete, and later mandate request) is decided by a deterministic arbiter before anything
+Complete, refund, and later mandate request) is decided by a deterministic arbiter before anything
 executes.
 
 **No human legs.** The arbiter is a pure policy function. It seals `allow` or `refuse`; it never
@@ -55,22 +55,29 @@ that needed it.
 | `mandate_present_unexpired` | Mandate reference and hash present, expiry after the decision time. Not evaluated for `mandate_request`. | `mandate_missing`, `mandate_expiry_missing`, `mandate_expired` |
 | `consent_active` | Consent reference present, status `active` or `granted`. | `consent_missing`, `consent_<status>` |
 | `passport_amount_cap` | Commerce Passport reference, cap, currency and expiry present; unexpired; same currency as the order; cap at least the order amount (minor units). | `passport_missing`, `passport_cap_missing`, `passport_expiry_missing`, `passport_expired`, `order_amount_missing`, `passport_currency_mismatch`, `passport_amount_cap_exceeded` |
-| `buyer_authority_verified` | The buyer authority (mandate, consent, passport) carries a server-side verification ref, or verified authority is not required (`AGENTICORG_ARBITER_REQUIRE_VERIFIED_AUTHORITY`, on in strict runtimes). | `buyer_authority_caller_asserted` |
+| `buyer_authority_verified` | The buyer authority carries the server-side verification ref the local mandate verifier produced, naming the same payment mandate jti and `mandate_hash` as the mandate evidence ([Grantex mandates](mandates.md#grantex-mandates)); or verified authority is not required (`AGENTICORG_ARBITER_REQUIRE_VERIFIED_AUTHORITY`, on in strict runtimes). | `buyer_authority_caller_asserted`, `buyer_authority_ref_invalid` |
 | `oacp_artifacts_valid` | For each required family (catalog snapshot, price, inventory, policy, mandate capability, protocol adapter; policy and mandate capability for `mandate_request`) an artifact in scope that the ES256 verifier accepted (`oacp-artifact-jws-v1;` ref with an `oacp-` key), fresh, unexpired, with a `fresh` revocation snapshot. | `artifact_missing:<family>`, `artifact_revoked:<family>`, `artifact_unverified:<family>`, `artifact_revocation_unknown:<family>`, `artifact_expired:<family>`, `artifact_stale:<family>` |
 | `merchant_limits` | Merchant config `provider_policy.arbiter` sets `max_order_amount_minor_units`, `currency_allowlist`, `max_quantity_per_order`, and the order is within them. | `merchant_limits_missing`, `order_amount_missing`, `currency_not_allowed`, `quantity_cap_exceeded`, `order_amount_cap_exceeded` |
+| `human_not_present_limits` | No verified presence (`presence_unverified`; caller-asserted authority is governed by `buyer_authority_verified`); or `human_present`; or `human_not_present` with the merchant's not-present limits (`provider_policy.arbiter.human_not_present.max_order_amount_minor_units`, optional `max_quantity_per_order`) configured and met and the intent mandate `max_amount` covering the total in its currency. | `presence_unknown`, `not_present_limits_missing`, `order_amount_missing`, `intent_cap_missing`, `intent_currency_mismatch`, `intent_cap_below_total`, `not_present_amount_cap_exceeded`, `not_present_quantity_cap_exceeded` |
+| `afa_evidence_present` (`session_complete` only, last) | No UPI AutoPay instrument in the payload; or RBI AFA does not apply (a subsequent debit within the limit; never for `human_not_present`); or server-side AFA evidence is present ([Mandates](mandates.md#the-arbiter-rule-afa_evidence_present)). | `afa_input_missing`, `afa_evidence_missing` |
+| `refund_within_captured` (`refund`, its only rule) | The refund is positive, in the order currency, and the captured amount covers it with every earlier refund that has not failed. | `refund_input_missing`, `refund_amount_invalid`, `refund_currency_mismatch`, `order_not_captured`, `refund_exceeds_captured` |
 
-Mandate, consent and passport references arrive in the request's `buyer_authority` object. Until
-Grantex-signed mandates and passports are verified server-side (in review, not on `main`), they are
-caller-asserted evidence: they are hashed into the decision and the ledger, never treated as
-credentials, and a missing value refuses.
+Buyer authority has two sources. On a UCP or ACP Complete with `mandate_request` (`AGENTICORG_GRANTEX_MANDATES_ENABLED` on), the server requests
+the Intent, Cart and Payment mandates from Grantex and verifies them itself; only a verified,
+linked and bound chain becomes the mandate, consent and passport evidence, with the
+verification ref `oacp-mandate-v1;jti=<payment jti>;mandate_hash=<hex>;verified_at=<time>`
+([Grantex mandates](mandates.md#what-the-arbiter-receives)). Everywhere else (the request's
+`buyer_authority` object, the AP2 `checkout_mandate`) the references are caller-asserted: hashed
+into the decision and the ledger, never treated as credentials, and a missing value refuses.
 
-Fail closed until then: rule `buyer_authority_verified` needs a server-side verification ref
-for that evidence. No code path produces one yet and the request body cannot carry one
-(`buyer_authority` refuses unknown members), so:
+Rule `buyer_authority_verified` (D1, closed) passes only with a verification ref that parses and
+names the decision's own mandate jti and hash. The server sets it; the request body cannot carry
+one (`buyer_authority` refuses unknown members), and any other string refuses
+`buyer_authority_ref_invalid`. Without one:
 
 - strict runtimes (production, staging, preview and unrecognised `AGENTICORG_ENV` labels, the
-  same detection as `AGENTICORG_OACP_VERIFY_STRICT`) refuse every purchase handoff, POS handoff
-  and mandate request with `failing_rule: buyer_authority_verified`
+  same detection as `AGENTICORG_OACP_VERIFY_STRICT`) refuse every purchase handoff, POS handoff,
+  mandate request and UCP session complete with `failing_rule: buyer_authority_verified`
   (`reason: buyer_authority_caller_asserted`);
 - local, dev, test and ci runtimes, or any runtime with
   `AGENTICORG_ARBITER_REQUIRE_VERIFIED_AUTHORITY=false`, pass the rule and record
@@ -79,7 +86,20 @@ for that evidence. No code path produces one yet and the request body cannot car
 
 `AGENTICORG_ARBITER_REQUIRE_VERIFIED_AUTHORITY` set explicitly wins in either direction. The
 rule is part of the decision id material, so the same request decided under the two settings
-gets two different decision ids. The policy version is `commerce-arbiter-v2`.
+gets two different decision ids. The policy version is `commerce-arbiter-v4`:
+
+| Version | Change |
+| --- | --- |
+| v2 | `buyer_authority_verified` (D1). |
+| v3 | The `refund` action and the `afa_evidence_present` rule. |
+| v4 | `buyer_authority_verified` checks the ref against the mandate evidence; `human_not_present_limits` after `merchant_limits` for every action but `refund`; no AFA-exempt path for `human_not_present`; the presence is part of the decision id material. |
+
+A decision's stored evidence also carries `mandate_hashes` and `mandate_jtis` (`intent`, `cart`,
+`payment`; null without verified mandates, never from a request body), `presence` and
+`authority_verification_ref`; `mandate_ref` and `mandate_hash` are the payment mandate's jti and
+the hex SHA-256 of its compact JWT. The ledger's `commerce.arbiter.decision` row seals
+`decision.mandates {jtis, hashes, presence}`, and the executor copies the hashes into the
+provider order metadata.
 
 Merchant configuration (under `provider_policy`):
 
@@ -89,6 +109,7 @@ Merchant configuration (under `provider_policy`):
     "max_order_amount_minor_units": 500000,
     "currency_allowlist": ["INR"],
     "max_quantity_per_order": 5,
+    "human_not_present": {"max_order_amount_minor_units": 100000, "max_quantity_per_order": 2},
     "escalate_to_human": false,
     "review_agent_id": null
   }
@@ -119,9 +140,14 @@ Merchant configuration (under `provider_policy`):
    wait for it and the decision does not change. Off (the default), nothing touches
    `hitl_queue`.
 
-Session complete (UCP and ACP checkout Complete) uses the same guard with the `session_complete`
-action. No mandate request route exists on `main` yet; the arbiter already defines the
-`mandate_request` rule set.
+UCP and ACP session complete use the same guard with the `session_complete` action. A fresh
+decision is sealed in its own transaction; after that commit it is offered to Grantex; then the
+allow is consumed in a second transaction (the session must still be `ready_for_complete` at the
+decided revision, else `decision_payload_mismatch`). So a strict runtime that requires the
+Grantex grant can consume it. A refund of a captured order is decided with the `refund` action
+and consumed by the same guard before the Plural executor calls Plural
+([Plural executor, Refunds](plural-executor.md#refunds)). No mandate request route exists on
+`main`; the arbiter already defines the `mandate_request` rule set.
 
 ## Append-Only Storage: Choice And Alternative
 
@@ -177,9 +203,13 @@ has a 5 s timeout, and is never retried.
   row (the one-time `grantex_grant_jti` transition) and sealed to the ledger
   (`commerce.arbiter.decision.countersigned`).
 - A decision without a `buyer_agent_id` cannot be countersigned (Grantex binds the grant to the
-  buyer agent): `status: skipped`, `reason: buyer_agent_missing`.
+  buyer agent): `status: skipped`, `reason: buyer_agent_missing`. UCP session-complete and refund
+  decisions name one: the authenticated platform (`ucp_platform:` and 40 hex characters of the
+  SHA-256 of its `UCP-Agent` profile URL) recorded on the checkout session at create time, and
+  for a refund the buyer agent of the order's session.
 
-Responses of purchase prepare and POS handoff carry `grantex_countersignature`:
+Responses of purchase prepare, POS handoff and UCP Complete (in `ai.agenticorg.commerce`) carry
+`grantex_countersignature`:
 `{status, reason, jti, exp}` with `status` one of `granted`, `recorded`, `skipped`,
 `unavailable`, `invalid`, `conflict`.
 
@@ -351,6 +381,7 @@ logged and the sealing stands; the next sealing posts its head.
 | `AGENTICORG_ARBITER_REQUIRE_VERIFIED_AUTHORITY` | unset: on in strict runtimes | Rule `buyer_authority_verified` refuses caller-asserted buyer authority. |
 | `AGENTICORG_ARBITER_REQUIRE_GRANTEX_GRANT` | unset: on in strict runtimes | An allow is consumable only with a verified Grantex grant (`grantex_grant_missing`). |
 | `AGENTICORG_ARBITER_GRANTEX_POST_ENABLED` | unset: follows the grant flag | Post every decision to Grantex. |
+| `AGENTICORG_GRANTEX_MANDATES_ENABLED` | off | UCP Complete honours `mandate_request`: Grantex mandates requested and verified before the decision. |
 | `AGENTICORG_AUDIT_WITNESS_ENABLED` | off | Post each sealed head to Grantex for witnessing. |
 | `AGENTICORG_OACP_RETENTION_APPLY_ENABLED` | off | The daily retention task applies due dispositions. |
 | `AGENTICORG_AUDIT_CHAIN_DEFAULT_ON` | off | Seal every tenant with a commerce merchant config. |

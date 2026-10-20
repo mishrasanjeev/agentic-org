@@ -19,8 +19,8 @@ flowchart TD
 Ask, compare, reason, explain source/freshness, and prepare a non-executing handoff. Where the
 merchant has turned on UCP or ACP checkout (both off by default), a buyer agent can also create
 and update a checkout session; it completes only after the commerce arbiter sealed an `allow`
-decision for that exact session and a registered executor consumed it. No executor is registered
-on `main` (status 2026-10-20).
+decision for that exact session and a registered executor consumed it. The Plural executor is
+registered only while `PLURAL_PINE_LIVE_EXECUTION_ENABLED` is on (off by default).
 
 ## Cannot Do
 

@@ -50,8 +50,40 @@ body; `{"decide_only": true}` returns the decision without executing and a later
 present its `decision_id`. Execution happens only through a registered executor, which receives a
 decision consumed by `require_allow_decision`; with `AGENTICORG_UCP_CHECKOUT_ENABLED` off the
 routes are 404, and with it on but no executor registered Complete answers
-`executor_unavailable` without deciding (status 2026-10-20: no executor is registered on
-`main`). ACP checkout sessions use the same Complete path.
+`executor_unavailable` without deciding. The Plural executor is registered while
+`PLURAL_PINE_LIVE_EXECUTION_ENABLED=true` (off by default; [Plural executor](plural-executor.md));
+a UPI AutoPay instrument also needs RBI AFA evidence ([Mandates](mandates.md)). ACP checkout
+sessions use the same Complete path, mandates included.
+
+### Server-verified mandates
+
+The strict runtime refuses caller-asserted authority on this path too (`buyer_authority_verified`).
+The authority it accepts comes from Grantex mandates the server requested and verified itself
+([Grantex mandates](mandates.md#grantex-mandates)):
+
+1. The checkout response of a merchant with `provider_policy.ucp.grantex_mandates` names
+   `ai.agenticorg.commerce.mandate_checkout {checkout, checkout_hash}` while it is
+   `ready_for_complete`. For a `human_present` purchase the platform has the buyer sign a WebAuthn
+   assertion whose challenge is that `checkout_hash`.
+2. Complete carries `ai.agenticorg.commerce.mandate_request {passport_jwt, presence, description,
+   max_amount_minor_units?, webauthn_assertion?}` (`AGENTICORG_GRANTEX_MANDATES_ENABLED` on).
+3. Before deciding, the server asks Grantex for the Intent, Cart and Payment mandates and
+   verifies the three locally (pinned JWKS and status list, chain, binding to this session). The
+   outcome is in the response as `ai.agenticorg.commerce.mandates {status, code, jtis, hashes,
+   presence}` and sealed as `commerce.ucp.checkout.mandates`.
+4. The arbiter decides on the verified chain (mandate, consent, passport, presence, the server
+   verification ref). A `human_not_present` purchase is held to the merchant's lower not-present
+   caps and to the intent cap (`human_not_present_limits`).
+5. The decision is sealed in its own transaction, then offered to Grantex for countersignature,
+   then the allow is consumed in a second transaction. With
+   `AGENTICORG_ARBITER_REQUIRE_GRANTEX_GRANT` on, only a countersigned allow is consumable. The
+   response carries `ai.agenticorg.commerce.grantex_countersignature`.
+6. The Plural order carries the three mandate hashes in `merchant_metadata`.
+
+Every decision names the buyer agent: the authenticated platform, `ucp_platform:` and 40 hex
+characters of the SHA-256 of its `UCP-Agent` profile URL, recorded on the session at create
+time (`state.platform.buyer_agent_id`). A refund decision names the buyer agent of the order's
+checkout session. Grantex binds its grant to it (`sub`).
 
 ## Required Fresh Inputs
 

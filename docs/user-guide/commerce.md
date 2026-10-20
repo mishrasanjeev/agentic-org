@@ -46,7 +46,7 @@ Current WooCommerce/ERP/PIM/OMS/WMS/custom-source configuration does not have un
 
 Before a purchase handoff, an Offline POS handoff or a checkout completion goes anywhere, a fixed set of rules decides it: mandate, consent, the buyer's Commerce Passport cap, valid artifacts and the merchant's own limits. The answer is allow or refuse, with the first failing rule as the reason, and it never waits for a person. An allow can be used once, for exactly that payload. Every commerce change is written to the commerce ledger, which an administrator can export and check offline. Optional human review copies a refusal into the review queue without changing it.
 
-UCP and ACP checkout for agent platforms, and the public UCP profile, are switched off by default. Turning them on is an operator step, one at a time. Until a payment executor is installed and switched on, a checkout cannot complete.
+UCP and ACP checkout for agent platforms, and the public UCP profile, are switched off by default. Turning them on is an operator step, one at a time. Until the payment executor is switched on, a checkout cannot complete, and refunds of completed checkouts are also decided by the same rules.
 
 ## Payments and offline POS
 

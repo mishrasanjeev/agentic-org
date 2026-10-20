@@ -19,9 +19,10 @@ AgenticOrg owns the buyer and seller AI-agent runtime for OACP-backed commerce, 
 
 **Status on 2026-10-20.** The `main` branch carries artifact verification before caching, the
 commerce arbiter and ledger, the UCP business profile, catalog, checkout, cart and order routes,
-the ACP feed and checkout sessions, and the MCP UCP checkout tools. Everything that touches
-checkout, payment or public discovery is behind a flag that defaults to off, and no payment
-executor is registered on `main`, so a checkout Complete ends at `executor_unavailable`. The
+the ACP feed and checkout sessions, the MCP UCP checkout tools, server-verified Grantex
+mandates, and the Plural executor with refunds, UPI AutoPay and RBI AFA. Everything that touches
+checkout, payment, mandates or public discovery is behind a flag that defaults to off; with the
+defaults no executor is registered, so a checkout Complete ends at `executor_unavailable`. The
 AgenticOrg production deployment does not include this work yet; check the deployed commit before
 relying on any of it there. Grantex production issues ES256-signed OACP artifacts under its first
 OACP issuer key and serves its public Token Status List. The turn-on order is in the
@@ -34,9 +35,9 @@ Merchants configure the runtime in `/dashboard/commerce-runtime` during onboardi
 | Status | Capability |
 | --- | --- |
 | Shipped (in source on `main`) | Merchant configuration, Seller Commerce Agent onboarding, encrypted Shopify credential custody, read-only Shopify Admin GraphQL sync, signed webhook verification, Grantex authority request, durable OACP cache that verifies each artifact before storing it, buyer-safe answers, protocol payload generation, bridge routes, purchase preparation, Offline POS handoff/reconciliation, and the commerce arbiter and ledger (every commerce write recorded; purchase and POS handoffs decided `allow` or `refuse`) |
-| Behind a flag, default off | UCP business profile, catalog and locations (`AGENTICORG_UCP_PROFILE_ENABLED`); UCP checkout, cart and order (`AGENTICORG_UCP_CHECKOUT_ENABLED`); ACP product feed (`AGENTICORG_ACP_FEED_ENABLED`); ACP checkout sessions (`AGENTICORG_ACP_CHECKOUT_ENABLED`); audit-chain sealing for commerce tenants, witness checkpoints and retention |
+| Behind a flag, default off | UCP business profile, catalog and locations (`AGENTICORG_UCP_PROFILE_ENABLED`); UCP checkout, cart and order (`AGENTICORG_UCP_CHECKOUT_ENABLED`); ACP product feed (`AGENTICORG_ACP_FEED_ENABLED`); ACP checkout sessions (`AGENTICORG_ACP_CHECKOUT_ENABLED`); Grantex mandates (`AGENTICORG_GRANTEX_MANDATES_ENABLED`); Plural payment execution and refunds (`PLURAL_PINE_LIVE_EXECUTION_ENABLED`); audit-chain sealing for commerce tenants, witness checkpoints and retention |
 | Configuration-dependent | Merchant public catalog, WhatsApp, Telegram, Grantex tenant authority and service token, Pine/Plural capability verification, real POS/provider callbacks, and a DNS-attested serving host for UCP and ACP |
-| Not universal | WooCommerce/ERP/PIM/OMS/WMS runtime adapters, external channel marketplace approval, payment/order execution (no executor is registered on `main`), and public OACP certification or standardization |
+| Not universal | WooCommerce/ERP/PIM/OMS/WMS runtime adapters, external channel marketplace approval, payment/order execution for rails other than Plural, and public OACP certification or standardization |
 
 Protocol adapter payloads make the same public-safe commerce facts available in
 bounded shapes: Schema.org, the merchant's UCP business profile (spec shape,
@@ -63,6 +64,8 @@ listed above.
 - [UCP checkout, cart and order](ucp-checkout.md)
 - [ACP product feed and checkout sessions](acp-feed-and-sessions.md)
 - [Plural/Pine P3P capability verifier](plural-pine-p3p-capability-verifier.md)
+- [Plural executor](plural-executor.md)
+- [Mandates, UPI AutoPay and RBI AFA](mandates.md)
 - [Purchase/mandate handoff](purchase-mandate-handoff.md)
 - [Offline POS bridge](offline-pos-bridge.md)
 - [Runtime operations runbook](runtime-operations-runbook.md)

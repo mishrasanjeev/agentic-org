@@ -4,7 +4,8 @@ Update 2026-10-20: `main` now verifies every Grantex artifact (ES256 detached
 JWS) before caching, decides every handoff and checkout Complete with the
 commerce arbiter, records commerce writes on the commerce ledger, and serves
 the UCP business profile, UCP checkout and ACP feed and checkout sessions in
-spec shape behind flags that default to off; no payment executor is registered.
+spec shape, Grantex mandates and a Plural payment executor, all behind flags that
+default to off.
 Sections below that describe UCP-style profiles or future UCP/ACP/AP2 work are
 historical. Current state: `docs/oacp/truth-inventory.md`.
 

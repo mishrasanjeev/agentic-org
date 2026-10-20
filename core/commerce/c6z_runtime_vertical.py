@@ -859,8 +859,14 @@ def build_grantex_authority_request_payload(
     connector_evidence: Mapping[str, Any],
     expected_tenant_id: str | None = None,
     public_discovery_opt_in: Mapping[str, str] | None = None,
+    mandate_capability_evidence: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     """The Grantex C6Z authority request.
+
+    ``mandate_capability_evidence`` (``core.commerce.mandate_capability_evidence.build``)
+    is sent as the top-level member of that name when given; it must be for the
+    packet's tenant and merchant. Without it Grantex marks the mandate capability
+    unverified.
 
     ``public_discovery_opt_in`` (``serving_host``, ``namespace_attestation_ref``)
     is passed only for a merchant that published its UCP profile with an attested
@@ -928,6 +934,13 @@ def build_grantex_authority_request_payload(
             "no_public_discovery_enablement": True,
         },
     }
+    if mandate_capability_evidence is not None:
+        if (
+            mandate_capability_evidence.get("tenant_id") != onboarding_packet["tenant_id"]
+            or mandate_capability_evidence.get("merchant_id") != onboarding_packet["merchant_id"]
+        ):
+            raise C6ZRuntimeValidationError("mandate capability evidence scope mismatch")
+        payload["mandate_capability_evidence"] = dict(mandate_capability_evidence)
     if public_discovery_opt_in is not None:
         serving_host = _require_text("serving_host", str(public_discovery_opt_in.get("serving_host") or ""))
         attestation_ref = _require_text(

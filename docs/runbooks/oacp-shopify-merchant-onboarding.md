@@ -4,6 +4,9 @@ Canonical runtime docs: `docs/oacp/README.md` and
 `docs/oacp/end-user-flow.md`. This runbook is retained for operator continuity
 and should follow the current OACP owner split.
 
+To list the merchant on Google AI Mode and Gemini through UCP, continue with the
+[Google Merchant Center UCP onboarding runbook](oacp-google-merchant-center-onboarding.md).
+
 ## Owner Split
 
 | Area | Owner |
@@ -71,7 +74,7 @@ and should follow the current OACP owner split.
 | Public catalog publishing | Merchant commerce config `public_publishing.enabled=true`; optional public base URL; `OACP_PUBLIC_CATALOG_PLATFORM_DISABLED=true` disables all merchants. |
 | Plural/Pine P3P setup | `PLURAL_PINE_CLIENT_ID`, `PLURAL_PINE_CLIENT_SECRET`, `PLURAL_PINE_ENVIRONMENT=sandbox`, optional `PLURAL_PINE_CAPABILITY_URL`. |
 | Offline POS handoff | Store/POS location metadata. Simulator is available locally; real provider needs `OFFLINE_POS_PROVIDER_ID` and `OFFLINE_POS_WEBHOOK_SECRET`. |
-| Live provider flow | External merchant/provider/legal/security/ops approval plus `PLURAL_PINE_LIVE_EXECUTION_ENABLED=true` and a consumed arbiter `allow` decision. On `main` this releases a prepared provider-owned handoff; no payment executor is registered. |
+| Live provider flow | External merchant/provider/legal/security/ops approval plus `PLURAL_PINE_LIVE_EXECUTION_ENABLED=true` and a consumed arbiter `allow` decision. For purchase preparation this releases a prepared provider-owned handoff; for UCP and ACP checkout it registers the Plural executor (merchant `provider_policy.ucp.executor`, see `docs/oacp/plural-executor.md`). |
 
 ## Safe Failure Mode
 

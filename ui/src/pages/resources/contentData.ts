@@ -69,7 +69,7 @@ export const CONTENT_PAGES: ContentPage[] = [
     ],
     faqs: [
       { q: "Does AgenticOrg move my Shopify source of truth?", a: "No. Shopify remains the source of record. AgenticOrg stores public-safe OACP refs and freshness labels." },
-      { q: "Can the buyer agent complete payment by itself?", a: "No. Nothing a buyer agent sends approves a payment. A checkout completes only after the commerce arbiter's fixed rules allow that exact checkout and a payment executor carries it out, and no executor is installed yet. Payment and mandate rails remain provider-owned; bank-owned and other rails require approved adapters before execution." },
+      { q: "Can the buyer agent complete payment by itself?", a: "No. Nothing a buyer agent sends approves a payment. A checkout completes only after the commerce arbiter's fixed rules allow that exact checkout and the Plural payment executor carries it out, and that executor is switched off by default. Payment and mandate rails remain provider-owned; bank-owned and other rails require approved adapters before execution." },
     ],
     relatedSlugs: ["commerce-sales-agent-grantex", "buyer-agents-shop-safely-oacp"],
     cta: { text: "Open the OACP flow", link: "/open-agentic-commerce-protocol" },
@@ -85,7 +85,7 @@ export const CONTENT_PAGES: ContentPage[] = [
     sections: [
       { heading: "Evidence First", body: "Buyer agents use OACP artifacts carrying source refs, TTL, freshness, revocation posture, risk tier, and blocked capabilities before answering." },
       { heading: "What The Agent Can Do", body: "The agent can answer product questions, compare options, show source/freshness, and prepare a non-executing handoff when required evidence is fresh." },
-      { heading: "What The Agent Cannot Do", body: "The agent cannot create orders, capture payment, reserve stock, create mandates, or invent provider status from cached artifacts. Where a merchant turns on UCP or ACP checkout (off by default), an agent can open a checkout session, but it completes only with an allow decision from the commerce arbiter and a payment executor, and none is installed yet." },
+      { heading: "What The Agent Cannot Do", body: "The agent cannot create orders, capture payment, reserve stock, create mandates, or invent provider status from cached artifacts. Where a merchant turns on UCP or ACP checkout (off by default), an agent can open a checkout session, but it completes only with an allow decision from the commerce arbiter and the Plural payment executor, which is switched off by default." },
     ],
     faqs: [
       { q: "What happens when artifacts are stale?", a: "AgenticOrg refreshes through approved authority paths or refuses the request." },
@@ -177,7 +177,7 @@ export const CONTENT_PAGES: ContentPage[] = [
     metaTitle: "Commerce Sales Agent with Grantex Controls | AgenticOrg",
     metaDescription: "How AgenticOrg's Commerce Sales Agent uses OACP-governed commerce tools, artifact cache controls, consent, Commerce Passports, and provider-owned checkout handoff boundaries.",
     keywords: ["commerce sales agent", "Grantex commerce", "agentic commerce", "commerce passport", "AI shopping agent safety"],
-    heroStat: { value: "0", label: "Provider rail executions by AgenticOrg" },
+    heroStat: { value: "0", label: "Payments without an arbiter allow decision" },
     sections: [
       { heading: "A Commerce Agent With A Control Layer", body: "AgenticOrg's Commerce Sales Agent is designed to help users ask product questions, compare grounded catalog results, draft carts, request consent, and follow checkout status without taking payment-provider control.\n\nThe OACP runtime boundary is split: Grantex owns trust/artifact authority, AgenticOrg owns buyer and seller agent runtime, merchant systems own commerce facts, and provider rails own payment or mandate execution." },
       { heading: "How The Flow Works", body: "The flow is intentionally staged: user question -> grounded product data -> inventory check -> cart draft -> consent or policy check -> provider-owned handoff or refusal -> status from merchant/provider evidence.\n\nAgenticOrg does not mint payment success locally. It can verify provider-owned capability metadata and prepare a handoff when configured, but provider abstraction, live execution approval, amount caps, audit, and reconciliation must remain with the approved authority and provider systems." },
@@ -187,7 +187,7 @@ export const CONTENT_PAGES: ContentPage[] = [
       { heading: "What Operators Should Watch", body: "Operators should review merchant config readiness, source evidence, Grantex authority blockers, provider capability evidence, bank/provider adapter status, channel approvals, POS bridge state, and public publishing state. Payment execution remains provider-owned and approval-gated." },
     ],
     faqs: [
-      { q: "Does AgenticOrg execute payment providers directly for commerce?", a: "No. AgenticOrg can verify provider-owned capability metadata and prepare provider-owned handoffs where configured, but it does not execute payment rails or claim payment success." },
+      { q: "Does AgenticOrg execute payment providers directly for commerce?", a: "Only through its Plural executor, which is switched off by default. With it on, a UCP or ACP checkout is charged through Plural once, and only after the commerce arbiter allowed that exact checkout. Otherwise AgenticOrg verifies provider-owned capability metadata and prepares provider-owned handoffs; it never claims payment success without the provider's confirmation." },
       { q: "Is payment execution live for every merchant?", a: "No. The runtime can prepare provider-owned handoffs only when a merchant, provider or bank, channel, and environment are configured and approved. Otherwise it fails closed with blockers." },
       { q: "Why can production discovery metadata appear before production readiness?", a: "Production MCP/A2A commerce metadata may be visible, but Grantex production Commerce V1 discovery remains disabled/fail-closed. The metadata should be gated or explicitly reviewed before any production discovery readiness decision." },
     ],

@@ -229,6 +229,18 @@ def test_complete_request_translation() -> None:
     assert acp.complete_body({"payment_data": {"purchase_order_number": "PO-1"}}, {})["payment"] == {"instruments": []}
 
 
+def test_acp_complete_carries_the_mandate_request_to_the_ucp_complete() -> None:
+    """ACP Complete runs the UCP Complete (run_operation), so a mandate request reaches the same D1 path."""
+    request = {"passport_jwt": af.PASSPORT, "presence": "human_not_present", "description": "A tote bag"}
+    body = af.complete_body(vendor={"mandate_request": request, "passport_jwt": af.PASSPORT})
+    vendor = acp._vendor(body)
+    out = acp.complete_body(body, vendor)
+    assert out[VENDOR_MEMBER] == {"mandate_request": request}
+    assert acp.OPERATIONS["complete"] == "complete_checkout"
+    with pytest.raises(acp._RefusalError):
+        acp._vendor(af.complete_body(vendor={"mandate": request}))
+
+
 @pytest.mark.parametrize(
     ("definition", "body", "param"),
     [
