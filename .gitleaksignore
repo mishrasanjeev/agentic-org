@@ -45,3 +45,8 @@ e3d046d9ab275c2054f198b4c2be323214a0aebe:docs/reports/commerce-agent-real-stagin
 c4de4ba34461d69618aa7502f3ccbe64b2d894ab:tests/integration/test_feature_flags_rls_postgres.py:generic-api-key:120
 # Synthetic OACP artifact JWS vector (attached-payload refusal case, test key only).
 15b35ec2499a735adbf50201f12e48354d8e07c4:tests/fixtures/oacp/oacp-artifact-jws-v1.json:jwt:875
+# Vendored ACP 2026-04-17 checkout schema (upstream specification, Apache-2.0): its
+# example members carry placeholder tokens, not credentials.
+0fd28b2ef5b652e327de0ccd936d08eb37a29694:core/commerce/acp/schemas/2026-04-17/schema.agentic_checkout.json:generic-api-key:325
+0fd28b2ef5b652e327de0ccd936d08eb37a29694:core/commerce/acp/schemas/2026-04-17/schema.agentic_checkout.json:generic-api-key:2126
+0fd28b2ef5b652e327de0ccd936d08eb37a29694:core/commerce/acp/schemas/2026-04-17/schema.agentic_checkout.json:generic-api-key:3628
