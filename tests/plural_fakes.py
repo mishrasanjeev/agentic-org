@@ -17,7 +17,7 @@ from typing import Any
 import httpx
 
 from core.commerce.executors.plural import PluralCredentials
-from core.commerce.payment_records import OperationRecord, PaymentState, payment_state_from
+from core.commerce.payment_records import JournalEntry, OperationRecord, PaymentState, payment_state_from
 
 BASE_URL = "https://plural.example/api"
 WEBHOOK_SECRET = base64.b64encode(b"synthetic-webhook-secret-for-tests").decode()
@@ -110,6 +110,8 @@ class _Row:
     currency: str | None
     provider_ref: str | None
     decision_id: str
+    checkout_session_id: str = ""
+    merchant_id: str = ""
 
 
 class MemoryJournal:
@@ -139,6 +141,37 @@ class MemoryJournal:
     async def state(self, tenant_id: str, checkout_session_id: str) -> PaymentState:
         return payment_state_from(self.rows)
 
+    async def operations(self, tenant_id: str, idempotency_key: str) -> list[JournalEntry]:
+        return [
+            JournalEntry(
+                operation=r.operation,
+                phase=r.phase,
+                idempotency_key=r.idempotency_key,
+                checkout_session_id=r.checkout_session_id,
+                decision_id=r.decision_id,
+                merchant_id=r.merchant_id,
+                amount_minor_units=r.amount_minor_units,
+                currency=r.currency,
+                provider_ref=r.provider_ref,
+            )
+            for r in self.rows
+            if r.idempotency_key == idempotency_key
+        ]
+
+    async def record_once(
+        self, op: OperationRecord, phase: str, *, provider_ref: str | None, details: Mapping[str, Any]
+    ) -> bool:
+        if any(
+            r.idempotency_key == op.idempotency_key and r.operation == op.operation and r.phase == phase
+            for r in self.rows
+        ):
+            return False
+        self.rows.append(self._row(op, phase, provider_ref))
+        return True
+
+    async def session_seller(self, tenant_id: str, checkout_session_id: str) -> str | None:
+        return "seller-01"
+
     @staticmethod
     def _row(op: OperationRecord, phase: str, provider_ref: str | None) -> _Row:
         return _Row(
@@ -149,6 +182,8 @@ class MemoryJournal:
             currency=op.currency,
             provider_ref=provider_ref,
             decision_id=op.decision_id,
+            checkout_session_id=op.checkout_session_id,
+            merchant_id=op.merchant_id,
         )
 
 

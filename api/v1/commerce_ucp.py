@@ -851,7 +851,9 @@ async def relay_plural_event(request: Request, tenant_id: str = Depends(get_curr
     The tenant comes from the authenticated caller; the event proves itself with
     the ``webhook-id``/``webhook-timestamp``/``webhook-signature`` headers Plural
     sent (HMAC with ``PLURAL_PINE_WEBHOOK_SECRET``), so the relay cannot forge
-    one. A verified UPI AutoPay mandate outcome records the RBI AFA evidence.
+    one. A verified UPI AutoPay mandate outcome records the RBI AFA evidence; a
+    verified order outcome reconciles a pending payment or a capture after
+    3-D Secure into the payment journal and the checkout (idempotent).
     """
     from core.commerce.executors.plural import PluralWebhookError, apply_plural_event
 
@@ -883,6 +885,11 @@ async def relay_plural_event(request: Request, tenant_id: str = Depends(get_curr
         seller_agent_id=None,
         buyer_agent_id=None,
         payload={"body_sha256": result["body_sha256"], "event_type": result["event_type"]},
-        details={"applied": result["applied"], "afa": result.get("afa"), "event_type": result["event_type"]},
+        details={
+            "applied": result["applied"],
+            "afa": result.get("afa"),
+            "payment": result.get("payment"),
+            "event_type": result["event_type"],
+        },
     )
-    return {"verified": True, "applied": result["applied"], "afa": result.get("afa")}
+    return {"verified": True, "applied": result["applied"], "afa": result.get("afa"), "payment": result.get("payment")}

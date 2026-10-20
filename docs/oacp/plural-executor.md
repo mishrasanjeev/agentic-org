@@ -101,7 +101,9 @@ sequenceDiagram
    - A UPI AutoPay mandate goes as `UPI` with `upi_details` naming the mandate reference.
 
    If the response has a challenge URL, the result is `action_required`: a 3DS Action in
-   2026-08-25, `continue_url` in 2026-04-08. Nothing is captured.
+   2026-08-25, `continue_url` in 2026-04-08. Nothing is captured until Plural reports the
+   outcome ([Reconciliation](#reconciliation)). A payment Plural reports as pending returns the
+   session to `ready_for_complete` with `payment_pending`; it is reconciled the same way.
 5. **Capture.** The capture amount is exactly the authorised amount. If the authorised amount
    differs from the session total, nothing is captured.
 
@@ -170,9 +172,33 @@ Each outcome is ledgered as `commerce.ucp.plural.event`:
   `headers_missing`, `secret_missing`).
 - A verified UPI AutoPay mandate outcome for one of AgenticOrg's mandate references records the
   RBI AFA evidence.
+- A verified order outcome for an order this executor created reconciles the payment
+  ([Reconciliation](#reconciliation)).
 - Any other verified event is recorded as not applied.
 
 No unauthenticated webhook route was added.
+
+## Reconciliation
+
+`PluralExecutor.reconcile`, from a verified order event (`data.order_id`,
+`data.merchant_order_reference`, `data.status` or the first payment's status). The event must name
+an order of this tenant: a `create_order` `succeeded` journal row with that Plural order id and an
+`aoc-` merchant reference. Anything else changes nothing (`unknown_order`).
+
+| Event status | Journal | Checkout |
+| --- | --- | --- |
+| `PROCESSED`, `CAPTURED` | A `capture` `succeeded` row (details `source: webhook`, the event SHA-256) unless one exists | The order is created as Complete would have (`completed`) |
+| `AUTHORIZED` (after the buyer's 3-D Secure step, or a pending payment authorised later) | The authorised amount is captured with the same merchant reference and `Request-ID` scheme, unless a capture was already requested (the journal refuses a second one); an authorised amount that differs from the journal amount captures nothing | Completed when the capture succeeds |
+| `FAILED`, `CANCELLED`, `DECLINED`, `REJECTED` | A `create_payment` `failed` row unless one exists | Back to `ready_for_complete`; the decision stays consumed, so the next Complete gets a new decision |
+| Anything else | Nothing | Nothing (still pending) |
+
+Every step is idempotent: a repeated or out-of-order event finds the phase already recorded and
+the session already completed (`already_completed`), and makes no provider call. The capture
+runs under the decision consumed at Complete; the session must still name that decision. The
+checkout records what reconciliation needs (`state.execution`: the decision id, the executor and
+the stored instruments, never a credential) when it moves to `complete_in_progress`. Each
+reconciliation is ledgered as `commerce.ucp.checkout.reconciled`, and each journal row as its
+`commerce.plural.<operation>` event. The route answers `payment: {journal, session}`.
 
 ## HTTP Safety
 
@@ -187,6 +213,7 @@ No unauthenticated webhook route was added.
 | --- | --- |
 | `tests/unit/test_plural_executor_g55.py` | Fake Plural API (MockTransport): no decision or a wrong decision means no HTTP call; each bound; replayed decisions; 3DS; declines; capture bounds; refunds bounded by the capture; webhook signature, headers and timestamp window; flag registration. |
 | `tests/integration/test_plural_executor_postgres.py` | UCP Complete end to end on Postgres with the same fake: ledger order, journal rows, decision consumed before the first call, refused and replayed decisions making no call, flag off, refunds, UPI AutoPay with AFA, append-only and forced RLS. |
+| `tests/integration/test_plural_reconciliation_postgres.py` | Webhook reconciliation on Postgres with the fake: capture after 3-D Secure exactly once across redelivered and out-of-order events, a pending payment captured at the provider, a failed 3-D Secure, an event for an unknown order. |
 | `tests/integration/test_plural_executor_sandbox.py` | The wire format against the Plural sandbox. Skipped unless `PLURAL_PINE_CLIENT_ID` and `PLURAL_PINE_CLIENT_SECRET` are set and the environment is `sandbox`. The payment step also needs `PLURAL_PINE_SANDBOX_INSTRUMENT_TOKEN`. |
 
 The request and response field names follow the Plural API v1 reference. Only the sandbox module
@@ -194,10 +221,9 @@ exercises them against Plural itself.
 
 ## Residual Gaps
 
-- **Asynchronous payment outcomes.** A payment that Plural reports as pending, or a 3DS
-  challenge completed later, is not yet reconciled from Plural webhooks. The session returns to
-  `ready_for_complete` (pending) or stays `complete_in_progress` (challenge). Capture after a
-  challenge needs a later webhook-driven step.
+- **Plural event field names.** Reconciliation reads `order_id`, `merchant_order_reference` and
+  `status` from the event `data` (or `data.order`). They follow the Plural API v1 reference and
+  are exercised only against the fake transport until the sandbox confirms them.
 - **Per-merchant credentials.** Credentials are read from the environment, so there is one
   Plural account per deployment. Per-merchant credentials, resolved from the provider's
   `credential_ref` through the vault, are a follow-up.

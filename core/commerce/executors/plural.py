@@ -552,6 +552,124 @@ class PluralExecutor:
             idempotency_key=key,
         )
 
+    async def reconcile(self, *, tenant_id: str, outcome: PaymentOutcome, event_sha256: str) -> ReconcileResult:
+        """Apply a verified Plural order event to the journal and the session; idempotent per phase.
+
+        The order must be one this executor created in the tenant (a
+        ``create_order`` ``succeeded`` row with this provider order ref and
+        merchant reference). Then:
+
+        * ``CAPTURED``/``PROCESSED``: a ``capture`` ``succeeded`` row is
+          appended (source ``webhook``) unless one exists, and the session's
+          order is created.
+        * ``AUTHORIZED`` (a payment that completed after the buyer's 3-D Secure
+          step, or that was pending): the authorised amount is captured with
+          the same merchant reference, unless a capture was already requested,
+          under the decision consumed at Complete (the journal refuses a second
+          capture). A captured payment then completes the session.
+        * ``FAILED`` and the like: a ``create_payment`` ``failed`` row is
+          appended and the session returns to ``ready_for_complete``.
+        * Anything else (still pending): nothing changes.
+        """
+        from datetime import UTC, datetime
+
+        from core.commerce.payment_records import OperationRecord
+        from core.commerce.ucp.handlers import reconcile_execution
+
+        entries = await self._journal.operations(tenant_id, outcome.merchant_reference)
+        created = next(
+            (
+                e
+                for e in entries
+                if e.operation == "create_order" and e.phase == "succeeded" and e.provider_ref == outcome.order_id
+            ),
+            None,
+        )
+        if created is None:
+            return ReconcileResult("unknown_order")
+        seller = await self._journal.session_seller(tenant_id, created.checkout_session_id) or ""
+
+        def op(operation: str) -> OperationRecord:
+            return OperationRecord(
+                tenant_id=tenant_id,
+                merchant_id=created.merchant_id,
+                seller_agent_id=seller,
+                checkout_session_id=created.checkout_session_id,
+                decision_id=created.decision_id,
+                operation=operation,
+                idempotency_key=created.idempotency_key,
+                amount_minor_units=created.amount_minor_units,
+                currency=created.currency,
+                mandate_hashes=dict(created.mandate_hashes),
+            )
+
+        def has(operation: str, phase: str) -> bool:
+            return any(e.operation == operation and e.phase == phase for e in entries)
+
+        source = {"source": "webhook", "event_sha256": event_sha256, "status": outcome.status}
+        journal = "unchanged"
+        if outcome.status in CAPTURED:
+            if not has("capture", "succeeded"):
+                journal = (
+                    "capture_recorded"
+                    if await self._journal.record_once(
+                        op("capture"), "succeeded", provider_ref=outcome.order_id, details=source
+                    )
+                    else "unchanged"
+                )
+            session_outcome = "captured"
+        elif outcome.status in AUTHORIZED:
+            if has("capture", "succeeded"):
+                session_outcome = "captured"
+            elif has("capture", "requested"):
+                return ReconcileResult("capture_already_requested")
+            else:
+                amount = created.amount_minor_units
+                if outcome.amount_minor_units is not None and outcome.amount_minor_units != amount:
+                    await self._journal.blocked(op("capture"), "authorized_amount_mismatch")
+                    return ReconcileResult("authorized_amount_mismatch")
+                client = self._client()
+                if client is None or amount is None:
+                    await self._journal.blocked(op("capture"), "plural_credentials_missing")
+                    return ReconcileResult("plural_credentials_missing")
+                phase, _data = await self._call(
+                    client,
+                    op("capture"),
+                    "PUT",
+                    f"/pay/v1/orders/{outcome.order_id}/capture",
+                    {
+                        "merchant_capture_reference": created.idempotency_key,
+                        "capture_amount": {"value": amount, "currency": str(created.currency)},
+                    },
+                    provider_ref=outcome.order_id,
+                    success=lambda data: str(data.get("status") or "").upper() in CAPTURED,
+                )
+                journal = f"capture_{phase}"
+                if phase != "succeeded":
+                    return ReconcileResult(journal)
+                session_outcome = "captured"
+        elif outcome.status in FAILED:
+            if not has("create_payment", "failed"):
+                journal = (
+                    "failure_recorded"
+                    if await self._journal.record_once(
+                        op("create_payment"), "failed", provider_ref=outcome.order_id, details=source
+                    )
+                    else "unchanged"
+                )
+            session_outcome = "failed"
+        else:
+            return ReconcileResult("pending")
+        session_result = await reconcile_execution(
+            tenant_id=tenant_id,
+            session_id=created.checkout_session_id,
+            decision_id=created.decision_id,
+            provider_order_ref=outcome.order_id,
+            outcome=session_outcome,
+            now=datetime.now(UTC),
+        )
+        return ReconcileResult(journal, session=session_result)
+
     async def _call(
         self,
         client: PluralApiClient,
@@ -687,6 +805,40 @@ def verify_webhook(
     )
 
 
+@dataclass(frozen=True)
+class PaymentOutcome:
+    """A Plural order event for one of our orders: the provider order, our merchant reference, the status."""
+
+    order_id: str
+    merchant_reference: str
+    status: str
+    amount_minor_units: int | None = None
+
+
+@dataclass(frozen=True)
+class ReconcileResult:
+    journal: str
+    session: str | None = None
+
+
+def payment_outcome(event: PluralWebhookEvent) -> PaymentOutcome | None:
+    """The order outcome a verified event carries for an order this executor created (``aoc-`` reference)."""
+    order = event.data.get("order") if isinstance(event.data.get("order"), Mapping) else event.data
+    order_id = str(order.get("order_id") or "")
+    reference = str(order.get("merchant_order_reference") or "")
+    if not order_id or not reference.startswith("aoc-"):
+        return None
+    payments = order.get("payments") if isinstance(order.get("payments"), list) else []
+    first = payments[0] if payments and isinstance(payments[0], Mapping) else {}
+    status = str(order.get("status") or first.get("status") or "").upper()
+    if not status:
+        return None
+    amount = _amount(first.get("payment_amount")) or _amount(order.get("order_amount"))
+    return PaymentOutcome(
+        order_id=order_id[:120], merchant_reference=reference[:64], status=status, amount_minor_units=amount
+    )
+
+
 def afa_outcome(event: PluralWebhookEvent) -> tuple[str, bool, str | None] | None:
     """``(mandate_reference, authorized, provider_mandate_ref)`` for a mandate event of ours, else None."""
     mandate = event.data.get("mandate") if isinstance(event.data.get("mandate"), Mapping) else event.data
@@ -703,18 +855,34 @@ def afa_outcome(event: PluralWebhookEvent) -> tuple[str, bool, str | None] | Non
 async def apply_plural_event(
     *, tenant_id: str, raw_body: bytes, headers: Mapping[str, str], secret: str | None = None
 ) -> dict[str, Any]:
-    """Verify a Plural event relayed for this tenant and apply what it proves (RBI AFA evidence).
+    """Verify a Plural event relayed for this tenant and apply what it proves.
 
-    Raises ``PluralWebhookError`` when it does not verify (the caller ledgers
-    the refusal). A verified event that carries no mandate outcome of ours is
-    reported as not applied.
+    A UPI AutoPay mandate outcome records the RBI AFA evidence. An order
+    outcome for an order this executor created reconciles a pending payment
+    or a capture after the buyer's 3-D Secure step into the operations journal
+    and the session (``PluralExecutor.reconcile``). Raises ``PluralWebhookError``
+    when it does not verify (the caller ledgers the refusal). A verified event
+    that carries neither is reported as not applied.
     """
+    from core.commerce import executors
     from core.commerce.payment_records import record_afa_outcome
 
     key = secret if secret is not None else (credentials_from_env() or PluralCredentials("", "", "")).webhook_secret
     event = verify_webhook(raw_body, headers, secret=key)
     outcome = afa_outcome(event)
     if outcome is None:
+        payment = payment_outcome(event)
+        executor = executors.get_executor(EXECUTOR_NAME)
+        if payment is not None and isinstance(executor, PluralExecutor):
+            reconciled = await executor.reconcile(tenant_id=tenant_id, outcome=payment, event_sha256=event.body_sha256)
+            return {
+                "verified": True,
+                "applied": reconciled.journal not in ("unknown_order", "pending", "unchanged")
+                or reconciled.session in ("completed", "returned_to_ready"),
+                "payment": {"journal": reconciled.journal, "session": reconciled.session},
+                "event_type": event.event_type,
+                "body_sha256": event.body_sha256,
+            }
         return {"verified": True, "applied": False, "event_type": event.event_type, "body_sha256": event.body_sha256}
     reference, authorized, provider_ref = outcome
     result = await record_afa_outcome(

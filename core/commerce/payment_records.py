@@ -95,6 +95,37 @@ class PaymentState:
         return max(0, self.captured_minor_units - self.refunded_minor_units)
 
 
+@dataclass(frozen=True)
+class JournalEntry:
+    """One ``commerce_payment_operations`` row as reconciliation reads it."""
+
+    operation: str
+    phase: str
+    idempotency_key: str
+    checkout_session_id: str
+    decision_id: str
+    merchant_id: str
+    amount_minor_units: int | None
+    currency: str | None
+    provider_ref: str | None
+    mandate_hashes: Mapping[str, Any] = field(default_factory=dict)
+
+    @classmethod
+    def from_row(cls, row: Any) -> JournalEntry:
+        return cls(
+            operation=row.operation,
+            phase=row.phase,
+            idempotency_key=row.idempotency_key,
+            checkout_session_id=row.checkout_session_id,
+            decision_id=row.decision_id,
+            merchant_id=row.merchant_id,
+            amount_minor_units=row.amount_minor_units,
+            currency=row.currency,
+            provider_ref=row.provider_ref,
+            mandate_hashes=dict(row.mandate_hashes or {}),
+        )
+
+
 class PaymentJournal(Protocol):
     async def begin(self, op: OperationRecord) -> bool:
         """Record the ``requested`` row; False when this key and operation were already requested."""
@@ -109,6 +140,14 @@ class PaymentJournal(Protocol):
         ...
 
     async def state(self, tenant_id: str, checkout_session_id: str) -> PaymentState: ...
+
+    async def operations(self, tenant_id: str, idempotency_key: str) -> list[JournalEntry]: ...
+
+    async def record_once(
+        self, op: OperationRecord, phase: str, *, provider_ref: str | None, details: Mapping[str, Any]
+    ) -> bool: ...
+
+    async def session_seller(self, tenant_id: str, checkout_session_id: str) -> str | None: ...
 
 
 class DbPaymentJournal:
@@ -186,6 +225,76 @@ class DbPaymentJournal:
 
         async with get_tenant_session(_tenant(tenant_id)) as session:
             return await payment_state(session, tenant_id=tenant_id, checkout_session_id=checkout_session_id)
+
+    async def operations(self, tenant_id: str, idempotency_key: str) -> list[JournalEntry]:
+        """Every journal row of one merchant reference in the tenant (reconciliation reads these)."""
+        from sqlalchemy import select
+
+        from core.database import get_tenant_session
+        from core.models.commerce_payments import CommercePaymentOperationRow as Row
+
+        async with get_tenant_session(_tenant(tenant_id)) as session:
+            rows = (
+                (
+                    await session.execute(
+                        select(Row)
+                        .where(Row.tenant_id == _tenant(tenant_id), Row.idempotency_key == idempotency_key)
+                        .order_by(Row.created_at, Row.id)
+                    )
+                )
+                .scalars()
+                .all()
+            )
+            return [JournalEntry.from_row(row) for row in rows]
+
+    async def record_once(
+        self, op: OperationRecord, phase: str, *, provider_ref: str | None, details: Mapping[str, Any]
+    ) -> bool:
+        """Append an outcome row learned from a verified provider event; False when that phase is already recorded."""
+        from sqlalchemy.dialects.postgresql import insert
+
+        from core.database import get_tenant_session
+        from core.models.commerce_payments import CommercePaymentOperationRow as Row
+
+        async with get_tenant_session(_tenant(op.tenant_id)) as session:
+            inserted = (
+                await session.execute(
+                    insert(Row)
+                    .values(id=uuid.uuid4(), **self._values(op, phase, provider_ref, details))
+                    .on_conflict_do_nothing(constraint="uq_commerce_payment_operations")
+                    .returning(Row.id)
+                )
+            ).first()
+            if inserted is None:
+                return False
+            await record_commerce_event(
+                session,
+                tenant_id=op.tenant_id,
+                event=op.ledger_event,
+                outcome="success" if phase == "succeeded" else "refused",
+                merchant_id=op.merchant_id,
+                seller_agent_id=op.seller_agent_id or None,
+                buyer_agent_id=None,
+                payload=op.ledger_payload(phase, provider_ref),
+                resource_id=op.idempotency_key,
+                details={"decision_id": op.decision_id, "phase": phase, **dict(details)},
+            )
+            return True
+
+    async def session_seller(self, tenant_id: str, checkout_session_id: str) -> str | None:
+        from sqlalchemy import select
+
+        from core.database import get_tenant_session
+        from core.models.commerce_ucp import CommerceCheckoutSessionRow as Session
+
+        async with get_tenant_session(_tenant(tenant_id)) as session:
+            return (
+                await session.execute(
+                    select(Session.seller_agent_id).where(
+                        Session.tenant_id == _tenant(tenant_id), Session.id == checkout_session_id
+                    )
+                )
+            ).scalar_one_or_none()
 
     @staticmethod
     def _values(op: OperationRecord, phase: str, provider_ref: str | None, details: Mapping[str, Any]) -> dict:

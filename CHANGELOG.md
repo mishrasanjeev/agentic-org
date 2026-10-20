@@ -1,5 +1,22 @@
 # Changelog
 
+## Unreleased - Plural 3-D Secure and pending payments reconciled from verified webhooks (G55)
+
+- A verified Plural order event relayed to `POST /api/v1/commerce/runtime/ucp/plural/events`
+  for an order the executor created (`create_order` journal row with that Plural order id and
+  `aoc-` reference) is reconciled once (`PluralExecutor.reconcile`): `PROCESSED`/`CAPTURED`
+  records the capture (`source: webhook`) and completes the checkout into its order;
+  `AUTHORIZED` (after the buyer's 3-D Secure step, or a pending payment authorised later)
+  captures the authorised amount with the same merchant reference under the decision consumed at
+  Complete, unless a capture was already requested; `FAILED` records the failure and returns the
+  checkout to `ready_for_complete`. Redelivered and out-of-order events change nothing and make no
+  provider call. The checkout keeps what this needs in `state.execution` (decision id, executor,
+  stored instruments; no credential); the order creation is shared with Complete
+  (`handlers._complete_into_order`, `handlers.reconcile_execution`, ledger
+  `commerce.ucp.checkout.reconciled`). The route answers `payment: {journal, session}`. No new
+  flag: the route and executor are already behind authentication and
+  `PLURAL_PINE_LIVE_EXECUTION_ENABLED`. Docs: `docs/oacp/plural-executor.md#reconciliation`.
+
 ## Unreleased - Server-verified Grantex mandates close D1; not-present rule set; buyer agent on UCP and refund decisions (G41, G44, G45, D1)
 
 - Mandate client (`core/commerce/mandates_client.py`): a UCP Complete carrying

@@ -1106,6 +1106,13 @@ async def _consume_and_prepare(
                 "handler_ids": sorted({i.handler_id for i in instruments}),
             },
         )
+    # What a later verified provider event needs to finish this execution (no credential).
+    state["execution"] = {
+        "decision_id": consumed.decision_id,
+        "executor": executor.name,
+        "instruments": [i.stored() for i in instruments],
+    }
+    row.state = state
     row.status = "complete_in_progress"
     row.decision_id = consumed.decision_id
     row.revision = row.revision + 1
@@ -1276,6 +1283,210 @@ async def _return_afa_step(
     return UcpResponse(status=200, body=rendered, outcome="refused", recorded=True, resource_id=row.id)
 
 
+async def _complete_into_order(
+    session: Any,
+    req: UcpRequest,
+    merchant: MerchantUcp,
+    row: Any,
+    state: dict[str, Any],
+    *,
+    version: str,
+    instruments: Sequence[Mapping[str, Any]],
+    decision_id: str,
+    executor_name: str,
+    provider_order_ref: str | None,
+    policies: Sequence[Mapping[str, Any]],
+    now: datetime,
+) -> OrderEvent:
+    """Create the order for a session whose payment the provider completed, in ``session``; returns its event."""
+    from core.models.commerce_ucp import CommerceOrderRow
+
+    order_id = new_order_id()
+    accepted = None
+    selected_term = (state.get("payment") or {}).get("selected_term_id")
+    if selected_term:
+        accepted = next((t for t in state.get("payment_terms") or [] if t["id"] == selected_term), None)
+    snapshot = build_order_snapshot(
+        order_id=order_id, checkout_id=row.id, merchant=merchant, state=state, accepted_term=accepted
+    )
+    if policies:
+        snapshot["policies"] = list(policies)
+    capability = merchant.mandate_capability
+    if capability is not None:
+        # The handler allowance the payment was captured under; refunds are bounded by it too.
+        snapshot["payment_allowance"] = {
+            "max_amount_minor_units": capability.max_amount_minor_units,
+            "currency": capability.currency,
+        }
+    session.add(
+        CommerceOrderRow(
+            id=order_id,
+            tenant_id=_tenant(req),
+            merchant_id=merchant.merchant_id,
+            seller_agent_id=merchant.seller_agent_id,
+            checkout_session_id=row.id,
+            serving_host=merchant.serving_host,
+            ucp_version=version,
+            platform_profile_url=row.platform_profile_url,
+            currency=str(row.currency),
+            total_minor_units=int(next(t["amount"] for t in state["totals"] if t["type"] == "total")),
+            snapshot=snapshot,
+            decision_id=decision_id,
+            executor=executor_name,
+            provider_order_ref=(provider_order_ref or None),
+            revision=1,
+            created_at=now,
+            updated_at=now,
+        )
+    )
+    await session.flush()
+    state["order_permalink_url"] = snapshot["permalink_url"]
+    state["payment"] = {**(state.get("payment") or {}), "instruments": list(instruments)}
+    state.pop("actions", None)
+    state.pop("execution", None)
+    row.state = state
+    row.status = "completed"
+    row.order_id = order_id
+    row.completed_at = now
+    order_event = OrderEvent(
+        event_type=ORDER_CREATED,
+        tenant_id=req.tenant_id,
+        merchant_id=merchant.merchant_id,
+        order_id=order_id,
+        revision=1,
+        snapshot=snapshot,
+        ucp_version=version,
+    )
+    await _record(
+        session,
+        req,
+        merchant,
+        ORDER_CREATED_EVENT,
+        "success",
+        order_id,
+        {"checkout_id": row.id, "decision_id": decision_id},
+        payload=snapshot,
+    )
+    webhook_url = (state.get("platform") or {}).get("order_webhook_url")
+    from core.commerce.ucp.webhooks import enqueue_order_deliveries, ensure_platform_subscription
+
+    if webhook_url and row.platform_profile_url:
+        await ensure_platform_subscription(
+            session,
+            tenant_id=_tenant(req),
+            merchant_id=merchant.merchant_id,
+            webhook_url=webhook_url,
+            platform_profile_url=row.platform_profile_url,
+            now=now,
+        )
+    await enqueue_order_deliveries(session, order_event, platform_profile_url=row.platform_profile_url, now=now)
+    await emit_order_event(session, order_event)
+    return order_event
+
+
+RECONCILED_EVENT = "commerce.ucp.checkout.reconciled"
+
+
+async def reconcile_execution(
+    *,
+    tenant_id: str,
+    session_id: str,
+    decision_id: str,
+    provider_order_ref: str | None,
+    outcome: str,
+    now: datetime,
+) -> str:
+    """Apply a verified provider outcome to a session whose execution is still open; idempotent.
+
+    ``outcome`` ``captured``: the order is created (as Complete would have) if
+    the session, executed under ``decision_id``, is not completed yet.
+    ``failed``: the session returns to ``ready_for_complete`` with a payment
+    message (the decision stays consumed; a new Complete needs a new decision).
+    Returns what happened: ``completed``, ``already_completed``,
+    ``returned_to_ready``, ``not_applicable`` or ``unknown_session``.
+    """
+    from core.commerce.ucp.merchant import config_from_row, merchant_ucp_from_config
+    from core.commerce.ucp.store import load_merchant_config_row
+    from core.database import get_tenant_session
+    from core.models.commerce_ucp import CommerceCheckoutSessionRow as Row
+
+    order_event: OrderEvent | None = None
+    req = UcpRequest(tenant_id=str(tenant_id), host="", ucp_agent=None)
+    async with get_tenant_session(_tenant(req)) as session:
+        scope = (
+            await session.execute(
+                select(Row.merchant_id, Row.seller_agent_id).where(Row.tenant_id == _tenant(req), Row.id == session_id)
+            )
+        ).first()
+    if scope is None:
+        return "unknown_session"
+    config_row = await load_merchant_config_row(
+        tenant_id=str(tenant_id), merchant_id=scope.merchant_id, seller_agent_id=scope.seller_agent_id
+    )
+    async with get_tenant_session(_tenant(req)) as session:
+        row = (
+            await session.execute(
+                select(Row).where(Row.tenant_id == _tenant(req), Row.id == session_id).with_for_update()
+            )
+        ).scalar_one_or_none()
+        if row is None or config_row is None:
+            return "unknown_session"
+        merchant = merchant_ucp_from_config(
+            config_from_row(config_row), tenant_id=str(tenant_id), serving_host=row.serving_host
+        )
+        if merchant is None:
+            return "unknown_session"
+        if row.status == "completed":
+            return "already_completed"
+        if row.decision_id != decision_id or row.status == "canceled":
+            return "not_applicable"
+        state = dict(row.state or {})
+        execution = state.get("execution") if isinstance(state.get("execution"), Mapping) else {}
+        if outcome == "captured":
+            order_event = await _complete_into_order(
+                session,
+                req,
+                merchant,
+                row,
+                state,
+                version=row.ucp_version,
+                instruments=list(execution.get("instruments") or []),
+                decision_id=decision_id,
+                executor_name=str(execution.get("executor") or merchant.executor or ""),
+                provider_order_ref=provider_order_ref,
+                policies=(),
+                now=now,
+            )
+            result = "completed"
+        elif outcome == "failed":
+            state.pop("actions", None)
+            state.pop("execution", None)
+            if row.status == "requires_escalation":
+                state.pop("continue_url", None)
+            state["messages"] = [m for m in state.get("messages") or [] if m.get("code") != "requires_3ds"]
+            row.state = state
+            row.status = "ready_for_complete"
+            result = "returned_to_ready"
+        else:
+            return "not_applicable"
+        row.revision = row.revision + 1
+        row.updated_at = now
+        await _record(
+            session,
+            req,
+            merchant,
+            RECONCILED_EVENT,
+            "success" if result == "completed" else "refused",
+            row.id,
+            {"result": result, "decision_id": decision_id, "provider_order_ref_present": bool(provider_order_ref)},
+        )
+    if order_event is not None:
+        from core.commerce.ucp.webhooks import kick_dispatch
+
+        kick_dispatch(_tenant(req))
+    return result
+
+
 async def _apply_execution(
     runtime: UcpRuntime,
     req: UcpRequest,
@@ -1288,7 +1499,6 @@ async def _apply_execution(
     executor_name: str,
 ) -> UcpResponse:
     from core.database import get_tenant_session
-    from core.models.commerce_ucp import CommerceOrderRow
 
     now = runtime.clock()
     version = negotiated.version
@@ -1298,86 +1508,20 @@ async def _apply_execution(
         row = await _load_session(session, req, merchant, session_id, lock=True)
         state = dict(row.state or {})
         if result.status == "completed":
-            order_id = new_order_id()
-            accepted = None
-            selected_term = (state.get("payment") or {}).get("selected_term_id")
-            if selected_term:
-                accepted = next((t for t in state.get("payment_terms") or [] if t["id"] == selected_term), None)
-            order_policies = await _policies(runtime, merchant, negotiated)
-            snapshot = build_order_snapshot(
-                order_id=order_id, checkout_id=row.id, merchant=merchant, state=state, accepted_term=accepted
-            )
-            if order_policies:
-                snapshot["policies"] = order_policies
-            capability = merchant.mandate_capability
-            if capability is not None:
-                # The handler allowance the payment was captured under; refunds are bounded by it too.
-                snapshot["payment_allowance"] = {
-                    "max_amount_minor_units": capability.max_amount_minor_units,
-                    "currency": capability.currency,
-                }
-            session.add(
-                CommerceOrderRow(
-                    id=order_id,
-                    tenant_id=_tenant(req),
-                    merchant_id=merchant.merchant_id,
-                    seller_agent_id=merchant.seller_agent_id,
-                    checkout_session_id=row.id,
-                    serving_host=merchant.serving_host,
-                    ucp_version=version,
-                    platform_profile_url=row.platform_profile_url,
-                    currency=str(row.currency),
-                    total_minor_units=int(next(t["amount"] for t in state["totals"] if t["type"] == "total")),
-                    snapshot=snapshot,
-                    decision_id=decision_id,
-                    executor=executor_name,
-                    provider_order_ref=(result.provider_order_ref or None),
-                    revision=1,
-                    created_at=now,
-                    updated_at=now,
-                )
-            )
-            await session.flush()
-            state["order_permalink_url"] = snapshot["permalink_url"]
-            state["payment"] = {**(state.get("payment") or {}), "instruments": [i.stored() for i in instruments]}
-            state.pop("actions", None)
-            row.state = state
-            row.status = "completed"
-            row.order_id = order_id
-            row.completed_at = now
-            order_event = OrderEvent(
-                event_type=ORDER_CREATED,
-                tenant_id=req.tenant_id,
-                merchant_id=merchant.merchant_id,
-                order_id=order_id,
-                revision=1,
-                snapshot=snapshot,
-                ucp_version=version,
-            )
-            await _record(
+            order_event = await _complete_into_order(
                 session,
                 req,
                 merchant,
-                ORDER_CREATED_EVENT,
-                "success",
-                order_id,
-                {"checkout_id": row.id, "decision_id": decision_id},
-                payload=snapshot,
+                row,
+                state,
+                version=version,
+                instruments=[i.stored() for i in instruments],
+                decision_id=decision_id,
+                executor_name=executor_name,
+                provider_order_ref=result.provider_order_ref,
+                policies=await _policies(runtime, merchant, negotiated),
+                now=now,
             )
-            webhook_url = (state.get("platform") or {}).get("order_webhook_url")
-            from core.commerce.ucp.webhooks import enqueue_order_deliveries, ensure_platform_subscription
-
-            if webhook_url and row.platform_profile_url:
-                await ensure_platform_subscription(
-                    session,
-                    tenant_id=_tenant(req),
-                    merchant_id=merchant.merchant_id,
-                    webhook_url=webhook_url,
-                    platform_profile_url=row.platform_profile_url,
-                    now=now,
-                )
-            await enqueue_order_deliveries(session, order_event, platform_profile_url=row.platform_profile_url, now=now)
-            await emit_order_event(session, order_event)
         elif result.status == "action_required":
             if negotiated.has(v.PAYMENT_AUTHENTICATION) and result.actions:
                 state["actions"] = _validated_actions(result.actions, merchant)
