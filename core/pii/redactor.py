@@ -104,6 +104,8 @@ def _quoted_hindi_grammar(text: str, start: int, end: int) -> bool:
 
 
 def _hindi_grammar_spans(text: str) -> list[tuple[int, int]]:
+    if os.environ.get("AGENTICORG_PII_HINDI_GRAMMAR_ENABLED", "").strip().lower() not in {"1", "true", "yes", "on"}:
+        return []
     spans = [
         match.span() for match in _HINDI_REFERENCE_QUERY.finditer(text)
         if not _quoted_hindi_grammar(text, match.start(), match.end())

@@ -72,6 +72,13 @@ positives on Hindi grammar. Assert that the entire question remains readable,
 not just that the earlier name and colour survive. Preserve literal quoted
 names, unknown words, custom recognizers and overlapping identifier detections.
 The narrow Hindi grammar guard is not a replacement Hindi language model.
+It is gated by `AGENTICORG_PII_HINDI_GRAMMAR_ENABLED`, default off in both
+redaction and entity lookup. Test absent, false and malformed values retaining
+previous detections, and enabled grammar correction retaining genuine PII.
+After exact-image acceptance and explicit rollout approval, enable only this
+control on API/worker. Leave other service configurations and existing flags
+unchanged. Disable this control to restore previous detection behavior without
+changing redaction mode or recognizers.
 
 For the existing explicit answer-mode opt-in only, verify two private linked
 turns using real PostgreSQL forced RLS and different API/worker signing keys.
@@ -85,8 +92,8 @@ changes refuse dispatch without spending or handing context to an alternate
 agent. Retain the existing routing correlation, distinct from execution state.
 Keep the binding claim until answer acknowledgement is stamped into encrypted
 receipt data so a follow-up cannot race that stamp. Never retry an uncertain
-send or backfill old answers as acknowledged. No schema, flags, keys or budget
-changes are needed; the banking dialogue/action runtime remains unchanged.
+send or backfill old answers as acknowledged. Context delivery needs no schema,
+existing flag, key or budget changes; the banking dialogue/action runtime remains unchanged.
 
 Account-backed Hindi/multi-turn acceptance is separate from these local tests.
 Record each run and actual reply, count its model cost against the approved

@@ -189,7 +189,8 @@ Wait for a meaningful Hindi confirmation, then send:
 Verify both actual bot replies and their matching inbox runs. The second reply
 should identify the same name and colour without asking you to repeat them.
 An answer about an unrelated person or organization is not a passing result,
-even if it repeats the correct facts. The privacy parser has narrow checks for
+even if it repeats the correct facts. With the default-off
+`AGENTICORG_PII_HINDI_GRAMMAR_ENABLED` rollout control enabled, the privacy parser has narrow checks for
 unambiguous Hindi reference-question grammar; named values and identifiers
 remain subject to redaction. These checks do not provide general Hindi NER
 coverage or permission to bypass privacy controls.

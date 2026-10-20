@@ -13,6 +13,11 @@ from core.pii.redactor import PIIRedactor, _is_hindi_grammar_entity
 FOLLOWUP = "अभी बताई गई मेरी काल्पनिक दुकान का नाम और रंग क्या है? हिंदी में उत्तर दें। कोई उपकरण या बाहरी कार्रवाई न करें।"
 
 
+@pytest.fixture(autouse=True)
+def enable_hindi_grammar(monkeypatch):
+    monkeypatch.setenv("AGENTICORG_PII_HINDI_GRAMMAR_ENABLED", "true")
+
+
 @pytest.mark.parametrize(
     "wrapper",
     [
@@ -87,7 +92,13 @@ def test_named_values_unknown_words_and_other_recognizers_are_never_exempted(tex
     assert not _is_hindi_grammar_entity(text, entity(text, fragment, kind, recognizer))
 
 
-def test_shared_redaction_and_pseudonymisation_lookup_preserve_real_entities(monkeypatch):
+@pytest.mark.parametrize("flag", [None, "false", "0", "invalid", "true", "1", "yes", " ON "])
+def test_shared_redaction_and_pseudonymisation_lookup_preserve_real_entities(monkeypatch, flag):
+    if flag is None:
+        monkeypatch.delenv("AGENTICORG_PII_HINDI_GRAMMAR_ENABLED", raising=False)
+    else:
+        monkeypatch.setenv("AGENTICORG_PII_HINDI_GRAMMAR_ENABLED", flag)
+    enabled = flag is not None and flag.strip().lower() in {"true", "1", "yes", "on"}
     monkeypatch.setenv("AGENTICORG_PII_REDACTION_MODE", "before_llm")
     text = FOLLOWUP + " संपर्क: प्रिया शर्मा, buyer@example.test, PAN ABCDE1234F।"
     detections = [
@@ -106,15 +117,20 @@ def test_shared_redaction_and_pseudonymisation_lookup_preserve_real_entities(mon
 
     redactor._analyzer.analyze.side_effect = analyze
     masked, tokens = redactor.redact(text)
-    assert FOLLOWUP in masked
+    assert (FOLLOWUP in masked) is enabled
     assert "प्रिया शर्मा" not in masked and "buyer@example.test" not in masked and "ABCDE1234F" not in masked
     assert redactor.deanonymize(masked, tokens) == text
-    assert redactor.find_entities(text, ["PERSON"]) == [
-        (result.start, result.end, result.entity_type) for result in detections[3:4]
+    assert redactor.find_entities(text, ["PERSON", "ORGANIZATION"]) == [
+        (result.start, result.end, result.entity_type)
+        for result in detections
+        if result.entity_type in {"PERSON", "ORGANIZATION"} and (not enabled or result is detections[3])
     ]
 
 
-def test_full_packaged_nlp_preserves_entire_question_and_context_grammar():
+@pytest.mark.parametrize("enabled", [False, True])
+def test_full_packaged_nlp_preserves_entire_question_and_context_grammar(monkeypatch, enabled):
+    if not enabled:
+        monkeypatch.delenv("AGENTICORG_PII_HINDI_GRAMMAR_ENABLED", raising=False)
     redactor = PIIRedactor()
     if redactor._analyzer is None:
         pytest.skip("Full packaged Presidio is required; immutable artifact gate runs this without skips")
@@ -131,6 +147,11 @@ def test_full_packaged_nlp_preserves_entire_question_and_context_grammar():
         }
     )
     masked, tokens = redactor.redact(text)
-    assert FOLLOWUP in masked and seed in masked and reply in masked
+    if enabled:
+        assert FOLLOWUP in masked and seed in masked and reply in masked
+        assert not redactor.find_entities(FOLLOWUP, ["PERSON", "ORGANIZATION"])
+    else:
+        assert FOLLOWUP not in masked
+        assert redactor.find_entities(FOLLOWUP, ["PERSON", "ORGANIZATION"])
     assert "buyer@example.test" not in masked
     assert redactor.deanonymize(masked, tokens) == text

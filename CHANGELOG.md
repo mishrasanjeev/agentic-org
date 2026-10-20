@@ -7,8 +7,10 @@
   as people or organizations. Do not exempt named values, unknown words,
   custom recognizers or spans crossing the grammatical boundary.
 - Apply the same narrow guard to pre-model redaction and entity lookup used by
-  pseudonymization. Redaction modes, genuine identifier recognizers, feature
-  flags and budgets are unchanged; this is not general Hindi NER coverage.
+  pseudonymization behind `AGENTICORG_PII_HINDI_GRAMMAR_ENABLED`, default off.
+  Enable only after privacy regression acceptance; disabling restores previous
+  detection behavior. Existing flags, redaction modes, genuine identifier
+  recognizers and budgets are unchanged; this is not general Hindi NER coverage.
 - Replay the entire seed and follow-up through the packaged privacy detector,
   alongside name, quoted-name, email and identifier protection regressions.
 
