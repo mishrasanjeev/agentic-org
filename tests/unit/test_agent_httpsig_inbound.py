@@ -486,23 +486,48 @@ async def test_a_registry_directory_with_a_bad_countersignature_is_not_trusted(
 
 
 @pytest.mark.asyncio
-async def test_a_tap_agent_is_looked_up_by_its_scheme_agent_id(
+async def test_a_tap_keyid_is_recorded_as_tap_keyid_and_never_as_a_scheme_agent_id(
     keys: KeyServer, redis: FakeRedis, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setattr(httpsig_keys, "grantex_base_url_for_env", lambda env=None: "https://registry.example")
     monkeypatch.setattr(settings, "httpsig_registry_lookup_enabled", True)
     key = _ed25519()
     keys.tap_keys["tap-agent-0001"] = {**public_jwk(key), "kid": "tap-agent-0001"}
-    keys.registry["scheme=visa_tap&scheme_agent_id=tap-agent-0001"] = {
+    thumbprint = jwk_thumbprint(key)
+    # The registry attests a scheme agent id for this key; it differs from the TAP keyid.
+    keys.registry[f"key_thumbprint={thumbprint}"] = {
         "agent_did": "did:web:agents.example:shopper-01",
-        "attestations": [{"scheme_agent_ids": [{"scheme": "visa_tap", "agent_id": "tap-agent-0001"}]}],
+        "attestations": [{"scheme_agent_ids": [{"scheme": "visa_tap", "agent_id": "visa-agent-77"}]}],
     }
     url = "https://merchant.example/api/v1/public/commerce/sellers/m/catalog.json"
     request = _starlette_request("GET", url, list(_tap_sign(key, url, keyid="tap-agent-0001").items()))
     check = await httpsig.check_request_signature(request, body=b"")
     assert check.status == "verified"
-    assert check.identity is not None and check.identity.agent_did == "did:web:agents.example:shopper-01"
-    assert [dict(i) for i in check.identity.scheme_agent_ids] == [{"scheme": "visa_tap", "agent_id": "tap-agent-0001"}]
+    identity = check.identity
+    assert identity is not None
+    assert identity.tap_keyid == "tap-agent-0001"
+    assert identity.key_thumbprint == thumbprint
+    assert identity.agent_did == "did:web:agents.example:shopper-01"
+    assert [dict(i) for i in identity.scheme_agent_ids] == [{"scheme": "visa_tap", "agent_id": "visa-agent-77"}]
+    lookups = [r.url.query.decode() for r in keys.requests if r.url.path == "/v1/registry/agents"]
+    assert lookups == [f"key_thumbprint={thumbprint}"]
+    assert all("scheme" not in q for q in lookups)
+
+
+@pytest.mark.asyncio
+async def test_without_a_registry_attestation_a_tap_agent_has_no_scheme_agent_ids(
+    keys: KeyServer, redis: FakeRedis, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(httpsig_keys, "grantex_base_url_for_env", lambda env=None: "https://registry.example")
+    monkeypatch.setattr(settings, "httpsig_registry_lookup_enabled", True)
+    key = _ed25519()
+    keys.tap_keys["tap-agent-0001"] = {**public_jwk(key), "kid": "tap-agent-0001"}
+    url = "https://merchant.example/api/v1/public/commerce/sellers/m/catalog.json"
+    request = _starlette_request("GET", url, list(_tap_sign(key, url, keyid="tap-agent-0001").items()))
+    check = await httpsig.check_request_signature(request, body=b"")
+    assert check.status == "verified" and check.identity is not None
+    assert check.identity.tap_keyid == "tap-agent-0001"
+    assert check.identity.scheme_agent_ids == () and check.identity.agent_did is None
 
 
 @pytest.mark.asyncio

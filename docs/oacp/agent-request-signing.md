@@ -128,8 +128,8 @@ A verified identity is `request.state.agent_signature` for the handler and:
 - on a write route (`POST /api/v1/a2a/message:send`), a commerce ledger row
   `a2a.agent_signature` (`outcome: success`, actor and buyer/merchant scope from the request) whose
   `details.agent_signature` holds the profile, tag, keyid, algorithm, label, `created`, `expires`,
-  Signature-Agent URL, key source, registry agent DID and scheme agent ids, and the TAP body
-  object results. The route's own `a2a.message.send` row is unchanged.
+  Signature-Agent URL, key source, key thumbprint, TAP keyid, registry agent DID and scheme agent
+  ids, and the TAP body object results. The route's own `a2a.message.send` row is unchanged.
 - on a read, the structured log `agent_request_signature` with the same fields.
 
 No key material, nonce or credential is recorded. A refused write in `enforce` mode is ledgered
@@ -149,17 +149,16 @@ canonicalization; the library's defaults (top-level members, RFC 8785 JCS) are u
 
 ### Scheme agent ids (G51)
 
-With `AGENTICORG_HTTPSIG_REGISTRY_LOOKUP_ENABLED=true` a verified agent is looked up in the Grantex
-registry, unauthenticated (the registry answers while `REGISTRY_PUBLIC_ENDPOINTS_ENABLED` is on;
-Grantex `REGISTRY_SCHEME_AGENT_IDS_ENABLED` must be on for scheme ids):
+A TAP `keyid` identifies a key in the TAP key store; it is recorded as `tap_keyid` and is never
+taken to be a scheme agent id. Every verified identity also carries `key_thumbprint`, the RFC 7638
+thumbprint of the key that verified it.
 
-- a TAP agent by `GET /v1/registry/agents?scheme=visa_tap&scheme_agent_id=<keyid>`: TAP keys an
-  agent by the `keyid` of its key store, so that keyid is its Visa TAP scheme agent id;
-- an agent whose key came from the Grantex registry directory by
-  `GET /v1/registry/agents?key_thumbprint=<keyid>`.
-
-The agent DID and the `scheme_agent_ids` of its counted attestations are recorded with the
-identity. Answers are cached (300 seconds, failures 60 seconds); a failed lookup records nothing
+With `AGENTICORG_HTTPSIG_REGISTRY_LOOKUP_ENABLED=true` a verified agent, of either profile, is looked
+up in the Grantex registry by that thumbprint, `GET /v1/registry/agents?key_thumbprint=<thumbprint>`,
+unauthenticated (the registry answers while `REGISTRY_PUBLIC_ENDPOINTS_ENABLED` is on; Grantex
+`REGISTRY_SCHEME_AGENT_IDS_ENABLED` must be on for scheme ids). Scheme agent ids come only from
+there: the agent DID and the `scheme_agent_ids` of the registry's counted attestations for that key
+are recorded with the identity. Answers are cached (300 seconds, failures 60 seconds); a failed lookup records nothing
 and never refuses the request.
 
 AgenticOrg serves no `/.well-known/agent-registry.json` (that document is the Grantex registry's).

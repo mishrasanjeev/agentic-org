@@ -28,10 +28,11 @@
   `agenticPaymentContainer` and `grantexConsentRecord` in a JSON body are checked with
   `verify_tap_body_objects` and recorded (`usable_for_payment`). `POST /api/v1/a2a/message:send`
   accepts the three optional members.
-- Scheme agent ids (G51): with `AGENTICORG_HTTPSIG_REGISTRY_LOOKUP_ENABLED` (default off) a verified
-  agent is looked up in the Grantex registry (`GET /v1/registry/agents?scheme=visa_tap&scheme_agent_id=`
-  for TAP, `?key_thumbprint=` for registry-directory keys; async, cached) and its DID and scheme
-  agent ids are recorded. `AGENTICORG_A2A_SCHEME_AGENT_IDS` publishes AgenticOrg's own ids in the A2A
+- Scheme agent ids (G51): a TAP keyid is recorded as `tap_keyid`, never as a scheme agent id. With
+  `AGENTICORG_HTTPSIG_REGISTRY_LOOKUP_ENABLED` (default off) a verified agent of either profile is
+  looked up in the Grantex registry by the RFC 7638 thumbprint of its verifying key
+  (`GET /v1/registry/agents?key_thumbprint=`; async, cached), and the DID and scheme agent ids the
+  registry attests for that key are recorded. `AGENTICORG_A2A_SCHEME_AGENT_IDS` publishes AgenticOrg's own ids in the A2A
   agent card as the `https://agenticorg.ai/a2a/extensions/scheme-agent-ids/v1` extension.
   AgenticOrg serves no `/.well-known/agent-registry.json`.
 - Outbound signing (G48): with `AGENTICORG_HTTPSIG_SIGN_OUTBOUND` (default off) the Grantex Commerce

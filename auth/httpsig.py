@@ -41,11 +41,11 @@ nonce, kid = keyid, the request's key). A consumer failure is soft; a payment
 container that fails is ``usable_for_payment: false``. No covered route takes
 a payment, so the result is recorded, not acted on.
 
-Scheme agent ids (G51): with ``AGENTICORG_HTTPSIG_REGISTRY_LOOKUP_ENABLED``,
-a verified agent is looked up in the Grantex registry (TAP: by
-``scheme=visa_tap`` and ``scheme_agent_id`` = the TAP keyid, the identifier
-TAP keys an agent by; a key from the Grantex registry directory: by
-``key_thumbprint``), and its DID and scheme agent ids are recorded.
+Scheme agent ids (G51): a TAP keyid is recorded as ``tap_keyid``, never as a
+scheme agent id. With ``AGENTICORG_HTTPSIG_REGISTRY_LOOKUP_ENABLED``, a
+verified agent is looked up in the Grantex registry by the RFC 7638 thumbprint
+of the key that verified it (``key_thumbprint``), whatever the profile, and the
+DID and scheme agent ids the registry attests for that key are recorded.
 """
 
 from __future__ import annotations
@@ -68,6 +68,7 @@ from grantex_agent_httpsig import (
     HttpRequest,
     InnerList,
     KeyReference,
+    jwk_thumbprint,
     parse_dictionary,
     parse_signature_agent,
     verify_tap_body_objects,
@@ -108,6 +109,10 @@ class AgentSignatureIdentity:
     expires: int | None
     signature_agent: str | None
     key_source: str
+    #: The RFC 7638 thumbprint of the verifying key (the registry looks agents up by it).
+    key_thumbprint: str | None = None
+    #: The TAP key-store keyid: an identifier of the key, not a scheme agent id.
+    tap_keyid: str | None = None
     agent_did: str | None = None
     scheme_agent_ids: tuple[Mapping[str, str], ...] = ()
     tap_body: Mapping[str, Any] | None = None
@@ -243,18 +248,19 @@ def _tap_body_result(body: bytes, *, nonce: str, keyid: str, jwk: Mapping[str, A
     }
 
 
-async def _registry_identity(
-    profile: str, keyid: str, key_source: str
-) -> tuple[str | None, tuple[Mapping[str, str], ...]]:
-    if not settings.httpsig_registry_lookup_enabled:
+def _thumbprint(jwk: Mapping[str, Any]) -> str | None:
+    try:
+        return jwk_thumbprint(jwk)
+    except (AgentHttpSigError, KeyError, TypeError, ValueError):
+        return None
+
+
+async def _registry_identity(thumbprint: str | None) -> tuple[str | None, tuple[Mapping[str, str], ...]]:
+    # Scheme agent ids come only from the registry's attestations for this key; a TAP keyid is
+    # never taken to be one.
+    if not settings.httpsig_registry_lookup_enabled or thumbprint is None:
         return None, ()
-    if profile == "tap":
-        query = [("scheme", "visa_tap"), ("scheme_agent_id", keyid)]
-    elif key_source == "grantex_registry_directory":
-        query = [("key_thumbprint", keyid)]
-    else:
-        return None, ()
-    agent = await httpsig_keys.lookup_registry_agent(query)
+    agent = await httpsig_keys.lookup_registry_agent([("key_thumbprint", thumbprint)])
     if agent is None:
         return None, ()
     return agent.agent_did, agent.scheme_agent_ids
@@ -339,7 +345,8 @@ async def check_request_signature(request: Request, *, body: bytes, now: int | N
             if profile == "tap" and result.nonce
             else None
         )
-        agent_did, scheme_ids = await _registry_identity(profile, result.keyid, resolved.source)
+        thumbprint = _thumbprint(resolved.jwk)
+        agent_did, scheme_ids = await _registry_identity(thumbprint)
         identity = AgentSignatureIdentity(
             profile=profile,
             tag=result.tag,
@@ -350,6 +357,8 @@ async def check_request_signature(request: Request, *, body: bytes, now: int | N
             expires=result.expires,
             signature_agent=result.signature_agent.url if result.signature_agent else None,
             key_source=resolved.source,
+            key_thumbprint=thumbprint,
+            tap_keyid=result.keyid if profile == "tap" else None,
             agent_did=agent_did,
             scheme_agent_ids=scheme_ids,
             tap_body=tap_body,
