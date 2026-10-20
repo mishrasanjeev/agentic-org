@@ -44,6 +44,13 @@ from core.commerce.offline_pos_bridge import (
     simulate_offline_pos_confirmation,
     verify_offline_pos_callback_signature,
 )
+from tests.commerce_ledger_fakes import patch_commerce_ledger
+
+
+@pytest.fixture(autouse=True)
+def commerce_ledger_events(monkeypatch: pytest.MonkeyPatch) -> list:
+    """The commerce ledger writes these route tests make (the database session is a fake here)."""
+    return patch_commerce_ledger(monkeypatch, commerce_runtime_api)
 
 
 def _now() -> datetime:

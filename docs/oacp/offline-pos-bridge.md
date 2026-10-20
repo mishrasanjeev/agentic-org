@@ -25,12 +25,29 @@ sequenceDiagram
   AgenticOrg-->>Grantex: Evidence refs only if authority/policy refresh is needed
 ```
 
+## Arbiter Decision
+
+A POS handoff packet is stored only against an `allow` decision of the commerce arbiter for
+that exact packet ([arbiter and ledger](arbiter-ledger.md)):
+
+1. `POST /api/v1/commerce/runtime/pos/offline/handoffs` with `buyer_authority` and no
+   `decision_id`: the arbiter decides on the packet. A refusal returns `status: blocked` with
+   `blocker.code = arbiter_refused`; an allow returns `status: decision_issued` with
+   `decision_id` and `payload_hash` and stores no packet.
+2. The same request with `decision_id` (within 10 minutes): the arbiter decides again; when that
+   is also `allow`, the presented decision is consumed once and the packet is stored with its
+   `decision_id`. A missing, refused, expired, reused or mismatched decision returns
+   `status: blocked` with the guard's code and stores nothing.
+
+Every call, its decision and the consumption are sealed to the commerce ledger. This is a
+breaking change for callers that created packets in one call (see `CHANGELOG.md`).
+
 ## What Works Now
 
 | Capability | Runtime status |
 | --- | --- |
 | POS readiness endpoint | Implemented at `GET /api/v1/commerce/runtime/pos/offline/readiness`. |
-| Handoff packet builder | Implemented at `POST /api/v1/commerce/runtime/pos/offline/handoffs`. |
+| Handoff packet builder | Implemented at `POST /api/v1/commerce/runtime/pos/offline/handoffs`; stored only against a consumed arbiter `allow` decision. |
 | Confirmation intake | Implemented at `POST /api/v1/commerce/runtime/pos/offline/confirmations`. |
 | Local simulator | Implemented at `POST /api/v1/commerce/runtime/pos/offline/simulator/confirm`. |
 | Persistence | Tenant-scoped tables store packets and confirmations with RLS. |

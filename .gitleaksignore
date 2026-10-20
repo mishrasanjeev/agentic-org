@@ -45,3 +45,7 @@ e3d046d9ab275c2054f198b4c2be323214a0aebe:docs/reports/commerce-agent-real-stagin
 c4de4ba34461d69618aa7502f3ccbe64b2d894ab:tests/integration/test_feature_flags_rls_postgres.py:generic-api-key:120
 # Synthetic OACP artifact JWS vector (attached-payload refusal case, test key only).
 15b35ec2499a735adbf50201f12e48354d8e07c4:tests/fixtures/oacp/oacp-artifact-jws-v1.json:jwt:875
+# Commerce ledger Postgres tests: synthetic purchase idempotency keys (a short label
+# plus a counter) in request bodies, not credentials. Baselined by fingerprint.
+9ff1945d7b64e22ac96f57c74b6239e89a247838:tests/integration/test_commerce_ledger_routes_postgres.py:generic-api-key:123
+0a020a0e631257dd9231c4fa996ac7e3d38e1e15:tests/integration/test_commerce_arbiter_ledger_postgres.py:generic-api-key:91

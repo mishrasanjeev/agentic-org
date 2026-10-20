@@ -1,5 +1,117 @@
 # Changelog
 
+## Unreleased - Fixed: commerce ledger details keep digests intact (G41)
+
+- `record_commerce_event` masked PII in `details` with patterns (a ten-digit phone number, an
+  8 to 18 digit account number) that also matched digit runs inside hex SHA-256 values and
+  `arbdec_<hex>` decision ids, so about one mandate hash in five, and some decision ids, were
+  sealed as `...******...` and could not be matched to the mandate or decision they name. Hex
+  digests (optionally `sha256:`) and opaque `<prefix>_<hex>` / `<prefix>-<hex>` ids are now kept;
+  every other string is masked as before. Rows already sealed are unchanged (append-only).
+  Regression: `tests/regression/test_ledger_digest_masking_20261020.py`.
+
+## Unreleased - Commerce ledger routes, offline export and Grantex countersignature (G14-G16)
+
+- Tests for the retention task, the Grantex service client (size limit, non-JSON and non-object
+  answers, unsafe endpoint, no retry, one JWKS refresh) and the offline verifier's exit codes in
+  process, so each new module meets the new-module coverage floor.
+- Tests: the commerce ledger route-table checks walk FastAPI's lazily included routers
+  (`tests/app_routes.py`), so they see every route on the pinned FastAPI 0.143 instead of none,
+  and the arbiter RLS probe is granted USAGE on the `public` schema, which other integration
+  suites recreate without the default grant.
+- `scripts/verify_ledger.py` no longer prints the name of the `--audit-secret-env` variable
+  when it is unset, and the operator reference on ledger operator decisions is derived from
+  the tenant and the principal subject only (the API key name is never read; API keys already
+  carry `apikey:<prefix>` as their subject).
+- **Breaking for strict runtimes: caller-asserted buyer authority is refused.** The commerce
+  arbiter has a new rule, `buyer_authority_verified` (policy `commerce-arbiter-v2`): mandate,
+  consent and passport evidence must carry a server-side verification ref, which only Phase 4
+  mandates will provide. With `AGENTICORG_ARBITER_REQUIRE_VERIFIED_AUTHORITY` unset, production,
+  staging, preview and unrecognised runtimes refuse every purchase handoff, POS handoff and
+  mandate request with `failing_rule: buyer_authority_verified`; local, dev, test and ci
+  runtimes pass the rule and record `buyer_authority_source: caller_asserted` in the decision.
+  Opt-out: `AGENTICORG_ARBITER_REQUIRE_VERIFIED_AUTHORITY=false` (the decision still records
+  `caller_asserted`). Docs: `docs/oacp/arbiter-ledger.md#rules`.
+- **Breaking for strict runtimes: an allow needs a Grantex countersignature to be consumed.**
+  After each arbiter decision commits, AgenticOrg posts it to Grantex `POST
+  /v1/commerce/oacp/arbiter-decisions` (contract body: `failing_rule` rules, six evidence keys,
+  the decision time) and, for an allow, verifies the returned `decision+jwt` against the pinned
+  Grantex JWKS (`approver_auth == policy_arbiter`, `action_hash == payload_hash`,
+  `decision_request == decision_id`) and attaches its `jti` to the decision. With
+  `AGENTICORG_ARBITER_REQUIRE_GRANTEX_GRANT` unset, strict runtimes consume only countersigned
+  allows; an allow without one is refused `grantex_grant_missing` at once (no waiting, no retry;
+  the caller asks for a new decision). Purchase prepare and POS handoff responses carry
+  `grantex_countersignature`. Posting follows `AGENTICORG_ARBITER_GRANTEX_POST_ENABLED` (unset:
+  the grant flag). Opt-out: `AGENTICORG_ARBITER_REQUIRE_GRANTEX_GRANT=false`.
+- Ledger routes under `/api/v1/commerce/runtime/ledger` (tenant admin): ledger events, arbiter
+  decisions, operator decisions bound to an arbiter decision (annotation only: they never change
+  an outcome or execute anything), review manifests, retention dispositions, what retention would
+  delete, and an export bundle. Each write route records its declared ledger event.
+- Offline-verifiable export (`GET /api/v1/commerce/runtime/ledger/export`) and
+  `scripts/verify_ledger.py <export.json>`: recomputes the chain with no database and no network
+  and reports the first break (`sequence_gap`, `previous_link`, `link_hash`, `truncated`,
+  `anchor_mismatch`, `witness_countersignature`); exit 1 on a break. Row signatures are HMAC, so
+  they are checked offline only with `--audit-secret-env`. The chain link arithmetic moved to
+  `core/governance/audit_chain_link.py` (no dependencies) so the verifier loads it by path.
+- Retention: a daily task on the shared Celery app (`apply-oacp-retention`, behind
+  `AGENTICORG_OACP_RETENTION_APPLY_ENABLED`, default off) deletes review manifests whose
+  disposition is due, through `oacp_delete_due_manifest` (SECURITY DEFINER, tenant-bound) and the
+  manifest trigger's one DELETE transition, which re-checks every due condition; each deletion is
+  ledgered.
+- Witness checkpoints: with `AGENTICORG_AUDIT_WITNESS_ENABLED` (default off) each sealed chain
+  head is posted to Grantex `POST /v1/audit/witness-checkpoints`; the verified countersignature is
+  stored in `audit_chain_witness_checkpoints`, and a `409 WITNESS_FORK` is logged as an
+  irregularity with its fork evidence stored.
+- Migration `v6z88_commerce_ledger` (unreleased, extended): `audit_chain_witness_checkpoints`
+  (forced RLS, append-only), `oacp_manifest_retention_guard` and `oacp_delete_due_manifest`.
+- Least-privilege grants in `v6z88_commerce_ledger` for the NOBYPASSRLS application role
+  `agenticorg_app` (applied only where the role exists): `oacp_delete_due_manifest` is revoked
+  from PUBLIC and executable by `agenticorg_app` alone; UPDATE and DELETE are revoked on
+  `audit_chain_witness_checkpoints` and the three `oacp_*` decision record tables; on
+  `commerce_arbiter_decisions` the role keeps only `UPDATE (consumed_at, grantex_grant_jti,
+  grantex_recorded_at)` for the two one-time transitions. Same rules as
+  `scripts/create_app_role.sql`.
+
+## Unreleased - Commerce ledger and arbiter (G9-G13)
+
+- **Breaking: `live_execution_approved` is ignored.** `POST /api/v1/commerce/runtime/purchase/prepare`
+  accepts the body boolean for one more release, logs a deprecation warning and ignores it
+  (`deprecated_fields_ignored` in the response). Live provider execution now needs
+  `decision_id`: call once with `buyer_authority` to get an `allow` arbiter decision, then
+  repeat the identical request with that `decision_id` within 10 minutes (single use), with
+  `PLURAL_PINE_LIVE_EXECUTION_ENABLED=true`. Migration path: send `buyer_authority`, read
+  `arbiter_decision.decision_id`, resend with it.
+- **Breaking: POS handoff packets need an arbiter decision.** `POST
+  /api/v1/commerce/runtime/pos/offline/handoffs` without `decision_id` now returns the decision
+  (`status: decision_issued`, or `blocked` with `arbiter_refused`) and stores no packet; the
+  packet is stored when the same request is repeated with the `allow` `decision_id`. Migration
+  path: two calls, as above. There is no opt-out: a handoff without an `allow` decision is the
+  behaviour this release removes.
+- Commerce arbiter (`core/commerce/arbiter.py`): deterministic `decide(action, context)` over
+  mandate, consent, Commerce Passport cap, verified fresh unrevoked OACP artifacts and merchant
+  limits (`provider_policy.arbiter` in the merchant config), first failure wins, missing input
+  refuses. Decisions are stored append-only in `commerce_arbiter_decisions` and sealed to the
+  ledger; refusals are returned as blockers. No path waits for a person; the merchant option
+  `escalate_to_human` (default false) copies a refusal into `hitl_queue` for review without
+  changing it.
+- Commerce ledger (`core/commerce/ledger.py`): every commerce write route and A2A
+  `message:send` writes a signed `audit_log` row (`resource_type = commerce_ledger`, RFC 8785
+  `payload_hash`) in the same transaction as the write. `route_meta(audit_event=...)` is now
+  enforced on commerce write routes: a route that returns without its event answers 500
+  `commerce_ledger_event_missing` (logged only with `AGENTICORG_ROUTE_ENFORCEMENT_MODE=log`).
+- OACP operator decision, review manifest and retention disposition records are append-only
+  (trigger) and mirrored into the ledger; a repeated record id is refused
+  `record_append_only`, a non-UUID tenant `ledger_tenant_invalid`.
+- `AGENTICORG_AUDIT_CHAIN_DEFAULT_ON` (default off) seals the audit chain of every tenant with a
+  commerce merchant config while `AGENTICORG_AUDIT_CHAIN_ENABLED` is off.
+- Migration `v6z88_commerce_ledger` (after `v6z87_platform_ctx_policies`):
+  `commerce_arbiter_decisions` under forced RLS, append-only triggers, and the `audit_log`
+  append-only trigger reinstalled (an empty-schema bootstrap was stamped past the baseline that
+  created it). Docs: `docs/oacp/arbiter-ledger.md`.
+- The Grantex replay fetch and the OACP trust endpoint fetch validate their URLs with the
+  async egress validator (`tests/regression/test_egress_async_callers.py`), so no async
+  commerce path calls the synchronous validator.
+
 ## Unreleased - Hindi reference-question privacy correction
 
 - Keep unambiguous Hindi reference-question grammar, action conjunctions and

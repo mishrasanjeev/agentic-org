@@ -16,8 +16,10 @@ from core.commerce.oacp_artifacts import (
     build_oacp_cache_operator_decision_record,
     plan_oacp_artifact_cache_maintenance,
 )
+from core.models.audit import AuditLog
 from core.models.oacp_audit_review_manifest import OacpAuditReviewManifestRecordRow
 
+TENANT_C6W3 = "6c6e7400-0000-4000-8000-0000000c6e03"
 C6Y2_DOC_PATH = Path("docs/reports/commerce-agent-c6y2-oacp-audit-review-manifest-repository.md")
 C6Y2_MIGRATION_PATH = Path("migrations/versions/v6_y2_oacp_audit_review_manifests.py")
 
@@ -38,7 +40,7 @@ def _record(**overrides: object) -> OacpPersistentArtifactCacheRecord:
         authority="grantex_canonical_oacp_artifact_authority",
         issuer="grantex",
         scope_kind="buyer_agent",
-        tenant_id="cten_C6W3",
+        tenant_id=TENANT_C6W3,
         merchant_id="mch_C6W3",
         seller_agent_id="seller_C6W3",
         buyer_agent_id="buyer_C6W3",
@@ -67,7 +69,7 @@ def _plan(records: tuple[OacpPersistentArtifactCacheRecord, ...]) -> dict[str, o
         grantex_available=True,
         action_intent="prepare_only",
         risk_tier="low",
-        scope_filter=OacpArtifactCacheRepositoryQuery(tenant_id="cten_C6W3", merchant_id="mch_C6W3"),
+        scope_filter=OacpArtifactCacheRepositoryQuery(tenant_id=TENANT_C6W3, merchant_id="mch_C6W3"),
     )
 
 
@@ -101,7 +103,7 @@ def _bundle() -> dict[str, object]:
         operator_decision_records=(decision,),
         durable_decision_records=(dict(decision),),
         generated_at="2026-06-12T00:03:00.000Z",
-        tenant_id="cten_C6W3",
+        tenant_id=TENANT_C6W3,
         merchant_id="mch_C6W3",
         seller_agent_id="seller_C6W3",
         buyer_agent_id="buyer_C6W3",
@@ -129,6 +131,7 @@ class _FakeScalars:
 class _FakeAsyncSession:
     def __init__(self) -> None:
         self.rows: dict[str, OacpAuditReviewManifestRecordRow] = {}
+        self.ledger: list[AuditLog] = []
 
     async def get(
         self,
@@ -137,7 +140,11 @@ class _FakeAsyncSession:
     ) -> OacpAuditReviewManifestRecordRow | None:
         return self.rows.get(manifest_id)
 
-    def add(self, row: OacpAuditReviewManifestRecordRow) -> None:
+    def add(self, row: object) -> None:
+        # New records are mirrored into the commerce ledger (audit_log) in the same session.
+        if isinstance(row, AuditLog):
+            self.ledger.append(row)
+            return
         self.rows[row.manifest_id] = row
 
     async def flush(self) -> None:
@@ -175,7 +182,7 @@ async def test_c6y2_repository_upserts_gets_lists_and_evaluates_without_export_o
 
     scoped = await repository.list_manifests_for_scope(
         OacpAuditReviewManifestRepositoryQuery(
-            tenant_id="cten_C6W3",
+            tenant_id=TENANT_C6W3,
             merchant_id="mch_C6W3",
             buyer_agent_id="buyer_C6W3",
             retention_class="standard_internal_review",

@@ -21,8 +21,10 @@ from core.commerce.oacp_artifacts import (
     build_oacp_cache_operator_decision_record,
     plan_oacp_artifact_cache_maintenance,
 )
+from core.models.audit import AuditLog
 from core.models.oacp_retention_disposition_decision import OacpRetentionDispositionDecisionRecordRow
 
+TENANT_C6W3 = "6c6e7400-0000-4000-8000-0000000c6e03"
 C6Y5_DOC_PATH = Path("docs/reports/commerce-agent-c6y5-oacp-retention-disposition-decisions.md")
 C6Y5_MIGRATION_PATH = Path("migrations/versions/v6_y5_oacp_retention_disposition_decisions.py")
 
@@ -43,7 +45,7 @@ def _record(**overrides: object) -> OacpPersistentArtifactCacheRecord:
         authority="grantex_canonical_oacp_artifact_authority",
         issuer="grantex",
         scope_kind="buyer_agent",
-        tenant_id="cten_C6W3",
+        tenant_id=TENANT_C6W3,
         merchant_id="mch_C6W3",
         seller_agent_id="seller_C6W3",
         buyer_agent_id="buyer_C6W3",
@@ -72,7 +74,7 @@ def _plan(records: tuple[OacpPersistentArtifactCacheRecord, ...]) -> dict[str, o
         grantex_available=True,
         action_intent="prepare_only",
         risk_tier="low",
-        scope_filter=OacpArtifactCacheRepositoryQuery(tenant_id="cten_C6W3", merchant_id="mch_C6W3"),
+        scope_filter=OacpArtifactCacheRepositoryQuery(tenant_id=TENANT_C6W3, merchant_id="mch_C6W3"),
     )
 
 
@@ -103,7 +105,7 @@ def _bundle(records: tuple[OacpPersistentArtifactCacheRecord, ...]) -> dict[str,
         operator_decision_records=(decision,),
         durable_decision_records=(dict(decision),),
         generated_at="2026-06-12T00:03:00.000Z",
-        tenant_id="cten_C6W3",
+        tenant_id=TENANT_C6W3,
         merchant_id="mch_C6W3",
         seller_agent_id="seller_C6W3",
         buyer_agent_id="buyer_C6W3",
@@ -119,7 +121,7 @@ def _summary() -> dict[str, object]:
     return build_oacp_c6y3_audit_review_manifest_summary(
         (manifest,),
         query=OacpAuditReviewManifestRepositoryQuery(
-            tenant_id="cten_C6W3",
+            tenant_id=TENANT_C6W3,
             merchant_id="mch_C6W3",
             retention_class="standard_internal_review",
         ),
@@ -165,6 +167,7 @@ class _FakeScalars:
 class _FakeAsyncSession:
     def __init__(self) -> None:
         self.rows: dict[str, OacpRetentionDispositionDecisionRecordRow] = {}
+        self.ledger: list[AuditLog] = []
 
     async def get(
         self,
@@ -173,7 +176,11 @@ class _FakeAsyncSession:
     ) -> OacpRetentionDispositionDecisionRecordRow | None:
         return self.rows.get(disposition_decision_id)
 
-    def add(self, row: OacpRetentionDispositionDecisionRecordRow) -> None:
+    def add(self, row: object) -> None:
+        # New records are mirrored into the commerce ledger (audit_log) in the same session.
+        if isinstance(row, AuditLog):
+            self.ledger.append(row)
+            return
         self.rows[row.disposition_decision_id] = row
 
     async def flush(self) -> None:
@@ -215,7 +222,7 @@ async def test_c6y5_repository_upserts_gets_lists_and_evaluates_without_retentio
 
     scoped = await repository.list_disposition_decisions_for_scope(
         OacpRetentionDispositionDecisionRepositoryQuery(
-            tenant_id="cten_C6W3",
+            tenant_id=TENANT_C6W3,
             merchant_id="mch_C6W3",
             decision_kind="approve_future_retention_review",
             retention_class="standard_internal_review",

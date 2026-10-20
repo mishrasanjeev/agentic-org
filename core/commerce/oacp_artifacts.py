@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import uuid
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
@@ -6002,6 +6003,52 @@ def _c6x8_query_matches(decision_record: Mapping[str, Any], query: OacpOperatorD
     )
 
 
+def _ledger_tenant(tenant_id: Any) -> bool:
+    """OACP records are mirrored into ``audit_log``, which is keyed by the tenant UUID."""
+    try:
+        uuid.UUID(str(tenant_id))
+    except (TypeError, ValueError):
+        return False
+    return True
+
+
+def _append_only_refusal(store_result: Mapping[str, Any]) -> dict[str, Any]:
+    """An OACP decision, manifest or disposition record is written once (append-only, ``v6z88_commerce_ledger``)."""
+    return {
+        **store_result,
+        "stored": False,
+        "status": "blocked",
+        "refusal_code": "record_append_only",
+        "message": "OACP records are append-only; record a new decision instead of changing this one.",
+    }
+
+
+def _ledger_tenant_refusal(store_result: Mapping[str, Any]) -> dict[str, Any]:
+    return {
+        **store_result,
+        "stored": False,
+        "status": "blocked",
+        "refusal_code": "ledger_tenant_invalid",
+        "message": "OACP records need the tenant UUID so they can be sealed to the commerce ledger.",
+    }
+
+
+async def _mirror_oacp_record(session: Any, event: str, row: Any, record: Mapping[str, Any]) -> None:
+    """Mirror one new OACP record into the chained ``audit_log`` in the same transaction."""
+    from core.commerce.ledger import record_commerce_event
+
+    await record_commerce_event(
+        session,
+        tenant_id=row.tenant_id,
+        event=event,
+        outcome="success",
+        merchant_id=row.merchant_id,
+        seller_agent_id=row.seller_agent_id,
+        buyer_agent_id=row.buyer_agent_id,
+        payload=record,
+    )
+
+
 class DurableOacpOperatorDecisionRepository:
     """Async SQLAlchemy-backed operator decision repository; it performs no maintenance actions."""
 
@@ -6016,12 +6063,15 @@ class DurableOacpOperatorDecisionRepository:
             return store_result
 
         decision_id = cast(str, store_result["decision_id"])
-        row = await self._session.get(OacpOperatorDecisionRecordRow, decision_id)
-        if row is None:
-            row = OacpOperatorDecisionRecordRow(decision_id=decision_id)
-            self._session.add(row)
+        if await self._session.get(OacpOperatorDecisionRecordRow, decision_id) is not None:
+            return _append_only_refusal(store_result)
+        row = OacpOperatorDecisionRecordRow(decision_id=decision_id)
         _c6x8_apply_decision_to_row(row, decision_record)
+        if not _ledger_tenant(row.tenant_id):
+            return _ledger_tenant_refusal(store_result)
+        self._session.add(row)
         await self._session.flush()
+        await _mirror_oacp_record(self._session, "commerce.oacp.operator_decision.record", row, decision_record)
         return store_result
 
     async def get_decision(self, decision_id: str) -> dict[str, Any] | None:
@@ -8936,12 +8986,17 @@ class DurableOacpRetentionDispositionDecisionRepository:
             return store_result
 
         disposition_decision_id = cast(str, store_result["disposition_decision_id"])
-        row = await self._session.get(OacpRetentionDispositionDecisionRecordRow, disposition_decision_id)
-        if row is None:
-            row = OacpRetentionDispositionDecisionRecordRow(disposition_decision_id=disposition_decision_id)
-            self._session.add(row)
+        if await self._session.get(OacpRetentionDispositionDecisionRecordRow, disposition_decision_id) is not None:
+            return _append_only_refusal(store_result)
+        row = OacpRetentionDispositionDecisionRecordRow(disposition_decision_id=disposition_decision_id)
         _c6y5_apply_decision_to_row(row, decision_record)
+        if not _ledger_tenant(row.tenant_id):
+            return _ledger_tenant_refusal(store_result)
+        self._session.add(row)
         await self._session.flush()
+        await _mirror_oacp_record(
+            self._session, "commerce.oacp.retention_disposition_decision.record", row, decision_record
+        )
         return store_result
 
     async def get_disposition_decision(self, disposition_decision_id: str) -> dict[str, Any] | None:
@@ -9060,12 +9115,15 @@ class DurableOacpAuditReviewManifestRepository:
             return store_result
 
         manifest_id = cast(str, store_result["manifest_id"])
-        row = await self._session.get(OacpAuditReviewManifestRecordRow, manifest_id)
-        if row is None:
-            row = OacpAuditReviewManifestRecordRow(manifest_id=manifest_id)
-            self._session.add(row)
+        if await self._session.get(OacpAuditReviewManifestRecordRow, manifest_id) is not None:
+            return _append_only_refusal(store_result)
+        row = OacpAuditReviewManifestRecordRow(manifest_id=manifest_id)
         _c6y2_apply_manifest_to_row(row, manifest)
+        if not _ledger_tenant(row.tenant_id):
+            return _ledger_tenant_refusal(store_result)
+        self._session.add(row)
         await self._session.flush()
+        await _mirror_oacp_record(self._session, "commerce.oacp.audit_review_manifest.record", row, manifest)
         return store_result
 
     async def get_manifest(self, manifest_id: str) -> dict[str, Any] | None:

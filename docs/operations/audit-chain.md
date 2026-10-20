@@ -114,6 +114,13 @@ digest fields are signed only when present).
 | --- | --- | --- |
 | `AGENTICORG_AUDIT_CHAIN_ENABLED` | `false` | Run the sealing task. Verification and the status read whatever is sealed either way. |
 | `AGENTICORG_AUDIT_CHAIN_SEAL_BATCH` | `5000` | Rows linked per batch. |
+| `AGENTICORG_AUDIT_CHAIN_DEFAULT_ON` | `false` | With the global flag off, still seal every tenant that has a commerce merchant config, so the commerce ledger ([arbiter and ledger](../oacp/arbiter-ledger.md)) is tamper-evident. The tenant's chain status reports `enabled: true`. |
+
+Migration `v6z88_commerce_ledger` (re)installs the `audit_log` append-only trigger with the
+sealing transition (the text of `SEAL_TRIGGER_SQL`): a database bootstrapped from an empty
+schema is stamped past the baseline that created it, so before this only `init_db` installed it
+there. Under the NOBYPASSRLS application role (`scripts/create_app_role.sql`) `audit_log`
+UPDATE is withheld, so the sealing task must run under a role that holds UPDATE on `audit_log`.
 
 ## Tests
 

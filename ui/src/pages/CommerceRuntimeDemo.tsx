@@ -697,7 +697,6 @@ export default function CommerceRuntimeDemo() {
         product_ref_or_query: query,
         quantity: 1,
         grantex_available: true,
-        live_execution_approved: false,
       });
       setPurchaseStatus(data);
       pushLog("Purchase handoff", data.status, data.status === "prepared_provider_handoff" ? "ok" : "warn");
@@ -726,7 +725,7 @@ export default function CommerceRuntimeDemo() {
     const query = firstProduct?.product_ref || firstProduct?.title || "Canvas Tote";
     setBusy("pos-handoff");
     try {
-      const { data } = await commerceRuntimeApi.createOfflinePosHandoff({
+      const request = {
         merchant_id: merchantId,
         seller_agent_id: sellerAgentId,
         buyer_agent_id: buyerAgentId || undefined,
@@ -741,7 +740,12 @@ export default function CommerceRuntimeDemo() {
           pos_provider: posProvider,
         },
         grantex_available: true,
-      });
+      };
+      let { data } = await commerceRuntimeApi.createOfflinePosHandoff(request);
+      // An allow decision is issued first; the packet is stored when the same request presents it.
+      if (data.status === "decision_issued" && data.decision_id) {
+        ({ data } = await commerceRuntimeApi.createOfflinePosHandoff({ ...request, decision_id: data.decision_id }));
+      }
       setPosStatus(data);
       pushLog("POS handoff", data.status, data.pos_handoff_created ? "ok" : "warn");
     } catch (error) {

@@ -6,7 +6,7 @@ This inventory is based on `api/v1/commerce_runtime.py`, `core/commerce/c6z_runt
 
 | Category | AgenticOrg reality | Owner/action |
 | --- | --- | --- |
-| Implemented runtime | Tenant/merchant/seller scoped commerce config UI/API, Seller onboarding packets, encrypted merchant-scoped Shopify credential setup, read-only Shopify sync, Shopify webhook HMAC checks, Grantex C6Z authority request, artifact cache intake and Grantex replay refresh that verify each artifact (ES256 detached JWS against the pinned Grantex JWKS, scope, TTL, Token Status List) and, in strict runtimes, refuses the whole issuance on any failure, buyer Q&A from cache, public catalog publishing gate, web/MCP/OpenAPI/A2A/search/WhatsApp/Telegram bridge routes, protocol adapter payloads, Plural/Pine capability verifier, bank/provider pending-adapter config, purchase preparation blockers, Offline POS Bridge handoff packets, POS confirmation intake, local POS simulator, and reconciliation status. | AgenticOrg keeps runtime tests, UI tests, route inventory, and docs aligned. |
+| Implemented runtime | Tenant/merchant/seller scoped commerce config UI/API, Seller onboarding packets, encrypted merchant-scoped Shopify credential setup, read-only Shopify sync, Shopify webhook HMAC checks, Grantex C6Z authority request, artifact cache intake and Grantex replay refresh that verify each artifact (ES256 detached JWS against the pinned Grantex JWKS, scope, TTL, Token Status List) and, in strict runtimes, refuses the whole issuance on any failure, buyer Q&A from cache, public catalog publishing gate, web/MCP/OpenAPI/A2A/search/WhatsApp/Telegram bridge routes, protocol adapter payloads, Plural/Pine capability verifier, bank/provider pending-adapter config, purchase preparation blockers, the commerce arbiter (deterministic allow/refuse decisions sealed to the ledger, single-use `decision_id` on purchase and POS handoff), the commerce ledger (signed, chained `audit_log` rows for every commerce write, enforced `audit_event`), Offline POS Bridge handoff packets, POS confirmation intake, local POS simulator, and reconciliation status. | AgenticOrg keeps runtime tests, UI tests, route inventory, and docs aligned. |
 | Implemented docs only | Older Commerce Sales Agent planning reports and launch plans. | Link to this docs set when they discuss the current OACP split. |
 | Implemented but not broad launch | Channel routes, provider capability checks, and real POS provider callbacks require secrets and partner approvals before public use. | Operators must configure channel/provider/POS env and run smoke tests. |
 | Requires external credentials/approval | Shopify access, Grantex service token and tenant allowlist, WhatsApp/Telegram webhook secrets, Plural/Pine credentials, POS provider approval, merchant and provider approval. | Runtime owner collects evidence before launch. |
@@ -22,10 +22,12 @@ This inventory is based on `api/v1/commerce_runtime.py`, `core/commerce/c6z_runt
 - Merchant config helpers: `core/commerce/oacp_merchant_config.py`
 - Artifact verification: `core/commerce/oacp_jws.py` (ES256 detached JWS, status-list token), `verify_oacp_artifact` in `core/commerce/oacp_artifacts.py`, `core/commerce/oacp_grantex_trust.py` (JWKS and status-list fetch and caching)
 - Artifact cache records: `core/commerce/oacp_artifacts.py`
+- Commerce ledger and arbiter: `core/commerce/ledger.py`, `core/commerce/arbiter.py`, `core/commerce/arbiter_store.py`, migration `v6_z88_commerce_ledger.py` ([arbiter and ledger](arbiter-ledger.md))
 - UI demo: `ui/src/pages/CommerceRuntimeDemo.tsx`
 - UI tests: `ui/src/__tests__/CommerceRuntimeDemo.test.tsx`
 - Unit tests: `tests/unit/test_oacp_c6z_runtime_vertical.py`, `tests/unit/test_oacp_artifact_jws_profile.py` (shared vectors)
-- Regression tests: `tests/regression/test_oacp_cache_verifies_grantex_artifacts_20261019.py`
+- Regression tests: `tests/regression/test_oacp_cache_verifies_grantex_artifacts_20261019.py`, `tests/regression/test_commerce_ledger_20261020.py`, `tests/unit/test_commerce_arbiter.py`
+- Postgres proofs: `tests/integration/test_commerce_arbiter_ledger_postgres.py`, `tests/integration/test_rls_nobypass_commerce_ledger.py`
 - Conformance against a running Grantex: `tests/integration/test_oacp_grantex_conformance.py`
 
 ## Pending Runtime Gaps
@@ -35,5 +37,7 @@ This inventory is based on `api/v1/commerce_runtime.py`, `core/commerce/c6z_runt
 | Provider or bank rail execution | Pine Labs Plural/P3P, bank/fintech/custom providers + merchant + AgenticOrg | Add only after provider/bank, merchant, legal, security, ops, rollback, webhook, and monitoring approval. |
 | Live POS provider integration | AgenticOrg + merchant + POS/payment provider | Replace simulator with verified provider callbacks, receipt evidence refs, operator monitoring, and rollback. |
 | Public channel launch | AgenticOrg + channel owners | Configure secrets, review channel policy, run webhook smoke, and verify source/freshness labels. |
+| Verified buyer authority | Grantex + AgenticOrg | Mandate, consent and Commerce Passport references reach the arbiter as caller-asserted evidence; replace with Grantex-signed mandates verified server-side (Phase 4). |
+| Ledger export, operator decisions, witness | AgenticOrg + Grantex | Ledger routes and offline-verifiable export, operator decisions bound to arbiter decisions, Grantex countersignature and chain-head witness (Phase 2 G14-G16). |
 | Multi-source conflict resolution | AgenticOrg + merchants | Define precedence when Shopify, OMS, ERP, WMS, and provider facts disagree. |
 | Public self-service rollout | AgenticOrg | Self-service config UI/API is implemented; complete support runbooks, approval queue, and merchant-launch ops before broad public rollout. |

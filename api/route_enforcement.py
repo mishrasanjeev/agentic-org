@@ -31,19 +31,33 @@ enforced only while ``AGENTICORG_ROUTE_SCOPE_A2A_MCP`` is on; no role holds
 their scopes, so API keys and agent grants that are given them, and admins,
 reach those routes.
 
-``AGENTICORG_ROUTE_ENFORCEMENT_MODE=log`` turns denials into warnings for a
-staged rollout; the default is ``enforce``.
+* ``audit_event`` — on a commerce write route (a non-read method under
+  :data:`COMMERCE_LEDGER_ROUTE_PREFIXES` or in :data:`COMMERCE_LEDGER_ROUTE_PATHS`)
+  the declared event must be written to the commerce ledger
+  (``core.commerce.ledger.record_commerce_event``) before the handler returns.
+  The dependency opens a request scope before the handler and checks it after;
+  a handler that returns without having recorded its event is a server error
+  (500, ``commerce_ledger_event_missing``). A handler that raises is not
+  checked: its transaction rolled back, and a refusal it seals is written in
+  its own transaction. The check runs after the handler and before the
+  response, so ``api.main`` registers this dependency with
+  ``scope="function"``.
+
+``AGENTICORG_ROUTE_ENFORCEMENT_MODE=log`` turns denials (and a missing ledger
+event) into warnings for a staged rollout; the default is ``enforce``.
 """
 
 from __future__ import annotations
 
 import logging
+from collections.abc import AsyncIterator
 from typing import Any
 
 from fastapi import HTTPException, Request
 
 from api.client_ip import client_ip as resolve_client_ip
 from api.route_metadata import ROUTE_METADATA_ATTR
+from core.commerce.ledger import close_request_scope, open_request_scope
 from core.config import settings
 
 logger = logging.getLogger("agenticorg.route_enforcement")
@@ -392,12 +406,63 @@ def _check_scope(request: Request, meta: dict[str, Any]) -> None:
     _deny(request, 403, f"Missing scope: {' or '.join(required)}", declared=meta.get("scope"))
 
 
-async def enforce_route_metadata(request: Request) -> None:
-    """Global dependency: apply ``route_meta`` rate limits and scope checks."""
+# Commerce routes whose writes go to the commerce ledger (route templates, as mounted).
+COMMERCE_LEDGER_ROUTE_PREFIXES: tuple[str, ...] = (
+    "/api/v1/commerce/",
+    "/api/v1/public/commerce/",
+    "/api/v1/a2a/commerce/",
+)
+COMMERCE_LEDGER_ROUTE_PATHS: frozenset[str] = frozenset({"/api/v1/a2a/message:send"})
+
+
+def is_commerce_write_route(path: str, method: str) -> bool:
+    """True for a non-read method on a commerce route template."""
+    if method.upper() in _READ_METHODS:
+        return False
+    return path in COMMERCE_LEDGER_ROUTE_PATHS or path.startswith(COMMERCE_LEDGER_ROUTE_PREFIXES)
+
+
+def _ledger_actor(request: Request) -> tuple[str, str]:
+    """Who the request acts as, for the ledger row (never a credential value)."""
+    state = request.state
+    auth_mode = getattr(state, "auth_mode", None)
+    if auth_mode == "commerce_buyer":
+        return "buyer_agent", str(getattr(state, "buyer_agent_id", None) or "unknown")
+    agent_id = getattr(state, "agent_id", None)
+    if agent_id:
+        return "agent", str(agent_id)
+    if auth_mode == "api_key":
+        return "api_key", str(getattr(state, "api_key_name", None) or "api_key")
+    return "user", str(getattr(state, "user_sub", None) or "unknown")
+
+
+async def enforce_route_metadata(request: Request) -> AsyncIterator[None]:
+    """Global dependency: ``route_meta`` rate limits and scope checks, and the commerce ledger check."""
     route = request.scope.get("route")
     endpoint = getattr(route, "endpoint", None)
     meta = getattr(endpoint, ROUTE_METADATA_ATTR, None) if endpoint is not None else None
     if not isinstance(meta, dict):
+        yield
         return
     await _check_rate_limit(request, meta)
     _check_scope(request, meta)
+    declared = meta.get("audit_event")
+    path = str(getattr(route, "path", "") or "")
+    if not declared or not is_commerce_write_route(path, request.method):
+        yield
+        return
+    actor_type, actor_id = _ledger_actor(request)
+    ledger_scope, token = open_request_scope(declared_event=declared, actor_type=actor_type, actor_id=actor_id)
+    try:
+        yield
+    finally:
+        close_request_scope(token)
+    if declared in ledger_scope.recorded:
+        return
+    logger.error(
+        "commerce_ledger_event_missing",
+        extra={"path": path, "declared_event": declared, "recorded": sorted(ledger_scope.recorded)},
+    )
+    if _enforcement_mode() == "log":
+        return
+    raise HTTPException(status_code=500, detail="commerce_ledger_event_missing")

@@ -37,6 +37,7 @@ from api.v1 import (
     channels,
     chat,
     client_portal,
+    commerce_ledger,
     commerce_public,
     commerce_runtime,
     companies,
@@ -236,10 +237,11 @@ async def lifespan(app: FastAPI):
 _is_strict_runtime = is_strict_runtime_env(settings.env)
 
 app = FastAPI(
-    # route_meta(scope=, rate_limit=) is enforced at request time for every
-    # route (api/route_enforcement.py) — the annotations are no longer
-    # documentation-only.
-    dependencies=[Depends(enforce_route_metadata)],
+    # route_meta(scope=, rate_limit=, audit_event=) is enforced at request
+    # time for every route (api/route_enforcement.py) — the annotations are no
+    # longer documentation-only. scope="function": the commerce ledger check
+    # runs after the handler and before the response is sent.
+    dependencies=[Depends(enforce_route_metadata, scope="function")],
     title="AgenticOrg",
     description=("AI Virtual Employee Platform. Real-time counts: GET /api/v1/product-facts."),
     version=product_facts._version_from_pyproject(),
@@ -323,6 +325,7 @@ app.include_router(channels.router, prefix="/api/v1")
 app.include_router(channels.webhook_router, prefix="/api/v1")
 app.include_router(connectors.router, prefix="/api/v1", tags=["Connectors"])
 app.include_router(commerce_public.public_router, prefix="/api/v1", tags=["Public Commerce"])
+app.include_router(commerce_ledger.router, prefix="/api/v1", tags=["Commerce Ledger"])
 app.include_router(commerce_runtime.merchant_config_router, prefix="/api/v1", tags=["Commerce Runtime"])
 app.include_router(commerce_runtime.router, prefix="/api/v1", tags=["Commerce Runtime"])
 app.include_router(oauth_connector.router, prefix="/api/v1", tags=["Connectors"])

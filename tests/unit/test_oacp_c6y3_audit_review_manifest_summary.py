@@ -18,8 +18,10 @@ from core.commerce.oacp_artifacts import (
     build_oacp_cache_operator_decision_record,
     plan_oacp_artifact_cache_maintenance,
 )
+from core.models.audit import AuditLog
 from core.models.oacp_audit_review_manifest import OacpAuditReviewManifestRecordRow
 
+TENANT_C6W3 = "6c6e7400-0000-4000-8000-0000000c6e03"
 C6Y3_DOC_PATH = Path("docs/reports/commerce-agent-c6y3-oacp-audit-review-manifest-summary.md")
 
 
@@ -35,7 +37,7 @@ def _record(**overrides: object) -> OacpPersistentArtifactCacheRecord:
         authority="grantex_canonical_oacp_artifact_authority",
         issuer="grantex",
         scope_kind="buyer_agent",
-        tenant_id="cten_C6W3",
+        tenant_id=TENANT_C6W3,
         merchant_id="mch_C6W3",
         seller_agent_id="seller_C6W3",
         buyer_agent_id="buyer_C6W3",
@@ -64,7 +66,7 @@ def _plan(records: tuple[OacpPersistentArtifactCacheRecord, ...]) -> dict[str, o
         grantex_available=True,
         action_intent="prepare_only",
         risk_tier="low",
-        scope_filter=OacpArtifactCacheRepositoryQuery(tenant_id="cten_C6W3", merchant_id="mch_C6W3"),
+        scope_filter=OacpArtifactCacheRepositoryQuery(tenant_id=TENANT_C6W3, merchant_id="mch_C6W3"),
     )
 
 
@@ -99,7 +101,7 @@ def _bundle(
         operator_decision_records=(decision,),
         durable_decision_records=(dict(decision),),
         generated_at=generated_at,
-        tenant_id="cten_C6W3",
+        tenant_id=TENANT_C6W3,
         merchant_id="mch_C6W3",
         seller_agent_id="seller_C6W3",
         buyer_agent_id="buyer_C6W3",
@@ -133,6 +135,7 @@ class _FakeScalars:
 class _FakeAsyncSession:
     def __init__(self) -> None:
         self.rows: dict[str, OacpAuditReviewManifestRecordRow] = {}
+        self.ledger: list[AuditLog] = []
 
     async def get(
         self,
@@ -141,7 +144,11 @@ class _FakeAsyncSession:
     ) -> OacpAuditReviewManifestRecordRow | None:
         return self.rows.get(manifest_id)
 
-    def add(self, row: OacpAuditReviewManifestRecordRow) -> None:
+    def add(self, row: object) -> None:
+        # New records are mirrored into the commerce ledger (audit_log) in the same session.
+        if isinstance(row, AuditLog):
+            self.ledger.append(row)
+            return
         self.rows[row.manifest_id] = row
 
     async def flush(self) -> None:
@@ -178,7 +185,7 @@ async def test_c6y3_repository_filters_and_builds_redacted_summary_without_expor
     await repository.upsert_manifest(inventory_manifest)
 
     query = OacpAuditReviewManifestRepositoryQuery(
-        tenant_id="cten_C6W3",
+        tenant_id=TENANT_C6W3,
         merchant_id="mch_C6W3",
         artifact_family="price",
         generated_at_after="2026-06-12T00:03:59.000Z",
@@ -214,7 +221,7 @@ def test_c6y3_summary_counts_due_and_legal_hold_without_evidence_values() -> Non
     summary = build_oacp_c6y3_audit_review_manifest_summary(
         (manifest,),
         query=OacpAuditReviewManifestRepositoryQuery(
-            tenant_id="cten_C6W3",
+            tenant_id=TENANT_C6W3,
             merchant_id="mch_C6W3",
             retention_class="legal_hold_candidate",
             retain_until_before="2036-06-11T00:00:00.000Z",
@@ -241,19 +248,19 @@ def test_c6y3_summary_fails_closed_for_unsafe_queries_and_manifests() -> None:
     unsafe_filter = build_oacp_c6y3_audit_review_manifest_summary(
         (manifest,),
         query=OacpAuditReviewManifestRepositoryQuery(
-            tenant_id="cten_C6W3",
+            tenant_id=TENANT_C6W3,
             blocked_capability="execute_checkout_payment_now",
         ),
         generated_at="2026-06-12T00:05:00.000Z",
     )
     bad_time = build_oacp_c6y3_audit_review_manifest_summary(
         (manifest,),
-        query=OacpAuditReviewManifestRepositoryQuery(tenant_id="cten_C6W3"),
+        query=OacpAuditReviewManifestRepositoryQuery(tenant_id=TENANT_C6W3),
         generated_at="not-a-time",
     )
     executable_manifest = build_oacp_c6y3_audit_review_manifest_summary(
         (_manifest(allowed_to_execute=True),),
-        query=OacpAuditReviewManifestRepositoryQuery(tenant_id="cten_C6W3"),
+        query=OacpAuditReviewManifestRepositoryQuery(tenant_id=TENANT_C6W3),
         generated_at="2026-06-12T00:05:00.000Z",
     )
 

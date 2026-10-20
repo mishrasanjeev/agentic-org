@@ -252,9 +252,9 @@ describe("CommerceRuntimeDemo", () => {
     expect(await screen.findByText("Canvas Tote")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: /prepare/i }));
     await waitFor(() => expect(apiMock.preparePurchase).toHaveBeenCalledWith(expect.objectContaining({
-      live_execution_approved: false,
       product_ref_or_query: "shopify:product:1",
     })));
+    expect(apiMock.preparePurchase.mock.calls[0][0]).not.toHaveProperty("live_execution_approved");
     expect(await screen.findByText(/plural_pine_capability_missing_or_stale/i)).toBeInTheDocument();
     expect(screen.queryByText(/capture payment|paid successfully|order created/i)).not.toBeInTheDocument();
   });
@@ -275,6 +275,13 @@ describe("CommerceRuntimeDemo", () => {
             title: "Canvas Tote",
           },
         ],
+      },
+    });
+    apiMock.createOfflinePosHandoff.mockResolvedValueOnce({
+      data: {
+        status: "decision_issued",
+        pos_handoff_created: false,
+        decision_id: "arbdec_demo_1",
       },
     });
     apiMock.createOfflinePosHandoff.mockResolvedValueOnce({
@@ -309,6 +316,10 @@ describe("CommerceRuntimeDemo", () => {
       product_ref_or_query: "shopify:product:1",
     })));
     expect(await screen.findByText("offline_pos_handoff_1")).toBeInTheDocument();
+    expect(apiMock.createOfflinePosHandoff).toHaveBeenLastCalledWith(expect.objectContaining({
+      decision_id: "arbdec_demo_1",
+      store_id: "store_demo",
+    }));
 
     fireEvent.click(screen.getByRole("button", { name: /pos confirm/i }));
     await waitFor(() => expect(apiMock.simulateOfflinePosConfirmation).toHaveBeenCalledWith({

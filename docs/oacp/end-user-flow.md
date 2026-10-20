@@ -34,10 +34,11 @@ flowchart LR
 7. Buyer asks through a configured surface. Web, MCP, OpenAPI, and A2A contracts
    are shipped; external ChatGPT, Claude, Gemini, Perplexity, WhatsApp, and
    Telegram use still depends on client/channel configuration and approval.
-8. Buyer agent answers from valid cache, refreshes, prepares a non-executing handoff, or refuses.
-9. If the buyer wants in-store pickup or payment, AgenticOrg can create a non-executing Offline POS handoff packet from the prepared purchase.
-10. POS/provider confirmation intake records `accepted`, `price_changed`, `out_of_stock`, `expired`, `needs_staff_review`, `unsupported`, `payment_pending`, `payment_confirmed`, `payment_failed`, or `receipt_available`.
-11. Provider/merchant/POS systems own final payment and order execution. AgenticOrg stores only non-sensitive evidence refs and buyer-safe reconciliation status.
+8. Buyer agent answers from valid cache, refreshes, prepares a non-executing handoff, or refuses. Every commerce write, answer and refusal is sealed to the commerce ledger ([arbiter and ledger](arbiter-ledger.md)).
+9. Purchase preparation and POS handoff are decided by the commerce arbiter: mandate, consent, Commerce Passport cap, verified fresh OACP artifacts and merchant limits. It returns `allow` with a `decision_id` or `refuse` with the failing rule as a blocker; it never waits for a person. Execution (a live provider handoff, a stored POS packet) consumes the `allow` decision once.
+10. If the buyer wants in-store pickup or payment, AgenticOrg creates a non-executing Offline POS handoff packet from the prepared purchase against a consumed `allow` decision.
+11. POS/provider confirmation intake records `accepted`, `price_changed`, `out_of_stock`, `expired`, `needs_staff_review`, `unsupported`, `payment_pending`, `payment_confirmed`, `payment_failed`, or `receipt_available`.
+12. Provider/merchant/POS systems own final payment and order execution. AgenticOrg stores only non-sensitive evidence refs and buyer-safe reconciliation status.
 
 WooCommerce, ERP, PIM, OMS, WMS, custom API, bank-owned rail, fintech rail, and custom provider configs can be saved during this journey. They stay pending-adapter and non-executing until approved adapters, tests, credentials, and rollout approvals exist. A Schema.org/UCP-style/ACP-style/AP2-style/A2A/MCP/OpenAPI payload is a compatibility projection of OACP evidence, not proof that an external ecosystem has listed or certified the merchant.
 

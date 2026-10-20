@@ -4,60 +4,27 @@ from __future__ import annotations
 
 import hashlib
 import hmac
-import json
-import uuid
 from datetime import UTC, datetime
 from typing import Any
 
 import structlog
 
 from core.config import settings
+from core.governance.audit_chain_link import SIGNED_COLUMNS, canonical_audit_payload, canonical_value
 
 logger = structlog.get_logger()
 
-# Columns covered by the row signature, in canonical order. ``id`` is
-# excluded on purpose: the DB generates it, so signing a pre-insert random id
-# (the previous behaviour) produced a signature nothing could ever verify.
-SIGNED_COLUMNS: tuple[str, ...] = (
-    "tenant_id",
-    "event_type",
-    "actor_type",
-    "actor_id",
-    "agent_id",
-    "workflow_run_id",
-    "resource_type",
-    "resource_id",
-    "action",
-    "outcome",
-    "details",
-    "trace_id",
-    "created_at",
-)
-
-
-def _canonical_value(key: str, value: Any) -> Any:
-    """Normalise a column value so the same row hashes identically whether it
-    comes from the in-memory entry (str/ISO) or an ORM row (UUID/datetime)."""
-    if value is None:
-        return None
-    if key == "created_at":
-        if isinstance(value, datetime):
-            if value.tzinfo is None:
-                value = value.replace(tzinfo=UTC)
-            return value.astimezone(UTC).isoformat()
-        return str(value)
-    if key == "details":
-        return value if isinstance(value, dict) else {}
-    if isinstance(value, uuid.UUID):
-        return str(value)
-    return str(value)
-
-
-def canonical_audit_payload(record: Any) -> str:
-    """Serialise the signed columns of ``record`` (dict or ``AuditLog`` row)."""
-    get = record.get if isinstance(record, dict) else lambda k, d=None: getattr(record, k, d)
-    canonical = {key: _canonical_value(key, get(key)) for key in SIGNED_COLUMNS}
-    return json.dumps(canonical, sort_keys=True, separators=(",", ":"), default=str)
+# The signed columns and their serialisation live in core.governance.audit_chain_link,
+# which has no dependencies, so the offline ledger verifier can load them by path.
+_canonical_value = canonical_value
+__all__ = [
+    "SIGNED_COLUMNS",
+    "AuditLogger",
+    "build_signed_audit_entry",
+    "canonical_audit_payload",
+    "sign_audit_record",
+    "verify_audit_row",
+]
 
 
 def sign_audit_record(record: Any, secret: bytes) -> str:
@@ -75,6 +42,48 @@ def verify_audit_row(row: Any, secret: bytes | None = None) -> bool:
     if not stored:
         return False
     return hmac.compare_digest(sign_audit_record(row, secret), str(stored))
+
+
+def build_signed_audit_entry(
+    *,
+    tenant_id: Any,
+    event_type: str,
+    actor_type: str,
+    actor_id: str,
+    action: str,
+    outcome: str,
+    details: dict[str, Any],
+    created_at: datetime,
+    resource_type: str | None = None,
+    resource_id: str | None = None,
+    agent_id: Any = None,
+    workflow_run_id: Any = None,
+    trace_id: str = "",
+    secret: bytes | None = None,
+) -> dict[str, Any]:
+    """The column values of one ``audit_log`` row, with its signature.
+
+    For a caller that adds the row to its own session so it commits in the same
+    transaction as the write it records (``core.commerce.ledger``). ``details``
+    is stored as given: mask anything free-form before passing it.
+    """
+    entry: dict[str, Any] = {
+        "tenant_id": tenant_id,
+        "event_type": event_type,
+        "actor_type": actor_type,
+        "actor_id": actor_id,
+        "agent_id": agent_id,
+        "workflow_run_id": workflow_run_id,
+        "resource_type": resource_type,
+        "resource_id": resource_id,
+        "action": action,
+        "outcome": outcome,
+        "details": details,
+        "trace_id": trace_id,
+        "created_at": created_at,
+    }
+    entry["signature"] = sign_audit_record(entry, secret if secret is not None else settings.secret_key.encode())
+    return entry
 
 
 class AuditLogger:
