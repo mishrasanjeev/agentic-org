@@ -33,6 +33,9 @@ HANDLER_ID = "plural_tokenized"
 HANDLER_VERSION = "2026-10-20"
 # The handler's config schema, authority-bound to the handler name (agenticorg.ai -> ai.agenticorg).
 HANDLER_SCHEMA = "https://agenticorg.ai/ucp/handlers/plural-tokenized/2026-10-20/config.json"
+# The credential an agent presents for this handler (ACP PaymentHandler.instrument_schemas).
+# Both files are served from ui/public on agenticorg.ai (tests map each URL to its file).
+INSTRUMENT_SCHEMA = "https://agenticorg.ai/ucp/handlers/plural-tokenized/2026-10-20/instrument.json"
 TOKEN_CREDENTIAL = "plural_pine_token"
 
 

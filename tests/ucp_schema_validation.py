@@ -1,12 +1,14 @@
 # SPDX-License-Identifier: Apache-2.0
 """Validate emitted UCP documents against the published UCP JSON Schemas.
 
-``tests/fixtures/ucp_schemas/<release>/`` holds the subset of the UCP schema
-trees (Universal-Commerce-Protocol/ucp, Apache-2.0) that the profile, catalog,
-location and error responses reference: 2026-04-08 from ``source/`` of
-``release/2026-04-08`` (``$id`` ``https://ucp.dev/schemas/...``), 2026-08-25 as
-published at ``https://ucp.dev/2026-08-25/...``. They are loaded into one
-``referencing`` registry keyed by ``$id``; nothing is fetched over the network.
+``tests/fixtures/ucp/<release>/`` is the one vendored copy of the UCP schemas
+(Universal-Commerce-Protocol/ucp, Apache-2.0) that every UCP test validates
+against: both releases as published at ``https://ucp.dev/<release>/schemas/``
+(the transaction tests use the same tree through ``tests/ucp_schema.py``), plus
+the 2026-04-08 discovery profile schema, which the release publishes only in
+its source tree (``2026-04-08/discovery/profile_schema.json``). They are loaded
+into one ``referencing`` registry keyed by ``$id``; nothing is fetched over the
+network.
 """
 
 from __future__ import annotations
@@ -20,12 +22,12 @@ import jsonschema
 from referencing import Registry
 from referencing.jsonschema import DRAFT202012
 
-SCHEMA_ROOT = Path(__file__).resolve().parent / "fixtures" / "ucp_schemas"
+SCHEMA_ROOT = Path(__file__).resolve().parent / "fixtures" / "ucp"
 
-R08_PROFILE = "https://ucp.dev/discovery/profile.json#/$defs/business_profile"
-R08_CATALOG_SEARCH = "https://ucp.dev/schemas/shopping/catalog_search.json#/$defs/search_response"
-R08_CATALOG_LOOKUP = "https://ucp.dev/schemas/shopping/catalog_lookup.json#/$defs/lookup_response"
-R08_ERROR = "https://ucp.dev/schemas/shopping/types/error_response.json"
+R08_PROFILE = "https://ucp.dev/2026-04-08/discovery/profile.json#/$defs/business_profile"
+R08_CATALOG_SEARCH = "https://ucp.dev/2026-04-08/schemas/shopping/catalog_search.json#/$defs/search_response"
+R08_CATALOG_LOOKUP = "https://ucp.dev/2026-04-08/schemas/shopping/catalog_lookup.json#/$defs/lookup_response"
+R08_ERROR = "https://ucp.dev/2026-04-08/schemas/shopping/types/error_response.json"
 R25_PROFILE = "https://ucp.dev/2026-08-25/schemas/profile.json#/$defs/business_schema"
 R25_CATALOG_SEARCH = "https://ucp.dev/2026-08-25/schemas/shopping/catalog_search.json#/$defs/search_response"
 R25_CATALOG_LOOKUP = "https://ucp.dev/2026-08-25/schemas/shopping/catalog_lookup.json#/$defs/lookup_response"
@@ -49,9 +51,9 @@ def ucp_schema_registry() -> Registry:
     # The 2026-04-08 source profile schema declares $id .../schemas/discovery/profile.json
     # but refers to "../schemas/ucp.json" relative to its source location
     # (source/discovery/ beside source/schemas/); register it at the id that
-    # makes that reference resolve to the ucp.json shipped with it.
+    # makes that reference resolve to the release's published ucp.json.
     profile = json.loads((SCHEMA_ROOT / "2026-04-08" / "discovery" / "profile_schema.json").read_text(encoding="utf-8"))
-    profile["$id"] = "https://ucp.dev/discovery/profile.json"
+    profile["$id"] = "https://ucp.dev/2026-04-08/discovery/profile.json"
     resources.append((profile["$id"], DRAFT202012.create_resource(profile)))
     return Registry().with_resources(resources)
 

@@ -247,7 +247,10 @@ merchant has an enabled `plural_pine` provider and a `provider_policy.ucp.mandat
 Its config carries that capability (`rails`, `max_amount_minor_units`, `currency`,
 `instrument_types`, `evidence: merchant_config`) and the allowance (`max_amount` = the capability
 cap). It accepts a network token with cryptogram or a `plural_pine_token`, never a PAN. It moves
-no money: executors do.
+no money: executors do. Its config schema is served at the URL the profile advertises,
+`https://agenticorg.ai/ucp/handlers/plural-tokenized/2026-10-20/config.json` (with
+`instrument.json` beside it), from `ui/public` in the UI image; a regression test maps both URLs
+to the files.
 
 ## Policies
 

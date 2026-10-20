@@ -1,5 +1,16 @@
 # Changelog
 
+## Unreleased - UCP handler schema hosting and schema fixtures
+
+- The Plural tokenised-instrument handler's config schema is served at the URL UCP profiles
+  advertise, `https://agenticorg.ai/ucp/handlers/plural-tokenized/2026-10-20/config.json`, with its
+  instrument schema beside it (`instrument.json`), from `ui/public` (static `*.json` in the UI image).
+  A regression test maps both URLs to the files, checks the nginx static rule and validates the
+  handler config the server emits against the hosted schema.
+- Tests: the two vendored UCP schema fixture trees (`tests/fixtures/ucp` and
+  `tests/fixtures/ucp_schemas`) are one, `tests/fixtures/ucp` (published release schemas plus the
+  2026-04-08 discovery profile schema).
+
 ## Unreleased - UCP checkout, cart and order (G21, G22, G25, G27, G29-G32, G35)
 
 - UCP REST binding at `https://<merchant serving host>/ucp` (`api/v1/commerce_ucp.py`), behind

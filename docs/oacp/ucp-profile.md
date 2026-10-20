@@ -219,7 +219,7 @@ The official suite (`Universal-Commerce-Protocol/conformance`, 2026-04-08,
 `test_discovery_urls` is skipped upstream; the checkout, cart, order and
 webhook results are in [ucp-checkout.md](ucp-checkout.md#conformance). Emitted
 documents are validated in tests against the published UCP JSON Schemas
-(`tests/fixtures/ucp_schemas`).
+(`tests/fixtures/ucp`, one vendored tree for every UCP test).
 
 ## Rollback
 
