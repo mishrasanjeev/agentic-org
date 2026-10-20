@@ -36,14 +36,22 @@ does not create or select database roles.
 
        python scripts/alembic_migrate.py
 
-2. Create the application role (idempotent; re-running re-applies grants).
-   Run it as the owner role so the default privileges cover tables later
-   migrations create:
+2. Create the application role. Run it as the owner role (the migration
+   role), so the default privileges cover tables later migrations create and
+   the platform spend function can be granted (see "Grants" below):
 
        psql "$OWNER_DB_URL" -v app_password="'<strong-password>'" -f scripts/create_app_role.sql
 
-   The last statement prints `rolsuper = f`, `rolbypassrls = f`; both must
-   be `f`. Store the password in the secret manager, never in the repository.
+   The script runs in one transaction. It is idempotent: re-running it
+   revokes and re-applies every grant, so the role converges on exactly the
+   grants below. Its last check raises, and rolls everything back, if the
+   result is broader (a superuser or `BYPASSRLS` role, `CREATE` on the
+   schema, `TRUNCATE` on any table, `UPDATE`/`DELETE` on an append-only
+   table, `EXECUTE` on a restricted function other than the spend total).
+   Re-run it after every migration that adds an append-only table or a
+   function the application calls. The last statement prints
+   `rolsuper = f`, `rolbypassrls = f`; both must be `f`. Store the password
+   in the secret manager, never in the repository.
 
 3. Point the runtime services, and only them, at the new role.
    `core/config.py` uses `env_prefix = "AGENTICORG_"`, so the variable is
@@ -77,13 +85,108 @@ does not create or select database roles.
    role can bypass RLS, so a green run means the flows it covers (signup,
    login, agent list and run, approvals, billing subscription and expiry
    sweep, DSAR, report and RPA schedule claims, compliance cron, API-key
-   lookup, SSO and branding discovery, workflow state, CDC events) work with
-   RLS actually enforced. It writes synthetic tenants; run it against a
+   lookup, SSO and branding discovery, workflow state, CDC events, audit
+   chain sealing) work with RLS actually enforced, and that the role is
+   refused `DELETE` on `audit_log`, `TRUNCATE`, writes to append-only and
+   migration-owned tables, DDL, and the restricted guard functions. It writes synthetic tenants; run it against a
    staging copy, not production data.
 
 Rollback: point the runtime `AGENTICORG_DB_URL` back at the previous role and
-unset `AGENTICORG_REQUIRE_NOBYPASSRLS_ROLE`. The policies and grants are
-additive and need no rollback.
+unset `AGENTICORG_REQUIRE_NOBYPASSRLS_ROLE`. The policies are additive and the
+grants apply only to `agenticorg_app`, so neither needs a rollback. To retire
+the role: `REASSIGN OWNED BY agenticorg_app TO <owner>; DROP OWNED BY
+agenticorg_app; DROP ROLE agenticorg_app;` as the owner, once nothing
+connects as it.
+
+## Grants
+
+`scripts/create_app_role.sql` gives `agenticorg_app` least privilege per
+table class. It revokes everything first, so a re-run removes what an older
+version granted (it used to grant `EXECUTE` on all functions).
+
+| Class | Tables | `agenticorg_app` gets |
+|-------|--------|------------------------|
+| Ordinary | every other table in `public` | `SELECT, INSERT, UPDATE, DELETE` |
+| Append-only | `capability_evidence_records`, `capability_promotion_events` (trigger `prevent_capability_ledger_mutation`), `eval_dataset_versions` (trigger `eval_dataset_versions_immutable`) | `SELECT, INSERT` |
+| Audit log | `audit_log` | `SELECT, INSERT`, `UPDATE (chain_seq, chain_prev, chain_hash, sealed_at)` |
+| Append-only by rule (any table) | every table whose trigger uses `audit_log_reject_mutation`, `prevent_capability_ledger_mutation`, `eval_dataset_versions_immutable`, `commerce_arbiter_decisions_guard`, `oacp_record_reject_mutation`, `oacp_manifest_retention_guard` or `audit_chain_witness_reject_mutation` | loses each operation its trigger covers |
+| Append-only, v6z88 | `oacp_operator_decision_records`, `oacp_audit_review_manifest_records`, `oacp_retention_disposition_decision_records`, `audit_chain_witness_checkpoints` | `SELECT, INSERT` |
+| Append-only with a transition, v6z88 | `commerce_arbiter_decisions` | `SELECT, INSERT`, `UPDATE (consumed_at, grantex_grant_jti, grantex_recorded_at)` |
+| No delete | `capability_readiness_records` (trigger refuses `DELETE`), `audit_chain_anchors` | `SELECT, INSERT, UPDATE` |
+| Migration-owned | `alembic_version`, `checkpoint_migrations` | `SELECT` |
+| Migration-only | `alembic_migration_progress` | nothing |
+| Sequences | all | `USAGE, SELECT` |
+| Schema | `public` | `USAGE` (no `CREATE`) |
+
+The grants are rule-based and tolerate objects that do not exist yet, so the
+same script runs on a database at `v6z87_platform_ctx_policies` or at any
+later head:
+
+* **Append-only rule.** Every table guarded by one of the trigger functions
+  above loses `UPDATE` when its trigger fires on `UPDATE` and `DELETE` when
+  it fires on `DELETE`, whether or not the script names the table. Column
+  grants for allowed transitions are applied after the rule (a table-level
+  `REVOKE` also revokes column privileges), and only where the table exists.
+* **Function allow-list.** `EXECUTE` is granted on the `SECURITY DEFINER`
+  functions in the allow-list that exist, and on no other.
+* **Fail-closed check.** The final check uses the same lists. It refuses the
+  run, and rolls it back, on any table-level privilege a guarding trigger
+  refuses or any `EXECUTE` on a restricted function outside the allow-list.
+
+* **`TRUNCATE`, `REFERENCES` and `TRIGGER` are never granted.** `TRUNCATE`
+  skips row-level security and row triggers.
+* **`audit_log`.** The sealing task (`core.tasks.audit_chain_tasks`) runs on
+  a Celery worker, so after the cut-over it runs as this role. It fills the
+  four chain columns of unsealed rows and upserts `audit_chain_anchors`.
+  The column-level `UPDATE` covers that and its `SELECT ... FOR UPDATE`.
+  The `audit_log_immutable` trigger is what stops a sealed row from being
+  rewritten through those columns. `v6z87_platform_ctx_policies` (re)installs
+  it with exactly `core.governance.audit_chain.SEAL_TRIGGER_SQL`, so a
+  database bootstrapped from an empty schema has it too. Before v6z87, only
+  the local-only legacy startup DDL installed it there. `UPDATE` of any other
+  column and every `DELETE` are refused by privilege as well.
+* **Commerce ledger (v6z88).** The arbiter decision guard allows two
+  one-time transitions: an `allow` row being consumed, and the Grantex
+  countersignature reference being attached. The column grant is exactly
+  those three columns, and the trigger refuses any other change through
+  them. Manifest retention deletes through
+  `oacp_delete_due_manifest(text, text)`, a tenant-bound `SECURITY DEFINER`
+  function. The application role holds `EXECUTE` on it and no `DELETE` on
+  `oacp_audit_review_manifest_records`.
+* **Functions.** `EXECUTE` is revoked on everything in `public`. Ordinary
+  functions (extension functions, plain trigger functions) keep their
+  default `PUBLIC` `EXECUTE`. Restricted functions stay closed when their
+  migration closes them with `REVOKE ... FROM PUBLIC`. Examples are
+  `guard_capability_ledger_scope()` and `connector_config_company_scope_guard()`,
+  which are `SECURITY DEFINER` trigger functions; a trigger fires without the
+  caller holding `EXECUTE`. The allow-list:
+  * `public.gemini_daily_platform_spend()`: v6z85, the platform Gemini cap
+    in `core/llm/router.py`. It is required, and its owner is the `NOLOGIN`
+    role `agenticorg_spend_aggregate`. A non-superuser installer grants it
+    through a temporary membership, as v6z85 does, and the script checks
+    that the installer did not keep the membership. Without this grant the
+    platform cap fails closed (`DailyBudgetExceeded`), so run the script
+    before the cut-over.
+  * `public.oacp_delete_due_manifest(text, text)`: v6z88. It is granted once
+    it exists.
+* **Later migrations add their own grants in the migration.**
+  `ALTER DEFAULT PRIVILEGES` gives tables that later migrations create (as
+  the role that ran the script) the ordinary row DML, and sequences
+  `USAGE, SELECT`. Functions get no default grant beyond `PUBLIC`. So a
+  migration that adds an append-only table or a function the application
+  calls must set the grant itself, guarded so it is a no-op where the role
+  does not exist:
+  `DO $$ BEGIN IF to_regrole('agenticorg_app') IS NOT NULL THEN ... END IF; END $$`.
+  For an append-only table, that means `REVOKE UPDATE, DELETE` plus any
+  transition column grant. For a function, it means `REVOKE ALL ... FROM
+  PUBLIC` and `GRANT EXECUTE ... TO agenticorg_app`. The same object also
+  goes into the script's rules, by adding its trigger function, allow-list
+  entry or transition columns, because a re-run of the script resets every
+  grant to the rules. `tests/regression/test_app_role_grants.py` fails CI
+  when a migration adds any of these that the script does not classify:
+  * an append-only trigger;
+  * an immutability-style trigger function;
+  * a non-trigger `SECURITY DEFINER` function.
 
 ## Application contract
 

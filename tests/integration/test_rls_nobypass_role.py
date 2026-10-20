@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """End-to-end proof that the application is correct under a NOBYPASSRLS role.
 
 Runs the real API (httpx ASGI transport) and the real beat/cron coroutines
@@ -165,9 +166,7 @@ async def test_signup_creates_tenant_user_and_seeded_defaults(env: _Env, client:
 
 @pytest.mark.asyncio
 async def test_login_by_email_before_tenant_is_known(env: _Env, client: AsyncClient) -> None:
-    resp = await client.post(
-        "/api/v1/auth/login", json={"email": env.tenant_a["email"], "password": _PASSWORD}
-    )
+    resp = await client.post("/api/v1/auth/login", json={"email": env.tenant_a["email"], "password": _PASSWORD})
     assert resp.status_code == 200, resp.text
     body = resp.json()
     assert body["user"]["tenant_id"] == env.tenant_a["tenant_id"]
@@ -250,10 +249,7 @@ async def test_run_agent_end_to_end_with_fake_chat_model(env: _Env, client: Asyn
         )
         audited = (
             await conn.execute(
-                text(
-                    "SELECT count(*) FROM audit_log WHERE event_type = 'agent.run' "
-                    "AND agent_id = CAST(:aid AS uuid)"
-                ),
+                text("SELECT count(*) FROM audit_log WHERE event_type = 'agent.run' AND agent_id = CAST(:aid AS uuid)"),
                 {"aid": env.tenant_a["agent_id"]},
             )
         ).scalar_one()
@@ -511,6 +507,156 @@ async def test_cdc_webhook_store_is_tenant_bound(env: _Env, monkeypatch) -> None
     assert other_total == 0 and other_events == []
     with pytest.raises(ValueError):
         await store.mark_processed(event_id, outcome={}, tenant_id=None)
+
+
+# ── 11. least-privilege grants (scripts/create_app_role.sql) ─────────────
+
+
+async def _refused(env: _Env, sql: str, tenant_id: str | None = None) -> str:
+    """Run ``sql`` as the app role (tenant bound, so RLS would let rows through) and return the refusal."""
+    from sqlalchemy.exc import DBAPIError
+
+    async with env.engine.connect() as conn:
+        if tenant_id:
+            await conn.execute(text("SELECT set_config('agenticorg.tenant_id', :tid, true)"), {"tid": tenant_id})
+        with pytest.raises(DBAPIError) as refused:
+            await conn.execute(text(sql))
+    return str(refused.value)
+
+
+@pytest.mark.asyncio
+async def test_app_role_grants_are_least_privilege(env: _Env) -> None:
+    tid = env.tenant_a["tenant_id"]
+    # The agent run above left audit rows that RLS lets this tenant see, so a
+    # zero-row result would not count: each statement must be refused outright.
+    async with env.engine.connect() as conn:
+        await conn.execute(text("SELECT set_config('agenticorg.tenant_id', :tid, true)"), {"tid": tid})
+        assert (await conn.execute(text("SELECT count(*) FROM audit_log"))).scalar_one() >= 1
+
+    denied = (
+        "DELETE FROM audit_log",
+        "UPDATE audit_log SET action = 'edited'",
+        "TRUNCATE audit_log",
+        "TRUNCATE agents",
+        "TRUNCATE users",
+        "DELETE FROM audit_chain_anchors",
+        "UPDATE capability_evidence_records SET tenant_id = tenant_id",
+        "DELETE FROM capability_promotion_events",
+        "UPDATE eval_dataset_versions SET note = note",
+        "DELETE FROM capability_readiness_records",
+        "UPDATE alembic_version SET version_num = version_num",
+        "INSERT INTO alembic_version (version_num) VALUES ('rls_probe')",
+        "SELECT count(*) FROM alembic_migration_progress",
+        "CREATE TABLE rls_privilege_probe (id int)",
+        "ALTER TABLE agents DISABLE ROW LEVEL SECURITY",
+        "CREATE TRIGGER rls_probe BEFORE INSERT ON agents FOR EACH ROW EXECUTE FUNCTION audit_log_reject_mutation()",
+    )
+    for statement in denied:
+        message = await _refused(env, statement, tid)
+        assert "permission denied" in message or "must be owner" in message, (statement, message)
+
+    async with env.engine.connect() as conn:
+        has_arbiter = (
+            await conn.execute(text("SELECT to_regclass('public.commerce_arbiter_decisions') IS NOT NULL"))
+        ).scalar_one()
+    if has_arbiter:
+        # v6z88: append-only except the consumed / countersigned transitions.
+        for statement in (
+            "UPDATE commerce_arbiter_decisions SET outcome = outcome",
+            "DELETE FROM commerce_arbiter_decisions",
+            "TRUNCATE commerce_arbiter_decisions",
+        ):
+            message = await _refused(env, statement, tid)
+            assert "permission denied" in message, (statement, message)
+        async with env.engine.connect() as conn:
+            await conn.execute(text("SELECT set_config('agenticorg.tenant_id', :tid, true)"), {"tid": tid})
+            # The transition columns are writable (no row matches; the privilege check passes).
+            await conn.execute(
+                text("UPDATE commerce_arbiter_decisions SET consumed_at = now() WHERE decision_id = 'rls-none'")
+            )
+            await conn.execute(
+                text(
+                    "UPDATE commerce_arbiter_decisions SET grantex_grant_jti = 'x', grantex_recorded_at = now() "
+                    "WHERE decision_id = 'rls-none'"
+                )
+            )
+
+    async with env.engine.connect() as conn:
+        has_witness, has_retention_fn = (
+            await conn.execute(
+                text(
+                    "SELECT to_regclass('public.audit_chain_witness_checkpoints') IS NOT NULL, "
+                    "to_regprocedure('public.oacp_delete_due_manifest(text, text)') IS NOT NULL"
+                )
+            )
+        ).one()
+    if has_witness:
+        for statement in (
+            "UPDATE audit_chain_witness_checkpoints SET tenant_id = tenant_id",
+            "DELETE FROM audit_chain_witness_checkpoints",
+        ):
+            message = await _refused(env, statement, tid)
+            assert "permission denied" in message, (statement, message)
+    if has_retention_fn:
+        # Retention deletes through the tenant-bound definer function, never by a DELETE grant.
+        message = await _refused(env, "DELETE FROM oacp_audit_review_manifest_records", tid)
+        assert "permission denied" in message, message
+        async with env.engine.connect() as conn:
+            assert (
+                await conn.execute(
+                    text("SELECT has_function_privilege('public.oacp_delete_due_manifest(text, text)', 'EXECUTE')")
+                )
+            ).scalar_one() is True
+
+    async with env.engine.connect() as conn:
+        # Schema version stays readable (init_db's head check).
+        assert (await conn.execute(text("SELECT count(*) FROM alembic_version"))).scalar_one() == 1
+        # Restricted functions: only the platform spend total is callable.
+        can_guard = (
+            await conn.execute(
+                text("SELECT has_function_privilege('public.connector_config_company_scope_guard()', 'EXECUTE')")
+            )
+        ).scalar_one()
+        assert can_guard is False
+        spend = (await conn.execute(text("SELECT public.gemini_daily_platform_spend()"))).scalar_one()
+        assert spend is not None and float(spend) >= 0
+
+
+@pytest.mark.asyncio
+async def test_audit_chain_seals_under_column_scoped_update(env: _Env) -> None:
+    from core.governance import audit_chain
+
+    tid = uuid.UUID(env.tenant_a["tenant_id"])
+    outcome = await audit_chain.seal(tid, batch=500)
+    assert outcome.head.seq >= 1
+    result = await audit_chain.verify(tid)
+    assert result.status == "verified", result.to_dict()
+
+    async with env.engine.connect() as conn:
+        has_trigger = (
+            await conn.execute(
+                text(
+                    "SELECT EXISTS (SELECT 1 FROM pg_trigger WHERE tgrelid = 'audit_log'::regclass "
+                    "AND tgname = 'audit_log_immutable' AND NOT tgisinternal)"
+                )
+            )
+        ).scalar_one()
+    # v6z87 installs the trigger on every database, including one bootstrapped
+    # from an empty schema; the chain-column grant relies on it.
+    assert has_trigger, "audit_log_immutable is missing: migrate to v6z87_platform_ctx_policies or later"
+    # The chain-column grant does not reopen a sealed row: the trigger allows
+    # only the unsealed -> sealed transition, so none of the chain columns of
+    # a sealed row can be rewritten.
+    for statement in (
+        "UPDATE audit_log SET chain_hash = repeat('0', 64) WHERE chain_seq IS NOT NULL",
+        "UPDATE audit_log SET chain_prev = repeat('0', 64) WHERE chain_seq IS NOT NULL",
+        "UPDATE audit_log SET chain_seq = chain_seq + 1000 WHERE chain_seq IS NOT NULL",
+        "UPDATE audit_log SET sealed_at = now() WHERE chain_seq IS NOT NULL",
+    ):
+        message = await _refused(env, statement, str(tid))
+        assert "append-only" in message, (statement, message)
+    # Nothing above took effect.
+    assert (await audit_chain.verify(tid)).status == "verified"
 
 
 def test_module_runs_serially_on_one_loop() -> None:
