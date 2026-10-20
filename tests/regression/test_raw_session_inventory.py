@@ -13,6 +13,7 @@ raw site fails this test until it is bound or justified.
 from __future__ import annotations
 
 import ast
+import functools
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -106,17 +107,24 @@ class _Finder(ast.NodeVisitor):
         super().generic_visit(node)
 
 
-def _raw_sites() -> set[tuple[str, str]]:
+@functools.cache
+def _raw_sites() -> frozenset[tuple[str, str]]:
+    # Parsed once per session: walking every module's AST under coverage
+    # tracing is slow enough to trip the per-test timeout.
     sites: set[tuple[str, str]] = set()
     for top in SCANNED:
         for path in sorted((ROOT / top).rglob("*.py")):
             rel = path.relative_to(ROOT).as_posix()
             if rel == "core/database.py":
                 continue  # defines the factory and the bound helpers
+            source = path.read_text(encoding="utf-8")
+            # Both forms _is_raw_factory_use matches name one of these identifiers.
+            if "async_session_factory" not in source and "current_session_factory" not in source:
+                continue
             finder = _Finder(rel)
-            finder.visit(ast.parse(path.read_text(encoding="utf-8"), filename=rel))
+            finder.visit(ast.parse(source, filename=rel))
             sites |= finder.sites
-    return sites
+    return frozenset(sites)
 
 
 def test_every_raw_session_site_is_bound_or_justified() -> None:

@@ -100,6 +100,13 @@
   irregularity with its fork evidence stored.
 - Migration `v6z88_commerce_ledger` (unreleased, extended): `audit_chain_witness_checkpoints`
   (forced RLS, append-only), `oacp_manifest_retention_guard` and `oacp_delete_due_manifest`.
+- Least-privilege grants in `v6z88_commerce_ledger` for the NOBYPASSRLS application role
+  `agenticorg_app` (applied only where the role exists): `oacp_delete_due_manifest` is revoked
+  from PUBLIC and executable by `agenticorg_app` alone; UPDATE and DELETE are revoked on
+  `audit_chain_witness_checkpoints` and the three `oacp_*` decision record tables; on
+  `commerce_arbiter_decisions` the role keeps only `UPDATE (consumed_at, grantex_grant_jti,
+  grantex_recorded_at)` for the two one-time transitions. Same rules as
+  `scripts/create_app_role.sql`.
 
 ## Unreleased - UCP business profile, catalog and locations (G17, G18, G19, G20, G23, G26, G28)
 
@@ -232,7 +239,11 @@
 - Migration `v6z87_platform_ctx_policies`: one permissive `SELECT`-only
   policy on `sso_configs`, `tenant_branding` and `agents` that honours
   `agenticorg.platform_ctx = '1'`. Tenant policies are unchanged; no platform
-  write policy exists.
+  write policy exists. It also (re)installs the `audit_log_immutable` trigger
+  with the sealing transition (the same text as
+  `core.governance.audit_chain.SEAL_TRIGGER_SQL`). Databases bootstrapped
+  from an empty schema previously had no trigger outside the local-only
+  startup DDL. Downgrade leaves the trigger installed.
 - Report schedule claims run per tenant (the RPA dispatcher's pattern), the
   synthetic-check sweep no longer reads `synthetic_checks` across tenants, the
   A/B variant helpers require `tenant_id`, CDC event-store writes and lists
@@ -246,6 +257,26 @@
 - Add `scripts/create_app_role.sql` and `docs/RLS_APP_ROLE.md`. Moving
   production `AGENTICORG_DB_URL` to the application role is an operator step
   documented there; this change does not perform it.
+- `scripts/create_app_role.sql` grants least privilege: row DML on ordinary
+  tables (never `TRUNCATE`, `REFERENCES` or `TRIGGER`); `SELECT`/`INSERT`
+  only on the append-only tables (`capability_evidence_records`,
+  `capability_promotion_events`, `eval_dataset_versions`, and, once
+  `v6z88_commerce_ledger` has run, the OACP decision records and
+  `commerce_arbiter_decisions`, the latter with `UPDATE` of only
+  `consumed_at`, `grantex_grant_jti` and `grantex_recorded_at`; every table
+  guarded by a known append-only trigger function is classified by rule, so
+  the script runs on any head); on `audit_log`
+  `SELECT`/`INSERT` plus `UPDATE` of the four hash-chain columns the sealing
+  task fills; no `DELETE` on `capability_readiness_records` or
+  `audit_chain_anchors`; read-only `alembic_version` and
+  `checkpoint_migrations`; no access to `alembic_migration_progress`; and
+  `EXECUTE` only on the allow-listed restricted functions
+  (`public.gemini_daily_platform_spend()`, and
+  `public.oacp_delete_due_manifest(text, text)` where it exists) (default privileges grant no function `EXECUTE`). The
+  script runs in one transaction, re-running it converges on these grants,
+  and it refuses and rolls back a broader result. Guarded by
+  `tests/regression/test_app_role_grants.py` and new cases in the Postgres
+  proof.
 - Egress URL validation inside async code uses `validate_public_url_async`
   (non-blocking DNS) for connectors, OIDC, JWKS, AI-provider probes and base
   URLs, commerce runtime calls and the lineage feed fetch.

@@ -604,6 +604,45 @@ def test_retention_guard_text_matches_the_migration() -> None:
     )
 
 
+def test_v6z88_grants_the_app_role_least_privilege() -> None:
+    """G13/G14: v6z88 closes its definer function to PUBLIC and its append-only tables to UPDATE/DELETE.
+
+    Before, ``oacp_delete_due_manifest`` kept PostgreSQL's default PUBLIC EXECUTE (any role could
+    call the owner-privileged delete), and the application role kept whatever row DML default
+    privileges gave it on the append-only tables.
+    """
+    import importlib.util
+    import re
+
+    path = ROOT / "migrations" / "versions" / "v6_z88_commerce_ledger.py"
+    spec = importlib.util.spec_from_file_location("v6z88_grants_probe", path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    grants = " ".join(module._APP_ROLE_GRANTS_SQL.split())
+    fn = "oacp_delete_due_manifest(text, text)"
+    revoke_public = f"REVOKE ALL ON FUNCTION {fn} FROM PUBLIC;"
+    grant_app = f"GRANT EXECUTE ON FUNCTION {fn} TO agenticorg_app;"
+    # PUBLIC loses EXECUTE on every database, before (outside) the role guard, so a database
+    # migrated before the application role exists does not leave the function open to all roles.
+    assert grants.startswith(f"DO $$ BEGIN {revoke_public} IF to_regrole('agenticorg_app') IS NOT NULL THEN")
+    assert revoke_public in grants and grant_app in grants
+    assert grants.index(revoke_public) < grants.index(grant_app)
+    assert "TO PUBLIC" not in grants
+    for table in ("audit_chain_witness_checkpoints", *module.OACP_APPEND_ONLY_TABLES, "commerce_arbiter_decisions"):
+        assert f"REVOKE UPDATE, DELETE ON {table} FROM agenticorg_app;" in grants, table
+        assert not re.search(rf"GRANT [^;]*\b(DELETE|UPDATE)\b[^(;]* ON {table} ", grants), table
+    column_grant = (
+        "GRANT UPDATE (consumed_at, grantex_grant_jti, grantex_recorded_at) "
+        "ON commerce_arbiter_decisions TO agenticorg_app;"
+    )
+    assert column_grant in grants
+    # Table-level REVOKE UPDATE also drops column grants, so the column grant must come after it.
+    assert grants.index("REVOKE UPDATE, DELETE ON commerce_arbiter_decisions") < grants.index(column_grant)
+    # The grants run last in upgrade(), after the function and the tables exist.
+    upgrade = inspect.getsource(module.upgrade)
+    assert upgrade.rstrip().endswith("op.execute(_APP_ROLE_GRANTS_SQL)")
+
+
 def test_ledger_routes_record_their_declared_events() -> None:
     from fastapi.routing import APIRoute
 

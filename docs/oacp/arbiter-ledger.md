@@ -302,7 +302,8 @@ The database enforces the transition, not only the task:
    function owned by the migration role (`search_path` pinned), so the application role needs no
    DELETE grant on the table. Because the owner may bypass row-level security, the function binds
    the DELETE to the session's tenant (`agenticorg.tenant_id`) itself; a session bound to another
-   tenant, or to none, deletes nothing.
+   tenant, or to none, deletes nothing. EXECUTE is revoked from PUBLIC and granted only to the
+   application role `agenticorg_app` (where it exists), so no other database role can call it.
 2. The function names the disposition in a transaction-local setting
    (`agenticorg.oacp_retention_disposition`) and deletes the row.
 3. The table's trigger (`oacp_manifest_retention_guard`) re-checks the tenant and every condition
