@@ -31,7 +31,13 @@ security and append-only.
 The audit_log append-only trigger is (re)installed with the sealing transition
 (the same text as core.governance.audit_chain.SEAL_TRIGGER_SQL): a database
 bootstrapped from an empty schema is stamped past the baseline that created the
-trigger, so until now only core.database.init_db installed it there.
+trigger. v6z87 installs the same trigger; reinstalling it here is idempotent.
+
+Where the NOBYPASSRLS application role ``agenticorg_app`` exists, its grants
+follow the same rules as scripts/create_app_role.sql: EXECUTE on
+``oacp_delete_due_manifest`` for that role only (closed to PUBLIC), no UPDATE or
+DELETE on the append-only tables, and on ``commerce_arbiter_decisions`` only the
+column UPDATE its two transitions need.
 """
 
 from alembic import op
@@ -175,6 +181,48 @@ OACP_APPEND_ONLY_TABLES: tuple[str, ...] = (
     "oacp_audit_review_manifest_records",
     "oacp_retention_disposition_decision_records",
 )
+
+# Least-privilege grants for the NOBYPASSRLS application role (docs/RLS_APP_ROLE.md),
+# applied only where that role exists. The retention function is closed to PUBLIC
+# and callable by the application role alone. The append-only tables lose UPDATE
+# and DELETE; the arbiter table keeps a column-scoped UPDATE for its two one-time
+# transitions. The same rules as scripts/create_app_role.sql, so a migration run
+# after the script leaves the same privileges.
+_APP_ROLE_GRANTS_SQL = """DO $$ BEGIN
+    IF to_regrole('agenticorg_app') IS NOT NULL THEN
+        REVOKE ALL ON FUNCTION oacp_delete_due_manifest(text, text) FROM PUBLIC;
+        GRANT EXECUTE ON FUNCTION oacp_delete_due_manifest(text, text) TO agenticorg_app;
+        GRANT SELECT, INSERT ON audit_chain_witness_checkpoints TO agenticorg_app;
+        REVOKE UPDATE, DELETE ON audit_chain_witness_checkpoints FROM agenticorg_app;
+        IF to_regclass('public.oacp_operator_decision_records') IS NOT NULL THEN
+            REVOKE UPDATE, DELETE ON oacp_operator_decision_records FROM agenticorg_app;
+        END IF;
+        IF to_regclass('public.oacp_audit_review_manifest_records') IS NOT NULL THEN
+            REVOKE UPDATE, DELETE ON oacp_audit_review_manifest_records FROM agenticorg_app;
+        END IF;
+        IF to_regclass('public.oacp_retention_disposition_decision_records') IS NOT NULL THEN
+            REVOKE UPDATE, DELETE ON oacp_retention_disposition_decision_records FROM agenticorg_app;
+        END IF;
+        GRANT SELECT, INSERT ON commerce_arbiter_decisions TO agenticorg_app;
+        REVOKE UPDATE, DELETE ON commerce_arbiter_decisions FROM agenticorg_app;
+        GRANT UPDATE (consumed_at, grantex_grant_jti, grantex_recorded_at)
+            ON commerce_arbiter_decisions TO agenticorg_app;
+    END IF;
+END $$;"""
+
+_APP_ROLE_DOWNGRADE_SQL = """DO $$ BEGIN
+    IF to_regrole('agenticorg_app') IS NOT NULL THEN
+        IF to_regclass('public.oacp_operator_decision_records') IS NOT NULL THEN
+            GRANT UPDATE, DELETE ON oacp_operator_decision_records TO agenticorg_app;
+        END IF;
+        IF to_regclass('public.oacp_audit_review_manifest_records') IS NOT NULL THEN
+            GRANT UPDATE, DELETE ON oacp_audit_review_manifest_records TO agenticorg_app;
+        END IF;
+        IF to_regclass('public.oacp_retention_disposition_decision_records') IS NOT NULL THEN
+            GRANT UPDATE, DELETE ON oacp_retention_disposition_decision_records TO agenticorg_app;
+        END IF;
+    END IF;
+END $$;"""
 
 
 def upgrade() -> None:
@@ -326,9 +374,14 @@ def upgrade() -> None:
         END $$;
     """)
 
+    op.execute(_APP_ROLE_GRANTS_SQL)
+
 
 def downgrade() -> None:
     # The audit_log trigger is left installed: removing a tamper control is not a rollback step.
+    # Without their triggers the OACP record tables are ordinary tables again, with row DML
+    # for the application role as before (the dropped table and function take their grants along).
+    op.execute(_APP_ROLE_DOWNGRADE_SQL)
     for table in OACP_APPEND_ONLY_TABLES:
         op.execute(f"""
             DO $$ BEGIN

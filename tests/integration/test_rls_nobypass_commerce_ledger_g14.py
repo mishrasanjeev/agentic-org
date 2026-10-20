@@ -166,3 +166,67 @@ async def test_operator_decisions_and_grant_attach_under_the_app_role(env) -> No
     assert missing.value.status_code == 404
     bundle = await ledger_api.export_ledger(from_seq=1, to_seq=None, tenant_id=tenant)
     assert bundle["tenant_id"] == tenant and bundle["unsealed_commerce_rows"] >= 3
+
+
+@pytest.mark.asyncio
+async def test_retention_function_is_closed_to_other_roles(env) -> None:  # noqa: F811
+    """G13/G14: v6z88 revokes the definer function from PUBLIC; only the application role may call it.
+
+    A fresh role holding nothing but CONNECT (so only what PUBLIC holds) must not be able to
+    EXECUTE ``oacp_delete_due_manifest``. Needs the owner DSN in ``AGENTICORG_DB_URL`` to create
+    the probe role.
+    """
+    import os
+
+    from sqlalchemy.ext.asyncio import create_async_engine
+    from sqlalchemy.pool import NullPool
+
+    owner_url = os.getenv("AGENTICORG_DB_URL")
+    if not owner_url or owner_url == RLS_DB_URL:
+        pytest.skip("set AGENTICORG_DB_URL to the owner DSN to create the probe role")
+    probe = f"oacp_probe_{uuid.uuid4().hex[:12]}"
+    database = None
+    engine = create_async_engine(owner_url, poolclass=NullPool)
+    try:
+        async with engine.connect() as conn:
+            database = (await conn.execute(text("SELECT current_database()"))).scalar_one()
+            await conn.execute(text(f"CREATE ROLE {probe} NOLOGIN"))
+            await conn.execute(text(f'GRANT CONNECT ON DATABASE "{database}" TO {probe}'))
+            await conn.commit()
+            fn = "public.oacp_delete_due_manifest(text, text)"
+            assert (
+                await conn.execute(text("SELECT has_function_privilege(:r, :fn, 'EXECUTE')"), {"r": probe, "fn": fn})
+            ).scalar_one() is False
+            assert (
+                await conn.execute(text("SELECT has_function_privilege('agenticorg_app', :fn, 'EXECUTE')"), {"fn": fn})
+            ).scalar_one() is True
+            # No grant to PUBLIC (grantee 0) remains in the function's ACL, and the ACL is explicit.
+            public_entries = (
+                await conn.execute(
+                    text(
+                        "SELECT count(*) FROM pg_proc p, aclexplode(p.proacl) a "
+                        "WHERE p.oid = to_regprocedure(:fn) AND a.grantee = 0"
+                    ),
+                    {"fn": fn},
+                )
+            ).scalar_one()
+            assert public_entries == 0
+            assert (
+                await conn.execute(
+                    text("SELECT proacl IS NOT NULL FROM pg_proc WHERE oid = to_regprocedure(:fn)"), {"fn": fn}
+                )
+            ).scalar_one() is True
+            await conn.commit()
+            # And calling it as the probe role is refused outright.
+            with pytest.raises(DBAPIError) as refused:
+                async with conn.begin():
+                    await conn.execute(text(f"SET LOCAL ROLE {probe}"))
+                    await conn.execute(text("SELECT oacp_delete_due_manifest('d', 'm')"))
+            assert "permission denied" in str(refused.value)
+    finally:
+        async with engine.connect() as conn:
+            if database is not None:
+                await conn.execute(text(f'REVOKE ALL ON DATABASE "{database}" FROM {probe}'))
+            await conn.execute(text(f"DROP ROLE IF EXISTS {probe}"))
+            await conn.commit()
+        await engine.dispose()

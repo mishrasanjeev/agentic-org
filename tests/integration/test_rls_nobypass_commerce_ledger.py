@@ -133,8 +133,11 @@ async def test_append_only_triggers_hold_under_the_app_role(env) -> None:  # noq
         "UPDATE audit_log SET outcome = 'refuse' WHERE resource_id = :d",
         "DELETE FROM audit_log WHERE resource_id = :d",
     ):
-        # audit_log: the app role also lacks UPDATE/DELETE (scripts/create_app_role.sql); the trigger backs it.
-        with pytest.raises(DBAPIError, match="append-only|permission denied for table audit_log"):
+        # The app role lacks UPDATE/DELETE on both tables (v6z88 and scripts/create_app_role.sql
+        # withhold them; only the arbiter's transition columns are writable); the triggers back it.
+        with pytest.raises(
+            DBAPIError, match="append-only|permission denied for table (audit_log|commerce_arbiter_decisions)"
+        ):
             async with get_tenant_session(uuid.UUID(tenant)) as session:
                 await session.execute(text(statement), {"d": decision.decision_id})
 

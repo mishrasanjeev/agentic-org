@@ -43,6 +43,13 @@
   irregularity with its fork evidence stored.
 - Migration `v6z88_commerce_ledger` (unreleased, extended): `audit_chain_witness_checkpoints`
   (forced RLS, append-only), `oacp_manifest_retention_guard` and `oacp_delete_due_manifest`.
+- Least-privilege grants in `v6z88_commerce_ledger` for the NOBYPASSRLS application role
+  `agenticorg_app` (applied only where the role exists): `oacp_delete_due_manifest` is revoked
+  from PUBLIC and executable by `agenticorg_app` alone; UPDATE and DELETE are revoked on
+  `audit_chain_witness_checkpoints` and the three `oacp_*` decision record tables; on
+  `commerce_arbiter_decisions` the role keeps only `UPDATE (consumed_at, grantex_grant_jti,
+  grantex_recorded_at)` for the two one-time transitions. Same rules as
+  `scripts/create_app_role.sql`.
 
 ## Unreleased - Commerce ledger and arbiter (G9-G13)
 
