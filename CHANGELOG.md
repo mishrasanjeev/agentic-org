@@ -146,6 +146,9 @@
 
 ## Unreleased - Commerce ledger routes, offline export and Grantex countersignature (G14-G16)
 
+- Tests for the retention task, the Grantex service client (size limit, non-JSON and non-object
+  answers, unsafe endpoint, no retry, one JWKS refresh) and the offline verifier's exit codes in
+  process, so each new module meets the new-module coverage floor.
 - Tests: the commerce ledger route-table checks walk FastAPI's lazily included routers
   (`tests/app_routes.py`), so they see every route on the pinned FastAPI 0.143 instead of none,
   and the arbiter RLS probe is granted USAGE on the `public` schema, which other integration
