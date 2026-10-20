@@ -182,15 +182,17 @@ OACP_APPEND_ONLY_TABLES: tuple[str, ...] = (
     "oacp_retention_disposition_decision_records",
 )
 
-# Least-privilege grants for the NOBYPASSRLS application role (docs/RLS_APP_ROLE.md),
-# applied only where that role exists. The retention function is closed to PUBLIC
-# and callable by the application role alone. The append-only tables lose UPDATE
-# and DELETE; the arbiter table keeps a column-scoped UPDATE for its two one-time
-# transitions. The same rules as scripts/create_app_role.sql, so a migration run
-# after the script leaves the same privileges.
+# Least-privilege grants for the NOBYPASSRLS application role (docs/RLS_APP_ROLE.md).
+# The retention function is closed to PUBLIC on every database, whether or not the
+# application role exists yet (a role created later gets EXECUTE from
+# scripts/create_app_role.sql), and is callable by the application role alone. The
+# role-specific grants apply only where that role exists: the append-only tables lose
+# UPDATE and DELETE; the arbiter table keeps a column-scoped UPDATE for its two
+# one-time transitions. The same rules as scripts/create_app_role.sql, so a migration
+# run after the script leaves the same privileges.
 _APP_ROLE_GRANTS_SQL = """DO $$ BEGIN
+    REVOKE ALL ON FUNCTION oacp_delete_due_manifest(text, text) FROM PUBLIC;
     IF to_regrole('agenticorg_app') IS NOT NULL THEN
-        REVOKE ALL ON FUNCTION oacp_delete_due_manifest(text, text) FROM PUBLIC;
         GRANT EXECUTE ON FUNCTION oacp_delete_due_manifest(text, text) TO agenticorg_app;
         GRANT SELECT, INSERT ON audit_chain_witness_checkpoints TO agenticorg_app;
         REVOKE UPDATE, DELETE ON audit_chain_witness_checkpoints FROM agenticorg_app;

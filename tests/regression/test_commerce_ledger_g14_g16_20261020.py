@@ -619,10 +619,12 @@ def test_v6z88_grants_the_app_role_least_privilege() -> None:
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     grants = " ".join(module._APP_ROLE_GRANTS_SQL.split())
-    assert grants.startswith("DO $$ BEGIN IF to_regrole('agenticorg_app') IS NOT NULL THEN")
     fn = "oacp_delete_due_manifest(text, text)"
     revoke_public = f"REVOKE ALL ON FUNCTION {fn} FROM PUBLIC;"
     grant_app = f"GRANT EXECUTE ON FUNCTION {fn} TO agenticorg_app;"
+    # PUBLIC loses EXECUTE on every database, before (outside) the role guard, so a database
+    # migrated before the application role exists does not leave the function open to all roles.
+    assert grants.startswith(f"DO $$ BEGIN {revoke_public} IF to_regrole('agenticorg_app') IS NOT NULL THEN")
     assert revoke_public in grants and grant_app in grants
     assert grants.index(revoke_public) < grants.index(grant_app)
     assert "TO PUBLIC" not in grants
