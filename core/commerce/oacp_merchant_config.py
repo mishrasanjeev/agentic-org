@@ -383,9 +383,23 @@ def _safe_mapping(value: Mapping[str, Any]) -> dict[str, Any]:
         elif isinstance(item, Mapping):
             clean[clean_key] = _safe_mapping(item)
         elif isinstance(item, Sequence) and not isinstance(item, str | bytes | bytearray):
-            clean[clean_key] = [_safe_text(element) for element in item if _safe_text(element)]
+            clean[clean_key] = _safe_sequence(item)
     if _contains_unsafe_config_value(clean):
         raise MerchantCommerceConfigError("metadata contains private or executable values")
+    return clean
+
+
+def _safe_sequence(items: Sequence[Any]) -> list[Any]:
+    """A list member: objects and nested lists keep their shape (UCP ``links``, ``payment_terms``,
+    ``method_combinations``); scalars become trimmed text and empty ones are dropped, as before."""
+    clean: list[Any] = []
+    for element in items:
+        if isinstance(element, Mapping):
+            clean.append(_safe_mapping(element))
+        elif isinstance(element, Sequence) and not isinstance(element, str | bytes | bytearray):
+            clean.append(_safe_sequence(element))
+        elif _safe_text(element):
+            clean.append(_safe_text(element))
     return clean
 
 

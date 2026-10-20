@@ -1,5 +1,16 @@
 # Changelog
 
+## Unreleased - Merchant config object lists
+
+- Fixed: `PUT /api/v1/commerce/runtime/merchant-configs/{merchant_id}` stored every object inside a
+  list of `provider_policy` (and of the brand profile and freshness policy) as its Python text, so
+  the documented `provider_policy.ucp.links` (`privacy_policy`, `terms_of_service`), `payment_terms`
+  and `fulfillment.method_combinations` were silently lost: UCP checkouts and the ACP feed showed no
+  merchant links. Lists of objects and nested lists now keep their shape, each object passing the
+  same unsafe-value checks (an object member such as `access_token` inside a list is now refused
+  like one outside it); lists of plain values are cleaned exactly as before. Regression:
+  `tests/regression/test_merchant_config_object_lists_20261021.py`.
+
 ## Unreleased - Playwright 1.64
 
 - Python `playwright` moves from 1.63.0 to 1.64.0 (`[v4]` extra and `requirements-v4.txt`); the
