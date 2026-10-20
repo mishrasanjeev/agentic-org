@@ -22,6 +22,8 @@ cd agenticorg
 python -m venv .venv
 source .venv/bin/activate  # or .venv\Scripts\activate on Windows
 pip install -e ".[dev]"
+# fastembed goes in without its dependency metadata (see requirements-fastembed.txt)
+pip install --no-deps --require-hashes -r requirements-fastembed.txt
 
 # Start infrastructure
 docker compose up -d postgres redis minio
@@ -210,7 +212,8 @@ the scan fails again.
 ### Dependency audit exceptions
 
 `scripts/run_pip_audit.py` runs `pip-audit` over the project metadata,
-`requirements.txt` and `requirements-v4.txt` on every pull request
+`requirements.txt`, `requirements-v4.txt` and `requirements-fastembed.txt`
+(the pinned package only, as it is installed with `--no-deps`) on every pull request
 (`security-scan` job), nightly and in `make check`. It fails on any known
 vulnerability, on any dependency it could not audit (for example a package
 that is not on PyPI), and on anything that stops the audit from completing.

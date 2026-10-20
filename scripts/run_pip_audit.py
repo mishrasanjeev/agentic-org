@@ -2,9 +2,10 @@
 # SPDX-License-Identifier: Apache-2.0
 """Dependency vulnerability audit with dated, reviewed exceptions.
 
-Runs ``pip-audit`` over the project metadata and both requirements files (the
-targets CI has always audited) and fails on any known vulnerability that is not
-covered by an exception in ``config/pip-audit-exceptions.toml``.
+Runs ``pip-audit`` over the project metadata, both requirements files (the
+targets CI has always audited) and ``requirements-fastembed.txt``, and fails on
+any known vulnerability that is not covered by an exception in
+``config/pip-audit-exceptions.toml``.
 
 A dependency ``pip-audit`` could not audit (it reports a ``skip_reason``, for
 example a package that is not on PyPI) fails the audit too, because nothing is
@@ -35,7 +36,15 @@ from pathlib import Path
 from typing import Any
 
 DEFAULT_EXCEPTIONS = Path("config/pip-audit-exceptions.toml")
-DEFAULT_TARGETS: tuple[tuple[str, ...], ...] = ((".",), ("-r", "requirements.txt"), ("-r", "requirements-v4.txt"))
+# requirements-fastembed.txt is installed with --no-deps (its Pillow ceiling is
+# overridden by pyproject.toml), so it is audited the same way: the pinned
+# package only, its dependencies being covered by the project target.
+DEFAULT_TARGETS: tuple[tuple[str, ...], ...] = (
+    (".",),
+    ("-r", "requirements.txt"),
+    ("-r", "requirements-v4.txt"),
+    ("--disable-pip", "--no-deps", "-r", "requirements-fastembed.txt"),
+)
 MAX_EXCEPTION_DAYS = 90
 TEXT_FIELDS = {"exception": ("id", "package", "reason", "owner"), "skip": ("package", "reason", "owner")}
 

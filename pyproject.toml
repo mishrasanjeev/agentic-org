@@ -146,11 +146,31 @@ dependencies = [
     "authlib>=1.9.1",
     "reportlab>=4.5.1",
     "google-cloud-kms>=3.18.0",
-    "fastembed>=0.9.0",
-    # SECURITY 2026-06-13: Pillow is transitively required by fastembed.
-    # Keep the patched floor direct so dependency resolution cannot drift
-    # back to the vulnerable 10.x/11.x lines.
-    "pillow>=12.3.0",
+    # SECURITY 2026-10-21: Pillow 13.0.0 fixes JPEG, TIFF and GIF decoder
+    # advisories reachable through document and image OCR (core/rag/extractors.py,
+    # core/idp/). Keep the patched floor direct so resolution cannot drift back.
+    "pillow>=13.0.0",
+    # fastembed, the default local embedding runtime (core/embeddings.py), is
+    # installed from requirements-fastembed.txt with --no-deps: its latest
+    # release (0.9.0) declares pillow<13 although it only uses Pillow for
+    # image embeddings, which this platform does not load. Its other runtime
+    # requirements are declared here with fastembed 0.9.0's own ranges
+    # (tests/regression/test_pillow13_fastembed_install.py keeps them in step).
+    # Once a fastembed release accepts Pillow 13, restore "fastembed>=<that
+    # release>" here and delete requirements-fastembed.txt and these entries.
+    "huggingface-hub>=0.20,<2.0",
+    "loguru>=0.7.2,<0.8.0",
+    "mmh3>=4.1.0,<6.0.0",
+    "numpy>=1.26; python_version == '3.12'",
+    "numpy>=2.1.0; python_version == '3.13'",
+    "numpy>=2.3.0; python_version >= '3.14'",
+    "onnxruntime>=1.17.0,!=1.20.0,!=1.24.0,!=1.24.1; python_version == '3.12'",
+    "onnxruntime>1.21.0,!=1.24.0,!=1.24.1; python_version == '3.13'",
+    "onnxruntime>=1.24.2; python_version >= '3.14'",
+    "py-rust-stemmers>=0.1.0,<0.2.0",
+    "requests>=2.31,<3.0",
+    "tokenizers>=0.15,<1.0",
+    "tqdm>=4.66,<5.0",
 ]
 
 [project.optional-dependencies]

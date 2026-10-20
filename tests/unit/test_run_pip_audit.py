@@ -115,12 +115,15 @@ def test_audit_that_cannot_complete_fails_closed(
     assert "run_pip_audit:" in capsys.readouterr().err
 
 
-def test_default_targets_cover_the_project_and_both_requirements_files(tmp_path: Path) -> None:
+def test_default_targets_cover_the_project_and_every_requirements_file(tmp_path: Path) -> None:
     runner = FakeRunner(0, report())
     path = exceptions_file(tmp_path, "")
     assert audit.main(["--exceptions", str(path)], runner=runner, today=TODAY) == 0
     assert [call[call.index("60") + 1:] for call in runner.calls] == [
-        ["."], ["-r", "requirements.txt"], ["-r", "requirements-v4.txt"]
+        ["."],
+        ["-r", "requirements.txt"],
+        ["-r", "requirements-v4.txt"],
+        ["--disable-pip", "--no-deps", "-r", "requirements-fastembed.txt"],
     ]
 
 
