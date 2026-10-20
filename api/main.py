@@ -297,6 +297,8 @@ app.add_middleware(
 # and BEFORE the route handler.
 app.add_middleware(CSRFMiddleware)
 app.add_middleware(GrantexAuthMiddleware)
+# ACP routes answer every pre-route refusal (auth, scope, rate limit, flag) as an ACP Error.
+app.add_middleware(commerce_acp.AcpErrorShapeMiddleware)
 app.add_middleware(DeprecationHeaderMiddleware)
 # Outermost (last add_middleware): binds request_id into structlog
 # contextvars before auth/CSRF run so every log line of the request —

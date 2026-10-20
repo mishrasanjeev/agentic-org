@@ -137,7 +137,7 @@ stays `ready_for_payment`.
 A key is scoped to the merchant: reusing it on another ACP path is 422 (stricter than the spec's
 per-path scope).
 
-### Request signatures (residual)
+### Request signatures (residual: G34 is partially closed for `Signature`)
 
 ACP recommends `Signature` and `Timestamp` but publishes no algorithm, canonical form, signed fields
 or key distribution: they are arranged out of band with each agent platform. Verification is
@@ -167,6 +167,13 @@ messages, and UCP severities become `resolution`. Examples:
 | `delegate_payment_allowance_exceeded` | `maximum_exceeded` |
 
 Internal blocker dicts and UCP envelopes never appear in an ACP response.
+
+Refusals answered before the binding runs (authentication 401, too many failed attempts 429, missing
+scope 403, rate limit 429, flag off or unknown path 404, wrong method 405) are rewritten on every
+`/acp` path into ACP `Error` objects by `AcpErrorShapeMiddleware` (`api/v1/commerce_acp.py`):
+`invalid_request` with `unauthorized`, `forbidden`, `rate_limit_exceeded`, `not_found` or
+`method_not_allowed` (5xx: `processing_error`; 503: `service_unavailable`). Status and headers such
+as `Retry-After` are kept.
 
 ### Capabilities, extensions, discounts (G38)
 

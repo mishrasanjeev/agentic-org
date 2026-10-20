@@ -23,6 +23,8 @@
   by a verifier registered per agent platform, `AGENTICORG_ACP_SIGNATURE_MODE=log` (default, never
   refuses) or `enforce`. ACP publishes no signing algorithm, so no verifier ships.
   An unexpected failure after the key is claimed releases it, so the client can retry.
+- Refusals answered before an ACP route runs (401, 403, 404, 405, 429 from authentication, scope,
+  rate-limit, flag and routing) are ACP `Error` objects on every `/acp` path (`AcpErrorShapeMiddleware`).
 - ACP error mapping (`core/commerce/acp/errors.py`): every internal message code maps to the closed
   `MessageError` enum, UCP protocol errors to `Error` objects; blocker dicts never reach ACP responses.
 - Capability negotiation: sessions declare the payment handlers served over ACP and the requested
