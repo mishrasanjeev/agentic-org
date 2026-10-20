@@ -290,6 +290,20 @@
   async egress validator (`tests/regression/test_egress_async_callers.py`), so no async
   commerce path calls the synchronous validator.
 
+## Unreleased - Hindi reference-question privacy correction
+
+- Keep unambiguous Hindi reference-question grammar, action conjunctions and
+  confirmation verbs readable when the English NLP recognizer mislabels them
+  as people or organizations. Do not exempt named values, unknown words,
+  custom recognizers or spans crossing the grammatical boundary.
+- Apply the same narrow guard to pre-model redaction and entity lookup used by
+  pseudonymization behind `AGENTICORG_PII_HINDI_GRAMMAR_ENABLED`, default off.
+  Enable only after privacy regression acceptance; disabling restores previous
+  detection behavior. Existing flags, redaction modes, genuine identifier
+  recognizers and budgets are unchanged; this is not general Hindi NER coverage.
+- Replay the entire seed and follow-up through the packaged privacy detector,
+  alongside name, quoted-name, email and identifier protection regressions.
+
 ## Unreleased - Database sessions ready for a NOBYPASSRLS application role
 
 - Bind tenant or platform context at the raw-session sites that still opened
