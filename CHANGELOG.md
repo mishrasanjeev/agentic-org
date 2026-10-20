@@ -7,8 +7,11 @@
   sessions (`POST /ucp/checkout-sessions` 201, `GET`, `PUT` full replacement, `/complete`,
   `/cancel`), carts (`POST /ucp/carts` 201, `GET`, `PUT`, `/cancel`) and `GET /ucp/orders/{id}`,
   for UCP `2026-04-08` (default) and `2026-08-25` (`AGENTICORG_UCP_VERSIONS`). The merchant is
-  resolved from `Host` inside the tenant of the platform's API key (`ucp:read` / `ucp:write`);
-  `provider_policy.ucp.serving_host` names the host. Docs: `docs/oacp/ucp-checkout.md`.
+  resolved from `Host` through the attested serving-host index of the profile work (published
+  merchants only) and must belong to the tenant of the platform's API key (`X-API-Key` or
+  bearer; scopes `ucp:read` / `ucp:write`). The transaction capabilities and payment handlers
+  are advertised in `/.well-known/ucp` while the flag is on, and 2026-08-25 responses carry
+  `policies[]` from the verified policy artifact. Docs: `docs/oacp/ucp-checkout.md`.
 - `UCP-Agent` is parsed as an RFC 8941 dictionary, the platform profile fetched over public HTTPS
   without redirects (cached 60 s to 1 h), its version checked (`version_unsupported`) and
   capabilities intersected with orphaned extensions pruned; responses echo the version and the

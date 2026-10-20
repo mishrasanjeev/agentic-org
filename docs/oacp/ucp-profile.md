@@ -25,9 +25,11 @@ official conformance suite target) and `2026-08-25`.
 The profile's REST service is `https://<host>/ucp` (no trailing slash). Only
 capabilities that are actually served are listed: catalog search and lookup
 always (while the profile is served), location search and lookup in
-2026-08-25 when the merchant has at least one enabled POS store. Checkout,
-cart and order register later behind `AGENTICORG_UCP_CHECKOUT_ENABLED`.
-`payment_handlers` is present and empty until a handler registers. Every
+2026-08-25 when the merchant has at least one enabled POS store; checkout,
+cart, order and their extensions, and the merchant's payment handlers, while
+`AGENTICORG_UCP_CHECKOUT_ENABLED` is on and the merchant's settings support
+them ([UCP checkout, cart and order](ucp-checkout.md)). `payment_handlers` is
+present and empty when no handler applies. Every
 `dev.ucp.*` entry carries `version` equal to `ucp.version`.
 
 Signing keys: 2026-04-08 publishes `signing_keys[]` with `keys[]` as a mirror
@@ -37,9 +39,10 @@ The request's release comes from the `version` parameter of the `UCP-Agent`
 header (`profile="https://agent.example/profile.json"; version="2026-04-08"`);
 without one, the newest configured release answers. An unserved release is
 `422 version_unsupported`; a malformed header `400 invalid_profile_url`. Every
-response echoes `ucp.version` and the active capability. Fetching the
-platform profile to read its version is not done yet (it comes with the
-transaction surfaces).
+response echoes `ucp.version` and the active capability. The transaction
+routes also fetch the platform profile and intersect capabilities
+([negotiation](ucp-checkout.md#negotiation)); the read routes honour the
+`version` parameter only.
 
 ## When a profile is served
 
@@ -214,7 +217,7 @@ all absent is dropped.
 The official suite (`Universal-Commerce-Protocol/conformance`, 2026-04-08,
 `ucp-sdk` 0.4.6) passes `test_discovery` against a local server;
 `test_discovery_urls` is skipped upstream; the checkout, cart, order and
-webhook tests do not apply until the transaction surfaces ship. Emitted
+webhook results are in [ucp-checkout.md](ucp-checkout.md#conformance). Emitted
 documents are validated in tests against the published UCP JSON Schemas
 (`tests/fixtures/ucp_schemas`).
 

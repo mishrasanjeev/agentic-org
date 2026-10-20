@@ -44,10 +44,11 @@ import httpx  # noqa: E402
 import uvicorn  # noqa: E402
 from cryptography.hazmat.primitives.asymmetric import ec  # noqa: E402
 from fastapi import Depends, FastAPI, Request  # noqa: E402
-from fastapi.responses import JSONResponse  # noqa: E402
+from fastapi.responses import JSONResponse, Response  # noqa: E402
 
 TENANT = "7f3c9a52-2d41-4e8b-9b1a-0c5d6e7f8a90"
 MERCHANT = "merchant.example"
+SERVING_HOST = "conformance.merchant.example"
 SELLER = "seller-01"
 
 
@@ -64,7 +65,10 @@ def build_app(data_dir: Path, secret: str, version: str) -> FastAPI:  # noqa: C9
     from core.commerce import executors
     from core.commerce.payment_handlers import Allowance, register_payment_handler
     from core.commerce.ucp import handlers, webhooks
-    from core.commerce.ucp.capabilities import DEFAULT_REGISTRY, PaymentHandlerEntry, RegistryContext
+    from core.commerce.ucp.capabilities import (
+        PaymentHandlerEntry,
+        publish_to_profile_registry,
+    )
     from core.commerce.ucp.httpsig import LocalEs256Signer
     from core.commerce.ucp.items import CatalogItem
     from core.commerce.ucp.merchant import merchant_ucp_from_config
@@ -74,6 +78,8 @@ def build_app(data_dir: Path, secret: str, version: str) -> FastAPI:  # noqa: C9
     from tests import commerce_arbiter_fixtures as fx
 
     settings.ucp_checkout_enabled = True
+    settings.ucp_profile_enabled = True
+    settings.ucp_versions = version
     settings.route_enforcement_mode = "enforce"
     os.environ["AGENTICORG_UCP_VERSIONS"] = version
 
@@ -95,7 +101,6 @@ def build_app(data_dir: Path, secret: str, version: str) -> FastAPI:  # noqa: C9
                 "max_quantity_per_order": 10**6,
             },
             "ucp": {
-                "serving_host": "conformance.merchant.example",
                 "currency": "USD",
                 "executor": "conformance_executor",
                 "links": [
@@ -110,7 +115,7 @@ def build_app(data_dir: Path, secret: str, version: str) -> FastAPI:  # noqa: C9
             },
         },
     }
-    merchant = merchant_ucp_from_config(config, tenant_id=TENANT)
+    merchant = merchant_ucp_from_config(config, tenant_id=TENANT, serving_host=SERVING_HOST, signing_available=True)
     assert merchant is not None
 
     prices = {row["id"]: row for row in _rows(data_dir / "products.csv")}
@@ -191,7 +196,7 @@ def build_app(data_dir: Path, secret: str, version: str) -> FastAPI:  # noqa: C9
                     name=self.name,
                     id="mock_payment_handler",
                     version=version_,
-                    schema=None,
+                    schema="https://example.com/ucp/mock-payment/config.json",
                     spec=None,
                     available_instruments=({"type": "card"},),
                 )
@@ -208,6 +213,7 @@ def build_app(data_dir: Path, secret: str, version: str) -> FastAPI:  # noqa: C9
             return None
 
     register_payment_handler(_MockHandler())
+    publish_to_profile_registry()
 
     class _Executor:
         name = "conformance_executor"
@@ -222,7 +228,10 @@ def build_app(data_dir: Path, secret: str, version: str) -> FastAPI:  # noqa: C9
 
     executors.register_executor(_Executor())
 
-    signer = LocalEs256Signer(ec.generate_private_key(ec.SECP256R1()), kid="conformance-merchant-key")
+    private_key = ec.generate_private_key(ec.SECP256R1())
+    from core.commerce.merchant_keys import public_jwk_for as _jwk
+
+    signer = LocalEs256Signer(private_key, kid=_jwk(private_key)["kid"])
     webhooks._validated_url = lambda url: url  # the suite's webhook receiver is http://localhost
     # The suite expects a retry within five seconds: a short backoff and timeout for the harness only.
     dispatcher = webhooks.OrderWebhookDispatcher(
@@ -240,8 +249,9 @@ def build_app(data_dir: Path, secret: str, version: str) -> FastAPI:  # noqa: C9
             signer=lambda: signer,
             fetcher=_fetch,
             authority_provider=_authority,
-            after_commit=lambda _tenant: None,
+            after_commit=lambda tenant: asyncio.get_running_loop().create_task(dispatcher.dispatch_tenant(tenant)),
             supported_versions=(version,),
+            published=commerce_ucp._published_capabilities,
         )
 
     commerce_ucp.runtime_factory = _runtime
@@ -259,30 +269,42 @@ def build_app(data_dir: Path, secret: str, version: str) -> FastAPI:  # noqa: C9
 
     app.include_router(commerce_ucp.router)
 
-    @app.get("/.well-known/ucp")
-    async def profile(request: Request) -> JSONResponse:
-        base = str(request.base_url).rstrip("/")
-        context = RegistryContext(merchant_signing_available=True)
-        return JSONResponse(
-            {
-                "ucp": {
-                    "version": version,
-                    "services": {
-                        "dev.ucp.shopping": [
-                            {
-                                "version": version,
-                                "transport": "rest",
-                                "endpoint": f"{base}/ucp",
-                                "spec": f"https://ucp.dev/{version}/specification/overview",
-                                "schema": f"https://ucp.dev/{version}/services/shopping/rest.openapi.json",
-                            }
-                        ]
-                    },
-                    "capabilities": DEFAULT_REGISTRY.business_capabilities(merchant, version, context),
-                    "payment_handlers": DEFAULT_REGISTRY.business_payment_handlers(merchant, version),
-                }
-            }
-        )
+    # The real profile route (api/v1/ucp_discovery.py) on a published-merchant serve state built here
+    # instead of the attestation, publication and public-discovery artifact flow.
+    from api.v1 import ucp_discovery
+    from core.commerce.merchant_keys import public_jwk_for
+    from core.commerce.ucp.profile import UcpMerchantServeState
+
+    jwk = public_jwk_for(private_key)
+    serve = UcpMerchantServeState(
+        host=SERVING_HOST,
+        tenant_id=TENANT,
+        merchant_id=MERCHANT,
+        seller_agent_id=SELLER,
+        namespace=None,
+        jwks=(jwk,),
+        locations=(),
+        ucp={},
+        config=config,
+    )
+
+    async def _serving(_request: Any) -> Any:
+        return serve
+
+    ucp_discovery._serving_merchant = _serving
+    app.include_router(ucp_discovery.well_known_router)
+
+    @app.middleware("http")
+    async def _local_endpoint(request: Request, call_next: Any) -> Any:
+        # The profile advertises https://<serving host>/ucp; the suite reaches this process over plain HTTP.
+        response = await call_next(request)
+        if not request.url.path.startswith("/.well-known/ucp"):
+            return response
+        body = b"".join([chunk async for chunk in response.body_iterator])
+        local = str(request.base_url).rstrip("/").encode()
+        body = body.replace(f"https://{SERVING_HOST}".encode(), local)
+        headers = {k: v for k, v in response.headers.items() if k.lower() not in ("content-length", "etag")}
+        return Response(content=body, status_code=response.status_code, headers=headers, media_type="application/json")
 
     @app.post("/testing/simulate-shipping/{order_id}")
     async def simulate_shipping(order_id: str, request: Request) -> JSONResponse:
@@ -304,6 +326,7 @@ def build_app(data_dir: Path, secret: str, version: str) -> FastAPI:  # noqa: C9
             adjustment=None,
             now=datetime.now(UTC),
         )
+        asyncio.get_running_loop().create_task(dispatcher.dispatch_tenant(uuid.UUID(TENANT)))
         return JSONResponse({"status": "shipped"})
 
     @app.on_event("startup")

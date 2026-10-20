@@ -65,9 +65,9 @@ decision to set it to `false`.
 
 ## UCP Smoke
 
-With `AGENTICORG_UCP_CHECKOUT_ENABLED=true` on staging and a merchant whose `provider_policy.ucp.serving_host` is the staging host:
+With `AGENTICORG_UCP_CHECKOUT_ENABLED=true` on staging and a merchant published on the staging host (attested serving host, active key, live `public_discovery` artifact):
 
-- `POST /ucp/checkout-sessions` with `UCP-Agent` and a tenant API key holding `ucp:write` returns 201 and `ready_for_complete` once fulfillment is selected.
+- `POST /ucp/checkout-sessions` with `UCP-Agent` and the platform's tenant API key (`X-API-Key`, scope `ucp:write`) returns 201 and `ready_for_complete` once fulfillment is selected.
 - A repeat with the same `Idempotency-Key` and body returns the same session; a different body returns 409.
 - Complete without a registered executor returns `executor_unavailable` and the session stays `ready_for_complete`.
 - The commerce ledger shows `commerce.ucp.checkout.create` and `commerce.ucp.checkout.complete` rows for the tenant.

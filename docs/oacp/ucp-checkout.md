@@ -8,8 +8,11 @@ at `https://<merchant serving host>/ucp`: checkout sessions (`dev.ucp.shopping.c
 (`dev.ucp.shopping.cart`) and orders (`dev.ucp.shopping.order`), with the fulfillment, buyer
 consent, loyalty, AP2 mandate and (2026-08-25) payment authentication, split payment and payment
 terms extensions. UCP `2026-04-08` is the default release; `2026-08-25` is served when
-`AGENTICORG_UCP_VERSIONS` lists it. The profile (`/.well-known/ucp`), catalog and location
-capabilities are documented with the profile work.
+`AGENTICORG_UCP_VERSIONS` lists it (then 2026-08-25 is the profile at `/.well-known/ucp` and
+2026-04-08 its `supported_versions` leaf). The profile, catalog and location capabilities are in
+[ucp-profile.md](ucp-profile.md); the transaction capabilities and payment handlers below are
+registered with the same profile registry and advertised only while the checkout flag is on, so
+a platform negotiates exactly what the profile lists.
 
 ## Flag
 
@@ -28,12 +31,14 @@ The flag also gates the order-webhook sweep. The merchant runtime endpoints unde
 
 ## Hosting And Authentication
 
-- The platform calls `https://<serving host>/ucp/...` with `Authorization: Bearer <API key>`,
-  a tenant API key the merchant issues to that platform with the scopes `ucp:read` (GET) and
-  `ucp:write` (writes). No role holds these scopes; tenant administrators pass.
-- The merchant is resolved from the `Host` header inside the key's tenant: a merchant config
-  whose `provider_policy.ucp.serving_host` equals the host. An unknown host, or a host claimed by
-  two configs, is 404. The verified-serving-host attestation is checked by the profile publisher.
+- The platform authenticates with the API key the merchant issued to it (UCP's pre-shared
+  platform key), sent as `X-API-Key: <key>` or `Authorization: Bearer <key>`; the key is a tenant
+  API key with the scopes `ucp:read` (GET) and `ucp:write` (writes). No role holds these scopes;
+  tenant administrators pass.
+- The merchant is resolved from the `Host` header through the profile publisher's host index:
+  the host must be the merchant's attested serving host and the merchant must be published (an
+  active signing key and a live `public_discovery` artifact), as for `/.well-known/ucp`, and it
+  must belong to the key's tenant. Anything else is 404.
 - Every write records its declared ledger event (`commerce.ucp.checkout.create`, `.update`,
   `.complete`, `.cancel`, `commerce.ucp.cart.create`, `.update`, `.cancel`); refusals and
   idempotent replays are recorded in their own transaction.
@@ -162,8 +167,9 @@ verified). Risk signals sent with Complete are recorded as `commerce.ucp.payment
   merchant-managed subscriptions. Headers: `Webhook-Id` (stable across retries of one revision),
   `Webhook-Timestamp`, `UCP-Agent: profile="https://<serving host>/.well-known/ucp"`,
   `Content-Digest` (RFC 9530) and an RFC 9421 signature (ES256, raw `r||s`) over `@method
-  @authority @path content-digest content-type ucp-agent` with the merchant's key. Without a
-  merchant key nothing is sent: the delivery retries and then dead-letters.
+  @authority @path content-digest content-type ucp-agent` with the merchant's active key from the
+  merchant key store (the key `/.well-known/ucp` publishes). Without one nothing is sent: the
+  delivery retries and then dead-letters.
 - Delivery uses an outbox (`commerce_order_webhook_deliveries`) written in the order's
   transaction, a Celery kick after commit and a 30-second sweep; 2xx is delivered, 408/425/429/5xx
   and transport errors retry with exponential backoff, other 4xx or 10 attempts dead-letter.
@@ -243,6 +249,13 @@ Its config carries that capability (`rails`, `max_amount_minor_units`, `currency
 cap). It accepts a network token with cryptogram or a `plural_pine_token`, never a PAN. It moves
 no money: executors do.
 
+## Policies
+
+2026-08-25 checkout, cart and order responses carry `policies[]` mapped from the merchant's
+verified OACP `policy` artifact (`map_oacp_policy_to_ucp_policies`), only while that artifact is
+a usable cache record; the order keeps the policies of its checkout as a snapshot. 2026-04-08
+has no `policies[]`.
+
 ## Buyer Consent
 
 `buyer.consent` is the `dev.ucp.consent.*` purpose map in 2026-08-25 (`analytics`, `marketing`
@@ -269,7 +282,6 @@ until identity linking, so no balance is disclosed, and a lookup failure omits l
 {
   "provider_policy": {
     "ucp": {
-      "serving_host": "shop.merchant.example",
       "currency": "INR",
       "executor": null,
       "links": [
@@ -307,24 +319,24 @@ until identity linking, so no balance is disclosed, and a lookup failure omits l
 
 ## Conformance
 
-The official suite (`Universal-Commerce-Protocol/conformance`) was run against a local server
-(`tests/conformance/ucp_conformance_server.py`) on the real handlers and Postgres, with test
-doubles for authentication, catalog, rates, buyer authority and a fake executor. Results and the
-reasons for each failure are recorded in the release report; summary:
+The official suite (`Universal-Commerce-Protocol/conformance`, `ucp-sdk` 0.4.6, release
+2026-04-08) was run end to end (discovery through the profile route, checkout, order and
+webhooks) against a local server (`tests/conformance/ucp_conformance_server.py`): the real
+profile route, UCP REST binding, handlers and Postgres, with test doubles for authentication,
+the publication state, catalog, rates, buyer authority and a fake executor.
 
-- Suite as published (its platform profile declares only `dev.ucp.shopping.order`): 1 passed
-  (discovery), 69 failed, 7 skipped. Strict negotiation answers every checkout operation with
-  `capabilities_incompatible`, because the platform never declared the checkout capability.
-- Suite with its platform profile also declaring checkout, fulfillment and buyer consent at
-  2026-04-08: 53 passed, 16 failed, 8 skipped in one run; the three lifecycle failures in that run
-  passed when rerun (the suite's mock profile server could not rebind its port on Windows), so
-  13 failures remain, all outside this release's scope or a deliberate spec reading:
+- Suite as published: 1 passed (discovery), 69 failed, 7 skipped. Its platform profile declares
+  only `dev.ucp.shopping.order`, so negotiation answers every checkout operation with
+  `capabilities_incompatible`.
+- Suite with its platform profile also declaring checkout, fulfillment and buyer consent: 54
+  passed, 15 failed, 8 skipped in a full run. The two webhook-address tests passed when their
+  module was rerun alone (the suite waits two seconds for a webhook), which leaves 13 failures:
   - discount extension not served (4);
   - free shipping for a specific item (1; the minimum-subtotal promotion passes);
   - stored addresses of known customers (3; needs identity linking);
   - `PUT /orders/{id}` adjustments (4; not in either release's REST OpenAPI, which has only
     `GET /orders/{id}`);
-  - `UCP-Agent: profile="..."` treated as valid (1; the spec requires an absolute profile URL,
+  - `UCP-Agent: profile="..."` accepted as valid (1; the spec requires an absolute profile URL,
     so this server answers 400 `invalid_profile_url`).
 
 ## Residual Gaps
@@ -333,9 +345,8 @@ reasons for each failure are recorded in the release report; summary:
   Plural executor lands; the Plural sandbox end-to-end run is pending.
 - Buyer authority is caller-asserted; AP2 checkout mandates are not verified yet.
 - The discount extension (`dev.ucp.shopping.discount`) and identity linking are not served.
-- `policies[]` are not rendered (the policies mapper belongs to the profile work).
 - The permalink browser endpoint itself is not served by AgenticOrg; carts link to the
   merchant's own `permalink_endpoint`.
-- Merchant signing keys come from the merchant key store; until it is wired, AP2 is not
-  advertised and UCP order webhooks are not sent (they wait and dead-letter).
+- With no active merchant signing key AP2 is not advertised and UCP order webhooks are not sent
+  (they wait and dead-letter); the profile itself needs an active key to be served.
 - Inbound RFC 9421 request signatures from platforms are not verified here (network identity work).
