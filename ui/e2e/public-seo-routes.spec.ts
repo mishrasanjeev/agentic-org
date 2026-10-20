@@ -47,6 +47,47 @@ for (const width of [320, 768, 1440]) {
   });
 }
 
+test("OACP explainer diagrams, comparison and switch status are available without JavaScript", async ({ browser, baseURL, request }) => {
+  const path = "/blog/oacp-one-trust-layer-under-ucp-acp-ap2";
+  const response = await request.get(path);
+  expect(response.status()).toBe(200);
+  expect(await response.text()).toContain("oacp-one-trust-layer-under-ucp-acp-ap2.png");
+  const context = await browser.newContext({ javaScriptEnabled: false });
+  try {
+    const page = await context.newPage();
+    await page.goto(`${baseURL}${path}`);
+    await expect(page.getByRole("heading", { level: 1 })).toHaveText("OACP explained: one trust layer under UCP, ACP and AP2");
+    await expect(page.getByRole("figure")).toHaveCount(5);
+    await expect(page.getByRole("table")).toHaveCount(1);
+    await expect(page.getByText("ship behind switches that default to off", { exact: false }).first()).toBeVisible();
+    await expect(page.getByText("OACP does not replace UCP, ACP or AP2. It feeds them.", { exact: true })).toBeVisible();
+  } finally {
+    await context.close();
+  }
+});
+
+for (const scheme of ["light", "dark"] as const) {
+  for (const width of [320, 390, 1440]) {
+    test(`OACP explainer fits at ${width}px in ${scheme} mode`, async ({ browser, baseURL }) => {
+      const context = await browser.newContext({ viewport: { width, height: 900 }, colorScheme: scheme });
+      try {
+        const page = await context.newPage();
+        await page.goto(`${baseURL}/blog/oacp-one-trust-layer-under-ucp-acp-ap2`);
+        await expect(page.getByRole("figure")).toHaveCount(5);
+        expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+        for (const svg of await page.locator("figure svg").all()) {
+          const bounds = await svg.boundingBox();
+          expect(bounds!.x + bounds!.width).toBeLessThanOrEqual(width);
+        }
+        const background = await page.locator(".figure-article").evaluate((el) => getComputedStyle(el).backgroundColor);
+        expect(background === "rgb(255, 255, 255)").toBe(scheme === "light");
+      } finally {
+        await context.close();
+      }
+    });
+  }
+}
+
 test("public content is available in HTML without JavaScript", async ({ browser, baseURL }) => {
   const context = await browser.newContext({ javaScriptEnabled: false });
   try {

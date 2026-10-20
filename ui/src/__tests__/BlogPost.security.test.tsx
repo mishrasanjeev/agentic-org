@@ -34,10 +34,11 @@ describe('security response article', () => {
     render(<HelmetProvider><MemoryRouter initialEntries={['/blog/cert-in-ai-agent-security']}>
       <Routes><Route path="/blog/:slug" element={<BlogPost />} /></Routes>
     </MemoryRouter></HelmetProvider>);
-    const workflows = BLOG_POSTS[0].workflows!;
+    const article = BLOG_POSTS.find(post => post.slug === 'cert-in-ai-agent-security')!;
+    const workflows = article.workflows!;
     expect(workflows).toHaveLength(3);
     for (const workflow of workflows) {
-      expect(BLOG_POSTS[0].content).toContain(`## ${workflow.heading}`);
+      expect(article.content).toContain(`## ${workflow.heading}`);
       const figure = screen.getByRole('figure', { name: workflow.title });
       expect(within(figure).getAllByRole('listitem')).toHaveLength(4);
       expect(within(figure).getByText(workflow.status)).toBeInTheDocument();
@@ -50,7 +51,7 @@ describe('security response article', () => {
   });
 
   it('leaves an ordinary article on its existing layout without workflow diagrams', () => {
-    const ordinary = BLOG_POSTS.find(post => !post.workflows)!;
+    const ordinary = BLOG_POSTS.find(post => !post.workflows && !post.figures)!;
     render(<HelmetProvider><MemoryRouter initialEntries={[`/blog/${ordinary.slug}`]}>
       <Routes><Route path="/blog/:slug" element={<BlogPost />} /></Routes>
     </MemoryRouter></HelmetProvider>);
