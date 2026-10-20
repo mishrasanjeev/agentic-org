@@ -99,7 +99,8 @@ def _actor(request: Request) -> dict[str, str]:
     if agent_id:
         return {"actor_type": "agent", "actor_id": str(agent_id)}
     if getattr(state, "auth_mode", None) == "api_key":
-        return {"actor_type": "api_key", "actor_id": str(getattr(state, "api_key_name", None) or "api_key")}
+        # The middleware sets user_sub to "apikey:<prefix>" for API keys; the key's name is never read here.
+        return {"actor_type": "api_key", "actor_id": str(getattr(state, "user_sub", None) or "api_key")}
     return {"actor_type": "user", "actor_id": str(getattr(state, "user_sub", None) or "unknown")}
 
 

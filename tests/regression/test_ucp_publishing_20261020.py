@@ -434,3 +434,15 @@ def test_verified_public_discovery_artifact_is_captured_and_a_later_disabled_one
     snapshot = capture(enabled)
     assert snapshot["publication_allowed"] is True and snapshot["serving_host"] == HOST
     assert capture(disabled)["publication_allowed"] is False
+
+
+def test_publishing_actor_for_an_api_key_is_its_subject_never_its_name() -> None:
+    """The ledger actor of an API-key request is the middleware subject (apikey:<prefix>), not the key's name."""
+    from types import SimpleNamespace
+
+    from api.v1.commerce_ucp_publishing import _actor
+
+    request = SimpleNamespace(
+        state=SimpleNamespace(agent_id=None, auth_mode="api_key", user_sub="apikey:ak_1234", api_key_name="ops key")
+    )
+    assert _actor(request) == {"actor_type": "api_key", "actor_id": "apikey:ak_1234"}  # type: ignore[arg-type]

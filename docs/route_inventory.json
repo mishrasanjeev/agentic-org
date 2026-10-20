@@ -3632,7 +3632,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "commerce.runtime.merchant_config.read",
-    "source_line": 166,
+    "source_line": 167,
     "tenant_required": true
   },
   {
@@ -3650,7 +3650,7 @@
     "public_exempt_reason": null,
     "rate_limit": "credential-write",
     "scope": "commerce.runtime.merchant_config.write",
-    "source_line": 363,
+    "source_line": 364,
     "tenant_required": true
   },
   {
@@ -3668,7 +3668,7 @@
     "public_exempt_reason": null,
     "rate_limit": "credential-write",
     "scope": "commerce.runtime.merchant_config.write",
-    "source_line": 382,
+    "source_line": 383,
     "tenant_required": true
   },
   {
@@ -3686,7 +3686,7 @@
     "public_exempt_reason": null,
     "rate_limit": "commerce-runtime-write",
     "scope": "commerce.runtime.merchant_config.write",
-    "source_line": 435,
+    "source_line": 436,
     "tenant_required": true
   },
   {
@@ -3704,7 +3704,7 @@
     "public_exempt_reason": null,
     "rate_limit": "commerce-runtime-write",
     "scope": "commerce.runtime.merchant_config.write",
-    "source_line": 187,
+    "source_line": 188,
     "tenant_required": true
   },
   {
@@ -3722,7 +3722,7 @@
     "public_exempt_reason": null,
     "rate_limit": "commerce-runtime-external",
     "scope": "commerce.runtime.merchant_config.write",
-    "source_line": 235,
+    "source_line": 236,
     "tenant_required": true
   },
   {
@@ -3740,7 +3740,7 @@
     "public_exempt_reason": null,
     "rate_limit": "commerce-runtime-write",
     "scope": "commerce.runtime.merchant_config.write",
-    "source_line": 486,
+    "source_line": 487,
     "tenant_required": true
   },
   {

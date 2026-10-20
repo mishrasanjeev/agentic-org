@@ -234,6 +234,9 @@
 
 ## Unreleased - UCP checkout, cart and order (G21, G22, G25, G27, G29-G32, G35)
 
+- The UCP publishing ledger actor for an API key is the authenticated subject (`apikey:<prefix>`),
+  never the key's name, and the `X-API-Key` header is read through a named constant; no credential
+  reaches a ledger hash.
 - Tests for the UCP and ACP HTTP adapters and their production wiring (unknown host refusals and
   their ledger events on every route, `Request-Id` echo, Shopify credentials failing closed to no
   Shopify reads, policies only from a usable verified artifact, the feed export formats and its
