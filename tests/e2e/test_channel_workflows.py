@@ -16,7 +16,18 @@ import httpx
 import pytest
 
 BASE = os.getenv("AGENTICORG_E2E_BASE_URL", "").rstrip("/")
-pytestmark = [pytest.mark.skipif(not BASE, reason="requires local Docker origin"), pytest.mark.timeout(240)]
+# These tests sign up disposable tenants, so they run only against a local stack. A remote
+# origin (the post-deploy production run sets the same variable) skips them; the asserts in
+# each test stay as a second guard.
+LOCAL_HOSTS = {"127.0.0.1", "localhost", "api"}
+pytestmark = [
+    pytest.mark.skipif(not BASE, reason="requires local Docker origin"),
+    pytest.mark.skipif(
+        bool(BASE) and urlsplit(BASE).hostname not in LOCAL_HOSTS,
+        reason="signs up disposable tenants; local Docker origin only",
+    ),
+    pytest.mark.timeout(240),
+]
 
 
 def checked(response, code=200):
@@ -26,7 +37,7 @@ def checked(response, code=200):
 
 def test_signed_channel_to_durable_workflow_and_revocation():
     # This signs up disposable tenants. Never run it against production or a remote host.
-    assert urlsplit(BASE).hostname in {"127.0.0.1", "localhost", "api"}
+    assert urlsplit(BASE).hostname in LOCAL_HOSTS
     run = uuid.uuid4().hex[:12]
     with httpx.Client(base_url=BASE + "/api/v1", timeout=60) as client:
         deadline = time.monotonic() + 60
@@ -340,7 +351,7 @@ def test_signed_channel_to_durable_workflow_and_revocation():
 
 
 def test_telegram_reply_settings_cannot_cross_tenant_or_target_boundaries():
-    assert urlsplit(BASE).hostname in {"127.0.0.1", "localhost", "api"}
+    assert urlsplit(BASE).hostname in LOCAL_HOSTS
     with (
         httpx.Client(base_url=BASE + "/api/v1", timeout=60) as owner,
         httpx.Client(base_url=BASE + "/api/v1", timeout=60) as other,
