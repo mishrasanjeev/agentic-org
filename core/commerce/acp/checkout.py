@@ -779,7 +779,15 @@ async def run(req: AcpRequest, runtime: AcpRuntime) -> AcpResponse:
                     headers={"Retry-After": "1"},
                 )
             claimed = True
-        response = await _operation(req, runtime, merchant, body, vendor)
+        try:
+            response = await _operation(req, runtime, merchant, body, vendor)
+        except BaseException:
+            if claimed:
+                # A 5xx answer releases the claim, so the client can retry the same key.
+                await idempotency.store(
+                    tenant_id=req.tenant_id, merchant_id=merchant.merchant_id, key=str(key), status=500, body={}
+                )
+            raise
     except _RefusalError as refusal:
         response = AcpResponse(
             status=refusal.status, body=refusal.error, headers=dict(refusal.headers), outcome="refused"

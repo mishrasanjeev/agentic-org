@@ -22,6 +22,7 @@
   `idempotency_in_flight` with `Retry-After`); `Request-Id` echoed; `Signature` / `Timestamp` checked
   by a verifier registered per agent platform, `AGENTICORG_ACP_SIGNATURE_MODE=log` (default, never
   refuses) or `enforce`. ACP publishes no signing algorithm, so no verifier ships.
+  An unexpected failure after the key is claimed releases it, so the client can retry.
 - ACP error mapping (`core/commerce/acp/errors.py`): every internal message code maps to the closed
   `MessageError` enum, UCP protocol errors to `Error` objects; blocker dicts never reach ACP responses.
 - Capability negotiation: sessions declare the payment handlers served over ACP and the requested

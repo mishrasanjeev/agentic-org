@@ -394,3 +394,21 @@ async def test_unknown_host_unopted_merchant_and_bad_bodies_are_acp_errors(db):
     enforced = af.runtime(tenant, mode="enforce")
     refused = await acp.run(af.request("create", tenant, af.create_body()), enforced)
     assert refused.status == 401 and refused.body["code"] == "invalid_signature"
+
+
+@pytest.mark.asyncio
+async def test_an_unexpected_failure_releases_the_idempotency_key(db, monkeypatch):
+    tenant = str(uuid.uuid4())
+    runtime = af.runtime(tenant)
+
+    async def _boom(*_args, **_kwargs):
+        raise RuntimeError("unexpected")
+
+    real = acp._operation
+    monkeypatch.setattr(acp, "_operation", _boom)
+    with pytest.raises(RuntimeError):
+        await acp.run(af.request("create", tenant, af.create_body(), key="k-crash"), runtime)
+    assert await _rows(db, "SELECT * FROM commerce_ucp_idempotency WHERE tenant_id = :t", t=tenant) == []
+    monkeypatch.setattr(acp, "_operation", real)
+    retried = await acp.run(af.request("create", tenant, af.create_body(), key="k-crash"), runtime)
+    assert retried.status == 201
