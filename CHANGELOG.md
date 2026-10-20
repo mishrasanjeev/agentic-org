@@ -16,7 +16,9 @@
   signature; the Grantex registry directory through its platform countersignature checked against
   the pinned Grantex JWKS. Async pinned egress, no redirects, 300 s cache, 60 s negative cache.
   Nonces are claimed with one Redis `SET NX` for at least the profile's replay window (8 minutes
-  for TAP). Docs: `docs/oacp/agent-request-signing.md`.
+  for TAP). Key fetches share a per-process budget (token bucket of 20, 2 per second, at most 4 in
+  flight); a fetch over budget is not made or cached and the request is `key_unknown` (refused in
+  `enforce`, logged in `log`). Docs: `docs/oacp/agent-request-signing.md`.
 - `enforce` scope: only the commerce API surfaces can refuse (`verify_agent_request_signature` on
   `catalog.json`, `products/{product_slug}.json`, `message:send`, `extendedAgentCard`). The seller
   and product HTML pages, `schema-org.jsonld`, `sitemap.xml` and `llms.txt` use

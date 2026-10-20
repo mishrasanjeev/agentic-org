@@ -31,6 +31,14 @@ Where keys come from:
   against the Grantex platform JWKS (the same pinned JWKS the OACP artifact
   verifier uses) and the listed keys are trusted through it.
 
+Fetch budget: every fetch (key store, directory, registry lookup) also draws
+on one per-process budget, a token bucket (``FETCH_BURST`` fetches, refilled at
+``FETCH_RATE_PER_SECOND``) with at most ``MAX_CONCURRENT_FETCHES`` in flight.
+A fetch over budget is not made and not cached: the key does not resolve
+(``key_unknown``: refused in ``enforce`` mode, logged in ``log`` mode) and
+``httpsig_key_fetch_budget_exceeded`` is logged. This bounds the outbound
+traffic a stream of invented keyids can cause, on top of the negative cache.
+
 Replay: ``claim_nonce`` is the shared, atomic nonce store, one Redis
 ``SET NX`` with an expiry of at least the profile's replay window.
 """
@@ -90,6 +98,9 @@ REGISTRY_DIRECTORY_MAX_WINDOW_SECONDS = 3600
 REGISTRY_CLOCK_SKEW_SECONDS = 60
 SCHEME_AGENT_ID_SCHEMES = ("visa_tap", "mastercard_agent_pay")
 NONCE_KEY_PREFIX = "httpsig:nonce:"
+FETCH_BURST = 20
+FETCH_RATE_PER_SECOND = 2.0
+MAX_CONCURRENT_FETCHES = 4
 
 TransportFactory = Callable[[], Any]
 # Test seam: a factory returning an httpx transport. Never set from request input.
@@ -98,6 +109,35 @@ _transport_factory: TransportFactory | None = None
 
 class KeyFetchError(RuntimeError):
     """A key source could not be read or did not verify."""
+
+
+class FetchBudgetExceededError(KeyFetchError):
+    """The per-process fetch budget is spent: nothing was fetched, and nothing is cached."""
+
+
+class _FetchBudget:
+    """A token bucket plus an in-flight cap. Event-loop code only (no awaits inside), so no lock."""
+
+    def __init__(self, burst: int, rate_per_second: float, max_in_flight: int) -> None:
+        self.burst = burst
+        self.rate = rate_per_second
+        self.max_in_flight = max_in_flight
+        self.tokens = float(burst)
+        self.in_flight = 0
+        self.updated = time.monotonic()
+
+    def try_acquire(self) -> bool:
+        now = time.monotonic()
+        self.tokens = min(float(self.burst), self.tokens + (now - self.updated) * self.rate)
+        self.updated = now
+        if self.in_flight >= self.max_in_flight or self.tokens < 1.0:
+            return False
+        self.tokens -= 1.0
+        self.in_flight += 1
+        return True
+
+    def release(self) -> None:
+        self.in_flight = max(0, self.in_flight - 1)
 
 
 @dataclass(frozen=True)
@@ -138,12 +178,15 @@ class _Cache:
 _TAP_KEYS = _Cache()
 _DIRECTORIES = _Cache()
 _REGISTRY = _Cache()
+_BUDGET = _FetchBudget(FETCH_BURST, FETCH_RATE_PER_SECOND, MAX_CONCURRENT_FETCHES)
 
 
 def reset_httpsig_caches() -> None:  # test hook
+    global _BUDGET
     _TAP_KEYS.clear()
     _DIRECTORIES.clear()
     _REGISTRY.clear()
+    _BUDGET = _FetchBudget(FETCH_BURST, FETCH_RATE_PER_SECOND, MAX_CONCURRENT_FETCHES)
 
 
 def _csv(value: str | None) -> list[str]:
@@ -191,6 +234,10 @@ async def _fetch(url: str, *, accept: str, max_bytes: int) -> httpx.Response:
         await validate_public_url_async(url, require_dns=False)
     except EgressValidationError as exc:
         raise KeyFetchError(f"unsafe key source: {exc.reason}") from exc
+    budget = _BUDGET
+    if not budget.try_acquire():
+        logger.warning("httpsig_key_fetch_budget_exceeded", in_flight=budget.in_flight)
+        raise FetchBudgetExceededError("key fetch budget exceeded")
     transport = (
         _transport_factory()
         if _transport_factory is not None
@@ -203,6 +250,8 @@ async def _fetch(url: str, *, accept: str, max_bytes: int) -> httpx.Response:
             response = await client.get(url, headers={"Accept": accept})
     except (httpx.HTTPError, EgressValidationError, OSError) as exc:
         raise KeyFetchError(f"fetch failed: {type(exc).__name__}") from exc
+    finally:
+        budget.release()
     if len(response.content) > max_bytes:
         raise KeyFetchError("response exceeds the size limit")
     return response
@@ -247,6 +296,8 @@ async def resolve_tap_key(keyid: str) -> ResolvedKey | None:
             if response.status_code != 200:
                 continue
             jwk = _jwk_from_key_store(response.json(), keyid)
+        except FetchBudgetExceededError:
+            return None  # not cached: the key may resolve once the budget refills
         except (KeyFetchError, ValueError) as exc:
             logger.warning("httpsig_tap_key_fetch_failed", reason=str(exc)[:120])
             continue
@@ -413,6 +464,8 @@ async def resolve_signature_agent_key(
     if not found:
         try:
             cached = await _load_directory(origin, now)
+        except FetchBudgetExceededError:
+            return None  # not cached
         except KeyFetchError as exc:
             logger.warning("httpsig_directory_fetch_failed", origin=origin, reason=str(exc)[:120])
             cached = None
@@ -479,6 +532,8 @@ async def lookup_registry_agent(query: Sequence[tuple[str, str]]) -> RegistryAge
             if isinstance(answer, Mapping):
                 did = answer.get("agent_did")
                 agent = RegistryAgent(did if isinstance(did, str) else None, _scheme_ids(answer))
+    except FetchBudgetExceededError:
+        return None  # not cached
     except (KeyFetchError, ValueError) as exc:
         logger.warning("httpsig_registry_lookup_failed", reason=str(exc)[:120])
     _REGISTRY.put(cache_key, agent)

@@ -110,6 +110,14 @@ Every fetch is async, after the async egress URL check, over the DNS-pinning tra
 are cached per process for 300 seconds, failures for 60 seconds (negative cache), so a forged
 `keyid` cannot force a fetch per request.
 
+Fetches (key store, directories and registry lookups together) also draw on one per-process
+budget: a token bucket of 20 fetches refilled at 2 per second, with at most 4 in flight
+(`FETCH_BURST`, `FETCH_RATE_PER_SECOND`, `MAX_CONCURRENT_FETCHES` in `auth/httpsig_keys.py`). A
+fetch over budget is not made and not cached, and `httpsig_key_fetch_budget_exceeded` is logged:
+the key does not resolve, so the request is `key_unknown` (refused in `enforce` mode, logged in
+`log` mode). A stream of invented keyids therefore costs the key stores at most the budget's rate
+per instance.
+
 | Signature | Key source | Configuration |
 | --- | --- | --- |
 | TAP | The TAP key store. TAP-SPEC names a `GET /keys` operation keyed by `keyID` but not its URL. | `AGENTICORG_HTTPSIG_TAP_KEY_STORE_URLS`: https URL templates holding `{keyid}`, tried in order. The answer is a JWK, or a JWK Set whose member's `kid` is the keyid. |

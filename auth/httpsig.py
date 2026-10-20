@@ -453,7 +453,7 @@ async def _verify_and_record(request: Request, *, enforceable: bool) -> AgentSig
     if is_write and tenant_known and check.status != "unavailable":
         try:
             await _ledger(request, check, outcome="refused")
-        # enterprise-gate: broad-except-ok reason=refusal-stands-when-its-ledger-row-cannot-be-written
+        # enterprise-gate: broad-except-ok reason=refusal-still-raised-when-the-ledger-write-fails
         except Exception:
             logger.exception("agent_request_signature_ledger_failed")
     raise _refuse(check)

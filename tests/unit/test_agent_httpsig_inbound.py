@@ -349,6 +349,55 @@ async def test_an_unknown_keyid_is_negatively_cached(keys: KeyServer, redis: Fak
 
 
 @pytest.mark.asyncio
+async def test_key_fetches_beyond_the_budget_are_not_made_and_resolve_no_key(
+    keys: KeyServer, redis: FakeRedis, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(httpsig_keys, "_BUDGET", httpsig_keys._FetchBudget(3, 0.0, 4))
+    key = _ed25519()
+    url = "https://merchant.example/api/v1/public/commerce/sellers/m/catalog.json"
+    with capture_logs() as logs:
+        for n in range(6):
+            request = _starlette_request("GET", url, list(_tap_sign(key, url, keyid=f"invented-{n}").items()))
+            check = await httpsig.check_request_signature(request, body=b"")
+            assert (check.status, check.reason) == ("invalid", "key_unknown")
+    assert len(keys.requests) == 3
+    assert sum(e["event"] == "httpsig_key_fetch_budget_exceeded" for e in logs) == 3
+    # An over-budget miss is not negatively cached: the key resolves once the budget refills.
+    keys.tap_keys["invented-5"] = {**public_jwk(key), "kid": "invented-5"}
+    monkeypatch.setattr(httpsig_keys, "_BUDGET", httpsig_keys._FetchBudget(3, 0.0, 4))
+    request = _starlette_request("GET", url, list(_tap_sign(key, url, keyid="invented-5").items()))
+    assert (await httpsig.check_request_signature(request, body=b"")).status == "verified"
+
+
+def test_the_fetch_budget_caps_concurrent_fetches_and_refills() -> None:
+    budget = httpsig_keys._FetchBudget(burst=10, rate_per_second=0.0, max_in_flight=2)
+    assert budget.try_acquire() and budget.try_acquire()
+    assert not budget.try_acquire()  # two in flight
+    budget.release()
+    assert budget.try_acquire()
+    refilling = httpsig_keys._FetchBudget(burst=1, rate_per_second=1000.0, max_in_flight=5)
+    assert refilling.try_acquire()
+    refilling.release()
+    refilling.updated -= 1.0
+    assert refilling.try_acquire()
+
+
+def test_over_budget_is_refused_in_enforce_and_logged_in_log(
+    a2a: dict[str, Any], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    httpsig_keys.reset_httpsig_caches()  # the a2a fixture's key is not cached yet
+    monkeypatch.setattr(httpsig_keys, "_BUDGET", httpsig_keys._FetchBudget(0, 0.0, 4))
+    monkeypatch.setattr(settings, "httpsig_verify_mode", "enforce")
+    response = _send(a2a, signed=True)
+    assert response.status_code == 401
+    assert response.json()["detail"]["reason"] == "key_unknown"
+    monkeypatch.setattr(settings, "httpsig_verify_mode", "log")
+    with capture_logs() as logs:
+        assert _send(a2a, signed=True).status_code == 200
+    assert any(e["event"] == "httpsig_key_fetch_budget_exceeded" for e in logs)
+
+
+@pytest.mark.asyncio
 async def test_a_window_longer_than_eight_minutes_is_refused(keys: KeyServer, redis: FakeRedis) -> None:
     key = _ed25519()
     keys.tap_keys["tap-key-01"] = {**public_jwk(key), "kid": "tap-key-01"}
