@@ -77,6 +77,15 @@
 
 ## Unreleased - UCP checkout, cart and order (G21, G22, G25, G27, G29-G32, G35)
 
+- Tests for the UCP and ACP HTTP adapters and their production wiring (unknown host refusals and
+  their ledger events on every route, `Request-Id` echo, Shopify credentials failing closed to no
+  Shopify reads, policies only from a usable verified artifact, the feed export formats and its
+  404/409 answers, error shaping of non-JSON `/acp` errors), the buyer authority and AP2 mandate
+  parsing, the Shopify Admin reads (allowlist, no redirects, GraphQL errors, delivery-profile
+  cache), the order webhook sender (signing, transport failures, the Celery kick and tasks), and,
+  on Postgres, the serving-host index, merchant scope reads, `Idempotency-Key` expiry and pruning,
+  the subscription, rotation, delivery and replay runtime endpoints and dead-lettering. No
+  behaviour change.
 - Type narrowing in the UCP and ACP modules (locations, merchant terms, instruments, fulfilment,
   ACP payment data and policy snapshot) so `mypy` 2.x passes; no behaviour change.
 - UCP REST binding at `https://<merchant serving host>/ucp` (`api/v1/commerce_ucp.py`), behind
