@@ -73,11 +73,17 @@ runtime_factory = build_runtime
 
 
 def _platform(request: Request) -> str:
-    """The calling platform: the authenticated credential's subject (``apikey:<prefix>`` for an API key)."""
-    subject = getattr(request.state, "user_sub", None) or getattr(request.state, "agent_id", None)
-    if not subject:
-        raise HTTPException(status_code=403, detail="No platform identity on this credential")
-    return f"acp:{subject}"[:2048]
+    """The calling agent platform: the API key it authenticated with (``acp:api_key:<key id>``).
+
+    ACP platforms are machine credentials the merchant issued; sessions, idempotency records and order
+    webhooks are bound to that key. Any other credential has no platform identity here.
+    """
+    from core.commerce.ucp.webhooks import acp_platform_id
+
+    key_id = getattr(request.state, "api_key_id", None)
+    if getattr(request.state, "auth_mode", None) != "api_key" or not key_id:
+        raise HTTPException(status_code=403, detail="ACP checkout needs the API key issued to the agent platform")
+    return acp_platform_id(key_id)
 
 
 async def _call(operation: str, request: Request, tenant_id: str, session_id: str | None = None) -> JSONResponse:
@@ -257,3 +263,64 @@ async def export_acp_feed(
         return Response(content=feed.products_jsonl(), media_type="application/jsonl", headers=headers)
     content: dict[str, Any] = feed.feed_metadata() if feed_format == "metadata" else feed.products_response()
     return JSONResponse(content=content, headers=headers)
+
+
+# --- ACP-shaped answers from before the route --------------------------------------------------
+
+
+class AcpErrorShapeMiddleware:
+    """Rewrites error answers on ``/acp`` paths that are not ACP ``Error`` objects into one (G40).
+
+    Authentication (401, 429 after repeated failures), scope and rate-limit checks (403, 429), the
+    feature flag and routing (404, 405) answer before the ACP binding runs, with ``{"detail": ...}``.
+    An agent platform gets ``{type, code, message}`` instead; status and headers such as
+    ``Retry-After`` are kept. Pure ASGI: only error answers on ``/acp`` are buffered.
+    """
+
+    def __init__(self, app: Any) -> None:
+        self.app = app
+
+    async def __call__(self, scope: Any, receive: Any, send: Any) -> None:
+        path = scope.get("path", "") if scope.get("type") == "http" else ""
+        if path != "/acp" and not path.startswith("/acp/"):
+            await self.app(scope, receive, send)
+            return
+        start: dict[str, Any] = {}
+        chunks: list[bytes] = []
+
+        async def _send(message: dict[str, Any]) -> None:
+            if message["type"] == "http.response.start":
+                if int(message["status"]) < 400:
+                    await send(message)
+                    return
+                start.update(message)
+                return
+            if message["type"] == "http.response.body" and start:
+                chunks.append(message.get("body", b""))
+                if message.get("more_body"):
+                    return
+                await _send_shaped(send, start, b"".join(chunks))
+                return
+            await send(message)
+
+        await self.app(scope, receive, _send)
+
+
+async def _send_shaped(send: Any, start: dict[str, Any], raw: bytes) -> None:
+    import json
+
+    from core.commerce.acp.errors import is_acp_error, shape_early_error
+
+    status = int(start["status"])
+    try:
+        body = json.loads(raw) if raw else None
+    except ValueError:
+        body = None
+    if is_acp_error(body):
+        payload = raw
+    else:
+        payload = json.dumps(shape_early_error(status, body)).encode("utf-8")
+    headers = [(k, v) for k, v in start.get("headers", []) if k.lower() not in (b"content-length", b"content-type")]
+    headers += [(b"content-type", b"application/json"), (b"content-length", str(len(payload)).encode())]
+    await send({"type": "http.response.start", "status": status, "headers": headers})
+    await send({"type": "http.response.body", "body": payload})

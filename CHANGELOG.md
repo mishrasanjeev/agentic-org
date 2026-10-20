@@ -95,6 +95,8 @@
   by a verifier registered per agent platform, `AGENTICORG_ACP_SIGNATURE_MODE=log` (default, never
   refuses) or `enforce`. ACP publishes no signing algorithm, so no verifier ships.
   An unexpected failure after the key is claimed releases it, so the client can retry.
+- Refusals answered before an ACP route runs (401, 403, 404, 405, 429 from authentication, scope,
+  rate-limit, flag and routing) are ACP `Error` objects on every `/acp` path (`AcpErrorShapeMiddleware`).
 - ACP error mapping (`core/commerce/acp/errors.py`): every internal message code maps to the closed
   `MessageError` enum, UCP protocol errors to `Error` objects; blocker dicts never reach ACP responses.
 - Capability negotiation: sessions declare the payment handlers served over ACP and the requested
@@ -111,6 +113,10 @@
   active key), verified against the shared vectors (`tests/fixtures/acp/merchant-signature-v1.json`).
   They replace the case-push HMAC headers and the placeholder payload of the unreleased UCP work.
   The order-webhook sweep also runs while only `AGENTICORG_ACP_CHECKOUT_ENABLED` is on.
+- Order webhook isolation: an `acp_hmac` subscription is bound to the ACP agent platform's API key
+  (`platform_api_key_id`, required) and receives only orders from sessions that key created; a UCP
+  platform's subscription is never reused by another platform naming the same URL. ACP sessions are
+  owned by the calling API key's id (`request.state.api_key_id`).
 
 ## Unreleased - UCP handler schema hosting and schema fixtures
 
@@ -122,6 +128,24 @@
 - Tests: the two vendored UCP schema fixture trees (`tests/fixtures/ucp` and
   `tests/fixtures/ucp_schemas`) are one, `tests/fixtures/ucp` (published release schemas plus the
   2026-04-08 discovery profile schema).
+
+## Unreleased - UCP checkout tools in the MCP server (G39)
+
+- `agenticorg-mcp-server` 5.1.0 adds the UCP 2026-04-08 MCP binding tools `create_checkout`,
+  `get_checkout`, `update_checkout`, `complete_checkout`, `cancel_checkout`, `create_cart`,
+  `get_cart`, `update_cart`, `cancel_cart` and `get_order` (the binding's names, not a
+  `checkout.*` prefix). They are registered only when `AGENTICORG_UCP_PROFILE_URL` names a
+  merchant profile whose capabilities include them, which the API publishes only with
+  `AGENTICORG_UCP_CHECKOUT_ENABLED` on; requests go to the profile's same-origin `/ucp` REST
+  endpoint. Nothing changes for a server without that variable.
+- `complete_checkout` needs an allow decision: `decide_only: true` returns a sealed
+  `session_complete` decision without executing, and only a call carrying its `decision_id` can
+  execute (consumed once by the API, bound to the payload hash). A call with neither is refused
+  before any request. Tool annotations mark reads read-only, updates and cancels destructive and
+  idempotent, and Complete destructive and not idempotent.
+- HTTP errors become MCP tool errors with only the UCP `{code, content}`; decisions in results keep
+  only their id, action, outcome, failing rule, payload hash and expiry. The merchant UCP profile
+  does not advertise an MCP transport, since this server is a local stdio adapter. No API change.
 
 ## Unreleased - UCP checkout, cart and order (G21, G22, G25, G27, G29-G32, G35)
 

@@ -24,7 +24,8 @@ SCHEMA = json.loads(
         encoding="utf-8"
     )
 )
-PLATFORM = "acp:apikey:ao_sk_platform"
+PLATFORM = "acp:api_key:00000000-0000-4000-8000-00000000a001"
+OTHER_PLATFORM = "acp:api_key:00000000-0000-4000-8000-00000000a002"
 TOTE = ucp_variant_id({"variant_id": "gid://shopify/ProductVariant/1"})
 ADDRESS = {
     "name": "Asha Buyer",

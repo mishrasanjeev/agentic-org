@@ -78,6 +78,7 @@ MESSAGE_WARNING_CODES: frozenset[str] = frozenset(
 # Internal error message code -> ACP MessageError.code. Sources: the UCP state engine
 # (checkout, quantity, fulfillment, payment), completion (AP2, executor, arbiter), decision
 # consumption (core.commerce.arbiter_store) and the ACP binding (allowance, currency).
+# enterprise-gate: process-local-ok reason=constant-lookup-table-never-mutated
 MESSAGE_ERROR_MAP: dict[str, str] = {
     # line items and quantities
     "missing": "missing",
@@ -203,6 +204,7 @@ def map_message(message: Mapping[str, Any]) -> dict[str, Any]:
 
 # (UCP REST status, UCP error code) -> (ACP status, Error.type, Error.code). Writes to a session that
 # can no longer change (completed, canceled, expired or executing) are 405, as ACP specifies for cancel.
+# enterprise-gate: process-local-ok reason=constant-lookup-table-never-mutated
 PROTOCOL_ERROR_MAP: dict[tuple[int, str], tuple[int, str, str]] = {
     (400, "invalid_request"): (400, "invalid_request", "invalid"),
     (404, "not_found"): (404, "invalid_request", "not_found"),
@@ -224,3 +226,41 @@ def protocol_error(status: int, body: Mapping[str, Any]) -> tuple[int, dict[str,
         return status, acp_error("invalid_request", "invalid", content)
     acp_status, error_type, acp_code = mapped
     return acp_status, acp_error(error_type, acp_code, content)
+
+
+# Statuses answered before an ACP route runs (authentication, scope and rate-limit checks, routing,
+# the feature flag) -> (Error.type, Error.code). The bodies of those answers are generic.
+# enterprise-gate: process-local-ok reason=constant-lookup-table-never-mutated
+EARLY_STATUS_ERRORS: dict[int, tuple[str, str]] = {
+    400: ("invalid_request", "invalid"),
+    401: ("invalid_request", "unauthorized"),
+    403: ("invalid_request", "forbidden"),
+    404: ("invalid_request", "not_found"),
+    405: ("invalid_request", "method_not_allowed"),
+    413: ("invalid_request", "request_too_large"),
+    415: ("invalid_request", "unsupported_media_type"),
+    422: ("invalid_request", "invalid"),
+    429: ("invalid_request", "rate_limit_exceeded"),
+    503: ("service_unavailable", "service_unavailable"),
+}
+
+
+def is_acp_error(body: Any) -> bool:
+    return (
+        isinstance(body, Mapping)
+        and body.get("type") in ERROR_TYPES
+        and isinstance(body.get("code"), str)
+        and isinstance(body.get("message"), str)
+    )
+
+
+def shape_early_error(status: int, body: Any) -> dict[str, Any]:
+    """A non-ACP error body (``{"detail": ...}``) answered on an ACP route, as an ACP ``Error``."""
+    error_type, code = EARLY_STATUS_ERRORS.get(
+        status, ("processing_error", "processing_error") if status >= 500 else ("invalid_request", "invalid")
+    )
+    detail = body.get("detail") if isinstance(body, Mapping) else None
+    message = detail if isinstance(detail, str) and detail else "The request could not be processed."
+    if status >= 500 and status != 503:
+        message = "The request could not be processed."
+    return acp_error(error_type, code, message[:300])

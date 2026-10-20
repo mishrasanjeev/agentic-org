@@ -1,6 +1,6 @@
 {
   "name": "agenticorg-mcp-server",
-  "version": "5.0.0",
+  "version": "5.1.0",
   "mcpName": "io.github.mishrasanjeev/agenticorg",
   "description": "Repository MCP adapter for company-scoped AgenticOrg workflow candidates and read-only discovery",
   "author": {
@@ -39,7 +39,7 @@
   ],
   "scripts": {
     "build": "tsc",
-    "test": "npm run build && node test/mcp-server-smoke.mjs",
+    "test": "npm run build && node test/mcp-server-smoke.mjs && node test/ucp-checkout-tools.mjs",
     "prepublishOnly": "npm run build"
   },
   "dependencies": {

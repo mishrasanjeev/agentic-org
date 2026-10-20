@@ -68,6 +68,48 @@ The same operations are callable without HTTP through `core.commerce.ucp.handler
 `complete_checkout`, `cancel_checkout`, `create_cart`, `get_cart`, `update_cart`, `cancel_cart`,
 `get_order`), which an MCP binding calls with the same request object.
 
+## MCP Tools
+
+`agenticorg-mcp-server` (5.1.0 and later) exposes the same operations under the UCP 2026-04-08
+MCP binding names (`services/shopping/mcp.openrpc.json`): `create_checkout`, `get_checkout`,
+`update_checkout`, `complete_checkout`, `cancel_checkout`, `create_cart`, `get_cart`,
+`update_cart`, `cancel_cart` and `get_order`. The program's `checkout.*` naming is replaced by
+the binding's names.
+
+- **Gating.** The server registers a tool only when `AGENTICORG_UCP_PROFILE_URL` names the
+  merchant's `/.well-known/ucp` and that profile lists the tool's capability at 2026-04-08
+  (checkout, cart or order). The profile lists them only while `AGENTICORG_UCP_CHECKOUT_ENABLED`
+  is on, so with the flag off no tool is registered, and a call made after the flag is turned
+  off gets the routes' 404 as a tool error. With both releases enabled the 2026-08-25 root's
+  `supported_versions` leaf for 2026-04-08 is followed. The REST endpoint must be on the
+  profile's origin (https; loopback http for local development), so the credential is never sent
+  elsewhere. No API change was needed.
+- **Arguments.** `meta` (`ucp-agent.profile`, `idempotency-key`), `id`, and the `checkout` or
+  `cart` object, mapped to the `UCP-Agent`, `Idempotency-Key` and `Request-Id` headers and the
+  REST body. `complete_checkout`, `cancel_checkout` and `cancel_cart` require
+  `meta.idempotency-key`, as the binding does. `meta.ucp-agent.profile` defaults to
+  `AGENTICORG_UCP_AGENT_PROFILE`.
+- **Decision.** `complete_checkout` sends a Complete only with exactly one of
+  `decide_only: true` (the arbiter seals a `session_complete` decision; nothing executes) or a
+  `decision_id` (the API consumes that allow decision once through `require_allow_decision`). A
+  call with neither, with both, or with values that conflict with the checkout's
+  `ai.agenticorg.commerce` member is refused locally with `decision_required` or
+  `invalid_request`. Only Complete has a decision: create, update and cancel move no money and the
+  arbiter has no action for them, so they are protected by the `ucp:write` scope and idempotency
+  instead.
+- **Annotations.** Reads: `readOnlyHint`, `idempotentHint`. Creates: neither destructive nor
+  idempotent. Updates (full replacement) and cancels: `destructiveHint`, `idempotentHint`.
+  Complete: `destructiveHint`, not idempotent. All: `openWorldHint`.
+- **Results and errors.** HTTP 200/201 bodies, including business outcomes and
+  `capabilities_incompatible`, are tool results in `structuredContent` and as text, as the binding
+  requires. The vendor member keeps only the decision's `decision_id`, `action`, `outcome`,
+  `failing_rule`, `payload_hash` and `expires_at`. Any other status is an MCP tool error
+  (`isError`) with `{status, code, content}` taken only from the UCP error body (`{code, content}`
+  or the first error message); framework details and internal refusal details are dropped.
+- **Profile.** No `mcp` transport is registered in `core.commerce.ucp.registry`: the server is a
+  local stdio adapter run by the platform, not a streamable HTTP endpoint on the merchant's host,
+  so the profile keeps advertising REST only. Catalog tools are not exposed by it.
+
 ## Negotiation
 
 1. `UCP-Agent` is parsed as an RFC 8941 dictionary; a missing or non-absolute profile URL is 400
@@ -181,6 +223,10 @@ verified). Risk signals sent with Complete are recorded as `commerce.ucp.payment
   `POST /api/v1/commerce/runtime/ucp/order-webhook-deliveries/{id}/replay`, and
   `POST /api/v1/commerce/runtime/ucp/orders/{id}/events` (a fulfillment event or an adjustment;
   sends the new snapshot).
+- Order isolation: a platform's own subscription (from its profile) receives only that platform's
+  orders and is never shared with another platform that names the same URL (no delivery, logged);
+  an `acp_hmac` subscription is bound to one ACP platform's API key (`platform_api_key_id`) and
+  receives only that platform's orders; only the merchant's own `ucp` subscriptions receive all.
 - A subscription with `scheme: acp_hmac` receives ACP order events (`order_create` /
   `order_update` with the full ACP `Order`) signed with ACP `Merchant-Signature` under its active
   shared key; the key is shown once and stored encrypted with the tenant key. See
@@ -271,7 +317,8 @@ of the buyer's Grantex consent record, so the map is rendered from the consent t
 marked `source: platform`; a platform's `source: business` is downgraded.
 
 Premise correction: UCP has no separate JSON-RPC transport. MCP and Embedded are its JSON-RPC
-bindings; the handlers above are transport-neutral so the MCP tools call the same code.
+bindings. The handlers above are transport-neutral; the MCP server reaches them through the REST
+binding (see MCP Tools).
 
 ## Loyalty And Attribution
 

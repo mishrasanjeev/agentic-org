@@ -53,3 +53,7 @@ c4de4ba34461d69618aa7502f3ccbe64b2d894ab:tests/integration/test_feature_flags_rl
 # Shared agent-httpsig profile vectors (synthetic, from the Grantex repository): the TAP consumer
 # object's idToken is a placeholder JWT whose signature segment reads "signature-placeholder".
 6d655caca1a735a83423a55a91e49ec3e5344d7f:tests/fixtures/agent_httpsig/agent-httpsig-profile-vectors.json:jwt:163
+
+# MCP checkout tool tests: synthetic Idempotency-Key values (constants COMPLETE_KEY, CANCEL_KEY), not credentials.
+88d79d06579c3d2749f134e3264ac41cb83e10c6:mcp-server/test/ucp-checkout-tools.mjs:generic-api-key:12
+88d79d06579c3d2749f134e3264ac41cb83e10c6:mcp-server/test/ucp-checkout-tools.mjs:generic-api-key:13

@@ -48,6 +48,7 @@ from core.commerce.ucp.merchant import MerchantUcp, PublishedHostResolver
 from core.commerce.ucp.shopify_reads import ShopifyAdminReads, ShopifyReads
 from core.commerce.ucp.webhooks import (
     WebhookSubscriptionError,
+    acp_platform_id,
     create_subscription,
     kick_dispatch,
     merchant_signer,
@@ -390,6 +391,9 @@ class SubscriptionCreate(BaseModel):
     merchant_id: str = Field(min_length=1, max_length=160)
     url: str = Field(min_length=8, max_length=2048)
     scheme: str = Field(default="ucp", pattern="^(ucp|acp_hmac)$")
+    # acp_hmac only: the API key this tenant issued to the ACP agent platform. The subscription
+    # receives only orders from checkout sessions that key created.
+    platform_api_key_id: uuid.UUID | None = None
 
 
 class SubscriptionUpdate(BaseModel):
@@ -423,6 +427,13 @@ async def _merchant_exists(session: Any, tenant_id: str, merchant_id: str) -> bo
             )
         )
     ).first()
+    return found is not None
+
+
+async def _api_key_exists(session: Any, tenant: uuid.UUID, key_id: uuid.UUID) -> bool:
+    from core.models.api_key import APIKey
+
+    found = (await session.execute(select(APIKey.id).where(APIKey.tenant_id == tenant, APIKey.id == key_id))).first()
     return found is not None
 
 
@@ -478,9 +489,20 @@ async def create_order_webhook_subscription(
     async with get_tenant_session(tenant) as session:
         if not await _merchant_exists(session, tenant_id, body.merchant_id):
             raise HTTPException(status_code=404, detail="Merchant config not found")
+        platform = None
+        if body.platform_api_key_id is not None:
+            if not await _api_key_exists(session, tenant, body.platform_api_key_id):
+                raise HTTPException(status_code=404, detail="API key not found")
+            platform = acp_platform_id(body.platform_api_key_id)
         try:
             row, key = await create_subscription(
-                session, tenant_id=tenant, merchant_id=body.merchant_id, url=body.url, scheme=body.scheme, now=now
+                session,
+                tenant_id=tenant,
+                merchant_id=body.merchant_id,
+                url=body.url,
+                scheme=body.scheme,
+                now=now,
+                platform=platform,
             )
         except WebhookSubscriptionError as exc:
             raise HTTPException(status_code=409 if exc.code == "subscription_exists" else 422, detail=exc.code) from exc
@@ -492,7 +514,12 @@ async def create_order_webhook_subscription(
             merchant_id=body.merchant_id,
             seller_agent_id=None,
             buyer_agent_id=None,
-            payload={"subscription_id": str(row.id), "url": row.url, "scheme": row.scheme},
+            payload={
+                "subscription_id": str(row.id),
+                "url": row.url,
+                "scheme": row.scheme,
+                "platform": row.platform_profile_url,
+            },
             resource_id=str(row.id),
         )
         view = subscription_view(row)

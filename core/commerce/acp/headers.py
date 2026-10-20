@@ -114,7 +114,7 @@ _VERIFIERS: dict[str, SignatureVerifier] = {}
 
 
 def register_signature_verifier(platform: str, verifier: SignatureVerifier) -> None:
-    """Accept ``Signature`` from ``platform`` (the API key identity, ``apikey:<prefix>``) through ``verifier``."""
+    """Accept ``Signature`` from ``platform`` (``acp:api_key:<key id>``) through ``verifier``."""
     _VERIFIERS[platform] = verifier
 
 
