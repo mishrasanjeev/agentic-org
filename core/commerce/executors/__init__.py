@@ -9,8 +9,10 @@ the same tenant for the exact session payload hash, and it is consumed in the
 caller's transaction (single use; of two concurrent completions exactly one
 wins). No executor is registered by default: a merchant whose UCP settings
 name no registered executor gets the business message ``executor_unavailable``
-and the session stays ``ready_for_complete``. The Plural executor is
-registered by the payment-rail work (``core/commerce/executors/plural.py``).
+and the session stays ``ready_for_complete``. The Plural executor
+(``core/commerce/executors/plural.py``) registers itself only while
+``PLURAL_PINE_LIVE_EXECUTION_ENABLED=true``. A refund consumes a ``refund``
+decision the same way (``consume_decision(..., action="refund")``).
 
 The credential the platform sent with Complete reaches the executor in memory
 only (``ExecutionCheckout.instruments[*].credential``); nothing stores it.
@@ -26,6 +28,7 @@ if TYPE_CHECKING:
     from core.commerce.scheme_token_binding import SchemeTokenBinding
 
 SESSION_COMPLETE = "session_complete"
+REFUND = "refund"
 _GATE = object()
 
 
@@ -38,6 +41,10 @@ class ConsumedDecision:
     tenant_id: str
     merchant_id: str
     seller_agent_id: str
+    action: str = SESSION_COMPLETE
+    # The intent, cart and payment mandate hashes sealed with the decision (values null until
+    # verified mandates populate them); executors carry them in the provider order metadata.
+    mandate_hashes: Mapping[str, str | None] = field(default_factory=dict)
     _gate: object = field(repr=False, compare=False, default=None)
 
     def __post_init__(self) -> None:
@@ -73,6 +80,13 @@ class ExecutionCheckout:
     # provider that holds the token, within limits. Not the UCP tokenizer binding
     # above. None: the payment uses the instrument credential only.
     scheme_token_binding: SchemeTokenBinding | None = None
+    # The handler allowance (``mandate_capability.max_amount_minor_units`` and currency); an executor
+    # refuses to charge above it or without it.
+    allowance_max_minor_units: int | None = None
+    allowance_currency: str | None = None
+    # The UPI AutoPay mandate reference and the server-side RBI AFA evidence ref, for a UPI AutoPay instrument.
+    upi_mandate_reference: str | None = None
+    afa_evidence_ref: str | None = None
 
 
 @dataclass(frozen=True)
@@ -117,18 +131,31 @@ async def consume_decision(
     seller_agent_id: str,
     decision_id: str | None,
     payload_hash: str,
+    action: str = SESSION_COMPLETE,
 ) -> ConsumedDecision:
-    """Consume ``decision_id`` for ``session_complete`` on ``payload_hash``; raises ``DecisionRefusedError``."""
+    """Consume ``decision_id`` for ``action`` on ``payload_hash``; raises ``DecisionRefusedError``."""
     from core.commerce.arbiter_store import require_allow_decision
 
+    if action not in (SESSION_COMPLETE, REFUND):
+        raise ValueError(f"executors consume session_complete or refund decisions, not {action!r}")
     row = await require_allow_decision(
-        db_session, tenant_id=tenant_id, decision_id=decision_id, payload_hash=payload_hash, action=SESSION_COMPLETE
+        db_session, tenant_id=tenant_id, decision_id=decision_id, payload_hash=payload_hash, action=action
     )
+    evidence = getattr(row, "evidence", None)
+    hashes = evidence.get("mandate_hashes") if isinstance(evidence, Mapping) else None
     return ConsumedDecision(
         decision_id=str(row.decision_id),
         payload_hash=payload_hash,
         tenant_id=str(tenant_id),
         merchant_id=merchant_id,
         seller_agent_id=seller_agent_id,
+        action=action,
+        mandate_hashes=dict(hashes) if isinstance(hashes, Mapping) else {},
         _gate=_GATE,
     )
+
+
+# The Plural executor registers itself here when PLURAL_PINE_LIVE_EXECUTION_ENABLED is on.
+from core.commerce.executors import plural as _plural  # noqa: E402
+
+_plural.sync_registration()

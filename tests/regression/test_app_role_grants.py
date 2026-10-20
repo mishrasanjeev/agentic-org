@@ -33,6 +33,8 @@ IMMUTABILITY_FUNCTIONS = {
     "oacp_record_reject_mutation",
     "oacp_manifest_retention_guard",
     "audit_chain_witness_reject_mutation",
+    # v6z90_mandates_rails (payment operation records, RBI AFA evidence).
+    "commerce_payment_record_reject_mutation",
 }
 # Column-scoped UPDATE the script grants on append-only tables, for the one
 # transition each trigger allows.

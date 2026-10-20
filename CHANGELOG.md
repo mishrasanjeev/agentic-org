@@ -77,6 +77,163 @@
   exempt as well. A regression test pins that every route declared public is exempt
   (`tests/regression/test_public_route_exemptions_20261020.py`).
 
+## Unreleased - ACP Complete uses server-verified mandates (G41, D1)
+
+- The ACP vendor extension `agenticorg_commerce` accepts `mandate_request` on complete and passes it to
+  the UCP Complete it runs, so ACP sessions obtain Intent, Cart and Payment mandates from Grantex and
+  are decided on server-verified authority like UCP sessions; strict runtimes refuse caller-asserted
+  authority on ACP too. The mandates are ledgered as `commerce.acp.checkout.mandates`. Tests:
+  `tests/integration/test_acp_checkout_postgres.py` (strict refusal, verified mandates) and
+  `tests/unit/test_acp_checkout_g34.py`.
+- `mandate_capability_evidence` builds its rail list as strings (mypy 2.x); no behaviour change.
+
+## Unreleased - UPI mandate extension schema hosted at its advertised URL (G56)
+
+- `ui/public/ucp/extensions/upi-mandate/2026-10-20/schema.json` publishes the JSON Schema of the
+  UCP vendor extension `ai.agenticorg.payment.upi_mandate` at
+  `https://agenticorg.ai/ucp/extensions/upi-mandate/2026-10-20/schema.json`, the URL the profile
+  advertises (served by the UI image like the Plural handler config schema). It declares the
+  Action `ai.agenticorg.payment.upi_mandate_authorization` and the mandate terms. A regression
+  test maps the advertised URL to the file and the nginx static rule, and validates the Action the
+  server emits against it.
+
+## Unreleased - Plural 3-D Secure and pending payments reconciled from verified webhooks (G55)
+
+- A verified Plural order event relayed to `POST /api/v1/commerce/runtime/ucp/plural/events`
+  for an order the executor created (`create_order` journal row with that Plural order id and
+  `aoc-` reference) is reconciled once (`PluralExecutor.reconcile`): `PROCESSED`/`CAPTURED`
+  records the capture (`source: webhook`) and completes the checkout into its order;
+  `AUTHORIZED` (after the buyer's 3-D Secure step, or a pending payment authorised later)
+  captures the authorised amount with the same merchant reference under the decision consumed at
+  Complete, unless a capture was already requested; `FAILED` records the failure and returns the
+  checkout to `ready_for_complete`. Redelivered and out-of-order events change nothing and make no
+  provider call. The checkout keeps what this needs in `state.execution` (decision id, executor,
+  stored instruments; no credential); the order creation is shared with Complete
+  (`handlers._complete_into_order`, `handlers.reconcile_execution`, ledger
+  `commerce.ucp.checkout.reconciled`). The route answers `payment: {journal, session}`. No new
+  flag: the route and executor are already behind authentication and
+  `PLURAL_PINE_LIVE_EXECUTION_ENABLED`. Docs: `docs/oacp/plural-executor.md#reconciliation`.
+
+## Unreleased - Server-verified Grantex mandates close D1; not-present rule set; buyer agent on UCP and refund decisions (G41, G44, G45, D1)
+
+- Mandate client (`core/commerce/mandates_client.py`): a UCP Complete carrying
+  `ai.agenticorg.commerce.mandate_request {passport_jwt, presence, description,
+  max_amount_minor_units?, webauthn_assertion?}` asks Grantex for the Intent, Cart and Payment
+  mandates in order with the service token (async, pinned egress transport, async egress
+  validation, 5 s, no redirect, no retry). A `human_present` cart carries the buyer's WebAuthn
+  assertion over `checkout_hash` exactly as the platform sent it; nothing is generated
+  server-side. The checkout response names `ai.agenticorg.commerce.mandate_checkout
+  {checkout, checkout_hash}` for merchants with `provider_policy.ucp.grantex_mandates`. Behind
+  `AGENTICORG_GRANTEX_MANDATES_ENABLED` (default off; enable after the Grantex mandate release).
+- Local verifier (`core/commerce/oacp_mandates.py`): the ordered refusal codes of the Grantex
+  mandate profile (`mandate_malformed` through `mandate_suspended`), the chain rules
+  (`mandate_chain_mismatch`) and the binding to the session (`mandate_binding_mismatch`), using
+  the pinned JWKS and the Token Status List reader of `oacp_grantex_trust` (new
+  `OacpGrantexArtifactVerifier.status_at`, shared with artifacts). Every case of the shared
+  vectors passes (`tests/fixtures/oacp/oacp-mandates-v1.json`, `oacp-mandates-v1-extra.json`).
+- D1 closed: `buyer_authority_verified` passes only with the server-side ref the verifier
+  produced (`oacp-mandate-v1;jti;mandate_hash;verified_at`) naming the decision's own mandate jti
+  and hash; any other ref refuses `buyer_authority_ref_invalid`. The decision's mandate evidence
+  is the payment mandate jti and `mandate_hash` (hex SHA-256 of the compact JWT); the decision
+  and the ledger (`commerce.arbiter.decision`, `commerce.ucp.checkout.mandates`) seal the three
+  jtis and hashes, and the Plural order metadata carries the three hashes.
+- Arbiter policy `commerce-arbiter-v4` (**breaking for decision shape**: `rules_evaluated` gains
+  `human_not_present_limits`, the decision id material gains the presence). A
+  `human_not_present` purchase must be within `provider_policy.arbiter.human_not_present` (lower
+  caps) and the intent mandate cap, and a UPI AutoPay instrument has no AFA-exempt path. No human
+  step: the rule refuses and the refusal is sealed.
+- **Breaking in strict runtimes (sibling path of D1):** UCP session complete now passes
+  `require_verified_authority` like the handoffs, so caller-asserted authority is refused there
+  too. Opt-out: `AGENTICORG_ARBITER_REQUIRE_VERIFIED_AUTHORITY=false`.
+- UCP Complete seals a fresh decision in its own transaction, offers it to Grantex after the
+  commit, then consumes the allow in a second transaction, so a strict runtime that requires the
+  Grantex grant can consume it (before, UCP decisions were never countersigned and strict
+  runtimes refused them `grantex_grant_missing`). A concurrent Complete still gets 409.
+- Buyer agent: UCP sessions record `state.platform.buyer_agent_id` (`ucp_platform:` and 40 hex
+  characters of the SHA-256 of the `UCP-Agent` profile URL) at create time; session-complete
+  decisions name it, and refund decisions name the buyer agent of the order's session, so Grantex
+  can countersign them.
+- Docs: `docs/oacp/mandates.md#grantex-mandates`, `purchase-mandate-handoff.md`,
+  `arbiter-ledger.md` (rules v4), `truth-inventory.md`, the launch and rollback runbook.
+  Live check: `tests/integration/test_grantex_mandates_live.py`.
+
+## Unreleased - Mandate-capability evidence for Grantex (G43, AgenticOrg side)
+
+- `core/commerce/mandate_capability_evidence.py` builds `oacp.mandate_capability_evidence.v1` from
+  the stored Plural capability verifier result and the merchant's `mandate_capability`: rails
+  (`plural`, `card_network_token`, `upi_autopay`), caps per rail, token types, `verified_at`
+  (the verifier's `checked_at`) and an `evidence_hash` over the redacted result. With
+  `AGENTICORG_GRANTEX_MANDATE_CAPABILITY_EVIDENCE_ENABLED=true` (default off) the Grantex C6Z
+  authority request carries it as the top-level member `mandate_capability_evidence`; a stale,
+  expired or capless result sends nothing. Docs:
+  `docs/oacp/plural-pine-p3p-capability-verifier.md#evidence-for-grantex`.
+
+## Unreleased - Google Merchant Center UCP onboarding runbook (G57)
+
+- New runbook `docs/runbooks/oacp-google-merchant-center-onboarding.md`: the UCP `2026-04-08`
+  profile Google targets, AgenticOrg prerequisites and flags, verification against the serving
+  host, the Merchant Center steps (cart transfer; native checkout needs the Google Pay handler,
+  which AgenticOrg does not offer), rollback and residual gaps, from Google's public UCP pages.
+
+## Unreleased - Multi-source precedence per fact family (G61)
+
+- `provider_policy.source_precedence` sets, per fact family (`price`, `inventory`, `policy`,
+  `catalog`, `location`), which source wins when Shopify and the config-only adapters disagree;
+  `provider_policy.source_facts` holds the values a config-only adapter (`woocommerce`, `erp`,
+  `pim`, `oms`, `wms`, `custom_api`) contributes. Those adapters are never called. The UCP catalog
+  routes and checkout pricing resolve price, stock and title through the same table
+  (`core/commerce/source_precedence.py`); without a table or saved facts Shopify's evidence is
+  used exactly as before. The merchant-config save refuses an invalid table or fact set.
+  Docs: `docs/oacp/merchant-commerce-configuration.md#source-precedence`.
+
+## Unreleased - Plural executor, UPI AutoPay and RBI AFA, refunds and tracking (G55, G56, G58)
+
+- Plural executor (`core/commerce/executors/plural.py`, G55): creates a `pre_auth` Plural order,
+  pays with the tokenised instrument and captures; refunds captured orders. It runs only with a
+  consumed arbiter decision (`session_complete`, or the new `refund` action), checks the amount
+  against the session total, the captured amount and the handler allowance
+  (`mandate_capability.max_amount_minor_units`) before any call, and carries the decision id and
+  the intent, cart and payment mandate hashes (empty until verified mandates land) in the order
+  metadata. Every call is journalled in `commerce_payment_operations` (a `requested` row before
+  the call; a repeated decision is refused without an HTTP call) and ledgered
+  (`commerce.plural.create_order`, `.create_payment`, `.capture`, `.refund`). Async `httpx` over
+  the pinned egress transport, no retry of order creation. Registered only while
+  `PLURAL_PINE_LIVE_EXECUTION_ENABLED=true`; otherwise UCP Complete keeps answering
+  `executor_unavailable`. Decision recorded in `docs/oacp/plural-executor.md`: direct Plural
+  execution; Grantex Commerce V1 execution is the alternative, not built.
+- Plural webhook verification is shared with billing
+  (`core.billing.pinelabs_client.plural_signature_valid`; billing behaviour unchanged). A merchant
+  integration relays Plural events to `POST /api/v1/commerce/runtime/ucp/plural/events` (tenant
+  admin); the Plural signature is verified, so a relay cannot forge one.
+- UPI AutoPay and RBI AFA (`core/commerce/india_rails.py`, G56): `mandate_capability.upi_autopay`
+  (amount rule and limit, frequency, validity, purpose and the authorization URL; the
+  NPCI-unconfirmed values are configuration) enables `upi_autopay` instruments. RBI e-mandate
+  framework 2026 thresholds are settings. The arbiter rule `afa_evidence_present` (last rule of
+  `session_complete`) refuses a UPI AutoPay completion until server-side AFA evidence exists;
+  the response carries the buyer's out-of-band step as the UCP Action
+  `ai.agenticorg.payment.upi_mandate_authorization` (vendor extension
+  `ai.agenticorg.payment.upi_mandate`, 2026-08-25) or as `requires_escalation` with
+  `continue_url`; `acp_afa_out_of_band` maps the same step for ACP. A verified Plural mandate
+  event records the evidence and returns the session to `ready_for_complete`. Nothing waits.
+- Arbiter policy `commerce-arbiter-v3`: the `refund` action (rule `refund_within_captured`), the
+  `afa_evidence_present` rule on `session_complete`, and `mandate_hashes` in the stored decision
+  evidence. `session_complete` decisions list one more rule in `rules_evaluated`; outcomes for
+  sessions without a UPI AutoPay instrument are unchanged.
+- Refund orchestration on the order entity (G58): `POST
+  /api/v1/commerce/runtime/ucp/orders/{order_id}/refunds` takes a fresh `refund` decision,
+  consumes it, refunds through the Plural executor and appends a `refund` adjustment; partial
+  refunds are bounded by the captured amount less earlier refunds (pending ones included).
+- Tracking normaliser (`core/commerce/fulfillment_tracking.py`, G58): Shopify fulfillment and
+  fulfillment-event payloads become UCP order fulfillment events (status map, carrier aliases
+  from `provider_policy.ucp.carrier_aliases`, source time in UTC), recorded with
+  `POST /api/v1/commerce/runtime/ucp/orders/{order_id}/shopify-fulfillments`; a redelivered event
+  has the same id and is recorded once.
+- Migration `v6z90_mandates_rails` (after `v6z89_commerce_sessions_orders`):
+  `commerce_payment_operations` and `commerce_afa_evidence`, ENABLE + FORCE row-level security,
+  tenant policy with `WITH CHECK`, append-only trigger `commerce_payment_record_reject_mutation`,
+  `SELECT, INSERT` for `agenticorg_app` (classified in `scripts/create_app_role.sql`); the arbiter
+  action CHECK admits `refund`. Forward-only.
+
 ## Unreleased - ACP product feed, checkout sessions and order events (G33, G34, G35, G37, G38, G40)
 
 - ACP product feed (`core/commerce/acp/feed.py`), behind `AGENTICORG_ACP_FEED_ENABLED` (default off):
@@ -154,6 +311,9 @@
 
 ## Unreleased - UCP checkout, cart and order (G21, G22, G25, G27, G29-G32, G35)
 
+- The UCP publishing ledger actor for an API key is the authenticated subject (`apikey:<prefix>`),
+  never the key's name, and the `X-API-Key` header is read through a named constant; no credential
+  reaches a ledger hash.
 - Tests for the UCP and ACP HTTP adapters and their production wiring (unknown host refusals and
   their ledger events on every route, `Request-Id` echo, Shopify credentials failing closed to no
   Shopify reads, policies only from a usable verified artifact, the feed export formats and its

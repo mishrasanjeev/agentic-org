@@ -19,6 +19,7 @@ from core.commerce.c6z_runtime_vertical import (
     PRIVATE_VALUE_MARKERS,
     contains_private_or_executable_value,
 )
+from core.commerce.source_precedence import SourcePrecedenceError, validate_provider_policy
 from core.commerce.ucp.locations import LocationConfigError, normalize_location_detail
 
 SOURCE_CONNECTOR_TYPES: frozenset[str] = frozenset(
@@ -115,6 +116,10 @@ def normalize_merchant_commerce_config(
         raise MerchantCommerceConfigError("commerce_categories are required")
     if _contains_unsafe_config_value(config):
         raise MerchantCommerceConfigError("merchant commerce config contains private or executable values")
+    try:
+        validate_provider_policy(config["provider_policy"])
+    except SourcePrecedenceError as exc:
+        raise MerchantCommerceConfigError(str(exc)) from exc
     return config
 
 

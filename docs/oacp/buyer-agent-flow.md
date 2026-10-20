@@ -42,5 +42,5 @@ Paid-state claims, stock holds, mandate setup, refunds, returns, shipment, and p
 Checkout and order creation go through the UCP checkout capability ([UCP checkout, cart and order](ucp-checkout.md)), and only there:
 
 - With `AGENTICORG_UCP_CHECKOUT_ENABLED` off (the default) a buyer agent cannot create a checkout or an order at all.
-- With it on, a buyer agent can create and update checkout sessions and carts, but a checkout is `completed` (and an order exists) only after the commerce arbiter sealed an `allow` decision for that exact session and a registered executor consumed it. No executor is registered in this release, so Complete returns `executor_unavailable`.
+- With it on, a buyer agent can create and update checkout sessions and carts, but a checkout is `completed` (and an order exists) only after the commerce arbiter sealed an `allow` decision for that exact session and a registered executor consumed it. The Plural executor is registered only while `PLURAL_PINE_LIVE_EXECUTION_ENABLED=true`; otherwise Complete returns `executor_unavailable`. A UPI AutoPay payment also needs the buyer's RBI AFA step, which the response returns as an action or a `continue_url` ([Mandates](mandates.md)).
 - A buyer agent must never describe a session that is not `completed` as an order, or a `complete_in_progress` session as paid.

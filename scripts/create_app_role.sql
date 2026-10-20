@@ -98,7 +98,7 @@ BEGIN
           AND p.proname IN ('audit_log_reject_mutation', 'prevent_capability_ledger_mutation',
                             'eval_dataset_versions_immutable', 'commerce_arbiter_decisions_guard',
                             'oacp_record_reject_mutation', 'oacp_manifest_retention_guard',
-                            'audit_chain_witness_reject_mutation')
+                            'audit_chain_witness_reject_mutation', 'commerce_payment_record_reject_mutation')
         GROUP BY tg.tgrelid
     LOOP
         IF r.refuses_update THEN
@@ -154,6 +154,14 @@ BEGIN
     -- Grantex witness checkpoints of the audit chain head: SELECT, INSERT.
     IF to_regclass('public.audit_chain_witness_checkpoints') IS NOT NULL THEN
         REVOKE UPDATE, DELETE ON audit_chain_witness_checkpoints FROM agenticorg_app;
+    END IF;
+    -- v6z90_mandates_rails: Plural payment operation records and RBI AFA evidence
+    -- (commerce_payment_record_reject_mutation): SELECT, INSERT.
+    IF to_regclass('public.commerce_payment_operations') IS NOT NULL THEN
+        REVOKE UPDATE, DELETE ON commerce_payment_operations FROM agenticorg_app;
+    END IF;
+    IF to_regclass('public.commerce_afa_evidence') IS NOT NULL THEN
+        REVOKE UPDATE, DELETE ON commerce_afa_evidence FROM agenticorg_app;
     END IF;
 END $$;
 
@@ -260,7 +268,7 @@ BEGIN
       AND p.proname IN ('audit_log_reject_mutation', 'prevent_capability_ledger_mutation',
                         'eval_dataset_versions_immutable', 'commerce_arbiter_decisions_guard',
                         'oacp_record_reject_mutation', 'oacp_manifest_retention_guard',
-                        'audit_chain_witness_reject_mutation')
+                        'audit_chain_witness_reject_mutation', 'commerce_payment_record_reject_mutation')
       AND ((tg.tgtype & 16 <> 0 AND has_table_privilege('agenticorg_app', tg.tgrelid, 'UPDATE'))
            OR (tg.tgtype & 8 <> 0 AND has_table_privilege('agenticorg_app', tg.tgrelid, 'DELETE')));
     IF bad IS NOT NULL THEN

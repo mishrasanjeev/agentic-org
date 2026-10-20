@@ -54,6 +54,8 @@ _BASE_URLS = {
 }
 
 _BASE_URL = _BASE_URLS.get(_ENV, _BASE_URLS["sandbox"])
+# Shared with the commerce executor (core/commerce/executors/plural.py).
+PLURAL_BASE_URLS: dict[str, str] = dict(_BASE_URLS)
 
 _APP_BASE_URL = os.getenv("AGENTICORG_APP_URL", "https://app.agenticorg.ai")
 
@@ -460,13 +462,29 @@ def verify_webhook_signature(
     -------
     True if signature is valid.
     """
-    if not _WEBHOOK_SECRET:
+    return plural_signature_valid(_WEBHOOK_SECRET, raw_body, webhook_id, webhook_timestamp, webhook_signature)
+
+
+def plural_signature_valid(
+    secret_b64: str,
+    raw_body: bytes,
+    webhook_id: str,
+    webhook_timestamp: str,
+    webhook_signature: str,
+) -> bool:
+    """Plural's webhook scheme with an explicit secret (billing and the commerce executor share it).
+
+    HMAC-SHA256 over ``{webhook_id}.{webhook_timestamp}.{raw_body}`` keyed with
+    the base64-decoded secret; the header carries one or more ``v1,<base64>``
+    values separated by spaces. Pure: no I/O, constant-time comparison.
+    """
+    if not secret_b64:
         logger.warning("plural_webhook_secret_not_set")
         return False
 
     # Decode the base64 secret
     try:
-        secret_bytes = base64.b64decode(_WEBHOOK_SECRET)
+        secret_bytes = base64.b64decode(secret_b64)
     except (ValueError, binascii.Error):
         logger.exception("plural_webhook_secret_decode_failed")
         return False

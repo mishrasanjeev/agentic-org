@@ -1,0 +1,86 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agenticorg.ai/ucp/extensions/upi-mandate/2026-10-20/schema.json",
+  "title": "ai.agenticorg.payment.upi_mandate checkout extension (2026-10-20)",
+  "description": "UCP vendor extension of dev.ucp.shopping.checkout that declares the Action type ai.agenticorg.payment.upi_mandate_authorization. A merchant emits the Action while a UPI AutoPay instrument needs the RBI additional factor of authentication (the buyer authorises the e-mandate with the UPI PIN at the url). The step is the buyer's own, out of band: the checkout stays incomplete until the provider confirms the mandate, and nothing on the merchant side waits for it. The mandate terms are the ones the buyer registers; amounts are integer minor units.",
+  "type": "object",
+  "properties": {
+    "actions": {
+      "type": "object",
+      "properties": {
+        "ai.agenticorg.payment.upi_mandate_authorization": {
+          "type": "array",
+          "items": {"$ref": "#/$defs/upi_mandate_authorization"}
+        }
+      }
+    }
+  },
+  "$defs": {
+    "upi_mandate_authorization": {
+      "type": "object",
+      "description": "One outstanding mandate authorisation (UCP Action instance: id and config).",
+      "required": ["id", "config"],
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^afa_[0-9a-f]{24}$",
+          "description": "Stable for the same outstanding step; different terms are new work with a new id."
+        },
+        "config": {
+          "type": "object",
+          "required": ["payment_instrument_id", "url", "mandate_reference", "mandate"],
+          "additionalProperties": false,
+          "properties": {
+            "payment_instrument_id": {
+              "type": "string",
+              "minLength": 1,
+              "description": "The UPI AutoPay instrument of the checkout the mandate is for."
+            },
+            "url": {
+              "type": "string",
+              "format": "uri",
+              "pattern": "^https://",
+              "description": "Where the buyer authorises the mandate."
+            },
+            "mandate_reference": {
+              "type": "string",
+              "pattern": "^aom-[A-Za-z0-9_-]{1,60}$",
+              "description": "The merchant's mandate reference the provider confirms."
+            },
+            "mandate": {"$ref": "#/$defs/mandate_terms"}
+          }
+        }
+      }
+    },
+    "mandate_terms": {
+      "type": "object",
+      "description": "The e-mandate the buyer registers: amount rule and limit, frequency, validity and purpose.",
+      "required": ["amount_rule", "amount", "currency", "frequency", "start_date", "end_date", "purpose"],
+      "additionalProperties": false,
+      "properties": {
+        "amount_rule": {"enum": ["fixed", "max"]},
+        "amount": {"type": "integer", "minimum": 1},
+        "currency": {"const": "INR"},
+        "frequency": {
+          "enum": [
+            "one_time",
+            "daily",
+            "weekly",
+            "fortnightly",
+            "monthly",
+            "bimonthly",
+            "quarterly",
+            "half_yearly",
+            "yearly"
+          ]
+        },
+        "start_date": {"type": "string", "format": "date"},
+        "end_date": {"type": "string", "format": "date"},
+        "purpose": {
+          "enum": ["general", "insurance_premium", "mutual_fund_subscription", "credit_card_bill"]
+        }
+      }
+    }
+  }
+}

@@ -184,7 +184,13 @@ The session's `capabilities` declares only what is served:
 - `extensions`: the agent's requested extensions that are served. The vendor extension
   `ai.agenticorg.commerce` adds `agenticorg_commerce` to the create, update and complete requests and
   to the session: `buyer_authority` references, `decision_id` or `decide_only` for the arbiter, and
-  `passport_jwt` (the buyer's Commerce Passport). The session echoes the arbiter decision there.
+  `passport_jwt` (the buyer's Commerce Passport), and on complete `mandate_request`. The session
+  echoes the arbiter decision there.
+- ACP Complete runs the UCP Complete, so the same arbiter rules apply: in strict runtimes
+  caller-asserted `buyer_authority` is refused (`buyer_authority_verified`), and a `mandate_request`
+  (same members as UCP, see [mandates](mandates.md)) obtains Intent, Cart and Payment mandates from
+  Grantex, verified locally, as server-verified authority. Its ledger event is
+  `commerce.acp.checkout.mandates`.
 - The core `discount` extension is not served: it is never declared, no `discounts` member is
   rendered, and request discount codes are ignored.
 - No intervention (3DS, biometric, address verification) is served, so `interventions` is omitted.

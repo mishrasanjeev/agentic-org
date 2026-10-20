@@ -102,6 +102,56 @@ flowchart TD
 
 Shopify can sync into the runtime packet today. Other source connectors are accepted for merchant-owned setup and future adapter work, but the runtime does not pretend they are live.
 
+## Source Precedence
+
+When the merchant's sources disagree about a fact, a per-family precedence table decides which
+one wins (`core/commerce/source_precedence.py`). The fact families are `price`, `inventory`,
+`policy`, `catalog` and `location`. The sources are:
+
+- `shopify`: the one runtime adapter, read-only Admin API evidence;
+- `merchant_config`: the merchant's own settings, such as POS stores and policy links;
+- the config-only adapters `woocommerce`, `erp`, `pim`, `oms`, `wms` and `custom_api`.
+
+Config-only adapters stay config-only. AgenticOrg never calls them. Their facts exist only as
+values the merchant saves in `provider_policy.source_facts`, so naming one in a precedence list
+never makes the runtime fetch anything.
+
+```json
+{
+  "provider_policy": {
+    "source_precedence": {"price": ["erp", "shopify"], "inventory": ["shopify", "wms"]},
+    "source_facts": {
+      "erp": {"price": {"TOTE-1": "24.00"}},
+      "wms": {"inventory": {"TOTE-1": 7}},
+      "pim": {"catalog": {"TOTE-1": {"title": "Canvas tote"}}}
+    }
+  }
+}
+```
+
+| Family | Default order | Used today |
+| --- | --- | --- |
+| `price` | `shopify`, `merchant_config` | UCP catalog search and lookup, and checkout pricing |
+| `inventory` | `shopify`, `merchant_config` | Same as `price` |
+| `catalog` | `shopify`, `merchant_config` | Same as `price` (the variant title) |
+| `policy` | `merchant_config`, `shopify` | Only the merchant config is read at runtime today |
+| `location` | `merchant_config`, `shopify` | Only the merchant config is read at runtime today |
+
+How a fact is resolved:
+
+- Facts are keyed by SKU, or by the source variant id when there is no SKU.
+- The first source in the family's list that has a value wins.
+- A source missing from the list never wins.
+- If no source has a value, there is no fact, and the caller fails closed exactly as before.
+- Without a precedence table or saved facts, Shopify's evidence stands unchanged.
+- Catalog listings and checkout pricing read the same winner.
+- Disagreements are logged as `commerce_fact_source_irregularity`, with the family and the
+  source names only.
+
+The merchant-config save refuses an unknown family, an unknown or repeated source, facts saved
+for `shopify`, and malformed values. Prices must be decimal strings in major units, inventory a
+non-negative integer, and catalog, policy and location values objects.
+
 ## Payment Providers
 
 Provider config is capability metadata, not payment execution.

@@ -346,6 +346,8 @@ async def check_user_session_state(tenant_id: str, claims: dict[str, Any]) -> st
 
 # UCP checkout, cart and order routes (api/v1/commerce_ucp.py) also accept the platform's API key in X-API-Key.
 UCP_TRANSACTION_PREFIXES: tuple[str, ...] = ("/ucp/checkout-sessions", "/ucp/carts", "/ucp/orders")
+# The header a UCP platform presents the merchant-issued tenant API key in (UCP REST x_api_key).
+UCP_PLATFORM_KEY_HEADER = "X-API-Key"
 
 
 class GrantexAuthMiddleware(BaseHTTPMiddleware):
@@ -459,9 +461,9 @@ class GrantexAuthMiddleware(BaseHTTPMiddleware):
             # UCP platforms authenticate with "a reusable api key allocated to the platform by the
             # business" in X-API-Key (UCP REST OpenAPI, x_api_key): the tenant API key the merchant
             # issued, verified exactly like a bearer API key. Only API keys are accepted there.
-            api_key = request.headers.get("X-API-Key", "").strip()
-            if api_key.startswith("ao_sk_"):
-                auth_header = f"Bearer {api_key}"
+            presented = request.headers.get(UCP_PLATFORM_KEY_HEADER, "").strip()
+            if presented.startswith("ao_sk_"):
+                auth_header = f"Bearer {presented}"
         if auth_header:
             if not auth_header.startswith("Bearer "):
                 return await self._credential_failure_response(

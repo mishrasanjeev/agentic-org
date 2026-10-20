@@ -531,3 +531,91 @@ async def test_a_ucp_platform_never_reuses_another_platforms_webhook_subscriptio
     deliveries = await _deliveries(db, tenant)
     assert deliveries == {subs[0]["id"]: {order_a}}
     assert order_b not in {o for orders in deliveries.values() for o in orders}
+
+
+# ---------------------------------------------------------------------------
+# ACP Complete runs the UCP Complete: the D1 rule and server-requested mandates apply to it too
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture()
+def strict(monkeypatch):
+    """A strict runtime: verified authority required, the Grantex grant required, every decision posted."""
+    from core import config
+    from core.commerce.oacp_grantex_trust import reset_oacp_trust_caches
+
+    monkeypatch.setattr(config, "arbiter_require_verified_authority_enabled", lambda env=None: True)
+    monkeypatch.setattr(config, "arbiter_require_grantex_grant_enabled", lambda env=None: True)
+    monkeypatch.setattr(config, "arbiter_grantex_post_enabled", lambda env=None: True)
+    reset_oacp_trust_caches()
+    yield
+    reset_oacp_trust_caches()
+
+
+def _mandate_runtime(tenant: str, fake_grantex):
+    import dataclasses
+
+    from tests.grantex_service_fakes import MANDATE_MERCHANT, MANDATE_TENANT
+
+    resolved = af.merchant(tenant, grantex_mandates={"tenant_id": MANDATE_TENANT, "merchant_id": MANDATE_MERCHANT})
+    runtime = af.runtime(tenant, resolved=resolved, grantex=_grantex())
+    ucp = dataclasses.replace(runtime.ucp, grantex_client=fake_grantex.client, mandates_enabled=lambda: True)
+    return dataclasses.replace(runtime, ucp=ucp)
+
+
+@pytest.mark.asyncio
+async def test_acp_complete_in_a_strict_runtime_refuses_caller_asserted_authority(db, executor, strict):
+    from tests.grantex_service_fakes import FakeGrantexService
+
+    tenant = str(uuid.uuid4())
+    runtime = _mandate_runtime(tenant, FakeGrantexService())
+    session_body = await _ready(runtime, tenant)
+    refused = await acp.run(
+        af.request("complete", tenant, af.complete_body(vendor=_vendor()), session_id=session_body["id"]), runtime
+    )
+    assert refused.status == 200 and refused.body["status"] == "ready_for_payment", refused.body
+    assert refused.body[caps.VENDOR_FIELD]["decision"]["failing_rule"] == "buyer_authority_verified"
+    assert executor.calls == []
+
+
+@pytest.mark.asyncio
+async def test_acp_complete_runs_on_server_verified_mandates(db, executor, strict):
+    from core.commerce import oacp_mandates
+    from tests.grantex_service_fakes import PASSPORT_JWT, FakeGrantexService, webauthn_assertion
+
+    fake = FakeGrantexService()
+    tenant = str(uuid.uuid4())
+    runtime = _mandate_runtime(tenant, fake)
+    session_body = await _ready(runtime, tenant)
+    request = {
+        "passport_jwt": PASSPORT_JWT,
+        "presence": "human_present",
+        "description": "A tote bag",
+        "webauthn_assertion": webauthn_assertion(),
+    }
+    done = await acp.run(
+        af.request(
+            "complete",
+            tenant,
+            af.complete_body(vendor=_vendor(mandate_request=request)),
+            session_id=session_body["id"],
+        ),
+        runtime,
+    )
+    assert done.status == 200 and done.body["status"] == "completed", (
+        done.body.get(caps.VENDOR_FIELD),
+        done.body.get("messages"),
+    )
+    assert len(executor.calls) == 1
+    hashes = {kind: oacp_mandates.mandate_hash(token) for kind, token in dict(fake.mandates).items()}
+    assert set(hashes) == {"intent", "cart", "payment"}
+    [decision] = await _rows(db, "SELECT * FROM commerce_arbiter_decisions WHERE tenant_id = :t", t=tenant)
+    assert decision["action"] == "session_complete" and decision["consumed_at"] is not None
+    assert decision["grantex_grant_jti"]
+    assert decision["evidence"]["buyer_authority_source"] == "server_verified"
+    assert decision["evidence"]["mandate_hash"] == hashes["payment"]
+    assert decision["evidence"]["presence"] == "human_present"
+    assert fake.assertions == [request["webauthn_assertion"]]
+    events = await _ledger(db, tenant)
+    assert "commerce.acp.checkout.mandates" in events
+    assert not [e for e in events if e.startswith("commerce.ucp.")]

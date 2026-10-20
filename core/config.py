@@ -455,6 +455,29 @@ class Settings(BaseSettings):
     # verifiers keep accepting signatures made before the rotation (UCP
     # signatures, Key Rotation: at least 7). Env: AGENTICORG_UCP_KEY_ROTATION_GRACE_DAYS.
     ucp_key_rotation_grace_days: int = 7
+    # RBI e-mandate framework 2026 (s.8): a subsequent UPI AutoPay / e-mandate
+    # debit above these amounts (minor units, paise) needs the additional factor
+    # of authentication; registration and the first debit always do
+    # (core/commerce/india_rails.py). Defaults are INR 15,000 and INR 1,00,000
+    # (insurance premiums, mutual fund subscriptions, credit-card bills).
+    # Env: AGENTICORG_RBI_EMANDATE_AFA_LIMIT_MINOR_UNITS,
+    # AGENTICORG_RBI_EMANDATE_AFA_HIGHER_LIMIT_MINOR_UNITS.
+    rbi_emandate_afa_limit_minor_units: int = 1_500_000
+    # Send the latest Plural capability verifier result as
+    # mandate_capability_evidence (oacp.mandate_capability_evidence.v1) on the
+    # Grantex C6Z authority request (core/commerce/mandate_capability_evidence.py).
+    # Off by default: turn on after the Grantex release that accepts the member.
+    # Env: AGENTICORG_GRANTEX_MANDATE_CAPABILITY_EVIDENCE_ENABLED.
+    grantex_mandate_capability_evidence_enabled: bool = False
+    # Server-requested OACP mandates (core/commerce/mandates_client.py): a UCP Complete
+    # carrying ai.agenticorg.commerce.mandate_request asks Grantex for Intent, Cart and
+    # Payment mandates and verifies them locally before the arbiter decides. Off by
+    # default: turn on after the Grantex mandate release (Phase 4). While off, a
+    # mandate_request is answered as unavailable and the authority stays caller-asserted.
+    # Env: AGENTICORG_GRANTEX_MANDATES_ENABLED.
+    grantex_mandates_enabled: bool = False
+    rbi_emandate_afa_higher_limit_minor_units: int = 10_000_000
+
     # ACP product feed (core/commerce/acp/feed.py): the tenant-admin feed export
     # under /api/v1/commerce/runtime/acp/feed answers 404 while off. The feed is
     # generated only from verified, fresh OACP artifacts.

@@ -15,11 +15,35 @@ from typing import Any
 
 import httpx
 
+from core.commerce import oacp_mandates
 from core.commerce.grantex_service import GrantexServiceClient
 from core.commerce.oacp_grantex_trust import OacpGrantexArtifactVerifier, OacpGrantexTrustConfig
-from tests.oacp_signing import ISSUER, JWKS_URI, EcSigningKey, sign_compact_jwt
+from tests.oacp_signing import ISSUER, JWKS_URI, EcSigningKey, sign_compact_jwt, status_list_token
 
 BASE_URL = "https://grantex.example"
+MANDATE_TENANT = "cten_TEST01"
+MANDATE_MERCHANT = "mch_TEST01"
+MANDATE_STATUS_URI = f"{ISSUER}/status/oacp/lst_MANDATES"
+# A synthetic Commerce Passport shape (the fake does not verify it; Grantex does).
+PASSPORT_JWT = "eyJhbGciOiJFUzI1NiJ9.eyJzdWIiOiJidXllcl9wcmluY2lwYWxfMDEifQ.c2lnbmF0dXJl"
+
+
+def _jwt_claims(token: str) -> dict[str, Any]:
+    import base64
+
+    segment = token.split(".")[1]
+    return json.loads(base64.urlsafe_b64decode(segment + "=" * (-len(segment) % 4)))
+
+
+def webauthn_assertion() -> dict[str, Any]:
+    """A platform-supplied AuthenticationResponseJSON shape (the fake Grantex records it; it verifies nothing)."""
+    return {
+        "id": "Y3JlZGVudGlhbC0x",
+        "rawId": "Y3JlZGVudGlhbC0x",
+        "type": "public-key",
+        "response": {"clientDataJSON": "e30", "authenticatorData": "AAAA", "signature": "AAAA"},
+        "clientExtensionResults": {},
+    }
 
 
 @dataclass
@@ -28,9 +52,16 @@ class FakeGrantexService:
     mode: str = "ok"
     posted: list[tuple[str, dict[str, Any]]] = field(default_factory=list)
     witnessed: dict[tuple[str, int], tuple[str, str, str]] = field(default_factory=dict)
+    # Mandates: signed with an OACP issuer key; refusals per type; status per index; issued tokens.
+    mandate_key: EcSigningKey = field(default_factory=lambda: EcSigningKey(kid="oacp-test-mandates"))
+    mandate_refusals: dict[str, str] = field(default_factory=dict)
+    mandate_statuses: dict[int, int] = field(default_factory=dict)
+    mandates: list[tuple[str, str]] = field(default_factory=list)
+    assertions: list[dict[str, Any]] = field(default_factory=list)
+    payment_amount_skew: int = 0
 
     def jwks(self) -> dict[str, Any]:
-        return {"keys": [self.key.public_jwk()]}
+        return {"keys": [self.key.public_jwk(), self.mandate_key.public_jwk()]}
 
     def _grant(self, body: dict[str, Any]) -> httpx.Response:
         now = int(time.time())
@@ -104,6 +135,8 @@ class FakeGrantexService:
         url = str(request.url)
         if url == JWKS_URI:
             return httpx.Response(200, json=self.jwks())
+        if url == MANDATE_STATUS_URI:
+            return self._status_list()
         if self.mode == "unreachable":
             raise httpx.ConnectError("connection refused", request=request)
         body = json.loads(request.content or b"{}")
@@ -119,7 +152,113 @@ class FakeGrantexService:
             return self._grant(body)
         if request.url.path == "/v1/audit/witness-checkpoints":
             return self._witness(body)
+        if request.url.path.startswith("/v1/commerce/oacp/mandates/"):
+            return self._mandate(request.url.path.rsplit("/", 1)[-1], body)
         return httpx.Response(404, json={"code": "not_found"})
+
+    # --- OACP mandates (contract section 8) ------------------------------------------------------
+
+    def _status_list(self) -> httpx.Response:
+        now = int(time.time())
+        token = status_list_token(
+            self.mandate_key, uri=MANDATE_STATUS_URI, statuses=self.mandate_statuses, iat=now - 5, exp=now + 600
+        )
+        return httpx.Response(200, text=token, headers={"content-type": "application/statuslist+jwt"})
+
+    def _mandate(self, kind: str, body: dict[str, Any]) -> httpx.Response:
+        refusal = self.mandate_refusals.get(kind)
+        if refusal is not None:
+            return httpx.Response(
+                403, json={"error": {"code": refusal, "message": "refused", "details": {"refusal_record_id": "rr_1"}}}
+            )
+        assert body["tenant_id"] == MANDATE_TENANT and body["passport_jwt"].count(".") == 2
+        now = int(time.time())
+        idx = len(self.mandates)
+        presence = body.get("presence", "human_not_present")
+        claims: dict[str, Any] = {
+            "iss": ISSUER,
+            "sub": "buyer_principal_01",
+            "aud": MANDATE_MERCHANT,
+            "iat": now,
+            "exp": now + 540 - idx * 30,
+            "jti": f"oacp_mnd_{kind}_{idx:04d}",
+            "mandate_version": "oacp.mandate.v1",
+            "tenant_id": MANDATE_TENANT,
+            "merchant_id": MANDATE_MERCHANT,
+            "buyer_agent_id": "cag_TEST01",
+            "presence": presence,
+            "amr": ["consent", "otp"],
+            "passport_ref": "cpsp_TEST01",
+            "consent_ref": "crec_TEST01",
+            "status": {"status_list": {"idx": idx, "uri": MANDATE_STATUS_URI}},
+        }
+        if kind == "intent":
+            claims["intent"] = {
+                "description_hash": oacp_mandates.checkout_hash(body["description"]),
+                "max_amount": body["max_amount"],
+                "merchants": [MANDATE_MERCHANT],
+                "expires_at": "2099-01-01T00:00:00Z",
+                "constraints": [{"type": "payment.amount_range", "max": body["max_amount"]["value"]}],
+            }
+        elif kind == "cart":
+            intent = _jwt_claims(body["intent_mandate"])
+            checkout = body["checkout"]
+            total = next(t["amount"] for t in checkout["totals"] if t["type"] == "total")
+            if total > intent["intent"]["max_amount"]["value"]:
+                return httpx.Response(403, json={"error": {"code": "intent_cap_exceeded", "message": "cap"}})
+            digest = oacp_mandates.checkout_hash(checkout)
+            claims["cart"] = {
+                "checkout_hash": digest,
+                "checkout_id": checkout["id"],
+                "line_items": [
+                    {"id": li["id"], "quantity": li["quantity"], "digest": oacp_mandates.checkout_hash(li)}
+                    for li in checkout["line_items"]
+                ],
+                "total": {"value": total, "currency": checkout["currency"]},
+            }
+            claims["intent_mandate_jti"] = intent["jti"]
+            if presence == "human_present":
+                assertion = body.get("webauthn_assertion")
+                if not isinstance(assertion, dict):
+                    return httpx.Response(403, json={"error": {"code": "passkey_evidence_required", "message": "x"}})
+                self.assertions.append(assertion)
+                claims["amr"] = ["consent", "otp", "passkey"]
+                claims["webauthn"] = {
+                    "digest": "d" * 64,
+                    "rp_id": "wallet.example",
+                    "origin": "https://wallet.example",
+                    "challenge": digest,
+                    "user_verified": True,
+                    "asserted_at": "2026-10-20T09:00:00.000Z",
+                    "credential_ref": "c" * 64,
+                }
+        else:
+            cart = _jwt_claims(body["cart_mandate"])
+            claims["amr"] = cart["amr"]
+            claims["presence"] = cart["presence"]
+            claims["payment"] = {
+                "transaction_id": cart["cart"]["checkout_hash"],
+                "amount": cart["cart"]["total"]["value"] + self.payment_amount_skew,
+                "currency": cart["cart"]["total"]["currency"],
+                "payee": {"id": MANDATE_MERCHANT},
+                "rail": body["rail"],
+                "token_binding": body["token_binding"],
+                "cart_mandate_jti": cart["jti"],
+            }
+        token = sign_compact_jwt(self.mandate_key, claims, typ=f"oacp-{kind}-mandate+jwt")
+        self.mandates.append((kind, token))
+        return httpx.Response(
+            201,
+            json={
+                "mandate": token,
+                "jti": claims["jti"],
+                "mandate_type": kind,
+                "exp": claims["exp"],
+                "status": "issued",
+                "mandate_hash": oacp_mandates.mandate_hash(token),
+                "claims": claims,
+            },
+        )
 
     def transport_factory(self) -> Callable[[], httpx.MockTransport]:
         return lambda: httpx.MockTransport(self.handler)
