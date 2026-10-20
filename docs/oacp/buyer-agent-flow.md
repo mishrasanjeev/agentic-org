@@ -16,6 +16,18 @@ flowchart TD
   result -->|No| blocker[Exact blocker]
 ```
 
+## Signed Buyer Requests
+
+With `AGENTICORG_HTTPSIG_SIGN_OUTBOUND=true`, AgenticOrg's buyer agent signs each request its
+Grantex Commerce connector sends with the tenant agent key, under the Visa Trusted Agent Protocol
+profile of RFC 9421: `agent-browser-auth` for catalog, inventory, cart, consent and status calls,
+`agent-payer-auth` for payment intents and checkouts, a fresh nonce per request, and optionally a
+Web Bot Auth signature with `Signature-Agent`. A payment intent or checkout made with a granted
+Grantex consent also carries the TAP payment container and the Grantex consent record object,
+bound to the signature's nonce. With signing on and no usable key the call is refused, never sent
+unsigned. Off (the default), requests are unchanged. See
+[agent request signing](agent-request-signing.md).
+
 ## What Buyers Can Ask
 
 - Product discovery and comparison.

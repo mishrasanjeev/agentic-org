@@ -1,5 +1,84 @@
 # Changelog
 
+## Unreleased - Agent network identity (G47, G48, G49, G51, G52)
+
+- README public-surface table: "the agent's RFC 9421 signature is verified" (the public-claims lint
+  read "9421 agent" as an agent-count claim).
+- The token-binding capability check narrows the capability `max_amount` with `isinstance`
+  (booleans and strings still refuse) so the `mypy` gate passes.
+- Tests: the covered-route and public-route checks walk FastAPI's lazily included routers
+  (`tests/app_routes.py`) and fail when they find no route, so they check the real route table on
+  the pinned FastAPI 0.143.
+- Inbound RFC 9421 agent request signatures (`auth/httpsig.py`, `auth/httpsig_keys.py`) on every
+  `/api/v1/public/commerce/` read and on `POST /api/v1/a2a/message:send` and
+  `GET /api/v1/a2a/extendedAgentCard`, under the Visa Trusted Agent Protocol (`agent-browser-auth`,
+  `agent-payer-auth`) and Web Bot Auth (`web-bot-auth`) profiles of `grantex-agent-httpsig` 0.2.0.
+  `AGENTICORG_HTTPSIG_VERIFY_MODE=log` (default) verifies and records and never refuses; `enforce`
+  refuses an unsigned or invalid request with 401 and `Accept-Signature` (RFC 9421 section 5.1)
+  and answers 503 while the Redis nonce store is down. Default `log` changes no response; it adds a
+  structured log line per request and, for a verified write, an `a2a.agent_signature` ledger row.
+  Keys: TAP by keyid from pinned key-store URL templates (`AGENTICORG_HTTPSIG_TAP_KEY_STORE_URLS`);
+  Web Bot Auth by (Signature-Agent URL, keyid) from allow-listed https directory origins
+  (`AGENTICORG_HTTPSIG_SIGNATURE_AGENT_ORIGINS`), only keys with a valid directory response
+  signature; the Grantex registry directory through its platform countersignature checked against
+  the pinned Grantex JWKS. Async pinned egress, no redirects, 300 s cache, 60 s negative cache.
+  Nonces are claimed with one Redis `SET NX` for at least the profile's replay window (8 minutes
+  for TAP). Key fetches share a per-process budget (token bucket of 20, 2 per second, at most 4 in
+  flight); a fetch over budget is not made or cached and the request is `key_unknown` (refused in
+  `enforce`, logged in `log`). Docs: `docs/oacp/agent-request-signing.md`.
+- `enforce` scope: only the commerce API surfaces can refuse (`verify_agent_request_signature` on
+  `catalog.json`, `products/{product_slug}.json`, `message:send`, `extendedAgentCard`). The seller
+  and product HTML pages, `schema-org.jsonld`, `sitemap.xml` and `llms.txt` use
+  `observe_agent_request_signature`, which verifies and records but never refuses. Fixed with it:
+  `GET /api/v1/public/commerce/sellers/{merchant_id}/products/{product_slug}.json` was shadowed by
+  the product HTML route (`{product_slug}` matched `<slug>.json`) and answered HTML; it is now
+  registered first and answers the product JSON.
+- TAP body objects (G49, inbound): after a TAP signature verifies, `agenticConsumer`,
+  `agenticPaymentContainer` and `grantexConsentRecord` in a JSON body are checked with
+  `verify_tap_body_objects` and recorded (`usable_for_payment`). `POST /api/v1/a2a/message:send`
+  accepts the three optional members.
+- Scheme agent ids (G51): a TAP keyid is recorded as `tap_keyid`, never as a scheme agent id. With
+  `AGENTICORG_HTTPSIG_REGISTRY_LOOKUP_ENABLED` (default off) a verified agent of either profile is
+  looked up in the Grantex registry by the RFC 7638 thumbprint of its verifying key
+  (`GET /v1/registry/agents?key_thumbprint=`; async, cached), and the DID and scheme agent ids the
+  registry attests for that key are recorded. `AGENTICORG_A2A_SCHEME_AGENT_IDS` publishes AgenticOrg's own ids in the A2A
+  agent card as the `https://agenticorg.ai/a2a/extensions/scheme-agent-ids/v1` extension.
+  AgenticOrg serves no `/.well-known/agent-registry.json`.
+- Outbound signing (G48): with `AGENTICORG_HTTPSIG_SIGN_OUTBOUND` (default off) the Grantex Commerce
+  buyer connector signs every request with the tenant agent key under the TAP profile
+  (`agent-payer-auth` for payment intents and checkouts, `agent-browser-auth` otherwise; `@method`,
+  `@authority`, `@path`, `content-digest`; a fresh nonce per request) and, when configured, adds a
+  Web Bot Auth signature with `Signature-Agent`. The key is a JWK sealed with the tenant crypto
+  helpers in the connector configuration (`agent_signing_key_encrypted`); with signing on and no
+  usable key the call is refused, never sent unsigned.
+- TAP body objects (G49, outbound): a payment intent or checkout made with a granted Grantex consent
+  carries `agenticPaymentContainer`, optionally `agenticConsumer`, and the Grantex consent record
+  object `grantexConsentRecord`, bound to the signature's nonce. The `grantex_consent` and
+  `tap_consumer_id_token` inputs are never forwarded as tool arguments.
+- Scheme token binding (G52): `core/commerce/scheme_token_binding.py` mirrors the Grantex
+  `SchemeTokenBinding` `{scheme, token_ref, agent_id, merchant_scope, limits}` (schemes `visa`,
+  `mastercard`, `upi_autopay`, `provider_token`). A `mandate_capability` artifact carrying
+  `token_binding` is now refused with `token_binding_invalid` when the binding is malformed, its
+  `token_ref` holds a run of 13 to 19 digits, or it does not sit inside the capability (agent,
+  merchant scope, currency, cap, expiry), as Grantex already refuses when it issues one. Artifacts
+  without the member are unaffected. `ExecutionCheckout.scheme_token_binding` (default `None`)
+  carries the parsed binding to the rail's executor; nothing executes it here.
+- Dependency: `grantex-agent-httpsig` 0.2.0 is not published to PyPI. `requirements.txt` and
+  `pyproject.toml` install it as a direct git reference pinned to a full commit sha of the Grantex
+  repository (`#subdirectory=packages/agent-httpsig-py`; hatch `allow-direct-references`); the
+  production image's builder stage installs `git`; pip-audit carries a reviewed `[[skip]]` for it.
+  A regression test refuses a branch, tag or short-sha reference. The commit must exist on GitHub
+  before CI can install it; the sha moves to the Grantex `main` merge commit once Phase 5 lands.
+- Fixed: the public buyer-safe seller pages and catalog reads under `/api/v1/public/commerce/`
+  (`api/v1/commerce_public.py`, all `GET`, `route_meta(auth_required=False)`, documented as public in
+  `docs/commerce-agent-bridges-guide.md`) answered `401 Missing session cookie or Authorization
+  header` to every anonymous request because the auth middleware did not exempt them. They are now
+  exempt; the merchant's `public_publishing.enabled` switch and
+  `OACP_PUBLIC_CATALOG_PLATFORM_DISABLED` still gate them. The same class affected
+  `GET /api/v1/org/invite-info` (the accept-invite screen's preview, called before login), now
+  exempt as well. A regression test pins that every route declared public is exempt
+  (`tests/regression/test_public_route_exemptions_20261020.py`).
+
 ## Unreleased - ACP Complete uses server-verified mandates (G41, D1)
 
 - The ACP vendor extension `agenticorg_commerce` accepts `mandate_request` on complete and passes it to

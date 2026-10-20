@@ -23,6 +23,7 @@ class HttpRoute:
     path: str
     methods: frozenset[str]
     endpoint: Any
+    dependency_calls: frozenset[Any]
 
 
 def _walk(routes: Iterable[Any]) -> Iterator[Any]:
@@ -34,6 +35,12 @@ def _walk(routes: Iterable[Any]) -> Iterator[Any]:
             yield route
 
 
+def _flatten(dependencies: Iterable[Any]) -> Iterator[Any]:
+    for dependency in dependencies:
+        yield dependency
+        yield from _flatten(getattr(dependency, "dependencies", ()))
+
+
 def http_routes(app: Any) -> list[HttpRoute]:
     """Every HTTP API route of ``app`` with its full path, methods and endpoint."""
     found: list[HttpRoute] = []
@@ -43,5 +50,9 @@ def http_routes(app: Any) -> list[HttpRoute]:
             continue
         endpoint = getattr(route, "endpoint", None) or original.endpoint
         methods = getattr(route, "methods", None) or original.methods
-        found.append(HttpRoute(path=route.path, methods=frozenset(methods), endpoint=endpoint))
+        dependant = getattr(route, "dependant", None) or original.dependant
+        calls = frozenset(dependency.call for dependency in _flatten(dependant.dependencies))
+        found.append(
+            HttpRoute(path=route.path, methods=frozenset(methods), endpoint=endpoint, dependency_calls=calls)
+        )
     return found

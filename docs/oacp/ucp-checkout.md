@@ -291,7 +291,9 @@ quantity stays an integer step count.
 - Payment terms (2026-08-25): `payment.terms` with schedule amounts computed from the total
   (`share_bps` or a fixed `amount`, `due_in_days`), `selected_term_id` on update.
 - Token binding passed to the executor: `{type: "dev.ucp.shopping.checkout", id}` (2026-08-25)
-  or `{checkout_id}` (2026-04-08).
+  or `{checkout_id}` (2026-04-08). Separately, `ExecutionCheckout.scheme_token_binding` carries the
+  scheme token binding of the buyer's payment capability when a verified `mandate_capability`
+  artifact holds one (see [purchase and mandate handoff](purchase-mandate-handoff.md#scheme-token-binding)).
 - AP2 (`dev.ucp.shopping.ap2_mandate` in 2026-04-08, `dev.ucp.common.payment.ap2_mandate` in
   2026-08-25) is advertised only when a merchant signing key is available; every checkout
   response then carries `ap2.merchant_authorization`, a detached ES256 JWS over the RFC 8785 JSON
