@@ -1,5 +1,16 @@
 # Changelog
 
+## Unreleased - Multi-source precedence per fact family (G61)
+
+- `provider_policy.source_precedence` sets, per fact family (`price`, `inventory`, `policy`,
+  `catalog`, `location`), which source wins when Shopify and the config-only adapters disagree;
+  `provider_policy.source_facts` holds the values a config-only adapter (`woocommerce`, `erp`,
+  `pim`, `oms`, `wms`, `custom_api`) contributes. Those adapters are never called. The UCP catalog
+  routes and checkout pricing resolve price, stock and title through the same table
+  (`core/commerce/source_precedence.py`); without a table or saved facts Shopify's evidence is
+  used exactly as before. The merchant-config save refuses an invalid table or fact set.
+  Docs: `docs/oacp/merchant-commerce-configuration.md#source-precedence`.
+
 ## Unreleased - Plural executor, UPI AutoPay and RBI AFA, refunds and tracking (G55, G56, G58)
 
 - Plural executor (`core/commerce/executors/plural.py`, G55): creates a `pre_auth` Plural order,

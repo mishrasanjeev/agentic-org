@@ -31,6 +31,7 @@ from fastapi.responses import JSONResponse, Response
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from api.route_metadata import route_meta
+from core.commerce.source_precedence import products_with_precedence
 from core.commerce.ucp.authority import normalize_host
 from core.commerce.ucp.catalog import (
     MAX_LOOKUP_IDS,
@@ -298,6 +299,12 @@ async def ucp_leaf_profile(version: str, request: Request) -> Response:
     return _profile_response(request, build_profile(serve, version=version, versions=versions))
 
 
+def _provider_policy(serve: Any) -> Mapping[str, Any] | None:
+    """The merchant's ``provider_policy`` (source precedence and saved config-only facts)."""
+    policy = (getattr(serve, "config", None) or {}).get("provider_policy")
+    return policy if isinstance(policy, Mapping) else None
+
+
 @ucp_router.post("/catalog/search")
 @route_meta(
     auth_required=False,
@@ -341,7 +348,7 @@ async def ucp_catalog_search(request: Request) -> JSONResponse:
         if price is not None and (price.min is not None or price.max is not None) and currency is None:
             messages.append(price_filter_ignored_message())
         results = search_catalog(
-            source.products,
+            products_with_precedence(source.products, _provider_policy(serve)),
             query=body.query,
             categories=filters.categories if filters else None,
             price_min=price.min if price else None,
@@ -389,7 +396,7 @@ async def ucp_catalog_lookup(request: Request) -> JSONResponse:
         results: list[dict[str, Any]] = []
         messages.append(catalog_unavailable_message())
     else:
-        results, missing = lookup_catalog(source.products, body.ids)
+        results, missing = lookup_catalog(products_with_precedence(source.products, _provider_policy(serve)), body.ids)
         messages.extend(not_found_message(index) for index in missing)
     policies = _catalog_policies(serve, records, now_iso) if version == UCP_2026_08_25 and results else []
     return JSONResponse(

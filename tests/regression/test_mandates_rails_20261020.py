@@ -22,6 +22,7 @@ NEW_MODULES = (
     "core/commerce/order_refunds.py",
     "core/commerce/executors/plural.py",
     "core/commerce/fulfillment_tracking.py",
+    "core/commerce/source_precedence.py",
 )
 
 
