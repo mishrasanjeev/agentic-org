@@ -90,6 +90,11 @@ UCP profile flags: `AGENTICORG_UCP_PROFILE_ENABLED` (default off; `/.well-known/
 key, and no `public_discovery_state` artifact may enable discovery), `AGENTICORG_UCP_VERSIONS`
 (default `2026-04-08`), `AGENTICORG_UCP_KEY_ROTATION_GRACE_DAYS` (default 7, minimum 7); see
 `docs/oacp/ucp-profile.md`.
+ACP flags: `AGENTICORG_ACP_FEED_ENABLED` (default off; the ACP product feed export answers 404),
+`AGENTICORG_ACP_CHECKOUT_ENABLED` (default off; the `/acp` checkout session routes answer 404; they
+run on the UCP session table, arbiter and executor) and `AGENTICORG_ACP_SIGNATURE_MODE` (`log` by
+default; `enforce` refuses requests no registered platform verifier accepts); see
+`docs/oacp/acp-feed-and-sessions.md`.
 
 **No human legs in commerce decisions.** The commerce arbiter (`core/commerce/arbiter.py`) is a
 deterministic policy function: it seals `allow` or `refuse`, never "pending", reads no clock

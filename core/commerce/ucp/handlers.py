@@ -84,6 +84,14 @@ EXECUTION_EVENT = "commerce.ucp.checkout.execution"
 ORDER_CREATED_EVENT = "commerce.ucp.order.created"
 RISK_SIGNALS_EVENT = "commerce.ucp.payment.risk_signals"
 ORDER_UPDATE_EVENT = "commerce.ucp.order.update"
+# The ledger events of the checkout operations, keyed as in EVENTS plus the three follow-on events;
+# a binding for another protocol (ACP) records its own names (UcpRuntime.events).
+CHECKOUT_EVENTS: dict[str, str] = {
+    **{op: name for op, name in EVENTS.items() if op.endswith("_checkout")},
+    "execution": EXECUTION_EVENT,
+    "order_created": ORDER_CREATED_EVENT,
+    "risk_signals": RISK_SIGNALS_EVENT,
+}
 
 
 @dataclass
@@ -94,6 +102,11 @@ class UcpRequest:
     raw_body: bytes = b""
     idempotency_key: str | None = None
     request_id: str | None = None
+    # Set by a binding from server-side context, never from the body: a pre-assigned checkout id (the ACP
+    # binding asks Grantex for the session's delegated-payment allowance before the row exists) and the
+    # platform that owns the session (ACP: the API key; its sessions answer to that platform only).
+    session_id: str | None = None
+    platform: str | None = None
 
     def json(self) -> Any:
         if not self.raw_body:
@@ -114,6 +127,11 @@ class UcpResponse:
     seller_agent_id: str | None = None
     resource_id: str | None = None
     headers: dict[str, str] = field(default_factory=dict)
+
+
+CheckoutRenderer = Callable[..., Awaitable[dict[str, Any]]]
+BodyTranslator = Callable[[Mapping[str, Any] | None, dict[str, Any]], tuple[dict[str, Any], dict[str, Any]]]
+CompletionCheck = Callable[[Mapping[str, Any], int, str | None, datetime], list[dict[str, Any]]]
 
 
 @dataclass
@@ -139,6 +157,17 @@ class UcpRuntime:
     # The capability names the merchant's profile advertises for a release (production: the profile registry).
     published: Callable[[MerchantUcp, str], set[str]] | None = None
     authority_provider: Callable[[MerchantUcp, Mapping[str, Any]], Awaitable[Mapping[str, Any] | None]] | None = None
+    # The protocol whose sessions this runtime serves. Non-UCP sessions are tagged state["protocol"]; a
+    # session of another protocol is not found. The ACP binding (core.commerce.acp) sets the four below.
+    protocol: str = "ucp"
+    events: Mapping[str, str] = field(default_factory=lambda: dict(CHECKOUT_EVENTS))
+    # Renders a checkout session in the protocol's shape (default: the UCP renderers).
+    checkout_renderer: CheckoutRenderer | None = None
+    # (previous state or None, request body) -> (full-replacement UCP body, state members to keep); runs
+    # under the session lock on update, so a partial update merges with the state it replaces.
+    body_translator: BodyTranslator | None = None
+    # Extra completion checks (state, total, currency, now) -> blocking messages, run before any decision.
+    completion_check: CompletionCheck | None = None
 
 
 class _AbortError(Exception):
@@ -210,7 +239,6 @@ def _object_body(req: UcpRequest) -> dict[str, Any]:
 
 async def run(operation: str, runtime: UcpRuntime, req: UcpRequest, resource_id: str | None = None) -> UcpResponse:
     """Run one operation with merchant resolution, negotiation, idempotency and error mapping."""
-    handler = OPERATIONS[operation]
     merchant: MerchantUcp | None = None
     claimed = False
     try:
@@ -244,11 +272,9 @@ async def run(operation: str, runtime: UcpRuntime, req: UcpRequest, resource_id:
                 )
                 raise _AbortError(_protocol_error(409, outcome.conflict, content, negotiated.version))
             claimed = True
-        response = await handler(runtime, req, merchant, negotiated, resource_id)
+        response = await run_operation(operation, runtime, req, merchant, negotiated, resource_id)
     except _AbortError as abort:
         response = abort.response
-    except (RequestError, AuthorityRequestError, PaymentRequestError) as exc:
-        response = _protocol_error(400, "invalid_request", str(exc))
     response = _with_merchant(response, merchant, resource_id)
     if claimed and merchant is not None and req.idempotency_key:
         await idempotency.store(
@@ -259,6 +285,27 @@ async def run(operation: str, runtime: UcpRuntime, req: UcpRequest, resource_id:
             body=response.body,
         )
     return response
+
+
+async def run_operation(
+    operation: str,
+    runtime: UcpRuntime,
+    req: UcpRequest,
+    merchant: MerchantUcp,
+    negotiated: Negotiated,
+    resource_id: str | None = None,
+) -> UcpResponse:
+    """One operation for an already resolved merchant and negotiated capability set (no idempotency).
+
+    A binding that resolves, negotiates and claims idempotency its own way (ACP) calls this; protocol
+    errors come back as UCP error responses, exactly as from ``run``.
+    """
+    try:
+        return await OPERATIONS[operation](runtime, req, merchant, negotiated, resource_id)
+    except _AbortError as abort:
+        return abort.response
+    except (RequestError, AuthorityRequestError, PaymentRequestError) as exc:
+        return _protocol_error(400, "invalid_request", str(exc))
 
 
 def _with_merchant(response: UcpResponse, merchant: MerchantUcp | None, resource_id: str | None) -> UcpResponse:
@@ -327,6 +374,10 @@ async def _render_checkout(
     extra_messages: Sequence[Mapping[str, Any]] = (),
     vendor: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
+    if runtime.checkout_renderer is not None:
+        return await runtime.checkout_renderer(
+            row=row, merchant=merchant, negotiated=negotiated, now=now, extra_messages=extra_messages, vendor=vendor
+        )
     state = dict(row.state or {})
     permalink = state.get("order_permalink_url")
     handlers = runtime.registry.payment_handlers(merchant, negotiated.version)
@@ -359,7 +410,9 @@ async def _render_checkout(
     return body
 
 
-async def _load_session(session: Any, req: UcpRequest, merchant: MerchantUcp, session_id: str, *, lock: bool) -> Any:
+async def _load_session(
+    session: Any, req: UcpRequest, merchant: MerchantUcp, session_id: str, *, lock: bool, protocol: str = "ucp"
+) -> Any:
     from core.models.commerce_ucp import CommerceCheckoutSessionRow as Row
 
     query = select(Row).where(
@@ -368,7 +421,11 @@ async def _load_session(session: Any, req: UcpRequest, merchant: MerchantUcp, se
     if lock:
         query = query.with_for_update()
     row = (await session.execute(query)).scalar_one_or_none()
-    if row is None:
+    if (
+        row is None
+        or (row.state or {}).get("protocol", "ucp") != protocol
+        or (req.platform is not None and row.platform_profile_url != req.platform)
+    ):
         raise _AbortError(_protocol_error(404, "not_found", "Checkout session not found."))
     return row
 
@@ -382,6 +439,13 @@ def _frozen_error(row: Any, now: datetime, version: str, operation: str) -> UcpR
     return None
 
 
+def _tag(state: dict[str, Any], runtime: UcpRuntime, kept: Mapping[str, Any]) -> None:
+    """Tag a non-UCP session with its protocol and keep the binding's own state members."""
+    if runtime.protocol != "ucp":
+        state["protocol"] = runtime.protocol
+    state.update(kept)
+
+
 async def create_checkout(
     runtime: UcpRuntime, req: UcpRequest, merchant: MerchantUcp, negotiated: Negotiated, _id: str | None
 ) -> UcpResponse:
@@ -389,6 +453,9 @@ async def create_checkout(
     from core.models.commerce_ucp import CommerceCartRow, CommerceCheckoutSessionRow
 
     body = _object_body(req)
+    kept: dict[str, Any] = {}
+    if runtime.body_translator is not None:
+        body, kept = runtime.body_translator(None, body)
     now = runtime.clock()
     vendor = vendor_member(body)
     cart_id = body.get("cart_id") if negotiated.has(v.CART) else None
@@ -423,7 +490,7 @@ async def create_checkout(
                     session,
                     req,
                     merchant,
-                    EVENTS["create_checkout"],
+                    runtime.events["create_checkout"],
                     "success",
                     existing.id,
                     {"cart_id": cart_id, "converted": "existing"},
@@ -447,13 +514,14 @@ async def create_checkout(
             deps=_deps(runtime, merchant, reads),
             now=now,
         )
-        session_id = f"chk_{uuid.uuid4().hex}"
+        session_id = req.session_id or f"chk_{uuid.uuid4().hex}"
         state = evaluation.state
         state["buyer_authority"] = vendor.get("buyer_authority")
         state["platform"] = {
             "profile_url": negotiated.platform.url,
             "order_webhook_url": negotiated.platform.order_webhook_url(negotiated.version),
         }
+        _tag(state, runtime, kept)
         row = CommerceCheckoutSessionRow(
             id=session_id,
             tenant_id=_tenant(req),
@@ -488,7 +556,7 @@ async def create_checkout(
             session,
             req,
             merchant,
-            EVENTS["create_checkout"],
+            runtime.events["create_checkout"],
             "success",
             session_id,
             {"status": row.status, "cart_id": cart_id, "ucp_version": negotiated.version},
@@ -517,7 +585,7 @@ async def get_checkout(
 
     now = runtime.clock()
     async with get_tenant_session(_tenant(req)) as session:
-        row = await _load_session(session, req, merchant, str(session_id), lock=False)
+        row = await _load_session(session, req, merchant, str(session_id), lock=False, protocol=runtime.protocol)
         rendered = await _render_checkout(runtime, row, merchant, negotiated, now)
     return UcpResponse(status=200, body=rendered)
 
@@ -530,14 +598,17 @@ async def update_checkout(
     body = _object_body(req)
     if body.get("id") not in (None, session_id):
         raise RequestError("id in the body does not match the path")
-    vendor = vendor_member(body)
     now = runtime.clock()
     reads = await _reads(runtime, merchant, negotiated)
     async with get_tenant_session(_tenant(req)) as session:
-        row = await _load_session(session, req, merchant, str(session_id), lock=True)
+        row = await _load_session(session, req, merchant, str(session_id), lock=True, protocol=runtime.protocol)
         frozen = _frozen_error(row, now, negotiated.version, "updated")
         if frozen is not None:
             return frozen
+        kept: dict[str, Any] = {}
+        if runtime.body_translator is not None:
+            body, kept = runtime.body_translator(row.state or {}, body)
+        vendor = vendor_member(body)
         evaluation = await evaluate(
             resource="checkout",
             merchant=merchant,
@@ -550,6 +621,7 @@ async def update_checkout(
         state = evaluation.state
         state["buyer_authority"] = vendor.get("buyer_authority") or (row.state or {}).get("buyer_authority")
         state["platform"] = (row.state or {}).get("platform")
+        _tag(state, runtime, kept)
         row.state = state
         row.status = evaluation.status
         row.currency = evaluation.currency
@@ -559,7 +631,7 @@ async def update_checkout(
             session,
             req,
             merchant,
-            EVENTS["update_checkout"],
+            runtime.events["update_checkout"],
             "success",
             row.id,
             {"status": row.status, "revision": row.revision},
@@ -575,7 +647,7 @@ async def cancel_checkout(
 
     now = runtime.clock()
     async with get_tenant_session(_tenant(req)) as session:
-        row = await _load_session(session, req, merchant, str(session_id), lock=True)
+        row = await _load_session(session, req, merchant, str(session_id), lock=True, protocol=runtime.protocol)
         if row.status in TERMINAL or row.status == "complete_in_progress":
             return _protocol_error(
                 409, "invalid_state", f"The checkout is {row.status}; it cannot be canceled.", negotiated.version
@@ -584,7 +656,9 @@ async def cancel_checkout(
         row.canceled_at = now
         row.revision = row.revision + 1
         row.updated_at = now
-        await _record(session, req, merchant, EVENTS["cancel_checkout"], "success", row.id, {"status": "canceled"})
+        await _record(
+            session, req, merchant, runtime.events["cancel_checkout"], "success", row.id, {"status": "canceled"}
+        )
         rendered = await _render_checkout(runtime, row, merchant, negotiated, now)
     return UcpResponse(status=200, body=rendered, recorded=True, resource_id=row.id)
 
@@ -600,9 +674,9 @@ async def complete_checkout(
     instruments, _term = parse_payment(body.get("payment"))
     now = runtime.clock()
     version = negotiated.version
-    event = EVENTS["complete_checkout"]
+    event = runtime.events["complete_checkout"]
     async with get_tenant_session(_tenant(req)) as session:
-        row = await _load_session(session, req, merchant, str(session_id), lock=True)
+        row = await _load_session(session, req, merchant, str(session_id), lock=True, protocol=runtime.protocol)
         frozen = _frozen_error(row, now, version, "completed")
         if frozen is not None:
             return frozen
@@ -631,6 +705,10 @@ async def complete_checkout(
         )
         if payment_messages:
             return await _blocked(payment_messages)
+        if runtime.completion_check is not None:
+            extra_blockers = runtime.completion_check(state, total, row.currency, now)
+            if extra_blockers:
+                return await _blocked(extra_blockers)
         authority = dict(vendor.get("buyer_authority") or state.get("buyer_authority") or {})
         if not authority and runtime.authority_provider is not None:
             authority = dict(await runtime.authority_provider(merchant, state) or {})
@@ -731,7 +809,7 @@ async def complete_checkout(
                 session,
                 req,
                 merchant,
-                RISK_SIGNALS_EVENT,
+                runtime.events["risk_signals"],
                 "success",
                 row.id,
                 {
@@ -804,7 +882,7 @@ async def _apply_execution(
     extra: list[dict[str, Any]] = []
     order_event: OrderEvent | None = None
     async with get_tenant_session(_tenant(req)) as session:
-        row = await _load_session(session, req, merchant, session_id, lock=True)
+        row = await _load_session(session, req, merchant, session_id, lock=True, protocol=runtime.protocol)
         state = dict(row.state or {})
         if result.status == "completed":
             order_id = new_order_id()
@@ -860,7 +938,7 @@ async def _apply_execution(
                 session,
                 req,
                 merchant,
-                ORDER_CREATED_EVENT,
+                runtime.events["order_created"],
                 "success",
                 order_id,
                 {"checkout_id": row.id, "decision_id": decision_id},
@@ -916,7 +994,7 @@ async def _apply_execution(
             session,
             req,
             merchant,
-            EXECUTION_EVENT,
+            runtime.events["execution"],
             "success"
             if result.status == "completed"
             else ("blocked" if result.status == "action_required" else "refused"),
@@ -1230,4 +1308,4 @@ OPERATIONS: dict[str, Operation] = {
     "get_order": get_order,
 }
 
-__all__ = ["OPERATIONS", "UcpRequest", "UcpResponse", "UcpRuntime", "parse_buyer_authority", "run"]
+__all__ = ["OPERATIONS", "UcpRequest", "UcpResponse", "UcpRuntime", "parse_buyer_authority", "run", "run_operation"]

@@ -19,10 +19,11 @@ same revision: they identify the event), ``UCP-Agent: profile="<business profile
 @path content-digest content-type ucp-agent``, signed with the merchant key
 through the injected signer; with no signer or no merchant key nothing is
 sent (webhooks MUST be signed) and the row retries until it dead-letters.
-``acp_hmac`` deliveries use the ``core.cases.push`` scheme (HMAC-SHA256 over
-``"<event id>.<timestamp>." + body`` with every key of the subscription); the
-payload renderer for that scheme is pluggable (the ACP order event mapper
-replaces the default).
+``acp_hmac`` deliveries are ACP order events (``core.commerce.acp.orders``:
+``{type: order_create|order_update, data: <full ACP Order>}``) signed with
+``Merchant-Signature: t=<unix>,v1=hex(HMAC-SHA256(secret, t + "." + body))`` under
+the subscription's active shared key, plus ``Request-Id`` (the stable webhook id)
+and ``Timestamp``; payload renderers stay pluggable (``register_payload_renderer``).
 
 The dispatcher follows ``core.cases.push``: lease due rows ``FOR UPDATE SKIP
 LOCKED``, post with no redirects through the DNS-pinned transport, 2xx
@@ -47,7 +48,8 @@ import httpx
 import structlog
 from sqlalchemy import select
 
-from core.cases.push import PushSettings, SigningKey, decrypt_keys, retry_delay, sign, validate_endpoint_url
+from core.cases.push import PushSettings, SigningKey, decrypt_keys, retry_delay, validate_endpoint_url
+from core.commerce.acp.orders import SIGNATURE_HEADER, acp_order_event, merchant_signature
 from core.commerce.ledger import commerce_payload_hash
 from core.commerce.ucp import releases as v
 from core.commerce.ucp.httpsig import MerchantKeyStoreSigner, MerchantSigner, SigningKeyUnavailableError, sign_request
@@ -92,11 +94,7 @@ def ucp_order_body(event: OrderEvent) -> dict[str, Any]:
     )
 
 
-def _default_acp_payload(event: OrderEvent) -> dict[str, Any]:
-    return {"type": event.event_type, "order": ucp_order_body(event)}
-
-
-_renderers: dict[str, PayloadRenderer] = {"ucp": ucp_order_body, "acp_hmac": _default_acp_payload}
+_renderers: dict[str, PayloadRenderer] = {"ucp": ucp_order_body, "acp_hmac": acp_order_event}
 
 
 def register_payload_renderer(scheme: str, renderer: PayloadRenderer) -> None:
@@ -450,12 +448,15 @@ class OrderWebhookDispatcher:
         body = json.dumps(item["payload"], separators=(",", ":"), ensure_ascii=False).encode("utf-8")
         timestamp = int(self.clock().timestamp())
         if item["scheme"] == "acp_hmac":
-            # The HMAC scheme signs the attempt time (receivers enforce a tolerance window).
+            # ACP Merchant-Signature signs the attempt time (receivers allow 300 s) with the active key.
             if not item["keys"]:
                 return "signing_key_unavailable", None
-            headers = sign(
-                body, event_id=item["webhook_id"], event_type=item["event_type"], timestamp=timestamp, keys=item["keys"]
-            )
+            headers = {
+                "Content-Type": "application/json",
+                SIGNATURE_HEADER: merchant_signature(item["keys"][0].secret, body, timestamp),
+                "Request-Id": item["webhook_id"],
+                "Timestamp": datetime.fromtimestamp(timestamp, tz=UTC).isoformat().replace("+00:00", "Z"),
+            }
         else:
             signer = self.signer()
             if signer is None:

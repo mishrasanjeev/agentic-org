@@ -455,6 +455,22 @@ class Settings(BaseSettings):
     # verifiers keep accepting signatures made before the rotation (UCP
     # signatures, Key Rotation: at least 7). Env: AGENTICORG_UCP_KEY_ROTATION_GRACE_DAYS.
     ucp_key_rotation_grace_days: int = 7
+    # ACP product feed (core/commerce/acp/feed.py): the tenant-admin feed export
+    # under /api/v1/commerce/runtime/acp/feed answers 404 while off. The feed is
+    # generated only from verified, fresh OACP artifacts.
+    # Env: AGENTICORG_ACP_FEED_ENABLED.
+    acp_feed_enabled: bool = False
+    # ACP checkout sessions (api/v1/commerce_acp.py) at
+    # https://<merchant serving host>/acp/checkout_sessions, over the UCP session
+    # table. Off by default: every /acp route answers 404 while off. Independent
+    # of AGENTICORG_UCP_CHECKOUT_ENABLED so each protocol is enabled on its own.
+    # Env: AGENTICORG_ACP_CHECKOUT_ENABLED.
+    acp_checkout_enabled: bool = False
+    # ACP request signatures (Signature + Timestamp headers): "log" records what
+    # arrived and never refuses; "enforce" refuses a request that a verifier
+    # registered for the calling platform does not accept (none ships: ACP
+    # publishes no signing algorithm). Env: AGENTICORG_ACP_SIGNATURE_MODE.
+    acp_signature_mode: str = "log"
     # Synthetic checks (observability/synthetic.py): the scheduled sweep runs
     # each tenant's due probes (model, knowledge, guardrail, audit chain) and
     # stores a result per run. Off by default; a check can be run by hand

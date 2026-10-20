@@ -37,6 +37,7 @@ from api.v1 import (
     channels,
     chat,
     client_portal,
+    commerce_acp,
     commerce_ledger,
     commerce_public,
     commerce_runtime,
@@ -335,6 +336,9 @@ app.include_router(commerce_ucp.runtime_router, prefix="/api/v1", tags=["Commerc
 # UCP REST binding at https://<merchant serving host>/ucp (AGENTICORG_UCP_CHECKOUT_ENABLED).
 app.include_router(commerce_ucp.router)
 app.include_router(commerce_ucp_publishing.router, prefix="/api/v1", tags=["Commerce UCP"])
+app.include_router(commerce_acp.runtime_router, prefix="/api/v1", tags=["Commerce Runtime"])
+# ACP checkout sessions at https://<merchant serving host>/acp (AGENTICORG_ACP_CHECKOUT_ENABLED).
+app.include_router(commerce_acp.router)
 # UCP business surfaces live at the merchant serving host's root (/.well-known/ucp, /ucp/...).
 app.include_router(ucp_discovery.well_known_router)
 app.include_router(ucp_discovery.ucp_router)

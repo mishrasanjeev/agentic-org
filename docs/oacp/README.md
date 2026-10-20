@@ -46,6 +46,7 @@ authority.
 - [Artifact cache guide](artifact-cache-guide.md)
 - [Protocol adapter consumption guide](protocol-adapter-consumption-guide.md)
 - [UCP business profile, catalog and locations](ucp-profile.md)
+- [ACP product feed and checkout sessions](acp-feed-and-sessions.md)
 - [Plural/Pine P3P capability verifier](plural-pine-p3p-capability-verifier.md)
 - [Purchase/mandate handoff](purchase-mandate-handoff.md)
 - [Offline POS bridge](offline-pos-bridge.md)

@@ -1,5 +1,44 @@
 # Changelog
 
+## Unreleased - ACP product feed, checkout sessions and order events (G33, G34, G35, G37, G38, G40)
+
+- ACP product feed (`core/commerce/acp/feed.py`), behind `AGENTICORG_ACP_FEED_ENABLED` (default off):
+  `GET /api/v1/commerce/runtime/acp/feed?merchant_id=&format=json|jsonl|metadata|csv` for tenant
+  administrators. ACP Feed `Product` JSON per the 2026-04-17 feed schema (validated in tests against
+  the vendored schema file) and the merchant-feed CSV with `availability`, `seller_*`, return and
+  `enable_search` / `enable_checkout` columns. Built only from verified, fresh OACP catalog, price
+  and inventory artifacts (409 otherwise); return terms only from the verified `policy` artifact.
+- ACP checkout sessions at `https://<merchant serving host>/acp/checkout_sessions`
+  (`api/v1/commerce_acp.py`), behind `AGENTICORG_ACP_CHECKOUT_ENABLED` (default off: every `/acp`
+  route answers 404) and the merchant's `provider_policy.acp.checkout_enabled`. Create (201),
+  partial update, get, complete and cancel (405 once not cancelable) run on the UCP session table
+  and operations: one state machine, the same arbiter `session_complete` decision and executor.
+  Sessions are tagged `protocol: acp` and owned by the creating API key (scopes `acp:read` /
+  `acp:write`). ACP 2026-04-17 `Item` has no quantity: a repeated id is one more unit. Docs:
+  `docs/oacp/acp-feed-and-sessions.md`.
+- ACP headers: `API-Version` pinned to `2026-04-17` (`missing_api_version` /
+  `unsupported_api_version` with `supported_versions`); `Idempotency-Key` required on POST, compared as
+  canonical JSON (replay with `Idempotent-Replayed: true`, 422 `idempotency_conflict`, 409
+  `idempotency_in_flight` with `Retry-After`); `Request-Id` echoed; `Signature` / `Timestamp` checked
+  by a verifier registered per agent platform, `AGENTICORG_ACP_SIGNATURE_MODE=log` (default, never
+  refuses) or `enforce`. ACP publishes no signing algorithm, so no verifier ships.
+- ACP error mapping (`core/commerce/acp/errors.py`): every internal message code maps to the closed
+  `MessageError` enum, UCP protocol errors to `Error` objects; blocker dicts never reach ACP responses.
+- Capability negotiation: sessions declare the payment handlers served over ACP and the requested
+  extensions that are served (the vendor extension `ai.agenticorg.commerce` for buyer authority,
+  arbiter decisions and the Commerce Passport); the `discount` extension and interventions are not
+  served and are not declared.
+- Delegate-payment allowance per ACP session from Grantex
+  (`POST /v1/commerce/oacp/acp/delegate-payment-allowance`; service token, async pinned transport,
+  no retry, no card data), shown in the handler config in the `DelegatePaymentRequest` shape and
+  sealed on the ledger; Grantex unreachable is an immediate business message; completion needs an
+  issued allowance covering the total.
+- `acp_hmac` order webhook subscriptions now deliver ACP `order_create` / `order_update` events (the
+  full ACP `Order`) signed with `Merchant-Signature` (`t=..,v1=hex(HMAC-SHA256(secret, t.body))`,
+  active key), verified against the shared vectors (`tests/fixtures/acp/merchant-signature-v1.json`).
+  They replace the case-push HMAC headers and the placeholder payload of the unreleased UCP work.
+  The order-webhook sweep also runs while only `AGENTICORG_ACP_CHECKOUT_ENABLED` is on.
+
 ## Unreleased - UCP handler schema hosting and schema fixtures
 
 - The Plural tokenised-instrument handler's config schema is served at the URL UCP profiles

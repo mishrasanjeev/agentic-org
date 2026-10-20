@@ -181,11 +181,12 @@ verified). Risk signals sent with Complete are recorded as `commerce.ucp.payment
   `POST /api/v1/commerce/runtime/ucp/order-webhook-deliveries/{id}/replay`, and
   `POST /api/v1/commerce/runtime/ucp/orders/{id}/events` (a fulfillment event or an adjustment;
   sends the new snapshot).
-- A subscription with `scheme: acp_hmac` is signed with the HMAC scheme of governed case push
-  (`AgenticOrg-Event-Id`, `-Event-Type`, `-Timestamp`, `-Signature`); its key is shown once and
-  stored encrypted with the tenant key. Its payload renderer is replaceable
-  (`register_payload_renderer`), and `register_order_event_listener` receives every order event
-  in the order's transaction, for the ACP order event mapping.
+- A subscription with `scheme: acp_hmac` receives ACP order events (`order_create` /
+  `order_update` with the full ACP `Order`) signed with ACP `Merchant-Signature` under its active
+  shared key; the key is shown once and stored encrypted with the tenant key. See
+  [ACP product feed and checkout sessions](acp-feed-and-sessions.md#order-events-g37). Payload
+  renderers stay replaceable (`register_payload_renderer`), and `register_order_event_listener`
+  receives every order event in the order's transaction.
 
 UCP has no `order_create`/`order_update` event types: those are ACP's names. The internal
 `order.created`/`order.updated` labels only choose the ACP mapping.
