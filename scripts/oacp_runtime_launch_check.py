@@ -3,12 +3,19 @@ from __future__ import annotations
 import asyncio
 import json
 import os
+import secrets
 import sys
+import zlib
+from collections.abc import Mapping
+from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
 import httpx
+from cryptography.hazmat.primitives import hashes
+from cryptography.hazmat.primitives.asymmetric import ec
+from cryptography.hazmat.primitives.asymmetric.utils import decode_dss_signature
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(REPO_ROOT) not in sys.path:
@@ -32,6 +39,20 @@ from core.commerce.c6z_runtime_vertical import (  # noqa: E402
     send_grantex_authority_request,
     verify_plural_pine_mandate_capability,
 )  # noqa: E402
+from core.commerce.oacp_artifacts import OacpArtifactScope  # noqa: E402
+from core.commerce.oacp_grantex_trust import (  # noqa: E402
+    OacpGrantexArtifactVerifier,
+    OacpGrantexTrustConfig,
+    split_grantex_artifact,
+)
+from core.commerce.oacp_jws import (  # noqa: E402
+    OACP_JWS_ALG,
+    OACP_JWS_TYP,
+    STATUS_LIST_JWT_TYP,
+    b64url_encode,
+    canonicalize_bytes,
+    oacp_payload_hash,
+)
 from core.commerce.oacp_public_publishing import (  # noqa: E402
     build_public_catalog_html,
     build_public_catalog_snapshot,
@@ -52,6 +73,19 @@ BUYER_AGENT_ID = os.getenv("OACP_LAUNCH_BUYER_AGENT_ID", "buyer_agent_oacp_launc
 EXTERNAL_CHECKS_ENABLED = os.getenv("OACP_LAUNCH_EXTERNAL_CHECKS", "").strip().lower() == "true"
 WRITE_EVIDENCE = os.getenv("OACP_LAUNCH_WRITE_EVIDENCE", "").strip().lower() == "true"
 EVIDENCE_DIR = Path(os.getenv("OACP_LAUNCH_EVIDENCE_DIR", str(REPO_ROOT / "docs" / "reports")))
+
+# The local artifacts are signed with a throwaway ES256 key generated for this
+# run and checked through the verifier the cache intake uses
+# (OacpGrantexArtifactVerifier: detached JWS, JWKS key, scope, TTL, Token
+# Status List). The issuer, JWKS and status list are served in process from a
+# synthetic .example origin, not by a Grantex issuer, so a passing local run
+# proves the verifier path, not Grantex issuance.
+LOCAL_ISSUER = "https://launch-check.issuer.example"
+LOCAL_JWKS_URI = f"{LOCAL_ISSUER}/.well-known/jwks.json"
+LOCAL_STATUS_LIST_URI = f"{LOCAL_ISSUER}/status/oacp/launch-check"
+LOCAL_POLICY_VERSION = "oacp-policy-launch-check"
+LOCAL_VERIFICATION_MODE = "local_throwaway_es256_key"
+LOCAL_STATUS_LIST_SOURCE = "local_in_process_status_list_all_valid"
 
 
 def _iso_now() -> str:
@@ -86,7 +120,129 @@ def _sample_product(now_iso: str) -> dict[str, Any]:
     }
 
 
-def _local_artifacts(payload: dict[str, Any], now_iso: str) -> list[dict[str, Any]]:
+@dataclass
+class LaunchCheckSigner:
+    """A throwaway P-256 key for one launch-check run; never written anywhere."""
+
+    kid: str = field(default_factory=lambda: f"oacp-launchcheck-{secrets.token_hex(8)}")
+    private_key: ec.EllipticCurvePrivateKey = field(default_factory=lambda: ec.generate_private_key(ec.SECP256R1()))
+
+    def public_jwk(self) -> dict[str, Any]:
+        numbers = self.private_key.public_key().public_numbers()
+        return {
+            "kty": "EC",
+            "crv": "P-256",
+            "x": b64url_encode(numbers.x.to_bytes(32, "big")),
+            "y": b64url_encode(numbers.y.to_bytes(32, "big")),
+            "kid": self.kid,
+            "alg": OACP_JWS_ALG,
+            "use": "sig",
+        }
+
+    def sign(self, data: bytes) -> bytes:
+        # RFC 7518 section 3.4: the ES256 signature is the 64-byte r || s.
+        r, s = decode_dss_signature(self.private_key.sign(data, ec.ECDSA(hashes.SHA256())))
+        return r.to_bytes(32, "big") + s.to_bytes(32, "big")
+
+    def sign_envelope(self, envelope: Mapping[str, Any]) -> dict[str, Any]:
+        """Detached compact JWS (RFC 7515 Appendix F) over the RFC 8785 envelope."""
+        unsigned = {key: value for key, value in envelope.items() if key != "signature"}
+        header = {"alg": OACP_JWS_ALG, "kid": self.kid, "typ": OACP_JWS_TYP}
+        header_b64 = b64url_encode(json.dumps(header, separators=(",", ":")).encode("utf-8"))
+        signing_input = f"{header_b64}.{b64url_encode(canonicalize_bytes(unsigned))}".encode("ascii")
+        return {**unsigned, "signature": f"{header_b64}..{b64url_encode(self.sign(signing_input))}"}
+
+    def status_list_token(self, *, uri: str, size: int, issued_epoch: int, ttl_seconds: int = 600) -> str:
+        """A Token Status List token (draft-ietf-oauth-status-list section 5.1), every entry VALID."""
+        raw = bytes((size + 3) // 4)  # 2-bit entries, all 0 (VALID)
+        claims = {
+            "sub": uri,
+            "iss": LOCAL_ISSUER,
+            "iat": issued_epoch,
+            "exp": issued_epoch + ttl_seconds,
+            "ttl": ttl_seconds,
+            "status_list": {"bits": 2, "lst": b64url_encode(zlib.compress(raw, 9))},
+        }
+        header = {"alg": OACP_JWS_ALG, "kid": self.kid, "typ": STATUS_LIST_JWT_TYP}
+        header_b64 = b64url_encode(json.dumps(header, separators=(",", ":")).encode("utf-8"))
+        claims_b64 = b64url_encode(json.dumps(claims, separators=(",", ":")).encode("utf-8"))
+        signature = self.sign(f"{header_b64}.{claims_b64}".encode("ascii"))
+        return f"{header_b64}.{claims_b64}.{b64url_encode(signature)}"
+
+
+async def verify_local_artifacts(
+    artifacts: list[dict[str, Any]],
+    *,
+    signer: LaunchCheckSigner,
+    now_iso: str,
+) -> list[dict[str, Any]]:
+    """Run each artifact through OacpGrantexArtifactVerifier (steps 1-8) and return its result.
+
+    The verifier fetches the JWKS and the status list itself, over an
+    in-process transport that serves only the throwaway key and a VALID list.
+    """
+    issued_epoch = int(datetime.fromisoformat(now_iso.replace("Z", "+00:00")).timestamp())
+    jwks = {"keys": [signer.public_jwk()]}
+    status_token = signer.status_list_token(
+        uri=LOCAL_STATUS_LIST_URI,
+        size=max(len(artifacts), 1),
+        issued_epoch=issued_epoch,
+    )
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        url = str(request.url)
+        if url == LOCAL_JWKS_URI:
+            return httpx.Response(200, json=jwks)
+        if url == LOCAL_STATUS_LIST_URI:
+            return httpx.Response(200, text=status_token, headers={"Content-Type": "application/statuslist+jwt"})
+        return httpx.Response(404)
+
+    verifier = OacpGrantexArtifactVerifier(
+        OacpGrantexTrustConfig(
+            issuer=LOCAL_ISSUER,
+            jwks_uri=LOCAL_JWKS_URI,
+            status_list_origins=frozenset({LOCAL_ISSUER}),
+        ),
+        transport_factory=lambda: httpx.MockTransport(handler),
+    )
+    results = []
+    for artifact in artifacts:
+        envelope, payload = split_grantex_artifact(artifact)
+        payload_scope = payload if isinstance(payload, Mapping) else {}
+        results.append(
+            await verifier.verify(
+                envelope,
+                payload,
+                expected_scope=OacpArtifactScope(
+                    tenant_id=str(payload_scope.get("tenant_id") or ""),
+                    merchant_id=str(payload_scope.get("merchant_id") or ""),
+                    seller_agent_id=str(payload_scope.get("seller_agent_id") or ""),
+                    buyer_agent_id="",
+                ),
+                now_iso=now_iso,
+            )
+        )
+    return results
+
+
+def summarize_verifier_results(results: list[dict[str, Any]]) -> dict[str, Any]:
+    """Counts taken from the verifier results, never from the number of artifacts."""
+    valid = [result for result in results if result.get("valid") is True]
+    refused = [result for result in results if result.get("valid") is not True]
+    return {
+        "checked": len(results),
+        "valid": len(valid),
+        "invalid": len(refused),
+        "status_list_checked": sum(1 for result in valid if result.get("status_checked") is True),
+        "refusal_codes": sorted({str(result.get("refusal_code")) for result in refused}),
+        "verification_mode": LOCAL_VERIFICATION_MODE,
+        "status_list_source": LOCAL_STATUS_LIST_SOURCE,
+        "issuer": LOCAL_ISSUER,
+        "grantex_issuer": False,
+    }
+
+
+def _local_artifacts(payload: dict[str, Any], now_iso: str, signer: LaunchCheckSigner) -> list[dict[str, Any]]:
     issued = datetime.fromisoformat(now_iso.replace("Z", "+00:00"))
     request = payload["request"]
     evidence = payload["connector_evidence"]
@@ -110,7 +266,7 @@ def _local_artifacts(payload: dict[str, Any], now_iso: str) -> list[dict[str, An
         "public_discovery_state": 15 * 60,
     }
     artifacts = []
-    for family in C6Z_ARTIFACT_FAMILIES:
+    for status_idx, family in enumerate(C6Z_ARTIFACT_FAMILIES):
         expires = (issued + timedelta(seconds=family_ttl.get(family, 5 * 60))).isoformat().replace("+00:00", "Z")
         artifact_id = f"local-c6z:{family}:{request['tenant_id']}:{request['merchant_id']}:{request['seller_agent_id']}"
         artifact_payload = {
@@ -126,20 +282,38 @@ def _local_artifacts(payload: dict[str, Any], now_iso: str) -> list[dict[str, An
             "non_authoritative_for_transaction": True,
             "unsupported_capabilities": ["checkout", "payment", "order", "mandate", "public_discovery"],
         }
-        artifacts.append(
+        envelope = signer.sign_envelope(
             {
-                "artifact_family": family,
-                "envelope": {
-                    "artifact_id": artifact_id,
-                    "artifact_type": family_type[family],
-                    "issuer": "local_contract_fixture_not_grantex_production",
-                    "issued_at": now_iso,
-                    "expires_at": expires,
+                "artifact_id": artifact_id,
+                "artifact_type": family_type[family],
+                "schema_version": "oacp.artifact.v1",
+                "issuer": LOCAL_ISSUER,
+                "issuer_key_id": signer.kid,
+                "subject_type": family,
+                "subject_id": f"{request['merchant_id']}:{request['seller_agent_id']}",
+                "tenant_id": request["tenant_id"],
+                "merchant_id": request["merchant_id"],
+                "seller_agent_id": request["seller_agent_id"],
+                "buyer_agent_id": "",
+                "issued_at": now_iso,
+                "expires_at": expires,
+                "source_observed_at": evidence["source_observed_at"],
+                "freshness_class": "fresh",
+                "revocation_status_url": LOCAL_STATUS_LIST_URI,
+                "status": {"status_list": {"idx": status_idx, "uri": LOCAL_STATUS_LIST_URI}},
+                "policy_version": LOCAL_POLICY_VERSION,
+                "evidence_refs": [evidence["source_evidence_ref"]],
+                "payload_hash": oacp_payload_hash(artifact_payload),
+                "signature_alg": OACP_JWS_ALG,
+                "safety": {
+                    "public_safe": True,
+                    "contains_private_data": False,
+                    "commitment_allowed": False,
+                    "stale_behavior": "refuse_final_commitment",
                 },
-                "payload": artifact_payload,
-                "verifier_status": {"valid": True, "status": "valid", "mode": "local_contract_check"},
             }
         )
+        artifacts.append({"artifact_family": family, "envelope": envelope, "payload": artifact_payload})
     return artifacts
 
 
@@ -206,6 +380,7 @@ def _render_markdown(summary: dict[str, Any]) -> str:
     public_catalog = summary.get("public_catalog_generation") or {}
     shopify = summary.get("shopify_external_check") or {}
     grantex = summary.get("grantex_external_check") or {}
+    verifier = summary.get("artifact_verifier_summary") or {}
     blocker_lines = [
         f"- Shopify external check: `{shopify.get('status')}`"
         + (f" missing `{', '.join(shopify.get('missing_env_vars') or [])}`" if shopify.get("missing_env_vars") else ""),
@@ -231,7 +406,11 @@ def _render_markdown(summary: dict[str, Any]) -> str:
             "",
             f"- Shopify product/variant counts: `{summary['shopify_product_count']}` / `{summary['shopify_variant_count']}`",
             f"- Artifact families: `{summary['local_artifact_family_count']}`",
-            f"- Cache records: `{summary['cache_records_count']}`",
+            f"- Artifact verifier: `{verifier.get('valid')}` valid / `{verifier.get('invalid')}` invalid of"
+            f" `{verifier.get('checked')}` checked; status list checked `{verifier.get('status_list_checked')}`",
+            f"- Verifier inputs: `{verifier.get('verification_mode')}`, `{verifier.get('status_list_source')}`,"
+            f" Grantex issuer `{verifier.get('grantex_issuer')}`",
+            f"- Cache records: `{summary['cache_records_count']}` (verified `{summary.get('cache_records_verified_count')}`)",
             f"- Buyer answer status: `{summary['buyer_answer_status']}`",
             f"- Adapter status: `{summary['protocol_adapter_status']}`",
             f"- Bridge artifact refs: `{summary['bridge_artifact_ref_count']}`",
@@ -332,10 +511,18 @@ async def main() -> None:
         onboarding_packet=packet,
         connector_evidence=evidence,
     )
-    artifacts = _local_artifacts(authority_payload, now_iso)
+    signer = LaunchCheckSigner()
+    artifacts = _local_artifacts(authority_payload, now_iso, signer)
+    verifier_results = await verify_local_artifacts(artifacts, signer=signer, now_iso=now_iso)
+    verifier_summary = summarize_verifier_results(verifier_results)
     cache_records = [
-        build_cache_record_from_grantex_artifact(artifact, cached_at=now_iso, buyer_agent_id=BUYER_AGENT_ID)
-        for artifact in artifacts
+        build_cache_record_from_grantex_artifact(
+            artifact,
+            cached_at=now_iso,
+            buyer_agent_id=BUYER_AGENT_ID,
+            verifier_result_ref=result.get("verifier_result_ref") if result.get("valid") is True else None,
+        )
+        for artifact, result in zip(artifacts, verifier_results, strict=True)
     ]
     answer = answer_product_question_from_cache(
         cache_records=cache_records,
@@ -439,10 +626,8 @@ async def main() -> None:
         "local_artifact_family_count": len(artifacts),
         "local_artifact_families": list(C6Z_ARTIFACT_FAMILIES),
         "artifact_ids": sorted(artifact["envelope"]["artifact_id"] for artifact in artifacts),
-        "artifact_verifier_summary": {
-            "valid": len(artifacts),
-            "invalid": 0,
-        },
+        "artifact_verifier_summary": verifier_summary,
+        "cache_records_verified_count": sum(1 for record in cache_records if record.verifier_result_ref),
         "cache_records_count": len(cache_records),
         "buyer_answer_status": answer.status,
         "buyer_answer_sample": answer.answer,
@@ -485,6 +670,8 @@ async def main() -> None:
         if _secret_value_present(summary):
             raise SystemExit("Unsafe launch summary contained a secret-like value after writing evidence paths")
     print(json.dumps(summary, indent=2, sort_keys=True))
+    if verifier_summary["invalid"]:
+        raise SystemExit(f"OACP verifier refused {verifier_summary['invalid']} local artifact(s)")
 
 
 if __name__ == "__main__":

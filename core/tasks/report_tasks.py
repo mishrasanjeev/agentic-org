@@ -93,6 +93,20 @@ def _schedule_report_config(row: Any) -> dict[str, Any]:
     }
 
 
+async def _all_tenant_ids() -> list[Any]:
+    """The tenant catalogue (``tenants`` carries no RLS) for the per-tenant claim."""
+    from sqlalchemy import select, text
+
+    from core.database import async_session_factory
+    from core.models.tenant import Tenant
+
+    async with async_session_factory() as session:
+        # A maintenance role that cannot bypass RLS must fail loudly here
+        # rather than enumerate zero tenants.
+        await session.execute(text("SET LOCAL row_security = off"))
+        return list((await session.scalars(select(Tenant.id).where(Tenant.deleted_at.is_(None)))).all())
+
+
 async def _claim_due_schedules() -> list[dict[str, Any]]:
     """Claim due ``report_schedules`` rows and advance ``next_run_at``.
 
@@ -101,20 +115,26 @@ async def _claim_due_schedules() -> list[dict[str, Any]]:
     advanced in the same transaction as the claim, so a crash between claim
     and enqueue re-runs at most that one schedule on the next sweep rather
     than double-firing it.
+
+    ``report_schedules`` is FORCE-RLS: the claim runs in one tenant-bound
+    session per tenant (the pattern of ``api.v1.rpa_schedules``), so it works
+    under a ``NOBYPASSRLS`` application role. Each session commits its claim
+    on exit.
     """
     from sqlalchemy import select
 
-    from core.database import async_session_factory
+    from core.database import get_tenant_session
     from core.models.report_schedule import ReportSchedule
 
     now = datetime.now(UTC)
     claimed: list[dict[str, Any]] = []
-    async with async_session_factory() as session:
-        async with session.begin():
+    for tenant_id in await _all_tenant_ids():
+        async with get_tenant_session(tenant_id) as session:
             rows = (
                 await session.execute(
                     select(ReportSchedule)
                     .where(
+                        ReportSchedule.tenant_id == tenant_id,
                         ReportSchedule.enabled.is_(True),
                         (ReportSchedule.next_run_at.is_(None)) | (ReportSchedule.next_run_at <= now),
                     )

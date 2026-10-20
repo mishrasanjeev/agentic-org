@@ -14,6 +14,131 @@
 - Replay the entire seed and follow-up through the packaged privacy detector,
   alongside name, quoted-name, email and identifier protection regressions.
 
+## Unreleased - Database sessions ready for a NOBYPASSRLS application role
+
+- Bind tenant or platform context at the raw-session sites that still opened
+  `async_session_factory()` without one, so the API and workers can run as a
+  `NOSUPERUSER NOBYPASSRLS` role (FINDINGS A-105). Tenant work uses
+  `get_tenant_session` / the new `bind_tenant_context`; pre-auth lookups
+  (signup, login, password reset, API-key prefix, Grantex agent DID, SSO and
+  branding discovery, health probes) use the new `get_platform_session`.
+- Migration `v6z87_platform_ctx_policies`: one permissive `SELECT`-only
+  policy on `sso_configs`, `tenant_branding` and `agents` that honours
+  `agenticorg.platform_ctx = '1'`. Tenant policies are unchanged; no platform
+  write policy exists. It also (re)installs the `audit_log_immutable` trigger
+  with the sealing transition (the same text as
+  `core.governance.audit_chain.SEAL_TRIGGER_SQL`). Databases bootstrapped
+  from an empty schema previously had no trigger outside the local-only
+  startup DDL. Downgrade leaves the trigger installed.
+- Report schedule claims run per tenant (the RPA dispatcher's pattern), the
+  synthetic-check sweep no longer reads `synthetic_checks` across tenants, the
+  A/B variant helpers require `tenant_id`, CDC event-store writes and lists
+  require and bind the event's tenant, and audit entries bind their tenant.
+  The cross-tenant spend CLI raises under a non-bypass role instead of
+  reporting zero.
+- Startup logs the database role's RLS posture (`DB_ROLE_BYPASSES_RLS`
+  warning for a superuser or `BYPASSRLS` role). `AGENTICORG_REQUIRE_NOBYPASSRLS_ROLE=1`
+  (default off) refuses such a role; `AGENTICORG_SKIP_DB_ROLE_RLS_CHECK=1`
+  skips the probe.
+- Add `scripts/create_app_role.sql` and `docs/RLS_APP_ROLE.md`. Moving
+  production `AGENTICORG_DB_URL` to the application role is an operator step
+  documented there; this change does not perform it.
+- `scripts/create_app_role.sql` grants least privilege: row DML on ordinary
+  tables (never `TRUNCATE`, `REFERENCES` or `TRIGGER`); `SELECT`/`INSERT`
+  only on the append-only tables (`capability_evidence_records`,
+  `capability_promotion_events`, `eval_dataset_versions`, and, once
+  `v6z88_commerce_ledger` has run, the OACP decision records and
+  `commerce_arbiter_decisions`, the latter with `UPDATE` of only
+  `consumed_at`, `grantex_grant_jti` and `grantex_recorded_at`; every table
+  guarded by a known append-only trigger function is classified by rule, so
+  the script runs on any head); on `audit_log`
+  `SELECT`/`INSERT` plus `UPDATE` of the four hash-chain columns the sealing
+  task fills; no `DELETE` on `capability_readiness_records` or
+  `audit_chain_anchors`; read-only `alembic_version` and
+  `checkpoint_migrations`; no access to `alembic_migration_progress`; and
+  `EXECUTE` only on the allow-listed restricted functions
+  (`public.gemini_daily_platform_spend()`, and
+  `public.oacp_delete_due_manifest(text, text)` where it exists) (default privileges grant no function `EXECUTE`). The
+  script runs in one transaction, re-running it converges on these grants,
+  and it refuses and rolls back a broader result. Guarded by
+  `tests/regression/test_app_role_grants.py` and new cases in the Postgres
+  proof.
+- Egress URL validation inside async code uses `validate_public_url_async`
+  (non-blocking DNS) for connectors, OIDC, JWKS, AI-provider probes and base
+  URLs, commerce runtime calls and the lineage feed fetch.
+- Regression guards: `tests/regression/test_raw_session_inventory.py`
+  (every remaining raw session is justified), `tests/regression/test_egress_async_callers.py`,
+  and the Postgres proof `tests/integration/test_rls_nobypass_role.py`.
+- The lead delivery Postgres tests no longer patch the removed
+  `api.v1.demo.async_session_factory` (the receipt writes through
+  `get_platform_session`), and the worker-outcome test seeds the marketing
+  tenant itself instead of relying on test order. A regression check keeps
+  `api.v1.demo` on the shared session helpers.
+- The OACP Grantex replay fetch and trust-endpoint fetch (merged from main)
+  validate their URLs with `validate_public_url_async`, as
+  `tests/regression/test_egress_async_callers.py` requires for code inside
+  `async def`; the policy (scheme and host checks, DNS left to the pinned
+  transport) is unchanged.
+
+## Unreleased - OACP artifact verification before caching (G5)
+
+- **Breaking for strict runtimes.** `POST /api/v1/commerce/runtime/artifacts/cache`
+  now verifies every Grantex OACP artifact before caching it: ES256 detached JWS
+  (protected header `oacp-artifact+jws`, RFC 8785 signing input of the envelope
+  without `signature`) against the Grantex JWKS pinned in configuration, payload
+  hash, issuer, scope, TTL, and the Token Status List entry the envelope names.
+  With `AGENTICORG_OACP_VERIFY_STRICT` on (the default in production, staging,
+  preview and unrecognised environments) one failure returns `422
+  artifact_verification_refused` and nothing from that issuance is cached.
+  Grantex artifacts signed with the legacy template string are refused until the
+  Grantex OACP signing release is deployed. Opt-out: set
+  `AGENTICORG_OACP_VERIFY_STRICT=false`; verification still runs, failures are
+  logged as `oacp_artifact_verification_irregularity` and those artifacts are
+  cached without a `verifier_result_ref`. Local, dev, test and ci runtimes
+  default to that log-only mode.
+- Stop stamping `verifier_result_ref = "<artifact_id>:verified"` on every cached
+  artifact and stop accepting a caller-supplied `verifier_result_ref`. Verified
+  records carry `oacp-artifact-jws-v1;kid=…;payload_hash=…;status=valid;verified_at=…`.
+- The Grantex JWKS is fetched asynchronously over the DNS-pinning egress
+  transport (5 s timeout, 300 s cache, 60 s negative cache, one refresh on an
+  unknown kid). Status lists are fetched only from the issuer or Grantex API
+  origin over https, verified as `statuslist+jwt`, cached within their `ttl`;
+  revoked and suspended entries and unreachable lists refuse the artifact.
+- Cache rows stamped `<artifact_id>:verified` before this change, and rows cached
+  in log-only mode, no longer count as verified on any runtime read (buyer and
+  bridge answers, protocol adapters, purchase and POS preparation). Strict
+  runtimes refuse them (`artifact_unverified_legacy`, `artifact_unverified`);
+  log-only runtimes log `oacp_cache_record_unverified_irregularity`. New
+  `POST /api/v1/commerce/runtime/artifacts/refresh` re-fetches a scope from
+  Grantex replay and caches it verified. Deploy order: the Grantex signing
+  release, a first OACP issuer key and `OACP_STATUS_LIST_PUBLIC_ENABLED` must be
+  live before strict verification reaches production (or set the opt-out).
+- Match Grantex's OACP issuance: `revocation` artifacts may live 24 h (was 0),
+  and `issued_at` / `not_before` tolerate 60 s of clock skew (expiry does not).
+  A status list Grantex has not made public (404) refuses the artifact.
+- `verify_oacp_artifact` follows the cross-repo verification order (signature
+  checks first) and takes a JWKS instead of caller-supplied key metadata and a
+  stub signature callback. The unwired in-memory `OacpArtifactCache` class and
+  its key-metadata and revocation-snapshot types are removed.
+- Shared vectors `tests/fixtures/oacp/oacp-artifact-jws-v1.json` (synthetic key)
+  and a conformance test against a running Grantex
+  (`tests/integration/test_oacp_grantex_conformance.py`, skipped unless
+  `AGENTICORG_GRANTEX_CONFORMANCE_URL` is set). No migration.
+- `docs/oacp/explainers/launch-rollback-runbook.md` lists
+  `AGENTICORG_OACP_VERIFY_STRICT` with its default, the launch order and the
+  rollback step.
+- `scripts/oacp_runtime_launch_check.py` no longer writes
+  `artifact_verifier_summary.valid = <artifact count>` for unsigned local
+  artifacts. It signs them with an ES256 key generated for the run (kid
+  `oacp-launchcheck-<random>`, never stored), runs each through
+  `OacpGrantexArtifactVerifier` against that key's JWKS and an in-process VALID
+  status list, and reports `checked` / `valid` / `invalid` / `status_list_checked`
+  / `refusal_codes` from the verifier results, labelled
+  `verification_mode: local_throwaway_es256_key` and `grantex_issuer: false`.
+  Cache records carry the verifier's `verifier_result_ref`
+  (`cache_records_verified_count`); any refusal exits non-zero. The tracked
+  local evidence is regenerated.
+
 ## Unreleased - Unicode input and private Telegram follow-ups
 
 - Preserve Unicode in model-facing JSON before privacy scanning, including

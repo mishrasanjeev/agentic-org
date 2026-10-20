@@ -407,11 +407,11 @@ async def _load_user_state_from_db(tenant_id: str, email: str) -> UserSessionSta
 
     from sqlalchemy import select
 
-    from core.database import async_session_factory
+    from core.database import get_tenant_session
     from core.models.user import User
 
     tid = uuid.UUID(str(tenant_id))
-    async with async_session_factory() as session:
+    async with get_tenant_session(tid) as session:
         result = await session.execute(
             select(User.status, User.sessions_invalid_before).where(
                 User.tenant_id == tid, User.email == email

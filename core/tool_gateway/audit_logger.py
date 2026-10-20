@@ -140,9 +140,14 @@ class AuditLogger:
 
         if self._db:
             try:
+                from core.database import bind_tenant_context
                 from core.models.audit import AuditLog
 
                 async with self._db() as session:
+                    # audit_log is RLS-enforced (WITH CHECK): bind the
+                    # entry's tenant so the INSERT is accepted under a
+                    # NOBYPASSRLS application role.
+                    await bind_tenant_context(session, tenant_id)
                     log_entry = AuditLog(**entry)
                     session.add(log_entry)
                     await session.commit()

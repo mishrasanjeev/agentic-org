@@ -62,10 +62,10 @@ async def _check_db() -> bool:
     try:
         from sqlalchemy import text
 
-        from core.database import engine
+        from core.database import get_platform_session
 
-        async with engine.connect() as conn:
-            await conn.execute(text("SELECT 1"))
+        async with get_platform_session() as session:
+            await session.execute(text("SELECT 1"))
         return True
     # enterprise-gate: broad-except-ok reason=public-status-db-probe-degrades-status
     except Exception:

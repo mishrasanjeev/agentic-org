@@ -727,7 +727,7 @@ class TestIntConn016HealthEndpoint:
         from api.v1.health import diagnostics as health_check
 
         with (
-            patch("api.v1.health.database.async_session_factory") as mock_sf,
+            patch("api.v1.health.database.get_platform_session") as mock_sf,
             patch("api.v1.health.aioredis") as mock_redis,
             patch("api.v1.health.ConnectorRegistry") as mock_cr,
         ):
@@ -761,7 +761,7 @@ class TestIntConn016HealthEndpoint:
         from api.v1.health import diagnostics as health_check
 
         with (
-            patch("api.v1.health.database.async_session_factory") as mock_sf,
+            patch("api.v1.health.database.get_platform_session") as mock_sf,
             patch("api.v1.health.aioredis") as mock_redis,
             patch("api.v1.health.ConnectorRegistry") as mock_cr,
             patch("api.v1.health._check_connector") as mock_check,
@@ -789,7 +789,7 @@ class TestIntConn016HealthEndpoint:
         from api.v1.health import diagnostics as health_check
 
         with (
-            patch("api.v1.health.database.async_session_factory") as mock_sf,
+            patch("api.v1.health.database.get_platform_session") as mock_sf,
             patch("api.v1.health.aioredis") as mock_redis,
             patch("api.v1.health.ConnectorRegistry") as mock_cr,
             patch("api.v1.health._check_connector") as mock_check,
@@ -1126,7 +1126,7 @@ class TestUiReg006SignupTermsConsent:
 
         existing_user = MagicMock()
 
-        with patch("api.v1.auth.async_session_factory") as mock_sf:
+        with patch("api.v1.auth.get_platform_session") as mock_sf:
             session = AsyncMock()
             session.execute = AsyncMock(return_value=_make_result(scalar_one=existing_user))
             mock_sf.return_value.__aenter__ = AsyncMock(return_value=session)

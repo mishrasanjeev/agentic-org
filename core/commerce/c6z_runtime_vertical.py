@@ -22,16 +22,20 @@ from decimal import Decimal, InvalidOperation
 from typing import Any, Literal, cast
 
 import httpx
+import structlog
 
 from core.commerce.oacp_artifacts import (
     OacpPersistentArtifactCacheRecord,
     PersistentCacheActionIntent,
     evaluate_oacp_persistent_artifact_cache_record,
+    oacp_cache_record_verification_refusal,
 )
+from core.config import oacp_verify_strict_enabled
 from core.security.egress import (
     EgressValidationError,
     build_pinned_async_transport,
     validate_public_url,
+    validate_public_url_async,
 )
 
 SHOPIFY_ENV_VARS: tuple[str, ...] = (
@@ -40,6 +44,8 @@ SHOPIFY_ENV_VARS: tuple[str, ...] = (
     "SHOPIFY_API_VERSION",
 )
 SHOPIFY_WEBHOOK_ENV_VARS: tuple[str, ...] = ("SHOPIFY_WEBHOOK_SECRET",)
+logger = structlog.get_logger()
+
 GRANTEX_AUTHORITY_ENV_VARS: tuple[str, ...] = (
     "GRANTEX_COMMERCE_BASE_URL",
     "GRANTEX_COMMERCE_INTERNAL_TOKEN",
@@ -570,7 +576,7 @@ class ShopifyAdminGraphQLClient:
             raise C6ZRuntimeValidationError("max_pages must be between 1 and 20")
 
         try:
-            validate_public_url(
+            await validate_public_url_async(
                 self.graphql_url,
                 allowed_schemes=("https",),
                 allowed_domains=("myshopify.com",),
@@ -944,7 +950,7 @@ async def send_grantex_authority_request(
         }
     base_url = source["GRANTEX_COMMERCE_BASE_URL"].rstrip("/")
     try:
-        validate_public_url(
+        await validate_public_url_async(
             f"{base_url}/v1/commerce/oacp/c6z/authority-requests",
             require_dns=transport is None,
         )
@@ -964,12 +970,82 @@ async def send_grantex_authority_request(
         return cast(dict[str, Any], body)
 
 
+GRANTEX_REPLAY_PAGE_LIMIT = 100
+GRANTEX_REPLAY_MAX_PAGES = 20
+
+
+async def fetch_grantex_artifact_replay(
+    *,
+    tenant_id: str,
+    merchant_id: str,
+    seller_agent_id: str,
+    env: Mapping[str, str] | None = None,
+    transport: httpx.AsyncBaseTransport | None = None,
+) -> list[dict[str, Any]]:
+    """Read every issued artifact for a scope from Grantex replay.
+
+    ``GET /v1/commerce/oacp/artifacts?tenant_id&merchant_id&seller_agent_id&cursor&limit``
+    with the c6z service token, following ``next_cursor`` (bounded). Returns the
+    items whose ``status`` is ``issued``; each still goes through verification
+    before it is cached.
+    """
+    source = os.environ if env is None else env
+    resolution = resolve_env(GRANTEX_AUTHORITY_ENV_VARS, source)
+    if not resolution.ready:
+        raise C6ZRuntimeValidationError("Grantex replay is not configured")
+    base_url = source["GRANTEX_COMMERCE_BASE_URL"].rstrip("/")
+    url = f"{base_url}/v1/commerce/oacp/artifacts"
+    try:
+        # Scheme and host checks only; the pinned transport validates DNS answers asynchronously.
+        await validate_public_url_async(url, require_dns=False)
+    except EgressValidationError as exc:
+        raise C6ZRuntimeValidationError("unsafe Grantex replay endpoint") from exc
+    client_transport = transport or build_pinned_async_transport(require_dns=True)
+    items: list[dict[str, Any]] = []
+    cursor: str | None = None
+    async with httpx.AsyncClient(timeout=20.0, transport=client_transport, follow_redirects=False) as client:
+        for _page in range(GRANTEX_REPLAY_MAX_PAGES):
+            params: dict[str, Any] = {
+                "tenant_id": tenant_id,
+                "merchant_id": merchant_id,
+                "seller_agent_id": seller_agent_id,
+                "limit": GRANTEX_REPLAY_PAGE_LIMIT,
+            }
+            if cursor:
+                params["cursor"] = cursor
+            response = await client.get(
+                url,
+                params=params,
+                headers={"Authorization": f"Bearer {source['GRANTEX_COMMERCE_INTERNAL_TOKEN']}"},
+            )
+            response.raise_for_status()
+            body = response.json()
+            page = body.get("artifacts") if isinstance(body, dict) else None
+            if not isinstance(page, list):
+                raise C6ZRuntimeValidationError("Grantex replay response is malformed")
+            items.extend(item for item in page if isinstance(item, dict) and item.get("status") == "issued")
+            next_cursor = body.get("next_cursor")
+            if not next_cursor:
+                return items
+            cursor = str(next_cursor)
+    raise C6ZRuntimeValidationError("Grantex replay exceeded the page limit")
+
+
 def build_cache_record_from_grantex_artifact(
     artifact: Mapping[str, Any],
     *,
     cached_at: str,
     buyer_agent_id: str | None = None,
+    verifier_result_ref: str | None = None,
 ) -> OacpPersistentArtifactCacheRecord:
+    """Map one Grantex issuance item to a cache record.
+
+    ``verifier_result_ref`` is the reference returned by
+    ``OacpGrantexArtifactVerifier.verify`` for this artifact (profile, kid,
+    payload hash, verification time). It is never read from the artifact and
+    never defaulted: an artifact that was not verified is cached without one,
+    and a record without one cannot back a final commitment.
+    """
     envelope = cast(Mapping[str, Any], artifact.get("envelope") or artifact)
     payload = cast(
         Mapping[str, Any],
@@ -1017,12 +1093,49 @@ def build_cache_record_from_grantex_artifact(
         risk_tier="low",
         blocked_capabilities=("checkout", "payment", "order", "mandate", "shipping"),
         unsupported_capabilities=("execution", "public_discovery", "live_provider"),
-        verifier_result_ref=str(artifact.get("verifier_result_ref") or f"{artifact_id}:verified"),
+        verifier_result_ref=verifier_result_ref,
         allowed_to_execute=False,
         non_authoritative_for_transaction=True,
         no_checkout_payment_enablement=True,
         no_live_provider_enablement=True,
         no_public_discovery_enablement=True,
+    )
+
+
+def evaluate_runtime_cache_record(
+    *,
+    record: OacpPersistentArtifactCacheRecord,
+    action_intent: PersistentCacheActionIntent,
+    now_iso: str,
+    grantex_available: bool,
+    expected_scope: dict[str, str | None] | None = None,
+    strict: bool | None = None,
+) -> dict[str, Any]:
+    """Every runtime read of a cached artifact (answers, adapters, purchase and POS prep).
+
+    A record counts as verified only when its ``verifier_result_ref`` was written by
+    the ES256 verifier. In strict runtimes (``AGENTICORG_OACP_VERIFY_STRICT``) an
+    unverified record is refused (``artifact_unverified_legacy`` for a stamped
+    pre-verification ref, ``artifact_unverified`` for none); in log-only mode the
+    irregularity is logged and the record is evaluated as before.
+    """
+    refusal = oacp_cache_record_verification_refusal(record)
+    if refusal is not None:
+        strict_mode = oacp_verify_strict_enabled() if strict is None else strict
+        logger.warning(
+            "oacp_cache_record_unverified_irregularity",
+            refusal_code=refusal["refusal_code"],
+            artifact_id=record.artifact_id,
+            strict=strict_mode,
+        )
+        if strict_mode:
+            return refusal
+    return evaluate_oacp_persistent_artifact_cache_record(
+        record=record,
+        action_intent=action_intent,
+        now_iso=now_iso,
+        grantex_available=grantex_available,
+        expected_scope=expected_scope,
     )
 
 
@@ -1054,7 +1167,7 @@ def answer_product_question_from_cache(
     for record in cache_records:
         if record.artifact_type != "catalog_snapshot":
             continue
-        result = evaluate_oacp_persistent_artifact_cache_record(
+        result = evaluate_runtime_cache_record(
             record=record,
             now_iso=now_iso,
             action_intent=action_intent,
@@ -1611,7 +1724,7 @@ async def verify_plural_pine_mandate_capability(
         client_transport = transport or build_pinned_async_transport(require_dns=True)
         async with httpx.AsyncClient(timeout=20.0, transport=client_transport) as client:
             if explicit_capability_url:
-                validate_public_url(
+                await validate_public_url_async(
                     explicit_capability_url,
                     allowed_schemes=("https",),
                     require_dns=transport is None,
@@ -1620,7 +1733,7 @@ async def verify_plural_pine_mandate_capability(
                 response.raise_for_status()
                 body = response.json()
             else:
-                validate_public_url(
+                await validate_public_url_async(
                     f"{_plural_pine_base_url(source)}/auth/v1/token",
                     allowed_schemes=("https",),
                     require_dns=transport is None,
@@ -1924,7 +2037,7 @@ def _usable_cache_records(
     usable_records: list[OacpPersistentArtifactCacheRecord] = []
     blocked_reasons: list[str] = []
     for record in cache_records:
-        result = evaluate_oacp_persistent_artifact_cache_record(
+        result = evaluate_runtime_cache_record(
             record=record,
             now_iso=now_iso,
             action_intent=action_intent,

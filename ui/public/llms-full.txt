@@ -311,7 +311,7 @@ The managed production path runs separate API and UI services on Google Cloud Ru
 
 ## OACP commerce boundary
 
-AgenticOrg owns the buyer and seller agent runtime around OACP-backed commerce. [Grantex](https://grantex.dev) owns trust authority, protocol and policy governance, canonical artifacts, artifact verification, and adapter authority. Shopify and merchant systems remain operational sources of record. Pine Labs Plural/P3P, banks, POS systems, and payment providers own their execution rails.
+AgenticOrg owns the buyer and seller agent runtime around OACP-backed commerce. [Grantex](https://grantex.dev) owns trust authority, protocol and policy governance, canonical artifacts and their signing keys, and adapter authority. AgenticOrg verifies every Grantex artifact before caching it. Shopify and merchant systems remain operational sources of record. Pine Labs Plural/P3P, banks, POS systems, and payment providers own their execution rails.
 
 The current supported source path is:
 
@@ -319,7 +319,7 @@ The current supported source path is:
 2. AgenticOrg stores Shopify credentials through the approved custody path.
 3. AgenticOrg performs read-only Shopify Admin GraphQL sync.
 4. Public-safe evidence is submitted to the configured Grantex authority path.
-5. Issued OACP artifacts are cached with freshness, scope, risk, and revocation posture.
+5. Each issued OACP artifact is verified before it is cached: its ES256 detached JWS against the Grantex JWKS pinned in configuration, its scope and TTL, and its Token Status List entry. In strict runtimes one failure refuses the whole issuance (`AGENTICORG_OACP_VERIFY_STRICT`, on by default there); elsewhere the failure is logged as an irregularity and the artifact is cached without a verifier reference. Until the Grantex release that signs artifacts this way is deployed, strict runtimes refuse Grantex artifacts. See [docs/oacp/artifact-cache-guide.md](https://github.com/mishrasanjeev/agentic-org/blob/main/docs/oacp/artifact-cache-guide.md).
 6. Buyer surfaces answer from valid artifacts and disclose source and freshness.
 7. Purchase intent becomes a non-executing provider, merchant, or POS handoff, or a fail-closed blocker.
 8. Only a verified provider or merchant callback can confirm the external outcome.

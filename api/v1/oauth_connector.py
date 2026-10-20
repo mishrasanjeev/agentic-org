@@ -632,7 +632,7 @@ async def _upsert_oauth_connector(
     region_urls = spec.urls_for({**user_fields, **extra_config})
     fallback_base = region_urls.get("api_base_url") or defaults["base_url"]
     base_url = fallback_base
-    _assert_public_base_url(base_url or "")
+    await _assert_public_base_url(base_url or "")
 
     credentials: dict[str, Any] = {
         "token_url": region_urls.get("token_url") or "",

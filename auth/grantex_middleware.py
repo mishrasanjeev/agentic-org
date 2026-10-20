@@ -245,10 +245,12 @@ async def _resolve_agent_tenant(agent_did: str) -> tuple[str, str, str | None] |
     """Map a Grantex agent DID to ``(tenant_id, agent_id, status)`` via ``agents.config.grantex``."""
     from sqlalchemy import select
 
-    from core.database import async_session_factory
+    from core.database import get_platform_session
     from core.models.agent import Agent
 
-    async with async_session_factory() as session:
+    # Pre-auth, cross-tenant by construction (the DID chooses the tenant):
+    # platform context, honoured by the agents platform-read policy (v6z87).
+    async with get_platform_session() as session:
         result = await session.execute(
             select(Agent.id, Agent.tenant_id, Agent.status).where(
                 Agent.config["grantex"]["grantex_did"].astext == agent_did,
@@ -513,12 +515,13 @@ class GrantexAuthMiddleware(BaseHTTPMiddleware):
             import bcrypt as _bcrypt
             from sqlalchemy import select, update
 
-            from core.database import async_session_factory
+            from core.database import get_platform_session, get_tenant_session
             from core.models.api_key import APIKey
 
             prefix = f"ao_sk_{token[6:12]}"
 
-            async with async_session_factory() as session:
+            # Pre-auth prefix lookup (api_keys pre-auth policy): platform context.
+            async with get_platform_session() as session:
                 result = await session.execute(
                     select(APIKey).where(
                         APIKey.prefix == prefix,
@@ -549,8 +552,8 @@ class GrantexAuthMiddleware(BaseHTTPMiddleware):
                     "API key expired",
                 )
 
-            # Update last_used_at
-            async with async_session_factory() as session:
+            # Update last_used_at (tenant-scoped write)
+            async with get_tenant_session(matched_key.tenant_id) as session:
                 await session.execute(
                     update(APIKey)
                     .where(APIKey.id == matched_key.id)

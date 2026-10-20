@@ -421,20 +421,25 @@ async def test_record_outcome_uses_atomic_update() -> None:
     from core import workflow_ab
 
     session = AsyncMock()
+    tenant_id = uuid.uuid4()
 
     class _Factory:
+        def __init__(self, tid, company_id=None):
+            assert tid == tenant_id  # RLS: the counter update is tenant-bound
+
         async def __aenter__(self):
             return session
 
         async def __aexit__(self, *a):
             return False
 
-    with patch.object(workflow_ab, "async_session_factory", _Factory):
-        await workflow_ab.record_outcome(uuid.uuid4(), success=True)
+    with patch.object(workflow_ab, "get_tenant_session", _Factory):
+        await workflow_ab.record_outcome(uuid.uuid4(), success=True, tenant_id=tenant_id)
 
     stmt = session.execute.await_args.args[0]
     sql = str(stmt.compile(compile_kwargs={"literal_binds": False}))
     assert sql.startswith("UPDATE workflow_variants")
+    assert "workflow_variants.tenant_id = " in sql
     assert "run_count=(workflow_variants.run_count + " in sql
     assert "success_count=(workflow_variants.success_count + " in sql
     assert "failure_count" not in sql

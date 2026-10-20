@@ -40,7 +40,7 @@ from auth.sso.state_token import (
     verify_state_token,
 )
 from core.config import settings
-from core.database import async_session_factory, get_tenant_session
+from core.database import get_platform_session, get_tenant_session
 from core.models.sso_config import SSOConfig
 from core.models.tenant import Tenant
 from core.rbac import get_scopes_for_role
@@ -162,7 +162,9 @@ async def list_providers(email: str = Query(..., description="User email — use
     if not domain:
         return {"providers": []}
 
-    async with async_session_factory() as session:
+    # Cross-tenant by design (pre-auth discovery): platform context, honoured
+    # by the sso_configs platform-read policy (v6z87).
+    async with get_platform_session() as session:
         # Find tenants whose sso_configs have this domain in allowed_domains.
         result = await session.execute(
             select(SSOConfig).where(SSOConfig.enabled.is_(True))
