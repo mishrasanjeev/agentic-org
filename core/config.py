@@ -276,6 +276,14 @@ class Settings(BaseSettings):
     # is mandatory in strict runtimes. Env: AGENTICORG_GRANTEX_ISSUER/_AUDIENCE.
     grantex_issuer: str = ""
     grantex_audience: str = ""
+    # OACP artifact verification on POST /commerce/runtime/artifacts/cache
+    # (core/commerce/oacp_grantex_trust.py). Unset, it is on in strict
+    # runtimes (is_strict_runtime_env) and off in local/dev/test/ci. On: the
+    # whole issuance is refused when any artifact fails detached-JWS, scope,
+    # TTL or Token Status List verification. Off: verification still runs,
+    # failures are logged as irregularities and the artifacts are cached
+    # without a verifier_result_ref. Env: AGENTICORG_OACP_VERIFY_STRICT.
+    oacp_verify_strict: bool | None = None
     # route_meta enforcement (api/route_enforcement.py): "enforce" | "log"
     route_enforcement_mode: str = "enforce"
     # Route scope checks for the A2A and MCP families (FINDINGS A-68). Off, they
@@ -1008,3 +1016,17 @@ def grantex_issuer_for_env(env: str | None = None) -> str:
     except Exception:
         return ""
     return str(_derive_issuer_from_jwks_uri(grantex_jwks_uri_for_env(env))).rstrip("/")
+
+
+def oacp_verify_strict_enabled(env: str | None = None) -> bool:
+    """Return whether OACP artifact verification failures refuse caching.
+
+    ``AGENTICORG_OACP_VERIFY_STRICT`` wins when set; otherwise strict runtimes
+    (production, staging, preview and unknown labels) refuse and relaxed
+    runtimes log the irregularity and continue.
+    """
+    configured_settings = globals().get("settings")
+    explicit = getattr(configured_settings, "oacp_verify_strict", None)
+    if isinstance(explicit, bool):
+        return explicit
+    return is_strict_runtime_env(env if env is not None else getattr(configured_settings, "env", None))

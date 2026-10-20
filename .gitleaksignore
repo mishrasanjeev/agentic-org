@@ -43,3 +43,5 @@ e3d046d9ab275c2054f198b4c2be323214a0aebe:docs/reports/commerce-agent-real-stagin
 # The feature-flag RLS integration test once set a placeholder secret key for its
 # migration subprocess; it now generates one per run.
 c4de4ba34461d69618aa7502f3ccbe64b2d894ab:tests/integration/test_feature_flags_rls_postgres.py:generic-api-key:120
+# Synthetic OACP artifact JWS vector (attached-payload refusal case, test key only).
+15b35ec2499a735adbf50201f12e48354d8e07c4:tests/fixtures/oacp/oacp-artifact-jws-v1.json:jwt:875

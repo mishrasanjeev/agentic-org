@@ -14,8 +14,15 @@
     "local-c6z:seller_agent_card:11111111-1111-1111-1111-111111111111:merchant_oacp_launch_evidence:seller_agent_oacp_launch"
   ],
   "artifact_verifier_summary": {
+    "checked": 11,
+    "grantex_issuer": false,
     "invalid": 0,
-    "valid": 11
+    "issuer": "https://launch-check.issuer.example",
+    "refusal_codes": [],
+    "status_list_checked": 11,
+    "status_list_source": "local_in_process_status_list_all_valid",
+    "valid": 11,
+    "verification_mode": "local_throwaway_es256_key"
   },
   "bridge_artifact_ref_count": 11,
   "bridge_channel": "openapi",
@@ -24,9 +31,10 @@
   "buyer_freshness_label": "Freshness: synced 0s ago",
   "buyer_source_label": "Source: Shopify via Grantex artifact",
   "cache_records_count": 11,
-  "evidence_id": "c6z_shopify_evidence_b05dd2a05115737466b57652",
+  "cache_records_verified_count": 11,
+  "evidence_id": "c6z_shopify_evidence_c15527ba3910f02221348fa2",
   "external_checks_enabled": false,
-  "generated_at": "2026-06-30T10:13:50.169372Z",
+  "generated_at": "2026-10-19T21:27:53.787208Z",
   "grantex_authority_request_status": "local_contract_fixture_ready",
   "grantex_external_check": {
     "missing_env_vars": [
@@ -78,7 +86,7 @@
     "allowed_to_execute": false,
     "catalog_json_url": "https://agenticorg.ai/api/v1/public/commerce/sellers/merchant_oacp_launch_evidence/catalog.json?tenant_id=11111111-1111-1111-1111-111111111111&seller_agent_id=seller_agent_oacp_launch",
     "external_publication_claimed": false,
-    "freshness_label": "Freshness: Shopify snapshot observed at 2026-06-30T10:13:50.169372Z; synced at 2026-06-30T10:13:50.169372Z",
+    "freshness_label": "Freshness: Shopify snapshot observed at 2026-10-19T21:27:53.787208Z; synced at 2026-10-19T21:27:53.787208Z",
     "html_bytes": 3854,
     "llms_txt_bytes": 705,
     "llms_txt_url": "https://agenticorg.ai/api/v1/public/commerce/sellers/merchant_oacp_launch_evidence/llms.txt?tenant_id=11111111-1111-1111-1111-111111111111&seller_agent_id=seller_agent_oacp_launch",
@@ -120,7 +128,7 @@
     "status": "blocked_missing_credentials"
   },
   "shopify_product_count": 1,
-  "shopify_sync_timestamp": "2026-06-30T10:13:50.169372Z",
+  "shopify_sync_timestamp": "2026-10-19T21:27:53.787208Z",
   "shopify_variant_count": 1,
   "tenant_id": "11111111-1111-1111-1111-111111111111"
 }

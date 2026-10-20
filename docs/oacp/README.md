@@ -15,7 +15,7 @@ For a runnable synthetic local seller and standalone external buyer, see the
 
 Current cross-product capability status: [AgenticOrg product status](../PRODUCT_STATUS.md).
 
-AgenticOrg owns the buyer and seller AI-agent runtime for OACP-backed commerce, including purchase preparation and Offline POS handoff orchestration. Grantex owns OACP trust authority, protocol/policy governance, canonical artifacts, artifact verification, and protocol adapter authority. Shopify, POS, and merchant systems remain source of record. Pine Labs Plural/P3P, POS, and payment providers own mandate/payment/POS execution.
+AgenticOrg owns the buyer and seller AI-agent runtime for OACP-backed commerce, including purchase preparation and Offline POS handoff orchestration. Grantex owns OACP trust authority, protocol/policy governance, canonical artifacts and their signing keys, and protocol adapter authority. AgenticOrg verifies every Grantex artifact (ES256 detached JWS, scope, TTL, Token Status List) before caching it; see the [artifact cache guide](artifact-cache-guide.md). Shopify, POS, and merchant systems remain source of record. Pine Labs Plural/P3P, POS, and payment providers own mandate/payment/POS execution.
 
 Merchants configure the runtime in `/dashboard/commerce-runtime` during onboarding or later. The configuration is scoped by tenant, merchant, and seller agent, and covers source connectors, buyer channels, provider-owned payment rails, public publishing, and Offline POS metadata. Shopify is the shipped read-only runtime source connector today and has been exercised against a configured production tenant. WooCommerce, ERP, PIM, OMS, WMS, custom API, bank-owned rails, fintech rails, and custom payment providers can be saved as non-executing adapter-ready config until approved adapters exist.
 
@@ -23,7 +23,7 @@ Merchants configure the runtime in `/dashboard/commerce-runtime` during onboardi
 
 | Status | Capability |
 | --- | --- |
-| Shipped | Merchant configuration, Seller Commerce Agent onboarding, encrypted Shopify credential custody, read-only Shopify Admin GraphQL sync, signed webhook verification, Grantex authority request, durable OACP cache, buyer-safe answers, protocol payload generation, bridge routes, purchase preparation, and Offline POS handoff/reconciliation |
+| Shipped | Merchant configuration, Seller Commerce Agent onboarding, encrypted Shopify credential custody, read-only Shopify Admin GraphQL sync, signed webhook verification, Grantex authority request, durable OACP cache that verifies each artifact before storing it, buyer-safe answers, protocol payload generation, bridge routes, purchase preparation, and Offline POS handoff/reconciliation |
 | Configuration-dependent | Merchant public catalog, WhatsApp, Telegram, Grantex tenant authority, Pine/Plural capability verification, and real POS/provider callbacks |
 | Not universal | WooCommerce/ERP/PIM/OMS/WMS runtime adapters, external channel marketplace approval, payment/order execution, and public OACP certification or standardization |
 
