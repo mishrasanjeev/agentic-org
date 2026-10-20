@@ -28,6 +28,7 @@ from datetime import UTC, datetime
 from typing import Any
 
 from core.commerce.arbiter import (
+    AfaEvidence,
     ArbiterContext,
     ConsentEvidence,
     MandateEvidence,
@@ -182,6 +183,8 @@ def arbiter_context(
     authority: Mapping[str, Any] | None,
     cache_records: Sequence[Any],
     merchant_config: Mapping[str, Any] | None,
+    afa: AfaEvidence | None = None,
+    mandate_hashes: Mapping[str, str | None] | None = None,
 ) -> ArbiterContext:
     a = authority or {}
     has_mandate = bool(a.get("mandate_ref") or a.get("mandate_hash"))
@@ -213,4 +216,6 @@ def arbiter_context(
         else None,
         artifacts=artifact_evidence_from_records(cache_records),
         merchant_limits=merchant_limits_from_config(merchant_config),
+        afa=afa,
+        mandate_hashes=mandate_hashes,
     )

@@ -21,10 +21,11 @@ a platform negotiates exactly what the profile lists.
 - **Off:** every `/ucp` route answers 404. Nothing is created, decided or executed.
 - **On:** checkout sessions, carts and orders are served. A checkout completes only when the
   merchant's UCP settings name a registered executor **and** the commerce arbiter seals an
-  `allow` decision for the exact session payload, which the executor consumes once. No executor is
-  registered in this release, so with the flag on a valid Complete answers the business message
-  `executor_unavailable` and the session stays `ready_for_complete`; the Plural executor arrives
-  with the payment-rail work (`core/commerce/executors/plural.py`).
+  `allow` decision for the exact session payload, which the executor consumes once. The Plural
+  executor (`core/commerce/executors/plural.py`, name `plural_pine`) is registered only while
+  `PLURAL_PINE_LIVE_EXECUTION_ENABLED=true`; without it a valid Complete answers the business
+  message `executor_unavailable` and the session stays `ready_for_complete`
+  ([Plural executor](plural-executor.md)).
 
 The flag also gates the order-webhook sweep. The merchant runtime endpoints under
 `/api/v1/commerce/runtime/ucp` are tenant-administrator routes and are not gated.
@@ -118,7 +119,9 @@ In order, each failure being a 200 business outcome with the session unchanged:
    the handler's allowance and currency.
 3. AP2 (when negotiated): `ap2.checkout_mandate` is required (`mandate_required`).
 4. Executor: the merchant's `provider_policy.ucp.executor` must be registered
-   (`executor_unavailable`, severity `unrecoverable`).
+   (`executor_unavailable`, severity `unrecoverable`). The Plural executor (`plural_pine`)
+   is registered only while `PLURAL_PINE_LIVE_EXECUTION_ENABLED=true`
+   ([Plural executor](plural-executor.md)).
 5. Decision. The arbiter decides action `session_complete` on the session payload: id, revision,
    merchant and seller, release, currency, totals, line items, fulfillment selections and each
    instrument's handler, type and credential SHA-256. A refusal is sealed and returned as
@@ -128,6 +131,14 @@ In order, each failure being a 200 business outcome with the session unchanged:
    `{"decision_id": "..."}` executes). Either way the decision is consumed through
    `require_allow_decision` (single use, same tenant, same payload hash, unexpired); a different
    credential or a changed session is `decision_payload_mismatch`.
+   With a UPI AutoPay instrument the rule `afa_evidence_present` refuses until server-side RBI
+   AFA evidence exists. The response then carries the buyer's out-of-band step:
+   - an `incomplete` session with the Action `ai.agenticorg.payment.upi_mandate_authorization`
+     when the extension `ai.agenticorg.payment.upi_mandate` is negotiated (2026-08-25);
+   - otherwise a `requires_escalation` session with the authorization URL as `continue_url`.
+
+   A verified Plural mandate event returns the session to `ready_for_complete`
+   ([Mandates](mandates.md#the-out-of-band-step)).
 6. The session moves to `complete_in_progress` in the same transaction, then the executor runs
    with the credential in memory only. `completed` creates the order and queues webhooks;
    `action_required` keeps `complete_in_progress` with `actions` (2026-08-25, payment
@@ -341,8 +352,10 @@ the publication state, catalog, rates, buyer authority and a fake executor.
 
 ## Residual Gaps
 
-- No executor is registered: Complete with the flag on stops at `executor_unavailable` until the
-  Plural executor lands; the Plural sandbox end-to-end run is pending.
+- The Plural executor is registered only with `PLURAL_PINE_LIVE_EXECUTION_ENABLED=true`; the
+  Plural sandbox end-to-end run (`tests/integration/test_plural_executor_sandbox.py`) is pending
+  sandbox credentials. Pending payments and completed 3DS challenges are not yet reconciled from
+  Plural webhooks ([Plural executor, Residual Gaps](plural-executor.md#residual-gaps)).
 - Buyer authority is caller-asserted; AP2 checkout mandates are not verified yet.
 - The discount extension (`dev.ucp.shopping.discount`) and identity linking are not served.
 - The permalink browser endpoint itself is not served by AgenticOrg; carts link to the

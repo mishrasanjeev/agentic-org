@@ -50,6 +50,8 @@ that needed it.
 | `buyer_authority_verified` | The buyer authority (mandate, consent, passport) carries a server-side verification ref, or verified authority is not required (`AGENTICORG_ARBITER_REQUIRE_VERIFIED_AUTHORITY`, on in strict runtimes). | `buyer_authority_caller_asserted` |
 | `oacp_artifacts_valid` | For each required family (catalog snapshot, price, inventory, policy, mandate capability, protocol adapter; policy and mandate capability for `mandate_request`) an artifact in scope that the ES256 verifier accepted (`oacp-artifact-jws-v1;` ref with an `oacp-` key), fresh, unexpired, with a `fresh` revocation snapshot. | `artifact_missing:<family>`, `artifact_revoked:<family>`, `artifact_unverified:<family>`, `artifact_revocation_unknown:<family>`, `artifact_expired:<family>`, `artifact_stale:<family>` |
 | `merchant_limits` | Merchant config `provider_policy.arbiter` sets `max_order_amount_minor_units`, `currency_allowlist`, `max_quantity_per_order`, and the order is within them. | `merchant_limits_missing`, `order_amount_missing`, `currency_not_allowed`, `quantity_cap_exceeded`, `order_amount_cap_exceeded` |
+| `afa_evidence_present` (`session_complete` only, last) | No UPI AutoPay instrument in the payload; or RBI AFA does not apply (a subsequent debit within the limit); or server-side AFA evidence is present ([Mandates](mandates.md#the-arbiter-rule-afa_evidence_present)). | `afa_input_missing`, `afa_evidence_missing` |
+| `refund_within_captured` (`refund`, its only rule) | The refund is positive, in the order currency, and the captured amount covers it with every earlier refund that has not failed. | `refund_input_missing`, `refund_amount_invalid`, `refund_currency_mismatch`, `order_not_captured`, `refund_exceeds_captured` |
 
 Mandate, consent and passport references arrive in the request's `buyer_authority` object. Until
 Grantex-signed mandates and passports are verified server-side (Phase 4), they are
@@ -71,7 +73,10 @@ for that evidence. No code path produces one yet and the request body cannot car
 
 `AGENTICORG_ARBITER_REQUIRE_VERIFIED_AUTHORITY` set explicitly wins in either direction. The
 rule is part of the decision id material, so the same request decided under the two settings
-gets two different decision ids. The policy version is `commerce-arbiter-v2`.
+gets two different decision ids. The policy version is `commerce-arbiter-v3`: v3 adds the
+`refund` action and the `afa_evidence_present` rule. A decision's stored evidence also
+carries `mandate_hashes` (`intent`, `cart`, `payment`; null until verified mandates populate
+them, never from a request body), which the executor copies into the provider order metadata.
 
 Merchant configuration (under `provider_policy`):
 
@@ -112,7 +117,9 @@ Merchant configuration (under `provider_policy`):
    `hitl_queue`.
 
 Session complete arrives with the checkout sessions of Phase 3; it uses the same guard with the
-`session_complete` action. A mandate request route arrives with Phase 4 mandates; the arbiter
+`session_complete` action. A refund of a captured order is decided with the `refund` action and
+consumed by the same guard before the Plural executor calls Plural
+([Plural executor, Refunds](plural-executor.md#refunds)). A mandate request route arrives with Phase 4 mandates; the arbiter
 already defines the `mandate_request` rule set.
 
 ## Append-Only Storage: Choice And Alternative

@@ -80,6 +80,38 @@ With `AGENTICORG_UCP_CHECKOUT_ENABLED=true` on staging and a merchant published 
 | `AGENTICORG_UCP_VERSIONS` | `2026-04-08` | UCP releases served; the newest is `/.well-known/ucp`, older ones are leaf profiles. |
 | `AGENTICORG_UCP_KEY_ROTATION_GRACE_DAYS` | `7` | Days a rotated-out UCP signing key stays published (minimum 7). |
 | `AGENTICORG_UCP_CHECKOUT_ENABLED` | `false` | UCP checkout, cart and order routes (`/ucp/checkout-sessions`, `/ucp/carts`, `/ucp/orders`) and the order-webhook sweep. |
+| `PLURAL_PINE_LIVE_EXECUTION_ENABLED` | unset (off) | `true` registers the Plural executor (`plural_pine`); UCP Complete then charges through Plural on a consumed `allow`, and order refunds go through Plural. Also gates the purchase handoff's live mode, unchanged. |
+| `AGENTICORG_RBI_EMANDATE_AFA_LIMIT_MINOR_UNITS` / `..._HIGHER_LIMIT_MINOR_UNITS` | `1500000` / `10000000` | RBI e-mandate no-AFA limits (paise) for subsequent UPI AutoPay debits. |
+
+## Plural Execution Launch Order
+
+1. Migration `v6z90_mandates_rails` (payment operation records, AFA evidence, the `refund`
+   arbiter action). Re-run `scripts/create_app_role.sql` so the two new append-only tables are
+   classified.
+2. Plural credentials in the secret manager: `PLURAL_PINE_CLIENT_ID`,
+   `PLURAL_PINE_CLIENT_SECRET`, `PLURAL_PINE_ENVIRONMENT=sandbox`, `PLURAL_PINE_WEBHOOK_SECRET`.
+3. Staging: `PLURAL_PINE_LIVE_EXECUTION_ENABLED=true` with `AGENTICORG_UCP_CHECKOUT_ENABLED=true`.
+   Set one test merchant's `provider_policy.ucp.executor` to `plural_pine`. Run
+   `tests/integration/test_plural_executor_sandbox.py` and the UCP smoke below. Then check the
+   ledger: `commerce.arbiter.decision.consumed` comes before each run of
+   `commerce.plural.create_order`, `commerce.plural.create_payment` and
+   `commerce.plural.capture`.
+4. Production: only after the owner approves the runbook, with
+   `PLURAL_PINE_ENVIRONMENT=production` and production credentials. Enable merchants one at a
+   time through their `executor` setting.
+
+Rolling back Plural execution: unset `PLURAL_PINE_LIVE_EXECUTION_ENABLED` (or set it to `false`)
+and restart.
+
+- The executor is no longer registered.
+- UCP Complete answers `executor_unavailable` and the session stays `ready_for_complete`.
+- Refunds answer `409 executor_unavailable`.
+- Captured orders, journal rows and AFA evidence are kept: they are append-only payment evidence
+  and `v6z90_mandates_rails` is not rolled back.
+
+To stop one merchant only, remove its `provider_policy.ucp.executor`. Refunds of captured
+orders while execution is off are made in the Plural dashboard and recorded on the order with
+`POST /api/v1/commerce/runtime/ucp/orders/{id}/events` (a `refund` adjustment).
 
 ## POS Smoke
 

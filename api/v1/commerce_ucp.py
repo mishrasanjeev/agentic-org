@@ -25,6 +25,7 @@ under ``/api/v1/commerce/runtime/ucp`` (tenant administrators).
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import json
 import uuid
 from collections.abc import Sequence
@@ -679,3 +680,209 @@ async def record_order_event(
     capabilities = {"dev.ucp.shopping.order": [{"version": version}]}
     rendered = render_order(snapshot=snapshot, version=version, capabilities=capabilities)
     return {"revision": revision, "order": rendered}
+
+
+# --- payments: refunds, tracking and Plural events (Phase 4) -------------------------------------
+
+
+class OrderRefundRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    amount: int = Field(ge=1, le=9_007_199_254_740_991)
+    reason: str | None = Field(default=None, max_length=200)
+    request_id: str | None = Field(default=None, min_length=1, max_length=80, pattern=r"^[A-Za-z0-9_.:-]+$")
+
+
+@runtime_router.post("/orders/{order_id}/refunds")
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="commerce.runtime.ucp.orders.write",
+    rate_limit="commerce-runtime-write",
+    idempotency="refund-request-id",
+    audit_event="commerce.ucp.order.refund",
+)
+async def refund_order(
+    order_id: str, body: OrderRefundRequest, tenant_id: str = Depends(get_current_tenant)
+) -> dict[str, Any]:
+    """Refund part or all of a captured order: a fresh ``refund`` arbiter decision, then the Plural executor."""
+    from core.commerce.order_refunds import RefundRequestError
+    from core.commerce.order_refunds import refund_order as orchestrate
+
+    tenant = _tenant_uuid(tenant_id)
+    try:
+        outcome = await orchestrate(
+            tenant_id=str(tenant),
+            order_id=order_id,
+            amount_minor_units=body.amount,
+            reason=body.reason,
+            now=datetime.now(UTC),
+            request_id=body.request_id,
+        )
+    except RefundRequestError as exc:
+        await record_commerce_event_in_own_transaction(
+            tenant_id=tenant_id,
+            event="commerce.ucp.order.refund",
+            outcome="blocked",
+            merchant_id=None,
+            seller_agent_id=None,
+            buyer_agent_id=None,
+            payload={"order_id": order_id, "reason": exc.code},
+            resource_id=order_id,
+            details={"reason": exc.code},
+        )
+        raise HTTPException(status_code=exc.status, detail=exc.code) from exc
+    if outcome.order_revision is not None:
+        kick_dispatch(tenant)
+    return {
+        "status": outcome.status,
+        "reason": outcome.reason,
+        "decision": outcome.decision,
+        "adjustment_id": outcome.adjustment_id,
+        "order_revision": outcome.order_revision,
+    }
+
+
+class ShopifyFulfillmentRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    # A Shopify Admin Fulfillment or FulfillmentEvent object, as the merchant's Shopify integration received it.
+    fulfillment: dict[str, Any]
+
+
+@runtime_router.post("/orders/{order_id}/shopify-fulfillments")
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="commerce.runtime.ucp.orders.write",
+    rate_limit="commerce-runtime-write",
+    idempotency="source-event-id",
+    audit_event="commerce.ucp.order.update",
+)
+async def record_shopify_fulfillment(
+    order_id: str, body: ShopifyFulfillmentRequest, tenant_id: str = Depends(get_current_tenant)
+) -> dict[str, Any]:
+    """Normalise a Shopify fulfillment (or fulfillment event) into a UCP order fulfillment event and record it."""
+    from core.commerce.fulfillment_tracking import TrackingNormalisationError, normalise_shopify_fulfillment
+    from core.commerce.ucp.renderers import render_order
+    from core.models.commerce_ucp import CommerceOrderRow
+
+    tenant = _tenant_uuid(tenant_id)
+    async with get_tenant_session(tenant) as session:
+        row = (
+            await session.execute(
+                select(CommerceOrderRow).where(CommerceOrderRow.tenant_id == tenant, CommerceOrderRow.id == order_id)
+            )
+        ).scalar_one_or_none()
+        if row is None:
+            raise HTTPException(status_code=404, detail="Order not found")
+        snapshot = dict(row.snapshot or {})
+        aliases = await _carrier_aliases(session, tenant, row)
+
+    async def _record_outcome(outcome: str, reason: str) -> None:
+        await record_commerce_event_in_own_transaction(
+            tenant_id=tenant_id,
+            event="commerce.ucp.order.update",
+            outcome=outcome,
+            merchant_id=row.merchant_id,
+            seller_agent_id=row.seller_agent_id,
+            buyer_agent_id=None,
+            payload={"order_id": order_id, "reason": reason},
+            resource_id=order_id,
+            details={"reason": reason, "source": "shopify_fulfillment"},
+        )
+
+    try:
+        normalised = normalise_shopify_fulfillment(body.fulfillment, snapshot, carrier_aliases=aliases)
+    except TrackingNormalisationError as exc:
+        await _record_outcome("refused", "tracking_unmappable")
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    if normalised is None:
+        await _record_outcome("blocked", "no_tracking_status")
+        return {"recorded": False, "reason": "no_tracking_status"}
+    try:
+        revision, updated, version = await handlers.apply_order_change(
+            tenant_id=tenant_id,
+            order_id=order_id,
+            fulfillment_event=normalised.event,
+            adjustment=None,
+            now=datetime.now(UTC),
+            event_id=normalised.event_id,
+        )
+    except handlers.OrderChangeError as exc:
+        if exc.status == 409:
+            await _record_outcome("blocked", "event_already_recorded")
+            return {"recorded": False, "reason": "event_already_recorded", "event_id": normalised.event_id}
+        raise HTTPException(status_code=exc.status, detail=str(exc)) from exc
+    kick_dispatch(tenant)
+    capabilities = {"dev.ucp.shopping.order": [{"version": version}]}
+    return {
+        "recorded": True,
+        "event_id": normalised.event_id,
+        "revision": revision,
+        "order": render_order(snapshot=updated, version=version, capabilities=capabilities),
+    }
+
+
+async def _carrier_aliases(session: Any, tenant: uuid.UUID, order: Any) -> dict[str, str]:
+    from core.commerce.oacp_merchant_config import merchant_config_id
+    from core.models.commerce_c6z_runtime import C6ZMerchantCommerceConfigRow
+
+    config = await session.get(
+        C6ZMerchantCommerceConfigRow, merchant_config_id(str(tenant), order.merchant_id, order.seller_agent_id)
+    )
+    ucp = ((getattr(config, "provider_policy", None) or {}).get("ucp") or {}) if config is not None else {}
+    aliases = ucp.get("carrier_aliases") if isinstance(ucp, dict) else None
+    return {str(k): str(v) for k, v in aliases.items()} if isinstance(aliases, dict) else {}
+
+
+@runtime_router.post("/plural/events")
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="commerce.runtime.ucp.orders.write",
+    rate_limit="commerce-runtime-write",
+    idempotency="plural-webhook-id",
+    audit_event="commerce.ucp.plural.event",
+)
+async def relay_plural_event(request: Request, tenant_id: str = Depends(get_current_tenant)) -> dict[str, Any]:
+    """A Plural webhook the merchant's integration relays: verified with the Plural signature, then applied.
+
+    The tenant comes from the authenticated caller; the event proves itself with
+    the ``webhook-id``/``webhook-timestamp``/``webhook-signature`` headers Plural
+    sent (HMAC with ``PLURAL_PINE_WEBHOOK_SECRET``), so the relay cannot forge
+    one. A verified UPI AutoPay mandate outcome records the RBI AFA evidence.
+    """
+    from core.commerce.executors.plural import PluralWebhookError, apply_plural_event
+
+    raw_body = await request.body()
+    if len(raw_body) > 256 * 1024:
+        raise HTTPException(status_code=413, detail="event too large")
+    names = ("webhook-id", "webhook-timestamp", "webhook-signature")
+    headers = {name: request.headers.get(name, "") for name in names}
+    tenant = str(_tenant_uuid(tenant_id))
+    try:
+        result = await apply_plural_event(tenant_id=tenant, raw_body=raw_body, headers=headers)
+    except PluralWebhookError as exc:
+        await record_commerce_event_in_own_transaction(
+            tenant_id=tenant,
+            event="commerce.ucp.plural.event",
+            outcome="refused",
+            merchant_id=None,
+            seller_agent_id=None,
+            buyer_agent_id=None,
+            payload={"body_sha256": hashlib.sha256(raw_body).hexdigest(), "reason": exc.code},
+            details={"reason": exc.code},
+        )
+        raise HTTPException(status_code=400, detail=exc.code) from exc
+    await record_commerce_event_in_own_transaction(
+        tenant_id=tenant,
+        event="commerce.ucp.plural.event",
+        outcome="success",
+        merchant_id=None,
+        seller_agent_id=None,
+        buyer_agent_id=None,
+        payload={"body_sha256": result["body_sha256"], "event_type": result["event_type"]},
+        details={"applied": result["applied"], "afa": result.get("afa"), "event_type": result["event_type"]},
+    )
+    return {"verified": True, "applied": result["applied"], "afa": result.get("afa")}

@@ -34,7 +34,7 @@ This inventory is based on `api/v1/commerce_runtime.py`, `core/commerce/c6z_runt
 
 | Gap | Owner | Action |
 | --- | --- | --- |
-| Provider or bank rail execution | Pine Labs Plural/P3P, bank/fintech/custom providers + merchant + AgenticOrg | Add only after provider/bank, merchant, legal, security, ops, rollback, webhook, and monitoring approval. |
+| Provider or bank rail execution | Pine Labs Plural/P3P, bank/fintech/custom providers + merchant + AgenticOrg | The Plural executor is implemented behind `PLURAL_PINE_LIVE_EXECUTION_ENABLED` (off by default; charges and refunds only on a consumed arbiter decision, see [Plural executor](plural-executor.md)). Production use and other rails need provider/bank, merchant, legal, security, ops, rollback, webhook, and monitoring approval. |
 | Live POS provider integration | AgenticOrg + merchant + POS/payment provider | Replace simulator with verified provider callbacks, receipt evidence refs, operator monitoring, and rollback. |
 | Public channel launch | AgenticOrg + channel owners | Configure secrets, review channel policy, run webhook smoke, and verify source/freshness labels. |
 | Verified buyer authority | Grantex + AgenticOrg | Mandate, consent and Commerce Passport references reach the arbiter as caller-asserted evidence; replace with Grantex-signed mandates verified server-side (Phase 4). |

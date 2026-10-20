@@ -32,7 +32,7 @@
     "public_exempt_reason": "ucp-business-profile-public-by-spec-host-bound",
     "rate_limit": "ucp-discovery",
     "scope": "public:ucp.profile.read",
-    "source_line": 276,
+    "source_line": 277,
     "tenant_required": false
   },
   {
@@ -50,7 +50,7 @@
     "public_exempt_reason": "ucp-leaf-profile-public-by-spec-host-bound",
     "rate_limit": "ucp-discovery",
     "scope": "public:ucp.profile.read",
-    "source_line": 293,
+    "source_line": 294,
     "tenant_required": false
   },
   {
@@ -3920,7 +3920,7 @@
     "public_exempt_reason": null,
     "rate_limit": "commerce-runtime-write",
     "scope": "commerce.runtime.ucp.deliveries.write",
-    "source_line": 616,
+    "source_line": 617,
     "tenant_required": true
   },
   {
@@ -3938,7 +3938,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "commerce.runtime.ucp.subscriptions.read",
-    "source_line": 450,
+    "source_line": 451,
     "tenant_required": true
   },
   {
@@ -3956,7 +3956,7 @@
     "public_exempt_reason": null,
     "rate_limit": "commerce-runtime-write",
     "scope": "commerce.runtime.ucp.subscriptions.write",
-    "source_line": 473,
+    "source_line": 474,
     "tenant_required": true
   },
   {
@@ -3974,7 +3974,7 @@
     "public_exempt_reason": null,
     "rate_limit": "commerce-runtime-write",
     "scope": "commerce.runtime.ucp.subscriptions.write",
-    "source_line": 514,
+    "source_line": 515,
     "tenant_required": true
   },
   {
@@ -3992,7 +3992,7 @@
     "public_exempt_reason": null,
     "rate_limit": "commerce-runtime-write",
     "scope": "commerce.runtime.ucp.subscriptions.write",
-    "source_line": 545,
+    "source_line": 546,
     "tenant_required": true
   },
   {
@@ -4010,7 +4010,43 @@
     "public_exempt_reason": null,
     "rate_limit": "commerce-runtime-write",
     "scope": "commerce.runtime.ucp.orders.write",
-    "source_line": 661,
+    "source_line": 662,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "commerce.ucp.order.refund",
+    "auth_required": true,
+    "function": "refund_order",
+    "idempotency": "refund-request-id",
+    "key": "POST /api/v1/commerce/runtime/ucp/orders/{order_id}/refunds api/v1/commerce_ucp.py:refund_order",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/commerce_ucp.py",
+    "path": "/api/v1/commerce/runtime/ucp/orders/{order_id}/refunds",
+    "public_exempt_reason": null,
+    "rate_limit": "commerce-runtime-write",
+    "scope": "commerce.runtime.ucp.orders.write",
+    "source_line": 705,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "commerce.ucp.order.update",
+    "auth_required": true,
+    "function": "record_shopify_fulfillment",
+    "idempotency": "source-event-id",
+    "key": "POST /api/v1/commerce/runtime/ucp/orders/{order_id}/shopify-fulfillments api/v1/commerce_ucp.py:record_shopify_fulfillment",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/commerce_ucp.py",
+    "path": "/api/v1/commerce/runtime/ucp/orders/{order_id}/shopify-fulfillments",
+    "public_exempt_reason": null,
+    "rate_limit": "commerce-runtime-write",
+    "scope": "commerce.runtime.ucp.orders.write",
+    "source_line": 762,
     "tenant_required": true
   },
   {
@@ -4028,7 +4064,25 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "commerce.runtime.ucp.deliveries.read",
-    "source_line": 579,
+    "source_line": 580,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "commerce.ucp.plural.event",
+    "auth_required": true,
+    "function": "relay_plural_event",
+    "idempotency": "plural-webhook-id",
+    "key": "POST /api/v1/commerce/runtime/ucp/plural/events api/v1/commerce_ucp.py:relay_plural_event",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/commerce_ucp.py",
+    "path": "/api/v1/commerce/runtime/ucp/plural/events",
+    "public_exempt_reason": null,
+    "rate_limit": "commerce-runtime-write",
+    "scope": "commerce.runtime.ucp.orders.write",
+    "source_line": 848,
     "tenant_required": true
   },
   {
@@ -12416,7 +12470,7 @@
     "public_exempt_reason": null,
     "rate_limit": "ucp-platform",
     "scope": "ucp.cart.write",
-    "source_line": 330,
+    "source_line": 331,
     "tenant_required": true
   },
   {
@@ -12434,7 +12488,7 @@
     "public_exempt_reason": null,
     "rate_limit": "ucp-platform",
     "scope": "ucp.cart.read",
-    "source_line": 342,
+    "source_line": 343,
     "tenant_required": true
   },
   {
@@ -12452,7 +12506,7 @@
     "public_exempt_reason": null,
     "rate_limit": "ucp-platform",
     "scope": "ucp.cart.write",
-    "source_line": 355,
+    "source_line": 356,
     "tenant_required": true
   },
   {
@@ -12470,7 +12524,7 @@
     "public_exempt_reason": null,
     "rate_limit": "ucp-platform",
     "scope": "ucp.cart.write",
-    "source_line": 368,
+    "source_line": 369,
     "tenant_required": true
   },
   {
@@ -12488,7 +12542,7 @@
     "public_exempt_reason": "ucp-catalog-public-access-level-verified-artifacts-only",
     "rate_limit": "ucp-catalog-read",
     "scope": "public:ucp.catalog.read",
-    "source_line": 370,
+    "source_line": 377,
     "tenant_required": false
   },
   {
@@ -12506,7 +12560,7 @@
     "public_exempt_reason": "ucp-catalog-public-access-level-verified-artifacts-only",
     "rate_limit": "ucp-catalog-read",
     "scope": "public:ucp.catalog.read",
-    "source_line": 311,
+    "source_line": 318,
     "tenant_required": false
   },
   {
@@ -12524,7 +12578,7 @@
     "public_exempt_reason": null,
     "rate_limit": "ucp-platform",
     "scope": "ucp.checkout.write",
-    "source_line": 258,
+    "source_line": 259,
     "tenant_required": true
   },
   {
@@ -12542,7 +12596,7 @@
     "public_exempt_reason": null,
     "rate_limit": "ucp-platform",
     "scope": "ucp.checkout.read",
-    "source_line": 270,
+    "source_line": 271,
     "tenant_required": true
   },
   {
@@ -12560,7 +12614,7 @@
     "public_exempt_reason": null,
     "rate_limit": "ucp-platform",
     "scope": "ucp.checkout.write",
-    "source_line": 285,
+    "source_line": 286,
     "tenant_required": true
   },
   {
@@ -12578,7 +12632,7 @@
     "public_exempt_reason": null,
     "rate_limit": "ucp-platform",
     "scope": "ucp.checkout.write",
-    "source_line": 315,
+    "source_line": 316,
     "tenant_required": true
   },
   {
@@ -12596,7 +12650,7 @@
     "public_exempt_reason": null,
     "rate_limit": "ucp-platform",
     "scope": "ucp.checkout.write",
-    "source_line": 300,
+    "source_line": 301,
     "tenant_required": true
   },
   {
@@ -12614,7 +12668,7 @@
     "public_exempt_reason": "ucp-location-public-store-hours-and-address-only",
     "rate_limit": "ucp-catalog-read",
     "scope": "public:ucp.location.read",
-    "source_line": 483,
+    "source_line": 490,
     "tenant_required": false
   },
   {
@@ -12632,7 +12686,7 @@
     "public_exempt_reason": "ucp-location-public-store-hours-and-address-only",
     "rate_limit": "ucp-catalog-read",
     "scope": "public:ucp.location.read",
-    "source_line": 433,
+    "source_line": 440,
     "tenant_required": false
   },
   {
@@ -12650,7 +12704,7 @@
     "public_exempt_reason": null,
     "rate_limit": "ucp-platform",
     "scope": "ucp.order.read",
-    "source_line": 380,
+    "source_line": 381,
     "tenant_required": true
   },
   {

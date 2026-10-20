@@ -202,7 +202,7 @@ def test_mandate_request_does_not_require_a_mandate() -> None:
 
 
 def test_unknown_action_refuses() -> None:
-    decision = decide("refund", _context())
+    decision = decide("chargeback", _context())
     assert decision.outcome == "refuse"
     assert decision.failing_rule == "action_supported"
 

@@ -37,6 +37,16 @@ Rules:
 ``merchant_limits``
     The merchant's arbiter limits are configured and the order is within them:
     a per-order amount cap, a currency allowlist and a per-order quantity cap.
+``afa_evidence_present`` (``session_complete`` only, evaluated last)
+    When a payment instrument is a UPI AutoPay mandate, the RBI additional
+    factor of authentication (AFA) applies (``core.commerce.india_rails``:
+    registration and the first debit always, a subsequent debit above the
+    RBI e-mandate limit) and server-side AFA evidence must be present. AFA is
+    the buyer's out-of-band step; this rule never waits for it, it refuses
+    until the evidence exists. Without a UPI AutoPay instrument it passes.
+``refund_within_captured`` (``refund``, the only rule of that action)
+    The refund is positive, in the order currency, and the captured amount
+    covers it together with every earlier refund of the order.
 
 The decision binds ``payload_hash`` (the RFC 8785 SHA-256 of the action's
 binding payload, ``binding_payload``) so the executor can refuse anything but
@@ -54,12 +64,12 @@ from typing import Any, Literal
 
 from core.commerce.ledger import commerce_payload_hash, json_safe
 
-POLICY_VERSION = "commerce-arbiter-v2"
+POLICY_VERSION = "commerce-arbiter-v3"
 DECISION_TTL = timedelta(minutes=10)
 
-Action = Literal["purchase_handoff", "mandate_request", "pos_handoff", "session_complete"]
+Action = Literal["purchase_handoff", "mandate_request", "pos_handoff", "session_complete", "refund"]
 Outcome = Literal["allow", "refuse"]
-ACTIONS: tuple[str, ...] = ("purchase_handoff", "mandate_request", "pos_handoff", "session_complete")
+ACTIONS: tuple[str, ...] = ("purchase_handoff", "mandate_request", "pos_handoff", "session_complete", "refund")
 
 RULE_MANDATE = "mandate_present_unexpired"
 RULE_CONSENT = "consent_active"
@@ -67,6 +77,8 @@ RULE_PASSPORT = "passport_amount_cap"
 RULE_AUTHORITY_VERIFIED = "buyer_authority_verified"
 RULE_ARTIFACTS = "oacp_artifacts_valid"
 RULE_MERCHANT_LIMITS = "merchant_limits"
+RULE_AFA = "afa_evidence_present"
+RULE_REFUND = "refund_within_captured"
 RULE_ORDER: tuple[str, ...] = (
     RULE_MANDATE,
     RULE_CONSENT,
@@ -98,8 +110,9 @@ REQUIRED_ARTIFACT_FAMILIES: dict[str, tuple[str, ...]] = {
 RULES_BY_ACTION: dict[str, tuple[str, ...]] = {
     "purchase_handoff": RULE_ORDER,
     "pos_handoff": RULE_ORDER,
-    "session_complete": RULE_ORDER,
+    "session_complete": (*RULE_ORDER, RULE_AFA),
     "mandate_request": tuple(rule for rule in RULE_ORDER if rule != RULE_MANDATE),
+    "refund": (RULE_REFUND,),
 }
 # ISO 4217 minor-unit exponents that are not 2 (amounts are compared in minor units).
 _CURRENCY_EXPONENTS: dict[str, int] = {"JPY": 0, "KRW": 0, "VND": 0, "CLP": 0, "ISK": 0, "BHD": 3, "KWD": 3, "OMR": 3}
@@ -124,6 +137,30 @@ class PassportEvidence:
     max_amount_minor_units: int | None
     currency: str | None
     expires_at: datetime | None
+
+
+@dataclass(frozen=True)
+class AfaEvidence:
+    """What ``afa_evidence_present`` reads: the debit (for the RBI thresholds) and the server-side evidence ref."""
+
+    debit_kind: str
+    amount_minor_units: int | None
+    currency: str | None
+    purpose: str | None
+    limit_minor_units: int
+    higher_limit_minor_units: int
+    # Set only from AFA evidence recorded server-side (a verified provider event), never from a request.
+    evidence_ref: str | None = None
+
+
+@dataclass(frozen=True)
+class RefundEvidence:
+    """The order's payment state a ``refund`` decision reads (minor units, from the payment operation records)."""
+
+    order_id: str
+    currency: str
+    captured_minor_units: int
+    refunded_minor_units: int
 
 
 @dataclass(frozen=True)
@@ -180,6 +217,13 @@ class ArbiterContext:
     authority_verification_ref: str | None = None
     # Refuse caller-asserted authority (AGENTICORG_ARBITER_REQUIRE_VERIFIED_AUTHORITY): an input, not read here.
     require_verified_authority: bool = False
+    # RBI AFA inputs for a UPI AutoPay payment (None when no instrument is one).
+    afa: AfaEvidence | None = None
+    # The order a ``refund`` decision is for.
+    refund: RefundEvidence | None = None
+    # The intent, cart and payment mandate hashes (lowercase hex SHA-256 of each compact JWT) once
+    # verified mandates exist; sealed with the decision and carried in the provider order metadata.
+    mandate_hashes: Mapping[str, str | None] | None = None
 
     @property
     def buyer_authority_source(self) -> str:
@@ -241,6 +285,20 @@ class Decision:
             "decided_at": _iso(self.decided_at),
             "expires_at": _iso(self.expires_at),
         }
+
+
+MANDATE_KINDS: tuple[str, ...] = ("intent", "cart", "payment")
+
+
+def mandate_hashes(context: ArbiterContext) -> dict[str, str | None]:
+    """The three mandate hashes (null until verified mandates populate them; never from a request body)."""
+    source = context.mandate_hashes or {}
+    out: dict[str, str | None] = {}
+    for kind in MANDATE_KINDS:
+        value = source.get(kind)
+        valid = isinstance(value, str) and len(value) == 64 and all(c in "0123456789abcdef" for c in value)
+        out[kind] = value if valid else None
+    return out
 
 
 def _iso(value: datetime) -> str:
@@ -358,6 +416,47 @@ def rule_merchant_limits(context: ArbiterContext) -> tuple[bool, str]:
     return True, "within_merchant_limits"
 
 
+def rule_afa_evidence_present(context: ArbiterContext) -> tuple[bool, str]:
+    from core.commerce.india_rails import INSTRUMENT_UPI_AUTOPAY, AfaThresholds, afa_requirement
+
+    payment = context.payload.get("payment") if isinstance(context.payload, Mapping) else None
+    upi = any(
+        isinstance(item, Mapping) and item.get("type") == INSTRUMENT_UPI_AUTOPAY
+        for item in (payment if isinstance(payment, list | tuple) else ())
+    )
+    afa = context.afa
+    if afa is None:
+        return (False, "afa_input_missing") if upi else (True, "afa_not_applicable")
+    requirement = afa_requirement(
+        debit_kind=afa.debit_kind,  # type: ignore[arg-type]
+        amount_minor_units=afa.amount_minor_units,
+        currency=afa.currency,
+        purpose=afa.purpose,
+        thresholds=AfaThresholds(afa.limit_minor_units, afa.higher_limit_minor_units),
+    )
+    if not requirement.required:
+        return True, f"afa_not_required:{requirement.basis}"
+    if afa.evidence_ref:
+        return True, "afa_evidence_present"
+    return False, "afa_evidence_missing"
+
+
+def rule_refund_within_captured(context: ArbiterContext) -> tuple[bool, str]:
+    refund = context.refund
+    if refund is None:
+        return False, "refund_input_missing"
+    amount = context.amount_minor_units
+    if amount is None or amount < 1:
+        return False, "refund_amount_invalid"
+    if not context.currency or context.currency.upper() != refund.currency.upper():
+        return False, "refund_currency_mismatch"
+    if refund.captured_minor_units < 1:
+        return False, "order_not_captured"
+    if refund.refunded_minor_units + amount > refund.captured_minor_units:
+        return False, "refund_exceeds_captured"
+    return True, "refund_within_captured"
+
+
 _RULES: dict[str, Callable[[ArbiterContext, str], tuple[bool, str]]] = {
     RULE_MANDATE: lambda context, _action: rule_mandate_present_unexpired(context),
     RULE_CONSENT: lambda context, _action: rule_consent_active(context),
@@ -365,6 +464,8 @@ _RULES: dict[str, Callable[[ArbiterContext, str], tuple[bool, str]]] = {
     RULE_AUTHORITY_VERIFIED: lambda context, _action: rule_buyer_authority_verified(context),
     RULE_ARTIFACTS: rule_oacp_artifacts_valid,
     RULE_MERCHANT_LIMITS: lambda context, _action: rule_merchant_limits(context),
+    RULE_AFA: lambda context, _action: rule_afa_evidence_present(context),
+    RULE_REFUND: lambda context, _action: rule_refund_within_captured(context),
 }
 
 
@@ -396,6 +497,8 @@ def evidence_hashes(context: ArbiterContext) -> tuple[str, ...]:
         hashes.add("consent:" + _sha256(f"{context.consent.ref}|{context.consent.status or ''}"))
     if context.passport and context.passport.ref:
         hashes.add("passport:" + _sha256(context.passport.ref))
+    if context.afa and context.afa.evidence_ref:
+        hashes.add("afa:" + _sha256(context.afa.evidence_ref))
     return tuple(sorted(hashes))
 
 
@@ -455,7 +558,10 @@ def decide(action: str, context: ArbiterContext) -> Decision:
         decided_at=context.now,
         expires_at=context.now + DECISION_TTL,
         reason=failing.reason if failing else "all_rules_passed",
-        extra={"buyer_authority_source": context.buyer_authority_source},
+        extra={
+            "buyer_authority_source": context.buyer_authority_source,
+            "mandate_hashes": mandate_hashes(context),
+        },
     )
 
 

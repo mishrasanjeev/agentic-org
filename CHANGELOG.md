@@ -1,5 +1,53 @@
 # Changelog
 
+## Unreleased - Plural executor, UPI AutoPay and RBI AFA, refunds and tracking (G55, G56, G58)
+
+- Plural executor (`core/commerce/executors/plural.py`, G55): creates a `pre_auth` Plural order,
+  pays with the tokenised instrument and captures; refunds captured orders. It runs only with a
+  consumed arbiter decision (`session_complete`, or the new `refund` action), checks the amount
+  against the session total, the captured amount and the handler allowance
+  (`mandate_capability.max_amount_minor_units`) before any call, and carries the decision id and
+  the intent, cart and payment mandate hashes (empty until verified mandates land) in the order
+  metadata. Every call is journalled in `commerce_payment_operations` (a `requested` row before
+  the call; a repeated decision is refused without an HTTP call) and ledgered
+  (`commerce.plural.create_order`, `.create_payment`, `.capture`, `.refund`). Async `httpx` over
+  the pinned egress transport, no retry of order creation. Registered only while
+  `PLURAL_PINE_LIVE_EXECUTION_ENABLED=true`; otherwise UCP Complete keeps answering
+  `executor_unavailable`. Decision recorded in `docs/oacp/plural-executor.md`: direct Plural
+  execution; Grantex Commerce V1 execution is the alternative, not built.
+- Plural webhook verification is shared with billing
+  (`core.billing.pinelabs_client.plural_signature_valid`; billing behaviour unchanged). A merchant
+  integration relays Plural events to `POST /api/v1/commerce/runtime/ucp/plural/events` (tenant
+  admin); the Plural signature is verified, so a relay cannot forge one.
+- UPI AutoPay and RBI AFA (`core/commerce/india_rails.py`, G56): `mandate_capability.upi_autopay`
+  (amount rule and limit, frequency, validity, purpose and the authorization URL; the
+  NPCI-unconfirmed values are configuration) enables `upi_autopay` instruments. RBI e-mandate
+  framework 2026 thresholds are settings. The arbiter rule `afa_evidence_present` (last rule of
+  `session_complete`) refuses a UPI AutoPay completion until server-side AFA evidence exists;
+  the response carries the buyer's out-of-band step as the UCP Action
+  `ai.agenticorg.payment.upi_mandate_authorization` (vendor extension
+  `ai.agenticorg.payment.upi_mandate`, 2026-08-25) or as `requires_escalation` with
+  `continue_url`; `acp_afa_out_of_band` maps the same step for ACP. A verified Plural mandate
+  event records the evidence and returns the session to `ready_for_complete`. Nothing waits.
+- Arbiter policy `commerce-arbiter-v3`: the `refund` action (rule `refund_within_captured`), the
+  `afa_evidence_present` rule on `session_complete`, and `mandate_hashes` in the stored decision
+  evidence. `session_complete` decisions list one more rule in `rules_evaluated`; outcomes for
+  sessions without a UPI AutoPay instrument are unchanged.
+- Refund orchestration on the order entity (G58): `POST
+  /api/v1/commerce/runtime/ucp/orders/{order_id}/refunds` takes a fresh `refund` decision,
+  consumes it, refunds through the Plural executor and appends a `refund` adjustment; partial
+  refunds are bounded by the captured amount less earlier refunds (pending ones included).
+- Tracking normaliser (`core/commerce/fulfillment_tracking.py`, G58): Shopify fulfillment and
+  fulfillment-event payloads become UCP order fulfillment events (status map, carrier aliases
+  from `provider_policy.ucp.carrier_aliases`, source time in UTC), recorded with
+  `POST /api/v1/commerce/runtime/ucp/orders/{order_id}/shopify-fulfillments`; a redelivered event
+  has the same id and is recorded once.
+- Migration `v6z90_mandates_rails` (after `v6z89_commerce_sessions_orders`):
+  `commerce_payment_operations` and `commerce_afa_evidence`, ENABLE + FORCE row-level security,
+  tenant policy with `WITH CHECK`, append-only trigger `commerce_payment_record_reject_mutation`,
+  `SELECT, INSERT` for `agenticorg_app` (classified in `scripts/create_app_role.sql`); the arbiter
+  action CHECK admits `refund`. Forward-only.
+
 ## Unreleased - UCP checkout, cart and order (G21, G22, G25, G27, G29-G32, G35)
 
 - UCP REST binding at `https://<merchant serving host>/ucp` (`api/v1/commerce_ucp.py`), behind

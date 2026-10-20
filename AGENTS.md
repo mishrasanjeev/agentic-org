@@ -85,6 +85,13 @@ UCP transaction flags: `AGENTICORG_UCP_CHECKOUT_ENABLED` (default off; the `/ucp
 order routes answer 404 while off). A UCP
 checkout completes only through a registered executor that consumes a `session_complete` `allow`
 decision (`core/commerce/executors/`); see `docs/oacp/ucp-checkout.md`.
+Payment execution: `PLURAL_PINE_LIVE_EXECUTION_ENABLED` (unset: off; `true` registers the Plural
+executor, `core/commerce/executors/plural.py`, which calls Plural only with a consumed `allow`
+decision, `session_complete` or `refund`, and journals and ledgers every call; see
+`docs/oacp/plural-executor.md`). UPI AutoPay needs RBI AFA evidence before a session completes
+(arbiter rule `afa_evidence_present`; thresholds `AGENTICORG_RBI_EMANDATE_AFA_LIMIT_MINOR_UNITS`
+and `AGENTICORG_RBI_EMANDATE_AFA_HIGHER_LIMIT_MINOR_UNITS`); AFA is the buyer's out-of-band step,
+returned as an action, never waited for (`docs/oacp/mandates.md`).
 UCP profile flags: `AGENTICORG_UCP_PROFILE_ENABLED` (default off; `/.well-known/ucp` and the
 `/ucp` catalog and location routes answer 404 while off, onboarding generates no UCP signing
 key, and no `public_discovery_state` artifact may enable discovery), `AGENTICORG_UCP_VERSIONS`

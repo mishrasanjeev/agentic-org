@@ -42,8 +42,10 @@ SHA-256). `buyer_authority` travels in the vendor member `ai.agenticorg.commerce
 body; `{"decide_only": true}` returns the decision without executing and a later Complete may
 present its `decision_id`. Execution happens only through a registered executor, which receives a
 decision consumed by `require_allow_decision`; with `AGENTICORG_UCP_CHECKOUT_ENABLED` off the
-routes are 404, and with it on but no executor registered (this release) Complete answers
-`executor_unavailable` without deciding.
+routes are 404, and with it on but no executor registered Complete answers
+`executor_unavailable` without deciding. The Plural executor is registered while
+`PLURAL_PINE_LIVE_EXECUTION_ENABLED=true` ([Plural executor](plural-executor.md)); a UPI AutoPay
+instrument also needs RBI AFA evidence ([Mandates](mandates.md)).
 
 ## Required Fresh Inputs
 

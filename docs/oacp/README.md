@@ -47,6 +47,8 @@ authority.
 - [Protocol adapter consumption guide](protocol-adapter-consumption-guide.md)
 - [UCP business profile, catalog and locations](ucp-profile.md)
 - [Plural/Pine P3P capability verifier](plural-pine-p3p-capability-verifier.md)
+- [Plural executor](plural-executor.md)
+- [Mandates, UPI AutoPay and RBI AFA](mandates.md)
 - [Purchase/mandate handoff](purchase-mandate-handoff.md)
 - [Offline POS bridge](offline-pos-bridge.md)
 - [Runtime operations runbook](runtime-operations-runbook.md)

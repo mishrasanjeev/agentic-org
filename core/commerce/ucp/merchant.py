@@ -28,8 +28,12 @@ Merchant transaction settings live in the merchant commerce config under
 ``payment_authentication``
     ``{allowed_origins: [https origins]}`` (2026-08-25 only).
 ``mandate_capability``
-    ``{rails: [...], max_amount_minor_units, currency, instrument_types: [...]}``:
+    ``{rails: [...], max_amount_minor_units, currency, instrument_types: [...], upi_autopay?}``:
     what the merchant's payment rail accepts for agent-initiated payments.
+    ``upi_autopay`` (``core.commerce.india_rails.parse_upi_autopay_capability``)
+    describes the UPI AutoPay e-mandate the merchant offers (amount rule and
+    limit, frequency, validity, purpose, the AFA authorization URL); with the
+    ``upi_autopay`` instrument type it enables UPI AutoPay instruments.
 ``executor``
     The registered executor that completes this merchant's sessions (none by default).
 ``currency``
@@ -50,6 +54,8 @@ import re
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from typing import Any, Protocol
+
+from core.commerce.india_rails import INSTRUMENT_UPI_AUTOPAY, UpiAutopayCapability, parse_upi_autopay_capability
 
 DEFAULT_CHECKOUT_TTL_SECONDS = 6 * 60 * 60
 _HOST_RE = re.compile(r"^(?=.{1,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z][a-z0-9-]{0,62}$")
@@ -91,15 +97,19 @@ class MandateCapability:
     max_amount_minor_units: int | None
     currency: str | None
     instrument_types: tuple[str, ...]
+    upi_autopay: UpiAutopayCapability | None = None
 
     def to_dict(self) -> dict[str, Any]:
-        return {
+        out: dict[str, Any] = {
             "rails": list(self.rails),
             "max_amount_minor_units": self.max_amount_minor_units,
             "currency": self.currency,
             "instrument_types": list(self.instrument_types),
             "evidence": "merchant_config",
         }
+        if self.upi_autopay is not None:
+            out["upi_autopay"] = self.upi_autopay.to_dict()
+        return out
 
 
 @dataclass(frozen=True)
@@ -193,11 +203,17 @@ def merchant_ucp_from_config(
     mandate_raw = ucp.get("mandate_capability") if isinstance(ucp.get("mandate_capability"), Mapping) else None
     mandate = None
     if mandate_raw:
+        upi = parse_upi_autopay_capability(mandate_raw.get("upi_autopay"))
+        types = tuple(str(t) for t in _seq(mandate_raw.get("instrument_types")) if t)
+        if upi is None:
+            # A UPI AutoPay instrument is offered only with complete e-mandate terms (fail closed).
+            types = tuple(t for t in types if t != INSTRUMENT_UPI_AUTOPAY)
         mandate = MandateCapability(
             rails=tuple(str(r) for r in _seq(mandate_raw.get("rails")) if r),
             max_amount_minor_units=_int(mandate_raw.get("max_amount_minor_units")),
             currency=str(mandate_raw.get("currency") or "").upper() or None,
-            instrument_types=tuple(str(t) for t in _seq(mandate_raw.get("instrument_types")) if t),
+            instrument_types=types,
+            upi_autopay=upi,
         )
     links = tuple(
         {k: str(v) for k, v in link.items() if k in {"type", "url", "title"} and v}

@@ -78,7 +78,11 @@ async def persist_decision(session: Any, decision: Decision) -> dict[str, Any]:
         "rules_evaluated": list(decision.rules_evaluated),
         "failing_rule": decision.failing_rule,
         "rule_results": [result.to_dict() for result in decision.rule_results],
-        "evidence": {**decision.evidence, "buyer_authority_source": decision.buyer_authority_source},
+        "evidence": {
+            **decision.evidence,
+            "buyer_authority_source": decision.buyer_authority_source,
+            "mandate_hashes": decision.extra.get("mandate_hashes"),
+        },
         "evidence_hashes": list(decision.evidence_hashes),
         "policy_version": decision.policy_version,
         "decided_at": decision.decided_at,
@@ -163,7 +167,9 @@ async def require_allow_decision(
             update(table)
             .where(*conditions)
             .values(consumed_at=moment)
-            .returning(table.decision_id, table.merchant_id, table.seller_agent_id, table.buyer_agent_id)
+            .returning(
+                table.decision_id, table.merchant_id, table.seller_agent_id, table.buyer_agent_id, table.evidence
+            )
         )
     ).first()
     if consumed is None:

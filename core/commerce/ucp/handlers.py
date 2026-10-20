@@ -32,7 +32,7 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 
 from core.commerce import executors
-from core.commerce.arbiter import decide
+from core.commerce.arbiter import RULE_AFA, AfaEvidence, decide
 from core.commerce.arbiter_store import DecisionRefusedError, persist_decision
 from core.commerce.ledger import commerce_payload_hash, record_commerce_event
 from core.commerce.ucp import idempotency
@@ -670,6 +670,7 @@ async def complete_checkout(
         payload_hash = commerce_payload_hash(payload)
         decision_id = vendor.get("decision_id")
         decision_public = None
+        afa_input, afa_step = await _afa_scope(session, req, merchant, row, instruments, total)
         if not decision_id:
             cache_records, merchant_config = (
                 await runtime.arbiter_scope(merchant) if runtime.arbiter_scope is not None else ((), None)
@@ -686,10 +687,15 @@ async def complete_checkout(
                     authority=authority,
                     cache_records=cache_records,
                     merchant_config=merchant_config,
+                    afa=afa_input,
                 ),
             )
             await persist_decision(session, decision)
             decision_public = decision.to_public()
+            if decision.failing_rule == RULE_AFA and afa_step is not None:
+                return await _return_afa_step(
+                    runtime, session, req, merchant, negotiated, row, state, afa_step, now, decision_public
+                )
             if not decision.allowed:
                 return await _blocked(
                     [msg.error("arbiter_refused", f"The commerce arbiter refused: {decision.failing_rule}.", path="$")],
@@ -771,6 +777,12 @@ async def complete_checkout(
             ],
             token_binding=token_binding(version, row.id),
             payload_hash=payload_hash,
+            allowance_max_minor_units=merchant.mandate_capability.max_amount_minor_units
+            if merchant.mandate_capability
+            else None,
+            allowance_currency=merchant.mandate_capability.currency if merchant.mandate_capability else None,
+            upi_mandate_reference=afa_step.reference if afa_step is not None else None,
+            afa_evidence_ref=afa_input.evidence_ref if afa_input is not None else None,
         )
     try:
         result = await executor.execute(checkout, consumed)
@@ -783,6 +795,135 @@ async def complete_checkout(
     return await _apply_execution(
         runtime, req, merchant, negotiated, str(session_id), instruments, result, consumed.decision_id, executor.name
     )
+
+
+@dataclass(frozen=True)
+class _AfaStep:
+    """The RBI AFA step a UPI AutoPay instrument needs (``core.commerce.india_rails``)."""
+
+    reference: str
+    instrument_id: str
+    terms: Any
+    url: str
+
+
+async def _afa_scope(
+    session: Any, req: UcpRequest, merchant: MerchantUcp, row: Any, instruments: Sequence[Instrument], total: int
+) -> tuple[AfaEvidence | None, _AfaStep | None]:
+    """The arbiter's AFA input for a UPI AutoPay instrument and the step to return when evidence is missing.
+
+    Evidence is read from ``commerce_afa_evidence`` (written only from a
+    verified provider event), never from the request. Terms that cannot be
+    built (wrong currency, above the mandate limit) leave the input empty, so
+    ``afa_evidence_present`` refuses with ``afa_input_missing``.
+    """
+    from core.commerce import india_rails
+    from core.commerce.payment_records import afa_evidence_ref
+
+    upi = [i for i in instruments if i.type == india_rails.INSTRUMENT_UPI_AUTOPAY]
+    capability = merchant.mandate_capability.upi_autopay if merchant.mandate_capability else None
+    if not upi or capability is None:
+        return None, None
+    instrument = upi[0]
+    reference = india_rails.mandate_reference(str(req.tenant_id), str(row.id), instrument.id)
+    started = row.created_at if isinstance(row.created_at, datetime) else datetime.now(UTC)
+    try:
+        terms = india_rails.mandate_terms(
+            capability, amount_minor_units=total, currency=row.currency, start=started.date()
+        )
+    except india_rails.UpiMandateError:
+        return None, None
+    evidence = await afa_evidence_ref(
+        session, tenant_id=str(req.tenant_id), reference=reference, terms_sha256=terms.sha256
+    )
+    thresholds = india_rails.afa_thresholds_from_settings()
+    afa = AfaEvidence(
+        debit_kind="registration",
+        amount_minor_units=total,
+        currency=row.currency,
+        purpose=capability.purpose,
+        limit_minor_units=thresholds.limit_minor_units,
+        higher_limit_minor_units=thresholds.higher_limit_minor_units,
+        evidence_ref=evidence,
+    )
+    step = _AfaStep(
+        reference=reference,
+        instrument_id=instrument.id,
+        terms=terms,
+        url=india_rails.authorization_url(capability, reference),
+    )
+    return afa, step
+
+
+async def _return_afa_step(
+    runtime: UcpRuntime,
+    session: Any,
+    req: UcpRequest,
+    merchant: MerchantUcp,
+    negotiated: Negotiated,
+    row: Any,
+    state: dict[str, Any],
+    step: _AfaStep,
+    now: datetime,
+    decision_public: Mapping[str, Any],
+) -> UcpResponse:
+    """The buyer's out-of-band AFA step: an ``actions[]`` entry when the extension is active, else escalation.
+
+    Nothing waits: the session leaves ``ready_for_complete`` (``incomplete``
+    with the Action, or ``requires_escalation`` with ``continue_url``) and
+    returns to it when verified AFA evidence is recorded; the next Complete
+    gets a fresh decision.
+    """
+    from core.commerce import india_rails
+    from core.commerce.payment_records import record_afa_requested
+
+    await record_afa_requested(
+        session,
+        tenant_id=str(req.tenant_id),
+        merchant_id=merchant.merchant_id,
+        seller_agent_id=merchant.seller_agent_id,
+        checkout_session_id=row.id,
+        instrument_id=step.instrument_id,
+        reference=step.reference,
+        terms=step.terms.to_dict(),
+        terms_sha256=step.terms.sha256,
+    )
+    messages = [m for m in state.get("messages") or [] if m.get("code") != india_rails.AFA_ERROR_CODE]
+    state["afa_pending"] = {
+        "mandate_reference": step.reference,
+        "instrument_id": step.instrument_id,
+        "terms_sha256": step.terms.sha256,
+    }
+    if negotiated.has(india_rails.UCP_UPI_MANDATE_EXTENSION):
+        actions = dict(state.get("actions") or {})
+        actions[india_rails.UCP_AFA_ACTION] = [
+            india_rails.ucp_afa_action(
+                reference=step.reference, instrument_id=step.instrument_id, terms=step.terms, url=step.url
+            )
+        ]
+        state["actions"] = actions
+        messages.append(india_rails.ucp_afa_blocking_message())
+        state["messages"] = messages
+        row.status = "incomplete"
+    else:
+        state["continue_url"] = step.url
+        messages.append(india_rails.ucp_afa_escalation_message())
+        state["messages"] = messages
+        row.status = status_for(messages, step.url)
+    row.state = state
+    row.revision = row.revision + 1
+    row.updated_at = now
+    await _record(
+        session,
+        req,
+        merchant,
+        EVENTS["complete_checkout"],
+        "refused",
+        row.id,
+        {"reason": india_rails.AFA_ERROR_CODE, "mandate_reference": step.reference},
+    )
+    rendered = await _render_checkout(runtime, row, merchant, negotiated, now, vendor={"decision": decision_public})
+    return UcpResponse(status=200, body=rendered, outcome="refused", recorded=True, resource_id=row.id)
 
 
 async def _apply_execution(
@@ -818,6 +959,13 @@ async def _apply_execution(
             )
             if order_policies:
                 snapshot["policies"] = order_policies
+            capability = merchant.mandate_capability
+            if capability is not None:
+                # The handler allowance the payment was captured under; refunds are bounded by it too.
+                snapshot["payment_allowance"] = {
+                    "max_amount_minor_units": capability.max_amount_minor_units,
+                    "currency": capability.currency,
+                }
             session.add(
                 CommerceOrderRow(
                     id=order_id,
@@ -1154,13 +1302,21 @@ async def apply_order_change(
     fulfillment_event: Mapping[str, Any] | None,
     adjustment: Mapping[str, Any] | None,
     now: datetime,
+    event_id: str | None = None,
 ) -> tuple[int, dict[str, Any], str]:
     """Record a fulfillment event or an adjustment on an order and queue the full snapshot to every subscriber.
 
     Returns ``(revision, snapshot, ucp_version)``; raises ``OrderChangeError`` (404 unknown order, 422 a change
-    that does not apply). The ledger event, the outbox rows and the order event listeners share one transaction.
+    that does not apply, 409 a fulfillment ``event_id`` already recorded). The ledger event, the outbox rows and
+    the order event listeners share one transaction.
     """
-    from core.commerce.ucp.orders import ORDER_UPDATED, OrderUpdateError, apply_adjustment, apply_fulfillment_event
+    from core.commerce.ucp.orders import (
+        ORDER_UPDATED,
+        DuplicateOrderEventError,
+        OrderUpdateError,
+        apply_adjustment,
+        apply_fulfillment_event,
+    )
     from core.commerce.ucp.webhooks import enqueue_order_deliveries
     from core.database import get_tenant_session
     from core.models.commerce_ucp import CommerceOrderRow
@@ -1181,9 +1337,11 @@ async def apply_order_change(
         snapshot = json.loads(json.dumps(row.snapshot))
         try:
             if fulfillment_event is not None:
-                entry = apply_fulfillment_event(snapshot, fulfillment_event, now=now)
+                entry = apply_fulfillment_event(snapshot, fulfillment_event, now=now, event_id=event_id)
             else:
                 entry = apply_adjustment(snapshot, adjustment or {}, now=now)
+        except DuplicateOrderEventError as exc:
+            raise OrderChangeError(409, "event_already_recorded") from exc
         except OrderUpdateError as exc:
             raise OrderChangeError(422, str(exc)) from exc
         row.snapshot = snapshot

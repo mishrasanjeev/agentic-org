@@ -75,6 +75,10 @@ REQUIRED_RUNTIME_TABLES = frozenset(
         "commerce_carts",
         "commerce_orders",
         "commerce_ucp_idempotency",
+        # Plural payment operation records and RBI AFA evidence (v6z90): the
+        # executor and UCP completion write and read them synchronously.
+        "commerce_payment_operations",
+        "commerce_afa_evidence",
     }
 )
 
