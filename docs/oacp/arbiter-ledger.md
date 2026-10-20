@@ -27,6 +27,12 @@ action's binding payload (`binding_payload`): the handoff or packet fields that 
 timestamps are excluded, so a decision taken at preparation still binds the identical payload
 at execution, and a changed price, quantity or packet is refused.
 
+Row `details` pass through the PII masker before they are signed, except digest values: a hex
+SHA-256 (optionally `sha256:`-prefixed) and an opaque id whose suffix is hex (`arbdec_<hex>`,
+`aoc-<hex>`) are kept as they are. Without that exception the masker's phone and account
+patterns rewrote digit runs inside such values, so a sealed mandate hash or decision id could not
+be matched to what it names.
+
 Every commerce write route records its declared `route_meta(audit_event=...)` event in the same
 database transaction as the write. Route enforcement (`api/route_enforcement.py`) checks this for
 every non-read route under `/api/v1/commerce/`, `/api/v1/public/commerce/`,

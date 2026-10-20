@@ -186,7 +186,7 @@ async def test_human_present_purchase_runs_on_verified_mandates_and_carries_thei
     assert "commerce.ucp.checkout.mandates" in events
     sealed = json.dumps([row["details"] for row in ledger])
     for value in hashes.values():
-        assert value in sealed
+        assert value in sealed, (events, [r["details"] for r in ledger if r["event_type"].endswith("mandates")])
     operations = await _rows(
         db, "SELECT mandate_hashes FROM commerce_payment_operations WHERE tenant_id = :t", tenant=tenant, t=tenant
     )
