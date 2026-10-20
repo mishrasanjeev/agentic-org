@@ -357,6 +357,7 @@ class GrantexAuthMiddleware(BaseHTTPMiddleware):
         "/api/v1/auth/google", "/api/v1/auth/config", "/api/v1/auth/signup",
         "/api/v1/auth/forgot-password", "/api/v1/auth/reset-password",
         "/api/v1/org/accept-invite",
+        "/api/v1/org/invite-info",  # Accept-invite screen preview (route_meta auth_required=False)
         "/api/v1/demo-request",
         "/api/v1/a2a/.well-known/agent.json",  # A2A discovery (public)
         "/api/v1/a2a/agent-card",  # A2A discovery alias (nginx-safe)
@@ -399,6 +400,9 @@ class GrantexAuthMiddleware(BaseHTTPMiddleware):
         "/api/v1/cron/",  # Cloud Scheduler triggers: X-Cron-Key verified by the route
         "/api/v1/customer-agent/",  # Bank-signed customer assertions and the session tokens they issue
         "/.well-known/ucp/",  # UCP leaf profiles for older supported releases (public by spec)
+        # Public buyer-safe seller pages and catalog reads (api/v1/commerce_public.py, all GET,
+        # route_meta auth_required=False); the merchant's public_publishing switch gates them.
+        "/api/v1/public/commerce/",
     )
 
     async def _credential_failure_response(

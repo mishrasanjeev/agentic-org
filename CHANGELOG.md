@@ -1,5 +1,17 @@
 # Changelog
 
+## Unreleased - Agent network identity (G47, G48, G49, G51, G52)
+
+- Fixed: the public buyer-safe seller pages and catalog reads under `/api/v1/public/commerce/`
+  (`api/v1/commerce_public.py`, all `GET`, `route_meta(auth_required=False)`, documented as public in
+  `docs/commerce-agent-bridges-guide.md`) answered `401 Missing session cookie or Authorization
+  header` to every anonymous request because the auth middleware did not exempt them. They are now
+  exempt; the merchant's `public_publishing.enabled` switch and
+  `OACP_PUBLIC_CATALOG_PLATFORM_DISABLED` still gate them. The same class affected
+  `GET /api/v1/org/invite-info` (the accept-invite screen's preview, called before login), now
+  exempt as well. A regression test pins that every route declared public is exempt
+  (`tests/regression/test_public_route_exemptions_20261020.py`).
+
 ## Unreleased - ACP product feed, checkout sessions and order events (G33, G34, G35, G37, G38, G40)
 
 - ACP product feed (`core/commerce/acp/feed.py`), behind `AGENTICORG_ACP_FEED_ENABLED` (default off):
