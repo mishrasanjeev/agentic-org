@@ -244,7 +244,7 @@ def main(argv: list[str] | None = None) -> int:
     if args.audit_secret_env:
         value = os.environ.get(args.audit_secret_env)
         if not value:
-            print(json.dumps({"status": "unreadable", "error": f"{args.audit_secret_env} is not set"}))
+            print(json.dumps({"status": "unreadable", "error": "the variable named by --audit-secret-env is not set"}))
             return 2
         secret = value.encode()
     report = verify_bundle(bundle, expected_head=_expected_head(args.expected_head), secret=secret)

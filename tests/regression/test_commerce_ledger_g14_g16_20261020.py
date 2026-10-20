@@ -547,6 +547,39 @@ def test_the_cli_verifies_from_a_file_without_importing_the_application(tmp_path
     )
 
 
+
+def test_verifier_does_not_echo_the_secret_variable_name(tmp_path: Path) -> None:
+    """A missing audit secret exits 2 without printing the variable it was told to read."""
+    export = tmp_path / "export.json"
+    export.write_text("{}", encoding="utf-8")
+    env_name = "AGENTICORG_TEST_LEDGER_SECRET_" + uuid.uuid4().hex.upper()
+    result = subprocess.run(  # noqa: S603 - fixed interpreter and repository script
+        [sys.executable, str(ROOT / "scripts" / "verify_ledger.py"), str(export), "--audit-secret-env", env_name],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.returncode == 2
+    assert env_name not in result.stdout + result.stderr
+    assert json.loads(result.stdout)["status"] == "unreadable"
+
+
+def test_reviewer_ref_is_derived_from_the_principal_subject_only() -> None:
+    """The operator reference hashes the tenant and subject; an API key's name is never read."""
+    from types import SimpleNamespace
+
+    from api.v1.commerce_ledger import _reviewer_ref
+
+    tenant = str(uuid.uuid4())
+    by_key = SimpleNamespace(state=SimpleNamespace(user_sub="apikey:ak_1234", api_key_name="ops key"))
+    same_sub = SimpleNamespace(state=SimpleNamespace(user_sub="apikey:ak_1234", api_key_name="renamed"))
+    ref = _reviewer_ref(by_key, tenant)  # type: ignore[arg-type]
+    assert ref.startswith("operator_ref_") and len(ref) == len("operator_ref_") + 24
+    assert ref == _reviewer_ref(same_sub, tenant)  # type: ignore[arg-type]
+    assert "ak_1234" not in ref
+    anonymous = SimpleNamespace(state=SimpleNamespace(api_key_name="ops key"))
+    assert _reviewer_ref(anonymous, tenant) == _reviewer_ref(SimpleNamespace(state=SimpleNamespace()), tenant)  # type: ignore[arg-type]
+
 # ---------------------------------------------------------------------------
 # G14: operator decisions annotate only; routes record their events; nothing waits
 # ---------------------------------------------------------------------------
