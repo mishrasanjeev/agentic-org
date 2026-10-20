@@ -265,7 +265,8 @@ A source definition is not evidence that a specific tenant has connected the pro
   on the public commerce reads and the A2A routes in `log` mode by default
   (`AGENTICORG_HTTPSIG_VERIFY_MODE=enforce` refuses unsigned requests); the buyer connector signs its
   requests with the tenant agent key only with `AGENTICORG_HTTPSIG_SIGN_OUTBOUND`. The library
-  (`grantex-agent-httpsig` 0.2.0) must be published before CI can install it. See
+  (`grantex-agent-httpsig` 0.2.0, not on PyPI) is installed from a commit-pinned git reference to the
+  Grantex repository, so installs need `git`. See
   [agent request signing](docs/oacp/agent-request-signing.md).
 - AI spend intelligence is off by default. Nothing is metered until `AGENTICORG_SPEND_INTELLIGENCE_ENABLED`
   is set on the API, worker, and beat services. Attribution follows the organisation tree and mappings a

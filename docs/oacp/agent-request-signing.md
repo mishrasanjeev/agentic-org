@@ -15,13 +15,22 @@ HTTP Message Signatures under two public profiles:
   (Signature-Agent URL, keyid) pair (section 5.4).
 
 The implementation is the `grantex-agent-httpsig` library (version 0.2.0, `verify_with_profile`,
-`sign_with_profile`, `verify_tap_body_objects`, `verify_directory_response`), pinned in
-`requirements.txt` and `pyproject.toml`.
+`sign_with_profile`, `verify_tap_body_objects`, `verify_directory_response`).
 
-> **Dependency status.** `grantex-agent-httpsig==0.2.0` is not yet on PyPI. Until it is published,
-> `pip install -r requirements.txt` fails and CI cannot install the API's dependencies; a local
-> build installs the library from a wheel built from the Grantex repository. CI needs the
-> published package before this change can merge.
+> **Dependency.** The library is not published to PyPI (its package is marked
+> `Private :: Do Not Upload`). `requirements.txt` and `pyproject.toml` install it as a direct
+> reference pinned to a full commit sha of the public Grantex repository:
+>
+> ```
+> grantex-agent-httpsig @ git+https://github.com/mishrasanjeev/grantex@<40-character sha>#subdirectory=packages/agent-httpsig-py
+> ```
+>
+> A branch or tag is never used (`tests/regression/test_agent_httpsig_pin_20261020.py` refuses
+> one), `[tool.hatch.metadata] allow-direct-references` is on, every image that installs the
+> Python dependencies has `git`, and `config/pip-audit-exceptions.toml` carries a reviewed
+> `[[skip]]` for it (pip-audit cannot look it up on PyPI). The commit must exist on GitHub before
+> CI can install it. The sha is the Grantex Phase 5 branch head for now and moves to the Grantex
+> `main` merge commit once Phase 5 lands there.
 
 ## Inbound verification (`auth/httpsig.py`)
 

@@ -46,8 +46,12 @@
   merchant scope, currency, cap, expiry), as Grantex already refuses when it issues one. Artifacts
   without the member are unaffected. `ExecutionCheckout.scheme_token_binding` (default `None`)
   carries the parsed binding to the rail's executor; nothing executes it here.
-- Dependency: `grantex-agent-httpsig==0.2.0` in `requirements.txt` and `pyproject.toml`. It is not
-  on PyPI yet; CI needs the published package.
+- Dependency: `grantex-agent-httpsig` 0.2.0 is not published to PyPI. `requirements.txt` and
+  `pyproject.toml` install it as a direct git reference pinned to a full commit sha of the Grantex
+  repository (`#subdirectory=packages/agent-httpsig-py`; hatch `allow-direct-references`); the
+  production image's builder stage installs `git`; pip-audit carries a reviewed `[[skip]]` for it.
+  A regression test refuses a branch, tag or short-sha reference. The commit must exist on GitHub
+  before CI can install it; the sha moves to the Grantex `main` merge commit once Phase 5 lands.
 - Fixed: the public buyer-safe seller pages and catalog reads under `/api/v1/public/commerce/`
   (`api/v1/commerce_public.py`, all `GET`, `route_meta(auth_required=False)`, documented as public in
   `docs/commerce-agent-bridges-guide.md`) answered `401 Missing session cookie or Authorization
