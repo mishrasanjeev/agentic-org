@@ -148,6 +148,7 @@ Useful variables:
   `make test-integration INTEGRATION_SUITES=tests/integration/test_api_integration.py`.
 - `RUNNER=local PYTHON=.venv/bin/python` runs tests and checks with a local
   interpreter instead of the container. It needs `pip install -e ".[dev]"`,
+  `pip install --no-deps --require-hashes -r requirements-fastembed.txt`,
   `pip-audit` and gitleaks 8.30.1; integration tests then reach the stack's
   Postgres and Redis on their published ports.
 
