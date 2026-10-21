@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """Merchant custom domains: host rules, the records and commands shown, DNS checks, the certificate probe,
 the Cloud Run Admin API client and the merchant view (no database; see the Postgres integration test)."""
 

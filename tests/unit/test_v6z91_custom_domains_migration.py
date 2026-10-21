@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """v6z91: the merchant custom domain table is tenant-isolated, platform-readable only, and matches the ORM."""
 
 from __future__ import annotations

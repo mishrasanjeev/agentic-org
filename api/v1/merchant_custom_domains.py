@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """Merchant custom domains: add a host, publish DNS, verify, follow the certificate to live.
 
 Merchant routes (``commerce.merchant_config.write`` or tenant admin, under

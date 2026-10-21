@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """Merchant custom domains (self-service onboarding of a merchant's own host).
 
 Revision ID: v6z91_merchant_custom_domains

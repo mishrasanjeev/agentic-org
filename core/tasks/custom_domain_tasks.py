@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """Merchant custom domains: advance domains waiting on their mapping or certificate.
 
 Every few minutes: list (platform context, SELECT only) the domains in

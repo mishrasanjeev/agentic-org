@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """Merchant custom domains: DNS checks, the records a merchant publishes, the
 domain-mapping step and the certificate probe.
 

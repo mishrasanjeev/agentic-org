@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """A merchant's own domain for its agent surfaces (UCP profile and catalog).
 
 Row-level security: tenant-scoped with ENABLE + FORCE RLS and a tenant policy;

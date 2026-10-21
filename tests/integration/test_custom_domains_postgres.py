@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """Merchant custom domains on a real Postgres: the merchant flow, the operator queue, RLS and host claims.
 
 DNS, the HTTPS probe and email are fakes; everything else (merchant config,

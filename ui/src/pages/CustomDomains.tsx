@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: Apache-2.0
+// SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 import { useCallback, useEffect, useState } from "react";
 import { Check, Copy, Globe, RefreshCw, Trash2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
