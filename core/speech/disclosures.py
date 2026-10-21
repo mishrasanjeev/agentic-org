@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """Disclosure scripts: what an agent must say on a call, whether it was said, and when it became overdue.
 
 A disclosure is a short script the bank requires on certain calls: that

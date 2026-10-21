@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """Source excerpts, stored apart from structured fields and cited by ``excerpt_ref``.
 
 Excerpts are short passages of attacker-controlled source text kept so a human

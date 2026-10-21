@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """The review store: processed documents kept with their file, corrections by field, page images, decisions.
 
 A document the pipeline routed to review waits in ``review``; a reviewer

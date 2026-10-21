@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """Regression: UCP publishing operator flow, merchant keys at onboarding and the rewritten adapter (G18, G19, G20, G26).
 
 Failures replayed:

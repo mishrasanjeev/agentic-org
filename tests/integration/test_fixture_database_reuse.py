@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """The integration fixtures can run repeatedly against one database.
 
 A test session mints fresh tenant and user ids, so the rows it seeds must not

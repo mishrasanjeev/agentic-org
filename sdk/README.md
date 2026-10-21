@@ -229,11 +229,15 @@ boundaries as the Python client.
 
 ## License
 
-Apache-2.0
+Apache License 2.0 (SPDX `Apache-2.0`); see [LICENSE](LICENSE). Copyright 2026 Orchestrum
+Technologies LLP.
 
-The [approved prospective platform policy](https://agenticorg.ai/docs/licensing)
-awaits software-release adoption; this SDK's Apache-2.0 rights remain unchanged.
-The platform policy includes existing and new covered users; existing hosted
-customers transition through required notice and acceptance. Self-use is free
-of a software license fee, not of hosting or provider charges.
-Commercial agreements: [sanjeev@orchestrum.in](mailto:sanjeev@orchestrum.in).
+**This Python SDK is open source and free for any use, including commercial use**, under the Apache
+License 2.0. It stays Apache-2.0 after the AgenticOrg platform moved to the Orchestrum Personal Use
+License 1.0 on 21 October 2026. The platform itself (the API, workers, UI and the rest of the
+repository) is licensed separately: only an individual's personal use of the platform is free, and
+any organisation needs a signed agreement with Orchestrum Technologies LLP; see
+[COMMERCIAL-LICENSE.md](https://github.com/mishrasanjeev/agentic-org/blob/main/COMMERCIAL-LICENSE.md).
+"AgenticOrg" and "Grantex" are trademarks of Orchestrum Technologies LLP; the Apache License 2.0
+grants no trademark rights
+([TRADEMARKS.md](https://github.com/mishrasanjeev/agentic-org/blob/main/TRADEMARKS.md)).

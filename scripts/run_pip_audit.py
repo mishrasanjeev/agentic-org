@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """Dependency vulnerability audit with dated, reviewed exceptions.
 
 Runs ``pip-audit`` over the project metadata, both requirements files (the

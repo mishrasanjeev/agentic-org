@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """PRD F-1 — every route that starts a run is bound to the caller's Grantex token.
 
 Grantex agent tokens skip the route scope checks (``api/route_enforcement.py``),

@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """Residency store paths: loading the region and attestations, recording and revoking attestations."""
 
 from __future__ import annotations

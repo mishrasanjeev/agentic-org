@@ -23,6 +23,46 @@ def test_core_database_added_ddl_requires_migration(monkeypatch) -> None:
     assert guard._schema_relevant_changed_files("base", "head", ["core/database.py"]) == ["core/database.py"]
 
 
+def test_model_comment_only_change_does_not_require_migration(monkeypatch) -> None:
+    # The 2026-10-21 relicensing changed only the SPDX comment line of every model file.
+    monkeypatch.setattr(
+        guard,
+        "_diff",
+        lambda *_args: (
+            "diff --git a/core/models/agent.py b/core/models/agent.py\n"
+            "--- a/core/models/agent.py\n"
+            "+++ b/core/models/agent.py\n"
+            "@@ -1 +1 @@\n"
+            "-# SPDX-License-" "Identifier: Apache-2.0\n"
+            "+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0"
+        ),
+    )
+
+    assert guard._schema_relevant_changed_files("base", "head", ["core/models/agent.py"]) == []
+
+
+def test_model_code_change_next_to_a_comment_still_requires_migration(monkeypatch) -> None:
+    monkeypatch.setattr(
+        guard,
+        "_diff",
+        lambda *_args: (
+            "--- a/core/models/agent.py\n"
+            "+++ b/core/models/agent.py\n"
+            "@@ -1,0 +1,2 @@\n"
+            "+# new column\n"
+            "+    nickname = Column(String(64))"
+        ),
+    )
+
+    assert guard._schema_relevant_changed_files("base", "head", ["core/models/agent.py"]) == ["core/models/agent.py"]
+
+
+def test_model_change_with_an_empty_diff_still_requires_migration(monkeypatch) -> None:
+    monkeypatch.setattr(guard, "_diff", lambda *_args: "")
+
+    assert guard._schema_relevant_changed_files("base", "head", ["core/models/agent.py"]) == ["core/models/agent.py"]
+
+
 def test_multiple_alembic_heads_fail_without_merge_plan(monkeypatch, capsys) -> None:
     monkeypatch.setattr(guard, "_alembic_heads", lambda: ["head_a", "head_b"])
     monkeypatch.setattr(guard, "_changed_files", lambda *_args: [])

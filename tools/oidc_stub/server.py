@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """OpenID Connect provider stub: protocol logic and HTTP server.
 
 Implements, for development and tests only:

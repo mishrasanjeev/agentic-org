@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """Grant enforcement for agent tool calls (``grants.enforce_closed``).
 
 Every agent tool call is checked against the run's Grantex grant. What happens

@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """Deterministic policy evaluation over a case's evidence fields.
 
 ``evaluate(policy, evidence)`` reads the dotted paths the policy references

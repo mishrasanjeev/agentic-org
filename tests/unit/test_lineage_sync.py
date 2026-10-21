@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """Incremental synchronisation: items and sources, the feed, runs that skip the unchanged, the sweep, the routes."""
 
 from __future__ import annotations

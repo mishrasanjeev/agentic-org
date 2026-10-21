@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """The Plural executor: the direct Plural (Pine Labs) rail that turns a consumed ``allow`` into money movement.
 
 Decision (docs/oacp/plural-executor.md): AgenticOrg calls the Plural API

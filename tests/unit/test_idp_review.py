@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """Document review: the store keeps files and results, renders pages, takes corrections and decisions; the routes."""
 
 from __future__ import annotations

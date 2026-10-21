@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """Spend reference data: organisation tree, source mappings, rate cards, model aliases, commitments, FX rates.
 
 Revision ID: v6z79_spend_reference

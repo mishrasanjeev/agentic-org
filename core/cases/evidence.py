@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """Evidence records for the Grantex evidence service, from a governed case's agent runs.
 
 Off by default (``AGENTICORG_CASE_EVIDENCE_SERVICE=grantex`` turns it on). After each

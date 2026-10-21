@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """The API process refuses to start in a production runtime without a vault key.
 
 ``test_vault_key_fail_closed_20260925.py`` proves the check in-process and reads

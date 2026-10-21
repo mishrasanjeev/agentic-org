@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """CI guard: agent prompts call only tools the agent actually has (PRD §7 F-3).
 
 Checks, with no baseline:

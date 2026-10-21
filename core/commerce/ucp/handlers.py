@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """Transport-neutral UCP operations: checkout, cart and order.
 
 Every operation takes a ``UcpRequest`` (the authenticated tenant, the request

@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: Apache-2.0
+// SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 /**
  * Live agent assist: opening a call, a turn with the checklist, mood, intent, knowledge and flags, closing.
  */

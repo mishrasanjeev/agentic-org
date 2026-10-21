@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: Apache-2.0
+// SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 /**
  * Transactions: findings with disposition, the fund-flow graph drawn by hop, node expansion, the paths, the export.
  */

@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: Apache-2.0
+// SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 // Building blocks for theme-aware inline SVG diagrams. Colours come from CSS tokens
 // (figureKit.css), so a diagram follows the page's light or dark scheme.
 import type { ReactNode } from "react";

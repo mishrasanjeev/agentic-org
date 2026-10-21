@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """Role-based workbenches: what each role sees and may do, decided by the backend.
 
 ``definitions``: the workbenches (review officer, relationship manager,

@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """The conventions the committed alert rules have to satisfy, and the checker that enforces them."""
 
 from __future__ import annotations

@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """The workbenches and their tabs.
 
 A tab names the page it opens, the counter behind its badge, the roles that

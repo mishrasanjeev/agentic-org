@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """The refusal every spend service raises, the guard that a change names who made it, and which
 database errors are worth another try."""
 

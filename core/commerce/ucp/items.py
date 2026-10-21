@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """Item lookup for checkout and cart pricing: the authoritative title, price, stock and sale basis.
 
 UCP ``item.id`` is the id the catalog capability publishes for a variant

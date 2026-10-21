@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """Personalisation: content for a subject, rendered only under a valid consent, with the attributes used recorded.
 
 A consent is the current record of a subject's agreement for one purpose

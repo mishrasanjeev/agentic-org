@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: Apache-2.0
+// SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 /**
  * Prompt change requests panel: hidden while maker-checker is off and nothing
  * is pending, the pending list, the side-by-side review, and the decisions.

@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """The ACP delegate-payment allowance of a checkout session, from Grantex (G35, AgenticOrg side).
 
 ACP delegated payment (RFC delegate payment; ``schema.delegate_payment.json``): the

@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """Per-agent execution limits and loop detection: a run over its limit or repeating a tool call pattern is stopped."""
 
 from __future__ import annotations

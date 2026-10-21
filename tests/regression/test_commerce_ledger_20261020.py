@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """Phase 2 commerce ledger (G9, G10, G12): signed ledger rows, enforced audit_event, no human legs.
 
 Before this change commerce routes wrote no audit row and ``route_meta(audit_event=...)``

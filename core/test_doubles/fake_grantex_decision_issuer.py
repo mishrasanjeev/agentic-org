@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """The Grantex auth service's decision-grant endpoints over HTTP, for tests (PRD G-3).
 
 :class:`FakeDecisionIssuer` answers ``httpx.MockTransport`` requests the way the auth service

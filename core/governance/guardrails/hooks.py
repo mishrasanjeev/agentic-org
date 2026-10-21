@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """Guardrail hooks at the platform's call sites.
 
 The reasoning node passes the newest message of a turn through the ``input``

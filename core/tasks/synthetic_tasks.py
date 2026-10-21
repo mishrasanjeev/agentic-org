@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """Synthetic checks: the scheduled sweep that runs every tenant's due checks, and the result prune."""
 
 from __future__ import annotations

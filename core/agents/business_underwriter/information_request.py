@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """Requests for more information: approved templates only, released only by a human.
 
 The underwriter may *propose* asking the applicant for missing items. A proposal names an approved

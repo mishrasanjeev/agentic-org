@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: Apache-2.0
+// SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 /**
  * The accessibility suite for the workbench pages: every shell page and panel renders with no axe
  * violation (WCAG 2.x rules as axe-core ships them; colour contrast and page regions are judged by

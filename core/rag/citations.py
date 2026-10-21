@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """Citations: where a retrieved chunk came from, and the excerpt a reader opens from it.
 
 Ingestion keeps a provenance row per chunk (``knowledge_chunk_sources``):

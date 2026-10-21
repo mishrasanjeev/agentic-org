@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """A self-contained, offline-verifiable export of a tenant's commerce ledger.
 
 The commerce ledger lives in the tenant's hash-chained ``audit_log``

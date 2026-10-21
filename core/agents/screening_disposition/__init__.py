@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """Screening Disposition reference agent (PRD A-7).
 
 Proposes a disposition for one screening hit - per-identifier comparisons, cited evidence, a

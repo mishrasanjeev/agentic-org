@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """Phase 4 (G55, G56, G58, G61) guard rails that need no database.
 
 * The new runtime routes are authenticated tenant-admin writes with their ledger events.

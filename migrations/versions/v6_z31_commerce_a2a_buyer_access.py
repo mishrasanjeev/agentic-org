@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """Tenant-isolated merchant approval for external A2A buyers.
 
 Revision ID: v6z31_a2a_buyers

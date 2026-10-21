@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """Reversible pseudonymisation service (PRD F-5, core/pii/pseudonymiser.py)."""
 
 from __future__ import annotations

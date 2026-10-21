@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """Spend reconciliation: provider invoices and their lines, reconciliation runs and their items.
 
 Revision ID: v6z82_spend_reconciliation

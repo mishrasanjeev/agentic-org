@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """Banking intents: the catalogue, entity extraction and recognition.
 
 Recognition is deterministic: each intent names weighted patterns, a turn's

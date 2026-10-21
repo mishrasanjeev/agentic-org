@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """The tenants spend's cross-tenant jobs walk: every tenant not deleted."""
 
 from __future__ import annotations

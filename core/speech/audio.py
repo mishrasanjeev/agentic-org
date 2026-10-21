@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """Recordings as samples: a WAV file decoded into one float array per channel, bounded in size and length.
 
 Only PCM WAV is read here (8, 16, 24 or 32-bit, one or two channels),

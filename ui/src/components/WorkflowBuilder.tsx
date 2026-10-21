@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: Apache-2.0
+// SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 /**
  * The visual workflow builder: steps as nodes, dependencies, condition paths and fallbacks as edges.
  *

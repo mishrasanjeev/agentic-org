@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """One turn of the customer agent: the conversational services under the autonomy ladder.
 
 The dialogue engine already collects slots, clarifies and asks for

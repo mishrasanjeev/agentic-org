@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """Operator override endpoints: place, list and release a halt or throttle.
 
 Tenant administrators only. Each change writes a signed audit row

@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """Policy-grounded response drafts: an answer written only from an approved source set, cited, or an honest no.
 
 Every claim of the response cites a source by id with a quote that must be

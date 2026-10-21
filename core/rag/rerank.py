@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """A re-ranking stage over fused candidates: the query's own words decide the final order.
 
 Hybrid retrieval fuses a dense and a sparse ranking by reciprocal rank, which

@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """A recorder that stands in for the commerce ledger when a route test replaces the database session."""
 
 from __future__ import annotations

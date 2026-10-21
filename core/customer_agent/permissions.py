@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """The customer's permissions page: every mandate the bank's agent holds, and the way to every outside agent.
 
 The bank's agent acts under mandates stored here. Outside agents act under

@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: Apache-2.0
+// SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 import { formatTimestamp, type Evidence } from "@/lib/governedCases";
 
 export interface CitationAnchors {

@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """Bundle splitting: a file of many documents becomes segments of consecutive pages, each one document.
 
 A new segment starts when the page's type changes. A page of the same type

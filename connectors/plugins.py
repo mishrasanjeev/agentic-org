@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """Load connectors and agents shipped as separate packages, via entry points.
 
 A package extends AgenticOrg without changing this repository by declaring

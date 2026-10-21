@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """A durable inbox sweep publishes only identifiers. Providers never carry authority claims."""
 
 import asyncio

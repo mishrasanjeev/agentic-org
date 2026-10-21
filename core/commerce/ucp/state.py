@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """The server-managed UCP state inside a merchant commerce config.
 
 Stored under ``public_publishing["ucp"]`` of ``commerce_c6z_merchant_configs``

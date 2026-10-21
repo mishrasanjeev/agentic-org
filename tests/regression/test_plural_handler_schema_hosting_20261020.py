@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """The Plural handler's advertised schema URLs on agenticorg.ai map to files the UI build publishes.
 
 The UCP profile and ACP sessions advertise

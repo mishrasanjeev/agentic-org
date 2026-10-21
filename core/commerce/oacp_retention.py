@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """Apply due OACP retention dispositions: the one narrow DELETE on an append-only OACP table.
 
 OACP review manifests (``oacp_audit_review_manifest_records``) are append-only

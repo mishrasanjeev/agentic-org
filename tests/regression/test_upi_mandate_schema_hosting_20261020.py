@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """The UPI mandate extension's advertised schema URL on agenticorg.ai maps to a file the UI build publishes.
 
 The UCP profile advertises ``ai.agenticorg.payment.upi_mandate`` with

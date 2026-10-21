@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """UCP Location (``dev.ucp.common.location.search`` / ``.lookup``, 2026-08-25 only).
 
 Locations are the merchant's enabled offline POS stores from the merchant

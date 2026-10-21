@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """Long-term memory: recall, remember, erase per subject, the retention policy and pruning."""
 
 from __future__ import annotations

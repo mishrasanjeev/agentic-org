@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: Apache-2.0
+// SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
@@ -9,80 +9,67 @@ import {
 } from "./generate-static-seo.mjs";
 import { buildSitemap } from "./generate-sitemap.mjs";
 
-test("approved policy publication preserves current rights without software adoption", () => {
+test("the licensing guide states the Orchestrum Personal Use licence and the agreement requirement", () => {
   const manual = loadUserGuides();
   assert.deepEqual(manual.articles.slice(0, 2).map((article) => article.slug), ["start-here", "first-agent"]);
   const guide = manual.articles.find((article) => article.slug === "licensing");
   assert.ok(guide);
   assert.equal(guide.group, "Govern And Operate");
+  assert.equal(guide.title, "Licensing and commercial use");
   assert.ok(manual.articles.indexOf(guide) > manual.articles.findIndex((article) => article.slug === "billing-and-support"));
-  assert.match(guide.html, /Approved for policy publication; not adopted by a software release/);
-  assert.match(guide.html, /No effective date or covered release has been approved/);
-  assert.match(guide.html, /personal and internal use is free/);
-  assert.match(guide.html, /commercializing the platform requires an agreement with Orchestrum Technologies LLP/);
-  assert.match(guide.html, /Already-granted Apache-2.0 permissions remain in place/);
-  assert.match(guide.html, /bank or merchant serving its own customers/);
-  assert.match(guide.html, /Third-party dependencies retain their own licenses/);
-  assert.match(guide.html, /source-available,\s*not an OSI-approved open-source license/);
+  assert.match(guide.html, /source-available under the Orchestrum Personal Use License 1\.0/);
+  assert.match(guide.html, /Only an individual using it for their own personal purposes is free/);
+  assert.match(guide.html, /Use by a charity, non-profit, school, university, research body or government/);
+  assert.match(guide.html, /Evaluation, testing or a pilot by or for any organisation/);
+  assert.doesNotMatch(guide.html, /PolyForm|Noncommercial Organizations|Required Notice/);
+  assert.match(guide.html, /Any organisation needs\s+prior written permission in a signed agreement with Orchestrum Technologies LLP/);
+  assert.match(guide.html, /Internal use by a company, firm or a sole proprietor(&#39;|&rsquo;|'|’)s business/);
+  assert.match(guide.html, /Versions published before 21 October 2026 remain available under the Apache\s+License\s+2\.0\s+they were released with/);
+  assert.match(guide.html, /are trademarks of Orchestrum\s+Technologies LLP/);
+  assert.match(guide.html, /SDKs and the MCP server are open source under the Apache License 2\.0,\s+free for any use including commercial/);
   assert.match(guide.html, /href="mailto:sanjeev@orchestrum.in"/);
-  assert.match(readFileSync(new URL("../../LICENSE", import.meta.url), "utf8"), /Apache License/);
-  assert.match(readFileSync(new URL("../../pyproject.toml", import.meta.url), "utf8"), /license = "Apache-2.0"/);
-  for (const file of ["../../README.md", "../../LICENSING.md", "../../docs/terms-of-service.md"]) {
-    assert.match(readFileSync(new URL(file, import.meta.url), "utf8"), /software adoption pending/);
-  }
+  assert.doesNotMatch(guide.html, /revok|withdrawn/i);
 });
 
-test("the concrete license and scope record cannot masquerade as an adopted license", () => {
+test("licence text, package metadata and the scope record agree", () => {
   const read = (file) => readFileSync(new URL("../../" + file, import.meta.url), "utf8");
+  const license = read("LICENSE");
+  assert.match(license, /^# Orchestrum Personal Use License 1\.0\r?\n/);
+  assert.match(license, /Copyright \(c\) 2026 Orchestrum Technologies LLP\./);
+  assert.match(license, /requires \*\*prior written permission\*\* from Orchestrum Technologies LLP in a signed agreement/);
+  assert.match(read("pyproject.toml"), /license = "LicenseRef-Orchestrum-Personal-Use-1\.0 AND Apache-2\.0"/);
+  assert.doesNotMatch(read("pyproject.toml"), /OSI Approved/);
+  assert.equal(JSON.parse(read("ui/package.json")).license, "LicenseRef-Orchestrum-Personal-Use-1.0");
+  for (const file of ["sdk-ts/package.json", "mcp-server/package.json"])
+    assert.equal(JSON.parse(read(file)).license, "Apache-2.0", file);
+  assert.match(read("sdk/pyproject.toml"), /license = "Apache-2\.0"/);
   const scope = JSON.parse(read("licensing/scope.json"));
-  assert.equal(scope.schema_version, 1);
-  assert.equal(scope.product, "AgenticOrg");
-  assert.equal(scope.status, "approved_for_publication");
+  assert.equal(scope.status, "adopted");
+  assert.equal(scope.license_id, "LicenseRef-Orchestrum-Personal-Use-1.0");
   assert.equal(scope.licensor, "Orchestrum Technologies LLP");
   assert.equal(scope.commercial_contact, "sanjeev@orchestrum.in");
-  assert.equal(scope.proposed_license_id, "LicenseRef-Orchestrum-Self-Use-Commercial-1.0");
-  assert.match(scope.reference_baseline_commit, /^[a-f0-9]{40}$/);
-  assert.equal(scope.reference_baseline_is_cutoff, false);
-  assert.deepEqual(scope.covered_files, []);
-  for (const field of ["release_version", "effective_date"])
-    assert.equal(scope[field], null, field);
-  assert.equal(scope.owner_approval_reference, "owner-publication-approval-2026-10-12");
-  assert.equal(scope.legal_review_reference, "owner-attested-legal-review-2026-10-12");
-  assert.equal(scope.publication_approved_on, "2026-10-12");
-  assert.equal(scope.existing_grants_policy, "preserve");
-  assert.equal(scope.third_party_licenses_policy, "retain_original");
-  assert.match(scope.sdk_and_protocol_policy, /preserve_published_grants/);
-  const candidate = read(scope.license_text);
-  assert.match(candidate, /Approved for policy publication; not adopted by a software release/);
-  assert.match(candidate, /An agreement signed by an authorized Orchestrum representative/);
-  assert.match(candidate, /merchant[\s\S]*selling its own goods/);
-  assert.match(candidate, /implementation or consulting services/);
-  assert.match(candidate, /Previously[\s\S]*published grants remain available/);
-  assert.match(candidate, /Termination under this license does not terminate an independent legacy/);
-  assert.match(candidate, /No governing law, venue or effective date has been selected/);
-  assert.match(loadUserGuides().articles.find((article) => article.slug === "licensing").html, /zero covered files/);
+  assert.equal(scope.effective_date, "2026-10-21");
+  assert.equal(scope.earlier_versions.license_id, "Apache-2.0");
+  assert.deepEqual(scope.third_party.map((entry) => entry.path), ["tests/fixtures/ucp/", "core/commerce/acp/schemas/"]);
+  assert.deepEqual(scope.apache_2_0_packages.map((entry) => entry.path), ["sdk/", "sdk-ts/", "mcp-server/"]);
+  for (const entry of scope.apache_2_0_packages) assert.match(read(entry.license_text), /Apache License\s+Version 2\.0/);
+  for (const entry of scope.third_party) assert.match(read(entry.license_text), /Apache License\s+Version 2\.0/);
 });
 
-test("existing covered users need an agreement while self-use and prior grants remain distinct", () => {
+test("public summaries tell existing and new users that commercial use needs an agreement", () => {
   const read = (file) => readFileSync(new URL("../../" + file, import.meta.url), "utf8");
-  const guide = loadUserGuides().articles.find((article) => article.slug === "licensing");
-  assert.ok(guide);
-  assert.match(guide.html, /Existing users and new users/);
-  assert.match(guide.html, /agreement requirement is not limited to new customers/);
-  assert.match(guide.html, /Account age alone does not exempt/);
-  assert.match(guide.html, /Give the notice and obtain the acceptance/);
-  assert.match(guide.html, /No retroactive fees, automatic acceptance, account suspension or effective date/);
-  assert.match(guide.html, /Self-use remains free of a software license fee/);
-  assert.match(guide.html, /For previously distributed Apache-2.0 copies/);
-  for (const file of ["README.md", "LICENSING.md", "docs/terms-of-service.md", "docs/user-guide/billing-and-support.md"]) {
-    assert.match(read(file), /existing and new/i, file);
-    assert.match(read(file), /notice[\s\S]*acceptance|notice and agreement terms/, file);
+  for (const file of ["README.md", "LICENSING.md", "COMMERCIAL-LICENSE.md", "docs/terms-of-service.md", "docs/user-guide/billing-and-support.md"]) {
+    const text = read(file).replace(/\s+/g, " ");
+    assert.match(text, /Orchestrum Personal Use License 1\.0/, file);
+    assert.doesNotMatch(text, /PolyForm/, file);
+    assert.match(text, /(written|signed) agreement/, file);
+    assert.doesNotMatch(text, /software adoption pending|prospective (licensing )?policy/i, file);
   }
-  const candidate = read("licensing/ORCHESTRUM-SELF-USE-COMMERCIAL-1.0-DRAFT.md");
-  assert.match(candidate, /applies equally to existing and new users of Covered Software/);
-  assert.match(candidate, /Self-use under section 2 remains free/);
-  assert.match(candidate, /does not withdraw the prior grants/);
-  assert.match(candidate, /Publication does not backdate obligations or replace executed agreements/);
+  for (const file of ["README.md", "LICENSING.md", "COMMERCIAL-LICENSE.md", "docs/terms-of-service.md"]) {
+    const text = read(file).replace(/\s+/g, " ");
+    assert.match(text, /[Ee]xisting and new users|organisation already uses AgenticOrg/, file);
+    assert.match(text, /remain available under the Apache License 2\.0 they were released with/, file);
+  }
 });
 
 test("missing authored sources cannot silently overwrite the manual with an empty build", () => {
@@ -96,6 +83,7 @@ test("both production UI images preserve the repository layout and include autho
     assert.match(dockerfile, /WORKDIR \/app\/ui/);
     assert.match(dockerfile, /COPY docs\/ \.\.\/docs\//);
     assert.match(dockerfile, /COPY --from=builder \/app\/ui\/dist/);
+    assert.match(dockerfile, /COPY LICENSE COMMERCIAL-LICENSE\.md TRADEMARKS\.md \.\.\//);
     assert.match(dockerfile, /COPY api\/v1\/model_gateway\.py \.\.\/api\/v1\/model_gateway\.py/);
     assert.match(dockerfile, /COPY api\/v1\/guardrails\.py \.\.\/api\/v1\/guardrails\.py/);
     assert.match(dockerfile, /COPY api\/v1\/observability\.py \.\.\/api\/v1\/observability\.py/);

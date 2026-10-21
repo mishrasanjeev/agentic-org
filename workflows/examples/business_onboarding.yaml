@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 #
 # Business onboarding on a governed case (PRD A-8). Requires the
 # governed_cases.enabled flag; every case_agent step is refused while it is off.

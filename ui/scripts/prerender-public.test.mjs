@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: Apache-2.0
+// SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 import test from "node:test";
 import assert from "node:assert/strict";
 import { evalsMarkup, visibleMarkup } from "./prerender-public.mjs";

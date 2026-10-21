@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """Phase 4 exit gate against a live Grantex: mandates requested, verified, sealed and carried to Plural.
 
 Skipped unless all of these are set (a local stack is fine; Plural is the fake transport):

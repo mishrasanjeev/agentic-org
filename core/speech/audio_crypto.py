@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """Tenant-bound encrypted audio stored as UTF-8 vault/envelope bytes."""
 
 from __future__ import annotations

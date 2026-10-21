@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """Keep published guide text within the existing public-claims boundary."""
 
 from datetime import UTC, datetime

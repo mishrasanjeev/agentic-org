@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """Promotion gates: an agent is not put into production while its prompt fails its evaluation.
 
 An agent may declare a gate in its configuration (``config["eval_gate"]``): an

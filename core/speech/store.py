@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """Kept recordings: tenant-encrypted audio and transcript with segments and speakers.
 
 A recording row keeps an encrypted WAV, what the diariser found (segments and

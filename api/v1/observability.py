@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """Observability endpoints: run timelines for the console's waterfall, the live workload and synthetic checks.
 
 Admin-only. The timeline answers only what ``run_spans`` holds: with

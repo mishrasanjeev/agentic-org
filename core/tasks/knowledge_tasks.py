@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """Bounded recovery of durable upload indexing on the existing maintenance queue."""
 
 import structlog

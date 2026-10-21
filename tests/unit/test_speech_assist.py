@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """Speech, part 3: disclosure scripts checked on a transcript, live agent assist turn by turn, the routes."""
 
 from __future__ import annotations

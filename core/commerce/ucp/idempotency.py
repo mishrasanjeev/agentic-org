@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """``Idempotency-Key`` records for UCP writes (UCP signatures, Replay Protection; checkout REST binding).
 
 A key is scoped to the tenant and merchant and kept for 48 hours (at least

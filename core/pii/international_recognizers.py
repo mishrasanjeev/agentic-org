@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """Recognisers for United States, United Kingdom and European identifiers.
 
 Covers United States Social Security numbers (``US_SSN``), Individual

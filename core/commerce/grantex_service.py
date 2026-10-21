@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """The AgenticOrg service client for the Grantex routes that countersign AgenticOrg evidence.
 
 Three callers: the mandate client (``core.commerce.mandates_client``, ``POST

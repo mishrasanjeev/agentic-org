@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: Apache-2.0
+// SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 /**
  * Prompt comparison panel: absent while comparison is off, the model limit,
  * the request it sends, and the side-by-side result including a failed model.

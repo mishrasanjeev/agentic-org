@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """Manage authority feature flags (platform operators only).
 
 Authority flags - ``grants.enforce_closed.warn`` / ``.deny`` and the other keys

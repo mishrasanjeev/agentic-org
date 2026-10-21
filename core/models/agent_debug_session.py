@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """A run paused at a breakpoint, stepped from the debugging console (``core/langgraph/debugger.py``)."""
 
 from __future__ import annotations

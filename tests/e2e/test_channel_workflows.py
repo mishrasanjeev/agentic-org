@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """Real HTTP/DB/worker test on an isolated local Docker stack; no provider delivery."""
 
 from __future__ import annotations

@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """Ambiguous default tools name their connector (PRD §7 F-3).
 
 A bare name registered by several connectors resolves first-wins in

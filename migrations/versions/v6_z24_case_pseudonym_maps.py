@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """Encrypted per-case pseudonym maps for pre-model pseudonymisation.
 
 Revision ID: v6z24_case_pseudonym_maps

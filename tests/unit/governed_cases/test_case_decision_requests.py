@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """Decision requests and grant consumption (PRD G-3), without a database or a network.
 
 Covers what the platform is responsible for: what the approver is shown, the provisional Grantex

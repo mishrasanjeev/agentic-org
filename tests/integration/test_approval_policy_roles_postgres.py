@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """Approval policy role checks through the API and persisted Postgres rows."""
 
 from __future__ import annotations

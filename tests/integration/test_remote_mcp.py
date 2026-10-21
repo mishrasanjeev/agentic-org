@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """HTTP discovery -> encrypted DB -> agent save -> governed MCP execution."""
 
 import json

@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """The dialogue: one intent at a time, its slots filled turn by turn, confirmed before anything runs.
 
 ``advance`` takes the state and the user's text and returns the next state and

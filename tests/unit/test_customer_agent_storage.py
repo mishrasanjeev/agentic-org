@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """The customer agent's storage seams and the agent's execution context, exercised against a fake tenant session."""
 
 from __future__ import annotations

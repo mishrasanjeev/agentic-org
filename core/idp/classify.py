@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """Document-type classification by rules: weighted patterns per type, a confidence from the weights matched.
 
 The catalogue is synthetic and generic: the document types a bank handles in

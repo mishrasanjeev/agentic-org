@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """Map a verified OACP ``policy`` artifact payload to UCP ``policies[]``.
 
 UCP 2026-08-25 ``common/types/policy.json``: each policy carries ``type`` (an

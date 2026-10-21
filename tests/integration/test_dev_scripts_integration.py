@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """Development scripts against real Postgres: test-database reset and the seed entry point."""
 
 from __future__ import annotations

@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: Apache-2.0
+// SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 import { describe, expect, it } from 'vitest';
 import llmsFull from '../../public/llms-full.txt?raw';
 import { BLOG_POSTS } from '../pages/blog/blogData';

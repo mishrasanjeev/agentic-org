@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """Fund-flow graphs: where money came from and went to, expanded across hops, with the paths carrying the most.
 
 The graph starts at an account, a customer or a counterparty and takes

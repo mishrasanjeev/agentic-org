@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """G33/G34/G40: the /acp HTTP adapter.
 
 Every checkout route answers only an agent platform's API key, ledgers its refusal under its own event, the

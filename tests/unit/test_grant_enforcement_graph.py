@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """PRD F-1 — grant enforcement through a real agent graph.
 
 A scripted model drives ``reason -> validate_scopes -> execute_tools`` so the

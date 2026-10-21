@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """Advisory lock keys for spend intelligence, built in one place.
 
 Every key is made by one helper here and passed as a bind parameter, so two

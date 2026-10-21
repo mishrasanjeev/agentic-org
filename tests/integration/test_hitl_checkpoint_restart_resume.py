@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """Interrupt, restart the process, resume (PRD F-2, §8.3 integration matrix).
 
 This process runs an agent to its approval interrupt with the Postgres

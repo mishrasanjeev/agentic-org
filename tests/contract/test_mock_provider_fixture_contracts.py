@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """The mock provider's fixtures validate against the domain schemas and are plainly synthetic."""
 
 from __future__ import annotations

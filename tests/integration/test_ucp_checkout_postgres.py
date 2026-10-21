@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """UCP checkout, cart and order on a real Postgres: state machine, arbiter decision, ledger, idempotency, webhooks.
 
 Requires the disposable database in ``AGENTICORG_DB_URL`` (migrated to head by the module fixture).

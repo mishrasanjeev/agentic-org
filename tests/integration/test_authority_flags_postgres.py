@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """PRD F-1 — authority flags against real Postgres.
 
 Through the production ``get_tenant_session`` and ``feature_flags`` table:
