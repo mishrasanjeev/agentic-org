@@ -1,0 +1,102 @@
+/* SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0 */
+/* Inline SVG diagrams (FigureKit.tsx). Colours are tokens, so each diagram follows the
+   page's scheme: blog posts with figures (.figure-article) and the docs site (.docs-site);
+   docs guides switch to the dark values only when marked adaptive (.docs-adaptive). */
+.figure-article,
+.docs-site {
+  --fig-surface: #f6f8fb;
+  --fig-card: #ffffff;
+  --fig-ink: #0f172a;
+  --fig-muted: #475569;
+  --fig-line: #94a3b8;
+  --fig-neutral-stroke: #cbd5e1;
+  --fig-protocol: #eef2f7;
+  --fig-protocol-stroke: #94a3b8;
+  --fig-grantex: #e8f0fd;
+  --fig-grantex-ink: #1f4f9a;
+  --fig-agenticorg: #e7f5ee;
+  --fig-agenticorg-ink: #176448;
+  --fig-oacp: #e2f1f7;
+  --fig-oacp-ink: #0b5a7a;
+  --fig-refuse: #fdecea;
+  --fig-refuse-ink: #a12a1b;
+  --fig-allow: #e7f5ee;
+  --fig-allow-ink: #176448;
+  --fig-hold: #fdf3e1;
+  --fig-hold-ink: #7a4a06;
+}
+
+@media (prefers-color-scheme: dark) {
+  .figure-article,
+  .docs-site.docs-adaptive {
+    --fig-surface: #121c2e;
+    --fig-card: #0f1726;
+    --fig-ink: #e8eef7;
+    --fig-muted: #b3c0d1;
+    --fig-line: #6b7d95;
+    --fig-neutral-stroke: #3a4a62;
+    --fig-protocol: #1b2638;
+    --fig-protocol-stroke: #5d708a;
+    --fig-grantex: #172a49;
+    --fig-grantex-ink: #a9c8ff;
+    --fig-agenticorg: #12322a;
+    --fig-agenticorg-ink: #8fe0bd;
+    --fig-oacp: #0f3141;
+    --fig-oacp-ink: #8fd6f2;
+    --fig-refuse: #3d1a18;
+    --fig-refuse-ink: #ffb4a8;
+    --fig-allow: #12322a;
+    --fig-allow-ink: #8fe0bd;
+    --fig-hold: #3a2a0c;
+    --fig-hold-ink: #f6cf7d;
+  }
+}
+
+.fig-pair { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px; }
+.fig-svg { display: block; width: 100%; height: auto; }
+
+.fig-box { stroke-width: 1.5; }
+.fig-box-neutral { fill: var(--fig-card); stroke: var(--fig-neutral-stroke); }
+.fig-pair .fig-svg > .fig-box-neutral:first-of-type { fill: var(--fig-surface); }
+.fig-box-protocol { fill: var(--fig-protocol); stroke: var(--fig-protocol-stroke); }
+.fig-box-grantex { fill: var(--fig-grantex); stroke: var(--fig-grantex-ink); }
+.fig-box-agenticorg { fill: var(--fig-agenticorg); stroke: var(--fig-agenticorg-ink); }
+.fig-box-oacp { fill: var(--fig-oacp); stroke: var(--fig-oacp-ink); stroke-width: 2; }
+.fig-box-refuse { fill: var(--fig-refuse); stroke: var(--fig-refuse-ink); }
+.fig-box-allow { fill: var(--fig-allow); stroke: var(--fig-allow-ink); }
+.fig-box-hold { fill: var(--fig-hold); stroke: var(--fig-hold-ink); }
+
+.fig-text { fill: var(--fig-ink); font-family: inherit; }
+.fig-text-title { font-size: 21px; font-weight: 700; }
+.fig-text-strong { font-size: 17px; font-weight: 650; }
+.fig-text-body { font-size: 15px; font-weight: 500; }
+.fig-text-small { font-size: 14px; fill: var(--fig-muted); }
+.fig-text-owner { font-size: 13px; font-weight: 650; letter-spacing: 0.02em; }
+.fig-ink-grantex { fill: var(--fig-grantex-ink); }
+.fig-ink-agenticorg { fill: var(--fig-agenticorg-ink); }
+.fig-ink-oacp { fill: var(--fig-oacp-ink); }
+.fig-ink-refuse { fill: var(--fig-refuse-ink); }
+.fig-ink-allow { fill: var(--fig-allow-ink); }
+.fig-ink-hold { fill: var(--fig-hold-ink); }
+.fig-ink-neutral, .fig-ink-protocol { fill: var(--fig-muted); }
+
+.fig-wire { fill: none; stroke: var(--fig-line); stroke-width: 1.75; }
+.fig-wire line { stroke: var(--fig-line); stroke-width: 1.75; }
+.fig-wire-tangled path { stroke: var(--fig-refuse-ink); stroke-width: 1.75; stroke-dasharray: 5 4; opacity: 0.75; }
+.fig-spine { stroke-dasharray: 3 5; }
+.fig-arrowhead { fill: var(--fig-line); }
+.fig-dot-refuse { fill: var(--fig-refuse-ink); }
+.fig-cross { stroke: var(--fig-refuse-ink); stroke-width: 2.2; stroke-linecap: round; }
+.fig-text-mono { font-family: "JetBrains Mono", ui-monospace, monospace; font-size: 13.5px; font-weight: 500; }
+.fig-mark { fill: none; stroke-width: 2.4; stroke-linecap: round; stroke-linejoin: round; }
+.fig-mark-allow { stroke: var(--fig-allow-ink); }
+.fig-mark-agenticorg { stroke: var(--fig-agenticorg-ink); }
+.fig-mark-grantex { stroke: var(--fig-grantex-ink); }
+.fig-knob { fill: var(--fig-card); stroke: var(--fig-neutral-stroke); stroke-width: 1.5; }
+
+@media (max-width: 760px) {
+  .fig-pair { grid-template-columns: 1fr; gap: 16px; }
+}
+.fig-dot-allow { fill: var(--fig-allow-ink); }
+.fig-dot-hold { fill: var(--fig-hold-ink); }
+.fig-dot-oacp { fill: var(--fig-oacp-ink); }

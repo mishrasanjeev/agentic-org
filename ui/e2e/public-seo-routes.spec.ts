@@ -88,6 +88,49 @@ for (const scheme of ["light", "dark"] as const) {
   }
 }
 
+const OACP_GUIDES = [
+  "oacp-overview", "oacp-how-it-works", "oacp-buyer-journey", "oacp-merchant-setup",
+  "oacp-safety-and-trust", "oacp-feature-switches", "oacp-faq",
+];
+
+test("OACP guides keep their figures and summaries without JavaScript", async ({ browser, baseURL }) => {
+  const context = await browser.newContext({ javaScriptEnabled: false });
+  try {
+    const page = await context.newPage();
+    await page.goto(`${baseURL}/docs/oacp-how-it-works`);
+    await expect(page.getByRole("heading", { level: 1 })).toHaveText("How OACP works, end to end");
+    await expect(page.locator(".docs-summary").first()).toContainText("In 30 seconds");
+    await expect(page.locator("main .docs-figure")).toHaveCount(2);
+    await expect(page.locator("main .docs-figure svg[role='img']")).toHaveCount(2);
+  } finally {
+    await context.close();
+  }
+});
+
+for (const scheme of ["light", "dark"] as const) {
+  for (const width of [320, 390, 1440]) {
+    test(`OACP guides fit at ${width}px in ${scheme} mode`, async ({ browser, baseURL }) => {
+      const context = await browser.newContext({ viewport: { width, height: 900 }, colorScheme: scheme });
+      try {
+        const page = await context.newPage();
+        for (const slug of OACP_GUIDES) {
+          await page.goto(`${baseURL}/docs/${slug}`);
+          await expect(page.locator("main .docs-figure svg").first()).toBeVisible();
+          expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), slug).toBe(true);
+          for (const svg of await page.locator("main .docs-figure svg").all()) {
+            const bounds = await svg.boundingBox();
+            expect(bounds!.x + bounds!.width, slug).toBeLessThanOrEqual(width);
+          }
+          const background = await page.locator(".docs-site").evaluate((el) => getComputedStyle(el).backgroundColor);
+          expect(background === "rgb(255, 255, 255)", slug).toBe(scheme === "light");
+        }
+      } finally {
+        await context.close();
+      }
+    });
+  }
+}
+
 test("public content is available in HTML without JavaScript", async ({ browser, baseURL }) => {
   const context = await browser.newContext({ javaScriptEnabled: false });
   try {

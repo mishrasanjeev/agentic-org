@@ -15,7 +15,7 @@ import {
 } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { loadUserGuides } from "./generate-user-docs.mjs";
+import { loadUserGuides, plainGuideMarkdown } from "./generate-user-docs.mjs";
 
 const SCRIPT_DIR = dirname(fileURLToPath(import.meta.url));
 const UI_ROOT = join(SCRIPT_DIR, "..");
@@ -577,7 +577,7 @@ function full(data) {
       ...loadUserGuides(UI_ROOT).articles.flatMap((article) => [
         "", "### " + article.title, "", "URL: " + SITE + "/docs/" + article.slug,
         "Audience: " + article.audience + ". Reviewed: " + article.reviewed + ".",
-        "", article.markdown.replace(/^## /gm, "#### "),
+        "", plainGuideMarkdown(article.markdown).replace(/^## /gm, "#### "),
       ]),
     ].join("\n"),
   );

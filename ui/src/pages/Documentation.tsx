@@ -21,9 +21,32 @@ import CommerceA2AJourney from "../components/docs/CommerceA2AJourney";
 import CommerceA2ATransaction from "../components/docs/CommerceA2ATransaction";
 import SpendPipelineMap from "../components/docs/SpendPipelineMap";
 import SpendReadersMap from "../components/docs/SpendReadersMap";
+import DocsFigure from "../components/docs/OacpGuideFigures";
+import "../components/figures/figureKit.css";
+import "../components/docs/docs-figures.css";
 import { buildDocumentationSchema } from "../lib/documentation-schema.mjs";
 
 type Guide = (typeof manual.articles)[number];
+type GuideFigure = { id: string; title: string; caption: string };
+type GuidePart = { html: string } | { figure: GuideFigure };
+
+const FIGURE_SLOT =
+  /<figure class="docs-figure" data-docs-figure="([a-z0-9-]+)"[^>]*>[\s\S]*?<\/figure>/g;
+
+/** Splits a guide's HTML at its figure placeholders so each diagram renders in place. */
+export function guideParts(html: string, figures: GuideFigure[]): GuidePart[] {
+  const parts: GuidePart[] = [];
+  let last = 0;
+  for (const match of html.matchAll(FIGURE_SLOT)) {
+    const figure = figures.find((item) => item.id === match[1]);
+    if (!figure) continue;
+    if (match.index > last) parts.push({ html: html.slice(last, match.index) });
+    parts.push({ figure });
+    last = match.index + match[0].length;
+  }
+  if (last < html.length) parts.push({ html: html.slice(last) });
+  return parts;
+}
 
 export function searchGuides(
   query: string,
@@ -150,6 +173,8 @@ export default function Documentation() {
   }
 
   const toc = guide?.headings.filter((heading) => heading.level === 2) ?? [];
+  const figures = (guide?.figures ?? []) as GuideFigure[];
+  const adaptive = guide?.colorScheme === "adaptive";
   const navigation = (
     <nav aria-label="Documentation guides">
       <Link className={!slug ? "docs-nav-active" : ""} to="/docs">
@@ -175,7 +200,7 @@ export default function Documentation() {
   );
 
   return (
-    <div className="docs-site">
+    <div className={`docs-site${adaptive ? " docs-adaptive" : ""}`}>
       <DocumentationSeo guide={guide} missing={Boolean(slug && !guide)} />
       <a className="docs-skip" href="#docs-main">
         Skip to guide
@@ -334,10 +359,26 @@ export default function Documentation() {
                   <SpendReadersMap />
                 </>
               )}
-              <article
-                className="docs-prose"
-                dangerouslySetInnerHTML={{ __html: guide.html }}
-              />
+              {figures.length ? (
+                <article className="docs-prose">
+                  {guideParts(guide.html, figures).map((part, i) =>
+                    "figure" in part ? (
+                      <DocsFigure key={part.figure.id} {...part.figure} />
+                    ) : (
+                      <div
+                        key={`part-${i}`}
+                        className="docs-prose-part"
+                        dangerouslySetInnerHTML={{ __html: part.html }}
+                      />
+                    ),
+                  )}
+                </article>
+              ) : (
+                <article
+                  className="docs-prose"
+                  dangerouslySetInnerHTML={{ __html: guide.html }}
+                />
+              )}
               <section
                 className="docs-source-notes"
                 aria-label="Implementation references"
@@ -413,6 +454,9 @@ export default function Documentation() {
                 <Link to="/docs/ai-spend-intelligence">
                   AI spend and invoice reconciliation
                 </Link>
+                <Link to="/docs/oacp-overview">
+                  OACP: agentic commerce, made safe
+                </Link>
               </div>
               <div className="docs-home-note">
                 <strong>New to agents?</strong> Begin with a read-only task and
@@ -425,7 +469,13 @@ export default function Documentation() {
               {manual.groups.map((group) => (
                 <section
                   key={group}
-                  id={group === "BFSI Playbooks" ? "bfsi-playbooks" : undefined}
+                  id={
+                    group === "BFSI Playbooks"
+                      ? "bfsi-playbooks"
+                      : group.startsWith("OACP")
+                        ? "oacp"
+                        : undefined
+                  }
                   className="docs-directory"
                 >
                   <h2>{group}</h2>
