@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """The synthetic OACP demo merchant source (core/commerce/oacp_demo_merchant.py).
 
 The demo source is a clearly labelled ``synthetic_demo`` connector, accepted

@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """The optional OACP artifact freshness sweep (core/commerce/artifact_freshness.py).
 
 Every 5 minutes on the existing beat and worker: a no-op unless both

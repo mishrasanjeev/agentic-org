@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """Regression: synthetic demo artifacts never back a real merchant, and real merchants are unchanged.
 
 Failure guarded against: with a ``synthetic_demo`` connector source in the

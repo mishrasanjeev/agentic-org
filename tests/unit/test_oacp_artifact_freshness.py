@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """On-demand OACP artifact freshness (core/commerce/artifact_freshness.py).
 
 Single flight per merchant scope, a minimum interval and backoff between

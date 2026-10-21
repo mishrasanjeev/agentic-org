@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """An in-memory stand-in for the async Redis calls core/commerce/artifact_freshness.py makes."""
 
 from __future__ import annotations

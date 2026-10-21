@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """The one synthetic OACP demo merchant, "Nilgiri Tea House": a clearly labelled demo tenant, catalog and store.
 
 ``scripts/seed_oacp_demo_merchant.py`` creates (or converges, or tears down)

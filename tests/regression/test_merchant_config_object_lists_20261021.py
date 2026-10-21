@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """Regression: merchant config lists of objects kept their shape through the config route.
 
 Failure replayed: ``PUT /api/v1/commerce/runtime/merchant-configs/{merchant_id}``

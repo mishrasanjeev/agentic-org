@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """Create, converge or tear down the one synthetic OACP demo merchant, "Nilgiri Tea House".
 
 Runs inside the production API image as a one-off Cloud Run job (see

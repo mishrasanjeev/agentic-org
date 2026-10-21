@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """scripts/seed_oacp_demo_merchant.py on a real Postgres: seed, converge, serve, tear down.
 
 Requires the disposable database in ``AGENTICORG_DB_URL`` (migrated to head by

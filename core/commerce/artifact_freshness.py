@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """On-demand freshness for short-lived OACP artifacts.
 
 Grantex issues the C6Z artifact set with short lifetimes for the facts that

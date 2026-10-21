@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """scripts/seed_oacp_demo_merchant.py: refusals before any write, argument rules and Grantex stops.
 
 The database paths (create, converge, teardown) run on Postgres in
