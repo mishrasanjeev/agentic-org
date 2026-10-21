@@ -63,7 +63,7 @@ export default function Privacy() {
         <h2 className="mb-3 mt-8 text-2xl font-semibold text-slate-900">Contact</h2>
         <p className="leading-relaxed text-slate-700">
           Send privacy questions without credentials or unnecessary personal data to{" "}
-          <a className="text-blue-600 hover:underline" href={`mailto:${PRIMARY_CONTACT_EMAIL}`}>
+          <a className="text-blue-700 underline underline-offset-2 hover:text-blue-900" href={`mailto:${PRIMARY_CONTACT_EMAIL}`}>
             {PRIMARY_CONTACT_EMAIL}
           </a>.
         </p>

@@ -34,7 +34,7 @@ export default function Refund() {
         <h2 className="mb-3 mt-8 text-2xl font-semibold text-slate-900">Submit a request</h2>
         <p className="mb-6 leading-relaxed text-slate-700">
           An authorized workspace administrator may email{" "}
-          <a className="text-blue-600 hover:underline" href={`mailto:${PRIMARY_CONTACT_EMAIL}`}>
+          <a className="text-blue-700 underline underline-offset-2 hover:text-blue-900" href={`mailto:${PRIMARY_CONTACT_EMAIL}`}>
             {PRIMARY_CONTACT_EMAIL}
           </a>{" "}
           with the workspace and order identifiers and the requested action. Do not include full
@@ -45,7 +45,7 @@ export default function Refund() {
         <h2 className="mb-3 mt-8 text-2xl font-semibold text-slate-900">Related terms</h2>
         <p className="leading-relaxed text-slate-700">
           Review this notice together with the applicable order form and the current{" "}
-          <Link to="/terms" className="text-blue-600 hover:underline">terms notice</Link>.
+          <Link to="/terms" className="text-blue-700 underline underline-offset-2 hover:text-blue-900">terms notice</Link>.
           Repository examples, plan labels, and UI text are not authoritative commercial terms.
         </p>
         <ProductOwnership tone="light" className="mt-10 border-t border-slate-200 pt-6" />

@@ -27,7 +27,7 @@ export default function Support() {
           <h2 className="mb-3 text-2xl font-semibold text-slate-900">Request support</h2>
           <p className="leading-relaxed text-slate-700">
             Email{" "}
-            <a className="text-blue-600 hover:underline" href={`mailto:${PRIMARY_CONTACT_EMAIL}`}>
+            <a className="text-blue-700 underline underline-offset-2 hover:text-blue-900" href={`mailto:${PRIMARY_CONTACT_EMAIL}`}>
               {PRIMARY_CONTACT_EMAIL}
             </a>{" "}
             with the workspace identifier, a concise description, observed timestamps, and safe
@@ -51,7 +51,7 @@ export default function Support() {
           <p className="leading-relaxed text-slate-700">
             Suspected vulnerabilities should follow the private reporting process in the current
             security policy. Data-handling questions should reference the{" "}
-            <Link to="/privacy" className="text-blue-600 hover:underline">privacy notice</Link>{" "}
+            <Link to="/privacy" className="text-blue-700 underline underline-offset-2 hover:text-blue-900">privacy notice</Link>{" "}
             and the signed data-processing terms.
           </p>
         </section>

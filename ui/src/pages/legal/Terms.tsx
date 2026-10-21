@@ -57,8 +57,8 @@ export default function Terms() {
           </strong>
           {" "}That includes companies, firms, charities, schools, universities, research bodies and government,
           and evaluation, testing, pilots, internal use, hosting, resale and embedding, paid or free.
-          Agreements: <a className="text-blue-600 hover:underline" href={`mailto:${PRIMARY_CONTACT_EMAIL}`}>{PRIMARY_CONTACT_EMAIL}</a>.
-          {" "}Read <Link to="/docs/licensing" className="text-blue-600 hover:underline">licensing and commercial use</Link> for
+          Agreements: <a className="text-blue-700 underline underline-offset-2 hover:text-blue-900" href={`mailto:${PRIMARY_CONTACT_EMAIL}`}>{PRIMARY_CONTACT_EMAIL}</a>.
+          {" "}Read <Link to="/docs/licensing" className="text-blue-700 underline underline-offset-2 hover:text-blue-900">licensing and commercial use</Link> for
           what is free and what needs an agreement. Hosted plans, infrastructure and provider costs are separate.
         </p>
         <p className="mb-6 leading-relaxed text-slate-700">
@@ -88,16 +88,16 @@ export default function Terms() {
 
         <h2 className="mb-3 mt-8 text-2xl font-semibold text-slate-900">Related notices</h2>
         <p className="mb-6 leading-relaxed text-slate-700">
-          Review the current <Link to="/privacy" className="text-blue-600 hover:underline">privacy notice</Link>,{" "}
-          <Link to="/support" className="text-blue-600 hover:underline">support notice</Link>, and{" "}
-          <Link to="/refund" className="text-blue-600 hover:underline">refund notice</Link> with the
+          Review the current <Link to="/privacy" className="text-blue-700 underline underline-offset-2 hover:text-blue-900">privacy notice</Link>,{" "}
+          <Link to="/support" className="text-blue-700 underline underline-offset-2 hover:text-blue-900">support notice</Link>, and{" "}
+          <Link to="/refund" className="text-blue-700 underline underline-offset-2 hover:text-blue-900">refund notice</Link> with the
           signed agreement. Each repository copy requires legal review.
         </p>
 
         <h2 className="mb-3 mt-8 text-2xl font-semibold text-slate-900">Contact</h2>
         <p className="leading-relaxed text-slate-700">
           Questions about the applicable agreement may be sent to{" "}
-          <a className="text-blue-600 hover:underline" href={`mailto:${PRIMARY_CONTACT_EMAIL}`}>
+          <a className="text-blue-700 underline underline-offset-2 hover:text-blue-900" href={`mailto:${PRIMARY_CONTACT_EMAIL}`}>
             {PRIMARY_CONTACT_EMAIL}
           </a>.
         </p>

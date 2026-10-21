@@ -17,9 +17,10 @@ export default function ProductOwnership({
 }: ProductOwnershipProps) {
   const textClass = tone === "dark" ? "text-slate-400" : "text-slate-600";
   const strongClass = tone === "dark" ? "text-slate-200" : "text-slate-900";
+  // Underlined so links inside sentences are not distinguished by colour alone (WCAG 1.4.1).
   const linkClass = tone === "dark"
-    ? "text-slate-300 hover:text-white"
-    : "text-blue-700 hover:text-blue-900";
+    ? "text-slate-300 hover:text-white underline underline-offset-2"
+    : "text-blue-700 hover:text-blue-900 underline underline-offset-2";
 
   return (
     <div
