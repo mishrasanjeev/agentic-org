@@ -269,6 +269,25 @@ export const commerceRuntimeApi = {
     api.post("/commerce/runtime/providers/plural-pine/mandate-capability/verify", data),
 };
 
+// Merchant custom domains (api/v1/merchant_custom_domains.py)
+export const customDomainsApi = {
+  get: (merchantId: string, params?: { seller_agent_id?: string }) =>
+    api.get(`/commerce/runtime/merchant-configs/${encodeURIComponent(merchantId)}/custom-domain`, { params }),
+  add: (merchantId: string, data: { host: string; seller_agent_id?: string }) =>
+    api.post(`/commerce/runtime/merchant-configs/${encodeURIComponent(merchantId)}/custom-domain`, data),
+  check: (merchantId: string, data: { search_console_owner_added: boolean; seller_agent_id?: string }) =>
+    api.post(`/commerce/runtime/merchant-configs/${encodeURIComponent(merchantId)}/custom-domain/check`, data),
+  remove: (merchantId: string, params?: { seller_agent_id?: string }) =>
+    api.delete(`/commerce/runtime/merchant-configs/${encodeURIComponent(merchantId)}/custom-domain`, { params }),
+  operatorQueue: () => api.get("/commerce/custom-domains/operator-queue"),
+  markMapped: (domainId: string) =>
+    api.post(`/commerce/custom-domains/operator-queue/${encodeURIComponent(domainId)}/mapped`, {}),
+  markUnmapped: (domainId: string) =>
+    api.post(`/commerce/custom-domains/operator-queue/${encodeURIComponent(domainId)}/unmapped`, {}),
+  markFailed: (domainId: string, reason: string) =>
+    api.post(`/commerce/custom-domains/operator-queue/${encodeURIComponent(domainId)}/failed`, { reason }),
+};
+
 // ABM (Account-Based Marketing)
 export const abmApi = {
   listAccounts: (params?: Record<string, string>) => api.get("/abm/accounts", { params }),

@@ -82,6 +82,7 @@ from api.v1 import (
     lineage,
     mcp,
     memory,
+    merchant_custom_domains,
     model_gateway,
     oauth_connector,
     observability,
@@ -338,6 +339,10 @@ app.include_router(commerce_ucp.runtime_router, prefix="/api/v1", tags=["Commerc
 # UCP REST binding at https://<merchant serving host>/ucp (AGENTICORG_UCP_CHECKOUT_ENABLED).
 app.include_router(commerce_ucp.router)
 app.include_router(commerce_ucp_publishing.router, prefix="/api/v1", tags=["Commerce UCP"])
+app.include_router(merchant_custom_domains.router, prefix="/api/v1", tags=["Commerce Custom Domains"])
+app.include_router(merchant_custom_domains.operator_router, prefix="/api/v1", tags=["Commerce Custom Domains"])
+# Certificate probe target on any host (AGENTICORG_CUSTOM_DOMAINS_ENABLED).
+app.include_router(merchant_custom_domains.host_check_router)
 app.include_router(commerce_acp.runtime_router, prefix="/api/v1", tags=["Commerce Runtime"])
 # ACP checkout sessions at https://<merchant serving host>/acp (AGENTICORG_ACP_CHECKOUT_ENABLED).
 app.include_router(commerce_acp.router)

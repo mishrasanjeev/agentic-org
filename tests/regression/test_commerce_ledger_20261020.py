@@ -243,6 +243,7 @@ def test_every_declared_commerce_write_event_is_written_by_its_handler() -> None
         commerce_runtime,
         commerce_ucp,
         commerce_ucp_publishing,
+        merchant_custom_domains,
     )
     from core.commerce.acp import checkout as acp_checkout
     from core.commerce.ucp import handlers as ucp_handlers
@@ -256,6 +257,7 @@ def test_every_declared_commerce_write_event_is_written_by_its_handler() -> None
         + inspect.getsource(ucp_handlers)
         + inspect.getsource(commerce_acp)
         + inspect.getsource(acp_checkout)
+        + inspect.getsource(merchant_custom_domains)
     )
     checked = 0
     for route in http_routes(app):

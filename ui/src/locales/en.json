@@ -31,6 +31,7 @@
     "connectors": "Connectors",
     "channels": "Channels",
     "commerceRuntime": "Commerce Runtime",
+    "customDomains": "Custom Domains",
     "promptTemplates": "Prompt Templates",
     "createFromSop": "Create from SOP",
     "integrations": "A2A / MCP",

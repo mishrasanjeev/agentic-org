@@ -78,6 +78,7 @@ const PromptTemplates = lazyRetry(() => import("./pages/PromptTemplates"));
 const SalesPipeline = lazyRetry(() => import("./pages/SalesPipeline"));
 const OrgChart = lazyRetry(() => import("./pages/OrgChart"));
 const CommerceRuntimeDemo = lazyRetry(() => import("./pages/CommerceRuntimeDemo"));
+const CustomDomains = lazyRetry(() => import("./pages/CustomDomains"));
 
 /* -- Role-specific dashboards -- */
 const CFODashboard = lazyRetry(() => import("./pages/CFODashboard"));
@@ -275,6 +276,16 @@ export default function App() {
           <ProtectedRoute allowedRoles={["admin", "merchant"]}>
             <Layout>
               <CommerceRuntimeDemo />
+            </Layout>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/dashboard/custom-domains"
+        element={
+          <ProtectedRoute allowedRoles={["admin", "merchant"]}>
+            <Layout>
+              <CustomDomains />
             </Layout>
           </ProtectedRoute>
         }
