@@ -66,6 +66,7 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -e ".[dev]"
+          pip install --no-deps --require-hashes -r requirements-fastembed.txt
       - name: Resolve tenant UUID
         id: tenant
         run: |

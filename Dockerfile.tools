@@ -29,13 +29,16 @@ RUN set -eu; \
     gitleaks version
 
 WORKDIR /opt/agenticorg-deps
-COPY pyproject.toml requirements-dev.txt ./
+COPY pyproject.toml requirements-dev.txt requirements-fastembed.txt scripts/pip_check.py ./
 # Install what `pip install -e ".[dev]"` would, without the package itself
-# (the source is mounted at /src and imported from there).
+# (the source is mounted at /src and imported from there), then fastembed without
+# its dependency metadata (requirements-fastembed.txt explains why). pip_check.py
+# is pip check accepting only fastembed's Pillow ceiling.
 RUN python -c "import tomllib; p = tomllib.load(open('pyproject.toml', 'rb'))['project']; \
 print('\n'.join(p['dependencies'] + p['optional-dependencies']['dev']))" > requirements-project.txt \
     && pip install --no-cache-dir -r requirements-project.txt -r requirements-dev.txt \
-    && pip check
+    && pip install --no-cache-dir --no-deps --require-hashes -r requirements-fastembed.txt \
+    && python pip_check.py
 
 # The mounted checkout is owned by the host user, which git would otherwise
 # refuse as a "dubious ownership" repository.

@@ -1,0 +1,14 @@
+# fastembed, the default local embedding runtime (core/embeddings.py).
+#
+# Installed after the project, without its own dependency metadata:
+#
+#   pip install --no-deps --require-hashes -r requirements-fastembed.txt
+#
+# fastembed 0.9.0, its latest release, declares pillow<13, while the project
+# requires Pillow>=13.0.0 for decoder security fixes. fastembed only imports
+# Pillow for image embeddings, which this platform does not load, and its
+# other runtime requirements are declared in pyproject.toml with the same
+# ranges. When a fastembed release accepts Pillow 13, move fastembed back into
+# pyproject.toml and delete this file.
+fastembed==0.9.0 \
+    --hash=sha256:273d408edec8c0f161711d8f6e44e4a5b559d18e8edf6bf805415d55dc772846

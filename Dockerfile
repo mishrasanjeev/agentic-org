@@ -4,7 +4,7 @@
 # python:3.14-slim @ 2026-05-01
 FROM python:3.14-slim@sha256:a2b82f3c48559aa0a8446d9af49826b6e2b2016f4cd2afabfe6013ec53729170 AS builder
 WORKDIR /app
-# Build deps for patched Pillow (required by fastembed) and other C extensions; git for the
+# Build deps for patched Pillow and other C extensions; git for the
 # commit-pinned grantex-agent-httpsig direct reference (requirements.txt, pyproject.toml).
 RUN apt-get update && apt-get install -y --no-install-recommends \
     gcc g++ libjpeg-dev zlib1g-dev libffi-dev git \
@@ -23,6 +23,11 @@ COPY schemas/ schemas/
 COPY testing/ testing/
 COPY migrations/ migrations/
 RUN pip install --upgrade pip && pip install --no-cache-dir ".[v4]"
+# fastembed (the default local embedding runtime) goes in without its dependency
+# metadata: its latest release caps pillow<13, and pyproject.toml declares its
+# other runtime requirements (requirements-fastembed.txt explains why).
+COPY requirements-fastembed.txt ./
+RUN pip install --no-cache-dir --no-deps --require-hashes -r requirements-fastembed.txt
 
 # Browser RPA executes with Playwright's version-matched Chromium. Download it
 # in the builder and copy the immutable browser bundle into the runtime image.
@@ -67,7 +72,10 @@ ENV PLAYWRIGHT_BROWSERS_PATH=/opt/playwright-browsers
 # in pip/_vendor/bom.cdx.json as installed runtime dependencies. Remove the
 # paths explicitly because copying site-packages over the runtime base can
 # overlay two pip versions that a normal uninstall does not fully clean up.
-RUN python -m pip check \
+# scripts/pip_check.py is pip check accepting only fastembed's Pillow ceiling.
+COPY scripts/pip_check.py /tmp/pip_check.py
+RUN python /tmp/pip_check.py \
+    && rm -f /tmp/pip_check.py \
     && rm -rf /usr/local/lib/python3.14/site-packages/pip \
         /usr/local/lib/python3.14/site-packages/pip-*.dist-info \
         /usr/local/bin/pip /usr/local/bin/pip3 /usr/local/bin/pip3.14
