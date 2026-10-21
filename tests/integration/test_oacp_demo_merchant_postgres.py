@@ -557,6 +557,60 @@ def test_serving_host_is_attested_published_and_served_through_the_app(seed, cap
     assert responses["acp_checkout"].status_code == 201, responses["acp_checkout"].text
     assert responses["unknown_host"].status_code == 404
 
+    # A minute later the short-lived artifacts have lapsed: the host read renews them on demand.
+    from core.commerce import artifact_freshness as freshness
+    from tests.oacp_fresh_fakes import FakeRedis
+
+    redis = FakeRedis()
+
+    async def _redis() -> FakeRedis:
+        return redis
+
+    monkeypatch.setattr(freshness, "_redis", _redis)
+    monkeypatch.setattr(settings, "oacp_on_demand_refresh_enabled", True)
+    _expire_short_lived()
+    _execute(
+        "UPDATE oacp_artifact_cache_records SET expires_at = now() - interval '1 second' "
+        "WHERE tenant_id = :t AND artifact_type = 'public_discovery'",
+        t=DEMO_TENANT_ID,
+    )
+    issued = len(seed.grantex.requests)
+
+    async def _search_again() -> httpx.Response:
+        transport = httpx.ASGITransport(app=app, client=("192.0.2.10", 443))
+        async with httpx.AsyncClient(transport=transport, base_url=f"https://{HOST}") as client:
+            return await client.post(
+                "/ucp/catalog/search", headers={"host": HOST}, json={"query": "masala", "context": {"currency": "INR"}}
+            )
+
+    again = asyncio.run(_search_again())
+    assert again.status_code == 200, again.text
+    assert [p["title"] for p in again.json().get("products") or []] == ["Masala Chai Blend"]
+    assert len(seed.grantex.requests) == issued + 1
+    assert seed.grantex.requests[-1]["request"]["public_discovery_requested"] is True
+
+    # The same through the checkout resolver (UCP REST), before any transaction of the route.
+    _expire_short_lived()
+    redis.values.clear()
+
+    async def _checkout_again() -> httpx.Response:
+        transport = httpx.ASGITransport(app=app, client=("192.0.2.10", 443))
+        async with httpx.AsyncClient(transport=transport, base_url=f"https://{HOST}") as client:
+            return await client.post(
+                "/ucp/checkout-sessions",
+                headers={
+                    "host": HOST,
+                    "UCP-Agent": 'profile="https://platform.example/.well-known/ucp"',
+                    "X-API-Key": key,
+                    "Idempotency-Key": uuid.uuid4().hex,
+                },
+                json={"line_items": [{"item": {"id": "NTH-MASALA-250"}, "quantity": 1}]},
+            )
+
+    checkout = asyncio.run(_checkout_again())
+    assert checkout.status_code == 201, checkout.text
+    assert len(seed.grantex.requests) == issued + 2
+
     assert seed("--teardown", "--apply") == 0
     capsys.readouterr()
     assert _scalar("SELECT settings ? 'ucp_serving_hosts' FROM tenants WHERE id::text = :t", t=DEMO_TENANT_ID) is False
@@ -637,3 +691,106 @@ def test_a_tenant_without_the_demo_marker_is_never_touched(seed, capsys) -> None
         assert _snapshot() == before
     finally:
         asyncio.run(_set_marker("true"))
+
+
+def _execute(sql: str, **params: Any) -> None:
+    async def _run() -> None:
+        engine = create_async_engine(os.environ["AGENTICORG_DB_URL"], poolclass=NullPool)
+        try:
+            async with engine.begin() as conn:
+                await conn.execute(text(sql), params)
+        finally:
+            await engine.dispose()
+
+    asyncio.run(_run())
+
+
+def _expire_short_lived() -> None:
+    """The state a minute after an issuance: inventory, price and mandate capability have lapsed."""
+    _execute(
+        "UPDATE oacp_artifact_cache_records SET expires_at = now() - interval '1 second' "
+        "WHERE tenant_id = :t AND artifact_type IN ('inventory', 'price', 'mandate_capability')",
+        t=DEMO_TENANT_ID,
+    )
+
+
+@pytest.mark.skipif(LIVE, reason="replays expiry and refusals with the in-process issuer")
+def test_on_demand_refresh_renews_lapsed_artifacts_once_and_bounds_growth(seed, capsys, monkeypatch) -> None:
+    from api.v1 import commerce_acp
+    from core.commerce import artifact_freshness as freshness
+    from core.commerce.acp.feed import FeedUnavailableError
+    from core.config import settings
+    from tests.oacp_fresh_fakes import FakeRedis
+
+    assert seed("--apply") == 0
+    capsys.readouterr()
+    redis = FakeRedis()
+
+    async def _redis() -> FakeRedis:
+        return redis
+
+    monkeypatch.setattr(freshness, "_redis", _redis)
+
+    def _feed() -> Any:
+        return asyncio.run(
+            commerce_acp.load_feed(
+                tenant_id=DEMO_TENANT_ID,
+                merchant_id=DEMO_MERCHANT_ID,
+                seller_agent_id=DEMO_SELLER_AGENT_ID,
+                now=datetime.now(UTC),
+            )
+        )
+
+    # Flag off: a lapsed inventory artifact is refused, exactly as before, and Grantex is not asked.
+    _expire_short_lived()
+    issued = len(seed.grantex.requests)
+    with pytest.raises(FeedUnavailableError):
+        _feed()
+    assert len(seed.grantex.requests) == issued
+
+    # Flag on: the read renews the scope once, re-reading evidence that is too old for Grantex first.
+    monkeypatch.setattr(settings, "oacp_on_demand_refresh_enabled", True)
+    _execute(
+        "UPDATE commerce_c6z_connector_evidence_records SET source_observed_at = now() - interval '20 minutes' "
+        "WHERE tenant_id = :t",
+        t=DEMO_TENANT_ID,
+    )
+    syncs = _events("commerce.runtime.demo_catalog.sync")
+    feed = _feed()
+    assert len(feed.products) == 10
+    assert len(seed.grantex.requests) == issued + 1
+    assert _events("commerce.runtime.demo_catalog.sync") == syncs + 1
+    assert _events("commerce.runtime.artifacts.refresh") >= 1
+    observed = _scalar(
+        "SELECT extract(epoch FROM now() - source_observed_at) FROM commerce_c6z_connector_evidence_records "
+        "WHERE tenant_id = :t",
+        t=DEMO_TENANT_ID,
+    )
+    assert float(observed) < 60
+    # A second read inside the artifacts' lifetime issues nothing.
+    _feed()
+    assert len(seed.grantex.requests) == issued + 1
+
+    # Many lapses in a row: the scope's cache stays bounded per type.
+    for _ in range(10):
+        _expire_short_lived()
+        redis.values.clear()  # past the minimum interval
+        _feed()
+    assert len(seed.grantex.requests) == issued + 11
+    widest = _scalar(
+        "SELECT max(n) FROM (SELECT count(*) AS n FROM oacp_artifact_cache_records "
+        "WHERE tenant_id = :t GROUP BY artifact_type) per_type",
+        t=DEMO_TENANT_ID,
+    )
+    assert int(widest) <= freshness.KEEP_PER_TYPE
+
+    # A refusal backs off: the read fails closed and Grantex is not asked again within the backoff.
+    seed.grantex.mode = "unsupported"
+    _expire_short_lived()
+    redis.values.clear()
+    with pytest.raises(FeedUnavailableError):
+        _feed()
+    with pytest.raises(FeedUnavailableError):
+        _feed()
+    assert len(seed.grantex.requests) == issued + 12
+    assert redis.keys("oacp:fresh:backoff:*")

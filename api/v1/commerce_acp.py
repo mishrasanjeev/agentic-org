@@ -209,6 +209,20 @@ async def load_feed(*, tenant_id: str, merchant_id: str, seller_agent_id: str, n
     records, products = await load_catalog_inputs(
         tenant_id=tenant_id, merchant_id=merchant_id, seller_agent_id=seller_agent_id
     )
+    from core.commerce.artifact_freshness import CATALOG_TYPES, ensure_fresh
+
+    if await ensure_fresh(
+        tenant_id=tenant_id,
+        merchant_id=merchant_id,
+        seller_agent_id=seller_agent_id,
+        records=records,
+        required=(*CATALOG_TYPES, "policy"),
+        now=now,
+    ):
+        records, products = await load_catalog_inputs(
+            tenant_id=tenant_id, merchant_id=merchant_id, seller_agent_id=seller_agent_id
+        )
+        now = datetime.now(UTC)
     now_iso = now.isoformat().replace("+00:00", "Z")
     state = ucp_state(config.get("public_publishing"))
     raw_snapshot = state.get("verified_policy")

@@ -193,11 +193,36 @@ async def _serving_merchant(request: Request) -> UcpMerchantServeState:
     records = await load_shared_cache_records(
         tenant_id=binding.tenant_id, merchant_id=binding.merchant_id, seller_agent_id=binding.seller_agent_id
     )
+    if await _refreshed(binding, records):
+        # The refresh also renews the merchant's public-discovery snapshot: read both again.
+        row = await load_merchant_config_row(
+            tenant_id=binding.tenant_id,
+            merchant_id=binding.merchant_id,
+            seller_agent_id=binding.seller_agent_id,
+        )
+        if row is None or str(row.tenant_id) != binding.tenant_id:
+            raise _not_found()
+        records = await load_shared_cache_records(
+            tenant_id=binding.tenant_id, merchant_id=binding.merchant_id, seller_agent_id=binding.seller_agent_id
+        )
     live = usable_artifact_ids(cache_records=records, now_iso=_now_iso(), artifact_type="public_discovery")
     serve = merchant_serve_state(row, host=host, now=_now(), live_public_discovery_ids=live)
     if serve is None:
         raise _not_found()
     return serve
+
+
+async def _refreshed(binding: Any, records: list[Any]) -> bool:
+    """On-demand renewal of the scope's short-lived artifacts (``core/commerce/artifact_freshness.py``)."""
+    from core.commerce.artifact_freshness import HOST_TYPES, ensure_fresh
+
+    return await ensure_fresh(
+        tenant_id=binding.tenant_id,
+        merchant_id=binding.merchant_id,
+        seller_agent_id=binding.seller_agent_id,
+        records=records,
+        required=HOST_TYPES,
+    )
 
 
 def _error_body(version: str, code: str, content: str) -> dict[str, Any]:

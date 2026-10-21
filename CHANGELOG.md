@@ -1,5 +1,26 @@
 # Changelog
 
+## Unreleased - On-demand OACP artifact freshness
+
+- Fixed (behind a flag): every merchant's UCP catalog, ACP feed, checkout decisions and public UCP
+  profile went unavailable a minute after a Grantex issuance, because nothing renewed the
+  short-lived artifacts (inventory 60 s, mandate capability 2 min, price 5 min, public discovery
+  15 min). With `AGENTICORG_OACP_ON_DEMAND_REFRESH_ENABLED=true` (default off) those reads renew the
+  merchant scope once when a required artifact is expired or expiring: a Redis single-flight lock
+  per scope, at most one issuance every 30 s, backoff after a failure or refusal, a read wait of at
+  most `AGENTICORG_OACP_REFRESH_WAIT_MS` (default 3000) after which the existing fail-closed refusal
+  stands, connector evidence re-read first when it is too old for Grantex, every write ledgered,
+  and the scope's cache bounded (newest 6 records per type, expired ones dropped after 5 minutes).
+  Host routes refresh before they open any transaction. Nothing is issued while nobody reads.
+- New optional beat task `sweep-oacp-artifact-freshness` (every 5 minutes, existing beat and
+  worker; a no-op unless `AGENTICORG_OACP_REFRESH_SWEEP_ENABLED` and the on-demand flag are true)
+  refreshing only scopes read in the last 15 minutes. Guide:
+  `docs/oacp/artifact-cache-guide.md#on-demand-freshness`.
+- The read-only Shopify sync route's body moved into a helper the refresh shares; its behaviour is
+  unchanged.
+- The seed script's `--keep-fresh-minutes` loop is removed: the on-demand refresh keeps the demo
+  merchant fresh while it is being used.
+
 ## Unreleased - OACP demo merchant (synthetic)
 
 - New `scripts/seed_oacp_demo_merchant.py`: creates, converges or tears down one clearly labelled
@@ -11,7 +32,7 @@
   to create, `--verify-host` attests it after propagation and publishes the UCP profile
   (namespace `ai.agenticorg.nilgiritea`). Dry run by default (`--apply` writes); every write
   goes through the route handler and records its commerce ledger event in a tenant-bound session;
-  `--keep-fresh-minutes` re-issues the short-lived artifacts for a showcase; `--teardown` deletes
+  `--teardown` deletes
   the demo's commerce rows and keeps the append-only ledger. It stops with the tenant id to
   allowlist when Grantex answers `service_tenant_not_allowed`, and with exit code 4 when Grantex
   does not accept the synthetic source. Runbook (with the Cloud Run domain mapping straight to

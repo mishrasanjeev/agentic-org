@@ -462,6 +462,21 @@ class Settings(BaseSettings):
     # Grantex artifact naming the synthetic source is refused at caching.
     # Env: AGENTICORG_OACP_DEMO_MERCHANT_ENABLED.
     oacp_demo_merchant_enabled: bool = False
+    # On-demand OACP artifact refresh (core/commerce/artifact_freshness.py): when a
+    # catalog, feed, checkout or discovery read finds a required artifact expired or
+    # expiring (inventory lives 60 s, prices 5 min), one refresh per merchant scope
+    # is requested from Grantex (Redis single-flight lock, minimum interval, backoff
+    # on failure) and the read waits at most oacp_refresh_wait_ms for it; otherwise
+    # the existing fail-closed refusal stands. Off by default: off, nothing is
+    # refreshed and every read behaves as before.
+    # Env: AGENTICORG_OACP_ON_DEMAND_REFRESH_ENABLED, AGENTICORG_OACP_REFRESH_WAIT_MS.
+    oacp_on_demand_refresh_enabled: bool = False
+    oacp_refresh_wait_ms: int = 3000
+    # The low-frequency beat sweep (every 5 minutes) that refreshes only merchant scopes
+    # read in the last 15 minutes, so their connector evidence and public-discovery
+    # artifact stay current off the read path. Off by default; needs the on-demand flag.
+    # Env: AGENTICORG_OACP_REFRESH_SWEEP_ENABLED.
+    oacp_refresh_sweep_enabled: bool = False
     # RBI e-mandate framework 2026 (s.8): a subsequent UPI AutoPay / e-mandate
     # debit above these amounts (minor units, paise) needs the additional factor
     # of authentication; registration and the first debit always do

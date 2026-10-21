@@ -112,6 +112,12 @@ Demo merchant: `AGENTICORG_OACP_DEMO_MERCHANT_ENABLED` (default off; on, the cle
 `scripts/seed_oacp_demo_merchant.py` creates, and an artifact naming it is cached only for a tenant
 carrying the demo marker; off, only Shopify read-only sources are accepted, as before). Never
 present synthetic data as a merchant system; see `docs/runbooks/oacp-demo-merchant.md`.
+Artifact freshness: `AGENTICORG_OACP_ON_DEMAND_REFRESH_ENABLED` (default off; a read that needs an
+expired or expiring short-lived artifact renews its merchant scope once, through a Redis single-flight
+lock with a 30 s minimum interval and backoff, waiting at most `AGENTICORG_OACP_REFRESH_WAIT_MS`;
+never inside an open transaction; stale stays refused) and `AGENTICORG_OACP_REFRESH_SWEEP_ENABLED`
+(default off; the 5-minute beat refreshes only scopes read in the last 15 minutes). No always-on loop
+issues artifacts; see `docs/oacp/artifact-cache-guide.md#on-demand-freshness`.
 ACP flags: `AGENTICORG_ACP_FEED_ENABLED` (default off; the ACP product feed export answers 404),
 `AGENTICORG_ACP_CHECKOUT_ENABLED` (default off; the `/acp` checkout session routes answer 404; they
 run on the UCP session table, arbiter and executor) and `AGENTICORG_ACP_SIGNATURE_MODE` (`log` by

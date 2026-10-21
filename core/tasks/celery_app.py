@@ -56,6 +56,7 @@ app = Celery(
         "core.tasks.knowledge_tasks",
         "core.tasks.lineage_tasks",
         "core.tasks.memory_tasks",
+        "core.tasks.oacp_freshness_tasks",
         "core.tasks.report_tasks",
         "core.tasks.rpa_tasks",
         "core.tasks.spend_tasks",
@@ -238,6 +239,14 @@ app.conf.beat_schedule = {
         # AGENTICORG_OACP_RETENTION_APPLY_ENABLED is true (core/tasks/commerce_ledger_tasks.py).
         "task": "core.tasks.commerce_ledger_tasks.apply_oacp_retention",
         "schedule": crontab(hour=4, minute=30),  # daily at 4:30 AM IST
+        "options": {"queue": "maintenance"},
+    },
+    "sweep-oacp-artifact-freshness": {
+        # Refreshes only merchant scopes read in the last 15 minutes; a no-op unless
+        # AGENTICORG_OACP_ON_DEMAND_REFRESH_ENABLED and AGENTICORG_OACP_REFRESH_SWEEP_ENABLED
+        # are true (core/tasks/oacp_freshness_tasks.py).
+        "task": "core.tasks.oacp_freshness_tasks.sweep_artifact_freshness",
+        "schedule": 300.0,  # every 5 minutes
         "options": {"queue": "maintenance"},
     },
     "run-synthetic-checks": {

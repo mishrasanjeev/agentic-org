@@ -53,6 +53,9 @@ Set on **both** `agenticorg-api` and `agenticorg-worker` (and on the seed job):
 | `AGENTICORG_UCP_CHECKOUT_ENABLED` | `true` | UCP checkout, cart and order routes |
 | `AGENTICORG_ACP_FEED_ENABLED` | `true` | ACP product feed export |
 | `AGENTICORG_ACP_CHECKOUT_ENABLED` | `true` | ACP checkout sessions |
+| `AGENTICORG_OACP_ON_DEMAND_REFRESH_ENABLED` | `true` | Reads renew lapsed short-lived artifacts on demand (needs Redis, already used by the API) |
+| `AGENTICORG_OACP_REFRESH_WAIT_MS` | `3000` (default) | Longest a read waits for a refresh |
+| `AGENTICORG_OACP_REFRESH_SWEEP_ENABLED` | unset (off) | Optional 5-minute sweep of recently read scopes; not needed for the demo |
 | `AGENTICORG_UCP_VERSIONS` | `2026-04-08` (default) | Release served at `/.well-known/ucp` |
 | `AGENTICORG_OACP_VERIFY_STRICT` | unset (on in production) | Artifacts are verified before caching |
 | `AGENTICORG_ARBITER_REQUIRE_VERIFIED_AUTHORITY` | unset (on) | Caller-asserted buyer authority is refused |
@@ -164,16 +167,13 @@ password (no console sign-in). After a new deploy, point the job at the new imag
       rerun later. The profile is served once Grantex issues an enabled `public_discovery_state`
       artifact.
 
-5. **Before a showcase**, keep the artifacts fresh (inventory artifacts live 60 s, prices 5 min,
-   public discovery 15 min):
-
-   ```
-   gcloud run jobs execute agenticorg-oacp-demo-seed --project=$PROJECT --region=$REGION \
-     --args=scripts/seed_oacp_demo_merchant.py,--apply,--keep-fresh-minutes=60
-   ```
-
-   It re-issues every 45 s and prunes the demo scope's expired cache rows. A single
-   `--refresh-artifacts` run gives about one minute of catalog, feed and checkout reads.
+5. **Freshness while it is used.** Inventory artifacts live 60 s, prices 5 min and public
+   discovery 15 min. With `AGENTICORG_OACP_ON_DEMAND_REFRESH_ENABLED=true` the first read that
+   finds one lapsed renews the demo scope (one Grantex issuance at most every 30 s, the read waits
+   at most 3 s; the synthetic catalog evidence is re-read first when it is older than 12 minutes),
+   so nothing has to run before a showcase and nothing is issued while nobody uses the demo. A
+   one-off `--refresh-artifacts` run is still available. See the
+   [artifact cache guide](../oacp/artifact-cache-guide.md#on-demand-freshness).
 
 6. **Sign in** (with the password secret): `https://app.agenticorg.ai` as
    `demo-admin@demo.agenticorg.example`, then create the API keys a demo platform needs (scopes
@@ -252,7 +252,9 @@ hours. A later `--apply` re-creates the demo on the same tenant.
 ## Cost and Safety
 
 - No cost beyond normal: one short job execution, a few hundred rows, one Grantex request per
-  refresh (a keep-fresh hour is about 80 requests and 880 short-lived artifacts), one domain mapping.
+  refresh, and refreshes only while someone reads (at most one issuance of 11 artifacts every 30 s
+  per merchant scope, none while idle; the scope's cache keeps at most 6 records per type), one
+  domain mapping.
 - Synthetic only: invented names, an invented address, `.example` addresses and URLs, no real
   people, no secrets in the output (the admin password never leaves Secret Manager and the job's
   environment).

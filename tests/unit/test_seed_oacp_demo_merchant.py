@@ -77,7 +77,6 @@ def test_dry_run_and_teardown_need_no_grantex_settings() -> None:
         ["--teardown", "--verify-host"],
         ["--teardown", "--refresh-artifacts"],
         ["--keep-fresh-minutes", "5"],
-        ["--apply", "--keep-fresh-minutes", str(seed.MAX_KEEP_FRESH_MINUTES + 1)],
     ],
 )
 def test_argument_rules(argv: list[str]) -> None:
@@ -87,7 +86,7 @@ def test_argument_rules(argv: list[str]) -> None:
 
 def test_default_is_a_dry_run() -> None:
     args = seed.parse_args([])
-    assert (args.apply, args.teardown, args.keep_fresh_minutes) == (False, False, 0)
+    assert (args.apply, args.teardown, args.verify_host, args.serving_host) == (False, False, False, None)
 
 
 def test_grantex_tenant_not_allowed_names_the_tenant_to_allowlist() -> None:

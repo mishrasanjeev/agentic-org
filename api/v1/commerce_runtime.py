@@ -772,12 +772,30 @@ async def sync_shopify_read_only(
     body: ShopifySyncRequest,
     tenant_id: str = Depends(get_current_tenant),
 ) -> dict[str, Any]:
+    return await _sync_shopify_packet(
+        tenant_id=tenant_id,
+        packet_id=body.packet_id,
+        page_size=body.page_size,
+        max_pages=body.max_pages,
+        currency=body.currency,
+    )
+
+
+async def _sync_shopify_packet(
+    *,
+    tenant_id: str,
+    packet_id: str,
+    page_size: int,
+    max_pages: int,
+    currency: str | None,
+) -> dict[str, Any]:
+    """The read-only Shopify sync of one packet (the sync route, and the artifact refresh when evidence is old)."""
     blocked_exc: HTTPException | None = None
     evidence: dict[str, Any] | None = None
     credentials: ShopifyCredentials | None = None
     credential_source = "unknown"
     async with get_tenant_session(_tenant_uuid(tenant_id)) as session:
-        packet_row = await session.get(C6ZSellerOnboardingPacketRow, body.packet_id)
+        packet_row = await session.get(C6ZSellerOnboardingPacketRow, packet_id)
         if packet_row is None or packet_row.tenant_id != tenant_id:
             raise HTTPException(404, "Seller Commerce Agent onboarding packet not found")
         packet = _row_to_packet(packet_row)
@@ -795,7 +813,7 @@ async def sync_shopify_read_only(
                 raise HTTPException(status_code=500, detail="Shopify credentials were not resolved")
             client = ShopifyAdminGraphQLClient(credentials)
             try:
-                products = await client.fetch_products(page_size=body.page_size, max_pages=body.max_pages)
+                products = await client.fetch_products(page_size=page_size, max_pages=max_pages)
             except (httpx.HTTPError, C6ZRuntimeValidationError) as exc:
                 raise HTTPException(status_code=502, detail=f"Shopify read-only sync failed: {exc}") from exc
             now_iso = _now_iso()
@@ -804,7 +822,7 @@ async def sync_shopify_read_only(
                 products=products,
                 synced_at=now_iso,
                 source_observed_at=now_iso,
-                currency=body.currency,
+                currency=currency,
             )
             row = await session.get(C6ZConnectorEvidenceRow, evidence["evidence_id"])
             if row is None:
@@ -820,8 +838,8 @@ async def sync_shopify_read_only(
             merchant_id=packet_row.merchant_id,
             seller_agent_id=packet_row.seller_agent_id,
             buyer_agent_id=None,
-            payload=evidence if evidence is not None else {"packet_id": body.packet_id, "status": packet_row.status},
-            resource_id=body.packet_id,
+            payload=evidence if evidence is not None else {"packet_id": packet_id, "status": packet_row.status},
+            resource_id=packet_id,
         )
     if blocked_exc is not None:
         raise blocked_exc
@@ -1620,6 +1638,7 @@ async def get_protocol_adapter_payloads(
         merchant_id=merchant_id,
         seller_agent_id=seller_agent_id,
         buyer_agent_id=buyer_agent_id,
+        refresh=True,
     )
     return generate_protocol_adapter_payloads(
         cache_records=cache_records,
@@ -1710,6 +1729,7 @@ async def prepare_purchase_handoff(
         merchant_id=body.merchant_id,
         seller_agent_id=body.seller_agent_id,
         buyer_agent_id=body.buyer_agent_id,
+        refresh=True,
     )
     merchant_config = await _merchant_config_for_arbiter(tenant_id, body.merchant_id, body.seller_agent_id)
     live_execution_env_enabled = os.environ.get("PLURAL_PINE_LIVE_EXECUTION_ENABLED", "").strip().lower() == "true"
@@ -1892,6 +1912,7 @@ async def create_offline_pos_handoff(
         merchant_id=body.merchant_id,
         seller_agent_id=body.seller_agent_id,
         buyer_agent_id=body.buyer_agent_id,
+        refresh=True,
     )
     merchant_config = await _merchant_config_for_arbiter(tenant_id, body.merchant_id, body.seller_agent_id)
     now = datetime.now(UTC)
@@ -2338,7 +2359,14 @@ async def _load_runtime_scope(
     merchant_id: str,
     seller_agent_id: str | None,
     buyer_agent_id: str | None,
+    refresh: bool = False,
 ) -> tuple[list[Any], list[dict[str, Any]], list[dict[str, Any]]]:
+    """The scope's cache records, synced products and capability evidence.
+
+    ``refresh`` (only from a route, never inside an open transaction) first lets
+    ``core/commerce/artifact_freshness.py`` renew expired or expiring artifacts
+    when ``AGENTICORG_OACP_ON_DEMAND_REFRESH_ENABLED`` is on.
+    """
     async with get_tenant_session(_tenant_uuid(tenant_id)) as session:
         repo = DurableOacpArtifactCacheRepository(session)
         cache_records = await repo.list_for_scope(
@@ -2391,6 +2419,22 @@ async def _load_runtime_scope(
         for evidence_row in evidence_rows:
             products.extend([dict(product) for product in list(evidence_row.products or [])])
         capabilities = [_row_to_capability_summary(row) for row in capability_rows]
+    if refresh:
+        from core.commerce.artifact_freshness import COMMITMENT_TYPES, ensure_fresh
+
+        if await ensure_fresh(
+            tenant_id=tenant_id,
+            merchant_id=merchant_id,
+            seller_agent_id=seller_agent_id,
+            records=list(cache_records),
+            required=COMMITMENT_TYPES,
+        ):
+            return await _load_runtime_scope(
+                tenant_id=tenant_id,
+                merchant_id=merchant_id,
+                seller_agent_id=seller_agent_id,
+                buyer_agent_id=buyer_agent_id,
+            )
     return list(cache_records), products, capabilities
 
 
@@ -2879,6 +2923,88 @@ async def sync_demo_catalog(*, tenant_id: str, packet_id: str) -> dict[str, Any]
         "synthetic_data": True,
         "allowed_to_execute": False,
     }
+
+
+# Grantex refuses connector evidence observed more than 15 minutes ago; older evidence is re-read first.
+EVIDENCE_REUSE_SECONDS = 12 * 60
+
+
+async def refresh_scope_artifacts(*, tenant_id: str, merchant_id: str, seller_agent_id: str) -> str:
+    """One refresh of a merchant scope's OACP artifacts (``core/commerce/artifact_freshness.py`` calls this).
+
+    Uses the scope's latest onboarding packet and connector evidence; evidence
+    too old for Grantex is re-read first (the read-only Shopify sync, or the
+    synthetic demo catalog). Then the same authority request and verified
+    caching as the routes, each write ledgered. Returns ``refreshed``,
+    ``refused`` (Grantex or the verifier said no), ``not_refreshable`` (no
+    packet, evidence or Grantex settings) or ``failed`` (a transient error).
+    """
+    from core.commerce import artifact_freshness as freshness
+
+    tid = _tenant_uuid(tenant_id)
+    async with get_tenant_session(tid) as session:
+        packet_row = (
+            await session.scalars(
+                select(C6ZSellerOnboardingPacketRow)
+                .where(
+                    C6ZSellerOnboardingPacketRow.tenant_id == tenant_id,
+                    C6ZSellerOnboardingPacketRow.merchant_id == merchant_id,
+                    C6ZSellerOnboardingPacketRow.seller_agent_id == seller_agent_id,
+                )
+                .order_by(C6ZSellerOnboardingPacketRow.created_at.desc())
+            )
+        ).first()
+        evidence_row = (
+            await session.scalars(
+                select(C6ZConnectorEvidenceRow)
+                .where(
+                    C6ZConnectorEvidenceRow.tenant_id == tenant_id,
+                    C6ZConnectorEvidenceRow.merchant_id == merchant_id,
+                    C6ZConnectorEvidenceRow.seller_agent_id == seller_agent_id,
+                )
+                .order_by(C6ZConnectorEvidenceRow.synced_at.desc())
+            )
+        ).first()
+        scope = None if packet_row is None or evidence_row is None else (
+            packet_row.packet_id,
+            evidence_row.evidence_id,
+            evidence_row.source_system,
+            evidence_row.currency,
+            evidence_row.source_observed_at,
+        )
+    if scope is None or not resolve_env(GRANTEX_AUTHORITY_ENV_VARS).ready:
+        return freshness.NOT_REFRESHABLE
+    packet_id, evidence_id, source_system, currency, observed_at = scope
+    observed = observed_at if observed_at.tzinfo else observed_at.replace(tzinfo=UTC)
+    try:
+        if (datetime.now(UTC) - observed).total_seconds() > EVIDENCE_REUSE_SECONDS:
+            if source_system == DEMO_SOURCE_SYSTEM:
+                evidence_id = (await sync_demo_catalog(tenant_id=tenant_id, packet_id=packet_id))["evidence_id"]
+            elif source_system == "shopify":
+                synced = await _sync_shopify_packet(
+                    tenant_id=tenant_id, packet_id=packet_id, page_size=50, max_pages=10, currency=currency
+                )
+                evidence_id = synced["evidence_id"]
+            else:
+                return freshness.NOT_REFRESHABLE
+        response = await request_grantex_authority_artifacts(
+            GrantexAuthorityRequest(packet_id=packet_id, evidence_id=evidence_id), tenant_id=tenant_id
+        )
+        artifacts = response.get("artifacts") if isinstance(response, Mapping) else None
+        if response.get("status") != "artifact_issuance_ready" or not artifacts:
+            return freshness.REFUSED
+        await _verify_and_cache_grantex_artifacts(
+            artifacts, tenant_id=tenant_id, buyer_agent_id=None, ledger_event="commerce.runtime.artifacts.refresh"
+        )
+    except httpx.HTTPStatusError as exc:
+        return freshness.REFUSED if exc.response.status_code < 500 else freshness.FAILED
+    except (httpx.HTTPError, TimeoutError):
+        return freshness.FAILED
+    except HTTPException as exc:
+        return freshness.FAILED if exc.status_code >= 500 else freshness.REFUSED
+    except C6ZRuntimeValidationError:
+        return freshness.REFUSED
+    return freshness.REFRESHED
 
 
 def _merchant_config_template(

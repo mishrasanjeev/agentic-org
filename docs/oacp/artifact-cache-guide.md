@@ -57,6 +57,47 @@ Every runtime read of the cache (buyer answers, bridge answers, protocol adapter
 
 `POST /api/v1/commerce/runtime/artifacts/refresh` with `{merchant_id, seller_agent_id, buyer_agent_id?}` reads every issued artifact for the authenticated tenant and that scope from Grantex replay (`GET /v1/commerce/oacp/artifacts`, following `next_cursor`, with the same service token as the authority request), skips expired ones, and caches the rest through the same verification as `/artifacts/cache`. It is the operator path for rows refused as `artifact_unverified_legacy` or `artifact_unverified`. Missing Grantex settings return `blocked_missing_grantex_env`; an unreachable replay returns `502 grantex_replay_unavailable` and changes nothing.
 
+## On-Demand Freshness
+
+Grantex issues the facts that change with short lifetimes: inventory 60 s, mandate capability
+2 min, price 5 min, public discovery and connector evidence 15 min; catalog, policy and seller
+agent 6 h; merchant capability and protocol adapter 24 h. Catalog search and lookup, the ACP
+feed, checkout decisions and the public UCP profile refuse an expired artifact, so without a
+refresh a merchant's catalog is unavailable a minute after an issuance.
+
+With `AGENTICORG_OACP_ON_DEMAND_REFRESH_ENABLED=true` (default off;
+`core/commerce/artifact_freshness.py`) those reads renew the scope when they need to:
+
+| Read | Types it needs fresh |
+| --- | --- |
+| `/.well-known/ucp`, `/ucp/*` and `/acp/*` on the merchant host (before the route opens any transaction) | public discovery, catalog, price, inventory, policy, mandate capability, protocol adapter, merchant and seller agent capability |
+| ACP feed export | catalog, price, inventory, policy, merchant and seller agent capability |
+| Protocol adapter payloads, purchase preparation, POS handoff | catalog, price, inventory, policy, mandate capability, protocol adapter, merchant and seller agent capability |
+
+A type counts as fresh when a verified, buyer-agnostic record of it is usable and still valid
+10 seconds on. Otherwise one refresh runs for the (tenant, merchant, seller agent) scope:
+
+- **Single flight.** A Redis `SET NX` lock per scope (30 s). Concurrent reads and other replicas
+  wait for the holder instead of asking Grantex again. Without Redis no refresh is attempted.
+- **Bounded wait.** The read waits at most `AGENTICORG_OACP_REFRESH_WAIT_MS` (default 3000, at
+  most 10000), then continues with what is cached; a still-stale scope gets the usual refusal and
+  the refresh finishes in the background for the next read.
+- **Bounded cost.** At most one issuance per scope every 30 s; after a failure 30 s of backoff,
+  after a Grantex or verifier refusal 5 min, and 10 min for a scope that cannot be refreshed (no
+  packet, evidence or Grantex settings). No loop runs and nothing is issued while nobody reads.
+- **The refresh** (`api.v1.commerce_runtime.refresh_scope_artifacts`): connector evidence older
+  than 12 minutes is re-read first (the read-only Shopify sync, or the synthetic demo catalog),
+  then the authority request and verified caching run as on the routes, every write ledgered
+  (`commerce.runtime.grantex.authority_request`, `commerce.runtime.artifacts.refresh`, and the
+  sync's event). Ledger rows grow with refreshes, so with buyer activity, never while idle.
+- **Bounded growth.** After a refresh the scope's cache keeps the newest 6 records of each type
+  and drops records expired for more than 5 minutes.
+
+`AGENTICORG_OACP_REFRESH_SWEEP_ENABLED=true` (default off, needs the on-demand flag) adds a beat
+task every 5 minutes on the existing beat and worker. It refreshes only scopes read in the last
+15 minutes whose slower artifacts (price, public discovery, catalog, policy) would lapse before
+the next sweep, so connector evidence and the public profile stay current off the read path.
+
 ## Grantex SDK Verifier
 
 `verify_oacp_artifact_jws` has the inputs (envelope, payload, JWKS, pinned issuer) and refusal codes of the `verify_oacp_artifact` function the Grantex Python SDK is adding. `grantex` is pinned at 0.7.2, which does not have it; when an SDK release with it is published, the cache switches to the SDK function and this local copy is deleted. The canonicalization already comes from `grantex.canonical` (RFC 8785).

@@ -370,10 +370,29 @@ class PublishedHostResolver:
         )
         if row is None or str(row.tenant_id) != binding.tenant_id:
             return None
-        now = datetime.now(UTC)
         records = await load_shared_cache_records(
             tenant_id=binding.tenant_id, merchant_id=binding.merchant_id, seller_agent_id=binding.seller_agent_id
         )
+        # Before any transaction of the route: renew expiring short-lived artifacts on demand (flag-gated).
+        from core.commerce.artifact_freshness import HOST_TYPES, ensure_fresh
+
+        if await ensure_fresh(
+            tenant_id=binding.tenant_id,
+            merchant_id=binding.merchant_id,
+            seller_agent_id=binding.seller_agent_id,
+            records=records,
+            required=HOST_TYPES,
+        ):
+            # The refresh also renews the public-discovery snapshot on the config row: read both again.
+            row = await load_merchant_config_row(
+                tenant_id=binding.tenant_id, merchant_id=binding.merchant_id, seller_agent_id=binding.seller_agent_id
+            )
+            if row is None or str(row.tenant_id) != binding.tenant_id:
+                return None
+            records = await load_shared_cache_records(
+                tenant_id=binding.tenant_id, merchant_id=binding.merchant_id, seller_agent_id=binding.seller_agent_id
+            )
+        now = datetime.now(UTC)
         live = usable_artifact_ids(
             cache_records=records, now_iso=now.isoformat().replace("+00:00", "Z"), artifact_type="public_discovery"
         )

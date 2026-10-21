@@ -24,7 +24,6 @@ import hashlib
 import json
 import uuid
 from collections.abc import Mapping, Sequence
-from datetime import UTC, datetime
 from typing import Any
 
 from core.commerce.c6z_runtime_vertical import (
@@ -433,31 +432,6 @@ async def delete_demo_commerce_rows(session: Any, tenant_id: str) -> dict[str, i
         )
         counts[table] = int(getattr(result, "rowcount", 0) or 0)
     return counts
-
-
-async def prune_expired_demo_cache_records(
-    session: Any, *, tenant_id: str, merchant_id: str, seller_agent_id: str, now: datetime | None = None
-) -> int:
-    """Delete the demo scope's expired artifact cache rows (a keep-fresh run issues a set every minute).
-
-    Expired rows are refused by every reader; removing them keeps the scope's
-    cache reads small. Demo tenants only.
-    """
-    from sqlalchemy import delete
-
-    from core.models.oacp_artifact_cache import OacpArtifactCacheRecordRow
-
-    if not await demo_tenant_marked(session, tenant_id):
-        raise DemoMerchantError("refusing to prune the artifact cache of a tenant without the demo marker")
-    result = await session.execute(
-        delete(OacpArtifactCacheRecordRow).where(
-            OacpArtifactCacheRecordRow.tenant_id == str(tenant_id),
-            OacpArtifactCacheRecordRow.merchant_id == merchant_id,
-            OacpArtifactCacheRecordRow.seller_agent_id == seller_agent_id,
-            OacpArtifactCacheRecordRow.expires_at < (now or datetime.now(UTC)),
-        )
-    )
-    return int(getattr(result, "rowcount", 0) or 0)
 
 
 def demo_sourced(payloads: Sequence[Mapping[str, Any]]) -> bool:

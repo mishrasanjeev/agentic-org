@@ -12,7 +12,6 @@ Dry run by default: it reads, prints what it would do and writes nothing.
     python scripts/seed_oacp_demo_merchant.py --apply              # create or converge
     python scripts/seed_oacp_demo_merchant.py --apply --serving-host nilgiritea.agenticorg.ai  # prints the TXT
     python scripts/seed_oacp_demo_merchant.py --apply --verify-host  # after DNS propagates: attest, publish
-    python scripts/seed_oacp_demo_merchant.py --apply --keep-fresh-minutes 60
     python scripts/seed_oacp_demo_merchant.py --teardown           # what a teardown would delete
     python scripts/seed_oacp_demo_merchant.py --teardown --apply
 
@@ -54,7 +53,7 @@ import sys
 import uuid
 from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import dataclass, field
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
@@ -72,9 +71,6 @@ EXIT_GRANTEX_DEMO_SOURCE_UNSUPPORTED = 4
 ADMIN_LOGIN_ENV = "AGENTICORG_OACP_DEMO_ADMIN_PASSWORD"
 MIN_ADMIN_LOGIN_LENGTH = 16
 OPERATOR_ACTOR_ID = "scripts/seed_oacp_demo_merchant.py"
-KEEP_FRESH_INTERVAL_SECONDS = 45
-MAX_KEEP_FRESH_MINUTES = 240
-MAX_KEEP_FRESH_FAILURES = 3
 GRANTEX_ENV_VARS = ("GRANTEX_COMMERCE_BASE_URL", "GRANTEX_COMMERCE_INTERNAL_TOKEN")
 # Every artifact type the Grantex C6Z issuance produces for a scope.
 ISSUED_ARTIFACT_TYPES: tuple[str, ...] = (
@@ -601,13 +597,8 @@ async def issue_and_cache_artifacts(report: Report) -> None:
 
     from api.v1 import commerce_runtime as runtime
     from core.commerce.c6z_runtime_vertical import C6ZRuntimeValidationError
-    from core.commerce.oacp_demo_merchant import (
-        DEMO_MERCHANT_ID,
-        DEMO_SELLER_AGENT_ID,
-        DEMO_TENANT_ID,
-        prune_expired_demo_cache_records,
-    )
-    from core.database import get_tenant_session
+    from core.commerce.artifact_freshness import Scope, prune_scope
+    from core.commerce.oacp_demo_merchant import DEMO_MERCHANT_ID, DEMO_SELLER_AGENT_ID, DEMO_TENANT_ID
 
     packet_id = desired_packet_id(desired_config())
     synced = await _ledgered(
@@ -648,10 +639,7 @@ async def issue_and_cache_artifacts(report: Report) -> None:
             EXIT_FAILED,
             f"artifact caching refused: {detail.get('status')} {detail.get('refusal_code') or ''} {codes or ''}".strip(),
         ) from exc
-    async with get_tenant_session(uuid.UUID(DEMO_TENANT_ID)) as session:
-        pruned = await prune_expired_demo_cache_records(
-            session, tenant_id=DEMO_TENANT_ID, merchant_id=DEMO_MERCHANT_ID, seller_agent_id=DEMO_SELLER_AGENT_ID
-        )
+    pruned = await prune_scope(Scope(DEMO_TENANT_ID, DEMO_MERCHANT_ID, DEMO_SELLER_AGENT_ID))
     verification = cached.get("verification") or {}
     report.artifacts = {
         "issued": len(artifacts),
@@ -659,7 +647,7 @@ async def issue_and_cache_artifacts(report: Report) -> None:
         "verified": int(verification.get("verified") or 0),
         "verification_mode": verification.get("mode"),
         "refused": len(verification.get("refused") or []),
-        "expired_records_pruned": pruned,
+        "cache_records_pruned": pruned,
         "public_discovery_enabled_by_grantex": response.get("no_public_discovery_enablement") is False,
     }
     report.actions.append(f"artifacts: {len(artifacts)} issued, {report.artifacts['verified']} verified and cached")
@@ -767,33 +755,7 @@ async def run(args: argparse.Namespace, environ: Mapping[str, str]) -> dict[str,
         await issue_and_cache_artifacts(report)
     else:
         report.actions.append("artifacts: every family has a usable verified record; nothing issued")
-    if args.keep_fresh_minutes:
-        await keep_fresh(args.keep_fresh_minutes, report)
     return summary(report, await read_state())
-
-
-async def keep_fresh(minutes: int, report: Report) -> None:
-    """Re-issue the artifacts every 45 s for ``minutes`` (inventory artifacts live 60 s, prices 5 min)."""
-    deadline = _now() + timedelta(minutes=minutes)
-    failures = 0
-    cycles = 0
-    while _now() < deadline:
-        await asyncio.sleep(KEEP_FRESH_INTERVAL_SECONDS)
-        try:
-            await issue_and_cache_artifacts(report)
-            failures = 0
-            cycles += 1
-            print(
-                json.dumps({"keep_fresh": "refreshed", "at": _iso(_now()), "artifacts": report.artifacts}), flush=True
-            )
-        except SeedError as exc:
-            if exc.exit_code != EXIT_FAILED:
-                raise
-            failures += 1
-            print(json.dumps({"keep_fresh": "failed", "at": _iso(_now()), "reason": str(exc)}), flush=True)
-            if failures >= MAX_KEEP_FRESH_FAILURES:
-                raise
-    report.actions.append(f"keep fresh: {cycles} refreshes over {minutes} minutes")
 
 
 async def _maybe_state() -> DemoState | None:
@@ -890,19 +852,9 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument(
         "--refresh-artifacts", action="store_true", help="request new artifacts even if usable ones exist"
     )
-    parser.add_argument(
-        "--keep-fresh-minutes",
-        type=int,
-        default=0,
-        help=f"after seeding, re-issue artifacts every {KEEP_FRESH_INTERVAL_SECONDS} s for this many minutes",
-    )
     args = parser.parse_args(argv)
-    if args.teardown and (args.serving_host or args.verify_host or args.refresh_artifacts or args.keep_fresh_minutes):
+    if args.teardown and (args.serving_host or args.verify_host or args.refresh_artifacts):
         parser.error("--teardown takes only --apply")
-    if not 0 <= args.keep_fresh_minutes <= MAX_KEEP_FRESH_MINUTES:
-        parser.error(f"--keep-fresh-minutes must be between 0 and {MAX_KEEP_FRESH_MINUTES}")
-    if args.keep_fresh_minutes and not args.apply:
-        parser.error("--keep-fresh-minutes needs --apply")
     return args
 
 
