@@ -155,6 +155,8 @@ docs/**
 !docs/oacp/explainers/
 !docs/oacp/explainers/launch-rollback-runbook.md
 !docs/oacp/explainers/protocol-partner-mappings.md
+!docs/runbooks/
+!docs/runbooks/oacp-demo-merchant.md
 !docs/readiness/
 !docs/readiness/DOMAIN_READINESS_STANDARD.md
 
