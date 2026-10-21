@@ -160,7 +160,7 @@ dependencies = [
     # (tests/regression/test_pillow13_fastembed_install.py keeps them in step).
     # Once a fastembed release accepts Pillow 13, restore "fastembed>=<that
     # release>" here and delete requirements-fastembed.txt and these entries.
-    "huggingface-hub>=0.20,<2.0",
+    "huggingface-hub>=2.2.0,<3.0",
     "loguru>=0.7.2,<0.8.0",
     "mmh3>=4.1.0,<6.0.0",
     "numpy>=1.26; python_version == '3.12'",
