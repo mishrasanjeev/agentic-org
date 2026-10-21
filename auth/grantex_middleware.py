@@ -387,6 +387,9 @@ class GrantexAuthMiddleware(BaseHTTPMiddleware):
         "/ucp/catalog/lookup",
         "/ucp/locations/search",
         "/ucp/locations/lookup",
+        # Custom-domain certificate probe: echoes the request host only
+        # (api/v1/merchant_custom_domains.py; 404 unless AGENTICORG_CUSTOM_DOMAINS_ENABLED).
+        "/.well-known/agenticorg-host",
         "/docs", "/openapi.json", "/redoc",
     }
 

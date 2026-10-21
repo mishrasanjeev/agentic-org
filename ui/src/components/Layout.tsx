@@ -53,6 +53,7 @@ const ALL_NAV: Array<{ path: string; labelKey: string; label: string; roles: rea
   { path: "/dashboard/connectors", labelKey: "nav.connectors", label: "Connectors", roles: CONNECTOR_ROLES },
   { path: "/dashboard/channels", labelKey: "nav.channels", label: "Channels", roles: AGENT_CREATOR_ROLES },
   { path: "/dashboard/commerce-runtime", labelKey: "nav.commerceRuntime", label: "Commerce Runtime", roles: ["admin", "merchant"] },
+  { path: "/dashboard/custom-domains", labelKey: "nav.customDomains", label: "Custom Domains", roles: ["admin", "merchant"] },
   { path: "/dashboard/prompt-templates", labelKey: "nav.promptTemplates", label: "Prompt Templates", roles: ["admin"] },
   { path: "/dashboard/agents/from-sop", labelKey: "nav.createFromSop", label: "Create from SOP", roles: ["admin"] },
   { path: "/dashboard/integrations", labelKey: "nav.integrations", label: "A2A / MCP", roles: ["admin"] },

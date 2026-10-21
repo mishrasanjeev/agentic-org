@@ -41,6 +41,7 @@ Turning a safety check off weakens the shop's protection. Do it only as a record
 | `AGENTICORG_UCP_PROFILE_ENABLED` | Off | Serves your UCP profile, catalog and store locations. Off, they answer 404. |
 | `AGENTICORG_UCP_VERSIONS` | `2026-04-08` | Which UCP releases are served. Add `2026-08-25` when platforms read it. |
 | `AGENTICORG_UCP_KEY_ROTATION_GRACE_DAYS` | `7` (minimum 7) | How long a rotated-out signing key stays published. |
+| `AGENTICORG_CUSTOM_DOMAINS_ENABLED` | Off | Lets you connect your own subdomain (for example `agent.your-store.example`) for your UCP profile under Commerce > Custom Domains. Off, those pages and routes answer 404. |
 | `AGENTICORG_UCP_CHECKOUT_ENABLED` | Off | Serves UCP checkout, cart and order routes. Off, they answer 404. |
 | `AGENTICORG_ACP_FEED_ENABLED` | Off | Lets you export the ACP product feed. |
 | `AGENTICORG_ACP_CHECKOUT_ENABLED` | Off | Serves ACP checkout sessions (your shop must also opt in). |

@@ -118,6 +118,10 @@ lock with a 30 s minimum interval and backoff, waiting at most `AGENTICORG_OACP_
 never inside an open transaction; stale stays refused) and `AGENTICORG_OACP_REFRESH_SWEEP_ENABLED`
 (default off; the 5-minute beat refreshes only scopes read in the last 15 minutes). No always-on loop
 issues artifacts; see `docs/oacp/artifact-cache-guide.md#on-demand-freshness`.
+Merchant custom domains: `AGENTICORG_CUSTOM_DOMAINS_ENABLED` (default off; the custom-domain routes
+and `/.well-known/agenticorg-host` answer 404 and the status task does nothing) and
+`AGENTICORG_CUSTOM_DOMAIN_CLOUD_RUN_AUTOMAP_ENABLED` (default off; an operator runs the generated
+domain-mapping command); no load balancer or paid certificate; see `docs/oacp/merchant-custom-domains.md`.
 ACP flags: `AGENTICORG_ACP_FEED_ENABLED` (default off; the ACP product feed export answers 404),
 `AGENTICORG_ACP_CHECKOUT_ENABLED` (default off; the `/acp` checkout session routes answer 404; they
 run on the UCP session table, arbiter and executor) and `AGENTICORG_ACP_SIGNATURE_MODE` (`log` by

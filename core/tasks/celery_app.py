@@ -49,6 +49,7 @@ app = Celery(
         "core.tasks.case_push_tasks",
         "core.tasks.channel_tasks",
         "core.tasks.commerce_ledger_tasks",
+        "core.tasks.custom_domain_tasks",
         "core.tasks.demo_tasks",
         "core.tasks.gateway_tasks",
         "core.tasks.health_snapshot",
@@ -248,6 +249,14 @@ app.conf.beat_schedule = {
         "task": "core.tasks.oacp_freshness_tasks.sweep_artifact_freshness",
         "schedule": 300.0,  # every 5 minutes
         "options": {"queue": "maintenance"},
+    },
+    "advance-custom-domains": {
+        # Moves merchant custom domains toward live (mapping and certificate checks,
+        # operator email); a no-op unless AGENTICORG_CUSTOM_DOMAINS_ENABLED is true
+        # (core/tasks/custom_domain_tasks.py).
+        "task": "core.tasks.custom_domain_tasks.advance_custom_domains",
+        "schedule": 300.0,  # every 5 minutes
+        "options": {"queue": "maintenance", "expires": 300},
     },
     "run-synthetic-checks": {
         # Runs each tenant's due synthetic checks; a no-op unless

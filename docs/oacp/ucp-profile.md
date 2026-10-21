@@ -182,7 +182,10 @@ and are rejected (`unsupported_filter`) rather than ignored.
 ## Hosting and deployment
 
 - Route the merchant host to the API service with the `Host` header intact and
-  without rewriting `/.well-known/ucp` or `/ucp/*`. The routes are exempt from
+  without rewriting `/.well-known/ucp` or `/ucp/*`. Merchants connect their own
+  subdomain self-service ([merchant custom domains](merchant-custom-domains.md));
+  the apex passes the agent paths through without redirects
+  ([apex domain guide](merchant-apex-domain.md)). The routes are exempt from
   tenant authentication; rate limits are per client IP (`ucp-discovery` 600/min,
   `ucp-catalog-read` 120/min) and degrade open if Redis is down.
 - The host index lives in the tenant catalogue (`tenants.settings.ucp_serving_hosts`);

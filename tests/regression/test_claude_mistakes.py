@@ -257,7 +257,9 @@ def test_mistake_5_localstorage_auth_bypass_count_below_cap() -> None:
 # Reviewed addition: the customer agent's DELETE /session and
 # DELETE /permissions/mandates/{id} are soft deletes (revoked_at and
 # status=revoked keep the rows); 36 -> 38.
-DELETE_HANDLER_CAP = 38
+# Reviewed addition: DELETE .../custom-domain (api/v1/merchant_custom_domains.py)
+# is a soft delete (status=removed keeps the row; the ledger records it); 38 -> 39.
+DELETE_HANDLER_CAP = 39
 
 DELETE_DECORATOR = re.compile(r'^@router\.delete\(', re.MULTILINE)
 

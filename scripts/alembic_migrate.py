@@ -79,6 +79,8 @@ REQUIRED_RUNTIME_TABLES = frozenset(
         # executor and UCP completion write and read them synchronously.
         "commerce_payment_operations",
         "commerce_afa_evidence",
+        # Merchant custom domains (v6z91): the custom-domain routes read and write it.
+        "merchant_custom_domains",
     }
 )
 
