@@ -6,7 +6,12 @@ from __future__ import annotations
 import importlib.util
 from pathlib import Path
 
-from core.models.merchant_custom_domain import CUSTOM_DOMAIN_STATUSES, MerchantCustomDomainRow
+from core.models.merchant_custom_domain import (
+    CLAIMED_STATUSES,
+    CUSTOM_DOMAIN_STATUSES,
+    INACTIVE_STATUSES,
+    MerchantCustomDomainRow,
+)
 
 MIGRATION = Path(__file__).resolve().parents[2] / "migrations" / "versions" / "v6_z91_merchant_custom_domains.py"
 
@@ -40,4 +45,8 @@ def test_statuses_and_columns_match_the_orm() -> None:
         assert f"'{status}'" in source
     for column in MerchantCustomDomainRow.__table__.columns:
         assert f"            {column.name} " in source, column.name
-    assert "WHERE status IN ('pending_mapping', 'pending_certificate', 'live')" in source
+    claimed = ", ".join(f"'{status}'" for status in CLAIMED_STATUSES)
+    assert f"WHERE status IN ({claimed})" in source  # failed keeps its claim until removed
+    assert "failed" in CLAIMED_STATUSES
+    inactive = ", ".join(f"'{status}'" for status in INACTIVE_STATUSES)
+    assert f"WHERE status NOT IN ({inactive})" in source

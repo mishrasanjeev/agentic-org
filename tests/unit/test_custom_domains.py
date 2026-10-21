@@ -434,3 +434,35 @@ def test_operator_email_escapes_and_needs_a_recipient(monkeypatch: pytest.Monkey
     assert mcd._send_operator_email(subject="s", lines=["<b>host</b>", "gcloud beta run x"]) is True
     assert sent[0][0] == "ops@platform.example"
     assert "&lt;b&gt;host&lt;/b&gt;" in sent[0][2] and "<code>gcloud beta run x</code>" in sent[0][2]
+
+
+def test_check_routing_uses_the_domain_s_own_target(monkeypatch: pytest.MonkeyPatch) -> None:
+    async def resolver(_host: str) -> str:
+        return "ghs.googlehosted.com"
+
+    monkeypatch.setattr(settings, "custom_domain_cname_target", "new-target.platform.example")
+    assert asyncio.run(cd.check_routing("agent.merchant.example", target="ghs.googlehosted.com.", resolver=resolver))[0]
+    assert asyncio.run(cd.check_routing("agent.merchant.example", resolver=resolver))[2] == "cname_wrong_target"
+
+
+@pytest.mark.parametrize(("status", "expected"), [(200, True), (404, True), (403, False), (500, False)])
+def test_delete_domain_mapping(monkeypatch: pytest.MonkeyPatch, status: int, expected: bool) -> None:
+    async def token() -> str:
+        return "synthetic-token"
+
+    monkeypatch.setattr(cd, "_access_token", token)
+    seen: list[tuple[str, str]] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append((request.method, str(request.url)))
+        return httpx.Response(status, json={})
+
+    client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
+    assert asyncio.run(cd.delete_domain_mapping("agent.merchant.example", client=client)) is expected
+    assert seen == [
+        (
+            "DELETE",
+            "https://asia-southeast1-run.googleapis.com/apis/domains.cloudrun.com/v1/namespaces/example-project"
+            "/domainmappings/agent.merchant.example",
+        )
+    ]

@@ -282,6 +282,8 @@ export const customDomainsApi = {
   operatorQueue: () => api.get("/commerce/custom-domains/operator-queue"),
   markMapped: (domainId: string) =>
     api.post(`/commerce/custom-domains/operator-queue/${encodeURIComponent(domainId)}/mapped`, {}),
+  markUnmapped: (domainId: string) =>
+    api.post(`/commerce/custom-domains/operator-queue/${encodeURIComponent(domainId)}/unmapped`, {}),
   markFailed: (domainId: string, reason: string) =>
     api.post(`/commerce/custom-domains/operator-queue/${encodeURIComponent(domainId)}/failed`, { reason }),
 };

@@ -73,7 +73,14 @@ async def db(monkeypatch):
 @pytest.fixture()
 def world(monkeypatch):
     """Feature flags on, an operator tenant, and fakes for DNS, the probe and email."""
-    state = {"txt": False, "cname": None, "probe": "certificate_pending", "emails": [], "operator": str(uuid.uuid4())}
+    state = {
+        "txt": False,
+        "cname": None,
+        "probe": "certificate_pending",
+        "emails": [],
+        "routing_targets": [],
+        "operator": str(uuid.uuid4()),
+    }
     monkeypatch.setattr(settings, "custom_domains_enabled", True)
     monkeypatch.setattr(settings, "custom_domain_operator_tenant_id", state["operator"])
     monkeypatch.setattr(settings, "custom_domain_mapping_account", "mapper@platform.example")
@@ -83,11 +90,12 @@ def world(monkeypatch):
     async def txt(_challenge):
         return state["txt"]
 
-    async def routing(_host):
+    async def routing(host, *, target=None):
+        state["routing_targets"].append(target)
         observed = state["cname"]
         if observed is None:
             return False, None, "cname_missing"
-        if observed != cd.cname_target():
+        if observed != (target or cd.cname_target()):
             return False, observed, "cname_wrong_target"
         return True, observed, None
 
@@ -128,17 +136,17 @@ async def _tenant(engine) -> str:
     return str(tenant)
 
 
-async def _merchant(tenant: str, merchant_id: str = MERCHANT) -> None:
+async def _merchant(tenant: str, merchant_id: str = MERCHANT, seller: str = SELLER) -> None:
     from core.database import get_tenant_session
     from core.models.commerce_c6z_runtime import C6ZMerchantCommerceConfigRow
 
     async with get_tenant_session(uuid.UUID(tenant)) as session:
         session.add(
             C6ZMerchantCommerceConfigRow(
-                config_id=merchant_config_id(tenant, merchant_id, SELLER),
+                config_id=merchant_config_id(tenant, merchant_id, seller),
                 tenant_id=tenant,
                 merchant_id=merchant_id,
-                seller_agent_id=SELLER,
+                seller_agent_id=seller,
                 merchant_display_name="Example Store",
                 provider_policy={},
             )
@@ -153,16 +161,16 @@ def _host() -> str:
     return f"agent-{uuid.uuid4().hex[:10]}.merchant.example"
 
 
-async def _add(tenant: str, host: str, merchant_id: str = MERCHANT) -> dict:
+async def _add(tenant: str, host: str, merchant_id: str = MERCHANT, seller: str | None = SELLER) -> dict:
     return await mcd.add_custom_domain(
-        merchant_id, mcd.AddDomainRequest(host=host, seller_agent_id=SELLER), _request(), tenant
+        merchant_id, mcd.AddDomainRequest(host=host, seller_agent_id=seller), _request(), tenant
     )
 
 
-async def _check(tenant: str, *, owner: bool = False, merchant_id: str = MERCHANT) -> dict:
+async def _check(tenant: str, *, owner: bool = False, merchant_id: str = MERCHANT, seller: str | None = SELLER) -> dict:
     return await mcd.check_custom_domain(
         merchant_id,
-        mcd.CheckDomainRequest(seller_agent_id=SELLER, search_console_owner_added=owner),
+        mcd.CheckDomainRequest(seller_agent_id=seller, search_console_owner_added=owner),
         _request(),
         tenant,
     )
@@ -371,7 +379,7 @@ async def test_same_tenant_second_merchant_cannot_take_the_host(db, world):
     assert binding is not None and binding.merchant_id == "merchant-a"
 
 
-async def test_remove_withdraws_the_host_and_asks_for_the_mapping_delete(db, world):
+async def test_remove_withdraws_the_host_and_queues_the_mapping_delete(db, world, monkeypatch):
     tenant = await _tenant(db)
     await _merchant(tenant)
     host = _host()
@@ -383,12 +391,27 @@ async def test_remove_withdraws_the_host_and_asks_for_the_mapping_delete(db, wor
     await mcd.mark_mapped(item["id"], _request(), world["operator"])
     assert (await _check(tenant))["status"] == "live"
 
+    world["emails"].clear()
+    monkeypatch.setattr(settings, "custom_domain_operator_email", "")
     removed = await mcd.remove_custom_domain(MERCHANT, _request(), SELLER, tenant)
     assert removed == {"removed": True, "host": host, "mapping_delete_needed": True}
     store.reset_ucp_host_cache()
     assert await store.find_serving_binding(host) is None
-    assert any("domain-mappings delete" in line for _subject, lines in world["emails"] for line in lines)
     assert (await mcd.get_custom_domain(MERCHANT, SELLER, tenant))["domain"] is None
+
+    # The mapping deletion is a durable queue item, whatever happens to the email.
+    queue = await mcd.list_operator_queue(world["operator"])
+    unmap = next(i for i in queue["items"] if i["host"] == host)
+    assert unmap["status"] == "pending_unmap" and unmap["action"] == "delete_mapping"
+    assert unmap["mapping_in_use"] is False
+    assert unmap["commands"]["delete"].startswith("gcloud beta run domain-mappings delete")
+    assert any("domain-mappings delete" in line for _subject, lines in world["emails"] for line in lines)
+    with pytest.raises(HTTPException):  # an unmap item is not a mapping item
+        await mcd.mark_mapped(unmap["id"], _request(), world["operator"])
+    done = await mcd.mark_unmapped(unmap["id"], _request("operator@platform.example"), world["operator"])
+    assert done["status"] == "removed"
+    assert all(i["host"] != host for i in (await mcd.list_operator_queue(world["operator"]))["items"])
+    assert "commerce.custom_domain.operator.unmapped" in await _ledger_events(db, tenant)
     assert (await _add(tenant, host))["status"] == "pending_dns"  # can be added again
 
 
@@ -430,3 +453,89 @@ async def test_status_task_lists_across_tenants_and_moves_mapped_domains_live(db
     view = (await mcd.get_custom_domain(MERCHANT, SELLER, tenant))["domain"]
     assert view["status"] == "live"
     assert world["emails"] == []
+
+
+async def test_unmap_items_are_deleted_by_automap_or_closed_when_the_host_is_reused(db, world, monkeypatch):
+    deleted: list[str] = []
+
+    async def delete(host):
+        deleted.append(host)
+        return True
+
+    monkeypatch.setattr(cd, "delete_domain_mapping", delete)
+    tenant = await _tenant(db)
+    await _merchant(tenant, "merchant-a")
+    await _merchant(tenant, "merchant-b")
+    world.update(txt=True, cname="ghs.googlehosted.com")
+    reused, gone = _host(), _host()
+    for host, merchant in ((reused, "merchant-a"), (gone, "merchant-b")):
+        await _add(tenant, host, merchant)
+        assert (await _check(tenant, owner=True, merchant_id=merchant))["status"] == "pending_mapping"
+        await mcd.remove_custom_domain(merchant, _request(), SELLER, tenant)
+    # merchant-a adds its host back before the operator deleted the mapping: it must be kept.
+    await _add(tenant, reused, "merchant-a")
+    queue = {i["host"]: i for i in (await mcd.list_operator_queue(world["operator"]))["items"]}
+    assert queue[reused]["mapping_in_use"] is True and queue[gone]["mapping_in_use"] is False
+
+    monkeypatch.setattr(settings, "custom_domain_cloud_run_automap_enabled", True)
+    from core.tasks.custom_domain_tasks import _advance_custom_domains_async
+
+    await _advance_custom_domains_async()
+    remaining = {i["host"] for i in (await mcd.list_operator_queue(world["operator"]))["items"]}
+    assert reused not in remaining and gone not in remaining
+    assert gone in deleted and reused not in deleted
+
+
+async def test_without_a_seller_the_scope_is_never_guessed(db, world):
+    tenant = await _tenant(db)
+    await _merchant(tenant, MERCHANT, "seller-a")
+    await _merchant(tenant, MERCHANT, "seller-b")
+    world.update(txt=True, cname="ghs.googlehosted.com")
+    host_a, host_b = _host(), _host()
+    await _add(tenant, host_a, seller="seller-a")
+    await _add(tenant, host_b, seller="seller-b")
+    for call in (
+        mcd.get_custom_domain(MERCHANT, None, tenant),
+        _check(tenant, seller=None),
+        mcd.remove_custom_domain(MERCHANT, _request(), None, tenant),
+    ):
+        with pytest.raises(HTTPException) as ambiguous:
+            await call
+        assert ambiguous.value.status_code == 409
+        assert ambiguous.value.detail["code"] == "seller_agent_id_required"
+    assert (await mcd.get_custom_domain(MERCHANT, "seller-b", tenant))["domain"]["host"] == host_b
+    # Both domains are untouched.
+    assert (await mcd.get_custom_domain(MERCHANT, "seller-a", tenant))["domain"]["host"] == host_a
+
+
+async def test_a_failed_domain_keeps_its_host_until_removed(db, world):
+    tenant = await _tenant(db)
+    await _merchant(tenant, "merchant-a")
+    await _merchant(tenant, "merchant-b")
+    host = _host()
+    world.update(txt=True, cname="ghs.googlehosted.com")
+    await _add(tenant, host, "merchant-a")
+    queued = await _check(tenant, owner=True, merchant_id="merchant-a")
+    await mcd.mark_failed(
+        queued["id"], mcd.OperatorFailRequest(reason="Mapping refused"), _request(), world["operator"]
+    )
+
+    await _add(tenant, host, "merchant-b")
+    taken = await _check(tenant, owner=True, merchant_id="merchant-b")
+    assert taken["status"] == "pending_dns" and taken["error"]["code"] == "host_in_use"
+    binding = await store.find_serving_binding(host)
+    assert binding is not None and binding.merchant_id == "merchant-a"
+    retried = await _check(tenant, owner=True, merchant_id="merchant-a")
+    assert retried["status"] == "pending_mapping"
+
+
+async def test_checks_use_the_target_the_domain_was_given(db, world, monkeypatch):
+    tenant = await _tenant(db)
+    await _merchant(tenant)
+    world.update(txt=True, cname="ghs.googlehosted.com")
+    added = await _add(tenant, _host())
+    assert next(r for r in added["records"] if r["type"] == "CNAME")["value"] == "ghs.googlehosted.com."
+    monkeypatch.setattr(settings, "custom_domain_cname_target", "new-target.platform.example")
+    queued = await _check(tenant, owner=True)
+    assert queued["status"] == "pending_mapping"
+    assert world["routing_targets"][-1] == "ghs.googlehosted.com"

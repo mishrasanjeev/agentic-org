@@ -7,10 +7,12 @@ Create Date: 2026-10-21
 
 * ``merchant_custom_domains``: one row per merchant scope (tenant, merchant,
   seller agent) and host, moving ``pending_dns`` -> ``pending_mapping`` ->
-  ``pending_certificate`` -> ``live`` (or ``failed``, ``removed``). A host in a
-  claimed state (``pending_mapping``, ``pending_certificate``, ``live``) is
-  unique across every tenant; a scope has at most one row that is not
-  ``removed``.
+  ``pending_certificate`` -> ``live`` (or ``failed``). Removing a mapped domain
+  leaves ``pending_unmap`` (the domain mapping still to delete, a durable
+  operator queue item) before ``removed``. A host in a claimed state
+  (``pending_mapping``, ``pending_certificate``, ``live``, ``failed``) is unique
+  across every tenant; a scope has at most one row that is not
+  ``pending_unmap`` or ``removed``.
 
 Tenant-scoped with ENABLE + FORCE row-level security and a ``USING`` +
 ``WITH CHECK`` tenant policy. A second, SELECT-only policy admits the platform
@@ -58,19 +60,21 @@ def upgrade() -> None:
             created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
             updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
             CONSTRAINT ck_merchant_custom_domains_status CHECK
-                (status IN ('pending_dns', 'pending_mapping', 'pending_certificate', 'live', 'failed', 'removed')),
+                (status IN ('pending_dns', 'pending_mapping', 'pending_certificate', 'live', 'failed',
+                            'pending_unmap', 'removed')),
             CONSTRAINT ck_merchant_custom_domains_mapping_source CHECK
                 (mapping_source IS NULL OR mapping_source IN ('operator', 'cloud_run_api'))
         );
     """)
     op.execute(
         "CREATE UNIQUE INDEX IF NOT EXISTS uq_merchant_custom_domains_scope_active "
-        "ON merchant_custom_domains (tenant_id, merchant_id, seller_agent_id) WHERE status <> 'removed';"
+        "ON merchant_custom_domains (tenant_id, merchant_id, seller_agent_id) "
+        "WHERE status NOT IN ('pending_unmap', 'removed');"
     )
     op.execute(
         "CREATE UNIQUE INDEX IF NOT EXISTS uq_merchant_custom_domains_claimed_host "
         "ON merchant_custom_domains (host) "
-        "WHERE status IN ('pending_mapping', 'pending_certificate', 'live');"
+        "WHERE status IN ('pending_mapping', 'pending_certificate', 'live', 'failed');"
     )
     op.execute(
         "CREATE INDEX IF NOT EXISTS ix_merchant_custom_domains_status ON merchant_custom_domains (status, updated_at);"

@@ -24,10 +24,15 @@ CUSTOM_DOMAIN_STATUSES: tuple[str, ...] = (
     "pending_certificate",
     "live",
     "failed",
+    "pending_unmap",
     "removed",
 )
-# A verified host belongs to one row across every tenant.
-CLAIMED_STATUSES: tuple[str, ...] = ("pending_mapping", "pending_certificate", "live")
+# A verified host belongs to one row across every tenant until it is removed
+# (a failed domain keeps its claim: the merchant retries it).
+CLAIMED_STATUSES: tuple[str, ...] = ("pending_mapping", "pending_certificate", "live", "failed")
+# Rows that no longer hold the merchant scope: removed, or removed with the
+# domain mapping still to delete (the operator queue's unmap item).
+INACTIVE_STATUSES: tuple[str, ...] = ("pending_unmap", "removed")
 
 
 class MerchantCustomDomainRow(BaseModel):
@@ -39,18 +44,19 @@ class MerchantCustomDomainRow(BaseModel):
             "merchant_id",
             "seller_agent_id",
             unique=True,
-            postgresql_where=text("status <> 'removed'"),
+            postgresql_where=text("status NOT IN ('pending_unmap', 'removed')"),
         ),
         Index(
             "uq_merchant_custom_domains_claimed_host",
             "host",
             unique=True,
-            postgresql_where=text("status IN ('pending_mapping', 'pending_certificate', 'live')"),
+            postgresql_where=text("status IN ('pending_mapping', 'pending_certificate', 'live', 'failed')"),
         ),
         Index("ix_merchant_custom_domains_status", "status", "updated_at"),
         Index("ix_merchant_custom_domains_tenant", "tenant_id", text("created_at DESC")),
         CheckConstraint(
-            "status IN ('pending_dns', 'pending_mapping', 'pending_certificate', 'live', 'failed', 'removed')",
+            "status IN ('pending_dns', 'pending_mapping', 'pending_certificate', 'live', 'failed', "
+            "'pending_unmap', 'removed')",
             name="ck_merchant_custom_domains_status",
         ),
         CheckConstraint(

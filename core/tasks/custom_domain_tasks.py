@@ -2,10 +2,11 @@
 """Merchant custom domains: advance domains waiting on their mapping or certificate.
 
 Every few minutes: list (platform context, SELECT only) the domains in
-``pending_mapping`` or ``pending_certificate``, then advance each in its own
-tenant's session (``api.v1.merchant_custom_domains.progress_domain``: the Cloud
-Run Admin API with automap on, else the HTTPS certificate probe) and email the
-operator about any queued domain not yet notified. A no-op unless
+``pending_mapping``, ``pending_certificate`` or ``pending_unmap``, then advance
+each in its own tenant's session (``api.v1.merchant_custom_domains.progress_domain``:
+the Cloud Run Admin API with automap on, else the HTTPS certificate probe; an
+unmap item is closed at once when another domain holds its host) and email the
+operator about any queue item not yet notified. A no-op unless
 ``AGENTICORG_CUSTOM_DOMAINS_ENABLED`` is on.
 """
 
@@ -35,7 +36,7 @@ async def _advance_custom_domains_async() -> dict:
         rows = (
             await session.execute(
                 select(MerchantCustomDomainRow.id, MerchantCustomDomainRow.tenant_id)
-                .where(MerchantCustomDomainRow.status.in_(("pending_mapping", "pending_certificate")))
+                .where(MerchantCustomDomainRow.status.in_(("pending_mapping", "pending_certificate", "pending_unmap")))
                 .order_by(MerchantCustomDomainRow.last_checked_at.asc().nulls_first())
                 .limit(BATCH_LIMIT)
             )
@@ -45,7 +46,7 @@ async def _advance_custom_domains_async() -> dict:
     for domain_id, tenant_id in rows:
         try:
             status = await progress_domain(domain_id, tenant_id=str(tenant_id))
-            if status == "pending_mapping":
+            if status in ("pending_mapping", "pending_unmap"):
                 await notify_operator(domain_id, tenant_id=str(tenant_id))
         # enterprise-gate: broad-except-ok reason=one-domains-failure-never-stops-the-sweep
         except Exception as exc:

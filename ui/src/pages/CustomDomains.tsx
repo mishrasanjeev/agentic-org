@@ -36,6 +36,8 @@ interface QueueItem {
   merchant_id: string;
   host: string;
   status: string;
+  action?: "create_mapping" | "delete_mapping";
+  mapping_in_use?: boolean;
   search_console_owner_confirmed: boolean;
   commands: { create: string; describe: string; delete: string };
   error: { code: string; detail?: string | null } | null;
@@ -59,6 +61,7 @@ const STATUS_LABELS: Record<string, { label: string; variant: "success" | "warni
   pending_certificate: { label: "Issuing certificate", variant: "warning" },
   live: { label: "Live", variant: "success" },
   failed: { label: "Needs attention", variant: "destructive" },
+  pending_unmap: { label: "Delete mapping", variant: "secondary" },
 };
 
 function stepClass(state: StepState) {
@@ -168,9 +171,10 @@ function OperatorQueue() {
 
   if (items === null) return message ? <p className="text-sm text-red-700">{message}</p> : null;
 
-  const act = async (item: QueueItem, action: "mapped" | "failed") => {
+  const act = async (item: QueueItem, action: "mapped" | "failed" | "deleted") => {
     try {
       if (action === "mapped") await customDomainsApi.markMapped(item.id);
+      else if (action === "deleted") await customDomainsApi.markUnmapped(item.id);
       else await customDomainsApi.markFailed(item.id, reasons[item.id] || "");
       setMessage(`${item.host}: marked ${action}.`);
       await load();
@@ -183,11 +187,32 @@ function OperatorQueue() {
     <section className="space-y-3 rounded-lg border p-4" aria-labelledby="operator-queue-title">
       <h3 id="operator-queue-title" className="text-lg font-semibold">Operator queue</h3>
       <p className="text-sm text-muted-foreground">
-        Domains that passed DNS and ownership checks and wait for their Cloud Run domain mapping. Run the command, then mark the domain mapped; the status check moves it to live once its certificate is active.
+        Domains that passed DNS and ownership checks and wait for their Cloud Run domain mapping, and removed domains whose mapping is still to delete. Run the command, then mark the item; the status check moves a mapped domain to live once its certificate is active.
       </p>
       {message ? <p className="text-sm" role="status">{message}</p> : null}
       {items.length === 0 ? <p className="text-sm text-muted-foreground">Nothing is waiting.</p> : null}
-      {items.map((item) => (
+      {items.map((item) =>
+        item.status === "pending_unmap" ? (
+          <div key={item.id} className="space-y-2 rounded-md border p-3" data-testid="operator-queue-item">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="font-semibold">{item.host}</span>
+              <Badge variant="secondary">{STATUS_LABELS.pending_unmap.label}</Badge>
+              <span className="text-xs text-muted-foreground">removed by merchant {item.merchant_id}</span>
+            </div>
+            {item.mapping_in_use ? (
+              <p className="text-sm">Another domain now uses this host: keep the mapping and mark this item done.</p>
+            ) : (
+              <div className="flex items-start gap-2 rounded bg-muted/50 p-2">
+                <code className="break-all text-xs">{item.commands.delete}</code>
+                <CopyButton value={item.commands.delete} label="delete command" />
+              </div>
+            )}
+            {item.error ? <p className="text-xs text-red-700">{item.error.code}: {item.error.detail}</p> : null}
+            <Button size="sm" onClick={() => void act(item, "deleted")}>
+              {item.mapping_in_use ? "Mark done" : "Mark deleted"}
+            </Button>
+          </div>
+        ) : (
         <div key={item.id} className="space-y-2 rounded-md border p-3" data-testid="operator-queue-item">
           <div className="flex flex-wrap items-center gap-2">
             <span className="font-semibold">{item.host}</span>
@@ -218,7 +243,8 @@ function OperatorQueue() {
             </Button>
           </div>
         </div>
-      ))}
+        ),
+      )}
     </section>
   );
 }

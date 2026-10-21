@@ -10,6 +10,7 @@ const apiMock = vi.hoisted(() => ({
   remove: vi.fn(),
   operatorQueue: vi.fn(),
   markMapped: vi.fn(),
+  markUnmapped: vi.fn(),
   markFailed: vi.fn(),
 }));
 
@@ -159,6 +160,38 @@ describe("CustomDomains", () => {
     expect(within(row).getByText("Search Console owner confirmed")).toBeTruthy();
     fireEvent.click(within(row).getByRole("button", { name: "Mark mapped" }));
     await waitFor(() => expect(apiMock.markMapped).toHaveBeenCalledWith("domain-1"));
+    expect(await screen.findByText("Nothing is waiting.")).toBeTruthy();
+  });
+
+  it("lists a removed domain's mapping deletion and marks it deleted", async () => {
+    const item = {
+      id: "domain-9",
+      tenant_id: "tenant-1",
+      merchant_id: "merchant-1",
+      host: HOST,
+      status: "pending_unmap",
+      action: "delete_mapping",
+      mapping_in_use: false,
+      search_console_owner_confirmed: true,
+      commands: {
+        create: "create",
+        describe: "describe",
+        delete: `gcloud beta run domain-mappings delete --domain=${HOST} --project=example-project --region=asia-southeast1 --quiet`,
+      },
+      error: null,
+      mapping_requested_at: null,
+    };
+    apiMock.operatorQueue.mockReset();
+    apiMock.operatorQueue.mockResolvedValueOnce({ data: { items: [item] } }).mockResolvedValueOnce({ data: { items: [] } });
+    apiMock.markUnmapped.mockResolvedValueOnce({ data: { ...item, status: "removed" } });
+    render(<CustomDomains />);
+
+    const row = await screen.findByTestId("operator-queue-item");
+    expect(within(row).getByText(item.commands.delete)).toBeTruthy();
+    expect(within(row).queryByRole("button", { name: "Mark mapped" })).toBeNull();
+    expect(within(row).queryByRole("button", { name: "Mark failed" })).toBeNull();
+    fireEvent.click(within(row).getByRole("button", { name: "Mark deleted" }));
+    await waitFor(() => expect(apiMock.markUnmapped).toHaveBeenCalledWith("domain-9"));
     expect(await screen.findByText("Nothing is waiting.")).toBeTruthy();
   });
 });

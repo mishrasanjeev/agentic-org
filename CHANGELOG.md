@@ -15,6 +15,11 @@
 - A status task (every five minutes) probes `https://<host>/.well-known/agenticorg-host` over the
   DNS-pinned egress transport and marks a domain live once its certificate verifies and the host
   reaches the API intact.
+- Removing a domain that may have a mapping leaves a durable `pending_unmap` item in the operator
+  queue (or an Admin API delete with automation on) instead of an email alone. A `failed` domain keeps
+  its host reserved until removed. Checks use the CNAME target stored on the domain. Without
+  `seller_agent_id`, a merchant with domains for several seller agents gets `409
+  seller_agent_id_required`.
 - Migration `v6z91_merchant_custom_domains`: tenant-scoped table with forced RLS and a SELECT-only
   platform-context policy. Everything is behind `AGENTICORG_CUSTOM_DOMAINS_ENABLED` (default off).
 - `docs/oacp/merchant-custom-domains.md` records the Cloud Run domain-mapping limits and when a load

@@ -56,7 +56,7 @@ from core.commerce.ucp.state import attested_host, ucp_state, with_ucp_state
 from core.commerce.ucp.store import write_host_index
 from core.config import settings
 from core.database import get_platform_session, get_tenant_session
-from core.models.merchant_custom_domain import CLAIMED_STATUSES, MerchantCustomDomainRow
+from core.models.merchant_custom_domain import CLAIMED_STATUSES, INACTIVE_STATUSES, MerchantCustomDomainRow
 
 logger = structlog.get_logger()
 
@@ -73,7 +73,9 @@ operator_router = APIRouter(
 host_check_router = APIRouter(tags=["Commerce Custom Domains"])
 
 APEX_GUIDE = "docs/oacp/merchant-apex-domain.md"
-OPERATOR_QUEUE_STATUSES: tuple[str, ...] = ("pending_mapping", "pending_certificate", "failed")
+# Waiting on the domain mapping (create) and on its deletion after a removal (unmap).
+MAPPING_QUEUE_STATUSES: tuple[str, ...] = ("pending_mapping", "pending_certificate", "failed")
+OPERATOR_QUEUE_STATUSES: tuple[str, ...] = (*MAPPING_QUEUE_STATUSES, "pending_unmap")
 CERTIFICATE_TIMEOUT = timedelta(hours=48)
 STEP_ORDER: tuple[str, ...] = ("dns", "ownership", "mapping", "certificate", "live")
 
@@ -209,9 +211,12 @@ def domain_view(row: MerchantCustomDomainRow, ucp: dict[str, Any] | None = None)
     }
 
 
-def operator_view(row: MerchantCustomDomainRow) -> dict[str, Any]:
+def operator_view(row: MerchantCustomDomainRow, *, mapping_in_use: bool = False) -> dict[str, Any]:
     return {
         "id": str(row.id),
+        "action": "delete_mapping" if row.status == "pending_unmap" else "create_mapping",
+        # An unmap item whose host another active domain now holds: keep the mapping, just mark it done.
+        "mapping_in_use": mapping_in_use,
         "tenant_id": str(row.tenant_id),
         "merchant_id": row.merchant_id,
         "seller_agent_id": row.seller_agent_id or None,
@@ -232,14 +237,25 @@ def operator_view(row: MerchantCustomDomainRow) -> dict[str, Any]:
 
 
 async def _active_row(session: Any, *, tenant_id: str, merchant_id: str, seller_agent_id: str | None) -> Any:
+    """The scope's active domain. Without ``seller_agent_id`` it must be unambiguous: 409 when the
+    merchant has active domains for more than one seller agent (never a guess)."""
     query = select(MerchantCustomDomainRow).where(
         MerchantCustomDomainRow.tenant_id == uuid.UUID(tenant_id),
         MerchantCustomDomainRow.merchant_id == merchant_id,
-        MerchantCustomDomainRow.status != "removed",
+        MerchantCustomDomainRow.status.not_in(INACTIVE_STATUSES),
     )
     if seller_agent_id:
         query = query.where(MerchantCustomDomainRow.seller_agent_id == seller_agent_id)
-    return (await session.scalars(query.order_by(MerchantCustomDomainRow.created_at.desc()))).first()
+    rows = (await session.scalars(query.order_by(MerchantCustomDomainRow.created_at.desc()))).all()
+    if len(rows) > 1:
+        raise HTTPException(
+            409,
+            {
+                "code": "seller_agent_id_required",
+                "message": "This merchant has domains for more than one seller agent; pass seller_agent_id.",
+            },
+        )
+    return rows[0] if rows else None
 
 
 async def _ucp_state_for(tenant_id: str, merchant_id: str, seller_agent_id: str | None) -> dict[str, Any]:
@@ -284,7 +300,8 @@ async def get_custom_domain(
     _require_enabled()
     async with get_tenant_session(uuid.UUID(tenant_id)) as session:
         row = await _active_row(session, tenant_id=tenant_id, merchant_id=merchant_id, seller_agent_id=seller_agent_id)
-    ucp = await _ucp_state_for(tenant_id, merchant_id, seller_agent_id)
+    scope_seller = (row.seller_agent_id or None) if row is not None else seller_agent_id
+    ucp = await _ucp_state_for(tenant_id, merchant_id, scope_seller)
     return {
         "enabled": True,
         "cname_target": cd.cname_target(),
@@ -323,11 +340,15 @@ async def add_custom_domain(
             },
         )
     actor = _actor(request)
-    ucp = await _ucp_state_for(tenant_id, merchant_id, body.seller_agent_id)
     async with get_tenant_session(uuid.UUID(tenant_id)) as session:
-        existing = await _active_row(
-            session, tenant_id=tenant_id, merchant_id=merchant_id, seller_agent_id=body.seller_agent_id
+        # The seller scope comes from the merchant config (the one the UCP routes use), never a
+        # domain row picked across sellers.
+        config = await _locked_row(
+            session, tenant_id=tenant_id, merchant_id=merchant_id, seller_agent_id=body.seller_agent_id, lock=False
         )
+        seller = config.seller_agent_id or None
+        ucp = ucp_state(config.public_publishing)
+        existing = await _active_row(session, tenant_id=tenant_id, merchant_id=merchant_id, seller_agent_id=seller)
     if existing is not None:
         if existing.host != host:
             raise HTTPException(
@@ -340,13 +361,10 @@ async def add_custom_domain(
         return domain_view(existing, ucp)
     if attested_host(ucp) != host:
         await issue_serving_host_challenge(
-            tenant_id=tenant_id, merchant_id=merchant_id, seller_agent_id=body.seller_agent_id, host=host, actor=actor
+            tenant_id=tenant_id, merchant_id=merchant_id, seller_agent_id=seller, host=host, actor=actor
         )
-        ucp = await _ucp_state_for(tenant_id, merchant_id, body.seller_agent_id)
+        ucp = await _ucp_state_for(tenant_id, merchant_id, seller)
     async with get_tenant_session(uuid.UUID(tenant_id)) as session:
-        config = await _locked_row(
-            session, tenant_id=tenant_id, merchant_id=merchant_id, seller_agent_id=body.seller_agent_id, lock=False
-        )
         row = MerchantCustomDomainRow(
             id=uuid.uuid4(),
             tenant_id=uuid.UUID(tenant_id),
@@ -415,7 +433,7 @@ async def _verify_dns(
                 else:
                     errors.append(("ownership_txt_missing", "The challenge changed; check again."))
         ucp = await _ucp_state_for(tenant_id, row.merchant_id, row.seller_agent_id or None)
-    ok, observed, code = await cd.check_routing(row.host)
+    ok, observed, code = await cd.check_routing(row.host, target=row.cname_target)
     if not ok and code is not None:
         detail = f"found {observed}, expected {row.cname_target}" if code == "cname_wrong_target" else None
         errors.append((code, detail))
@@ -528,7 +546,9 @@ async def remove_custom_domain(
         row = await _active_row(session, tenant_id=tenant_id, merchant_id=merchant_id, seller_agent_id=seller_agent_id)
         if row is None:
             raise HTTPException(404, "No custom domain")
-        had_mapping = row.mapping_created_at is not None or row.status in ("pending_certificate", "live")
+        # Once verified, a mapping may exist (an operator can create it before marking it), so its
+        # deletion becomes a durable queue item rather than an email alone.
+        had_mapping = row.verified_at is not None and row.status != "pending_dns"
         config = await _locked_row(
             session, tenant_id=tenant_id, merchant_id=row.merchant_id, seller_agent_id=row.seller_agent_id or None
         )
@@ -550,19 +570,16 @@ async def remove_custom_domain(
         if isinstance(challenge, dict) and challenge.get("host") == row.host:
             state.pop("challenge", None)
         config.public_publishing = with_ucp_state(config.public_publishing, state)
-        row.status = "removed"
+        row.status = "pending_unmap" if had_mapping else "removed"
+        row.operator_notified_at = None
+        row.last_error_code = None
+        row.last_error_detail = None
         row.updated_at = _now()
         await _ledger(session, row, "commerce.custom_domain.remove", "success", had_mapping=had_mapping)
-        host = row.host
+        host, domain_id = row.host, row.id
     if had_mapping:
-        await asyncio.to_thread(
-            _send_operator_email,
-            subject=f"Custom domain removed: {host}",
-            lines=[
-                f"The merchant disconnected {host}. Delete its domain mapping:",
-                cd.mapping_commands(host)["delete"],
-            ],
-        )
+        # The queue item is the durable record; the email is a courtesy the status task resends.
+        await notify_operator(domain_id, tenant_id=tenant_id)
     logger.info("custom_domain_removed", had_mapping=had_mapping)
     return {"removed": True, "host": host, "mapping_delete_needed": had_mapping}
 
@@ -571,15 +588,17 @@ async def remove_custom_domain(
 
 
 async def progress_domain(domain_id: uuid.UUID, *, tenant_id: str) -> str:
-    """Advance one ``pending_mapping`` / ``pending_certificate`` domain; returns its status afterwards.
+    """Advance one ``pending_mapping``, ``pending_certificate`` or ``pending_unmap`` domain; returns its status.
 
     Network calls (Admin API, DNS, the HTTPS probe) run outside the row lock.
     """
     async with get_tenant_session(uuid.UUID(tenant_id)) as session:
         row = await session.get(MerchantCustomDomainRow, domain_id)
-        if row is None or row.status not in ("pending_mapping", "pending_certificate"):
+        if row is None or row.status not in ("pending_mapping", "pending_certificate", "pending_unmap"):
             return row.status if row is not None else "missing"
-        original, host, created_at = row.status, row.host, row.mapping_created_at
+        original, host, created_at, target = row.status, row.host, row.mapping_created_at, row.cname_target
+    if original == "pending_unmap":
+        return await _progress_unmap(domain_id, tenant_id=tenant_id, host=host)
     status = original
     update: dict[str, Any] = {}
     now = _now()
@@ -598,7 +617,7 @@ async def progress_domain(domain_id: uuid.UUID, *, tenant_id: str) -> str:
                 update = {"status": "pending_certificate", "mapping_source": "cloud_run_api", "mapping_created_at": now}
                 status, created_at = "pending_certificate", now
     if status in ("pending_mapping", "pending_certificate") and update.get("status") != "failed":
-        update.update(await _certificate_update(host, status=status, created_at=created_at, now=now))
+        update.update(await _certificate_update(host, target, status=status, created_at=created_at, now=now))
     async with get_tenant_session(uuid.UUID(tenant_id)) as session:
         row = await session.get(MerchantCustomDomainRow, domain_id, with_for_update=True)
         if row is None or row.status != original:
@@ -618,8 +637,10 @@ async def progress_domain(domain_id: uuid.UUID, *, tenant_id: str) -> str:
         return row.status
 
 
-async def _certificate_update(host: str, *, status: str, created_at: datetime | None, now: datetime) -> dict[str, Any]:
-    ok, observed, code = await cd.check_routing(host)
+async def _certificate_update(
+    host: str, target: str, *, status: str, created_at: datetime | None, now: datetime
+) -> dict[str, Any]:
+    ok, observed, code = await cd.check_routing(host, target=target)
     if not ok:
         detail = f"found {observed}" if code == "cname_wrong_target" else None
         return {"last_error_code": code, "last_error_detail": detail}
@@ -644,6 +665,63 @@ async def _certificate_update(host: str, *, status: str, created_at: datetime | 
     if status == "pending_mapping":
         return {"last_error_code": None, "last_error_detail": None}
     return {"last_error_code": probe.state, "last_error_detail": probe.detail}
+
+
+async def host_still_claimed(host: str, *, excluding: uuid.UUID) -> bool:
+    """Whether another active domain row (any tenant) holds ``host``: its mapping must then be kept."""
+    async with get_platform_session() as session:
+        found = (
+            await session.scalars(
+                select(MerchantCustomDomainRow.id).where(
+                    MerchantCustomDomainRow.host == host,
+                    MerchantCustomDomainRow.id != excluding,
+                    MerchantCustomDomainRow.status.not_in(INACTIVE_STATUSES),
+                )
+            )
+        ).first()
+    return found is not None
+
+
+async def _finish_unmap(domain_id: uuid.UUID, *, tenant_id: str, **payload: Any) -> str:
+    async with get_tenant_session(uuid.UUID(tenant_id)) as session:
+        row = await session.get(MerchantCustomDomainRow, domain_id, with_for_update=True)
+        if row is None or row.status != "pending_unmap":
+            return row.status if row is not None else "missing"
+        row.status = "removed"
+        row.last_error_code = None
+        row.last_error_detail = None
+        row.updated_at = _now()
+        await _ledger(session, row, "commerce.custom_domain.status", "success", previous="pending_unmap", **payload)
+        return row.status
+
+
+async def _progress_unmap(domain_id: uuid.UUID, *, tenant_id: str, host: str) -> str:
+    """With automap on, delete a removed domain's mapping (kept when another active row holds the host)."""
+    if await host_still_claimed(host, excluding=domain_id):
+        return await _finish_unmap(domain_id, tenant_id=tenant_id, mapping_kept=True)
+    if not cd.automap_enabled():
+        # The operator deletes it; note the check so the item does not keep the head of every batch.
+        async with get_tenant_session(uuid.UUID(tenant_id)) as session:
+            row = await session.get(MerchantCustomDomainRow, domain_id, with_for_update=True)
+            if row is not None and row.status == "pending_unmap":
+                row.last_checked_at = _now()
+        return "pending_unmap"
+    try:
+        deleted = await cd.delete_domain_mapping(host)
+    # enterprise-gate: broad-except-ok reason=admin-api-failure-keeps-the-unmap-item-queued-for-retry
+    except Exception as exc:
+        logger.warning("custom_domain_mapping_delete_error", error_type=type(exc).__name__)
+        deleted = False
+    if not deleted:
+        async with get_tenant_session(uuid.UUID(tenant_id)) as session:
+            row = await session.get(MerchantCustomDomainRow, domain_id, with_for_update=True)
+            if row is not None and row.status == "pending_unmap":
+                row.last_error_code = "mapping_failed"
+                row.last_error_detail = "The domain mapping could not be deleted; retrying."
+                row.last_checked_at = _now()
+                row.check_count = (row.check_count or 0) + 1
+        return "pending_unmap"
+    return await _finish_unmap(domain_id, tenant_id=tenant_id, mapping_source="cloud_run_api")
 
 
 # --- operator notification --------------------------------------------------------
@@ -675,22 +753,27 @@ async def notify_operator(domain_id: uuid.UUID, *, tenant_id: str) -> bool:
         return False
     async with get_tenant_session(uuid.UUID(tenant_id)) as session:
         row = await session.get(MerchantCustomDomainRow, domain_id)
-        if row is None or row.status != "pending_mapping" or row.operator_notified_at is not None:
+        if row is None or row.status not in ("pending_mapping", "pending_unmap") or row.operator_notified_at:
             return False
-        host = row.host
+        host, status = row.host, row.status
         confirmed = row.search_console_owner_confirmed_at is not None
     commands = cd.mapping_commands(host)
-
-    sent = await asyncio.to_thread(
-        _send_operator_email,
-        subject=f"Custom domain waiting for a mapping: {host}",
-        lines=[
+    if status == "pending_unmap":
+        subject = f"Custom domain removed, delete its mapping: {host}"
+        lines = [
+            f"The merchant disconnected {host}. Delete its Cloud Run domain mapping, if it was created:",
+            commands["delete"],
+            "Then mark it deleted in the operator queue (Commerce > Custom domains).",
+        ]
+    else:
+        subject = f"Custom domain waiting for a mapping: {host}"
+        lines = [
             f"{host} passed DNS and ownership checks and waits for its Cloud Run domain mapping.",
             "Merchant confirmed the Search Console owner: " + ("yes" if confirmed else "no"),
             commands["create"],
             "Then mark it mapped in the operator queue (Commerce > Custom domains), or let the status check find it.",
-        ],
-    )
+        ]
+    sent = await asyncio.to_thread(_send_operator_email, subject=subject, lines=lines)
     if sent:
         async with get_tenant_session(uuid.UUID(tenant_id)) as session:
             row = await session.get(MerchantCustomDomainRow, domain_id, with_for_update=True)
@@ -709,14 +792,14 @@ def _require_operator(tenant_id: str) -> None:
         raise HTTPException(404, "Not Found")
 
 
-async def _operator_row(domain_id: str) -> MerchantCustomDomainRow:
+async def _operator_row(domain_id: str, statuses: tuple[str, ...]) -> MerchantCustomDomainRow:
     try:
         key = uuid.UUID(domain_id)
     except ValueError as exc:
         raise HTTPException(404, "Not Found") from exc
     async with get_platform_session() as session:
         row = await session.get(MerchantCustomDomainRow, key)
-    if row is None or row.status not in OPERATOR_QUEUE_STATUSES:
+    if row is None or row.status not in statuses:
         raise HTTPException(404, "Not Found")
     return row
 
@@ -741,10 +824,26 @@ async def list_operator_queue(tenant_id: str = Depends(get_current_tenant)) -> d
                 .limit(200)
             )
         ).all()
+    active_hosts: dict[str, set[uuid.UUID]] = {}
+    unmap_hosts = {row.host for row in rows if row.status == "pending_unmap"}
+    if unmap_hosts:
+        async with get_platform_session() as session:
+            for domain_id, host in (
+                await session.execute(
+                    select(MerchantCustomDomainRow.id, MerchantCustomDomainRow.host).where(
+                        MerchantCustomDomainRow.host.in_(unmap_hosts),
+                        MerchantCustomDomainRow.status.not_in(INACTIVE_STATUSES),
+                    )
+                )
+            ).all():
+                active_hosts.setdefault(host, set()).add(domain_id)
     return {
         "automap_enabled": cd.automap_enabled(),
         "mapping_account": cd.mapping_account(),
-        "items": [operator_view(row) for row in rows],
+        "items": [
+            operator_view(row, mapping_in_use=row.status == "pending_unmap" and bool(active_hosts.get(row.host)))
+            for row in rows
+        ],
     }
 
 
@@ -759,10 +858,10 @@ async def list_operator_queue(tenant_id: str = Depends(get_current_tenant)) -> d
 )
 async def mark_mapped(domain_id: str, request: Request, tenant_id: str = Depends(get_current_tenant)) -> dict[str, Any]:
     _require_operator(tenant_id)
-    found = await _operator_row(domain_id)
+    found = await _operator_row(domain_id, MAPPING_QUEUE_STATUSES)
     async with get_tenant_session(found.tenant_id) as session:
         row = await session.get(MerchantCustomDomainRow, found.id, with_for_update=True)
-        if row is None or row.status not in OPERATOR_QUEUE_STATUSES:
+        if row is None or row.status not in MAPPING_QUEUE_STATUSES:
             raise HTTPException(404, "Not Found")
         if row.status != "pending_certificate":
             row.status = "pending_certificate"
@@ -791,16 +890,43 @@ async def mark_failed(
     tenant_id: str = Depends(get_current_tenant),
 ) -> dict[str, Any]:
     _require_operator(tenant_id)
-    found = await _operator_row(domain_id)
+    found = await _operator_row(domain_id, MAPPING_QUEUE_STATUSES)
     async with get_tenant_session(found.tenant_id) as session:
         row = await session.get(MerchantCustomDomainRow, found.id, with_for_update=True)
-        if row is None or row.status not in OPERATOR_QUEUE_STATUSES:
+        if row is None or row.status not in MAPPING_QUEUE_STATUSES:
             raise HTTPException(404, "Not Found")
         row.status = "failed"
         row.last_error_code = "mapping_failed"
         row.last_error_detail = body.reason
         row.updated_at = _now()
         await _ledger(session, row, "commerce.custom_domain.operator.failed", "refused", operator=_actor(request))
+        return operator_view(row)
+
+
+@operator_router.post("/{domain_id}/unmapped")
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="commerce.runtime.merchant_config.write",
+    rate_limit="commerce-runtime-write",
+    idempotency="no-op-when-already-removed",
+    audit_event="commerce.custom_domain.operator.unmapped",
+)
+async def mark_unmapped(
+    domain_id: str, request: Request, tenant_id: str = Depends(get_current_tenant)
+) -> dict[str, Any]:
+    """The operator deleted the removed domain's mapping (or kept it because another domain holds the host)."""
+    _require_operator(tenant_id)
+    found = await _operator_row(domain_id, ("pending_unmap",))
+    async with get_tenant_session(found.tenant_id) as session:
+        row = await session.get(MerchantCustomDomainRow, found.id, with_for_update=True)
+        if row is None or row.status != "pending_unmap":
+            raise HTTPException(404, "Not Found")
+        row.status = "removed"
+        row.last_error_code = None
+        row.last_error_detail = None
+        row.updated_at = _now()
+        await _ledger(session, row, "commerce.custom_domain.operator.unmapped", "success", operator=_actor(request))
         return operator_view(row)
 
 

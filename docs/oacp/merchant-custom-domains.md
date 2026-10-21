@@ -100,12 +100,21 @@ flowchart LR
 `failed` domain it is the retry: the domain goes back to the step that failed
 and joins the operator queue again (the operator is emailed again). The same
 domain re-added returns the existing one. A different domain needs the current
-one removed first.
+one removed first. A `failed` domain keeps its host reserved until it is
+removed, so no other merchant can take the host between a failure and its retry.
+Checks compare DNS with the CNAME target the domain was given when it was added.
+A later change to `AGENTICORG_CUSTOM_DOMAIN_CNAME_TARGET` applies only to new
+domains.
 
 **Remove.** Disconnecting withdraws the host's public index entry, its
-attestation and the publication (the profile stops being served there). If a
-mapping existed, the operator is emailed the `gcloud ... domain-mappings delete`
-command.
+attestation and the publication, so the profile stops being served there. A
+domain that got past verification may have a mapping. It moves to
+`pending_unmap`, a durable item in the operator queue with the
+`gcloud ... domain-mappings delete` command, and the operator is emailed. The
+email is resent by the status task until it goes out. With automation on, the
+status task deletes the mapping through the Admin API instead and retries until
+it succeeds. If another domain already holds the host again, the mapping is
+kept and the item is simply closed.
 
 ### States and errors
 
@@ -115,8 +124,9 @@ command.
 | `pending_mapping` | Verified; waiting for the domain mapping (operator queue). |
 | `pending_certificate` | Mapping created; waiting for the certificate. |
 | `live` | HTTPS works and reaches this service with the host intact. |
-| `failed` | The mapping was refused or no certificate came within 48 hours; retry after fixing. |
-| `removed` | Disconnected (kept for history). |
+| `failed` | The mapping was refused or no certificate came within 48 hours; retry after fixing. The host stays reserved. |
+| `pending_unmap` | Disconnected; its domain mapping is still to delete (operator queue, or the Admin API with automation on). |
+| `removed` | Disconnected and unmapped (kept for history). |
 
 | Code | Shown when | Fix |
 | --- | --- | --- |
@@ -137,7 +147,10 @@ command.
 
 All merchant routes require `commerce.merchant_config.write` or tenant admin,
 are tenant bound, write the commerce ledger (`commerce.custom_domain.*`), and
-take an optional `seller_agent_id`.
+take an optional `seller_agent_id`. Without it, a merchant with active
+domains for more than one seller agent gets `409 seller_agent_id_required`
+rather than a guess. Adding a domain without it uses the merchant config the
+UCP serving-host routes use.
 
 | Method and path (`/api/v1/commerce/runtime/merchant-configs/{merchant_id}`) | Body | Returns |
 | --- | --- | --- |
@@ -173,6 +186,10 @@ merchant's domain, so the merchant cannot do it from inside AgenticOrg.
    owner is missing), **mark it failed** with a reason
    (`POST .../operator-queue/{id}/failed`, `{"reason": "..."}`). The merchant
    sees that reason and a retry.
+5. **Delete mappings of removed domains.** A `pending_unmap` item shows the
+   `gcloud beta run domain-mappings delete ...` command. Run it, then **mark it
+   deleted** (`POST .../operator-queue/{id}/unmapped`). When the item says
+   another domain now uses the host, keep the mapping and mark it done.
 
 The queue routes answer 404 to everyone except administrators of
 `AGENTICORG_CUSTOM_DOMAIN_OPERATOR_TENANT_ID`. Each action is written to the
@@ -181,7 +198,8 @@ merchant tenant's commerce ledger with the operator as actor.
 ## Optional: automation through the Cloud Run Admin API
 
 With `AGENTICORG_CUSTOM_DOMAIN_CLOUD_RUN_AUTOMAP_ENABLED=true` and a project
-set, the status task creates the mapping itself. It calls
+set, the status task creates the mapping itself, and deletes the mapping of a
+removed domain (`DELETE .../domainmappings/{host}`). It calls
 `POST https://{region}-run.googleapis.com/apis/domains.cloudrun.com/v1/namespaces/{project}/domainmappings`
 with `spec.routeName` = the service and `certificateMode: AUTOMATIC`, then reads
 the mapping (`GET .../domainmappings/{host}`) for its `Ready` condition. Calls

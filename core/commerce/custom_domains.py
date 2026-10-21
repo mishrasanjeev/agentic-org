@@ -235,15 +235,25 @@ class DnsCheck:
         return self.ownership_ok and self.cname_ok and not self.errors
 
 
-async def check_routing(host: str, *, resolver: CnameResolver = resolve_cname) -> tuple[bool, str | None, str | None]:
-    """``(ok, observed_cname, error_code)`` for the host's CNAME record."""
+async def check_routing(
+    host: str,
+    *,
+    target: str | None = None,
+    resolver: CnameResolver = resolve_cname,
+) -> tuple[bool, str | None, str | None]:
+    """``(ok, observed_cname, error_code)`` for the host's CNAME record.
+
+    ``target`` is the domain's own stored target (the one its records showed);
+    the configured target is only the default for a new domain.
+    """
+    expected = (target or cname_target()).rstrip(".").lower()
     try:
         observed = await resolver(host)
     except DnsLookupError:
         return False, None, "dns_lookup_failed"
     if observed is None:
         return False, None, "cname_missing"
-    if observed != cname_target():
+    if observed != expected:
         return False, observed, "cname_wrong_target"
     return True, observed, None
 
@@ -407,3 +417,22 @@ async def create_domain_mapping(host: str, *, client: Any | None = None) -> Mapp
             exists=False, ready=False, failed=True, message=(detail or f"HTTP {response.status_code}")[:300]
         )
     return parse_mapping_state(response.json())
+
+
+async def delete_domain_mapping(host: str, *, client: Any | None = None) -> bool:
+    """Delete the mapping for ``host``; True once it is gone (deleted now, or already absent)."""
+    import httpx  # noqa: PLC0415
+
+    token = await _access_token()
+    owned = client is None
+    client = client or httpx.AsyncClient(timeout=API_TIMEOUT_SECONDS)
+    try:
+        response = await client.delete(
+            f"{_api_base()}/domainmappings/{host}", headers={"Authorization": f"Bearer {token}"}
+        )
+    finally:
+        if owned:
+            await client.aclose()
+    if response.status_code == 404:
+        return True
+    return response.status_code < 400
