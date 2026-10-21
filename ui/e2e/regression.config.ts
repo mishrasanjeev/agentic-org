@@ -46,6 +46,9 @@ export default defineConfig({
   // secrets and must never run against a hosted environment. decision-grants
   // also throws at load without its variables, which aborted this whole run.
   testIgnore: ["dev-stack.spec.ts", "governed-cases*.spec.ts", "decision-grants.spec.ts"],
+  // Before a hosted run, soft-delete the shadow agents earlier runs left behind, so
+  // agent creation stays under the tenant's shadow limit (see helpers/sweep-stale-test-agents.ts).
+  globalSetup: "./helpers/sweep-stale-test-agents.ts",
   // After a hosted run, end the demo accounts' sessions so no token a failing
   // request logged into the reports stays valid (see helpers/revoke-demo-sessions.ts).
   globalTeardown: process.env.E2E_REVOKE_DEMO_SESSIONS === "1" ? "./helpers/revoke-demo-sessions.ts" : undefined,
