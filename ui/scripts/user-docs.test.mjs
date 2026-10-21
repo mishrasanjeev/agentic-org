@@ -2,7 +2,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { loadUserGuides, renderGuide } from "./generate-user-docs.mjs";
+import { loadUserGuides, plainGuideMarkdown, renderGuide } from "./generate-user-docs.mjs";
 import {
   loadRouteDescriptors,
   renderStaticHtml,
@@ -112,6 +112,13 @@ test("both production UI images preserve the repository layout and include autho
   assert.match(dockerignore, /^!docs\/bfsi\/capability-baseline\.json$/m);
   assert.match(dockerignore, /^!docs\/finops\/$/m);
   assert.match(dockerignore, /^!docs\/finops\/spend-intelligence\.md$/m);
+  // Every repository source an OACP guide cites must be inside the UI image's build context.
+  for (const source of new Set(loadUserGuides().articles
+    .filter((article) => article.slug.startsWith("oacp-"))
+    .flatMap((article) => article.sources)
+    .filter((source) => source.startsWith("docs/")))) {
+    assert.ok(dockerignore.split(/\r?\n/).includes(`!${source}`), source);
+  }
 });
 
 test("the complete manual has maintained source references and six BFSI playbooks", () => {
@@ -130,7 +137,7 @@ test("the complete manual has maintained source references and six BFSI playbook
       .length,
     6,
   );
-  assert.equal(manual.groups.length, 5);
+  assert.equal(manual.groups.length, 6);
   const coverage = manual.articles.find((article) => article.slug === "bfsi-capability-status");
   assert.ok(coverage);
   const baseline = JSON.parse(readFileSync(
@@ -381,4 +388,77 @@ test("public A2A guide links to a hosted page, not a source Markdown soft 404", 
   assert.ok(guide);
   assert.match(guide.html, /href="\/docs\/seller-a2a-commerce-journey"/);
   assert.doesNotMatch(guide.html, /href="[^"]*a2a-interoperability\.md"/);
+});
+
+test("the OACP section has seven adaptive guides with summaries, figures and workflow cards", () => {
+  const manual = loadUserGuides();
+  const group = "OACP — agentic commerce, made safe";
+  assert.ok(manual.groups.includes(group));
+  const guides = manual.articles.filter((article) => article.group === group);
+  assert.deepEqual(guides.map((guide) => guide.slug), [
+    "oacp-overview", "oacp-how-it-works", "oacp-buyer-journey", "oacp-merchant-setup",
+    "oacp-safety-and-trust", "oacp-feature-switches", "oacp-faq",
+  ]);
+  for (const guide of guides) {
+    assert.equal(guide.colorScheme, "adaptive", guide.slug);
+    assert.match(guide.html, /^<aside class="docs-summary" aria-label="In 30 seconds">/, guide.slug);
+    assert.ok(guide.figures.length >= 1, guide.slug);
+    for (const figure of guide.figures)
+      assert.match(guide.html, new RegExp(`data-docs-figure="${figure.id}"`), guide.slug);
+  }
+  // Every other guide keeps the light scheme and has no figure placeholders.
+  for (const guide of manual.articles.filter((article) => article.group !== group)) {
+    assert.equal(guide.colorScheme, "light", guide.slug);
+    assert.deepEqual(guide.figures, [], guide.slug);
+  }
+  const overview = guides[0];
+  assert.match(overview.html, /does not replace them, and it is not a certification/);
+  assert.match(overview.html, /Mastercard Agent Pay/);
+  const journey = guides.find((guide) => guide.slug === "oacp-buyer-journey");
+  assert.match(journey.html, /Intent/);
+  assert.match(journey.html, /passkey/);
+  assert.match(journey.html, /RBI AFA/);
+  assert.ok([...journey.html.matchAll(/class="docs-process-owner"/g)].length >= 10);
+  const setup = guides.find((guide) => guide.slug === "oacp-merchant-setup");
+  // The checklist keeps one numbering across its five phases.
+  assert.match(setup.html, /aria-label="Process map" start="20">/);
+  assert.match(setup.html, /_agenticorg-ucp\.shop\.merchant\.example/);
+  assert.match(setup.html, /off until a sandbox run passes/i);
+  const switches = guides.find((guide) => guide.slug === "oacp-feature-switches");
+  for (const flag of [
+    "AGENTICORG_OACP_VERIFY_STRICT", "AGENTICORG_ARBITER_REQUIRE_VERIFIED_AUTHORITY",
+    "AGENTICORG_ARBITER_REQUIRE_GRANTEX_GRANT", "AGENTICORG_ROUTE_ENFORCEMENT_MODE",
+    "AGENTICORG_UCP_PROFILE_ENABLED", "AGENTICORG_UCP_CHECKOUT_ENABLED", "AGENTICORG_ACP_FEED_ENABLED",
+    "AGENTICORG_ACP_CHECKOUT_ENABLED", "AGENTICORG_ACP_SIGNATURE_MODE", "PLURAL_PINE_LIVE_EXECUTION_ENABLED",
+    "AGENTICORG_GRANTEX_MANDATES_ENABLED", "AGENTICORG_GRANTEX_MANDATE_CAPABILITY_EVIDENCE_ENABLED",
+    "AGENTICORG_HTTPSIG_VERIFY_MODE", "AGENTICORG_HTTPSIG_SIGN_OUTBOUND", "AGENTICORG_AUDIT_WITNESS_ENABLED",
+    "AGENTICORG_OACP_RETENTION_APPLY_ENABLED", "AGENTICORG_AUDIT_CHAIN_DEFAULT_ON",
+  ])
+    assert.match(switches.html, new RegExp(`<code>${flag}</code>`), flag);
+  const faq = guides.find((guide) => guide.slug === "oacp-faq");
+  assert.ok(faq.headings.filter((heading) => heading.level === 2).length >= 11);
+});
+
+test("figure, summary and numbered flow fences render safely and read as text", () => {
+  const markdown = [
+    "```summary", "First <b>point</b>", "Second point", "```", "",
+    "## One", "",
+    "```figure", "oacp-x | A <title> | A caption & more", "```", "",
+    "```flow start=4", "Step | Body | Owner: Merchant", "```", "",
+  ].join("\n");
+  const { html, figures, searchText } = renderGuide(markdown);
+  assert.deepEqual(figures, [{ id: "oacp-x", title: "A <title>", caption: "A caption & more" }]);
+  assert.match(html, /<li>First &lt;b&gt;point&lt;\/b&gt;<\/li>/);
+  assert.match(html, /data-docs-figure="oacp-x"/);
+  assert.match(html, /A &lt;title&gt;/);
+  assert.match(html, /aria-label="Process map" start="4"><li><span class="docs-flow-number" aria-hidden="true">4<\/span>/);
+  assert.doesNotMatch(searchText, /oacp-x/);
+  assert.match(searchText, /A caption & more/);
+  const plain = plainGuideMarkdown(markdown);
+  assert.match(plain, /^In 30 seconds:\n\n- First <b>point<\/b>\n- Second point/);
+  assert.match(plain, /Figure: A <title>\. A caption & more/);
+  assert.throws(() => renderGuide("```figure\nBad Id | t | c\n```"), /Figure fences need/);
+  assert.throws(() => renderGuide("```figure\na | t\n```"), /Figure fences need/);
+  assert.throws(() => renderGuide("```figure\na | t | c\n```\n\n```figure\na | t | c\n```"), /Duplicate figure/);
+  assert.throws(() => renderGuide("```flow start=0\na | b\n```"), /starts at 1/);
 });

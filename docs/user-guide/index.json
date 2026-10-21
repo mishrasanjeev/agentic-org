@@ -5,6 +5,7 @@
     "Build And Run",
     "Govern And Operate",
     "Connect And Extend",
+    "OACP — agentic commerce, made safe",
     "BFSI Playbooks"
   ],
   "articles": [
@@ -420,6 +421,111 @@
         "docs/deployment.md",
         "docs/deployment-airgap.md",
         "docker-compose.yml"
+      ]
+    },
+    {
+      "slug": "oacp-overview",
+      "title": "What OACP is and why you need it",
+      "description": "OACP is one trust layer under UCP, ACP, AP2, Visa TAP, MCP and A2A: your facts stated once, signed, decided by fixed rules and recorded, then rendered into each standard.",
+      "group": "OACP — agentic commerce, made safe",
+      "audience": "Merchants and business owners",
+      "reviewed": "2026-10-21",
+      "colorScheme": "adaptive",
+      "sources": [
+        "docs/oacp/README.md",
+        "docs/oacp/truth-inventory.md",
+        "docs/oacp/explainers/protocol-partner-mappings.md",
+        "ui/src/components/docs/OacpGuideFigures.tsx"
+      ]
+    },
+    {
+      "slug": "oacp-how-it-works",
+      "title": "How OACP works, end to end",
+      "description": "Follow your shop's facts through seven steps: signed by Grantex, verified and kept by AgenticOrg, decided by the arbiter, recorded in the ledger and rendered for every buyer agent.",
+      "group": "OACP — agentic commerce, made safe",
+      "audience": "Merchants, product and platform teams",
+      "reviewed": "2026-10-21",
+      "colorScheme": "adaptive",
+      "sources": [
+        "docs/oacp/end-user-flow.md",
+        "docs/oacp/artifact-cache-guide.md",
+        "docs/oacp/arbiter-ledger.md",
+        "ui/src/components/docs/OacpGuideFigures.tsx"
+      ]
+    },
+    {
+      "slug": "oacp-buyer-journey",
+      "title": "A purchase, step by step",
+      "description": "Walk through one agent purchase: Intent, Cart and Payment mandates, the buyer's passkey, RBI AFA for UPI AutoPay, the arbiter's decision, the payment and the order.",
+      "group": "OACP — agentic commerce, made safe",
+      "audience": "Merchants and agent platform teams",
+      "reviewed": "2026-10-21",
+      "colorScheme": "adaptive",
+      "sources": [
+        "docs/oacp/mandates.md",
+        "docs/oacp/ucp-checkout.md",
+        "docs/oacp/plural-executor.md",
+        "ui/src/components/docs/OacpGuideFigures.tsx"
+      ]
+    },
+    {
+      "slug": "oacp-merchant-setup",
+      "title": "Merchant setup checklist",
+      "description": "A numbered checklist from Shopify sync and the Grantex allowlist to the DNS TXT step, your UCP profile, checkout, the ACP feed and MCP tools, and what stays off until a payment sandbox run.",
+      "group": "OACP — agentic commerce, made safe",
+      "audience": "Merchants and platform operators",
+      "reviewed": "2026-10-21",
+      "colorScheme": "adaptive",
+      "sources": [
+        "docs/oacp/merchant-commerce-configuration.md",
+        "docs/oacp/ucp-profile.md",
+        "docs/oacp/acp-feed-and-sessions.md",
+        "docs/oacp/explainers/launch-rollback-runbook.md",
+        "ui/src/components/docs/OacpGuideFigures.tsx"
+      ]
+    },
+    {
+      "slug": "oacp-safety-and-trust",
+      "title": "Safety and trust",
+      "description": "Revocation everywhere, the arbiter's eight rules in plain words, the ledger and its offline check, agent request signatures in log and enforce mode, and how to read a refusal.",
+      "group": "OACP — agentic commerce, made safe",
+      "audience": "Merchants, risk and audit teams",
+      "reviewed": "2026-10-21",
+      "colorScheme": "adaptive",
+      "sources": [
+        "docs/oacp/arbiter-ledger.md",
+        "docs/oacp/agent-request-signing.md",
+        "docs/oacp/troubleshooting.md",
+        "ui/src/components/docs/OacpGuideFigures.tsx"
+      ]
+    },
+    {
+      "slug": "oacp-feature-switches",
+      "title": "Feature switches reference",
+      "description": "Every OACP switch, its default and what it does, in plain tables, with the safe order for turning them on and how to turn them back off.",
+      "group": "OACP — agentic commerce, made safe",
+      "audience": "Platform operators and merchants",
+      "reviewed": "2026-10-21",
+      "colorScheme": "adaptive",
+      "sources": [
+        "docs/oacp/explainers/launch-rollback-runbook.md",
+        "docs/oacp/README.md",
+        "ui/src/components/docs/OacpGuideFigures.tsx"
+      ]
+    },
+    {
+      "slug": "oacp-faq",
+      "title": "OACP FAQ",
+      "description": "Short answers to the questions sellers ask: standards, certification, Grantex's role, prices, approvals, outages, revocation, UPI and what is switched on today.",
+      "group": "OACP — agentic commerce, made safe",
+      "audience": "Merchants",
+      "reviewed": "2026-10-21",
+      "colorScheme": "adaptive",
+      "sources": [
+        "docs/oacp/README.md",
+        "docs/oacp/end-user-flow.md",
+        "docs/oacp/troubleshooting.md",
+        "ui/src/components/docs/OacpGuideFigures.tsx"
       ]
     },
     {

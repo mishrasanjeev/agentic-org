@@ -135,11 +135,24 @@ docs/**
 !docs/finops/
 !docs/finops/spend-intelligence.md
 !docs/oacp/
+!docs/oacp/README.md
+!docs/oacp/acp-feed-and-sessions.md
+!docs/oacp/agent-request-signing.md
+!docs/oacp/arbiter-ledger.md
+!docs/oacp/artifact-cache-guide.md
 !docs/oacp/end-user-flow.md
 !docs/oacp/merchant-commerce-configuration.md
+!docs/oacp/mandates.md
 !docs/oacp/offline-pos-bridge.md
+!docs/oacp/plural-executor.md
 !docs/oacp/plural-pine-p3p-capability-verifier.md
 !docs/oacp/truth-inventory.md
+!docs/oacp/troubleshooting.md
+!docs/oacp/ucp-checkout.md
+!docs/oacp/ucp-profile.md
+!docs/oacp/explainers/
+!docs/oacp/explainers/launch-rollback-runbook.md
+!docs/oacp/explainers/protocol-partner-mappings.md
 !docs/readiness/
 !docs/readiness/DOMAIN_READINESS_STANDARD.md
 

@@ -200,7 +200,7 @@ describe("AI spend guide in the documentation site", () => {
     expect(article).toBeDefined();
     expect(article?.group).toBe("Govern And Operate");
     expect(manual.articles[1].slug).toBe("first-agent");
-    expect(manual.groups).toHaveLength(5);
+    expect(manual.groups).toHaveLength(6);
   });
 
   it("renders the pipeline and reader views only on the spend guide", () => {
