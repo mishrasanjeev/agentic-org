@@ -409,7 +409,7 @@
   "landingFaqs": [
     {
       "question": "What is AgenticOrg?",
-      "answer": "AgenticOrg is a source-available enterprise AI agent platform, licensed under the PolyForm Noncommercial License 1.0.0; commercial use needs a written agreement with Orchestrum Technologies LLP. It provides an agent runtime, workflow orchestration, native connectors, scoped tools, human approval gates, evaluation, audit evidence, SDKs, API access, MCP, A2A, and bounded OACP commerce surfaces."
+      "answer": "AgenticOrg is a source-available enterprise AI agent platform, with the platform licensed under the PolyForm Noncommercial License 1.0.0 (commercial use needs a written agreement with Orchestrum Technologies LLP) and the SDKs and MCP server under Apache-2.0. It provides an agent runtime, workflow orchestration, native connectors, scoped tools, human approval gates, evaluation, audit evidence, SDKs, API access, MCP, A2A, and bounded OACP commerce surfaces."
     },
     {
       "question": "How does AgenticOrg keep AI agents under human control?",
@@ -437,7 +437,7 @@
     },
     {
       "question": "Can AgenticOrg be self-hosted?",
-      "answer": "Yes. The repository is licensed under the PolyForm Noncommercial License 1.0.0 and includes Docker and deployment assets. Self use is free; commercial self-hosting needs a written agreement with Orchestrum Technologies LLP. The current managed production path uses Google Cloud Run with commit-pinned images, health verification, explicit traffic movement, and rollback-aware deployment tooling."
+      "answer": "Yes. The platform is licensed under the PolyForm Noncommercial License 1.0.0 and the repository includes Docker and deployment assets. Self use is free; commercial self-hosting needs a written agreement with Orchestrum Technologies LLP. The current managed production path uses Google Cloud Run with commit-pinned images, health verification, explicit traffic movement, and rollback-aware deployment tooling."
     },
     {
       "question": "Who is AgenticOrg for?",

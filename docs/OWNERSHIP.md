@@ -8,10 +8,10 @@ AgenticOrg is owned by **Orchestrum Technologies LLP**.
 
 ## Repository And License
 
-From 21 October 2026 the AgenticOrg source repository is licensed under the
-PolyForm Noncommercial License 1.0.0. Only self use is free; commercial use of any
-sort needs a written agreement with Orchestrum Technologies LLP (see
-[COMMERCIAL-LICENSE.md](../COMMERCIAL-LICENSE.md)). Versions published before that
+From 21 October 2026 the AgenticOrg platform is licensed under the PolyForm
+Noncommercial License 1.0.0. Only self use is free; commercial use of any sort
+needs a written agreement with Orchestrum Technologies LLP (see
+[COMMERCIAL-LICENSE.md](../COMMERCIAL-LICENSE.md)). The AgenticOrg SDKs (`sdk/`, `sdk-ts/`) and the MCP server (`mcp-server/`) are open source under the Apache License 2.0, free for any use including commercial. Versions published before that
 date remain available under the Apache License 2.0 they were released with.
 "AgenticOrg" and "Grantex" are trademarks of Orchestrum Technologies LLP (see
 [TRADEMARKS.md](../TRADEMARKS.md)).

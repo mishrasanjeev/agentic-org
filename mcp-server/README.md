@@ -227,13 +227,15 @@ further promotion requires the backend's separate authorization path.
 
 ## License
 
-PolyForm Noncommercial License 1.0.0 (SPDX `PolyForm-Noncommercial-1.0.0`); see [LICENSE](LICENSE).
+Apache License 2.0 (SPDX `Apache-2.0`); see [LICENSE](LICENSE). Copyright 2026 Orchestrum
+Technologies LLP.
 
-**Only self use is free. Commercial use of any sort needs a written agreement with
-Orchestrum Technologies LLP**: see
-[COMMERCIAL-LICENSE.md](https://github.com/mishrasanjeev/agentic-org/blob/main/COMMERCIAL-LICENSE.md)
-and write to [sanjeev@orchestrum.in](mailto:sanjeev@orchestrum.in). These terms apply to every
-version published on or after 21 October 2026, including all updates; versions published
-before that date remain available under the Apache License 2.0 they were released with.
-"AgenticOrg" and "Grantex" are trademarks of Orchestrum Technologies LLP
+**This MCP server is open source and free for any use, including commercial use**, under the Apache
+License 2.0. It stays Apache-2.0 after the AgenticOrg platform moved to the PolyForm Noncommercial
+License 1.0.0 on 21 October 2026. The platform itself (the API, workers, UI and the rest of the
+repository) is licensed separately: commercial use of the platform needs a written agreement with
+Orchestrum Technologies LLP; see
+[COMMERCIAL-LICENSE.md](https://github.com/mishrasanjeev/agentic-org/blob/main/COMMERCIAL-LICENSE.md).
+"AgenticOrg" and "Grantex" are trademarks of Orchestrum Technologies LLP; the Apache License 2.0
+grants no trademark rights
 ([TRADEMARKS.md](https://github.com/mishrasanjeev/agentic-org/blob/main/TRADEMARKS.md)).

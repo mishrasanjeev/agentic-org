@@ -4,12 +4,17 @@
 
 ### Breaking - licence
 
-- From 21 October 2026 AgenticOrg is licensed under the PolyForm Noncommercial License 1.0.0
-  (SPDX `PolyForm-Noncommercial-1.0.0`) instead of the Apache License 2.0. The licensor is
+- From 21 October 2026 the AgenticOrg platform is licensed under the PolyForm Noncommercial License
+  1.0.0 (SPDX `PolyForm-Noncommercial-1.0.0`) instead of the Apache License 2.0. The licensor is
   Orchestrum Technologies LLP. Only self use is free; commercial use of any sort, including
   internal business use, hosting, resale, embedding in a product and consulting delivery, needs
   prior approval and a written agreement with Orchestrum Technologies LLP
   (`COMMERCIAL-LICENSE.md`, sanjeev@orchestrum.in).
+- Not changed: the Python SDK (`sdk/`), the TypeScript SDK (`sdk-ts/`) and the MCP server
+  (`mcp-server/`) stay open source under the Apache License 2.0, free for any use including
+  commercial. Each now carries its own Apache `LICENSE`; their package metadata, classifiers and
+  SPDX headers are unchanged. README, `COMMERCIAL-LICENSE.md`, `LICENSING.md`, the licensing page,
+  the website footer and `llms.txt` state the split with a directory-to-licence table.
 - The new terms apply to every version published on or after 21 October 2026, including all
   later updates. Versions published before that date remain available under the Apache License
   2.0 they were released with. Existing and new users alike need a written agreement to use a
@@ -17,15 +22,17 @@
 - New `TRADEMARKS.md`: "AgenticOrg" and "Grantex", and their names and logos, are trademarks of
   Orchestrum Technologies LLP; commercial use of the names, logos, hosted services or brand needs
   Orchestrum's prior written approval with any version, including earlier ones.
-- `LICENSE` holds the official PolyForm Noncommercial 1.0.0 text with two `Required Notice:` lines;
+- `LICENSE` holds the official PolyForm Noncommercial 1.0.0 text with three `Required Notice:` lines
+  (copyright, the commercial-agreement requirement, and the Apache-2.0 SDK directories);
   `NOTICE`, `LICENSING.md`, `docs/OWNERSHIP.md`, the terms of service, the public licensing page
   (`/docs/licensing`), every public footer, the README, the SDK and MCP server READMEs, structured
-  data and `llms.txt` state the new licence. `sdk/`, `sdk-ts/` and `mcp-server/` carry a copy of
-  `LICENSE` so published packages include it.
-- Every first-party SPDX header is now `PolyForm-Noncommercial-1.0.0`, and
-  `scripts/check_license_headers.py` requires that identifier on new source files. Package
-  metadata (`pyproject.toml`, `sdk/pyproject.toml`, `ui`, `sdk-ts` and `mcp-server` `package.json`)
-  declares `PolyForm-Noncommercial-1.0.0` and no longer carries the OSI Apache classifier.
+  data and `llms.txt` state the new licence.
+- Every platform SPDX header is now `PolyForm-Noncommercial-1.0.0`; files under `sdk/`, `sdk-ts/`
+  and `mcp-server/` keep `Apache-2.0`. `scripts/check_license_headers.py` requires the identifier
+  for the file's directory on new source files and rejects the other one. The root
+  `pyproject.toml` (whose wheel also carries the Apache-2.0 SDK and vendored schemas) declares
+  `PolyForm-Noncommercial-1.0.0 AND Apache-2.0` and drops the OSI Apache classifier; `ui/package.json`
+  declares `PolyForm-Noncommercial-1.0.0`.
 - Third-party material keeps its own licence: the vendored UCP schemas (`tests/fixtures/ucp/`) and
   ACP schemas (`core/commerce/acp/schemas/`) remain Apache License 2.0, with the licence text in
   `LICENSES/Apache-2.0.txt`.

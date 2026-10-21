@@ -1,17 +1,31 @@
-**AgenticOrg is source-available under the PolyForm Noncommercial License 1.0.0.
+**The AgenticOrg platform is source-available under the PolyForm Noncommercial License 1.0.0.
 Only self use is free. Commercial use of any sort needs Orchestrum's prior approval and a
 written agreement with Orchestrum Technologies LLP.**
 Agreements: [sanjeev@orchestrum.in](mailto:sanjeev@orchestrum.in).
+
+**The AgenticOrg SDKs and the MCP server are open source under the Apache License 2.0,
+free for any use including commercial.**
 
 **Licensor:** Orchestrum Technologies LLP.
 **Licence:** [PolyForm Noncommercial License 1.0.0](https://polyformproject.org/licenses/noncommercial/1.0.0)
 (SPDX `PolyForm-Noncommercial-1.0.0`).
 **Change date:** 21 October 2026.
 
+## Licence scope
+
+| Part of AgenticOrg | Licence |
+| --- | --- |
+| Python SDK (`sdk/`) | Apache License 2.0: open source, free for any use including commercial |
+| TypeScript SDK (`sdk-ts/`) | Apache License 2.0: open source, free for any use including commercial |
+| MCP server (`mcp-server/`) | Apache License 2.0: open source, free for any use including commercial |
+| The platform: API, workers, connectors, UI and website, documentation, scripts and everything else | PolyForm Noncommercial License 1.0.0: commercial use needs a written agreement |
+
+The rest of this page is about the platform.
+
 ## What is free
 
-You may use, copy and modify AgenticOrg without a fee and without asking, for the
-purposes the licence permits:
+You may use, copy and modify the AgenticOrg platform without a fee and without asking,
+for the purposes the licence permits:
 
 - Personal use: personal study, hobby projects, private entertainment and amateur
   pursuits, with no anticipated commercial application.
@@ -27,8 +41,8 @@ the licence terms and the `Required Notice:` lines in the repository's LICENSE f
 
 ## What needs a written agreement
 
-Any commercial use needs a written agreement with Orchestrum Technologies LLP before it
-starts. For example:
+Any commercial use of the platform needs a written agreement with Orchestrum Technologies
+LLP before it starts. The SDKs and MCP server do not. For example:
 
 | Use | Free? |
 | --- | --- |

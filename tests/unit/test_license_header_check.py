@@ -9,6 +9,7 @@ import pytest
 from scripts import check_license_headers as check
 
 HEADER_LINE = "# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0\n"
+SDK_HEADER_LINE = "# SPDX-License-Identifier: Apache-2.0\n"
 
 
 def _git(repo: Path, *args: str) -> str:
@@ -51,23 +52,68 @@ def test_new_source_file_with_header_passes(repo: Path, capsys: pytest.CaptureFi
     assert code == 0
 
 
-def test_header_constant_is_the_polyform_noncommercial_identifier() -> None:
+def test_header_constants_name_the_platform_and_sdk_licences() -> None:
     assert check.HEADER == "SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0"
+    assert check.SDK_HEADER == "SPDX-License-Identifier: Apache-2.0"
+    assert check.SDK_PREFIXES == ("sdk/", "sdk-ts/", "mcp-server/")
 
 
-def test_new_source_file_with_the_retired_apache_identifier_fails(
+def test_new_platform_file_with_the_apache_identifier_fails(
     repo: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    # From 2026-10-21 first-party source is PolyForm-Noncommercial-1.0.0; a new file that
-    # copies an older Apache-2.0 header must not pass.
-    retired = "# SPDX-License-" + "Identifier: Apache-2.0\n"
-    _commit(repo, {"core/copied_header.py": retired + "VALUE = 1\n"})
+    # From 2026-10-21 the platform is PolyForm-Noncommercial-1.0.0; a new platform file that
+    # copies an Apache-2.0 header (for example from an SDK file) must not pass.
+    _commit(repo, {"core/copied_header.py": SDK_HEADER_LINE + "VALUE = 1\n"})
 
     code, out = _run(repo, capsys)
 
     assert code == 1
     assert "core/copied_header.py" in out
     assert check.HEADER in out
+
+
+@pytest.mark.parametrize("path", ["sdk/agenticorg/new.py", "sdk-ts/src/new.ts", "mcp-server/src/new.ts"])
+def test_new_sdk_file_needs_the_apache_identifier(
+    repo: Path, capsys: pytest.CaptureFixture[str], path: str
+) -> None:
+    comment = "# " if path.endswith(".py") else "// "
+    _commit(repo, {path: comment + "SPDX-License-Identifier: Apache-2.0\nexport const x = 1;\n"})
+
+    code, _ = _run(repo, capsys)
+
+    assert code == 0
+
+
+@pytest.mark.parametrize("path", ["sdk/agenticorg/new.py", "sdk-ts/src/new.ts", "mcp-server/src/new.ts"])
+def test_new_sdk_file_with_the_platform_identifier_fails(
+    repo: Path, capsys: pytest.CaptureFixture[str], path: str
+) -> None:
+    comment = "# " if path.endswith(".py") else "// "
+    _commit(repo, {path: comment + "SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0\nx = 1\n"})
+
+    code, out = _run(repo, capsys)
+
+    assert code == 1
+    assert f"{path}: needs '{check.SDK_HEADER}'" in out
+
+
+def test_directory_named_like_an_sdk_inside_the_platform_is_not_an_sdk(
+    repo: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    _commit(repo, {"core/sdk/new.py": SDK_HEADER_LINE + "VALUE = 1\n"})
+
+    code, out = _run(repo, capsys)
+
+    assert code == 1
+    assert "core/sdk/new.py" in out
+
+
+def test_block_comment_header_is_accepted(repo: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    _commit(repo, {"ui/src/thing.js": "/* SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0 */\nexport {};\n"})
+
+    code, _ = _run(repo, capsys)
+
+    assert code == 0
 
 
 def test_new_source_file_without_header_fails_and_is_named(repo: Path, capsys: pytest.CaptureFixture[str]) -> None:

@@ -2,8 +2,9 @@
 
 Hosted platform plans and external provider usage are different. Models, embeddings, calls, messaging, merchant systems and payment providers can charge independently. Self-hosting adds your infrastructure and operating costs. Do not assume an economy label means the provider is free for your account.
 
-The software licence is separate from these charges. AgenticOrg is licensed under the
-PolyForm Noncommercial License 1.0.0: only self use is free, and commercial use of any
+The software licence is separate from these charges. The AgenticOrg platform is licensed under
+the PolyForm Noncommercial License 1.0.0 (the SDKs and MCP server are Apache-2.0, free for any
+use): only self use of the platform is free, and commercial use of any
 sort, including commercial self-hosting, needs a written agreement with Orchestrum
 Technologies LLP. Existing and new users are treated the same for every version
 published on or after 21 October 2026. See [Licensing and commercial use](/docs/licensing);

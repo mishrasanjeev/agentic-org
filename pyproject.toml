@@ -50,7 +50,10 @@ name = "agenticorg"
 version = "4.8.0"
 description = "Repository for evaluating tenant-scoped AI workflow candidates, approval controls, connectors, and operator tooling"
 readme = "README.md"
-license = "PolyForm-Noncommercial-1.0.0"
+# The platform is PolyForm Noncommercial 1.0.0; this wheel also carries the Apache-2.0 Python SDK
+# (sdk/agenticorg) and the vendored Apache-2.0 ACP schemas. See LICENSING.md.
+license = "PolyForm-Noncommercial-1.0.0 AND Apache-2.0"
+license-files = ["LICENSE", "NOTICE", "LICENSES/Apache-2.0.txt"]
 requires-python = ">=3.12"
 authors = [{ name = "Sanjeev Kumar", email = "sanjeev@orchestrum.in" }]
 maintainers = [{ name = "Orchestrum Technologies LLP", email = "sanjeev@orchestrum.in" }]

@@ -1,5 +1,6 @@
 Required Notice: Copyright 2026 Orchestrum Technologies LLP (https://agenticorg.ai)
 Required Notice: Commercial use of this software requires a prior written agreement with Orchestrum Technologies LLP. Write to sanjeev@orchestrum.in. See COMMERCIAL-LICENSE.md and TRADEMARKS.md.
+Required Notice: The sdk/, sdk-ts/ and mcp-server/ directories are not covered by this license; they are licensed under the Apache License 2.0 (see the LICENSE file in each).
 
 # PolyForm Noncommercial License 1.0.0
 

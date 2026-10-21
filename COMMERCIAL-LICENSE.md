@@ -1,8 +1,13 @@
 # Commercial licence
 
-AgenticOrg is source-available under the
+The AgenticOrg platform is source-available under the
 [PolyForm Noncommercial License 1.0.0](LICENSE) (SPDX `PolyForm-Noncommercial-1.0.0`).
 The licensor is **Orchestrum Technologies LLP**.
+
+**SDK carve-out:** the AgenticOrg SDKs (`sdk/`, `sdk-ts/`) and the MCP server (`mcp-server/`)
+are open source under the Apache License 2.0 and free for any use, including commercial use.
+They do not need a commercial licence. Everything on this page is about the platform: every
+other part of this repository.
 
 **Only self use is free. Commercial use of any sort needs Orchestrum's prior approval and a
 written agreement with Orchestrum Technologies LLP.**
@@ -12,8 +17,8 @@ applies; if this page and the licence differ, the licence wins.
 
 ## What is free
 
-You may use, copy and modify AgenticOrg without a fee and without asking, for the purposes the
-PolyForm Noncommercial License 1.0.0 permits:
+You may use, copy and modify the AgenticOrg platform without a fee and without asking, for the
+purposes the PolyForm Noncommercial License 1.0.0 permits:
 
 - **Personal use**: personal study, hobby projects, private entertainment and amateur
   pursuits, with no anticipated commercial application.
@@ -33,8 +38,8 @@ top of [LICENSE](LICENSE).
 
 ## What needs a written agreement
 
-Any commercial use needs a written agreement with Orchestrum Technologies LLP before it starts.
-That includes, for example:
+Any commercial use of the platform needs a written agreement with Orchestrum Technologies LLP
+before it starts. That includes, for example:
 
 - **Internal business use** by a company or any other organisation operating for profit,
   including running AgenticOrg for your own staff, customers, operations or back office.
@@ -79,6 +84,16 @@ Orchestrum's prior written approval whichever version you use; see [TRADEMARKS.m
 
 Hosted subscriptions to Orchestrum-operated services are governed by the plan or agreement you
 accepted for them.
+
+## Licence scope
+
+| Directory | Licence |
+| --- | --- |
+| `sdk/` (Python SDK) | Apache License 2.0: open source, free for any use including commercial |
+| `sdk-ts/` (TypeScript SDK) | Apache License 2.0: open source, free for any use including commercial |
+| `mcp-server/` (MCP server) | Apache License 2.0: open source, free for any use including commercial |
+| `tests/fixtures/ucp/`, `core/commerce/acp/schemas/` (vendored protocol schemas) | Apache License 2.0 (third-party, unchanged) |
+| Everything else: the AgenticOrg platform (`api/`, `core/`, `auth/`, `connectors/`, `ui/` and the website, workers, `docs/`, `scripts/`, `migrations/`, tests) | PolyForm Noncommercial License 1.0.0: commercial use needs a written agreement with Orchestrum Technologies LLP |
 
 ## Third-party material
 

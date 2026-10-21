@@ -15,7 +15,27 @@
   },
   "commercial_terms": "COMMERCIAL-LICENSE.md",
   "trademarks": "TRADEMARKS.md",
-  "covered": "all first-party files in the repository",
+  "covered": "all first-party files in the repository except the apache_2_0_packages paths",
+  "apache_2_0_packages": [
+    {
+      "path": "sdk/",
+      "description": "AgenticOrg Python SDK",
+      "license_id": "Apache-2.0",
+      "license_text": "sdk/LICENSE"
+    },
+    {
+      "path": "sdk-ts/",
+      "description": "AgenticOrg TypeScript SDK",
+      "license_id": "Apache-2.0",
+      "license_text": "sdk-ts/LICENSE"
+    },
+    {
+      "path": "mcp-server/",
+      "description": "AgenticOrg MCP server",
+      "license_id": "Apache-2.0",
+      "license_text": "mcp-server/LICENSE"
+    }
+  ],
   "third_party": [
     {
       "path": "tests/fixtures/ucp/",

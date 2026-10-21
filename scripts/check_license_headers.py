@@ -1,11 +1,18 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
-"""CI guard: new source files must carry an SPDX licence identifier.
+"""CI guard: new source files must carry the SPDX licence identifier for their directory.
 
-Every source file *added* between a base ref and a head ref must contain
-``SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0`` within its first few lines (a shebang
-or encoding line may come first). Files that existed before the check are not
-required to gain a header when they are edited.
+The repository has two licences (see LICENSING.md):
+
+- the client packages ``sdk/``, ``sdk-ts/`` and ``mcp-server/`` are Apache-2.0, so a new
+  source file there must contain ``SPDX-License-Identifier: Apache-2.0``;
+- everything else is the AgenticOrg platform, licensed under the PolyForm Noncommercial
+  License 1.0.0, so a new source file must contain
+  ``SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0``.
+
+The identifier must appear within the first few lines (a shebang or encoding line may come
+first). A file carrying the other directory's identifier fails. Files that existed before the
+check are not required to gain a header when they are edited.
 
 Fails closed: if either ref does not resolve or git fails, the check exits 2
 rather than passing.
@@ -23,7 +30,11 @@ import subprocess
 import sys
 from pathlib import Path, PurePosixPath
 
-HEADER = "SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0"
+PLATFORM_LICENSE = "PolyForm-Noncommercial-1.0.0"
+SDK_LICENSE = "Apache-2.0"
+HEADER = f"SPDX-License-Identifier: {PLATFORM_LICENSE}"
+SDK_HEADER = f"SPDX-License-Identifier: {SDK_LICENSE}"
+SDK_PREFIXES = ("sdk/", "sdk-ts/", "mcp-server/")
 HEADER_WINDOW = 5
 SOURCE_SUFFIXES = frozenset({".py", ".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs", ".sh"})
 EXCLUDED_PREFIXES = ("tests/cassettes/",)
@@ -66,17 +77,31 @@ def requires_header(path: str) -> bool:
     return True
 
 
-def has_header(file_path: Path) -> bool:
+def required_header(path: str) -> str:
+    """The SPDX line a new source file at ``path`` must carry."""
+    return SDK_HEADER if path.startswith(SDK_PREFIXES) else HEADER
+
+
+def _spdx_id(line: str) -> str | None:
+    marker = "SPDX-License-Identifier:"
+    if marker not in line:
+        return None
+    rest = line.split(marker, 1)[1].split()
+    return rest[0].rstrip("*/") if rest else ""
+
+
+def has_header(file_path: Path, header: str = HEADER) -> bool:
+    expected = header.split(":", 1)[1].strip()
     with file_path.open(encoding="utf-8", errors="replace") as handle:
         for index, line in enumerate(handle):
             if index >= HEADER_WINDOW:
                 return False
-            if HEADER in line:
+            if _spdx_id(line) == expected:
                 return True
     return False
 
 
-def missing_headers(repo: Path, base: str, head: str) -> list[str]:
+def missing_headers(repo: Path, base: str, head: str) -> list[tuple[str, str]]:
     missing = []
     for name in added_files(repo, base, head):
         if not requires_header(name):
@@ -84,8 +109,9 @@ def missing_headers(repo: Path, base: str, head: str) -> list[str]:
         file_path = repo / name
         if not file_path.is_file() or file_path.stat().st_size == 0:
             continue
-        if not has_header(file_path):
-            missing.append(name)
+        header = required_header(name)
+        if not has_header(file_path, header):
+            missing.append((name, header))
     return missing
 
 
@@ -103,10 +129,13 @@ def main(argv: list[str] | None = None) -> int:
         return 2
 
     if missing:
-        print(f"New source files without '{HEADER}' in their first {HEADER_WINDOW} lines:")
-        for name in missing:
-            print(f"  {name}")
-        print("Add a comment line, for example '# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0'.")
+        print(f"New source files without their SPDX licence line in the first {HEADER_WINDOW} lines:")
+        for name, header in missing:
+            print(f"  {name}: needs '{header}'")
+        print(
+            f"Platform files use '# {HEADER}'; files under {', '.join(SDK_PREFIXES)} "
+            f"use '# {SDK_HEADER}' (see LICENSING.md)."
+        )
         return 1
     return 0
 

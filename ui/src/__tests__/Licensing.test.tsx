@@ -16,6 +16,9 @@ describe("PolyForm Noncommercial licence notice", () => {
       "Commercial use of any sort needs prior approval and a written agreement with Orchestrum Technologies LLP",
     );
     expect(notice).toHaveTextContent("internal business use");
+    expect(screen.getByText(/SDKs \(Python and TypeScript\) and the MCP server/)).toHaveTextContent(
+      "open source under the Apache License 2.0, free for any use including commercial",
+    );
     expect(screen.getByRole("link", { name: "licensing and commercial use" })).toHaveAttribute(
       "href",
       "/docs/licensing",
@@ -42,8 +45,9 @@ describe("PolyForm Noncommercial licence notice", () => {
   it("puts the licence in every public footer through the ownership disclosure", () => {
     render(<ProductOwnership />);
     const licence = screen.getByTestId("product-licence");
-    expect(licence).toHaveTextContent("Licence: PolyForm Noncommercial 1.0.0");
+    expect(licence).toHaveTextContent("Licence: platform PolyForm Noncommercial 1.0.0");
     expect(licence).toHaveTextContent("Self use is free; commercial use needs a written agreement");
+    expect(licence).toHaveTextContent("SDKs and MCP server: Apache-2.0, free for any use.");
     expect(screen.getByRole("link", { name: "Licensing and commercial use" })).toHaveAttribute(
       "href",
       "/docs/licensing",

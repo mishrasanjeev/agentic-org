@@ -23,6 +23,7 @@ test("the licensing guide states the PolyForm Noncommercial licence and the agre
   assert.match(guide.html, /Internal business use by a company operating for profit/);
   assert.match(guide.html, /Versions published before 21 October 2026 remain available under the Apache\s+License 2\.0 they were released with/);
   assert.match(guide.html, /are trademarks of Orchestrum\s+Technologies LLP/);
+  assert.match(guide.html, /SDKs and the MCP server are open source under the Apache License 2\.0,\s+free for any use including commercial/);
   assert.match(guide.html, /href="mailto:sanjeev@orchestrum.in"/);
   assert.doesNotMatch(guide.html, /revok|withdrawn/i);
 });
@@ -32,10 +33,12 @@ test("licence text, package metadata and the scope record agree", () => {
   const license = read("LICENSE");
   assert.match(license, /^Required Notice: Copyright 2026 Orchestrum Technologies LLP \(https:\/\/agenticorg\.ai\)\r?\n/);
   assert.match(license, /# PolyForm Noncommercial License 1\.0\.0/);
-  assert.match(read("pyproject.toml"), /license = "PolyForm-Noncommercial-1\.0\.0"/);
+  assert.match(read("pyproject.toml"), /license = "PolyForm-Noncommercial-1\.0\.0 AND Apache-2\.0"/);
   assert.doesNotMatch(read("pyproject.toml"), /OSI Approved/);
-  for (const file of ["ui/package.json", "sdk-ts/package.json", "mcp-server/package.json"])
-    assert.equal(JSON.parse(read(file)).license, "PolyForm-Noncommercial-1.0.0", file);
+  assert.equal(JSON.parse(read("ui/package.json")).license, "PolyForm-Noncommercial-1.0.0");
+  for (const file of ["sdk-ts/package.json", "mcp-server/package.json"])
+    assert.equal(JSON.parse(read(file)).license, "Apache-2.0", file);
+  assert.match(read("sdk/pyproject.toml"), /license = "Apache-2\.0"/);
   const scope = JSON.parse(read("licensing/scope.json"));
   assert.equal(scope.status, "adopted");
   assert.equal(scope.license_id, "PolyForm-Noncommercial-1.0.0");
@@ -44,6 +47,8 @@ test("licence text, package metadata and the scope record agree", () => {
   assert.equal(scope.effective_date, "2026-10-21");
   assert.equal(scope.earlier_versions.license_id, "Apache-2.0");
   assert.deepEqual(scope.third_party.map((entry) => entry.path), ["tests/fixtures/ucp/", "core/commerce/acp/schemas/"]);
+  assert.deepEqual(scope.apache_2_0_packages.map((entry) => entry.path), ["sdk/", "sdk-ts/", "mcp-server/"]);
+  for (const entry of scope.apache_2_0_packages) assert.match(read(entry.license_text), /Apache License\s+Version 2\.0/);
   for (const entry of scope.third_party) assert.match(read(entry.license_text), /Apache License\s+Version 2\.0/);
 });
 

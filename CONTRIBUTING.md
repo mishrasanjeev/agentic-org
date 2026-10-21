@@ -2,9 +2,10 @@
 
 We welcome contributions from the community. This guide covers everything you need to get started.
 
-AgenticOrg is source-available under the [PolyForm Noncommercial License 1.0.0](LICENSE).
-Commercial use needs a written agreement with Orchestrum Technologies LLP
-([COMMERCIAL-LICENSE.md](COMMERCIAL-LICENSE.md)). Read the
+The AgenticOrg platform is source-available under the [PolyForm Noncommercial License 1.0.0](LICENSE);
+commercial use needs a written agreement with Orchestrum Technologies LLP
+([COMMERCIAL-LICENSE.md](COMMERCIAL-LICENSE.md)). The SDKs (`sdk/`, `sdk-ts/`) and the MCP
+server (`mcp-server/`) are Apache-2.0 open source. Read the
 [contributor licence](#contributor-licence) before you open a pull request: by contributing,
 you allow Orchestrum to license your contribution commercially as well.
 
@@ -96,10 +97,11 @@ npm run dev    # http://localhost:5173
 
 ### Licence headers
 
-AgenticOrg is licensed under the PolyForm Noncommercial License 1.0.0 (SPDX
-`PolyForm-Noncommercial-1.0.0`). Every **new** source file (`.py`, `.ts`, `.tsx`,
-`.js`, `.jsx`, `.mjs`, `.cjs`, `.sh`) must carry an SPDX identifier within its
-first five lines — after a shebang or encoding line if there is one:
+The platform is licensed under the PolyForm Noncommercial License 1.0.0 (SPDX
+`PolyForm-Noncommercial-1.0.0`); `sdk/`, `sdk-ts/` and `mcp-server/` are Apache-2.0.
+Every **new** source file (`.py`, `.ts`, `.tsx`, `.js`, `.jsx`, `.mjs`, `.cjs`, `.sh`)
+must carry the SPDX identifier for its directory within its first five lines — after a
+shebang or encoding line if there is one. Platform files:
 
 ```python
 # SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
@@ -107,6 +109,12 @@ first five lines — after a shebang or encoding line if there is one:
 
 ```ts
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+```
+
+Files under `sdk/`, `sdk-ts/` and `mcp-server/`:
+
+```ts
+// SPDX-License-Identifier: Apache-2.0
 ```
 
 Files from other projects that are copied into the repository unchanged, such
@@ -337,6 +345,9 @@ stay possible, every contribution is accepted on these terms:
 Submitting a pull request, patch or other contribution means you agree to these terms. If
 your employer has rights in your work, make sure they agree too. Questions go to
 [sanjeev@orchestrum.in](mailto:sanjeev@orchestrum.in).
+
+Contributions to `sdk/`, `sdk-ts/` and `mcp-server/` are also licensed to everyone under the
+Apache License 2.0, the licence of those directories.
 
 Contributions made before 21 October 2026 were made under the Apache License 2.0 that applied
 then.

@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+// SPDX-License-Identifier: Apache-2.0
 import assert from "node:assert/strict";
 import http from "node:http";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";

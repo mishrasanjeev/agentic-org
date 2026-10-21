@@ -6,13 +6,17 @@ Inventor / Owner: Sanjeev Kumar
 Primary contact: sanjeev@orchestrum.in
 Secondary contact: mishra.sanjeev@gmail.com
 
-From 21 October 2026, AgenticOrg is licensed under the PolyForm Noncommercial
-License 1.0.0 (SPDX: PolyForm-Noncommercial-1.0.0). See the LICENSE file.
-Self use is free. Commercial use of any sort requires a prior written agreement
-with Orchestrum Technologies LLP; see COMMERCIAL-LICENSE.md.
+From 21 October 2026, the AgenticOrg platform is licensed under the PolyForm
+Noncommercial License 1.0.0 (SPDX: PolyForm-Noncommercial-1.0.0). See the LICENSE
+file. Self use is free. Commercial use of any sort requires a prior written
+agreement with Orchestrum Technologies LLP; see COMMERCIAL-LICENSE.md.
 
-These terms apply to every version published on or after 21 October 2026,
-including all later updates. Versions published before that date remain
+The AgenticOrg SDKs (sdk/, sdk-ts/) and the MCP server (mcp-server/) are open
+source under the Apache License 2.0 (SPDX: Apache-2.0), free for any use
+including commercial; see the LICENSE file in each of those directories.
+
+The PolyForm terms apply to every platform version published on or after
+21 October 2026, including all later updates. Versions published before that date remain
 available under the Apache License 2.0 they were released with.
 
 "AgenticOrg" and "Grantex", and their names and logos, are trademarks of
