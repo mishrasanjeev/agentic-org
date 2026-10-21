@@ -138,12 +138,15 @@ class FakeDemoGrantex:
                 "merchant_id": request["merchant_id"],
                 "seller_agent_id": request["seller_agent_id"],
                 "source_system": evidence["source_system"],
+                # As Grantex marks every synthetic issuance (grantex PR 1811), discovery state included.
+                "synthetic_data": True,
                 "source_evidence_ref": evidence["source_evidence_ref"],
                 "source_observed_at": evidence["source_observed_at"],
                 "source_lineage": {
                     "source_system": evidence["source_system"],
                     "synthetic_data": True,
                     "merchant_system_source_of_record": False,
+                    "raw_provider_payload_stored_by_grantex": False,
                 },
                 "allowed_to_execute": False,
                 "no_payment_execution": True,
