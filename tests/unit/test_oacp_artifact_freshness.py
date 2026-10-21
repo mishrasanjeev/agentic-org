@@ -259,3 +259,21 @@ def test_the_sweep_is_scheduled_on_the_existing_beat() -> None:
     assert entry["task"] == "core.tasks.oacp_freshness_tasks.sweep_artifact_freshness"
     assert entry["schedule"] == 300.0 and entry["options"] == {"queue": "maintenance"}
     assert "core.tasks.oacp_freshness_tasks" in app.conf.include
+
+
+def test_the_celery_task_runs_the_sweep_and_logs_only_when_enabled(monkeypatch: pytest.MonkeyPatch) -> None:
+    from core.tasks import oacp_freshness_tasks
+
+    outcomes = iter([{"enabled": 0, "scopes": 0, "refreshed": 0}, {"enabled": 1, "scopes": 3, "refreshed": 1}])
+
+    async def _sweep() -> dict[str, int]:
+        return next(outcomes)
+
+    logged: list[dict[str, Any]] = []
+    monkeypatch.setattr(fresh, "sweep", _sweep)
+    monkeypatch.setattr(oacp_freshness_tasks.logger, "info", lambda event, **kw: logged.append({"event": event, **kw}))
+    monkeypatch.setattr(oacp_freshness_tasks, "run_async", asyncio.run)
+    assert oacp_freshness_tasks.sweep_artifact_freshness() == {"enabled": 0, "scopes": 0, "refreshed": 0}
+    assert logged == []
+    assert oacp_freshness_tasks.sweep_artifact_freshness() == {"enabled": 1, "scopes": 3, "refreshed": 1}
+    assert logged == [{"event": "oacp_freshness_sweep", "scopes": 3, "refreshed": 1}]
