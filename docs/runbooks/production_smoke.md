@@ -78,6 +78,16 @@ Do not stop production embeddings to manufacture a failure. After deployment,
 verify the flag on all three services, worker task registration and real
 upload/search/excerpt success; list untested cold-start paths explicitly.
 
+The hosted embedding service scales to zero. When it is cold (a cold start
+took about 80 s on 2026-10-20) the first upload after idle is accepted as
+`processing` with "Retry pending" and is indexed by the worker within about
+three minutes; that is the recovery path working, not a failure. The post-deploy
+browser test `ui/e2e/knowledge-upload-recovery.spec.ts` waits for it within
+`KNOWLEDGE_INDEX_BUDGET_MS` (`ui/e2e/helpers/knowledge.ts`), which
+`tests/regression/test_knowledge_upload_e2e_budget_20261021.py` keeps in step
+with the retry delays, the beat period and the embedding read timeout. A row
+that ends `failed`, or stays `processing` past that budget, is a real failure.
+
 ## No-New-Infra Policy
 
 Do not create new GCP infrastructure for smoke readiness unless the owner separately approves a costed proposal. This includes Cloud Run services, jobs, databases, queues, schedulers, buckets, VPC resources, Artifact Registry repositories, Pub/Sub topics, or service accounts.
