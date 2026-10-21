@@ -1,5 +1,18 @@
 # Changelog
 
+## Unreleased - Custom domains guide on the documentation site
+
+- New OACP guide "Your own domain for buyer agents" (`/docs/oacp-custom-domains`, figure
+  `oacp-custom-domain`). It covers the merchant flow on Commerce > Custom Domains, the CNAME and TXT
+  records, the Search Console owner, every check and its fix, retry and removal, and the main domain
+  without redirects (Cloudflare Worker and nginx examples). For platform operators it covers the
+  settings to turn it on, the operator queue (connect and disconnect), the Cloud Run limits, the load
+  balancer cost as a future decision, and how to turn it off.
+- The merchant setup checklist links to it from phase 3, and the feature switches guide lists every
+  custom-domain setting. `docs/oacp/merchant-custom-domains.md` has a production turn-on section with
+  the exact commands. The UI image build includes the two custom-domain sources (`.dockerignore`),
+  and the sitemap, `llms*.txt` and the CSP hashes are regenerated.
+
 ## Unreleased - Demo merchant seed on production schemas
 
 - Fixed: the OACP demo merchant seed failed in production on `ck_c6z_onboarding_connector`.
