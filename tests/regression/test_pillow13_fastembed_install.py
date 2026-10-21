@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 """Pillow 13 is installed even though fastembed 0.9.0 declares ``pillow<13``.
 
 The 2026-10 Pillow advisories (JPEG, TIFF and GIF decoders, reachable through
