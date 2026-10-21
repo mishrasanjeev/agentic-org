@@ -8,6 +8,8 @@ Live payment stays off until a payment-provider sandbox run has passed. Nothing 
 
 ## The five phases
 
+Want to see the result first? [Nilgiri Tea House](/docs/oacp-example-nilgiri-tea) is a live example shop that went through every phase except payments.
+
 ```figure
 oacp-setup-path | Five phases from shop to sales | Connect your shop, connect to Grantex, publish your UCP profile, open sales channels, and finally turn on payments. The last phase stays off until a payment-provider sandbox run has passed.
 ```
