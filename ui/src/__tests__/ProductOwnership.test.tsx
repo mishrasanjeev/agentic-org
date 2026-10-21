@@ -19,4 +19,15 @@ describe("ProductOwnership", () => {
       "mailto:mishra.sanjeev@gmail.com",
     );
   });
+
+  it.each(["light", "dark"] as const)(
+    "underlines its links so they are not distinguished by colour alone (%s tone)",
+    (tone) => {
+      // axe link-in-text-block failed on the licensing link inside the licence sentence.
+      render(<ProductOwnership tone={tone} />);
+      for (const link of screen.getAllByRole("link")) {
+        expect(link.className.split(/\s+/)).toContain("underline");
+      }
+    },
+  );
 });
