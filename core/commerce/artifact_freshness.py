@@ -272,7 +272,7 @@ async def _refresh_and_release(client: Any, scope: Scope, token: str, reason: st
             await client.set(scope.key("backoff"), outcome, ex=_BACKOFF_SECONDS.get(outcome, RETRY_BACKOFF_SECONDS))
         if await client.get(scope.key("lock")) == token:
             await client.delete(scope.key("lock"))
-    # enterprise-gate: broad-except-ok reason=lock-and-backoff-keys-expire-on-their-ttl
+    # enterprise-gate: broad-except-ok reason=bookkeeping-failure-logged-lock-and-backoff-keys-expire-on-their-ttl
     except Exception as exc:
         logger.warning("oacp_refresh_bookkeeping_failed", error_type=type(exc).__name__)
     logger.info("oacp_refresh_finished", reason=reason, outcome=outcome)
