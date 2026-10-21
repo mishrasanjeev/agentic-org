@@ -13,6 +13,7 @@ from __future__ import annotations
 import asyncio
 import json
 import os
+import re
 import subprocess
 import sys
 import uuid
@@ -287,18 +288,39 @@ async def test_rows_are_isolated_by_rls_and_listed_only_in_platform_context(db, 
 
     role = f"cd_rls_{uuid.uuid4().hex[:8]}"
     async with db.begin() as conn:
+        # The table's schema as the test connection resolves it: a CI database can keep the
+        # tables in a per-user schema that the probe role's own search_path would not reach.
+        schema = str((await conn.execute(text("SELECT current_schema()"))).scalar_one())
+        assert re.fullmatch(r"[a-z_][a-z0-9_]*", schema), schema
         await conn.execute(text(f"CREATE ROLE {role} NOLOGIN NOBYPASSRLS"))
-        await conn.execute(text(f"GRANT SELECT, INSERT ON merchant_custom_domains TO {role}"))
+        await conn.execute(text(f"GRANT USAGE ON SCHEMA {schema} TO {role}"))
+        await conn.execute(text(f"GRANT SELECT, INSERT ON {schema}.merchant_custom_domains TO {role}"))
+
+    async def as_probe(conn, **ctx: str) -> None:
+        await conn.execute(text(f"SET LOCAL ROLE {role}"))
+        await conn.execute(text("SELECT set_config('search_path', :s, true)"), {"s": schema})
+        for key, value in ctx.items():
+            await conn.execute(text("SELECT set_config(:k, :v, true)"), {"k": f"agenticorg.{key}", "v": value})
 
     async def count(**ctx: str) -> int:
         async with db.begin() as conn:
-            await conn.execute(text(f"SET LOCAL ROLE {role}"))
-            for key, value in ctx.items():
-                await conn.execute(text("SELECT set_config(:k, :v, true)"), {"k": f"agenticorg.{key}", "v": value})
+            await as_probe(conn, **ctx)
             result = await conn.execute(
                 text("SELECT count(*) FROM merchant_custom_domains WHERE tenant_id = CAST(:t AS uuid)"), {"t": tenant_a}
             )
             return int(result.scalar_one())
+
+    async def insert_as_probe(host: str, **ctx: str) -> None:
+        async with db.begin() as conn:
+            await as_probe(conn, **ctx)
+            await conn.execute(
+                text(
+                    "INSERT INTO merchant_custom_domains "
+                    "(id, tenant_id, merchant_id, host, cname_target, created_by) "
+                    "VALUES (:id, CAST(:t AS uuid), 'm', :host, 'ghs.googlehosted.com', 'test')"
+                ),
+                {"id": uuid.uuid4(), "t": tenant_a, "host": host},
+            )
 
     try:
         assert await count(tenant_id=tenant_a) == 1
@@ -306,33 +328,14 @@ async def test_rows_are_isolated_by_rls_and_listed_only_in_platform_context(db, 
         assert await count() == 0
         assert await count(platform_ctx="1") == 1
         with pytest.raises(Exception, match="row-level security"):
-            async with db.begin() as conn:
-                await conn.execute(text(f"SET LOCAL ROLE {role}"))
-                await conn.execute(text("SELECT set_config('agenticorg.tenant_id', :v, true)"), {"v": tenant_b})
-                await conn.execute(
-                    text(
-                        "INSERT INTO merchant_custom_domains "
-                        "(id, tenant_id, merchant_id, host, cname_target, created_by) "
-                        "VALUES (:id, CAST(:t AS uuid), 'm', 'x.merchant.example', 'ghs.googlehosted.com', 'test')"
-                    ),
-                    {"id": uuid.uuid4(), "t": tenant_a},
-                )
+            await insert_as_probe("x.merchant.example", tenant_id=tenant_b)
         # The platform context reads but never writes.
         with pytest.raises(Exception, match="row-level security"):
-            async with db.begin() as conn:
-                await conn.execute(text(f"SET LOCAL ROLE {role}"))
-                await conn.execute(text("SELECT set_config('agenticorg.platform_ctx', '1', true)"))
-                await conn.execute(
-                    text(
-                        "INSERT INTO merchant_custom_domains "
-                        "(id, tenant_id, merchant_id, host, cname_target, created_by) "
-                        "VALUES (:id, CAST(:t AS uuid), 'm', 'y.merchant.example', 'ghs.googlehosted.com', 'test')"
-                    ),
-                    {"id": uuid.uuid4(), "t": tenant_a},
-                )
+            await insert_as_probe("y.merchant.example", platform_ctx="1")
     finally:
         async with db.begin() as conn:
-            await conn.execute(text(f"REVOKE ALL ON merchant_custom_domains FROM {role}"))
+            await conn.execute(text(f"REVOKE ALL ON {schema}.merchant_custom_domains FROM {role}"))
+            await conn.execute(text(f"REVOKE USAGE ON SCHEMA {schema} FROM {role}"))
             await conn.execute(text(f"DROP ROLE {role}"))
 
 
