@@ -38,6 +38,40 @@ table. It is tenant scoped with ENABLE + FORCE row-level security, a
 policy. The status task and the operator queue use that policy to list rows
 across tenants. Every write runs in the owning tenant's session.
 
+### Production turn-on
+
+The settings go on `agenticorg-api`, which serves the routes, and on
+`agenticorg-worker`, which runs the status task and sends the operator email
+over the existing SMTP settings. `agenticorg-beat` only schedules the task.
+`scripts/deploy_cloud_run.sh` uses `--update-env-vars`, so these values
+survive later deploys.
+
+1. Deploy a commit that contains `v6z91_merchant_custom_domains` with
+   `--with-migrations`, so the migrate job creates the table.
+2. Find the operator tenant id: sign in to the app as an administrator of your
+   own organization and open `/api/v1/auth/me` (the `tenant_id` field).
+3. Apply the settings (each command creates a new revision with no image change):
+
+   ```bash
+   gcloud run services update agenticorg-api --project=PROJECT_ID --region=asia-southeast1 --update-env-vars=AGENTICORG_CUSTOM_DOMAINS_ENABLED=true,AGENTICORG_CUSTOM_DOMAIN_MAPPING_ACCOUNT=MAPPING_ACCOUNT_EMAIL,AGENTICORG_CUSTOM_DOMAIN_OPERATOR_TENANT_ID=OPERATOR_TENANT_ID,AGENTICORG_CUSTOM_DOMAIN_OPERATOR_EMAIL=OPERATOR_INBOX,AGENTICORG_CUSTOM_DOMAIN_CLOUD_RUN_PROJECT=PROJECT_ID
+   ```
+
+   ```bash
+   gcloud run services update agenticorg-worker --project=PROJECT_ID --region=asia-southeast1 --update-env-vars=AGENTICORG_CUSTOM_DOMAINS_ENABLED=true,AGENTICORG_CUSTOM_DOMAIN_MAPPING_ACCOUNT=MAPPING_ACCOUNT_EMAIL,AGENTICORG_CUSTOM_DOMAIN_OPERATOR_TENANT_ID=OPERATOR_TENANT_ID,AGENTICORG_CUSTOM_DOMAIN_OPERATOR_EMAIL=OPERATOR_INBOX,AGENTICORG_CUSTOM_DOMAIN_CLOUD_RUN_PROJECT=PROJECT_ID
+   ```
+
+4. Verify:
+   - `https://app.agenticorg.ai/api/v1/health` answers `healthy`.
+   - The API service's own URL (`gcloud run services describe agenticorg-api
+     --format='value(status.url)'`) answers `/.well-known/agenticorg-host` with
+     `{"service": "agenticorg", "host": "<that host>"}`, and so does any host
+     already mapped to the service. It is 404 while the flag is off. The UI
+     host does not proxy this path.
+   - **Commerce > Custom Domains** loads for a merchant, and the operator queue
+     shows for the operator tenant's administrators.
+5. Rollback: run the same commands with `AGENTICORG_CUSTOM_DOMAINS_ENABLED=false`,
+   or move traffic back to the previous revisions.
+
 ## Merchant flow
 
 The merchant works in **Commerce > Custom Domains** (`/dashboard/custom-domains`,

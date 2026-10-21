@@ -142,6 +142,8 @@ docs/**
 !docs/oacp/artifact-cache-guide.md
 !docs/oacp/end-user-flow.md
 !docs/oacp/merchant-commerce-configuration.md
+!docs/oacp/merchant-apex-domain.md
+!docs/oacp/merchant-custom-domains.md
 !docs/oacp/mandates.md
 !docs/oacp/offline-pos-bridge.md
 !docs/oacp/plural-executor.md

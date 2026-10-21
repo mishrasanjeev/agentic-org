@@ -49,7 +49,7 @@ Publish | Record your opt-in to public discovery. The next Grantex authority req
 Profile goes live | When the UCP profile switch is on and Grantex has issued an allowing discovery artifact, the profile is served. | Owner: Platform operator | If blocked: The profile answers 404 until every condition holds; the UCP status view shows which one is missing.
 ```
 
-Your operator must also route your shop host to the AgenticOrg service with the original host name intact.
+Your operator must also route your shop host to the AgenticOrg service with the original host name intact. The easiest way is the **Custom Domains** page. It runs the TXT step above for you, adds the CNAME record that routes the host, and follows the domain until its certificate is live. See [Your own domain for buyer agents](/docs/oacp-custom-domains).
 
 ## Phase 4. Open your sales channels
 

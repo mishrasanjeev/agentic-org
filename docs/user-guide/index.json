@@ -485,6 +485,16 @@
       ]
     },
     {
+      "slug": "oacp-custom-domains",
+      "title": "Your own domain for buyer agents",
+      "description": "Connect a subdomain you own for your UCP profile: the CNAME and TXT records, the Search Console owner, every check and its fix, your main domain without redirects, and the operator steps, limits and costs.",
+      "group": "OACP — agentic commerce, made safe",
+      "audience": "Merchants and platform operators",
+      "reviewed": "2026-10-21",
+      "colorScheme": "adaptive",
+      "sources": ["docs/oacp/merchant-custom-domains.md", "docs/oacp/merchant-apex-domain.md", "docs/oacp/ucp-profile.md", "ui/src/components/docs/OacpGuideFigures.tsx"]
+    },
+    {
       "slug": "oacp-safety-and-trust",
       "title": "Safety and trust",
       "description": "Revocation everywhere, the arbiter's eight rules in plain words, the ledger and its offline check, agent request signatures in log and enforce mode, and how to read a refusal.",
