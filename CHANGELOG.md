@@ -1,5 +1,66 @@
 # Changelog
 
+## Unreleased - On-demand OACP artifact freshness
+
+- Fixed (behind a flag): every merchant's UCP catalog, ACP feed, checkout decisions and public UCP
+  profile went unavailable a minute after a Grantex issuance, because nothing renewed the
+  short-lived artifacts (inventory 60 s, mandate capability 2 min, price 5 min, public discovery
+  15 min). With `AGENTICORG_OACP_ON_DEMAND_REFRESH_ENABLED=true` (default off) those reads renew the
+  merchant scope once when a required artifact is expired or expiring: a Redis single-flight lock
+  per scope, at most one issuance every 30 s, backoff after a failure or refusal, a read wait of at
+  most `AGENTICORG_OACP_REFRESH_WAIT_MS` (default 3000) after which the existing fail-closed refusal
+  stands, connector evidence re-read first when it is too old for Grantex, every write ledgered,
+  and the scope's cache bounded (newest 6 records per type, expired ones dropped after 5 minutes).
+  Host routes refresh before they open any transaction. Nothing is issued while nobody reads.
+- New optional beat task `sweep-oacp-artifact-freshness` (every 5 minutes, existing beat and
+  worker; a no-op unless `AGENTICORG_OACP_REFRESH_SWEEP_ENABLED` and the on-demand flag are true)
+  refreshing only scopes read in the last 15 minutes. Guide:
+  `docs/oacp/artifact-cache-guide.md#on-demand-freshness`.
+- The read-only Shopify sync route's body moved into a helper the refresh shares; its behaviour is
+  unchanged.
+- The seed script's `--keep-fresh-minutes` loop is removed: the on-demand refresh keeps the demo
+  merchant fresh while it is being used.
+
+## Unreleased - OACP demo merchant (synthetic)
+
+- New `scripts/seed_oacp_demo_merchant.py`: creates, converges or tears down one clearly labelled
+  synthetic demo merchant, the invented tea retailer "Nilgiri Tea House" (tenant
+  `13bd6961-b1e4-56ca-b242-91fbdfe1b1b0`, admin `demo-admin@demo.agenticorg.example`): 10 teas and
+  accessories in INR with stock, one Ooty store with `Asia/Kolkata` hours, a returns policy, the UCP
+  signing key, the Grantex authority request with verified caching of the issued artifacts, and the
+  public host in two runs: `--serving-host nilgiritea.agenticorg.ai` prints the exact DNS TXT record
+  to create, `--verify-host` attests it after propagation and publishes the UCP profile
+  (namespace `ai.agenticorg.nilgiritea`). Dry run by default (`--apply` writes); every write
+  goes through the route handler and records its commerce ledger event in a tenant-bound session;
+  `--teardown` deletes
+  the demo's commerce rows and keeps the append-only ledger. It stops with the tenant id to
+  allowlist when Grantex answers `service_tenant_not_allowed`, and with exit code 4 when Grantex
+  does not accept the synthetic source. Runbook (with the Cloud Run domain mapping straight to
+  `agenticorg-api` and the DNS records): `docs/runbooks/oacp-demo-merchant.md`. A Postgres test
+  drives the real app on `Host: nilgiritea.agenticorg.ai`: profile, catalog and location reads,
+  a UCP checkout and an ACP checkout session with a merchant-issued API key; no app change was
+  needed for the host.
+- New flag `AGENTICORG_OACP_DEMO_MERCHANT_ENABLED` (default off): the `synthetic_demo` connector
+  source (merchant config, onboarding packet, connector evidence and authority request, which says
+  `synthetic_data: true`). Off, every path accepts Shopify read-only sources only and an artifact
+  naming the synthetic source is refused at caching, exactly as before. On, such an artifact is
+  cached only for a tenant whose catalogue row carries the demo marker; any other tenant gets
+  `422 synthetic_demo_artifact_refused` on the ledger. Shopify payloads are unchanged either way.
+- Onboarding packets and connector evidence rows now store the connector source they carry instead
+  of always writing `shopify` (every existing row is Shopify, so nothing changes for them), and
+  synthetic catalog variants get `synthetic_demo_variant:` UCP item ids.
+
+## Unreleased - Merchant config object lists
+
+- Fixed: `PUT /api/v1/commerce/runtime/merchant-configs/{merchant_id}` stored every object inside a
+  list of `provider_policy` (and of the brand profile and freshness policy) as its Python text, so
+  the documented `provider_policy.ucp.links` (`privacy_policy`, `terms_of_service`), `payment_terms`
+  and `fulfillment.method_combinations` were silently lost: UCP checkouts and the ACP feed showed no
+  merchant links. Lists of objects and nested lists now keep their shape, each object passing the
+  same unsafe-value checks (an object member such as `access_token` inside a list is now refused
+  like one outside it); lists of plain values are cleaned exactly as before. Regression:
+  `tests/regression/test_merchant_config_object_lists_20261021.py`.
+
 ## Unreleased - Merchant custom domains
 
 - Merchants connect their own subdomain for the UCP profile and routes from **Commerce > Custom Domains**

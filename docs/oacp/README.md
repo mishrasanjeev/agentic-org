@@ -52,6 +52,7 @@ listed above.
 - [Runtime launch closure PRD](runtime-launch-closure-prd.md)
 - [OACP end-user flow](end-user-flow.md)
 - [Merchant commerce configuration](merchant-commerce-configuration.md)
+- [OACP demo merchant (synthetic)](../runbooks/oacp-demo-merchant.md)
 - [Seller Commerce Agent onboarding](seller-commerce-agent-onboarding.md)
 - [Shopify merchant onboarding](shopify-merchant-onboarding.md)
 - [Shopify connector setup](shopify-connector-setup.md)

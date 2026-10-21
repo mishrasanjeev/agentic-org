@@ -107,6 +107,17 @@ UCP profile flags: `AGENTICORG_UCP_PROFILE_ENABLED` (default off; `/.well-known/
 key, and no `public_discovery_state` artifact may enable discovery), `AGENTICORG_UCP_VERSIONS`
 (default `2026-04-08`), `AGENTICORG_UCP_KEY_ROTATION_GRACE_DAYS` (default 7, minimum 7); see
 `docs/oacp/ucp-profile.md`.
+Demo merchant: `AGENTICORG_OACP_DEMO_MERCHANT_ENABLED` (default off; on, the clearly labelled
+`synthetic_demo` connector source is accepted for the one demo tenant that
+`scripts/seed_oacp_demo_merchant.py` creates, and an artifact naming it is cached only for a tenant
+carrying the demo marker; off, only Shopify read-only sources are accepted, as before). Never
+present synthetic data as a merchant system; see `docs/runbooks/oacp-demo-merchant.md`.
+Artifact freshness: `AGENTICORG_OACP_ON_DEMAND_REFRESH_ENABLED` (default off; a read that needs an
+expired or expiring short-lived artifact renews its merchant scope once, through a Redis single-flight
+lock with a 30 s minimum interval and backoff, waiting at most `AGENTICORG_OACP_REFRESH_WAIT_MS`;
+never inside an open transaction; stale stays refused) and `AGENTICORG_OACP_REFRESH_SWEEP_ENABLED`
+(default off; the 5-minute beat refreshes only scopes read in the last 15 minutes). No always-on loop
+issues artifacts; see `docs/oacp/artifact-cache-guide.md#on-demand-freshness`.
 Merchant custom domains: `AGENTICORG_CUSTOM_DOMAINS_ENABLED` (default off; the custom-domain routes
 and `/.well-known/agenticorg-host` answer 404 and the status task does nothing) and
 `AGENTICORG_CUSTOM_DOMAIN_CLOUD_RUN_AUTOMAP_ENABLED` (default off; an operator runs the generated
