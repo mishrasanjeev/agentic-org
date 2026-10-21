@@ -18,6 +18,24 @@
     "tenant_required": false
   },
   {
+    "audit_event": "none-public-custom-domain-host-check",
+    "auth_required": false,
+    "function": "host_check",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/.well-known/agenticorg-host api/v1/merchant_custom_domains.py:host_check",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/merchant_custom_domains.py",
+    "path": "/api/v1/.well-known/agenticorg-host",
+    "public_exempt_reason": "custom-domain-probe-echoes-only-the-request-host",
+    "rate_limit": "ucp-discovery",
+    "scope": "public:custom_domain.host_check",
+    "source_line": 820,
+    "tenant_required": false
+  },
+  {
     "audit_event": "none-public-ucp-profile",
     "auth_required": false,
     "function": "ucp_business_profile",
@@ -3150,6 +3168,60 @@
     "tenant_required": false
   },
   {
+    "audit_event": "commerce.custom_domain.operator_queue.read",
+    "auth_required": true,
+    "function": "list_operator_queue",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/commerce/custom-domains/operator-queue api/v1/merchant_custom_domains.py:list_operator_queue",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/merchant_custom_domains.py",
+    "path": "/api/v1/commerce/custom-domains/operator-queue",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "commerce.runtime.merchant_config.read",
+    "source_line": 733,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "commerce.custom_domain.operator.failed",
+    "auth_required": true,
+    "function": "mark_failed",
+    "idempotency": "overwrites-failure-reason",
+    "key": "POST /api/v1/commerce/custom-domains/operator-queue/{domain_id}/failed api/v1/merchant_custom_domains.py:mark_failed",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/merchant_custom_domains.py",
+    "path": "/api/v1/commerce/custom-domains/operator-queue/{domain_id}/failed",
+    "public_exempt_reason": null,
+    "rate_limit": "commerce-runtime-write",
+    "scope": "commerce.runtime.merchant_config.write",
+    "source_line": 787,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "commerce.custom_domain.operator.mapped",
+    "auth_required": true,
+    "function": "mark_mapped",
+    "idempotency": "no-op-when-already-mapped",
+    "key": "POST /api/v1/commerce/custom-domains/operator-queue/{domain_id}/mapped api/v1/merchant_custom_domains.py:mark_mapped",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/merchant_custom_domains.py",
+    "path": "/api/v1/commerce/custom-domains/operator-queue/{domain_id}/mapped",
+    "public_exempt_reason": null,
+    "rate_limit": "commerce-runtime-write",
+    "scope": "commerce.runtime.merchant_config.write",
+    "source_line": 760,
+    "tenant_required": true
+  },
+  {
     "audit_event": null,
     "auth_required": true,
     "function": "export_acp_feed",
@@ -3600,6 +3672,78 @@
     "tenant_required": true
   },
   {
+    "audit_event": "commerce.custom_domain.remove",
+    "auth_required": true,
+    "function": "remove_custom_domain",
+    "idempotency": "no-op-when-no-domain",
+    "key": "DELETE /api/v1/commerce/runtime/merchant-configs/{merchant_id}/custom-domain api/v1/merchant_custom_domains.py:remove_custom_domain",
+    "metadata_present": true,
+    "methods": [
+      "DELETE"
+    ],
+    "module": "api/v1/merchant_custom_domains.py",
+    "path": "/api/v1/commerce/runtime/merchant-configs/{merchant_id}/custom-domain",
+    "public_exempt_reason": null,
+    "rate_limit": "commerce-runtime-write",
+    "scope": "commerce.runtime.merchant_config.write",
+    "source_line": 520,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "commerce.custom_domain.read",
+    "auth_required": true,
+    "function": "get_custom_domain",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/commerce/runtime/merchant-configs/{merchant_id}/custom-domain api/v1/merchant_custom_domains.py:get_custom_domain",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/merchant_custom_domains.py",
+    "path": "/api/v1/commerce/runtime/merchant-configs/{merchant_id}/custom-domain",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "commerce.runtime.merchant_config.read",
+    "source_line": 279,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "commerce.custom_domain.add",
+    "auth_required": true,
+    "function": "add_custom_domain",
+    "idempotency": "same-host-returns-the-existing-domain",
+    "key": "POST /api/v1/commerce/runtime/merchant-configs/{merchant_id}/custom-domain api/v1/merchant_custom_domains.py:add_custom_domain",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/merchant_custom_domains.py",
+    "path": "/api/v1/commerce/runtime/merchant-configs/{merchant_id}/custom-domain",
+    "public_exempt_reason": null,
+    "rate_limit": "commerce-runtime-external",
+    "scope": "commerce.runtime.merchant_config.write",
+    "source_line": 306,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "commerce.custom_domain.check",
+    "auth_required": true,
+    "function": "check_custom_domain",
+    "idempotency": "re-checks-current-state",
+    "key": "POST /api/v1/commerce/runtime/merchant-configs/{merchant_id}/custom-domain/check api/v1/merchant_custom_domains.py:check_custom_domain",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/merchant_custom_domains.py",
+    "path": "/api/v1/commerce/runtime/merchant-configs/{merchant_id}/custom-domain/check",
+    "public_exempt_reason": null,
+    "rate_limit": "commerce-runtime-external",
+    "scope": "commerce.runtime.merchant_config.write",
+    "source_line": 434,
+    "tenant_required": true
+  },
+  {
     "audit_event": "commerce.runtime.merchant_config.readiness",
     "auth_required": true,
     "function": "get_merchant_commerce_config_readiness",
@@ -3650,7 +3794,7 @@
     "public_exempt_reason": null,
     "rate_limit": "credential-write",
     "scope": "commerce.runtime.merchant_config.write",
-    "source_line": 364,
+    "source_line": 392,
     "tenant_required": true
   },
   {
@@ -3668,7 +3812,7 @@
     "public_exempt_reason": null,
     "rate_limit": "credential-write",
     "scope": "commerce.runtime.merchant_config.write",
-    "source_line": 383,
+    "source_line": 411,
     "tenant_required": true
   },
   {
@@ -3686,7 +3830,7 @@
     "public_exempt_reason": null,
     "rate_limit": "commerce-runtime-write",
     "scope": "commerce.runtime.merchant_config.write",
-    "source_line": 436,
+    "source_line": 464,
     "tenant_required": true
   },
   {
@@ -3722,7 +3866,7 @@
     "public_exempt_reason": null,
     "rate_limit": "commerce-runtime-external",
     "scope": "commerce.runtime.merchant_config.write",
-    "source_line": 236,
+    "source_line": 253,
     "tenant_required": true
   },
   {
@@ -3740,7 +3884,7 @@
     "public_exempt_reason": null,
     "rate_limit": "commerce-runtime-write",
     "scope": "commerce.runtime.merchant_config.write",
-    "source_line": 487,
+    "source_line": 515,
     "tenant_required": true
   },
   {

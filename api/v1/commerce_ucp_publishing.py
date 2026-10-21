@@ -194,11 +194,36 @@ async def request_serving_host_challenge(
     host = normalize_host(body.host)
     if host is None:
         raise HTTPException(422, "host must be a registered domain name (no IP literal, port or path)")
-    challenge = {**new_dns_challenge(host), "created_at": _iso(_now()), "created_by": _actor(request)}
+    challenge = await issue_serving_host_challenge(
+        tenant_id=tenant_id,
+        merchant_id=merchant_id,
+        seller_agent_id=body.seller_agent_id,
+        host=host,
+        actor=_actor(request),
+    )
+    return {
+        "host": host,
+        "dns_record": {
+            "name": challenge["record_name"],
+            "type": "TXT",
+            "value": challenge["record_value"],
+        },
+        "next": "Publish the TXT record, then POST .../ucp/serving-host/verify.",
+    }
+
+
+async def issue_serving_host_challenge(
+    *,
+    tenant_id: str,
+    merchant_id: str,
+    seller_agent_id: str | None,
+    host: str,
+    actor: dict[str, str],
+) -> dict[str, Any]:
+    """Store a fresh DNS TXT challenge for ``host`` (a normalized host) and ledger it; returns the challenge."""
+    challenge = {**new_dns_challenge(host), "created_at": _iso(_now()), "created_by": actor}
     async with get_tenant_session(uuid.UUID(tenant_id)) as session:
-        row = await _locked_row(
-            session, tenant_id=tenant_id, merchant_id=merchant_id, seller_agent_id=body.seller_agent_id
-        )
+        row = await _locked_row(session, tenant_id=tenant_id, merchant_id=merchant_id, seller_agent_id=seller_agent_id)
         state = ucp_state(row.public_publishing)
         state["challenge"] = challenge
         row.public_publishing = with_ucp_state(row.public_publishing, state)
@@ -213,15 +238,7 @@ async def request_serving_host_challenge(
             payload={"host": host, "record_name": challenge["record_name"]},
             resource_id=row.config_id,
         )
-    return {
-        "host": host,
-        "dns_record": {
-            "name": challenge["record_name"],
-            "type": "TXT",
-            "value": challenge["record_value"],
-        },
-        "next": "Publish the TXT record, then POST .../ucp/serving-host/verify.",
-    }
+    return challenge
 
 
 @router.post("/merchant-configs/{merchant_id}/ucp/serving-host/verify")
@@ -239,10 +256,21 @@ async def verify_serving_host(
     request: Request,
     tenant_id: str = Depends(get_current_tenant),
 ) -> dict[str, Any]:
+    return await verify_and_attest_serving_host(
+        tenant_id=tenant_id, merchant_id=merchant_id, seller_agent_id=body.seller_agent_id, actor=_actor(request)
+    )
+
+
+async def verify_and_attest_serving_host(
+    *,
+    tenant_id: str,
+    merchant_id: str,
+    seller_agent_id: str | None,
+    actor: dict[str, str],
+) -> dict[str, Any]:
+    """Look the pending challenge up in DNS and record the attestation; 409 (``reason``) when it does not hold."""
     async with get_tenant_session(uuid.UUID(tenant_id)) as session:
-        row = await _locked_row(
-            session, tenant_id=tenant_id, merchant_id=merchant_id, seller_agent_id=body.seller_agent_id
-        )
+        row = await _locked_row(session, tenant_id=tenant_id, merchant_id=merchant_id, seller_agent_id=seller_agent_id)
         challenge = ucp_state(row.public_publishing).get("challenge")
         scope = (row.merchant_id, row.seller_agent_id, row.config_id)
     if not isinstance(challenge, dict) or not isinstance(challenge.get("host"), str):
@@ -275,7 +303,7 @@ async def verify_serving_host(
         "record_name": challenge["record_name"],
         "record_value_sha256": value_digest,
         "verified_at": verified_at,
-        "verified_by": _actor(request),
+        "verified_by": actor,
         # Opaque reference sent to Grantex as namespace_attestation_ref with the public-discovery opt-in.
         "ref": "agenticorg:ucp-attestation:" + challenge_value_digest(f"{host}|{value_digest}|{verified_at}")[:32],
     }

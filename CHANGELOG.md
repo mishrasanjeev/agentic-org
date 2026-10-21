@@ -1,5 +1,27 @@
 # Changelog
 
+## Unreleased - Merchant custom domains
+
+- Merchants connect their own subdomain for the UCP profile and routes from **Commerce > Custom Domains**
+  (`/dashboard/custom-domains`): add the host, publish the CNAME (`ghs.googlehosted.com.`) and the
+  `_agenticorg-ucp` TXT record, confirm the Search Console owner, verify, and follow the mapping and
+  certificate to live. Every failed check is shown with its fix, and failed domains can be retried. Zone apexes are refused
+  with a pointer to the new apex guide (`docs/oacp/merchant-apex-domain.md`: Cloudflare Worker and
+  nginx pass-through of `/.well-known/ucp` and `/ucp/*`, no redirects).
+- The one manual step, the Cloud Run domain mapping, goes to an operator queue with the exact
+  `gcloud` command, an email to the operator, and mark mapped or failed actions. The Cloud Run Admin
+  API can create mappings instead behind `AGENTICORG_CUSTOM_DOMAIN_CLOUD_RUN_AUTOMAP_ENABLED`
+  (default off; permissions documented).
+- A status task (every five minutes) probes `https://<host>/.well-known/agenticorg-host` over the
+  DNS-pinned egress transport and marks a domain live once its certificate verifies and the host
+  reaches the API intact.
+- Migration `v6z91_merchant_custom_domains`: tenant-scoped table with forced RLS and a SELECT-only
+  platform-context policy. Everything is behind `AGENTICORG_CUSTOM_DOMAINS_ENABLED` (default off).
+- `docs/oacp/merchant-custom-domains.md` records the Cloud Run domain-mapping limits and when a load
+  balancer would replace them, with list-price estimates (a future decision, nothing provisioned).
+- The serving-host challenge and verification in `api/v1/commerce_ucp_publishing.py` are now
+  functions the custom-domain flow reuses; the routes behave as before.
+
 ## Unreleased - Playwright 1.64
 
 - Python `playwright` moves from 1.63.0 to 1.64.0 (`[v4]` extra and `requirements-v4.txt`); the

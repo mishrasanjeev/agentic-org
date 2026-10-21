@@ -107,6 +107,10 @@ UCP profile flags: `AGENTICORG_UCP_PROFILE_ENABLED` (default off; `/.well-known/
 key, and no `public_discovery_state` artifact may enable discovery), `AGENTICORG_UCP_VERSIONS`
 (default `2026-04-08`), `AGENTICORG_UCP_KEY_ROTATION_GRACE_DAYS` (default 7, minimum 7); see
 `docs/oacp/ucp-profile.md`.
+Merchant custom domains: `AGENTICORG_CUSTOM_DOMAINS_ENABLED` (default off; the custom-domain routes
+and `/.well-known/agenticorg-host` answer 404 and the status task does nothing) and
+`AGENTICORG_CUSTOM_DOMAIN_CLOUD_RUN_AUTOMAP_ENABLED` (default off; an operator runs the generated
+domain-mapping command); no load balancer or paid certificate; see `docs/oacp/merchant-custom-domains.md`.
 ACP flags: `AGENTICORG_ACP_FEED_ENABLED` (default off; the ACP product feed export answers 404),
 `AGENTICORG_ACP_CHECKOUT_ENABLED` (default off; the `/acp` checkout session routes answer 404; they
 run on the UCP session table, arbiter and executor) and `AGENTICORG_ACP_SIGNATURE_MODE` (`log` by

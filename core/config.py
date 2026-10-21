@@ -455,6 +455,40 @@ class Settings(BaseSettings):
     # verifiers keep accepting signatures made before the rotation (UCP
     # signatures, Key Rotation: at least 7). Env: AGENTICORG_UCP_KEY_ROTATION_GRACE_DAYS.
     ucp_key_rotation_grace_days: int = 7
+    # Merchant custom domains (api/v1/merchant_custom_domains.py,
+    # core/commerce/custom_domains.py; docs/oacp/merchant-custom-domains.md):
+    # a merchant adds its own host (CNAME to the Cloud Run domain-mapping
+    # target, DNS TXT ownership record), verifies it and follows the
+    # certificate to live. Off by default: the routes answer 404 and the
+    # status task does nothing. Env: AGENTICORG_CUSTOM_DOMAINS_ENABLED.
+    custom_domains_enabled: bool = False
+    # CNAME target merchants publish for a subdomain (Cloud Run domain mappings).
+    # Env: AGENTICORG_CUSTOM_DOMAIN_CNAME_TARGET.
+    custom_domain_cname_target: str = "ghs.googlehosted.com"
+    # The Cloud Run service, project and region the generated domain-mapping
+    # command names. Empty project: GOOGLE_CLOUD_PROJECT, else a placeholder.
+    # Env: AGENTICORG_CUSTOM_DOMAIN_CLOUD_RUN_SERVICE / _PROJECT / _REGION.
+    custom_domain_cloud_run_service: str = "agenticorg-api"
+    custom_domain_cloud_run_project: str = ""
+    custom_domain_cloud_run_region: str = "asia-southeast1"
+    # The tenant whose administrators work the operator queue (the platform's
+    # own tenant). Empty: the operator queue answers 404 for everyone.
+    # Env: AGENTICORG_CUSTOM_DOMAIN_OPERATOR_TENANT_ID.
+    custom_domain_operator_tenant_id: str = ""
+    # Where a new operator queue item is emailed (with its exact command).
+    # Empty: no email. Env: AGENTICORG_CUSTOM_DOMAIN_OPERATOR_EMAIL.
+    custom_domain_operator_email: str = ""
+    # The Google account that creates domain mappings (the operator's account,
+    # or the runtime service account with automap on). Merchants add it as a
+    # Search Console owner of their domain, which Google requires before a
+    # mapping can exist. Env: AGENTICORG_CUSTOM_DOMAIN_MAPPING_ACCOUNT.
+    custom_domain_mapping_account: str = ""
+    # Create the domain mapping and read its certificate state through the
+    # Cloud Run Admin API with the runtime service account (no charge; needs
+    # the permissions in docs/oacp/merchant-custom-domains.md). Off by default:
+    # an operator runs the generated command. Env:
+    # AGENTICORG_CUSTOM_DOMAIN_CLOUD_RUN_AUTOMAP_ENABLED.
+    custom_domain_cloud_run_automap_enabled: bool = False
     # RBI e-mandate framework 2026 (s.8): a subsequent UPI AutoPay / e-mandate
     # debit above these amounts (minor units, paise) needs the additional factor
     # of authentication; registration and the first debit always do
