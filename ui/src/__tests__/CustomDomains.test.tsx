@@ -194,4 +194,55 @@ describe("CustomDomains", () => {
     await waitFor(() => expect(apiMock.markUnmapped).toHaveBeenCalledWith("domain-9"));
     expect(await screen.findByText("Nothing is waiting.")).toBeTruthy();
   });
+
+  it("needs no Search Console step for a Firebase Hosting domain", async () => {
+    apiMock.get.mockResolvedValueOnce({
+      data: {
+        enabled: true,
+        cname_target: "merchant-domains.web.app",
+        domain: domain({
+          provider: "firebase_hosting",
+          records: [
+            { purpose: "routing", type: "CNAME", name: HOST, value: "merchant-domains.web.app." },
+            { purpose: "ownership", type: "TXT", name: `_agenticorg-ucp.${HOST}`, value: "agenticorg-ucp-verify=synthetic" },
+          ],
+          search_console: { required: false, account: null, property: "merchant.example", instructions: "", confirmed: false },
+        }),
+      },
+    });
+    apiMock.check.mockResolvedValueOnce({ data: domain({ provider: "firebase_hosting", status: "pending_certificate" }) });
+    render(<CustomDomains />);
+    await loadMerchant();
+
+    expect(await screen.findByText("merchant-domains.web.app.")).toBeTruthy();
+    expect(screen.queryByRole("checkbox")).toBeNull();
+    expect(screen.queryByText("2. Let us connect the domain")).toBeNull();
+    expect(screen.getByText(/That is all you need to do/)).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: /Verify records/ }));
+    await waitFor(() => expect(apiMock.check).toHaveBeenCalledWith("merchant-1", { search_console_owner_added: false }));
+  });
+
+  it("shows a failed Firebase Hosting domain to the operator without a command", async () => {
+    const item = {
+      id: "domain-7",
+      tenant_id: "tenant-1",
+      merchant_id: "merchant-1",
+      host: HOST,
+      status: "failed",
+      provider: "firebase_hosting",
+      search_console_owner_confirmed: false,
+      commands: null,
+      error: { code: "mapping_failed", detail: "The domain is connected to another Firebase project." },
+      mapping_requested_at: null,
+    };
+    apiMock.operatorQueue.mockReset();
+    apiMock.operatorQueue.mockResolvedValueOnce({ data: { items: [item] } });
+    render(<CustomDomains />);
+
+    const row = await screen.findByTestId("operator-queue-item");
+    expect(within(row).getByText("Connected by AgenticOrg through Firebase Hosting")).toBeTruthy();
+    expect(within(row).queryByRole("button", { name: "Mark mapped" })).toBeNull();
+    expect(within(row).queryByLabelText("Copy mapping command")).toBeNull();
+    expect(within(row).getByText(/another Firebase project/)).toBeTruthy();
+  });
 });

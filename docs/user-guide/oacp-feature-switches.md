@@ -42,6 +42,8 @@ Turning a safety check off weakens the shop's protection. Do it only as a record
 | `AGENTICORG_UCP_VERSIONS` | `2026-04-08` | Which UCP releases are served. Add `2026-08-25` when platforms read it. |
 | `AGENTICORG_UCP_KEY_ROTATION_GRACE_DAYS` | `7` (minimum 7) | How long a rotated-out signing key stays published. |
 | `AGENTICORG_CUSTOM_DOMAINS_ENABLED` | Off | Lets you connect your own subdomain (for example `agent.your-store.example`) for your UCP profile under Commerce > Custom Domains. Off, those pages and routes answer 404. See [Your own domain for buyer agents](/docs/oacp-custom-domains). |
+| `AGENTICORG_CUSTOM_DOMAIN_FIREBASE_ENABLED` | Off | Connects new custom domains through a Firebase Hosting site: merchants publish two DNS records and AgenticOrg does the rest. |
+| `AGENTICORG_CUSTOM_DOMAIN_FIREBASE_SITE` | Empty | The Firebase Hosting site id; merchants point their CNAME at `<site>.web.app`. |
 | `AGENTICORG_CUSTOM_DOMAIN_MAPPING_ACCOUNT` | Empty | The Google account that connects domains. Merchants add it as an owner in Search Console. |
 | `AGENTICORG_CUSTOM_DOMAIN_OPERATOR_TENANT_ID` | Empty | Your own organization's id. Only its administrators see the operator queue. Empty, nobody does. |
 | `AGENTICORG_CUSTOM_DOMAIN_OPERATOR_EMAIL` | Empty | Where each new operator queue item is emailed, with its command. |

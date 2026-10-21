@@ -30,6 +30,9 @@ CUSTOM_DOMAIN_STATUSES: tuple[str, ...] = (
 # A verified host belongs to one row across every tenant until it is removed
 # (a failed domain keeps its claim: the merchant retries it).
 CLAIMED_STATUSES: tuple[str, ...] = ("pending_mapping", "pending_certificate", "live", "failed")
+# How the host reaches the API: a Cloud Run domain mapping, or Firebase Hosting
+# rewriting the agent paths to the API (v6z93).
+PROVIDERS: tuple[str, ...] = ("cloud_run_mapping", "firebase_hosting")
 # Rows that no longer hold the merchant scope: removed, or removed with the
 # domain mapping still to delete (the operator queue's unmap item).
 INACTIVE_STATUSES: tuple[str, ...] = ("pending_unmap", "removed")
@@ -60,8 +63,12 @@ class MerchantCustomDomainRow(BaseModel):
             name="ck_merchant_custom_domains_status",
         ),
         CheckConstraint(
-            "mapping_source IS NULL OR mapping_source IN ('operator', 'cloud_run_api')",
+            "mapping_source IS NULL OR mapping_source IN ('operator', 'cloud_run_api', 'firebase_hosting')",
             name="ck_merchant_custom_domains_mapping_source",
+        ),
+        CheckConstraint(
+            "provider IN ('cloud_run_mapping', 'firebase_hosting')",
+            name="ck_merchant_custom_domains_provider",
         ),
     )
 
@@ -73,6 +80,7 @@ class MerchantCustomDomainRow(BaseModel):
     status: Mapped[str] = mapped_column(String(24), nullable=False, default="pending_dns")
     cname_target: Mapped[str] = mapped_column(String(253), nullable=False)
     mapping_source: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    provider: Mapped[str] = mapped_column(String(24), nullable=False, default="cloud_run_mapping")
     # When the merchant confirmed it added the mapping account as a Search
     # Console owner of its domain (Google requires it before a mapping exists).
     search_console_owner_confirmed_at: Mapped[datetime | None] = mapped_column(TIMESTAMP(timezone=True), nullable=True)

@@ -22,7 +22,8 @@ interface DomainView {
   steps: { key: string; state: StepState }[];
   records: DnsRecord[];
   ownership_verified: boolean;
-  search_console: { account: string | null; property: string; instructions: string; confirmed: boolean };
+  provider?: "cloud_run_mapping" | "firebase_hosting";
+  search_console: { required?: boolean; account: string | null; property: string; instructions: string; confirmed: boolean };
   error: { code: string; message: string; detail?: string | null } | null;
   can_retry: boolean;
   profile_url: string;
@@ -39,7 +40,8 @@ interface QueueItem {
   action?: "create_mapping" | "delete_mapping";
   mapping_in_use?: boolean;
   search_console_owner_confirmed: boolean;
-  commands: { create: string; describe: string; delete: string };
+  provider?: "cloud_run_mapping" | "firebase_hosting";
+  commands: { create: string; describe: string; delete: string } | null;
   error: { code: string; detail?: string | null } | null;
   mapping_requested_at: string | null;
 }
@@ -202,10 +204,12 @@ function OperatorQueue() {
             {item.mapping_in_use ? (
               <p className="text-sm">Another domain now uses this host: keep the mapping and mark this item done.</p>
             ) : (
-              <div className="flex items-start gap-2 rounded bg-muted/50 p-2">
-                <code className="break-all text-xs">{item.commands.delete}</code>
-                <CopyButton value={item.commands.delete} label="delete command" />
-              </div>
+              item.commands ? (
+                <div className="flex items-start gap-2 rounded bg-muted/50 p-2">
+                  <code className="break-all text-xs">{item.commands.delete}</code>
+                  <CopyButton value={item.commands.delete} label="delete command" />
+                </div>
+              ) : null
             )}
             {item.error ? <p className="text-xs text-red-700">{item.error.code}: {item.error.detail}</p> : null}
             <Button size="sm" onClick={() => void act(item, "deleted")}>
@@ -218,17 +222,23 @@ function OperatorQueue() {
             <span className="font-semibold">{item.host}</span>
             <Badge variant={STATUS_LABELS[item.status]?.variant || "secondary"}>{STATUS_LABELS[item.status]?.label || item.status}</Badge>
             <span className="text-xs text-muted-foreground">merchant {item.merchant_id}</span>
-            <span className="text-xs text-muted-foreground">
-              Search Console owner {item.search_console_owner_confirmed ? "confirmed" : "not confirmed"}
-            </span>
+            {item.commands ? (
+              <span className="text-xs text-muted-foreground">
+                Search Console owner {item.search_console_owner_confirmed ? "confirmed" : "not confirmed"}
+              </span>
+            ) : (
+              <span className="text-xs text-muted-foreground">Connected by AgenticOrg through Firebase Hosting</span>
+            )}
           </div>
-          <div className="flex items-start gap-2 rounded bg-muted/50 p-2">
-            <code className="break-all text-xs">{item.commands.create}</code>
-            <CopyButton value={item.commands.create} label="mapping command" />
-          </div>
+          {item.commands ? (
+            <div className="flex items-start gap-2 rounded bg-muted/50 p-2">
+              <code className="break-all text-xs">{item.commands.create}</code>
+              <CopyButton value={item.commands.create} label="mapping command" />
+            </div>
+          ) : null}
           {item.error ? <p className="text-xs text-red-700">{item.error.code}: {item.error.detail}</p> : null}
           <div className="flex flex-wrap items-center gap-2">
-            {item.status === "pending_mapping" ? (
+            {item.status === "pending_mapping" && item.commands ? (
               <Button size="sm" onClick={() => void act(item, "mapped")}>Mark mapped</Button>
             ) : null}
             <input
@@ -416,6 +426,11 @@ export default function CustomDomains() {
             </p>
           </div>
 
+          {domain.search_console.required === false ? (
+            <p className="text-sm text-muted-foreground">
+              That is all you need to do. AgenticOrg connects the domain and Google issues its certificate once the records verify.
+            </p>
+          ) : (
           <div className="space-y-2">
             <h4 className="font-semibold">2. Let us connect the domain</h4>
             <p className="text-sm text-muted-foreground">{domain.search_console.instructions}</p>
@@ -430,6 +445,7 @@ export default function CustomDomains() {
               I added {domain.search_console.account || "the AgenticOrg mapping account"} as an owner of {domain.search_console.property}
             </label>
           </div>
+          )}
 
           {domain.last_checked_at ? (
             <p className="text-xs text-muted-foreground">Last checked {new Date(domain.last_checked_at).toLocaleString()}</p>

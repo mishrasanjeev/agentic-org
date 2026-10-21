@@ -83,7 +83,28 @@ def custom_domains_enabled() -> bool:
     return bool(getattr(settings, "custom_domains_enabled", False))
 
 
+def firebase_site() -> str:
+    return str(getattr(settings, "custom_domain_firebase_site", "") or "").strip().lower()
+
+
+def firebase_enabled() -> bool:
+    """New domains go through Firebase Hosting (flag on, a site and the project configured)."""
+    return (
+        bool(getattr(settings, "custom_domain_firebase_enabled", False))
+        and bool(firebase_site())
+        and bool(cloud_run_project())
+    )
+
+
+def current_provider() -> str:
+    """The provider a domain added now uses."""
+    return "firebase_hosting" if firebase_enabled() else "cloud_run_mapping"
+
+
 def cname_target() -> str:
+    """The CNAME target a domain added now is given (Firebase: the site's default domain)."""
+    if firebase_enabled():
+        return f"{firebase_site()}.web.app"
     target = str(getattr(settings, "custom_domain_cname_target", "") or "ghs.googlehosted.com")
     return target.rstrip(".").lower()
 
@@ -147,9 +168,14 @@ def dns_records(host: str, challenge: Mapping[str, Any] | None, *, target: str |
     return records
 
 
-def search_console_step(host: str) -> dict[str, Any]:
+def search_console_step(host: str, *, provider: str = "cloud_run_mapping") -> dict[str, Any]:
+    """The Search Console owner step; only Cloud Run domain mappings need it (Firebase Hosting proves
+    ownership from the CNAME itself)."""
     account = mapping_account()
+    if provider == "firebase_hosting":
+        return {"required": False, "account": None, "property": parent_domain(host), "instructions": ""}
     return {
+        "required": True,
         "account": account,
         "property": parent_domain(host),
         "instructions": (
@@ -436,3 +462,115 @@ async def delete_domain_mapping(host: str, *, client: Any | None = None) -> bool
     if response.status_code == 404:
         return True
     return response.status_code < 400
+
+
+# --- Firebase Hosting (custom domains on a Hosting site that rewrites the agent paths) ---------
+
+FIREBASE_API = "https://firebasehosting.googleapis.com/v1beta1"
+# Only these paths reach the API through a merchant domain; everything else is
+# Firebase's own 404 (no AgenticOrg page or API route is served on a merchant host).
+FIREBASE_AGENT_PATHS: tuple[str, ...] = (
+    "/.well-known/ucp",
+    "/.well-known/ucp/**",
+    "/ucp/**",
+    "/acp/**",
+    HOST_CHECK_PATH,
+)
+
+
+def firebase_site_config(*, service: str | None = None, region: str | None = None) -> dict[str, Any]:
+    """The Hosting version config the site is released with: agent paths rewritten to the API service."""
+    target = {"serviceId": service or cloud_run_service(), "region": region or cloud_run_region()}
+    return {"rewrites": [{"glob": path, "run": dict(target)} for path in FIREBASE_AGENT_PATHS]}
+
+
+@dataclass(frozen=True)
+class FirebaseDomainState:
+    exists: bool
+    host_active: bool = False
+    ownership: str | None = None
+    cert_state: str | None = None
+    failed: bool = False
+    message: str | None = None
+
+    @property
+    def serving(self) -> bool:
+        """Hosting serves the domain with a certificate (CERT_PROPAGATING already answers HTTPS)."""
+        return (
+            self.host_active
+            and self.ownership == "OWNERSHIP_ACTIVE"
+            and self.cert_state in ("CERT_ACTIVE", "CERT_PROPAGATING", "CERT_EXPIRING_SOON")
+        )
+
+
+# Ownership states Hosting cannot recover from on its own (Firebase Hosting REST, CustomDomain.OwnershipState).
+_FIREBASE_OWNERSHIP_FAILURES = {
+    "OWNERSHIP_MISMATCH": "The domain is connected to another Firebase project. Remove it there first.",
+    "OWNERSHIP_SUSPENDED": "Firebase suspended this domain. Check its DNS records, then retry.",
+}
+
+
+def parse_firebase_domain(document: Mapping[str, Any]) -> FirebaseDomainState:
+    cert = document.get("cert") if isinstance(document.get("cert"), Mapping) else {}
+    ownership = document.get("ownershipState")
+    failure = _FIREBASE_OWNERSHIP_FAILURES.get(str(ownership))
+    return FirebaseDomainState(
+        exists=True,
+        host_active=document.get("hostState") == "HOST_ACTIVE",
+        ownership=str(ownership) if ownership else None,
+        cert_state=str(cert.get("state")) if cert.get("state") else None,
+        failed=failure is not None,
+        message=failure,
+    )
+
+
+def _firebase_domains_url() -> str:
+    return f"{FIREBASE_API}/projects/{cloud_run_project()}/sites/{firebase_site()}/customDomains"
+
+
+async def _firebase_call(method: str, url: str, *, client: Any | None, json_body: Any = None) -> Any:
+    import httpx  # noqa: PLC0415
+
+    token = await _access_token()
+    owned = client is None
+    client = client or httpx.AsyncClient(timeout=API_TIMEOUT_SECONDS)
+    try:
+        return await client.request(method, url, json=json_body, headers={"Authorization": f"Bearer {token}"})
+    finally:
+        if owned:
+            await client.aclose()
+
+
+def _firebase_error(response: Any) -> str:
+    try:
+        detail = str(((response.json() or {}).get("error") or {}).get("message") or "")
+    except ValueError:
+        detail = ""
+    return (detail or f"HTTP {response.status_code}")[:300]
+
+
+async def get_firebase_domain(host: str, *, client: Any | None = None) -> FirebaseDomainState:
+    response = await _firebase_call("GET", f"{_firebase_domains_url()}/{host}", client=client)
+    if response.status_code == 404:
+        return FirebaseDomainState(exists=False)
+    if response.status_code >= 400:
+        return FirebaseDomainState(exists=False, failed=True, message=_firebase_error(response))
+    return parse_firebase_domain(response.json())
+
+
+async def create_firebase_domain(host: str, *, client: Any | None = None) -> FirebaseDomainState:
+    """Ask Hosting to serve ``host`` on the site; an existing domain on the site is read instead."""
+    response = await _firebase_call(
+        "POST", f"{_firebase_domains_url()}?customDomainId={host}", client=client, json_body={}
+    )
+    if response.status_code == 409 or response.status_code < 400:
+        # Created (a long-running operation) or already on this site: read its current state.
+        state = await get_firebase_domain(host, client=client)
+        return state if state.exists or response.status_code == 409 else FirebaseDomainState(exists=True)
+    return FirebaseDomainState(exists=False, failed=True, message=_firebase_error(response))
+
+
+async def delete_firebase_domain(host: str, *, client: Any | None = None) -> bool:
+    """Remove ``host`` from the site; True once it is gone (deleted now, or already absent)."""
+    response = await _firebase_call("DELETE", f"{_firebase_domains_url()}/{host}", client=client)
+    return response.status_code == 404 or response.status_code < 400

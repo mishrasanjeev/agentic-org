@@ -32,7 +32,7 @@
     "public_exempt_reason": "custom-domain-probe-echoes-only-the-request-host",
     "rate_limit": "ucp-discovery",
     "scope": "public:custom_domain.host_check",
-    "source_line": 946,
+    "source_line": 1024,
     "tenant_required": false
   },
   {
@@ -3182,7 +3182,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "commerce.runtime.merchant_config.read",
-    "source_line": 816,
+    "source_line": 885,
     "tenant_required": true
   },
   {
@@ -3200,7 +3200,7 @@
     "public_exempt_reason": null,
     "rate_limit": "commerce-runtime-write",
     "scope": "commerce.runtime.merchant_config.write",
-    "source_line": 886,
+    "source_line": 964,
     "tenant_required": true
   },
   {
@@ -3218,7 +3218,7 @@
     "public_exempt_reason": null,
     "rate_limit": "commerce-runtime-write",
     "scope": "commerce.runtime.merchant_config.write",
-    "source_line": 859,
+    "source_line": 935,
     "tenant_required": true
   },
   {
@@ -3236,7 +3236,7 @@
     "public_exempt_reason": null,
     "rate_limit": "commerce-runtime-write",
     "scope": "commerce.runtime.merchant_config.write",
-    "source_line": 915,
+    "source_line": 993,
     "tenant_required": true
   },
   {
@@ -3704,7 +3704,7 @@
     "public_exempt_reason": null,
     "rate_limit": "commerce-runtime-write",
     "scope": "commerce.runtime.merchant_config.write",
-    "source_line": 538,
+    "source_line": 543,
     "tenant_required": true
   },
   {
@@ -3722,7 +3722,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "commerce.runtime.merchant_config.read",
-    "source_line": 295,
+    "source_line": 298,
     "tenant_required": true
   },
   {
@@ -3740,7 +3740,7 @@
     "public_exempt_reason": null,
     "rate_limit": "commerce-runtime-external",
     "scope": "commerce.runtime.merchant_config.write",
-    "source_line": 323,
+    "source_line": 326,
     "tenant_required": true
   },
   {
@@ -3758,7 +3758,7 @@
     "public_exempt_reason": null,
     "rate_limit": "commerce-runtime-external",
     "scope": "commerce.runtime.merchant_config.write",
-    "source_line": 452,
+    "source_line": 456,
     "tenant_required": true
   },
   {

@@ -511,6 +511,15 @@ class Settings(BaseSettings):
     # an operator runs the generated command. Env:
     # AGENTICORG_CUSTOM_DOMAIN_CLOUD_RUN_AUTOMAP_ENABLED.
     custom_domain_cloud_run_automap_enabled: bool = False
+    # Front merchant custom domains with Firebase Hosting instead of Cloud Run
+    # domain mappings (docs/oacp/merchant-custom-domains.md): the merchant's
+    # CNAME points at <site>.web.app, AgenticOrg creates the domain through
+    # the Firebase Hosting API (no Search Console owner, no operator step), and
+    # on the agent paths a verified X-Forwarded-Host names the merchant.
+    # Off by default. Env: AGENTICORG_CUSTOM_DOMAIN_FIREBASE_ENABLED and
+    # AGENTICORG_CUSTOM_DOMAIN_FIREBASE_SITE (the Hosting site id).
+    custom_domain_firebase_enabled: bool = False
+    custom_domain_firebase_site: str = ""
     # RBI e-mandate framework 2026 (s.8): a subsequent UPI AutoPay / e-mandate
     # debit above these amounts (minor units, paise) needs the additional factor
     # of authentication; registration and the first debit always do

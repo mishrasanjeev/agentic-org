@@ -122,6 +122,10 @@ Merchant custom domains: `AGENTICORG_CUSTOM_DOMAINS_ENABLED` (default off; the c
 and `/.well-known/agenticorg-host` answer 404 and the status task does nothing) and
 `AGENTICORG_CUSTOM_DOMAIN_CLOUD_RUN_AUTOMAP_ENABLED` (default off; an operator runs the generated
 domain-mapping command); no load balancer or paid certificate; see `docs/oacp/merchant-custom-domains.md`.
+`AGENTICORG_CUSTOM_DOMAIN_FIREBASE_ENABLED` (default off) with `AGENTICORG_CUSTOM_DOMAIN_FIREBASE_SITE`: new
+domains go through a Firebase Hosting site (CNAME plus the ownership TXT, created through the Hosting API, no
+Search Console or operator step), and on the agent paths only a verified `X-Forwarded-Host` becomes `Host`
+(`api/middleware/merchant_host.py`).
 ACP flags: `AGENTICORG_ACP_FEED_ENABLED` (default off; the ACP product feed export answers 404),
 `AGENTICORG_ACP_CHECKOUT_ENABLED` (default off; the `/acp` checkout session routes answer 404; they
 run on the UCP session table, arbiter and executor) and `AGENTICORG_ACP_SIGNATURE_MODE` (`log` by

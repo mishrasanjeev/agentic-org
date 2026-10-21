@@ -539,3 +539,175 @@ async def test_checks_use_the_target_the_domain_was_given(db, world, monkeypatch
     queued = await _check(tenant, owner=True)
     assert queued["status"] == "pending_mapping"
     assert world["routing_targets"][-1] == "ghs.googlehosted.com"
+
+
+# --- Firebase Hosting (v6z93) ---------------------------------------------------------------------
+
+FIREBASE_SITE = "merchant-domains-example"
+FIREBASE_TARGET = f"{FIREBASE_SITE}.web.app"
+
+
+@pytest.fixture()
+def firebase(world, monkeypatch):
+    """Firebase mode on, with a fake Hosting API that records what AgenticOrg asked of it."""
+    hosting = {"domains": set(), "created": [], "deleted": [], "serving": False, "refuse": None}
+    monkeypatch.setattr(settings, "custom_domain_firebase_enabled", True)
+    monkeypatch.setattr(settings, "custom_domain_firebase_site", FIREBASE_SITE)
+
+    async def create(host):
+        hosting["created"].append(host)
+        if hosting["refuse"]:
+            return cd.FirebaseDomainState(exists=False, failed=True, message=hosting["refuse"])
+        hosting["domains"].add(host)
+        return cd.FirebaseDomainState(exists=True, ownership="OWNERSHIP_MISSING", cert_state="CERT_PREPARING")
+
+    async def get(host):
+        if host not in hosting["domains"]:
+            return cd.FirebaseDomainState(exists=False)
+        if hosting["serving"]:
+            return cd.FirebaseDomainState(
+                exists=True, host_active=True, ownership="OWNERSHIP_ACTIVE", cert_state="CERT_ACTIVE"
+            )
+        return cd.FirebaseDomainState(exists=True, ownership="OWNERSHIP_MISSING", cert_state="CERT_VALIDATING")
+
+    async def delete(host):
+        hosting["deleted"].append(host)
+        hosting["domains"].discard(host)
+        return True
+
+    monkeypatch.setattr(cd, "create_firebase_domain", create)
+    monkeypatch.setattr(cd, "get_firebase_domain", get)
+    monkeypatch.setattr(cd, "delete_firebase_domain", delete)
+    store.reset_firebase_host_cache()
+    world.update(txt=True, cname=FIREBASE_TARGET, hosting=hosting)
+    yield world
+    store.reset_firebase_host_cache()
+
+
+async def test_firebase_flow_needs_two_dns_records_and_no_operator(db, firebase):
+    tenant = await _tenant(db)
+    await _merchant(tenant)
+    host = _host()
+    hosting = firebase["hosting"]
+
+    added = await _add(tenant, host)
+    assert added["provider"] == "firebase_hosting"
+    cname = [r["value"] for r in added["records"] if r["type"] == "CNAME"]
+    assert cname == [f"{FIREBASE_TARGET}."]
+    assert {r["type"] for r in added["records"]} == {"CNAME", "TXT"}
+    assert added["search_console"]["required"] is False
+
+    queued = await _check(tenant)  # no Search Console confirmation needed
+    assert queued["status"] == "pending_mapping" and queued["error"] is None
+    assert firebase["emails"] == []  # nothing for an operator to do
+    queue = await mcd.list_operator_queue(firebase["operator"])
+    assert all(item["host"] != host for item in queue["items"])
+
+    connecting = await _check(tenant)
+    assert hosting["created"] == [host]
+    assert connecting["status"] == "pending_certificate"
+    assert connecting["error"]["code"] == "certificate_pending"
+    assert "OWNERSHIP_MISSING" in connecting["error"]["detail"]
+    store.reset_firebase_host_cache()
+    assert await store.firebase_domain_active(host) is True
+
+    hosting["serving"] = True
+    firebase["probe"] = "live"
+    live = await _check(tenant)
+    assert live["status"] == "live" and live["error"] is None
+    assert firebase["routing_targets"][-1] == FIREBASE_TARGET
+    events = await _ledger_events(db, tenant)
+    assert events.count("commerce.custom_domain.status") >= 2
+
+
+async def test_only_firebase_domains_are_trusted_as_forwarded_hosts(db, firebase, monkeypatch):
+    import httpx
+
+    from api.main import app
+
+    tenant = await _tenant(db)
+    await _merchant(tenant, "merchant-firebase")
+    await _merchant(tenant, "merchant-mapping")
+    firebase["hosting"]["serving"] = True
+    firebase["probe"] = "live"
+    via_firebase = _host()
+    await _add(tenant, via_firebase, "merchant-firebase")
+    await _check(tenant, merchant_id="merchant-firebase")
+    await _check(tenant, merchant_id="merchant-firebase")
+    assert (await _check(tenant, merchant_id="merchant-firebase"))["status"] == "live"
+
+    # A domain on a Cloud Run mapping is a real Host, never a forwarded one.
+    monkeypatch.setattr(settings, "custom_domain_firebase_enabled", False)
+    via_mapping = _host()
+    firebase["cname"] = "ghs.googlehosted.com"
+    await _add(tenant, via_mapping, "merchant-mapping")
+    assert (await _check(tenant, owner=True, merchant_id="merchant-mapping"))["status"] == "pending_mapping"
+    monkeypatch.setattr(settings, "custom_domain_firebase_enabled", True)
+
+    store.reset_firebase_host_cache()
+    assert await store.firebase_domain_active(via_firebase) is True
+    assert await store.firebase_domain_active(via_mapping) is False
+    assert await store.firebase_domain_active("unknown.merchant.example") is False
+
+    service_host = "agenticorg-api-example.a.run.app"
+
+    async def ask(forwarded: str) -> dict:
+        transport = httpx.ASGITransport(app=app)
+        async with httpx.AsyncClient(transport=transport, base_url=f"https://{service_host}") as client:
+            response = await client.get("/.well-known/agenticorg-host", headers={"x-forwarded-host": forwarded})
+        assert response.headers["cache-control"] == "no-store"
+        return response.json()
+
+    assert (await ask(via_firebase))["host"] == via_firebase
+    assert (await ask(via_mapping))["host"] == service_host
+    assert (await ask("unknown.merchant.example"))["host"] == service_host
+
+
+async def test_removing_a_firebase_domain_disconnects_it_automatically(db, firebase):
+    from core.tasks.custom_domain_tasks import _advance_custom_domains_async
+
+    tenant = await _tenant(db)
+    await _merchant(tenant)
+    host = _host()
+    firebase["hosting"]["serving"] = True
+    firebase["probe"] = "live"
+    await _add(tenant, host)
+    await _check(tenant)
+    await _check(tenant)
+    assert (await _check(tenant))["status"] == "live"
+
+    removed = await mcd.remove_custom_domain(MERCHANT, _request(), SELLER, tenant)
+    assert removed["mapping_delete_needed"] is True
+    queue = await mcd.list_operator_queue(firebase["operator"])
+    assert all(item["host"] != host for item in queue["items"])  # nothing for the operator
+    assert firebase["emails"] == []
+
+    await _advance_custom_domains_async()
+    assert host in firebase["hosting"]["deleted"]
+    store.reset_firebase_host_cache()
+    assert await store.firebase_domain_active(host) is False
+    assert "commerce.custom_domain.status" in await _ledger_events(db, tenant)
+
+
+async def test_a_refused_firebase_domain_fails_and_reaches_the_operator(db, firebase):
+    tenant = await _tenant(db)
+    await _merchant(tenant)
+    host = _host()
+    firebase["hosting"]["refuse"] = "The domain is connected to another Firebase project. Remove it there first."
+    await _add(tenant, host)
+    await _check(tenant)
+    failed = await _check(tenant)
+    assert failed["status"] == "failed"
+    assert "another Firebase project" in failed["error"]["detail"]
+
+    queue = await mcd.list_operator_queue(firebase["operator"])
+    item = next(i for i in queue["items"] if i["host"] == host)
+    assert item["provider"] == "firebase_hosting" and item["commands"] is None
+    with pytest.raises(HTTPException) as automatic:
+        await mcd.mark_mapped(item["id"], _request(), firebase["operator"])
+    assert automatic.value.status_code == 409
+
+    firebase["hosting"]["refuse"] = None
+    retried = await _check(tenant)  # the retry connects the domain again at once
+    assert retried["status"] == "pending_certificate"
+    assert firebase["hosting"]["created"] == [host, host]

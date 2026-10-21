@@ -43,8 +43,10 @@ def test_statuses_and_columns_match_the_orm() -> None:
     source = MIGRATION.read_text(encoding="utf-8")
     for status in CUSTOM_DOMAIN_STATUSES:
         assert f"'{status}'" in source
+    later = {"provider"}  # added by v6z93_custom_domain_firebase
     for column in MerchantCustomDomainRow.__table__.columns:
-        assert f"            {column.name} " in source, column.name
+        if column.name not in later:
+            assert f"            {column.name} " in source, column.name
     claimed = ", ".join(f"'{status}'" for status in CLAIMED_STATUSES)
     assert f"WHERE status IN ({claimed})" in source  # failed keeps its claim until removed
     assert "failed" in CLAIMED_STATUSES
