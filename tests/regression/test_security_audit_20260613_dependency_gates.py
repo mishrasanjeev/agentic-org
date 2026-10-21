@@ -28,7 +28,7 @@ def _dependency_names(values: list[str]) -> set[str]:
 
 def test_production_dependencies_keep_patched_pillow_floor() -> None:
     deps = _pyproject()["project"]["dependencies"]
-    assert "pillow>=12.3.0" in deps
+    assert "pillow>=13.0.0" in deps
 
 
 def test_pytorch_owners_are_not_in_base_or_v4_dependencies() -> None:
@@ -112,7 +112,9 @@ def test_runtime_image_does_not_install_curl_for_healthcheck() -> None:
 def test_runtime_image_validates_dependencies_and_removes_pip() -> None:
     dockerfile = (REPO / "Dockerfile").read_text(encoding="utf-8")
     runtime_stage = dockerfile.split("FROM python:3.14-slim@sha256:", 2)[2]
-    assert "python -m pip check" in runtime_stage
+    # pip check, accepting only fastembed's Pillow ceiling (requirements-fastembed.txt).
+    assert "COPY scripts/pip_check.py /tmp/pip_check.py" in runtime_stage
+    assert "RUN python /tmp/pip_check.py" in runtime_stage
     assert "/site-packages/pip " in runtime_stage
     assert "/site-packages/pip-*.dist-info" in runtime_stage
     assert "/usr/local/bin/pip3.14" in runtime_stage

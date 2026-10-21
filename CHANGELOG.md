@@ -22,6 +22,39 @@
 - The serving-host challenge and verification in `api/v1/commerce_ucp_publishing.py` are now
   functions the custom-domain flow reuses; the routes behave as before.
 
+## Unreleased - Security advisories of 2026-10-21 (Pillow 13, follow-redirects, hono)
+
+### Security
+
+- Pillow moves from 12.3.0 to 13.0.0 (`pyproject.toml` floor `pillow>=13.0.0`, and the cassette
+  re-record lock). Pillow 13.0.0 fixes the JPEG, TIFF, GIF, PDF-parser and EPS advisories published
+  with it, including GHSA-p4wg-p73j-c528, GHSA-65qm-jvmh-6pqg, GHSA-58r4-6rv3-gfh8,
+  GHSA-pchr-8j38-3x4p, GHSA-q45j-58j2-45rg, GHSA-462x-pgg6-55fp, GHSA-c6hw-5grf-ff96 and
+  GHSA-vx6w-vv9f-6gvg that failed the dependency audit on every pull request. The decoders are
+  reachable through document and image OCR (`core/rag/extractors.py`, `core/idp/`), which open
+  uploaded images. None of the APIs Pillow 13 removed are used here.
+- fastembed 0.9.0, the default local embedding runtime and its latest release, declares
+  `pillow<13`, which held resolution at 12.3.0. It is now installed from the hash-pinned
+  `requirements-fastembed.txt` with `--no-deps` after the project (API image, tools image, CI test
+  jobs, the live RAG eval and the developer setup in `README.md`, `CONTRIBUTING.md` and
+  `docs/quickstart-local.md`); its other runtime requirements are declared in `pyproject.toml` with
+  its own ranges. fastembed imports Pillow only for image embeddings, which the platform does not
+  load. `scripts/pip_check.py` replaces `pip check` in both images and accepts only that one broken
+  requirement (a fastembed Pillow requirement failing because Pillow is newer). The dependency audit
+  covers `requirements-fastembed.txt` as a fourth target, and its "unreadable output" failure now
+  includes pip-audit's exit code and stderr (pip-audit exits 1 with empty stdout when it cannot
+  finish, which had hidden the cause in CI). When a fastembed release accepts Pillow 13,
+  fastembed moves back into `pyproject.toml` and the file and script are deleted.
+- UI: follow-redirects (via axios) moves from 1.16.0 to 1.16.1 through the `overrides` floor
+  (`>=1.16.1`), fixing GHSA-q3jh-wrc6-jgq8 and GHSA-8r9p-f939-6h3c (credential headers kept on
+  cross-origin redirects).
+- MCP server: hono (via `@modelcontextprotocol/sdk`) moves from 4.13.7 to 4.13.13 through the
+  `overrides` floor (`>=4.13.11`), fixing GHSA-5r4p-p66f-jhc7 (moderate; it failed the nightly
+  `npm audit --audit-level=moderate`). The MCP server does not serve static files.
+- Regression tests: `tests/regression/test_pillow13_fastembed_install.py` (patched floor, fastembed
+  out of resolution and installed everywhere the project is, fastembed's other requirements declared
+  and satisfied, fastembed importing under Pillow 13, the `pip_check.py` acceptance rule).
+
 ## Unreleased - Playwright 1.64
 
 - Python `playwright` moves from 1.63.0 to 1.64.0 (`[v4]` extra and `requirements-v4.txt`); the
