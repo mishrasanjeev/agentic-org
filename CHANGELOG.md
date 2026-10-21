@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased - Demo merchant seed on production schemas
+
+- Fixed: the OACP demo merchant seed failed in production on `ck_c6z_onboarding_connector`.
+  Databases migrated from `v6z_runtime_vertical_demo` carry shopify-only checks on the onboarding
+  packet connector and the connector evidence source; databases bootstrapped from the ORM carried no
+  checks, so the tests never met them. Migration `v6z92_c6z_demo_source` replaces both checks on
+  every database: `shopify` or `synthetic_demo`, read-only. Which tenants may use the synthetic
+  source is still decided by the application (the demo flag and the demo tenant marker).
+
 ## Unreleased - On-demand OACP artifact freshness
 
 - Fixed (behind a flag): every merchant's UCP catalog, ACP feed, checkout decisions and public UCP

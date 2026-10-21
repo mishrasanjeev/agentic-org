@@ -96,7 +96,7 @@ password (no console sign-in). After a new deploy, point the job at the new imag
 
 ## Run Order
 
-1. Deploy, set the flags above on the API and worker, add the tenant id to the Grantex allowlist.
+1. Deploy (with migrations: the seed needs `v6z92_c6z_demo_source`), set the flags above on the API and worker, add the tenant id to the Grantex allowlist.
 2. **Dry run** (the job's default arguments; reads only):
 
    ```

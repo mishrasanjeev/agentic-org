@@ -300,6 +300,18 @@ def _summary(out: str) -> dict[str, Any]:
     return json.loads(lines[-1])["summary"]
 
 
+@pytest.mark.parametrize(
+    "constraint",
+    ["ck_c6z_onboarding_connector", "ck_c6z_connector_source"],
+)
+def test_source_checks_exist_and_admit_the_synthetic_demo_source(constraint: str) -> None:
+    # Production's tables carry these checks from v6z_runtime_vertical_demo, shopify only, and the
+    # seed failed on them; v6z92 makes every database carry them, so the seed below writes through them.
+    definition = _scalar("SELECT pg_get_constraintdef(oid) FROM pg_constraint WHERE conname = :c", c=constraint)
+    assert definition is not None
+    assert "'shopify'" in definition and "'synthetic_demo'" in definition and "'read_only'" in definition
+
+
 def test_dry_run_writes_nothing(seed) -> None:
     before = _snapshot()
     assert seed() == 0
