@@ -115,12 +115,23 @@ def test_audit_that_cannot_complete_fails_closed(
     assert "run_pip_audit:" in capsys.readouterr().err
 
 
-def test_default_targets_cover_the_project_and_both_requirements_files(tmp_path: Path) -> None:
+def test_unreadable_output_reports_pip_audit_stderr(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    # pip-audit exits 1 with nothing on stdout when it cannot finish; its stderr says why.
+    assert run(tmp_path, FakeRunner(1, "", "ConnectionError: vulnerability service unavailable")) == 2
+    err = capsys.readouterr().err
+    assert "unreadable output (exit 1)" in err
+    assert "vulnerability service unavailable" in err
+
+
+def test_default_targets_cover_the_project_and_every_requirements_file(tmp_path: Path) -> None:
     runner = FakeRunner(0, report())
     path = exceptions_file(tmp_path, "")
     assert audit.main(["--exceptions", str(path)], runner=runner, today=TODAY) == 0
     assert [call[call.index("60") + 1:] for call in runner.calls] == [
-        ["."], ["-r", "requirements.txt"], ["-r", "requirements-v4.txt"]
+        ["."],
+        ["-r", "requirements.txt"],
+        ["-r", "requirements-v4.txt"],
+        ["--disable-pip", "--no-deps", "-r", "requirements-fastembed.txt"],
     ]
 
 
