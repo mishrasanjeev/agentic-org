@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """A synchronous database bridge must not poison the shared connection pool.
 
 `get_provider_credential_sync` runs the async resolver on a fresh event loop

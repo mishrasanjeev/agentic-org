@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """Spend usage routes, jobs, partitions, the migration, the Celery tasks and the hooks into reference data."""
 
 from __future__ import annotations

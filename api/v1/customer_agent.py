@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """The customer agent's routes: the bank's own agent, reached by the bank's own customers.
 
 Off by default (``AGENTICORG_CUSTOMER_AGENT_ENABLED``). Nothing here takes an

@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """Portable case hand-off: a signed webhook backed by an outbox, plus REST retrieval.
 
 **Outbox.** When a case reaches ``awaiting_decision`` (``case.completed``, or ``case.updated`` on

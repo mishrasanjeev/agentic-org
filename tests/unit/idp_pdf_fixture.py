@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """A minimal PDF built by hand for the document-processing tests: one page per document, Helvetica text at known places.
 
 No PDF library writes it, so the tests exercise the reader against a file

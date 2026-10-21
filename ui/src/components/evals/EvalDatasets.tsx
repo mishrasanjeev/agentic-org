@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: Apache-2.0
+// SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 import { useCallback, useEffect, useRef, useState } from "react";
 import api, { extractApiError } from "@/lib/api";
 

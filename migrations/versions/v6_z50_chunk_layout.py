@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """Chunk layout: the chunking strategy per tenant and paragraph and heading provenance per chunk.
 
 Revision ID: v6z50_chunk_layout

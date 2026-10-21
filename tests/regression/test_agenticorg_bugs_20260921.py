@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 
 """Regression coverage for the 2026-09-21 AgenticOrg bug sheet.
 

@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """A long-term memory entry about a subject (``core/memory/long_term.py``)."""
 
 from __future__ import annotations

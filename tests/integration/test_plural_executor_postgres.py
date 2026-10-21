@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """G55, G56, G58 on a real Postgres: UCP Complete through the Plural executor, RBI AFA, refunds and tracking.
 
 The Plural API is a fake (httpx MockTransport) that counts every request, so

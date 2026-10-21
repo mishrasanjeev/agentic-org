@@ -1,15 +1,58 @@
-                              Apache License
-                        Version 2.0, January 2004
-                     http://www.apache.org/licenses/
+# Orchestrum Personal Use License 1.0
 
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at
+Copyright (c) 2026 Orchestrum Technologies LLP. All rights reserved except as stated below.
 
-    http://www.apache.org/licenses/LICENSE-2.0
+## 1. Who may use the software without permission
 
-Unless required by applicable law or agreed to in writing, software
-distributed under the License is distributed on an "AS IS" BASIS,
-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-See the License for the specific language governing permissions and
-limitations under the License.
+An **individual** may use, copy and modify the software for their own personal purposes
+("Personal Use"), provided the individual is not acting for, on behalf of, or for the benefit of
+any organisation.
+
+Personal Use does **not** include use by or for any company, partnership, LLP, firm, sole
+proprietorship carrying on a business, charity, non-profit, school, university, research
+institution, government body or any other organisation, whether or not that use is commercial,
+internal, for evaluation, or free of charge to others.
+
+## 2. Everyone else needs written permission
+
+Any use other than Personal Use — including any use by or for an organisation, any commercial
+use, evaluation, testing, piloting, internal deployment, hosting, offering the software or a
+service based on it to others, resale, sublicensing, and embedding it in another product —
+requires **prior written permission** from Orchestrum Technologies LLP in a signed agreement.
+
+To request permission: sanjeev@orchestrum.in
+
+## 3. Conditions
+
+1. Keep this licence and the copyright notice with every copy, including modified copies.
+2. You may not distribute the software, modified or not, except as allowed by a written
+   agreement with Orchestrum Technologies LLP.
+3. You may not remove or alter any licensing, copyright or trademark notice.
+4. This licence grants no right to use the names, logos or trademarks "AgenticOrg", "Grantex" or
+   "Orchestrum"; see TRADEMARKS.md.
+
+## 4. Earlier releases and open-source parts
+
+1. Releases published before 21 October 2026 were made available under the terms they were
+   released with. This licence applies to every version from 21 October 2026 onward, including
+   all updates.
+2. Some directories are licensed separately under the Apache License 2.0 (for example the SDKs
+   and client packages). Those directories say so in their own LICENSE files, and this licence
+   does not apply to them.
+
+## 5. Termination
+
+Your rights under this licence end automatically if you use the software outside Personal Use
+without a written agreement, or break any condition above. They return if you stop the breach
+within 30 days of first learning of it, unless you have breached before.
+
+## 6. No warranty and no liability
+
+The software is provided "as is", without warranty of any kind, express or implied, including
+merchantability, fitness for a particular purpose and non-infringement. To the fullest extent
+the law allows, Orchestrum Technologies LLP is not liable for any claim, damages or other
+liability arising from the software or its use.
+
+## 7. Governing law
+
+This licence is governed by the laws of India. The courts at New Delhi, India have exclusive jurisdiction.

@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """Reconciliation: a provider's billing month of metered usage against its invoices, in two figures.
 
 **Scope.** The month is the provider's own billing month (``billing_date`` of

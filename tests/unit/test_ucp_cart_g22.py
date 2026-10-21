@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """G22: merchant-side carts (dev.ucp.shopping.cart), update without cart.id, the shopping permalink continue_url."""
 
 from __future__ import annotations

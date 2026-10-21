@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """The debugging console: breakpoints, step-through of a run's checkpoints and variable inspection.
 
 A run's graph (``core/langgraph/agent_graph.py``) writes a checkpoint after

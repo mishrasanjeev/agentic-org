@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """Call summaries: intent, key points, next actions and outcome, from a model or from the words.
 
 The model path goes through the content services' JSON call (schema

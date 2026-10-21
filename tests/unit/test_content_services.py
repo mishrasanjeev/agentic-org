@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """Content services: the framework, the three services, the sources, the drafts queue and the routes."""
 
 from __future__ import annotations

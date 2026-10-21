@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """The commerce arbiter: a deterministic policy decision that seals ``allow`` or ``refuse``.
 
 No human legs. ``decide`` is a pure function of its inputs: it reads no clock

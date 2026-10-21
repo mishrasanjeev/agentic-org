@@ -2,6 +2,7 @@ export const PRODUCT_OWNER = "Orchestrum Technologies LLP";
 export const INVENTOR_OWNER = "Sanjeev Kumar";
 export const PRIMARY_CONTACT_EMAIL = "sanjeev@orchestrum.in";
 export const SECONDARY_CONTACT_EMAIL = "mishra.sanjeev@gmail.com";
+export const LICENSING_PATH = "/docs/licensing";
 
 interface ProductOwnershipProps {
   tone?: "dark" | "light";
@@ -39,6 +40,14 @@ export default function ProductOwnership({
         <span aria-hidden="true">|</span>
         <a className={`${linkClass} break-all transition-colors`} href={`mailto:${SECONDARY_CONTACT_EMAIL}`}>
           {SECONDARY_CONTACT_EMAIL}
+        </a>
+      </p>
+      <p data-testid="product-licence">
+        Licence: platform Orchestrum Personal Use 1.0. Only individuals&apos; personal use is free; any
+        organisation needs a signed agreement with {PRODUCT_OWNER}. SDKs and MCP server: Apache-2.0,
+        free for any use.{" "}
+        <a className={`${linkClass} transition-colors`} href={LICENSING_PATH}>
+          Licensing and commercial use
         </a>
       </p>
     </div>

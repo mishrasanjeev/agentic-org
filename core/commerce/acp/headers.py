@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """ACP request headers: ``API-Version``, ``Idempotency-Key``, ``Request-Id``, ``Signature``, ``Timestamp`` (G34).
 
 ACP 2026-04-17 (RFC agentic checkout section 2.1 and 6; ``openapi.agentic_checkout.yaml``

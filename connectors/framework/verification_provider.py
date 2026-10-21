@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """The provider seam for business verification, ownership, screening and monitoring data.
 
 Agents, the policy engine and the evidence package depend only on this interface, so any data

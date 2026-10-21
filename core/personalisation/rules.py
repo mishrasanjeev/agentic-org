@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """The checks and the evaluation of personalisation: subjects, profiles, rules, conditions and templates.
 
 Everything here is pure: no store, no clock beyond what a caller passes.

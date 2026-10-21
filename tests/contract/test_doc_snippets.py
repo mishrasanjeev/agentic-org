@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """Documentation code examples are extracted from tests that run in CI.
 
 A fenced block in a checked document is preceded by a marker naming its source region::

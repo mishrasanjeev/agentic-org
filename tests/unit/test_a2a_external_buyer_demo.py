@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """Keep the synthetic external-buyer runner off remote and production targets."""
 
 from __future__ import annotations

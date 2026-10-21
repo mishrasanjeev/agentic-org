@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """Join the registry constraint hardening and functional feature migrations.
 
 Revision ID: v6z78_security_release_merge

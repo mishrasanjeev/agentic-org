@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """Transaction intelligence, part 1: records, entity aggregation, the detectors, findings and disposition, routes."""
 
 from __future__ import annotations

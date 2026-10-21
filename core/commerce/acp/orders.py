@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """ACP order webhook events: ``order_create`` / ``order_update`` signed with ``Merchant-Signature`` (G37).
 
 ACP 2026-04-17 (``openapi.agentic_checkout_webhook.yaml``): the merchant POSTs

@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """GPU node hours of in-house model serving, spread across the calls each hour served.
 
 One in-house endpoint (ollama, vllm) serves every tenant, so a node hour is a

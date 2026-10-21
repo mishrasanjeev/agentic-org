@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """Runtime guard for the model stub, importable before any application module.
 
 ``core.config`` validates production settings at import time, so the guard

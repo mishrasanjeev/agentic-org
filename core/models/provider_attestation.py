@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """Provider residency attestations: an administrator's record that a provider may process data in a region.
 
 The platform cannot know where a vendor hosts an endpoint or whether the vendor

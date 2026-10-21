@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """Every reasoning turn of an agent run is admitted under the per-model limits and gives its slot back."""
 
 from __future__ import annotations

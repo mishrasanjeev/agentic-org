@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: Apache-2.0
+// SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 /**
  * Typed helpers for the governed case API (`/api/v1/governed-cases`).
  *

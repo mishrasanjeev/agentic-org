@@ -2,6 +2,14 @@
 
 We welcome contributions from the community. This guide covers everything you need to get started.
 
+The AgenticOrg platform is source-available under the [Orchestrum Personal Use License 1.0](LICENSE);
+only an individual's personal use is free and any organisation needs a signed agreement with
+Orchestrum Technologies LLP
+([COMMERCIAL-LICENSE.md](COMMERCIAL-LICENSE.md)). The SDKs (`sdk/`, `sdk-ts/`) and the MCP
+server (`mcp-server/`) are Apache-2.0 open source. Read the
+[contributor licence](#contributor-licence) before you open a pull request: by contributing,
+you allow Orchestrum to license your contribution commercially as well.
+
 ## Development Setup
 
 ### Prerequisites
@@ -92,17 +100,29 @@ npm run dev    # http://localhost:5173
 
 ### Licence headers
 
-AgenticOrg is Apache-2.0. Every **new** source file (`.py`, `.ts`, `.tsx`,
-`.js`, `.jsx`, `.mjs`, `.cjs`, `.sh`) must carry an SPDX identifier within its
-first five lines — after a shebang or encoding line if there is one:
+The platform is licensed under the Orchestrum Personal Use License 1.0 (SPDX
+`LicenseRef-Orchestrum-Personal-Use-1.0`); `sdk/`, `sdk-ts/` and `mcp-server/` are Apache-2.0.
+Every **new** source file (`.py`, `.ts`, `.tsx`, `.js`, `.jsx`, `.mjs`, `.cjs`, `.sh`)
+must carry the SPDX identifier for its directory within its first five lines — after a
+shebang or encoding line if there is one. Platform files:
 
 ```python
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 ```
+
+```ts
+// SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
+```
+
+Files under `sdk/`, `sdk-ts/` and `mcp-server/`:
 
 ```ts
 // SPDX-License-Identifier: Apache-2.0
 ```
+
+Files from other projects that are copied into the repository unchanged, such
+as the vendored UCP and ACP JSON Schemas, keep their own licence and are not
+given this header.
 
 Existing files are not required to gain a header when edited. Type declaration
 files (`.d.ts`), minified bundles, empty files and recorded test cassettes are
@@ -248,7 +268,7 @@ expired until the dependency is fixed or the review is renewed.
 3. Register in `core/agents/registry.py`
 4. Add authorized tool scopes in agent config
 5. Write tests covering all processing steps
-
+
 ### Prompt tool references
 
 Every tool a built-in prompt tells the model to call (`call x(...)`, `x()`, or a
@@ -308,6 +328,30 @@ Agents are organized in a parent-child hierarchy per department. Key patterns:
 - Use GitHub Issues for bugs and feature requests
 - For security vulnerabilities, see [SECURITY.md](SECURITY.md)
 
-## License
+## Contributor licence
 
-By contributing, you agree that your contributions will be licensed under the Apache License 2.0.
+The AgenticOrg platform is licensed to the public under the Orchestrum Personal Use License 1.0, and
+Orchestrum Technologies LLP licenses it commercially under written agreements. For that to
+stay possible, every contribution is accepted on these terms:
+
+1. You keep the copyright in your contribution.
+2. You grant Orchestrum Technologies LLP, and anyone who receives the software from it, a
+   perpetual, worldwide, non-exclusive, royalty-free, irrevocable licence to use, copy,
+   modify, distribute and sublicense your contribution under the Orchestrum Personal Use
+   License 1.0 and under any other terms Orchestrum chooses, including commercial licence
+   agreements.
+3. You grant the same recipients a licence under any patent claims you can license that your
+   contribution would otherwise infringe, on the same basis.
+4. You confirm that the contribution is your own work, or that you have the right to submit
+   it on these terms, and that it does not include code under a licence that conflicts with
+   them.
+
+Submitting a pull request, patch or other contribution means you agree to these terms. If
+your employer has rights in your work, make sure they agree too. Questions go to
+[sanjeev@orchestrum.in](mailto:sanjeev@orchestrum.in).
+
+Contributions to `sdk/`, `sdk-ts/` and `mcp-server/` are also licensed to everyone under the
+Apache License 2.0, the licence of those directories.
+
+Contributions made before 21 October 2026 were made under the Apache License 2.0 that applied
+then.

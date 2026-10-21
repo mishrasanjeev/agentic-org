@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """Tenant-scoped checkpoint thread ids.
 
 The LangGraph checkpoint tables have no ``tenant_id`` column, so row-level

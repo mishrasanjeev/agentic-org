@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: Apache-2.0
+// SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 import { test, expect, type Locator } from "@playwright/test";
 import AxeBuilder from "@axe-core/playwright";
 import manual from "../src/content/userDocs.generated.json" with { type: "json" };

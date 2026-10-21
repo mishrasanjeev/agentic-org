@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """A fixture case for pseudonymisation tests.
 
 Every value is invented or reserved: names from no real person, a date of

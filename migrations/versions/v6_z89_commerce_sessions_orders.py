@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """UCP transactions: checkout sessions, carts, orders, order webhooks and idempotency records.
 
 Revision ID: v6z89_commerce_sessions_orders

@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """A-6 / §8.3 adversarial: instruction injection changes no tool call and no policy outcome.
 
 Four injection sites - website copy, a registry filing, a company name and a

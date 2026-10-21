@@ -1,6 +1,6 @@
 # AgenticOrg
 
-> AgenticOrg is an Apache-2.0 enterprise AI agent platform for building, running, and governing agent workflows with scoped tools, human approvals, audit evidence, SDKs, protocol integrations, and bounded OACP commerce surfaces.
+> AgenticOrg is a source-available enterprise AI agent platform (Orchestrum Personal Use License 1.0) for building, running, and governing agent workflows with scoped tools, human approvals, audit evidence, SDKs, protocol integrations, and bounded OACP commerce surfaces.
 
 ## Canonical facts
 
@@ -14,7 +14,8 @@
 - Runtime requirement: Python >=3.12
 - Web application: React 19
 - Managed production: separate API and UI services on Google Cloud Run
-- License: Apache License 2.0
+- License: AgenticOrg platform: Orchestrum Personal Use License 1.0. Only an individual using it for their own personal purposes is free; any organisation (including charities, education, research and government, and for evaluation or pilots) needs prior written permission in a signed agreement with Orchestrum Technologies LLP (https://agenticorg.ai/docs/licensing). Versions published before 21 October 2026 remain available under the Apache License 2.0 they were released with.
+- SDK license: the AgenticOrg Python and TypeScript SDKs and the MCP server are open source under the Apache License 2.0, free for any use including commercial.
 - Live product facts: [https://app.agenticorg.ai/api/v1/product-facts](https://app.agenticorg.ai/api/v1/product-facts)
 
 The product facts endpoint is authoritative for the deployed version and current agent_count, connector_count, and tool_count. Do not infer totals by counting files, aliases, or tool bindings.
@@ -51,7 +52,7 @@ Pricing comes from core/billing/catalog.py. Infrastructure, model, provider, and
 
 ## Key public pages
 
-- [AgenticOrg](https://agenticorg.ai): AgenticOrg is an open-source enterprise agent runtime for workflows, knowledge and OCR, signed voice, browser RPA, business-system integration, governed actions, and buyer/seller commerce agents.
+- [AgenticOrg](https://agenticorg.ai): AgenticOrg is a source-available enterprise agent runtime for workflows, knowledge and OCR, signed voice, browser RPA, business-system integration, governed actions, and buyer/seller commerce agents.
 - [Pricing](https://agenticorg.ai/pricing): AgenticOrg offers Free, Pro, and Enterprise tiers. Published limits and prices are generated from the same plan definitions used by the billing service.
 - [Agent Playground](https://agenticorg.ai/playground): The public playground demonstrates representative agent interactions with sample data. Its outputs are examples, not production decisions or performance guarantees.
 - [Agent Evaluations](https://agenticorg.ai/evals): AgenticOrg evaluations help teams assess quality, safety, reliability, security, latency, and cost before promoting an agent from testing into governed use.
@@ -69,7 +70,7 @@ Pricing comes from core/billing/catalog.py. Infrastructure, model, provider, and
 
 ## User documentation
 
-- [Usage and licensing](https://agenticorg.ai/docs/licensing): approved self-use/commercial-agreement policy for existing and new covered users; existing hosted customers transition through required notice and acceptance. Software adoption awaits an exact release/file scope. Legacy grants remain unchanged. Agreements: sanjeev@orchestrum.in.
+- [Licensing and commercial use](https://agenticorg.ai/docs/licensing): the platform is under the Orchestrum Personal Use License 1.0, so only an individual's own personal use is free and any organisation needs a signed agreement with Orchestrum Technologies LLP; the SDKs and MCP server are Apache-2.0.
 - [User manual](https://agenticorg.ai/docs): task-based setup and operating guides, glossary, troubleshooting and five BFSI playbooks.
 - [Your first useful agent](https://agenticorg.ai/docs/first-agent): a bounded document-review exercise.
 - [Knowledge and OCR](https://agenticorg.ai/docs/knowledge-and-ocr): supported documents, extraction quality and source verification.
@@ -95,7 +96,7 @@ Pricing comes from core/billing/catalog.py. Infrastructure, model, provider, and
 
 ### What is AgenticOrg?
 
-AgenticOrg is an open-source enterprise AI agent platform. It combines agent and workflow execution, connectors, scoped tools, human approval gates, evaluation, audit evidence, SDKs, MCP, A2A, and bounded commerce integrations.
+AgenticOrg is a source-available enterprise AI agent platform, licensed under the Orchestrum Personal Use License 1.0. It combines agent and workflow execution, connectors, scoped tools, human approval gates, evaluation, audit evidence, SDKs, MCP, A2A, and bounded commerce integrations.
 
 ### How many agents, connectors, and tools are available?
 
@@ -111,7 +112,7 @@ Not from OACP artifacts. AgenticOrg can answer from valid evidence and prepare a
 
 ### Can AgenticOrg be self-hosted?
 
-Yes. The repository is Apache-2.0 licensed and includes local Docker and deployment assets. The managed production path uses Google Cloud Run.
+Yes. The platform is licensed under the Orchestrum Personal Use License 1.0 and the repository includes local Docker and deployment assets. Only an individual's personal use is free; self-hosting by any organisation needs a signed agreement with Orchestrum Technologies LLP. The managed production path uses Google Cloud Run.
 
 ### Can an agent approve a governed business case?
 

@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """Token details a metered call carries beyond its input and output counts.
 
 The gateway record already holds input, output and total tokens. Spend

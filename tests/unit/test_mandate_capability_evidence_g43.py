@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """G43 (AgenticOrg side): the Plural capability result becomes Grantex mandate-capability evidence.
 
 The object must pass the Grantex validator (``oacp.mandate_capability_evidence.v1``, closed member

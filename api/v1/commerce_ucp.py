@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """UCP REST binding: checkout sessions, carts and orders at ``https://<merchant serving host>/ucp``.
 
 Mounted at ``/ucp`` (no ``/api/v1`` prefix): the UCP profile advertises

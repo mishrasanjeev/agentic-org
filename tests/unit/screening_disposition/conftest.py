@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """Screening Disposition test set-up: screen a fixture party on the mock provider and run the agent on a hit."""
 
 from __future__ import annotations

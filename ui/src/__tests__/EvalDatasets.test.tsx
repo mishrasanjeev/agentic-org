@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: Apache-2.0
+// SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 /**
  * Evaluation datasets panel: absent while the feature is off, creating a
  * dataset, saving a new version against the version that was opened, reading

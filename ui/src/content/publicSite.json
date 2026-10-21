@@ -18,7 +18,7 @@
     "email": "sanjeev@orchestrum.in",
     "secondaryEmail": "mishra.sanjeev@gmail.com",
     "github": "https://github.com/mishrasanjeev/agentic-org",
-    "description": "AgenticOrg is an open-source platform for building, deploying, and governing enterprise AI agents with scoped tools, human approvals, audit evidence, and protocol-based integration."
+    "description": "AgenticOrg is a source-available platform for building, deploying, and governing enterprise AI agents with scoped tools, human approvals, audit evidence, and protocol-based integration."
   },
   "aliases": {
     "/contact": "/support",
@@ -45,7 +45,7 @@
       "name": "AgenticOrg",
       "title": "Governed Enterprise AI Agents | AgenticOrg",
       "description": "Build and govern enterprise AI agents across workflows, documents and OCR, signed voice, browser RPA, APIs, MCP, A2A, and bounded OACP commerce.",
-      "summary": "AgenticOrg is an open-source enterprise agent runtime for workflows, knowledge and OCR, signed voice, browser RPA, business-system integration, governed actions, and buyer/seller commerce agents.",
+      "summary": "AgenticOrg is a source-available enterprise agent runtime for workflows, knowledge and OCR, signed voice, browser RPA, business-system integration, governed actions, and buyer/seller commerce agents.",
       "section": "Platform",
       "schemaType": "WebPage",
       "index": true,
@@ -409,7 +409,7 @@
   "landingFaqs": [
     {
       "question": "What is AgenticOrg?",
-      "answer": "AgenticOrg is an open-source enterprise AI agent platform. It provides an agent runtime, workflow orchestration, native connectors, scoped tools, human approval gates, evaluation, audit evidence, SDKs, API access, MCP, A2A, and bounded OACP commerce surfaces."
+      "answer": "AgenticOrg is a source-available enterprise AI agent platform, with the platform licensed under the Orchestrum Personal Use License 1.0 (only individuals' personal use is free; any organisation needs a signed agreement with Orchestrum Technologies LLP) and the SDKs and MCP server under Apache-2.0. It provides an agent runtime, workflow orchestration, native connectors, scoped tools, human approval gates, evaluation, audit evidence, SDKs, API access, MCP, A2A, and bounded OACP commerce surfaces."
     },
     {
       "question": "How does AgenticOrg keep AI agents under human control?",
@@ -437,7 +437,7 @@
     },
     {
       "question": "Can AgenticOrg be self-hosted?",
-      "answer": "Yes. The repository is Apache-2.0 licensed and includes Docker and deployment assets. The current managed production path uses Google Cloud Run with commit-pinned images, health verification, explicit traffic movement, and rollback-aware deployment tooling."
+      "answer": "Yes. The platform is licensed under the Orchestrum Personal Use License 1.0 and the repository includes Docker and deployment assets. Only an individual's personal use is free; self-hosting by any organisation needs a signed agreement with Orchestrum Technologies LLP. The current managed production path uses Google Cloud Run with commit-pinned images, health verification, explicit traffic movement, and rollback-aware deployment tooling."
     },
     {
       "question": "Who is AgenticOrg for?",

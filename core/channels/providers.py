@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """Native provider wire contracts. Credentials and callback bodies never enter logs."""
 
 from __future__ import annotations

@@ -81,6 +81,21 @@ def _core_database_added_schema_ddl(base: str, head: str) -> bool:
     return any(pattern in line for line in added_lines for pattern in SCHEMA_DDL_PATTERNS)
 
 
+def _only_comment_lines_changed(base: str, head: str, path: str) -> bool:
+    """True when every added or removed line of ``path`` is blank or a ``#`` comment.
+
+    A Python comment cannot change a model's schema, so a comment-only edit (for example
+    an SPDX licence header change) does not need a migration. Any other changed line,
+    including a docstring or code, still does.
+    """
+    changed_lines = [
+        line[1:].strip()
+        for line in _diff(base, head, path).splitlines()
+        if line[:1] in {"+", "-"} and not line.startswith(("+++", "---"))
+    ]
+    return bool(changed_lines) and all(not line or line.startswith("#") for line in changed_lines)
+
+
 def _schema_relevant_changed_files(base: str, head: str, changed: list[str]) -> list[str]:
     relevant = []
     for path in changed:
@@ -91,6 +106,8 @@ def _schema_relevant_changed_files(base: str, head: str, changed: list[str]) -> 
                 relevant.append(path)
             continue
         if path.startswith("core/models/"):
+            if _only_comment_lines_changed(base, head, path):
+                continue
             relevant.append(path)
     return relevant
 

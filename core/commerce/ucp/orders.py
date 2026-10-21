@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """The order entity (``dev.ucp.shopping.order``) and its lifecycle events.
 
 A completed checkout produces one order. The stored snapshot is

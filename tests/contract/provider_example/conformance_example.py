@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """How a provider package runs the conformance suite against itself, using the mock as the provider.
 
 This file is written from outside the repository's point of view: it imports the suite from its

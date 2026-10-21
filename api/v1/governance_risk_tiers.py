@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """Regulatory risk tiers: the policy and every agent's compliance (core/governance/risk_tiers.py)."""
 
 from __future__ import annotations

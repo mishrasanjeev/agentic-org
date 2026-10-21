@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """FX rates: the reference rate of a currency to INR per reporting date.
 
 A rate is kept per ``(currency, rate_date)``; ``put_rate`` and the import

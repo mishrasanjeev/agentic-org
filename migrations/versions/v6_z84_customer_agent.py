@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """Customer agent: customer sessions, mandates and prepared actions.
 
 Revision ID: v6z84_customer_agent

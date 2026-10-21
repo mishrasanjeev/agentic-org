@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """The authenticated caller of the current request, for policies that match on identity.
 
 The auth middleware binds a :class:`CallerIdentity` for the span of each

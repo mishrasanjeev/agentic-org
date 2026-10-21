@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """Graph retrieval over the entities found in the knowledge base.
 
 While ``AGENTICORG_KNOWLEDGE_GRAPH_RETRIEVAL_ENABLED`` is on, ingestion

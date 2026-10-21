@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """A-2: the conformance suite is importable from an external package, and the mock passes it.
 
 The wheel publishes ``testing/provider_conformance`` as ``agenticorg.testing.provider_conformance``

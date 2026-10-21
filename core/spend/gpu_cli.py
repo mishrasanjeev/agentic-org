@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """Operator command for in-house GPU node hours (``python -m core.spend.gpu_cli``).
 
 Node hours are a deployment cost, so they are entered by the platform

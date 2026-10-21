@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """Commitments: committed or prepaid volume over a billing period.
 
 A **quantity** commitment names a provider, a usage type, optionally a

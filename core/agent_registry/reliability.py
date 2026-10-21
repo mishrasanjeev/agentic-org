@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """Ratings, reliability metrics and certification status for an agent's card.
 
 **Reliability** is read from the agent's stored task results over a window

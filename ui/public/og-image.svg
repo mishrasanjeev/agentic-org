@@ -66,7 +66,7 @@
   <text x="100" y="485" font-family="Inter, system-ui, sans-serif" font-size="56" font-weight="800" fill="white">One Platform.</text>
 
   <!-- Subtext -->
-  <text x="100" y="540" font-family="Inter, system-ui, sans-serif" font-size="20" fill="#94a3b8">Open Source  ·  Apache 2.0  ·  India-First  ·  HITL Governance</text>
+  <text x="100" y="540" font-family="Inter, system-ui, sans-serif" font-size="20" fill="#94a3b8">Source-available  ·  Free for personal use  ·  India-First  ·  HITL Governance</text>
 
   <!-- Domain -->
   <text x="100" y="590" font-family="Inter, system-ui, sans-serif" font-size="18" fill="#64748b">agenticorg.ai</text>

@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: Apache-2.0
+// SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 /**
  * The embeddable customer agent element: the disclosure gate, turns, prepared-action
  * cards with one-tap confirm and cancel, the step-up event, and the "why this" panel.

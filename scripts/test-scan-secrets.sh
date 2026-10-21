@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 # Self-test for scripts/scan-secrets.sh.
 #
 # Builds a throwaway git repository, commits a clean change and a change that

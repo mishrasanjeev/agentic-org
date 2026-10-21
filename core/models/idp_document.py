@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """A processed document kept for review: the file, the pipeline's result, the corrections and the decision."""
 
 from __future__ import annotations

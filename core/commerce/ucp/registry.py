@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """The UCP capability, service and payment-handler registry.
 
 A business profile lists only what is actually served (UCP 2026-08-25

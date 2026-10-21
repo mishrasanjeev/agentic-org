@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """A2A v1 HTTP+JSON synchronous messages with merchant-bound buyer access."""
 
 from __future__ import annotations

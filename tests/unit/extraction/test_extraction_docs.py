@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """docs/security/untrusted-content.md stays in step with the code it documents."""
 
 from __future__ import annotations

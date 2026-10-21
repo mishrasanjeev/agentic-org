@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """Phase 2 under the NOBYPASSRLS application role: arbiter decisions and ledger rows stay tenant-bound.
 
 Uses the fixtures of ``test_rls_nobypass_role`` (app-role engine, every session routed to it).

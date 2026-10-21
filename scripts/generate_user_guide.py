@@ -478,8 +478,8 @@ def build():
     pdf.bold_bullet("Enterprise ($299/mo)", "Unlimited everything, SSO, priority support")
     pdf.ln(1)
     pdf.body("India pricing: Free / Rs 999/mo / Rs 4999/mo. Toggle between USD and INR on the billing page.")
-    pdf.sub("Self-Hosted (Free Forever)")
-    pdf.body("If you deploy AgenticOrg on your own servers, it is completely free. No license fees. No per-seat charges. Open source (Apache 2.0).")
+    pdf.sub("Self-Hosted")
+    pdf.body("AgenticOrg is licensed under the Orchestrum Personal Use License 1.0. Personal use by an individual is free. Any organisation, including for self-hosting, needs a written agreement with Orchestrum Technologies LLP.")
 
     # ---- 17. SETTINGS ----
     pdf.add_page()

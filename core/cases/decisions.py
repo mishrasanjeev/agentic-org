@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """Recording the human decision on a governed case.
 
 A case reaches ``decided`` only through :func:`record_decision`, and only when the configured

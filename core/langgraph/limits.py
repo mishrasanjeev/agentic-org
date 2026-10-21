@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """Per-agent execution limits and loop detection.
 
 An agent may carry limits in its configuration (``config["limits"]``): the

@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """An approval step whose condition cannot be evaluated applies (review H-6).
 
 Skipping a step removes approvals, so an unevaluatable condition must never

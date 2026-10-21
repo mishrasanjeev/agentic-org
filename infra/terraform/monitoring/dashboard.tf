@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 #
 # One dashboard, matching the alerts: every panel reads a metric an alert reads, so an operator
 # looking at a firing alert can see the series behind it without building a query.

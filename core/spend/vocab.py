@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """The closed sets of spend intelligence and the normalisers every input passes through.
 
 Every closed set here is mirrored by a CHECK constraint in the migrations.

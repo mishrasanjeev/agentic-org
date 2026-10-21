@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: Apache-2.0
+// SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 /**
  * The visual builder: the graph derived from the definition, and edits that are edits of the definition.
  */

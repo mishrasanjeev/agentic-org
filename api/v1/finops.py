@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """FinOps: cost attribution by use case, application, business unit, department and cost centre."""
 
 from __future__ import annotations

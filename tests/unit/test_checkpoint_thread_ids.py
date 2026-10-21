@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """Tenant-scoped checkpoint thread ids and their enforcement in the runner (PRD F-2)."""
 
 from __future__ import annotations

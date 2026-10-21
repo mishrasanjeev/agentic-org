@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """Domain types exchanged with a :class:`~connectors.framework.verification_provider.VerificationProvider`.
 
 These are domain concepts - businesses, registry status, owners and controllers, screening hits -

@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """An in-memory stand-in for the tenant session the spend services use.
 
 It evaluates the SQLAlchemy statements those services build against a list

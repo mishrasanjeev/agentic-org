@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """A-3: the mock provider as a separate HTTP service and the client provider that talks to it.
 
 The service runs on a real socket (``AGENTICORG_TEST_MOCK_PROVIDER_PORT``, or a free port), so these

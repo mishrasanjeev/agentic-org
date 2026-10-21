@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """Business Onboarding Underwriter reference agent (PRD A-7).
 
 Investigates a business application through a :class:`VerificationProvider` and hands off a

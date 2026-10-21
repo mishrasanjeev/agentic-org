@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """A-5 / §8.3 "policy determinism": identical inputs always produce an identical result.
 
 Property tests over 1,000 generated cases per policy, from a seeded generator

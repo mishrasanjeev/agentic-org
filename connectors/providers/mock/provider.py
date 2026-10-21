@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """``MockProvider``: an in-process, fixture-backed :class:`VerificationProvider`.
 
 Built from the domain (see ``fixtures/``), not from any real source's responses. It offers every

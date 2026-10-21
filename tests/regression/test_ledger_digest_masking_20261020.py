@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """Commerce ledger details keep digest values intact while personal data is still masked.
 
 Replays the failure seen when sealing mandate hashes: the PII masker's phone

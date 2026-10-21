@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: Apache-2.0
+// SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 /**
  * Layout: an entry behind a default-off subsystem flag is shown only once its status says enabled.
  */

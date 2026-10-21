@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """Force row-level security on the programme's tenant tables.
 
 Revision ID: v6z68_force_rls_programme_tables

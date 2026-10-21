@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """Model cards: one standard card per model the tenant uses (core/governance/model_cards.py)."""
 
 from __future__ import annotations

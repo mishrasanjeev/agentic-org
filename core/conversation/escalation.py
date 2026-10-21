@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """Escalation hand-off: a person gets the summary, the intent tag and the transcript, not a blank slate.
 
 A hand-off records a review-queue item (``hitl_queue``, trigger

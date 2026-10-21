@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """G34/G38: ACP requests translate onto the UCP state engine and render as schema-valid ACP CheckoutSessions;
 headers, statuses, capability declarations and the request schema behave as ACP 2026-04-17 specifies."""
 

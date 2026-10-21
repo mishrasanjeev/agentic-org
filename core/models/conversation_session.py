@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """A banking conversation in progress: its dialogue state per channel, company, agent and user."""
 
 from __future__ import annotations

@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """G29: UCP quantities are integer step counts of the sale basis (unit, scale <= 15, increment), bounded at 2^53-1."""
 
 from __future__ import annotations

@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """Run timelines (observability/timeline.py): kept per run, stored when the run ends, read for the console."""
 
 from __future__ import annotations

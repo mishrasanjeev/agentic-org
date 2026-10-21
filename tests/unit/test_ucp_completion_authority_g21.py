@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """G21: the buyer authority and vendor member of a UCP complete body are validated field by field (400 on any
 malformed value), and an AP2 checkout mandate stands in for the mandate reference by its SHA-256."""
 

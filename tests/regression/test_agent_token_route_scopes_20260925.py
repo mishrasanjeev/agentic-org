@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """Agent tokens need a route's scope like any other credential (review H-1).
 
 ``_check_scope`` returned before looking at scopes for any ``auth_mode`` other

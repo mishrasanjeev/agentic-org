@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """Opt-in final-answer replies; existing bindings and intake stay status-only."""
 
 from alembic import op

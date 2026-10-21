@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """The provider tool gateway: read tools only, grant check fails closed, calls recorded and counted."""
 
 from __future__ import annotations

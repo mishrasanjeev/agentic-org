@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """Synthetic check kinds: adversarial and eval_dataset.
 
 Revision ID: v6z46_synthetic_check_kinds
