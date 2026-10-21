@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+// SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 /**
  * Governed case queue and case detail against the local development stack
  * (`make dev && make seed && make seed-cases && make e2e`). Every response is

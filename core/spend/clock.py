@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """The two calendars of spend intelligence, and the one clock tests patch.
 
 A record has an **event date**, its instant in the reporting zone

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 # Browser end-to-end run for `make e2e`, executed inside the official
 # Playwright image on the dev stack's network (see the e2e service in
 # docker-compose.dev.yml).

@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """Conversational services: POST /chat/query holds back weak answers and carries the fallback streak across queries."""
 
 from __future__ import annotations

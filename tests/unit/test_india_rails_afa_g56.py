@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """G56: UPI AutoPay e-mandates on the payment capability, RBI AFA as an out-of-band step, and the arbiter rule.
 
 A session never completes without the AFA evidence ref when AFA applies: the

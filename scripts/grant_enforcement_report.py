@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """Per-tenant report of tool calls grant enforcement denied or would deny.
 
 Reads the API's JSON log lines — raw stdout lines, or Cloud Logging entries

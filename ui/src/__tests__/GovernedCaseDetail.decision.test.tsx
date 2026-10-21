@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+// SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 // The decision action (PRD A-9): approving without step-up is impossible in the UI, the four-eyes
 // state is visible, the second approver cannot be the first, and dwell is recorded render-to-submit.
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";

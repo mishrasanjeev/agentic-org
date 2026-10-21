@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """PRD A-8 hand-off on PostgreSQL: case push outbox, signed delivery, retries, dead letters, provider webhooks.
 
 Drives real cases (mock provider, scripted model) and delivers through ``CasePushDispatcher`` with an

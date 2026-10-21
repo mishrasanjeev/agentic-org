@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """Per-model limits: admission under concurrency and rate limits, release, and the degraded paths."""
 
 from __future__ import annotations

@@ -2029,7 +2029,7 @@ $ agenticorg sop deploy \\
 
           <div className="border-t border-slate-800 pt-8 flex flex-col sm:flex-row items-center justify-between gap-4">
             <p className="text-sm text-slate-500">
-              &copy; 2026 Orchestrum Technologies LLP. Platform: PolyForm Noncommercial 1.0.0, commercial use needs a written agreement. SDKs: Apache-2.0.
+              &copy; 2026 Orchestrum Technologies LLP. Platform: Orchestrum Personal Use License 1.0, organisations need a signed agreement. SDKs: Apache-2.0.
             </p>
             <div className="flex flex-wrap items-center justify-center gap-x-6 gap-y-2">
               <a href="/privacy" className="text-sm text-slate-500 hover:text-slate-300 transition-colors">Privacy</a>

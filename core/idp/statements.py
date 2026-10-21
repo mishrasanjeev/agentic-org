@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """Bank statement line items from an extracted table: dated transactions with debit, credit and running balance.
 
 Rows are read from the statement's transaction table (date, description,

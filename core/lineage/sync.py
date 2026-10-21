@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """Incremental synchronisation: a source polled on a schedule, only what changed since the last run processed.
 
 A sync source names a feed the tenant administrator set up: an HTTPS

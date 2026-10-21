@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """UCP ``messages[]`` builders and the error response shape.
 
 Business outcomes (out of stock, an undeliverable address, a refused payment)

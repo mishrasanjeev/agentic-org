@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """Sandboxed extraction worker. Runs in its own process; never imported to extract in-process.
 
 The parent (``core.extraction.sandbox``) starts this file by path with

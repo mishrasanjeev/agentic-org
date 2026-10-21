@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """Synthetic UCP scope for tests: a merchant on merchant.example, platform profiles, fakes for every dependency."""
 
 from __future__ import annotations

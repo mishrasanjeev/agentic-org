@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """The read path for the Prometheus registry (FINDINGS A-56).
 
 Every instrument in this repository was write-only: incremented in a container and never read.

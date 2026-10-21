@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """Provenance: where every kept thing came from, which version it is, and the steps that produced it.
 
 A node is one thing the platform keeps or uses, named by its kind and a

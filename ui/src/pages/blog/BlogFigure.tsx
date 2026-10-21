@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+// SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 import type { ReactNode } from "react";
 import type { BlogDiagramId, BlogFigure as Figure } from "./blogData";
 

@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """Record and replay model calls so agent tests are deterministic.
 
 ``AGENTICORG_MODEL_MODE`` selects how model calls behave:

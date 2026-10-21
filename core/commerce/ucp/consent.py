@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """Buyer consent (``dev.ucp.shopping.buyer_consent``): the ``dev.ucp.consent.*`` purpose map.
 
 2026-08-25: ``buyer.consent`` maps reverse-DNS purposes to ``{granted, source,

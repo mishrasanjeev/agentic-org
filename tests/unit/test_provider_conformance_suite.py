@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """A-2: the conformance suite passes a conforming provider and fails each deliberately broken one
 with a reason a person can act on."""
 

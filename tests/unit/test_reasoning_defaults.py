@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """Creation defaults, explicit tenant choices, provider dispatch and published pricing agree."""
 
 from core.ai_providers.catalog import find_llm

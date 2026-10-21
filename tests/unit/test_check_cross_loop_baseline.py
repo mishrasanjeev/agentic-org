@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """The cross-loop ratchet baseline only moves down (scripts/check_cross_loop_baseline.py)."""
 
 from __future__ import annotations

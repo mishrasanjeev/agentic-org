@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """Spend usage: usage records, the daily rollup, meter gaps and maintenance jobs.
 
 Written by ``core/spend/`` (migration ``v6z80_spend_usage``). An empty

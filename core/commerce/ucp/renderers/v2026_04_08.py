@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """UCP 2026-04-08 shapes.
 
 Differences from 2026-08-25 handled here: items have no ``quantity_unit`` or

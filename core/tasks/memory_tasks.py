@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """Celery tasks for long-term memory retention (``core/memory/long_term.py``)."""
 
 from __future__ import annotations

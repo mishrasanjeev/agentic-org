@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """Governed case lifecycle rules, decision refusal and workflow step refusals without a database."""
 
 from __future__ import annotations

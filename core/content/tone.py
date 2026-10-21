@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """Audience-adaptive tone: the same facts rewritten for an audience, a tone and a reading level.
 
 A rewrite must keep every number, amount, date and percentage of the

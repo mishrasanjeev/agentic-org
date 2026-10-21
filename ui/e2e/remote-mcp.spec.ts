@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+// SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 import { randomUUID } from "node:crypto";
 import { expect, test } from "@playwright/test";
 import { setSessionToken } from "./helpers/auth";

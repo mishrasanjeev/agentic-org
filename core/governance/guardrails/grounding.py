@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """The grounding checker: is each claim of an answer supported by the context the run retrieved?
 
 A deterministic, lexical check, so it runs inside a detector's time budget

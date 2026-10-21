@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """Load and validate documents against the governed-case domain schemas.
 
 The schemas live in ``schemas/<name>.schema.json`` (JSON Schema 2020-12). Each

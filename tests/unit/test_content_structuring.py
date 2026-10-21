@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """Content services, part 2: structuring to JSON and XML, grounded responses, tone adaptation and clause assembly."""
 
 from __future__ import annotations

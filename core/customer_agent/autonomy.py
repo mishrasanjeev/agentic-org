@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """The autonomy ladder: how far the agent may go for one task, for one customer.
 
 Five levels, set per task class and per customer, promotable and demotable:

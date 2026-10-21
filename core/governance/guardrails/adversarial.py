@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """The adversarial evaluation set: how well a set of guardrail rules holds against known attacks.
 
 A fixed corpus of synthetic cases, each a text at a stage with what a sound

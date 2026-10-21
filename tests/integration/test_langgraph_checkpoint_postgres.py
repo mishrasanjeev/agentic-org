@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """Postgres checkpoint store against a real database (PRD F-2).
 
 * The v6z22 migration builds exactly the catalog ``AsyncPostgresSaver.setup()``

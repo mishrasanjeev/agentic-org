@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """Context-window management: what is sent to a model fits the model, most relevant first.
 
 An agent run accumulates tool results. Sent whole, a long run eventually

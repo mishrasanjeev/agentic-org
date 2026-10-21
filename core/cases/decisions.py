@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """Recording the human decision on a governed case.
 
 A case reaches ``decided`` only through :func:`record_decision`, and only when the configured

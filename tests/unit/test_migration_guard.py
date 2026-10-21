@@ -34,7 +34,7 @@ def test_model_comment_only_change_does_not_require_migration(monkeypatch) -> No
             "+++ b/core/models/agent.py\n"
             "@@ -1 +1 @@\n"
             "-# SPDX-License-" "Identifier: Apache-2.0\n"
-            "+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0"
+            "+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0"
         ),
     )
 

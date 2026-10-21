@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """Conversation summaries: what was asked, what was done, what is pending, for a person or a downstream system.
 
 Built from the dialogue's own record (the actions that ran, the stage it is

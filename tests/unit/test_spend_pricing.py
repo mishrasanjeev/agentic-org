@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """The spend pricing engine: card selection, fallback, in-house, unpriced, money and FX, tiers (pure)."""
 
 from __future__ import annotations

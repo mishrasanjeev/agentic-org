@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """Agentic Commerce Protocol (ACP, API version ``2026-04-17``) surfaces.
 
 * ``feed``: the product feed (ACP Feed ``Product`` JSON and the flat CSV with

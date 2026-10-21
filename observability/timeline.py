@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """Run timelines: the spans of one agent run, kept for the console's waterfall.
 
 Tracing exports spans to a collector, and no environment of this platform

@@ -3,9 +3,9 @@
 "AgenticOrg" and "Grantex", and the AgenticOrg and Grantex names and logos, are trademarks of
 **Orchestrum Technologies LLP**.
 
-The software licences in this repository, the PolyForm Noncommercial License 1.0.0 and, for
-versions published before 21 October 2026, the Apache License 2.0, do not grant any right to
-use these trademarks.
+The software licences in this repository, the Orchestrum Personal Use License 1.0, the Apache
+License 2.0 of the SDKs and MCP server and, for versions published before 21 October 2026, the
+Apache License 2.0, do not grant any right to use these trademarks.
 
 ## What needs approval
 

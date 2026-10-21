@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """A fake Plural API (httpx MockTransport) and an in-memory payment journal for executor tests.
 
 Synthetic only: the base URL is on plural.example and the credentials are placeholders.

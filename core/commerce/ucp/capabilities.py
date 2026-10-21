@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """The transaction capabilities (checkout, cart, order and their extensions) and their payment handlers.
 
 Each ``CapabilityEntry`` says, per merchant, whether the capability is

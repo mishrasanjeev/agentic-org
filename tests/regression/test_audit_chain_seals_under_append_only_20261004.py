@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """The sealing task links audit rows while ``audit_log`` stays append-only.
 
 ``audit_log`` refuses every UPDATE and DELETE through its trigger. Sealing a

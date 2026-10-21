@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """Phase 4 on a real Postgres: server-requested mandates (D1), the not-present rule set and the buyer agent.
 
 Grantex is the fake in ``tests/grantex_service_fakes.py`` (mandates signed with

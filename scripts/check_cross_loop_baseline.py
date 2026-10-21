@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """CI guard: the cross-loop ratchet baseline only ever moves down.
 
 `cross_loop_baseline.txt` is how many times the cross-loop guard

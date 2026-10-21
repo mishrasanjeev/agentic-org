@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """Phase 2 on a real Postgres: arbiter decisions, single-use consumption, ledger rows and append-only triggers.
 
 Requires the disposable database in ``AGENTICORG_DB_URL`` (migrated to head by the module fixture).

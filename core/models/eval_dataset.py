@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """Evaluation datasets and their versions (``core/evals/datasets.py``)."""
 
 from __future__ import annotations

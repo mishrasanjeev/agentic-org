@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """The business console: the rules, thresholds and routing a tenant changes without a release.
 
 ``GET /workbench/console`` lists every setting with its definition, bounds,

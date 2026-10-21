@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """Order webhooks: subscriptions, the delivery outbox and the signed dispatcher.
 
 Subscriptions (``commerce_order_webhook_subscriptions``):

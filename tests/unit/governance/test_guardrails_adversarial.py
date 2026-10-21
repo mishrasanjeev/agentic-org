@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """The adversarial evaluation set: the corpus, the baseline's measured results and the endpoints."""
 
 from __future__ import annotations

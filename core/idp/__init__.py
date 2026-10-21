@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """Intelligent document processing: pages with word boxes, classification, bundle splitting, fields and tables.
 
 ``pages``: a PDF or image as pages of words with bounding boxes (text layer

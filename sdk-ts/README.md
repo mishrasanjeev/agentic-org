@@ -208,10 +208,10 @@ Apache License 2.0 (SPDX `Apache-2.0`); see [LICENSE](LICENSE). Copyright 2026 O
 Technologies LLP.
 
 **This TypeScript SDK is open source and free for any use, including commercial use**, under the Apache
-License 2.0. It stays Apache-2.0 after the AgenticOrg platform moved to the PolyForm Noncommercial
-License 1.0.0 on 21 October 2026. The platform itself (the API, workers, UI and the rest of the
-repository) is licensed separately: commercial use of the platform needs a written agreement with
-Orchestrum Technologies LLP; see
+License 2.0. It stays Apache-2.0 after the AgenticOrg platform moved to the Orchestrum Personal Use
+License 1.0 on 21 October 2026. The platform itself (the API, workers, UI and the rest of the
+repository) is licensed separately: only an individual's personal use of the platform is free, and
+any organisation needs a signed agreement with Orchestrum Technologies LLP; see
 [COMMERCIAL-LICENSE.md](https://github.com/mishrasanjeev/agentic-org/blob/main/COMMERCIAL-LICENSE.md).
 "AgenticOrg" and "Grantex" are trademarks of Orchestrum Technologies LLP; the Apache License 2.0
 grants no trademark rights

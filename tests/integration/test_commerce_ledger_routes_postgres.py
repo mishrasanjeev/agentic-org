@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """Phase 2 G14-G16 and D1 on a real Postgres.
 
 Strict buyer authority refusal, the Grantex grant requirement on consumption,

@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """OpenAI-compatible model stub: protocol logic and HTTP server.
 
 ``POST /v1/chat/completions`` answers in one of two ways, chosen by the

@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """Every YAML example in docs/policies/authoring.md loads, or fails with the reason it states."""
 
 from __future__ import annotations

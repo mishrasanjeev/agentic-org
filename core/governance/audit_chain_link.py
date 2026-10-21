@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """The audit chain's link arithmetic, with no dependency beyond the standard library.
 
 ``canonical_audit_payload`` is the serialisation the platform audit key signs

@@ -1,15 +1,17 @@
 # Changelog
 
-## Unreleased - Licence change to PolyForm Noncommercial 1.0.0
+## Unreleased - Platform licence change to the Orchestrum Personal Use License 1.0
 
 ### Breaking - licence
 
-- From 21 October 2026 the AgenticOrg platform is licensed under the PolyForm Noncommercial License
-  1.0.0 (SPDX `PolyForm-Noncommercial-1.0.0`) instead of the Apache License 2.0. The licensor is
-  Orchestrum Technologies LLP. Only self use is free; commercial use of any sort, including
-  internal business use, hosting, resale, embedding in a product and consulting delivery, needs
-  prior approval and a written agreement with Orchestrum Technologies LLP
-  (`COMMERCIAL-LICENSE.md`, sanjeev@orchestrum.in).
+- From 21 October 2026 the AgenticOrg platform is licensed under the Orchestrum Personal Use
+  License 1.0 (SPDX `LicenseRef-Orchestrum-Personal-Use-1.0`) instead of the Apache License 2.0.
+  The licensor is Orchestrum Technologies LLP. Only an individual using it for their own personal
+  purposes is free. Every organisation (companies, firms, sole proprietors' businesses, charities,
+  schools, universities, research bodies and government) needs prior written permission in a
+  signed agreement with Orchestrum Technologies LLP for any use, including evaluation, testing,
+  pilots, internal use, hosting, resale and embedding, paid or free (`COMMERCIAL-LICENSE.md`,
+  sanjeev@orchestrum.in). Distribution needs a written agreement as well.
 - Not changed: the Python SDK (`sdk/`), the TypeScript SDK (`sdk-ts/`) and the MCP server
   (`mcp-server/`) stay open source under the Apache License 2.0, free for any use including
   commercial. Each now carries its own Apache `LICENSE`; their package metadata, classifiers and
@@ -17,27 +19,27 @@
   the website footer and `llms.txt` state the split with a directory-to-licence table.
 - The new terms apply to every version published on or after 21 October 2026, including all
   later updates. Versions published before that date remain available under the Apache License
-  2.0 they were released with. Existing and new users alike need a written agreement to use a
-  version from 21 October 2026 onward commercially.
+  2.0 they were released with. Existing and new users alike need a signed agreement for any use by
+  or for an organisation of a version from 21 October 2026 onward.
 - New `TRADEMARKS.md`: "AgenticOrg" and "Grantex", and their names and logos, are trademarks of
   Orchestrum Technologies LLP; commercial use of the names, logos, hosted services or brand needs
   Orchestrum's prior written approval with any version, including earlier ones.
-- `LICENSE` holds the official PolyForm Noncommercial 1.0.0 text with three `Required Notice:` lines
-  (copyright, the commercial-agreement requirement, and the Apache-2.0 SDK directories);
+- `LICENSE` holds the owner-approved Orchestrum Personal Use License 1.0 text, which also states
+  that the Apache-2.0 directories are licensed separately;
   `NOTICE`, `LICENSING.md`, `docs/OWNERSHIP.md`, the terms of service, the public licensing page
   (`/docs/licensing`), every public footer, the README, the SDK and MCP server READMEs, structured
   data and `llms.txt` state the new licence.
-- Every platform SPDX header is now `PolyForm-Noncommercial-1.0.0`; files under `sdk/`, `sdk-ts/`
+- Every platform SPDX header is now `LicenseRef-Orchestrum-Personal-Use-1.0`; files under `sdk/`, `sdk-ts/`
   and `mcp-server/` keep `Apache-2.0`. `scripts/check_license_headers.py` requires the identifier
   for the file's directory on new source files and rejects the other one. The root
   `pyproject.toml` (whose wheel also carries the Apache-2.0 SDK and vendored schemas) declares
-  `PolyForm-Noncommercial-1.0.0 AND Apache-2.0` and drops the OSI Apache classifier; `ui/package.json`
-  declares `PolyForm-Noncommercial-1.0.0`.
+  `LicenseRef-Orchestrum-Personal-Use-1.0 AND Apache-2.0` and drops the OSI Apache classifier; `ui/package.json`
+  declares `LicenseRef-Orchestrum-Personal-Use-1.0`.
 - Third-party material keeps its own licence: the vendored UCP schemas (`tests/fixtures/ucp/`) and
   ACP schemas (`core/commerce/acp/schemas/`) remain Apache License 2.0, with the licence text in
   `LICENSES/Apache-2.0.txt`.
 - `CONTRIBUTING.md` adds a contributor licence: contributors keep their copyright and allow
-  Orchestrum to license contributions under PolyForm Noncommercial 1.0.0 and commercially.
+  Orchestrum to license contributions under the Orchestrum Personal Use License 1.0 and commercially.
 - `licensing/scope.json` now records the adopted licence, change date and third-party paths; the
   superseded draft custom licence (`licensing/ORCHESTRUM-SELF-USE-COMMERCIAL-1.0-DRAFT.md`) is
   removed. No runtime, billing, API or schema behaviour changes.
@@ -3937,7 +3939,7 @@ is 4.8.0; versions 4.1 to 4.8 have no sections of their own.
   `main` and weekly over the full history, plus a pre-commit hook and a
   `scripts/preflight.sh` step (`SKIP_SECRETS=1` to skip). See "Secret
   scanning" in `CONTRIBUTING.md`.
-- New source files must carry `SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0` in their
+- New source files must carry `SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0` in their
   first five lines; enforced on pull requests and in `scripts/preflight.sh`.
   Existing files are unaffected. See "Licence headers" in `CONTRIBUTING.md`.
 - Container scanning of both the API and console images on every pull

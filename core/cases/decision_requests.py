@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """Decision requests: asking a named person to decide a governed case (PRD G-3).
 
 AgenticOrg never collects an approval itself. It asks the Grantex auth service for a *decision

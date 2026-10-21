@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """Run the reference agents for a governed case and persist what they hand off.
 
 ``investigate_case`` moves a case to ``in_progress``, runs the Business Onboarding Underwriter with

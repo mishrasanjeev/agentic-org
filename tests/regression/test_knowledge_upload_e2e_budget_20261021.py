@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """The browser knowledge-upload test must allow for the product's own retry schedule.
 
 Production E2E run 39477578804 (2026-10-20, release 6fdb3af2): the hosted

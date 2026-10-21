@@ -4,8 +4,8 @@ Copied unchanged from `github.com/agentic-commerce-protocol/agentic-commerce-pro
 `spec/2026-04-17/json-schema/`, at commit `7fdd78df677a` (Apache-2.0).
 
 These files are third-party material under the Apache License 2.0 (a copy is in
-[`LICENSES/Apache-2.0.txt`](../../../../../LICENSES/Apache-2.0.txt)); the repository's PolyForm
-Noncommercial licence does not apply to them.
+[`LICENSES/Apache-2.0.txt`](../../../../../LICENSES/Apache-2.0.txt)); the repository's Orchestrum Personal Use
+License does not apply to them.
 
 | File | Used for |
 | --- | --- |

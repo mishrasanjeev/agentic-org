@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """An approval step condition that cannot be evaluated can refuse the vote (review H-6 residual).
 
 With the operator flag ``approvals.unevaluable_condition`` off (the default) a

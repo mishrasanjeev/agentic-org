@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """What the commerce arbiter decides on when a UCP checkout is completed.
 
 ``session_complete`` decisions bind ``completion_payload``: the session id,

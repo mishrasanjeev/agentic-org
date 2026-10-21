@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """FINDINGS A-64: a tenant admin can grant an agent route scopes.
 
 Route scope checks apply to Grantex agent tokens (H-1), but registration only ever gave an

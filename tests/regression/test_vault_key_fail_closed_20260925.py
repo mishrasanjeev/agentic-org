@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """The credential vault never encrypts under a key published in this repository.
 
 ``core/crypto/credential_vault.py`` fell back to

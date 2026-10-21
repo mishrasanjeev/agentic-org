@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """Spend GPU: in-house pool node hours (a platform table) and each tenant's allocated share.
 
 Revision ID: v6z81_spend_gpu

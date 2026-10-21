@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """Operator override: decisions, and the enforcement points that honour them.
 
 Everything here runs without a database or Redis: the active override list is

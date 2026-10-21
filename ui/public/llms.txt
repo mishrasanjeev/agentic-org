@@ -1,6 +1,6 @@
 # AgenticOrg
 
-> AgenticOrg is a source-available enterprise AI agent platform (PolyForm Noncommercial License 1.0.0) for building, running, and governing agent workflows with scoped tools, human approvals, audit evidence, SDKs, protocol integrations, and bounded OACP commerce surfaces.
+> AgenticOrg is a source-available enterprise AI agent platform (Orchestrum Personal Use License 1.0) for building, running, and governing agent workflows with scoped tools, human approvals, audit evidence, SDKs, protocol integrations, and bounded OACP commerce surfaces.
 
 ## Canonical facts
 
@@ -14,7 +14,7 @@
 - Runtime requirement: Python >=3.12
 - Web application: React 19
 - Managed production: separate API and UI services on Google Cloud Run
-- License: AgenticOrg platform: PolyForm Noncommercial License 1.0.0. Self use is free; commercial use of any sort needs a written agreement with Orchestrum Technologies LLP (https://agenticorg.ai/docs/licensing). Versions published before 21 October 2026 remain available under the Apache License 2.0 they were released with.
+- License: AgenticOrg platform: Orchestrum Personal Use License 1.0. Only an individual using it for their own personal purposes is free; any organisation (including charities, education, research and government, and for evaluation or pilots) needs prior written permission in a signed agreement with Orchestrum Technologies LLP (https://agenticorg.ai/docs/licensing). Versions published before 21 October 2026 remain available under the Apache License 2.0 they were released with.
 - SDK license: the AgenticOrg Python and TypeScript SDKs and the MCP server are open source under the Apache License 2.0, free for any use including commercial.
 - Live product facts: [https://app.agenticorg.ai/api/v1/product-facts](https://app.agenticorg.ai/api/v1/product-facts)
 
@@ -96,7 +96,7 @@ Pricing comes from core/billing/catalog.py. Infrastructure, model, provider, and
 
 ### What is AgenticOrg?
 
-AgenticOrg is a source-available enterprise AI agent platform, licensed under the PolyForm Noncommercial License 1.0.0. It combines agent and workflow execution, connectors, scoped tools, human approval gates, evaluation, audit evidence, SDKs, MCP, A2A, and bounded commerce integrations.
+AgenticOrg is a source-available enterprise AI agent platform, licensed under the Orchestrum Personal Use License 1.0. It combines agent and workflow execution, connectors, scoped tools, human approval gates, evaluation, audit evidence, SDKs, MCP, A2A, and bounded commerce integrations.
 
 ### How many agents, connectors, and tools are available?
 
@@ -112,7 +112,7 @@ Not from OACP artifacts. AgenticOrg can answer from valid evidence and prepare a
 
 ### Can AgenticOrg be self-hosted?
 
-Yes. The repository is licensed under the PolyForm Noncommercial License 1.0.0 and includes local Docker and deployment assets. Self use is free; commercial self-hosting needs a written agreement with Orchestrum Technologies LLP. The managed production path uses Google Cloud Run.
+Yes. The platform is licensed under the Orchestrum Personal Use License 1.0 and the repository includes local Docker and deployment assets. Only an individual's personal use is free; self-hosting by any organisation needs a signed agreement with Orchestrum Technologies LLP. The managed production path uses Google Cloud Run.
 
 ### Can an agent approve a governed business case?
 

@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """The Grantex service client refuses unusable answers at once and never trusts an unverified token."""
 
 from __future__ import annotations

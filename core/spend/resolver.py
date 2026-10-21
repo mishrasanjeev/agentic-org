@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """Attribution resolution: which organisation node, labels and dimensions a usage record carries.
 
 **Server-owned.** The inputs (``Hints``) come from context variables the

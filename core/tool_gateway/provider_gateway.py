@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """The tool gateway between a governed case agent and a :class:`VerificationProvider`.
 
 Every provider call a reference agent makes goes through :class:`ProviderToolGateway`, which:

@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """ACP capability negotiation, extensions and payment handlers (G38).
 
 ACP 2026-04-17 (RFC capability negotiation; ``Capabilities``,

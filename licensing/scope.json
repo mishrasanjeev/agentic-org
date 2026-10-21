@@ -4,9 +4,9 @@
   "status": "adopted",
   "licensor": "Orchestrum Technologies LLP",
   "commercial_contact": "sanjeev@orchestrum.in",
-  "license_id": "PolyForm-Noncommercial-1.0.0",
+  "license_id": "LicenseRef-Orchestrum-Personal-Use-1.0",
   "license_text": "LICENSE",
-  "license_url": "https://polyformproject.org/licenses/noncommercial/1.0.0",
+  "license_url": "https://github.com/mishrasanjeev/agentic-org/blob/main/LICENSE",
   "effective_date": "2026-10-21",
   "applies_to": "every version published on or after the effective date, including all later updates",
   "earlier_versions": {
@@ -49,5 +49,8 @@
       "license_id": "Apache-2.0",
       "license_text": "LICENSES/Apache-2.0.txt"
     }
-  ]
+  ],
+  "license_name": "Orchestrum Personal Use License 1.0",
+  "free_use": "an individual using the software for their own personal purposes only",
+  "needs_signed_agreement": "any use by or for an organisation, including evaluation, testing, pilots, internal use, hosting, resale and embedding, paid or free"
 }

@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """Withdrawing authority: pause and retire revoke, the middleware refuses revoked and inactive agents."""
 
 from __future__ import annotations

@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """Grantex countersignature of commerce arbiter decisions (cross-repo contract section 7).
 
 AgenticOrg's arbiter is authoritative; Grantex only countersigns. After a

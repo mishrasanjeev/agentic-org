@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """The guardrail engine: evaluate a tenant's rules at one stage of a call.
 
 ``evaluate`` runs every enabled rule that matches the stage (and the agent,

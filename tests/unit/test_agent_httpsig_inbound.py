@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """Inbound RFC 9421 agent request signatures (G47), TAP body objects (G49) and scheme agent ids (G51).
 
 Before G47 nothing verified an agent's request signature on the public commerce

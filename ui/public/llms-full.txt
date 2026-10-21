@@ -6,7 +6,7 @@ Source version: 4.8.0. Python: >=3.12. Web application: React 19. Managed produc
 
 ## Verified repository guide
 
-AgenticOrg is an enterprise AI agent platform for building, running, and governing agent workflows across finance, HR, marketing, operations, back office, communications, and bounded agentic-commerce use cases. The platform is source-available under the PolyForm Noncommercial License 1.0.0, and commercial use needs a written agreement with Orchestrum Technologies LLP; the SDKs and MCP server are Apache-2.0 open source (see [Licence](#licence)).
+AgenticOrg is an enterprise AI agent platform for building, running, and governing agent workflows across finance, HR, marketing, operations, back office, communications, and bounded agentic-commerce use cases. The platform is source-available under the Orchestrum Personal Use License 1.0: only individuals' personal use is free, and any organisation needs a signed agreement with Orchestrum Technologies LLP; the SDKs and MCP server are Apache-2.0 open source (see [Licence](#licence)).
 
 > **Ownership:** AgenticOrg is owned by **Orchestrum Technologies LLP**.
 >
@@ -33,15 +33,17 @@ credentials or customer data in a public enquiry.
 
 ![Python 3.12+](https://img.shields.io/badge/Python-3.12%2B-3776AB)
 ![React 19](https://img.shields.io/badge/React-19-149ECA)
-![Platform license: PolyForm Noncommercial 1.0.0](https://img.shields.io/badge/Platform-PolyForm%20Noncommercial%201.0.0-orange)
+![Platform license: Orchestrum Personal Use 1.0](https://img.shields.io/badge/Platform-Orchestrum%20Personal%20Use%201.0-orange)
 ![SDKs and MCP server: Apache 2.0](https://img.shields.io/badge/SDKs%20%26%20MCP%20server-Apache--2.0-blue)
 
 ## Licence
 
-**The AgenticOrg platform is source-available under the [PolyForm Noncommercial License 1.0.0](https://github.com/mishrasanjeev/agentic-org/blob/main/LICENSE).
-Only self use is free. Commercial use of any sort, including internal business use, hosting
-it as a service, reselling it, embedding it in a product or using it to deliver consulting,
-needs prior approval and a written agreement with Orchestrum Technologies LLP.**
+**The AgenticOrg platform is source-available under the [Orchestrum Personal Use License 1.0](https://github.com/mishrasanjeev/agentic-org/blob/main/LICENSE).
+Only an individual using it for their own personal purposes is free. Every organisation
+(companies, firms, sole proprietors' businesses, charities, schools, universities, research
+bodies and government) needs prior written permission in a signed agreement with Orchestrum
+Technologies LLP, for any use: evaluation, testing, pilots, internal use, hosting, resale or
+embedding, paid or free.**
 
 **The AgenticOrg SDKs (`sdk/`, `sdk-ts/`) and the MCP server (`mcp-server/`) are open source
 under the Apache License 2.0, free for any use including commercial.**
@@ -52,16 +54,17 @@ under the Apache License 2.0, free for any use including commercial.**
 | `sdk-ts/` (TypeScript SDK) | Apache License 2.0: open source, free for any use including commercial |
 | `mcp-server/` (MCP server) | Apache License 2.0: open source, free for any use including commercial |
 | `tests/fixtures/ucp/`, `core/commerce/acp/schemas/` (vendored protocol schemas) | Apache License 2.0 (third-party, unchanged) |
-| Everything else: the AgenticOrg platform (`api/`, `core/`, `auth/`, `connectors/`, `ui/` and the website, workers, `docs/`, `scripts/`, `migrations/`, tests) | PolyForm Noncommercial License 1.0.0: commercial use needs a written agreement with Orchestrum Technologies LLP |
+| Everything else: the AgenticOrg platform (`api/`, `core/`, `auth/`, `connectors/`, `ui/` and the website, workers, `docs/`, `scripts/`, `migrations/`, tests) | Orchestrum Personal Use License 1.0: individuals' personal use only; any organisation needs a signed agreement with Orchestrum Technologies LLP |
 
-- **Free (platform):** personal use, personal evaluation and testing, non-commercial research and
-  education, and use by the non-commercial organisations the licence names.
+- **Free (platform):** an individual's own personal use only. Distributing the platform needs a
+  written agreement too.
 - **Commercial licence:** see [COMMERCIAL-LICENSE.md](https://github.com/mishrasanjeev/agentic-org/blob/main/COMMERCIAL-LICENSE.md) and write to
   [sanjeev@orchestrum.in](mailto:sanjeev@orchestrum.in).
 - **Existing users:** these terms apply to every version published on or after
   21 October 2026, including all updates. Versions published before that date remain
   available under the Apache License 2.0 they were released with. Existing and new users
-  alike need a written agreement to use a version from 21 October 2026 onward commercially.
+  alike need a signed agreement for any use by or for an organisation of a version from
+  21 October 2026 onward.
 - **Trademarks:** "AgenticOrg" and "Grantex" are trademarks of Orchestrum Technologies LLP;
   commercial use of the names, logos, hosted services or brand needs prior written approval
   with any version. See [TRADEMARKS.md](https://github.com/mishrasanjeev/agentic-org/blob/main/TRADEMARKS.md).
@@ -519,7 +522,7 @@ The hosted plan source of truth is the typed `PUBLIC_PLAN_CATALOG` in [core/bill
 | <!-- claim-id: BILLING-CATALOG-PUBLIC-PLANS --> Pro | $99/month | INR 9,999/month | 15 | 10,000/month | 50 GB |
 | <!-- claim-id: BILLING-CATALOG-PUBLIC-PLANS --> Enterprise | $499/month | INR 49,999/month | Unlimited | Unlimited | Unlimited |
 
-The platform is licensed under the PolyForm Noncommercial License 1.0.0; commercial self-hosting needs a written agreement with Orchestrum Technologies LLP (see [Licence](#licence)). Infrastructure, model-provider, external API, payment-provider, and support costs are separate from the software licence.
+The platform is licensed under the Orchestrum Personal Use License 1.0; self-hosting by or for any organisation needs a signed agreement with Orchestrum Technologies LLP (see [Licence](#licence)). Infrastructure, model-provider, external API, payment-provider, and support costs are separate from the software licence.
 
 ## Security and governance
 
@@ -669,8 +672,8 @@ Read [CONTRIBUTING.md](https://github.com/mishrasanjeev/agentic-org/blob/main/CO
 
 ## License and trademarks
 
-Platform: PolyForm Noncommercial License 1.0.0 ([LICENSE](https://github.com/mishrasanjeev/agentic-org/blob/main/LICENSE)). Only self use is free; commercial
-use of any sort needs a written agreement with Orchestrum Technologies LLP
+Platform: Orchestrum Personal Use License 1.0 ([LICENSE](https://github.com/mishrasanjeev/agentic-org/blob/main/LICENSE)). Only an individual's personal use is
+free; any organisation needs a signed agreement with Orchestrum Technologies LLP
 ([COMMERCIAL-LICENSE.md](https://github.com/mishrasanjeev/agentic-org/blob/main/COMMERCIAL-LICENSE.md), [sanjeev@orchestrum.in](mailto:sanjeev@orchestrum.in)).
 SDKs (`sdk/`, `sdk-ts/`) and MCP server (`mcp-server/`): Apache License 2.0, free for any use.
 Trademarks: [TRADEMARKS.md](https://github.com/mishrasanjeev/agentic-org/blob/main/TRADEMARKS.md). Overview, change date and third-party material:
@@ -857,7 +860,7 @@ These names are parsed from connectors. A listing does not prove credentials, su
 - [Security, privacy and data handling](https://agenticorg.ai/docs/security-and-data): Choose appropriate data, review provider retention and access, protect credentials, and organize evidence deletion and incident response.
 - [Agent security deployment and evidence](https://agenticorg.ai/docs/cert-in-agent-security): Map CERT-In guidance to product controls, tenant-owned SSO, run authorization, operator responsibilities and negative acceptance tests.
 - [Billing, limits and support](https://agenticorg.ai/docs/billing-and-support): Understand hosted plan limits and provider charges, use the billing console, and send a useful support request without secrets.
-- [Licensing and commercial use](https://agenticorg.ai/docs/licensing): The AgenticOrg platform is under the PolyForm Noncommercial License 1.0.0 and the SDKs and MCP server under Apache-2.0: what is free, what needs a written agreement with Orchestrum Technologies LLP, earlier versions and trademarks.
+- [Licensing and commercial use](https://agenticorg.ai/docs/licensing): The AgenticOrg platform is under the Orchestrum Personal Use License 1.0 (individuals' personal use only) and the SDKs and MCP server under Apache-2.0: what is free, what needs a written agreement with Orchestrum Technologies LLP, earlier versions and trademarks.
 - [AI spend intelligence and invoice reconciliation](https://agenticorg.ai/docs/ai-spend-intelligence): Attribute metered AI usage to your organisation tree, price it in rupees from contract or list rate cards, reconcile invoices within 1% and read the Gate 1 status.
 - [Troubleshooting by symptom](https://agenticorg.ai/docs/troubleshooting): Resolve access, model, connector, OCR, workflow, voice, RPA and commerce problems using concrete checks and safe recovery steps.
 - [Seller and buyer commerce with OACP](https://agenticorg.ai/docs/commerce): Follow merchant configuration, Shopify sync, Grantex authority, artifact-backed buyer answers and provider or POS handoffs.
@@ -1073,11 +1076,11 @@ bypass permissions.
 
 #### When you get stuck
 
-The AgenticOrg platform is source-available under the PolyForm Noncommercial License
-1.0.0: only self use is free, and commercial use of any sort needs a written agreement
-with Orchestrum Technologies LLP. The SDKs and MCP server are Apache-2.0 open source,
+The AgenticOrg platform is source-available under the Orchestrum Personal Use License
+1.0: only an individual's own personal use is free, and any organisation needs a signed
+agreement with Orchestrum Technologies LLP, including for evaluation. The SDKs and MCP server are Apache-2.0 open source,
 free for any use. Read [Licensing and commercial use](/docs/licensing)
-before you use it in a business. Hosted plans, infrastructure and provider usage
+before you use it for any organisation. Hosted plans, infrastructure and provider usage
 may have separate charges.
 
 Use [Troubleshooting](/docs/troubleshooting) to isolate the issue. Record the screen, time, selected company, action and safe error code. Never send passwords, API keys or raw customer files in a support ticket.
@@ -2771,13 +2774,13 @@ Audience: Account owners. Reviewed: 2026-10-13.
 Hosted platform plans and external provider usage are different. Models, embeddings, calls, messaging, merchant systems and payment providers can charge independently. Self-hosting adds your infrastructure and operating costs. Do not assume an economy label means the provider is free for your account.
 
 The software licence is separate from these charges. The AgenticOrg platform is licensed under
-the PolyForm Noncommercial License 1.0.0 (the SDKs and MCP server are Apache-2.0, free for any
-use): only self use of the platform is free, and commercial use of any
-sort, including commercial self-hosting, needs a written agreement with Orchestrum
+the Orchestrum Personal Use License 1.0 (the SDKs and MCP server are Apache-2.0, free for any
+use): only an individual's own personal use of the platform is free, and any organisation,
+including for self-hosting, evaluation or a pilot, needs a signed agreement with Orchestrum
 Technologies LLP. Existing and new users are treated the same for every version
 published on or after 21 October 2026. See [Licensing and commercial use](/docs/licensing);
-agreements: [sanjeev@orchestrum.in](mailto:sanjeev@orchestrum.in). A free software
-licence for self use does not mean free hosting or providers.
+agreements: [sanjeev@orchestrum.in](mailto:sanjeev@orchestrum.in). Free personal
+use of the software does not mean free hosting or providers.
 
 Administrators and CFOs can open the **Cost Dashboard** at `/dashboard/costs` (it has no sidebar entry). It sums the platform's own recorded USD cost per task and agent; it is not a provider invoice.
 
@@ -2813,17 +2816,17 @@ AgenticOrg is owned by **Orchestrum Technologies LLP**. Inventor / Owner: **Sanj
 URL: https://agenticorg.ai/docs/licensing
 Audience: Everyone. Reviewed: 2026-10-21.
 
-**The AgenticOrg platform is source-available under the PolyForm Noncommercial License 1.0.0.
-Only self use is free. Commercial use of any sort needs Orchestrum's prior approval and a
-written agreement with Orchestrum Technologies LLP.**
+**The AgenticOrg platform is source-available under the Orchestrum Personal Use License 1.0.
+Only an individual using it for their own personal purposes is free. Any organisation needs
+prior written permission in a signed agreement with Orchestrum Technologies LLP.**
 Agreements: [sanjeev@orchestrum.in](mailto:sanjeev@orchestrum.in).
 
 **The AgenticOrg SDKs and the MCP server are open source under the Apache License 2.0,
 free for any use including commercial.**
 
 **Licensor:** Orchestrum Technologies LLP.
-**Licence:** [PolyForm Noncommercial License 1.0.0](https://polyformproject.org/licenses/noncommercial/1.0.0)
-(SPDX `PolyForm-Noncommercial-1.0.0`).
+**Licence:** [Orchestrum Personal Use License 1.0](https://github.com/mishrasanjeev/agentic-org/blob/main/LICENSE)
+(SPDX `LicenseRef-Orchestrum-Personal-Use-1.0`).
 **Change date:** 21 October 2026.
 
 #### Licence scope
@@ -2833,64 +2836,57 @@ free for any use including commercial.**
 | Python SDK (`sdk/`) | Apache License 2.0: open source, free for any use including commercial |
 | TypeScript SDK (`sdk-ts/`) | Apache License 2.0: open source, free for any use including commercial |
 | MCP server (`mcp-server/`) | Apache License 2.0: open source, free for any use including commercial |
-| The platform: API, workers, connectors, UI and website, documentation, scripts and everything else | PolyForm Noncommercial License 1.0.0: commercial use needs a written agreement |
+| The platform: API, workers, connectors, UI and website, documentation, scripts and everything else | Orchestrum Personal Use License 1.0: individuals' personal use only; any organisation needs a signed agreement |
 
 The rest of this page is about the platform.
 
 #### What is free
 
-You may use, copy and modify the AgenticOrg platform without a fee and without asking,
-for the purposes the licence permits:
+An individual may use, copy and modify the AgenticOrg platform without a fee and without
+asking, for their own personal purposes, as long as they are not acting for, on behalf
+of, or for the benefit of any organisation. Personal study, trying it out on your own
+computer and hobby projects are examples.
 
-- Personal use: personal study, hobby projects, private entertainment and amateur
-  pursuits, with no anticipated commercial application.
-- Personal evaluation and testing: trying it out, experimenting and testing, with no
-  anticipated commercial application.
-- Non-commercial research and education.
-- Use by a charitable organisation, educational institution, public research
-  organisation, public safety or health organisation, environmental protection
-  organisation or government institution, as the licence allows.
-
-You may share copies, with or without your changes, for those purposes, together with
-the licence terms and the `Required Notice:` lines in the repository's LICENSE file.
+That is the only free use. Distributing the platform, modified or not, needs a written
+agreement, and every copy must keep the licence and copyright notice.
 
 #### What needs a written agreement
 
-Any commercial use of the platform needs a written agreement with Orchestrum Technologies
-LLP before it starts. The SDKs and MCP server do not. For example:
+Every organisation needs prior written permission in a signed agreement with Orchestrum
+Technologies LLP before any use, paid or free. The SDKs and MCP server do not. For
+example:
 
 | Use | Free? |
 | --- | --- |
-| Personal use, study and hobby projects | Yes |
-| Non-commercial research and education | Yes |
-| Internal business use by a company operating for profit | Agreement needed |
+| An individual's own personal use, study and hobby projects | Yes |
+| Evaluation, testing or a pilot by or for any organisation | Agreement needed |
+| Internal use by a company, firm or a sole proprietor's business | Agreement needed |
+| Use by a charity, non-profit, school, university, research body or government | Agreement needed |
 | Hosting it, or a service built on it, for others (SaaS, managed service) | Agreement needed |
-| Selling, reselling, sublicensing or distributing it for a fee | Agreement needed |
-| Embedding it, or any part of it, in a commercial product or service | Agreement needed |
+| Selling, reselling, sublicensing or distributing it | Agreement needed |
+| Embedding it, or any part of it, in another product or service | Agreement needed |
 | Using it to deliver consulting, implementation or managed services | Agreement needed |
-| Evaluating it inside a business with a view to any of the above | Ask first |
 
-If you are not sure whether your use is commercial, ask before you rely on it.
+If you are not sure whether your use is personal, ask before you rely on it.
 
 #### How to get a commercial licence
 
 Write to [sanjeev@orchestrum.in](mailto:sanjeev@orchestrum.in) with your organisation's
 name and country, how you intend to use AgenticOrg and who the users will be, and how
-you will deploy it. A commercial licence exists only when a written agreement has been
-signed by Orchestrum Technologies LLP; an enquiry, an issue or a pull request is not an
-agreement. Prices, support and service levels are set only in that agreement.
+you will deploy it. A licence exists only when a written agreement has been signed by
+Orchestrum Technologies LLP; an enquiry, an issue or a pull request is not an agreement.
+Prices, support and service levels are set only in that agreement.
 
 #### Existing users and earlier versions
 
-The PolyForm Noncommercial License 1.0.0 applies to every version of AgenticOrg
-published on or after 21 October 2026, including all later updates, fixes and security
-patches. Versions published before 21 October 2026 remain available under the Apache
-License 2.0 they were released with.
+The Orchestrum Personal Use License 1.0 applies to every version of AgenticOrg published
+on or after 21 October 2026, including all later updates, fixes and security patches.
+Versions published before 21 October 2026 remain available under the Apache License 2.0
+they were released with.
 
-If you already use AgenticOrg commercially, including if you started before
-21 October 2026, you need a written agreement with Orchestrum Technologies LLP to use
-any version published on or after that date commercially. Existing and new users are
-treated the same.
+If your organisation already uses AgenticOrg, including if it started before
+21 October 2026, it needs a signed agreement with Orchestrum Technologies LLP to use any
+version published on or after that date. Existing and new users are treated the same.
 
 #### Trademarks and hosted services
 
@@ -2912,13 +2908,12 @@ License 2.0, and dependencies keep their authors' licences.
 #### Contributions
 
 Contributions are accepted under the repository's contributor licence, which lets
-Orchestrum Technologies LLP license them commercially as well as under the PolyForm
-Noncommercial License 1.0.0.
+Orchestrum Technologies LLP license them under the Orchestrum Personal Use License 1.0
+and under commercial agreements.
 
 #### Source documents
 
-- [PolyForm Noncommercial License 1.0.0](https://polyformproject.org/licenses/noncommercial/1.0.0)
-- [LICENSE](https://github.com/mishrasanjeev/agentic-org/blob/main/LICENSE)
+- [LICENSE (Orchestrum Personal Use License 1.0)](https://github.com/mishrasanjeev/agentic-org/blob/main/LICENSE)
 - [COMMERCIAL-LICENSE.md](https://github.com/mishrasanjeev/agentic-org/blob/main/COMMERCIAL-LICENSE.md)
 - [TRADEMARKS.md](https://github.com/mishrasanjeev/agentic-org/blob/main/TRADEMARKS.md)
 - [Contributor licence](https://github.com/mishrasanjeev/agentic-org/blob/main/CONTRIBUTING.md#contributor-licence)

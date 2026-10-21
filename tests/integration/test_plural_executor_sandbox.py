@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """G55 against the Plural sandbox: skipped unless the sandbox credentials are configured.
 
 Uses the env names the C6Z integration checks already use (``PLURAL_PINE_CLIENT_ID``,

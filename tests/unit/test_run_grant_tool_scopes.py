@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """A run grant whose scopes name tools covers only those tools (FINDINGS A-109).
 
 The Grantex SDK's ``enforce`` reads ``tool:<connector>:<permission>:<tool>`` as a

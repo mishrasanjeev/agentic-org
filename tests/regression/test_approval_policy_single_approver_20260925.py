@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """One person cannot satisfy a multi-person approval policy (review H-6).
 
 The duplicate-vote guard compared a reviewer's past votes with the current

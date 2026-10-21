@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """Model cards: one standard card per model a tenant uses.
 
 A card is assembled live (``collect_card``) from what the platform already

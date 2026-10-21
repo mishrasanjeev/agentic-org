@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """The passages behind a governed case's citations, stored encrypted and bounded.
 
 A cited excerpt is the record a provider returned - a sanctions entry with a person's name, date

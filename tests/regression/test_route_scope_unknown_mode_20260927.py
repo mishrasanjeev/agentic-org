@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """Route scope residuals of review H-1 (FINDINGS A-68).
 
 * ``_check_scope`` never read ``auth_mode``. The auth middleware sets

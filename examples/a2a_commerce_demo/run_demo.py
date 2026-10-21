@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """Seed a synthetic local seller and exercise it from a separate A2A buyer process."""
 
 from __future__ import annotations

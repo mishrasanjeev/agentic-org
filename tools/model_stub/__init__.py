@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """OpenAI-compatible model stub for the local development stack.
 
 Serves ``POST /v1/chat/completions`` (including tool calls) from record/replay

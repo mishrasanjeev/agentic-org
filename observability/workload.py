@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """The live workload of one tenant: review deadlines and the last hour's outcomes, each read on its own.
 
 A part that cannot be read says so (``error``) instead of failing the whole

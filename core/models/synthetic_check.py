@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """Synthetic checks: a tenant's scheduled probes and their results.
 
 A check (``observability.synthetic``) names a probe kind, its configuration

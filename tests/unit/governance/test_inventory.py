@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """The AI asset inventory: every asset with owner, version and risk tier, dependencies, and the export."""
 
 from __future__ import annotations

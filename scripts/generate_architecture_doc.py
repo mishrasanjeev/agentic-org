@@ -221,7 +221,7 @@ def build():
     pdf.set_font("Helvetica", "", 9)
     pdf.set_text_color(140, 170, 220)
     pdf.set_xy(15, 195)
-    pdf.cell(180, 6, "Source-available -- PolyForm Noncommercial License 1.0.0", align="C")
+    pdf.cell(180, 6, "Source-available -- Orchestrum Personal Use License 1.0", align="C")
 
     # ================================================================
     # TABLE OF CONTENTS
@@ -266,8 +266,8 @@ def build():
     pdf.body(
         "AgenticOrg is an AI Virtual Employee Platform that orchestrates 50+ LangGraph-powered "
         "agents to automate enterprise business workflows across finance, HR, marketing, operations, "
-        "and back-office functions. It is source-available under the PolyForm Noncommercial License 1.0.0 "
-        "(commercial use needs a written agreement with Orchestrum Technologies LLP), deployable as self-hosted "
+        "and back-office functions. It is source-available under the Orchestrum Personal Use License 1.0 "
+        "(organisations need a written agreement with Orchestrum Technologies LLP), deployable as self-hosted "
         "(Docker Compose, Kubernetes) or cloud-managed on GCP."
     )
     pdf.body(
@@ -1237,7 +1237,7 @@ def build():
     pdf.section("15", "Billing System")
     pdf.body(
         "AgenticOrg supports both global (Stripe) and India-specific (PineLabs Plural) payment "
-        "processing. Self use is free; commercial self-hosted deployments need a written agreement "
+        "processing. Personal use by an individual is free; any organisation needs a written agreement "
         "with Orchestrum Technologies LLP."
     )
 
@@ -1699,7 +1699,7 @@ def build():
     pdf.table_header(["Metric", "Value"], sw2)
     summary = [
         ("Version", "4.0.0 (Project Apex)"),
-        ("License", "PolyForm Noncommercial 1.0.0 (commercial use by written agreement)"),
+        ("License", "Orchestrum Personal Use 1.0 (organisations by written agreement)"),
         ("Python Version", "3.12+"),
         ("Node.js Version", "18+ (frontend)"),
         ("Total AI Agents", "50+ (6 domains + 4 industry packs)"),
@@ -1754,7 +1754,7 @@ def build():
     pdf.set_font("Helvetica", "I", 10)
     pdf.set_text_color(150, 150, 150)
     pdf.cell(0, 7, f"Generated: {DATE} | Version {VERSION}", align="C", new_x="LMARGIN", new_y="NEXT")
-    pdf.cell(0, 7, "Source-available -- PolyForm Noncommercial License 1.0.0", align="C", new_x="LMARGIN", new_y="NEXT")
+    pdf.cell(0, 7, "Source-available -- Orchestrum Personal Use License 1.0", align="C", new_x="LMARGIN", new_y="NEXT")
     pdf.ln(8)
     pdf.set_font("Helvetica", "", 10)
     pdf.set_text_color(*GRAY)

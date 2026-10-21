@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """Speech, part 4: spoken card numbers, codes, CVVs and PINs found, cut from the transcript, silenced in the audio."""
 
 from __future__ import annotations

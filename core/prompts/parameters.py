@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """Typed prompt parameters: what a template's placeholders are, and what may be put in them.
 
 A prompt template carries ``{{name}}`` placeholders. Until now a template

@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """The policy console: every policy of the tenant in one list, written and dry-run in one place.
 
 The console stores nothing of its own: a policy written here is the same row

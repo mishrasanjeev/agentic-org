@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """Configuration for the mock provider: latency, failure injection, polling and webhook signing.
 
 Everything random is derived from ``seed`` and the call itself (not from call order), so a run is

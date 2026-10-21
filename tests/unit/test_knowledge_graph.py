@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """Graph retrieval: entities found at ingestion, walked at search time, with every lookup bound and tenant scoped."""
 
 from __future__ import annotations

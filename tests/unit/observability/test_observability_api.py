@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """Observability endpoints: admin-only reads of a tenant's run timelines and live workload."""
 
 from __future__ import annotations

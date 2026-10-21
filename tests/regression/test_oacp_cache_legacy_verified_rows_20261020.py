@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """Regression: cache rows stamped ``<artifact_id>:verified`` must not count as verified (G5).
 
 Failure replayed: before ES256 verification, every cached artifact got

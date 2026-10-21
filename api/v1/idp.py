@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """Intelligent document processing: analyse a PDF or image into typed documents with fields, tables and boxes."""
 
 from __future__ import annotations

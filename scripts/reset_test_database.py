@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """Drop and recreate the throwaway database the integration suite runs against.
 
 ``make test`` points the integration tests at a dedicated database on the

@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """The document analysis report: what a kept file contains, what agrees, what is missing, what needs a person.
 
 Assembled from the stored result, the reviewer's corrections, the

@@ -1,14 +1,14 @@
 #!/usr/bin/env python3
-# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """CI guard: new source files must carry the SPDX licence identifier for their directory.
 
 The repository has two licences (see LICENSING.md):
 
 - the client packages ``sdk/``, ``sdk-ts/`` and ``mcp-server/`` are Apache-2.0, so a new
   source file there must contain ``SPDX-License-Identifier: Apache-2.0``;
-- everything else is the AgenticOrg platform, licensed under the PolyForm Noncommercial
-  License 1.0.0, so a new source file must contain
-  ``SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0``.
+- everything else is the AgenticOrg platform, licensed under the Orchestrum Personal Use
+  License 1.0 (the root LICENSE), so a new source file must contain
+  ``SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0``.
 
 The identifier must appear within the first few lines (a shebang or encoding line may come
 first). A file carrying the other directory's identifier fails. Files that existed before the
@@ -30,7 +30,7 @@ import subprocess
 import sys
 from pathlib import Path, PurePosixPath
 
-PLATFORM_LICENSE = "PolyForm-Noncommercial-1.0.0"
+PLATFORM_LICENSE = "LicenseRef-Orchestrum-Personal-Use-1.0"
 SDK_LICENSE = "Apache-2.0"
 HEADER = f"SPDX-License-Identifier: {PLATFORM_LICENSE}"
 SDK_HEADER = f"SPDX-License-Identifier: {SDK_LICENSE}"

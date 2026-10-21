@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """Streaming latency: how long a model call takes to produce its first token.
 
 A model call's total duration says how long the caller waited for the whole

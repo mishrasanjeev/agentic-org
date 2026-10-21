@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """OpenID Connect provider stub for the local development stack.
 
 Discovery, JWKS, the authorization-code flow with PKCE, a token endpoint,

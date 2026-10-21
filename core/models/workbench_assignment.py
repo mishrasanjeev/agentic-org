@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """A workbench assigned to a user by an administrator (``core/workbench/assignments.py``)."""
 
 from __future__ import annotations

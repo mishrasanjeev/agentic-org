@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """The commerce ledger: every commerce write leaves a signed ``audit_log`` row in its own transaction.
 
 ``record_commerce_event`` adds one row to the caller's session, so the row

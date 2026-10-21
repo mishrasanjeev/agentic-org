@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """G58: Shopify fulfillment payloads normalise to UCP order fulfillment events; replays are idempotent."""
 
 from __future__ import annotations

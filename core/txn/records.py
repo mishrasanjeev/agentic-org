@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """Transaction records: what the detectors and the aggregation read, taken in as batches or from a kept statement.
 
 A record is one movement on one account: a reference that makes it

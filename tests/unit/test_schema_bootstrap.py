@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """Empty-database bootstrap decisions for `alembic upgrade` (core.schema_bootstrap).
 
 The database side (a real `alembic upgrade head` on an empty Postgres and the

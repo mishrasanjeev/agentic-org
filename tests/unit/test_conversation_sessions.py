@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """Conversational services: the session store, the agent context a turn runs with, and the session routes."""
 
 from __future__ import annotations

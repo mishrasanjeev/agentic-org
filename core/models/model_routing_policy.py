@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """Model routing policies: how the model gateway picks a provider and model.
 
 A row matches requests on any of its match columns (a NULL column matches every

@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """Personalisation: consents, profiles, rules, and content rendered only under a valid consent.
 
 ``PUT /personalisation/consents`` records a grant with its evidence and

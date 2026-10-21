@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """The passage behind every excerpt a governed case's documents cite, encrypted.
 
 Revision ID: v6z28_case_excerpts

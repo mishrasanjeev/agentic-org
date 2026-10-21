@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """Checkpoint store selection, fail-closed lifecycle and encryption at rest (PRD F-2)."""
 
 from __future__ import annotations

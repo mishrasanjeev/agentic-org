@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """Keep grant tokens out of LangSmith traces of agent graph state.
 
 ``AgentState.grant_token`` carries the run's Grantex grant (a credential). When

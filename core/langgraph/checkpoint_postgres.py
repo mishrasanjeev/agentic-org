@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """Postgres checkpoint saver that keeps no channel value in plaintext.
 
 Imported only when ``AGENTICORG_LANGGRAPH_CHECKPOINTER=postgres``, so the

@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """Storage GB-days: a daily sample of what each tenant keeps, one usage record per store and day.
 
 The scheduled job (``sample_all_tenants``, the 23:30 IST beat) measures four

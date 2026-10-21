@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """Provider-shaped callbacks: authentication, receiver scope, media and outbound failure boundaries."""
 
 import hashlib

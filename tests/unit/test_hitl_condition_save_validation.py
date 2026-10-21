@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """HITL conditions are checked against the grammar when they are saved.
 
 PRD §7 F-4 remainder: an unparseable condition used to be accepted by the

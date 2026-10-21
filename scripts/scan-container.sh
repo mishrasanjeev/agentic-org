@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 # Container and filesystem vulnerability scanning, and SBOM generation, with Trivy.
 #
 #   scripts/scan-container.sh image <image-ref> [sbom-out.cdx.json]

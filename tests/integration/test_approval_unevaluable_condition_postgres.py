@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """``approvals.unevaluable_condition`` through the API on real Postgres.
 
 The policy is created with ``POST /api/v1/approval-policies`` and the vote cast

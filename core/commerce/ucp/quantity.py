@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """UCP quantities: integer step counts of an item's sale basis (UCP 2026-08-25 overview, Quantities and units).
 
 ``line_items[].quantity`` is an integer from 1 to 2^53-1 counting *steps*. The

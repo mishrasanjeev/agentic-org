@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """Model-level metrics and routing records for the model gateway.
 
 Every model call the platform makes, on the agent path (the graph's reasoning

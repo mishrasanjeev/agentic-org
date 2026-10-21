@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """Re-register agents' Grantex scopes with the permission levels enforcement understands.
 
 Agents registered before this fix carry ``tool:{connector}:execute:{tool}``

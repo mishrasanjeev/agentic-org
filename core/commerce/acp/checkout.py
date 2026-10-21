@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """ACP checkout sessions over the UCP session table and state engine (G34, G35, G38, G40).
 
 ACP 2026-04-17 (``openapi.agentic_checkout.yaml``, ``schema.agentic_checkout.json``):

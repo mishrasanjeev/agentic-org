@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """An evaluation run: a version of a dataset scored with a prompt and a model, and what is kept of it.
 
 Each case is answered once by the model under test through the prompt-comparison

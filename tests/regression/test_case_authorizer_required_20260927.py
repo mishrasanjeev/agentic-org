@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """Regression tests: a governed-case agent cannot be wired without its grant check (2026-09-27).
 
 The provider tool gateway already refused every call it had no authorizer for, but the gateway and

@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """``feature_flags`` global rows for a role bound by row-level security (2026-09-27).
 
 The only policy on ``feature_flags`` (v6z16) compares ``tenant_id`` with the session's

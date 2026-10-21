@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """Deterministic metrics over the per-case outcomes of an evaluation run.
 
 Everything here is arithmetic over outcomes the scorer already produced: no

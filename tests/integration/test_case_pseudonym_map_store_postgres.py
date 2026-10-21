@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """PostgreSQL coverage for the encrypted per-case pseudonym map store (PRD F-5).
 
 Runs the ``v6z24_case_pseudonym_maps`` migration (idempotent) against the

@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+// SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 /**
  * Evaluation datasets panel: absent while the feature is off, creating a
  * dataset, saving a new version against the version that was opened, reading

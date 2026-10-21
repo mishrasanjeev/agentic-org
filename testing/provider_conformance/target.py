@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """What an implementation hands the conformance suite: how to build it and what to ask it."""
 
 from __future__ import annotations

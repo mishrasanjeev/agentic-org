@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """The agent registry: an agent's card fields and its governance lifecycle (``core/agent_registry``)."""
 
 from __future__ import annotations

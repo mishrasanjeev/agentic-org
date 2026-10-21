@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """G27: order webhook subscriptions refuse bad input before any write, every delivery is signed (or not sent),
 transport failures are classified for retry, and the Celery kick never blocks or breaks the request."""
 

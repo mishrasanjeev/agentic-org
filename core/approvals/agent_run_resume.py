@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """Resume a standalone agent run when its approval is decided (PRD F-2).
 
 Behind the per-tenant feature flag ``approvals.resume_agent_runs`` (off unless

@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """Schema-validated tool registration and the execution envelope the gateway holds a registered tool to.
 
 A tenant registers a tool by name (``connector:tool``, or a plain tool name)

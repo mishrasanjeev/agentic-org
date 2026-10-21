@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """Traffic allocation between two published agents, and its one-action rollback.
 
 An agent may carry a split in its configuration (``config["traffic_split"]``):

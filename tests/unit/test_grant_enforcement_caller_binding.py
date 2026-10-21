@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """PRD F-1 — a caller's Grantex token never stands in for the run agent's grant.
 
 Acceptance criteria covered here:

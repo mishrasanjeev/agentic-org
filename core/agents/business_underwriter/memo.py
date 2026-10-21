@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """Assemble the cited ``underwriting_memo`` for a business case.
 
 Sections, findings, the recommendation and the missing-items list are computed from provider

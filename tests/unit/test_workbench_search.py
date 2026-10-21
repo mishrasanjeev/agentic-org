@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """Workbench search: the query grammar, who may search what, hits of every kind, facets and the route."""
 
 from __future__ import annotations

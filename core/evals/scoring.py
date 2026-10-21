@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """Model-graded scorers: a judge model rates an answer on a fixed rubric.
 
 Four judges, each a question with a five-point scale that the judge answers as

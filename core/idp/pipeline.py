@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """The processing pipeline: pages, segments, documents with fields and tables, and what needs a person.
 
 Confidence routing: a document whose type is unknown or below the type

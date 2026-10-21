@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """UCP 2026-04-08 document shapes (the release Google's Merchant Center guides target).
 
 Differences from 2026-08-25 that live here: signing keys are published in

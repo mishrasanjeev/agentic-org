@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """CI guard: the ambient-Redis allowlist only ever shrinks.
 
 `tests/ambient_redis_allowlist.txt` names the test files that still reach a

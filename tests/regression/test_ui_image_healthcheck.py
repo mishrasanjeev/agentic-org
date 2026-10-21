@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """Console image healthchecks must probe the address nginx actually listens on.
 
 Both console images ran ``wget --spider http://localhost/...``. In the

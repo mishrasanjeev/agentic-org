@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """PRD F-1 — reasons for denials from Grantex SDKs without reason codes (0.5.x).
 
 The pinned SDK (``grantex==0.5.1``) returns only a message. Each test makes the

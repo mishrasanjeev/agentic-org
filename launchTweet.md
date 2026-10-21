@@ -1,8 +1,8 @@
 # AgenticOrg Launch Tweet
 
-> Historical draft. Since 21 October 2026 AgenticOrg is licensed under the PolyForm
-> Noncommercial License 1.0.0, not Apache 2.0, and is source-available rather than open
-> source; commercial use needs a written agreement with Orchestrum Technologies LLP. See
+> Historical draft. Since 21 October 2026 the AgenticOrg platform is licensed under the
+> Orchestrum Personal Use License 1.0, not Apache 2.0, and is source-available rather than open
+> source; any organisation needs a signed agreement with Orchestrum Technologies LLP. See
 > [COMMERCIAL-LICENSE.md](COMMERCIAL-LICENSE.md). Do not reuse the licence claims below.
 
 ## Main Tweet

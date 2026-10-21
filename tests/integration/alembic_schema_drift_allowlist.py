@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """Reviewed differences between the migrated schema and the ORM models.
 
 ``test_alembic_e2e.py`` builds an empty database with ``alembic upgrade head``

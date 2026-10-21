@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """Phase 2 G14-G16 without a database: Grantex countersignature, witness checkpoints, offline export verification.
 
 Each test replays a failure the work closes: an allow consumable without a

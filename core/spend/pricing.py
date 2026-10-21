@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """The pricing engine: a usage priced at its date, in the card's currency and in INR.
 
 **Effective dating.** A card prices a usage when ``effective_from <= on <

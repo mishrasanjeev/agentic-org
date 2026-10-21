@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """Regression: the artifact cache must verify every Grantex OACP artifact (G5).
 
 Failure replayed: ``POST /commerce/runtime/artifacts/cache`` cached whatever

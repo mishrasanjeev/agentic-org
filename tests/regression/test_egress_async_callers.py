@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """Egress validation must not block the event loop (audit 2026-09-13).
 
 ``core.security.egress.validate_public_url`` resolves DNS with the blocking

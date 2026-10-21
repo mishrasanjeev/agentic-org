@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+// SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
@@ -9,7 +9,7 @@ import {
 } from "./generate-static-seo.mjs";
 import { buildSitemap } from "./generate-sitemap.mjs";
 
-test("the licensing guide states the PolyForm Noncommercial licence and the agreement requirement", () => {
+test("the licensing guide states the Orchestrum Personal Use licence and the agreement requirement", () => {
   const manual = loadUserGuides();
   assert.deepEqual(manual.articles.slice(0, 2).map((article) => article.slug), ["start-here", "first-agent"]);
   const guide = manual.articles.find((article) => article.slug === "licensing");
@@ -17,11 +17,14 @@ test("the licensing guide states the PolyForm Noncommercial licence and the agre
   assert.equal(guide.group, "Govern And Operate");
   assert.equal(guide.title, "Licensing and commercial use");
   assert.ok(manual.articles.indexOf(guide) > manual.articles.findIndex((article) => article.slug === "billing-and-support"));
-  assert.match(guide.html, /source-available under the PolyForm Noncommercial License 1\.0\.0/);
-  assert.match(guide.html, /Only self use is free/);
-  assert.match(guide.html, /Commercial use of any sort needs Orchestrum(&#39;|&rsquo;|'|’)s prior approval and a\s+written agreement with Orchestrum Technologies LLP/);
-  assert.match(guide.html, /Internal business use by a company operating for profit/);
-  assert.match(guide.html, /Versions published before 21 October 2026 remain available under the Apache\s+License 2\.0 they were released with/);
+  assert.match(guide.html, /source-available under the Orchestrum Personal Use License 1\.0/);
+  assert.match(guide.html, /Only an individual using it for their own personal purposes is free/);
+  assert.match(guide.html, /Use by a charity, non-profit, school, university, research body or government/);
+  assert.match(guide.html, /Evaluation, testing or a pilot by or for any organisation/);
+  assert.doesNotMatch(guide.html, /PolyForm|Noncommercial Organizations|Required Notice/);
+  assert.match(guide.html, /Any organisation needs\s+prior written permission in a signed agreement with Orchestrum Technologies LLP/);
+  assert.match(guide.html, /Internal use by a company, firm or a sole proprietor(&#39;|&rsquo;|'|’)s business/);
+  assert.match(guide.html, /Versions published before 21 October 2026 remain available under the Apache\s+License\s+2\.0\s+they were released with/);
   assert.match(guide.html, /are trademarks of Orchestrum\s+Technologies LLP/);
   assert.match(guide.html, /SDKs and the MCP server are open source under the Apache License 2\.0,\s+free for any use including commercial/);
   assert.match(guide.html, /href="mailto:sanjeev@orchestrum.in"/);
@@ -31,17 +34,18 @@ test("the licensing guide states the PolyForm Noncommercial licence and the agre
 test("licence text, package metadata and the scope record agree", () => {
   const read = (file) => readFileSync(new URL("../../" + file, import.meta.url), "utf8");
   const license = read("LICENSE");
-  assert.match(license, /^Required Notice: Copyright 2026 Orchestrum Technologies LLP \(https:\/\/agenticorg\.ai\)\r?\n/);
-  assert.match(license, /# PolyForm Noncommercial License 1\.0\.0/);
-  assert.match(read("pyproject.toml"), /license = "PolyForm-Noncommercial-1\.0\.0 AND Apache-2\.0"/);
+  assert.match(license, /^# Orchestrum Personal Use License 1\.0\r?\n/);
+  assert.match(license, /Copyright \(c\) 2026 Orchestrum Technologies LLP\./);
+  assert.match(license, /requires \*\*prior written permission\*\* from Orchestrum Technologies LLP in a signed agreement/);
+  assert.match(read("pyproject.toml"), /license = "LicenseRef-Orchestrum-Personal-Use-1\.0 AND Apache-2\.0"/);
   assert.doesNotMatch(read("pyproject.toml"), /OSI Approved/);
-  assert.equal(JSON.parse(read("ui/package.json")).license, "PolyForm-Noncommercial-1.0.0");
+  assert.equal(JSON.parse(read("ui/package.json")).license, "LicenseRef-Orchestrum-Personal-Use-1.0");
   for (const file of ["sdk-ts/package.json", "mcp-server/package.json"])
     assert.equal(JSON.parse(read(file)).license, "Apache-2.0", file);
   assert.match(read("sdk/pyproject.toml"), /license = "Apache-2\.0"/);
   const scope = JSON.parse(read("licensing/scope.json"));
   assert.equal(scope.status, "adopted");
-  assert.equal(scope.license_id, "PolyForm-Noncommercial-1.0.0");
+  assert.equal(scope.license_id, "LicenseRef-Orchestrum-Personal-Use-1.0");
   assert.equal(scope.licensor, "Orchestrum Technologies LLP");
   assert.equal(scope.commercial_contact, "sanjeev@orchestrum.in");
   assert.equal(scope.effective_date, "2026-10-21");
@@ -56,13 +60,14 @@ test("public summaries tell existing and new users that commercial use needs an 
   const read = (file) => readFileSync(new URL("../../" + file, import.meta.url), "utf8");
   for (const file of ["README.md", "LICENSING.md", "COMMERCIAL-LICENSE.md", "docs/terms-of-service.md", "docs/user-guide/billing-and-support.md"]) {
     const text = read(file).replace(/\s+/g, " ");
-    assert.match(text, /PolyForm Noncommercial License 1\.0\.0/, file);
-    assert.match(text, /written agreement/, file);
+    assert.match(text, /Orchestrum Personal Use License 1\.0/, file);
+    assert.doesNotMatch(text, /PolyForm/, file);
+    assert.match(text, /(written|signed) agreement/, file);
     assert.doesNotMatch(text, /software adoption pending|prospective (licensing )?policy/i, file);
   }
   for (const file of ["README.md", "LICENSING.md", "COMMERCIAL-LICENSE.md", "docs/terms-of-service.md"]) {
     const text = read(file).replace(/\s+/g, " ");
-    assert.match(text, /[Ee]xisting and new users|already use AgenticOrg commercially/, file);
+    assert.match(text, /[Ee]xisting and new users|organisation already uses AgenticOrg/, file);
     assert.match(text, /remain available under the Apache License 2\.0 they were released with/, file);
   }
 });

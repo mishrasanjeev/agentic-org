@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """§8.3 adversarial: an instruction in a screening alias changes no disposition, tool call or model request."""
 
 from __future__ import annotations

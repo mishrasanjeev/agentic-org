@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """Payment execution records, RBI AFA evidence and the arbiter ``refund`` action.
 
 Revision ID: v6z90_mandates_rails

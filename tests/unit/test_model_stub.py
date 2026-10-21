@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """Development model stub (tools/model_stub): scripted turns, replay, record and guards."""
 
 from __future__ import annotations

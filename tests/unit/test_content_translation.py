@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """Content services, part 3: translation checks (figures, glossary, verbatim terms, script) and routes."""
 
 from __future__ import annotations

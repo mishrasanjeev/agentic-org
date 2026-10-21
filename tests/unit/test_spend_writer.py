@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """The spend usage writer: the call-path queue, the flush, retries and spills, gaps, the pause and the drain."""
 
 from __future__ import annotations

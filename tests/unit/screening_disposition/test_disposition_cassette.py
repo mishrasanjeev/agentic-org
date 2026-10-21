@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """§8.2 record and replay: the disposition rationale replays from a reviewed cassette with no live model."""
 
 from __future__ import annotations

@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """Cost thresholds: alert, throttle or suspend a use case, application, business unit or the organisation."""
 
 from __future__ import annotations

@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 from __future__ import annotations
 
 import subprocess
@@ -8,7 +8,7 @@ import pytest
 
 from scripts import check_license_headers as check
 
-HEADER_LINE = "# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0\n"
+HEADER_LINE = "# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0\n"
 SDK_HEADER_LINE = "# SPDX-License-Identifier: Apache-2.0\n"
 
 
@@ -53,7 +53,7 @@ def test_new_source_file_with_header_passes(repo: Path, capsys: pytest.CaptureFi
 
 
 def test_header_constants_name_the_platform_and_sdk_licences() -> None:
-    assert check.HEADER == "SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0"
+    assert check.HEADER == "SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0"
     assert check.SDK_HEADER == "SPDX-License-Identifier: Apache-2.0"
     assert check.SDK_PREFIXES == ("sdk/", "sdk-ts/", "mcp-server/")
 
@@ -61,7 +61,7 @@ def test_header_constants_name_the_platform_and_sdk_licences() -> None:
 def test_new_platform_file_with_the_apache_identifier_fails(
     repo: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    # From 2026-10-21 the platform is PolyForm-Noncommercial-1.0.0; a new platform file that
+    # From 2026-10-21 the platform is LicenseRef-Orchestrum-Personal-Use-1.0; a new platform file that
     # copies an Apache-2.0 header (for example from an SDK file) must not pass.
     _commit(repo, {"core/copied_header.py": SDK_HEADER_LINE + "VALUE = 1\n"})
 
@@ -89,7 +89,7 @@ def test_new_sdk_file_with_the_platform_identifier_fails(
     repo: Path, capsys: pytest.CaptureFixture[str], path: str
 ) -> None:
     comment = "# " if path.endswith(".py") else "// "
-    _commit(repo, {path: comment + "SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0\nx = 1\n"})
+    _commit(repo, {path: comment + "SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0\nx = 1\n"})
 
     code, out = _run(repo, capsys)
 
@@ -109,7 +109,8 @@ def test_directory_named_like_an_sdk_inside_the_platform_is_not_an_sdk(
 
 
 def test_block_comment_header_is_accepted(repo: Path, capsys: pytest.CaptureFixture[str]) -> None:
-    _commit(repo, {"ui/src/thing.js": "/* SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0 */\nexport {};\n"})
+    header = "/* SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0 */\n"
+    _commit(repo, {"ui/src/thing.js": header + "export {};\n"})
 
     code, _ = _run(repo, capsys)
 

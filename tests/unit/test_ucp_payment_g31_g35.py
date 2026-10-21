@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """G31 + G35: payment instruments, credentials (PAN vs network token), split payments, terms, request constraints,
 token binding, and the Plural tokenised-instrument handler (allowance = mandate_capability.max_amount)."""
 

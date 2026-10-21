@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """United States, United Kingdom and European identifier recognisers (PRD F-5).
 
 Every identifier in this file is reserved, never issued, or built on an

@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """Gmail connector health must exercise an authenticated Gmail resource."""
 
 from unittest.mock import AsyncMock

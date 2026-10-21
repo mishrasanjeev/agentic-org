@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """Serving the Prometheus registry to a collector that runs beside the process.
 
 Every service in this deployment (the API, the Celery worker, the beat scheduler) increments

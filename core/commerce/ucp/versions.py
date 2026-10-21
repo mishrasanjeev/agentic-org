@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """UCP release selection and the ``UCP-Agent`` request header.
 
 UCP releases are dated (``YYYY-MM-DD``). A business profile declares one

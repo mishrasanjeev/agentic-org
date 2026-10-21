@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """The guardrail policy model: rules, findings, outcomes and the result of one evaluation.
 
 A rule says, for one stage of a model or tool call (``input``, ``retrieval``,

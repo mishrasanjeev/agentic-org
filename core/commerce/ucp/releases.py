@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """UCP releases this server speaks and the version-specific names and URLs it publishes.
 
 Each response is rendered in exactly one release (the platform's, after

@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """The fulfillment extension (``dev.ucp.shopping.fulfillment``): methods, destinations, groups and options.
 
 Request shape (both releases): ``fulfillment.methods[]`` with ``type``

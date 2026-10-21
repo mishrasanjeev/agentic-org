@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """UCP business profile: shape per release, schema validity, served-only registry (G17, G18)."""
 
 from __future__ import annotations

@@ -43,8 +43,9 @@ export default function ProductOwnership({
         </a>
       </p>
       <p data-testid="product-licence">
-        Licence: platform PolyForm Noncommercial 1.0.0. Self use is free; commercial use needs a
-        written agreement with {PRODUCT_OWNER}. SDKs and MCP server: Apache-2.0, free for any use.{" "}
+        Licence: platform Orchestrum Personal Use 1.0. Only individuals&apos; personal use is free; any
+        organisation needs a signed agreement with {PRODUCT_OWNER}. SDKs and MCP server: Apache-2.0,
+        free for any use.{" "}
         <a className={`${linkClass} transition-colors`} href={LICENSING_PATH}>
           Licensing and commercial use
         </a>

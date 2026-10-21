@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """Governed drafting: notices, circulars, letters, emails, memos and FAQs from points and approved sources.
 
 The draft names the sources it used (only ones it was given), lists the

@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """The checkout and cart state engine: line items, totals, fulfillment, consent, loyalty, payment and status.
 
 Status machine (UCP checkout, Status Values; identical in 2026-04-08 and

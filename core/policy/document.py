@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """Render a :class:`~core.policy.types.PolicyResult` as a ``policy_result`` schema document.
 
 The engine's result carries more than the published document (engine version, policy hash,

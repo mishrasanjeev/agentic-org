@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+// SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 import { expect, test } from "./helpers/test";
 import { APP, E2E_TOKEN, authenticate, requireAuth } from "./helpers/auth";
 import { KNOWLEDGE_INDEX_TEST_TIMEOUT_MS, acceptedUpload, expectRowIndexed } from "./helpers/knowledge";

@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """The daily rollup of usage records: incremental upkeep, rebuild, queries and coverage.
 
 A rollup row sums the records of one reporting day (``event_date``) and one

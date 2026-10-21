@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """Retrieval quality metrics and a grounding indicator.
 
 While ``AGENTICORG_KNOWLEDGE_METRICS_ENABLED`` is on, every knowledge search

@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """``UCP-Agent`` parsing, platform profile fetching and capability negotiation.
 
 UCP 2026-08-25 overview, Negotiation Protocol: every request carries

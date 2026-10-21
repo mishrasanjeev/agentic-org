@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """Spend invoices and reconciliations: provider invoices, their lines, reconciliation runs and their items.
 
 Written by ``core/spend/invoices.py`` and ``core/spend/reconcile.py``

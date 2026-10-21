@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """Authority flags other than grant enforcement read global and tenant rows separately.
 
 * ``pseudonymisation.pre_model`` is protective: it is on when either the global

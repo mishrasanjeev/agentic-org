@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """Refund orchestration on the UCP order entity: a fresh ``refund`` decision, then the executor, then the order.
 
 ``refund_order`` never reuses the order's ``session_complete`` decision:

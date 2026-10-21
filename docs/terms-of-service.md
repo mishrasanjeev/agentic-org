@@ -6,7 +6,7 @@ AgenticOrg is owned by **Orchestrum Technologies LLP**. Inventor / Owner:
 **Sanjeev Kumar**. Contact: [sanjeev@orchestrum.in](mailto:sanjeev@orchestrum.in)
 or [mishra.sanjeev@gmail.com](mailto:mishra.sanjeev@gmail.com).
 **Effective Date:** March 21, 2026
-**Last Updated:** October 21, 2026 (software licence changed to PolyForm Noncommercial 1.0.0)
+**Last Updated:** October 21, 2026 (platform software licence changed to the Orchestrum Personal Use License 1.0)
 
 These Terms of Service ("Terms") govern your access to and use of the AgenticOrg platform at agenticorg.ai (the "Service") provided by Orchestrum Technologies LLP ("we", "us", "our"). By accessing or using the Service, you agree to be bound by these Terms.
 
@@ -14,20 +14,20 @@ These Terms of Service ("Terms") govern your access to and use of the AgenticOrg
 
 ## 1. Software License
 
-The AgenticOrg platform software is source-available under the **PolyForm Noncommercial License 1.0.0**
-(the "License"): https://polyformproject.org/licenses/noncommercial/1.0.0 and the
-repository [LICENSE](../LICENSE). Only self use is free. Commercial use of any sort,
-including internal business use, hosting, resale, embedding in a product and consulting
-delivery, requires Orchestrum's prior approval and a written agreement with Orchestrum
-Technologies LLP. See [COMMERCIAL-LICENSE.md](../COMMERCIAL-LICENSE.md); agreements:
+The AgenticOrg platform software is source-available under the **Orchestrum Personal Use License 1.0**
+(the "License"), in the repository [LICENSE](../LICENSE). Only an individual using it for their own
+personal purposes is free. Every organisation, including companies, firms, sole proprietors'
+businesses, charities, schools, universities, research bodies and government, needs prior
+written permission in a signed agreement with Orchestrum Technologies LLP for any use,
+including evaluation, testing, pilots, internal use, hosting, resale and embedding, paid or free. See [COMMERCIAL-LICENSE.md](../COMMERCIAL-LICENSE.md); agreements:
 [sanjeev@orchestrum.in](mailto:sanjeev@orchestrum.in).
 
 The AgenticOrg SDKs (`sdk/`, `sdk-ts/`) and the MCP server (`mcp-server/`) are open source under the Apache License 2.0, free for any use including commercial.
 
 The License applies to every version published on or after 21 October 2026, including all
 later updates. Versions published before that date remain available under the Apache License
-2.0 they were released with. Existing and new users alike need a written agreement to use a
-version published on or after 21 October 2026 commercially.
+2.0 they were released with. Existing and new users alike need a signed agreement for any use by
+or for an organisation of a version published on or after 21 October 2026.
 
 The License applies to the software. These Terms govern your use of the hosted Service at
 agenticorg.ai; a hosted plan or signed agreement you have accepted governs that Service.
@@ -110,7 +110,7 @@ Upon account termination, we will delete Your Data within 90 days, except for au
 ## 6. Intellectual Property
 
 ### 6.1 Software Licence
-The AgenticOrg platform software is licensed under the PolyForm Noncommercial License 1.0.0 and the SDKs and MCP server under the Apache License 2.0 (see section 1). Your rights to the software are governed by that licence, by any written commercial agreement you have signed with Orchestrum Technologies LLP and, for versions published before 21 October 2026, by the Apache License 2.0 they were released with.
+The AgenticOrg platform software is licensed under the Orchestrum Personal Use License 1.0 and the SDKs and MCP server under the Apache License 2.0 (see section 1). Your rights to the software are governed by that licence, by any written commercial agreement you have signed with Orchestrum Technologies LLP and, for versions published before 21 October 2026, by the Apache License 2.0 they were released with.
 
 ### 6.2 Trademarks
 "AgenticOrg" and "Grantex", and their names and logos, are trademarks of Orchestrum Technologies LLP. Any commercial use of the names, logos, hosted services or brand, including with versions published before 21 October 2026, requires our prior written approval. See [TRADEMARKS.md](../TRADEMARKS.md).

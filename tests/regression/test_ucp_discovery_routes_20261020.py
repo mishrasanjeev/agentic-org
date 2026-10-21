@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """Regression: the merchant UCP profile and catalog/location reads on the serving host (G17, G23, G26, G28).
 
 Failure replayed: there was no ``/.well-known/ucp``; a platform discovering a

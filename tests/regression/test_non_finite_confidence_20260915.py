@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """Production follow-up 2026-09-15: non-finite model values must fail closed.
 
 The approvals page failed the post-deploy "no NaN" checks in production. The

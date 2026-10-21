@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """Long-term memory inside a run: recalled entries are redacted like the task, and the sidecar never fails a run."""
 
 from __future__ import annotations

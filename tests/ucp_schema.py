@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """Validate UCP payloads against the published JSON Schemas (tests/fixtures/ucp/<version>/schemas).
 
 The fixture files are the schemas published at ``https://ucp.dev/<version>/schemas/``

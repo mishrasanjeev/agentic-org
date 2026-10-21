@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """End-to-end proof that the application is correct under a NOBYPASSRLS role.
 
 Runs the real API (httpx ASGI transport) and the real beat/cron coroutines

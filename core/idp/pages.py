@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """Pages of words with bounding boxes, from a PDF's text layer or from OCR of a scanned page or an image.
 
 PDFs are read with PDFium (``pypdfium2``): every character's box from the

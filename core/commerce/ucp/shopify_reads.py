@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """Read-only Shopify Admin GraphQL reads for UCP: customer loyalty metafields and delivery profiles.
 
 Both reads reuse the merchant's existing Shopify connector credentials and the

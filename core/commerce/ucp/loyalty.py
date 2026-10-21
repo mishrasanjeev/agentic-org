@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """Loyalty (``dev.ucp.common.loyalty``) from Shopify customer metafields.
 
 When the extension is negotiated, the merchant has a loyalty programme in its

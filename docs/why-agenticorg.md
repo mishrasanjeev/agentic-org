@@ -142,13 +142,13 @@ graph LR
 | Feature | UiPath | ServiceNow | Power Automate | AgenticOrg |
 |---------|--------|------------|----------------|------------|
 | AI-native agents | No (RPA bots) | Limited | Copilot only | **24 specialist agents** |
-| Source available | No | No | No | **Yes: PolyForm Noncommercial 1.0.0; commercial use by written agreement** |
+| Source available | No | No | No | **Yes: Orchestrum Personal Use License 1.0; organisations by signed agreement** |
 | Self-hosted | No | No | No | **Yes, your infrastructure** |
 | India connectors | Limited | Limited | Limited | **GSTN, EPFO, Darwinbox, Keka, MCA** |
 | HITL governance | Basic | Basic | None | **Orchestrator-level, unskippable** |
 | Shadow mode | No | No | No | **Mandatory before production** |
 | Data sovereignty | Cloud-only | Cloud-only | Cloud-only | **Your infrastructure, your data** |
-| Pricing | $420/robot/year | $$$$/year | $15/user/month | **Self use free; commercial use by written agreement** |
+| Pricing | $420/robot/year | $$$$/year | $15/user/month | **Personal use free; organisations by signed agreement** |
 | Kill switch | Restart process | Ticket-based | None | **< 30 sec, token revocation** |
 | Audit trail | Limited | Partial | Minimal | **HMAC-signed, WORM, 7-year** |
 | LLM backbone | Not AI-native | Limited AI | GPT only | **Claude + GPT-4o fallback** |
@@ -186,7 +186,7 @@ graph TB
 
 Indian enterprises face unique regulatory, compliance, and data sovereignty requirements. Being able to read the source and run it on your own infrastructure is not a nice-to-have — it is a strategic imperative.
 
-AgenticOrg is source-available under the PolyForm Noncommercial License 1.0.0. Only self use is free; commercial use of any sort, including internal business use, needs a written agreement with Orchestrum Technologies LLP. See [COMMERCIAL-LICENSE.md](../COMMERCIAL-LICENSE.md).
+The AgenticOrg platform is source-available under the Orchestrum Personal Use License 1.0. Only an individual's own personal use is free; any organisation, including for evaluation, needs a signed agreement with Orchestrum Technologies LLP. The SDKs and MCP server are Apache-2.0. See [COMMERCIAL-LICENSE.md](../COMMERCIAL-LICENSE.md).
 
 ### Data Stays in India
 
@@ -227,9 +227,9 @@ AgenticOrg ships with native support for India-specific systems and regulations:
 
 ### Deploy on Your Own Infrastructure
 
-- Commercial use is covered by one written agreement with Orchestrum Technologies LLP
+- Organisational use is covered by one signed agreement with Orchestrum Technologies LLP
 - Infrastructure (compute, storage, LLM API calls) is yours to choose and size
-- Self use for personal study and non-commercial research is free
+- An individual's own personal use is free
 
 ```mermaid
 graph LR
@@ -242,8 +242,8 @@ graph LR
     end
 
     subgraph SourceAvailable["AgenticOrg Pricing"]
-        O1["Self use: free"]
-        O2["Commercial use: written agreement"]
+        O1["Personal use: free"]
+        O2["Organisations: signed agreement"]
         O3["Infra: your choice"]
     end
 
@@ -334,7 +334,7 @@ flowchart LR
 | **Governance** | 10 non-negotiable constraints enforced at architecture level |
 | **India** | Native GSTN, EPFO, Darwinbox, Keka, MCA integrations |
 | **Sovereignty** | Self-hosted, data never leaves your infrastructure |
-| **License** | PolyForm Noncommercial 1.0.0 — self use free; commercial use by written agreement with Orchestrum Technologies LLP |
+| **License** | Orchestrum Personal Use License 1.0 — individuals' personal use free; organisations by signed agreement with Orchestrum Technologies LLP |
 | **Compliance** | SOC2, GDPR, DPDP, RBI — built-in, not bolted-on |
 | **Agents** | 24 specialists + NEXUS orchestrator, ready to deploy in < 1 day |
 

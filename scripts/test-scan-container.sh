@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 # Self-test for scripts/scan-container.sh.
 #
 # Uses filesystem mode against a fixture lockfile pinning lodash 4.17.20, which

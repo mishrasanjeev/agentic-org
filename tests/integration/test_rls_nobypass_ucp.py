@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """UCP tables under the NOBYPASSRLS application role: sessions, carts, orders, webhooks and idempotency stay
 tenant-bound, a cross-tenant write fails WITH CHECK, and a full checkout completes under the app role.
 

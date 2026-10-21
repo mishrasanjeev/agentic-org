@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """Evaluation runs: answering, scoring and judging one slice, what is stored, and the run endpoints."""
 
 from __future__ import annotations

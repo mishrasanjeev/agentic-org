@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """Guardrail rules: which detector runs at which stage of a call, and what happens when it finds something.
 
 One row per rule a tenant administrator writes. ``core.governance.guardrails``

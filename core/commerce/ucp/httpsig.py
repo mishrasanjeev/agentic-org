@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """Outbound RFC 9421 HTTP message signatures and RFC 9530 Content-Digest for UCP.
 
 UCP 2026-08-25 signatures (REST Request Signing; shared by 2026-04-08):

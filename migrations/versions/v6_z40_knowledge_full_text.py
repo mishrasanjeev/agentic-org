@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """Index tenant-ready knowledge text for native hybrid retrieval.
 
 Revision ID: v6z40_knowledge_full_text

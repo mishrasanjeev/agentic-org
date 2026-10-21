@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """Inbound provider webhooks: verify, record, and use only as a trigger to re-query.
 
 A provider webhook never changes a case directly, and only a delivery whose authenticity is proven

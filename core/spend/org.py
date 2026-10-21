@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """The organisation tree spend rolls up through: group, business unit, department, team, cost centre.
 
 A node has the organisation's own code (unique per tenant, upper-cased), a

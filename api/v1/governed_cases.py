@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """Governed business cases: submit, investigate, retrieve, review dispositions and record decisions.
 
 Every route needs an authenticated tenant user and is hidden (404 ``governed_cases_disabled``)

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """Demo 3: a governed enterprise case, end to end, against the dev stack (``make demo-case``).
 
 An agent runs a business-onboarding case that calls the mock verification provider through the

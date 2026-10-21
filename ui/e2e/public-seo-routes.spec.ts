@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+// SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 import { expect, test } from "@playwright/test";
 
 test("CERT-In workflows and sandbox boundaries are available without JavaScript", async ({ browser, baseURL, request }) => {

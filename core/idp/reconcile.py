@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """Cross-document reconciliation: fields that should agree across the documents of one file, compared.
 
 A name on the identity document, the salary slip, the application form and

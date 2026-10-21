@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """Arbiter countersignature and chain-head witnessing against a live Grantex (contract section 7).
 
 Skipped unless these point at a running Grantex auth service with the arbiter-decision and

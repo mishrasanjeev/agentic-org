@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """Detectors over transaction records: structuring and pass-through, each finding with the rows that support it.
 
 Structuring: cash deposits each below the reporting threshold, several of

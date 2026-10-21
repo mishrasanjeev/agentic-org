@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """The dependency graph endpoint: visible agents only, related agents named only when the caller may see them."""
 
 from __future__ import annotations

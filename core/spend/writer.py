@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """The usage writer: one background thread per process, off every call path.
 
 ``submit`` is what the model-call hook and the metering handlers call. It

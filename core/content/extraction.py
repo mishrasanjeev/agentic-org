@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """Obligation and deadline extraction: who must do what by when, each item quoting the text it comes from.
 
 An item is kept only when its quote is a meaningful span of its source (at

@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """G35 (AgenticOrg side, ACP): the Grantex delegate-payment allowance per session, in the DelegatePaymentRequest
 shape; no card data is sent; Grantex unreachable is an immediate business outcome."""
 

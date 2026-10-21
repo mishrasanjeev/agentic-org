@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """A workflow definition as a graph, and the checks the visual builder and the API apply to it.
 
 A definition is a list of steps (``workflows/parser.py``): each has an id, a

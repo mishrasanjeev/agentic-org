@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """Spend usage: events and keys from a model call, token details, scopes, billing accounts and the write path."""
 
 from __future__ import annotations

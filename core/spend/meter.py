@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """Usage events: built from a finished model call on the call path, written by the writer off it.
 
 **On the call path** (``meter_model_call``, from ``record_model_call``): the

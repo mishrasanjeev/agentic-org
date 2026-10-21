@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """Governed-case decisions consumed by request id (``AGENTICORG_CASE_DECISION_GRANT_RELEASE``).
 
 With the Grantex auth service's ``DECISION_GRANT_AGENT_BINDING`` on, the developer API key never

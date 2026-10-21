@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """The approval workflow: promotion to production follows the registry, and the registry follows the runtime.
 
 While ``AGENTICORG_AGENT_REGISTRY_GATES_PROMOTION`` is on (and the registry is

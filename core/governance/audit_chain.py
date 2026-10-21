@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """Tamper-evident audit: each tenant's audit rows linked into a hash chain.
 
 Every audit row is signed on its own with the platform's audit key

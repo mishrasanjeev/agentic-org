@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """A-6: the extractor returns typed, constrained fields only.
 
 Parsing functions are exercised in-process here; they are pure. The sandbox

@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """The grounding checker: claims held against the run's context, as a detector, a rule and a hook."""
 
 from __future__ import annotations

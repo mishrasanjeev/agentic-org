@@ -9,7 +9,7 @@ export default function Terms() {
         <title>Terms Notice - AgenticOrg</title>
         <meta
           name="description"
-          content="AgenticOrg terms notice: the platform is licensed under the PolyForm Noncommercial License 1.0.0, commercial use needs a written agreement with Orchestrum Technologies LLP, and the SDKs are Apache-2.0."
+          content="AgenticOrg terms notice: the platform is licensed under the Orchestrum Personal Use License 1.0, any organisation needs a signed agreement with Orchestrum Technologies LLP, and the SDKs are Apache-2.0."
         />
       </Helmet>
 
@@ -51,12 +51,12 @@ export default function Terms() {
         <h2 className="mb-3 mt-8 text-2xl font-semibold text-slate-900">Software licence</h2>
         <p className="mb-6 leading-relaxed text-slate-700">
           <strong>
-            The AgenticOrg platform is source-available under the PolyForm Noncommercial License 1.0.0. Only
-            self use is free. Commercial use of any sort needs prior approval and a written agreement with
-            Orchestrum Technologies LLP.
+            The AgenticOrg platform is source-available under the Orchestrum Personal Use License 1.0. Only an
+            individual using it for their own personal purposes is free. Any organisation needs prior written
+            permission in a signed agreement with Orchestrum Technologies LLP.
           </strong>
-          {" "}That includes internal business use, hosting it as a service, reselling it, embedding it in a
-          product and using it to deliver consulting.
+          {" "}That includes companies, firms, charities, schools, universities, research bodies and government,
+          and evaluation, testing, pilots, internal use, hosting, resale and embedding, paid or free.
           Agreements: <a className="text-blue-600 hover:underline" href={`mailto:${PRIMARY_CONTACT_EMAIL}`}>{PRIMARY_CONTACT_EMAIL}</a>.
           {" "}Read <Link to="/docs/licensing" className="text-blue-600 hover:underline">licensing and commercial use</Link> for
           what is free and what needs an agreement. Hosted plans, infrastructure and provider costs are separate.
@@ -68,8 +68,8 @@ export default function Terms() {
         <p className="mb-6 leading-relaxed text-slate-700">
           The licence applies to every version published on or after 21 October 2026, including all later
           updates. Versions published before that date remain available under the Apache License 2.0 they
-          were released with. Existing and new users alike need a written agreement to use a version
-          published on or after 21 October 2026 commercially.
+          were released with. Existing and new users alike need a signed agreement for any use by or for an
+          organisation of a version published on or after 21 October 2026.
         </p>
         <p className="mb-6 leading-relaxed text-slate-700">
           &quot;AgenticOrg&quot; and &quot;Grantex&quot;, and their names and logos, are trademarks of Orchestrum

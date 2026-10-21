@@ -78,11 +78,11 @@ bypass permissions.
 
 ## When you get stuck
 
-The AgenticOrg platform is source-available under the PolyForm Noncommercial License
-1.0.0: only self use is free, and commercial use of any sort needs a written agreement
-with Orchestrum Technologies LLP. The SDKs and MCP server are Apache-2.0 open source,
+The AgenticOrg platform is source-available under the Orchestrum Personal Use License
+1.0: only an individual's own personal use is free, and any organisation needs a signed
+agreement with Orchestrum Technologies LLP, including for evaluation. The SDKs and MCP server are Apache-2.0 open source,
 free for any use. Read [Licensing and commercial use](/docs/licensing)
-before you use it in a business. Hosted plans, infrastructure and provider usage
+before you use it for any organisation. Hosted plans, infrastructure and provider usage
 may have separate charges.
 
 Use [Troubleshooting](/docs/troubleshooting) to isolate the issue. Record the screen, time, selected company, action and safe error code. Never send passwords, API keys or raw customer files in a support ticket.

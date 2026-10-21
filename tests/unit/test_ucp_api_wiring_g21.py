@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """G21: the /ucp REST adapter and its production wiring.
 
 Every route resolves the merchant from ``Host`` before any business work (an unknown host is 404, and a write's

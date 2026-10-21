@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """A fake Grantex for the arbiter countersignature and witness checkpoint routes (contract section 7).
 
 Keys are generated at test time. ``mode`` switches the answers so tests can

@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """Global feature-flag rows for a database role that row-level security binds.
 
 ``feature_flags`` is FORCE ROW LEVEL SECURITY. A global row has ``tenant_id``

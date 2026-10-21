@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """The banking pack: five agent templates, each held to a review condition and a confidence floor."""
 
 from __future__ import annotations

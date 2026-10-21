@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """Outbound buyer-agent request signatures with the tenant agent key (G48) and TAP body objects (G49).
 
 The buyer connector (``connectors/commerce/grantex_commerce.py``) signs each

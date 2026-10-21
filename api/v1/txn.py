@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """Transaction intelligence: records in, entities aggregated, detectors run, findings under human disposition.
 
 ``POST /txn/records`` takes a batch of movements (idempotent under each

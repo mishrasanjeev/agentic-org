@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """POST /agents/{id}/run when the configured checkpoint store is unavailable (PRD F-2)."""
 
 from __future__ import annotations

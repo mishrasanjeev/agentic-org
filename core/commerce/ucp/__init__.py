@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """Universal Commerce Protocol (UCP) business surfaces.
 
 Profile, catalog and locations are rendered from verified OACP artifacts

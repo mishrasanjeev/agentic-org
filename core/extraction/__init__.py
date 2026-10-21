@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """Untrusted content extraction: websites, registry documents and applicant uploads.
 
 Content from these sources is attacker-controlled. It is parsed in a sandboxed

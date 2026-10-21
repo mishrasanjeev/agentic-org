@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """OACP artifact JWS profile v1: detached ES256 JWS over the RFC 8785 envelope.
 
 Pure functions, no I/O. Grantex signs every OACP artifact envelope with a

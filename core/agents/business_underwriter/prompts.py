@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """Versioned prompts for the Business Onboarding Underwriter.
 
 A prompt is identified by ``(prompt_id, version)`` and bound by the SHA-256 of its exact bytes.

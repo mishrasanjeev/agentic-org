@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """G25 + G32: buyer consent (dev.ucp.consent.* purpose map, source marker), loyalty from Shopify customer
 metafields, attribution on the session, and the transport-neutral handler registry an MCP binding uses."""
 

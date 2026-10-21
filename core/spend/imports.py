@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """Bounded CSV and JSON row parsing for spend imports, and the import report.
 
 An import file is at most ``MAX_IMPORT_BYTES`` (the request gate and the

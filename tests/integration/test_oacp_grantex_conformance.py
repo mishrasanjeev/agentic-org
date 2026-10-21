@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """OACP conformance against a running Grantex: issue -> replay -> verify -> revoke -> refuse.
 
 Skipped unless ``AGENTICORG_GRANTEX_CONFORMANCE_URL`` names a Grantex API

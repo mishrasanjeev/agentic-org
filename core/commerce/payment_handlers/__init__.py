@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """Payment handlers: the instruments and credentials a merchant accepts, advertised in UCP profiles.
 
 A payment handler (UCP overview, Payment Handlers) is declared under

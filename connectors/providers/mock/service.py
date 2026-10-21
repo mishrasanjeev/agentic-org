@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """The mock provider as a separate HTTP service, so the provider seam is exercised over the network.
 
 Run it with ``uvicorn connectors.providers.mock.service:app``. It serves one :class:`MockProvider`

@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """Provider invoices: one billing month's lines, imported whole from CSV or JSON, superseded and never deleted.
 
 An invoice names a provider, its billing month (the provider's own calendar,

@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """Production incident 2026-09-14: every agent run failed after release 784cbd03.
 
 The agent graph started passing ``tenant_id`` to ``create_chat_model`` (so a

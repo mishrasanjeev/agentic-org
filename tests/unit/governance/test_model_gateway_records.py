@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """Routing records: token and cost extraction, signing, metering and the best-effort write."""
 
 from __future__ import annotations

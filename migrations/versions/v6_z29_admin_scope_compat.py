@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """Keep administrator access for API keys that held a colon-delimited admin sub-scope.
 
 Revision ID: v6z29_admin_scope_compat

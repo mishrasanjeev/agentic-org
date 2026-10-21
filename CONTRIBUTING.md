@@ -2,8 +2,9 @@
 
 We welcome contributions from the community. This guide covers everything you need to get started.
 
-The AgenticOrg platform is source-available under the [PolyForm Noncommercial License 1.0.0](LICENSE);
-commercial use needs a written agreement with Orchestrum Technologies LLP
+The AgenticOrg platform is source-available under the [Orchestrum Personal Use License 1.0](LICENSE);
+only an individual's personal use is free and any organisation needs a signed agreement with
+Orchestrum Technologies LLP
 ([COMMERCIAL-LICENSE.md](COMMERCIAL-LICENSE.md)). The SDKs (`sdk/`, `sdk-ts/`) and the MCP
 server (`mcp-server/`) are Apache-2.0 open source. Read the
 [contributor licence](#contributor-licence) before you open a pull request: by contributing,
@@ -99,18 +100,18 @@ npm run dev    # http://localhost:5173
 
 ### Licence headers
 
-The platform is licensed under the PolyForm Noncommercial License 1.0.0 (SPDX
-`PolyForm-Noncommercial-1.0.0`); `sdk/`, `sdk-ts/` and `mcp-server/` are Apache-2.0.
+The platform is licensed under the Orchestrum Personal Use License 1.0 (SPDX
+`LicenseRef-Orchestrum-Personal-Use-1.0`); `sdk/`, `sdk-ts/` and `mcp-server/` are Apache-2.0.
 Every **new** source file (`.py`, `.ts`, `.tsx`, `.js`, `.jsx`, `.mjs`, `.cjs`, `.sh`)
 must carry the SPDX identifier for its directory within its first five lines — after a
 shebang or encoding line if there is one. Platform files:
 
 ```python
-# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 ```
 
 ```ts
-// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+// SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 ```
 
 Files under `sdk/`, `sdk-ts/` and `mcp-server/`:
@@ -329,15 +330,15 @@ Agents are organized in a parent-child hierarchy per department. Key patterns:
 
 ## Contributor licence
 
-AgenticOrg is licensed to the public under the PolyForm Noncommercial License 1.0.0, and
+The AgenticOrg platform is licensed to the public under the Orchestrum Personal Use License 1.0, and
 Orchestrum Technologies LLP licenses it commercially under written agreements. For that to
 stay possible, every contribution is accepted on these terms:
 
 1. You keep the copyright in your contribution.
 2. You grant Orchestrum Technologies LLP, and anyone who receives the software from it, a
    perpetual, worldwide, non-exclusive, royalty-free, irrevocable licence to use, copy,
-   modify, distribute and sublicense your contribution under the PolyForm Noncommercial
-   License 1.0.0 and under any other terms Orchestrum chooses, including commercial licence
+   modify, distribute and sublicense your contribution under the Orchestrum Personal Use
+   License 1.0 and under any other terms Orchestrum chooses, including commercial licence
    agreements.
 3. You grant the same recipients a licence under any patent claims you can license that your
    contribution would otherwise infringe, on the same basis.

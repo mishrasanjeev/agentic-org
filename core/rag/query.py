@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """Query transformation and agentic retrieval with a visible trace.
 
 A knowledge search starts from the words a person typed. While

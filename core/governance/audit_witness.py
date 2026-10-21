@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """Grantex witnessing of audit chain heads (cross-repo contract section 7).
 
 After the sealing task seals a tenant's chain (``core.tasks.audit_chain_tasks``)

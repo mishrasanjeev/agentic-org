@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """Key-value extraction per document type: a label, a value pattern, and for each field found a confidence and a box.
 
 A field's confidence combines how well the label matched, whether the value

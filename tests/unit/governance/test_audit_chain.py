@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """The tamper-evident audit chain: sealing, verification, the tasks and the evidence section."""
 
 from __future__ import annotations

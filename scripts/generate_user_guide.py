@@ -479,7 +479,7 @@ def build():
     pdf.ln(1)
     pdf.body("India pricing: Free / Rs 999/mo / Rs 4999/mo. Toggle between USD and INR on the billing page.")
     pdf.sub("Self-Hosted")
-    pdf.body("AgenticOrg is licensed under the PolyForm Noncommercial License 1.0.0. Self use is free. Commercial use of any sort, including commercial self-hosting, needs a written agreement with Orchestrum Technologies LLP.")
+    pdf.body("AgenticOrg is licensed under the Orchestrum Personal Use License 1.0. Personal use by an individual is free. Any organisation, including for self-hosting, needs a written agreement with Orchestrum Technologies LLP.")
 
     # ---- 17. SETTINGS ----
     pdf.add_page()

@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """Document translation across Indian languages, with the checks a bank needs before it trusts a translation.
 
 The model translates; the service checks, deterministically, that every

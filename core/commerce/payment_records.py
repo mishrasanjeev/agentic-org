@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """Payment execution records: the executor's journal of provider calls, refund bounds and RBI AFA evidence.
 
 ``DbPaymentJournal`` is the journal the Plural executor writes before and after

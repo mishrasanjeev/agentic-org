@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """Plural tokenised instrument: the merchant's Plural rail as a UCP payment handler.
 
 Offered when the merchant has an enabled ``plural_pine`` payment provider and a

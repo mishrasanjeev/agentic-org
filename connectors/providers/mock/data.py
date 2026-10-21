@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """The mock provider's synthetic fixtures, loaded and validated.
 
 Fixtures describe businesses in domain terms - a registry record, owners, a website, events and a

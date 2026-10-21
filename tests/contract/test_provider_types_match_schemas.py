@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """The provider domain types serialise to the published A-4 schemas and share their vocabularies."""
 
 from __future__ import annotations

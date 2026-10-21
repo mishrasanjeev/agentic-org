@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """Explicit platform-context read policies for the pre-auth cross-tenant lookups.
 
 Revision ID: v6z87_platform_ctx_policies

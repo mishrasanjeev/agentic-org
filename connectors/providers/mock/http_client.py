@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """``MockHttpProvider``: the ``mock`` provider reached over HTTP (see ``service.py``).
 
 Every call carries the remaining deadline in ``X-Request-Deadline-Ms`` and is bounded by it

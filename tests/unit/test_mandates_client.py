@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """The mandate client: Intent, Cart, Payment requested in order with the service token, verified locally.
 
 Against the fake Grantex (``tests/grantex_service_fakes.py``): mandates signed

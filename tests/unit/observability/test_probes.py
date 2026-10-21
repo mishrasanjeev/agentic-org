@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """The two probes that stand behind the metrics export.
 
 They are tools rather than libraries - CI runs them as processes and reads their exit codes - but

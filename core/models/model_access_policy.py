@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """Model access policies: which application, principal or business unit may use which provider or model.
 
 A row matches a routed model call on any of its match columns (a NULL column

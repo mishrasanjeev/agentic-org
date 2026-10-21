@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+// SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 /**
  * The visual builder behind its server flag: the create tab and the stored-workflow graph appear only while
  * the server reports the flag on, and the detail page draws the graph the graph route answers.

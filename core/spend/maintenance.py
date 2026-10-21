@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """The audited jobs that revise a usage record's derived fields: FX settlement, restatement, re-attribution.
 
 A usage record is never deleted and its event fields (time, quantity, unit,

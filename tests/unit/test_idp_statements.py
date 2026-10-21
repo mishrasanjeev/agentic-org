@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """Document processing, part 4: statement line items with running-balance checks, and version comparison."""
 
 from __future__ import annotations

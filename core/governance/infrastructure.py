@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """Infrastructure attestations for the compliance report.
 
 The hosting platform, not application code, satisfies the infrastructure items

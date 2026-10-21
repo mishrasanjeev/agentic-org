@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """Evaluation datasets: versioned reference cases a tenant's administrators keep and run."""
 
 from __future__ import annotations

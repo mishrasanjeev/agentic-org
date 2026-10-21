@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+// SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 import { expect, test } from "@playwright/test";
 
 // Runs against the local development stack only (see dev-stack.config.ts).

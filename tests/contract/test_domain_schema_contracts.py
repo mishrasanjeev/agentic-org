@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """A-4 domain schemas: every schema is valid and versioned, every fixture validates, and the
 schemas reject the documents the PRD says they must."""
 

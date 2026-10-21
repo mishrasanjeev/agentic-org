@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """The merchant a UCP request is for: Host resolution and the merchant's UCP settings.
 
 UCP endpoints are served at ``https://<merchant serving host>/ucp``; the
