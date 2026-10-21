@@ -1064,3 +1064,85 @@
     grid-template-columns: 1fr;
   }
 }
+/* Guides marked "colorScheme": "adaptive" in docs/user-guide/index.json follow the reader's
+   light or dark preference. The light values above stay the default for every guide. */
+@media (prefers-color-scheme: dark) {
+  .docs-site.docs-adaptive {
+    color-scheme: dark;
+    --docs-summary-bg: #10261f;
+    --docs-summary-edge: #6fd3a8;
+    --docs-summary-ink: #dbeae3;
+    --docs-figure-rule: #26344d;
+    --docs-figure-muted: #a9b7c9;
+    background: #0c1220;
+    color: #dfe7f1;
+  }
+  .docs-adaptive a,
+  .docs-adaptive .docs-home-note a { color: #7fd6b0; }
+  .docs-adaptive :focus-visible { outline-color: #7cc4f0; }
+  .docs-adaptive .docs-header,
+  .docs-adaptive .docs-skip,
+  .docs-adaptive .docs-sidebar-open { background: #0c1220; }
+  .docs-adaptive .docs-header,
+  .docs-adaptive .docs-sidebar-open { border-color: #26344d; }
+  .docs-adaptive .docs-brand { color: #f1f5f9 !important; }
+  .docs-adaptive .docs-brand span { color: #a9b7c9; border-color: #26344d; }
+  .docs-adaptive .docs-search { background: #111a2b; border-color: #33435f; }
+  .docs-adaptive .docs-search input { color: #dfe7f1; }
+  .docs-adaptive .docs-search input::placeholder { color: #8d9bb0; }
+  .docs-adaptive .docs-search button,
+  .docs-adaptive .docs-menu-toggle,
+  .docs-adaptive .docs-actions button { background: #111a2b; border-color: #33435f; color: #dfe7f1; }
+  .docs-adaptive .docs-sidebar { border-color: #1d2a40; }
+  .docs-adaptive .docs-sidebar nav a { color: #b6c3d4; }
+  .docs-adaptive .docs-sidebar nav a:hover { background: #16223a; color: #8fe0bd; }
+  .docs-adaptive .docs-sidebar nav a[aria-current="page"],
+  .docs-adaptive .docs-sidebar .docs-nav-active { background: #12322a; color: #8fe0bd; border-left-color: #3fbf8a; }
+  .docs-adaptive .docs-nav-group h2,
+  .docs-adaptive .docs-toc h2 { color: #e2e8f0; }
+  .docs-adaptive .docs-main h1,
+  .docs-adaptive .docs-prose h2,
+  .docs-adaptive .docs-prose h3 { color: #f1f5f9; }
+  .docs-adaptive .docs-eyebrow,
+  .docs-adaptive .docs-results > a > span { color: #f2a493; }
+  .docs-adaptive .docs-description,
+  .docs-adaptive .docs-breadcrumb,
+  .docs-adaptive .docs-meta,
+  .docs-adaptive .docs-toc nav a,
+  .docs-adaptive .docs-results p,
+  .docs-adaptive .docs-source-notes,
+  .docs-adaptive .docs-footer { color: #a9b7c9; }
+  .docs-adaptive .docs-source-notes h2 { color: #dfe7f1; }
+  .docs-adaptive .docs-toc > a,
+  .docs-adaptive .docs-mobile-toc,
+  .docs-adaptive .docs-results > a,
+  .docs-adaptive .docs-source-notes,
+  .docs-adaptive .docs-pagination a,
+  .docs-adaptive .docs-footer { border-color: #26344d; }
+  .docs-adaptive .docs-prose blockquote { background: #2a2110; border-color: #d59a52; }
+  .docs-adaptive .docs-prose code { background: #18243a; color: #cfe0f5; }
+  .docs-adaptive .docs-prose pre { background: #070c16; color: #e2e8f0; border: 1px solid #1d2a40; }
+  .docs-adaptive .docs-prose pre code { background: none; color: inherit; }
+  .docs-adaptive .docs-table-scroll,
+  .docs-adaptive .docs-prose th,
+  .docs-adaptive .docs-prose td,
+  .docs-adaptive .docs-prose img { border-color: #26344d; }
+  .docs-adaptive .docs-prose th { background: #16223a; color: #e2e8f0; }
+  .docs-adaptive .docs-flow li { border-color: #3fbf8a; }
+  .docs-adaptive .docs-flow li:nth-child(3n + 2) { border-color: #5fb0e0; }
+  .docs-adaptive .docs-flow li:nth-child(3n) { border-color: #e0a85c; }
+  .docs-adaptive .docs-flow-number { color: #a9b7c9; }
+  .docs-adaptive .docs-flow strong,
+  .docs-adaptive .docs-process-outcomes strong { color: #eef5f1; }
+  .docs-adaptive .docs-flow p { color: #b6c3d4; }
+  .docs-adaptive .docs-process-map > li:not(:last-child)::before { background: #33435f; }
+  .docs-adaptive .docs-process-map .docs-flow-number { background: #0c1220; border-color: #3fbf8a; color: #8fe0bd; }
+  .docs-adaptive .docs-process-content { border-color: #26344d; }
+  .docs-adaptive .docs-process-owner { color: #a9b7c9; }
+  .docs-adaptive .docs-process-decision { background: #12213a; border-color: #5fb0e0; }
+  .docs-adaptive .docs-process-exception { background: #241c10; border-color: #e0a85c; }
+  .docs-adaptive .docs-ownership,
+  .docs-adaptive .docs-ownership .text-slate-600 { color: #a9b7c9; }
+  .docs-adaptive .docs-ownership .text-slate-900 { color: #f1f5f9; }
+  .docs-adaptive .docs-ownership .text-blue-700 { color: #9cc2ff; }
+}
