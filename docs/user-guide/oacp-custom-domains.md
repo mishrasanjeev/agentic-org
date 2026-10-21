@@ -87,7 +87,7 @@ The rules for these paths:
 
 Agents that sign their requests should call the address your profile names, which is your subdomain. A signed request forwarded from your main domain no longer matches the name it was signed for.
 
-On **Cloudflare**, use a Worker. It works on every plan; the free plan allows 100,000 requests a day. Bind it to the routes `your-store.example/.well-known/ucp*` and `your-store.example/ucp/*`:
+On **Cloudflare**, use a Worker. Workers are available on every Cloudflare account; check Cloudflare's current request limits for yours. Bind it to the routes `your-store.example/.well-known/ucp*` and `your-store.example/ucp/*`:
 
 ```js
 const AGENT_HOST = "agent.your-store.example";
@@ -158,7 +158,7 @@ Custom domains use Cloud Run domain mappings, which Google still marks as a prev
 
 - **Latency.** Google warns of extra latency and does not recommend mappings for production.
 - **No wildcards and no path routing.** A connected host reaches the whole API service.
-- **Certificates.** About 15 minutes to issue, at most 24 hours. Google allows 50 per top domain per week.
+- **Certificates.** About 15 minutes to issue, at most 24 hours. Google allows 50 certificates for each top domain in a week.
 - **Names.** At most 64 characters.
 
 A load balancer with managed certificates would replace mappings, when a paying merchant needs a service level or traffic must be filtered per host. It is not needed today. At list prices checked on 2026-10-21, it costs about $19 a month for 10 to 100 merchants and about $199 a month for 1,000.
