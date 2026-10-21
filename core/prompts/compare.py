@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """Side-by-side comparison and dataset evaluation for prompts.
 
 **Compare** runs one prompt with one input against several models at once and

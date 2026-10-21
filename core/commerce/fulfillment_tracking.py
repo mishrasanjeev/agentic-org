@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """Tracking normaliser: Shopify fulfillment and fulfillment-event payloads to UCP order fulfillment events.
 
 Pure: no I/O, no clock. Input is a Shopify Admin ``Fulfillment`` object

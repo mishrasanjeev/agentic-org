@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """Cost thresholds with actions: alert, throttle or suspend a scope of spend.
 
 A threshold names a scope (the whole organisation, one application, one use

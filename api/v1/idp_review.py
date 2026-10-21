@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """Document review: processed documents, their pages as images for the overlay, corrections and decisions."""
 
 from __future__ import annotations

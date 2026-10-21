@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """Arbiter decisions: one append-only row per ``core.commerce.arbiter.decide`` call.
 
 Row-level security: tenant-scoped (``v6z88_commerce_ledger``). The table is

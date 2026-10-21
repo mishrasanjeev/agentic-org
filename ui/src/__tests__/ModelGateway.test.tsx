@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: Apache-2.0
+// SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 /**
  * Model gateway console: the lists render from the admin endpoints, a policy
  * is created with the payload the API expects, enable and delete act on the

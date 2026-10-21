@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """Guard registry event source states on databases already at v6z48.
 
 Revision ID: v6z49_registry_from_state

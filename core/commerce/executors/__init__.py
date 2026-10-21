@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """Checkout executors: the only code that turns a completed UCP checkout into a provider order.
 
 An executor implements ``CheckoutExecutor.execute(session, decision)``. It

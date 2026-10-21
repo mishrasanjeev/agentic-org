@@ -1,34 +1,55 @@
 # Usage and licensing
 
-Current AgenticOrg source is licensed under [Apache-2.0](LICENSE), including
-commercial use. Hosted-service plans and provider costs are separate.
+**AgenticOrg platform: [Orchestrum Personal Use License 1.0](LICENSE). Only an individual using
+it for their own personal purposes is free. Any organisation needs prior written permission in a
+signed agreement with Orchestrum Technologies LLP, including for evaluation, testing and pilots,
+and including charities, education, research and government.** Agreements:
+[sanjeev@orchestrum.in](mailto:sanjeev@orchestrum.in).
 
-**Approved prospective policy; software adoption pending:** personal and internal use is free;
-commercializing the platform requires an agreement with Orchestrum Technologies
-LLP. Agreements: [sanjeev@orchestrum.in](mailto:sanjeev@orchestrum.in).
+**AgenticOrg SDKs (`sdk/`, `sdk-ts/`) and the MCP server (`mcp-server/`): Apache License 2.0,
+open source and free for any use, including commercial use.**
 
-The policy covers existing and new users of covered software and Orchestrum-hosted
-commercial offerings. An older account is not an exemption. Existing hosted
-customers transition through applicable notice, acceptance and agreement terms;
-previously granted Apache-2.0 permissions are not withdrawn.
+| Directory | Licence |
+| --- | --- |
+| `sdk/` (Python SDK) | Apache License 2.0: open source, free for any use including commercial |
+| `sdk-ts/` (TypeScript SDK) | Apache License 2.0: open source, free for any use including commercial |
+| `mcp-server/` (MCP server) | Apache License 2.0: open source, free for any use including commercial |
+| `tests/fixtures/ucp/`, `core/commerce/acp/schemas/` (vendored protocol schemas) | Apache License 2.0 (third-party, unchanged) |
+| Everything else: the AgenticOrg platform (`api/`, `core/`, `auth/`, `connectors/`, `ui/` and the website, workers, `docs/`, `scripts/`, `migrations/`, tests) | Orchestrum Personal Use License 1.0: individuals' personal use only; any organisation needs a signed agreement with Orchestrum Technologies LLP |
 
-Read the [licensing policy](docs/user-guide/licensing.md) for definitions, existing
-license protections and release-scope requirements. Publication and legal-review
-approval were received from the owner on 12 October 2026. No software release has
-adopted the new license; current grants and third-party licenses remain unchanged.
+| Document | What it covers |
+| --- | --- |
+| [LICENSE](LICENSE) | The Orchestrum Personal Use License 1.0 text |
+| [COMMERCIAL-LICENSE.md](COMMERCIAL-LICENSE.md) | What is free, what needs an agreement, how to get one |
+| [TRADEMARKS.md](TRADEMARKS.md) | Use of the AgenticOrg and Grantex names and logos |
+| [CONTRIBUTING.md](CONTRIBUTING.md#contributor-licence) | The terms contributions are accepted on |
+| [licensing/scope.json](licensing/scope.json) | Machine-readable record of the licence, change date and third-party paths |
+| [Licensing page](docs/user-guide/licensing.md) | The same terms on the public documentation site |
 
-## Concrete transition
+## Change date and earlier versions
 
-- Candidate terms: [Orchestrum Self-Use and Commercial Agreement License 1.0](licensing/ORCHESTRUM-SELF-USE-COMMERCIAL-1.0-DRAFT.md).
-- Exact adoption scope: [licensing/scope.json](licensing/scope.json). It is a
-  publication-approved with no covered files, release version or effective date; the reference
-  baseline commit is not a licensing cutoff.
-- Apply finalized terms to eligible new Orchestrum-controlled material only.
-  Prefer separately identifiable new modules, not a relabeling of existing code.
-- Current hosted plans, support, reseller/OEM access and brand permissions are
-  separate commercial arrangements; they do not restrict independent use of
-  Apache-licensed code. Software self-use does not imply free hosting/providers.
+The Orchestrum Personal Use License 1.0 applies to every platform version published on or after
+21 October 2026, including all later updates. Versions published before that date remain
+available under the Apache License 2.0 they were released with.
 
-This is mixed licensing, not Apache-2.0 with an extra condition. A future
-mixed release must identify each component's license instead of claiming the
-entire release is Apache-2.0 or unrestricted open source.
+Existing and new users alike need a signed agreement with Orchestrum Technologies LLP for any use
+by or for an organisation of a platform version published on or after 21 October 2026.
+Commercial use of the AgenticOrg or Grantex names, logos, hosted services or brand needs
+Orchestrum's prior written approval with any version, including earlier ones.
+
+## What each licence covers
+
+The Orchestrum Personal Use License 1.0 covers the platform: all first-party material except
+`sdk/`, `sdk-ts/` and `mcp-server/`, including the API, workers, UI and website, scripts,
+migrations, tests and documentation. Its source files carry
+`SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0`.
+
+The Apache License 2.0 covers `sdk/`, `sdk-ts/` and `mcp-server/`; each has its own `LICENSE`
+and its source files carry `SPDX-License-Identifier: Apache-2.0`.
+`scripts/check_license_headers.py` enforces the right identifier on new files in each place.
+
+Third-party material keeps its own licence: the vendored UCP schemas in `tests/fixtures/ucp/`
+and ACP schemas in `core/commerce/acp/schemas/` are Apache License 2.0 (copy in
+[LICENSES/Apache-2.0.txt](LICENSES/Apache-2.0.txt)), and dependencies keep their authors'
+licences. Hosted plans, infrastructure and model-provider costs are separate from the software
+licence.

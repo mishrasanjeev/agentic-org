@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """How usage records relate to the existing ledgers: a read-only comparison, and backfill from gateway rows.
 
 Usage records are a new, separate source; spend never writes the existing

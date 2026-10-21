@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """LangGraph checkpoint store: backend selection and lifecycle.
 
 ``AGENTICORG_LANGGRAPH_CHECKPOINTER`` selects the backend:

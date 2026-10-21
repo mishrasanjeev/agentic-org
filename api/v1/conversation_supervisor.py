@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """The supervisor console: live conversations, a transcript, takeover, replies and release. Tenant-admin only."""
 
 from __future__ import annotations

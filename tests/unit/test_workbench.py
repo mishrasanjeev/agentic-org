@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """Workbenches: the catalogue, who holds which, the tabs a role sees, the counts, assignments and the routes."""
 
 from __future__ import annotations

@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """API keys that were administrators under the prefix match stay administrators.
 
 The exact-match admin check (``core.rbac.has_admin_scope``) stopped treating

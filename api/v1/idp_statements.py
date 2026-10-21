@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """Document processing, part 4: bank statement line items and version comparison of kept documents."""
 
 from __future__ import annotations

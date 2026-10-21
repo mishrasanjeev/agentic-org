@@ -9,7 +9,7 @@ export default function Terms() {
         <title>Terms Notice - AgenticOrg</title>
         <meta
           name="description"
-          content="AgenticOrg terms notice and approved prospective licensing policy; signed agreements and release-specific software licenses control."
+          content="AgenticOrg terms notice: the platform is licensed under the Orchestrum Personal Use License 1.0, any organisation needs a signed agreement with Orchestrum Technologies LLP, and the SDKs are Apache-2.0."
         />
       </Helmet>
 
@@ -48,29 +48,33 @@ export default function Terms() {
           <li>Suspected unauthorized access should be reported through the support contact.</li>
         </ul>
 
-        <h2 className="mb-3 mt-8 text-2xl font-semibold text-slate-900">Prospective licensing policy</h2>
+        <h2 className="mb-3 mt-8 text-2xl font-semibold text-slate-900">Software licence</h2>
         <p className="mb-6 leading-relaxed text-slate-700">
-          Publication approved; software adoption pending: personal/internal use would be free; commercializing
-          the platform would require an agreement with Orchestrum Technologies LLP.
+          <strong>
+            The AgenticOrg platform is source-available under the Orchestrum Personal Use License 1.0. Only an
+            individual using it for their own personal purposes is free. Any organisation needs prior written
+            permission in a signed agreement with Orchestrum Technologies LLP.
+          </strong>
+          {" "}That includes companies, firms, charities, schools, universities, research bodies and government,
+          and evaluation, testing, pilots, internal use, hosting, resale and embedding, paid or free.
           Agreements: <a className="text-blue-600 hover:underline" href={`mailto:${PRIMARY_CONTACT_EMAIL}`}>{PRIMARY_CONTACT_EMAIL}</a>.
-          {" "}Read the <Link to="/docs/licensing" className="text-blue-600 hover:underline">licensing policy</Link> for
-          definitions, recorded approval and the release-scope boundary. Current Apache-2.0 rights remain unchanged;
-          hosted plans, infrastructure and provider costs are separate.
+          {" "}Read <Link to="/docs/licensing" className="text-blue-600 hover:underline">licensing and commercial use</Link> for
+          what is free and what needs an agreement. Hosted plans, infrastructure and provider costs are separate.
         </p>
         <p className="mb-6 leading-relaxed text-slate-700">
-          The policy includes existing and new covered users. An older account is not an exemption.
-          Existing hosted customers must obtain a commercial agreement for continued covered
-          commercialization after the notice and acceptance required by their current contract
-          and applicable law. An existing agreement already authorizing the offering is sufficient.
-          Publishing this notice does not backdate obligations or withdraw prior Apache-2.0 permissions.
-          Self-use remains free of a software license fee; hosting and provider charges are separate.
+          The AgenticOrg SDKs (Python and TypeScript) and the MCP server are open source under the Apache
+          License 2.0, free for any use including commercial.
         </p>
         <p className="mb-6 leading-relaxed text-slate-700">
-          The concrete transition uses a separate source-available license for
-          explicitly covered, eligible future platform material. Legacy code and
-          published SDK/protocol grants keep their licenses. Hosted resale, OEM
-          access and brand permissions need their own applicable agreement; that
-          does not restrict independent use of Apache-licensed code.
+          The licence applies to every version published on or after 21 October 2026, including all later
+          updates. Versions published before that date remain available under the Apache License 2.0 they
+          were released with. Existing and new users alike need a signed agreement for any use by or for an
+          organisation of a version published on or after 21 October 2026.
+        </p>
+        <p className="mb-6 leading-relaxed text-slate-700">
+          &quot;AgenticOrg&quot; and &quot;Grantex&quot;, and their names and logos, are trademarks of Orchestrum
+          Technologies LLP. Commercial use of the names, logos, hosted services or brand needs prior written
+          approval with any version, including earlier ones.
         </p>
 
         <h2 className="mb-3 mt-8 text-2xl font-semibold text-slate-900">Terms requiring agreement</h2>

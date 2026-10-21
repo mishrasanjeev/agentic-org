@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """An in-memory tenant session for the spend usage services.
 
 It extends the reference-data fake (``tests/unit/spend_fakes.py``) with what

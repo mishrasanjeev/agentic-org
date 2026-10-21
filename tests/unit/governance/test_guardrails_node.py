@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """The reasoning node under guardrails: an answer is redacted before it travels on; a blocked input ends the run."""
 
 from __future__ import annotations

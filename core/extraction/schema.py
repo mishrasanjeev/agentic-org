@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """Typed field schema per source kind, and strict validation of worker responses.
 
 The worker is the component that touches attacker-controlled bytes, so its

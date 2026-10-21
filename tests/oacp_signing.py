@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """Test-only OACP artifact signer and Token Status List issuer.
 
 Keys are generated at test time and never leave the process. The shared

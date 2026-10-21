@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """Request Intent, Cart and Payment mandates from Grantex for one checkout (cross-repo contract section 8).
 
 AgenticOrg asks; Grantex issues. ``request_mandate_chain`` makes three calls

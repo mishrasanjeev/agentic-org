@@ -1,6 +1,6 @@
 # AgenticOrg
 
-AgenticOrg is an enterprise AI agent platform for building, running, and governing agent workflows across finance, HR, marketing, operations, back office, communications, and bounded agentic-commerce use cases. See [usage and licensing](LICENSING.md) for current source rights and the proposed future platform license.
+AgenticOrg is an enterprise AI agent platform for building, running, and governing agent workflows across finance, HR, marketing, operations, back office, communications, and bounded agentic-commerce use cases. The platform is source-available under the Orchestrum Personal Use License 1.0: only individuals' personal use is free, and any organisation needs a signed agreement with Orchestrum Technologies LLP; the SDKs and MCP server are Apache-2.0 open source (see [Licence](#licence)).
 
 > **Ownership:** AgenticOrg is owned by **Orchestrum Technologies LLP**.
 >
@@ -27,7 +27,41 @@ credentials or customer data in a public enquiry.
 
 ![Python 3.12+](https://img.shields.io/badge/Python-3.12%2B-3776AB)
 ![React 19](https://img.shields.io/badge/React-19-149ECA)
-![License: Apache 2.0](https://img.shields.io/badge/License-Apache--2.0-blue)
+![Platform license: Orchestrum Personal Use 1.0](https://img.shields.io/badge/Platform-Orchestrum%20Personal%20Use%201.0-orange)
+![SDKs and MCP server: Apache 2.0](https://img.shields.io/badge/SDKs%20%26%20MCP%20server-Apache--2.0-blue)
+
+## Licence
+
+**The AgenticOrg platform is source-available under the [Orchestrum Personal Use License 1.0](LICENSE).
+Only an individual using it for their own personal purposes is free. Every organisation
+(companies, firms, sole proprietors' businesses, charities, schools, universities, research
+bodies and government) needs prior written permission in a signed agreement with Orchestrum
+Technologies LLP, for any use: evaluation, testing, pilots, internal use, hosting, resale or
+embedding, paid or free.**
+
+**The AgenticOrg SDKs (`sdk/`, `sdk-ts/`) and the MCP server (`mcp-server/`) are open source
+under the Apache License 2.0, free for any use including commercial.**
+
+| Directory | Licence |
+| --- | --- |
+| `sdk/` (Python SDK) | Apache License 2.0: open source, free for any use including commercial |
+| `sdk-ts/` (TypeScript SDK) | Apache License 2.0: open source, free for any use including commercial |
+| `mcp-server/` (MCP server) | Apache License 2.0: open source, free for any use including commercial |
+| `tests/fixtures/ucp/`, `core/commerce/acp/schemas/` (vendored protocol schemas) | Apache License 2.0 (third-party, unchanged) |
+| Everything else: the AgenticOrg platform (`api/`, `core/`, `auth/`, `connectors/`, `ui/` and the website, workers, `docs/`, `scripts/`, `migrations/`, tests) | Orchestrum Personal Use License 1.0: individuals' personal use only; any organisation needs a signed agreement with Orchestrum Technologies LLP |
+
+- **Free (platform):** an individual's own personal use only. Distributing the platform needs a
+  written agreement too.
+- **Commercial licence:** see [COMMERCIAL-LICENSE.md](COMMERCIAL-LICENSE.md) and write to
+  [sanjeev@orchestrum.in](mailto:sanjeev@orchestrum.in).
+- **Existing users:** these terms apply to every version published on or after
+  21 October 2026, including all updates. Versions published before that date remain
+  available under the Apache License 2.0 they were released with. Existing and new users
+  alike need a signed agreement for any use by or for an organisation of a version from
+  21 October 2026 onward.
+- **Trademarks:** "AgenticOrg" and "Grantex" are trademarks of Orchestrum Technologies LLP;
+  commercial use of the names, logos, hosted services or brand needs prior written approval
+  with any version. See [TRADEMARKS.md](TRADEMARKS.md).
 
 ## Source of truth
 
@@ -482,7 +516,7 @@ The hosted plan source of truth is the typed `PUBLIC_PLAN_CATALOG` in [core/bill
 | <!-- claim-id: BILLING-CATALOG-PUBLIC-PLANS --> Pro | $99/month | INR 9,999/month | 15 | 10,000/month | 50 GB |
 | <!-- claim-id: BILLING-CATALOG-PUBLIC-PLANS --> Enterprise | $499/month | INR 49,999/month | Unlimited | Unlimited | Unlimited |
 
-The repository is Apache-2.0 licensed. Infrastructure, model-provider, external API, payment-provider, and support costs are separate from the software license.
+The platform is licensed under the Orchestrum Personal Use License 1.0; self-hosting by or for any organisation needs a signed agreement with Orchestrum Technologies LLP (see [Licence](#licence)). Infrastructure, model-provider, external API, payment-provider, and support costs are separate from the software licence.
 
 ## Security and governance
 
@@ -630,15 +664,11 @@ code, OpenAPI, runbooks, retained release evidence, or live product facts.
 
 Read [CONTRIBUTING.md](CONTRIBUTING.md) and [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md). Keep pull requests focused, add tests for behavior changes, and update generated public documentation when a source-of-truth field changes.
 
-## License
+## License and trademarks
 
-AgenticOrg is licensed under the [Apache License 2.0](LICENSE).
-
-Approved prospective policy (software adoption pending): personal/internal use is free;
-commercializing the platform requires an agreement with Orchestrum Technologies
-LLP. Write to [sanjeev@orchestrum.in](mailto:sanjeev@orchestrum.in).
-The policy covers existing and new covered users, not just new accounts;
-existing hosted customers transition through applicable notice and agreement terms.
-See [usage and licensing](LICENSING.md); current Apache-2.0 rights remain unchanged.
-The concrete transition uses a separate self-use/commercial-agreement license
-for eligible future platform material, not an added condition on legacy code.
+Platform: Orchestrum Personal Use License 1.0 ([LICENSE](LICENSE)). Only an individual's personal use is
+free; any organisation needs a signed agreement with Orchestrum Technologies LLP
+([COMMERCIAL-LICENSE.md](COMMERCIAL-LICENSE.md), [sanjeev@orchestrum.in](mailto:sanjeev@orchestrum.in)).
+SDKs (`sdk/`, `sdk-ts/`) and MCP server (`mcp-server/`): Apache License 2.0, free for any use.
+Trademarks: [TRADEMARKS.md](TRADEMARKS.md). Overview, change date and third-party material:
+[LICENSING.md](LICENSING.md) and the [Licence](#licence) section above.

@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """Replay the lead receipt, SMTP formatting and protected spend failures."""
 from unittest.mock import AsyncMock, MagicMock, patch
 

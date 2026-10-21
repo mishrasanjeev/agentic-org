@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """Provider request regressions; scripted responses are not provider accuracy proof."""
 
 from types import SimpleNamespace

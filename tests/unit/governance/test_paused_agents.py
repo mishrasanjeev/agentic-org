@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """A paused agent is refused by the run endpoint, chat and workflow steps when the setting is on (A-110)."""
 
 from __future__ import annotations

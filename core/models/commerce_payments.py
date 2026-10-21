@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """Payment execution records: every Plural call an executor makes, and RBI AFA evidence for UPI AutoPay.
 
 Row-level security: both tables are tenant-scoped with ENABLE + FORCE RLS

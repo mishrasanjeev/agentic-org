@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """Buyer-safe operational readiness projection for a registered connector."""
 
 from __future__ import annotations

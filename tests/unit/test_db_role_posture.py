@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """Startup role-posture probe and the platform / tenant binding helpers (FINDINGS A-105)."""
 
 from __future__ import annotations

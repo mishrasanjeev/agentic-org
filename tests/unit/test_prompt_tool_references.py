@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """Prompts call only tools the agent has; defaults name only registered tools.
 
 PRD §7 F-3: every tool a built-in prompt names must be registered by a

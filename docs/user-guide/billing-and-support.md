@@ -2,13 +2,14 @@
 
 Hosted platform plans and external provider usage are different. Models, embeddings, calls, messaging, merchant systems and payment providers can charge independently. Self-hosting adds your infrastructure and operating costs. Do not assume an economy label means the provider is free for your account.
 
-The [approved prospective licensing policy](/docs/licensing) has not been adopted
-by a software release and does not change current Apache-2.0 rights or hosted/provider charges. Commercial
-agreement inquiries go to [sanjeev@orchestrum.in](mailto:sanjeev@orchestrum.in).
-Existing and new covered users require a commercialization agreement; an older
-account is not an exemption. Existing hosted customers transition through the
-notice and acceptance required by their contracts. Self-use remains free of a
-software license fee; this does not promise free hosting or providers.
+The software licence is separate from these charges. The AgenticOrg platform is licensed under
+the Orchestrum Personal Use License 1.0 (the SDKs and MCP server are Apache-2.0, free for any
+use): only an individual's own personal use of the platform is free, and any organisation,
+including for self-hosting, evaluation or a pilot, needs a signed agreement with Orchestrum
+Technologies LLP. Existing and new users are treated the same for every version
+published on or after 21 October 2026. See [Licensing and commercial use](/docs/licensing);
+agreements: [sanjeev@orchestrum.in](mailto:sanjeev@orchestrum.in). Free personal
+use of the software does not mean free hosting or providers.
 
 Administrators and CFOs can open the **Cost Dashboard** at `/dashboard/costs` (it has no sidebar entry). It sums the platform's own recorded USD cost per task and agent; it is not a provider invoice.
 

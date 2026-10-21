@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """G21: checkout state, status machine and totals, rendered for 2026-04-08 and 2026-08-25 and schema-validated."""
 
 from __future__ import annotations

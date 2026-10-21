@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """Build an empty database's starting schema for ``alembic upgrade``.
 
 The Alembic chain does not start from nothing. Its first revision,

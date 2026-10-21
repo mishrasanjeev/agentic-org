@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """Synthetic ACP scope for tests: the UCP test merchant opted in to ACP, request bodies, schema validation."""
 
 from __future__ import annotations

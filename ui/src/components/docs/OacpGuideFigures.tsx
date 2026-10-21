@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: Apache-2.0
+// SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 // Diagrams for the OACP user guides. A guide names one with a ```figure fence
 // (ui/scripts/generate-user-docs.mjs); Documentation.tsx renders it in place.
 // Every diagram is a narrow vertical layout so it stays legible on a phone.

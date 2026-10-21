@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """Every raw session in production code is accounted for (NOBYPASSRLS readiness).
 
 Under a ``NOBYPASSRLS`` application role a session opened straight from

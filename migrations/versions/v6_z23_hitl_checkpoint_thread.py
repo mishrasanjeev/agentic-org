@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """Store a paused run's checkpoint thread on its approval row.
 
 Revision ID: v6z23_hitl_checkpoint_thread

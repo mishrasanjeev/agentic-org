@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """Stored case and bound inbox tenants reach scoped plugin constructors on every caller."""
 
 from __future__ import annotations

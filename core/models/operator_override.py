@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """Operator override rows: a halt or throttle an administrator placed on a target.
 
 A row names one target (a model provider, a model, one agent, every agent, a

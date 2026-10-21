@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """Per-user workbench assignments an administrator keeps (``workbench_assignments``)."""
 
 from __future__ import annotations

@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """Render version-neutral state as UCP JSON for one release.
 
 The shared builders here assemble checkout, cart and order resources; every

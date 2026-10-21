@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """Scheme token binding on the payment capability (G52): ``{scheme, token_ref, agent_id, merchant_scope, limits}``.
 
 The Python mirror of the Grantex shared type (``@grantex/sdk``

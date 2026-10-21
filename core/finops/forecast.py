@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """Cost comparison across models and providers, and forecasting from history and growth assumptions.
 
 **Forecast** (``forecast``): the attributed ledger's daily history over a

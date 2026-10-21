@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """Mutate the alert definitions and check that the gate notices (a tool, not a CI step).
 
 ``scripts/check_alert_rules.py`` is only worth having if it fails when it should. This breaks the

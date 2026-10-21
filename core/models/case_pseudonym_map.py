@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """Encrypted per-case pseudonym maps (see ``core.pii.pseudonymiser``)."""
 
 from __future__ import annotations

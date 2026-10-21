@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """Coverage floor for Python modules a change adds.
 
 Complements ``diff-cover`` (which gates changed lines that appear in the

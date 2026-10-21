@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """Compose a merchant's UCP business profile (``/.well-known/ucp``).
 
 Shared logic lives here; the release-specific document shape is rendered by

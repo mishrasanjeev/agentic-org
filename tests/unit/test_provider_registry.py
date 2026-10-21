@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """The providers registry and loading providers from the ``agenticorg.providers`` entry-point group."""
 
 from __future__ import annotations

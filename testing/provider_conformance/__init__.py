@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """Conformance suite for :class:`~connectors.framework.verification_provider.VerificationProvider`.
 
 Published as ``agenticorg.testing.provider_conformance``. A provider package runs it against itself::

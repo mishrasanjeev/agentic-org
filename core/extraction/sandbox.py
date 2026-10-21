@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """Run the untrusted-content extractor out of process and fail closed.
 
 ``extract`` starts ``core/extraction/_worker.py`` as a separate Python process

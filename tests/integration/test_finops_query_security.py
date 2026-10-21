@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """Execute every reporting dimension against PostgreSQL with two isolated tenants."""
 
 from __future__ import annotations

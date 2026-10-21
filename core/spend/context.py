@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """What a metered call carries to the spend meter: cheap context variables, no I/O.
 
 **Scopes.** An entry point (an agent run, a chat turn, a workflow step, a

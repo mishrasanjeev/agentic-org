@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """Routing records: one signed row per model call made while the model gateway was on.
 
 Written by ``core.governance.model_gateway_records`` when a routed model call

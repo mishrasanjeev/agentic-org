@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """The supervisor's view: live sessions, a transcript, takeover, replies and release.
 
 A supervisor sees every conversation in progress or escalated, opens its

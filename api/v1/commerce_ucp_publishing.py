@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """Operator actions that publish a merchant's UCP business profile.
 
 All routes need the merchant-config write scope (``commerce.merchant_config.write``

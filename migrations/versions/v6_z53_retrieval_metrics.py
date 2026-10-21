@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """Knowledge retrieval metrics.
 
 Revision ID: v6z53_retrieval_metrics

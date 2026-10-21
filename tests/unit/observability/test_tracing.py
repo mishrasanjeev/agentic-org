@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """Tracing wiring and correlation ids (observability/tracing.py).
 
 Off by default, every helper is a no-op that touches no tracer. On, the

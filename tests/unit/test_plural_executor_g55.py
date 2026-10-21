@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """G55: the Plural executor calls Plural only under a consumed decision, within bounds, idempotently.
 
 A fake Plural API (httpx MockTransport) counts every request; the journal is in memory.

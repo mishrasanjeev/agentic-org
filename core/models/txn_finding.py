@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """A detector finding under human disposition (``core/txn/findings.py``)."""
 
 from __future__ import annotations

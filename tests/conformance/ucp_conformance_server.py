@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """Local server for the official UCP conformance suite (test harness only; never deployed).
 
 Runs the real UCP REST binding (``api/v1/commerce_ucp.py``) and handlers on a

@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """Let a role bound by row-level security read global feature-flag rows.
 
 Revision ID: v6z30_flag_global_read

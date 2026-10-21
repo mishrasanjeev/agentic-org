@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """Tamper-evident audit: the hash chain over audit rows and the model call digests.
 
 Revision ID: v6z41_tamper_evident_audit

@@ -290,7 +290,7 @@ def build():
     pdf.set_xy(15, 200)
     pdf.cell(180, 7, "For end users and business administrators", align="C")
     pdf.set_xy(15, 210)
-    pdf.cell(180, 7, "Apache 2.0 License | agenticorg.ai", align="C")
+    pdf.cell(180, 7, "Orchestrum Personal Use License 1.0 | agenticorg.ai", align="C")
 
     # ========================================================================
     # TABLE OF CONTENTS
@@ -408,9 +408,9 @@ def build():
         "when business rules require sign-off"
     )
     pdf.bold_bullet(
-        "Open Source",
-        "Apache 2.0 license. Self-host for free or use our managed cloud. "
-        "No vendor lock-in, no per-seat fees for self-hosted"
+        "Source-available",
+        "Orchestrum Personal Use License 1.0. Personal use by an individual is free; any "
+        "organisation, including for self-hosting, needs a written agreement with Orchestrum Technologies LLP"
     )
     pdf.ln(2)
     pdf.sub("Who Is This Guide For?")
@@ -482,7 +482,7 @@ def build():
     pdf.table_row(["Dashboards", "CFO, CMO, ABM, Sales Pipeline"], widths)
     pdf.table_row(["Languages", "English, Hindi"], widths, fill=True)
     pdf.table_row(["Security", "PII masking, scope enforcement, WORM audit"], widths)
-    pdf.table_row(["License", "Apache 2.0 (open source)"], widths, fill=True)
+    pdf.table_row(["License", "Orchestrum Personal Use 1.0 (organisations by written agreement)"], widths, fill=True)
 
     # ---- Chapter 2: Creating Your Account ----
     pdf.chapter(2, "Creating Your Account")
@@ -2616,10 +2616,11 @@ def build():
         "activates immediately after payment."
     )
 
-    pdf.sub("Self-Hosted (Free Forever)")
+    pdf.sub("Self-Hosted")
     pdf.body(
-        "If you deploy AgenticOrg on your own servers, it is completely "
-        "free. No license fees, no per-seat charges. Apache 2.0 license."
+        "AgenticOrg is licensed under the Orchestrum Personal Use License 1.0. Personal use by "
+        "an individual is free. Any organisation, including for self-hosting, needs a written "
+        "agreement with Orchestrum Technologies LLP (sanjeev@orchestrum.in)."
     )
 
     # ---- Chapter 34: Report Scheduler ----
@@ -3160,7 +3161,7 @@ def build():
     pdf.set_font("Helvetica", "I", 10)
     pdf.set_text_color(120, 120, 120)
     pdf.cell(
-        0, 7, "Apache 2.0 License | Open Source | Self-Host Free Forever",
+        0, 7, "Orchestrum Personal Use 1.0 | Personal use free | Organisations by written agreement",
         align="C", new_x="LMARGIN", new_y="NEXT"
     )
     pdf.ln(4)

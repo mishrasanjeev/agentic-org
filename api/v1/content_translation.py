@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """Content services, part 3: document translation, one text or a bounded batch, with checks and back-translation."""
 
 from __future__ import annotations

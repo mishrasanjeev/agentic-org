@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: Apache-2.0
+// SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 import type { ReactNode } from "react";
 import type { BlogDiagramId, BlogFigure as Figure } from "./blogData";
 import { FlowFigure, HubPanel, JourneyFigure, RevocationFigure, WiredPanel } from "@/components/figures/OacpDiagrams";

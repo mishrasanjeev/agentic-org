@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """Real PostgreSQL BYTEA scanner/rotation semantics in a rolled-back private schema."""
 
 from __future__ import annotations

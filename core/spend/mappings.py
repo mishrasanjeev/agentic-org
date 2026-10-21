@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """Source mappings and model aliases.
 
 A **source mapping** ties a spend source to the organisation tree and to

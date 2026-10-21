@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """The Screening Disposition agent.
 
 For one screening hit it proposes a disposition for an analyst to accept or override:

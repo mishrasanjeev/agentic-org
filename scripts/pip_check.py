@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """``pip check`` that accepts exactly one known conflict: fastembed's Pillow ceiling.
 
 fastembed is installed with ``--no-deps`` from ``requirements-fastembed.txt``

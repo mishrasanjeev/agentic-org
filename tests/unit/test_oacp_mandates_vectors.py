@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """The local mandate verifier against the shared Grantex mandate vectors (every case, both files).
 
 ``tests/fixtures/oacp/oacp-mandates-v1.json`` (31 cases, 5 chains) and

@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """A second implementation sketch, against the shape of a public government company registry.
 
 ADR 0009 requires one before the provider interface is frozen: if the interface only fitted the

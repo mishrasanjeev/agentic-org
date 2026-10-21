@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """Agent assist and disclosure tracking: the checklist on a kept recording, and a live call turn by turn.
 
 ``GET /speech/disclosures`` lists the scripts and what this tenant

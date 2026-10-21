@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """Native hybrid retrieval against real PostgreSQL full-text and pgvector operators."""
 
 from __future__ import annotations

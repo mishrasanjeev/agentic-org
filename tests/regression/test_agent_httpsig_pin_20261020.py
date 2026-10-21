@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """grantex-agent-httpsig is pinned to a full commit sha of the Grantex repository, never a branch.
 
 The library is not published to PyPI (its package is marked ``Private :: Do Not

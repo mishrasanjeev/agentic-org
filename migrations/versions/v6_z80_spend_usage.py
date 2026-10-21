@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """Spend usage: usage records (partitioned by month), the daily rollup, meter gaps and maintenance jobs.
 
 Revision ID: v6z80_spend_usage

@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """Case push endpoints, the case push outbox and provider webhook receipts.
 
 Revision ID: v6z26_case_push

@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """Celery entry points that deliver the governed case push outbox (``core.cases.push``).
 
 ``dispatch_case_pushes(tenant_id)`` is queued right after a case change commits, so a completed

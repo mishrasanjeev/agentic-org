@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """Local verification of Grantex OACP mandates (profile ``oacp.mandate.v1``, cross-repo contract section 8).
 
 Grantex issues Intent, Cart and Payment mandates as compact ES256 JWTs (RFC 7519;

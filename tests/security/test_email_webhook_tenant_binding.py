@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """Email webhooks take the tenant from the URL, never from the payload.
 
 The shared email webhook routes (``/api/v1/webhooks/email/{sendgrid,mailchimp,moengage}``) read the

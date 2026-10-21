@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """Incremental synchronisation: sync sources and their runs.
 
 Revision ID: v6z76_lineage_sync

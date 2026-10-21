@@ -319,12 +319,12 @@
     },
     {
       "slug": "licensing",
-      "title": "Usage and licensing",
-      "description": "Understand free self-use and commercial agreements for existing and new covered users, prior source rights and the separate software-release adoption boundary.",
+      "title": "Licensing and commercial use",
+      "description": "The AgenticOrg platform is under the Orchestrum Personal Use License 1.0 (individuals' personal use only) and the SDKs and MCP server under Apache-2.0: what is free, what needs a written agreement with Orchestrum Technologies LLP, earlier versions and trademarks.",
       "group": "Govern And Operate",
       "audience": "Everyone",
-      "reviewed": "2026-10-13",
-      "sources": ["README.md", "ui/src/pages/legal/Terms.tsx"]
+      "reviewed": "2026-10-21",
+      "sources": ["LICENSE", "COMMERCIAL-LICENSE.md", "TRADEMARKS.md", "README.md", "ui/src/pages/legal/Terms.tsx"]
     },
     {
       "slug": "ai-spend-intelligence",

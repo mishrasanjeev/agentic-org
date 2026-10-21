@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """Transcription engines and the transcript they produce: timed words, then turns with a speaker each.
 
 Three ways to words: a local ``faster-whisper`` model where it is

@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """Prompt comparison across models and evaluation against a reference dataset."""
 
 from __future__ import annotations

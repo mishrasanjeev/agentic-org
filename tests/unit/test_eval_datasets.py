@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """Evaluation datasets: versioned reference cases, their rules, storage and endpoints."""
 
 from __future__ import annotations

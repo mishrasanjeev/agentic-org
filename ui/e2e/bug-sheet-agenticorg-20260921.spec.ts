@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: Apache-2.0
+// SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 
 import { Page } from "@playwright/test";
 import { expect, test } from "./helpers/test";

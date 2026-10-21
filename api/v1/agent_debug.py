@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """The debugging console: an agent's breakpoints, its paused runs, and step-through of a run's checkpoints."""
 
 from __future__ import annotations

@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """Guardrail endpoints: rules and a dry-run evaluation.
 
 Tenant administrators only. A rule says which detector runs at which stage of

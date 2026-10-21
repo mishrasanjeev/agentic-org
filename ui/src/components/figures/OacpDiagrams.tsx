@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: Apache-2.0
+// SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 // OACP diagrams shared by the blog explainer and the OACP user guides.
 import { Box, Chip, StepStack, Svg, Text } from "./FigureKit";
 

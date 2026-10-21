@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """Use-case attribution: every cost carries a business unit, department, application and use case.
 
 A run binds its attribution for its whole span (``bind``): the use case (the

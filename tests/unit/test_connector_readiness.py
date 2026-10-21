@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """Connector registration is not evidence of a working provider integration."""
 
 from datetime import UTC, datetime, timedelta

@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """PRD F-1 end to end against a real Grantex auth service.
 
 Registers an agent through ``auth.grantex_registration`` (the production scope

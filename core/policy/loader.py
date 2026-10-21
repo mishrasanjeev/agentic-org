@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """Strict loader for versioned YAML policy files.
 
 Every problem with a policy file is found here and raised as a

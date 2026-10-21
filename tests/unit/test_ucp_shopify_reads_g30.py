@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """G25/G30: the read-only Shopify Admin GraphQL reads behind loyalty and shipping rates.
 
 The client posts to the shop's ``*.myshopify.com`` Admin endpoint only, never follows a redirect, fails closed

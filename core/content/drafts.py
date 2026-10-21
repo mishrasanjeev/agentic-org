@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """The drafts queue: every draft is kept; a notice or circular waits for a second person to approve it."""
 
 from __future__ import annotations

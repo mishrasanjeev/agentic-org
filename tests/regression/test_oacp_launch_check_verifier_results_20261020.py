@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """Regression: the OACP launch check reports verifier results, not artifact counts (G5).
 
 Failure replayed: ``scripts/oacp_runtime_launch_check.py`` built eleven

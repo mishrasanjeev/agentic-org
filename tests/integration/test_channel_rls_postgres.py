@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """Real migrations and channel RLS, using an isolated database and non-superuser."""
 
 from __future__ import annotations
