@@ -128,7 +128,7 @@ Check it with `curl -s -o /dev/null -w "%{http_code} %{redirect_url}\n" https://
 
 ### Turn it on
 
-Custom domains need the `v6z91_merchant_custom_domains` database migration, which the normal deploy runs with `--with-migrations`. Then set these on the API and worker services. The beat service only schedules the checks, so it needs none of them. The deploy script adds to the existing settings rather than replacing them, so they survive later deploys.
+Custom domains need the `v6z91_merchant_custom_domains` database migration, which the normal deploy runs with `--with-migrations`. Then set these on the API and worker services. The beat service only schedules the checks, so it needs none of them. The deploy script adds to the existing settings rather than replacing them, so they survive later deploys. A settings change creates a new revision. If your services pin traffic to named revisions, as the deploy script does, move traffic to the new revision afterwards. The exact commands are in the repository at `docs/oacp/merchant-custom-domains.md`, under "Production turn-on".
 
 | Setting | Value |
 | --- | --- |

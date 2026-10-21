@@ -60,7 +60,23 @@ survive later deploys.
    gcloud run services update agenticorg-worker --project=PROJECT_ID --region=asia-southeast1 --update-env-vars=AGENTICORG_CUSTOM_DOMAINS_ENABLED=true,AGENTICORG_CUSTOM_DOMAIN_MAPPING_ACCOUNT=MAPPING_ACCOUNT_EMAIL,AGENTICORG_CUSTOM_DOMAIN_OPERATOR_TENANT_ID=OPERATOR_TENANT_ID,AGENTICORG_CUSTOM_DOMAIN_OPERATOR_EMAIL=OPERATOR_INBOX,AGENTICORG_CUSTOM_DOMAIN_CLOUD_RUN_PROJECT=PROJECT_ID
    ```
 
-4. Verify:
+4. Move traffic to the new revisions. `scripts/deploy_cloud_run.sh` pins
+   traffic to named revisions, so the new revision from step 3 is Ready but
+   gets 0% until traffic moves. Check `spec.traffic` and move it per service:
+
+   ```bash
+   gcloud run services describe agenticorg-api --project=PROJECT_ID --region=asia-southeast1 --format='value(status.latestReadyRevisionName,status.traffic)'
+   ```
+
+   ```bash
+   gcloud run services update-traffic agenticorg-api --project=PROJECT_ID --region=asia-southeast1 --to-revisions=NEW_API_REVISION=100
+   ```
+
+   Do the same for `agenticorg-worker`. Note the previous revisions first:
+   they are the rollback targets. Use `--update-env-vars`, never
+   `--set-env-vars`, which would drop every other setting. Do not roll while a
+   post-deploy E2E run is in progress.
+5. Verify:
    - `https://app.agenticorg.ai/api/v1/health` answers `healthy`.
    - The API service's own URL (`gcloud run services describe agenticorg-api
      --format='value(status.url)'`) answers `/.well-known/agenticorg-host` with
@@ -69,8 +85,10 @@ survive later deploys.
      host does not proxy this path.
    - **Commerce > Custom Domains** loads for a merchant, and the operator queue
      shows for the operator tenant's administrators.
-5. Rollback: run the same commands with `AGENTICORG_CUSTOM_DOMAINS_ENABLED=false`,
-   or move traffic back to the previous revisions.
+6. Rollback: move traffic back to the previous revisions
+   (`gcloud run services update-traffic <service> --to-revisions=<previous>=100`),
+   or run step 3 with `AGENTICORG_CUSTOM_DOMAINS_ENABLED=false` and move
+   traffic again.
 
 ## Merchant flow
 
