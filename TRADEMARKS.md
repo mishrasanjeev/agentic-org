@@ -24,10 +24,14 @@ under the Apache License 2.0. For example:
 Using an Orchestrum-hosted service under a plan or agreement you have accepted with Orchestrum
 is use with that approval, within the plan's or agreement's terms.
 
+If a written agreement with Orchestrum allows you to distribute a changed version, do not call it
+AgenticOrg or Grantex unless that agreement says you may; describe it as "based on AgenticOrg" and
+keep the copyright and licence notices from LICENSE.
+
 ## What does not need approval
 
 - Accurate, plain-text references to AgenticOrg or Grantex, for example in news, reviews,
-  academic work, or a non-commercial project that says it is based on AgenticOrg, without the
+  academic work, or a personal project that says it is based on AgenticOrg, without the
   logos and without suggesting endorsement.
 - Keeping the copyright, licence and notice text in copies of the software, as the licences
   require.

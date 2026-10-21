@@ -94,7 +94,17 @@ def test_spdx_headers_follow_the_directory_licence() -> None:
     assert _git_grep("-E", apache_header, "--", ".", *outside_sdks) == []
     assert _git_grep("-E", platform_header, "--", *SDK_DIRS) == []
     assert set(_git_grep("-E", apache_header, "--", *SDK_DIRS)) >= {"mcp-server/src/ucp.ts"}
-    assert _git_grep("-F", "PolyForm-" + "Noncommercial") == []
+
+
+def test_no_tracked_file_names_the_retired_polyform_licence() -> None:
+    # Only the tests that assert its absence may spell the old name.
+    allowed = [
+        ":(exclude)tests/regression/test_license_orchestrum_personal_use_20261021.py",
+        ":(exclude)tests/regression/test_pdf_generators_licence_20261021.py",
+        ":(exclude)ui/scripts/user-docs.test.mjs",
+    ]
+    for retired in ("polyform", "required notice:", "noncommercial license", "non-commercial project"):
+        assert _git_grep("-i", "-F", retired, "--", ".", *allowed) == [], retired
 
 
 def test_licence_header_check_requires_the_directory_identifier() -> None:
@@ -153,6 +163,13 @@ def test_commercial_licence_and_trademarks_state_the_owner_decision() -> None:
     assert f"{names} are trademarks of **{OWNER}**" in trademarks
     assert "including versions published before 21 October 2026" in trademarks
     assert "prior written approval" in trademarks
+    assert LICENSE_NAME in trademarks
+    assert "a personal project that says it is based on AgenticOrg" in trademarks
+    assert (
+        "If a written agreement with Orchestrum allows you to distribute a changed version, do not call it "
+        "AgenticOrg or Grantex unless that agreement says you may"
+    ) in trademarks
+    assert not RETIRED_FREE_USES.search(trademarks)
 
 
 def test_public_statements_name_the_split_change_date_and_earlier_versions_factually() -> None:
