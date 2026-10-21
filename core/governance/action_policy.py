@@ -374,8 +374,28 @@ _RULE_GROUPS: tuple[tuple[ActionRisk, frozenset[ActionDomain], frozenset[str]], 
 )
 
 
+# Connector-qualified classes, matched on the whole ``connector:tool`` name before any bare
+# tool name. The ucp_buyer connector reuses the bare names ``catalog_search`` and
+# ``checkout_create``, which the groups above class for grantex_commerce, where
+# ``checkout_create`` creates a payment handoff and is MONEY. A UCP checkout session is a
+# priced draft: only Complete executes payment, and ucp_buyer has no Complete (nor Cancel or
+# payment) tool, so its checkout writes are customer-facing writes that move no money. Matching
+# the qualified name first means the bare suffix can never decide the class of these tools; a
+# bare ``checkout_create`` with no connector still classes as MONEY.
+_QUALIFIED_RULES: dict[str, tuple[ActionRisk, frozenset[ActionDomain]]] = {
+    "ucp_buyer_catalog_search": (ActionRisk.READ, _ALL),
+    "ucp_buyer_catalog_lookup": (ActionRisk.READ, _ALL),
+    "ucp_buyer_checkout_get": (ActionRisk.READ, _ALL),
+    "ucp_buyer_checkout_create": (ActionRisk.CUSTOMER_WRITE, _CUSTOMER),
+    "ucp_buyer_checkout_update": (ActionRisk.CUSTOMER_WRITE, _CUSTOMER),
+}
+
+
 def _rule(action: object) -> tuple[str, ActionRisk, frozenset[ActionDomain]] | None:
     raw = str(action or "").strip()
+    qualified = _QUALIFIED_RULES.get(_norm(raw))
+    if qualified is not None:
+        return _norm(raw), qualified[0], qualified[1]
     candidates = {_norm(raw)}
     if ":" in raw:
         candidates.add(_norm(raw.rsplit(":", 1)[-1]))
