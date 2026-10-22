@@ -37,6 +37,23 @@ global fallback, and other-company refusal. Playwright replays the Shadow
 Mode `Generate Test Sample` workflow and asserts the visible sample-count
 update using deterministic fixtures.
 
+**Reopened 2026-10-22 (production):** a company-bound agent using a
+tenant-global connector was still refused with `connector_not_ready_for_dispatch`
+/ `missing_connector_config`. Step 2 above was unreachable: `connector_configs`
+RLS (`v6z6`) shows a session only the rows of its exact company context, and
+the fallback query ran inside the company-scoped session. The unit tests faked
+a session that could see the tenant-global row, which the real policy never
+allows. The tenant-global lookup now runs in a tenant-scoped session
+(`api/v1/agents.py` `_tenant_global_connector_config`), for name and id
+lookups, in both config resolution and dispatch readiness. The RLS policy is
+unchanged, so company rows stay isolated. Evidence: the unit fakes now apply
+the policy, and `tests/integration/test_rls_company_tenant_connector_fallback.py`
+runs as the NOBYPASSRLS app role (tenant-global fallback works; another
+company's and a company row from a tenant-level agent stay refused); both
+fail on the previous code. The tool gateway (`core/tool_gateway/gateway.py`)
+keeps its exact-company lookup, as `tests/security/test_connector_company_scope.py`
+requires.
+
 ## BUG-02 - Agent generation ignores tenant-configured LLM credentials
 
 **Verdict:** Fixed in code; deployed-environment recheck pending.
