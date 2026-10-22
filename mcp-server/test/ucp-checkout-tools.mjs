@@ -136,6 +136,13 @@ const api = http.createServer((req, res) => {
     if (req.method === "GET" && path === "/ucp/carts/cart_1") return json({ ucp: { version: "2026-04-08", status: "success" }, id: "cart_1", line_items: [] });
     if (req.method === "PUT" && path === "/ucp/carts/cart_1") return json({ ucp: { version: "2026-04-08", status: "success" }, id: "cart_1", line_items: [] });
     if (req.method === "POST" && path === "/ucp/carts/cart_1/cancel") return json({ ucp: { version: "2026-04-08", status: "success" }, id: "cart_1", status: "canceled" });
+    if (req.method === "POST" && path === "/ucp/catalog/search") {
+      return json({
+        ucp: { version: "2026-04-08", capabilities: { "dev.ucp.shopping.catalog.search": [{ version: "2026-04-08" }] } },
+        products: [{ id: "p_1", title: "Synthetic Masala Chai", variants: [{ id: "v_1", sku: "SYN-CHAI-250", price: { amount: 44900, currency: "INR" } }] }],
+        pagination: { has_next_page: false, total_count: 1 },
+      });
+    }
     if (req.method === "GET" && path === "/ucp/orders/ord_1") return json({ ucp: { version: "2026-04-08", status: "success" }, id: "ord_1", checkout_id: "cs_1" });
     return json({ detail: "Not Found" }, 404);
   });
@@ -493,6 +500,53 @@ try {
   } finally {
     await client.close();
   }
+
+  // --- public catalog -----------------------------------------------------------------------
+  await check("catalog search is registered even when checkout is off, lookup only when advertised", async () => {
+    const c = await connect({ AGENTICORG_UCP_PROFILE_URL: `${base}/off/.well-known/ucp` });
+    try {
+      const names = (await c.listTools()).tools.map((t) => t.name);
+      assert.ok(names.includes("search_catalog"));
+      assert.ok(!names.includes("lookup_catalog"), "lookup is not advertised by the stub");
+      assert.deepEqual(ucpNames(await c.listTools()), []);
+      const search = (await c.listTools()).tools.find((t) => t.name === "search_catalog");
+      assert.equal(search.annotations.readOnlyHint, true);
+    } finally {
+      await c.close();
+    }
+  });
+
+  await check("catalog search sends no credential, no idempotency key and needs no platform profile", async () => {
+    const c = await connect({ AGENTICORG_UCP_PROFILE_URL: `${base}/off/.well-known/ucp` });
+    try {
+      const result = await c.callTool({
+        name: "search_catalog",
+        arguments: { request: { query: "chai", context: { currency: "INR" } } },
+      });
+      assert.notEqual(result.isError, true);
+      assert.equal(result.structuredContent.products[0].variants[0].sku, "SYN-CHAI-250");
+      const call = callsTo("/ucp/catalog/search").at(-1);
+      assert.deepEqual(call.body, { query: "chai", context: { currency: "INR" } });
+      assert.equal(call.authorization, undefined, "the API key never goes to a public route");
+      assert.equal(call.idempotencyKey, undefined);
+      assert.equal(call.ucpAgent, undefined);
+      assert.ok(call.requestId);
+    } finally {
+      await c.close();
+    }
+  });
+
+  await check("catalog search names the platform profile when one is configured", async () => {
+    const c = await connect({ AGENTICORG_UCP_PROFILE_URL: `${base}/.well-known/ucp`, AGENTICORG_UCP_AGENT_PROFILE: AGENT });
+    try {
+      await c.callTool({ name: "search_catalog", arguments: { request: { query: "chai" } } });
+      const call = callsTo("/ucp/catalog/search").at(-1);
+      assert.equal(call.ucpAgent, `profile="${AGENT}"`);
+      assert.equal(call.authorization, undefined);
+    } finally {
+      await c.close();
+    }
+  });
 
   await check("no platform profile is a tool error without an API call", async () => {
     const c = await connect({ AGENTICORG_UCP_PROFILE_URL: `${base}/.well-known/ucp` });

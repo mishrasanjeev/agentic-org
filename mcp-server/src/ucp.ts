@@ -1,7 +1,10 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * UCP checkout, cart and order tools (UCP 2026-04-08 MCP binding,
+ * UCP catalog, checkout, cart and order tools (UCP 2026-04-08 MCP binding,
  * services/shopping/mcp.openrpc.json).
+ *
+ * `search_catalog` and `lookup_catalog` call the merchant's public catalog
+ * routes: they send no credential and need no platform profile.
  *
  * The tools are a stdio adapter over the merchant's UCP REST binding. They
  * are registered only when the configured merchant profile
@@ -29,6 +32,8 @@ const SHOPPING_SERVICE = "dev.ucp.shopping";
 const CHECKOUT = "dev.ucp.shopping.checkout";
 const CART = "dev.ucp.shopping.cart";
 const ORDER = "dev.ucp.shopping.order";
+const CATALOG_SEARCH = "dev.ucp.shopping.catalog.search";
+const CATALOG_LOOKUP = "dev.ucp.shopping.catalog.lookup";
 
 const PROFILE_TIMEOUT_MS = 5_000;
 const CALL_TIMEOUT_MS = 30_000;
@@ -256,6 +261,8 @@ interface Operation {
   shape: Record<string, z.ZodTypeAny>;
   body?: string;
   annotations: { readOnlyHint: boolean; destructiveHint: boolean; idempotentHint: boolean };
+  /** A public merchant route: no credential, no Idempotency-Key, platform profile optional. */
+  public?: boolean;
 }
 
 const READ = { readOnlyHint: true, destructiveHint: false, idempotentHint: true };
@@ -267,6 +274,38 @@ const COMPLETE = { readOnlyHint: false, destructiveHint: true, idempotentHint: f
 const seg = (id?: string) => encodeURIComponent(id ?? "");
 
 export const OPERATIONS: Operation[] = [
+  {
+    name: "search_catalog",
+    capability: CATALOG_SEARCH,
+    title: "Search UCP catalog",
+    description:
+      "Search the merchant's catalog by free text. Answers come only from the merchant's verified catalog facts; " +
+      "prices are in minor units (44900 INR is 449.00).",
+    method: "POST",
+    path: () => "/catalog/search",
+    shape: {
+      meta: metaSchema.optional(),
+      request: objectSchema.describe('UCP catalog search request, e.g. {"query":"chai","context":{"currency":"INR"}}'),
+    },
+    body: "request",
+    annotations: READ,
+    public: true,
+  },
+  {
+    name: "lookup_catalog",
+    capability: CATALOG_LOOKUP,
+    title: "Look up UCP catalog items",
+    description: "Look up products by product id, variant id or SKU.",
+    method: "POST",
+    path: () => "/catalog/lookup",
+    shape: {
+      meta: metaSchema.optional(),
+      request: objectSchema.describe('UCP catalog lookup request, e.g. {"ids":["NTH-MASALA-250"]}'),
+    },
+    body: "request",
+    annotations: READ,
+    public: true,
+  },
   {
     name: "create_checkout",
     capability: CHECKOUT,
@@ -440,7 +479,7 @@ async function callUcp(
   body: Json | undefined,
 ) {
   const profile = meta?.["ucp-agent"]?.profile ?? options.agentProfile;
-  if (!profile) {
+  if (!profile && !op.public) {
     return errorResult({
       status: 400,
       code: "invalid_profile_url",
@@ -448,18 +487,19 @@ async function callUcp(
     });
   }
   let headers: Record<string, string>;
-  try {
-    headers = options.headers();
-  } catch (exc) {
-    return errorResult({ status: 401, code: "unauthorized", content: (exc as Error).message });
+  if (op.public) {
+    // Public catalog routes: the credential never leaves for a read anyone may make.
+    headers = { "Content-Type": "application/json" };
+  } else {
+    try {
+      headers = options.headers();
+    } catch (exc) {
+      return errorResult({ status: 401, code: "unauthorized", content: (exc as Error).message });
+    }
   }
-  headers = {
-    ...headers,
-    Accept: "application/json",
-    "UCP-Agent": `profile="${profile}"`,
-    "Request-Id": randomUUID(),
-  };
-  if (op.method !== "GET") headers["Idempotency-Key"] = meta?.["idempotency-key"] ?? randomUUID();
+  headers = { ...headers, Accept: "application/json", "Request-Id": randomUUID() };
+  if (profile) headers["UCP-Agent"] = `profile="${profile}"`;
+  if (op.method !== "GET" && !op.public) headers["Idempotency-Key"] = meta?.["idempotency-key"] ?? randomUUID();
   let resp: Response;
   try {
     resp = await fetch(`${binding.endpoint}${op.path(id)}`, {
@@ -532,7 +572,7 @@ export async function registerUcpTools(server: McpServer, options: UcpToolOption
     registered.push(op.name);
   }
   if (registered.length === 0) {
-    log("UCP checkout tools not registered: the merchant profile lists no checkout, cart or order capability");
+    log("UCP tools not registered: the merchant profile lists no catalog, checkout, cart or order capability");
   }
   return registered;
 }

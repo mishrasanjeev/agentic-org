@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased - Buyer agents can search and check out at the demo shop over MCP
+
+- `agenticorg-mcp-server`: new `search_catalog` and `lookup_catalog` tools over the merchant's
+  public UCP catalog routes. They never send the configured credential and need no platform
+  profile, so any MCP client can search a UCP shop such as `nilgiritea.agenticorg.ai`.
+- A public UCP platform profile for AgenticOrg's demo buyer agent at
+  `https://agenticorg.ai/ucp/platforms/agenticorg-demo-buyer/profile.json` (catalog, cart,
+  checkout, fulfillment, buyer consent and order at 2026-04-08), for the `UCP-Agent` header of
+  demo checkouts.
 ## Unreleased - Nilgiri Tea House example guide
 
 - New docs guide `/docs/oacp-example-nilgiri-tea` ("Example: Nilgiri Tea House, end to end"): the
