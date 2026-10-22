@@ -137,7 +137,7 @@ Search | The agent searches for chai and gets the Masala Chai Blend at ₹449, i
 Open a checkout | The agent creates a checkout for NTH-MASALA-250, quantity 1, using the API key the merchant issued to its platform. The shop prices it from the same verified facts. | Owner: Buyer agent | If blocked: Without a valid key the shop answers 401.
 Get mandates | Grantex issues three signed mandates: what the buyer allowed (Intent), this exact cart (Cart) and the amount and payment rail (Payment). | Owner: Grantex | If blocked: A mandate is refused when it goes beyond what the buyer allowed.
 Decide | The arbiter applies its fixed rules, such as the shop's limits and the mandates, and answers allow or refuse. The decision is sealed in the ledger. | Owner: AgenticOrg arbiter | If blocked: A refusal names the first rule that failed; nothing is charged.
-Pay | With live payments on, the payment provider would charge once, only on allow. In this demo payments are off: a checkout can be decided, but completing it answers executor_unavailable and nothing is charged. | Owner: Payment provider | If blocked: Live payment stays off until a payment-provider sandbox run has passed.
+Pay | With live payments on, the payment provider would charge once, only on allow. In this demo there is no payment step: once pickup is chosen the checkout is ready, and completing it answers payment_failed, "A payment instrument is required to complete." Nothing is charged. | Owner: Payment provider | If blocked: Live payment stays off until a payment-provider sandbox run has passed.
 ```
 
 For an agent platform, the checkout request looks like this. The key and the platform profile are your own.
@@ -152,6 +152,55 @@ curl -s -X POST https://nilgiritea.agenticorg.ai/ucp/checkout-sessions \
 ```
 
 Every step of the mandates, the passkey and the decision is in [A purchase, step by step](/docs/oacp-buyer-journey).
+
+## See it with real agents
+
+These are real runs against the live shop on 22 October 2026, not mock-ups. Each one searches the
+catalog, opens a checkout and stops at the payment step. Nothing was charged.
+
+### Gemini, through the AgenticOrg MCP server
+
+Gemini CLI was connected to the `agenticorg-mcp-server` UCP tools, pointed at the shop's profile.
+Gemini asked before every tool call, and each call was approved by hand.
+
+![Gemini summarises its run: it found Masala Chai Blend, NTH-MASALA-250, at Rs 449 in stock, opened checkout chk_b07d…f2d for one 250 g pack with a total of Rs 449, and the shop answered that the order still needs a fulfilment choice, shipping or pickup.](/screenshots/nilgiri-gemini-summary.webp)
+
+1. **Search and checkout.** Gemini found Masala Chai Blend (NTH-MASALA-250) at ₹449, in stock,
+   and opened a checkout for one pack. The shop priced it at ₹449 and marked it `incomplete`: it
+   still needed to know how the tea reaches the buyer.
+
+![Gemini updates the checkout to in-store pickup at Nilgiri Tea House, Ooty, with a pickup fee of Rs 0; the session moves to ready_for_complete with totals of 44900 subtotal, 0 fulfilment and 44900 total.](/screenshots/nilgiri-gemini-pickup.webp)
+
+2. **Pickup chosen.** Gemini chose in-store pickup at the Ooty store, which costs nothing. The
+   checkout moved to `ready_for_complete` with a total of ₹449.
+
+![The shop's answer to completing the checkout: an error message with code payment_failed, "A payment instrument is required to complete.", severity recoverable, path $.payment.](/screenshots/nilgiri-gemini-payment-stop.webp)
+
+3. **Stop at payment.** Asked to complete, the shop answered `payment_failed`: "A payment
+   instrument is required to complete." That is the payment layer. A real shop with live payments
+   would take the buyer's payment here, only after the arbiter allows it.
+
+### Telegram, through an AgenticOrg agent
+
+An AgenticOrg agent with the `ucp_buyer` connector answers in a Telegram bot. It may search, read
+and open checkouts at sandbox shops, and it has no tool that pays. Asked "Find masala chai at
+Nilgiri Tea House and open a checkout for one", it replied:
+
+> I found the **Masala Chai Blend (250 g)** at Nilgiri Tea House for Rs 449 (44900 INR), which is
+> currently in stock.
+>
+> I have successfully opened a checkout session for one unit.
+>
+> - **Checkout ID:** `chk_0451d43ddbdf4560a3e97c83563a7c1a`
+> - **Status:** incomplete
+> - **Total:** Rs 449.00 (44900 INR)
+>
+> *Note: Payment is not available to me; the order stops before payment, which you would complete
+> with the shop.*
+
+Behind that one message the agent searched the catalog, opened the checkout at the shop (HTTP 201)
+and answered, in about 30 seconds. To give your own agent these tools, see the
+[UCP buyer connector](https://github.com/mishrasanjeev/agentic-org/blob/main/docs/oacp/ucp-buyer-connector.md).
 
 ## Do the same for your shop
 
