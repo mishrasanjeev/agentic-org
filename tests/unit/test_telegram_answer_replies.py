@@ -26,6 +26,12 @@ from tests.unit.test_channel_runtime_boundaries import state as state
         (False, "false"),
         ({"items": [7, 11]}, '{"items": [7, 11]}'),
         ("नमस्ते 世界", "नमस्ते 世界"),
+        # A plain-text answer arrives wrapped by the agent graph; only the text is sent.
+        ({"raw_output": " Masala Chai Blend, Rs 449 ", "status": "completed"}, "Masala Chai Blend, Rs 449"),
+        ({"raw_output": "18 items remain"}, "18 items remain"),
+        # Not a plain-text wrapper: a structured raw_output or extra members stay a JSON export.
+        ({"raw_output": {"items": 2}, "status": "completed"}, '{"raw_output": {"items": 2}, "status": "completed"}'),
+        ({"raw_output": "x", "extra": 1}, '{"raw_output": "x", "extra": 1}'),
     ],
 )
 def test_final_answer_contains_only_the_completed_output(output, expected):
@@ -56,6 +62,9 @@ def test_final_answer_contains_only_the_completed_output(output, expected):
         [[[[[[["deep"]]]]]]],
         list(range(101)),
         {str(i): i for i in range(101)},
+        # The secret filters still apply to unwrapped plain text.
+        {"raw_output": "Bearer synthetic-private-value", "status": "completed"},
+        {"raw_output": "   ", "status": "completed"},
     ],
 )
 def test_private_malformed_and_unbounded_outputs_are_withheld(output):

@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased - Channel replies send plain-text answers as text
+
+- Fixed: when an agent answered in plain text, Telegram and other answer replies showed the agent
+  graph's wrapper (`{"raw_output": "...", "status": "completed"}`) instead of the answer. A
+  wrapper holding only a text `raw_output` (and `status`) is now sent as that text; every secret and
+  size filter still applies, and any other output is unchanged.
+
 ## Unreleased - Merchant custom domains through Firebase Hosting
 
 - Behind `AGENTICORG_CUSTOM_DOMAIN_FIREBASE_ENABLED` (default off) and `AGENTICORG_CUSTOM_DOMAIN_FIREBASE_SITE`,
