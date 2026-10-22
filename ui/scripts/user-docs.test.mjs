@@ -413,7 +413,7 @@ test("the OACP section has nine adaptive guides with summaries, figures and work
   assert.match(example.html, /aria-label="Process map" start="11">/);
   // Real agent runs: Gemini screenshots and the Telegram reply, stopping at payment.
   for (const shot of ["nilgiri-gemini-summary", "nilgiri-gemini-pickup", "nilgiri-gemini-payment-stop"])
-    assert.match(example.html, new RegExp(`src="/screenshots/${shot}\.webp"`));
+    assert.ok(example.html.includes(`src="/screenshots/${shot}.webp"`), shot);
   assert.match(example.html, /A payment instrument is required to complete/);
   assert.doesNotMatch(example.html, /executor_unavailable/);
   assert.match(overview.html, /href="\/docs\/oacp-example-nilgiri-tea"/);
