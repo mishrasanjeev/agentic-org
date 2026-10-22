@@ -20,6 +20,16 @@
 - Docs: the custom domains guide and runbook describe the Firebase setup, the spike results, limits, cost
   and rollback; the Cloud Run domain-mapping flow remains as the older option.
 
+## Unreleased - Company agents can use tenant-wide connectors again
+
+- Fixed: an agent that belongs to a company was refused with
+  `connector_not_ready_for_dispatch` / `missing_connector_config` when its connector was registered
+  for the whole tenant (BUG-01 of 2026-09-21, reopened). Row-level security on `connector_configs`
+  shows a company-scoped session only that company's rows, so the tenant-wide fallback never found
+  the shared row. Config resolution and dispatch readiness now read the tenant-wide binding in a
+  tenant-scoped session. Precedence is unchanged: the company's own binding, then the tenant-wide
+  one, never another company's. The RLS policy is unchanged.
+
 ## Unreleased - Sandbox checkout at operator-listed demo shops
 
 - `ucp_buyer` connector: `sandbox_checkout_create` and `sandbox_checkout_update`, the same checkout

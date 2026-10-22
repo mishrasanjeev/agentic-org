@@ -1345,6 +1345,37 @@ async def _resolve_run_grant_for_type(
     )
 
 
+async def _tenant_global_connector_config(
+    tid: _uuid.UUID,
+    *,
+    connector_name: str | None = None,
+    config_id: _uuid.UUID | None = None,
+) -> Any | None:
+    """The tenant-global ``ConnectorConfig`` (``company_id IS NULL``) by name or id, or None.
+
+    BUG-01 (bug sheet 2026-09-21) precedence for a company-bound agent is the exact
+    ``(tenant, company, connector)`` binding, then this tenant-global binding, and never
+    another company's. ``connector_configs`` RLS (``v6z6``) shows a session only the rows of
+    its exact company context, so a company-scoped session can never see a tenant-global
+    row. This lookup therefore opens a tenant-scoped session (no company context), whose
+    policy shows exactly the tenant-global rows of this tenant and no company's rows.
+    """
+    from core.models.connector_config import ConnectorConfig
+
+    if (connector_name is None) == (config_id is None):
+        raise ValueError("pass exactly one of connector_name or config_id")
+    query = select(ConnectorConfig).where(
+        ConnectorConfig.tenant_id == tid,
+        ConnectorConfig.company_id.is_(None),
+    )
+    if connector_name is not None:
+        query = query.where(ConnectorConfig.connector_name == connector_name)
+    else:
+        query = query.where(ConnectorConfig.id == config_id)
+    async with get_tenant_session(tid) as tenant_session:
+        return (await tenant_session.execute(query)).scalar_one_or_none()
+
+
 async def _resolve_connector_configs(
     tenant_id: str,
     connector_ids: list[str],
@@ -1432,16 +1463,11 @@ async def _resolve_connector_configs(
                 cc = cc_result.scalar_one_or_none()
 
                 # Prefer a company binding, then use the tenant-global
-                # binding. Never fall through to another company.
+                # binding. Never fall through to another company. The
+                # tenant-global row is read in a tenant-scoped session: this
+                # company-scoped session cannot see it under v6z6 RLS.
                 if cc is None and company_uuid is not None:
-                    cc_result = await session.execute(
-                        select(ConnectorConfig).where(
-                            ConnectorConfig.tenant_id == tid,
-                            ConnectorConfig.company_id.is_(None),
-                            ConnectorConfig.connector_name == connector_name,
-                        )
-                    )
-                    cc = cc_result.scalar_one_or_none()
+                    cc = await _tenant_global_connector_config(tid, connector_name=connector_name)
 
                 # RU-May01-BUG-03: ``connector_ids`` historically stored
                 # connector NAME strings (``"zoho_books"``). Some agents
@@ -1477,6 +1503,8 @@ async def _resolve_connector_configs(
                         )
                     )
                     cc = cc_result.scalar_one_or_none()
+                    if cc is None and company_uuid is not None:
+                        cc = await _tenant_global_connector_config(tid, config_id=row_uuid)
                     if cc is None:
                         logger.info(
                             "connector_config_not_found_by_uuid",
@@ -1662,15 +1690,8 @@ async def _assert_connectors_ready_for_activation(
             )
         ).scalar_one_or_none()
         if cc is None and company_id is not None:
-            cc = (
-                await session.execute(
-                    select(ConnectorConfig).where(
-                        ConnectorConfig.tenant_id == tenant_id,
-                        ConnectorConfig.company_id.is_(None),
-                        ConnectorConfig.connector_name == connector_name,
-                    )
-                )
-            ).scalar_one_or_none()
+            # BUG-01 step 2, read outside this company-scoped session (v6z6 RLS hides it here).
+            cc = await _tenant_global_connector_config(tenant_id, connector_name=connector_name)
         if cc is None:
             try:
                 cc_uuid = _uuid.UUID(connector_name)
@@ -1690,6 +1711,8 @@ async def _assert_connectors_ready_for_activation(
                         )
                     )
                 ).scalar_one_or_none()
+                if cc is None and company_id is not None:
+                    cc = await _tenant_global_connector_config(tenant_id, config_id=cc_uuid)
 
         if cc is None:
             not_ready.append({"connector": connector_name, "reason": "missing_connector_config"})
