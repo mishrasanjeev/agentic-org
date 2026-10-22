@@ -1,0 +1,22 @@
+# Hosted MCP endpoint for the Nilgiri Tea House demo shop (mcp-server/src/http.ts).
+# Build from the repository root:  docker build -f mcp-server/Dockerfile.hosted -t agenticorg-mcp-demo .
+# Runtime settings (PORT, AGENTICORG_UCP_PROFILE_URL, AGENTICORG_UCP_AGENT_PROFILE, AGENTICORG_API_KEY,
+# MCP_ALLOWED_HOSTS) come from the Cloud Run service; the platform key is a Secret Manager reference.
+
+FROM node:26-slim@sha256:0d1e33586362bb9e608c4e751e7a9e7edb55c9ac11461ed5666af696cc461dd4 AS build
+WORKDIR /app
+COPY mcp-server/package.json mcp-server/package-lock.json ./
+RUN npm ci --no-audit --no-fund
+COPY mcp-server/tsconfig.json ./
+COPY mcp-server/src ./src
+RUN npm run build && npm prune --omit=dev
+
+FROM node:26-slim@sha256:0d1e33586362bb9e608c4e751e7a9e7edb55c9ac11461ed5666af696cc461dd4
+ENV NODE_ENV=production PORT=8080
+WORKDIR /app
+COPY --from=build --chown=root:root /app/package.json ./
+COPY --from=build --chown=root:root /app/node_modules ./node_modules
+COPY --from=build --chown=root:root /app/dist ./dist
+USER node
+EXPOSE 8080
+CMD ["node", "dist/http.js"]

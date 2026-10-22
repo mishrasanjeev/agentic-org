@@ -1,5 +1,15 @@
 # agenticorg-mcp-server changelog
 
+## Unreleased
+
+### Added
+- `dist/http.js`: a hosted, stateless Streamable HTTP endpoint for one public UCP shop, exposing
+  only the shop tools (search, lookup, create, get and update checkout; nothing that pays). It
+  fixes the shop, the platform profile and the key, and adds a host allowlist, a 64 KiB body
+  limit, and per-client and per-instance rate limits. `Dockerfile.hosted` builds it.
+- `registerUcpTools` options: `binding` (reuse a discovered binding), `allowTools` (register a
+  subset) and `lockAgentProfile` (ignore a call's `meta["ucp-agent"].profile`).
+
 ## 5.1.0 - 2026-10-20
 
 ### Added

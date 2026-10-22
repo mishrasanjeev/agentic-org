@@ -39,8 +39,9 @@
   ],
   "scripts": {
     "build": "tsc",
-    "test": "npm run build && node test/mcp-server-smoke.mjs && node test/ucp-checkout-tools.mjs",
-    "prepublishOnly": "npm run build"
+    "test": "npm run build && node test/mcp-server-smoke.mjs && node test/ucp-checkout-tools.mjs && node test/hosted-http.mjs",
+    "prepublishOnly": "npm run build",
+    "start:hosted": "node dist/http.js"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.32.1",
