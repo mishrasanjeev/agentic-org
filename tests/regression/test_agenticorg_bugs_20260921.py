@@ -216,12 +216,24 @@ class _Result:
         return self.value
 
 
-class _CompanyScopedConnectorSession:
-    """Return a tenant-global ConnectorConfig, never another company row."""
+class _RlsConnectorStore:
+    """ConnectorConfig rows behind the v6z6 policy: a session sees only rows of its exact company.
 
-    def __init__(self):
-        self.global_config = SimpleNamespace(
+    The earlier fake returned the tenant-global row to a company-scoped session, which the
+    real policy never does; that is how BUG-01's fallback shipped unreachable. Sessions from
+    this store apply the policy, so the fallback must read through a tenant-scoped session.
+    """
+
+    def __init__(self, *rows):
+        self.rows = list(rows)
+        self.connector = SimpleNamespace(name="hubspot", status="active")
+        self.sessions: list[uuid.UUID | None] = []
+
+    @staticmethod
+    def row(company_id):
+        return SimpleNamespace(
             id=uuid.uuid4(),
+            company_id=company_id,
             connector_name="hubspot",
             status="configured",
             health_status="healthy",
@@ -229,50 +241,66 @@ class _CompanyScopedConnectorSession:
             config={},
             credentials_encrypted={"_encrypted": "synthetic-encrypted-value"},
         )
-        self.connector = SimpleNamespace(name="hubspot", status="active")
-        self.company_queries: list[object] = []
 
-    async def execute(self, statement):
-        entity = statement.column_descriptions[0]["entity"]
-        name = getattr(entity, "__name__", str(entity))
-        if name == "ConnectorConfig":
-            params = statement.compile().params
-            company_value = next(
-                (
-                    value
-                    for key, value in params.items()
-                    if "company_id" in key and value is not None
-                ),
-                None,
-            )
-            self.company_queries.append(company_value)
-            return _Result(self.global_config if company_value is None else None)
-        if name == "Company":
-            return _Result(COMPANY_ID)
-        if name == "Connector":
-            return _Result(self.connector)
-        return _Result(None)
+    def session(self, company_id=None):
+        self.sessions.append(company_id)
+        store = self
+
+        class _Session:
+            async def execute(self, statement):
+                entity = statement.column_descriptions[0]["entity"]
+                name = getattr(entity, "__name__", str(entity))
+                if name == "ConnectorConfig":
+                    params = statement.compile().params
+                    wanted = next(
+                        (value for key, value in params.items() if "company_id" in key and value is not None),
+                        None,
+                    )
+                    visible = [r for r in store.rows if r.company_id == company_id]  # the RLS policy
+                    return _Result(next((r for r in visible if r.company_id == wanted), None))
+                if name == "Company":
+                    return _Result(COMPANY_ID)
+                if name == "Connector":
+                    return _Result(store.connector)
+                return _Result(None)
+
+        return _Session()
+
+    def factory(self):
+        store = self
+
+        class _Context:
+            def __init__(self, company_id=None):
+                self.company_id = company_id
+
+            async def __aenter__(self):
+                return store.session(self.company_id)
+
+            async def __aexit__(self, *_args):
+                return False
+
+        return lambda _tenant_id, company_id=None: _Context(company_id)
 
 
 @pytest.mark.asyncio
 async def test_dispatch_readiness_falls_back_to_tenant_global_config() -> None:
-    """BUG-01: a company-bound agent can use the tenant-global binding."""
+    """BUG-01: a company-bound agent can use the tenant-global binding, read in a tenant session."""
     from api.v1.agents import _assert_connectors_ready_for_activation
 
-    session = _CompanyScopedConnectorSession()
-    with patch(
-        "core.crypto.decrypt_for_tenant",
-        return_value=json.dumps({"api_key": "synthetic-key"}),
+    store = _RlsConnectorStore(_RlsConnectorStore.row(None))
+    with (
+        patch("api.v1.agents.get_tenant_session", side_effect=store.factory()),
+        patch("core.crypto.decrypt_for_tenant", return_value=json.dumps({"api_key": "synthetic-key"})),
     ):
         await _assert_connectors_ready_for_activation(
-            session,
+            store.session(COMPANY_ID),
             TENANT_ID,
             ["registry-hubspot"],
             COMPANY_ID,
         )
 
-    assert COMPANY_ID in session.company_queries
-    assert None in session.company_queries
+    # The company session could not see the global row; the tenant-scoped session did.
+    assert store.sessions == [COMPANY_ID, None]
 
 
 @pytest.mark.asyncio
@@ -280,20 +308,11 @@ async def test_runtime_config_resolution_uses_the_same_global_fallback() -> None
     """BUG-01: tool config resolution must match the dispatch readiness gate."""
     from api.v1.agents import _resolve_connector_configs
 
-    class _Context:
-        async def __aenter__(self):
-            return session
-
-        async def __aexit__(self, *_args):
-            return False
-
-    session = _CompanyScopedConnectorSession()
+    store = _RlsConnectorStore(_RlsConnectorStore.row(None))
     with (
-        patch("core.database.get_tenant_session", side_effect=lambda *_args, **_kwargs: _Context()),
-        patch(
-            "core.crypto.decrypt_for_tenant",
-            return_value=json.dumps({"api_key": "synthetic-key"}),
-        ),
+        patch("core.database.get_tenant_session", side_effect=store.factory()),
+        patch("api.v1.agents.get_tenant_session", side_effect=store.factory()),
+        patch("core.crypto.decrypt_for_tenant", return_value=json.dumps({"api_key": "synthetic-key"})),
     ):
         config, names = await _resolve_connector_configs(
             tenant_id=str(TENANT_ID),
@@ -303,6 +322,35 @@ async def test_runtime_config_resolution_uses_the_same_global_fallback() -> None
 
     assert config == {"api_key": "synthetic-key"}
     assert names == ["hubspot"]
+    assert None in store.sessions
+
+
+@pytest.mark.asyncio
+async def test_exact_company_binding_wins_over_the_tenant_global_one() -> None:
+    """BUG-01 step 1: with both rows present, the company's own binding is used."""
+    from api.v1.agents import _resolve_connector_configs
+
+    company_row = _RlsConnectorStore.row(COMPANY_ID)
+    company_row.credentials_encrypted = {"_encrypted": "company"}
+    global_row = _RlsConnectorStore.row(None)
+    global_row.credentials_encrypted = {"_encrypted": "global"}
+    store = _RlsConnectorStore(company_row, global_row)
+
+    def _decrypt(value):
+        return json.dumps({"api_key": f"{value}-key"})
+
+    with (
+        patch("core.database.get_tenant_session", side_effect=store.factory()),
+        patch("api.v1.agents.get_tenant_session", side_effect=store.factory()),
+        patch("core.crypto.decrypt_for_tenant", side_effect=_decrypt),
+    ):
+        config, _names = await _resolve_connector_configs(
+            tenant_id=str(TENANT_ID),
+            connector_ids=["registry-hubspot"],
+            company_id=COMPANY_ID,
+        )
+
+    assert config == {"api_key": "company-key"}
 
 
 @pytest.mark.asyncio
@@ -310,31 +358,13 @@ async def test_dispatch_readiness_never_falls_back_to_another_company() -> None:
     """BUG-01 safety boundary: a different company's config remains blocked."""
     from api.v1.agents import _assert_connectors_ready_for_activation
 
-    class _OtherCompanyOnly(_CompanyScopedConnectorSession):
-        async def execute(self, statement):
-            entity = statement.column_descriptions[0]["entity"]
-            name = getattr(entity, "__name__", str(entity))
-            if name == "ConnectorConfig":
-                params = statement.compile().params
-                company_value = next(
-                    (
-                        value
-                        for key, value in params.items()
-                        if "company_id" in key and value is not None
-                    ),
-                    None,
-                )
-                self.company_queries.append(company_value)
-                return _Result(
-                    self.global_config
-                    if company_value == OTHER_COMPANY_ID
-                    else None
-                )
-            return await super().execute(statement)
-
-    with pytest.raises(HTTPException) as exc_info:
+    store = _RlsConnectorStore(_RlsConnectorStore.row(OTHER_COMPANY_ID))
+    with (
+        patch("api.v1.agents.get_tenant_session", side_effect=store.factory()),
+        pytest.raises(HTTPException) as exc_info,
+    ):
         await _assert_connectors_ready_for_activation(
-            _OtherCompanyOnly(),
+            store.session(COMPANY_ID),
             TENANT_ID,
             ["registry-hubspot"],
             COMPANY_ID,
