@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased - Hosted MCP endpoint for the demo shop
+
+- `agenticorg-mcp-server` gains a hosted Streamable HTTP endpoint (`mcp-server/src/http.ts`,
+  `mcp-server/Dockerfile.hosted`) so hosted assistants, such as Gemini custom apps and ChatGPT
+  connectors, can search the synthetic demo shop and open a checkout. It exposes only the five shop
+  tools and nothing that pays, with a fixed shop, profile and key, a host allowlist, a body limit
+  and rate limits. Container scanning covers the new image.
 ## Unreleased - Nilgiri Tea House guide: Telegram screenshot
 
 - The Telegram run in the Nilgiri Tea House guide is now a screenshot of the bot's plain-text reply
