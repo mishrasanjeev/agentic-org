@@ -22,6 +22,24 @@
   lookup and checkout read are reads; checkout create and update are customer-facing writes, not
   money. The bare `checkout_create` and `grantex_commerce:checkout_create` keep the money class.
 - Guide: `docs/oacp/ucp-buyer-connector.md`.
+## Unreleased - Buyer agents can search and check out at the demo shop over MCP
+
+- `agenticorg-mcp-server`: new `search_catalog` and `lookup_catalog` tools over the merchant's
+  public UCP catalog routes. They never send the configured credential and need no platform
+  profile, so any MCP client can search a UCP shop such as `nilgiritea.agenticorg.ai`.
+- A public UCP platform profile for AgenticOrg's demo buyer agent at
+  `https://agenticorg.ai/ucp/platforms/agenticorg-demo-buyer/profile.json` (catalog, cart,
+  checkout, fulfillment, buyer consent and order at 2026-04-08), for the `UCP-Agent` header of
+  demo checkouts.
+## Unreleased - Nilgiri Tea House example guide
+
+- New docs guide `/docs/oacp-example-nilgiri-tea` ("Example: Nilgiri Tea House, end to end"): the
+  live synthetic example merchant at `nilgiritea.agenticorg.ai`, with try-it commands anyone can run
+  against the real host (profile and catalog search, with real answers), the setup steps behind it,
+  its two DNS records, a buyer agent's purchase, a "do the same for your shop" table and what the
+  demo does not do. Four new diagrams (story, shelf, DNS records, buyer flow). Linked from the OACP
+  overview and the merchant setup checklist; the production layout check covers it at 320, 390 and
+  1440 px in light and dark mode.
 
 ## Unreleased - Custom domains guide on the documentation site
 
