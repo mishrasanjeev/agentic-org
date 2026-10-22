@@ -144,7 +144,7 @@ def _json(request: httpx.Request) -> Any:
 # -- registration -----------------------------------------------------------------------------
 
 
-def test_registers_exactly_the_five_buyer_tools_and_no_payment_tool() -> None:
+def test_registers_exactly_the_buyer_tools_and_no_payment_tool() -> None:
     connector = UcpBuyerConnector({})
     assert set(connector._tool_registry) == {
         "catalog_search",
@@ -152,6 +152,9 @@ def test_registers_exactly_the_five_buyer_tools_and_no_payment_tool() -> None:
         "checkout_create",
         "checkout_get",
         "checkout_update",
+        # Host-allowlisted variants (tests/unit/test_ucp_buyer_sandbox_checkout.py).
+        "sandbox_checkout_create",
+        "sandbox_checkout_update",
     }
     for name in dir(connector):
         lowered = name.lower()

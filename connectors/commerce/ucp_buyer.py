@@ -12,6 +12,12 @@ A UCP checkout session is a priced draft; only Complete executes payment. This c
 no Complete, Cancel or payment tool, refuses payment members in a checkout body, and never
 builds a URL other than the five operations above, so it cannot move money.
 
+``sandbox_checkout_create`` and ``sandbox_checkout_update`` are the same two checkout writes,
+allowed only at merchant hosts the operator lists in ``AGENTICORG_UCP_BUYER_SANDBOX_HOSTS``
+(exact host names, comma separated, empty by default). They exist so an agent can demonstrate a
+checkout at a synthetic demo shop where governance would otherwise contain the write; at any
+other host they refuse before a request is built.
+
 Every request goes through the connector's guarded client (``BaseConnector``): https only,
 a public address checked before each send (``core.security.egress.validate_public_url_async``),
 DNS pinned by ``build_pinned_async_transport``, no redirects, a timeout, and a bounded body.
@@ -22,6 +28,7 @@ the merchant profile URL does not name.
 from __future__ import annotations
 
 import json
+import os
 import re
 import time
 import uuid
@@ -62,6 +69,7 @@ PAYMENT_NOTE = (
     "Payment and checkout completion are not available to this agent. The buyer completes the "
     "purchase with the merchant (continue_url, when present)."
 )
+SANDBOX_HOSTS_ENV = "AGENTICORG_UCP_BUYER_SANDBOX_HOSTS"
 AMOUNT_NOTE = "Amounts are integer minor units of the currency (for example 89900 INR is 899.00 INR)."
 
 
@@ -146,6 +154,8 @@ class UcpBuyerConnector(BaseConnector):
             "checkout_create": self.checkout_create,
             "checkout_get": self.checkout_get,
             "checkout_update": self.checkout_update,
+            "sandbox_checkout_create": self.sandbox_checkout_create,
+            "sandbox_checkout_update": self.sandbox_checkout_update,
         }
 
     def _api_key(self) -> str:
@@ -268,6 +278,24 @@ class UcpBuyerConnector(BaseConnector):
         except _ToolError as exc:
             return self._finish(exc.result)
 
+    async def sandbox_checkout_create(
+        self, line_items: list[dict[str, Any]], buyer: dict[str, Any] | None = None
+    ) -> dict[str, Any]:
+        """Open a checkout session at an operator-listed sandbox shop (synthetic demo merchant only); never pays."""
+        try:
+            self._require_sandbox_host()
+        except _ToolError as exc:
+            return self._finish(exc.result)
+        return await self.checkout_create(line_items, buyer)
+
+    async def sandbox_checkout_update(self, checkout_id: str, checkout: dict[str, Any]) -> dict[str, Any]:
+        """Replace a checkout session at an operator-listed sandbox shop; same rules as checkout_update."""
+        try:
+            self._require_sandbox_host()
+        except _ToolError as exc:
+            return self._finish(exc.result)
+        return await self.checkout_update(checkout_id, checkout)
+
     # -- input validation --------------------------------------------------------------------
 
     @staticmethod
@@ -324,6 +352,21 @@ class UcpBuyerConnector(BaseConnector):
                 "merchant_profile_url must be an https URL ending in /.well-known/ucp.",
             )
         return url
+
+    @staticmethod
+    def _sandbox_hosts() -> frozenset[str]:
+        raw = os.getenv(SANDBOX_HOSTS_ENV, "")
+        return frozenset(host.strip().lower().rstrip(".") for host in raw.split(",") if host.strip())
+
+    def _require_sandbox_host(self) -> None:
+        """Fail closed unless the merchant profile's host is listed exactly in the sandbox allowlist."""
+        host = (self._profile_url().host or "").lower().rstrip(".")
+        if not host or host not in self._sandbox_hosts():
+            raise _ToolError(
+                "sandbox_host_not_allowed",
+                "Sandbox checkout is allowed only at merchant hosts the operator lists in "
+                f"{SANDBOX_HOSTS_ENV}; use checkout_create, which governance reviews.",
+            )
 
     def _ucp_agent(self, *, required: bool) -> str | None:
         raw = self.config.get("agent_profile_url")

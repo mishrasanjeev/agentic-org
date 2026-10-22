@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased - Sandbox checkout at operator-listed demo shops
+
+- `ucp_buyer` connector: `sandbox_checkout_create` and `sandbox_checkout_update`, the same checkout
+  writes allowed only at merchant hosts listed exactly in `AGENTICORG_UCP_BUYER_SANDBOX_HOSTS`
+  (empty by default; any other host is refused before a request is built). The action taxonomy
+  classes them as `draft`, so an agent can open a checkout at the synthetic demo shop in production;
+  the ordinary `checkout_create` / `checkout_update` stay customer-facing writes and contained.
+  Owner decision of 2026-10-22; see `docs/oacp/ucp-buyer-connector.md`.
+
 ## Unreleased - UCP buyer connector
 
 - New connector `ucp_buyer`: an agent can shop at a public UCP merchant (for example the demo shop

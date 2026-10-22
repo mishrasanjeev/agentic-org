@@ -388,6 +388,16 @@ _QUALIFIED_RULES: dict[str, tuple[ActionRisk, frozenset[ActionDomain]]] = {
     "ucp_buyer_checkout_get": (ActionRisk.READ, _ALL),
     "ucp_buyer_checkout_create": (ActionRisk.CUSTOMER_WRITE, _CUSTOMER),
     "ucp_buyer_checkout_update": (ActionRisk.CUSTOMER_WRITE, _CUSTOMER),
+    # Narrow demo exception (owner decision, 2026-10-22). The sandbox variants open or replace a
+    # checkout session only at merchant hosts the operator lists in
+    # AGENTICORG_UCP_BUYER_SANDBOX_HOSTS (empty by default; the connector refuses any other host
+    # before a request is built), such as the synthetic demo shop nilgiritea.agenticorg.ai. There
+    # they create a priced draft at a shop with no real buyers and no payment executor, so they
+    # class as DRAFT and are dispatched in strict runtimes. Unlike ``cart_create`` above, the
+    # durable state they create lives only at an operator-listed synthetic shop. Any other host
+    # uses ucp_buyer_checkout_create / _update, which stay CUSTOMER_WRITE and contained.
+    "ucp_buyer_sandbox_checkout_create": (ActionRisk.DRAFT, _CUSTOMER),
+    "ucp_buyer_sandbox_checkout_update": (ActionRisk.DRAFT, _CUSTOMER),
 }
 
 
