@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased - Nilgiri Tea House guide: Telegram screenshot
+
+- The Telegram run in the Nilgiri Tea House guide is now a screenshot of the bot's plain-text reply
+  (product, price, stock, checkout id, status, total, stop before payment) instead of a quoted
+  Markdown answer.
+
 ## Unreleased - Nilgiri Tea House guide: real agent runs
 
 - The Nilgiri Tea House example guide gains "See it with real agents": three screenshots of Gemini
