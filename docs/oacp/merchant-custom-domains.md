@@ -128,7 +128,10 @@ its own catalog there.
 3. It confirms with the HTTPS probe and marks the domain live.
 
 Removing a domain deletes it from the site
-(`DELETE .../customDomains/{host}`), retried until it succeeds. An ownership
+(`DELETE .../customDomains/{host}`), retried until it succeeds. Hosting keeps
+a deleted domain about 30 days (`deleteTime` set). If the same host is added
+again in that time, AgenticOrg restores it with `POST
+.../customDomains/{host}:undelete` instead of failing on the existing name. An ownership
 state Hosting cannot fix by itself (`OWNERSHIP_MISMATCH`, the domain is on
 another Firebase project; `OWNERSHIP_SUSPENDED`) marks the domain failed with
 the reason. Only failed Firebase domains appear in the operator queue, and

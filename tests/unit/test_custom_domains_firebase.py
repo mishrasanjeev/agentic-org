@@ -281,3 +281,53 @@ def test_release_script_dry_run_prints_the_agent_only_config(capsys: pytest.Capt
     printed = json.loads(capsys.readouterr().out)
     assert printed["site"] == SITE
     assert printed["config"] == cd.firebase_site_config()
+
+
+def test_a_soft_deleted_domain_reads_as_absent() -> None:
+    deleted = cd.parse_firebase_domain({**_domain("HOST_ACTIVE", "OWNERSHIP_ACTIVE", "CERT_ACTIVE"), "deleteTime": "x"})
+    assert deleted.deleted and not deleted.exists and not deleted.serving
+
+
+def test_reconnecting_a_removed_host_undeletes_it(monkeypatch: pytest.MonkeyPatch) -> None:
+    _token(monkeypatch)
+    calls: list[tuple[str, str]] = []
+    restored = {"done": False}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls.append((request.method, str(request.url)))
+        if request.method == "POST" and str(request.url).endswith(":undelete"):
+            restored["done"] = True
+            return httpx.Response(200, json={"name": "operations/2"})
+        if request.method == "POST":
+            return httpx.Response(409, json={"error": {"message": "already exists"}})
+        document = _domain("HOST_ACTIVE", "OWNERSHIP_ACTIVE", "CERT_ACTIVE")
+        if not restored["done"]:
+            document["deleteTime"] = "2026-10-21T00:00:00Z"
+        return httpx.Response(200, json=document)
+
+    state = asyncio.run(
+        cd.create_firebase_domain(HOST, client=httpx.AsyncClient(transport=httpx.MockTransport(handler)))
+    )
+    assert calls == [
+        ("POST", f"{BASE}?customDomainId={HOST}"),
+        ("GET", f"{BASE}/{HOST}"),
+        ("POST", f"{BASE}/{HOST}:undelete"),
+        ("GET", f"{BASE}/{HOST}"),
+    ]
+    assert state.exists and state.serving and not state.deleted
+
+
+def test_a_refused_undelete_fails_with_its_reason(monkeypatch: pytest.MonkeyPatch) -> None:
+    _token(monkeypatch)
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.method == "POST" and str(request.url).endswith(":undelete"):
+            return httpx.Response(400, json={"error": {"message": "past the restore window"}})
+        if request.method == "POST":
+            return httpx.Response(409, json={"error": {"message": "already exists"}})
+        return httpx.Response(200, json={**_domain("HOST_ACTIVE", "OWNERSHIP_ACTIVE", None), "deleteTime": "x"})
+
+    state = asyncio.run(
+        cd.create_firebase_domain(HOST, client=httpx.AsyncClient(transport=httpx.MockTransport(handler)))
+    )
+    assert state.failed and state.message == "past the restore window"

@@ -492,6 +492,9 @@ class FirebaseDomainState:
     cert_state: str | None = None
     failed: bool = False
     message: str | None = None
+    # Soft-deleted: Hosting keeps a deleted CustomDomain about 30 days (``deleteTime`` set); creating
+    # the same host again needs an ``undelete`` (Firebase Hosting REST v1beta1, customDomains.undelete).
+    deleted: bool = False
 
     @property
     def serving(self) -> bool:
@@ -511,6 +514,8 @@ _FIREBASE_OWNERSHIP_FAILURES = {
 
 
 def parse_firebase_domain(document: Mapping[str, Any]) -> FirebaseDomainState:
+    if document.get("deleteTime"):
+        return FirebaseDomainState(exists=False, deleted=True)
     cert = document.get("cert") if isinstance(document.get("cert"), Mapping) else {}
     ownership = document.get("ownershipState")
     failure = _FIREBASE_OWNERSHIP_FAILURES.get(str(ownership))
@@ -563,11 +568,21 @@ async def create_firebase_domain(host: str, *, client: Any | None = None) -> Fir
     response = await _firebase_call(
         "POST", f"{_firebase_domains_url()}?customDomainId={host}", client=client, json_body={}
     )
-    if response.status_code == 409 or response.status_code < 400:
-        # Created (a long-running operation) or already on this site: read its current state.
+    if response.status_code >= 400 and response.status_code != 409:
+        return FirebaseDomainState(exists=False, failed=True, message=_firebase_error(response))
+    # Created (a long-running operation) or already known to the site: read its current state.
+    state = await get_firebase_domain(host, client=client)
+    if state.deleted or (response.status_code == 409 and not state.exists and not state.failed):
+        # The host was removed and is now added again: restore the soft-deleted domain.
+        restored = await _firebase_call(
+            "POST", f"{_firebase_domains_url()}/{host}:undelete", client=client, json_body={}
+        )
+        if restored.status_code >= 400:
+            return FirebaseDomainState(exists=False, failed=True, message=_firebase_error(restored))
         state = await get_firebase_domain(host, client=client)
-        return state if state.exists or response.status_code == 409 else FirebaseDomainState(exists=True)
-    return FirebaseDomainState(exists=False, failed=True, message=_firebase_error(response))
+    if state.exists or state.failed:
+        return state
+    return FirebaseDomainState(exists=True)  # created; Hosting has not published its state yet
 
 
 async def delete_firebase_domain(host: str, *, client: Any | None = None) -> bool:
