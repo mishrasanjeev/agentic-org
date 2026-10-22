@@ -7,6 +7,12 @@
   the stop at payment with `payment_failed`, "A payment instrument is required to complete"), and
   the reply of a Telegram agent using the `ucp_buyer` connector. The checkout step now describes the
   real payment stop instead of `executor_unavailable`.
+## Unreleased - Channel replies send plain-text answers as text
+
+- Fixed: when an agent answered in plain text, Telegram and other answer replies showed the agent
+  graph's wrapper (`{"raw_output": "...", "status": "completed"}`) instead of the answer. A
+  wrapper holding only a text `raw_output` (and `status`) is now sent as that text; every secret and
+  size filter still applies, and any other output is unchanged.
 
 ## Unreleased - Merchant custom domains through Firebase Hosting
 

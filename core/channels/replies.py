@@ -69,6 +69,14 @@ def final_answer(result: dict, credentials: dict[str, str]) -> str | None:
         return None
     if isinstance(output, dict) and "answer" in output:
         output = output["answer"]
+    elif (
+        isinstance(output, dict)
+        and isinstance(output.get("raw_output"), str)
+        and set(output) <= {"raw_output", "status"}
+    ):
+        # A plain-text agent answer, wrapped by the agent graph (agent_graph._parse_output);
+        # send the text itself, not the wrapper. Anything else in the dict keeps it a JSON export.
+        output = output["raw_output"]
     if output is None or output == "":
         return None
     text = output.strip() if isinstance(output, str) else json.dumps(output, ensure_ascii=False, allow_nan=False)
