@@ -65,6 +65,8 @@ ucp_buyer:catalog_lookup
 ucp_buyer:checkout_create
 ucp_buyer:checkout_get
 ucp_buyer:checkout_update
+ucp_buyer:sandbox_checkout_create
+ucp_buyer:sandbox_checkout_update
 ```
 
 ## Governance
@@ -80,3 +82,20 @@ Reads dispatch in every runtime. Customer-facing writes are contained like every
 action: in strict runtimes (production, staging, preview) they run in shadow and are not sent; in
 other runtimes they need the live capability flag `safety.live_capability.<domain>.customer_write`
 and a matching capability authorization.
+
+## Sandbox checkout at a demo shop
+
+`sandbox_checkout_create` and `sandbox_checkout_update` take the same arguments and send the same
+requests as `checkout_create` and `checkout_update`, with one difference: they work only when the
+merchant profile's host is listed, exactly, in the operator setting
+`AGENTICORG_UCP_BUYER_SANDBOX_HOSTS` (comma separated host names; no wildcards; empty by default).
+At any other host, or with the setting empty, they return `sandbox_host_not_allowed` before any
+request is built, including the profile fetch. Every other rule still applies: same-origin
+endpoint, payment members refused, no completion tool.
+
+They exist so an agent can demonstrate a checkout at a synthetic demo shop, such as
+`nilgiritea.agenticorg.ai`, in production. There the taxonomy classes them as `draft`, which
+strict runtimes dispatch: the session they open is a priced draft at a shop with no real buyers
+and no payment executor. This is a narrow exception recorded as the owner's decision of
+2026-10-22. The ordinary `checkout_create` and `checkout_update` are unchanged and stay contained
+in strict runtimes. Only list hosts that serve synthetic demo merchants.
