@@ -7,6 +7,11 @@
   connectors, can search the synthetic demo shop and open a checkout. It exposes only the five shop
   tools and nothing that pays, with a fixed shop, profile and key, a host allowlist, a body limit
   and rate limits. Container scanning covers the new image.
+## Unreleased - Nilgiri Tea House guide: Telegram screenshot
+
+- The Telegram run in the Nilgiri Tea House guide is now a screenshot of the bot's plain-text reply
+  (product, price, stock, checkout id, status, total, stop before payment) instead of a quoted
+  Markdown answer.
 
 ## Unreleased - Nilgiri Tea House guide: real agent runs
 
