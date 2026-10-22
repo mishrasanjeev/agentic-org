@@ -337,21 +337,31 @@ def main() -> int:
         if company_id:
             _ensure_pending_approval(client, company_id)
 
-        resp = client.get("/api/v1/agents", params={"page": 1, "per_page": 200})
-        resp.raise_for_status()
-        items = resp.json().get("items", [])
-        # First-seen-wins: pick the first (oldest) agent of each type so we
-        # update one consistently across CI runs rather than juggling
-        # replicas.
+        # Walk every page: the API caps per_page at 100, and test agents that other
+        # specs leave behind pushed the seeded agents past page 1, so the seed missed
+        # them and its create answered 409 (the name was taken).
+        items: list[dict[str, Any]] = []
+        for page in range(1, 51):
+            resp = client.get("/api/v1/agents", params={"page": page, "per_page": 100})
+            resp.raise_for_status()
+            batch = resp.json().get("items", [])
+            items.extend(batch)
+            if len(batch) < 100:
+                break
+        # Prefer the seeded agent of each type (its name starts with "E2E "), then the
+        # first seen, so the same agent is updated on every CI run.
+        names = {spec[0]: spec[2] for spec in _AGENT_SPECS}
         existing_by_type: dict[str, str] = {}
-        for a in items:
-            at = a.get("agent_type")
-            # Retired agents stay in the DB but can't be patched or run —
-            # treat them as absent so the CREATE path below produces a
-            # fresh shadow replacement.
-            if a.get("status") == "retired":
-                continue
-            if at and at not in existing_by_type:
+        for seeded_first in (True, False):
+            for a in items:
+                at = a.get("agent_type")
+                # Retired agents stay in the DB but can't be patched or run —
+                # treat them as absent so the CREATE path below produces a
+                # fresh shadow replacement.
+                if a.get("status") == "retired" or not at or at in existing_by_type:
+                    continue
+                if seeded_first and a.get("employee_name") != names.get(at):
+                    continue
                 existing_by_type[at] = a["id"]
 
         for agent_type, domain, name, prompt, tools in _AGENT_SPECS:
