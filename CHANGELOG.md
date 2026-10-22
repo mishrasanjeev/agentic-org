@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased - Nilgiri Tea House guide: real agent runs
+
+- The Nilgiri Tea House example guide gains "See it with real agents": three screenshots of Gemini
+  CLI shopping the live demo shop through the AgenticOrg MCP server (search, checkout, pickup, then
+  the stop at payment with `payment_failed`, "A payment instrument is required to complete"), and
+  the reply of a Telegram agent using the `ucp_buyer` connector. The checkout step now describes the
+  real payment stop instead of `executor_unavailable`.
 ## Unreleased - Channel replies send plain-text answers as text
 
 - Fixed: when an agent answered in plain text, Telegram and other answer replies showed the agent
