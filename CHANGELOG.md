@@ -1,5 +1,25 @@
 # Changelog
 
+## Unreleased - Merchant custom domains through Firebase Hosting
+
+- Behind `AGENTICORG_CUSTOM_DOMAIN_FIREBASE_ENABLED` (default off) and `AGENTICORG_CUSTOM_DOMAIN_FIREBASE_SITE`,
+  new merchant custom domains go through a Firebase Hosting site in front of `agenticorg-api` instead of a
+  Cloud Run domain mapping. The merchant publishes two DNS records (a CNAME to `<site>.web.app` and the
+  `_agenticorg-ucp` TXT that binds the host to its tenant). AgenticOrg creates, follows and deletes the
+  domain through the Firebase Hosting API. There is no Search Console owner and no operator step; only
+  failed Firebase domains reach the operator queue, without a command.
+- `api/middleware/merchant_host.py` is active only with the flag on, and only on the agent paths
+  (`/.well-known/ucp`, `/.well-known/ucp/*`, `/ucp/*`, `/acp/*`, `/.well-known/agenticorg-host`). It takes
+  `X-Forwarded-Host` as `Host` only when it names a domain AgenticOrg connected through Firebase (provider
+  `firebase_hosting`, `pending_certificate` or `live`), and adds `Cache-Control: no-store` to responses
+  without a policy, because Firebase caches those for ten minutes.
+- `scripts/release_merchant_domain_site.py` releases the site with rewrites for the agent paths only;
+  every other path on a merchant domain is Firebase's 404.
+- Migration `v6z93_custom_domain_firebase` adds `merchant_custom_domains.provider` (existing rows stay
+  `cloud_run_mapping`) and admits `firebase_hosting` as a mapping source.
+- Docs: the custom domains guide and runbook describe the Firebase setup, the spike results, limits, cost
+  and rollback; the Cloud Run domain-mapping flow remains as the older option.
+
 ## Unreleased - Company agents can use tenant-wide connectors again
 
 - Fixed: an agent that belongs to a company was refused with

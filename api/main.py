@@ -10,6 +10,7 @@ from fastapi import Depends, FastAPI
 from api.error_handlers import register_error_handlers
 from api.middleware import DeprecationHeaderMiddleware
 from api.middleware.marketing_cors import MarketingCORSMiddleware
+from api.middleware.merchant_host import MerchantHostMiddleware
 from api.middleware.request_id import RequestIDMiddleware
 from api.middleware.spend_gate import SpendRequestGate
 from api.route_enforcement import enforce_route_metadata
@@ -301,6 +302,11 @@ app.add_middleware(GrantexAuthMiddleware)
 # ACP routes answer every pre-route refusal (auth, scope, rate limit, flag) as an ACP Error.
 app.add_middleware(commerce_acp.AcpErrorShapeMiddleware)
 app.add_middleware(DeprecationHeaderMiddleware)
+# Merchant custom domains behind Firebase Hosting (api/middleware/merchant_host.py): on the
+# agent paths, a verified X-Forwarded-Host becomes Host, and a response without Cache-Control
+# gets no-store (so Firebase never caches it). Outside the auth middleware so it also covers auth
+# refusals; a no-op unless AGENTICORG_CUSTOM_DOMAIN_FIREBASE_ENABLED is on.
+app.add_middleware(MerchantHostMiddleware)
 # Outermost (last add_middleware): binds request_id into structlog
 # contextvars before auth/CSRF run so every log line of the request —
 # including 401/403 rejections — carries the same correlation id.

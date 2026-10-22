@@ -2,18 +2,23 @@
 
 A merchant serves its UCP business profile (`/.well-known/ucp`) and the public
 UCP routes (`/ucp/*`) on a host it owns, for example `agent.merchant.example`,
-instead of an AgenticOrg host. This page covers the merchant flow, the one
-operator step, the Cloud Run limits, and when a load balancer would replace
-domain mappings.
+instead of an AgenticOrg host. This page covers the merchant flow, the two ways
+a domain reaches the API, the Cloud Run limits, and when a load balancer would
+replace them. The recommended way is the [Firebase Hosting front](#firebase-hosting-front-recommended):
+the merchant publishes two DNS records and AgenticOrg does the rest. The
+original way, a Cloud Run domain mapping per merchant, also needs a Search
+Console owner and an operator step.
 
 The custom domain becomes the merchant's UCP serving host. What is served there
 is still decided by [the UCP profile rules](ucp-profile.md#when-a-profile-is-served).
 Merchants who want the apex domain (`merchant.example`) as well should follow
 the [apex domain guide](merchant-apex-domain.md).
 
-**Cost.** This adds no Google Cloud cost. The domain is a Cloud Run domain
-mapping on the existing `agenticorg-api` service, its certificate is Google
-managed, and the status checks run on the existing worker and beat services.
+**Cost.** Cloud Run domain mappings add no Google Cloud cost: the domain maps
+to the existing `agenticorg-api` service, its certificate is Google managed,
+and the status checks run on the existing worker and beat services. The
+Firebase Hosting front is metered only beyond its free storage and transfer
+allowances ([limits and cost](#firebase-hosting-limits-and-cost)).
 DNS lookups and the operator email (existing SMTP) are not billed by Google
 Cloud. There is no load balancer, no Certificate Manager certificate and no new
 instance.
@@ -30,6 +35,8 @@ instance.
 | `AGENTICORG_CUSTOM_DOMAIN_MAPPING_ACCOUNT` | empty | The Google account that creates mappings. Merchants add it as a Search Console owner. |
 | `AGENTICORG_CUSTOM_DOMAIN_OPERATOR_TENANT_ID` | empty | The tenant whose administrators see the operator queue. Empty: nobody sees it. |
 | `AGENTICORG_CUSTOM_DOMAIN_OPERATOR_EMAIL` | empty | Where each new queue item is emailed, with its command. Empty: no email. |
+| `AGENTICORG_CUSTOM_DOMAIN_FIREBASE_ENABLED` | `false` | New domains go through the Firebase Hosting site instead of a Cloud Run domain mapping, and a verified `X-Forwarded-Host` names the merchant on the agent paths. See [Firebase Hosting front](#firebase-hosting-front-recommended). |
+| `AGENTICORG_CUSTOM_DOMAIN_FIREBASE_SITE` | empty | The Firebase Hosting site id (its CNAME target is `<site>.web.app`). Both this and the flag are needed. |
 | `AGENTICORG_CUSTOM_DOMAIN_CLOUD_RUN_AUTOMAP_ENABLED` | `false` | Create mappings through the Cloud Run Admin API instead of the operator. See [automation](#optional-automation-through-the-cloud-run-admin-api). |
 
 Migration `v6z91_merchant_custom_domains` adds the `merchant_custom_domains`
@@ -89,6 +96,131 @@ survive later deploys.
    (`gcloud run services update-traffic <service> --to-revisions=<previous>=100`),
    or run step 3 with `AGENTICORG_CUSTOM_DOMAINS_ENABLED=false` and move
    traffic again.
+
+## Firebase Hosting front (recommended)
+
+With `AGENTICORG_CUSTOM_DOMAIN_FIREBASE_ENABLED=true` and
+`AGENTICORG_CUSTOM_DOMAIN_FIREBASE_SITE` set, new domains go through a
+Firebase Hosting site in front of `agenticorg-api` instead of a Cloud Run
+domain mapping. This removes both the Search Console owner step and the
+operator step.
+
+**For the merchant, two DNS records:**
+
+| Type | Name | Value | Purpose |
+| --- | --- | --- | --- |
+| `CNAME` | `agent.merchant.example` | `<site>.web.app.` | Routes the host to the Firebase Hosting site. Firebase also takes it as proof of ownership for its certificate. |
+| `TXT` | `_agenticorg-ucp.agent.merchant.example` | `agenticorg-ucp-verify=<random>` | Binds the host to the merchant's AgenticOrg tenant. |
+
+The TXT record is required even though Firebase needs only the CNAME. Every
+merchant's CNAME points at the same AgenticOrg site, so the CNAME cannot tell
+AgenticOrg which tenant the domain belongs to. Without the TXT check, another
+tenant could claim a domain that a merchant had pointed at AgenticOrg and serve
+its own catalog there.
+
+**What AgenticOrg does:**
+1. Once both records verify, the status task creates the domain on the site
+   through the Firebase Hosting API: `POST
+   https://firebasehosting.googleapis.com/v1beta1/projects/{project}/sites/{site}/customDomains?customDomainId={host}`.
+2. It follows the domain (`GET .../customDomains/{host}`) until Hosting serves it
+   (`HOST_ACTIVE`, `OWNERSHIP_ACTIVE`, certificate `CERT_PROPAGATING` or
+   `CERT_ACTIVE`).
+3. It confirms with the HTTPS probe and marks the domain live.
+
+Removing a domain deletes it from the site
+(`DELETE .../customDomains/{host}`), retried until it succeeds. Hosting keeps
+a deleted domain about 30 days (`deleteTime` set). If the same host is added
+again in that time, AgenticOrg restores it with `POST
+.../customDomains/{host}:undelete` instead of failing on the existing name. An ownership
+state Hosting cannot fix by itself (`OWNERSHIP_MISMATCH`, the domain is on
+another Firebase project; `OWNERSHIP_SUSPENDED`) marks the domain failed with
+the reason. Only failed Firebase domains appear in the operator queue, and
+they carry no command to run.
+
+**How the merchant is recognised.** Firebase Hosting forwards a request to
+Cloud Run with `Host` set to the service's own name and the merchant domain in
+`X-Forwarded-Host`. `api/middleware/merchant_host.py` handles this only on the
+agent paths (`/.well-known/ucp`, `/.well-known/ucp/*`, `/ucp/*`, `/acp/*`,
+`/.well-known/agenticorg-host`). There it puts the forwarded host in `Host`,
+but only when it names a domain AgenticOrg itself connected through Firebase:
+provider `firebase_hosting`, status `pending_certificate` or `live`, cached for
+60 s. Every UCP and ACP route, and RFC 9421 `@authority`, then see the merchant
+domain as before. Any other forwarded value is ignored. A caller who sends
+`X-Forwarded-Host` straight to the service URL can name only a domain that is
+already public through Firebase, and reaches the same public profile and catalog.
+Every write still needs its own credentials.
+
+**Caching.** Firebase Hosting caches a response that carries no
+`Cache-Control` (it adds `max-age=600`). On the agent paths the middleware adds
+`Cache-Control: no-store` to any response without a policy, including auth
+refusals. The UCP profile keeps its own `public, max-age=300`.
+
+**Agent paths only.** The site serves no files. Its configuration
+(`core.commerce.custom_domains.firebase_site_config`) rewrites only the agent
+paths to `agenticorg-api`. Every other path on a merchant domain is Firebase's
+own 404, so no AgenticOrg page or API route is reachable on a merchant host.
+Cloud Run domain mappings cannot do this.
+
+### Owner setup (once)
+
+1. **Firebase on the project.** Enable `firebase.googleapis.com` and
+   `firebasehosting.googleapis.com` and add Firebase to the project. There is
+   no charge for adding it.
+2. **A site for merchant domains,** for example `agenticorg-merchant-domains`:
+
+   ```bash
+   curl -s -X POST -H "Authorization: Bearer $(gcloud auth print-access-token)" -H "x-goog-user-project: PROJECT_ID" -H "Content-Type: application/json" -d "{}" "https://firebasehosting.googleapis.com/v1beta1/projects/PROJECT_ID/sites?siteId=SITE_ID"
+   ```
+
+3. **Release the agent-only configuration** (again whenever the agent paths change):
+
+   ```bash
+   python scripts/release_merchant_domain_site.py --project PROJECT_ID --site SITE_ID
+   ```
+
+4. **Let the runtime service account manage the site's domains.** Grant it
+   `roles/firebasehosting.admin` on the project. This narrow role replaces the
+   Project Editor role that Cloud Run domain-mapping automation would need:
+
+   ```bash
+   gcloud projects add-iam-policy-binding PROJECT_ID --member=serviceAccount:RUNTIME_SA_EMAIL --role=roles/firebasehosting.admin
+   ```
+
+5. **Turn it on** for `agenticorg-api` and `agenticorg-worker`
+   (`--update-env-vars`, then move traffic as in
+   [Production turn-on](#production-turn-on)):
+   - `AGENTICORG_CUSTOM_DOMAIN_FIREBASE_ENABLED=true`
+   - `AGENTICORG_CUSTOM_DOMAIN_FIREBASE_SITE=SITE_ID`
+   - `AGENTICORG_CUSTOM_DOMAIN_CLOUD_RUN_PROJECT=PROJECT_ID` (also the Firebase project)
+
+   The mapping account and the operator settings stay useful for failed
+   domains and for any Cloud Run-mapped domains that already exist.
+6. **Check** with a throwaway subdomain of a domain you control: add the domain
+   on Commerce > Custom Domains, publish the two records and wait for **Live**.
+
+### Spike results (2026-10-22)
+
+The spike used the site `agenticorg-cd-spike` and `cd-spike.agenticorg.ai`:
+- The Hosting API asked for exactly one record for a subdomain: a CNAME to `<site>.web.app`.
+- Ownership was `OWNERSHIP_ACTIVE` about 5 minutes after the CNAME was published.
+- HTTPS answered in under 33 minutes; Firebase passed its ACME HTTP challenge by itself.
+- Cloud Run received `Host: <service>.run.app`, `X-Forwarded-Host: cd-spike.agenticorg.ai`, `X-Forwarded-Proto: https` and `Via: 1.1 Firebase Hosting`.
+- POST bodies, query strings, `Authorization`, `UCP-Agent`, `Signature-Input`, `Signature` and `Idempotency-Key` passed through unchanged.
+- A 404 without `Cache-Control` came back with `max-age=600` and was then served from Firebase's cache (`X-Cache: HIT`).
+
+### Firebase Hosting limits and cost
+
+Checked on 2026-10-22:
+- **Subdomains:** at most 20 per apex domain (one agent subdomain per merchant is far below that).
+- **Hosts:** a custom domain can belong to only one Hosting site.
+- **Timeout:** a request can take at most 60 seconds.
+- **Cost:** custom domains and certificates carry no separate charge. Hosting storage is free up to 10 GB and data transfer up to 360 MB a day; beyond that, about $0.026 per GB stored and $0.15 per GB transferred. The site stores no files, and UCP profile and catalog responses are small JSON.
+- **Billing plan:** Cloud Run rewrites need the project on the pay-as-you-go (Blaze) plan, which any project with Cloud Run already uses.
+
+**Rollback.** Turning `AGENTICORG_CUSTOM_DOMAIN_FIREBASE_ENABLED` off sends new
+domains back to Cloud Run domain mappings. It also stops recognising the
+forwarded host, so domains already connected through Firebase answer 404 until
+it is on again. To leave Firebase for good, remove those domains first.
 
 ## Merchant flow
 

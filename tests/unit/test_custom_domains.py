@@ -332,6 +332,7 @@ def _row(**overrides: Any) -> Any:
         "status": "pending_dns",
         "cname_target": "ghs.googlehosted.com",
         "mapping_source": None,
+        "provider": "cloud_run_mapping",
         "search_console_owner_confirmed_at": None,
         "last_error_code": None,
         "last_error_detail": None,

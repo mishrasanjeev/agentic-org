@@ -873,7 +873,7 @@ These names are parsed from connectors. A listing does not prove credentials, su
 - [How OACP works, end to end](https://agenticorg.ai/docs/oacp-how-it-works): Follow your shop's facts through seven steps: signed by Grantex, verified and kept by AgenticOrg, decided by the arbiter, recorded in the ledger and rendered for every buyer agent.
 - [A purchase, step by step](https://agenticorg.ai/docs/oacp-buyer-journey): Walk through one agent purchase: Intent, Cart and Payment mandates, the buyer's passkey, RBI AFA for UPI AutoPay, the arbiter's decision, the payment and the order.
 - [Merchant setup checklist](https://agenticorg.ai/docs/oacp-merchant-setup): A numbered checklist from Shopify sync and the Grantex allowlist to the DNS TXT step, your UCP profile, checkout, the ACP feed and MCP tools, and what stays off until a payment sandbox run.
-- [Your own domain for buyer agents](https://agenticorg.ai/docs/oacp-custom-domains): Connect a subdomain you own for your UCP profile: the CNAME and TXT records, the Search Console owner, every check and its fix, your main domain without redirects, and the operator steps, limits and costs.
+- [Your own domain for buyer agents](https://agenticorg.ai/docs/oacp-custom-domains): Connect a subdomain you own for your UCP profile with two DNS records: every check and its fix, your main domain without redirects, and the operator setup, limits and costs.
 - [Safety and trust](https://agenticorg.ai/docs/oacp-safety-and-trust): Revocation everywhere, the arbiter's eight rules in plain words, the ledger and its offline check, agent request signatures in log and enforce mode, and how to read a refusal.
 - [Feature switches reference](https://agenticorg.ai/docs/oacp-feature-switches): Every OACP switch, its default and what it does, in plain tables, with the safe order for turning them on and how to turn them back off.
 - [OACP FAQ](https://agenticorg.ai/docs/oacp-faq): Short answers to the questions sellers ask: standards, certification, Grantex's role, prices, approvals, outages, revocation, UPI and what is switched on today.
@@ -4247,16 +4247,16 @@ Audience: Merchants and platform operators. Reviewed: 2026-10-21.
 In 30 seconds:
 
 - Buyer agents can find your shop on a subdomain you own, such as agent.your-store.example, instead of an AgenticOrg address.
-- You add two DNS records and one Search Console owner. AgenticOrg checks them and tells you exactly what to fix.
-- Your platform operator connects the domain with one command. Google then issues its certificate, usually within 15 minutes.
-- It costs nothing extra: no load balancer, no paid certificate, no new server.
+- You add two DNS records. AgenticOrg checks them, tells you exactly what to fix, and connects the domain itself.
+- Google issues the certificate, usually within the hour. You do not wait for anyone or share any account.
+- Only the agent addresses are served on your domain; nothing else of AgenticOrg is reachable there.
 - Your main domain (your-store.example) can answer too, through a pass-through rule. A redirect is not allowed there.
 
 #### What you get
 
 Your UCP profile is the file buyer agents read first. It says where your shop is and what it offers. With a custom domain it is served at `https://agent.your-store.example/.well-known/ucp`, together with your catalog and store locations under `/ucp`.
 
-Figure: Your own domain, step by step. You add a subdomain, publish two DNS records and add one Search Console owner. AgenticOrg checks them and queues the domain. Your platform operator connects it, Google issues the certificate, and the domain is live.
+Figure: Your own domain, step by step. You add a subdomain and publish two DNS records. AgenticOrg checks them, connects the domain and follows the certificate until the domain is live.
 
 You will use the **Custom Domains** page at `/dashboard/custom-domains`. You need the administrator role or the merchant role. Enter your merchant ID, and your seller agent ID if your shop has more than one, then press **Load**.
 
@@ -4264,35 +4264,38 @@ You will use the **Custom Domains** page at `/dashboard/custom-domains`. You nee
 
 - **A subdomain you control.** Use a name such as `agent.your-store.example` or `shop-agent.your-store.example`. It can be at most 64 characters long. Your main domain cannot be used directly, because a CNAME record is not allowed at the top of a domain. The [apex section](#your-main-domain) below shows how to make your main domain answer as well.
 - **Access to your DNS provider**, to add two records.
-- **Google Search Console** for your domain. If you already use Google Merchant Center, you probably have it.
 
 #### Connect your domain
 
 ```flow start=1
 Add the subdomain | On Custom Domains, type the subdomain and press Add domain. AgenticOrg shows the two records to publish, each with a copy button. | Owner: Merchant | If blocked: "This name is the apex of its DNS zone" means you entered your main domain; use a subdomain.
-Publish the CNAME record | At your DNS provider, point the subdomain at ghs.googlehosted.com. Keep it DNS only: switch off any proxy, CDN or CNAME flattening for this record. | Owner: Merchant | If blocked: Some providers add your domain to the end of the name for you; enter only the first part if so.
-Publish the TXT record | Add the TXT record named _agenticorg-ucp.<your subdomain> with the value shown. It proves you control the subdomain. It has its own name, so it never clashes with the CNAME. | Owner: Merchant | If blocked: Copy the value exactly; DNS changes can take up to an hour to be seen.
-Add the mapping account in Search Console | Google connects a domain only for an account that owns it in Search Console. Add the account shown on the page under Settings, Users and permissions, Verified owners, Add an owner. Keep it while the domain is connected. | Owner: Merchant | If blocked: Verify your domain property in Search Console first if it is not verified yet.
-Verify records | Tick "I added ... as an owner", then press Verify records. AgenticOrg checks both records and the confirmation. Every problem is listed with its fix. | Owner: Merchant | If blocked: See "If a check fails" below, fix the record and press Verify records again.
-Connect the domain | Your domain joins the operator queue and your platform operator is emailed. The operator runs one command to connect it. | Owner: Platform operator | If blocked: The step shows "Needs attention" with the operator's reason and a Retry button.
-Certificate, then live | Google issues the certificate, usually within 15 minutes and at most 24 hours. AgenticOrg checks every few minutes and marks the domain Live. | Owner: Google and AgenticOrg | If blocked: After 48 hours without a certificate the domain shows a failure; check CAA records and that the CNAME is DNS only.
+Publish the CNAME record | At your DNS provider, point the subdomain at the address shown, which ends in .web.app. Keep it DNS only: switch off any proxy, CDN or CNAME flattening for this record. | Owner: Merchant | If blocked: Some providers add your domain to the end of the name for you; enter only the first part if so.
+Publish the TXT record | Add the TXT record named _agenticorg-ucp.<your subdomain> with the value shown. It ties the subdomain to your AgenticOrg account, so nobody else can claim it. It has its own name, so it never clashes with the CNAME. | Owner: Merchant | If blocked: Copy the value exactly; DNS changes can take up to an hour to be seen.
+Verify records | Press Verify records. AgenticOrg checks both records and lists every problem with its fix. | Owner: Merchant | If blocked: See "If a check fails" below, fix the record and press Verify records again.
+Connect the domain | AgenticOrg connects the domain by itself within a few minutes. Nobody needs to act. | Owner: AgenticOrg | If blocked: A connection problem shows "Needs attention" with the reason and a Retry button.
+Certificate, then live | Google issues the certificate, usually within the hour and at most 24 hours. AgenticOrg checks every few minutes and marks the domain Live. | Owner: Google and AgenticOrg | If blocked: After 48 hours without a certificate the domain shows a failure; check that the CNAME is DNS only.
 ```
 
 The progress bar on the page shows the same five stages: publish DNS records, verify ownership, connect domain, issue certificate, live. Each stage is marked done, current or failed.
 
 Your profile is served on the domain once it is published. That means your signing key exists, you pressed publish, and Grantex allows public discovery for the host. See [Merchant setup checklist](/docs/oacp-merchant-setup), phase 3.
 
+**If the page also asks for a Search Console owner,** your deployment still connects domains through Cloud Run domain mappings. In that case:
+- The CNAME points at `ghs.googlehosted.com`.
+- Google connects the domain only for an account that owns it in Search Console, so add the account shown on the page under Settings, Users and permissions, Verified owners, Add an owner, then tick the box on the page.
+- Your platform operator then connects the domain with one command.
+
 #### The records
 
 | Type | Name | Value | Why |
 | --- | --- | --- | --- |
-| `CNAME` | `agent.your-store.example` | `ghs.googlehosted.com.` | Sends traffic for the subdomain to AgenticOrg. |
-| `TXT` | `_agenticorg-ucp.agent.your-store.example` | `agenticorg-ucp-verify=<code shown>` | Proves you control the subdomain. Keep it while the domain is connected. |
+| `CNAME` | `agent.your-store.example` | the address shown, ending in `.web.app.` | Sends traffic for the subdomain to AgenticOrg, and lets Google issue its certificate. |
+| `TXT` | `_agenticorg-ucp.agent.your-store.example` | `agenticorg-ucp-verify=<code shown>` | Ties the subdomain to your AgenticOrg account. Keep it while the domain is connected. |
 
 Two more rules keep the certificate working:
 
-- **Keep the CNAME DNS only.** On Cloudflare that means the grey cloud. Also turn off **Always Use HTTPS** for it, so Google's certificate checks get through.
-- **Check your CAA records.** If your domain has CAA records, they must allow `pki.goog` and `letsencrypt.org`.
+- **Keep the CNAME DNS only.** On Cloudflare that means the grey cloud. Also turn off **Always Use HTTPS** for it, so the certificate checks get through.
+- **Check your CAA records.** If your domain has CAA records, they must allow the certificate authorities Google uses: `pki.goog` and `letsencrypt.org`.
 
 #### If a check fails
 
@@ -4302,10 +4305,10 @@ Two more rules keep the certificate working:
 | No CNAME record was found | The subdomain has no CNAME, or a proxy hides it | Add the CNAME and set it to DNS only |
 | The CNAME record points somewhere else | The found target is shown | Point it at the target on the page |
 | DNS did not answer in time | A temporary lookup problem | Check again in a few minutes |
-| Confirm that you added the mapping account | The records are right but the Search Console box is not ticked | Add the owner, tick the box, check again |
+| Confirm that you added the mapping account | Only on deployments using domain mappings: the records are right but the Search Console box is not ticked | Add the owner, tick the box, check again |
 | Already connected to another organization | Another AgenticOrg customer proved control of this host first | Remove it there first |
 | Already connected to another merchant | Another merchant in your organization holds the host | Remove it there first |
-| AgenticOrg could not connect the domain | The operator or Google refused the connection; the reason is shown | Usually the Search Console owner is missing. Fix it and press Retry |
+| AgenticOrg could not connect the domain | The connection was refused; the reason is shown, for example that the domain is connected to another Firebase project | Fix the cause and press Retry |
 | Google is issuing the certificate | Nothing is wrong; it takes up to 24 hours | Wait |
 
 **Retry and check status.** The button on the page always does the right thing for the domain's current state. It verifies records, checks the certificate, or retries a failed domain. A failed domain keeps its subdomain reserved for you until you remove it.
@@ -4370,23 +4373,43 @@ Check it with `curl -s -o /dev/null -w "%{http_code} %{redirect_url}\n" https://
 
 #### For platform operators
 
+### How domains reach AgenticOrg
+
+The recommended setup puts a Firebase Hosting site in front of the API service:
+- Each merchant subdomain is a custom domain on that site, which AgenticOrg creates and removes through the Firebase Hosting API.
+- The site sends only the agent paths to the API: `/.well-known/ucp`, `/ucp/`, `/acp/` and the host check. Every other path on a merchant domain is a plain 404.
+- Firebase passes the merchant's domain to the API in `X-Forwarded-Host`. AgenticOrg accepts it only for domains it connected itself, and only on those paths.
+
+The older setup maps each domain to the API service with a Cloud Run domain mapping. Google then requires a Search Console owner and an operator command for every merchant.
+
 ### Turn it on
 
-Custom domains need the `v6z91_merchant_custom_domains` database migration, which the normal deploy runs with `--with-migrations`. Then set these on the API and worker services. The beat service only schedules the checks, so it needs none of them. The deploy script adds to the existing settings rather than replacing them, so they survive later deploys. A settings change creates a new revision. If your services pin traffic to named revisions, as the deploy script does, move traffic to the new revision afterwards. The exact commands are in the repository at `docs/oacp/merchant-custom-domains.md`, under "Production turn-on".
+Firebase mode needs the `v6z91` and `v6z93` database migrations, which the normal deploy runs with `--with-migrations`. Then, once:
+
+```flow start=1
+Add Firebase to the project | Enable the Firebase and Firebase Hosting APIs and add Firebase to the Google Cloud project of the API service. | Owner: Platform operator | If blocked: Adding Firebase needs the project owner's account.
+Create the merchant domains site | Create one Firebase Hosting site, for example agenticorg-merchant-domains. Its address, <site>.web.app, is the CNAME target merchants publish. | Owner: Platform operator | If blocked: Site ids are global; pick another if the name is taken.
+Release the agent-only configuration | Run python scripts/release_merchant_domain_site.py --project <project> --site <site>. It sends the agent paths to the API and nothing else. | Owner: Platform operator | If blocked: Run it with your own Google account signed in to gcloud.
+Allow AgenticOrg to manage the site | Grant the API's service account the Firebase Hosting Admin role (roles/firebasehosting.admin) on the project. | Owner: Platform operator | If blocked: Without it, every domain fails with a permission message.
+Set the settings | Set the settings below on the API and worker services, then move traffic to the new revisions. | Owner: Platform operator | If blocked: The exact commands are in the repository at docs/oacp/merchant-custom-domains.md.
+```
 
 | Setting | Value |
 | --- | --- |
 | `AGENTICORG_CUSTOM_DOMAINS_ENABLED` | `true`. Off, the Custom Domains routes answer 404 and the status checks stop. |
-| `AGENTICORG_CUSTOM_DOMAIN_MAPPING_ACCOUNT` | The Google account you run `gcloud` with. Merchants add it in Search Console. |
-| `AGENTICORG_CUSTOM_DOMAIN_OPERATOR_TENANT_ID` | Your own AgenticOrg organization's id. Only its administrators see the operator queue. Your browser shows it at `/api/v1/auth/me` while you are signed in. |
-| `AGENTICORG_CUSTOM_DOMAIN_OPERATOR_EMAIL` | The inbox that gets a message for each new queue item, with its command. |
-| `AGENTICORG_CUSTOM_DOMAIN_CLOUD_RUN_PROJECT` | The Google Cloud project of the API service. The region (`asia-southeast1`), the service (`agenticorg-api`) and the CNAME target (`ghs.googlehosted.com`) have matching settings with these defaults. |
+| `AGENTICORG_CUSTOM_DOMAIN_FIREBASE_ENABLED` | `true`, to connect new domains through Firebase Hosting. |
+| `AGENTICORG_CUSTOM_DOMAIN_FIREBASE_SITE` | The site id, for example `agenticorg-merchant-domains`. |
+| `AGENTICORG_CUSTOM_DOMAIN_CLOUD_RUN_PROJECT` | The Google Cloud project, also the Firebase project. |
+| `AGENTICORG_CUSTOM_DOMAIN_OPERATOR_TENANT_ID` | Your own AgenticOrg organization's id, for the operator queue. Your browser shows it at `/api/v1/auth/me` while you are signed in. |
+| `AGENTICORG_CUSTOM_DOMAIN_OPERATOR_EMAIL` | The inbox for domains that need attention under the older setup. |
 
-Leave `AGENTICORG_CUSTOM_DOMAIN_CLOUD_RUN_AUTOMAP_ENABLED` off. It would let AgenticOrg create mappings itself, but Google names the Project Editor role for that. That role is far broader than a one-minute command is worth.
+The deploy script adds to the existing settings rather than replacing them, so they survive later deploys.
 
 ### Work the queue
 
-The **Operator queue** appears on the Custom Domains page for administrators of your organization. It is also emailed to you.
+With Firebase Hosting, AgenticOrg connects and disconnects domains by itself. A Firebase domain appears in the **Operator queue** only when it fails, for example because the domain is connected to another Firebase project. It shows the reason and needs no command.
+
+Domains on the older domain-mapping setup still need you:
 
 ```flow start=1
 Connect a new domain | Copy the command from the queue item or the email and run it signed in as the mapping account. It looks like gcloud beta run domain-mappings create --service=agenticorg-api --domain=<host> --project=<project> --region=asia-southeast1. | Owner: Platform operator | If blocked: "Domain not verified" means the merchant has not added your account in Search Console; press Mark failed with that reason.
@@ -4398,18 +4421,22 @@ Every operator action is written to the merchant's commerce ledger with you as t
 
 ### Limits and when to change approach
 
-Custom domains use Cloud Run domain mappings, which Google still marks as a preview. They work, with some limits:
+**Firebase Hosting:**
+- Each merchant domain can have at most 20 subdomains connected.
+- A request can take at most 60 seconds.
+- Responses that do not set their own caching are marked not to be cached, so Firebase never serves a stale answer.
+- Hosting meters storage and data transfer beyond its monthly allowance. The site stores no files, and agent responses are small.
 
-- **Latency.** Google warns of extra latency and does not recommend mappings for production.
-- **No wildcards and no path routing.** A connected host reaches the whole API service.
-- **Certificates.** About 15 minutes to issue, at most 24 hours. Google allows 50 certificates for each top domain in a week.
-- **Names.** At most 64 characters.
+**Cloud Run domain mappings** (older setup) are still a Google preview:
+- Google warns of extra latency.
+- A connected host reaches the whole API service.
+- Google allows 50 certificates for each top domain in a week.
 
-A load balancer with managed certificates would replace mappings, when a paying merchant needs a service level or traffic must be filtered per host. It is not needed today. At list prices checked on 2026-10-21, it costs about $19 a month for 10 to 100 merchants and about $199 a month for 1,000.
+A load balancer with managed certificates would replace either setup when a paying merchant needs a service level or traffic must be filtered per host. It is not needed today. At list prices checked on 2026-10-21, it costs about $19 a month for 10 to 100 merchants and about $199 a month for 1,000.
 
 ### Turn it off
 
-Set `AGENTICORG_CUSTOM_DOMAINS_ENABLED=false`. The Custom Domains pages, routes and checks stop at once. Domains already verified keep serving under the UCP profile rules until each merchant unpublishes, or until `AGENTICORG_UCP_PROFILE_ENABLED` is off. Mappings stay in Cloud Run until you delete them.
+Set `AGENTICORG_CUSTOM_DOMAINS_ENABLED=false`. The Custom Domains pages, routes and checks stop at once. Turning only `AGENTICORG_CUSTOM_DOMAIN_FIREBASE_ENABLED` off sends new domains to the older setup, and makes domains already connected through Firebase answer 404 until it is on again. Remove those domains first if you are leaving Firebase for good.
 
 
 ### Safety and trust
@@ -4579,6 +4606,8 @@ Turning a safety check off weakens the shop's protection. Do it only as a record
 | `AGENTICORG_UCP_VERSIONS` | `2026-04-08` | Which UCP releases are served. Add `2026-08-25` when platforms read it. |
 | `AGENTICORG_UCP_KEY_ROTATION_GRACE_DAYS` | `7` (minimum 7) | How long a rotated-out signing key stays published. |
 | `AGENTICORG_CUSTOM_DOMAINS_ENABLED` | Off | Lets you connect your own subdomain (for example `agent.your-store.example`) for your UCP profile under Commerce > Custom Domains. Off, those pages and routes answer 404. See [Your own domain for buyer agents](/docs/oacp-custom-domains). |
+| `AGENTICORG_CUSTOM_DOMAIN_FIREBASE_ENABLED` | Off | Connects new custom domains through a Firebase Hosting site: merchants publish two DNS records and AgenticOrg does the rest. |
+| `AGENTICORG_CUSTOM_DOMAIN_FIREBASE_SITE` | Empty | The Firebase Hosting site id; merchants point their CNAME at `<site>.web.app`. |
 | `AGENTICORG_CUSTOM_DOMAIN_MAPPING_ACCOUNT` | Empty | The Google account that connects domains. Merchants add it as an owner in Search Console. |
 | `AGENTICORG_CUSTOM_DOMAIN_OPERATOR_TENANT_ID` | Empty | Your own organization's id. Only its administrators see the operator queue. Empty, nobody does. |
 | `AGENTICORG_CUSTOM_DOMAIN_OPERATOR_EMAIL` | Empty | Where each new operator queue item is emailed, with its command. |

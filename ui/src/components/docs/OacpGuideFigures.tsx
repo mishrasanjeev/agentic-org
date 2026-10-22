@@ -173,14 +173,13 @@ function SetupPath() {
 function CustomDomainPath() {
   return (
     <StepStack id="docfig-custom-domain" title="Your own domain, step by step"
-      desc="Six steps. You add a subdomain such as agent.merchant.example. You publish two DNS records: a CNAME to ghs.googlehosted.com and a TXT ownership record. You add the AgenticOrg mapping account as an owner of your domain in Google Search Console. AgenticOrg verifies the records and queues the domain. The platform operator connects the domain to AgenticOrg. Google issues the certificate, and the domain is live."
+      desc="Five steps. You add a subdomain such as agent.merchant.example. You publish two DNS records: a CNAME to the AgenticOrg address ending in web.app, and a TXT record that ties the subdomain to your account. AgenticOrg verifies both records. AgenticOrg connects the domain by itself. Google issues the certificate, and the domain is live."
       steps={[
         { owner: "You", tone: "neutral", title: "Add a subdomain", detail: "For example agent.merchant.example" },
-        { owner: "You", tone: "neutral", title: "Publish two DNS records", detail: "CNAME to ghs.googlehosted.com, TXT ownership" },
-        { owner: "You", tone: "neutral", title: "Add the mapping account", detail: "As an owner in Google Search Console" },
-        { owner: "AgenticOrg", tone: "agenticorg", title: "Verifies and queues it", detail: "Every failed check says how to fix it" },
-        { owner: "Platform operator", tone: "oacp", title: "Connects the domain", detail: "One command, about a minute" },
-        { owner: "Google", tone: "allow", title: "Issues the certificate", detail: "Usually 15 minutes, at most 24 hours", badge: "then live" },
+        { owner: "You", tone: "neutral", title: "Publish two DNS records", detail: "CNAME to <site>.web.app, TXT for your account" },
+        { owner: "AgenticOrg", tone: "agenticorg", title: "Verifies both records", detail: "Every failed check says how to fix it" },
+        { owner: "AgenticOrg", tone: "agenticorg", title: "Connects the domain", detail: "Automatically, nobody waits for a person" },
+        { owner: "Google", tone: "allow", title: "Issues the certificate", detail: "Usually within the hour, at most 24 hours", badge: "then live" },
       ]} />
   );
 }

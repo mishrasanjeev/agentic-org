@@ -503,7 +503,7 @@
     {
       "slug": "oacp-custom-domains",
       "title": "Your own domain for buyer agents",
-      "description": "Connect a subdomain you own for your UCP profile: the CNAME and TXT records, the Search Console owner, every check and its fix, your main domain without redirects, and the operator steps, limits and costs.",
+      "description": "Connect a subdomain you own for your UCP profile with two DNS records: every check and its fix, your main domain without redirects, and the operator setup, limits and costs.",
       "group": "OACP — agentic commerce, made safe",
       "audience": "Merchants and platform operators",
       "reviewed": "2026-10-21",

@@ -82,6 +82,42 @@ async def find_serving_binding(host: str) -> UcpServingBinding | None:
     return binding
 
 
+# enterprise-gate: process-local-ok reason=firebase host cache expires on its ttl; the database is the source of truth
+_FIREBASE_HOST_CACHE: dict[str, tuple[float, bool]] = {}
+
+
+def reset_firebase_host_cache() -> None:
+    _FIREBASE_HOST_CACHE.clear()
+
+
+async def firebase_domain_active(host: str) -> bool:
+    """Whether ``host`` is a merchant custom domain AgenticOrg connected through Firebase Hosting.
+
+    Only such a host may be taken from ``X-Forwarded-Host`` (api/middleware/merchant_host.py):
+    provider ``firebase_hosting``, in ``pending_certificate`` or ``live``. Read in the platform
+    context (SELECT-only policy, v6z91) and cached in-process for 60 s.
+    """
+    from core.models.merchant_custom_domain import MerchantCustomDomainRow  # noqa: PLC0415
+
+    now = time.monotonic()
+    cached = _FIREBASE_HOST_CACHE.get(host)
+    if cached is not None and cached[0] > now:
+        return cached[1]
+    async with get_platform_session() as session:
+        found = (
+            await session.scalars(
+                select(MerchantCustomDomainRow.id).where(
+                    MerchantCustomDomainRow.host == host,
+                    MerchantCustomDomainRow.provider == "firebase_hosting",
+                    MerchantCustomDomainRow.status.in_(("pending_certificate", "live")),
+                )
+            )
+        ).first()
+    active = found is not None
+    _FIREBASE_HOST_CACHE[host] = (now + HOST_INDEX_TTL_SECONDS, active)
+    return active
+
+
 async def host_claimed_by_other_tenant(host: str, tenant_id: str) -> bool:
     async with get_platform_session() as session:
         rows = (

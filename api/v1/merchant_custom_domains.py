@@ -37,7 +37,7 @@ import structlog
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict, Field
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.exc import IntegrityError
 
 from api.deps import get_current_tenant, require_tenant_admin
@@ -193,8 +193,9 @@ def domain_view(row: MerchantCustomDomainRow, ucp: dict[str, Any] | None = None)
         "steps": _steps(row),
         "records": records,
         "ownership_verified": ownership_verified,
+        "provider": row.provider or "cloud_run_mapping",
         "search_console": {
-            **cd.search_console_step(row.host),
+            **cd.search_console_step(row.host, provider=row.provider or "cloud_run_mapping"),
             "confirmed": row.search_console_owner_confirmed_at is not None,
         },
         "error": error,
@@ -225,7 +226,9 @@ def operator_view(row: MerchantCustomDomainRow, *, mapping_in_use: bool = False)
         "mapping_source": row.mapping_source,
         "search_console_owner_confirmed": row.search_console_owner_confirmed_at is not None,
         "mapping_account": cd.mapping_account(),
-        "commands": cd.mapping_commands(row.host),
+        "provider": row.provider or "cloud_run_mapping",
+        # Firebase Hosting domains are connected and disconnected by AgenticOrg: no command to run.
+        "commands": None if row.provider == "firebase_hosting" else cd.mapping_commands(row.host),
         "error": {"code": row.last_error_code, "detail": row.last_error_detail} if row.last_error_code else None,
         "mapping_requested_at": _iso(row.mapping_requested_at),
         "mapping_created_at": _iso(row.mapping_created_at),
@@ -372,6 +375,7 @@ async def add_custom_domain(
             seller_agent_id=config.seller_agent_id or "",
             host=host,
             status="pending_dns",
+            provider=cd.current_provider(),
             cname_target=cd.cname_target(),
             created_by=_actor_label(actor),
             check_count=0,
@@ -500,7 +504,8 @@ async def _check_pending_dns(domain_id: uuid.UUID, *, tenant_id: str, actor: dic
         row.updated_at = now
         if attested_host(ucp) == row.host and row.verified_at is None:
             row.verified_at = now
-        if not errors and row.search_console_owner_confirmed_at is None:
+        needs_owner = row.provider != "firebase_hosting"
+        if not errors and needs_owner and row.search_console_owner_confirmed_at is None:
             errors.append(("search_console_owner_not_confirmed", None))
         if errors:
             row.last_error_code, row.last_error_detail = errors[0][0], (errors[0][1] or None)
@@ -597,12 +602,36 @@ async def progress_domain(domain_id: uuid.UUID, *, tenant_id: str) -> str:
         if row is None or row.status not in ("pending_mapping", "pending_certificate", "pending_unmap"):
             return row.status if row is not None else "missing"
         original, host, created_at, target = row.status, row.host, row.mapping_created_at, row.cname_target
+        provider = row.provider or "cloud_run_mapping"
     if original == "pending_unmap":
-        return await _progress_unmap(domain_id, tenant_id=tenant_id, host=host)
+        return await _progress_unmap(domain_id, tenant_id=tenant_id, host=host, provider=provider)
     status = original
     update: dict[str, Any] = {}
     now = _now()
-    if status == "pending_mapping" and cd.automap_enabled():
+    if status == "pending_mapping" and provider == "firebase_hosting":
+        # Firebase Hosting: AgenticOrg connects the domain itself, no operator and no Search Console.
+        try:
+            hosted = await cd.create_firebase_domain(host)
+        # enterprise-gate: broad-except-ok reason=hosting-api-failure-is-recorded-on-the-domain-and-retried
+        except Exception as exc:
+            logger.warning("custom_domain_firebase_create_error", error_type=type(exc).__name__)
+            update = {
+                "last_error_code": "mapping_failed",
+                "last_error_detail": "Firebase Hosting unavailable; retrying.",
+            }
+        else:
+            if hosted.failed:
+                update = {"status": "failed", "last_error_code": "mapping_failed", "last_error_detail": hosted.message}
+            else:
+                update = {
+                    "status": "pending_certificate",
+                    "mapping_source": "firebase_hosting",
+                    "mapping_created_at": now,
+                    "last_error_code": None,
+                    "last_error_detail": None,
+                }
+                status, created_at = "pending_certificate", now
+    elif status == "pending_mapping" and cd.automap_enabled():
         try:
             mapping = await cd.create_domain_mapping(host)
         # enterprise-gate: broad-except-ok reason=admin-api-failure-is-recorded-on-the-domain-and-retried
@@ -617,7 +646,9 @@ async def progress_domain(domain_id: uuid.UUID, *, tenant_id: str) -> str:
                 update = {"status": "pending_certificate", "mapping_source": "cloud_run_api", "mapping_created_at": now}
                 status, created_at = "pending_certificate", now
     if status in ("pending_mapping", "pending_certificate") and update.get("status") != "failed":
-        update.update(await _certificate_update(host, target, status=status, created_at=created_at, now=now))
+        update.update(
+            await _certificate_update(host, target, status=status, created_at=created_at, now=now, provider=provider)
+        )
     async with get_tenant_session(uuid.UUID(tenant_id)) as session:
         row = await session.get(MerchantCustomDomainRow, domain_id, with_for_update=True)
         if row is None or row.status != original:
@@ -638,13 +669,41 @@ async def progress_domain(domain_id: uuid.UUID, *, tenant_id: str) -> str:
 
 
 async def _certificate_update(
-    host: str, target: str, *, status: str, created_at: datetime | None, now: datetime
+    host: str,
+    target: str,
+    *,
+    status: str,
+    created_at: datetime | None,
+    now: datetime,
+    provider: str = "cloud_run_mapping",
 ) -> dict[str, Any]:
     ok, observed, code = await cd.check_routing(host, target=target)
     if not ok:
         detail = f"found {observed}" if code == "cname_wrong_target" else None
         return {"last_error_code": code, "last_error_detail": detail}
-    if cd.automap_enabled() and status == "pending_certificate":
+    timed_out = status == "pending_certificate" and created_at is not None and now - created_at > CERTIFICATE_TIMEOUT
+    if provider == "firebase_hosting" and status == "pending_certificate":
+        try:
+            hosted = await cd.get_firebase_domain(host)
+        # enterprise-gate: broad-except-ok reason=hosting-api-read-failure-is-recorded-and-retried
+        except Exception as exc:
+            logger.warning("custom_domain_firebase_read_error", error_type=type(exc).__name__)
+            return {"last_error_code": "certificate_pending", "last_error_detail": "Firebase Hosting unavailable."}
+        if hosted.failed:
+            return {"status": "failed", "last_error_code": "mapping_failed", "last_error_detail": hosted.message}
+        if not hosted.exists:
+            # The domain left the site (deleted in the console): connect it again on the next check.
+            return {"status": "pending_mapping", "mapping_source": None, "mapping_created_at": None}
+        if not hosted.serving:
+            if timed_out:
+                return {
+                    "status": "failed",
+                    "last_error_code": "mapping_failed",
+                    "last_error_detail": "No certificate after 48 hours; check that the CNAME is DNS only.",
+                }
+            detail = f"Firebase Hosting: {hosted.ownership or 'pending'}, {hosted.cert_state or 'pending'}"
+            return {"last_error_code": "certificate_pending", "last_error_detail": detail}
+    if cd.automap_enabled() and status == "pending_certificate" and provider != "firebase_hosting":
         try:
             mapping = await cd.get_domain_mapping(host)
         # enterprise-gate: broad-except-ok reason=admin-api-read-failure-falls-back-to-the-https-probe
@@ -656,7 +715,7 @@ async def _certificate_update(
     probe = await cd.probe_host(host)
     if probe.state == "live":
         return {"status": "live", "live_at": now}
-    if status == "pending_certificate" and created_at is not None and now - created_at > CERTIFICATE_TIMEOUT:
+    if timed_out:
         return {
             "status": "failed",
             "last_error_code": "mapping_failed",
@@ -695,11 +754,17 @@ async def _finish_unmap(domain_id: uuid.UUID, *, tenant_id: str, **payload: Any)
         return row.status
 
 
-async def _progress_unmap(domain_id: uuid.UUID, *, tenant_id: str, host: str) -> str:
-    """With automap on, delete a removed domain's mapping (kept when another active row holds the host)."""
+async def _progress_unmap(
+    domain_id: uuid.UUID, *, tenant_id: str, host: str, provider: str = "cloud_run_mapping"
+) -> str:
+    """Delete a removed domain's mapping (Firebase Hosting always; a Cloud Run mapping with automap on).
+
+    The mapping is kept when another active row holds the host.
+    """
     if await host_still_claimed(host, excluding=domain_id):
         return await _finish_unmap(domain_id, tenant_id=tenant_id, mapping_kept=True)
-    if not cd.automap_enabled():
+    firebase = provider == "firebase_hosting"
+    if not firebase and not cd.automap_enabled():
         # The operator deletes it; note the check so the item does not keep the head of every batch.
         async with get_tenant_session(uuid.UUID(tenant_id)) as session:
             row = await session.get(MerchantCustomDomainRow, domain_id, with_for_update=True)
@@ -707,7 +772,7 @@ async def _progress_unmap(domain_id: uuid.UUID, *, tenant_id: str, host: str) ->
                 row.last_checked_at = _now()
         return "pending_unmap"
     try:
-        deleted = await cd.delete_domain_mapping(host)
+        deleted = await (cd.delete_firebase_domain(host) if firebase else cd.delete_domain_mapping(host))
     # enterprise-gate: broad-except-ok reason=admin-api-failure-keeps-the-unmap-item-queued-for-retry
     except Exception as exc:
         logger.warning("custom_domain_mapping_delete_error", error_type=type(exc).__name__)
@@ -721,7 +786,9 @@ async def _progress_unmap(domain_id: uuid.UUID, *, tenant_id: str, host: str) ->
                 row.last_checked_at = _now()
                 row.check_count = (row.check_count or 0) + 1
         return "pending_unmap"
-    return await _finish_unmap(domain_id, tenant_id=tenant_id, mapping_source="cloud_run_api")
+    return await _finish_unmap(
+        domain_id, tenant_id=tenant_id, mapping_source="firebase_hosting" if firebase else "cloud_run_api"
+    )
 
 
 # --- operator notification --------------------------------------------------------
@@ -755,6 +822,8 @@ async def notify_operator(domain_id: uuid.UUID, *, tenant_id: str) -> bool:
         row = await session.get(MerchantCustomDomainRow, domain_id)
         if row is None or row.status not in ("pending_mapping", "pending_unmap") or row.operator_notified_at:
             return False
+        if row.provider == "firebase_hosting":
+            return False  # AgenticOrg connects and disconnects Firebase domains itself
         host, status = row.host, row.status
         confirmed = row.search_console_owner_confirmed_at is not None
     commands = cd.mapping_commands(host)
@@ -819,7 +888,14 @@ async def list_operator_queue(tenant_id: str = Depends(get_current_tenant)) -> d
         rows = (
             await session.scalars(
                 select(MerchantCustomDomainRow)
-                .where(MerchantCustomDomainRow.status.in_(OPERATOR_QUEUE_STATUSES))
+                .where(
+                    MerchantCustomDomainRow.status.in_(OPERATOR_QUEUE_STATUSES),
+                    # Firebase Hosting domains need an operator only when they fail.
+                    or_(
+                        MerchantCustomDomainRow.provider != "firebase_hosting",
+                        MerchantCustomDomainRow.status == "failed",
+                    ),
+                )
                 .order_by(MerchantCustomDomainRow.mapping_requested_at.asc().nulls_last())
                 .limit(200)
             )
@@ -863,6 +939,8 @@ async def mark_mapped(domain_id: str, request: Request, tenant_id: str = Depends
         row = await session.get(MerchantCustomDomainRow, found.id, with_for_update=True)
         if row is None or row.status not in MAPPING_QUEUE_STATUSES:
             raise HTTPException(404, "Not Found")
+        if row.provider == "firebase_hosting":
+            raise HTTPException(409, {"code": "connected_automatically", "message": "AgenticOrg connects this domain."})
         if row.status != "pending_certificate":
             row.status = "pending_certificate"
             row.mapping_source = "operator"
