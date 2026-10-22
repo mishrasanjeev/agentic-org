@@ -16,6 +16,9 @@
 - `AGENTICORG_UCP_AGENT_PROFILE` sets the default platform profile sent as
   `UCP-Agent`.
 - HTTP errors map to MCP tool errors with only the UCP `code` and `content`.
+- `search_catalog` and `lookup_catalog`: the merchant's public UCP catalog
+  search and lookup. They send no credential and no Idempotency-Key, and need no
+  platform profile (it is sent as `UCP-Agent` when configured).
 
 ## 5.0.0 - 2026-10-09
 

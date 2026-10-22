@@ -89,7 +89,7 @@ for (const scheme of ["light", "dark"] as const) {
 }
 
 const OACP_GUIDES = [
-  "oacp-overview", "oacp-how-it-works", "oacp-buyer-journey", "oacp-merchant-setup",
+  "oacp-overview", "oacp-example-nilgiri-tea", "oacp-how-it-works", "oacp-buyer-journey", "oacp-merchant-setup",
   "oacp-safety-and-trust", "oacp-feature-switches", "oacp-faq",
 ];
 

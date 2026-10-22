@@ -378,13 +378,13 @@ test("public A2A guide links to a hosted page, not a source Markdown soft 404", 
   assert.doesNotMatch(guide.html, /href="[^"]*a2a-interoperability\.md"/);
 });
 
-test("the OACP section has eight adaptive guides with summaries, figures and workflow cards", () => {
+test("the OACP section has nine adaptive guides with summaries, figures and workflow cards", () => {
   const manual = loadUserGuides();
   const group = "OACP — agentic commerce, made safe";
   assert.ok(manual.groups.includes(group));
   const guides = manual.articles.filter((article) => article.group === group);
   assert.deepEqual(guides.map((guide) => guide.slug), [
-    "oacp-overview", "oacp-how-it-works", "oacp-buyer-journey", "oacp-merchant-setup",
+    "oacp-overview", "oacp-example-nilgiri-tea", "oacp-how-it-works", "oacp-buyer-journey", "oacp-merchant-setup",
     "oacp-custom-domains", "oacp-safety-and-trust", "oacp-feature-switches", "oacp-faq",
   ]);
   for (const guide of guides) {
@@ -402,6 +402,16 @@ test("the OACP section has eight adaptive guides with summaries, figures and wor
   const overview = guides[0];
   assert.match(overview.html, /does not replace them, and it is not a certification/);
   assert.match(overview.html, /Mastercard Agent Pay/);
+  // The live example merchant: try-it commands against the real host, four diagrams, one numbering.
+  const example = guides.find((guide) => guide.slug === "oacp-example-nilgiri-tea");
+  assert.deepEqual(example.figures.map((figure) => figure.id), [
+    "nilgiri-story", "nilgiri-shelf", "nilgiri-records", "nilgiri-buyer",
+  ]);
+  assert.match(example.html, /https:\/\/nilgiritea\.agenticorg\.ai\/\.well-known\/ucp/);
+  assert.match(example.html, /NTH-MASALA-250/);
+  assert.match(example.html, /synthetic demo data/i);
+  assert.match(example.html, /aria-label="Process map" start="11">/);
+  assert.match(overview.html, /href="\/docs\/oacp-example-nilgiri-tea"/);
   const journey = guides.find((guide) => guide.slug === "oacp-buyer-journey");
   assert.match(journey.html, /Intent/);
   assert.match(journey.html, /passkey/);
