@@ -16,6 +16,7 @@ The doubles are deliberately tenant-scoped and never contain real secrets.
 from __future__ import annotations
 
 import json
+import re
 import uuid
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -256,8 +257,21 @@ class _RlsConnectorStore:
                         (value for key, value in params.items() if "company_id" in key and value is not None),
                         None,
                     )
+                    names = [value for key, value in params.items() if key.startswith("connector_name")]
+                    ids = [value for key, value in params.items() if re.fullmatch(r"id_\d+", key)]
                     visible = [r for r in store.rows if r.company_id == company_id]  # the RLS policy
-                    return _Result(next((r for r in visible if r.company_id == wanted), None))
+                    return _Result(
+                        next(
+                            (
+                                r
+                                for r in visible
+                                if r.company_id == wanted
+                                and all(r.connector_name == n for n in names)
+                                and all(r.id == i for i in ids)
+                            ),
+                            None,
+                        )
+                    )
                 if name == "Company":
                     return _Result(COMPANY_ID)
                 if name == "Connector":
@@ -371,3 +385,35 @@ async def test_dispatch_readiness_never_falls_back_to_another_company() -> None:
         )
 
     assert "connector_not_ready_for_activation" in str(exc_info.value)
+
+
+@pytest.mark.asyncio
+async def test_tenant_global_fallback_also_applies_to_a_config_id_reference() -> None:
+    """BUG-01 + RU-May01-BUG-03: connector_ids may hold the ConnectorConfig id; the fallback covers it."""
+    from api.v1.agents import _assert_connectors_ready_for_activation, _resolve_connector_configs
+
+    global_row = _RlsConnectorStore.row(None)
+    store = _RlsConnectorStore(global_row)
+    with (
+        patch("core.database.get_tenant_session", side_effect=store.factory()),
+        patch("api.v1.agents.get_tenant_session", side_effect=store.factory()),
+        patch("core.crypto.decrypt_for_tenant", return_value=json.dumps({"api_key": "synthetic-key"})),
+    ):
+        await _assert_connectors_ready_for_activation(
+            store.session(COMPANY_ID), TENANT_ID, [str(global_row.id)], COMPANY_ID
+        )
+        config, names = await _resolve_connector_configs(
+            tenant_id=str(TENANT_ID), connector_ids=[str(global_row.id)], company_id=COMPANY_ID
+        )
+
+    assert config == {"api_key": "synthetic-key"}
+    assert names == ["hubspot"]
+
+
+@pytest.mark.parametrize("kwargs", [{}, {"connector_name": "hubspot", "config_id": uuid.uuid4()}])
+@pytest.mark.asyncio
+async def test_tenant_global_lookup_takes_exactly_one_key(kwargs) -> None:
+    from api.v1.agents import _tenant_global_connector_config
+
+    with pytest.raises(ValueError, match="exactly one"):
+        await _tenant_global_connector_config(TENANT_ID, **kwargs)
