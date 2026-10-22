@@ -631,6 +631,78 @@ def test_serving_host_is_attested_published_and_served_through_the_app(seed, cap
     assert _scalar("SELECT settings ? 'ucp_serving_hosts' FROM tenants WHERE id::text = :t", t=DEMO_TENANT_ID) is False
 
 
+def test_ucp_buyer_connector_searches_and_opens_a_checkout_through_the_app(seed, capsys, monkeypatch) -> None:
+    """The ucp_buyer connector against the real app on ``nilgiritea.agenticorg.ai``: search, then a priced draft."""
+    from api.v1 import commerce_ucp_publishing
+    from core.config import settings
+
+    async def _dns(_challenge: Mapping[str, Any]) -> bool:
+        return True
+
+    monkeypatch.setattr(commerce_ucp_publishing, "dns_challenge_satisfied", _dns)
+    assert seed("--apply") == 0
+    assert seed("--apply", "--serving-host", HOST) == 0
+    assert seed("--apply", "--verify-host") == 0
+    assert _summary(capsys.readouterr().out)["state"]["ucp"]["published"] is True
+
+    key = _create_platform_key(["ucp:read", "ucp:write"])
+    monkeypatch.setattr(settings, "ucp_checkout_enabled", True)
+    from api.main import app
+    from connectors.commerce.ucp_buyer import UcpBuyerConnector
+    from core.commerce.ucp import negotiation
+    from tests import ucp_txn_fixtures
+
+    async def _platform_profile(_url: str) -> dict[str, Any]:
+        return ucp_txn_fixtures.platform_profile()  # the buyer platform's profile, served in process
+
+    monkeypatch.setattr(negotiation, "default_profile_fetcher", _platform_profile)
+
+    async def _shop() -> tuple[dict[str, Any], dict[str, Any], dict[str, Any]]:
+        connector = UcpBuyerConnector(
+            {
+                "merchant_profile_url": f"https://{HOST}/.well-known/ucp",
+                "agent_profile_url": "https://platform.example/.well-known/ucp",
+                "api_key": key,
+            }
+        )
+        # The connector's own guarded client, with the app as its transport (Host preserved).
+        transport = httpx.ASGITransport(app=app, client=("192.0.2.10", 443))
+        monkeypatch.setattr(connector, "_connector_transport_and_dns", lambda: (transport, False))
+        await connector.connect()
+        try:
+            search = await connector.catalog_search(query="masala")
+            variant = search["products"][0]["variants"][0]["id"]
+            checkout = await connector.checkout_create(line_items=[{"item_id": variant, "quantity": 1}])
+            fetched = await connector.checkout_get(checkout_id=checkout["id"])
+        finally:
+            await connector.disconnect()
+        return search, checkout, fetched
+
+    search, checkout, fetched = asyncio.run(_shop())
+    assert [product["title"] for product in search["products"]] == ["Masala Chai Blend"]
+    assert search["products"][0]["variants"][0]["price"]["currency"] == "INR"
+    assert "error" not in checkout, checkout
+    assert checkout["id"] and checkout["currency"] == "INR"
+    assert checkout["status"] in {"incomplete", "ready_for_complete", "requires_escalation"}
+    assert checkout["line_items"][0]["quantity"] == 1
+    assert checkout["payment"] == "not_available"
+    assert fetched["id"] == checkout["id"] and fetched["status"] == checkout["status"]
+    assert key not in json.dumps([search, checkout, fetched])
+    # A draft only: nothing completed, no order.
+    assert _count("commerce_orders") == 0
+    assert (
+        _scalar(
+            "SELECT status FROM commerce_checkout_sessions WHERE tenant_id::text = :t AND id = :i",
+            t=DEMO_TENANT_ID,
+            i=checkout["id"],
+        )
+        == checkout["status"]
+    )
+
+    assert seed("--teardown", "--apply") == 0
+    capsys.readouterr()
+
+
 def _create_platform_key(scopes: list[str]) -> str:
     """A tenant API key for the demo tenant, stored the way the API-key route stores one."""
     from api.v1.api_keys import _generate_api_key

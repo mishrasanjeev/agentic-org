@@ -96,6 +96,10 @@ CATALOG_META: dict[str, dict[str, str]] = {
     },
     "g2": {"display_name": "G2", "description": "B2B software review + buyer-intent signals."},
     "bombora": {"display_name": "Bombora", "description": "B2B intent data across the web."},
+    "ucp_buyer": {
+        "display_name": "UCP Buyer",
+        "description": "Search a UCP merchant's catalog and open checkouts. Never pays.",
+    },
     "teams_bot": {
         "display_name": "Microsoft Teams",
         "description": "Teams channel + DM automation.",

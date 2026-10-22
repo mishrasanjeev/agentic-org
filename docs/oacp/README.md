@@ -63,6 +63,7 @@ listed above.
 - [Commerce arbiter and ledger](arbiter-ledger.md)
 - [UCP business profile, catalog and locations](ucp-profile.md)
 - [UCP checkout, cart and order](ucp-checkout.md)
+- [UCP buyer connector (agents shopping at a UCP merchant)](ucp-buyer-connector.md)
 - [Merchant custom domains](merchant-custom-domains.md) and the [apex domain guide](merchant-apex-domain.md)
 - [ACP product feed and checkout sessions](acp-feed-and-sessions.md)
 - [Agent request signing (RFC 9421, Visa TAP, Web Bot Auth)](agent-request-signing.md)

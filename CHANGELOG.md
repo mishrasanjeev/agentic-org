@@ -20,6 +20,19 @@
 - Docs: the custom domains guide and runbook describe the Firebase setup, the spike results, limits, cost
   and rollback; the Cloud Run domain-mapping flow remains as the older option.
 
+## Unreleased - UCP buyer connector
+
+- New connector `ucp_buyer`: an agent can shop at a public UCP merchant (for example the demo shop
+  on `nilgiritea.agenticorg.ai`) as a buyer. Tools: `catalog_search`, `catalog_lookup`,
+  `checkout_create`, `checkout_get` and `checkout_update`, named `ucp_buyer:<tool>` in an agent's
+  `authorized_tools`. It reads the merchant's `/.well-known/ucp`, uses the `dev.ucp.shopping` REST
+  endpoint at 2026-04-08 only when it is on the profile URL's origin, sends the merchant-issued
+  platform key only on checkout calls, and stops before payment: there is no complete, cancel or
+  payment tool, and payment members in a checkout update are refused.
+- The action taxonomy classes `ucp_buyer` tools by their qualified name: catalog search, catalog
+  lookup and checkout read are reads; checkout create and update are customer-facing writes, not
+  money. The bare `checkout_create` and `grantex_commerce:checkout_create` keep the money class.
+- Guide: `docs/oacp/ucp-buyer-connector.md`.
 ## Unreleased - Buyer agents can search and check out at the demo shop over MCP
 
 - `agenticorg-mcp-server`: new `search_catalog` and `lookup_catalog` tools over the merchant's
