@@ -3962,7 +3962,7 @@ An AgenticOrg agent with the `ucp_buyer` connector answers in a Telegram bot. It
 and open checkouts at sandbox shops, and it has no tool that pays. Asked "Find masala chai at
 Nilgiri Tea House and open a checkout for one", it replied:
 
-![In Telegram, the buyer asks "Find masala chai at Nilgiri Tea House and open a checkout for one." The bot replies: Item found: Masala Chai Blend, 250 g, price Rs 449, in stock. Checkout ID: chk_de0b0a92da6446259b4147662d72c60f. Status: incomplete. Total: Rs 449. The order stops before payment, which the buyer would complete with the shop.](/screenshots/nilgiri-telegram-reply.webp)
+![In Telegram, the buyer asks "Find masala chai at Nilgiri Tea House and open a checkout for one." The bot replies: Item found: Masala Chai Blend, 250 g, Rs 449, in stock. Checkout ID: chk_de0b0a92da6446259b4147662d72c60f. Status: incomplete. Total: Rs 449. The order stops before payment, which the buyer would complete with the shop.](/screenshots/nilgiri-telegram-reply.webp)
 
 Behind that one message the agent searched the catalog, opened the checkout at the shop (HTTP 201)
 and answered, in about 30 seconds. To give your own agent these tools, see the
