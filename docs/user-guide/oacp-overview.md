@@ -79,6 +79,7 @@ Honesty matters here, so here is the plain list.
 
 ## Read next
 
+- [Example: Nilgiri Tea House, end to end](/docs/oacp-example-nilgiri-tea), a live shop you can try in two minutes
 - [How OACP works, end to end](/docs/oacp-how-it-works)
 - [A purchase, step by step](/docs/oacp-buyer-journey)
 - [Merchant setup checklist](/docs/oacp-merchant-setup)

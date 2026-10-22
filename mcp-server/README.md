@@ -116,7 +116,7 @@ Set `AGENTICORG_MCP_COMMERCE_ONLY=true` to expose only those seller tools (and
 the UCP tools below when configured); this setting limits the visible tool
 surface but does not create transaction authority.
 
-### UCP checkout tools
+### UCP catalog and checkout tools
 
 When `AGENTICORG_UCP_PROFILE_URL` names a merchant's UCP business profile
 (`https://<merchant serving host>/.well-known/ucp`), the server reads that
@@ -131,6 +131,8 @@ the configured credential (a tenant API key holding `ucp:read`/`ucp:write`).
 
 | Tool | Capability | Annotations | Behavior |
 |---|---|---|---|
+| `search_catalog` | catalog.search | read-only, idempotent | Free-text catalog search on the public route; no credential sent, platform profile optional. |
+| `lookup_catalog` | catalog.lookup | read-only, idempotent | Looks up products by product id, variant id or SKU; public, as above. |
 | `create_checkout` | checkout | not read-only, not destructive, not idempotent | Creates a session; nothing is charged. |
 | `get_checkout` | checkout | read-only, idempotent | Reads a session. |
 | `update_checkout` | checkout | destructive, idempotent | Full replacement of the session contents. |
@@ -175,8 +177,10 @@ returned. The decision in a result keeps only `decision_id`, `action`, `outcome`
 `failing_rule`, `payload_hash` and `expires_at`.
 
 These tools are a local stdio adapter: no MCP transport is advertised in the
-merchant's UCP profile. Catalog tools (`search_catalog`, `lookup_catalog`,
-`get_product`) are not exposed.
+merchant's UCP profile. `search_catalog` and `lookup_catalog` call the
+merchant's public catalog routes and never send the configured credential.
+They are registered whenever the profile advertises catalog search or lookup,
+even with checkout off. `get_product` is not exposed.
 
 Direct connector invocation is not exposed by this server. Connector records
 and agent-tool records are discovery data, not proof that provider credentials,

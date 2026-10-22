@@ -439,6 +439,22 @@
       ]
     },
     {
+      "slug": "oacp-example-nilgiri-tea",
+      "title": "Example: Nilgiri Tea House, end to end",
+      "description": "A live example shop you can try in two minutes: how Nilgiri Tea House was set up, how it got its own address, how a buyer agent searches and checks out, and the same steps for your shop.",
+      "group": "OACP — agentic commerce, made safe",
+      "audience": "Merchants, agent platform teams and anyone new to OACP",
+      "reviewed": "2026-10-22",
+      "colorScheme": "adaptive",
+      "sources": [
+        "docs/runbooks/oacp-demo-merchant.md",
+        "docs/oacp/ucp-checkout.md",
+        "docs/oacp/merchant-custom-domains.md",
+        "docs/oacp/ucp-profile.md",
+        "ui/src/components/docs/OacpGuideFigures.tsx"
+      ]
+    },
+    {
       "slug": "oacp-how-it-works",
       "title": "How OACP works, end to end",
       "description": "Follow your shop's facts through seven steps: signed by Grantex, verified and kept by AgenticOrg, decided by the arbiter, recorded in the ledger and rendered for every buyer agent.",

@@ -406,7 +406,117 @@ function Roles() {
   );
 }
 
+// The live example merchant, Nilgiri Tea House (synthetic data; docs/runbooks/oacp-demo-merchant.md).
+function NilgiriStory() {
+  return (
+    <StepStack id="docfig-nilgiri-story" title="Nilgiri Tea House, from shop to sale"
+      desc="Six steps. The shop: Nilgiri Tea House in Ooty, ten teas and accessories priced in rupees. AgenticOrg syncs its catalog and its order limits. Grantex signs those facts: eleven signed artifacts, every one verified. The shop proves its own address, nilgiritea.agenticorg.ai, with a DNS TXT record. Buyer agents find it at /.well-known/ucp and search the catalog. Every checkout is decided by the arbiter's fixed rules and recorded in the ledger; payments are off in this demo."
+      steps={[
+        { owner: "The shop", tone: "neutral", title: "Nilgiri Tea House, Ooty", detail: "10 teas and accessories, priced in ₹" },
+        { owner: "AgenticOrg", tone: "agenticorg", title: "Catalog synced, limits set", detail: "Products, prices, stock, order limits" },
+        { owner: "Grantex", tone: "grantex", title: "Facts signed", detail: "11 signed artifacts, all verified", badge: "verified" },
+        { owner: "DNS", tone: "oacp", title: "Its own address", detail: "nilgiritea.agenticorg.ai, proven by TXT" },
+        { owner: "Buyer agents", tone: "neutral", title: "Find it and search it", detail: "Profile at /.well-known/ucp" },
+        { owner: "AgenticOrg arbiter", tone: "agenticorg", title: "Every checkout decided", detail: "Fixed rules, recorded in the ledger", badge: "payments off", badgeTone: "hold" },
+      ]} />
+  );
+}
+
+function NilgiriShelf() {
+  const items: { name: string; price: string; inStock: boolean }[] = [
+    { name: "Frost Black Tea", price: "from ₹349", inStock: true },
+    { name: "Doddabetta Green Tea", price: "₹399", inStock: true },
+    { name: "Masala Chai Blend", price: "₹449", inStock: true },
+    { name: "Homemade Chocolate Tea", price: "₹499", inStock: true },
+    { name: "Blue Mountain Oolong", price: "₹899", inStock: false },
+    { name: "Silver Tips White Tea", price: "₹1,299", inStock: true },
+    { name: "Estate Sampler, 6 teas", price: "₹999", inStock: true },
+    { name: "Cast Iron Kettle 800 ml", price: "₹2,499", inStock: true },
+    { name: "Tea Infuser", price: "₹199", inStock: true },
+    { name: "Tin Tea Caddy", price: "₹299", inStock: true },
+  ];
+  const top = 100;
+  const rowH = 36;
+  const height = top + items.length * rowH + 40;
+  return (
+    <Svg id="docfig-nilgiri-shelf" width={W} height={height} title="What a buyer agent sees"
+      desc="The catalog that nilgiritea.agenticorg.ai serves to buyer agents over UCP 2026-04-08: Frost Black Tea from 349 rupees, Doddabetta Green Tea 399, Masala Chai Blend 449, Homemade Chocolate Tea 499, Blue Mountain Oolong 899 and sold out, Silver Tips White Tea 1,299, an Estate Sampler of six teas 999, a Cast Iron Kettle of 800 millilitres 2,499, a Tea Infuser 199 and a Tin Tea Caddy 299. Every other item is in stock. All of it is synthetic demo data.">
+      <Box x={20} y={12} w={380} h={72} tone="oacp" />
+      <Text x={36} y={38} kind="owner" tone="oacp">NILGIRITEA.AGENTICORG.AI</Text>
+      <Text x={36} y={64} kind="strong">UCP 2026-04-08 · 10 products</Text>
+      {items.map((item, i) => {
+        const y = top + i * rowH;
+        const tone: Tone = item.inStock ? "allow" : "refuse";
+        return (
+          <g key={item.name}>
+            <line x1={20} y1={y + rowH} x2={400} y2={y + rowH} className="fig-wire" />
+            <Text x={24} y={y + 23} kind="body">{item.name}</Text>
+            <Text x={300} y={y + 23} anchor="end" kind="strong">{item.price}</Text>
+            <Box x={314} y={y + 7} w={86} h={22} tone={tone} rx={11} />
+            <Text x={357} y={y + 22.5} anchor="middle" kind="small" tone={tone}>{item.inStock ? "in stock" : "sold out"}</Text>
+          </g>
+        );
+      })}
+      <Text x={24} y={height - 12} kind="small">Synthetic demo data, prices in Indian rupees.</Text>
+    </Svg>
+  );
+}
+
+function NilgiriRecords() {
+  const records = [
+    { label: "RECORD 1 · ROUTES THE HOST", type: "CNAME", name: "nilgiritea", value: "ghs.googlehosted.com" },
+    { label: "RECORD 2 · PROVES OWNERSHIP", type: "TXT", name: "_agenticorg-ucp.nilgiritea", value: "agenticorg-ucp-verify=rYSvH2jU…" },
+  ];
+  const cardH = 150;
+  const gap = 16;
+  const resultY = 12 + records.length * (cardH + gap);
+  return (
+    <Svg id="docfig-nilgiri-records" width={W} height={resultY + 100} title="Nilgiri Tea House's two DNS records"
+      desc="Both records live in the agenticorg.ai DNS zone. Record 1 routes the host: a CNAME named nilgiritea pointing to ghs.googlehosted.com. Record 2 proves ownership: a TXT record named _agenticorg-ucp.nilgiritea whose value is agenticorg-ucp-verify followed by the code AgenticOrg issued. With both in place the host was attested and the profile published under the namespace ai.agenticorg.nilgiritea.">
+      {records.map((record, i) => {
+        const y = 12 + i * (cardH + gap);
+        return (
+          <g key={record.type}>
+            <Box x={20} y={y} w={380} h={cardH} tone="neutral" />
+            <Text x={36} y={y + 26} kind="owner" tone="oacp">{record.label}</Text>
+            <Text x={36} y={y + 54} kind="small">Type</Text>
+            <Text x={110} y={y + 54} kind="mono">{record.type}</Text>
+            <Text x={36} y={y + 82} kind="small">Name, in the agenticorg.ai zone</Text>
+            <Text x={36} y={y + 104} kind="mono">{record.name}</Text>
+            <Text x={36} y={y + 128} kind="small">Value</Text>
+            <Text x={110} y={y + 128} kind="mono">{record.value}</Text>
+          </g>
+        );
+      })}
+      <Box x={20} y={resultY} w={380} h={84} tone="allow" />
+      <Tick cx={46} cy={resultY + 30} />
+      <Text x={68} y={resultY + 36} kind="strong" tone="allow">Host attested, profile live</Text>
+      <Text x={36} y={resultY + 66} kind="small">Namespace ai.agenticorg.nilgiritea</Text>
+    </Svg>
+  );
+}
+
+function NilgiriBuyer() {
+  return (
+    <StepStack id="docfig-nilgiri-buyer" title="A buyer agent shops at Nilgiri Tea House"
+      desc="Seven steps. The buyer agent reads the shop's profile at /.well-known/ucp. It searches the catalog: chai finds the Masala Chai Blend at 449 rupees. AgenticOrg answers only from facts Grantex signed. The agent opens a checkout with its platform API key. Grantex issues Intent, Cart and Payment mandates for that exact cart. The arbiter allows or refuses by fixed rules and records the decision in the ledger. A payment provider would charge once, only on allow; payments are off in this demo."
+      steps={[
+        { owner: "Buyer agent", tone: "neutral", title: "Reads the shop's profile", detail: "GET /.well-known/ucp" },
+        { owner: "Buyer agent", tone: "neutral", title: "Searches the catalog", detail: "\"chai\" finds Masala Chai Blend, ₹449" },
+        { owner: "AgenticOrg", tone: "agenticorg", title: "Answers from signed facts", detail: "Price and stock verified, never guessed" },
+        { owner: "Buyer agent", tone: "neutral", title: "Opens a checkout", detail: "With its own platform API key" },
+        { owner: "Grantex", tone: "grantex", title: "Mandates for this cart", detail: "Intent, Cart and Payment" },
+        { owner: "AgenticOrg arbiter", tone: "agenticorg", title: "Allow or refuse", detail: "Fixed rules, sealed in the ledger", badge: "recorded" },
+        { owner: "Payment provider", tone: "hold", title: "Charges once, on allow", detail: "Switched off in this demo", badge: "off in demo", badgeTone: "hold" },
+      ]} />
+  );
+}
+
 const FIGURES: Record<string, { wide?: boolean; render: () => ReactNode }> = {
+  "nilgiri-story": { render: () => <NilgiriStory /> },
+  "nilgiri-shelf": { render: () => <NilgiriShelf /> },
+  "nilgiri-records": { render: () => <NilgiriRecords /> },
+  "nilgiri-buyer": { render: () => <NilgiriBuyer /> },
   "oacp-five-copies": { wide: true, render: () => <div className="fig-pair"><WiredPanel /><HubPanel /></div> },
   "oacp-standards-map": { render: () => <StandardsMap /> },
   "oacp-docs-flow": { render: () => <DocsFlow /> },
