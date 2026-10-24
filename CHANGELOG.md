@@ -6,6 +6,8 @@
   load the baked English NER model and exercise full PII detection, complete
   synthetic redaction and exact restoration. Missing models, regex fallback
   and disabled redaction fail the build instead of passing an install check.
+- Discard only the probe-generated public-suffix cache in that same build step;
+  do not retain build-time cache locks in the runtime image.
 - Keep preshed at 3.0.13 on Python 3.14 to avoid the token hash-map overflow in
   3.0.14. Other interpreter versions, privacy behavior and flags are unchanged.
 

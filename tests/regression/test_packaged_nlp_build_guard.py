@@ -33,6 +33,14 @@ def test_final_runtime_requires_packaged_nlp_after_copy_and_nonroot_user():
     assert "\nUSER " not in runtime[runtime.index(gate):]
 
 
+def test_runtime_probe_discards_only_its_generated_suffix_cache_in_the_same_run():
+    dockerfile = (ROOT / "Dockerfile").read_text(encoding="utf-8")
+    assert (
+        "RUN --network=none python -m scripts.validate_packaged_nlp \\\n"
+        "    && rm -rf /home/agenticorg/.cache/python-tldextract\n"
+    ) in dockerfile
+
+
 @pytest.mark.parametrize("install_set", ["v4", "dev", "requirements-v4.txt"])
 def test_nlp_install_sets_pin_only_the_confirmed_python_314_compatibility(install_set):
     if install_set in {"v4", "dev"}:
