@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 import json
+import tomllib
 from pathlib import Path
 from typing import Any
 
 import pytest
+from packaging.requirements import Requirement
 from packaging.version import Version
 
 
@@ -14,9 +16,22 @@ def test_ui_lockfile_uses_patched_security_alert_versions() -> None:
 
     assert packages["node_modules/form-data"]["version"] == "4.0.6"
     assert packages["node_modules/@babel/core"]["version"] == "7.29.6"
-    assert Version(packages["node_modules/dompurify"]["version"]) >= Version("3.4.16")
+    assert Version(packages["node_modules/dompurify"]["version"]) >= Version("3.4.17")
     assert Version(packages["node_modules/brace-expansion"]["version"]) >= Version("5.0.12")
-    assert packages["node_modules/undici"]["version"] == "7.29.1"
+    assert packages["node_modules/undici"]["version"] == "7.30.1"
+
+
+def test_pypdf_security_floor_and_exact_pin_are_patched() -> None:
+    project = tomllib.loads(Path("pyproject.toml").read_text(encoding="utf-8"))["project"]
+    declared = next(Requirement(raw) for raw in project["dependencies"] if Requirement(raw).name == "pypdf")
+    assert not declared.specifier.contains("6.21.1")
+    assert declared.specifier.contains("6.21.2")
+    pinned = next(
+        Requirement(raw.strip())
+        for raw in Path("requirements.txt").read_text(encoding="utf-8").splitlines()
+        if raw.strip() and not raw.lstrip().startswith("#") and Requirement(raw.strip()).name == "pypdf"
+    )
+    assert str(pinned.specifier) == "==6.21.2"
 
 
 @pytest.mark.asyncio

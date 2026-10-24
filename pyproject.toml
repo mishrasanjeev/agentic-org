@@ -65,7 +65,7 @@ classifiers = [
     "Topic :: Scientific/Engineering :: Artificial Intelligence",
 ]
 dependencies = [
-    "fastapi>=0.143.3",
+    "fastapi>=0.144.0",
     "uvicorn[standard]>=0.54.0",
     # Held to the 2.1 series to match requirements.txt: the tools image installs
     # these ranges, and 2.1.0's typing changes failed mypy until the code was
@@ -109,7 +109,7 @@ dependencies = [
     "opentelemetry-instrumentation-fastapi>=0.66b1",
     "wrapt>=1.17.3",
     "prometheus-client>=0.26.0",
-    "langgraph>=1.2.15",
+    "langgraph>=1.2.16",
     "langchain>=1.4.6",
     "langchain-google-genai>=4.4.2",
     "langchain-anthropic>=1.7.6",
@@ -121,7 +121,7 @@ dependencies = [
     "grantex>=0.7.2",
     "grantex-agent-httpsig @ git+https://github.com/mishrasanjeev/grantex@f006cc82bf2261e3b2e9601c93587395956fb685#subdirectory=packages/agent-httpsig-py",
     "langsmith>=0.14.11",
-    "pypdf>=6.21.1",
+    "pypdf>=6.21.2",
     # Canonical document extraction. The production image below ships the
     # matching Tesseract, Poppler, and LibreOffice system dependencies.
     "python-docx>=1.2.0",
@@ -161,18 +161,18 @@ dependencies = [
     # Once a fastembed release accepts Pillow 13, restore "fastembed>=<that
     # release>" here and delete requirements-fastembed.txt and these entries.
     "huggingface-hub>=0.20,<2.0",
-    "loguru>=0.7.2,<0.8.0",
-    "mmh3>=4.1.0,<6.0.0",
+    "loguru>=0.7.3,<0.8.0",
+    "mmh3>=5.3.1,<6.0.0",
     "numpy>=1.26; python_version == '3.12'",
     "numpy>=2.1.0; python_version == '3.13'",
     "numpy>=2.3.0; python_version >= '3.14'",
     "onnxruntime>=1.17.0,!=1.20.0,!=1.24.0,!=1.24.1; python_version == '3.12'",
     "onnxruntime>1.21.0,!=1.24.0,!=1.24.1; python_version == '3.13'",
     "onnxruntime>=1.24.2; python_version >= '3.14'",
-    "py-rust-stemmers>=0.1.0,<0.2.0",
-    "requests>=2.31,<3.0",
-    "tokenizers>=0.15,<1.0",
-    "tqdm>=4.66,<5.0",
+    "py-rust-stemmers>=0.1.8,<0.2.0",
+    "requests>=2.34.2,<3.0",
+    "tokenizers>=0.23.3,<1.0",
+    "tqdm>=4.70.1,<5.0",
 ]
 
 [project.optional-dependencies]
