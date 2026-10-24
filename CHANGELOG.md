@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased - Dependency compatibility and security patches
+
+- Refresh the compatible Python and UI dependency updates together, preserving the
+  required embedding and PII-analysis dependency bounds.
+- Require pypdf 6.21.2 and keep the exact requirements pin aligned with the project floor.
+- Update the UI's DOMPurify and Undici overrides to patched releases and retain
+  regression checks for their locked versions. No audit exclusions are added.
+
 ## Unreleased - Hosted MCP endpoint for the demo shop
 
 - `agenticorg-mcp-server` gains a hosted Streamable HTTP endpoint (`mcp-server/src/http.ts`,
