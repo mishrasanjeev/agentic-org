@@ -121,7 +121,7 @@ dependencies = [
     "grantex>=0.7.2",
     "grantex-agent-httpsig @ git+https://github.com/mishrasanjeev/grantex@f006cc82bf2261e3b2e9601c93587395956fb685#subdirectory=packages/agent-httpsig-py",
     "langsmith>=0.14.11",
-    "pypdf>=6.21.1",
+    "pypdf>=6.21.2",
     # Canonical document extraction. The production image below ships the
     # matching Tesseract, Poppler, and LibreOffice system dependencies.
     "python-docx>=1.2.0",
