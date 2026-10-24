@@ -17,6 +17,7 @@ def test_ui_runtime_installs_fixed_security_packages(dockerfile: str) -> None:
         "pcre2>=10.49-r0",
         "tiff>=4.7.2-r0",
         "libx11>=1.8.14-r0",
+        "brotli-libs>=1.2.1-r0",
     ):
         assert f"'{package}'" in upgrade, f"{dockerfile}: missing security floor for {package}"
 

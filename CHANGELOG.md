@@ -7,6 +7,8 @@
 - Require pypdf 6.21.2 and keep the exact requirements pin aligned with the project floor.
 - Update the UI's DOMPurify and Undici overrides to patched releases and retain
   regression checks for their locked versions. No audit exclusions are added.
+- Require Brotli runtime library 1.2.1-r0 or newer in both UI images to fix
+  CVE-2026-111497, without changing scanner exceptions or severity thresholds.
 
 ## Unreleased - Hosted MCP endpoint for the demo shop
 
