@@ -181,3 +181,6 @@ tools/
 .tmp/
 push_*.log
 pytest_out.log
+
+# Generated authentication files must stay excluded after all allowlists.
+**/gha-creds-*.json

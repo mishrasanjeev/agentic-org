@@ -136,3 +136,6 @@ mcp-server/mcp-publisher
 # pyproject.toml has no [tool.uv] section and no CI/Dockerfile uses uv sync.
 # If we ever adopt uv, delete this entry and commit the lockfile deliberately.
 uv.lock
+
+# Generated authentication files must never be committed.
+gha-creds-*.json

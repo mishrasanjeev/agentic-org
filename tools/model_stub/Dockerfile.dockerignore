@@ -9,3 +9,6 @@
 !tools/__init__.py
 !tools/model_stub/
 **/__pycache__
+
+# Keep generated authentication files out of the allowed stub subtree.
+**/gha-creds-*.json
