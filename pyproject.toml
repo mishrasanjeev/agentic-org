@@ -169,10 +169,10 @@ dependencies = [
     "onnxruntime>=1.17.0,!=1.20.0,!=1.24.0,!=1.24.1; python_version == '3.12'",
     "onnxruntime>1.21.0,!=1.24.0,!=1.24.1; python_version == '3.13'",
     "onnxruntime>=1.24.2; python_version >= '3.14'",
-    "py-rust-stemmers>=0.1.0,<0.2.0",
+    "py-rust-stemmers>=0.1.8,<0.2.0",
     "requests>=2.34.2,<3.0",
-    "tokenizers>=0.15,<1.0",
-    "tqdm>=4.66,<5.0",
+    "tokenizers>=0.23.3,<1.0",
+    "tqdm>=4.70.1,<5.0",
 ]
 
 [project.optional-dependencies]
