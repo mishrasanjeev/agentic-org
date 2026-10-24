@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Security
+- Update the hosted Node runtime and affected Zod, body-parser, URI and IP parsing
+  dependencies; omit unused package managers from the hosted runtime image.
+
 ### Added
 - `dist/http.js`: a hosted, stateless Streamable HTTP endpoint for one public UCP shop, exposing
   only the shop tools (search, lookup, create, get and update checkout; nothing that pays). It
