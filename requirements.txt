@@ -21,7 +21,7 @@
 # ==============================================================================
 
 # ─── Web Framework ───────────────────────────────────────────────────────────
-fastapi==0.143.3
+fastapi==0.144.0
 uvicorn[standard]==0.54.0
 # starlette pulled by fastapi (>=0.49.1 required for CVE-2025-54121, CVE-2025-62727)
 python-multipart==0.0.32
@@ -73,7 +73,7 @@ anthropic==0.125.0
 openai==2.54.0
 
 # ─── LangChain & LangGraph (Agent Runtime) ──────────────────────────────────
-langgraph==1.2.15
+langgraph==1.2.16
 langchain==1.4.6
 # The provider integrations below require core >=1.6.10.
 langchain-core==1.6.12
@@ -101,7 +101,7 @@ opentelemetry-instrumentation-fastapi==0.66b1
 prometheus-client==0.26.0
 
 # ─── Document Processing & Reporting ─────────────────────────────────────────
-pypdf==6.21.1
+pypdf==6.21.2
 pypdfium2==5.14.0
 # CVE-2026-41066: keep python-docx/transitive XML parsing on patched lxml.
 lxml==6.1.3

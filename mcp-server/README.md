@@ -182,6 +182,29 @@ merchant's public catalog routes and never send the configured credential.
 They are registered whenever the profile advertises catalog search or lookup,
 even with checkout off. `get_product` is not exposed.
 
+### Hosted endpoint for the demo shop (Streamable HTTP)
+
+`dist/http.js` (`npm run start:hosted`, image `mcp-server/Dockerfile.hosted`) serves one public UCP
+shop to clients that support a configured bearer credential at `POST /mcp` over
+Streamable HTTP. It runs stateless, with a fresh server per request, and exposes only
+`search_catalog`, `lookup_catalog`, `create_checkout`, `get_checkout` and `update_checkout`. There
+is no completion, cancel, cart, order, agent or seller tool, so nothing it does can take a payment.
+
+| Setting | Meaning |
+|---|---|
+| `AGENTICORG_UCP_PROFILE_URL` | The shop's `/.well-known/ucp`. Fixed: callers cannot choose another shop. |
+| `AGENTICORG_UCP_AGENT_PROFILE` | The buyer platform profile sent as `UCP-Agent`. Locked: a call's `meta` cannot change it. |
+| `AGENTICORG_API_KEY` | The platform key the shop issued (scopes `ucp:read`, `ucp:write`), from a secret. Sent only on checkout calls. |
+| `MCP_ACCESS_TOKEN` | Required separate caller credential, at least 32 characters, from a secret. Clients send it as `Authorization: Bearer ...`; never reuse the shop's platform key. |
+| `MCP_ALLOWED_HOSTS` | Host names the server answers on (DNS-rebinding protection); any other `Host` gets 403. |
+| `MCP_RATE_PER_CLIENT_PER_MINUTE` / `MCP_RATE_GLOBAL_PER_MINUTE` | Fixed one-minute limits per client (default 30) and per instance (default 300); over them, 429 with `Retry-After`. |
+| `MCP_TRUSTED_PROXY_HOPS` | Default 0: ignore forwarded addresses and limit by socket. Set only for a reviewed ingress topology with no bypass path; the rightmost configured proxy suffix is used. |
+
+Requests are limited to 64 KiB, `GET /healthz` answers `{"status":"ok"}`, and each request logs
+its JSON-RPC method, status and duration, never bodies or keys. Every MCP request requires the
+separate caller credential before merchant discovery or tool execution. OAuth discovery and
+anonymous hosted-assistant access are not implemented. Invalid rate settings fail at startup.
+
 Direct connector invocation is not exposed by this server. Connector records
 and agent-tool records are discovery data, not proof that provider credentials,
 permissions, or live accounts are configured.

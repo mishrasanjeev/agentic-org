@@ -50,7 +50,8 @@ FROM nginx:alpine@sha256:892bb2152464f0c5d8972593a5f5afaf8054552580b699d95f8ff4a
 # package is unavailable. Drop this once the base digest carries 2.8.5-r0.
 # CVE-2026-4775: libgd pulls in tiff; require its patched package too.
 # CVE-2026-88806: require the fixed X11 client library pulled in by libgd.
-RUN apk add --no-cache --upgrade 'libexpat>=2.8.5-r0' 'pcre2>=10.49-r0' 'tiff>=4.7.2-r0' 'libx11>=1.8.14-r0'
+# CVE-2026-111497: require the patched Brotli decoder runtime library.
+RUN apk add --no-cache --upgrade 'libexpat>=2.8.5-r0' 'pcre2>=10.49-r0' 'tiff>=4.7.2-r0' 'libx11>=1.8.14-r0' 'brotli-libs>=1.2.1-r0'
 COPY --from=builder /app/ui/dist /usr/share/nginx/html
 COPY ui/nginx.cloudrun.conf.template /etc/nginx/templates/default.conf.template
 ENV NGINX_ENVSUBST_FILTER='^(API_BACKEND_HOST|PORT)$'

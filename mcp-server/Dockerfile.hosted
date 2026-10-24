@@ -1,0 +1,26 @@
+# Hosted MCP endpoint for the Nilgiri Tea House demo shop (mcp-server/src/http.ts).
+# Build from the repository root:  docker build -f mcp-server/Dockerfile.hosted -t agenticorg-mcp-demo .
+# Runtime settings (PORT, AGENTICORG_UCP_PROFILE_URL, AGENTICORG_UCP_AGENT_PROFILE, AGENTICORG_API_KEY,
+# MCP_ALLOWED_HOSTS) come from the Cloud Run service; the platform key is a Secret Manager reference.
+
+FROM node:26.12.1-slim@sha256:36793bcbb160a6a16cede1e62b93f84e26b78a972a8a4c0b879c1c12f22761ec AS build
+WORKDIR /app
+COPY mcp-server/package.json mcp-server/package-lock.json ./
+RUN npm ci --no-audit --no-fund
+COPY mcp-server/tsconfig.json ./
+COPY mcp-server/src ./src
+COPY mcp-server/test ./test
+RUN npm test && npm prune --omit=dev
+
+FROM node:26.12.1-slim@sha256:36793bcbb160a6a16cede1e62b93f84e26b78a972a8a4c0b879c1c12f22761ec
+ENV NODE_ENV=production PORT=8080
+WORKDIR /app
+# The runtime executes Node directly and does not need package-manager bundles.
+RUN rm -rf /usr/local/lib/node_modules/npm /usr/local/bin/npm /usr/local/bin/npx \
+    /opt/yarn-* /usr/local/bin/yarn /usr/local/bin/yarnpkg
+COPY --from=build --chown=root:root /app/package.json ./
+COPY --from=build --chown=root:root /app/node_modules ./node_modules
+COPY --from=build --chown=root:root /app/dist ./dist
+USER node
+EXPOSE 8080
+CMD ["node", "dist/http.js"]

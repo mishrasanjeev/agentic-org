@@ -6,6 +6,7 @@ and connector integration.
 
 from __future__ import annotations
 
+import ipaddress
 import json
 from unittest.mock import AsyncMock, MagicMock, patch
 from xml.etree.ElementTree import Element, SubElement
@@ -165,8 +166,12 @@ class TestTallyConnectorBridgeRouting:
             assert "BODY" in result
 
     @pytest.mark.asyncio
-    async def test_send_xml_bridge_mode(self):
+    async def test_send_xml_bridge_mode(self, monkeypatch):
         from connectors.finance.tally import TallyConnector
+        from core.security import egress
+
+        resolver = AsyncMock(return_value=(ipaddress.ip_address("93.184.216.34"),))
+        monkeypatch.setattr(egress, "_resolve_host_async", resolver)
 
         connector = TallyConnector(config={
             "bridge_url": "https://example.com/api/v1/bridge/route/tally",
@@ -185,10 +190,15 @@ class TestTallyConnectorBridgeRouting:
         with patch("httpx.AsyncClient.post", return_value=mock_resp):
             result = await connector._send_via_bridge("<ENVELOPE/>")
             assert result["BODY"]["CREATED"] == "1"
+        resolver.assert_awaited_once_with("example.com")
 
     @pytest.mark.asyncio
-    async def test_bridge_error_raises(self):
+    async def test_bridge_error_raises(self, monkeypatch):
         from connectors.finance.tally import TallyConnector
+        from core.security import egress
+
+        resolver = AsyncMock(return_value=(ipaddress.ip_address("93.184.216.34"),))
+        monkeypatch.setattr(egress, "_resolve_host_async", resolver)
 
         connector = TallyConnector(config={
             "bridge_url": "https://example.com/api/v1/bridge/route/tally",
@@ -209,6 +219,7 @@ class TestTallyConnectorBridgeRouting:
             # the caller can still catch RuntimeError for backward compat.
             with pytest.raises(RuntimeError, match="Tally bridge error"):
                 await connector._send_via_bridge("<ENVELOPE/>")
+        resolver.assert_awaited_once_with("example.com")
 
 
 # ---------------------------------------------------------------------------

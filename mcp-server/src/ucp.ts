@@ -53,6 +53,12 @@ export interface UcpToolOptions {
   agentProfile?: string;
   headers: () => Record<string, string>;
   log?: (message: string) => void;
+  /** A binding already discovered (the hosted server caches it); skips the profile fetch. */
+  binding?: UcpBinding;
+  /** Register only these tool names (the hosted server exposes the shop tools only). */
+  allowTools?: ReadonlySet<string>;
+  /** Always send `agentProfile`; a call's `meta["ucp-agent"].profile` is ignored. */
+  lockAgentProfile?: boolean;
 }
 
 type Json = Record<string, unknown>;
@@ -478,7 +484,7 @@ async function callUcp(
   id: string | undefined,
   body: Json | undefined,
 ) {
-  const profile = meta?.["ucp-agent"]?.profile ?? options.agentProfile;
+  const profile = options.lockAgentProfile ? options.agentProfile : (meta?.["ucp-agent"]?.profile ?? options.agentProfile);
   if (!profile && !op.public) {
     return errorResult({
       status: 400,
@@ -537,7 +543,7 @@ export async function registerUcpTools(server: McpServer, options: UcpToolOption
   const log = options.log ?? ((m: string) => console.error(m));
   let binding: UcpBinding;
   try {
-    binding = await discoverUcpBinding(options.profileUrl);
+    binding = options.binding ?? (await discoverUcpBinding(options.profileUrl));
   } catch (exc) {
     log(`UCP checkout tools not registered: ${(exc as Error).message}`);
     return [];
@@ -545,6 +551,7 @@ export async function registerUcpTools(server: McpServer, options: UcpToolOption
   const registered: string[] = [];
   for (const op of OPERATIONS) {
     if (!binding.capabilities.has(op.capability)) continue;
+    if (options.allowTools && !options.allowTools.has(op.name)) continue;
     server.registerTool(
       op.name,
       {

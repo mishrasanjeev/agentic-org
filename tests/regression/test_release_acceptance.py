@@ -18,7 +18,9 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import subprocess
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -272,15 +274,44 @@ def test_check_registry_is_complete() -> None:
 @pytest.mark.parametrize(
     "key", ["skips", "coverage", "qa_matrix", "crypto", "tsc", "npm_build", "vitest", "playwright", "artefacts"]
 )
+@pytest.mark.parametrize("returncode", [0, 7])
 @pytest.mark.timeout(180)
-def test_each_check_returns_a_checkresult(key) -> None:
-    """Smoke: every check function returns a CheckResult, never
-    raises uncaught. Some legitimately fail in the test env (no
-    npm, no DB) — that's fine; we're pinning the contract that
-    they return a CheckResult."""
+def test_each_check_returns_a_checkresult(key, returncode, monkeypatch) -> None:
+    """Check result contracts without recursively launching the release suites."""
     mod = _load_module()
+    calls = []
+
+    def run(command, **kwargs):
+        calls.append((command, kwargs))
+        return subprocess.CompletedProcess(command, returncode, "synthetic stdout", "synthetic stderr")
+
+    monkeypatch.setattr(mod, "subprocess", SimpleNamespace(run=run, TimeoutExpired=subprocess.TimeoutExpired))
+    monkeypatch.setattr(mod, "shutil", SimpleNamespace(which=lambda command: command))
     fn = mod.CHECK_REGISTRY[key]
     r = fn()
     assert isinstance(r, mod.CheckResult)
     assert r.name
     assert isinstance(r.passed, bool)
+    if key in {"coverage", "crypto", "tsc", "npm_build", "vitest", "playwright"}:
+        assert len(calls) == 1
+        assert calls[0][1]["capture_output"] is True
+        assert calls[0][1]["timeout"] in {120, 600}
+        assert r.passed is (returncode == 0)
+    else:
+        assert calls == []
+
+
+@pytest.mark.parametrize("key", ["coverage", "crypto", "tsc", "npm_build", "vitest", "playwright"])
+def test_external_check_timeout_returns_a_required_failure(key, monkeypatch) -> None:
+    mod = _load_module()
+
+    def run(command, **kwargs):
+        raise subprocess.TimeoutExpired(command, kwargs["timeout"])
+
+    monkeypatch.setattr(mod, "subprocess", SimpleNamespace(run=run, TimeoutExpired=subprocess.TimeoutExpired))
+    monkeypatch.setattr(mod, "shutil", SimpleNamespace(which=lambda command: command))
+    result = mod.CHECK_REGISTRY[key]()
+    assert isinstance(result, mod.CheckResult)
+    assert result.passed is False
+    assert result.severity == "required"
+    assert "timed out" in result.message

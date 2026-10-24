@@ -6,6 +6,7 @@ Target: 80+ test functions covering happy paths, empty/not-found, and edge cases
 
 from __future__ import annotations
 
+import ipaddress
 import json
 import uuid
 from datetime import UTC, datetime
@@ -643,9 +644,13 @@ class TestConnectorsEndpoints:
         assert resp["total"] == 100
 
     @pytest.mark.asyncio
-    async def test_register_connector_happy(self, tenant_id, mock_session):
+    async def test_register_connector_happy(self, tenant_id, mock_session, monkeypatch):
         from api.v1.connectors import register_connector
         from core.schemas.api import ConnectorCreate
+        from core.security import egress
+
+        resolver = AsyncMock(return_value=(ipaddress.ip_address("93.184.216.34"),))
+        monkeypatch.setattr(egress, "_resolve_host_async", resolver)
 
         body = ConnectorCreate(
             name="Hubspot",
@@ -663,7 +668,36 @@ class TestConnectorsEndpoints:
 
         mock_session.add.assert_called_once()
         mock_session.flush.assert_awaited_once()
+        resolver.assert_awaited_once_with("api.hubspot.com")
         assert resp["name"] == "Hubspot"
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("addresses", [(), ("127.0.0.1",), ("169.254.169.254",), ("93.184.216.34", "10.1.2.3")])
+    async def test_register_connector_rejects_unsafe_dns(self, tenant_id, mock_session, monkeypatch, addresses):
+        from api.v1.connectors import register_connector
+        from core.schemas.api import ConnectorCreate
+        from core.security import egress
+
+        resolver = AsyncMock(return_value=tuple(ipaddress.ip_address(address) for address in addresses))
+        monkeypatch.setattr(egress, "_resolve_host_async", resolver)
+        body = ConnectorCreate(
+            name="Hubspot",
+            category="crm",
+            auth_type="api_key",
+            base_url="https://api.hubspot.com",
+        )
+
+        ctx = _patch_tenant_session("connectors", mock_session)
+        try:
+            with pytest.raises(HTTPException) as exc:
+                await register_connector(body=body, request=_connector_admin_request(), tenant_id=tenant_id)
+        finally:
+            ctx.stop()
+
+        assert exc.value.status_code == 403
+        resolver.assert_awaited_once_with("api.hubspot.com")
+        mock_session.add.assert_not_called()
+        mock_session.flush.assert_not_awaited()
 
     @pytest.mark.asyncio
     async def test_register_connector_sets_status_active(self, tenant_id, mock_session):

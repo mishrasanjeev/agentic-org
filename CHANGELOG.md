@@ -1,5 +1,25 @@
 # Changelog
 
+## Unreleased - Dependency compatibility and security patches
+
+- Refresh the compatible Python and UI dependency updates together, preserving the
+  required embedding and PII-analysis dependency bounds.
+- Require pypdf 6.21.2 and keep the exact requirements pin aligned with the project floor.
+- Update the UI's DOMPurify and Undici overrides to patched releases and retain
+  regression checks for their locked versions. No audit exclusions are added.
+- Require Brotli runtime library 1.2.1-r0 or newer in both UI images to fix
+  CVE-2026-111497, without changing scanner exceptions or severity thresholds.
+
+## Unreleased - Hosted MCP endpoint for the demo shop
+
+- `agenticorg-mcp-server` gains a hosted Streamable HTTP endpoint (`mcp-server/src/http.ts`,
+  `mcp-server/Dockerfile.hosted`) so clients with a configured caller bearer credential can search
+  the synthetic demo shop and open a checkout. It exposes only the five shop
+  tools and nothing that pays, with a fixed shop, profile and key, a host allowlist, a body limit
+  and validated rate limits. Caller authentication is separate from the shop credential;
+  forwarded addresses are ignored unless an operator reviews the trusted proxy topology.
+  The image build runs the MCP security regressions before container scanning. Anonymous and
+  OAuth-only hosted-assistant access are not implemented.
 ## Unreleased - Nilgiri Tea House guide: Telegram screenshot
 
 - The Telegram run in the Nilgiri Tea House guide is now a screenshot of the bot's plain-text reply
