@@ -77,11 +77,18 @@ def _get_agent_id(headers: dict, agent_type: str) -> str:
     turn a seed-cleanup artifact into a spurious test failure. Skip
     retired entries and pick the first shadow/active/paused one.
     """
-    r = httpx.get(f"{BASE}/agents?per_page=100", headers=headers)
-    for a in r.json().get("items", []):
-        if a.get("agent_type") == agent_type and a.get("status") != "retired":
-            return a["id"]
-    return ""
+    # Walk every page (the API caps per_page at 100, and leftover test agents can push the
+    # seeded ones past page 1), and prefer the seeded "E2E ..." agent of this type.
+    candidates: list[dict] = []
+    for page in range(1, 51):
+        r = httpx.get(f"{BASE}/agents", params={"page": page, "per_page": 100}, headers=headers)
+        items = r.json().get("items", [])
+        candidates += [a for a in items if a.get("agent_type") == agent_type and a.get("status") != "retired"]
+        if len(items) < 100:
+            break
+    seeded = [a for a in candidates if str(a.get("employee_name") or "").startswith("E2E ")]
+    chosen = (seeded or candidates)[:1]
+    return chosen[0]["id"] if chosen else ""
 
 
 def _run_agent(headers: dict, agent_id: str, action: str, inputs: dict) -> dict:
