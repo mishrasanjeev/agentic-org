@@ -4,7 +4,7 @@
  * Hosted MCP endpoint for one public UCP shop, over Streamable HTTP.
  *
  * Built for the synthetic demo shop Nilgiri Tea House so that hosted assistants
- * (Gemini custom apps, ChatGPT connectors) can search it and open a checkout.
+ * with a separately configured caller bearer credential can search it and open a checkout.
  * It exposes only the shop tools in HOSTED_TOOLS: no completion, cancel, cart,
  * order, agent or seller tool, so nothing it does can take a payment.
  *
@@ -17,11 +17,14 @@
  *
  *   PORT=8080 AGENTICORG_UCP_PROFILE_URL=https://nilgiritea.agenticorg.ai/.well-known/ucp \
  *   AGENTICORG_UCP_AGENT_PROFILE=https://agenticorg.ai/ucp/platforms/agenticorg-demo-buyer/profile.json \
- *   AGENTICORG_API_KEY=<platform key> MCP_ALLOWED_HOSTS=mcp.agenticorg.ai node dist/http.js
+ *   AGENTICORG_API_KEY=<platform key> MCP_ACCESS_TOKEN=<separate caller token> \
+ *   MCP_ALLOWED_HOSTS=mcp.agenticorg.ai node dist/http.js
  */
 
 import http from "node:http";
+import { createHash, timingSafeEqual } from "node:crypto";
 import { readFileSync } from "node:fs";
+import { isIP } from "node:net";
 import { dirname, resolve } from "node:path";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
@@ -43,9 +46,11 @@ export interface HostedConfig {
   profileUrl: string;
   agentProfile: string;
   apiKey: string;
+  accessToken: string;
   allowedHosts: ReadonlySet<string>;
   perClientPerMinute: number;
   globalPerMinute: number;
+  trustedProxyHops?: number;
   version: string;
   log?: (entry: Record<string, unknown>) => void;
   now?: () => number;
@@ -53,6 +58,8 @@ export interface HostedConfig {
 
 /** Fixed one-minute windows per client and per instance; returns seconds to wait, or 0. */
 export function createRateLimiter(perClient: number, global: number, now: () => number = Date.now) {
+  positiveInteger(perClient, "per-client rate");
+  positiveInteger(global, "global rate");
   let windowStart = now();
   let total = 0;
   const counts = new Map<string, number>();
@@ -77,10 +84,27 @@ function hostName(header: string | undefined): string {
   return host.split(":")[0];
 }
 
-function clientOf(req: http.IncomingMessage): string {
-  // Cloud Run's front end appends the caller to X-Forwarded-For; the global cap bounds spoofing.
-  const forwarded = String(req.headers["x-forwarded-for"] ?? "").split(",")[0].trim();
-  return forwarded || req.socket.remoteAddress || "unknown";
+function positiveInteger(value: number, name: string): number {
+  if (!Number.isSafeInteger(value) || value <= 0) throw new Error(`${name} must be a positive integer`);
+  return value;
+}
+
+function proxyHops(value: number): number {
+  if (!Number.isSafeInteger(value) || value < 0 || value > 16) {
+    throw new Error("MCP_TRUSTED_PROXY_HOPS must be a non-negative integer up to 16");
+  }
+  return value;
+}
+
+function clientOf(req: http.IncomingMessage, trustedProxyHops: number): string {
+  const socket = req.socket.remoteAddress || "unknown";
+  if (!trustedProxyHops) return socket;
+  // Only the operator-reviewed proxy suffix is trusted; preceding values are caller-controlled.
+  // https://cloud.google.com/load-balancing/docs/https#x-forwarded-for_header
+  const forwarded = String(req.headers["x-forwarded-for"] ?? "").split(",").map(value => value.trim());
+  const suffix = forwarded.slice(-trustedProxyHops);
+  if (suffix.length !== trustedProxyHops || suffix.some(value => !isIP(value))) return socket;
+  return suffix[0];
 }
 
 function send(res: http.ServerResponse, status: number, body: unknown, headers: Record<string, string> = {}) {
@@ -104,6 +128,11 @@ async function readBody(req: http.IncomingMessage): Promise<string | null> {
 }
 
 export function createHostedHandler(config: HostedConfig) {
+  if (!config.accessToken || config.accessToken.length < 32 || !/^[A-Za-z0-9\-._~+/]+=*$/.test(config.accessToken) || config.accessToken === config.apiKey) {
+    throw new Error("MCP_ACCESS_TOKEN must be a separate caller credential of at least 32 characters");
+  }
+  const tokenHash = createHash("sha256").update(config.accessToken).digest();
+  const trustedProxyHops = proxyHops(config.trustedProxyHops ?? 0);
   const log = config.log ?? ((entry) => console.log(JSON.stringify(entry)));
   const now = config.now ?? Date.now;
   const limit = createRateLimiter(config.perClientPerMinute, config.globalPerMinute, now);
@@ -131,7 +160,11 @@ export function createHostedHandler(config: HostedConfig) {
     if (req.method !== "POST") {
       return rpcError(res, 405, -32000, "Method not allowed: this stateless server takes POST /mcp only.", { Allow: "POST" });
     }
-    const wait = limit(clientOf(req));
+    const bearer = req.headers.authorization?.match(/^Bearer ([A-Za-z0-9\-._~+/]+=*)$/i)?.[1];
+    if (!bearer || !timingSafeEqual(tokenHash, createHash("sha256").update(bearer).digest())) {
+      return rpcError(res, 401, -32000, "Caller authentication required.", { "WWW-Authenticate": 'Bearer realm="agenticorg-mcp"' });
+    }
+    const wait = limit(clientOf(req, trustedProxyHops));
     if (wait > 0) return rpcError(res, 429, -32000, "Too many requests; retry later.", { "Retry-After": String(wait) });
     const raw = await readBody(req);
     if (raw === null) return rpcError(res, 413, -32000, "Request too large.");
@@ -195,9 +228,11 @@ export function configFromEnv(): HostedConfig {
     profileUrl: required("AGENTICORG_UCP_PROFILE_URL"),
     agentProfile: required("AGENTICORG_UCP_AGENT_PROFILE"),
     apiKey: required("AGENTICORG_API_KEY"),
+    accessToken: required("MCP_ACCESS_TOKEN"),
     allowedHosts: new Set(hosts),
-    perClientPerMinute: Number(process.env.MCP_RATE_PER_CLIENT_PER_MINUTE ?? "30"),
-    globalPerMinute: Number(process.env.MCP_RATE_GLOBAL_PER_MINUTE ?? "300"),
+    perClientPerMinute: positiveInteger(Number(process.env.MCP_RATE_PER_CLIENT_PER_MINUTE ?? "30"), "MCP_RATE_PER_CLIENT_PER_MINUTE"),
+    globalPerMinute: positiveInteger(Number(process.env.MCP_RATE_GLOBAL_PER_MINUTE ?? "300"), "MCP_RATE_GLOBAL_PER_MINUTE"),
+    trustedProxyHops: proxyHops(Number(process.env.MCP_TRUSTED_PROXY_HOPS ?? "0")),
     version: pkg.version,
   };
 }

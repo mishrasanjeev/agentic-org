@@ -8,6 +8,7 @@ import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/
 import { createHostedHandler, createRateLimiter, HOSTED_TOOLS } from "../dist/http.js";
 
 const KEY = "synthetic-hosted-platform-key";
+const ACCESS = "synthetic-caller-token-0123456789abcdef";
 const AGENT = "https://platform.example/profiles/demo-buyer.json";
 const calls = [];
 let merchantBase = "";
@@ -57,6 +58,7 @@ const handler = createHostedHandler({
   profileUrl: `${merchantBase}/.well-known/ucp`,
   agentProfile: AGENT,
   apiKey: KEY,
+  accessToken: ACCESS,
   allowedHosts: new Set(["127.0.0.1"]),
   perClientPerMinute: 1000,
   globalPerMinute: 1000,
@@ -77,7 +79,9 @@ const check = async (label, fn) => {
 
 async function connect() {
   const client = new Client({ name: "hosted-test", version: "1.0.0" });
-  await client.connect(new StreamableHTTPClientTransport(new URL(`${base}/mcp`)));
+  await client.connect(new StreamableHTTPClientTransport(new URL(`${base}/mcp`), {
+    requestInit: { headers: { Authorization: `Bearer ${ACCESS}` } },
+  }));
   return client;
 }
 
@@ -132,7 +136,7 @@ try {
     assert.equal(get.status, 405);
     assert.equal(get.headers.get("allow"), "POST");
     assert.equal((await fetch(`${base}/other`, { method: "POST", body: "{}" })).status, 404);
-    const big = await fetch(`${base}/mcp`, { method: "POST", headers: { "content-type": "application/json" }, body: "x".repeat(70 * 1024) });
+    const big = await fetch(`${base}/mcp`, { method: "POST", headers: { "content-type": "application/json", Authorization: `Bearer ${ACCESS}` }, body: "x".repeat(70 * 1024) });
     assert.equal(big.status, 413);
   });
 
@@ -150,14 +154,14 @@ try {
 
   await check("a limited client gets 429 with Retry-After from the hosted endpoint", async () => {
     const tight = createHostedHandler({
-      profileUrl: `${merchantBase}/.well-known/ucp`, agentProfile: AGENT, apiKey: KEY,
+      profileUrl: `${merchantBase}/.well-known/ucp`, agentProfile: AGENT, apiKey: KEY, accessToken: ACCESS,
       allowedHosts: new Set(["127.0.0.1"]), perClientPerMinute: 1, globalPerMinute: 10, version: "test", log: () => {},
     });
     const srv = http.createServer((req, res) => void tight(req, res));
     await new Promise((r) => srv.listen(0, "127.0.0.1", r));
     const url = `http://127.0.0.1:${srv.address().port}/mcp`;
     const init = { jsonrpc: "2.0", id: 1, method: "tools/list", params: {} };
-    const opts = { method: "POST", headers: { "content-type": "application/json", accept: "application/json, text/event-stream" }, body: JSON.stringify(init) };
+    const opts = { method: "POST", headers: { "content-type": "application/json", accept: "application/json, text/event-stream", Authorization: `Bearer ${ACCESS}` }, body: JSON.stringify(init) };
     assert.notEqual((await fetch(url, opts)).status, 429);
     const second = await fetch(url, opts);
     assert.equal(second.status, 429);

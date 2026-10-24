@@ -3,6 +3,8 @@
 ## Unreleased
 
 ### Security
+- Require a separate caller bearer credential before hosted merchant access; validate rate
+  settings and trust forwarded addresses only through an explicitly configured proxy suffix.
 - Update the hosted Node runtime and affected Zod, body-parser, URI and IP parsing
   dependencies; omit unused package managers from the hosted runtime image.
 

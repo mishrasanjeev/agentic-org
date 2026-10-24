@@ -39,7 +39,7 @@
   ],
   "scripts": {
     "build": "tsc",
-    "test": "npm run build && node test/mcp-server-smoke.mjs && node test/ucp-checkout-tools.mjs && node test/hosted-http.mjs",
+    "test": "npm run build && node test/mcp-server-smoke.mjs && node test/ucp-checkout-tools.mjs && node test/hosted-http.mjs && node --test test/hosted-security.mjs",
     "prepublishOnly": "npm run build",
     "start:hosted": "node dist/http.js"
   },
