@@ -26,6 +26,7 @@ from __future__ import annotations
 
 import json
 import re
+import shutil
 import subprocess  # noqa: S404 — invoking bandit CLI is the test's job
 import sys
 from pathlib import Path
@@ -48,6 +49,7 @@ _REQUIRED_DOCKERIGNORE_PATTERNS = [
     (".env.*", "env-per-environment files (e.g. .env.production)"),
     ("*.pem", "TLS / signing private keys"),
     ("*.key", "any *.key file is presumed secret"),
+    ("**/gha-creds-*.json", "generated cloud authentication files at any depth"),
     ("id_rsa", "ssh private keys"),
     (".venv/", "Python virtualenv with installed deps"),
     ("node_modules/", "frontend deps tree"),
@@ -111,6 +113,8 @@ def test_dockerignore_does_not_re_include_secrets_via_negation() -> None:
         "!id_rsa",
         "!.venv",
         "!node_modules",
+        "!gha-creds-*.json",
+        "!**/gha-creds-*.json",
     ]
     for pattern in forbidden_negations:
         # Match exact line (with optional trailing whitespace) — a
@@ -123,6 +127,67 @@ def test_dockerignore_does_not_re_include_secrets_via_negation() -> None:
             f"{pattern!r}. This defeats the exclusion above and is "
             f"forbidden by SEC-2026-05-P0-001."
         )
+
+
+@pytest.mark.parametrize(
+    ("ignore_file", "pattern"),
+    [
+        (".dockerignore", "**/gha-creds-*.json"),
+        ("tools/model_stub/Dockerfile.dockerignore", "**/gha-creds-*.json"),
+        (".gitignore", "gha-creds-*.json"),
+        (".gcloudignore", "gha-creds-*.json"),
+    ],
+)
+def test_generated_auth_files_stay_excluded_after_allowlists(ignore_file: str, pattern: str) -> None:
+    active = [
+        line.strip()
+        for line in (REPO / ignore_file).read_text(encoding="utf-8").splitlines()
+        if line.strip() and not line.strip().startswith("#")
+    ]
+    assert pattern in active, f"{ignore_file}: generated authentication files must be excluded"
+    assert not any(line.startswith("!") for line in active[active.index(pattern) + 1:]), (
+        f"{ignore_file}: credential exclusion must follow negated allowlists"
+    )
+
+
+@pytest.mark.parametrize(
+    "filename",
+    [
+        "gha-creds-canary.json",
+        "core/nested/gha-creds-canary.json",
+        "tools/model_stub/gha-creds-canary.json",
+        "ui/gha-creds-canary.json",
+    ],
+)
+def test_generated_auth_files_are_ignored_by_git(filename: str) -> None:
+    git = shutil.which("git")
+    assert git is not None, "Git is required to verify credential exclusions"
+    result = subprocess.run(  # noqa: S603 - resolved Git, fixed arguments, synthetic stdin
+        [git, "check-ignore", "--no-index", "--verbose", "--stdin"],
+        cwd=REPO,
+        input=filename + "\n",
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.startswith(".gitignore:")
+    assert f":gha-creds-*.json\t{filename}" in result.stdout
+
+
+def test_generated_auth_exclusions_do_not_ignore_ordinary_json() -> None:
+    git = shutil.which("git")
+    assert git is not None, "Git is required to verify nonsecret JSON remains available"
+    result = subprocess.run(  # noqa: S603 - resolved Git, fixed arguments, synthetic stdin
+        [git, "check-ignore", "--no-index", "--stdin"],
+        cwd=REPO,
+        input="catalog.json\nui/catalog.json\ncore/catalog.json\n",
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.returncode == 1, result.stderr
+    assert not result.stdout
 
 
 # ─────────────────────────────────────────────────────────────────

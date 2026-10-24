@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased - Generated credentials stay outside build artifacts
+
+- Exclude generated cloud authentication JSON from Docker contexts, source
+  uploads and version control, including the model-stub Dockerfile override.
+- Retain nonsecret JSON and source files; keep credential exclusions after
+  negated allowlists and preserve existing build and authentication controls.
+
 ## Unreleased - Dependency compatibility and security patches
 
 - Refresh the compatible Python and UI dependency updates together, preserving the

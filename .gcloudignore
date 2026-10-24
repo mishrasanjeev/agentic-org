@@ -11,3 +11,6 @@ ui/dist
 .ruff_cache
 coverage.xml
 htmlcov
+
+# Generated authentication files must never enter source uploads.
+gha-creds-*.json
