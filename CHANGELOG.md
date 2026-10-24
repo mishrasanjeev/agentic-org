@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased - Validate packaged NLP during the runtime image build
+
+- Require the copied runtime, as its nonroot user without network access, to
+  load the baked English NER model and exercise full PII detection, complete
+  synthetic redaction and exact restoration. Missing models, regex fallback
+  and disabled redaction fail the build instead of passing an install check.
+- Keep preshed at 3.0.13 on Python 3.14 to avoid the token hash-map overflow in
+  3.0.14. Other interpreter versions, privacy behavior and flags are unchanged.
+
 ## Unreleased - Generated credentials stay outside build artifacts
 
 - Exclude generated cloud authentication JSON from Docker contexts, source
