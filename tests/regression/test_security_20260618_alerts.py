@@ -16,7 +16,7 @@ def test_ui_lockfile_uses_patched_security_alert_versions() -> None:
     assert packages["node_modules/@babel/core"]["version"] == "7.29.6"
     assert Version(packages["node_modules/dompurify"]["version"]) >= Version("3.4.17")
     assert Version(packages["node_modules/brace-expansion"]["version"]) >= Version("5.0.12")
-    assert Version(packages["node_modules/undici"]["version"]) >= Version("7.30.1")
+    assert packages["node_modules/undici"]["version"] == "7.30.1"
 
 
 @pytest.mark.asyncio
