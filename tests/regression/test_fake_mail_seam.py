@@ -17,6 +17,7 @@ Pinned behaviors:
 from __future__ import annotations
 
 import os
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -73,19 +74,26 @@ def test_send_email_captures_under_fake(monkeypatch) -> None:
     # capture isn't an accident of missing creds.
     monkeypatch.delenv("AGENTICORG_GMAIL_APP_PASSWORD", raising=False)
 
-    # Real-domain target so domain validation passes (gmail.com
-    # has MX records).
+    from core import email
     from core.email import send_email
 
-    send_email(
-        to="qa@gmail.com",
+    resolver = MagicMock(return_value=["10 mail.example.org."])
+    monkeypatch.setattr(email.dns.resolver, "resolve", resolver)
+    smtp_ssl, smtp_plain = MagicMock(), MagicMock()
+    monkeypatch.setattr(email.smtplib, "SMTP_SSL", smtp_ssl)
+    monkeypatch.setattr(email.smtplib, "SMTP", smtp_plain)
+    assert send_email(
+        to="qa@example.org",
         subject="Welcome",
         html="<p>welcome</p>",
-    )
+    ) is True
+    resolver.assert_called_once_with("example.org", "MX")
+    smtp_ssl.assert_not_called()
+    smtp_plain.assert_not_called()
     assert fake_mail.count() == 1
     rec = fake_mail.last()
     assert rec is not None
-    assert rec.to == "qa@gmail.com"
+    assert rec.to == "qa@example.org"
     assert rec.subject == "Welcome"
 
 
@@ -95,13 +103,30 @@ def test_send_email_skips_invalid_domain_under_fake(monkeypatch) -> None:
     prevention pattern from Foundation #8."""
     monkeypatch.setenv("AGENTICORG_TEST_FAKE_MAIL", "1")
 
+    import dns.resolver
+
+    from core import email
     from core.email import send_email
 
-    send_email(
+    resolver = MagicMock(side_effect=dns.resolver.NXDOMAIN)
+    monkeypatch.setattr(email.dns.resolver, "resolve", resolver)
+    assert send_email(
         to="x@nonexistent-domain-with-no-mx-record-12345.invalid",
         subject="should not capture",
         html="x",
-    )
+    ) is False
+    resolver.assert_called_once_with("nonexistent-domain-with-no-mx-record-12345.invalid", "MX")
+    assert fake_mail.count() == 0
+
+
+def test_send_email_skips_empty_mx_under_fake(monkeypatch) -> None:
+    from core import email
+
+    monkeypatch.setenv("AGENTICORG_TEST_FAKE_MAIL", "1")
+    resolver = MagicMock(return_value=[])
+    monkeypatch.setattr(email.dns.resolver, "resolve", resolver)
+    assert email.send_email("qa@example.org", "should not capture", "x") is False
+    resolver.assert_called_once_with("example.org", "MX")
     assert fake_mail.count() == 0
 
 

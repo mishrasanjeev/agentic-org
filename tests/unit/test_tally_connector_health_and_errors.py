@@ -11,6 +11,7 @@ Pins:
 
 from __future__ import annotations
 
+import ipaddress
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -131,7 +132,11 @@ class TestTallyHealthCheckBridge:
         assert result["status"] == "bridge_error"
 
     @pytest.mark.asyncio
-    async def test_bridge_http_error_surfaces_durable_request_metadata(self) -> None:
+    async def test_bridge_http_error_surfaces_durable_request_metadata(self, monkeypatch) -> None:
+        from core.security import egress
+
+        resolver = AsyncMock(return_value=(ipaddress.ip_address("93.184.216.34"),))
+        monkeypatch.setattr(egress, "_resolve_host_async", resolver)
         connector = TallyConnector({
             "bridge_url": "https://example.com/api",
             "bridge_id": "bid-1",
@@ -172,6 +177,29 @@ class TestTallyHealthCheckBridge:
         assert exc_info.value.request_id == "durable-req-1"
         assert exc_info.value.error_category == "request_timed_out"
         assert exc_info.value.detail == "Bridge request timed out after 30s"
+        resolver.assert_awaited_once_with("example.com")
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("addresses", [(), ("127.0.0.1",), ("169.254.169.254",), ("93.184.216.34", "10.1.2.3")])
+    async def test_bridge_rejects_unsafe_dns_before_http(self, monkeypatch, addresses) -> None:
+        from core.security import egress
+
+        resolver = AsyncMock(return_value=tuple(ipaddress.ip_address(address) for address in addresses))
+        monkeypatch.setattr(egress, "_resolve_host_async", resolver)
+        connector = TallyConnector({
+            "bridge_url": "https://example.com/api",
+            "bridge_id": "bid-1",
+            "bridge_token": "tok-1",
+        })
+
+        with patch("httpx.AsyncClient") as client:
+            with pytest.raises(TallyBridgeError) as exc_info:
+                await connector._send_via_bridge("<ENVELOPE/>")
+
+        assert exc_info.value.error_category == "unsafe_bridge_url"
+        assert exc_info.value.request_id
+        resolver.assert_awaited_once_with("example.com")
+        client.assert_not_called()
 
     @pytest.mark.asyncio
     async def test_health_check_never_raises(self) -> None:
