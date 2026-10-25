@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """API lifespans must not erase live JWT revocations or rewrite their expiry."""
 
 from __future__ import annotations
