@@ -49,6 +49,29 @@ Prerequisites: custom domains and the Firebase front on, and one wildcard record
 so at most `AGENTICORG_PLATFORM_SUBDOMAIN_CAP` (20) are claimed; past the cap the listing still stands
 and the merchant is asked to connect its own domain.
 
+## The public Telegram bot
+
+One AgenticOrg bot serves every network shop to anyone on Telegram, separate from tenant channels
+(which answer only a linked owner). `POST /api/v1/network/telegram/webhook` checks Telegram's secret
+header and queues the update (`core.tasks.network_tasks`); the worker answers it once
+(`core.commerce.network_telegram`).
+
+- `t.me/<bot>?start=<slug>` picks a shop; `/shops` lists the network; `/stop` forgets the chat.
+- Anything else goes to a tool-calling model with five tools: list shops, search (one shop or the
+  network), open, read and update a checkout. The checkout tools use the same network path as the
+  gateway. There is no complete, cancel or payment tool, and the model is told never to ask for
+  payment details.
+- Chat state (the chosen shop and the last six turns, never tool output) is kept in Redis under a
+  SHA-256 of the chat id; turns expire after 30 minutes of quiet, the state after seven days.
+- Limits: 20 messages per chat per hour and 60 per minute for the bot, then a short "try later".
+  The platform Gemini spend cap applies. Replies pass the channel answer filter (no secrets, no echo
+  of the bot's own credentials, capped length).
+
+Set it up once: create the bot with BotFather, store its token and a webhook secret in Secret
+Manager, give them to the API service, then run
+`python scripts/connect_network_telegram_bot.py --base-url https://app.agenticorg.ai` and set
+`AGENTICORG_NETWORK_TELEGRAM_BOT_USERNAME` to the username it prints.
+
 ## Switches
 
 | Switch | Default | What it does |
@@ -58,6 +81,9 @@ and the merchant is asked to connect its own domain.
 | `AGENTICORG_NETWORK_AGENT_PROFILE` | `https://agenticorg.ai/ucp/platforms/agenticorg-network/profile.json` | The UCP platform profile network checkouts are opened for. |
 | `AGENTICORG_NETWORK_TERMS_VERSION` | `2026-10-25` | The network terms version a merchant accepts. |
 | `AGENTICORG_NETWORK_TELEGRAM_BOT_USERNAME` | Empty | The public bot's username, for `t.me/<bot>?start=<slug>` links. |
+| `AGENTICORG_NETWORK_TELEGRAM_ENABLED` | Off | Serves the public bot's webhook. Off, it answers 404. |
+| `AGENTICORG_NETWORK_TELEGRAM_BOT_TOKEN` / `_WEBHOOK_SECRET` | Empty | The bot's token and webhook secret (Secret Manager). |
+| `AGENTICORG_NETWORK_TELEGRAM_CHAT_LIMIT_PER_HOUR` / `_GLOBAL_LIMIT_PER_MINUTE` | `20` / `60` | Message limits per chat and for the bot. |
 | `AGENTICORG_PLATFORM_SUBDOMAIN_APEX` | `agenticorg.ai` | The apex for platform subdomains. |
 | `AGENTICORG_PLATFORM_SUBDOMAIN_CAP` | `20` | How many platform subdomains may be claimed. |
 
