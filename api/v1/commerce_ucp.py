@@ -214,16 +214,33 @@ runtime_factory = build_runtime
 # --- REST adapter -----------------------------------------------------------------------------
 
 
-async def _call(operation: str, request: Request, tenant_id: str, resource_id: str | None = None) -> JSONResponse:
-    raw = await request.body()
+async def run_ucp_operation(
+    operation: str,
+    *,
+    tenant_id: str,
+    host: str,
+    ucp_agent: str | None,
+    raw_body: bytes,
+    idempotency_key: str | None = None,
+    request_id: str | None = None,
+    resource_id: str | None = None,
+    platform: str | None = None,
+) -> handlers.UcpResponse:
+    """Run one UCP operation for a merchant host inside a tenant and record its ledger event.
+
+    The REST adapter below and the network checkout gateway (``api.v1.network``) both call this,
+    so idempotency, the arbiter and the ledger behave the same on both paths.
+    """
     req = handlers.UcpRequest(
         tenant_id=tenant_id,
-        host=request.headers.get("host", ""),
-        ucp_agent=request.headers.get("ucp-agent"),
-        raw_body=raw,
-        idempotency_key=request.headers.get("idempotency-key"),
-        request_id=request.headers.get("request-id"),
+        host=host,
+        ucp_agent=ucp_agent,
+        raw_body=raw_body,
+        idempotency_key=idempotency_key,
+        request_id=request_id,
+        platform=platform,
     )
+    raw = raw_body
     response = await handlers.run(operation, runtime_factory(), req, resource_id)
     event = handlers.EVENTS.get(operation)
     if event and not response.recorded:
@@ -242,9 +259,24 @@ async def _call(operation: str, request: Request, tenant_id: str, resource_id: s
             resource_id=response.resource_id or operation,
             details={"http_status": response.status, "operation": operation},
         )
+    return response
+
+
+async def _call(operation: str, request: Request, tenant_id: str, resource_id: str | None = None) -> JSONResponse:
+    request_id = request.headers.get("request-id")
+    response = await run_ucp_operation(
+        operation,
+        tenant_id=tenant_id,
+        host=request.headers.get("host", ""),
+        ucp_agent=request.headers.get("ucp-agent"),
+        raw_body=await request.body(),
+        idempotency_key=request.headers.get("idempotency-key"),
+        request_id=request_id,
+        resource_id=resource_id,
+    )
     headers = dict(response.headers)
-    if req.request_id:
-        headers["Request-Id"] = req.request_id[:128]
+    if request_id:
+        headers["Request-Id"] = request_id[:128]
     return JSONResponse(status_code=response.status, content=response.body, headers=headers)
 
 

@@ -520,6 +520,33 @@ class Settings(BaseSettings):
     # AGENTICORG_CUSTOM_DOMAIN_FIREBASE_SITE (the Hosting site id).
     custom_domain_firebase_enabled: bool = False
     custom_domain_firebase_site: str = ""
+    # AgenticOrg shopping network ("Sell everywhere", core/commerce/network.py,
+    # api/v1/network.py): merchants opt in once and are listed in the public
+    # directory (GET /api/v1/network/merchants) that the hosted MCP server and
+    # the public Telegram bot read; the network checkout gateway opens
+    # checkouts at a listed shop for the AgenticOrg network platform. Off by
+    # default: the network routes answer 404. Env: AGENTICORG_NETWORK_ENABLED.
+    network_enabled: bool = False
+    # Shared credential the hosted MCP server presents to the network checkout
+    # gateway (Secret Manager). Empty: the gateway refuses every call.
+    # Env: AGENTICORG_NETWORK_SERVICE_TOKEN.
+    network_service_token: str = ""
+    # The UCP platform profile the network presents as UCP-Agent; network
+    # checkouts answer to this platform only. Env: AGENTICORG_NETWORK_AGENT_PROFILE.
+    network_agent_profile: str = "https://agenticorg.ai/ucp/platforms/agenticorg-network/profile.json"
+    # Version of the network terms a merchant accepts when it turns the network on.
+    # Env: AGENTICORG_NETWORK_TERMS_VERSION.
+    network_terms_version: str = "2026-10-25"
+    # The public network Telegram bot's username (without @), for deep links
+    # t.me/<bot>?start=<slug>. Empty: no Telegram link is shown.
+    # Env: AGENTICORG_NETWORK_TELEGRAM_BOT_USERNAME.
+    network_telegram_bot_username: str = ""
+    # Platform subdomains <slug>.<apex> for network shops without a host of
+    # their own, served through the Firebase Hosting front (a wildcard CNAME
+    # *.<apex> -> <site>.web.app). Firebase allows 20 custom domains per apex,
+    # hence the cap. Env: AGENTICORG_PLATFORM_SUBDOMAIN_APEX, _CAP.
+    platform_subdomain_apex: str = "agenticorg.ai"
+    platform_subdomain_cap: int = 20
     # RBI e-mandate framework 2026 (s.8): a subsequent UPI AutoPay / e-mandate
     # debit above these amounts (minor units, paise) needs the additional factor
     # of authentication; registration and the first debit always do

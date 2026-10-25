@@ -343,6 +343,70 @@ async def verify_and_attest_serving_host(
         return _status(row)
 
 
+async def attest_platform_subdomain(
+    *,
+    tenant_id: str,
+    merchant_id: str,
+    seller_agent_id: str | None,
+    host: str,
+    platform_apex: str,
+    actor: dict[str, str],
+) -> dict[str, Any]:
+    """Record a platform subdomain (``<slug>.<platform apex>``) as the merchant's serving host.
+
+    AgenticOrg owns the apex, so ownership needs no DNS TXT proof from the merchant: the network
+    listing (``core.commerce.network``) holds the slug and the platform claims the subdomain for it.
+    Only a single label directly under the configured apex qualifies, and a host another tenant
+    already holds is refused exactly as in ``verify_and_attest_serving_host``.
+    """
+    apex = platform_apex.strip().lower().rstrip(".")
+    label, _, rest = host.partition(".")
+    if not apex or rest != apex or not label:
+        raise HTTPException(422, {"status": "not_verified", "reason": "not_a_platform_subdomain"})
+    if await host_claimed_by_other_tenant(host, tenant_id):
+        raise HTTPException(409, {"status": "not_verified", "reason": "host_bound_to_another_tenant"})
+    verified_at = _iso(_now())
+    attestation = {
+        "method": "platform_subdomain",
+        "host": host,
+        "platform_apex": apex,
+        "verified_at": verified_at,
+        "verified_by": actor,
+        "ref": "agenticorg:ucp-attestation:" + challenge_value_digest(f"{host}|platform|{verified_at}")[:32],
+    }
+    async with get_tenant_session(uuid.UUID(tenant_id)) as session:
+        row = await _locked_row(session, tenant_id=tenant_id, merchant_id=merchant_id, seller_agent_id=seller_agent_id)
+        state = ucp_state(row.public_publishing)
+        previous_host = state.get("serving_host") if isinstance(state.get("serving_host"), str) else None
+        state["serving_host"] = host
+        state["attestation"] = attestation
+        state.pop("challenge", None)
+        if previous_host != host:
+            state["published"] = None
+            state.pop("namespace", None)
+        row.public_publishing = with_ucp_state(row.public_publishing, state)
+        await write_host_index(
+            session,
+            tenant_id=tenant_id,
+            host=host,
+            merchant_id=row.merchant_id,
+            seller_agent_id=row.seller_agent_id,
+            previous_host=previous_host,
+        )
+        await record_commerce_event(
+            session,
+            tenant_id=tenant_id,
+            event="commerce.ucp.serving_host.verify",
+            outcome="success",
+            merchant_id=row.merchant_id,
+            seller_agent_id=row.seller_agent_id,
+            buyer_agent_id=None,
+            payload={"host": host, "attestation": attestation},
+            resource_id=row.config_id,
+        )
+        return _status(row)
+
+
 async def _provision_or_rotate(
     *,
     merchant_id: str,
