@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased - Preserve token revocations across API restarts
+
+- Security: remove obsolete startup blacklist cleanup so revoked tokens remain
+  refused until their normal expiry. Other startup and shutdown behavior is unchanged.
+
 ## Unreleased - Validate packaged NLP during the runtime image build
 
 - Require the copied runtime, as its nonroot user without network access, to
