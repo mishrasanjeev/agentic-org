@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased - Sell everywhere page and guide
+
+- New **Commerce > Sell Everywhere** page (admin and merchant roles): catalog and policy steps,
+  the network shop name, the network terms and one switch, then where buyers can find the shop:
+  web address, ChatGPT and other AI apps, Telegram, and the Google, Microsoft and Perplexity
+  programs still being registered. Pause and resume from the same page.
+- New user guide "Sell everywhere: one switch for every AI surface" (`/docs/oacp-sell-everywhere`)
+  with its figure, and the generated docs, sitemap, llms files and CSP hashes refreshed.
+
 ## Unreleased - Public AgenticOrg shopping bot on Telegram
 
 - One AgenticOrg bot serves every network shop to anyone on Telegram:
