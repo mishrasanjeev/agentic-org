@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """Time-based one-time passwords (RFC 6238) for authenticator-app MFA.
 
 Secrets are 160-bit random values, shown to the user once as a QR code and a
@@ -106,9 +107,14 @@ def generate_recovery_codes(count: int = RECOVERY_CODE_COUNT) -> list[str]:
 
 
 def hash_recovery_code(user_id: str, code: str) -> str:
-    """Bind the hash to the user so two users' identical codes never collide."""
+    """scrypt with a per-user salt: slow to brute-force, and two users' identical codes never collide.
+
+    One derivation per sign-in attempt is compared against the user's stored
+    hashes, so the cost is paid once, not once per remaining code.
+    """
     normalized = normalize_code(code).lower()
-    return hashlib.sha256(f"{user_id}:{normalized}".encode()).hexdigest()
+    salt = f"agenticorg-mfa-recovery:{user_id}".encode()
+    return hashlib.scrypt(normalized.encode(), salt=salt, n=2**14, r=8, p=1, dklen=32).hex()
 
 
 def looks_like_recovery_code(code: str) -> bool:

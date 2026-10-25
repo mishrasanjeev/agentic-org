@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """Authenticator-app (TOTP) multi-factor sign-in: codes, enrolment, the login gate and resets."""
 
 from __future__ import annotations

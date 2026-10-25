@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """Authenticator-app (TOTP) multi-factor sign-in.
 
 Enrolment, for any signed-in user:

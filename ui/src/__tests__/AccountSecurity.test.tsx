@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
