@@ -57,6 +57,7 @@ app = Celery(
         "core.tasks.knowledge_tasks",
         "core.tasks.lineage_tasks",
         "core.tasks.memory_tasks",
+        "core.tasks.network_tasks",
         "core.tasks.oacp_freshness_tasks",
         "core.tasks.report_tasks",
         "core.tasks.rpa_tasks",
@@ -92,6 +93,7 @@ app.conf.update(
         "core.tasks.report_tasks.cleanup_old_reports": {"queue": "maintenance"},
         "core.tasks.workflow_tasks.*": {"queue": "workflows"},
         "core.tasks.channel_tasks.*": {"queue": "workflows"},
+        "core.tasks.network_tasks.*": {"queue": "workflows"},
         "core.tasks.knowledge_tasks.*": {"queue": "maintenance"},
         # Retain the historical short task names so messages already in
         # Redis remain executable during rolling deploys.

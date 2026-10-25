@@ -15,6 +15,10 @@ Public, under ``/api/v1/network`` (no session; every route answers 404 while
   would; network checkouts answer to the network platform only. There is no
   complete, cancel or payment route: the buyer pays with the shop.
 
+* ``POST /network/telegram/webhook`` - the public AgenticOrg shopping bot
+  (``core.commerce.network_telegram``): Telegram's secret header is checked and the update is
+  queued; 404 while ``AGENTICORG_NETWORK_TELEGRAM_ENABLED`` is off.
+
 Merchant (``commerce.merchant_config.write`` or tenant admin), under
 ``/api/v1/commerce/runtime/merchant-configs/{merchant_id}/sell-everywhere``:
 ``GET`` where the shop stands on each surface; ``PUT`` turn the network on
@@ -26,6 +30,7 @@ from __future__ import annotations
 
 import hashlib
 import hmac
+import json
 import uuid
 from typing import Any
 
@@ -118,26 +123,114 @@ async def _gateway(operation: str, slug: str, request: Request, session_id: str 
         shop = await net.resolve_shop(slug)
     except net.NetworkError as exc:
         raise _refusal(exc) from None
+    request_id = request.headers.get("request-id")
+    response = await _run_for_network(
+        operation,
+        shop,
+        raw,
+        idempotency_key=request.headers.get("idempotency-key"),
+        request_id=request_id,
+        session_id=session_id,
+    )
+    headers = dict(response.headers)
+    if request_id:
+        headers["Request-Id"] = request_id[:128]
+    return JSONResponse(status_code=response.status, content=response.body, headers=headers)
+
+
+async def _run_for_network(
+    operation: str,
+    shop: net.ShopRef,
+    raw: bytes,
+    *,
+    idempotency_key: str | None,
+    request_id: str | None,
+    session_id: str | None,
+) -> Any:
     from api.v1.commerce_ucp import run_ucp_operation  # noqa: PLC0415 - commerce_ucp wires the UCP runtime at import
 
+    if operation not in GATEWAY_OPERATIONS:
+        raise ValueError(f"not a network operation: {operation}")
     profile = settings.network_agent_profile
-    request_id = request.headers.get("request-id")
     response = await run_ucp_operation(
         operation,
         tenant_id=shop.tenant_id,
         host=shop.host,
         ucp_agent=f'profile="{profile}"',
         raw_body=raw,
-        idempotency_key=request.headers.get("idempotency-key"),
+        idempotency_key=idempotency_key,
         request_id=request_id,
         resource_id=session_id,
         platform=profile,
     )
-    headers = dict(response.headers)
-    if request_id:
-        headers["Request-Id"] = request_id[:128]
-    logger.info("network_gateway_call", operation=operation, slug=shop.slug, status=response.status)
-    return JSONResponse(status_code=response.status, content=response.body, headers=headers)
+    logger.info("network_checkout_call", operation=operation, slug=shop.slug, status=response.status)
+    return response
+
+
+async def network_checkout(
+    slug: str, operation: str, body: dict[str, Any] | None, session_id: str | None = None
+) -> dict[str, Any]:
+    """The network checkout path for in-process callers (the public Telegram bot).
+
+    Same resolution and UCP handling as the gateway routes; returns the shop's answer with its
+    HTTP status and the shop slug, or ``{"error": ...}`` when the shop is not available.
+    """
+    if not (net.network_enabled() and settings.ucp_checkout_enabled):
+        return {"error": "checkout_unavailable"}
+    try:
+        shop = await net.resolve_shop(slug)
+    except net.NetworkError as exc:
+        return {"error": exc.code, "message": exc.message}
+    raw = json.dumps(body).encode() if body is not None else b""
+    response = await _run_for_network(
+        operation,
+        shop,
+        raw,
+        idempotency_key=str(uuid.uuid4()) if operation != "get_checkout" else None,
+        request_id=str(uuid.uuid4()),
+        session_id=session_id,
+    )
+    answer = response.body if isinstance(response.body, dict) else {"body": response.body}
+    return {"http_status": response.status, "shop": shop.slug, **answer}
+
+
+# --- public Telegram bot ----------------------------------------------------------------------
+
+
+def _telegram_secret_ok(request: Request) -> bool:
+    expected = (settings.network_telegram_webhook_secret or "").strip()
+    presented = request.headers.get("x-telegram-bot-api-secret-token", "")
+    if len(expected) < 24 or not presented:
+        return False
+    return hmac.compare_digest(hashlib.sha256(presented.encode()).digest(), hashlib.sha256(expected.encode()).digest())
+
+
+@router.post("/telegram/webhook")
+@route_meta(
+    auth_required=False,
+    tenant_required=False,
+    scope="public:network.telegram.webhook",
+    rate_limit="provider-webhook",
+    idempotency="telegram-update-id-claimed-once",
+    audit_event="network.telegram.update",
+    public_reason="telegram-webhook-secret-checked-in-handler",
+)
+async def network_telegram_webhook(request: Request) -> JSONResponse:
+    if not (net.network_enabled() and settings.network_telegram_enabled):
+        raise HTTPException(404, "Not Found")
+    if not _telegram_secret_ok(request):
+        raise HTTPException(403, "Forbidden")
+    raw = await request.body()
+    if len(raw) > MAX_GATEWAY_BODY_BYTES * 4:
+        return JSONResponse({"ok": True})
+    try:
+        update = json.loads(raw)
+    except ValueError:
+        return JSONResponse({"ok": True})
+    from core.tasks.network_tasks import handle_telegram_update  # noqa: PLC0415 - Celery app import on demand
+
+    handle_telegram_update.delay(update)
+    return JSONResponse({"ok": True})
 
 
 @router.post("/shops/{slug}/checkout-sessions", status_code=201)
