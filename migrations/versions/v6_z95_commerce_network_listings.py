@@ -64,8 +64,8 @@ def upgrade() -> None:
         "CREATE INDEX IF NOT EXISTS ix_commerce_network_listings_status "
         "ON commerce_network_listings (status, updated_at);"
     )
-    op.execute(f"ALTER TABLE {TABLE} ENABLE ROW LEVEL SECURITY;")
-    op.execute(f"ALTER TABLE {TABLE} FORCE ROW LEVEL SECURITY;")
+    op.execute("ALTER TABLE commerce_network_listings ENABLE ROW LEVEL SECURITY;")
+    op.execute("ALTER TABLE commerce_network_listings FORCE ROW LEVEL SECURITY;")
     op.execute(f"DROP POLICY IF EXISTS {TABLE}_tenant_isolation ON {TABLE};")
     op.execute(
         f"CREATE POLICY {TABLE}_tenant_isolation ON {TABLE} USING ({TENANT_PREDICATE}) WITH CHECK ({TENANT_PREDICATE});"
