@@ -650,7 +650,7 @@ def _infer_auth_required(path: str, methods: list[str]) -> bool | None:
         "/api/v1/product-facts",
     }:
         return False
-    if path.startswith(("/api/v1/evals", "/api/v1/billing/webhook/", "/api/v1/auth/sso/")):
+    if path.startswith(("/api/v1/evals", "/api/v1/billing/webhook/", "/api/v1/auth/sso/", "/api/v1/network/")):
         return False
     return True
 

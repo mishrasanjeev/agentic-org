@@ -125,6 +125,7 @@ from api.v1 import (
     auth as v1_auth,
 )
 from api.v1 import auth_mfa as v1_auth_mfa
+from api.v1 import network as v1_network
 from api.v1 import demo as v1_demo
 from api.v1 import org as v1_org
 from api.v1 import (
@@ -327,6 +328,8 @@ app.include_router(commerce_ucp.runtime_router, prefix="/api/v1", tags=["Commerc
 app.include_router(commerce_ucp.router)
 app.include_router(commerce_ucp_publishing.router, prefix="/api/v1", tags=["Commerce UCP"])
 app.include_router(merchant_custom_domains.router, prefix="/api/v1", tags=["Commerce Custom Domains"])
+app.include_router(v1_network.router, prefix="/api/v1", tags=["Network"])
+app.include_router(v1_network.merchant_router, prefix="/api/v1", tags=["Network"])
 app.include_router(merchant_custom_domains.operator_router, prefix="/api/v1", tags=["Commerce Custom Domains"])
 # Certificate probe target on any host (AGENTICORG_CUSTOM_DOMAINS_ENABLED).
 app.include_router(merchant_custom_domains.host_check_router)

@@ -1,5 +1,22 @@
 # Changelog
 
+## Unreleased - Shopping network core ("Sell everywhere", phase 1)
+
+- Merchants can turn on the AgenticOrg shopping network
+  (`PUT /api/v1/commerce/runtime/merchant-configs/{id}/sell-everywhere`): a network slug, the
+  accepted network terms and a listing that can be paused. Migration `v6z95_network_listings`
+  adds `commerce_network_listings` with tenant row-level security and a read-only platform
+  context policy.
+- A public directory, `GET /api/v1/network/merchants`, lists the listed shops whose UCP profile
+  is published on an attested host. The hosted MCP server and the public Telegram bot read it.
+- A network checkout gateway opens, reads and updates checkouts at a listed shop for the
+  AgenticOrg network platform, with one service credential and the same UCP handlers, ledger
+  and idempotency as `https://<host>/ucp`. No complete, cancel or payment route.
+- A shop without a host of its own gets a platform subdomain `<slug>.agenticorg.ai` through the
+  Firebase Hosting front, at most 20 (Firebase's per-apex limit).
+- Everything is behind `AGENTICORG_NETWORK_ENABLED` (off). See
+  `docs/oacp/shopping-network.md`.
+
 ## Unreleased - Nilgiri Tea House guide: shopping from ChatGPT
 
 - The Nilgiri Tea House example now shows a real ChatGPT run: connect
