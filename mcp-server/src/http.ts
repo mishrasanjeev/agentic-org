@@ -23,6 +23,11 @@
  *   AGENTICORG_UCP_AGENT_PROFILE=https://agenticorg.ai/ucp/platforms/agenticorg-demo-buyer/profile.json \
  *   AGENTICORG_API_KEY=<platform key> MCP_ACCESS_TOKEN=<separate caller token> \
  *   MCP_ALLOWED_HOSTS=mcp.agenticorg.ai node dist/http.js
+ *
+ * Network mode (MCP_NETWORK_DIRECTORY_URL set): instead of one shop, every shop the AgenticOrg
+ * network directory lists (src/network.ts). Catalog calls go to each shop's public routes;
+ * checkouts go through the network checkout gateway with AGENTICORG_NETWORK_SERVICE_TOKEN, and
+ * AGENTICORG_UCP_PROFILE_URL / AGENTICORG_API_KEY are not used.
  */
 
 import http from "node:http";
@@ -32,6 +37,7 @@ import { isIP } from "node:net";
 import { dirname, resolve } from "node:path";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
+import { createNetwork, NETWORK_TOOLS, registerNetworkTools, type Network } from "./network.js";
 import { discoverUcpBinding, registerUcpTools, type UcpBinding } from "./ucp.js";
 
 export const HOSTED_TOOLS: ReadonlySet<string> = new Set([
@@ -47,9 +53,13 @@ const BINDING_TTL_MS = 5 * 60 * 1000;
 const WINDOW_MS = 60 * 1000;
 
 export interface HostedConfig {
+  /** Demo mode: the one shop's profile. Unused in network mode. */
   profileUrl: string;
   agentProfile: string;
+  /** Demo mode: the platform key the shop issued. Unused in network mode. */
   apiKey: string;
+  /** Network mode: every shop in the AgenticOrg network directory (MCP_NETWORK_DIRECTORY_URL). */
+  network?: { directoryUrl: string; serviceToken: string };
   /** Caller bearer credential; empty only with allowAnonymous. */
   accessToken?: string;
   /** Serve callers without a credential (explicit operator opt-in for the public demo). */
@@ -144,7 +154,8 @@ export function createHostedHandler(config: HostedConfig) {
     (!config.accessToken ||
       config.accessToken.length < 32 ||
       !/^[A-Za-z0-9\-._~+/]+=*$/.test(config.accessToken) ||
-      config.accessToken === config.apiKey)
+      config.accessToken === config.apiKey ||
+      config.accessToken === config.network?.serviceToken)
   ) {
     throw new Error(
       "MCP_ACCESS_TOKEN must be a separate caller credential of at least 32 characters (or set MCP_ALLOW_ANONYMOUS=true)",
@@ -156,6 +167,15 @@ export function createHostedHandler(config: HostedConfig) {
   const now = config.now ?? Date.now;
   const limit = createRateLimiter(config.perClientPerMinute, config.globalPerMinute, now);
   let cached: { binding: UcpBinding; at: number } | null = null;
+  const network: Network | null = config.network
+    ? createNetwork({
+        directoryUrl: config.network.directoryUrl,
+        serviceToken: config.network.serviceToken,
+        agentProfile: config.agentProfile,
+        now,
+        log,
+      })
+    : null;
 
   async function binding(): Promise<UcpBinding> {
     if (cached && now() - cached.at < BINDING_TTL_MS) return cached.binding;
@@ -195,28 +215,40 @@ export function createHostedHandler(config: HostedConfig) {
     } catch {
       return rpcError(res, 400, -32700, "Parse error.");
     }
-    let current: UcpBinding;
-    try {
-      current = await binding();
-    } catch {
-      return rpcError(res, 503, -32000, "The shop is unavailable; retry later.");
+    let server: McpServer;
+    if (network) {
+      server = new McpServer({
+        name: "agenticorg-network",
+        version: config.version,
+        description:
+          "Shops on the AgenticOrg network: list them, search their catalogs and open a checkout at one. " +
+          "It stops before payment; no tool here can pay.",
+      });
+      registerNetworkTools(server, network);
+    } else {
+      let current: UcpBinding;
+      try {
+        current = await binding();
+      } catch {
+        return rpcError(res, 503, -32000, "The shop is unavailable; retry later.");
+      }
+      server = new McpServer({
+        name: "agenticorg-nilgiri-demo",
+        version: config.version,
+        description:
+          "Nilgiri Tea House, a synthetic demo shop on AgenticOrg: search its catalog and open a checkout. " +
+          "It stops before payment; no tool here can pay.",
+      });
+      await registerUcpTools(server, {
+        profileUrl: config.profileUrl,
+        agentProfile: config.agentProfile,
+        lockAgentProfile: true,
+        allowTools: HOSTED_TOOLS,
+        binding: current,
+        headers: () => ({ "Content-Type": "application/json", Authorization: `Bearer ${config.apiKey}` }),
+        log: (message) => log({ event: "mcp_tools", message }),
+      });
     }
-    const server = new McpServer({
-      name: "agenticorg-nilgiri-demo",
-      version: config.version,
-      description:
-        "Nilgiri Tea House, a synthetic demo shop on AgenticOrg: search its catalog and open a checkout. " +
-        "It stops before payment; no tool here can pay.",
-    });
-    await registerUcpTools(server, {
-      profileUrl: config.profileUrl,
-      agentProfile: config.agentProfile,
-      lockAgentProfile: true,
-      allowTools: HOSTED_TOOLS,
-      binding: current,
-      headers: () => ({ "Content-Type": "application/json", Authorization: `Bearer ${config.apiKey}` }),
-      log: (message) => log({ event: "mcp_tools", message }),
-    });
     const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined, enableJsonResponse: true });
     res.on("close", () => {
       void transport.close();
@@ -259,10 +291,17 @@ export function configFromEnv(): HostedConfig {
     .split(",")
     .map((h) => h.trim().toLowerCase())
     .filter(Boolean);
+  const directoryUrl = (process.env.MCP_NETWORK_DIRECTORY_URL ?? "").trim();
+  const shopSettings = directoryUrl
+    ? {
+        profileUrl: "",
+        apiKey: "",
+        network: { directoryUrl, serviceToken: required("AGENTICORG_NETWORK_SERVICE_TOKEN") },
+      }
+    : { profileUrl: required("AGENTICORG_UCP_PROFILE_URL"), apiKey: required("AGENTICORG_API_KEY") };
   return {
-    profileUrl: required("AGENTICORG_UCP_PROFILE_URL"),
+    ...shopSettings,
     agentProfile: required("AGENTICORG_UCP_AGENT_PROFILE"),
-    apiKey: required("AGENTICORG_API_KEY"),
     ...callerAuthFromEnv(),
     allowedHosts: new Set(hosts),
     perClientPerMinute: positiveInteger(Number(process.env.MCP_RATE_PER_CLIENT_PER_MINUTE ?? "30"), "MCP_RATE_PER_CLIENT_PER_MINUTE"),
@@ -282,5 +321,9 @@ if (require.main === module) {
         if (!res.headersSent) rpcError(res, 500, -32603, "Internal error.");
       });
     })
-    .listen(port, () => console.log(JSON.stringify({ event: "mcp_listening", port, tools: [...HOSTED_TOOLS] })));
+    .listen(port, () =>
+      console.log(
+        JSON.stringify({ event: "mcp_listening", port, mode: config.network ? "network" : "shop", tools: [...(config.network ? NETWORK_TOOLS : HOSTED_TOOLS)] }),
+      ),
+    );
 }

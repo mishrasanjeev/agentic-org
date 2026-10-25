@@ -541,6 +541,16 @@ class Settings(BaseSettings):
     # t.me/<bot>?start=<slug>. Empty: no Telegram link is shown.
     # Env: AGENTICORG_NETWORK_TELEGRAM_BOT_USERNAME.
     network_telegram_bot_username: str = ""
+    # The public network shopping bot (core/commerce/network_telegram.py): its
+    # webhook POST /api/v1/network/telegram/webhook answers any private chat.
+    # Off by default (the webhook answers 404). The token and webhook secret
+    # come from Secret Manager. Env: AGENTICORG_NETWORK_TELEGRAM_ENABLED,
+    # _BOT_TOKEN, _WEBHOOK_SECRET, _CHAT_LIMIT_PER_HOUR, _GLOBAL_LIMIT_PER_MINUTE.
+    network_telegram_enabled: bool = False
+    network_telegram_bot_token: str = ""
+    network_telegram_webhook_secret: str = ""
+    network_telegram_chat_limit_per_hour: int = 20
+    network_telegram_global_limit_per_minute: int = 60
     # Platform subdomains <slug>.<apex> for network shops without a host of
     # their own, served through the Firebase Hosting front (a wildcard CNAME
     # *.<apex> -> <site>.web.app). Firebase allows 20 custom domains per apex,

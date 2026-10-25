@@ -9,6 +9,25 @@
 - New user guide "Sell everywhere: one switch for every AI surface" (`/docs/oacp-sell-everywhere`)
   with its figure, and the generated docs, sitemap, llms files and CSP hashes refreshed.
 
+## Unreleased - Public AgenticOrg shopping bot on Telegram
+
+- One AgenticOrg bot serves every network shop to anyone on Telegram:
+  `t.me/<bot>?start=<slug>` picks a shop, `/shops` lists them, `/stop` forgets the chat, and any
+  other message goes to a shopper that searches, opens a checkout and updates it (for example to
+  store pickup) through the network checkout path. It never takes payment.
+- `POST /api/v1/network/telegram/webhook` checks Telegram's secret header and queues the update;
+  each update is answered once. Limits per chat (20 an hour) and for the bot (60 a minute), the
+  platform Gemini spend cap, and the channel answer filter apply.
+- Behind `AGENTICORG_NETWORK_TELEGRAM_ENABLED` (off). `scripts/connect_network_telegram_bot.py`
+  registers the webhook.
+
+## Unreleased - Hosted MCP endpoint: network mode
+
+- With `MCP_NETWORK_DIRECTORY_URL` set, the hosted MCP endpoint serves every shop on the AgenticOrg
+  shopping network: `list_shops`, a catalog search across shops (or in one), lookup, and checkouts
+  through the network checkout gateway with `AGENTICORG_NETWORK_SERVICE_TOKEN`. Every result names
+  its shop; nothing can complete, cancel or pay. Without the setting it still serves one shop.
+
 ## Unreleased - Shopping network core ("Sell everywhere", phase 1)
 
 - Merchants can turn on the AgenticOrg shopping network
