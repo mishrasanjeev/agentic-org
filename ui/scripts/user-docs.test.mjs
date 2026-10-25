@@ -417,7 +417,7 @@ test("the OACP section has nine adaptive guides with summaries, figures and work
     "nilgiri-gemini-summary", "nilgiri-gemini-pickup", "nilgiri-gemini-payment-stop", "nilgiri-telegram-reply",
   ])
     assert.ok(example.html.includes(`src="/screenshots/${shot}.webp"`), shot);
-  assert.ok(example.html.includes("https://mcp.agenticorg.ai/mcp"), "hosted MCP URL");
+  assert.match(example.html, /<code>https:\/\/mcp\.agenticorg\.ai\/mcp<\/code>/);
   assert.match(example.html, /A payment instrument is required to complete/);
   assert.doesNotMatch(example.html, /executor_unavailable/);
   assert.match(overview.html, /href="\/docs\/oacp-example-nilgiri-tea"/);
