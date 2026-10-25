@@ -21,17 +21,11 @@ from core.commerce import network as net
 from core.commerce.ucp import store
 from core.commerce.ucp.state import ucp_state, with_ucp_state
 from core.config import settings
-from tests.integration.test_custom_domains_postgres import (  # noqa: F401 - fixtures
-    MERCHANT,
-    SELLER,
-    _merchant,
-    _request,
-    _tenant,
-    db,
-    firebase,
-    migrated_schema,
-    world,
-)
+from tests.integration.test_custom_domains_postgres import MERCHANT, SELLER, _merchant, _request, _tenant
+from tests.integration.test_custom_domains_postgres import db as db
+from tests.integration.test_custom_domains_postgres import firebase as firebase
+from tests.integration.test_custom_domains_postgres import migrated_schema as migrated_schema
+from tests.integration.test_custom_domains_postgres import world as world
 
 pytestmark = pytest.mark.asyncio
 
