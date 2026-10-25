@@ -9,6 +9,10 @@
   dependencies; omit unused package managers from the hosted runtime image.
 
 ### Added
+- Hosted endpoint: `MCP_ALLOW_ANONYMOUS=true` serves callers without a credential, for the public
+  demo shop that hosted assistants (which cannot send a static bearer header) connect to. It is an
+  explicit opt-in: with neither it nor `MCP_ACCESS_TOKEN` the server refuses to start, and both
+  together are refused. Every other guard still applies.
 - `dist/http.js`: a hosted, stateless Streamable HTTP endpoint for one public UCP shop, exposing
   only the shop tools (search, lookup, create, get and update checkout; nothing that pays). It
   fixes the shop, the platform profile and the key, and adds a host allowlist, a 64 KiB body

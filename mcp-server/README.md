@@ -185,8 +185,9 @@ even with checkout off. `get_product` is not exposed.
 ### Hosted endpoint for the demo shop (Streamable HTTP)
 
 `dist/http.js` (`npm run start:hosted`, image `mcp-server/Dockerfile.hosted`) serves one public UCP
-shop to clients that support a configured bearer credential at `POST /mcp` over
-Streamable HTTP. It runs stateless, with a fresh server per request, and exposes only
+shop at `POST /mcp` over Streamable HTTP, either to clients that hold a configured bearer
+credential or, for the public demo, to anyone (`MCP_ALLOW_ANONYMOUS=true`), so that hosted assistants
+(Gemini custom apps, ChatGPT connectors), which cannot send a static bearer header, can connect. It runs stateless, with a fresh server per request, and exposes only
 `search_catalog`, `lookup_catalog`, `create_checkout`, `get_checkout` and `update_checkout`. There
 is no completion, cancel, cart, order, agent or seller tool, so nothing it does can take a payment.
 
@@ -195,15 +196,16 @@ is no completion, cancel, cart, order, agent or seller tool, so nothing it does 
 | `AGENTICORG_UCP_PROFILE_URL` | The shop's `/.well-known/ucp`. Fixed: callers cannot choose another shop. |
 | `AGENTICORG_UCP_AGENT_PROFILE` | The buyer platform profile sent as `UCP-Agent`. Locked: a call's `meta` cannot change it. |
 | `AGENTICORG_API_KEY` | The platform key the shop issued (scopes `ucp:read`, `ucp:write`), from a secret. Sent only on checkout calls. |
-| `MCP_ACCESS_TOKEN` | Required separate caller credential, at least 32 characters, from a secret. Clients send it as `Authorization: Bearer ...`; never reuse the shop's platform key. |
+| `MCP_ACCESS_TOKEN` | Separate caller credential, at least 32 characters, from a secret. Clients send it as `Authorization: Bearer ...`; never reuse the shop's platform key. Required unless anonymous mode is on. |
+| `MCP_ALLOW_ANONYMOUS` | `true` serves callers without a credential (the public demo). It is an explicit opt-in: with neither this nor `MCP_ACCESS_TOKEN` the server refuses to start, and setting both is refused too. Every other guard (shop tools only, fixed shop, profile and key, host allowlist, body and rate limits) still applies. |
 | `MCP_ALLOWED_HOSTS` | Host names the server answers on (DNS-rebinding protection); any other `Host` gets 403. |
 | `MCP_RATE_PER_CLIENT_PER_MINUTE` / `MCP_RATE_GLOBAL_PER_MINUTE` | Fixed one-minute limits per client (default 30) and per instance (default 300); over them, 429 with `Retry-After`. |
-| `MCP_TRUSTED_PROXY_HOPS` | Default 0: ignore forwarded addresses and limit by socket. Set only for a reviewed ingress topology with no bypass path; the rightmost configured proxy suffix is used. |
+| `MCP_TRUSTED_PROXY_HOPS` | Default 0: ignore forwarded addresses and limit by socket. Set only for a reviewed ingress topology with no bypass path; the rightmost configured proxy suffix is used. On Cloud Run without a load balancer, `1` uses the client address Google's front end appends. |
 
 Requests are limited to 64 KiB, `GET /healthz` answers `{"status":"ok"}`, and each request logs
-its JSON-RPC method, status and duration, never bodies or keys. Every MCP request requires the
-separate caller credential before merchant discovery or tool execution. OAuth discovery and
-anonymous hosted-assistant access are not implemented. Invalid rate settings fail at startup.
+its JSON-RPC method, status and duration, never bodies or keys. With `MCP_ACCESS_TOKEN` set, every MCP request
+requires that credential before merchant discovery or tool execution; in anonymous mode it requires
+none. OAuth discovery is not implemented. Invalid rate settings fail at startup.
 
 Direct connector invocation is not exposed by this server. Connector records
 and agent-tool records are discovery data, not proof that provider credentials,

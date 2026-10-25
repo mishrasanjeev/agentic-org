@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased - Hosted demo MCP endpoint: anonymous mode for hosted assistants
+
+- The hosted MCP endpoint can run without caller credentials when the operator sets
+  `MCP_ALLOW_ANONYMOUS=true`, so Gemini custom apps and ChatGPT connectors (which cannot send a
+  static bearer header) can search the synthetic demo shop and open checkouts. Shop tools only,
+  nothing that pays, and the host allowlist, body limit and rate limits still apply. Without the
+  flag a caller token stays mandatory.
+
 ## Unreleased - Validate packaged NLP during the runtime image build
 
 - Require the copied runtime, as its nonroot user without network access, to
