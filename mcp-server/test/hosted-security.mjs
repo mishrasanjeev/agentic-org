@@ -2,6 +2,8 @@
 import assert from "node:assert/strict";
 import http from "node:http";
 import { test } from "node:test";
+import { Client } from "@modelcontextprotocol/sdk/client/index.js";
+import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import { configFromEnv, createHostedHandler, createRateLimiter } from "../dist/http.js";
 
 const ACCESS = "synthetic-caller-token-0123456789abcdef";
@@ -169,4 +171,104 @@ test("anonymous mode is an explicit opt-in and still applies every other guard",
     for (const name of Object.keys(process.env)) if (!(name in before)) delete process.env[name];
     Object.assign(process.env, before);
   }
+});
+
+test("anonymous clients can use only the shop tools with the operator's fixed binding", async () => {
+  const calls = [];
+  const product = { id: "p1", title: "Synthetic Chai", variants: [{ id: "v1", price: { amount: 44900, currency: "INR" } }] };
+  const privateMarker = "synthetic-merchant-internal-only";
+  let merchantBase;
+  let checkout;
+  const merchant = http.createServer((req, res) => {
+    let raw = "";
+    req.setEncoding("utf8");
+    req.on("data", chunk => { raw += chunk; });
+    req.on("end", () => {
+      const json = (body, status = 200) => {
+        res.writeHead(status, { "content-type": "application/json" });
+        res.end(JSON.stringify(body));
+      };
+      const path = req.url.split("?")[0];
+      const body = raw ? JSON.parse(raw) : undefined;
+      calls.push({ method: req.method, path, body, headers: req.headers });
+      if (req.method === "GET" && path === "/.well-known/ucp") {
+        const capabilities = ["catalog.search", "catalog.lookup", "checkout", "cart", "order"];
+        return json({ ucp: {
+          version: "2026-04-08",
+          services: { "dev.ucp.shopping": [{ version: "2026-04-08", transport: "rest", endpoint: `${merchantBase}/ucp` }] },
+          capabilities: Object.fromEntries(capabilities.map(name => [`dev.ucp.shopping.${name}`, [{ version: "2026-04-08" }]])),
+        } });
+      }
+      if (req.method === "POST" && ["/ucp/catalog/search", "/ucp/catalog/lookup"].includes(path)) {
+        return json({ products: [product] });
+      }
+      const create = req.method === "POST" && path === "/ucp/checkout-sessions";
+      const update = req.method === "PUT" && path === "/ucp/checkout-sessions/chk_anonymous";
+      if (create || (update && checkout)) {
+        checkout = {
+          id: "chk_anonymous", status: "incomplete", currency: "INR", line_items: body.line_items,
+          totals: [{ type: "total", amount: 44900 * body.line_items[0].quantity }], messages: [],
+        };
+        return json({ ...checkout, "ai.agenticorg.commerce": { internal: privateMarker } }, create ? 201 : 200);
+      }
+      if (req.method === "GET" && path === "/ucp/checkout-sessions/chk_anonymous" && checkout) {
+        return json({ ...checkout, "ai.agenticorg.commerce": { internal: privateMarker } });
+      }
+      return json({ code: "not_found", content: "Not found." }, 404);
+    });
+  });
+  await new Promise(resolve => merchant.listen(0, "127.0.0.1", resolve));
+  merchantBase = `http://127.0.0.1:${merchant.address().port}`;
+  try {
+    await withServer({
+      profileUrl: `${merchantBase}/.well-known/ucp`, accessToken: undefined, allowAnonymous: true,
+      perClientPerMinute: 100, globalPerMinute: 100,
+    }, async base => {
+      const client = new Client({ name: "anonymous-hosted-test", version: "1.0.0" });
+      try {
+        await client.connect(new StreamableHTTPClientTransport(new URL(`${base}/mcp`)));
+        assert.deepEqual((await client.listTools()).tools.map(tool => tool.name).sort(), [
+          "create_checkout", "get_checkout", "lookup_catalog", "search_catalog", "update_checkout",
+        ]);
+        for (const [name, request] of [
+          ["search_catalog", { query: "chai" }], ["lookup_catalog", { ids: ["p1"] }],
+        ]) {
+          const result = await client.callTool({ name, arguments: { request } });
+          assert.notEqual(result.isError, true);
+          assert.deepEqual(result.structuredContent, { products: [product] });
+          assert.deepEqual(calls.at(-1).body, request);
+          assert.equal(calls.at(-1).headers.authorization, undefined);
+        }
+        const meta = { "ucp-agent": { profile: "http://127.0.0.1:9/caller-profile.json" } };
+        const steps = [
+          { name: "create_checkout", arguments: { meta, checkout: { line_items: [{ item: { id: "v1" }, quantity: 1 }] } } },
+          { name: "get_checkout", arguments: { meta, id: "chk_anonymous" } },
+          { name: "update_checkout", arguments: { meta, id: "chk_anonymous", checkout: { line_items: [{ item: { id: "v1" }, quantity: 2 }] } } },
+        ];
+        for (const [index, step] of steps.entries()) {
+          const result = await client.callTool(step);
+          assert.notEqual(result.isError, true);
+          const quantity = index === 2 ? 2 : 1;
+          const expected = {
+            id: "chk_anonymous", status: "incomplete", currency: "INR",
+            line_items: [{ item: { id: "v1" }, quantity }],
+            totals: [{ type: "total", amount: 44900 * quantity }], messages: [],
+          };
+          assert.deepEqual(result.structuredContent, expected);
+          assert.deepEqual(JSON.parse(result.content[0].text), expected);
+          assert.equal(calls.at(-1).headers.authorization, `Bearer ${config.apiKey}`);
+          assert.equal(calls.at(-1).headers["ucp-agent"], `profile="${config.agentProfile}"`);
+          assert.ok(!JSON.stringify(result).includes(config.apiKey));
+          assert.ok(!JSON.stringify(result).includes(privateMarker));
+        }
+        assert.deepEqual(calls.map(({ method, path }) => [method, path]), [
+          ["GET", "/.well-known/ucp"], ["POST", "/ucp/catalog/search"], ["POST", "/ucp/catalog/lookup"],
+          ["POST", "/ucp/checkout-sessions"], ["GET", "/ucp/checkout-sessions/chk_anonymous"],
+          ["PUT", "/ucp/checkout-sessions/chk_anonymous"],
+        ]);
+        assert.ok(calls.every(call => call.headers.host === new URL(merchantBase).host));
+        assert.equal(calls[0].headers.authorization, undefined);
+      } finally { await client.close(); }
+    });
+  } finally { await new Promise(resolve => merchant.close(resolve)); }
 });
