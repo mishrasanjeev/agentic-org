@@ -27,6 +27,7 @@ import structlog
 from sqlalchemy import func, select
 
 from core.commerce import custom_domains as cd
+from core.commerce.ledger import record_commerce_event
 from core.commerce.ucp.state import attested_host, is_published, ucp_state
 from core.commerce.ucp.store import find_serving_binding
 from core.config import settings
@@ -218,6 +219,17 @@ async def save_listing(
             raise NetworkError("not_listed", "The shop is not in the network.", 404)
         row.updated_at = now
         await session.flush()
+        await record_commerce_event(
+            session,
+            tenant_id=tenant_id,
+            event="commerce.network.sell_everywhere.write",
+            outcome="success",
+            merchant_id=config.merchant_id,
+            seller_agent_id=seller,
+            buyer_agent_id=None,
+            payload={"slug": row.slug, "status": row.status, "terms_version": row.terms_version},
+            resource_id=str(row.id),
+        )
     reset_directory_cache()
     return row
 

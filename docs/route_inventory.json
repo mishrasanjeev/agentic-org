@@ -3902,11 +3902,11 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "commerce.runtime.merchant_config.read",
-    "source_line": 333,
+    "source_line": 334,
     "tenant_required": true
   },
   {
-    "audit_event": "network.sell_everywhere.write",
+    "audit_event": "commerce.network.sell_everywhere.write",
     "auth_required": true,
     "function": "put_sell_everywhere",
     "idempotency": "listing-state-converges",
@@ -3920,7 +3920,7 @@
     "public_exempt_reason": null,
     "rate_limit": "commerce-runtime-write",
     "scope": "commerce.runtime.merchant_config.write",
-    "source_line": 351,
+    "source_line": 352,
     "tenant_required": true
   },
   {
@@ -9050,7 +9050,7 @@
     "public_exempt_reason": "network-directory-lists-only-published-opted-in-shops",
     "rate_limit": "public-read",
     "scope": "public:network.directory.read",
-    "source_line": 99,
+    "source_line": 100,
     "tenant_required": false
   },
   {
@@ -9068,7 +9068,7 @@
     "public_exempt_reason": "network-service-credential-checked-in-handler",
     "rate_limit": "ucp-platform",
     "scope": "network.checkout.write",
-    "source_line": 245,
+    "source_line": 246,
     "tenant_required": false
   },
   {
@@ -9086,7 +9086,7 @@
     "public_exempt_reason": "network-service-credential-checked-in-handler",
     "rate_limit": "ucp-platform",
     "scope": "network.checkout.read",
-    "source_line": 259,
+    "source_line": 260,
     "tenant_required": false
   },
   {
@@ -9104,7 +9104,7 @@
     "public_exempt_reason": "network-service-credential-checked-in-handler",
     "rate_limit": "ucp-platform",
     "scope": "network.checkout.write",
-    "source_line": 273,
+    "source_line": 274,
     "tenant_required": false
   },
   {
@@ -9122,7 +9122,7 @@
     "public_exempt_reason": "telegram-webhook-secret-checked-in-handler",
     "rate_limit": "provider-webhook",
     "scope": "public:network.telegram.webhook",
-    "source_line": 217,
+    "source_line": 218,
     "tenant_required": false
   },
   {
