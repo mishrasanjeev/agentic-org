@@ -9,6 +9,20 @@
 
 export const ADMIN_ROLE = "admin";
 
+/** Every role core/rbac.py knows: pages about the signed-in person themself. */
+export const ALL_ROLES: readonly string[] = [
+  "admin",
+  "cfo",
+  "chro",
+  "cmo",
+  "coo",
+  "auditor",
+  "domain_lead",
+  "developer",
+  "analyst",
+  "merchant",
+];
+
 /** Roles that may open the agent fleet and create (personal) agents. */
 export const AGENT_CREATOR_ROLES: readonly string[] = [
   "admin",

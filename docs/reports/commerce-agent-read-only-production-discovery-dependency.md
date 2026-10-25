@@ -51,7 +51,7 @@ has an approved read-only production Commerce discovery posture.
 The reason is dependency ordering:
 
 1. AgenticOrg commerce tools are Grantex-only.
-2. AgenticOrg does not call Stripe, Plural, Pine, or provider APIs directly for
+2. AgenticOrg does not call Stripe, Plural, or provider APIs directly for
    commerce.
 3. Public AgenticOrg commerce metadata points users and agents toward Grantex
    commerce capabilities.
@@ -109,7 +109,7 @@ After enabling AgenticOrg public commerce discovery:
 | `GET /api/v1/a2a/.well-known/agent.json` | Includes commerce metadata only after explicit approval |
 | `GET /api/v1/a2a/agents` | Includes `commerce_sales_agent` only after explicit approval |
 | Public metadata | Grantex-only commerce boundary is clear |
-| Provider scan | No Stripe, Plural, Pine, provider credential, secret, or raw payload path |
+| Provider scan | No Stripe, Plural, provider credential, secret, or raw payload path |
 | Wording scan | No live-payment, live-Plural, external-pilot, production-ready, or certification overclaims |
 
 ## No-Go Conditions
@@ -122,7 +122,7 @@ Do not enable AgenticOrg public commerce discovery if any of these are true:
 - Grantex read-only discovery smoke has not passed.
 - Grantex discovery payload has not been reviewed for secrets and overclaims.
 - Live payments or live Plural would be enabled or implied.
-- AgenticOrg would advertise direct Stripe, Plural, Pine, or provider
+- AgenticOrg would advertise direct Stripe, Plural, or provider
   credential handling.
 - AgenticOrg public metadata would imply production readiness, external pilot
   readiness, AP2/UCP/ACP certification, Plural certification, or provider
@@ -214,7 +214,7 @@ AGENTICORG_COMMERCE_PUBLIC_DISCOVERY_ENABLED in an approved production deploy.
 
 Checks:
 1. Confirm mock mode remains default.
-2. Confirm no direct Stripe/Plural/Pine/provider credential path exists.
+2. Confirm no direct Stripe/Plural/provider credential path exists.
 3. Confirm public metadata is Grantex-only.
 4. Confirm live payment and live Plural language is absent.
 5. Confirm rollback hides commerce metadata by disabling

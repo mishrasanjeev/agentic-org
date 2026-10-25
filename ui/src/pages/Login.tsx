@@ -1,13 +1,14 @@
 import { useState, useEffect, FormEvent } from "react";
-import { useNavigate, useSearchParams, Link } from "react-router";
+import { useLocation, useNavigate, useSearchParams, Link } from "react-router";
 import { GoogleLogin, GoogleOAuthProvider } from "@react-oauth/google";
-import { useAuth, defaultLandingForRole } from "@/contexts/AuthContext";
+import { useAuth, defaultLandingForRole, isMfaChallenge, type MfaChallenge } from "@/contexts/AuthContext";
 import { useBranding } from "../contexts/BrandingContext";
 
 export default function Login() {
-  const { login, loginWithGoogle } = useAuth();
+  const { login, loginWithGoogle, completeMfa } = useAuth();
   const branding = useBranding();
   const navigate = useNavigate();
+  const location = useLocation();
   const [searchParams] = useSearchParams();
   // Honor a ?next=/some/path query so flows like the billing callback
   // can re-route the user back to where they were after re-auth.
@@ -24,6 +25,11 @@ export default function Login() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [googleClientId, setGoogleClientId] = useState<string | null>(null);
+  // Second step of a two-factor sign-in (also handed over from the signup page).
+  const [mfa, setMfa] = useState<MfaChallenge | null>(
+    () => (location.state as { mfaChallenge?: MfaChallenge } | null)?.mfaChallenge ?? null,
+  );
+  const [mfaCode, setMfaCode] = useState("");
 
   // Fetch Google Client ID from backend config
   useEffect(() => {
@@ -41,8 +47,12 @@ export default function Login() {
     setError(null);
     setLoading(true);
     try {
-      const sessionUser = await login(email, password);
-      navigate(nextPath ?? defaultLandingForRole(sessionUser?.role));
+      const outcome = await login(email, password);
+      if (isMfaChallenge(outcome)) {
+        setMfa(outcome);
+        return;
+      }
+      navigate(nextPath ?? defaultLandingForRole(outcome?.role));
     } catch (err: any) {
       setError(err.message || "Login failed");
     } finally {
@@ -54,14 +64,93 @@ export default function Login() {
     setError(null);
     setLoading(true);
     try {
-      const sessionUser = await loginWithGoogle(credentialResponse.credential);
-      navigate(nextPath ?? defaultLandingForRole(sessionUser?.role));
+      const outcome = await loginWithGoogle(credentialResponse.credential);
+      if (isMfaChallenge(outcome)) {
+        setMfa(outcome);
+        return;
+      }
+      navigate(nextPath ?? defaultLandingForRole(outcome?.role));
     } catch (err: any) {
       setError(err.message || "Google login failed");
     } finally {
       setLoading(false);
     }
   };
+
+  const handleMfaSubmit = async (e: FormEvent) => {
+    e.preventDefault();
+    if (!mfa) return;
+    setError(null);
+    setLoading(true);
+    try {
+      const sessionUser = await completeMfa(mfa.challenge, mfaCode);
+      navigate(nextPath ?? defaultLandingForRole(sessionUser?.role));
+    } catch (err: any) {
+      const message = err.message || "That code did not work";
+      // An expired or used-up challenge cannot be retried: start the sign-in again.
+      if (/sign in again/i.test(message)) {
+        setMfa(null);
+        setPassword("");
+      }
+      setMfaCode("");
+      setError(message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const cancelMfa = () => {
+    setMfa(null);
+    setMfaCode("");
+    setPassword("");
+    setError(null);
+  };
+
+  const mfaForm = (
+    <form onSubmit={handleMfaSubmit} className="space-y-4" autoComplete="off" data-testid="mfa-form">
+      <div className="text-center space-y-1">
+        <h2 className="text-lg font-semibold">Enter your authenticator code</h2>
+        <p className="text-sm text-muted-foreground">
+          Open your authenticator app and type the 6-digit code shown for AgenticOrg.
+        </p>
+      </div>
+      <div>
+        <label htmlFor="mfa-code" className="block text-sm font-medium text-foreground mb-1.5">
+          Authentication code
+        </label>
+        <input
+          id="mfa-code"
+          type="text"
+          inputMode="numeric"
+          autoComplete="one-time-code"
+          autoFocus
+          required
+          maxLength={11}
+          value={mfaCode}
+          onChange={(e) => setMfaCode(e.target.value)}
+          placeholder="123456"
+          className="w-full rounded-lg border border-border bg-background px-3 py-2 text-center text-lg tracking-[0.4em] text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary"
+        />
+        <p className="mt-2 text-xs text-muted-foreground">
+          Lost your phone? Enter one of your recovery codes instead.
+        </p>
+      </div>
+      <button
+        type="submit"
+        disabled={loading || mfaCode.trim().length < 6}
+        className="w-full rounded-lg bg-primary px-4 py-2.5 text-sm font-medium text-primary-foreground hover:bg-primary/90 focus:outline-none focus:ring-2 focus:ring-primary/50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+      >
+        {loading ? "Verifying..." : "Verify and sign in"}
+      </button>
+      <button
+        type="button"
+        onClick={cancelMfa}
+        className="w-full text-sm text-muted-foreground hover:text-foreground transition-colors"
+      >
+        &larr; Use a different account
+      </button>
+    </form>
+  );
 
   const loginForm = (
     <div className="min-h-screen bg-background flex items-center justify-center px-4">
@@ -93,6 +182,7 @@ export default function Login() {
             </div>
           )}
 
+          {mfa ? mfaForm : (<>
           {/* Google Sign-In */}
           {googleClientId && (
             <>
@@ -175,6 +265,7 @@ export default function Login() {
               {loading ? "Signing in..." : "Sign in with email"}
             </button>
           </form>
+          </>)}
 
           {/* Create account â€” prominent */}
           <div className="mt-6 p-4 rounded-lg border-2 border-dashed border-primary/30 bg-primary/5 text-center">

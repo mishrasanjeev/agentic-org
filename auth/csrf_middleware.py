@@ -68,6 +68,7 @@ _EXEMPT_PATHS: Final[frozenset[str]] = frozenset({
     "/api/v1/auth/google",            # Google ID-token verification (no prior session)
     "/api/v1/auth/forgot-password",   # public — issues reset email
     "/api/v1/auth/reset-password",    # public — consumes one-time code
+    "/api/v1/auth/mfa/verify",        # public — second factor; consumes one-time challenge
     "/api/v1/auth/sso/callback",
     "/api/v1/auth/sso/login",
     "/api/v1/auth/refresh",       # session refresh — verified by refresh-cookie + token

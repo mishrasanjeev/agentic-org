@@ -93,5 +93,5 @@ def test_demo_doc_states_internal_sandbox_and_pr_dependency() -> None:
 
     assert "internal sandbox only" in doc
     assert "pr #326" in doc
-    assert "no direct stripe, plural, pine" in doc
+    assert "no direct stripe, plural, or other payment provider calls" in doc
     assert "no provider credential handling" in doc

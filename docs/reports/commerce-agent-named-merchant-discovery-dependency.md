@@ -55,7 +55,7 @@ separate public discovery approval. That approval must confirm:
 - Public A2A discovery can expose commerce metadata only after separate
   approval.
 - The Commerce Sales Agent remains Grantex-only.
-- AgenticOrg does not advertise direct Stripe, Plural, Pine, or provider
+- AgenticOrg does not advertise direct Stripe, Plural, or provider
   credential handling.
 - AgenticOrg does not imply production checkout/payment readiness.
 - AgenticOrg does not imply live payment readiness.

@@ -35,7 +35,7 @@ runtime, or provider credentials.
 
 - Internal sandbox only.
 - No production deployment or live payment configuration.
-- No direct Stripe, Plural, Pine, or other payment provider calls.
+- No direct Stripe, Plural, or other payment provider calls.
 - No provider credential handling.
 - Commerce Passports are Grantex outputs only and are redacted in demo output.
 - Final payment confirmation remains user-controlled.

@@ -20,7 +20,7 @@ does not store or handle payment provider credentials for this flow.
 
 - Internal sandbox only.
 - No production deployment change.
-- No live Plural, Pine Labs, Stripe, or other direct payment provider calls.
+- No live Plural, Stripe, or other direct payment provider calls.
 - No local Commerce Passport minting. Passports are only Grantex outputs after
   a successful consent exchange.
 - Payment status polling goes through Grantex Commerce only.

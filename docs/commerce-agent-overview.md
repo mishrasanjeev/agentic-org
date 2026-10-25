@@ -305,7 +305,7 @@ another code, the fixture-backed C2G behavior is not passing.
 - Fixture files must stay under `.tmp/` and values must not be printed.
 - Evidence records names, statuses, latency, error/blocker codes, synthetic IDs,
   and redacted hashes only.
-- Commerce code must not import or call direct Stripe, Plural, Pine, or provider
+- Commerce code must not import or call direct Stripe, Plural, or provider
   credential paths.
 
 ## Production Discovery Caveat

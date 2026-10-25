@@ -284,10 +284,14 @@ async def evidence_package(tenant_id: str = Depends(get_current_tenant)):
             },
             "password_policy": {
                 "control_id": "CC6.1-password",
-                "min_length": 12,
+                # Matches api/v1/auth.py::_validate_password.
+                "min_length": 8,
                 "hashing": "bcrypt",
                 "cost_factor": 12,
+                # Authenticator-app TOTP for every user (api/v1/auth_mfa.py);
+                # organization SSO users follow their identity provider's MFA.
                 "mfa_available": True,
+                "mfa_methods": ["totp_authenticator_app", "recovery_codes"],
                 "lockout_threshold": int(os.getenv("AGENTICORG_LOCKOUT_THRESHOLD", "5")),
                 "lockout_cooldown_minutes": int(os.getenv("AGENTICORG_LOCKOUT_COOLDOWN", "15")),
                 "status": "collected",

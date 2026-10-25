@@ -2,7 +2,7 @@
 
 Status: historical M9 staging artifact; superseded by the current OACP runtime path in docs/oacp-end-to-end-flow.md. Do not deploy from this historical document.
 
-This plan defines how AgenticOrg should run the Commerce Sales Agent against Grantex Commerce V1 hosted staging. Commerce must go through Grantex APIs and MCP tools only. It must not call Stripe, Plural, Pine, or provider credential paths directly.
+This plan defines how AgenticOrg should run the Commerce Sales Agent against Grantex Commerce V1 hosted staging. Commerce must go through Grantex APIs and MCP tools only. It must not call Stripe, Plural, or provider credential paths directly.
 
 ## Hard Boundaries
 
@@ -15,7 +15,7 @@ This plan defines how AgenticOrg should run the Commerce Sales Agent against Gra
 - Do not commit `.tmp`, synthetic env files, bearer tokens, passports, idempotency keys, provider credentials, or secrets.
 - No production database or Redis.
 - Commerce Sales Agent staging is sandbox only.
-- No direct Stripe/Plural/Pine/provider credential path for commerce.
+- No direct Stripe/Plural/provider credential path for commerce.
 
 ## Recommended Topology
 
@@ -28,7 +28,7 @@ This plan defines how AgenticOrg should run the Commerce Sales Agent against Gra
 | Domain | `staging.agenticorg.ai` | Points only to staging services. |
 | Grantex commerce endpoint | `https://api-staging.grantex.dev` | Used by both `GRANTEX_COMMERCE_BASE_URL` and `GRANTEX_BASE_URL`. |
 | Commerce discovery | Staging only for `commerce_sales_agent` | Production discovery remains unchanged. |
-| Payment/provider access | Grantex only | No direct Stripe, Plural, Pine, or provider credential path for commerce. |
+| Payment/provider access | Grantex only | No direct Stripe, Plural, or provider credential path for commerce. |
 
 The existing production helper defaults in `scripts/deploy_cloud_run.sh` point at production-shaped service names and production domains. M10 implementation should add separate staging workflow/script entry points rather than changing production helper defaults.
 
@@ -49,7 +49,7 @@ Commerce discovery:
 - Ensure the Grantex connector resolves to `https://api-staging.grantex.dev`.
 - Ensure default commerce tools remain `grantex_commerce:*`.
 - Keep `PLURAL_ENV=sandbox` only for non-commerce app areas that already need Plural sandbox behavior.
-- Commerce must not read or use direct Stripe, Plural, Pine, or provider credentials.
+- Commerce must not read or use direct Stripe, Plural, or provider credentials.
 
 ## Required Secrets By Name Only
 
@@ -94,7 +94,7 @@ No-production guardrails:
 - Reject `AGENTICORG_BASE_URL=https://app.agenticorg.ai`.
 - Reject `GRANTEX_COMMERCE_BASE_URL=https://api.grantex.dev`.
 - Reject `GRANTEX_BASE_URL=https://api.grantex.dev`.
-- Reject commerce tool configs that include direct Stripe, Plural, Pine, or provider credential paths.
+- Reject commerce tool configs that include direct Stripe, Plural, or provider credential paths.
 - Reject staging deploys that read production GitHub environment secrets.
 
 Post-deploy smoke checks:
@@ -207,7 +207,7 @@ Risk/cost tradeoffs:
 - Confirm whether staging should be public with auth/rate limits or IP/access-gated.
 - Confirm the preferred Grantex auth method: `GRANTEX_COMMERCE_BEARER_TOKEN`, `GRANTEX_AGENT_ASSERTION`, or `GRANTEX_API_KEY`.
 - Confirm which LLM provider keys are required by the staging runtime.
-- Confirm that commerce continues to avoid direct Stripe, Plural, Pine, and provider credential paths.
+- Confirm that commerce continues to avoid direct Stripe, Plural, and provider credential paths.
 
 ## Implementation Sequence For M10+
 

@@ -41,7 +41,7 @@ Do not place values for those names in docs, logs, fixtures, local env files, or
 
 - Commerce actions must use `grantex_commerce:*` tools.
 - AgenticOrg consumes Grantex staging data only.
-- No direct Stripe/Plural/Pine/provider credential commerce path is prescribed.
+- No direct Stripe/Plural/provider credential commerce path is prescribed.
 - No provider credential handling is required for the Commerce Sales Agent.
 - Non-commerce app areas may keep their existing provider integrations, but commerce must not use them.
 - Payment intent creation, checkout creation, payment status polling, mock webhook outcomes, reconciliation, and audit evidence are Grantex responsibilities.
@@ -156,7 +156,7 @@ With `.tmp` fixture bridge data present, AgenticOrg can attempt consent exchange
 - Do not commit `.tmp`, synthetic env files containing generated auth material, generated Commerce Passport material, generated request correlation material, provider credentials, or secrets.
 - Do not point staging demos at `https://api.grantex.dev`.
 - Do not point staging demos at `https://app.agenticorg.ai`.
-- Do not run commerce through direct Stripe, Plural, Pine, or provider credential paths.
+- Do not run commerce through direct Stripe, Plural, or provider credential paths.
 
 ## M10 Confirmation
 

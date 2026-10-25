@@ -5,8 +5,8 @@ from __future__ import annotations
 import uuid
 from datetime import datetime
 
-from sqlalchemy import TIMESTAMP, Boolean, ForeignKey, String, UniqueConstraint, func, text
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy import TIMESTAMP, BigInteger, Boolean, ForeignKey, String, Text, UniqueConstraint, func, text
+from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from core.models.base import BaseModel
@@ -29,6 +29,16 @@ class User(BaseModel):
     password_hash: Mapped[str | None] = mapped_column(String(255), nullable=True)
     status: Mapped[str] = mapped_column(String(20), nullable=False, default="active")
     mfa_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    # v6z94: authenticator-app (TOTP) enrolment. Secrets are vault-encrypted;
+    # recovery codes are stored as SHA-256 hashes (auth/totp.py).
+    mfa_totp_secret: Mapped[str | None] = mapped_column(Text, nullable=True)
+    mfa_pending_secret: Mapped[str | None] = mapped_column(Text, nullable=True)
+    mfa_pending_created_at: Mapped[datetime | None] = mapped_column(TIMESTAMP(timezone=True), nullable=True)
+    mfa_last_totp_step: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    mfa_recovery_codes: Mapped[list[str]] = mapped_column(
+        JSONB, nullable=False, default=list, server_default=text("'[]'::jsonb")
+    )
+    mfa_enabled_at: Mapped[datetime | None] = mapped_column(TIMESTAMP(timezone=True), nullable=True)
     last_login_at: Mapped[datetime | None] = mapped_column(TIMESTAMP(timezone=True), nullable=True)
     # v6z17: session revocation watermark. Legacy JWTs whose ``iat`` is
     # older than this are rejected by the auth middleware. Set on member

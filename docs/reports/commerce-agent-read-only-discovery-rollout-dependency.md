@@ -31,7 +31,7 @@ Current required posture:
 - AgenticOrg public discovery must not expose `grantex_commerce:*` metadata.
 - Non-commerce discovery and health can remain available.
 - AgenticOrg commerce execution remains Grantex-only.
-- AgenticOrg must not expose direct Stripe, Plural, Pine, or provider
+- AgenticOrg must not expose direct Stripe, Plural, or provider
   credential paths for commerce.
 
 Grantex C5C deployed a narrow read-only discovery gate, but production Grantex
@@ -106,7 +106,7 @@ true:
 - Grantex named merchant approval is missing.
 - Grantex discovery payload contains secrets, provider credentials, live payment
   language, live Plural language, or readiness/certification overclaims.
-- AgenticOrg metadata would advertise direct Stripe, Plural, Pine, or provider
+- AgenticOrg metadata would advertise direct Stripe, Plural, or provider
   credential handling.
 - AgenticOrg metadata would imply production checkout/payment readiness,
   external pilot readiness, AP2/UCP/ACP certification, provider certification,
@@ -128,7 +128,7 @@ smoke passes. It must use read-only GET requests only.
 | A2A agents before enablement | Public agents hide `commerce_sales_agent` and `grantex_commerce:*`. |
 | Grantex dependency | Grantex read-only discovery is already approved, enabled, and smoke-tested. |
 | Public metadata after separate approval | If later approved, metadata remains Grantex-only and references approved Grantex discovery posture. |
-| Provider scan | No direct Stripe, Plural, Pine, provider credential, secret, DB/Redis URL, private key, or raw payload markers. |
+| Provider scan | No direct Stripe, Plural, provider credential, secret, DB/Redis URL, private key, or raw payload markers. |
 | Wording scan | No live-payment, live-Plural, production-ready, external-pilot-ready, or certification overclaims. |
 | Rollback | Disabling the AgenticOrg discovery gate hides commerce metadata again. |
 

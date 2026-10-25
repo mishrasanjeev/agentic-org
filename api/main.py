@@ -124,6 +124,7 @@ from api.v1 import (
 from api.v1 import (
     auth as v1_auth,
 )
+from api.v1 import auth_mfa as v1_auth_mfa
 from api.v1 import demo as v1_demo
 from api.v1 import org as v1_org
 from api.v1 import (
@@ -297,6 +298,7 @@ app.include_router(health.router, prefix="/api/v1", tags=["Health"])
 app.include_router(product_facts.router, prefix="/api/v1", tags=["Product Facts"])
 app.include_router(integrations_status.router, prefix="/api/v1", tags=["Integrations"])
 app.include_router(v1_auth.router, prefix="/api/v1", tags=["Auth"])
+app.include_router(v1_auth_mfa.router, prefix="/api/v1", tags=["Auth"])
 app.include_router(agents.router, prefix="/api/v1", tags=["Agents"])
 app.include_router(prompt_templates.router, prefix="/api/v1", tags=["Prompt Templates"])
 app.include_router(sales.router, prefix="/api/v1", tags=["Sales"])

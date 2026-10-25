@@ -53,7 +53,7 @@ These IDs are internal/local/smoke-only synthetic values. They are not productio
 | Overclaim scan | Pass, no matches | `agenticorg-overclaim-scan.log` |
 | Synthetic safety scan | Pass, no matches | `agenticorg-synthetic-safety-scan.log` |
 
-The AgenticOrg gated discovery and no-provider-call tests passed. They confirmed that public MCP/A2A commerce discovery stays hidden by default and that Commerce Sales Agent tooling remains Grantex-only with no direct Stripe, Plural, Pine, or provider credential path.
+The AgenticOrg gated discovery and no-provider-call tests passed. They confirmed that public MCP/A2A commerce discovery stays hidden by default and that Commerce Sales Agent tooling remains Grantex-only with no direct Stripe, Plural, or provider credential path.
 
 ## Safety Assertions
 
@@ -70,7 +70,7 @@ The AgenticOrg gated discovery and no-provider-call tests passed. They confirmed
 - No live payment flow was run.
 - No live Plural flow was run.
 - No checkout/payment production creation request was run.
-- No direct Stripe, Plural, Pine, or provider credential path was introduced.
+- No direct Stripe, Plural, or provider credential path was introduced.
 - No secrets or real merchant data were required.
 - Synthetic data is not production approval.
 - The synthetic merchant ID must not be used in any production allowlist.

@@ -1251,7 +1251,7 @@ def sec06_connectors(pdf: FuncSpecPdf) -> None:
         ("Banking AA", 6, "RBI Account Aggregator: consent, FI fetch, statements"),
         ("Income Tax India", 5, "ITR filing, Form 26AS, TDS certificates, refund status"),
         ("Stripe", 10, "Charges, subscriptions, refunds, payouts, disputes"),
-        ("PineLabs", 5, "POS transactions, settlements, reconciliation"),
+        ("Pine Labs Plural", 5, "Payments, settlements, reconciliation"),
         ("NetSuite", 14, "SuiteQL: customers, invoices, GL, inventory, projects"),
     ]
     cols_c = [("Connector", 32), ("Tools", 12), ("Capabilities", 146)]
