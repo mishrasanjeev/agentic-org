@@ -14,14 +14,14 @@ Status: M12 gap analysis and safe regression coverage only. This pass did not de
 
 | Area | Status | Assessment |
 | --- | --- | --- |
-| Grantex-only commerce connector | `done` | `GrantexCommerceConnector` exposes `grantex_commerce:*` aliases and does not import Stripe, Plural, Pine, or provider credential connectors. |
+| Grantex-only commerce connector | `done` | `GrantexCommerceConnector` exposes `grantex_commerce:*` aliases and does not import Stripe, Plural, or provider credential connectors. |
 | Safe tool aliases | `done` | Aliases map to Grantex MCP tools plus Grantex passport REST endpoints and the C6H GET-only buyer discovery preview endpoint: catalog, inventory, cart, consent, passport exchange, buyer preview, payment intent, checkout, and status. |
 | Consent/passport guardrails | `partial` | Local guardrails refuse missing, denied, revoked, or expired passport inputs; final cryptographic verification remains Grantex-owned and hosted staging is not yet exercised. |
 | Amount cap guardrails | `done` | Local guardrails refuse requested amounts above passport cap before calling Grantex. |
 | Disabled merchant/agent guardrails | `partial` | Local status/error handling exists; real staging disabled merchant and untrusted agent cases are not yet executed. |
 | Stale inventory behavior | `done` | Local guardrails require cautious responses for stale or unknown inventory. |
 | Unsupported EMI/discount/warranty behavior | `done` | Claim grounding refuses unbacked EMI, discount, offer, return, tax, and warranty claims. |
-| No direct Stripe/Plural/Pine/provider credential path | `done` | Regression tests statically block provider imports and default Commerce Sales Agent tools are Grantex-only. |
+| No direct Stripe/Plural/provider credential path | `done` | Regression tests statically block provider imports and default Commerce Sales Agent tools are Grantex-only. |
 | Mocked eval/demo status | `partial` | Local demo and evals cover the safety path, but they use mocked Grantex responses. |
 | Real hosted staging eval gap | `partial` | C1 adds explicit local AgenticOrg real-staging mode against approved Grantex staging or exact smoke URLs; hosted AgenticOrg services and full negative fixture coverage remain pending. |
 | Broader PRD Commerce Agent Pack | `deferred` | Only the Sales Agent slice exists; catalog enrichment, offer, support, reconciliation, and store operations agent pack work remains roadmap. |
@@ -66,11 +66,11 @@ Status: M12 gap analysis and safe regression coverage only. This pass did not de
 
 ## No-Provider-Call Boundary
 
-No direct Stripe/Plural/Pine/provider credential commerce path is allowed.
+No direct Stripe/Plural/provider credential commerce path is allowed.
 
 AgenticOrg Commerce Sales Agent must not:
 
-- call Stripe, Plural, Pine, or payment provider connectors for commerce;
+- call Stripe, Plural, or payment provider connectors for commerce;
 - read provider credentials for commerce;
 - create checkout links outside Grantex;
 - poll provider status directly;

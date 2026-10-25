@@ -56,7 +56,7 @@ Blocked cases remain blocked:
 - Checkout creation.
 - Payment creation.
 - Provider credential handling.
-- Direct Stripe, Plural, Pine, or provider payment paths.
+- Direct Stripe, Plural, or provider payment paths.
 - Live payment rails.
 - Public discovery enablement.
 
