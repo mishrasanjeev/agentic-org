@@ -269,6 +269,16 @@ export const commerceRuntimeApi = {
     api.post("/commerce/runtime/providers/plural-pine/mandate-capability/verify", data),
 };
 
+// Sell everywhere: the AgenticOrg shopping network (api/v1/network.py)
+export const sellEverywhereApi = {
+  get: (merchantId: string, params?: { seller_agent_id?: string }) =>
+    api.get(`/commerce/runtime/merchant-configs/${encodeURIComponent(merchantId)}/sell-everywhere`, { params }),
+  put: (
+    merchantId: string,
+    data: { listed: boolean; accept_terms: boolean; slug?: string; seller_agent_id?: string },
+  ) => api.put(`/commerce/runtime/merchant-configs/${encodeURIComponent(merchantId)}/sell-everywhere`, data),
+};
+
 // Merchant custom domains (api/v1/merchant_custom_domains.py)
 export const customDomainsApi = {
   get: (merchantId: string, params?: { seller_agent_id?: string }) =>

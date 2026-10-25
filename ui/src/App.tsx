@@ -80,6 +80,7 @@ const SalesPipeline = lazyRetry(() => import("./pages/SalesPipeline"));
 const OrgChart = lazyRetry(() => import("./pages/OrgChart"));
 const CommerceRuntimeDemo = lazyRetry(() => import("./pages/CommerceRuntimeDemo"));
 const CustomDomains = lazyRetry(() => import("./pages/CustomDomains"));
+const SellEverywhere = lazyRetry(() => import("./pages/SellEverywhere"));
 
 /* -- Role-specific dashboards -- */
 const CFODashboard = lazyRetry(() => import("./pages/CFODashboard"));
@@ -287,6 +288,16 @@ export default function App() {
           <ProtectedRoute allowedRoles={["admin", "merchant"]}>
             <Layout>
               <CustomDomains />
+            </Layout>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/dashboard/sell-everywhere"
+        element={
+          <ProtectedRoute allowedRoles={["admin", "merchant"]}>
+            <Layout>
+              <SellEverywhere />
             </Layout>
           </ProtectedRoute>
         }

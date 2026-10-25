@@ -2098,6 +2098,67 @@
       "minutes": 7
     },
     {
+      "slug": "oacp-sell-everywhere",
+      "title": "Sell everywhere: one switch for every AI surface",
+      "description": "Turn your shop on once and buyers find it in ChatGPT, Claude and other AI apps, the AgenticOrg shopping bot on Telegram and the open web, with a web address if you have none. You stay the seller.",
+      "group": "OACP — agentic commerce, made safe",
+      "audience": "Merchants and business owners",
+      "reviewed": "2026-10-25",
+      "colorScheme": "adaptive",
+      "sources": [
+        "docs/oacp/shopping-network.md",
+        "docs/oacp/merchant-custom-domains.md",
+        "ui/src/components/docs/OacpGuideFigures.tsx"
+      ],
+      "html": "<aside class=\"docs-summary\" aria-label=\"In 30 seconds\"><p class=\"docs-summary-title\">In 30 seconds</p><ul><li>Sell everywhere puts your shop on every AI surface the AgenticOrg network reaches, with one switch.</li><li>Buyers then find you in ChatGPT, Claude and other AI apps, in the AgenticOrg shopping bot on Telegram, and on the open web.</li><li>You do no setup on each surface: AgenticOrg connects to them once, for every shop on the network.</li><li>If you have no web address for buyer agents yet, AgenticOrg gives you one, such as your-shop.agenticorg.ai.</li><li>You stay the seller. Buyers always finish and pay with you, and you can pause it at any time.</li></ul></aside><h2 id=\"one-switch-every-surface\">One switch, every surface</h2>\n<figure class=\"docs-figure\" data-docs-figure=\"sell-everywhere-network\" aria-labelledby=\"docs-figure-sell-everywhere-network-title\"><figcaption><p class=\"docs-figure-title\" id=\"docs-figure-sell-everywhere-network-title\">One switch, every surface</p><p class=\"docs-figure-caption\">You turn it on once. AgenticOrg lists your shop and connects it to each surface. Buyers finish and pay with you.</p></figcaption></figure><div class=\"docs-table-scroll\" tabindex=\"0\" role=\"region\" aria-label=\"Reference table\"><table><thead>\n<tr>\n<th>Surface</th>\n<th>How buyers reach you</th>\n<th>What you do</th>\n</tr>\n</thead>\n<tbody>\n<tr>\n<td>ChatGPT, Claude and other AI apps</td>\n<td>They add AgenticOrg's server once and can then shop every network shop</td>\n<td>Nothing</td>\n</tr>\n<tr>\n<td>Telegram</td>\n<td>They tap your link, <code>t.me/&lt;bot&gt;?start=&lt;your-shop&gt;</code>, or search across shops in the AgenticOrg shopping bot</td>\n<td>Share your link if you like</td>\n</tr>\n<tr>\n<td>The open web</td>\n<td>AI search engines and agents read your shop's profile at your web address</td>\n<td>Nothing</td>\n</tr>\n<tr>\n<td>Google Gemini and AI Mode, Microsoft Copilot, Perplexity</td>\n<td>Coming: AgenticOrg is registering with each program for the whole network</td>\n<td>Nothing yet</td>\n</tr>\n<tr>\n<td>Payment in the chat</td>\n<td>Not in this release: buyers open a checkout in the chat and finish with you</td>\n<td>Nothing</td>\n</tr>\n</tbody>\n</table></div><h2 id=\"turn-it-on\">Turn it on</h2>\n<p>You need a merchant in Commerce Runtime with your catalog in it.</p>\n<ol class=\"docs-flow\" aria-label=\"Workflow\"><li><span class=\"docs-flow-number\">1</span><strong>Your catalog</strong><p>Connect Shopify read-only or add your products in Commerce Runtime. This is what buyers will search.</p></li><li><span class=\"docs-flow-number\">2</span><strong>Your policies</strong><p>Check returns, shipping and store pickup in Commerce Runtime. Buyer agents read them before they buy.</p></li><li><span class=\"docs-flow-number\">3</span><strong>Sell everywhere</strong><p>Open Commerce &gt; Sell Everywhere, enter your merchant ID and load it. Choose your shop name, accept the network terms and turn it on.</p></li></ol><p>Your shop name is the short name buyers see in AI apps and in your Telegram link, such as <code>nilgiritea</code>. Use 3 to 40 lowercase letters, digits or hyphens. It cannot change later, so choose it with care.</p>\n<p>The network terms say that AgenticOrg lists your shop and opens checkouts for buyers who find it, and that you remain the seller and take payment yourself.</p>\n<h2 id=\"your-web-address\">Your web address</h2>\n<p>Buyer agents read your shop's profile at <code>https://&lt;your address&gt;/.well-known/ucp</code>.</p>\n<ul>\n<li><strong>You already have an address.</strong> If you connected your own domain in Custom Domains, or your profile is already published, the network uses it.</li>\n<li><strong>You have no address yet.</strong> AgenticOrg gives you <code>&lt;your-shop&gt;.agenticorg.ai</code> and sets it up for you, certificate included. It usually goes live within an hour.</li>\n</ul>\n<p>AgenticOrg can give out 20 of these addresses in all. If they are taken, you can still turn on Sell everywhere and connect your own domain instead; see <a href=\"/docs/oacp-custom-domains\">Your own domain for buyer agents</a>.</p>\n<p>Your shop appears on the network only once its profile is published at that address. Until then, the page shows <strong>Waiting for publication</strong>.</p>\n<h2 id=\"where-buyers-can-find-you\">Where buyers can find you</h2>\n<p>The page lists each surface and where it stands:</p>\n<div class=\"docs-table-scroll\" tabindex=\"0\" role=\"region\" aria-label=\"Reference table\"><table><thead>\n<tr>\n<th>Status</th>\n<th>Meaning</th>\n</tr>\n</thead>\n<tbody>\n<tr>\n<td>Live</td>\n<td>Buyers can reach you there now.</td>\n</tr>\n<tr>\n<td>Setting up, Issuing certificate</td>\n<td>Your web address is being connected. Check back in a few minutes.</td>\n</tr>\n<tr>\n<td>Waiting for publication</td>\n<td>You are on the network, but your profile is not published yet.</td>\n</tr>\n<tr>\n<td>Coming: registration in progress</td>\n<td>AgenticOrg is still registering with that program.</td>\n</tr>\n<tr>\n<td>Off</td>\n<td>Sell everywhere is paused or not turned on.</td>\n</tr>\n</tbody>\n</table></div><p>To see what buyers see in ChatGPT, follow <a href=\"/docs/oacp-example-nilgiri-tea\">the ChatGPT run in the Nilgiri Tea House example</a>.</p>\n<h2 id=\"pause-or-resume\">Pause or resume</h2>\n<p>Choose <strong>Pause</strong> on the page. Your shop leaves the directory at once: AI apps and the Telegram bot stop offering it, and new network checkouts are refused. Your web address and your shop name stay yours. Choose <strong>Resume Sell everywhere</strong> to come back.</p>\n<h2 id=\"what-stays-with-you\">What stays with you</h2>\n<ul>\n<li><strong>Payment.</strong> No surface takes payment in this release. A buyer opens a checkout in the chat and finishes with you.</li>\n<li><strong>Your rules.</strong> Every network checkout goes through the same checks as any other: your signed facts, your limits and the arbiter's fixed rules, recorded in your ledger.</li>\n<li><strong>Your data.</strong> The directory shows your shop name, display name, categories and profile address, nothing else.</li>\n</ul>\n<h2 id=\"read-next\">Read next</h2>\n<ul>\n<li><a href=\"/docs/oacp-merchant-setup\">Merchant setup checklist</a></li>\n<li><a href=\"/docs/oacp-custom-domains\">Your own domain for buyer agents</a></li>\n<li><a href=\"/docs/oacp-example-nilgiri-tea\">Example: Nilgiri Tea House, end to end</a></li>\n<li><a href=\"/docs/oacp-feature-switches\">Feature switches</a></li>\n</ul>\n",
+      "headings": [
+        {
+          "id": "one-switch-every-surface",
+          "title": "One switch, every surface",
+          "level": 2
+        },
+        {
+          "id": "turn-it-on",
+          "title": "Turn it on",
+          "level": 2
+        },
+        {
+          "id": "your-web-address",
+          "title": "Your web address",
+          "level": 2
+        },
+        {
+          "id": "where-buyers-can-find-you",
+          "title": "Where buyers can find you",
+          "level": 2
+        },
+        {
+          "id": "pause-or-resume",
+          "title": "Pause or resume",
+          "level": 2
+        },
+        {
+          "id": "what-stays-with-you",
+          "title": "What stays with you",
+          "level": 2
+        },
+        {
+          "id": "read-next",
+          "title": "Read next",
+          "level": 2
+        }
+      ],
+      "figures": [
+        {
+          "id": "sell-everywhere-network",
+          "title": "One switch, every surface",
+          "caption": "You turn it on once. AgenticOrg lists your shop and connects it to each surface. Buyers finish and pay with you."
+        }
+      ],
+      "searchText": "In 30 seconds:\n\n- Sell everywhere puts your shop on every AI surface the AgenticOrg network reaches, with one switch.\n- Buyers then find you in ChatGPT, Claude and other AI apps, in the AgenticOrg shopping bot on Telegram, and on the open web.\n- You do no setup on each surface: AgenticOrg connects to them once, for every shop on the network.\n- If you have no web address for buyer agents yet, AgenticOrg gives you one, such as your-shop.agenticorg.ai.\n- You stay the seller. Buyers always finish and pay with you, and you can pause it at any time.\n\n   One switch, every surface\n\nFigure: One switch, every surface. You turn it on once. AgenticOrg lists your shop and connects it to each surface. Buyers finish and pay with you.\n\n  Surface   How buyers reach you   What you do  \n  ---   ---   ---  \n  ChatGPT, Claude and other AI apps   They add AgenticOrg's server once and can then shop every network shop   Nothing  \n  Telegram   They tap your link,  t.me/<bot>?start=<your-shop> , or search across shops in the AgenticOrg shopping bot   Share your link if you like  \n  The open web   AI search engines and agents read your shop's profile at your web address   Nothing  \n  Google Gemini and AI Mode, Microsoft Copilot, Perplexity   Coming: AgenticOrg is registering with each program for the whole network   Nothing yet  \n  Payment in the chat   Not in this release: buyers open a checkout in the chat and finish with you   Nothing  \n\n   Turn it on\n\nYou need a merchant in Commerce Runtime with your catalog in it.\n\n Your catalog   Connect Shopify read-only or add your products in Commerce Runtime. This is what buyers will search.\nYour policies   Check returns, shipping and store pickup in Commerce Runtime. Buyer agents read them before they buy.\nSell everywhere   Open Commerce > Sell Everywhere, enter your merchant ID and load it. Choose your shop name, accept the network terms and turn it on.\n \nYour shop name is the short name buyers see in AI apps and in your Telegram link, such as  nilgiritea . Use 3 to 40 lowercase letters, digits or hyphens. It cannot change later, so choose it with care.\n\nThe network terms say that AgenticOrg lists your shop and opens checkouts for buyers who find it, and that you remain the seller and take payment yourself.\n\n   Your web address\n\nBuyer agents read your shop's profile at  https://<your address>/.well-known/ucp .\n\n-   You already have an address.   If you connected your own domain in Custom Domains, or your profile is already published, the network uses it.\n-   You have no address yet.   AgenticOrg gives you  <your-shop>.agenticorg.ai  and sets it up for you, certificate included. It usually goes live within an hour.\n\nAgenticOrg can give out 20 of these addresses in all. If they are taken, you can still turn on Sell everywhere and connect your own domain instead; see [Your own domain for buyer agents](/docs/oacp-custom-domains).\n\nYour shop appears on the network only once its profile is published at that address. Until then, the page shows   Waiting for publication  .\n\n   Where buyers can find you\n\nThe page lists each surface and where it stands:\n\n  Status   Meaning  \n  ---   ---  \n  Live   Buyers can reach you there now.  \n  Setting up, Issuing certificate   Your web address is being connected. Check back in a few minutes.  \n  Waiting for publication   You are on the network, but your profile is not published yet.  \n  Coming: registration in progress   AgenticOrg is still registering with that program.  \n  Off   Sell everywhere is paused or not turned on.  \n\nTo see what buyers see in ChatGPT, follow [the ChatGPT run in the Nilgiri Tea House example](/docs/oacp-example-nilgiri-tea).\n\n   Pause or resume\n\nChoose   Pause   on the page. Your shop leaves the directory at once: AI apps and the Telegram bot stop offering it, and new network checkouts are refused. Your web address and your shop name stay yours. Choose   Resume Sell everywhere   to come back.\n\n   What stays with you\n\n-   Payment.   No surface takes payment in this release. A buyer opens a checkout in the chat and finishes with you.\n-   Your rules.   Every network checkout goes through the same checks as any other: your signed facts, your limits and the arbiter's fixed rules, recorded in your ledger.\n-   Your data.   The directory shows your shop name, display name, categories and profile address, nothing else.\n\n   Read next\n\n- [Merchant setup checklist](/docs/oacp-merchant-setup)\n- [Your own domain for buyer agents](/docs/oacp-custom-domains)\n- [Example: Nilgiri Tea House, end to end](/docs/oacp-example-nilgiri-tea)\n- [Feature switches](/docs/oacp-feature-switches)\n",
+      "minutes": 4
+    },
+    {
       "slug": "oacp-custom-domains",
       "title": "Your own domain for buyer agents",
       "description": "Connect a subdomain you own for your UCP profile with two DNS records: every check and its fix, your main domain without redirects, and the operator setup, limits and costs.",

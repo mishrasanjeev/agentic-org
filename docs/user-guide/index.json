@@ -501,6 +501,20 @@
       ]
     },
     {
+      "slug": "oacp-sell-everywhere",
+      "title": "Sell everywhere: one switch for every AI surface",
+      "description": "Turn your shop on once and buyers find it in ChatGPT, Claude and other AI apps, the AgenticOrg shopping bot on Telegram and the open web, with a web address if you have none. You stay the seller.",
+      "group": "OACP — agentic commerce, made safe",
+      "audience": "Merchants and business owners",
+      "reviewed": "2026-10-25",
+      "colorScheme": "adaptive",
+      "sources": [
+        "docs/oacp/shopping-network.md",
+        "docs/oacp/merchant-custom-domains.md",
+        "ui/src/components/docs/OacpGuideFigures.tsx"
+      ]
+    },
+    {
       "slug": "oacp-custom-domains",
       "title": "Your own domain for buyer agents",
       "description": "Connect a subdomain you own for your UCP profile with two DNS records: every check and its fix, your main domain without redirects, and the operator setup, limits and costs.",

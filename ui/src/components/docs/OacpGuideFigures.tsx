@@ -512,7 +512,24 @@ function NilgiriBuyer() {
   );
 }
 
+// The AgenticOrg shopping network (docs/oacp/shopping-network.md).
+function SellEverywhereNetwork() {
+  return (
+    <StepStack id="docfig-sell-everywhere" title="One switch, every surface"
+      desc="Six steps. The merchant connects its catalog, checks its policies and turns on Sell everywhere once. AgenticOrg lists the shop in the network directory and gives it a web address if it has none. ChatGPT, Claude and other AI apps reach every network shop through one AgenticOrg server. The AgenticOrg shopping bot on Telegram answers anyone, with a link for each shop. Google, Microsoft Copilot and Perplexity are next, once AgenticOrg's registrations are approved. Buyers always finish and pay with the shop."
+      steps={[
+        { owner: "Merchant", tone: "neutral", title: "Turns on Sell everywhere", detail: "Catalog, policies, one consent" },
+        { owner: "AgenticOrg", tone: "agenticorg", title: "Lists the shop", detail: "Network directory and a web address" },
+        { owner: "AI apps", tone: "oacp", title: "ChatGPT, Claude and others", detail: "One server for every network shop" },
+        { owner: "Telegram", tone: "oacp", title: "The AgenticOrg shopping bot", detail: "A link for each shop" },
+        { owner: "Next", tone: "hold", title: "Google, Copilot, Perplexity", detail: "After AgenticOrg's registrations", badge: "coming", badgeTone: "hold" },
+        { owner: "The shop", tone: "neutral", title: "Takes the payment", detail: "Buyers finish and pay with you" },
+      ]} />
+  );
+}
+
 const FIGURES: Record<string, { wide?: boolean; render: () => ReactNode }> = {
+  "sell-everywhere-network": { render: () => <SellEverywhereNetwork /> },
   "nilgiri-story": { render: () => <NilgiriStory /> },
   "nilgiri-shelf": { render: () => <NilgiriShelf /> },
   "nilgiri-records": { render: () => <NilgiriRecords /> },
