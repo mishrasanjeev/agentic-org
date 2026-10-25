@@ -4,7 +4,11 @@
  * Hosted MCP endpoint for one public UCP shop, over Streamable HTTP.
  *
  * Built for the synthetic demo shop Nilgiri Tea House so that hosted assistants
- * with a separately configured caller bearer credential can search it and open a checkout.
+ * (Gemini custom apps, ChatGPT connectors) can search it and open a checkout.
+ * Callers present a separate bearer credential (MCP_ACCESS_TOKEN), or, only when the
+ * operator sets MCP_ALLOW_ANONYMOUS=true, no credential at all: hosted assistants
+ * cannot send a static bearer header, and this endpoint can only search a synthetic
+ * shop and open checkouts that cannot be paid.
  * It exposes only the shop tools in HOSTED_TOOLS: no completion, cancel, cart,
  * order, agent or seller tool, so nothing it does can take a payment.
  *
@@ -46,7 +50,10 @@ export interface HostedConfig {
   profileUrl: string;
   agentProfile: string;
   apiKey: string;
-  accessToken: string;
+  /** Caller bearer credential; empty only with allowAnonymous. */
+  accessToken?: string;
+  /** Serve callers without a credential (explicit operator opt-in for the public demo). */
+  allowAnonymous?: boolean;
   allowedHosts: ReadonlySet<string>;
   perClientPerMinute: number;
   globalPerMinute: number;
@@ -128,10 +135,22 @@ async function readBody(req: http.IncomingMessage): Promise<string | null> {
 }
 
 export function createHostedHandler(config: HostedConfig) {
-  if (!config.accessToken || config.accessToken.length < 32 || !/^[A-Za-z0-9\-._~+/]+=*$/.test(config.accessToken) || config.accessToken === config.apiKey) {
-    throw new Error("MCP_ACCESS_TOKEN must be a separate caller credential of at least 32 characters");
+  const anonymous = config.allowAnonymous === true && !config.accessToken;
+  if (config.allowAnonymous && config.accessToken) {
+    throw new Error("Set either MCP_ACCESS_TOKEN or MCP_ALLOW_ANONYMOUS=true, not both");
   }
-  const tokenHash = createHash("sha256").update(config.accessToken).digest();
+  if (
+    !anonymous &&
+    (!config.accessToken ||
+      config.accessToken.length < 32 ||
+      !/^[A-Za-z0-9\-._~+/]+=*$/.test(config.accessToken) ||
+      config.accessToken === config.apiKey)
+  ) {
+    throw new Error(
+      "MCP_ACCESS_TOKEN must be a separate caller credential of at least 32 characters (or set MCP_ALLOW_ANONYMOUS=true)",
+    );
+  }
+  const tokenHash = anonymous ? null : createHash("sha256").update(config.accessToken as string).digest();
   const trustedProxyHops = proxyHops(config.trustedProxyHops ?? 0);
   const log = config.log ?? ((entry) => console.log(JSON.stringify(entry)));
   const now = config.now ?? Date.now;
@@ -160,9 +179,11 @@ export function createHostedHandler(config: HostedConfig) {
     if (req.method !== "POST") {
       return rpcError(res, 405, -32000, "Method not allowed: this stateless server takes POST /mcp only.", { Allow: "POST" });
     }
-    const bearer = req.headers.authorization?.match(/^Bearer ([A-Za-z0-9\-._~+/]+=*)$/i)?.[1];
-    if (!bearer || !timingSafeEqual(tokenHash, createHash("sha256").update(bearer).digest())) {
-      return rpcError(res, 401, -32000, "Caller authentication required.", { "WWW-Authenticate": 'Bearer realm="agenticorg-mcp"' });
+    if (tokenHash) {
+      const bearer = req.headers.authorization?.match(/^Bearer ([A-Za-z0-9\-._~+/]+=*)$/i)?.[1];
+      if (!bearer || !timingSafeEqual(tokenHash, createHash("sha256").update(bearer).digest())) {
+        return rpcError(res, 401, -32000, "Caller authentication required.", { "WWW-Authenticate": 'Bearer realm="agenticorg-mcp"' });
+      }
     }
     const wait = limit(clientOf(req, trustedProxyHops));
     if (wait > 0) return rpcError(res, 429, -32000, "Too many requests; retry later.", { "Retry-After": String(wait) });
@@ -218,6 +239,20 @@ function required(name: string): string {
   return value;
 }
 
+/** MCP_ACCESS_TOKEN, or MCP_ALLOW_ANONYMOUS=true for the public demo; never neither, never both. */
+function callerAuthFromEnv(): { accessToken?: string; allowAnonymous?: boolean } {
+  const token = (process.env.MCP_ACCESS_TOKEN ?? "").trim();
+  const anonymous = (process.env.MCP_ALLOW_ANONYMOUS ?? "").trim().toLowerCase();
+  if (anonymous && anonymous !== "true" && anonymous !== "false") {
+    throw new Error("MCP_ALLOW_ANONYMOUS must be true or false");
+  }
+  if (anonymous === "true") {
+    if (token) throw new Error("Set either MCP_ACCESS_TOKEN or MCP_ALLOW_ANONYMOUS=true, not both");
+    return { allowAnonymous: true };
+  }
+  return { accessToken: required("MCP_ACCESS_TOKEN") };
+}
+
 export function configFromEnv(): HostedConfig {
   const pkg = JSON.parse(readFileSync(resolve(dirname(__filename), "..", "package.json"), "utf-8")) as { version: string };
   const hosts = required("MCP_ALLOWED_HOSTS")
@@ -228,7 +263,7 @@ export function configFromEnv(): HostedConfig {
     profileUrl: required("AGENTICORG_UCP_PROFILE_URL"),
     agentProfile: required("AGENTICORG_UCP_AGENT_PROFILE"),
     apiKey: required("AGENTICORG_API_KEY"),
-    accessToken: required("MCP_ACCESS_TOKEN"),
+    ...callerAuthFromEnv(),
     allowedHosts: new Set(hosts),
     perClientPerMinute: positiveInteger(Number(process.env.MCP_RATE_PER_CLIENT_PER_MINUTE ?? "30"), "MCP_RATE_PER_CLIENT_PER_MINUTE"),
     globalPerMinute: positiveInteger(Number(process.env.MCP_RATE_GLOBAL_PER_MINUTE ?? "300"), "MCP_RATE_GLOBAL_PER_MINUTE"),

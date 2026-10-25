@@ -17,6 +17,14 @@
 - Compliance evidence now names the real MFA methods and the real minimum
   password length (8).
 
+## Unreleased - Hosted demo MCP endpoint: anonymous mode for hosted assistants
+
+- The hosted MCP endpoint can run without caller credentials when the operator sets
+  `MCP_ALLOW_ANONYMOUS=true`, so Gemini custom apps and ChatGPT connectors (which cannot send a
+  static bearer header) can search the synthetic demo shop and open checkouts. Shop tools only,
+  nothing that pays, and the host allowlist, body limit and rate limits still apply. Without the
+  flag a caller token stays mandatory.
+
 ## Unreleased - Preserve token revocations across API restarts
 
 - Security: remove obsolete startup blacklist cleanup so revoked tokens remain
