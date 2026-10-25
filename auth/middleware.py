@@ -18,6 +18,7 @@ class AuthMiddleware(BaseHTTPMiddleware):
         "/api/health",
         "/api/v1/auth/google", "/api/v1/auth/config", "/api/v1/auth/signup",
         "/api/v1/auth/forgot-password", "/api/v1/auth/reset-password",
+        "/api/v1/auth/mfa/verify",
         "/api/v1/org/accept-invite",
         "/api/v1/demo-request",
         "/api/v1/billing/callback",  # Plural redirect callback

@@ -40,13 +40,38 @@ interface AuthUser {
 //     /auth/me hydration will succeed if the server-side cookie is
 //     still valid; otherwise the user simply sees the login screen.
 
+/** Password or Google was accepted, but the account has two-factor sign-in:
+ *  no session exists until ``completeMfa`` sends a code from the
+ *  authenticator app (or a recovery code) with this challenge. */
+export interface MfaChallenge {
+  mfaRequired: true;
+  challenge: string;
+  expiresIn: number;
+}
+
+export type LoginOutcome = AuthUser | MfaChallenge;
+
+export function isMfaChallenge(outcome: LoginOutcome | null | undefined): outcome is MfaChallenge {
+  return Boolean(outcome && (outcome as MfaChallenge).mfaRequired === true);
+}
+
+function _mfaChallengeFrom(data: any): MfaChallenge | null {
+  if (data && data.mfa_required === true && typeof data.mfa_challenge === "string") {
+    return { mfaRequired: true, challenge: data.mfa_challenge, expiresIn: Number(data.expires_in) || 300 };
+  }
+  return null;
+}
+
 interface AuthContextType {
   /** @deprecated Always null in browser sessions. Use ``isAuthenticated``. */
   token: null;
   user: AuthUser | null;
-  /** Resolve with the hydrated session user so callers can route by role. */
-  login: (email: string, password: string) => Promise<AuthUser>;
-  loginWithGoogle: (credential: string) => Promise<AuthUser>;
+  /** Resolve with the hydrated session user so callers can route by role,
+   *  or with an MFA challenge when the account needs an authenticator code. */
+  login: (email: string, password: string) => Promise<LoginOutcome>;
+  loginWithGoogle: (credential: string) => Promise<LoginOutcome>;
+  /** Second step of an MFA sign-in: exchange the challenge and a code for the session. */
+  completeMfa: (challenge: string, code: string) => Promise<AuthUser>;
   loginWithToken: (token?: string) => Promise<AuthUser>;
   signup: (orgName: string, name: string, email: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
@@ -166,6 +191,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       throw new Error(err.detail || "Login failed");
     }
     const data = await res.json();
+    const challenge = _mfaChallengeFrom(data);
+    if (challenge) return challenge;
     // Cookie was set by the backend response. Hydrate from /auth/me
     // (single source of truth) so we never rely on the response body's
     // user shape, which has drifted across endpoints in the past.
@@ -211,8 +238,29 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const err = await res.json().catch(() => ({ detail: "Google login failed" }));
       throw new Error(err.detail || "Google login failed");
     }
+    const challenge = _mfaChallengeFrom(await res.json().catch(() => ({})));
+    if (challenge) return challenge;
     const sessionUser = await _hydrateFromCookie();
     if (!sessionUser) throw new Error("Google login succeeded but the session could not be verified");
+    return sessionUser;
+  }, [_hydrateFromCookie]);
+
+  const completeMfa = useCallback(async (challenge: string, code: string) => {
+    const res = await fetch(`${API_BASE}/auth/mfa/verify`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ challenge, code }),
+      ...SESSION_FETCH_OPTS,
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ detail: "That code did not work" }));
+      const error = new Error(err.detail || "That code did not work") as Error & { status?: number };
+      error.status = res.status;
+      throw error;
+    }
+    const sessionUser = await _hydrateFromCookie();
+    if (!sessionUser) throw new Error("Sign-in succeeded but the session could not be verified");
+    import("@/components/Analytics").then(m => m.trackEvent("login", { method: "mfa" })).catch(() => {});
     return sessionUser;
   }, [_hydrateFromCookie]);
 
@@ -254,6 +302,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         user,
         login,
         loginWithGoogle,
+        completeMfa,
         loginWithToken,
         signup,
         logout,

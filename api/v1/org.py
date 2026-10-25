@@ -158,6 +158,7 @@ async def list_members(request: Request):
             "role": u.role,
             "domain": u.domain,
             "status": u.status,
+            "mfa_enabled": bool(u.mfa_enabled and u.mfa_totp_secret),
             "created_at": u.created_at.isoformat() if u.created_at else None,
         }
         for u in users
@@ -453,3 +454,49 @@ async def deactivate_member(user_id: str, request: Request):
 
     await invalidate_user_session_state(tenant_id, user.email)
     return {"status": "deactivated", "user_id": user_id}
+
+
+@router.delete("/members/{user_id}/mfa", dependencies=[require_tenant_admin])
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="org.members.mfa.reset.admin",
+    rate_limit="admin-mutating",
+    idempotency="clears-member-mfa-enrolment",
+    audit_event="org.members.mfa_reset",
+)
+async def reset_member_mfa(user_id: str, request: Request):
+    """Turn off two-factor sign-in for a member who lost their authenticator.
+
+    Their sessions are revoked as well, so the next sign-in is with the
+    password (or Google) alone and they can enrol a new device. An admin
+    cannot reset their own: that would bypass the code it protects.
+    """
+    from api.v1.auth_mfa import clear_mfa  # noqa: PLC0415 - avoids an import cycle through api.v1.auth
+
+    tenant_id = _get_tenant_id(request)
+    current_user_email = getattr(request.state, "user_sub", "")
+    try:
+        member_id = uuid.UUID(user_id)
+    except ValueError:
+        raise HTTPException(status_code=404, detail="Member not found") from None
+    async with get_tenant_session(uuid.UUID(tenant_id)) as session:
+        result = await session.execute(
+            select(User).where(User.id == member_id, User.tenant_id == uuid.UUID(tenant_id)).with_for_update()
+        )
+        user = result.scalar_one_or_none()
+        if not user or user.status == "deleted":
+            raise HTTPException(status_code=404, detail="Member not found")
+        if user.email == current_user_email:
+            raise HTTPException(
+                status_code=400,
+                detail="You cannot reset your own two-factor sign-in; turn it off with a code, or ask another admin",
+            )
+        clear_mfa(user)
+        user.sessions_invalid_before = datetime.now(UTC)
+        session.add(user)
+        await session.commit()
+        email = user.email
+
+    await invalidate_user_session_state(tenant_id, email)
+    return {"status": "mfa_reset", "user_id": user_id}

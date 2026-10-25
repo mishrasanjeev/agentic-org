@@ -3,7 +3,7 @@ import { Link, useLocation, useNavigate } from "react-router";
 import { useTranslation } from "react-i18next";
 import HITLBadge from "./HITLBadge";
 import { useAuth } from "../contexts/AuthContext";
-import { AGENT_CREATOR_ROLES, APPROVAL_ROLES, CONNECTOR_ROLES, LINEAGE_ROLES, SUPERVISOR_ROLES, WORKBENCH_ROLES } from "../lib/roles";
+import { ALL_ROLES, AGENT_CREATOR_ROLES, APPROVAL_ROLES, CONNECTOR_ROLES, LINEAGE_ROLES, SUPERVISOR_ROLES, WORKBENCH_ROLES } from "../lib/roles";
 import api from "../lib/api";
 
 const LANGUAGES = [
@@ -77,6 +77,7 @@ const ALL_NAV: Array<{ path: string; labelKey: string; label: string; roles: rea
   { path: "/dashboard/sla", labelKey: "nav.sla", label: "SLA Monitor", roles: ["admin"] },
   { path: "/dashboard/billing", labelKey: "nav.billing", label: "Billing", roles: ["admin"] },
   { path: "/dashboard/settings", labelKey: "nav.settings", label: "Settings", roles: ["admin"] },
+  { path: "/dashboard/security", labelKey: "nav.accountSecurity", label: "Account Security", roles: ALL_ROLES },
 ];
 
 const ROLE_LABELS: Record<string, { titleKey: string; domainKey: string }> = {

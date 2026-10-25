@@ -1,5 +1,22 @@
 # Changelog
 
+## Unreleased - Two-factor sign-in with an authenticator app
+
+- Every user can turn on two-factor sign-in from **Account Security**: scan a
+  QR code (or type the key) into Google Authenticator, Microsoft Authenticator,
+  Authy or 1Password, confirm with a 6-digit code, and save ten one-time
+  recovery codes.
+- With it on, password and Google sign-in ask for the code before a session
+  starts. The sign-in challenge lasts five minutes, allows five wrong codes, is
+  single use, and a code cannot be replayed within its 30-second window.
+- Turning it off or replacing recovery codes needs a current code. Admins can
+  reset a member who lost their phone (`DELETE /org/members/{id}/mfa`), which
+  also signs that member out everywhere; admins cannot reset their own.
+- Secrets are encrypted with the credential vault; recovery codes are stored
+  as hashes. Migration `v6z94_user_totp_mfa` adds the columns to `users`.
+- Compliance evidence now names the real MFA methods and the real minimum
+  password length (8).
+
 ## Unreleased - Preserve token revocations across API restarts
 
 - Security: remove obsolete startup blacklist cleanup so revoked tokens remain

@@ -1724,7 +1724,7 @@
     "public_exempt_reason": "auth-bootstrap-config-no-tenant-data",
     "rate_limit": "public-read",
     "scope": "public:auth.config",
-    "source_line": 914,
+    "source_line": 940,
     "tenant_required": false
   },
   {
@@ -1742,7 +1742,7 @@
     "public_exempt_reason": "password-reset-bootstrap-rate-limited",
     "rate_limit": "auth-password-reset",
     "scope": "public:auth.password_reset.request",
-    "source_line": 647,
+    "source_line": 673,
     "tenant_required": false
   },
   {
@@ -1760,7 +1760,7 @@
     "public_exempt_reason": "google-id-token-verification",
     "rate_limit": "auth-login",
     "scope": "public:auth.google",
-    "source_line": 509,
+    "source_line": 545,
     "tenant_required": false
   },
   {
@@ -1778,7 +1778,7 @@
     "public_exempt_reason": "auth-bootstrap-rate-limited-credentials",
     "rate_limit": "auth-login",
     "scope": "public:auth.login",
-    "source_line": 432,
+    "source_line": 491,
     "tenant_required": false
   },
   {
@@ -1796,7 +1796,7 @@
     "public_exempt_reason": null,
     "rate_limit": "auth-mutating",
     "scope": "auth.session.logout",
-    "source_line": 763,
+    "source_line": 789,
     "tenant_required": true
   },
   {
@@ -1814,7 +1814,7 @@
     "public_exempt_reason": null,
     "rate_limit": "auth-mutating",
     "scope": "auth.session.logout",
-    "source_line": 797,
+    "source_line": 823,
     "tenant_required": true
   },
   {
@@ -1832,8 +1832,116 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "auth.session.read",
-    "source_line": 844,
+    "source_line": 870,
     "tenant_required": true
+  },
+  {
+    "audit_event": "auth.mfa.disable",
+    "auth_required": true,
+    "function": "mfa_disable",
+    "idempotency": "clears-enrolment",
+    "key": "POST /api/v1/auth/mfa/disable api/v1/auth_mfa.py:mfa_disable",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/auth_mfa.py",
+    "path": "/api/v1/auth/mfa/disable",
+    "public_exempt_reason": null,
+    "rate_limit": "auth-mutating",
+    "scope": "auth.mfa.manage",
+    "source_line": 235,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "auth.mfa.enable",
+    "auth_required": true,
+    "function": "mfa_enable",
+    "idempotency": "enrolment-confirmed-once",
+    "key": "POST /api/v1/auth/mfa/enable api/v1/auth_mfa.py:mfa_enable",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/auth_mfa.py",
+    "path": "/api/v1/auth/mfa/enable",
+    "public_exempt_reason": null,
+    "rate_limit": "auth-mutating",
+    "scope": "auth.mfa.manage",
+    "source_line": 200,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "auth.mfa.recovery_codes",
+    "auth_required": true,
+    "function": "mfa_regenerate_recovery_codes",
+    "idempotency": "replaces-recovery-codes",
+    "key": "POST /api/v1/auth/mfa/recovery-codes api/v1/auth_mfa.py:mfa_regenerate_recovery_codes",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/auth_mfa.py",
+    "path": "/api/v1/auth/mfa/recovery-codes",
+    "public_exempt_reason": null,
+    "rate_limit": "auth-mutating",
+    "scope": "auth.mfa.manage",
+    "source_line": 258,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "auth.mfa.setup",
+    "auth_required": true,
+    "function": "mfa_setup",
+    "idempotency": "replaces-pending-secret",
+    "key": "POST /api/v1/auth/mfa/setup api/v1/auth_mfa.py:mfa_setup",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/auth_mfa.py",
+    "path": "/api/v1/auth/mfa/setup",
+    "public_exempt_reason": null,
+    "rate_limit": "auth-mutating",
+    "scope": "auth.mfa.manage",
+    "source_line": 167,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "auth.mfa.status",
+    "auth_required": true,
+    "function": "mfa_status",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/auth/mfa/status api/v1/auth_mfa.py:mfa_status",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/auth_mfa.py",
+    "path": "/api/v1/auth/mfa/status",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "auth.mfa.read",
+    "source_line": 142,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "auth.mfa.verify",
+    "auth_required": false,
+    "function": "mfa_verify",
+    "idempotency": "one-time-challenge-consumed-on-success",
+    "key": "POST /api/v1/auth/mfa/verify api/v1/auth_mfa.py:mfa_verify",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/auth_mfa.py",
+    "path": "/api/v1/auth/mfa/verify",
+    "public_exempt_reason": "second-factor-of-a-pending-sign-in",
+    "rate_limit": "auth-login",
+    "scope": "public:auth.mfa.verify",
+    "source_line": 283,
+    "tenant_required": false
   },
   {
     "audit_event": "auth.password_reset.completed",
@@ -1850,7 +1958,7 @@
     "public_exempt_reason": "one-time-reset-code-validated",
     "rate_limit": "auth-password-reset",
     "scope": "public:auth.password_reset.consume",
-    "source_line": 707,
+    "source_line": 733,
     "tenant_required": false
   },
   {
@@ -1868,7 +1976,7 @@
     "public_exempt_reason": "auth-bootstrap-rate-limited-password-policy",
     "rate_limit": "auth-signup",
     "scope": "public:auth.signup",
-    "source_line": 194,
+    "source_line": 204,
     "tenant_required": false
   },
   {
@@ -9158,7 +9266,7 @@
     "public_exempt_reason": "one-time-invite-code-validated",
     "rate_limit": "auth-invite",
     "scope": "public:org.invite.accept",
-    "source_line": 316,
+    "source_line": 317,
     "tenant_required": false
   },
   {
@@ -9230,7 +9338,7 @@
     "public_exempt_reason": null,
     "rate_limit": "admin-mutating",
     "scope": "org.members.invite.admin",
-    "source_line": 176,
+    "source_line": 177,
     "tenant_required": true
   },
   {
@@ -9248,7 +9356,7 @@
     "public_exempt_reason": "one-time-invite-code-preview",
     "rate_limit": "auth-invite",
     "scope": "public:org.invite.preview",
-    "source_line": 267,
+    "source_line": 268,
     "tenant_required": false
   },
   {
@@ -9284,7 +9392,25 @@
     "public_exempt_reason": null,
     "rate_limit": "admin-mutating",
     "scope": "org.members.delete.admin",
-    "source_line": 429,
+    "source_line": 430,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "org.members.mfa_reset",
+    "auth_required": true,
+    "function": "reset_member_mfa",
+    "idempotency": "clears-member-mfa-enrolment",
+    "key": "DELETE /api/v1/org/members/{user_id}/mfa api/v1/org.py:reset_member_mfa",
+    "metadata_present": true,
+    "methods": [
+      "DELETE"
+    ],
+    "module": "api/v1/org.py",
+    "path": "/api/v1/org/members/{user_id}/mfa",
+    "public_exempt_reason": null,
+    "rate_limit": "admin-mutating",
+    "scope": "org.members.mfa.reset.admin",
+    "source_line": 468,
     "tenant_required": true
   },
   {
@@ -9302,7 +9428,7 @@
     "public_exempt_reason": null,
     "rate_limit": "admin-mutating",
     "scope": "org.onboarding.update.admin",
-    "source_line": 392,
+    "source_line": 393,
     "tenant_required": true
   },
   {
