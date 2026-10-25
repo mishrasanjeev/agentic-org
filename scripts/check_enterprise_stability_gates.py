@@ -636,6 +636,7 @@ def _infer_auth_required(path: str, methods: list[str]) -> bool | None:
         "/api/v1/auth/signup",
         "/api/v1/auth/forgot-password",
         "/api/v1/auth/reset-password",
+        "/api/v1/auth/mfa/verify",
         "/api/v1/org/accept-invite",
         "/api/v1/demo-request",
         "/api/v1/billing/callback",

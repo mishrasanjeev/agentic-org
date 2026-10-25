@@ -259,7 +259,10 @@ def test_mistake_5_localstorage_auth_bypass_count_below_cap() -> None:
 # status=revoked keep the rows); 36 -> 38.
 # Reviewed addition: DELETE .../custom-domain (api/v1/merchant_custom_domains.py)
 # is a soft delete (status=removed keeps the row; the ledger records it); 38 -> 39.
-DELETE_HANDLER_CAP = 39
+# Reviewed addition: DELETE /org/members/{user_id}/mfa (api/v1/org.py) deletes no
+# row: it clears the member's MFA enrolment columns and revokes their sessions
+# (admin only, never their own); 39 -> 40.
+DELETE_HANDLER_CAP = 40
 
 DELETE_DECORATOR = re.compile(r'^@router\.delete\(', re.MULTILINE)
 

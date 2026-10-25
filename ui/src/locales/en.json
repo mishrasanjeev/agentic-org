@@ -54,6 +54,7 @@
     "agentCatalogue": "Agent Catalogue",
     "sla": "SLA Monitor",
     "billing": "Billing",
+    "accountSecurity": "Account Security",
     "settings": "Settings",
     "lineage": "Lineage"
   },

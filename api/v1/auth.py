@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
+import json
 import logging
 import os
 import re
@@ -22,6 +23,7 @@ from sqlalchemy import func, select
 from api.client_ip import client_ip as resolve_client_ip
 from api.route_metadata import route_meta
 from auth.jwt import blacklist_token, create_access_token, validate_local_token
+from auth.one_time_codes import MFA_CHALLENGE_TTL_SECONDS
 from auth.one_time_codes import consume as consume_code
 from auth.one_time_codes import issue as issue_code
 from core import auth_state
@@ -114,6 +116,14 @@ class LoginResponse(BaseModel):
     access_token: str
     token_type: str = "bearer"
     user: dict
+
+
+class MfaChallengeResponse(BaseModel):
+    """Password or Google accepted; a code from the user's authenticator app is still due."""
+
+    mfa_required: bool = True
+    mfa_challenge: str
+    expires_in: int
 
 
 class SignupRequest(BaseModel):
@@ -419,7 +429,56 @@ async def _clear_rate_limit(client_ip: str) -> None:
     _login_attempts.pop(client_ip, None)
 
 
-@router.post("/login", response_model=LoginResponse)
+def mfa_enrolled(user: User) -> bool:
+    """A confirmed authenticator enrolment; the bare legacy flag is not enough."""
+    return bool(user.mfa_enabled and user.mfa_totp_secret)
+
+
+def session_token_for(user: User) -> str:
+    return create_access_token(
+        data={
+            "sub": user.email,
+            "agenticorg:user_id": str(user.id),
+            "agenticorg:tenant_id": str(user.tenant_id),
+            "grantex:scopes": get_scopes_for_role(user.role),
+            "name": user.name,
+            "role": user.role,
+            "domain": user.domain,
+            "agenticorg:domains": get_allowed_domains(user.role, user.domain),
+        },
+        expires_minutes=getattr(settings, "token_ttl_minutes", 60),
+    )
+
+
+def start_session(response: Response, user: User, tenant_settings: dict | None) -> LoginResponse:
+    """Mint the session cookie and the login body for a fully authenticated user."""
+    token = session_token_for(user)
+    _set_session_cookie(response, token, getattr(settings, "token_ttl_minutes", 60) * 60)
+    return LoginResponse(
+        access_token=token,
+        user={
+            "email": user.email,
+            "name": user.name,
+            "role": user.role,
+            "domain": user.domain,
+            "tenant_id": str(user.tenant_id),
+            "onboarding_complete": (tenant_settings or {}).get("onboarding_complete", False),
+        },
+    )
+
+
+async def issue_mfa_challenge(user: User, method: str) -> MfaChallengeResponse:
+    """First factor passed: hold the session back until the authenticator code arrives.
+
+    The challenge is an opaque one-time code in Redis (never a JWT), bound to
+    this user and tenant, valid for five minutes and consumed on success.
+    """
+    payload = json.dumps({"user_id": str(user.id), "tenant_id": str(user.tenant_id), "method": method})
+    challenge = await issue_code("mfa", payload, MFA_CHALLENGE_TTL_SECONDS)
+    return MfaChallengeResponse(mfa_challenge=challenge, expires_in=MFA_CHALLENGE_TTL_SECONDS)
+
+
+@router.post("/login", response_model=LoginResponse | MfaChallengeResponse)
 @route_meta(
     auth_required=False,
     tenant_required=False,
@@ -464,39 +523,16 @@ async def login(body: LoginRequest, request: Request, response: Response):
     if tenant and user.role == "admin":
         await _seed_tenant_defaults_isolated(user.tenant_id, only_if_empty=True, trigger="login")
 
-    tenant_settings = tenant.settings if tenant else {}
-    token = create_access_token(
-        data={
-            "sub": user.email,
-            "agenticorg:user_id": str(user.id),
-            "agenticorg:tenant_id": str(user.tenant_id),
-            "grantex:scopes": get_scopes_for_role(user.role),
-            "name": user.name,
-            "role": user.role,
-            "domain": user.domain,
-            "agenticorg:domains": get_allowed_domains(user.role, user.domain),
-        },
-        expires_minutes=getattr(settings, "token_ttl_minutes", 60),
-    )
-    _set_session_cookie(response, token, getattr(settings, "token_ttl_minutes", 60) * 60)
-    return LoginResponse(
-        access_token=token,
-        user={
-            "email": user.email,
-            "name": user.name,
-            "role": user.role,
-            "domain": user.domain,
-            "tenant_id": str(user.tenant_id),
-            "onboarding_complete": tenant_settings.get("onboarding_complete", False),
-        },
-    )
+    if mfa_enrolled(user):
+        return await issue_mfa_challenge(user, "password")
+    return start_session(response, user, tenant.settings if tenant else {})
 
 
 class GoogleLoginRequest(BaseModel):
     credential: str  # Google ID token from Sign In With Google
 
 
-@router.post("/google", response_model=LoginResponse)
+@router.post("/google", response_model=LoginResponse | MfaChallengeResponse)
 @route_meta(
     auth_required=False,
     tenant_required=False,
@@ -588,19 +624,9 @@ async def google_login(body: GoogleLoginRequest, response: Response):
     if new_google_tenant_id is not None:
         await _seed_tenant_defaults_isolated(new_google_tenant_id, only_if_empty=False, trigger="google_signup")
 
-    token = create_access_token(
-        data={
-            "sub": user.email,
-            "agenticorg:user_id": str(user.id),
-            "agenticorg:tenant_id": str(user.tenant_id),
-            "grantex:scopes": get_scopes_for_role(user.role),
-            "name": user.name,
-            "role": user.role,
-            "domain": user.domain,
-            "agenticorg:domains": get_allowed_domains(user.role, user.domain),
-        },
-        expires_minutes=getattr(settings, "token_ttl_minutes", 60),
-    )
+    if mfa_enrolled(user):
+        return await issue_mfa_challenge(user, "google")
+    token = session_token_for(user)
     _set_session_cookie(response, token, getattr(settings, "token_ttl_minutes", 60) * 60)
     return LoginResponse(
         access_token=token,

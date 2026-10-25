@@ -566,6 +566,7 @@ def test_bridge_mutating_routes_include_idempotency_and_audit_metadata() -> None
 def test_auth_billing_connector_target_routes_have_metadata() -> None:
     target_paths = [
         gates.REPO_ROOT / "api/v1/auth.py",
+        gates.REPO_ROOT / "api/v1/auth_mfa.py",
         gates.REPO_ROOT / "api/v1/org.py",
         gates.REPO_ROOT / "api/v1/billing.py",
         gates.REPO_ROOT / "api/v1/oauth_connector.py",
@@ -575,7 +576,9 @@ def test_auth_billing_connector_target_routes_have_metadata() -> None:
     routes = gates.scan_routes(target_paths, gates.REPO_ROOT)
     findings = gates.route_metadata_findings(routes)
 
-    assert len(routes) == 46  # 2026-09-13: +POST /auth/logout-all (session revocation)
+    # 2026-09-13: +POST /auth/logout-all (session revocation)
+    # 2026-10-25: +6 /auth/mfa/* (authenticator sign-in) and DELETE /org/members/{id}/mfa
+    assert len(routes) == 53
     assert findings == []
     assert all(route.metadata_present for route in routes)
     assert all(route.scope for route in routes)
@@ -587,6 +590,7 @@ def test_auth_billing_connector_target_routes_have_metadata() -> None:
 def test_public_auth_billing_oauth_routes_include_public_reason() -> None:
     target_paths = [
         gates.REPO_ROOT / "api/v1/auth.py",
+        gates.REPO_ROOT / "api/v1/auth_mfa.py",
         gates.REPO_ROOT / "api/v1/org.py",
         gates.REPO_ROOT / "api/v1/billing.py",
         gates.REPO_ROOT / "api/v1/oauth_connector.py",
@@ -600,6 +604,7 @@ def test_public_auth_billing_oauth_routes_include_public_reason() -> None:
         "/api/v1/auth/signup",
         "/api/v1/auth/forgot-password",
         "/api/v1/auth/reset-password",
+        "/api/v1/auth/mfa/verify",
         "/api/v1/billing/callback",
         "/api/v1/billing/callback/stripe",
         "/api/v1/oauth/callback",

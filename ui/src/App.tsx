@@ -71,6 +71,7 @@ const Audit = lazyRetry(() => import("./pages/Audit"));
 const Observability = lazyRetry(() => import("./pages/Observability"));
 const Observatory = lazyRetry(() => import("./pages/Observatory"));
 const Settings = lazyRetry(() => import("./pages/Settings"));
+const AccountSecurity = lazyRetry(() => import("./pages/AccountSecurity"));
 const AccessDenied = lazyRetry(() => import("./pages/AccessDenied"));
 const Onboarding = lazyRetry(() => import("./pages/Onboarding"));
 const SLAMonitor = lazyRetry(() => import("./pages/SLAMonitor"));
@@ -903,6 +904,16 @@ export default function App() {
           <ProtectedRoute allowedRoles={["admin", "cfo", "coo", "auditor"]}>
             <Layout>
               <CompanyDetail />
+            </Layout>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/dashboard/security"
+        element={
+          <ProtectedRoute>
+            <Layout>
+              <AccountSecurity />
             </Layout>
           </ProtectedRoute>
         }

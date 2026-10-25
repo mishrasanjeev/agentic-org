@@ -20,9 +20,13 @@ from typing import Literal
 
 import redis.asyncio as aioredis
 
-CodeKind = Literal["invite", "reset"]
+CodeKind = Literal["invite", "reset", "mfa"]
 
 _CODE_BYTES = 24  # 192-bit opaque code → 32-char urlsafe-base64
+
+# A sign-in that passed its first factor waits this long for the
+# authenticator code before the user has to start again.
+MFA_CHALLENGE_TTL_SECONDS = 300
 
 
 def _redis() -> aioredis.Redis:
@@ -71,5 +75,22 @@ async def consume(kind: CodeKind, code: str) -> str | None:
     try:
         payload = await r.getdel(_key(kind, code))
         return payload
+    finally:
+        await r.aclose()
+
+
+async def record_attempt(kind: CodeKind, code: str, ttl_seconds: int) -> int:
+    """Count one guess against a code and return the running total.
+
+    Lets a caller cap wrong guesses per code (an MFA challenge allows five)
+    across replicas; the counter expires with the code.
+    """
+    r = _redis()
+    try:
+        key = f"onetime-attempts:{kind}:{code}"
+        count = await r.incr(key)
+        if count == 1:
+            await r.expire(key, ttl_seconds)
+        return int(count)
     finally:
         await r.aclose()

@@ -1,7 +1,7 @@
 import { useState, useEffect, FormEvent } from "react";
 import { useNavigate, Link } from "react-router";
 import { GoogleLogin, GoogleOAuthProvider } from "@react-oauth/google";
-import { useAuth } from "../contexts/AuthContext";
+import { isMfaChallenge, useAuth } from "../contexts/AuthContext";
 
 export default function Signup() {
   const { signup, loginWithGoogle } = useAuth();
@@ -63,7 +63,12 @@ export default function Signup() {
     setError(null);
     setLoading(true);
     try {
-      await loginWithGoogle(credentialResponse.credential);
+      const outcome = await loginWithGoogle(credentialResponse.credential);
+      // An existing account with two-factor sign-in finishes on the login page.
+      if (isMfaChallenge(outcome)) {
+        navigate("/login", { state: { mfaChallenge: outcome } });
+        return;
+      }
       import("@/components/Analytics").then(m => m.trackEvent("sign_up", { method: "google" })).catch(() => {});
       navigate("/onboarding");
     } catch (err: any) {
