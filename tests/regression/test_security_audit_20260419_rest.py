@@ -43,7 +43,6 @@ def test_critical01_auth_sets_session_cookie():
 
 def test_critical01_auth_endpoints_invoke_cookie_helper():
     from api.v1 import auth as auth_module
-
     from api.v1 import auth_mfa
 
     # start_session is the shared helper that sets the cookie for a fully
