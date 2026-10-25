@@ -36,12 +36,24 @@ REPO = Path(__file__).resolve().parents[2]
 
 
 class TestUserIdClaim:
-    @pytest.mark.parametrize("fn_name", ["signup", "login", "google_login"])
+    @pytest.mark.parametrize("fn_name", ["signup", "login", "google_login", "mfa_verify"])
     def test_every_human_token_carries_agenticorg_user_id(self, fn_name: str) -> None:
         from api.v1 import auth as auth_mod
+        from api.v1 import auth_mfa
 
-        src = inspect.getsource(getattr(auth_mod, fn_name))
-        assert '"agenticorg:user_id": str(user.id)' in src, fn_name
+        # Sessions are minted inline (signup) or by the shared helpers, which
+        # must themselves carry the claim (2026-10-25: MFA moved login/google
+        # behind session_token_for / start_session).
+        helper_src = inspect.getsource(auth_mod.session_token_for)
+        assert '"agenticorg:user_id": str(user.id)' in helper_src
+        assert "session_token_for(user)" in inspect.getsource(auth_mod.start_session)
+        fn = getattr(auth_mod, fn_name, None) or getattr(auth_mfa, fn_name)
+        src = inspect.getsource(fn)
+        assert (
+            '"agenticorg:user_id": str(user.id)' in src
+            or "session_token_for(user)" in src
+            or "start_session(response, user" in src
+        ), fn_name
 
     def test_agents_and_prompt_templates_no_longer_parse_sub_as_uuid(self) -> None:
         from api.v1 import agents, prompt_templates

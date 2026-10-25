@@ -44,9 +44,15 @@ def test_critical01_auth_sets_session_cookie():
 def test_critical01_auth_endpoints_invoke_cookie_helper():
     from api.v1 import auth as auth_module
 
-    for fn_name in ("signup", "login", "google_login"):
-        fn_src = inspect.getsource(getattr(auth_module, fn_name))
-        assert "_set_session_cookie(response" in fn_src, (
+    from api.v1 import auth_mfa
+
+    # start_session is the shared helper that sets the cookie for a fully
+    # authenticated user (password, Google, or after the MFA code).
+    assert "_set_session_cookie(response" in inspect.getsource(auth_module.start_session)
+    for fn_name in ("signup", "login", "google_login", "mfa_verify"):
+        fn = getattr(auth_module, fn_name, None) or getattr(auth_mfa, fn_name)
+        fn_src = inspect.getsource(fn)
+        assert "_set_session_cookie(response" in fn_src or "start_session(response" in fn_src, (
             f"/{fn_name} must call _set_session_cookie on the Response"
         )
 
