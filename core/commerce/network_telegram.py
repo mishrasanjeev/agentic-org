@@ -116,7 +116,8 @@ async def load_state(chat: str) -> dict[str, Any]:
     state = json.loads(raw) if raw else {}
     if not isinstance(state, dict):
         state = {}
-    turns = state.get("turns") if isinstance(state.get("turns"), list) else []
+    stored = state.get("turns")
+    turns: list[Any] = stored if isinstance(stored, list) else []
     if turns and time.time() - float(state.get("updated_at") or 0) > TURN_TTL_SECONDS:
         turns = []
     state["turns"] = turns[-MAX_TURNS:]
@@ -141,8 +142,9 @@ def parse_update(update: Any) -> tuple[int, str, str] | None:
     message = update.get("message")
     if not isinstance(message, dict):
         return None
-    chat = message.get("chat") if isinstance(message.get("chat"), dict) else {}
-    sender = message.get("from") if isinstance(message.get("from"), dict) else {}
+    raw_chat, raw_sender = message.get("chat"), message.get("from")
+    chat: dict[str, Any] = raw_chat if isinstance(raw_chat, dict) else {}
+    sender: dict[str, Any] = raw_sender if isinstance(raw_sender, dict) else {}
     text = message.get("text")
     if chat.get("type") != "private" or not isinstance(text, str) or not text.strip():
         return None
