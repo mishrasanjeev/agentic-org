@@ -22,6 +22,7 @@ Here is what is switched on for it today.
 | Catalog search and lookup | Live, no key needed | `https://nilgiritea.agenticorg.ai/ucp/catalog/search` |
 | Facts signed by Grantex | 11 signed artifacts, all verified | Refreshed automatically when they expire |
 | Checkout, cart and order (UCP), ACP feed and checkout | On | Needs a platform API key issued by the merchant |
+| Shopping from ChatGPT and other MCP apps | Live, no sign-in, no payment tools | `https://mcp.agenticorg.ai/mcp` ([how to connect](#chatgpt-through-the-hosted-agenticorg-mcp-server)) |
 | Real payments | Off | No money can move in this demo |
 
 ## Try it yourself in two minutes
@@ -155,8 +156,46 @@ Every step of the mandates, the passkey and the decision is in [A purchase, step
 
 ## See it with real agents
 
-These are real runs against the live shop on 22 October 2026, not mock-ups. Each one searches the
-catalog, opens a checkout and stops at the payment step. Nothing was charged.
+These are real runs against the live shop on 22 and 25 October 2026, not mock-ups. Each one
+searches the catalog, opens a checkout and stops at the payment step. Nothing was charged.
+
+### ChatGPT, through the hosted AgenticOrg MCP server
+
+ChatGPT connects straight to AgenticOrg's hosted MCP server at `https://mcp.agenticorg.ai/mcp`. The
+server needs no sign-in and offers shop tools only: search, product lookup, and opening or updating a
+checkout. It has no tool that pays, and each caller is rate-limited.
+
+Connect it once:
+
+```flow
+Add the server | In ChatGPT on the web, open Plugins, choose Add, then Add custom MCP server.
+Fill in three fields | Name it Nilgiri Tea House, set Server URL to https://mcp.agenticorg.ai/mcp and set Authentication to No authentication.
+Create it | Tick that you trust the server, then choose Create as a plugin.
+Shop | In any chat, type @Nil, pick the plugin and ask in plain words.
+```
+
+The run below used a free ChatGPT account on 25 October 2026. ChatGPT's menu names may change over
+time.
+
+![ChatGPT's message box with @Nil typed; the picker offers the plugin Nilgiri Tea House (AgenticOrg demo).](/screenshots/nilgiri-chatgpt-picker.webp)
+
+1. **Pick the plugin.** Type `@Nil` in the message box and choose Nilgiri Tea House.
+
+![The buyer's message, sent with the Nilgiri Tea House plugin: find masala chai, tell me the price, open a checkout for 1 pack for store pickup in INR, and stop before any payment. ChatGPT worked for 24 seconds and shows Masala Chai Blend from Nilgiri Tea House, a 250 g pack at Rs 449.00, in stock, black tea blended with cardamom, ginger, clove and cinnamon.](/screenshots/nilgiri-chatgpt-request.webp)
+
+2. **Ask in plain words.** Ask it to find masala chai, open a checkout for one pack for store pickup,
+   and stop before paying. In 24 seconds ChatGPT searched the catalog and found Masala Chai Blend
+   (250 g, in stock, ₹449.00).
+
+![ChatGPT's checkout card: checkout created successfully, store pickup selected at Nilgiri Tea House, Ooty, India (demo store). Item 1 at Rs 449.00, pickup fee Rs 0.00, total Rs 449.00, checkout status Ready for completion, payment: no payment made. Checkout ID chk_b874442731f24f9f8308752406904b57. What this means: the checkout is ready for the next step with one 250 g pack and store pickup configured; it stopped before payment, no payment instrument was added and no charge was made.](/screenshots/nilgiri-chatgpt-checkout.webp)
+
+3. **Checkout, then stop at payment.** ChatGPT opened the checkout and chose pickup at the Ooty
+   store, which costs nothing. The checkout is ready for completion with a total of ₹449.00, and no
+   payment was added or charged. A real shop with live payments would take the buyer's payment here,
+   only after the arbiter allows it.
+
+ChatGPT may show a product photo it found on its own. The shop's catalog has no real photos, so any
+picture you see there does not come from Nilgiri Tea House.
 
 ### Gemini, through the AgenticOrg MCP server
 

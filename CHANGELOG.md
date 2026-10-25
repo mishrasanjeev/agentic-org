@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased - Nilgiri Tea House guide: shopping from ChatGPT
+
+- The Nilgiri Tea House example now shows a real ChatGPT run: connect
+  `https://mcp.agenticorg.ai/mcp` as a custom MCP server with no authentication,
+  pick the plugin, and ask for masala chai. ChatGPT finds it at Rs 449, opens a
+  store-pickup checkout and stops before payment. Three screenshots; the
+  product photo ChatGPT adds from its own image search is left out.
+
 ## Unreleased - Hosted demo MCP endpoint: anonymous mode for hosted assistants
 
 - The hosted MCP endpoint can run without caller credentials when the operator sets
