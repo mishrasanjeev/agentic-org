@@ -14,7 +14,7 @@ Sales Agent without weakening the OACP runtime boundary.
   adapters, and provider-owned mandate capability verification.
 - Use Grantex for trust, policy, and canonical OACP artifact authority. Do not
   make Grantex a toll booth for valid cached non-binding buyer/seller answers.
-- Do not call Stripe, Plural, Pine, POS, or provider payment execution paths for
+- Do not call Stripe, Plural, POS, or provider payment execution paths for
   commerce. Provider-owned capability verification is allowed only through the
   non-executing verifier and must store redacted evidence refs only.
 - Treat `grantex_commerce:buyer_discovery_preview` as read-only sandbox preview

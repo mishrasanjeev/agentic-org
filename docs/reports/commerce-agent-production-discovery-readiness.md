@@ -30,7 +30,7 @@
 - Production A2A discovery currently exposes commerce agent metadata and Grantex commerce tool references.
 - Grantex production Commerce V1 discovery is not currently enabled, so AgenticOrg commerce metadata should not be treated as production commerce readiness.
 - Grantex issuer/JWKS references are production-safe public verification metadata, not secret material.
-- No direct Stripe, Plural, Pine, provider credential, bearer token, passport/JWT, idempotency key, webhook secret, DB/Redis URL, private key, or raw payload material was observed or recorded in this evidence.
+- No direct Stripe, Plural, provider credential, bearer token, passport/JWT, idempotency key, webhook secret, DB/Redis URL, private key, or raw payload material was observed or recorded in this evidence.
 - No live payment or live Plural behavior was exercised or enabled.
 - No production runtime defaults were changed by this task.
 

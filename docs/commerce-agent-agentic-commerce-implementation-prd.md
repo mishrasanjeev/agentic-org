@@ -505,7 +505,7 @@ Detailed page and blog plan lives in
 
 Stop AgenticOrg work if any of these occur:
 
-- A direct Stripe, Plural, Pine, provider, or merchant private commerce API path
+- A direct Stripe, Plural, provider, or merchant private commerce API path
   is introduced for payment execution or unapproved merchant execution.
 - AgenticOrg stores provider credentials, raw payment data, Commerce Passport
   values, JWTs, idempotency keys, webhook secrets, DB/Redis URLs, private keys,

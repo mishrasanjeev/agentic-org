@@ -155,7 +155,7 @@ below is true:
 - Any AgenticOrg public commerce discovery request appears before the Grantex
   named merchant approval, Grantex read-only smoke path, and separate
   AgenticOrg dependency approval exist.
-- AgenticOrg would add a direct Stripe, Plural, Pine, or provider credential
+- AgenticOrg would add a direct Stripe, Plural, or provider credential
   path instead of relying on Grantex-controlled metadata.
 
 ## Recommended Next Real Step

@@ -28,9 +28,9 @@ Record only names in docs and reports. Do not paste secret values into shell his
 
 ## Commerce Provider Boundary
 
-No direct Stripe/Plural/Pine/provider credential commerce path is prescribed.
+No direct Stripe/Plural/provider credential commerce path is prescribed.
 
-The Commerce Sales Agent must not call Stripe, Plural, Pine, or any payment provider directly for commerce. It must not read or handle provider credentials for commerce. It must use Grantex staging commerce endpoints and Grantex MCP tools for catalog, inventory, cart, consent, passport, payment intent, checkout, webhook evidence, and audit evidence.
+The Commerce Sales Agent must not call Stripe, Plural, or any payment provider directly for commerce. It must not read or handle provider credentials for commerce. It must use Grantex staging commerce endpoints and Grantex MCP tools for catalog, inventory, cart, consent, passport, payment intent, checkout, webhook evidence, and audit evidence.
 
 Plural sandbox may remain available only for unrelated non-commerce app areas if the staging runtime already requires it. Commerce must not use Plural credentials or live provider credentials.
 
@@ -177,7 +177,7 @@ If hosted staging commerce discovery must be hidden, remove the staging Commerce
 No-go conditions:
 
 - AgenticOrg points commerce to a production Grantex URL.
-- AgenticOrg calls direct Stripe, Plural, Pine, or provider credential paths for commerce.
+- AgenticOrg calls direct Stripe, Plural, or provider credential paths for commerce.
 - AgenticOrg stores or emits secret values, raw passports, or auth material in evidence.
 - Negative evals succeed when they should be refused.
 - Commerce discovery is visible outside staging.

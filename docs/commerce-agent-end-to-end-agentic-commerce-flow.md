@@ -165,7 +165,7 @@ sequenceDiagram
 
 ## What AgenticOrg Must Never Do
 
-- Do not call Plural, Stripe, Pine, or another provider for payment execution.
+- Do not call Plural, Stripe, or another provider for payment execution.
 - Do not call Shopify, WooCommerce, Magento, ERP, OMS, WMS, logistics, support,
   or merchant private APIs outside approved connector sync workflows.
 - Do not store provider credentials, raw payment data, Commerce Passport values,

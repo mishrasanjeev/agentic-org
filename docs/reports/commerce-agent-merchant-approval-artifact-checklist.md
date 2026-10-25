@@ -108,7 +108,7 @@ Do not proceed if any condition below is true:
   live payment approval, live Plural approval, or provider approval.
 - `AGENTICORG_COMMERCE_PUBLIC_DISCOVERY_ENABLED` would be enabled before
   Grantex named merchant read-only smoke passes.
-- AgenticOrg would expose direct Stripe, Plural, Pine, or provider credential
+- AgenticOrg would expose direct Stripe, Plural, or provider credential
   handling.
 - Rollback owner, read-only smoke owner, support owner, incident escalation
   owner, or evidence retention owner is missing.

@@ -21,7 +21,7 @@ def test_commerce_agent_hosted_staging_plan_pins_staging_topology() -> None:
         "GRANTEX_BASE_URL=https://api-staging.grantex.dev",
         "commerce_sales_agent",
         "grantex_commerce:*",
-        "No direct Stripe/Plural/Pine/provider credential path for commerce",
+        "No direct Stripe/Plural/provider credential path for commerce",
         "workflow_dispatch",
         "No production database or Redis",
     ]:
@@ -83,9 +83,9 @@ def test_commerce_agent_staging_data_setup_keeps_commerce_grantex_only() -> None
     content = DATA_SETUP.read_text(encoding="utf-8")
 
     assert "Commerce actions must use `grantex_commerce:*` tools." in content
-    assert "No direct Stripe/Plural/Pine/provider credential commerce path is prescribed." in content
+    assert "No direct Stripe/Plural/provider credential commerce path is prescribed." in content
     assert "No provider credential handling is required for the Commerce Sales Agent." in content
-    assert "Do not run commerce through direct Stripe, Plural, Pine, or provider credential paths." in content
+    assert "Do not run commerce through direct Stripe, Plural, or provider credential paths." in content
 
 
 def test_commerce_agent_staging_data_setup_has_no_secret_values() -> None:
@@ -171,8 +171,8 @@ def test_commerce_agent_hosted_staging_e2e_documents_option_a_local_smoke_sequen
 def test_commerce_agent_hosted_staging_e2e_keeps_commerce_grantex_only() -> None:
     content = E2E.read_text(encoding="utf-8")
 
-    assert "No direct Stripe/Plural/Pine/provider credential commerce path is prescribed." in content
-    assert "must not call Stripe, Plural, Pine, or any payment provider directly for commerce" in content
+    assert "No direct Stripe/Plural/provider credential commerce path is prescribed." in content
+    assert "must not call Stripe, Plural, or any payment provider directly for commerce" in content
     assert "must not read or handle provider credentials for commerce" in content
     assert "AgenticOrg consumes Grantex staging data only" in content
     assert "GRANTEX_COMMERCE_BASE_URL=https://api.grantex.dev" not in content
@@ -252,7 +252,7 @@ def test_commerce_agent_contract_gap_report_classifies_required_items() -> None:
         "Disabled merchant/agent guardrails",
         "Stale inventory behavior",
         "Unsupported EMI/discount/warranty behavior",
-        "No direct Stripe/Plural/Pine/provider credential path",
+        "No direct Stripe/Plural/provider credential path",
         "Mocked eval/demo status",
         "Real hosted staging eval gap",
         "Broader PRD Commerce Agent Pack",
@@ -263,7 +263,7 @@ def test_commerce_agent_contract_gap_report_classifies_required_items() -> None:
 def test_commerce_agent_contract_gap_report_preserves_no_provider_boundary() -> None:
     content = CONTRACT_GAP.read_text(encoding="utf-8")
 
-    assert "No direct Stripe/Plural/Pine/provider credential commerce path is allowed." in content
+    assert "No direct Stripe/Plural/provider credential commerce path is allowed." in content
     assert "The only commerce execution path is Grantex" in content
     assert "GRANTEX_COMMERCE_BASE_URL=https://api-staging.grantex.dev" in content
     assert "GRANTEX_BASE_URL=https://api-staging.grantex.dev" in content

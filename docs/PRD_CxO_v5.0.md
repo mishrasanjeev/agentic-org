@@ -71,7 +71,6 @@ The platform has real infrastructure but demo product surface:
 
 | Company | Industry | Size | Primary CxO Need |
 |---------|----------|------|-------------------|
-| Pine Labs | Fintech / Payments | 2000+ employees | CFO (treasury, reconciliation), COO (merchant ops) |
 | Cred | Consumer Fintech | 800+ employees | CMO (growth marketing), CFO (credit ops) |
 | PolicyBazaar | Insurtech | 5000+ employees | COO (customer support), CHRO (large workforce) |
 | Zerodha | Broking / Fintech | 1500+ employees | CFO (regulatory compliance), CBO (SEBI filings) |
@@ -3854,7 +3853,7 @@ Note: Combined with existing test suite (~2,500 tests), total reaches **~4,000 t
    - (CFO and CMO sections already exist -- update with new dashboard screenshots)
 
 2. **"For Enterprise" Section:**
-   - Scale examples: "Process 10,000 invoices/month like Pine Labs"
+   - Scale examples: "Process 10,000 invoices/month"
    - Security: "SOC 2, DPDPA compliant, zero PII in logs"
    - Multi-tenant: "Each department gets its own AI command center"
 
