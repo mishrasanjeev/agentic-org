@@ -2,6 +2,7 @@
 # Build from the repository root:  docker build -f mcp-server/Dockerfile.hosted -t agenticorg-mcp-demo .
 # Runtime settings (PORT, AGENTICORG_UCP_PROFILE_URL, AGENTICORG_UCP_AGENT_PROFILE, AGENTICORG_API_KEY,
 # MCP_ALLOWED_HOSTS) come from the Cloud Run service; the platform key is a Secret Manager reference.
+# Network mode instead takes MCP_NETWORK_DIRECTORY_URL and AGENTICORG_NETWORK_SERVICE_TOKEN (a secret).
 
 FROM node:26.12.1-slim@sha256:36793bcbb160a6a16cede1e62b93f84e26b78a972a8a4c0b879c1c12f22761ec AS build
 WORKDIR /app

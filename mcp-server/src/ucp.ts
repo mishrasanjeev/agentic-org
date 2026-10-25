@@ -63,7 +63,7 @@ export interface UcpToolOptions {
 
 type Json = Record<string, unknown>;
 
-function isObject(value: unknown): value is Json {
+export function isObject(value: unknown): value is Json {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
@@ -72,7 +72,7 @@ function isLoopback(hostname: string): boolean {
 }
 
 /** https only, except a loopback host (local development and the test stub). */
-function allowedUrl(raw: string): URL | null {
+export function allowedUrl(raw: string): URL | null {
   let url: URL;
   try {
     url = new URL(raw);
@@ -188,7 +188,7 @@ export function ucpError(status: number, body: unknown): UcpError {
   return { status, code, content: text };
 }
 
-function errorResult(error: UcpError) {
+export function errorResult(error: UcpError) {
   return {
     isError: true,
     content: [{ type: "text" as const, text: JSON.stringify({ error }) }],
@@ -212,7 +212,7 @@ function publicBody(body: Json): Json {
   return out;
 }
 
-function okResult(body: Json) {
+export function okResult(body: Json) {
   const shown = publicBody(body);
   return {
     content: [{ type: "text" as const, text: JSON.stringify(shown, null, 2) }],

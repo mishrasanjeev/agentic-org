@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased - Hosted MCP endpoint: network mode
+
+- With `MCP_NETWORK_DIRECTORY_URL` set, the hosted MCP endpoint serves every shop on the AgenticOrg
+  shopping network: `list_shops`, a catalog search across shops (or in one), lookup, and checkouts
+  through the network checkout gateway with `AGENTICORG_NETWORK_SERVICE_TOKEN`. Every result names
+  its shop; nothing can complete, cancel or pay. Without the setting it still serves one shop.
+
 ## Unreleased - Nilgiri Tea House guide: shopping from ChatGPT
 
 - The Nilgiri Tea House example now shows a real ChatGPT run: connect
