@@ -9,6 +9,7 @@ DNS and a fake Firebase Hosting API). Publication is simulated by recording the
 from __future__ import annotations
 
 import re
+import secrets
 import uuid
 from datetime import UTC, datetime
 
@@ -76,7 +77,7 @@ async def _publish(tenant: str) -> None:
 async def test_opt_in_claims_a_platform_subdomain_and_lists_the_shop_once_published(db, network):
     tenant = await _tenant(db)
     await _merchant(tenant)
-    slug = f"example-store-{uuid.uuid4().hex[:6]}"
+    slug = f"example-store-{secrets.token_hex(3)}"
     host = f"{slug}.shops.example"
 
     view = await _opt_in(tenant, slug=slug)
@@ -127,7 +128,7 @@ async def test_slugs_are_unique_across_tenants_reserved_names_refused_and_terms_
     first, second = await _tenant(db), await _tenant(db)
     await _merchant(first)
     await _merchant(second)
-    slug = f"tea-corner-{uuid.uuid4().hex[:6]}"
+    slug = f"tea-corner-{secrets.token_hex(3)}"
     await _opt_in(first, slug=slug, claim=False)
 
     with pytest.raises(HTTPException) as taken:
@@ -153,8 +154,8 @@ async def test_the_platform_subdomain_cap_is_enforced_across_tenants(db, network
     first, second = await _tenant(db), await _tenant(db)
     await _merchant(first)
     await _merchant(second)
-    assert (await _opt_in(first, slug=f"cap-a-{uuid.uuid4().hex[:6]}"))["subdomain_note"] is None
-    second_view = await _opt_in(second, slug=f"cap-b-{uuid.uuid4().hex[:6]}")
+    assert (await _opt_in(first, slug=f"cap-a-{secrets.token_hex(3)}"))["subdomain_note"] is None
+    second_view = await _opt_in(second, slug=f"cap-b-{secrets.token_hex(3)}")
     # The listing stands; only the platform address is refused.
     assert second_view["listing"]["status"] == "listed"
     assert second_view["subdomain_note"]["code"] == "platform_subdomain_cap_reached"
@@ -166,7 +167,7 @@ async def test_without_the_firebase_front_no_subdomain_is_claimed(db, world, mon
     monkeypatch.setattr(settings, "platform_subdomain_apex", "shops.example")
     tenant = await _tenant(db)
     await _merchant(tenant)
-    view = await _opt_in(tenant, slug=f"no-front-{uuid.uuid4().hex[:6]}")
+    view = await _opt_in(tenant, slug=f"no-front-{secrets.token_hex(3)}")
     assert view["subdomain_note"]["code"] == "platform_subdomains_unavailable"
     assert view["listing"]["subdomain_host"] is None
 
@@ -174,9 +175,9 @@ async def test_without_the_firebase_front_no_subdomain_is_claimed(db, world, mon
 async def test_listings_are_isolated_by_rls_and_readable_only_in_platform_context(db, network):
     tenant_a, tenant_b = await _tenant(db), await _tenant(db)
     await _merchant(tenant_a)
-    await _opt_in(tenant_a, slug=f"rls-{uuid.uuid4().hex[:8]}", claim=False)
+    await _opt_in(tenant_a, slug=f"rls-{secrets.token_hex(4)}", claim=False)
 
-    role = f"net_rls_{uuid.uuid4().hex[:8]}"
+    role = f"net_rls_{secrets.token_hex(4)}"
     async with db.begin() as conn:
         schema = str((await conn.execute(text("SELECT current_schema()"))).scalar_one())
         assert re.fullmatch(r"[a-z_][a-z0-9_]*", schema), schema
@@ -208,7 +209,7 @@ async def test_listings_are_isolated_by_rls_and_readable_only_in_platform_contex
                     "terms_version, opted_in_by, opted_in_at) VALUES (:id, CAST(:t AS uuid), 'm', :slug, 'x', "
                     "'v', 'test', now())"
                 ),
-                {"id": uuid.uuid4(), "t": tenant_a, "slug": f"probe-{uuid.uuid4().hex[:8]}"},
+                {"id": uuid.uuid4(), "t": tenant_a, "slug": f"probe-{secrets.token_hex(4)}"},
             )
 
     try:
