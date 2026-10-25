@@ -130,3 +130,43 @@ test("invalid limits and unsafe caller credentials fail closed at startup", () =
     Object.assign(process.env, before);
   }
 });
+
+test("anonymous mode is an explicit opt-in and still applies every other guard", async () => {
+  // Opt-in: no token and the flag serves without credentials; a token is then not required.
+  await withServer({ accessToken: undefined, allowAnonymous: true }, async base => {
+    assert.equal((await post(base)).status, 503); // reaches the (stub-less) shop: no 401
+    assert.equal((await post(base)).status, 429); // per-client limit still applies
+    const wrongHost = await new Promise(resolveStatus => {
+      const req = http.request(`${base}/mcp`, { method: "POST", headers: { Host: "evil.example", "content-type": "application/json" } }, r => resolveStatus(r.statusCode));
+      req.end("{}");
+    });
+    assert.equal(wrongHost, 403); // host allowlist still applies
+  });
+  // Never both, never neither.
+  assert.throws(() => createHostedHandler({ ...config, allowAnonymous: true }), /not both/);
+  assert.throws(() => createHostedHandler({ ...config, accessToken: undefined }), /MCP_ACCESS_TOKEN/);
+  assert.throws(() => createHostedHandler({ ...config, accessToken: undefined, allowAnonymous: false }), /MCP_ACCESS_TOKEN/);
+  const before = { ...process.env };
+  try {
+    Object.assign(process.env, {
+      AGENTICORG_UCP_PROFILE_URL: config.profileUrl,
+      AGENTICORG_UCP_AGENT_PROFILE: config.agentProfile,
+      AGENTICORG_API_KEY: config.apiKey,
+      MCP_ALLOWED_HOSTS: "127.0.0.1",
+    });
+    delete process.env.MCP_ACCESS_TOKEN;
+    delete process.env.MCP_ALLOW_ANONYMOUS;
+    assert.throws(configFromEnv, /MCP_ACCESS_TOKEN is required/);
+    process.env.MCP_ALLOW_ANONYMOUS = "yes";
+    assert.throws(configFromEnv, /true or false/);
+    process.env.MCP_ALLOW_ANONYMOUS = "true";
+    const anonymousConfig = configFromEnv();
+    assert.equal(anonymousConfig.allowAnonymous, true);
+    assert.equal(anonymousConfig.accessToken, undefined);
+    process.env.MCP_ACCESS_TOKEN = ACCESS;
+    assert.throws(configFromEnv, /not both/);
+  } finally {
+    for (const name of Object.keys(process.env)) if (!(name in before)) delete process.env[name];
+    Object.assign(process.env, before);
+  }
+});
