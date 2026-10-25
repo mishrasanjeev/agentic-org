@@ -81,6 +81,10 @@ RUN python /tmp/pip_check.py \
         /usr/local/bin/pip /usr/local/bin/pip3 /usr/local/bin/pip3.14
 COPY . .
 USER agenticorg
+# Exercise the copied native NLP packages and baked model as the runtime user.
+# Installing a model alone does not prove its tokenizer or full PII path loads.
+RUN --network=none python -m scripts.validate_packaged_nlp \
+    && rm -rf /home/agenticorg/.cache/python-tldextract
 EXPOSE 8000
 HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
   CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/v1/health/liveness', timeout=4).read()"
