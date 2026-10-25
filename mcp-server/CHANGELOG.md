@@ -9,6 +9,10 @@
   dependencies; omit unused package managers from the hosted runtime image.
 
 ### Added
+- Hosted endpoint network mode (`MCP_NETWORK_DIRECTORY_URL`): every shop the AgenticOrg network
+  directory lists, with `list_shops`, a search across shops (or in one), lookup, and checkouts
+  through the network checkout gateway with `AGENTICORG_NETWORK_SERVICE_TOKEN`. Every result names
+  its `shop`; there is still no tool that completes, cancels or pays.
 - Hosted endpoint: `MCP_ALLOW_ANONYMOUS=true` serves callers without a credential, for the public
   demo shop that hosted assistants (which cannot send a static bearer header) connect to. It is an
   explicit opt-in: with neither it nor `MCP_ACCESS_TOKEN` the server refuses to start, and both

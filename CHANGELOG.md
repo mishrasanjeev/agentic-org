@@ -12,6 +12,13 @@
 - Behind `AGENTICORG_NETWORK_TELEGRAM_ENABLED` (off). `scripts/connect_network_telegram_bot.py`
   registers the webhook.
 
+## Unreleased - Hosted MCP endpoint: network mode
+
+- With `MCP_NETWORK_DIRECTORY_URL` set, the hosted MCP endpoint serves every shop on the AgenticOrg
+  shopping network: `list_shops`, a catalog search across shops (or in one), lookup, and checkouts
+  through the network checkout gateway with `AGENTICORG_NETWORK_SERVICE_TOKEN`. Every result names
+  its shop; nothing can complete, cancel or pay. Without the setting it still serves one shop.
+
 ## Unreleased - Shopping network core ("Sell everywhere", phase 1)
 
 - Merchants can turn on the AgenticOrg shopping network
