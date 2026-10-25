@@ -3902,11 +3902,11 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "commerce.runtime.merchant_config.read",
-    "source_line": 240,
+    "source_line": 241,
     "tenant_required": true
   },
   {
-    "audit_event": "network.sell_everywhere.write",
+    "audit_event": "commerce.network.sell_everywhere.write",
     "auth_required": true,
     "function": "put_sell_everywhere",
     "idempotency": "listing-state-converges",
@@ -3920,7 +3920,7 @@
     "public_exempt_reason": null,
     "rate_limit": "commerce-runtime-write",
     "scope": "commerce.runtime.merchant_config.write",
-    "source_line": 258,
+    "source_line": 259,
     "tenant_required": true
   },
   {
@@ -9050,7 +9050,7 @@
     "public_exempt_reason": "network-directory-lists-only-published-opted-in-shops",
     "rate_limit": "public-read",
     "scope": "public:network.directory.read",
-    "source_line": 94,
+    "source_line": 95,
     "tenant_required": false
   },
   {
@@ -9068,7 +9068,7 @@
     "public_exempt_reason": "network-service-credential-checked-in-handler",
     "rate_limit": "ucp-platform",
     "scope": "network.checkout.write",
-    "source_line": 152,
+    "source_line": 153,
     "tenant_required": false
   },
   {
@@ -9086,7 +9086,7 @@
     "public_exempt_reason": "network-service-credential-checked-in-handler",
     "rate_limit": "ucp-platform",
     "scope": "network.checkout.read",
-    "source_line": 166,
+    "source_line": 167,
     "tenant_required": false
   },
   {
@@ -9104,7 +9104,7 @@
     "public_exempt_reason": "network-service-credential-checked-in-handler",
     "rate_limit": "ucp-platform",
     "scope": "network.checkout.write",
-    "source_line": 180,
+    "source_line": 181,
     "tenant_required": false
   },
   {

@@ -40,6 +40,7 @@ from api.route_metadata import route_meta
 from api.v1.commerce_runtime import require_merchant_commerce_config_write
 from api.v1.commerce_ucp_publishing import _actor, _locked_row
 from core.commerce import network as net
+from core.commerce.ledger import record_commerce_event_in_own_transaction
 from core.config import settings
 from core.database import get_tenant_session
 from core.models.merchant_custom_domain import INACTIVE_STATUSES, MerchantCustomDomainRow
@@ -253,7 +254,7 @@ async def get_sell_everywhere(
     scope="commerce.runtime.merchant_config.write",
     rate_limit="commerce-runtime-write",
     idempotency="listing-state-converges",
-    audit_event="network.sell_everywhere.write",
+    audit_event="commerce.network.sell_everywhere.write",
 )
 async def put_sell_everywhere(
     merchant_id: str,
@@ -286,6 +287,16 @@ async def put_sell_everywhere(
                 # The listing stands; the page shows why no platform address was given.
                 subdomain_note = {"code": exc.code, "message": exc.message}
     except net.NetworkError as exc:
+        await record_commerce_event_in_own_transaction(
+            tenant_id=tenant_id,
+            event="commerce.network.sell_everywhere.write",
+            outcome="refused",
+            merchant_id=config.merchant_id,
+            seller_agent_id=config.seller_agent_id or "",
+            buyer_agent_id=None,
+            payload={"listed": body.listed, "reason": exc.code},
+            resource_id=config.config_id,
+        )
         raise _refusal(exc) from None
     view = await _view(tenant_id, merchant_id, body.seller_agent_id)
     view["subdomain_note"] = subdomain_note
