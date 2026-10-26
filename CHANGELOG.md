@@ -31,6 +31,18 @@
   lock on the lead. Twilio SMS replies reach `POST /onboarding-desk/webhooks/twilio/{tenant}`
   (Twilio signature verified): STOP-style keywords opt the contact out of every channel and other
   replies mark the lead engaged. Migration `v6z97_onboarding_outreach`.
+- Applications: one per lead, shared by the web and text message. The onboarding link opens a
+  two-hour applicant session (`POST /onboarding-desk/apply/session`); answers are saved as the
+  applicant goes, each validated the same way on every channel, and the partner's policy
+  (`PUT /onboarding-desk/application-policy`) decides the required and optional items per merchant
+  type, each with a reason in English and French. Documents (PDF, PNG or JPEG, up to 10 MB and 10
+  pages, recognised by their first bytes) suggest values the applicant confirms before they are
+  saved. "Talk to a person" opens a hand-off with the transcript (`GET /onboarding-desk/handoffs`).
+  Partners that set `sms_conversation` in the branding get the guided application over text: one
+  question at a time, HELP and PERSON keywords, and a link to the secure page for the address,
+  owners and documents. A complete application maps to a `business_case` application. Answers,
+  transcripts and documents are encrypted under the tenant key. Migration
+  `v6z98_onboarding_applications`.
 
 ## Unreleased - Shopping bot store pickup
 

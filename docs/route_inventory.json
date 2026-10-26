@@ -9306,6 +9306,240 @@
     "tenant_required": true
   },
   {
+    "audit_event": null,
+    "auth_required": true,
+    "function": "get_application_policy",
+    "idempotency": null,
+    "key": "GET /api/v1/onboarding-desk/application-policy api/v1/onboarding_desk.py:get_application_policy",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/onboarding_desk.py",
+    "path": "/api/v1/onboarding-desk/application-policy",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "onboarding_desk.applications.read",
+    "source_line": 1000,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "onboarding_desk.application_policy.update",
+    "auth_required": true,
+    "function": "put_application_policy",
+    "idempotency": "idempotent-replaces-the-application-policy",
+    "key": "PUT /api/v1/onboarding-desk/application-policy api/v1/onboarding_desk.py:put_application_policy",
+    "metadata_present": true,
+    "methods": [
+      "PUT"
+    ],
+    "module": "api/v1/onboarding_desk.py",
+    "path": "/api/v1/onboarding-desk/application-policy",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "onboarding_desk.applications.write",
+    "source_line": 1018,
+    "tenant_required": true
+  },
+  {
+    "audit_event": null,
+    "auth_required": true,
+    "function": "list_applications",
+    "idempotency": null,
+    "key": "GET /api/v1/onboarding-desk/applications api/v1/onboarding_desk.py:list_applications",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/onboarding_desk.py",
+    "path": "/api/v1/onboarding-desk/applications",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "onboarding_desk.applications.read",
+    "source_line": 1034,
+    "tenant_required": true
+  },
+  {
+    "audit_event": null,
+    "auth_required": true,
+    "function": "get_application",
+    "idempotency": null,
+    "key": "GET /api/v1/onboarding-desk/applications/{application_id} api/v1/onboarding_desk.py:get_application",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/onboarding_desk.py",
+    "path": "/api/v1/onboarding-desk/applications/{application_id}",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "onboarding_desk.applications.read",
+    "source_line": 1052,
+    "tenant_required": true
+  },
+  {
+    "audit_event": null,
+    "auth_required": true,
+    "function": "download_document",
+    "idempotency": null,
+    "key": "GET /api/v1/onboarding-desk/applications/{application_id}/documents/{document_id} api/v1/onboarding_desk.py:download_document",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/onboarding_desk.py",
+    "path": "/api/v1/onboarding-desk/applications/{application_id}/documents/{document_id}",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "onboarding_desk.applications.read",
+    "source_line": 1067,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "onboarding_desk.apply.answers",
+    "auth_required": false,
+    "function": "applicant_answers",
+    "idempotency": "idempotent-the-same-answers-save-the-same-values",
+    "key": "PUT /api/v1/onboarding-desk/apply/answers api/v1/onboarding_desk.py:applicant_answers",
+    "metadata_present": true,
+    "methods": [
+      "PUT"
+    ],
+    "module": "api/v1/onboarding_desk.py",
+    "path": "/api/v1/onboarding-desk/apply/answers",
+    "public_exempt_reason": "public-read-or-doc-route",
+    "rate_limit": "onboarding-desk-public",
+    "scope": "public:onboarding_desk.apply",
+    "source_line": 864,
+    "tenant_required": false
+  },
+  {
+    "audit_event": null,
+    "auth_required": false,
+    "function": "applicant_application",
+    "idempotency": null,
+    "key": "GET /api/v1/onboarding-desk/apply/application api/v1/onboarding_desk.py:applicant_application",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/onboarding_desk.py",
+    "path": "/api/v1/onboarding-desk/apply/application",
+    "public_exempt_reason": "public-read-or-doc-route",
+    "rate_limit": "onboarding-desk-public",
+    "scope": "public:onboarding_desk.apply",
+    "source_line": 846,
+    "tenant_required": false
+  },
+  {
+    "audit_event": "onboarding_desk.apply.document",
+    "auth_required": false,
+    "function": "applicant_document",
+    "idempotency": "not_idempotent-each-upload-is-kept",
+    "key": "POST /api/v1/onboarding-desk/apply/documents api/v1/onboarding_desk.py:applicant_document",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/onboarding_desk.py",
+    "path": "/api/v1/onboarding-desk/apply/documents",
+    "public_exempt_reason": "public-read-or-doc-route",
+    "rate_limit": "onboarding-desk-public",
+    "scope": "public:onboarding_desk.apply",
+    "source_line": 891,
+    "tenant_required": false
+  },
+  {
+    "audit_event": "onboarding_desk.apply.document_remove",
+    "auth_required": false,
+    "function": "applicant_remove_document",
+    "idempotency": "idempotent-a-removed-document-stays-removed",
+    "key": "DELETE /api/v1/onboarding-desk/apply/documents/{document_id} api/v1/onboarding_desk.py:applicant_remove_document",
+    "metadata_present": true,
+    "methods": [
+      "DELETE"
+    ],
+    "module": "api/v1/onboarding_desk.py",
+    "path": "/api/v1/onboarding-desk/apply/documents/{document_id}",
+    "public_exempt_reason": "public-read-or-doc-route",
+    "rate_limit": "onboarding-desk-public",
+    "scope": "public:onboarding_desk.apply",
+    "source_line": 939,
+    "tenant_required": false
+  },
+  {
+    "audit_event": "onboarding_desk.apply.confirm",
+    "auth_required": false,
+    "function": "applicant_confirm",
+    "idempotency": "idempotent-confirming-again-saves-the-same-values",
+    "key": "POST /api/v1/onboarding-desk/apply/documents/{document_id}/confirm api/v1/onboarding_desk.py:applicant_confirm",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/onboarding_desk.py",
+    "path": "/api/v1/onboarding-desk/apply/documents/{document_id}/confirm",
+    "public_exempt_reason": "public-read-or-doc-route",
+    "rate_limit": "onboarding-desk-public",
+    "scope": "public:onboarding_desk.apply",
+    "source_line": 917,
+    "tenant_required": false
+  },
+  {
+    "audit_event": "onboarding_desk.apply.person",
+    "auth_required": false,
+    "function": "applicant_person",
+    "idempotency": "idempotent-one-open-request-per-application",
+    "key": "POST /api/v1/onboarding-desk/apply/person api/v1/onboarding_desk.py:applicant_person",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/onboarding_desk.py",
+    "path": "/api/v1/onboarding-desk/apply/person",
+    "public_exempt_reason": "public-read-or-doc-route",
+    "rate_limit": "onboarding-desk-public",
+    "scope": "public:onboarding_desk.apply",
+    "source_line": 961,
+    "tenant_required": false
+  },
+  {
+    "audit_event": "onboarding_desk.apply.session",
+    "auth_required": false,
+    "function": "applicant_session",
+    "idempotency": "idempotent-the-lead-has-one-application",
+    "key": "POST /api/v1/onboarding-desk/apply/session api/v1/onboarding_desk.py:applicant_session",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/onboarding_desk.py",
+    "path": "/api/v1/onboarding-desk/apply/session",
+    "public_exempt_reason": "public-read-or-doc-route",
+    "rate_limit": "onboarding-desk-public",
+    "scope": "public:onboarding_desk.apply",
+    "source_line": 812,
+    "tenant_required": false
+  },
+  {
+    "audit_event": "onboarding_desk.apply.submit",
+    "auth_required": false,
+    "function": "applicant_submit",
+    "idempotency": "not_idempotent-a-submitted-application-is-closed-to-changes",
+    "key": "POST /api/v1/onboarding-desk/apply/submit api/v1/onboarding_desk.py:applicant_submit",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/onboarding_desk.py",
+    "path": "/api/v1/onboarding-desk/apply/submit",
+    "public_exempt_reason": "public-read-or-doc-route",
+    "rate_limit": "onboarding-desk-public",
+    "scope": "public:onboarding_desk.apply",
+    "source_line": 983,
+    "tenant_required": false
+  },
+  {
     "audit_event": "onboarding_desk.branding.read",
     "auth_required": true,
     "function": "get_branding",
@@ -9339,6 +9573,42 @@
     "rate_limit": "standard",
     "scope": "onboarding_desk.branding.write",
     "source_line": 504,
+    "tenant_required": true
+  },
+  {
+    "audit_event": null,
+    "auth_required": true,
+    "function": "list_handoffs",
+    "idempotency": null,
+    "key": "GET /api/v1/onboarding-desk/handoffs api/v1/onboarding_desk.py:list_handoffs",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/onboarding_desk.py",
+    "path": "/api/v1/onboarding-desk/handoffs",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "onboarding_desk.applications.read",
+    "source_line": 1093,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "onboarding_desk.handoff.resolve",
+    "auth_required": true,
+    "function": "resolve_handoff",
+    "idempotency": "idempotent-a-resolved-handoff-stays-resolved",
+    "key": "POST /api/v1/onboarding-desk/handoffs/{handoff_id}/resolve api/v1/onboarding_desk.py:resolve_handoff",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/onboarding_desk.py",
+    "path": "/api/v1/onboarding-desk/handoffs/{handoff_id}/resolve",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "onboarding_desk.applications.write",
+    "source_line": 1118,
     "tenant_required": true
   },
   {

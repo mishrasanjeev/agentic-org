@@ -163,3 +163,86 @@ class OnboardingContactAttempt(BaseModel):
     attempt_no: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
     created_at: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), server_default=func.now(), nullable=False)
     sent_at: Mapped[datetime | None] = mapped_column(TIMESTAMP(timezone=True), nullable=True)
+
+
+APPLICATION_STATUSES = ("in_progress", "submitted", "withdrawn")
+HANDOFF_STATUSES = ("open", "resolved")
+
+
+class OnboardingApplication(BaseModel):
+    """One application per lead (``v6z98_onboarding_applications``); answers and transcript are encrypted."""
+
+    __tablename__ = "onboarding_desk_applications"
+    __table_args__ = (
+        Index("ux_onboarding_applications_lead", "tenant_id", "lead_id", unique=True),
+        Index("ix_onboarding_applications_status", "tenant_id", "status", text("created_at DESC")),
+        CheckConstraint(
+            "status IN ('in_progress','submitted','withdrawn')", name="ck_onboarding_applications_status"
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    tenant_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
+    lead_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
+    status: Mapped[str] = mapped_column(String(16), nullable=False, default="in_progress")
+    merchant_type: Mapped[str] = mapped_column(String(64), nullable=False, default="general")
+    country: Mapped[str] = mapped_column(String(2), nullable=False)
+    region: Mapped[str] = mapped_column(String(2), nullable=False)
+    locale: Mapped[str] = mapped_column(String(2), nullable=False, default="en")
+    answers_ciphertext: Mapped[str | None] = mapped_column(Text, nullable=True)
+    transcript_ciphertext: Mapped[str | None] = mapped_column(Text, nullable=True)
+    answered_items: Mapped[list[str]] = mapped_column(JSONB, nullable=False, default=list)
+    pending_item: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    last_channel: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), server_default=func.now(), nullable=False)
+    updated_at: Mapped[datetime | None] = mapped_column(TIMESTAMP(timezone=True), nullable=True)
+    submitted_at: Mapped[datetime | None] = mapped_column(TIMESTAMP(timezone=True), nullable=True)
+
+
+class OnboardingDocument(BaseModel):
+    """An applicant's uploaded document, encrypted, with the values it suggests (also encrypted)."""
+
+    __tablename__ = "onboarding_desk_documents"
+    __table_args__ = (Index("ix_onboarding_documents_application", "tenant_id", "application_id"),)
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    tenant_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
+    application_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
+    item: Mapped[str] = mapped_column(String(32), nullable=False)
+    filename: Mapped[str] = mapped_column(String(100), nullable=False)
+    mime_type: Mapped[str] = mapped_column(String(32), nullable=False)
+    size_bytes: Mapped[int] = mapped_column(Integer, nullable=False)
+    sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    content_ciphertext: Mapped[str] = mapped_column(Text, nullable=False)
+    extraction_status: Mapped[str] = mapped_column(String(16), nullable=False)
+    suggestions_ciphertext: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), server_default=func.now(), nullable=False)
+
+
+class OnboardingHandoff(BaseModel):
+    """A request to talk to a person; at most one open per application."""
+
+    __tablename__ = "onboarding_desk_handoffs"
+    __table_args__ = (
+        Index(
+            "ux_onboarding_handoffs_open",
+            "tenant_id",
+            "application_id",
+            unique=True,
+            postgresql_where=text("status = 'open'"),
+        ),
+        Index("ix_onboarding_handoffs_status", "tenant_id", "status", text("created_at DESC")),
+        CheckConstraint("status IN ('open','resolved')", name="ck_onboarding_handoffs_status"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    tenant_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
+    application_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
+    lead_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
+    channel: Mapped[str] = mapped_column(String(16), nullable=False)
+    status: Mapped[str] = mapped_column(String(16), nullable=False, default="open")
+    message_ciphertext: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), server_default=func.now(), nullable=False)
+    resolved_at: Mapped[datetime | None] = mapped_column(TIMESTAMP(timezone=True), nullable=True)
+    resolved_by: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    resolution_note: Mapped[str | None] = mapped_column(String(500), nullable=True)

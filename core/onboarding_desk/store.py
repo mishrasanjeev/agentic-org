@@ -821,6 +821,32 @@ async def mark_engaged(tenant_id: uuid.UUID, phone: str) -> int:
     return count
 
 
+async def open_leads_by_phone(tenant_id: uuid.UUID, phone: str) -> list[Any]:
+    """Leads with this phone that are still open: not opted out, submitted or closed."""
+    from sqlalchemy import select
+
+    from core.models.onboarding_desk import OnboardingLead
+
+    try:
+        normalised = contacts.normalise_phone(phone)
+    except contacts.ContactError:
+        return []
+    if not normalised:
+        return []
+    async with _session(tenant_id) as session:
+        return list(
+            (
+                await session.execute(
+                    select(OnboardingLead).where(
+                        OnboardingLead.tenant_id == tenant_id,
+                        OnboardingLead.phone_hash == _hash(tenant_id, "phone", normalised),
+                        OnboardingLead.status.in_(("new", "contacted", "engaged", "applying")),
+                    )
+                )
+            ).scalars()
+        )
+
+
 async def tenant_ids_with_desk() -> list[uuid.UUID]:
     """Tenants that saved a desk policy or branding: the only cross-tenant read the desk makes."""
     from sqlalchemy import select
