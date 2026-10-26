@@ -39,6 +39,9 @@ class User(BaseModel):
         JSONB, nullable=False, default=list, server_default=text("'[]'::jsonb")
     )
     mfa_enabled_at: Mapped[datetime | None] = mapped_column(TIMESTAMP(timezone=True), nullable=True)
+    mfa_challenge_generation: Mapped[int] = mapped_column(
+        BigInteger, nullable=False, default=0, server_default=text("0")
+    )
     last_login_at: Mapped[datetime | None] = mapped_column(TIMESTAMP(timezone=True), nullable=True)
     # v6z17: session revocation watermark. Legacy JWTs whose ``iat`` is
     # older than this are rejected by the auth middleware. Set on member
