@@ -69,7 +69,7 @@ header and queues the update (`core.tasks.network_tasks`); the worker answers it
 
 Set it up once: create the bot with BotFather, store its token and a webhook secret in Secret
 Manager, give them to the API service, then run
-`python scripts/connect_network_telegram_bot.py --base-url https://app.agenticorg.ai` and set
+`python -m scripts.connect_network_telegram_bot --base-url https://app.agenticorg.ai` and set
 `AGENTICORG_NETWORK_TELEGRAM_BOT_USERNAME` to the username it prints.
 
 ## Switches
