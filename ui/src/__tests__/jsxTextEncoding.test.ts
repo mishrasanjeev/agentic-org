@@ -35,8 +35,9 @@ describe("JSX text encoding", () => {
     expect(leakedEscapes(source)).toEqual([]);
   });
 
+  // This whole-repository AST sweep needs a batch budget, not a component deadline.
   it("checks every JSX source and attribute across the UI", () => {
     const failures = Object.entries(sources).flatMap(([path, source]) => leakedEscapes(source).map(text => `${path}: ${text}`));
     expect(failures).toEqual([]);
-  });
+  }, 30_000);
 });
