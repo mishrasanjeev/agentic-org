@@ -7,7 +7,7 @@ Create Date: 2026-10-26
 
 One application per lead, its answers and transcript encrypted under the
 tenant key; uploaded documents encrypted the same way, with the values they
-suggest; and requests to talk to a person, at most one open per application.
+suggest, kept with the time when the applicant removes one; and requests to talk to a person, at most one open per application.
 All three tables are tenant-scoped under forced row-level security.
 """
 
@@ -74,7 +74,8 @@ def upgrade() -> None:
             content_ciphertext TEXT NOT NULL,
             extraction_status VARCHAR(16) NOT NULL,
             suggestions_ciphertext TEXT NULL,
-            created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+            created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+            removed_at TIMESTAMPTZ NULL
         );
     """)
     op.execute(

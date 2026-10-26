@@ -72,7 +72,7 @@ The onboarding link in every outreach message carries a signed token, valid for 
 | `PUT /apply/answers` | Saves up to 20 answers; `null` clears one. Each refused answer comes back with a code and a message in the applicant's language |
 | `POST /apply/documents` | Uploads a document for a document item (form fields `item` and `file`) |
 | `POST /apply/documents/{id}/confirm` | Saves the values the document suggested that the applicant confirms |
-| `DELETE /apply/documents/{id}` | Removes one of the applicant's own uploads |
+| `DELETE /apply/documents/{id}` | Removes one of the applicant's own uploads from the application; the file is kept, marked removed, for the partner and the evidence pack |
 | `POST /apply/person` | Asks for a person, with an optional message |
 | `POST /apply/submit` | Submits a complete application; refused with `application_incomplete` and the missing items otherwise |
 
@@ -80,7 +80,7 @@ Once submitted, the application is closed to changes and the lead stops getting 
 
 ## Documents
 
-**What is accepted.** PDF, PNG and JPEG files, up to 8 MB and 10 pages, with at most 10 documents per application. The type is recognised from the file's first bytes, not its name or declared type. The stored name keeps no path and ends in the real extension.
+**What is accepted.** PDF, PNG and JPEG files, up to 8 MB and 10 pages, with at most 10 documents on an application at a time and 30 uploads in all. The type is recognised from the file's first bytes, not its name or declared type. The stored name keeps no path and ends in the real extension.
 
 **Reading.** The desk reads the text with the document pipeline: a PDF's text layer, or OCR where the engine is installed. It looks for:
 - the legal name;
@@ -150,7 +150,7 @@ Migration `v6z98_onboarding_applications` adds three tenant-scoped tables under 
 | Table | Holds |
 |---|---|
 | `onboarding_desk_applications` | One row per lead: status, merchant type, country, region, locale, encrypted answers and transcript, which items are answered, the item the text conversation is waiting on |
-| `onboarding_desk_documents` | Each upload: item, safe file name, type, size, SHA-256, encrypted content, read result, encrypted suggestions |
+| `onboarding_desk_documents` | Each upload: item, safe file name, type, size, SHA-256, encrypted content, read result, encrypted suggestions, and when the applicant removed it |
 | `onboarding_desk_handoffs` | Requests for a person: channel, encrypted message, status, who resolved it and their note; at most one open per application |
 
 Answers, transcripts, documents and messages are encrypted under the tenant key before they are stored. Writes to an application take a lock on its row, so answers given on two channels at once are never lost.

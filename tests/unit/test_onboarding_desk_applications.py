@@ -389,6 +389,9 @@ class FakeResult:
     def scalar(self):
         return self.rows[0] if self.rows else None
 
+    def one(self):
+        return self.rows[0]
+
 
 class FakeSession:
     def __init__(self, results):
@@ -476,6 +479,7 @@ def doc_row(item="formation_document", **overrides):
         "suggestions_ciphertext": None,
         "content_ciphertext": "JVBERi0=",
         "created_at": NOW,
+        "removed_at": None,
     }
     base.update(overrides)
     return SimpleNamespace(**base)
@@ -577,7 +581,7 @@ class TestStore:
 
         monkeypatch.setattr(documents, "extract", extract)
         row = app_row()
-        session = db([row], [], [2], [row])
+        session = db([row], [], [(3, 1)], [row])
         result = asyncio.run(
             applications.add_document(
                 TENANT,
@@ -599,11 +603,12 @@ class TestStore:
         db([row], [])
         with pytest.raises(DeskError, match="does not ask"):
             asyncio.run(applications.add_document(TENANT, APP, item="legal_name", filename="a", content=b"%PDF-"))
-        db([row], [], [documents.MAX_PER_APPLICATION])
-        with pytest.raises(DeskError, match="at most"):
-            asyncio.run(
-                applications.add_document(TENANT, APP, item="formation_document", filename="a", content=b"%PDF-")
-            )
+        for counts in ((documents.MAX_PER_APPLICATION, 0), (documents.MAX_STORED, 25)):
+            db([row], [], [counts])
+            with pytest.raises(DeskError, match="at most"):
+                asyncio.run(
+                    applications.add_document(TENANT, APP, item="formation_document", filename="a", content=b"%PDF-")
+                )
 
     def test_confirm_and_remove(self, db):
         doc = doc_row(suggestions_ciphertext=json.dumps([{"item": "legal_name", "value": "Northwind Coffee LLC"}]))
@@ -624,7 +629,14 @@ class TestStore:
         row = app_row(answered_items=["formation_document", "legal_name", "tax_id_document"])
         session = db([row], [doc, other])
         asyncio.run(applications.remove_document(TENANT, APP, doc.id, now=NOW))
-        assert session.deleted == [doc] and row.answered_items == ["legal_name", "tax_id_document"]
+        assert session.deleted == [] and doc.removed_at == NOW
+        assert row.answered_items == ["legal_name", "tax_id_document"]
+        assert "removed_at IS NULL" in str(session.statements[1])
+        assert applications.document_view(doc)["removed_at"] == NOW.isoformat()
+        db([doc])
+        with pytest.raises(DeskError) as caught:
+            asyncio.run(applications.confirm_suggestions(TENANT, APP, doc.id, ["legal_name"]))
+        assert caught.value.code == "document_not_found"
         db([row], [other])
         with pytest.raises(DeskError, match="no such document"):
             asyncio.run(applications.remove_document(TENANT, APP, doc.id))
@@ -687,7 +699,7 @@ class TestStore:
         ] == str(APP)
         with pytest.raises(DeskError):
             asyncio.run(applications.list_applications(TENANT, status="lost"))
-        doc = doc_row()
+        doc = doc_row(removed_at=NOW)
         db([doc])
         assert asyncio.run(applications.document_content(TENANT, APP, doc.id)) == (
             "articles.pdf",

@@ -28,6 +28,8 @@ logger = structlog.get_logger()
 MAX_BYTES = 8 * 1024 * 1024
 MAX_PAGES = 10
 MAX_PER_APPLICATION = 10
+#: Uploads kept per application, removed ones included, so removing and uploading again cannot grow forever.
+MAX_STORED = 30
 READ_TIMEOUT_SECONDS = 30.0
 MAGIC: dict[str, tuple[bytes, ...]] = {
     "application/pdf": (b"%PDF-",),

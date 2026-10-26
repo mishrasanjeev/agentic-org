@@ -202,23 +202,20 @@ def _require_open(row: Any) -> None:
         raise DeskError(409, "application_closed", f"this application is {row.status}")
 
 
-async def _documents(tenant_id: uuid.UUID, application_id: uuid.UUID) -> list[Any]:
+async def _documents(
+    tenant_id: uuid.UUID, application_id: uuid.UUID, *, include_removed: bool = False
+) -> list[Any]:
     from sqlalchemy import select
 
     from core.models.onboarding_desk import OnboardingDocument
 
+    query = select(OnboardingDocument).where(
+        OnboardingDocument.tenant_id == tenant_id, OnboardingDocument.application_id == application_id
+    )
+    if not include_removed:
+        query = query.where(OnboardingDocument.removed_at.is_(None))
     async with store._session(tenant_id) as session:
-        return list(
-            (
-                await session.execute(
-                    select(OnboardingDocument)
-                    .where(
-                        OnboardingDocument.tenant_id == tenant_id, OnboardingDocument.application_id == application_id
-                    )
-                    .order_by(OnboardingDocument.created_at)
-                )
-            ).scalars()
-        )
+        return list((await session.execute(query.order_by(OnboardingDocument.created_at))).scalars())
 
 
 async def _open_handoff(tenant_id: uuid.UUID, application_id: uuid.UUID) -> Any:
@@ -247,6 +244,7 @@ def document_view(row: Any) -> dict[str, Any]:
         "size_bytes": int(row.size_bytes),
         "extraction_status": row.extraction_status,
         "created_at": row.created_at.isoformat() if row.created_at else None,
+        "removed_at": row.removed_at.isoformat() if getattr(row, "removed_at", None) else None,
     }
 
 
@@ -367,14 +365,14 @@ async def add_document(
     if item not in question_set.items() or questions.ITEMS[item].kind != "document":
         raise DeskError(422, "item_not_requested", "this application does not ask for that document")
     async with store._session(tenant_id) as session:
-        count = (
+        stored, removed = (
             await session.execute(
-                select(func.count()).where(
+                select(func.count(), func.count(OnboardingDocument.removed_at)).where(
                     OnboardingDocument.tenant_id == tenant_id, OnboardingDocument.application_id == application_id
                 )
             )
-        ).scalar() or 0
-    if count >= documents.MAX_PER_APPLICATION:
+        ).one()
+    if stored - removed >= documents.MAX_PER_APPLICATION or stored >= documents.MAX_STORED:
         raise DeskError(409, "too_many_documents", f"at most {documents.MAX_PER_APPLICATION} documents per application")
     answerable = tuple(i for i in question_set.items() if questions.ITEMS[i].kind != "document")
     extraction = await documents.extract(content, mime, items=answerable, country=current.country)
@@ -407,7 +405,9 @@ async def add_document(
     return {**document_view(doc), "suggestions": extraction.suggestions}
 
 
-async def _document(tenant_id: uuid.UUID, application_id: uuid.UUID, document_id: uuid.UUID) -> Any:
+async def _document(
+    tenant_id: uuid.UUID, application_id: uuid.UUID, document_id: uuid.UUID, *, include_removed: bool = False
+) -> Any:
     from sqlalchemy import select
 
     from core.models.onboarding_desk import OnboardingDocument
@@ -422,7 +422,7 @@ async def _document(tenant_id: uuid.UUID, application_id: uuid.UUID, document_id
                 )
             )
         ).scalar_one_or_none()
-    if doc is None:
+    if doc is None or (doc.removed_at is not None and not include_removed):
         raise DeskError(404, "document_not_found", "no such document")
     return doc
 
@@ -450,7 +450,11 @@ async def confirm_suggestions(
 async def remove_document(
     tenant_id: uuid.UUID, application_id: uuid.UUID, document_id: uuid.UUID, *, now: datetime | None = None
 ) -> None:
-    """Remove an applicant's own upload before the application is submitted."""
+    """Remove an applicant's own upload before the application is submitted.
+
+    The removal is soft: the document leaves the application but its row and encrypted content stay,
+    with the time it was removed, for the partner and the evidence pack.
+    """
     from sqlalchemy import select
 
     from core.models.onboarding_desk import OnboardingDocument
@@ -463,7 +467,9 @@ async def remove_document(
             (
                 await session.execute(
                     select(OnboardingDocument).where(
-                        OnboardingDocument.tenant_id == tenant_id, OnboardingDocument.application_id == application_id
+                        OnboardingDocument.tenant_id == tenant_id,
+                        OnboardingDocument.application_id == application_id,
+                        OnboardingDocument.removed_at.is_(None),
                     )
                 )
             ).scalars()
@@ -471,7 +477,7 @@ async def remove_document(
         target = next((d for d in docs if d.id == document_id), None)
         if target is None:
             raise DeskError(404, "document_not_found", "no such document")
-        await session.delete(target)
+        target.removed_at = moment
         kept = {d.item for d in docs if d.id != document_id}
         answered = {i for i in (row.answered_items or []) if questions.ITEMS[i].kind != "document"}
         row.answered_items = sorted(answered | kept)
@@ -625,7 +631,7 @@ async def list_applications(tenant_id: uuid.UUID, *, status: str | None = None, 
 async def document_content(
     tenant_id: uuid.UUID, application_id: uuid.UUID, document_id: uuid.UUID
 ) -> tuple[str, str, bytes]:
-    doc = await _document(tenant_id, application_id, document_id)
+    doc = await _document(tenant_id, application_id, document_id, include_removed=True)
     raw = await _open(doc.content_ciphertext)
     return doc.filename, doc.mime_type, base64.b64decode(raw or "")
 

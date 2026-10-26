@@ -211,7 +211,7 @@ class OnboardingApplication(BaseModel):
 
 
 class OnboardingDocument(BaseModel):
-    """An applicant's uploaded document, encrypted, with the values it suggests (also encrypted)."""
+    """An applicant's uploaded document, encrypted, with the values it suggests (also encrypted); removal is soft."""
 
     __tablename__ = "onboarding_desk_documents"
     __table_args__ = (Index("ix_onboarding_documents_application", "tenant_id", "application_id"),)
@@ -228,6 +228,8 @@ class OnboardingDocument(BaseModel):
     extraction_status: Mapped[str] = mapped_column(String(16), nullable=False)
     suggestions_ciphertext: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), server_default=func.now(), nullable=False)
+    #: When the applicant removed it; the row and its content stay for the partner and the evidence pack.
+    removed_at: Mapped[datetime | None] = mapped_column(TIMESTAMP(timezone=True), nullable=True)
 
 
 class OnboardingHandoff(BaseModel):

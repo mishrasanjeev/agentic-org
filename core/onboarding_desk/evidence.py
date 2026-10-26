@@ -262,7 +262,7 @@ async def build_pack(tenant_id: uuid.UUID, application_id: uuid.UUID, *, now: da
         "transcript": await applications._transcript(row),
         "documents": [
             {**applications.document_view(d), "sha256": d.sha256}
-            for d in await applications._documents(tenant_id, row.id)
+            for d in await applications._documents(tenant_id, row.id, include_removed=True)
         ],
         "handoffs": [
             {

@@ -3,7 +3,6 @@
 
 from __future__ import annotations
 
-import re
 import uuid
 from pathlib import Path
 from types import SimpleNamespace
@@ -68,9 +67,11 @@ class TestPageBranding:
         monkeypatch.setattr(applications, "open_for_lead", open_for_lead)
         monkeypatch.setattr(applications, "state", state)
         monkeypatch.setattr(store, "get_branding", get_branding)
-        body = TestClient(app).post(
-            "/api/v1/onboarding-desk/apply/session", json={"t": tokens.sign("apply", TENANT, LEAD)}
-        ).json()
+        body = (
+            TestClient(app)
+            .post("/api/v1/onboarding-desk/apply/session", json={"t": tokens.sign("apply", TENANT, LEAD)})
+            .json()
+        )
         assert body["brand_color"] == "#0B57D0" and body["privacy_url"] == "https://n.example/privacy"
         assert body["partner_name"] == "Northwind"
 
@@ -126,15 +127,47 @@ class TestCrossSiteAccess:
 
 class TestPageFiles:
     def test_the_hosted_page_needs_no_inline_script(self):
+        from html.parser import HTMLParser
+
         page = (ROOT / "ui" / "public" / "onboarding-desk" / "apply.html").read_text(encoding="utf-8")
-        scripts = re.findall(r"<script\b[^>]*>(.*?)</script>", page, flags=re.S)
-        assert scripts == [""] and 'src="/onboarding-desk/apply.js"' in page
+
+        class Scripts(HTMLParser):
+            def __init__(self):
+                super().__init__()
+                self.found: list[dict[str, str | None]] = []
+                self.inline = ""
+                self._open = False
+
+            def handle_starttag(self, tag, attrs):
+                if tag == "script":
+                    self.found.append(dict(attrs))
+                    self._open = True
+
+            def handle_endtag(self, tag):
+                if tag == "script":
+                    self._open = False
+
+            def handle_data(self, data):
+                if self._open:
+                    self.inline += data
+
+        parser = Scripts()
+        parser.feed(page)
+        assert parser.found == [{"src": "/onboarding-desk/apply.js", "defer": None}] and parser.inline.strip() == ""
         assert '<meta name="robots" content="noindex, nofollow"' in page
         assert '<agenticorg-onboarding api-base="/api/v1">' in page
 
     def test_the_element_never_writes_markup_or_storage(self):
         source = (ROOT / "ui" / "public" / "onboarding-desk" / "apply.js").read_text(encoding="utf-8")
-        for forbidden in ("innerHTML", "outerHTML", "insertAdjacentHTML", "document.write", "localStorage",
-                          "sessionStorage", "eval(", "new Function"):
+        for forbidden in (
+            "innerHTML",
+            "outerHTML",
+            "insertAdjacentHTML",
+            "document.write",
+            "localStorage",
+            "sessionStorage",
+            "eval(",
+            "new Function",
+        ):
             assert forbidden not in source, forbidden
         assert 'credentials: "omit"' in source

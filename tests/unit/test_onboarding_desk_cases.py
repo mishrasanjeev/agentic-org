@@ -423,7 +423,8 @@ def pack_inputs(monkeypatch):
             )
         ]
 
-    async def docs(tid, aid):
+    async def docs(tid, aid, *, include_removed=False):
+        assert include_removed, "the evidence pack keeps removed documents"
         return [
             SimpleNamespace(
                 id=uuid.uuid4(),
@@ -433,8 +434,20 @@ def pack_inputs(monkeypatch):
                 size_bytes=5,
                 extraction_status="suggested",
                 created_at=NOW,
+                removed_at=None,
                 sha256="cd" * 32,
-            )
+            ),
+            SimpleNamespace(
+                id=uuid.uuid4(),
+                item="formation_document",
+                filename="old.pdf",
+                mime_type="application/pdf",
+                size_bytes=4,
+                extraction_status="nothing_found",
+                created_at=NOW - timedelta(hours=1),
+                removed_at=NOW,
+                sha256="ef" * 32,
+            ),
         ]
 
     async def handoffs(tid, aid):
@@ -468,6 +481,7 @@ class TestEvidence:
         sections = pack["sections"]
         assert sections["consents"][0]["wording"] == "Yes, text me." and sections["lead"]["external_ref"] == "form-1"
         assert sections["documents"][0]["sha256"] == "cd" * 32 and sections["transcript"][0]["text"] == "hi"
+        assert sections["documents"][1]["removed_at"] == NOW.isoformat()
         assert sections["case"]["decision"]["outcome"] == "approve" and sections["case_evidence"] == {"status": "off"}
         assert sections["application"]["answers"]["tax_id"] == "12-3456789"
         key = evidence.public_key()
