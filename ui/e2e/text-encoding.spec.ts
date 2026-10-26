@@ -44,6 +44,7 @@ for (const width of [390, 1440]) {
           const card = heading.locator("../..");
           await expect(card.getByText(state === "populated" ? "50%" : "\u2014", { exact: true })).toBeVisible();
           await expect(page).toHaveTitle(/ \u2014 AgenticOrg$/);
+          await expect(page.locator('input[placeholder^="Ask anything"]')).toHaveAttribute("placeholder", "Ask anything... (\u2318K)");
           expect(await page.locator("body").innerText()).not.toMatch(/\u00e2\u20ac|\u00c3[\u0080-\u00bf]|\ufffd/);
           expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
           for (const metric of await card.locator("p").all()) {

@@ -206,7 +206,7 @@ export default function NLQueryBar({ onOpenChat }: { onOpenChat?: () => void }) 
           type="text"
           value={query}
           onChange={handleChange}
-          placeholder="Ask anything... (\u2318K)"
+          placeholder={"Ask anything... (\u2318K)"}
           className="h-9 w-64 lg:w-96 rounded-lg border border-slate-700 bg-slate-800/50 pl-8 pr-3 text-sm text-slate-200 placeholder:text-slate-500 focus:outline-none focus:ring-1 focus:ring-primary"
         />
 
