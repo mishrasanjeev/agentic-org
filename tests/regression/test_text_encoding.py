@@ -11,7 +11,7 @@ from scripts import check_text_encoding as guard
 @pytest.mark.parametrize("original", [
     "\u2014", "\u2013", "\u2018", "\u2019", "\u201c", "\u201d",
     "\u2026", "\u2022", "\u2192", "\u2190", "\u2500", "\u00e9",
-    "\u00a0", "\u20b9", "\U0001f680",
+    "\u00a0", "\u20b9", "\U0001f680", "\u00c5", "\u2585", "\U0001f685",
 ])
 @pytest.mark.parametrize("codec", ["cp1252", "latin-1"])
 def test_rejects_misdecoded_punctuation_accents_and_symbols(tmp_path, original, codec):
@@ -29,6 +29,7 @@ def test_rejects_misdecoded_punctuation_accents_and_symbols(tmp_path, original, 
     "\u0939\u093f\u0928\u094d\u0926\u0940 \u0928\u0940\u0932\u0915\u092e\u0932",
     "\u4e2d\u6587 \u65e5\u672c\u8a9e", "\u0627\u0644\u0639\u0631\u0628\u064a\u0629",
     "\u20b9 100 \u20ac 50 \U0001f680", r"\u00e2\u20ac\u201d",
+    "\u00c5ngstr\u00f6m \u2585 \U0001f685",
 ])
 def test_preserves_correct_unicode_and_escaped_detection_fixtures(tmp_path, text):
     path = tmp_path / "translations.json"
@@ -47,6 +48,16 @@ def test_invalid_utf8_is_not_silently_replaced(tmp_path):
     path = tmp_path / "page.tsx"
     path.write_bytes(b"invalid: \xff")
     assert guard.scan_file(path) == [f"{path}: invalid UTF-8"]
+
+
+@pytest.mark.parametrize("ending", ["\n", "\r\n"])
+def test_latin1_next_line_byte_cannot_split_a_corrupt_sequence(tmp_path, ending):
+    corrupt = "\u2585".encode("utf-8").decode("latin-1")
+    path = tmp_path / "page.tsx"
+    path.write_text(ending.join(["valid", corrupt, "end"]), encoding="utf-8")
+    failures = guard.scan_file(path)
+    assert len(failures) == 1
+    assert ":2:" in failures[0]
 
 
 def test_images_are_not_decoded_as_source_text(tmp_path):

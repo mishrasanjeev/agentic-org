@@ -41,9 +41,10 @@ def scan_file(path: Path) -> list[str]:
         content = path.read_text(encoding="utf-8")
     except UnicodeDecodeError:
         return [f"{path}: invalid UTF-8"]
+    # Latin-1 NEL can be a corrupt continuation byte, not a source newline.
     return [
         f"{path}:{number}: corrupted text {match.group().encode('unicode_escape').decode('ascii')}"
-        for number, line in enumerate(content.splitlines(), 1)
+        for number, line in enumerate(content.split("\n"), 1)
         for match in MOJIBAKE.finditer(line)
     ]
 
