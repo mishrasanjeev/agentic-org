@@ -831,6 +831,8 @@ async def applicant_session(body: SessionIn) -> dict[str, Any]:
         "session": tokens.sign("session", claims.tenant_id, claims.lead_id, now=now),
         "expires_at": (now + tokens.TTL["session"]).isoformat(),
         "partner_name": branding.partner_name,
+        "brand_color": branding.brand_color,
+        "privacy_url": branding.privacy_url,
         "application": state,
     }
 

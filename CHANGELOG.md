@@ -43,6 +43,14 @@
   owners and documents. A complete application maps to a `business_case` application. Answers,
   transcripts and documents are encrypted under the tenant key. Migration
   `v6z98_onboarding_applications`.
+- The applicant page: `<agenticorg-onboarding>`, a dependency-free element served at
+  `/onboarding-desk/apply.js`, for the partner's own site, and a hosted page at
+  `/onboarding-desk/apply`. It reads the signed link from the page, removes it from the address
+  bar, keeps the session in memory, and shows the application in English or French in the
+  partner's colour (`brand_color`) with its privacy notice (`privacy_url`): every item with its
+  reason, documents with values to confirm, "talk to a person" and submit. The applicant routes
+  accept calls from any site without credentials, since they authenticate only with the session
+  header.
 
 ## Unreleased - Shopping bot store pickup
 

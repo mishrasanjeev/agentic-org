@@ -57,7 +57,7 @@ Rules for the policy:
 
 ## The applicant's side
 
-The onboarding link in every outreach message carries a signed token, valid for 14 days.
+The onboarding link in every outreach message carries a signed token, valid for 14 days. The [applicant page](web-page.md) does all of this for the applicant; these are the calls it makes.
 
 1. **The page opens a session.** The partner's page posts the token to `POST /api/v1/onboarding-desk/apply/session` and gets:
    - a two-hour session;
