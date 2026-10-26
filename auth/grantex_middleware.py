@@ -397,6 +397,7 @@ class GrantexAuthMiddleware(BaseHTTPMiddleware):
     EXEMPT_PREFIXES = (
         "/api/v1/channels/webhooks/",  # Provider signature and receiver binding are mandatory.
         "/api/v1/onboarding-desk/webhooks/",  # Partner lead sources: HMAC signature verified by the route.
+        "/api/v1/onboarding-desk/unsubscribe",  # Signed, expiring unsubscribe token verified by the route.
         "/api/v1/network/",  # Public directory; the checkout gateway checks the network service credential.
         "/api/v1/evals",
         "/api/v1/webhooks/",

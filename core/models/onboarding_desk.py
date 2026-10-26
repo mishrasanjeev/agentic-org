@@ -47,6 +47,12 @@ class OnboardingLead(BaseModel):
         Index("ix_onboarding_leads_tenant_email_hash", "tenant_id", "email_hash"),
         Index("ix_onboarding_leads_tenant_phone_hash", "tenant_id", "phone_hash"),
         Index(
+            "ix_onboarding_leads_tenant_next_contact",
+            "tenant_id",
+            "next_contact_at",
+            postgresql_where=text("next_contact_at IS NOT NULL"),
+        ),
+        Index(
             "ux_onboarding_leads_source_ref",
             "tenant_id",
             "source_id",
@@ -81,6 +87,8 @@ class OnboardingLead(BaseModel):
     created_by: Mapped[str] = mapped_column(String(128), nullable=False, default="")
     created_at: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), server_default=func.now(), nullable=False)
     updated_at: Mapped[datetime | None] = mapped_column(TIMESTAMP(timezone=True), nullable=True)
+    next_contact_at: Mapped[datetime | None] = mapped_column(TIMESTAMP(timezone=True), nullable=True)
+    contacted_at: Mapped[datetime | None] = mapped_column(TIMESTAMP(timezone=True), nullable=True)
 
 
 class OnboardingConsent(BaseModel):

@@ -1,6 +1,6 @@
 # Merchant onboarding desk: foundations
 
-The merchant onboarding desk turns a payment partner's opted-in leads into verified, reviewed merchants. This page covers the foundations every later step relies on: leads, per-channel consent, opt-outs, the contact policy, and signed lead intake. Outreach, the guided onboarding conversation and the hand-off into a governed case build on these.
+The merchant onboarding desk turns a payment partner's opted-in leads into verified, reviewed merchants. This page covers the foundations every later step relies on: leads, per-channel consent, opt-outs, the contact policy, and signed lead intake. [Outreach](outreach.md), the guided onboarding conversation and the hand-off into a governed case build on these.
 
 The desk is off by default. With `AGENTICORG_ONBOARDING_DESK_ENABLED` unset, `GET /api/v1/onboarding-desk/status` answers `enabled: false` and every other onboarding desk route, the signed webhook included, is not found.
 

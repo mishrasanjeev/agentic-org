@@ -18,7 +18,7 @@ import uuid
 from datetime import UTC, datetime
 from typing import Any
 
-from fastapi import APIRouter, Depends, Form, HTTPException, Query, Request, UploadFile
+from fastapi import APIRouter, Depends, Form, HTTPException, Query, Request, Response, UploadFile
 from pydantic import BaseModel, Field
 
 from api.deps import get_current_tenant, get_current_user, require_tenant_admin
@@ -460,3 +460,268 @@ async def webhook_leads(tenant_id: str, source_id: str, request: Request) -> dic
         created += int(outcome.created)
         existing += int(not outcome.created)
     return {"created": created, "existing": existing}
+
+
+# ── Outreach ─────────────────────────────────────────────────────────────────
+
+
+class ContactIn(BaseModel):
+    model_config = {"extra": "forbid"}
+
+    channel: str | None = Field(None, max_length=16)
+    kind: str = Field("first_contact", max_length=16)
+
+
+class RunIn(BaseModel):
+    model_config = {"extra": "forbid"}
+
+    limit: int = Field(50, ge=1, le=200)
+
+
+@router.get("/branding")
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="onboarding_desk.branding.read",
+    rate_limit="standard",
+    idempotency="read-only",
+    audit_event="onboarding_desk.branding.read",
+)
+async def get_branding(tenant_id: str = Depends(get_current_tenant)) -> dict[str, Any]:
+    _require_on()
+    return (await store.get_branding(uuid.UUID(tenant_id))).to_dict()
+
+
+@router.put("/branding", dependencies=[require_tenant_admin])
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="onboarding_desk.branding.write",
+    rate_limit="standard",
+    idempotency="idempotent-replaces-the-tenant-branding",
+    audit_event="onboarding_desk.branding.set",
+)
+async def put_branding(
+    body: dict[str, Any], tenant_id: str = Depends(get_current_tenant), user: Any = Depends(get_current_user)
+) -> dict[str, Any]:
+    """The partner name, onboarding page, postal address, senders per channel and automatic contact."""
+    _require_on()
+    try:
+        branding = await store.put_branding(uuid.UUID(tenant_id), body, actor=_actor(user))
+    except DeskError as exc:
+        raise _refused(exc) from exc
+    return branding.to_dict()
+
+
+@router.post("/leads/{lead_id}/contact")
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="onboarding_desk.outreach.write",
+    rate_limit="standard",
+    idempotency="not_idempotent-may-send-one-message-under-a-lead-lock",
+    audit_event="onboarding_desk.outreach.contact",
+)
+async def contact_lead(lead_id: str, body: ContactIn, tenant_id: str = Depends(get_current_tenant)) -> dict[str, Any]:
+    """Send a first contact or a reminder now, only if the contact rules allow it."""
+    _require_on()
+    from core.onboarding_desk import outreach
+
+    channel = body.channel.lower() if body.channel else None
+    try:
+        outcome = await outreach.contact_lead(
+            uuid.UUID(tenant_id), _uuid(lead_id, "lead"), channel=channel, kind=body.kind
+        )
+    except DeskError as exc:
+        raise _refused(exc) from exc
+    return outcome.to_dict()
+
+
+@router.get("/leads/{lead_id}/attempts")
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="onboarding_desk.leads.read",
+    rate_limit="standard",
+    idempotency="read-only",
+    audit_event="onboarding_desk.outreach.attempts",
+)
+async def list_attempts(lead_id: str, tenant_id: str = Depends(get_current_tenant)) -> dict[str, Any]:
+    _require_on()
+    rows = await store.list_attempts(uuid.UUID(tenant_id), _uuid(lead_id, "lead"))
+    return {"attempts": [store.attempt_view(r) for r in rows]}
+
+
+@router.post("/outreach/run", dependencies=[require_tenant_admin])
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="onboarding_desk.outreach.write",
+    rate_limit="standard",
+    idempotency="not_idempotent-contacts-due-leads-under-lead-locks",
+    audit_event="onboarding_desk.outreach.run",
+)
+async def run_outreach(body: RunIn, tenant_id: str = Depends(get_current_tenant)) -> dict[str, Any]:
+    """Contact this tenant's due leads now, as the minute sweep would."""
+    _require_on()
+    from core.onboarding_desk import outreach
+
+    return await outreach.run_due(uuid.UUID(tenant_id), limit=body.limit)
+
+
+_UNSUBSCRIBE_TEXT = {
+    "en": (
+        "Unsubscribe",
+        "Stop emails from {partner} about your application?",
+        "Unsubscribe",
+        "You are unsubscribed. {partner} will not email you about this application again.",
+        "This link is not valid or has expired.",
+    ),
+    "fr": (
+        "Se désabonner",
+        "Ne plus recevoir de courriels de {partner} au sujet de votre demande ?",
+        "Se désabonner",
+        "Vous êtes désabonné. {partner} ne vous écrira plus au sujet de cette demande.",
+        "Ce lien n'est pas valide ou a expiré.",
+    ),
+}
+
+
+def _page(title: str, body: str, *, lang: str) -> Response:
+    import html as _html
+
+    content = (
+        f'<!doctype html><html lang="{lang}"><head><meta charset="utf-8">'
+        '<meta name="viewport" content="width=device-width, initial-scale=1">'
+        f"<title>{_html.escape(title)}</title></head>"
+        '<body style="font-family:system-ui,sans-serif;max-width:32rem;margin:3rem auto;padding:0 1rem">'
+        f"{body}</body></html>"
+    )
+    return Response(
+        content=content,
+        media_type="text/html; charset=utf-8",
+        headers={"Cache-Control": "no-store", "Referrer-Policy": "no-referrer"},
+    )
+
+
+async def _unsubscribe_context(token: str) -> tuple[Any, Any, str, str]:
+    from core.onboarding_desk import tokens
+
+    claims = tokens.verify(token, "unsubscribe")
+    lead, _ = await store.get_lead(claims.tenant_id, claims.lead_id)
+    branding = await store.get_branding(claims.tenant_id)
+    lang = "fr" if lead.locale == "fr" else "en"
+    return claims, lead, lang, branding.partner_name or ""
+
+
+@router.get("/unsubscribe")
+@route_meta(
+    auth_required=False,
+    tenant_required=False,
+    scope="public:onboarding_desk.unsubscribe",
+    rate_limit="onboarding-desk-public",
+    idempotency="read-only",
+    audit_event="onboarding_desk.unsubscribe.view",
+    public_reason="signed-expiring-unsubscribe-token-names-the-lead",
+)
+async def unsubscribe_page(t: str = Query(..., max_length=512)) -> Response:
+    """A confirmation page; nothing changes until the person presses the button, so link scanners cannot unsubscribe."""
+    import html as _html
+
+    from core.onboarding_desk.tokens import TokenError
+
+    if not store.enabled():
+        raise _off()
+    try:
+        _, _, lang, partner = await _unsubscribe_context(t)
+    except (TokenError, DeskError):
+        return _page(_UNSUBSCRIBE_TEXT["en"][0], f"<p>{_UNSUBSCRIBE_TEXT['en'][4]}</p>", lang="en")
+    title, question, button, _, _ = _UNSUBSCRIBE_TEXT[lang]
+    form = (
+        f"<h1>{_html.escape(title)}</h1><p>{_html.escape(question.format(partner=partner))}</p>"
+        '<form method="post" action="/api/v1/onboarding-desk/unsubscribe">'
+        f'<input type="hidden" name="t" value="{_html.escape(t)}">'
+        f'<button type="submit">{_html.escape(button)}</button></form>'
+    )
+    return _page(title, form, lang=lang)
+
+
+@router.post("/unsubscribe")
+@route_meta(
+    auth_required=False,
+    tenant_required=False,
+    scope="public:onboarding_desk.unsubscribe",
+    rate_limit="onboarding-desk-public",
+    idempotency="idempotent-a-suppression-is-kept-once",
+    audit_event="onboarding_desk.unsubscribe",
+    public_reason="signed-expiring-unsubscribe-token-names-the-lead",
+)
+async def unsubscribe(t: str = Form(..., max_length=512)) -> Response:
+    """Suppress the lead's email for this partner; also answers one-click unsubscribe posts."""
+    import html as _html
+    import json as _json
+
+    from core.onboarding_desk.tokens import TokenError
+
+    if not store.enabled():
+        raise _off()
+    try:
+        claims, lead, lang, partner = await _unsubscribe_context(t)
+    except (TokenError, DeskError):
+        return _page(_UNSUBSCRIBE_TEXT["en"][0], f"<p>{_UNSUBSCRIBE_TEXT['en'][4]}</p>", lang="en")
+    contact = _json.loads(await store.decrypt_contact(lead))
+    if contact.get("email"):
+        await store.opt_out(
+            claims.tenant_id,
+            email=contact["email"],
+            phone=None,
+            channel="email",
+            reason="unsubscribe",
+            source="email_link",
+        )
+    title, _, _, done, _ = _UNSUBSCRIBE_TEXT[lang]
+    return _page(title, f"<h1>{_html.escape(title)}</h1><p>{_html.escape(done.format(partner=partner))}</p>", lang=lang)
+
+
+@router.post("/webhooks/twilio/{tenant_id}")
+@route_meta(
+    auth_required=False,
+    tenant_required=False,
+    scope="public:onboarding_desk.twilio",
+    rate_limit="onboarding-desk-public",
+    idempotency="idempotent-opt-outs-are-kept-once",
+    audit_event="onboarding_desk.webhook.twilio",
+    public_reason="twilio-signature-verified-with-the-tenant-sms-connector-auth-token",
+)
+async def twilio_inbound(tenant_id: str, request: Request) -> Response:
+    """An SMS reply: STOP-style keywords opt the sender out of every channel; anything else marks the lead engaged."""
+    from api.v1.agents import _resolve_connector_configs
+    from api.v1.voice_runtime import _public_api_base
+    from core.onboarding_desk import contacts
+    from core.voice.runtime import verify_twilio_signature
+
+    if not store.enabled():
+        raise _off()
+    tid = _uuid(tenant_id, "tenant")
+    form = await request.form()
+    params = {str(k): str(v) for k, v in form.items()}
+    branding = await store.get_branding(tid)
+    sender = branding.senders.get("sms")
+    if sender is None:
+        raise HTTPException(403, detail={"error": "sms_sender_not_configured"})
+    config, names = await _resolve_connector_configs(str(tid), [sender.connector], None, None)
+    token = str(config.get("auth_token") or "") if names else ""
+    url = f"{_public_api_base()}/api/v1/onboarding-desk/webhooks/twilio/{tid}"
+    if not token or not verify_twilio_signature(
+        url=url, params=params, signature=request.headers.get("X-Twilio-Signature", ""), auth_token=token
+    ):
+        raise HTTPException(403, detail={"error": "signature_invalid"})
+    sender_phone = params.get("From", "")
+    if contacts.is_opt_out(params.get("Body")):
+        try:
+            await store.opt_out(tid, email=None, phone=sender_phone, channel="all", reason="stop_keyword", source="sms")
+        except DeskError:
+            pass
+    else:
+        await store.mark_engaged(tid, sender_phone)
+    return Response(content='<?xml version="1.0" encoding="UTF-8"?><Response/>', media_type="text/xml")

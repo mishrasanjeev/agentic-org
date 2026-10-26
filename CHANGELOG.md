@@ -22,6 +22,15 @@
   weekends in Canada, and only the hours allowed in every time zone of a multi-zone state or
   province. Leads in Quebec default to French.
 - Migration `v6z96_onboarding_desk` (six tables under forced row-level security).
+- Consent-gated outreach: `PUT /onboarding-desk/branding` sets the partner name, onboarding page,
+  postal address and senders, which reuse the tenant's Twilio, SendGrid and WhatsApp Business
+  connectors. `POST /leads/{id}/contact` and the minute sweep (for tenants that turn on automatic
+  contact) send a first contact or a reminder only when the contact rules allow, in English or
+  French, with the partner name, an AI-assistant disclosure, a signed onboarding link and opt-out
+  wording; emails add a signed unsubscribe link and the postal address. Attempts are claimed under a
+  lock on the lead. Twilio SMS replies reach `POST /onboarding-desk/webhooks/twilio/{tenant}`
+  (Twilio signature verified): STOP-style keywords opt the contact out of every channel and other
+  replies mark the lead engaged. Migration `v6z97_onboarding_outreach`.
 
 ## Unreleased - Shopping bot always answers
 

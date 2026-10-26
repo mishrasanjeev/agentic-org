@@ -9306,6 +9306,42 @@
     "tenant_required": true
   },
   {
+    "audit_event": "onboarding_desk.branding.read",
+    "auth_required": true,
+    "function": "get_branding",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/onboarding-desk/branding api/v1/onboarding_desk.py:get_branding",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/onboarding_desk.py",
+    "path": "/api/v1/onboarding-desk/branding",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "onboarding_desk.branding.read",
+    "source_line": 490,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "onboarding_desk.branding.set",
+    "auth_required": true,
+    "function": "put_branding",
+    "idempotency": "idempotent-replaces-the-tenant-branding",
+    "key": "PUT /api/v1/onboarding-desk/branding api/v1/onboarding_desk.py:put_branding",
+    "metadata_present": true,
+    "methods": [
+      "PUT"
+    ],
+    "module": "api/v1/onboarding_desk.py",
+    "path": "/api/v1/onboarding-desk/branding",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "onboarding_desk.branding.write",
+    "source_line": 504,
+    "tenant_required": true
+  },
+  {
     "audit_event": "onboarding_desk.source.list",
     "auth_required": true,
     "function": "list_sources",
@@ -9414,6 +9450,24 @@
     "tenant_required": true
   },
   {
+    "audit_event": "onboarding_desk.outreach.attempts",
+    "auth_required": true,
+    "function": "list_attempts",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/onboarding-desk/leads/{lead_id}/attempts api/v1/onboarding_desk.py:list_attempts",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/onboarding_desk.py",
+    "path": "/api/v1/onboarding-desk/leads/{lead_id}/attempts",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "onboarding_desk.leads.read",
+    "source_line": 549,
+    "tenant_required": true
+  },
+  {
     "audit_event": "onboarding_desk.consent.record",
     "auth_required": true,
     "function": "record_consent",
@@ -9450,6 +9504,24 @@
     "tenant_required": true
   },
   {
+    "audit_event": "onboarding_desk.outreach.contact",
+    "auth_required": true,
+    "function": "contact_lead",
+    "idempotency": "not_idempotent-may-send-one-message-under-a-lead-lock",
+    "key": "POST /api/v1/onboarding-desk/leads/{lead_id}/contact api/v1/onboarding_desk.py:contact_lead",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/onboarding_desk.py",
+    "path": "/api/v1/onboarding-desk/leads/{lead_id}/contact",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "onboarding_desk.outreach.write",
+    "source_line": 525,
+    "tenant_required": true
+  },
+  {
     "audit_event": "onboarding_desk.contact_decision",
     "auth_required": true,
     "function": "contact_decision",
@@ -9483,6 +9555,24 @@
     "rate_limit": "standard",
     "scope": "onboarding_desk.consents.write",
     "source_line": 365,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "onboarding_desk.outreach.run",
+    "auth_required": true,
+    "function": "run_outreach",
+    "idempotency": "not_idempotent-contacts-due-leads-under-lead-locks",
+    "key": "POST /api/v1/onboarding-desk/outreach/run api/v1/onboarding_desk.py:run_outreach",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/onboarding_desk.py",
+    "path": "/api/v1/onboarding-desk/outreach/run",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "onboarding_desk.outreach.write",
+    "source_line": 564,
     "tenant_required": true
   },
   {
@@ -9540,6 +9630,42 @@
     "tenant_required": true
   },
   {
+    "audit_event": "onboarding_desk.unsubscribe.view",
+    "auth_required": false,
+    "function": "unsubscribe_page",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/onboarding-desk/unsubscribe api/v1/onboarding_desk.py:unsubscribe_page",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/onboarding_desk.py",
+    "path": "/api/v1/onboarding-desk/unsubscribe",
+    "public_exempt_reason": "signed-expiring-unsubscribe-token-names-the-lead",
+    "rate_limit": "onboarding-desk-public",
+    "scope": "public:onboarding_desk.unsubscribe",
+    "source_line": 627,
+    "tenant_required": false
+  },
+  {
+    "audit_event": "onboarding_desk.unsubscribe",
+    "auth_required": false,
+    "function": "unsubscribe",
+    "idempotency": "idempotent-a-suppression-is-kept-once",
+    "key": "POST /api/v1/onboarding-desk/unsubscribe api/v1/onboarding_desk.py:unsubscribe",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/onboarding_desk.py",
+    "path": "/api/v1/onboarding-desk/unsubscribe",
+    "public_exempt_reason": "signed-expiring-unsubscribe-token-names-the-lead",
+    "rate_limit": "onboarding-desk-public",
+    "scope": "public:onboarding_desk.unsubscribe",
+    "source_line": 659,
+    "tenant_required": false
+  },
+  {
     "audit_event": "onboarding_desk.webhook.leads",
     "auth_required": false,
     "function": "webhook_leads",
@@ -9555,6 +9681,24 @@
     "rate_limit": "onboarding-desk-public",
     "scope": "public:onboarding_desk.webhook",
     "source_line": 434,
+    "tenant_required": false
+  },
+  {
+    "audit_event": "onboarding_desk.webhook.twilio",
+    "auth_required": false,
+    "function": "twilio_inbound",
+    "idempotency": "idempotent-opt-outs-are-kept-once",
+    "key": "POST /api/v1/onboarding-desk/webhooks/twilio/{tenant_id} api/v1/onboarding_desk.py:twilio_inbound",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/onboarding_desk.py",
+    "path": "/api/v1/onboarding-desk/webhooks/twilio/{tenant_id}",
+    "public_exempt_reason": "twilio-signature-verified-with-the-tenant-sms-connector-auth-token",
+    "rate_limit": "onboarding-desk-public",
+    "scope": "public:onboarding_desk.twilio",
+    "source_line": 696,
     "tenant_required": false
   },
   {

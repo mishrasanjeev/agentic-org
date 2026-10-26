@@ -99,7 +99,7 @@ async def put_policy(tenant_id: uuid.UUID, raw: dict[str, Any], *, actor: str) -
         if row is None:
             session.add(OnboardingPolicy(tenant_id=tenant_id, settings=policy.to_dict(), updated_by=actor[:128]))
         else:
-            row.settings = policy.to_dict()
+            row.settings = {**(row.settings or {}), **policy.to_dict()}
             row.updated_by = actor[:128]
             row.updated_at = datetime.now(UTC)
     return policy
@@ -376,6 +376,8 @@ async def record_consent(tenant_id: uuid.UUID, lead_id: uuid.UUID, consent: Cons
     row = _consent_row(tenant_id, lead_id, consent, actor)
     async with _session(tenant_id) as session:
         session.add(row)
+    # A new lead waits for the first-contact delay; any other lead is due now, subject to the contact rules.
+    await set_next_contact(tenant_id, lead_id, None if lead.status == "new" else datetime.now(UTC))
     return row
 
 
@@ -562,3 +564,269 @@ async def contact_decision(
         is_reminder=is_reminder,
         last_attempt_at=last,
     )
+
+
+# ── Branding and outreach ────────────────────────────────────────────────────
+
+
+async def get_branding(tenant_id: uuid.UUID) -> Any:
+    from sqlalchemy import select
+
+    from core.models.onboarding_desk import OnboardingPolicy
+    from core.onboarding_desk.branding import branding_from
+
+    async with _session(tenant_id) as session:
+        row = (
+            await session.execute(select(OnboardingPolicy).where(OnboardingPolicy.tenant_id == tenant_id))
+        ).scalar_one_or_none()
+    return branding_from((row.settings or {}).get("branding") if row else None)
+
+
+async def put_branding(tenant_id: uuid.UUID, raw: dict[str, Any], *, actor: str) -> Any:
+    from sqlalchemy import select
+
+    from core.models.onboarding_desk import OnboardingPolicy
+    from core.onboarding_desk.branding import BrandingError, branding_from
+
+    try:
+        branding = branding_from(raw)
+    except BrandingError as exc:
+        raise DeskError(422, "branding_invalid", f"{exc.field}: {exc.message}") from exc
+    async with _session(tenant_id) as session:
+        row = (
+            await session.execute(select(OnboardingPolicy).where(OnboardingPolicy.tenant_id == tenant_id))
+        ).scalar_one_or_none()
+        if row is None:
+            session.add(
+                OnboardingPolicy(tenant_id=tenant_id, settings={"branding": branding.to_dict()}, updated_by=actor[:128])
+            )
+        else:
+            row.settings = {**(row.settings or {}), "branding": branding.to_dict()}
+            row.updated_by = actor[:128]
+            row.updated_at = datetime.now(UTC)
+    return branding
+
+
+async def decrypt_contact(lead: Any) -> str:
+    return await _decrypt(lead.contact_ciphertext)
+
+
+def attempt_view(row: Any) -> dict[str, Any]:
+    return {
+        "id": str(row.id),
+        "channel": row.channel,
+        "kind": row.kind,
+        "status": row.status,
+        "refusal_reason": row.refusal_reason,
+        "provider_ref": row.provider_ref,
+        "attempt_no": int(row.attempt_no),
+        "created_at": row.created_at.isoformat() if row.created_at else None,
+        "sent_at": row.sent_at.isoformat() if row.sent_at else None,
+    }
+
+
+async def list_attempts(tenant_id: uuid.UUID, lead_id: uuid.UUID) -> list[Any]:
+    from sqlalchemy import select
+
+    from core.models.onboarding_desk import OnboardingContactAttempt as Attempt
+
+    async with _session(tenant_id) as session:
+        return list(
+            (
+                await session.execute(
+                    select(Attempt)
+                    .where(Attempt.tenant_id == tenant_id, Attempt.lead_id == lead_id)
+                    .order_by(Attempt.created_at.desc())
+                    .limit(MAX_LIST)
+                )
+            ).scalars()
+        )
+
+
+async def claim_attempt(tenant_id: uuid.UUID, lead_id: uuid.UUID, channel: str, kind: str, *, now: datetime) -> Any:
+    """A queued attempt, claimed under a lock on the lead; refused while another attempt is in flight."""
+    from sqlalchemy import func, select
+
+    from core.models.onboarding_desk import OnboardingContactAttempt as Attempt
+    from core.models.onboarding_desk import OnboardingLead
+
+    async with _session(tenant_id) as session:
+        lead = (
+            await session.execute(
+                select(OnboardingLead)
+                .where(OnboardingLead.tenant_id == tenant_id, OnboardingLead.id == lead_id)
+                .with_for_update()
+            )
+        ).scalar_one_or_none()
+        if lead is None:
+            raise DeskError(404, "lead_not_found", "no such lead")
+        in_flight = (
+            await session.execute(
+                select(func.count()).where(
+                    Attempt.tenant_id == tenant_id,
+                    Attempt.lead_id == lead_id,
+                    Attempt.status == "queued",
+                    Attempt.created_at >= now - timedelta(minutes=10),
+                )
+            )
+        ).scalar() or 0
+        if in_flight:
+            raise DeskError(409, "contact_in_progress", "another contact with this lead is in progress")
+        count = (
+            await session.execute(
+                select(func.count()).where(Attempt.tenant_id == tenant_id, Attempt.lead_id == lead_id)
+            )
+        ).scalar() or 0
+        row = Attempt(
+            id=uuid.uuid4(),
+            tenant_id=tenant_id,
+            lead_id=lead_id,
+            channel=channel,
+            kind=kind,
+            status="queued",
+            attempt_no=int(count) + 1,
+            created_at=now,
+        )
+        session.add(row)
+    return row
+
+
+async def finish_attempt(
+    tenant_id: uuid.UUID,
+    attempt_id: uuid.UUID,
+    *,
+    ok: bool,
+    provider_ref: str | None,
+    error: str | None,
+    next_contact_at: datetime | None = None,
+) -> None:
+    from sqlalchemy import select
+
+    from core.models.onboarding_desk import OnboardingContactAttempt as Attempt
+    from core.models.onboarding_desk import OnboardingLead
+
+    now = datetime.now(UTC)
+    async with _session(tenant_id) as session:
+        attempt = (
+            await session.execute(select(Attempt).where(Attempt.tenant_id == tenant_id, Attempt.id == attempt_id))
+        ).scalar_one_or_none()
+        if attempt is None:
+            return
+        attempt.status = "sent" if ok else "failed"
+        attempt.provider_ref = provider_ref
+        attempt.refusal_reason = None if ok else (error or "send_failed")[:48]
+        attempt.sent_at = now if ok else None
+        lead = (
+            await session.execute(
+                select(OnboardingLead).where(
+                    OnboardingLead.tenant_id == tenant_id, OnboardingLead.id == attempt.lead_id
+                )
+            )
+        ).scalar_one_or_none()
+        if lead is not None:
+            if ok:
+                if lead.status == "new":
+                    lead.status = "contacted"
+                lead.contacted_at = now
+                lead.next_contact_at = next_contact_at
+            else:
+                lead.next_contact_at = now + timedelta(hours=1)
+            lead.updated_at = now
+
+
+async def record_refusal(tenant_id: uuid.UUID, lead_id: uuid.UUID, channel: str, kind: str, reason: str) -> None:
+    from core.models.onboarding_desk import OnboardingContactAttempt as Attempt
+
+    async with _session(tenant_id) as session:
+        session.add(
+            Attempt(
+                id=uuid.uuid4(),
+                tenant_id=tenant_id,
+                lead_id=lead_id,
+                channel=channel[:16],
+                kind=kind,
+                status="refused",
+                refusal_reason=reason[:48],
+            )
+        )
+
+
+async def set_next_contact(tenant_id: uuid.UUID, lead_id: uuid.UUID, at: datetime | None) -> None:
+    from sqlalchemy import select
+
+    from core.models.onboarding_desk import OnboardingLead
+
+    async with _session(tenant_id) as session:
+        lead = (
+            await session.execute(
+                select(OnboardingLead).where(OnboardingLead.tenant_id == tenant_id, OnboardingLead.id == lead_id)
+            )
+        ).scalar_one_or_none()
+        if lead is not None:
+            lead.next_contact_at = at
+
+
+async def due_leads(tenant_id: uuid.UUID, *, now: datetime, first_contact_delay: timedelta, limit: int) -> list[Any]:
+    """Leads due for contact: new leads past the delay with no schedule, and any lead whose next contact has come."""
+    from sqlalchemy import and_, func, or_, select
+
+    from core.models.onboarding_desk import OnboardingLead as Lead
+
+    query = (
+        select(Lead)
+        .where(
+            Lead.tenant_id == tenant_id,
+            Lead.status.in_(("new", "contacted", "engaged", "applying")),
+            or_(
+                Lead.next_contact_at <= now,
+                and_(
+                    Lead.next_contact_at.is_(None), Lead.status == "new", Lead.created_at <= now - first_contact_delay
+                ),
+            ),
+        )
+        .order_by(func.coalesce(Lead.next_contact_at, Lead.created_at))
+        .limit(limit)
+    )
+    async with _session(tenant_id) as session:
+        return list((await session.execute(query)).scalars())
+
+
+async def mark_engaged(tenant_id: uuid.UUID, phone: str) -> int:
+    """A reply from a lead's phone marks new or contacted leads with that phone engaged."""
+    from sqlalchemy import select
+
+    from core.models.onboarding_desk import OnboardingLead
+
+    try:
+        normalised = contacts.normalise_phone(phone)
+    except contacts.ContactError:
+        return 0
+    if not normalised:
+        return 0
+    digest = _hash(tenant_id, "phone", normalised)
+    count = 0
+    async with _session(tenant_id) as session:
+        for lead in (
+            await session.execute(
+                select(OnboardingLead).where(
+                    OnboardingLead.tenant_id == tenant_id,
+                    OnboardingLead.phone_hash == digest,
+                    OnboardingLead.status.in_(("new", "contacted")),
+                )
+            )
+        ).scalars():
+            lead.status = "engaged"
+            lead.updated_at = datetime.now(UTC)
+            count += 1
+    return count
+
+
+async def tenant_ids_with_desk() -> list[uuid.UUID]:
+    """Tenants that saved a desk policy or branding: the only cross-tenant read the desk makes."""
+    from sqlalchemy import select
+
+    from core.database import get_platform_session
+    from core.models.onboarding_desk import OnboardingPolicy
+
+    async with get_platform_session() as session:
+        return list((await session.execute(select(OnboardingPolicy.tenant_id))).scalars())
