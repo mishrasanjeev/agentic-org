@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased - UI container curl security floor
+
+- Both UI runtime images require curl and libcurl 8.23.0-r0 or newer to address
+  CVE-2026-92392. Builds fail if patched packages are unavailable; existing image
+  pins, healthchecks and vulnerability scan policy are unchanged.
+
 ## Unreleased - Paused shadow agent recovery
 
 - Agents paused from shadow mode can reset their evaluation counters with Retest, remain
