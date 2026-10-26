@@ -1123,6 +1123,7 @@ class TestResumeAgent:
             id=aid,
             status="paused",
             shadow_min_samples=10,
+            shadow_sample_count=16,
             shadow_accuracy_current=Decimal("0.800"),
             shadow_accuracy_floor=Decimal("0.950"),
         )
