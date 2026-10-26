@@ -602,6 +602,8 @@ def summary_view(row: Any) -> dict[str, Any]:
         "created_at": row.created_at.isoformat() if row.created_at else None,
         "updated_at": row.updated_at.isoformat() if row.updated_at else None,
         "submitted_at": row.submitted_at.isoformat() if row.submitted_at else None,
+        "case_ref": row.case_ref,
+        "case_error": row.case_error,
     }
 
 

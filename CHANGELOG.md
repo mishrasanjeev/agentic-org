@@ -51,6 +51,24 @@
   reason, documents with values to confirm, "talk to a person" and submit. The applicant routes
   accept calls from any site without credentials, since they authenticate only with the session
   header.
+- The hand-off into a governed case: a submitted application opens a governed case
+  (`POST /onboarding-desk/applications/{id}/case`, or on its own with the case settings
+  `auto_open` and `investigate`, both off by default) under the jurisdiction's case policy; the
+  case reference is stored on the application in the same transaction, so an application never
+  has two cases. From there the governed-case workflow runs the checks, the review, the decision
+  grants and the signed case push. `GET /onboarding-desk/cases/{case_ref}` returns the lead and
+  application behind a case. Adds the example policy `business_onboarding_ca` (not reviewed;
+  refused by strict runtimes like the others).
+- Evidence packs: `GET /onboarding-desk/applications/{id}/evidence` returns the consents with
+  their wording, contact attempts, transcript, document hashes, hand-offs, the case with its
+  policy result, recommendation and decision, and the Grantex-signed case export when that
+  service is on, with a SHA-256 per section and an Ed25519 signature over the manifest
+  (`AGENTICORG_ONBOARDING_DESK_EVIDENCE_SIGNING_KEY`; the public key is at
+  `GET /onboarding-desk/evidence-key`). `scripts/verify_onboarding_evidence.py` checks a pack
+  offline.
+- Reporting: `GET /onboarding-desk/reports/summary` gives the funnel, hours to submission and to
+  decision (median and 90th percentile), consent coverage by channel, and checks per merchant,
+  for leads created in the period. Migration `v6z99_onboarding_cases`.
 
 ## Unreleased - Shopping bot store pickup
 

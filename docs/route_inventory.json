@@ -9320,7 +9320,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "onboarding_desk.applications.read",
-    "source_line": 1002,
+    "source_line": 1009,
     "tenant_required": true
   },
   {
@@ -9338,7 +9338,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "onboarding_desk.applications.write",
-    "source_line": 1020,
+    "source_line": 1027,
     "tenant_required": true
   },
   {
@@ -9356,7 +9356,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "onboarding_desk.applications.read",
-    "source_line": 1036,
+    "source_line": 1043,
     "tenant_required": true
   },
   {
@@ -9374,7 +9374,25 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "onboarding_desk.applications.read",
-    "source_line": 1054,
+    "source_line": 1061,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "onboarding_desk.case.open",
+    "auth_required": true,
+    "function": "open_case",
+    "idempotency": "idempotent-an-application-has-one-case",
+    "key": "POST /api/v1/onboarding-desk/applications/{application_id}/case api/v1/onboarding_desk.py:open_case",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/onboarding_desk.py",
+    "path": "/api/v1/onboarding-desk/applications/{application_id}/case",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "onboarding_desk.cases.write",
+    "source_line": 1215,
     "tenant_required": true
   },
   {
@@ -9392,7 +9410,25 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "onboarding_desk.applications.read",
-    "source_line": 1069,
+    "source_line": 1078,
+    "tenant_required": true
+  },
+  {
+    "audit_event": null,
+    "auth_required": true,
+    "function": "evidence_pack",
+    "idempotency": null,
+    "key": "GET /api/v1/onboarding-desk/applications/{application_id}/evidence api/v1/onboarding_desk.py:evidence_pack",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/onboarding_desk.py",
+    "path": "/api/v1/onboarding-desk/applications/{application_id}/evidence",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "onboarding_desk.cases.read",
+    "source_line": 1260,
     "tenant_required": true
   },
   {
@@ -9410,7 +9446,7 @@
     "public_exempt_reason": "public-read-or-doc-route",
     "rate_limit": "onboarding-desk-public",
     "scope": "public:onboarding_desk.apply",
-    "source_line": 866,
+    "source_line": 868,
     "tenant_required": false
   },
   {
@@ -9428,7 +9464,7 @@
     "public_exempt_reason": "public-read-or-doc-route",
     "rate_limit": "onboarding-desk-public",
     "scope": "public:onboarding_desk.apply",
-    "source_line": 848,
+    "source_line": 850,
     "tenant_required": false
   },
   {
@@ -9446,7 +9482,7 @@
     "public_exempt_reason": "public-read-or-doc-route",
     "rate_limit": "onboarding-desk-public",
     "scope": "public:onboarding_desk.apply",
-    "source_line": 893,
+    "source_line": 895,
     "tenant_required": false
   },
   {
@@ -9464,7 +9500,7 @@
     "public_exempt_reason": "public-read-or-doc-route",
     "rate_limit": "onboarding-desk-public",
     "scope": "public:onboarding_desk.apply",
-    "source_line": 941,
+    "source_line": 943,
     "tenant_required": false
   },
   {
@@ -9482,7 +9518,7 @@
     "public_exempt_reason": "public-read-or-doc-route",
     "rate_limit": "onboarding-desk-public",
     "scope": "public:onboarding_desk.apply",
-    "source_line": 919,
+    "source_line": 921,
     "tenant_required": false
   },
   {
@@ -9500,7 +9536,7 @@
     "public_exempt_reason": "public-read-or-doc-route",
     "rate_limit": "onboarding-desk-public",
     "scope": "public:onboarding_desk.apply",
-    "source_line": 963,
+    "source_line": 965,
     "tenant_required": false
   },
   {
@@ -9518,7 +9554,7 @@
     "public_exempt_reason": "public-read-or-doc-route",
     "rate_limit": "onboarding-desk-public",
     "scope": "public:onboarding_desk.apply",
-    "source_line": 812,
+    "source_line": 814,
     "tenant_required": false
   },
   {
@@ -9536,7 +9572,7 @@
     "public_exempt_reason": "public-read-or-doc-route",
     "rate_limit": "onboarding-desk-public",
     "scope": "public:onboarding_desk.apply",
-    "source_line": 985,
+    "source_line": 987,
     "tenant_required": false
   },
   {
@@ -9554,7 +9590,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "onboarding_desk.branding.read",
-    "source_line": 490,
+    "source_line": 492,
     "tenant_required": true
   },
   {
@@ -9572,8 +9608,80 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "onboarding_desk.branding.write",
-    "source_line": 504,
+    "source_line": 506,
     "tenant_required": true
+  },
+  {
+    "audit_event": null,
+    "auth_required": true,
+    "function": "get_case_settings",
+    "idempotency": null,
+    "key": "GET /api/v1/onboarding-desk/case-settings api/v1/onboarding_desk.py:get_case_settings",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/onboarding_desk.py",
+    "path": "/api/v1/onboarding-desk/case-settings",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "onboarding_desk.cases.read",
+    "source_line": 1170,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "onboarding_desk.case_settings.update",
+    "auth_required": true,
+    "function": "put_case_settings",
+    "idempotency": "idempotent-replaces-the-case-settings",
+    "key": "PUT /api/v1/onboarding-desk/case-settings api/v1/onboarding_desk.py:put_case_settings",
+    "metadata_present": true,
+    "methods": [
+      "PUT"
+    ],
+    "module": "api/v1/onboarding_desk.py",
+    "path": "/api/v1/onboarding-desk/case-settings",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "onboarding_desk.cases.write",
+    "source_line": 1187,
+    "tenant_required": true
+  },
+  {
+    "audit_event": null,
+    "auth_required": true,
+    "function": "application_for_case",
+    "idempotency": null,
+    "key": "GET /api/v1/onboarding-desk/cases/{case_ref} api/v1/onboarding_desk.py:application_for_case",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/onboarding_desk.py",
+    "path": "/api/v1/onboarding-desk/cases/{case_ref}",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "onboarding_desk.cases.read",
+    "source_line": 1240,
+    "tenant_required": true
+  },
+  {
+    "audit_event": null,
+    "auth_required": false,
+    "function": "evidence_key",
+    "idempotency": null,
+    "key": "GET /api/v1/onboarding-desk/evidence-key api/v1/onboarding_desk.py:evidence_key",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/onboarding_desk.py",
+    "path": "/api/v1/onboarding-desk/evidence-key",
+    "public_exempt_reason": "public-read-or-doc-route",
+    "rate_limit": "onboarding-desk-public",
+    "scope": "public:onboarding_desk.evidence_key",
+    "source_line": 1289,
+    "tenant_required": false
   },
   {
     "audit_event": null,
@@ -9590,7 +9698,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "onboarding_desk.applications.read",
-    "source_line": 1095,
+    "source_line": 1104,
     "tenant_required": true
   },
   {
@@ -9608,7 +9716,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "onboarding_desk.applications.write",
-    "source_line": 1120,
+    "source_line": 1129,
     "tenant_required": true
   },
   {
@@ -9626,7 +9734,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "onboarding_desk.sources.read",
-    "source_line": 205,
+    "source_line": 207,
     "tenant_required": true
   },
   {
@@ -9644,7 +9752,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "onboarding_desk.sources.write",
-    "source_line": 180,
+    "source_line": 182,
     "tenant_required": true
   },
   {
@@ -9662,7 +9770,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "onboarding_desk.leads.read",
-    "source_line": 275,
+    "source_line": 277,
     "tenant_required": true
   },
   {
@@ -9680,7 +9788,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "onboarding_desk.leads.write",
-    "source_line": 219,
+    "source_line": 221,
     "tenant_required": true
   },
   {
@@ -9698,7 +9806,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "onboarding_desk.leads.write",
-    "source_line": 241,
+    "source_line": 243,
     "tenant_required": true
   },
   {
@@ -9716,7 +9824,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "onboarding_desk.leads.read",
-    "source_line": 295,
+    "source_line": 297,
     "tenant_required": true
   },
   {
@@ -9734,7 +9842,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "onboarding_desk.leads.read",
-    "source_line": 549,
+    "source_line": 551,
     "tenant_required": true
   },
   {
@@ -9752,7 +9860,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "onboarding_desk.consents.write",
-    "source_line": 313,
+    "source_line": 315,
     "tenant_required": true
   },
   {
@@ -9770,7 +9878,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "onboarding_desk.consents.write",
-    "source_line": 340,
+    "source_line": 342,
     "tenant_required": true
   },
   {
@@ -9788,7 +9896,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "onboarding_desk.outreach.write",
-    "source_line": 525,
+    "source_line": 527,
     "tenant_required": true
   },
   {
@@ -9806,7 +9914,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "onboarding_desk.leads.read",
-    "source_line": 390,
+    "source_line": 392,
     "tenant_required": true
   },
   {
@@ -9824,7 +9932,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "onboarding_desk.consents.write",
-    "source_line": 365,
+    "source_line": 367,
     "tenant_required": true
   },
   {
@@ -9842,7 +9950,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "onboarding_desk.outreach.write",
-    "source_line": 564,
+    "source_line": 566,
     "tenant_required": true
   },
   {
@@ -9860,7 +9968,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "onboarding_desk.policy.read",
-    "source_line": 145,
+    "source_line": 147,
     "tenant_required": true
   },
   {
@@ -9878,7 +9986,25 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "onboarding_desk.policy.write",
-    "source_line": 159,
+    "source_line": 161,
+    "tenant_required": true
+  },
+  {
+    "audit_event": null,
+    "auth_required": true,
+    "function": "report_summary",
+    "idempotency": null,
+    "key": "GET /api/v1/onboarding-desk/reports/summary api/v1/onboarding_desk.py:report_summary",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/onboarding_desk.py",
+    "path": "/api/v1/onboarding-desk/reports/summary",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "onboarding_desk.reports.read",
+    "source_line": 1305,
     "tenant_required": true
   },
   {
@@ -9896,7 +10022,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "onboarding_desk.read",
-    "source_line": 119,
+    "source_line": 121,
     "tenant_required": true
   },
   {
@@ -9914,7 +10040,7 @@
     "public_exempt_reason": "signed-expiring-unsubscribe-token-names-the-lead",
     "rate_limit": "onboarding-desk-public",
     "scope": "public:onboarding_desk.unsubscribe",
-    "source_line": 627,
+    "source_line": 629,
     "tenant_required": false
   },
   {
@@ -9932,7 +10058,7 @@
     "public_exempt_reason": "signed-expiring-unsubscribe-token-names-the-lead",
     "rate_limit": "onboarding-desk-public",
     "scope": "public:onboarding_desk.unsubscribe",
-    "source_line": 659,
+    "source_line": 661,
     "tenant_required": false
   },
   {
@@ -9950,7 +10076,7 @@
     "public_exempt_reason": "webhook-or-callback-signature/state-protected",
     "rate_limit": "onboarding-desk-public",
     "scope": "public:onboarding_desk.webhook",
-    "source_line": 434,
+    "source_line": 436,
     "tenant_required": false
   },
   {
@@ -9968,7 +10094,7 @@
     "public_exempt_reason": "twilio-signature-verified-with-the-tenant-sms-connector-auth-token",
     "rate_limit": "onboarding-desk-public",
     "scope": "public:onboarding_desk.twilio",
-    "source_line": 696,
+    "source_line": 698,
     "tenant_required": false
   },
   {

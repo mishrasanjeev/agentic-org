@@ -399,6 +399,7 @@ class GrantexAuthMiddleware(BaseHTTPMiddleware):
         "/api/v1/onboarding-desk/webhooks/",  # Partner lead sources: HMAC signature verified by the route.
         "/api/v1/onboarding-desk/unsubscribe",  # Signed, expiring unsubscribe token verified by the route.
         "/api/v1/onboarding-desk/apply/",  # Applicant session: signed link or session token verified by the route.
+        "/api/v1/onboarding-desk/evidence-key",  # Public verification key for signed evidence packs.
         "/api/v1/network/",  # Public directory; the checkout gateway checks the network service credential.
         "/api/v1/evals",
         "/api/v1/webhooks/",

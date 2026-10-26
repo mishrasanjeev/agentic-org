@@ -452,6 +452,9 @@ def app_row(**overrides):
         "created_at": NOW,
         "updated_at": None,
         "submitted_at": None,
+        "case_ref": None,
+        "case_opened_at": None,
+        "case_error": None,
     }
     base.update(overrides)
     return SimpleNamespace(**base)
@@ -1108,7 +1111,7 @@ class TestOperatorRoutes:
         assert client.put(f"{base}/application-policy", json={"bad": 1}).status_code == 422
         assert client.get(f"{base}/applications").json()["applications"][0]["id"] == str(APP)
         assert client.get(f"{base}/applications?status=lost").status_code == 422
-        assert client.get(f"{base}/applications/{APP}").json() == {"operator": True}
+        assert client.get(f"{base}/applications/{APP}").json() == {"operator": True, "case": None}
         assert client.get(f"{base}/applications/{uuid.uuid4()}").status_code == 404
         download = client.get(f"{base}/applications/{APP}/documents/{uuid.uuid4()}")
         assert download.content == b"%PDF-1" and download.headers["x-content-type-options"] == "nosniff"

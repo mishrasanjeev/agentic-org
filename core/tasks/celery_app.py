@@ -95,6 +95,7 @@ app.conf.update(
         "core.tasks.workflow_tasks.*": {"queue": "workflows"},
         "core.tasks.channel_tasks.*": {"queue": "workflows"},
         "core.tasks.network_tasks.*": {"queue": "workflows"},
+        "core.tasks.onboarding_desk_tasks.open_case": {"queue": "workflows"},
         "core.tasks.knowledge_tasks.*": {"queue": "maintenance"},
         # Retain the historical short task names so messages already in
         # Redis remain executable during rolling deploys.

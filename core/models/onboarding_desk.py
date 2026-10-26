@@ -176,6 +176,13 @@ class OnboardingApplication(BaseModel):
     __table_args__ = (
         Index("ux_onboarding_applications_lead", "tenant_id", "lead_id", unique=True),
         Index("ix_onboarding_applications_status", "tenant_id", "status", text("created_at DESC")),
+        Index(
+            "ux_onboarding_applications_case",
+            "tenant_id",
+            "case_ref",
+            unique=True,
+            postgresql_where=text("case_ref IS NOT NULL"),
+        ),
         CheckConstraint(
             "status IN ('in_progress','submitted','withdrawn')", name="ck_onboarding_applications_status"
         ),
@@ -197,6 +204,10 @@ class OnboardingApplication(BaseModel):
     created_at: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), server_default=func.now(), nullable=False)
     updated_at: Mapped[datetime | None] = mapped_column(TIMESTAMP(timezone=True), nullable=True)
     submitted_at: Mapped[datetime | None] = mapped_column(TIMESTAMP(timezone=True), nullable=True)
+    #: The governed case opened from this application (``v6z99_onboarding_cases``).
+    case_ref: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    case_opened_at: Mapped[datetime | None] = mapped_column(TIMESTAMP(timezone=True), nullable=True)
+    case_error: Mapped[str | None] = mapped_column(String(64), nullable=True)
 
 
 class OnboardingDocument(BaseModel):

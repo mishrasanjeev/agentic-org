@@ -18,7 +18,8 @@ import uuid
 from datetime import UTC, datetime
 from typing import Any
 
-from fastapi import APIRouter, Depends, Form, HTTPException, Query, Request, Response, UploadFile
+import structlog
+from fastapi import APIRouter, BackgroundTasks, Depends, Form, HTTPException, Query, Request, Response, UploadFile
 from pydantic import BaseModel, Field
 
 from api.deps import get_current_tenant, get_current_user, require_tenant_admin
@@ -29,6 +30,7 @@ from core.onboarding_desk import rules, store
 from core.onboarding_desk.leads import LeadError
 from core.onboarding_desk.store import DeskError
 
+logger = structlog.get_logger()
 router = APIRouter(prefix="/onboarding-desk", tags=["Onboarding Desk"])
 
 MAX_WEBHOOK_BYTES = 256 * 1024
@@ -984,14 +986,19 @@ async def applicant_person(body: PersonIn, request: Request) -> dict[str, Any]:
 )
 async def applicant_submit(request: Request) -> dict[str, Any]:
     """Submit a complete application; refused with the missing items until every required item is in."""
-    from core.onboarding_desk import applications
+    from core.onboarding_desk import applications, cases
 
     tenant_id, row = await _applicant(request)
     try:
         await applications.submit(tenant_id, row.id)
-        return await _applicant_state(tenant_id, row.id)
+        state = await _applicant_state(tenant_id, row.id)
     except DeskError as exc:
         raise _refused(exc) from exc
+    try:
+        await cases.after_submit(tenant_id, row.id)
+    except DeskError as exc:
+        logger.warning("onboarding_case_hand_off_not_queued", reason=exc.code)
+    return state
 
 
 # ── Applications: the partner's side ─────────────────────────────────────────
@@ -1059,7 +1066,9 @@ async def get_application(application_id: str, tenant_id: str = Depends(get_curr
     tid = uuid.UUID(tenant_id)
     try:
         row = await applications.get_application(tid, _uuid(application_id, "application"))
-        return await applications.state(tid, row, operator=True)
+        view = await applications.state(tid, row, operator=True)
+        view["case"] = await _case_of(tid, row)
+        return view
     except DeskError as exc:
         raise _refused(exc) from exc
 
@@ -1134,3 +1143,177 @@ async def resolve_handoff(
     except DeskError as exc:
         raise _refused(exc) from exc
     return await applications.handoff_view(row)
+
+
+# ── Cases, evidence and reporting ────────────────────────────────────────────
+
+EVIDENCE_KEY_REASON = "public-verification-key-for-signed-evidence-packs-carries-no-tenant-data"
+
+
+class OpenCaseIn(BaseModel):
+    model_config = {"extra": "forbid"}
+
+    investigate: bool = False
+
+
+async def _case_of(tenant_id: uuid.UUID, row: Any) -> dict[str, Any] | None:
+    from core.onboarding_desk import cases
+
+    if not row.case_ref:
+        return None
+    case = await cases.get_case(tenant_id, row.case_ref)
+    return cases.case_view(case) if case is not None else {"case_ref": row.case_ref, "state": "not_found"}
+
+
+@router.get("/case-settings")
+@route_meta(auth_required=True, tenant_required=True, scope="onboarding_desk.cases.read", rate_limit="standard")
+async def get_case_settings(tenant_id: str = Depends(get_current_tenant)) -> dict[str, Any]:
+    """Whether a submitted application opens its governed case on its own, and starts the checks."""
+    from core.onboarding_desk import cases
+
+    _require_on()
+    return (await cases.get_case_settings(uuid.UUID(tenant_id))).to_dict()
+
+
+@router.put("/case-settings", dependencies=[require_tenant_admin])
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="onboarding_desk.cases.write",
+    rate_limit="standard",
+    idempotency="idempotent-replaces-the-case-settings",
+    audit_event="onboarding_desk.case_settings.update",
+)
+async def put_case_settings(
+    body: dict[str, Any], tenant_id: str = Depends(get_current_tenant), user: Any = Depends(get_current_user)
+) -> dict[str, Any]:
+    """Turn the automatic case hand-off and automatic checks on or off."""
+    from core.onboarding_desk import cases
+
+    _require_on()
+    try:
+        return (await cases.put_case_settings(uuid.UUID(tenant_id), body, actor=_actor(user))).to_dict()
+    except DeskError as exc:
+        raise _refused(exc) from exc
+
+
+async def _investigate_later(tenant_id: uuid.UUID, case_ref: str, actor: str) -> None:
+    from core.onboarding_desk import cases
+
+    await cases.investigate(tenant_id, case_ref, actor=actor)
+
+
+@router.post("/applications/{application_id}/case")
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="onboarding_desk.cases.write",
+    rate_limit="standard",
+    idempotency="idempotent-an-application-has-one-case",
+    audit_event="onboarding_desk.case.open",
+)
+async def open_case(
+    application_id: str,
+    body: OpenCaseIn,
+    background: BackgroundTasks,
+    tenant_id: str = Depends(get_current_tenant),
+    user: Any = Depends(get_current_user),
+) -> dict[str, Any]:
+    """Open the governed case for a submitted application and, if asked, start the checks."""
+    from core.onboarding_desk import cases
+
+    _require_on()
+    tid = uuid.UUID(tenant_id)
+    actor = f"user:{_actor(user)}" if _actor(user) else cases.WORKFLOW_ACTOR
+    try:
+        case_ref, created = await cases.open_case(tid, _uuid(application_id, "application"), actor=actor)
+    except DeskError as exc:
+        raise _refused(exc) from exc
+    scheduled = bool(body.investigate and created)
+    if scheduled:
+        background.add_task(_investigate_later, tid, case_ref, actor)
+    return {"case_ref": case_ref, "created": created, "investigation_scheduled": scheduled}
+
+
+@router.get("/cases/{case_ref}")
+@route_meta(auth_required=True, tenant_required=True, scope="onboarding_desk.cases.read", rate_limit="standard")
+async def application_for_case(case_ref: str, tenant_id: str = Depends(get_current_tenant)) -> dict[str, Any]:
+    """The application and lead behind a governed case, for a partner receiving the case push."""
+    from core.onboarding_desk import applications, cases
+
+    _require_on()
+    tid = uuid.UUID(tenant_id)
+    try:
+        row = await cases.application_for_case(tid, case_ref[:128])
+        lead, _ = await store.get_lead(tid, row.lead_id)
+    except DeskError as exc:
+        raise _refused(exc) from exc
+    return {
+        "application": applications.summary_view(row),
+        "lead": {"id": str(lead.id), "external_ref": lead.external_ref, "source_kind": lead.source_kind},
+        "case": await _case_of(tid, row),
+    }
+
+
+@router.get("/applications/{application_id}/evidence")
+@route_meta(auth_required=True, tenant_required=True, scope="onboarding_desk.cases.read", rate_limit="standard")
+async def evidence_pack(application_id: str, tenant_id: str = Depends(get_current_tenant)) -> Response:
+    """The application's evidence pack: consents, transcript, documents, checks and decision, signed."""
+    import json as _json
+
+    from core.onboarding_desk import evidence
+
+    _require_on()
+    try:
+        pack = await evidence.build_pack(uuid.UUID(tenant_id), _uuid(application_id, "application"))
+    except DeskError as exc:
+        raise _refused(exc) from exc
+    return Response(
+        content=_json.dumps(pack, indent=2, ensure_ascii=False, default=str),
+        media_type="application/json",
+        headers={
+            "Content-Disposition": f'attachment; filename="onboarding-evidence-{application_id[:36]}.json"',
+            "Cache-Control": "no-store",
+        },
+    )
+
+
+@router.get("/evidence-key")
+@route_meta(
+    auth_required=False,
+    tenant_required=False,
+    scope="public:onboarding_desk.evidence_key",
+    rate_limit="onboarding-desk-public",
+    public_reason=EVIDENCE_KEY_REASON,
+)
+async def evidence_key() -> dict[str, Any]:
+    """The public key evidence packs are signed with, for checking a pack offline."""
+    from core.onboarding_desk import evidence
+
+    _require_on()
+    try:
+        key = evidence.public_key()
+    except DeskError as exc:
+        raise _refused(exc) from exc
+    if key is None:
+        raise HTTPException(404, detail={"error": "evidence_unsigned", "message": "Evidence packs are not signed."})
+    return key
+
+
+@router.get("/reports/summary")
+@route_meta(auth_required=True, tenant_required=True, scope="onboarding_desk.reports.read", rate_limit="standard")
+async def report_summary(
+    since: str | None = None, until: str | None = None, tenant_id: str = Depends(get_current_tenant)
+) -> dict[str, Any]:
+    """The funnel, time to submission and decision, consent coverage and checks per merchant.
+
+    ``since`` and ``until`` are ISO 8601 times with a zone; the default is the last 30 days.
+    """
+    from core.onboarding_desk import reports
+
+    _require_on()
+    try:
+        period = reports.period_from(reports.parse_time(since), reports.parse_time(until))
+        return await reports.summary(uuid.UUID(tenant_id), period)
+    except DeskError as exc:
+        raise _refused(exc) from exc
