@@ -123,6 +123,44 @@ The file may hold at most 2,000 rows and 1 MB.
 - **Consent needs an attestation.** Consents are recorded only when the import carries an attestation: the form fields `consent_wording`, `consent_method` and `consent_written`, stating the wording and method used to collect them. Without one, rows are imported with no consent and cannot be contacted.
 - **Bad rows do not stop the import.** Rows that fail validation are reported with their row number and field, and the rest are imported.
 
+## HubSpot and Salesforce
+
+A tenant administrator can pull leads from the partner's CRM through the tenant's own HubSpot or Salesforce connector.
+
+**Setting it up.**
+1. Create a lead source of kind `crm`.
+2. Set `PUT /onboarding-desk/crm-settings`:
+
+```json
+{
+  "source_id": "<the crm lead source>",
+  "provider": "hubspot",
+  "connector": "registry-hubspot",
+  "filter_field": "hs_lead_status",
+  "filter_value": "PAYMENTS_INTEREST",
+  "consent_fields": {"sms": "sms_opt_in", "email": "email_opt_in"},
+  "captured_at_field": "consent_captured_at",
+  "attestation": {"wording": "Yes, contact me about accepting card payments. Reply STOP to opt out.", "written": false}
+}
+```
+
+| Setting | Meaning |
+|---|---|
+| `filter_field` and `filter_value` | Which contacts to take: one field equal to one value, such as a lead status or a list flag |
+| `consent_fields` | Which field records consent for each channel |
+| `captured_at_field` | The field holding when consent was captured |
+| `attestation` | The wording people agreed to and whether it was in writing, as for a CSV import |
+
+Field names are plain CRM API names. The method recorded on each consent is `crm_import`.
+
+**Syncing.** `POST /onboarding-desk/crm/sync` pulls up to 200 matching contacts, the most recently changed first in Salesforce, and stores each as a lead from the CRM source.
+
+- **Mapping.** The contact's company is the business name. Its name, email and phone are the contact. Its state or province and country become the region and country; full names such as "California" or "Québec" are read as their codes.
+- **Idempotent.** Each lead's external reference is `hubspot:<id>` or `salesforce:<id>`, so a second sync returns the leads already stored rather than duplicating them.
+- **Refusals.** Contacts that fail validation, such as a country outside the United States and Canada or no email or phone, are reported with their reference and the field.
+
+**Consent is never assumed.** A channel's consent is recorded only when its field is true (`true`, `yes`, `1`, `opted_in`, `subscribed` or `granted`) and the capture-time field holds a time. A contact with no consent recorded arrives as a lead that cannot be contacted. A contact whose details are suppressed arrives opted out.
+
 ## Records
 
 Six tenant-scoped tables under forced row-level security, from migration `v6z96_onboarding_desk`:

@@ -69,6 +69,11 @@
 - Reporting: `GET /onboarding-desk/reports/summary` gives the funnel, hours to submission and to
   decision (median and 90th percentile), consent coverage by channel, and checks per merchant,
   for leads created in the period. Migration `v6z99_onboarding_cases`.
+- CRM intake: `PUT /onboarding-desk/crm-settings` names a CRM lead source, the HubSpot or
+  Salesforce connector, which contacts to take, the field that records consent per channel, the
+  capture-time field and an attestation of the wording; `POST /onboarding-desk/crm/sync` pulls up
+  to 200 matching contacts into leads, idempotently by CRM id. Consent is recorded only where the
+  CRM says so and has a capture time.
 
 ## Unreleased - Shopping bot quotes the real checkout
 

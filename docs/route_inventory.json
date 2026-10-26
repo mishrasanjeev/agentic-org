@@ -9667,6 +9667,60 @@
   },
   {
     "audit_event": null,
+    "auth_required": true,
+    "function": "get_crm_settings",
+    "idempotency": null,
+    "key": "GET /api/v1/onboarding-desk/crm-settings api/v1/onboarding_desk.py:get_crm_settings",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/onboarding_desk.py",
+    "path": "/api/v1/onboarding-desk/crm-settings",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "onboarding_desk.crm.read",
+    "source_line": 1333,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "onboarding_desk.crm_settings.update",
+    "auth_required": true,
+    "function": "put_crm_settings",
+    "idempotency": "idempotent-replaces-the-crm-settings",
+    "key": "PUT /api/v1/onboarding-desk/crm-settings api/v1/onboarding_desk.py:put_crm_settings",
+    "metadata_present": true,
+    "methods": [
+      "PUT"
+    ],
+    "module": "api/v1/onboarding_desk.py",
+    "path": "/api/v1/onboarding-desk/crm-settings",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "onboarding_desk.crm.write",
+    "source_line": 1354,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "onboarding_desk.crm.sync",
+    "auth_required": true,
+    "function": "crm_sync",
+    "idempotency": "idempotent-leads-are-kept-once-per-crm-record",
+    "key": "POST /api/v1/onboarding-desk/crm/sync api/v1/onboarding_desk.py:crm_sync",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/onboarding_desk.py",
+    "path": "/api/v1/onboarding-desk/crm/sync",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "onboarding_desk.crm.write",
+    "source_line": 1376,
+    "tenant_required": true
+  },
+  {
+    "audit_event": null,
     "auth_required": false,
     "function": "evidence_key",
     "idempotency": null,

@@ -1317,3 +1317,70 @@ async def report_summary(
         return await reports.summary(uuid.UUID(tenant_id), period)
     except DeskError as exc:
         raise _refused(exc) from exc
+
+
+# ── CRM intake ───────────────────────────────────────────────────────────────
+
+
+class CrmSyncIn(BaseModel):
+    model_config = {"extra": "forbid"}
+
+    limit: int = Field(200, ge=1, le=200)
+
+
+@router.get("/crm-settings")
+@route_meta(auth_required=True, tenant_required=True, scope="onboarding_desk.crm.read", rate_limit="standard")
+async def get_crm_settings(tenant_id: str = Depends(get_current_tenant)) -> dict[str, Any]:
+    """The CRM lead source: provider, connector, which contacts to take, and how consent is read."""
+    from core.onboarding_desk import crm
+
+    _require_on()
+    try:
+        current = await crm.get_crm_settings(uuid.UUID(tenant_id))
+    except DeskError as exc:
+        raise _refused(exc) from exc
+    return {"configured": current is not None, **(current.to_dict() if current else {})}
+
+
+@router.put("/crm-settings", dependencies=[require_tenant_admin])
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="onboarding_desk.crm.write",
+    rate_limit="standard",
+    idempotency="idempotent-replaces-the-crm-settings",
+    audit_event="onboarding_desk.crm_settings.update",
+)
+async def put_crm_settings(
+    body: dict[str, Any], tenant_id: str = Depends(get_current_tenant), user: Any = Depends(get_current_user)
+) -> dict[str, Any]:
+    """Set the CRM lead source, the contacts to take, the consent fields and the consent attestation."""
+    from core.onboarding_desk import crm
+
+    _require_on()
+    try:
+        return (await crm.put_crm_settings(uuid.UUID(tenant_id), body, actor=_actor(user))).to_dict()
+    except DeskError as exc:
+        raise _refused(exc) from exc
+
+
+@router.post("/crm/sync", dependencies=[require_tenant_admin])
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="onboarding_desk.crm.write",
+    rate_limit="standard",
+    idempotency="idempotent-leads-are-kept-once-per-crm-record",
+    audit_event="onboarding_desk.crm.sync",
+)
+async def crm_sync(
+    body: CrmSyncIn, tenant_id: str = Depends(get_current_tenant), user: Any = Depends(get_current_user)
+) -> dict[str, Any]:
+    """Pull the matching CRM contacts and store them as leads, with consent only where the CRM records it."""
+    from core.onboarding_desk import crm
+
+    _require_on()
+    try:
+        return await crm.sync(uuid.UUID(tenant_id), actor=_actor(user), limit=body.limit)
+    except DeskError as exc:
+        raise _refused(exc) from exc
