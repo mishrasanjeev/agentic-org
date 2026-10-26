@@ -1724,7 +1724,7 @@
     "public_exempt_reason": "auth-bootstrap-config-no-tenant-data",
     "rate_limit": "public-read",
     "scope": "public:auth.config",
-    "source_line": 940,
+    "source_line": 969,
     "tenant_required": false
   },
   {
@@ -1742,7 +1742,7 @@
     "public_exempt_reason": "password-reset-bootstrap-rate-limited",
     "rate_limit": "auth-password-reset",
     "scope": "public:auth.password_reset.request",
-    "source_line": 673,
+    "source_line": 700,
     "tenant_required": false
   },
   {
@@ -1760,7 +1760,7 @@
     "public_exempt_reason": "google-id-token-verification",
     "rate_limit": "auth-login",
     "scope": "public:auth.google",
-    "source_line": 545,
+    "source_line": 572,
     "tenant_required": false
   },
   {
@@ -1778,7 +1778,7 @@
     "public_exempt_reason": "auth-bootstrap-rate-limited-credentials",
     "rate_limit": "auth-login",
     "scope": "public:auth.login",
-    "source_line": 491,
+    "source_line": 518,
     "tenant_required": false
   },
   {
@@ -1796,7 +1796,7 @@
     "public_exempt_reason": null,
     "rate_limit": "auth-mutating",
     "scope": "auth.session.logout",
-    "source_line": 789,
+    "source_line": 817,
     "tenant_required": true
   },
   {
@@ -1814,7 +1814,7 @@
     "public_exempt_reason": null,
     "rate_limit": "auth-mutating",
     "scope": "auth.session.logout",
-    "source_line": 823,
+    "source_line": 851,
     "tenant_required": true
   },
   {
@@ -1832,7 +1832,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "auth.session.read",
-    "source_line": 870,
+    "source_line": 899,
     "tenant_required": true
   },
   {
@@ -1850,7 +1850,7 @@
     "public_exempt_reason": null,
     "rate_limit": "auth-mutating",
     "scope": "auth.mfa.manage",
-    "source_line": 236,
+    "source_line": 259,
     "tenant_required": true
   },
   {
@@ -1868,7 +1868,7 @@
     "public_exempt_reason": null,
     "rate_limit": "auth-mutating",
     "scope": "auth.mfa.manage",
-    "source_line": 201,
+    "source_line": 221,
     "tenant_required": true
   },
   {
@@ -1886,7 +1886,7 @@
     "public_exempt_reason": null,
     "rate_limit": "auth-mutating",
     "scope": "auth.mfa.manage",
-    "source_line": 259,
+    "source_line": 284,
     "tenant_required": true
   },
   {
@@ -1904,7 +1904,7 @@
     "public_exempt_reason": null,
     "rate_limit": "auth-mutating",
     "scope": "auth.mfa.manage",
-    "source_line": 168,
+    "source_line": 188,
     "tenant_required": true
   },
   {
@@ -1922,7 +1922,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "auth.mfa.read",
-    "source_line": 143,
+    "source_line": 163,
     "tenant_required": true
   },
   {
@@ -1940,7 +1940,7 @@
     "public_exempt_reason": "second-factor-of-a-pending-sign-in",
     "rate_limit": "auth-login",
     "scope": "public:auth.mfa.verify",
-    "source_line": 284,
+    "source_line": 312,
     "tenant_required": false
   },
   {
@@ -1958,7 +1958,7 @@
     "public_exempt_reason": "one-time-reset-code-validated",
     "rate_limit": "auth-password-reset",
     "scope": "public:auth.password_reset.consume",
-    "source_line": 733,
+    "source_line": 760,
     "tenant_required": false
   },
   {
@@ -1976,7 +1976,7 @@
     "public_exempt_reason": "auth-bootstrap-rate-limited-password-policy",
     "rate_limit": "auth-signup",
     "scope": "public:auth.signup",
-    "source_line": 204,
+    "source_line": 229,
     "tenant_required": false
   },
   {
@@ -10382,7 +10382,7 @@
     "public_exempt_reason": null,
     "rate_limit": "admin-mutating",
     "scope": "org.members.mfa.reset.admin",
-    "source_line": 468,
+    "source_line": 471,
     "tenant_required": true
   },
   {
