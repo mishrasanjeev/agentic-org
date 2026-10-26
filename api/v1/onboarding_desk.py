@@ -694,10 +694,13 @@ async def unsubscribe(t: str = Form(..., max_length=512)) -> Response:
     public_reason="twilio-signature-verified-with-the-tenant-sms-connector-auth-token",
 )
 async def twilio_inbound(tenant_id: str, request: Request) -> Response:
-    """An SMS reply: STOP-style keywords opt the sender out of every channel; anything else marks the lead engaged."""
+    """An SMS reply: STOP-style keywords opt the sender out of every channel; anything else marks the lead
+    engaged and, where the partner turns the conversation on, continues the lead's application."""
+    import html as _html
+
     from api.v1.agents import _resolve_connector_configs
     from api.v1.voice_runtime import _public_api_base
-    from core.onboarding_desk import contacts
+    from core.onboarding_desk import contacts, conversation
     from core.voice.runtime import verify_twilio_signature
 
     if not store.enabled():
@@ -722,6 +725,410 @@ async def twilio_inbound(tenant_id: str, request: Request) -> Response:
             await store.opt_out(tid, email=None, phone=sender_phone, channel="all", reason="stop_keyword", source="sms")
         except DeskError:
             pass
-    else:
-        await store.mark_engaged(tid, sender_phone)
-    return Response(content='<?xml version="1.0" encoding="UTF-8"?><Response/>', media_type="text/xml")
+        return Response(content='<?xml version="1.0" encoding="UTF-8"?><Response/>', media_type="text/xml")
+    await store.mark_engaged(tid, sender_phone)
+    try:
+        reply = await conversation.handle_sms(tid, sender_phone, params.get("Body", ""))
+    except DeskError:
+        reply = None
+    body = f"<Message>{_html.escape(reply, quote=False)}</Message>" if reply else ""
+    return Response(
+        content=f'<?xml version="1.0" encoding="UTF-8"?><Response>{body}</Response>'
+        if body
+        else '<?xml version="1.0" encoding="UTF-8"?><Response/>',
+        media_type="text/xml",
+    )
+
+
+# ── Applications: the applicant's side ───────────────────────────────────────
+
+APPLICANT_HEADER = "x-applicant-session"
+APPLICANT_REASON = "applicant-session-token-hmac-signed-bound-to-one-lead-and-verified-by-the-route"
+
+
+class SessionIn(BaseModel):
+    model_config = {"extra": "forbid"}
+
+    t: str = Field(..., min_length=1, max_length=512)
+
+
+class AnswersIn(BaseModel):
+    model_config = {"extra": "forbid"}
+
+    answers: dict[str, Any]
+
+
+class ConfirmIn(BaseModel):
+    model_config = {"extra": "forbid"}
+
+    items: list[str] = Field(..., min_length=1, max_length=10)
+
+
+class PersonIn(BaseModel):
+    model_config = {"extra": "forbid"}
+
+    message: str = Field("", max_length=1000)
+
+
+class ResolveIn(BaseModel):
+    model_config = {"extra": "forbid"}
+
+    note: str = Field("", max_length=500)
+
+
+async def _applicant(request: Request) -> tuple[uuid.UUID, Any]:
+    """The applicant's tenant and application, from the session header; the lead must still be open."""
+    from core.onboarding_desk import applications, tokens
+
+    _require_on()
+    try:
+        claims = tokens.verify(request.headers.get(APPLICANT_HEADER, ""), "session")
+    except tokens.TokenError:
+        raise HTTPException(
+            401, detail={"error": "session_invalid", "message": "Open your onboarding link again."}
+        ) from None
+    try:
+        return claims.tenant_id, await applications.open_for_lead(claims.tenant_id, claims.lead_id)
+    except DeskError as exc:
+        raise _refused(exc) from exc
+
+
+async def _applicant_state(tenant_id: uuid.UUID, application_id: uuid.UUID) -> dict[str, Any]:
+    from core.onboarding_desk import applications
+
+    return await applications.state(tenant_id, await applications.get_application(tenant_id, application_id))
+
+
+@router.post("/apply/session")
+@route_meta(
+    auth_required=False,
+    tenant_required=False,
+    scope="public:onboarding_desk.apply",
+    rate_limit="onboarding-desk-public",
+    idempotency="idempotent-the-lead-has-one-application",
+    audit_event="onboarding_desk.apply.session",
+    public_reason=APPLICANT_REASON,
+)
+async def applicant_session(body: SessionIn) -> dict[str, Any]:
+    """Exchange an onboarding link for a two-hour session and the application, opened on first use."""
+    from core.onboarding_desk import applications, tokens
+
+    _require_on()
+    try:
+        claims = tokens.verify(body.t, "apply")
+    except tokens.TokenError:
+        raise HTTPException(
+            401, detail={"error": "link_invalid", "message": "This link has expired. Ask for a new one."}
+        ) from None
+    try:
+        row = await applications.open_for_lead(claims.tenant_id, claims.lead_id)
+        branding = await store.get_branding(claims.tenant_id)
+        state = await applications.state(claims.tenant_id, row)
+    except DeskError as exc:
+        raise _refused(exc) from exc
+    now = datetime.now(UTC)
+    return {
+        "session": tokens.sign("session", claims.tenant_id, claims.lead_id, now=now),
+        "expires_at": (now + tokens.TTL["session"]).isoformat(),
+        "partner_name": branding.partner_name,
+        "application": state,
+    }
+
+
+@router.get("/apply/application")
+@route_meta(
+    auth_required=False,
+    tenant_required=False,
+    scope="public:onboarding_desk.apply",
+    rate_limit="onboarding-desk-public",
+    public_reason=APPLICANT_REASON,
+)
+async def applicant_application(request: Request) -> dict[str, Any]:
+    """The application as the applicant left it, on any channel."""
+    from core.onboarding_desk import applications
+
+    tenant_id, row = await _applicant(request)
+    return await applications.state(tenant_id, row)
+
+
+@router.put("/apply/answers")
+@route_meta(
+    auth_required=False,
+    tenant_required=False,
+    scope="public:onboarding_desk.apply",
+    rate_limit="onboarding-desk-public",
+    idempotency="idempotent-the-same-answers-save-the-same-values",
+    audit_event="onboarding_desk.apply.answers",
+    public_reason=APPLICANT_REASON,
+)
+async def applicant_answers(body: AnswersIn, request: Request) -> dict[str, Any]:
+    """Save answers; each refused answer comes back with a code and a message in the applicant's language."""
+    from core.onboarding_desk import applications, questions
+
+    tenant_id, row = await _applicant(request)
+    try:
+        errors = await applications.save_answers(tenant_id, row.id, body.answers, source="web")
+        state = await _applicant_state(tenant_id, row.id)
+    except DeskError as exc:
+        raise _refused(exc) from exc
+    lang = state["locale"]
+    return {
+        "application": state,
+        "errors": {item: {"code": code, "message": questions.error_text(code, lang)} for item, code in errors.items()},
+    }
+
+
+@router.post("/apply/documents")
+@route_meta(
+    auth_required=False,
+    tenant_required=False,
+    scope="public:onboarding_desk.apply",
+    rate_limit="onboarding-desk-public",
+    idempotency="not_idempotent-each-upload-is-kept",
+    audit_event="onboarding_desk.apply.document",
+    public_reason=APPLICANT_REASON,
+)
+async def applicant_document(
+    request: Request, file: UploadFile, item: str = Form(..., max_length=32)
+) -> dict[str, Any]:
+    """Upload a document for a document item; the values it suggests come back for the applicant to confirm."""
+    from core.onboarding_desk import applications, documents
+
+    tenant_id, row = await _applicant(request)
+    content = await file.read(documents.MAX_BYTES + 1)
+    try:
+        return await applications.add_document(
+            tenant_id, row.id, item=item, filename=file.filename, content=content
+        )
+    except DeskError as exc:
+        raise _refused(exc) from exc
+
+
+@router.post("/apply/documents/{document_id}/confirm")
+@route_meta(
+    auth_required=False,
+    tenant_required=False,
+    scope="public:onboarding_desk.apply",
+    rate_limit="onboarding-desk-public",
+    idempotency="idempotent-confirming-again-saves-the-same-values",
+    audit_event="onboarding_desk.apply.confirm",
+    public_reason=APPLICANT_REASON,
+)
+async def applicant_confirm(document_id: str, body: ConfirmIn, request: Request) -> dict[str, Any]:
+    """Save the values a document suggested that the applicant confirmed."""
+    from core.onboarding_desk import applications
+
+    tenant_id, row = await _applicant(request)
+    try:
+        errors = await applications.confirm_suggestions(tenant_id, row.id, _uuid(document_id, "document"), body.items)
+        return {"application": await _applicant_state(tenant_id, row.id), "errors": errors}
+    except DeskError as exc:
+        raise _refused(exc) from exc
+
+
+@router.delete("/apply/documents/{document_id}")
+@route_meta(
+    auth_required=False,
+    tenant_required=False,
+    scope="public:onboarding_desk.apply",
+    rate_limit="onboarding-desk-public",
+    idempotency="idempotent-a-removed-document-stays-removed",
+    audit_event="onboarding_desk.apply.document_remove",
+    public_reason=APPLICANT_REASON,
+)
+async def applicant_remove_document(document_id: str, request: Request) -> dict[str, Any]:
+    """Remove one of the applicant's own uploads before the application is submitted."""
+    from core.onboarding_desk import applications
+
+    tenant_id, row = await _applicant(request)
+    try:
+        await applications.remove_document(tenant_id, row.id, _uuid(document_id, "document"))
+        return await _applicant_state(tenant_id, row.id)
+    except DeskError as exc:
+        raise _refused(exc) from exc
+
+
+@router.post("/apply/person")
+@route_meta(
+    auth_required=False,
+    tenant_required=False,
+    scope="public:onboarding_desk.apply",
+    rate_limit="onboarding-desk-public",
+    idempotency="idempotent-one-open-request-per-application",
+    audit_event="onboarding_desk.apply.person",
+    public_reason=APPLICANT_REASON,
+)
+async def applicant_person(body: PersonIn, request: Request) -> dict[str, Any]:
+    """Ask for a person; the partner's queue gets the request with the conversation so far."""
+    from core.onboarding_desk import applications
+
+    tenant_id, row = await _applicant(request)
+    try:
+        await applications.request_person(tenant_id, row.id, channel="web", message=body.message)
+        return await _applicant_state(tenant_id, row.id)
+    except DeskError as exc:
+        raise _refused(exc) from exc
+
+
+@router.post("/apply/submit")
+@route_meta(
+    auth_required=False,
+    tenant_required=False,
+    scope="public:onboarding_desk.apply",
+    rate_limit="onboarding-desk-public",
+    idempotency="not_idempotent-a-submitted-application-is-closed-to-changes",
+    audit_event="onboarding_desk.apply.submit",
+    public_reason=APPLICANT_REASON,
+)
+async def applicant_submit(request: Request) -> dict[str, Any]:
+    """Submit a complete application; refused with the missing items until every required item is in."""
+    from core.onboarding_desk import applications
+
+    tenant_id, row = await _applicant(request)
+    try:
+        await applications.submit(tenant_id, row.id)
+        return await _applicant_state(tenant_id, row.id)
+    except DeskError as exc:
+        raise _refused(exc) from exc
+
+
+# ── Applications: the partner's side ─────────────────────────────────────────
+
+
+@router.get("/application-policy")
+@route_meta(auth_required=True, tenant_required=True, scope="onboarding_desk.applications.read", rate_limit="standard")
+async def get_application_policy(tenant_id: str = Depends(get_current_tenant)) -> dict[str, Any]:
+    """The items each merchant type is asked for, required and optional."""
+    from core.onboarding_desk import applications, questions
+
+    _require_on()
+    policy = await applications.get_application_policy(uuid.UUID(tenant_id))
+    return {**policy.to_dict(), "catalogue": questions.view(questions.QuestionSet(tuple(questions.ITEMS), ()), "en")}
+
+
+@router.put("/application-policy", dependencies=[require_tenant_admin])
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="onboarding_desk.applications.write",
+    rate_limit="standard",
+    idempotency="idempotent-replaces-the-application-policy",
+    audit_event="onboarding_desk.application_policy.update",
+)
+async def put_application_policy(
+    body: dict[str, Any], tenant_id: str = Depends(get_current_tenant), user: Any = Depends(get_current_user)
+) -> dict[str, Any]:
+    """Set the required and optional items, by default and per merchant type."""
+    from core.onboarding_desk import applications
+
+    _require_on()
+    try:
+        policy = await applications.put_application_policy(uuid.UUID(tenant_id), body, actor=_actor(user))
+    except DeskError as exc:
+        raise _refused(exc) from exc
+    return policy.to_dict()
+
+
+@router.get("/applications")
+@route_meta(auth_required=True, tenant_required=True, scope="onboarding_desk.applications.read", rate_limit="standard")
+async def list_applications(
+    status: str | None = Query(None, max_length=16),
+    limit: int = Query(50, ge=1, le=200),
+    tenant_id: str = Depends(get_current_tenant),
+) -> dict[str, Any]:
+    """Applications, newest first, with which items are answered; no answers are shown here."""
+    from core.onboarding_desk import applications
+
+    _require_on()
+    try:
+        rows = await applications.list_applications(uuid.UUID(tenant_id), status=status, limit=limit)
+    except DeskError as exc:
+        raise _refused(exc) from exc
+    return {"applications": [applications.summary_view(r) for r in rows]}
+
+
+@router.get("/applications/{application_id}")
+@route_meta(auth_required=True, tenant_required=True, scope="onboarding_desk.applications.read", rate_limit="standard")
+async def get_application(application_id: str, tenant_id: str = Depends(get_current_tenant)) -> dict[str, Any]:
+    """One application with its answers, documents, transcript and, once complete, the case application."""
+    from core.onboarding_desk import applications
+
+    _require_on()
+    tid = uuid.UUID(tenant_id)
+    try:
+        row = await applications.get_application(tid, _uuid(application_id, "application"))
+        return await applications.state(tid, row, operator=True)
+    except DeskError as exc:
+        raise _refused(exc) from exc
+
+
+@router.get("/applications/{application_id}/documents/{document_id}")
+@route_meta(auth_required=True, tenant_required=True, scope="onboarding_desk.applications.read", rate_limit="standard")
+async def download_document(
+    application_id: str, document_id: str, tenant_id: str = Depends(get_current_tenant)
+) -> Response:
+    """An applicant's document, as a download."""
+    from core.onboarding_desk import applications
+
+    _require_on()
+    try:
+        filename, mime, content = await applications.document_content(
+            uuid.UUID(tenant_id), _uuid(application_id, "application"), _uuid(document_id, "document")
+        )
+    except DeskError as exc:
+        raise _refused(exc) from exc
+    return Response(
+        content=content,
+        media_type=mime,
+        headers={
+            "Content-Disposition": f'attachment; filename="{filename}"',
+            "X-Content-Type-Options": "nosniff",
+            "Cache-Control": "no-store",
+        },
+    )
+
+
+@router.get("/handoffs")
+@route_meta(auth_required=True, tenant_required=True, scope="onboarding_desk.applications.read", rate_limit="standard")
+async def list_handoffs(
+    status: str = Query("open", max_length=16),
+    limit: int = Query(50, ge=1, le=200),
+    tenant_id: str = Depends(get_current_tenant),
+) -> dict[str, Any]:
+    """Applicants who asked for a person, with their message; the transcript is on the application."""
+    from core.onboarding_desk import applications
+
+    _require_on()
+    try:
+        rows = await applications.list_handoffs(uuid.UUID(tenant_id), status=status, limit=limit)
+    except DeskError as exc:
+        raise _refused(exc) from exc
+    return {"handoffs": [await applications.handoff_view(r) for r in rows]}
+
+
+@router.post("/handoffs/{handoff_id}/resolve")
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="onboarding_desk.applications.write",
+    rate_limit="standard",
+    idempotency="idempotent-a-resolved-handoff-stays-resolved",
+    audit_event="onboarding_desk.handoff.resolve",
+)
+async def resolve_handoff(
+    handoff_id: str,
+    body: ResolveIn,
+    tenant_id: str = Depends(get_current_tenant),
+    user: Any = Depends(get_current_user),
+) -> dict[str, Any]:
+    """Mark a request for a person handled, with an optional note."""
+    from core.onboarding_desk import applications
+
+    _require_on()
+    try:
+        row = await applications.resolve_handoff(
+            uuid.UUID(tenant_id), _uuid(handoff_id, "handoff"), actor=_actor(user), note=body.note
+        )
+    except DeskError as exc:
+        raise _refused(exc) from exc
+    return await applications.handoff_view(row)

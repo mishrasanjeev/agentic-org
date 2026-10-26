@@ -63,6 +63,8 @@ class Branding:
     auto_contact: bool = False
     first_contact_delay_minutes: int = 0
     senders: dict[str, Sender] = field(default_factory=dict)
+    #: Answer text-message replies with the guided application; off by default.
+    sms_conversation: bool = False
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -72,6 +74,7 @@ class Branding:
             "auto_contact": self.auto_contact,
             "first_contact_delay_minutes": self.first_contact_delay_minutes,
             "senders": {channel: sender.to_dict() for channel, sender in self.senders.items()},
+            "sms_conversation": self.sms_conversation,
         }
 
     def missing_for(self, channel: str) -> str | None:
@@ -149,6 +152,9 @@ def branding_from(raw: dict[str, Any] | None) -> Branding:
     auto = raw.get("auto_contact", False)
     if not isinstance(auto, bool):
         raise BrandingError("auto_contact", "auto_contact must be true or false")
+    conversation = raw.get("sms_conversation", False)
+    if not isinstance(conversation, bool):
+        raise BrandingError("sms_conversation", "sms_conversation must be true or false")
     delay = raw.get("first_contact_delay_minutes", 0)
     if not isinstance(delay, int) or not 0 <= delay <= 24 * 60:
         raise BrandingError("first_contact_delay_minutes", "first_contact_delay_minutes must be between 0 and 1440")
@@ -162,4 +168,5 @@ def branding_from(raw: dict[str, Any] | None) -> Branding:
         auto_contact=auto,
         first_contact_delay_minutes=delay,
         senders={channel: _sender(channel, value) for channel, value in senders_raw.items()},
+        sms_conversation=conversation,
     )

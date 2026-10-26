@@ -3,8 +3,9 @@
 
 A token is ``<base64url payload>.<hex HMAC>``. The payload names the purpose,
 the tenant, the lead and the expiry; the HMAC is keyed with the platform secret
-and bound to the purpose, so an unsubscribe token cannot open an application
-and an onboarding token cannot unsubscribe anyone.
+and bound to the purpose, so an unsubscribe token cannot open an application,
+an onboarding token cannot unsubscribe anyone, and neither works as an
+applicant's working session.
 """
 
 from __future__ import annotations
@@ -19,8 +20,13 @@ from datetime import UTC, datetime, timedelta
 
 from core.config import settings
 
-PURPOSES: tuple[str, ...] = ("apply", "unsubscribe")
-TTL: dict[str, timedelta] = {"apply": timedelta(days=14), "unsubscribe": timedelta(days=365)}
+PURPOSES: tuple[str, ...] = ("apply", "unsubscribe", "session")
+TTL: dict[str, timedelta] = {
+    "apply": timedelta(days=14),
+    "unsubscribe": timedelta(days=365),
+    # An applicant's working session, exchanged for the onboarding link so the link stays out of later requests.
+    "session": timedelta(hours=2),
+}
 MAX_TOKEN = 512
 
 
