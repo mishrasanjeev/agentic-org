@@ -24,7 +24,7 @@ export default function InviteAccept() {
 
   useEffect(() => {
     if (!inviteId) {
-      setError("Invalid invite link â€” no code provided.");
+      setError("Invalid invite link — no code provided.");
       setFetching(false);
       return;
     }

@@ -12,7 +12,7 @@ import type { Connector } from "@/types";
 const CATEGORIES = ["all", "finance", "hr", "marketing", "ops", "comms"];
 
 /**
- * Native connector catalog item â€” shape returned by
+ * Native connector catalog item — shape returned by
  * `GET /api/v1/connectors/registry` (Enterprise Readiness P5 PR-B2).
  * Prior to this PR the UI embedded a hardcoded array of 55 connectors
  * that drifted away from the runtime registry; the catalog is now
@@ -30,7 +30,7 @@ interface NativeCatalogItem {
 }
 
 // ---------------------------------------------------------------------------
-// Composio Marketplace â€” real data from /api/v1/composio/apps
+// Composio Marketplace — real data from /api/v1/composio/apps
 // ---------------------------------------------------------------------------
 
 interface ComposioApp {
@@ -69,7 +69,7 @@ export default function Connectors() {
   const [marketplaceLoading, setMarketplaceLoading] = useState(false);
   const [marketplaceError, setMarketplaceError] = useState<string | null>(null);
 
-  // Native-connector catalog sourced from /api/v1/connectors/registry â€” the
+  // Native-connector catalog sourced from /api/v1/connectors/registry — the
   // single source of truth (runtime registry + connectors/catalog_meta.py).
   const [nativeCatalog, setNativeCatalog] = useState<NativeCatalogItem[]>([]);
   const [catalogLoading, setCatalogLoading] = useState(true);
@@ -241,7 +241,7 @@ export default function Connectors() {
         </button>
       </div>
 
-      {/* â”€â”€ Native Connectors Tab â”€â”€ */}
+      {/* ── Native Connectors Tab ── */}
       {activeTab === "native" && (
         <>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
@@ -336,7 +336,7 @@ export default function Connectors() {
             </div>
           )}
 
-          {/* Browse All Native Connectors â€” catalog from /api/v1/connectors/registry */}
+          {/* Browse All Native Connectors — catalog from /api/v1/connectors/registry */}
           {!loading && (
             <div className="mt-8" data-testid="native-catalog">
               <h3 className="text-lg font-semibold mb-4">
@@ -346,7 +346,7 @@ export default function Connectors() {
                 Full catalog of supported native connectors. Click "Register" to add one to your tenant.
               </p>
               {catalogLoading && nativeCatalog.length === 0 ? (
-                <p className="text-sm text-muted-foreground">Loading catalogâ€¦</p>
+                <p className="text-sm text-muted-foreground">Loading catalog…</p>
               ) : catalogError ? (
                 <p className="text-sm text-red-700" data-testid="native-catalog-error">
                   Catalog unavailable: {catalogError}
@@ -402,7 +402,7 @@ export default function Connectors() {
         </>
       )}
 
-      {/* â”€â”€ Marketplace Tab â”€â”€ */}
+      {/* ── Marketplace Tab ── */}
       {activeTab === "marketplace" && (
         <>
           <div className="flex gap-4 items-center">

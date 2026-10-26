@@ -14,7 +14,7 @@ export default function ProtectedRoute({ children, allowedRoles }: ProtectedRout
   // route, the AuthProvider mounts with isAuthenticated=false until
   // /auth/me resolves. Without this gate, ProtectedRoute fires
   // <Navigate to="/login"> on the first paint and the browser bounces
-  // the user before hydration ever finishes â€” even though the
+  // the user before hydration ever finishes — even though the
   // agenticorg_session cookie is valid. Defer the redirect decision
   // until hydration completes.
   if (isHydrating) {
@@ -24,7 +24,7 @@ export default function ProtectedRoute({ children, allowedRoles }: ProtectedRout
         aria-live="polite"
         className="flex min-h-screen items-center justify-center text-sm text-muted-foreground"
       >
-        Loading sessionâ€¦
+        Loading session…
       </div>
     );
   }

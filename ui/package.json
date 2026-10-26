@@ -3,7 +3,7 @@
   "version": "4.8.0",
   "private": true,
   "license": "LicenseRef-Orchestrum-Personal-Use-1.0",
-  "description": "AgenticOrg UI â€” Enterprise AI Virtual Employee Platform",
+  "description": "AgenticOrg UI — Enterprise AI Virtual Employee Platform",
   "homepage": "https://agenticorg.ai",
   "type": "module",
   "scripts": {

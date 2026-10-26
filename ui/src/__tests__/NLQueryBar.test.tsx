@@ -68,7 +68,7 @@ describe("NLQueryBar", () => {
     vi.useRealTimers();
   });
 
-  // â”€â”€ Rendering â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // ── Rendering ──────────────────────────────────────────────────────────
 
   it("renders search input with placeholder", () => {
     renderNLQuery();
@@ -86,7 +86,7 @@ describe("NLQueryBar", () => {
     expect(svg).toBeInTheDocument();
   });
 
-  // â”€â”€ Keyboard Shortcut: Cmd+K â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // ── Keyboard Shortcut: Cmd+K ───────────────────────────────────────────
 
   it("Cmd+K focuses the input", () => {
     renderNLQuery();
@@ -109,7 +109,7 @@ describe("NLQueryBar", () => {
     expect(document.activeElement).toBe(input);
   });
 
-  // â”€â”€ Query Submission â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // ── Query Submission ───────────────────────────────────────────────────
 
   it("submitting a query calls API with correct payload", async () => {
     mockPost.mockResolvedValue({ data: MOCK_FINANCE_RESPONSE });
@@ -188,7 +188,7 @@ describe("NLQueryBar", () => {
     expect(spinner).toBeInTheDocument();
   });
 
-  // â”€â”€ Empty Query Prevention â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // ── Empty Query Prevention ─────────────────────────────────────────────
 
   it("empty query does not trigger API call on submit", async () => {
     renderNLQuery();
@@ -218,7 +218,7 @@ describe("NLQueryBar", () => {
     expect(mockPost).not.toHaveBeenCalled();
   });
 
-  // â”€â”€ Debounce Behavior â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // ── Debounce Behavior ──────────────────────────────────────────────────
 
   it("does not auto-fire API on typing (requires explicit submit)", async () => {
     mockPost.mockResolvedValue({ data: MOCK_FINANCE_RESPONSE });
@@ -240,7 +240,7 @@ describe("NLQueryBar", () => {
       vi.advanceTimersByTime(500);
     });
 
-    // API should STILL not be called â€” requires explicit submit (BUG #18 fix)
+    // API should STILL not be called — requires explicit submit (BUG #18 fix)
     expect(mockPost).not.toHaveBeenCalled();
   });
 
@@ -260,7 +260,7 @@ describe("NLQueryBar", () => {
     expect(mockPost).not.toHaveBeenCalled();
   });
 
-  // â”€â”€ Dropdown Behavior â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // ── Dropdown Behavior ──────────────────────────────────────────────────
 
   it("Open Chat button calls onOpenChat callback", async () => {
     mockPost.mockResolvedValue({ data: MOCK_FINANCE_RESPONSE });
@@ -353,7 +353,7 @@ describe("NLQueryBar", () => {
     expect(screen.queryByText("fpa-analyst")).not.toBeInTheDocument();
   });
 
-  // â”€â”€ Error Handling â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // ── Error Handling ─────────────────────────────────────────────────────
 
   it("handles API error gracefully without crashing", async () => {
     mockPost.mockRejectedValue(new Error("Network Error"));

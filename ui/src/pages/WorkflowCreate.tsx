@@ -64,7 +64,7 @@ export default function WorkflowCreate() {
   // Tab state
   const [activeTab, setActiveTab] = useState<TabMode>(templateState?.templateId ? "template" : "describe");
 
-  // Template form state (existing) â€” pre-fill from template navigation
+  // Template form state (existing) — pre-fill from template navigation
   const [name, setName] = useState(templateState?.templateName as string || "");
   const [version, setVersion] = useState("1.0.0");
   const [domain, setDomain] = useState(templateState?.templateDomain as string || "finance");
@@ -107,7 +107,7 @@ export default function WorkflowCreate() {
     }
   }
 
-  // â”€â”€ Template form submit â”€â”€
+  // ── Template form submit ──
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!name.trim()) { setError("Workflow name is required"); return; }
@@ -138,7 +138,7 @@ export default function WorkflowCreate() {
     }
   }
 
-  // â”€â”€ NL validation helper â”€â”€
+  // ── NL validation helper ──
   function validateNlInput(text: string): string | null {
     const trimmed = text.trim();
     if (trimmed.length < 20) {
@@ -155,7 +155,7 @@ export default function WorkflowCreate() {
     return null;
   }
 
-  // â”€â”€ NL generation â”€â”€
+  // ── NL generation ──
   async function handleGenerate() {
     if (!nlDescription.trim()) {
       setNlError("Please describe the workflow you want to create.");
@@ -185,7 +185,7 @@ export default function WorkflowCreate() {
     }
   }
 
-  // â”€â”€ Deploy generated workflow â”€â”€
+  // ── Deploy generated workflow ──
   async function handleDeploy() {
     if (!generatedWorkflow) return;
     setDeploying(true);
@@ -206,7 +206,7 @@ export default function WorkflowCreate() {
     }
   }
 
-  // â”€â”€ Switch to template editor with pre-filled data from generated workflow â”€â”€
+  // ── Switch to template editor with pre-filled data from generated workflow ──
   function handleEditInTemplate() {
     if (!generatedWorkflow) return;
     setActiveTab("template");
@@ -223,7 +223,7 @@ export default function WorkflowCreate() {
   const [collabAggregation, setCollabAggregation] = useState<"merge" | "vote" | "first_complete">("merge");
   const [collabTimeout, setCollabTimeout] = useState(10);
 
-  // â”€â”€ Step type badge color â”€â”€
+  // ── Step type badge color ──
   function stepTypeBadge(stepType: string): string {
     const colors: Record<string, string> = {
       agent: "bg-blue-100 text-blue-800",
@@ -331,7 +331,7 @@ export default function WorkflowCreate() {
         </Card>
       )}
 
-      {/* â”€â”€ Describe in English tab â”€â”€ */}
+      {/* ── Describe in English tab ── */}
       {activeTab === "describe" && (
         <Card>
           <CardHeader>
@@ -389,7 +389,7 @@ export default function WorkflowCreate() {
               <p className="text-sm text-destructive" data-testid="nl-error">{nlError}</p>
             )}
 
-            {/* â”€â”€ Generated workflow preview â”€â”€ */}
+            {/* ── Generated workflow preview ── */}
             {generatedWorkflow && (
               <div className="border rounded-lg p-4 space-y-4" data-testid="workflow-preview">
                 <div className="flex justify-between items-start">
@@ -464,7 +464,7 @@ export default function WorkflowCreate() {
         </Card>
       )}
 
-      {/* â”€â”€ Use Template tab (existing) â”€â”€ */}
+      {/* ── Use Template tab (existing) ── */}
       {activeTab === "template" && (
         <Card>
           <CardHeader><CardTitle>Workflow Configuration</CardTitle></CardHeader>

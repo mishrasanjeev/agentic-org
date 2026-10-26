@@ -524,7 +524,7 @@ export default function CompanyDetail() {
     }
   };
 
-  // â”€â”€ BUG-003 / BUG-008 / BUG-011: Tally Connection handlers â”€â”€â”€â”€â”€â”€â”€â”€
+  // ── BUG-003 / BUG-008 / BUG-011: Tally Connection handlers ────────
   const handleSaveTally = async () => {
     if (!id) return;
     setTallySaving(true);
@@ -600,7 +600,7 @@ export default function CompanyDetail() {
       const data = res.data as { bridge_id: string; bridge_token: string };
       setBridgeTokenOnce(data.bridge_token);
       await refreshWithNotice(
-        "Bridge credentials generated. Copy the token below â€” it is shown only once.",
+        "Bridge credentials generated. Copy the token below — it is shown only once.",
       );
     } catch (err) {
       setError(extractApiError(err, "Failed to generate bridge credentials."));
@@ -614,9 +614,9 @@ export default function CompanyDetail() {
       await navigator.clipboard.writeText(value);
       setNotice(`${label} copied to clipboard.`);
     } catch {
-      // Fallback for older browsers â€” select the text for the user.
+      // Fallback for older browsers — select the text for the user.
       setNotice(
-        `Copy not supported in this browser â€” select the ${label} manually.`,
+        `Copy not supported in this browser — select the ${label} manually.`,
       );
     }
   };
@@ -1558,7 +1558,7 @@ export default function CompanyDetail() {
                 {bridgeTokenOnce && (
                   <div className="mt-3 rounded-md border border-amber-400 bg-amber-50 dark:bg-amber-950/30 p-3 space-y-2">
                     <p className="text-xs font-medium text-amber-900 dark:text-amber-100">
-                      Save this bridge token now â€” it cannot be retrieved later.
+                      Save this bridge token now — it cannot be retrieved later.
                     </p>
                     <div className="flex items-center gap-2 flex-wrap">
                       <code className="font-mono text-xs bg-background border px-2 py-1 rounded break-all flex-1 min-w-0">

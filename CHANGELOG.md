@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased - Text encoding repairs
+
+- Correct corrupted punctuation across the dashboard, session loading, agent and company
+  pages, connectors, workflows, public resources and page titles. Empty approval totals
+  keep their existing dash placeholder; real approval percentages are unchanged.
+- Add a repository-wide UTF-8 guard and rendering regressions for English and Hindi,
+  unavailable approval data, session hydration and resource lists.
+
 ## Unreleased - Shopping bot quotes the real checkout
 
 - Search results give the bot one `item_id` (the variant a checkout takes) instead of a product id

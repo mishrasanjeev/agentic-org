@@ -157,7 +157,7 @@ class RPAExecutionOut(BaseModel):
     retryable: bool = False
 
 
-# ── Endpoints ────────���───────────────────────────────────────────────
+# Endpoints
 
 
 @router.get("/scripts", response_model=list[RPAScriptOut])

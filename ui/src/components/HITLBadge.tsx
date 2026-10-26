@@ -13,7 +13,7 @@ export default function HITLBadge() {
         const total = data?.total ?? (Array.isArray(data) ? data.length : 0);
         setCount(total);
       } catch {
-        // Silently fail â€” badge just won't show
+        // Silently fail — badge just won't show
       }
     };
     fetchCount();

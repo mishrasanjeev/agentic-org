@@ -144,7 +144,7 @@ export default function CompanyDashboard() {
   // options even when the tenant has no companies yet, then union any
   // industries present on currently-loaded companies so bespoke values
   // saved before the canonical list grew are still selectable.
-  // BUG-010: same pattern for the state filter â€” seed with all INDIAN_STATES
+  // BUG-010: same pattern for the state filter — seed with all INDIAN_STATES
   // codes so the dropdown is never empty on an unpopulated tenant.
   const industries = (() => {
     const pool = new Set(INDUSTRIES);
@@ -331,7 +331,7 @@ export default function CompanyDashboard() {
           data-testid="bulk-upload-report"
         >
           <p className="font-medium">
-            {bulkReport.created_count} created Â· {bulkReport.validated_count} validated Â· {bulkReport.failed_count} failed
+            {bulkReport.created_count} created · {bulkReport.validated_count} validated · {bulkReport.failed_count} failed
           </p>
           {bulkReport.errors && bulkReport.errors.length > 0 && (
             <ul className="mt-1 list-disc pl-5">
@@ -402,7 +402,7 @@ export default function CompanyDashboard() {
             const meta = INDIAN_STATES.find((s) => s.code === st);
             return (
               <option key={st} value={st}>
-                {meta ? `${meta.code} â€” ${meta.name}` : st}
+                {meta ? `${meta.code} — ${meta.name}` : st}
               </option>
             );
           })}
