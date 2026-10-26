@@ -247,6 +247,8 @@ async def test_password_login_with_mfa_returns_a_challenge_not_a_session(monkeyp
 
     user = _enrolled(password_hash=_bcrypt.hashpw(b"CorrectPass1", _bcrypt.gensalt(rounds=4)).decode())
     monkeypatch.setattr(auth_mod, "_get_throttle_redis", AsyncMock(return_value=None))
+    clear_ip = AsyncMock()
+    monkeypatch.setattr(auth_mod, "_clear_rate_limit", clear_ip)
     issued = AsyncMock(return_value="challenge-" + "x" * 32)
     monkeypatch.setattr(auth_mod, "issue_code", issued)
     monkeypatch.setattr(auth_mod, "_seed_tenant_defaults_isolated", AsyncMock())
@@ -264,6 +266,7 @@ async def test_password_login_with_mfa_returns_a_challenge_not_a_session(monkeyp
     assert isinstance(result, auth_mod.MfaChallengeResponse) and result.mfa_required is True
     assert result.mfa_challenge.startswith("challenge-")
     response.set_cookie.assert_not_called()
+    clear_ip.assert_not_awaited()
     kind, payload, ttl = issued.await_args.args
     assert kind == "mfa" and ttl == 300
     assert json.loads(payload) == {
@@ -423,8 +426,8 @@ async def test_a_recovery_code_signs_in_once(monkeypatch) -> None:
 
 @pytest.mark.asyncio
 async def test_admin_reset_clears_a_member_and_revokes_sessions_but_not_self(monkeypatch) -> None:
-    from api.v1 import org
     from api.deps import ActiveHumanAdmin
+    from api.v1 import org
 
     member = _enrolled(email="member@example.com")
     actor = _enrolled(email="owner@example.com")

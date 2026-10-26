@@ -51,3 +51,11 @@ instead of skip. Local physical migration checks use
 use `MFA_STATE_TEST_ENABLE=1`, `MFA_STATE_TEST_REQUIRED=1`,
 `MFA_STATE_TEST_PG_URL` and `MFA_STATE_TEST_REDIS_URL`. These URLs are test-only
 and must never point at application databases or shared caches.
+
+The non-owner RLS/admin-reset suite additionally requires
+`AGENTICORG_MFA_ADMIN_POSTGRES_TESTS=1`,
+`AGENTICORG_MFA_ADMIN_POSTGRES_REQUIRED=1`,
+`AGENTICORG_MFA_ADMIN_POSTGRES_URL` and `AGENTICORG_MFA_ADMIN_REDIS_URL`.
+Its bootstrap login may create only the disposable test role/schema in the
+dedicated `mfa_admin_tests` database. The application requests use a generated
+non-owner, non-superuser, `NOBYPASSRLS` login, not the bootstrap connection.
