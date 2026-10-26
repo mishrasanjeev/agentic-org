@@ -68,6 +68,7 @@ jobs:
           python -m pytest -q --no-cov
           tests/regression/test_mfa_challenge_generation_migration.py
           tests/security/test_mfa_state_integration.py
+          tests/security/test_mfa_state_integration_config.py
           tests/security/test_mfa_admin_reset_postgres.py
           tests/unit/test_mfa_admin_reset_security.py
           tests/unit/test_mfa_ascii_codes.py
