@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 import { expect, test } from "@playwright/test";
 
+// Owned by text-encoding.config.ts, outside the hosted regression suite.
 // Replay the rendered application with deterministic local responses, never a live account.
 for (const width of [390, 1440]) {
   for (const colorScheme of ["light", "dark"] as const) {
