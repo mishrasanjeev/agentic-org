@@ -61,8 +61,9 @@ SYSTEM_PROMPT = "\n".join(
         "- Use only facts the tools return. Copy product names, prices and stock exactly; never invent products,",
         "  prices, stores or policies.",
         "- Prices are in minor units: amount 44900 with currency INR is Rs 449.00.",
-        "- To buy, open a checkout with open_checkout. If the buyer wants store pickup or delivery, read the",
-        "  checkout and update it with the fulfilment option the shop offers.",
+        "- To buy, open a checkout with open_checkout. For store pickup call choose_pickup with the checkout id",
+        "  (pass location only when the shop names several). For delivery, read the checkout and update it with",
+        "  the buyer's address and the shipping option the shop offers.",
         "- You cannot take payment and must never ask for card, UPI or bank details. When a checkout is ready,",
         "  give its id and total and say the buyer completes payment with the shop.",
         "- Keep answers short and plain, for a phone screen. No markdown tables.",
@@ -236,7 +237,66 @@ class ShopperTools:
     async def update_checkout(self, shop: str, checkout_id: str, checkout: dict[str, Any]) -> dict[str, Any]:
         from api.v1.network import network_checkout  # noqa: PLC0415
 
-        return await network_checkout(shop or self.chosen_shop or "", "update_checkout", checkout, checkout_id)
+        slug = shop or self.chosen_shop or ""
+        body = dict(checkout)
+        if not body.get("line_items"):
+            # An update replaces the checkout, and the model often sends only the part it changes.
+            current = await network_checkout(slug, "get_checkout", None, checkout_id)
+            body["line_items"] = _line_items(current)
+        return await network_checkout(slug, "update_checkout", body, checkout_id)
+
+    async def choose_pickup(self, shop: str, checkout_id: str, location: str | None = None) -> dict[str, Any]:
+        """Pickup takes three choices (method, location, option); make them from what the shop returns."""
+        from api.v1.network import network_checkout  # noqa: PLC0415
+
+        slug = shop or self.chosen_shop or ""
+        current = await network_checkout(slug, "get_checkout", None, checkout_id)
+        items = _line_items(current)
+        if not items:
+            return current
+        method: dict[str, Any] = {"type": "pickup"}
+        answer = await network_checkout(
+            slug, "update_checkout", {"line_items": items, "fulfillment": {"methods": [method]}}, checkout_id
+        )
+        locations = [d for d in _pickup_method(answer).get("destinations") or [] if isinstance(d, dict)]
+        wanted = (location or "").strip().lower()
+        matches = [d for d in locations if wanted and wanted in f"{d.get('id', '')} {d.get('name', '')}".lower()]
+        if len(matches) != 1:
+            matches = locations if len(locations) == 1 and not wanted else []
+        if not matches:
+            if not locations:
+                return answer
+            return {"choose_location": [{"id": d.get("id"), "name": d.get("name")} for d in locations]}
+        method["selected_destination_id"] = matches[0].get("id")
+        answer = await network_checkout(
+            slug, "update_checkout", {"line_items": items, "fulfillment": {"methods": [method]}}, checkout_id
+        )
+        group = (_pickup_method(answer).get("groups") or [{}])[0]
+        options = [o for o in group.get("options") or [] if isinstance(o, dict)]
+        if group.get("selected_option_id") or not options:
+            return answer
+        method["groups"] = [{"selected_option_id": options[0].get("id")}]
+        return await network_checkout(
+            slug, "update_checkout", {"line_items": items, "fulfillment": {"methods": [method]}}, checkout_id
+        )
+
+
+def _line_items(checkout: dict[str, Any]) -> list[dict[str, Any]]:
+    """A checkout answer's line items, in the shape an update sends back."""
+    items: list[dict[str, Any]] = []
+    for line in checkout.get("line_items") or []:
+        if isinstance(line, dict) and isinstance(line.get("item"), dict):
+            items.append(
+                {"id": line.get("id"), "item": {"id": line["item"].get("id")}, "quantity": line.get("quantity", 1)}
+            )
+    return items
+
+
+def _pickup_method(checkout: dict[str, Any]) -> dict[str, Any]:
+    methods = (
+        (checkout.get("fulfillment") or {}).get("methods") if isinstance(checkout.get("fulfillment"), dict) else None
+    )
+    return next((m for m in methods or [] if isinstance(m, dict) and m.get("type") == "pickup"), {})
 
 
 def _langchain_tools(tools: ShopperTools) -> list[Any]:
@@ -264,7 +324,13 @@ def _langchain_tools(tools: ShopperTools) -> list[Any]:
         StructuredTool.from_function(
             coroutine=tools.update_checkout,
             name="update_checkout",
-            description="Replace a checkout with its full UCP JSON, for example to choose store pickup. No payment.",
+            description="Change a checkout with UCP JSON (line_items, fulfillment), for example a delivery address. "
+            "Line items are kept when left out. No payment.",
+        ),
+        StructuredTool.from_function(
+            coroutine=tools.choose_pickup,
+            name="choose_pickup",
+            description="Choose store pickup for a checkout; pass location only when the shop has several. No payment.",
         ),
     ]
 
