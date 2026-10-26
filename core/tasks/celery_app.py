@@ -56,6 +56,7 @@ app = Celery(
         "core.tasks.invoice_tasks",
         "core.tasks.knowledge_tasks",
         "core.tasks.lineage_tasks",
+        "core.tasks.onboarding_desk_tasks",
         "core.tasks.memory_tasks",
         "core.tasks.network_tasks",
         "core.tasks.oacp_freshness_tasks",
@@ -94,6 +95,7 @@ app.conf.update(
         "core.tasks.workflow_tasks.*": {"queue": "workflows"},
         "core.tasks.channel_tasks.*": {"queue": "workflows"},
         "core.tasks.network_tasks.*": {"queue": "workflows"},
+        "core.tasks.onboarding_desk_tasks.open_case": {"queue": "workflows"},
         "core.tasks.knowledge_tasks.*": {"queue": "maintenance"},
         # Retain the historical short task names so messages already in
         # Redis remain executable during rolling deploys.
@@ -123,6 +125,14 @@ app.conf.beat_schedule = {
         "task": "core.tasks.channel_tasks.sweep",
         "schedule": 15.0,
         "options": {"queue": "workflows"},
+    },
+    "sweep-onboarding-desk-outreach": {
+        # Consent-gated merchant onboarding outreach (core/onboarding_desk/outreach.py).
+        # A no-op unless AGENTICORG_ONBOARDING_DESK_ENABLED is true and a tenant's
+        # branding turns on automatic contact.
+        "task": "core.tasks.onboarding_desk_tasks.sweep_outreach",
+        "schedule": 60.0,
+        "options": {"queue": "delivery", "expires": 60},
     },
     "sweep-case-pushes": {
         # Governed case hand-off retries and missed kicks (core/cases/push.py).

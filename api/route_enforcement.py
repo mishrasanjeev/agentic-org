@@ -76,6 +76,7 @@ RATE_LIMIT_CLASSES: dict[str, tuple[int, int]] = {
     "public-product-facts": (60, 60),
     "demo-request-public": (5, 3600),
     "client-portal-public": (60, 60),
+    "onboarding-desk-public": (120, 60),
     "customer-agent-public": (30, 60),
     "customer-agent": (120, 60),
     "branding-public-lookup": (120, 60),
@@ -188,6 +189,11 @@ SCOPE_FAMILIES: dict[str, tuple[str, str]] = {
     # rendered for a customer are audit-grade reads; granting consent, editing
     # profiles and rules, and rendering take the approvals write scope.
     "personalisation": ("audit:read", "approvals:write"),
+    # Merchant onboarding desk (core/onboarding_desk/): leads carry business
+    # owners' contact details and consents, so reading them is an audit-grade
+    # read and recording leads, consents and opt-outs takes the approvals write
+    # scope; the policy and lead sources also need a tenant administrator.
+    "onboarding_desk": ("audit:read", "approvals:write"),
     # AI spend (core/spend/): spend, rate cards, the organisation tree and
     # reconciliations are audit-grade reads; changing reference data, running
     # jobs and reconciling take the approvals write scope and a tenant

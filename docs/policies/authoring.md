@@ -6,8 +6,8 @@ A case policy is a versioned YAML file that turns a case's evidence into a
 policy and evidence always give the same result, and a model's confidence is
 never an input (see [ADR 0011](../adr/0011-policy-over-confidence.md)).
 
-> **The shipped policies are examples.** `core/policy/examples/business_onboarding_us.yaml`
-> and `business_onboarding_uk.yaml` show the format. They have not been reviewed
+> **The shipped policies are examples.** `core/policy/examples/business_onboarding_us.yaml`,
+> `business_onboarding_uk.yaml` and `business_onboarding_ca.yaml` show the format. They have not been reviewed
 > by a compliance owner, encode no regulatory advice and must not be used to make
 > real onboarding recommendations. Loading one logs `policy_example_loaded` at
 > warning level every time. Copy one, have a named compliance owner review and

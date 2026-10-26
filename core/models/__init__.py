@@ -136,6 +136,15 @@ from core.models.oacp_operator_decision import OacpOperatorDecisionRecordRow as 
 from core.models.oacp_retention_disposition_decision import (
     OacpRetentionDispositionDecisionRecordRow as OacpRetentionDispositionDecisionRecordRow,
 )
+from core.models.onboarding_desk import OnboardingApplication as OnboardingApplication
+from core.models.onboarding_desk import OnboardingConsent as OnboardingConsent
+from core.models.onboarding_desk import OnboardingContactAttempt as OnboardingContactAttempt
+from core.models.onboarding_desk import OnboardingDocument as OnboardingDocument
+from core.models.onboarding_desk import OnboardingHandoff as OnboardingHandoff
+from core.models.onboarding_desk import OnboardingLead as OnboardingLead
+from core.models.onboarding_desk import OnboardingLeadSource as OnboardingLeadSource
+from core.models.onboarding_desk import OnboardingPolicy as OnboardingPolicy
+from core.models.onboarding_desk import OnboardingSuppression as OnboardingSuppression
 from core.models.operator_override import OperatorOverride as OperatorOverride
 from core.models.organization import CostCenter as CostCenter
 from core.models.organization import Department as Department
