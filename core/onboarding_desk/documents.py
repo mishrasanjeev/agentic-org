@@ -2,7 +2,7 @@
 """Applicant documents: what is accepted, and the values a document suggests for the applicant to confirm.
 
 Only PDFs, PNG and JPEG files are accepted, recognised by their first bytes
-rather than the name or the declared type, up to 10 MB and 10 pages. The text
+rather than the name or the declared type, up to 8 MB and 10 pages. The text
 is read with the document pipeline (a PDF's text layer, OCR where the engine is
 installed) off the event loop and under a time limit. Values found in it are
 suggestions only: each goes through the same validation as a typed answer, and
@@ -24,7 +24,8 @@ from core.onboarding_desk import questions
 
 logger = structlog.get_logger()
 
-MAX_BYTES = 10 * 1024 * 1024
+# Below the 10 MB request limit the UI's reverse proxy puts on /api/, which also counts the multipart envelope.
+MAX_BYTES = 8 * 1024 * 1024
 MAX_PAGES = 10
 MAX_PER_APPLICATION = 10
 READ_TIMEOUT_SECONDS = 30.0

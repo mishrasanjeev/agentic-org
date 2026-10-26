@@ -35,7 +35,7 @@
   two-hour applicant session (`POST /onboarding-desk/apply/session`); answers are saved as the
   applicant goes, each validated the same way on every channel, and the partner's policy
   (`PUT /onboarding-desk/application-policy`) decides the required and optional items per merchant
-  type, each with a reason in English and French. Documents (PDF, PNG or JPEG, up to 10 MB and 10
+  type, each with a reason in English and French. Documents (PDF, PNG or JPEG, up to 8 MB and 10
   pages, recognised by their first bytes) suggest values the applicant confirms before they are
   saved. "Talk to a person" opens a hand-off with the transcript (`GET /onboarding-desk/handoffs`).
   Partners that set `sms_conversation` in the branding get the guided application over text: one

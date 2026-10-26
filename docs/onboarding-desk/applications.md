@@ -80,7 +80,7 @@ Once submitted, the application is closed to changes and the lead stops getting 
 
 ## Documents
 
-**What is accepted.** PDF, PNG and JPEG files, up to 10 MB and 10 pages, with at most 10 documents per application. The type is recognised from the file's first bytes, not its name or declared type. The stored name keeps no path and ends in the real extension.
+**What is accepted.** PDF, PNG and JPEG files, up to 8 MB and 10 pages, with at most 10 documents per application. The type is recognised from the file's first bytes, not its name or declared type. The stored name keeps no path and ends in the real extension.
 
 **Reading.** The desk reads the text with the document pipeline: a PDF's text layer, or OCR where the engine is installed. It looks for:
 - the legal name;
