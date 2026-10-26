@@ -21,6 +21,10 @@ import uuid
 from typing import Literal
 
 import redis.asyncio as aioredis
+from redis.asyncio.retry import Retry
+from redis.backoff import NoBackoff
+
+from core.config import redis_socket_timeout_kwargs
 
 CodeKind = Literal["invite", "reset", "mfa"]
 
@@ -47,7 +51,9 @@ def _redis() -> aioredis.Redis:
     url = os.getenv("AGENTICORG_REDIS_URL") or os.getenv(
         "REDIS_URL", "redis://localhost:6379/0"
     )
-    return aioredis.from_url(url, decode_responses=True)
+    return aioredis.from_url(
+        url, decode_responses=True, retry=Retry(NoBackoff(), 0), **redis_socket_timeout_kwargs()
+    )
 
 
 def _key(kind: CodeKind, code: str) -> str:

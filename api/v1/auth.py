@@ -50,7 +50,8 @@ router = APIRouter(prefix="/auth", tags=["Auth"])
 async def mfa_store[T](operation: Awaitable[T]) -> T:
     """MFA state never falls back to process-local memory on store failures."""
     try:
-        return await operation
+        async with asyncio.timeout(sum(redis_socket_timeout_kwargs().values())):
+            return await operation
     except (RedisError, OSError) as exc:
         raise HTTPException(503, "Two-factor verification is temporarily unavailable") from exc
 

@@ -21,6 +21,9 @@ Redis increments the counter and assigns its initial expiry atomically. Existing
 per-IP and per-challenge controls remain in force. A valid second factor clears
 the shared counter while the user lock is held. Store failures refuse verification
 without issuing a session; no process-local budget is substituted.
+Existing Redis timeout settings bound connection/read waits and the complete
+MFA store operation. One-time mutations have no automatic retry: a lost reply
+must not cause a second increment or consume attempt.
 
 Admin resets additionally require an active human administrator, not an API key
 or delegated grant. Actor and target rows are locked in stable ID order, and

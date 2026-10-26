@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import base64
 import json
 import uuid
@@ -287,3 +288,97 @@ async def test_atomic_script_errors_close_without_fallback(monkeypatch):
         await auth.mfa_store(one_time_codes.record_mfa_account_attempt(str(uuid.UUID(int=1)), str(uuid.UUID(int=2))))
     assert exc.value.status_code == 503
     cache.aclose.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_store_wait_is_bounded_and_cancels_unresponsive_operation(monkeypatch):
+    monkeypatch.setattr(
+        auth,
+        "redis_socket_timeout_kwargs",
+        lambda: {
+            "socket_connect_timeout": 0.01,
+            "socket_timeout": 0.01,
+        },
+    )
+    cancelled = asyncio.Event()
+
+    async def unresponsive():
+        try:
+            await asyncio.Event().wait()
+        finally:
+            cancelled.set()
+
+    with pytest.raises(HTTPException) as exc:
+        await asyncio.wait_for(auth.mfa_store(unresponsive()), timeout=0.5)
+    assert exc.value.status_code == 503
+    assert cancelled.is_set()
+
+
+@pytest.mark.asyncio
+@pytest.mark.ambient_redis
+async def test_connected_unresponsive_redis_peer_is_bounded(monkeypatch):
+    def timeouts():
+        return {"socket_connect_timeout": 0.025, "socket_timeout": 0.025}
+
+    monkeypatch.setattr(auth, "redis_socket_timeout_kwargs", timeouts)
+    monkeypatch.setattr(one_time_codes, "redis_socket_timeout_kwargs", timeouts, raising=False)
+    connected = asyncio.Event()
+    release = asyncio.Event()
+    peers = set()
+    handlers = set()
+
+    async def accept(_reader, writer):
+        task = asyncio.current_task()
+        handlers.add(task)
+        peers.add(writer)
+        connected.set()
+        try:
+            await release.wait()
+        finally:
+            writer.close()
+            await writer.wait_closed()
+            peers.discard(writer)
+            handlers.discard(task)
+
+    server = await asyncio.start_server(accept, "127.0.0.1", 0)
+    port = server.sockets[0].getsockname()[1]
+    monkeypatch.setenv("AGENTICORG_REDIS_URL", f"redis://127.0.0.1:{port}/14")
+    operation = None
+    try:
+        operation = asyncio.create_task(
+            auth.mfa_store(
+                one_time_codes.record_mfa_account_attempt(
+                    str(uuid.UUID(int=1)),
+                    str(uuid.UUID(int=2)),
+                )
+            )
+        )
+        done, _ = await asyncio.wait({operation}, timeout=0.75)
+        assert done, "Connected Redis peer exceeded the MFA operation deadline"
+        with pytest.raises(HTTPException) as exc:
+            await operation
+        assert exc.value.status_code == 503
+        assert connected.is_set()
+    finally:
+        server.close()
+        release.set()
+        for peer in list(peers):
+            peer.close()
+        if operation is not None:
+            await asyncio.wait_for(asyncio.gather(operation, return_exceptions=True), timeout=2)
+        if handlers:
+            await asyncio.wait_for(asyncio.gather(*handlers, return_exceptions=True), timeout=2)
+        await server.wait_closed()
+
+
+@pytest.mark.asyncio
+async def test_one_time_client_has_bounded_sockets_and_no_mutation_retry(monkeypatch):
+    monkeypatch.setenv("AGENTICORG_REDIS_URL", "redis://127.0.0.1:1/14")
+    client = one_time_codes._redis()
+    try:
+        options = client.connection_pool.connection_kwargs
+        assert options["socket_connect_timeout"] > 0
+        assert options["socket_timeout"] > 0
+        assert options["retry"].get_retries() == 0
+    finally:
+        await client.aclose()
