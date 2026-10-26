@@ -87,6 +87,7 @@ from api.v1 import (
     model_gateway,
     oauth_connector,
     observability,
+    onboarding_desk,
     operator_overrides,
     packs,
     personalisation,
@@ -378,6 +379,7 @@ app.include_router(speech_assist.router, prefix="/api/v1")
 app.include_router(txn.router, prefix="/api/v1")
 app.include_router(lineage.router, prefix="/api/v1")
 app.include_router(personalisation.router, prefix="/api/v1")
+app.include_router(onboarding_desk.router, prefix="/api/v1")
 app.include_router(spend.router, prefix="/api/v1")
 app.include_router(companies.router, prefix="/api/v1", tags=["Companies"])
 app.include_router(ca_operations.router, prefix="/api/v1", tags=["CA Operations"])

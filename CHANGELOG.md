@@ -1,5 +1,28 @@
 # Changelog
 
+## Unreleased - Merchant onboarding desk foundations (off by default)
+
+- New `AGENTICORG_ONBOARDING_DESK_ENABLED` (off): while off, `GET /onboarding-desk/status`
+  answers `enabled: false` and every other `/onboarding-desk` route, the signed webhook
+  included, is not found.
+- Leads for partners onboarding merchants in the United States and Canada, from an operator,
+  a CSV import of opted-in leads with an attestation of the consent wording and method, or a
+  partner form posting to a signed webhook (`X-AgenticOrg-Signature: t=..., v1=...`, HMAC
+  with the source's secret, five-minute tolerance). Intake is idempotent per source and
+  external reference. Contact details are encrypted under the tenant key; lists show masked
+  forms and opt-outs match keyed hashes.
+- Consents per channel (SMS, email, WhatsApp, voice) keep the exact wording, its hash, how
+  and where consent was captured, and whether it was captured in writing, which AI voice
+  calls require. Opt-outs suppress the contact, withdraw the matching consents and mark the
+  leads opted out; a later lead with the same contact arrives opted out.
+- `GET /onboarding-desk/leads/{id}/contact-decision` says whether a lead may be contacted on a
+  channel now and, if not, why and when. Defaults are floors a partner policy may only
+  narrow: 08:00 to 21:00 local in the United States (08:00 to 20:00 and three attempts a day
+  in Florida, Oklahoma and Maryland), 09:00 to 21:30 on weekdays and 10:00 to 18:00 at
+  weekends in Canada, and only the hours allowed in every time zone of a multi-zone state or
+  province. Leads in Quebec default to French.
+- Migration `v6z96_onboarding_desk` (six tables under forced row-level security).
+
 ## Unreleased - Shopping bot always answers
 
 - The public shopping bot gets eight tool rounds instead of five, and when it still runs out it
