@@ -226,7 +226,7 @@ def test_strict_runtimes_refuse_the_example_policies(monkeypatch: pytest.MonkeyP
     with pytest.raises(PolicyLoadError):
         load_case_policies()
     monkeypatch.setattr(config.settings, "env", "test")
-    assert set(load_case_policies()) == {"business_onboarding_uk", "business_onboarding_us"}
+    assert set(load_case_policies()) == {"business_onboarding_ca", "business_onboarding_uk", "business_onboarding_us"}
 
 
 def test_the_migration_is_the_single_head_with_a_short_revision_id() -> None:

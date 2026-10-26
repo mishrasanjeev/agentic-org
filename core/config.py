@@ -785,6 +785,16 @@ class Settings(BaseSettings):
     # attributes used recorded. Off by default: off, GET /personalisation/status
     # answers ``enabled: false`` and every other personalisation route is not found.
     personalisation_enabled: bool = False
+    # Merchant onboarding desk (core/onboarding_desk/, api/v1/onboarding_desk.py):
+    # leads, per-channel consents, opt-outs, the contact policy and signed lead
+    # intake for partners onboarding merchants in the United States and Canada.
+    # Off by default: off, GET /onboarding-desk/status answers ``enabled: false``
+    # and every other onboarding desk route, the signed webhook included, is not found.
+    onboarding_desk_enabled: bool = False
+    # Base64 Ed25519 seed (32 bytes) that signs onboarding desk evidence packs; the public key is
+    # published at GET /onboarding-desk/evidence-key. Empty: packs are built unsigned.
+    # Env: AGENTICORG_ONBOARDING_DESK_EVIDENCE_SIGNING_KEY.
+    onboarding_desk_evidence_signing_key: str = ""
     # AI spend intelligence (core/spend/): an organisation tree, rate cards,
     # commitments and FX rates; a usage record with its attribution for every
     # model call and metered service, priced in the card's currency and in INR;

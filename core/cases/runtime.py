@@ -43,7 +43,11 @@ from core.tool_gateway.provider_gateway import AUTHORIZATION_UNAVAILABLE, Author
 logger = structlog.get_logger()
 
 FLAG_KEY = "governed_cases.enabled"
-POLICY_BY_COUNTRY: dict[str, str] = {"US": "business_onboarding_us", "GB": "business_onboarding_uk"}
+POLICY_BY_COUNTRY: dict[str, str] = {
+    "US": "business_onboarding_us",
+    "GB": "business_onboarding_uk",
+    "CA": "business_onboarding_ca",
+}
 WORKFLOW_ACTOR = "workflow:business_onboarding"
 _PLACEHOLDER = re.compile(r"^\$([a-z][a-z0-9_]*)$")
 

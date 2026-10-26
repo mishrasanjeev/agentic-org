@@ -8,6 +8,81 @@
 - Add a repository-wide UTF-8 guard and rendering regressions for English and Hindi,
   unavailable approval data, session hydration and resource lists.
 
+## Unreleased - Merchant onboarding desk foundations (off by default)
+
+- New `AGENTICORG_ONBOARDING_DESK_ENABLED` (off): while off, `GET /onboarding-desk/status`
+  answers `enabled: false` and every other `/onboarding-desk` route, the signed webhook
+  included, is not found.
+- Leads for partners onboarding merchants in the United States and Canada, from an operator,
+  a CSV import of opted-in leads with an attestation of the consent wording and method, or a
+  partner form posting to a signed webhook (`X-AgenticOrg-Signature: t=..., v1=...`, HMAC
+  with the source's secret, five-minute tolerance). Intake is idempotent per source and
+  external reference. Contact details are encrypted under the tenant key; lists show masked
+  forms and opt-outs match keyed hashes.
+- Consents per channel (SMS, email, WhatsApp, voice) keep the exact wording, its hash, how
+  and where consent was captured, and whether it was captured in writing, which AI voice
+  calls require. Opt-outs suppress the contact, withdraw the matching consents and mark the
+  leads opted out; a later lead with the same contact arrives opted out.
+- `GET /onboarding-desk/leads/{id}/contact-decision` says whether a lead may be contacted on a
+  channel now and, if not, why and when. Defaults are floors a partner policy may only
+  narrow: 08:00 to 21:00 local in the United States (08:00 to 20:00 and three attempts a day
+  in Florida, Oklahoma and Maryland), 09:00 to 21:30 on weekdays and 10:00 to 18:00 at
+  weekends in Canada, and only the hours allowed in every time zone of a multi-zone state or
+  province. Leads in Quebec default to French.
+- Migration `v6z96_onboarding_desk` (six tables under forced row-level security).
+- Consent-gated outreach: `PUT /onboarding-desk/branding` sets the partner name, onboarding page,
+  postal address and senders, which reuse the tenant's Twilio, SendGrid and WhatsApp Business
+  connectors. `POST /leads/{id}/contact` and the minute sweep (for tenants that turn on automatic
+  contact) send a first contact or a reminder only when the contact rules allow, in English or
+  French, with the partner name, an AI-assistant disclosure, a signed onboarding link and opt-out
+  wording; emails add a signed unsubscribe link and the postal address. Attempts are claimed under a
+  lock on the lead. Twilio SMS replies reach `POST /onboarding-desk/webhooks/twilio/{tenant}`
+  (Twilio signature verified): STOP-style keywords opt the contact out of every channel and other
+  replies mark the lead engaged. Migration `v6z97_onboarding_outreach`.
+- Applications: one per lead, shared by the web and text message. The onboarding link opens a
+  two-hour applicant session (`POST /onboarding-desk/apply/session`); answers are saved as the
+  applicant goes, each validated the same way on every channel, and the partner's policy
+  (`PUT /onboarding-desk/application-policy`) decides the required and optional items per merchant
+  type, each with a reason in English and French. Documents (PDF, PNG or JPEG, up to 8 MB and 10
+  pages, recognised by their first bytes) suggest values the applicant confirms before they are
+  saved. "Talk to a person" opens a hand-off with the transcript (`GET /onboarding-desk/handoffs`).
+  Partners that set `sms_conversation` in the branding get the guided application over text: one
+  question at a time, HELP and PERSON keywords, and a link to the secure page for the address,
+  owners and documents. A complete application maps to a `business_case` application. Answers,
+  transcripts and documents are encrypted under the tenant key. Migration
+  `v6z98_onboarding_applications`.
+- The applicant page: `<agenticorg-onboarding>`, a dependency-free element served at
+  `/onboarding-desk/apply.js`, for the partner's own site, and a hosted page at
+  `/onboarding-desk/apply`. It reads the signed link from the page, removes it from the address
+  bar, keeps the session in memory, and shows the application in English or French in the
+  partner's colour (`brand_color`) with its privacy notice (`privacy_url`): every item with its
+  reason, documents with values to confirm, "talk to a person" and submit. The applicant routes
+  accept calls from any site without credentials, since they authenticate only with the session
+  header.
+- The hand-off into a governed case: a submitted application opens a governed case
+  (`POST /onboarding-desk/applications/{id}/case`, or on its own with the case settings
+  `auto_open` and `investigate`, both off by default) under the jurisdiction's case policy; the
+  case reference is stored on the application in the same transaction, so an application never
+  has two cases. From there the governed-case workflow runs the checks, the review, the decision
+  grants and the signed case push. `GET /onboarding-desk/cases/{case_ref}` returns the lead and
+  application behind a case. Adds the example policy `business_onboarding_ca` (not reviewed;
+  refused by strict runtimes like the others).
+- Evidence packs: `GET /onboarding-desk/applications/{id}/evidence` returns the consents with
+  their wording, contact attempts, transcript, document hashes, hand-offs, the case with its
+  policy result, recommendation and decision, and the Grantex-signed case export when that
+  service is on, with a SHA-256 per section and an Ed25519 signature over the manifest
+  (`AGENTICORG_ONBOARDING_DESK_EVIDENCE_SIGNING_KEY`; the public key is at
+  `GET /onboarding-desk/evidence-key`). `scripts/verify_onboarding_evidence.py` checks a pack
+  offline.
+- Reporting: `GET /onboarding-desk/reports/summary` gives the funnel, hours to submission and to
+  decision (median and 90th percentile), consent coverage by channel, and checks per merchant,
+  for leads created in the period. Migration `v6z99_onboarding_cases`.
+- CRM intake: `PUT /onboarding-desk/crm-settings` names a CRM lead source, the HubSpot or
+  Salesforce connector, which contacts to take, the field that records consent per channel, the
+  capture-time field and an attestation of the wording; `POST /onboarding-desk/crm/sync` pulls up
+  to 200 matching contacts into leads, idempotently by CRM id. Consent is recorded only where the
+  CRM says so and has a capture time.
+
 ## Unreleased - Shopping bot quotes the real checkout
 
 - Search results give the bot one `item_id` (the variant a checkout takes) instead of a product id
