@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased - Shopping bot quotes the real checkout
+
+- Search results give the bot one `item_id` (the variant a checkout takes) instead of a product id
+  and a variant id, so the checkout it opens holds the item the buyer asked for.
+- Every checkout tool result carries a summary (checkout id, status, ready, total, problems), and
+  the bot quotes the total only from it, so a checkout the shop could not fill is never reported
+  with the search price.
+
 ## Unreleased - Shopping bot store pickup
 
 - The public shopping bot gains a `choose_pickup` tool: it picks the shop's pickup location (or

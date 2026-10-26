@@ -105,7 +105,7 @@ async def test_the_shopper_searches_opens_a_checkout_and_never_binds_a_payment_t
         return [
             {
                 "shop": entry["slug"],
-                "id": "TEA-1",
+                "item_id": "TEA-1",
                 "title": "Masala Chai Blend",
                 "price": "Rs 449.00",
                 "available": True,
@@ -121,7 +121,7 @@ async def test_the_shopper_searches_opens_a_checkout_and_never_binds_a_payment_t
     model = ScriptedChatModel(
         steps=[
             tool_call("search", query="masala chai"),
-            tool_call("open_checkout", shop="tea-corner", product_id="TEA-1", quantity=1),
+            tool_call("open_checkout", shop="tea-corner", item_id="TEA-1", quantity=1),
             final("Masala Chai Blend at Tea Corner is Rs 449.00. Checkout chk_1 is open; you pay with the shop."),
         ]
     )
