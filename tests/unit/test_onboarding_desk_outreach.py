@@ -5,8 +5,6 @@ from __future__ import annotations
 
 import asyncio
 import base64
-import hashlib
-import hmac
 import json
 import uuid
 from contextlib import asynccontextmanager
@@ -22,6 +20,7 @@ from core.onboarding_desk import branding as branding_mod
 from core.onboarding_desk import messages, outreach, rules, senders, store, tokens
 from core.onboarding_desk.branding import Branding, Sender
 from core.onboarding_desk.store import DeskError
+from core.voice.runtime import build_twilio_signature
 
 TENANT = uuid.uuid4()
 LEAD = uuid.uuid4()
@@ -605,8 +604,7 @@ def client(monkeypatch):
 
 
 def twilio_signature(url: str, params: dict[str, str], token: str) -> str:
-    payload = url + "".join(f"{k}{params[k]}" for k in sorted(params))
-    return base64.b64encode(hmac.new(token.encode(), payload.encode(), hashlib.sha1).digest()).decode()
+    return build_twilio_signature(url=url, params=params, auth_token=token)
 
 
 class TestOutreachRoutes:
