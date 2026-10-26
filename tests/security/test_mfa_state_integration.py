@@ -67,8 +67,11 @@ def _configuration() -> tuple[str, str]:
         database.drivername != "postgresql+asyncpg"
         or database.database != "mfa_state_tests"
         or not database.host
+        or database.query
+        or database.port not in {None, 5432}
         or cache.scheme != "redis"
         or not cache.hostname
+        or cache.port not in {None, 6379}
         or cache.path != "/14"
         or cache.query
         or cache.fragment
@@ -135,18 +138,29 @@ class Harness:
         scope_digest = hashlib.sha256(f"{tid}:{uid}".encode("ascii")).hexdigest()
         state_digest = hashlib.sha256(f"{tid}:{email}".encode()).hexdigest()
         email_digest = hashlib.sha256(email.encode()).hexdigest()
-        self.owned_keys.update({
-            f"onetime-attempts:mfa-account:{scope_digest}", f"auth:user_state:{state_digest}",
-            f"auth:reset_email:{email_digest}",
-        })
+        self.owned_keys.update(
+            {
+                f"onetime-attempts:mfa-account:{scope_digest}",
+                f"auth:user_state:{state_digest}",
+                f"auth:reset_email:{email_digest}",
+            }
+        )
         async with self.factory() as session:
             if tenant_id is None:
                 session.add(Tenant(id=tid, name="Synthetic Organization", slug=tid.hex, settings={}))
                 await session.flush()
-            session.add(User(
-                id=uid, tenant_id=tid, email=email, name="Synthetic Member", role="analyst",
-                status="active", domain="finance", password_hash=await _hash_password(PASSWORD),
-            ))
+            session.add(
+                User(
+                    id=uid,
+                    tenant_id=tid,
+                    email=email,
+                    name="Synthetic Member",
+                    role="analyst",
+                    status="active",
+                    domain="finance",
+                    password_hash=await _hash_password(PASSWORD),
+                )
+            )
             await session.commit()
         browser = self.client()
         response = await browser.post(f"{PREFIX}/auth/login", json={"email": email, "password": PASSWORD})
@@ -165,7 +179,8 @@ class Harness:
             browser = self.client(ip)
             browser.cookies.update(account.browser.cookies)
         return await browser.post(
-            f"{PREFIX}{path}", json=body,
+            f"{PREFIX}{path}",
+            json=body,
             headers={"X-CSRF-Token": account.browser.cookies["agenticorg_csrf"]},
         )
 
@@ -203,7 +218,8 @@ class Harness:
 
     async def verify(self, challenge: str, code: str, *, ip="192.0.2.10"):
         response = await self.client(ip).post(
-            f"{PREFIX}/auth/mfa/verify", json={"challenge": challenge, "code": code},
+            f"{PREFIX}/auth/mfa/verify",
+            json={"challenge": challenge, "code": code},
         )
         if response.status_code != 200:
             _no_session(response)
@@ -306,7 +322,8 @@ async def test_f3_real_mutation_revokes_old_challenge(state, action):
         assert len(keys) == 1
         state.owned_keys.add(keys[0])
         response = await state.client().post(
-            f"{PREFIX}/auth/reset-password", json={"code": keys[0].split(":")[-1], "password": NEW_PASSWORD},
+            f"{PREFIX}/auth/reset-password",
+            json={"code": keys[0].split(":")[-1], "password": NEW_PASSWORD},
         )
         password = NEW_PASSWORD
     elif action == "recovery-codes":
@@ -371,7 +388,10 @@ async def test_f2_replacing_setup_does_not_reset_enable_budget(state):
         setup = await state.mutate(account, "/auth/mfa/setup", ip=f"192.0.2.{40 + index}")
         assert setup.status_code == 200, setup.text
         invalid = await state.mutate(
-            account, "/auth/mfa/enable", {"code": "not-a-valid-code"}, ip=f"192.0.2.{50 + index}",
+            account,
+            "/auth/mfa/enable",
+            {"code": "not-a-valid-code"},
+            ip=f"192.0.2.{50 + index}",
         )
         _no_session(invalid)
         statuses.append(invalid.status_code)
@@ -447,10 +467,12 @@ async def test_exhausted_account_does_not_block_other_tenant(state):
 async def test_concurrent_different_challenges_share_atomic_account_budget(state):
     account = await state.account()
     challenges = [await state.challenge(account, ip=f"192.0.2.{120 + index}") for index in range(9)]
-    responses = await asyncio.gather(*(
-        state.verify(challenge, "not-a-valid-code", ip=f"192.0.2.{140 + index}")
-        for index, challenge in enumerate(challenges)
-    ))
+    responses = await asyncio.gather(
+        *(
+            state.verify(challenge, "not-a-valid-code", ip=f"192.0.2.{140 + index}")
+            for index, challenge in enumerate(challenges)
+        )
+    )
     statuses = sorted(response.status_code for response in responses)
     assert statuses == [401] * 5 + [429] * 4, f"Concurrent account budget: {statuses}"
 
@@ -518,10 +540,18 @@ async def test_f1_real_admin_scoped_api_key_cannot_reset_mfa(state, target):
     token = f"ao_sk_{uuid.uuid4().hex}{uuid.uuid4().hex}"
     key_id = uuid.uuid4()
     async with state.factory() as session:
-        session.add(APIKey(
-            id=key_id, tenant_id=owner.tenant_id, user_id=owner.id, name="Synthetic Integration Key",
-            prefix=token[:12], key_hash=await _hash_password(token), scopes=["agenticorg:admin"], status="active",
-        ))
+        session.add(
+            APIKey(
+                id=key_id,
+                tenant_id=owner.tenant_id,
+                user_id=owner.id,
+                name="Synthetic Integration Key",
+                prefix=token[:12],
+                key_hash=await _hash_password(token),
+                scopes=["agenticorg:admin"],
+                status="active",
+            )
+        )
         await session.commit()
     before = await state.row(member)
     client = state.client("192.0.2.180")
@@ -532,7 +562,8 @@ async def test_f1_real_admin_scoped_api_key_cannot_reset_mfa(state, target):
         key = (await session.execute(select(APIKey).where(APIKey.id == key_id))).scalar_one()
         assert key.last_used_at is not None
     response = await client.delete(
-        f"{PREFIX}/org/members/{member.id}/mfa", headers={"Authorization": f"Bearer {token}"},
+        f"{PREFIX}/org/members/{member.id}/mfa",
+        headers={"Authorization": f"Bearer {token}"},
     )
     _no_session(response)
     assert response.status_code == 403, f"API key resetting {target}: HTTP {response.status_code}"
@@ -558,18 +589,27 @@ async def test_failed_mutation_keeps_pending_challenge_usable(state):
 async def test_concurrent_same_recovery_code_across_challenges_is_single_use(state):
     account = await state.account()
     challenges = [await state.challenge(account, ip=f"192.0.2.{190 + index}") for index in range(2)]
-    responses = await asyncio.gather(*(
-        state.verify(challenge, account.recovery[0], ip=f"192.0.2.{200 + index}")
-        for index, challenge in enumerate(challenges)
-    ))
+    responses = await asyncio.gather(
+        *(
+            state.verify(challenge, account.recovery[0], ip=f"192.0.2.{200 + index}")
+            for index, challenge in enumerate(challenges)
+        )
+    )
     assert sorted(response.status_code for response in responses) == [200, 401]
     assert len((await state.row(account)).mfa_recovery_codes) == 9
 
 
-@pytest.mark.parametrize("field,value", [
-    ("version", 2), ("generation", True), ("generation", -1), ("method", "unrecognized"),
-    ("generation", "missing"), ("version", "missing"),
-])
+@pytest.mark.parametrize(
+    "field,value",
+    [
+        ("version", 2),
+        ("generation", True),
+        ("generation", -1),
+        ("method", "unrecognized"),
+        ("generation", "missing"),
+        ("version", "missing"),
+    ],
+)
 async def test_f3_malformed_challenge_state_cannot_mint_session(state, field, value):
     account = await state.account()
     challenge = await state.challenge(account)
