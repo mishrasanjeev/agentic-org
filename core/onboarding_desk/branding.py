@@ -26,6 +26,7 @@ _CONNECTOR_RE = re.compile(r"^registry-[a-z][a-z0-9_]{1,63}$")
 _TEMPLATE_RE = re.compile(r"^[a-z0-9_]{1,512}$")
 _LANGUAGE_RE = re.compile(r"^[a-z]{2}(_[A-Z]{2})?$")
 _LOCAL_HOSTS = frozenset({"localhost", "127.0.0.1"})
+_COLOR_RE = re.compile(r"^#[0-9a-fA-F]{6}$")
 
 
 class BrandingError(ValueError):
@@ -65,6 +66,10 @@ class Branding:
     senders: dict[str, Sender] = field(default_factory=dict)
     #: Answer text-message replies with the guided application; off by default.
     sms_conversation: bool = False
+    #: The applicant page's accent colour, ``#RRGGBB``.
+    brand_color: str = ""
+    #: The partner's privacy notice, linked from the applicant page.
+    privacy_url: str = ""
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -75,6 +80,8 @@ class Branding:
             "first_contact_delay_minutes": self.first_contact_delay_minutes,
             "senders": {channel: sender.to_dict() for channel, sender in self.senders.items()},
             "sms_conversation": self.sms_conversation,
+            "brand_color": self.brand_color,
+            "privacy_url": self.privacy_url,
         }
 
     def missing_for(self, channel: str) -> str | None:
@@ -94,16 +101,16 @@ def _local_env() -> bool:
     return str(settings.env or "").lower() in {"local", "dev", "development", "test"}
 
 
-def _url(value: Any) -> str:
+def _url(value: Any, field_name: str = "onboarding_url") -> str:
     url = str(value or "").strip()
     if not url:
         return ""
     if len(url) > MAX_URL:
-        raise BrandingError("onboarding_url", f"onboarding_url is longer than {MAX_URL} characters")
+        raise BrandingError(field_name, f"{field_name} is longer than {MAX_URL} characters")
     parts = urlsplit(url)
     secure = parts.scheme == "https" or (parts.scheme == "http" and parts.hostname in _LOCAL_HOSTS and _local_env())
     if not secure or not parts.hostname or parts.query or parts.fragment:
-        raise BrandingError("onboarding_url", "onboarding_url must be an https URL without a query or fragment")
+        raise BrandingError(field_name, f"{field_name} must be an https URL without a query or fragment")
     return url.rstrip("/")
 
 
@@ -155,6 +162,9 @@ def branding_from(raw: dict[str, Any] | None) -> Branding:
     conversation = raw.get("sms_conversation", False)
     if not isinstance(conversation, bool):
         raise BrandingError("sms_conversation", "sms_conversation must be true or false")
+    color = str(raw.get("brand_color") or "").strip()
+    if color and not _COLOR_RE.match(color):
+        raise BrandingError("brand_color", "brand_color must be a colour like #1A73E8")
     delay = raw.get("first_contact_delay_minutes", 0)
     if not isinstance(delay, int) or not 0 <= delay <= 24 * 60:
         raise BrandingError("first_contact_delay_minutes", "first_contact_delay_minutes must be between 0 and 1440")
@@ -169,4 +179,6 @@ def branding_from(raw: dict[str, Any] | None) -> Branding:
         first_contact_delay_minutes=delay,
         senders={channel: _sender(channel, value) for channel, value in senders_raw.items()},
         sms_conversation=conversation,
+        brand_color=color.upper(),
+        privacy_url=_url(raw.get("privacy_url"), "privacy_url"),
     )
