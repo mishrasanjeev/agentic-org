@@ -109,8 +109,7 @@ def test_products_are_summarised_with_rupee_prices():
     }
     assert bot._product_summary("tea-corner", product) == {
         "shop": "tea-corner",
-        "id": "TEA-1",
-        "variant_id": "TEA-1-250",
+        "item_id": "TEA-1-250",
         "title": "Masala Chai Blend",
         "price": "Rs 449.00",
         "available": True,
@@ -126,6 +125,7 @@ def test_products_are_summarised_with_rupee_prices():
         },
     )
     assert bare["price"] == "USD 10.00" and bare["description"] == "plain text" and bare["available"] is None
+    assert bare["item_id"] == "X"
     assert bot._money(None) is None
 
 
@@ -406,7 +406,8 @@ async def test_choose_pickup_passes_shop_answers_through_when_there_is_nothing_t
         return missing
 
     monkeypatch.setattr(api, "network_checkout", gone)
-    assert await bot.ShopperTools("tea-corner").choose_pickup("", "chk_1") == missing
+    passed = await bot.ShopperTools("tea-corner").choose_pickup("", "chk_1")
+    assert passed["error"] == "not_found" and passed["summary"]["problems"] == ["not_found"]
     shop = PickupShop([])
     monkeypatch.setattr(api, "network_checkout", shop)
     assert (await bot.ShopperTools("tea-corner").choose_pickup("", "chk_1"))["status"] == "incomplete"
@@ -420,3 +421,39 @@ async def test_update_checkout_keeps_the_line_items_the_model_left_out(monkeypat
         "", "chk_1", {"fulfillment": {"methods": [{"type": "pickup"}]}}
     )
     assert shop.updates[0]["line_items"] == [{"id": "li_1", "item": {"id": "TEA-1"}, "quantity": 2}]
+
+
+def test_checkout_answers_carry_a_summary_the_model_quotes_from():
+    missing = bot._for_model(
+        {
+            "http_status": 201,
+            "id": "chk_1",
+            "status": "incomplete",
+            "currency": "INR",
+            "totals": [{"type": "subtotal", "amount": 0}, {"type": "total", "amount": 0}],
+            "messages": [
+                {"type": "error", "content": "Item TEA-1 was not found."},
+                {"type": "info", "content": "Prices include tax."},
+            ],
+        }
+    )
+    assert missing["summary"] == {
+        "checkout_id": "chk_1",
+        "status": "incomplete",
+        "ready": False,
+        "total": "Rs 0.00",
+        "problems": ["Item TEA-1 was not found."],
+    }
+    assert missing["id"] == "chk_1"
+    ready = bot._for_model(
+        {
+            "http_status": 200,
+            "id": "chk_2",
+            "status": "ready_for_complete",
+            "totals": [{"type": "total", "amount": 44900}],
+        }
+    )["summary"]
+    assert ready["ready"] is True and ready["total"] == "Rs 449.00" and ready["problems"] == []
+    refused = bot._for_model({"http_status": 404, "error": "not_found", "message": "No such checkout.", "totals": "x"})
+    assert refused["summary"]["problems"] == ["No such checkout."] and refused["summary"]["total"] is None
+    assert bot._for_model({"choose_location": []}) == {"choose_location": []}
