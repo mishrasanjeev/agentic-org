@@ -40,6 +40,7 @@ API_TOKEN = "ao_sk_synthetic_admin_reset_credential"
 MFA_FIELDS = (
     "mfa_enabled", "mfa_totp_secret", "mfa_pending_secret", "mfa_pending_created_at",
     "mfa_last_totp_step", "mfa_recovery_codes", "mfa_enabled_at", "sessions_invalid_before",
+    "mfa_challenge_generation",
 )
 
 
@@ -53,6 +54,7 @@ def _user(number: int, email: str, **overrides) -> User:
         "mfa_pending_created_at": now, "mfa_last_totp_step": 123,
         "mfa_recovery_codes": ["synthetic-recovery-hash"], "mfa_enabled_at": now,
         "sessions_invalid_before": now,
+        "mfa_challenge_generation": 0,
     }
     return User(**(values | overrides))
 

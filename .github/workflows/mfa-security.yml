@@ -1,0 +1,67 @@
+name: MFA Security State
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mfa-security-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  postgres-redis:
+    name: Real PostgreSQL and Redis MFA regressions
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_USER: mfa_test
+          POSTGRES_PASSWORD: mfa-test-only
+          POSTGRES_DB: mfa_state_tests
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U mfa_test -d mfa_state_tests"
+          --health-interval 5s --health-timeout 5s --health-retries 12
+      redis:
+        image: redis:7-alpine
+        ports: ["6379:6379"]
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s --health-timeout 5s --health-retries 12
+    env:
+      CI: "true"
+      AGENTICORG_ENV: test
+      MFA_STATE_TEST_ENABLE: "1"
+      MFA_STATE_TEST_REQUIRED: "1"
+      MFA_STATE_TEST_PG_URL: postgresql+asyncpg://mfa_test:mfa-test-only@127.0.0.1:5432/mfa_state_tests
+      MFA_STATE_TEST_REDIS_URL: redis://127.0.0.1:6379/14
+      MFA_MIGRATION_TEST_REQUIRED: "1"
+      MFA_MIGRATION_TEST_DB_URL: postgresql+psycopg2://mfa_test:mfa-test-only@127.0.0.1:5432/mfa_generation_test
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      - name: Install test dependencies
+        run: pip install uv && uv pip install --system -e ".[dev]" && uv pip install --system --no-deps --require-hashes -r requirements-fastembed.txt
+      - name: Create the dedicated migration database
+        env:
+          PGPASSWORD: mfa-test-only
+        run: psql -h 127.0.0.1 -U mfa_test -d mfa_state_tests -v ON_ERROR_STOP=1 -c 'CREATE DATABASE mfa_generation_test'
+      - name: Validate physical migration and actual-router state
+        run: >-
+          python -m pytest -q --no-cov
+          tests/regression/test_mfa_challenge_generation_migration.py
+          tests/security/test_mfa_state_integration.py
+          tests/unit/test_mfa_admin_reset_security.py
+          tests/unit/test_mfa_ascii_codes.py
+          tests/unit/test_mfa_challenge_state.py

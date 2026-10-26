@@ -24,7 +24,7 @@ def _safe_test_url(value):
     url = make_url(value)
     if (
         url.drivername not in {"postgresql", "postgresql+psycopg2", "postgresql+psycopg"}
-        or url.host not in {"localhost", "127.0.0.1", "::1", "ao-mfa-pg-20261027"}
+        or url.host not in {"localhost", "127.0.0.1", "::1", "postgres", "mfa-test-postgres"}
         or url.database != "mfa_generation_test"
         or url.username != "mfa_test"
         or url.port not in {None, 5432}
@@ -51,6 +51,8 @@ def _upgrade(connection):
 def pg():
     value = os.environ.get(DB_ENV)
     if not value:
+        if os.environ.get("MFA_MIGRATION_TEST_REQUIRED") == "1":
+            pytest.fail(f"Required dedicated {DB_ENV} is missing")
         pytest.skip(f"Set {DB_ENV} to a dedicated local PostgreSQL test database")
     # Validate before opening any connection; never fall back to application URLs.
     url = _safe_test_url(value)
@@ -87,7 +89,7 @@ def test_database_gate_refuses_unsafe_targets(value):
         _safe_test_url(value)
 
 
-@pytest.mark.parametrize("host", ["localhost", "127.0.0.1", "[::1]", "ao-mfa-pg-20261027"])
+@pytest.mark.parametrize("host", ["localhost", "127.0.0.1", "[::1]", "postgres", "mfa-test-postgres"])
 def test_database_gate_accepts_dedicated_local_targets(host):
     assert _safe_test_url(f"postgresql://mfa_test@{host}/mfa_generation_test").database == "mfa_generation_test"
 
@@ -107,7 +109,8 @@ def test_revision_and_forward_only_downgrade(monkeypatch):
     assert module.down_revision == "v6z99_onboarding_cases"
     statements = []
     monkeypatch.setattr(module.op, "execute", statements.append)
-    module.downgrade()
+    with pytest.raises(RuntimeError, match="forward-only"):
+        module.downgrade()
     assert statements == []
 
 

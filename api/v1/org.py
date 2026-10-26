@@ -429,6 +429,8 @@ async def update_onboarding(body: OnboardingUpdate, request: Request):
 )
 async def deactivate_member(user_id: str, request: Request):
     """Soft-deactivate a member by setting status to inactive."""
+    from api.v1.auth import invalidate_mfa_challenges  # noqa: PLC0415 - avoids router import cycles
+
     tenant_id = _get_tenant_id(request)
     current_user_email = getattr(request.state, "user_sub", "")
 
@@ -437,7 +439,7 @@ async def deactivate_member(user_id: str, request: Request):
             select(User).where(
                 User.id == uuid.UUID(user_id),
                 User.tenant_id == uuid.UUID(tenant_id),
-            )
+            ).with_for_update()
         )
         user = result.scalar_one_or_none()
         if not user:
@@ -449,6 +451,7 @@ async def deactivate_member(user_id: str, request: Request):
         # Revoke every outstanding session: tokens issued before this
         # watermark are rejected by the auth middleware (v6z17).
         user.sessions_invalid_before = datetime.now(UTC)
+        invalidate_mfa_challenges(user)
         session.add(user)
         await session.commit()
 

@@ -14,8 +14,10 @@ use).
 
 from __future__ import annotations
 
+import hashlib
 import os
 import secrets
+import uuid
 from typing import Literal
 
 import redis.asyncio as aioredis
@@ -27,6 +29,18 @@ _CODE_BYTES = 24  # 192-bit opaque code → 32-char urlsafe-base64
 # A sign-in that passed its first factor waits this long for the
 # authenticator code before the user has to start again.
 MFA_CHALLENGE_TTL_SECONDS = 300
+MFA_ACCOUNT_MAX_ATTEMPTS = 5
+
+# Count and initial expiry are one Redis operation, including across replicas.
+_ATTEMPT_SCRIPT = """
+local count = redis.call('INCR', KEYS[1])
+if count == 1 then
+    redis.call('EXPIRE', KEYS[1], ARGV[1])
+elseif redis.call('TTL', KEYS[1]) < 0 then
+    return redis.error_reply('MFA counter has no expiry')
+end
+return count
+"""
 
 
 def _redis() -> aioredis.Redis:
@@ -85,12 +99,35 @@ async def record_attempt(kind: CodeKind, code: str, ttl_seconds: int) -> int:
     Lets a caller cap wrong guesses per code (an MFA challenge allows five)
     across replicas; the counter expires with the code.
     """
+    return await _record_attempt(f"onetime-attempts:{kind}:{code}", ttl_seconds)
+
+
+async def _record_attempt(key: str, ttl_seconds: int) -> int:
     r = _redis()
     try:
-        key = f"onetime-attempts:{kind}:{code}"
-        count = await r.incr(key)
-        if count == 1:
-            await r.expire(key, ttl_seconds)
-        return int(count)
+        count = await r.eval(_ATTEMPT_SCRIPT, 1, key, ttl_seconds)
+        if type(count) is not int or count < 1:
+            raise aioredis.RedisError("Invalid MFA attempt counter")
+        return count
+    finally:
+        await r.aclose()
+
+
+def _mfa_account_key(tenant_id: str, user_id: str) -> str:
+    scope = f"{uuid.UUID(tenant_id)}:{uuid.UUID(user_id)}"
+    digest = hashlib.sha256(scope.encode("ascii")).hexdigest()
+    return f"onetime-attempts:mfa-account:{digest}"
+
+
+async def record_mfa_account_attempt(tenant_id: str, user_id: str) -> int:
+    """Reserve a guess shared by all challenges and enrollment operations."""
+    return await _record_attempt(_mfa_account_key(tenant_id, user_id), MFA_CHALLENGE_TTL_SECONDS)
+
+
+async def clear_mfa_account_attempts(tenant_id: str, user_id: str) -> None:
+    """Call only after a valid second factor, while holding that user's row lock."""
+    r = _redis()
+    try:
+        await r.delete(_mfa_account_key(tenant_id, user_id))
     finally:
         await r.aclose()
