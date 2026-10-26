@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased - Shopping bot store pickup
+
+- The public shopping bot gains a `choose_pickup` tool: it picks the shop's pickup location (or
+  asks which one when the shop has several) and its pickup option, so "store pickup" leaves a
+  checkout ready for the shop to complete. An update the model sends without line items now keeps
+  the checkout's items instead of being rejected.
+
 ## Unreleased - Shopping bot always answers
 
 - The public shopping bot gets eight tool rounds instead of five, and when it still runs out it

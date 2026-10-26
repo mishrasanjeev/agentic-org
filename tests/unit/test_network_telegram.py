@@ -134,7 +134,7 @@ async def test_the_shopper_searches_opens_a_checkout_and_never_binds_a_payment_t
     ]
     model.assert_consumed()
     bound = set(model.bind_tools(bot._langchain_tools(bot.ShopperTools(None))).bound_tool_names)
-    assert bound == {"list_shops", "search", "open_checkout", "get_checkout", "update_checkout"}
+    assert bound == {"list_shops", "search", "open_checkout", "get_checkout", "update_checkout", "choose_pickup"}
     # The chosen shop is in the system prompt; the remembered turn holds only the texts.
     assert "slug tea-corner" in model.calls[0][0].content
     state = await bot.load_state(bot.chat_key("42"))
