@@ -7,7 +7,7 @@ it refuses a bot whose webhook already points at another application). Run once 
 token and secret are in Secret Manager and the service carries them:
 
     AGENTICORG_NETWORK_TELEGRAM_BOT_TOKEN=... AGENTICORG_NETWORK_TELEGRAM_WEBHOOK_SECRET=... \\
-        python scripts/connect_network_telegram_bot.py --base-url https://app.agenticorg.ai
+        python -m scripts.connect_network_telegram_bot --base-url https://app.agenticorg.ai
 """
 
 from __future__ import annotations

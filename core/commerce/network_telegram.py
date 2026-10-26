@@ -38,7 +38,7 @@ logger = structlog.get_logger()
 STATE_TTL_SECONDS = 7 * 24 * 3600
 TURN_TTL_SECONDS = 30 * 60
 MAX_TURNS = 6
-MAX_TOOL_ROUNDS = 5
+MAX_TOOL_ROUNDS = 8
 UPDATE_TTL_SECONDS = 24 * 3600
 SEARCH_TIMEOUT_SECONDS = 8.0
 MAX_TEXT = 1000
@@ -288,7 +288,8 @@ async def run_shopper(state: dict[str, Any], text: str, model_factory: ModelFact
     tools = ShopperTools(state.get("shop"))
     bound = _langchain_tools(tools)
     by_name = {t.name: t for t in bound}
-    model = (model_factory or _default_model)().bind_tools(bound)
+    base = (model_factory or _default_model)()
+    model = base.bind_tools(bound)
     system = SYSTEM_PROMPT
     if state.get("shop"):
         system += f"\n\nThe buyer chose the shop {state.get('shop_name') or state['shop']} (slug {state['shop']})."
@@ -314,7 +315,23 @@ async def run_shopper(state: dict[str, Any], text: str, model_factory: ModelFact
                 except Exception as exc:
                     result = {"error": type(exc).__name__}
             messages.append(ToolMessage(content=json.dumps(result, default=str)[:8000], tool_call_id=call["id"]))
-    return "I couldn't finish that. Please ask again more simply."
+    # Out of tool rounds: the work so far (often a checkout already opened) still deserves an answer.
+    # The tool results go in as plain text, so the closing call needs no tools at all.
+    results = "\n".join(str(m.content) for m in messages if isinstance(m, ToolMessage))[-12000:]
+    closing = await base.ainvoke(
+        [
+            SystemMessage(content=system),
+            HumanMessage(content=text),
+            HumanMessage(
+                content="Here is everything the shop tools returned for this request:\n"
+                + results
+                + "\n\nReply to the buyer now in a few short lines: what you found and did, with any checkout id "
+                "and total. Do not call tools."
+            ),
+        ]
+    )
+    answer = closing.content if isinstance(closing.content, str) else json.dumps(closing.content)
+    return answer.strip() or "I couldn't finish that. Please ask again more simply."
 
 
 # --- one update -------------------------------------------------------------------------------
