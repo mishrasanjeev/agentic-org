@@ -203,8 +203,21 @@ async def test_the_shopper_reports_unknown_tools_and_stops_after_five_rounds(mon
     tool_messages = [m for m in recovering.calls[1] if m.__class__.__name__ == "ToolMessage"]
     assert json.loads(tool_messages[0].content) == {"error": "RuntimeError"}
 
-    looping = ScriptedChatModel(steps=[tool_call("list_shops", call_id=f"c{i}") for i in range(bot.MAX_TOOL_ROUNDS)])
-    assert "couldn't finish" in await bot.run_shopper({}, "loop", model_factory=lambda: looping)
+    # Out of tool rounds, one closing call without tools still answers from what the tools returned.
+    looping = ScriptedChatModel(
+        steps=[tool_call("list_shops", call_id=f"c{i}") for i in range(bot.MAX_TOOL_ROUNDS)]
+        + [final("Checkout chk_1 is open for Rs 449.00; you pay with the shop.")]
+    )
+    reply = await bot.run_shopper({}, "loop", model_factory=lambda: looping)
+    assert reply == "Checkout chk_1 is open for Rs 449.00; you pay with the shop."
+    closing = looping.calls[-1]
+    assert len(closing) == 3 and "Do not call tools" in closing[-1].content
+    assert not [m for m in closing if m.__class__.__name__ == "ToolMessage"]
+    looping.assert_consumed()
+    silent = ScriptedChatModel(
+        steps=[tool_call("list_shops", call_id=f"s{i}") for i in range(bot.MAX_TOOL_ROUNDS)] + [final("")]
+    )
+    assert "couldn't finish" in await bot.run_shopper({}, "loop", model_factory=lambda: silent)
 
 
 @pytest.mark.asyncio

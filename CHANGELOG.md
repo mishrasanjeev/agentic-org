@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased - Shopping bot always answers
+
+- The public shopping bot gets eight tool rounds instead of five, and when it still runs out it
+  answers from what the shop tools returned (for example the checkout it already opened) instead
+  of "I couldn't finish that". The setup command is `python -m scripts.connect_network_telegram_bot`.
+
 ## Unreleased - Sell everywhere page and guide
 
 - New **Commerce > Sell Everywhere** page (admin and merchant roles): catalog and policy steps,
