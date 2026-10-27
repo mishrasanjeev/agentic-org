@@ -5,6 +5,7 @@ from __future__ import annotations
 import inspect
 import uuid
 from contextlib import asynccontextmanager
+from decimal import Decimal
 from types import SimpleNamespace
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -94,6 +95,8 @@ async def test_resume_uses_authoritative_agent_company_for_connector_gate() -> N
         company_id=COMPANY_ID,
         config={},
         connector_ids=[],
+        shadow_accuracy_current=Decimal("0.990"),
+        shadow_accuracy_floor=Decimal("0.600"),
     )
     pause_event = SimpleNamespace(from_status="active")
     tenant_session = MagicMock()

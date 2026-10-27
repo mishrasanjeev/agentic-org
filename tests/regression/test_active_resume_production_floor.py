@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """HTTP lifecycle replay with synthetic token/session/DB and activation hooks.
 
 The router, caller derivation, ownership rules and floor predicates are real.
