@@ -539,6 +539,35 @@ async def contact_lead(lead_id: str, body: ContactIn, tenant_id: str = Depends(g
     return outcome.to_dict()
 
 
+@router.post("/leads/{lead_id}/apply-link")
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="onboarding_desk.outreach.write",
+    rate_limit="standard",
+    idempotency="not_idempotent-each-call-signs-a-new-link",
+    audit_event="onboarding_desk.apply.link",
+)
+async def apply_link(
+    lead_id: str, tenant_id: str = Depends(get_current_tenant), user: Any = Depends(get_current_user)
+) -> dict[str, Any]:
+    """A signed link to the lead's application, for the partner to hand over itself; nothing is sent."""
+    _require_on()
+    from core.onboarding_desk import outreach, tokens
+
+    tenant, lead = uuid.UUID(tenant_id), _uuid(lead_id, "lead")
+    try:
+        await store.get_lead(tenant, lead)
+        branding = await store.get_branding(tenant)
+    except DeskError as exc:
+        raise _refused(exc) from exc
+    now = datetime.now(UTC)
+    token = tokens.sign("apply", tenant, lead, now=now)
+    url = outreach.onboarding_link(branding.onboarding_url, tenant, lead, now) if branding.onboarding_url else None
+    logger.info("onboarding_desk_apply_link_signed", tenant_id=tenant_id, lead_id=lead_id, actor=_actor(user))
+    return {"token": token, "url": url, "expires_at": (now + tokens.TTL["apply"]).isoformat()}
+
+
 @router.get("/leads/{lead_id}/attempts")
 @route_meta(
     auth_required=True,

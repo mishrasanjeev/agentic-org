@@ -1,5 +1,21 @@
 # Changelog
 
+## Unreleased - Merchant onboarding desk end to end
+
+- `POST /onboarding-desk/leads/{id}/apply-link` signs the lead's application link for the partner
+  to hand over itself (a partner form redirecting into the application, a call centre reading it
+  out). It sends nothing and needs no consent; the link is the one outreach messages carry.
+- `make e2e-onboarding-desk` (and the `make e2e-decisions` CI job): a signed webhook lead with its
+  consents, the contact rules, the applicant page in a browser reading an uploaded certificate,
+  a refused answer and the submission, the governed case the desk opens, the checks against the
+  mock provider, a real approval on the Grantex approval page, the signed case push to the
+  partner, the signed evidence pack checked with `scripts/verify_onboarding_evidence.py`, and the
+  partner report.
+- A Canadian mock provider fixture (`ca-clean-mapleleaf`); the underwriter suites now decide it
+  with the `business_onboarding_ca` example policy, which reaches the `low` tier on a clean case.
+- The development stack can run the desk (`AGENTICORG_DEV_ONBOARDING_DESK`, off by default, and
+  `AGENTICORG_DEV_ONBOARDING_DESK_EVIDENCE_KEY`).
+
 ## Unreleased - Merchant onboarding desk foundations (off by default)
 
 - New `AGENTICORG_ONBOARDING_DESK_ENABLED` (off): while off, `GET /onboarding-desk/status`
