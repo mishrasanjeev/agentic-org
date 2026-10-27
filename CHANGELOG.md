@@ -13,6 +13,10 @@
   partner report.
 - A Canadian mock provider fixture (`ca-clean-mapleleaf`); the underwriter suites now decide it
   with the `business_onboarding_ca` example policy, which reaches the `low` tier on a clean case.
+- The underwriter treats Canada's Business Number (`ca_business_number`) as the tax identifier the
+  registry confirms, as it does the EIN in the United States. Before, `verification.tax_id_match` was
+  never produced for a Canadian case, so the `business_onboarding_ca` rule reading it was indeterminate
+  on every case, and a Canadian application without a Business Number was not reported as missing one.
 - The development stack can run the desk (`AGENTICORG_DEV_ONBOARDING_DESK`, off by default, and
   `AGENTICORG_DEV_ONBOARDING_DESK_EVIDENCE_KEY`).
 
