@@ -2,6 +2,10 @@
 
 ## Unreleased - Merchant onboarding desk end to end
 
+- A new optional application item, `incorporated_in`: the state or province of incorporation when it
+  differs from the registered address, or `FEDERAL` for a federally incorporated Canadian company. The
+  governed case's jurisdiction, and so the registry checked, now follows it; before, a Delaware company
+  with a Californian address was checked as a Californian one.
 - `POST /onboarding-desk/leads/{id}/apply-link` signs the lead's application link for the partner
   to hand over itself (a partner form redirecting into the application, a call centre reading it
   out). It sends nothing and needs no consent; the link is the one outreach messages carry.
