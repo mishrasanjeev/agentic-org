@@ -255,11 +255,13 @@ test.describe("the merchant onboarding desk, end to end", () => {
     await expect
       .poll(
         async () => {
-          const summary = await okJson<{ status: string; case_ref: string | null; case_error: string | null }>(
-            await page.request.get(`${DESK}/applications/${applicationId}`),
-          );
-          expect(summary.case_error, "the case was refused").toBeNull();
-          caseRef = summary.case_ref || "";
+          const { applications } = await okJson<{
+            applications: { id: string; case_ref: string | null; case_error: string | null }[];
+          }>(await page.request.get(`${DESK}/applications`));
+          const summary = applications.find((row) => row.id === applicationId);
+          expect(summary, "the application is still listed").toBeTruthy();
+          expect(summary!.case_error, "the case was refused").toBeNull();
+          caseRef = summary!.case_ref || "";
           return caseRef;
         },
         { message: "the desk opens the governed case", timeout: 90_000, intervals: [1_000, 2_000, 5_000] },
