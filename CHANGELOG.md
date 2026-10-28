@@ -2,6 +2,12 @@
 
 ## Unreleased - Merchant onboarding desk end to end
 
+- `scripts/onboarding_desk_production_run.py`: a labelled, disposable run of the desk in a production
+  deployment through the live public API. It covers the signed lead and its consents, the contact
+  rules, the applicant's session with a document read and a refused answer, the submission, the
+  signed evidence pack checked with the published key, and the report. It then retires its own
+  tenant. It has no message senders and opens no case, because the checks need the verification
+  partner's credential (docs/onboarding-desk/production-run.md).
 - A new optional application item, `incorporated_in`: the state or province of incorporation when it
   differs from the registered address, or `FEDERAL` for a federally incorporated Canadian company. The
   governed case's jurisdiction, and so the registry checked, now follows it; before, a Delaware company
