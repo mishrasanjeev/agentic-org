@@ -42,6 +42,12 @@ x-backend-env: &backend-env
   # needs an auth service build that serves that endpoint, which the pin below
   # predates (docs/governance/decision-requests.md, rollout order).
   AGENTICORG_CASE_DECISION_GRANT_RELEASE: "${AGENTICORG_DEV_CASE_DECISION_GRANT_RELEASE:-false}"
+  # The merchant onboarding desk (docs/onboarding-desk/). Off unless a run sets
+  # it, as in every deployment; `make e2e-onboarding-desk` needs it on, and an
+  # evidence signing key (a base64 Ed25519 seed the run generates) so the
+  # suite can check the signed evidence pack.
+  AGENTICORG_ONBOARDING_DESK_ENABLED: "${AGENTICORG_DEV_ONBOARDING_DESK:-false}"
+  AGENTICORG_ONBOARDING_DESK_EVIDENCE_SIGNING_KEY: "${AGENTICORG_DEV_ONBOARDING_DESK_EVIDENCE_KEY:-}"
 
 x-backend-build: &backend-build
   context: .

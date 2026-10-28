@@ -26,7 +26,9 @@ from connectors.framework.verification_provider import (
 from core.agents.business_underwriter.reconciliation import Reconciliation, normalise_name
 from core.extraction._worker import ACTIVITY_KEYWORDS
 
-TAX_ID_SCHEMES: Mapping[str, str] = {"US": "us_ein"}
+#: The federal tax identifier each country's registry can confirm: the EIN, and Canada's Business Number.
+TAX_ID_SCHEMES: Mapping[str, str] = {"US": "us_ein", "CA": "ca_business_number"}
+TAX_ID_NAMES: Mapping[str, str] = {"US": "a federal employer identification number", "CA": "a Business Number"}
 
 
 @dataclass
