@@ -343,11 +343,12 @@ test.describe("the merchant onboarding desk, end to end", () => {
 
       // The evidence pack: signed with the key the desk publishes, covering every section.
       const key = await okJson<{ alg: string; key_id: string; public_key: string }>(await request.get(`${DESK}/evidence-key`));
+      const packResponse = await page.request.get(`${DESK}/applications/${run.application_id}/evidence`);
       const pack = await okJson<{
         manifest: { schema: string; application_id: string; sections: Record<string, string> };
         signature: { alg: string; key_id: string; value: string };
         sections: Record<string, unknown> & { case: { case_ref: string; decision?: { outcome: string } } };
-      }>(await page.request.get(`${DESK}/applications/${run.application_id}/evidence`));
+      }>(packResponse);
       expect(pack.manifest.schema).toBe("agenticorg.onboarding_evidence/1");
       expect(pack.manifest.application_id).toBe(run.application_id);
       expect(Object.keys(pack.manifest.sections).sort()).toEqual(Object.keys(pack.sections).sort());
@@ -364,7 +365,8 @@ test.describe("the merchant onboarding desk, end to end", () => {
       expect(JSON.stringify(pack.sections.consents)).toContain("web_form");
       expect(JSON.stringify(pack.sections.documents)).toContain("certificate-of-incorporation.pdf");
       // The section digests are checked by the desk's own verifier after this run (make e2e-onboarding-desk).
-      writeFileSync(EVIDENCE_PACK_PATH, JSON.stringify(pack), "utf-8");
+      // Kept as downloaded: re-serialising the JSON can rewrite numbers (100.0 as 100) and so the digests.
+      writeFileSync(EVIDENCE_PACK_PATH, await packResponse.body());
       writeFileSync(EVIDENCE_KEY_PATH, key.public_key, "utf-8");
 
       // The partner report counts the lead, the application, the case and the approval.
