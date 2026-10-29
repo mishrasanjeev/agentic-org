@@ -119,7 +119,11 @@ async def _complete_setup(tenant: str, merchant_id: str) -> dict[str, Any]:
     await setup_api.put_policies(
         merchant_id,
         setup_api.PoliciesRequest(
-            returns="Unused tea can be returned within 7 days.", shipping="Ships across India in 3 to 5 days."
+            returns="Unused tea can be returned within 7 days.",
+            shipping="Ships across India in 3 to 5 days.",
+            shipping_fee="49.50",
+            shipping_currency="inr",
+            shipping_countries=["in", "IN"],
         ),
         tenant,
     )
@@ -159,7 +163,7 @@ async def test_a_new_merchant_goes_from_upload_to_published_without_any_env_edit
     merchant_id = created["merchant"]["merchant_id"]
     seller = created["merchant"]["seller_agent_id"]
     assert re.fullmatch(r"tea-corner-[0-9a-f]{6}", merchant_id)
-    assert created["missing"] == ["catalog", "policies", "order_limits"]
+    assert created["missing"] == ["catalog", "policies", "shipping_rate", "order_limits"]
     listed = await setup_api.list_merchant_configs(tenant_id=tenant)
     assert [item["merchant_id"] for item in listed["merchants"]] == [merchant_id]
 
@@ -167,7 +171,7 @@ async def test_a_new_merchant_goes_from_upload_to_published_without_any_env_edit
     with pytest.raises(HTTPException) as incomplete:
         await _opt_in(tenant, merchant_id, seller, slug)
     assert incomplete.value.status_code == 409 and incomplete.value.detail["code"] == "setup_incomplete"
-    assert incomplete.value.detail["missing"] == ["catalog", "policies", "order_limits"]
+    assert incomplete.value.detail["missing"] == ["catalog", "policies", "shipping_rate", "order_limits"]
 
     with pytest.raises(HTTPException) as bad_file:
         await setup_api.upload_catalog(
@@ -180,6 +184,7 @@ async def test_a_new_merchant_goes_from_upload_to_published_without_any_env_edit
 
     ready = await _complete_setup(tenant, merchant_id)
     assert ready["ready_to_turn_on"] is True and ready["missing"] == []
+    assert ready["policies"]["shipping_rate"] == {"fee": "49.50", "currency": "INR", "countries": ["IN"]}
     assert ready["catalog"] | {"last_synced_at": None} == {
         "status": "ready",
         "source": "catalog_upload",

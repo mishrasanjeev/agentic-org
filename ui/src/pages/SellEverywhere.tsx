@@ -58,7 +58,13 @@ interface Setup {
     webhook_status: string | null;
     webhook_path: string | null;
   };
-  policies: { status: string; returns: string; shipping: string; pickup: string };
+  policies: {
+    status: string;
+    returns: string;
+    shipping: string;
+    pickup: string;
+    shipping_rate?: { fee: string; currency: string; countries: string[] } | null;
+  };
   order_limits: {
     status: string;
     currency: string | null;
@@ -111,6 +117,7 @@ const MISSING_LABEL: Record<string, string> = {
   catalog: "your catalog",
   policies: "your policies",
   order_limits: "your order limits",
+  shipping_rate: "your shipping fee",
 };
 
 function StatusBadge({ status }: { status: string }) {
@@ -205,6 +212,9 @@ export default function SellEverywhere() {
   const [returnsPolicy, setReturnsPolicy] = useState("");
   const [shippingPolicy, setShippingPolicy] = useState("");
   const [pickupPolicy, setPickupPolicy] = useState("");
+  const [shippingFee, setShippingFee] = useState("");
+  const [shippingCurrency, setShippingCurrency] = useState("");
+  const [shippingCountries, setShippingCountries] = useState("");
 
   const [currency, setCurrency] = useState("");
   const [maxOrder, setMaxOrder] = useState("");
@@ -219,6 +229,9 @@ export default function SellEverywhere() {
     setReturnsPolicy(data.policies.returns);
     setShippingPolicy(data.policies.shipping);
     setPickupPolicy(data.policies.pickup);
+    setShippingFee(data.policies.shipping_rate?.fee ?? "");
+    setShippingCurrency(data.policies.shipping_rate?.currency ?? data.catalog.currency ?? "");
+    setShippingCountries((data.policies.shipping_rate?.countries ?? []).join(", "));
     setCurrency(data.order_limits.currency ?? data.catalog.currency ?? "");
     setMaxOrder(data.order_limits.max_order_amount ?? "");
     setMaxDaily(data.order_limits.max_daily_amount ?? "");
@@ -368,6 +381,12 @@ export default function SellEverywhere() {
         returns: returnsPolicy.trim(),
         shipping: shippingPolicy.trim(),
         pickup: pickupPolicy.trim(),
+        shipping_fee: shippingFee.trim() || null,
+        shipping_currency: shippingFee.trim() ? shippingCurrency.trim().toUpperCase() : null,
+        shipping_countries: shippingCountries
+          .split(",")
+          .map((c) => c.trim().toUpperCase())
+          .filter(Boolean),
       });
       applySetup(data);
       setNotice("Policies saved.");
@@ -638,6 +657,43 @@ export default function SellEverywhere() {
                 <textarea className={areaClass} value={pickupPolicy} onChange={(e) => setPickupPolicy(e.target.value)} />
               </label>
             </div>
+            <div className="flex flex-wrap items-end gap-3 text-sm">
+              <label className="flex flex-col gap-1">
+                Shipping fee per order
+                <input
+                  className={`${inputClass} w-32`}
+                  inputMode="decimal"
+                  placeholder="50.00"
+                  value={shippingFee}
+                  onChange={(e) => setShippingFee(e.target.value.replace(/[^0-9.]/g, ""))}
+                />
+              </label>
+              <label className="flex flex-col gap-1">
+                Shipping currency
+                <input
+                  className={`${inputClass} w-24 uppercase`}
+                  maxLength={3}
+                  placeholder="INR"
+                  value={shippingCurrency}
+                  onChange={(e) => setShippingCurrency(e.target.value.replace(/[^A-Za-z]/g, ""))}
+                />
+              </label>
+              <label className="flex flex-col gap-1">
+                Ships to (country codes, empty for everywhere)
+                <input
+                  className={`${inputClass} w-56 uppercase`}
+                  placeholder="IN"
+                  value={shippingCountries}
+                  onChange={(e) => setShippingCountries(e.target.value)}
+                />
+              </label>
+            </div>
+            {setup.catalog.source !== "shopify" ? (
+              <p className="text-xs text-muted-foreground">
+                Buyers are offered this fee at checkout. Enter 0 to ship free. Shopify shops use their Shopify shipping
+                rates instead.
+              </p>
+            ) : null}
             <Button
               variant="outline"
               disabled={busy !== null || returnsPolicy.trim().length < 10 || shippingPolicy.trim().length < 10}

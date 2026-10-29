@@ -144,7 +144,10 @@ def _rates_for(merchant: MerchantUcp) -> Any:
     async def _rates(m: MerchantUcp) -> list[Any]:
         reads = await _shopify_reads(m)
         if reads is None:
-            return []
+            # No Shopify store: the flat rate the merchant set in the setup flow, if any.
+            from core.commerce.ucp.flat_rates import configured_delivery_rates
+
+            return configured_delivery_rates(m.raw_config)
         try:
             return list(await reads.delivery_rates())
         # enterprise-gate: broad-except-ok reason=rate-lookup-failure-degrades-to-no-shipping-option-business-message
