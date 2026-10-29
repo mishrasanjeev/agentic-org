@@ -52,13 +52,16 @@ def current_step(now: float | None = None) -> int:
 
 
 def normalize_code(code: str) -> str:
-    return "".join(ch for ch in (code or "") if not ch.isspace() and ch != "-")
+    """Remove ASCII spacing and hyphens; refuse non-text or non-ASCII input."""
+    if not isinstance(code, str) or not code.isascii():
+        return ""
+    return "".join(ch for ch in code if not ch.isspace() and ch != "-")
 
 
 def verify(secret: str, code: str, *, last_used_step: int | None = None, now: float | None = None) -> int | None:
     """Return the matched step, or ``None`` when the code is wrong or replayed."""
     candidate = normalize_code(code)
-    if len(candidate) != DIGITS or not candidate.isdigit():
+    if len(candidate) != DIGITS or not all("0" <= ch <= "9" for ch in candidate):
         return None
     step = current_step(now)
     matched: int | None = None
@@ -111,7 +114,10 @@ def hash_recovery_code(user_id: str, code: str) -> str:
 
     One derivation per sign-in attempt is compared against the user's stored
     hashes, so the cost is paid once, not once per remaining code.
+    Invalid recovery input raises ``ValueError`` before any derivation.
     """
+    if not looks_like_recovery_code(code):
+        raise ValueError("Invalid recovery code")
     normalized = normalize_code(code).lower()
     salt = f"agenticorg-mfa-recovery:{user_id}".encode()
     return hashlib.scrypt(normalized.encode(), salt=salt, n=2**14, r=8, p=1, dklen=32).hex()

@@ -15,7 +15,7 @@ export default function Blog() {
   return (
     <div className="min-h-screen bg-white">
       <Helmet>
-        <title>Blog â€” AgenticOrg | AI Virtual Employees for Enterprise</title>
+        <title>Blog — AgenticOrg | AI Virtual Employees for Enterprise</title>
         <meta name="description" content="Insights on AI agents, enterprise automation, virtual employees, bank reconciliation, invoice processing, HITL governance, and no-code agent building." />
         <link rel="canonical" href="https://agenticorg.ai/blog" />
       </Helmet>

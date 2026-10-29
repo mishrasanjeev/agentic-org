@@ -61,7 +61,7 @@ describe("CompanySwitcher", () => {
     });
   });
 
-  // â”€â”€ Loading State â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // ── Loading State ──────────────────────────────────────────────────────
 
   it("renders loading skeleton initially", () => {
     mockGet.mockReturnValue(new Promise(() => {}));
@@ -73,7 +73,7 @@ describe("CompanySwitcher", () => {
     expect(skeleton).toBeInTheDocument();
   });
 
-  // â”€â”€ Single Company: No Dropdown â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // ── Single Company: No Dropdown ────────────────────────────────────────
 
   it("renders company name without dropdown for single company", async () => {
     mockGet.mockResolvedValue({ data: SINGLE_COMPANY });
@@ -117,7 +117,7 @@ describe("CompanySwitcher", () => {
     expect(localStorage.getItem("company_id")).toBeNull();
   });
 
-  // â”€â”€ Multiple Companies: Dropdown â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // ── Multiple Companies: Dropdown ───────────────────────────────────────
 
   it("renders dropdown toggle for multiple companies", async () => {
     mockGet.mockResolvedValue({ data: MULTI_COMPANIES });
@@ -203,7 +203,7 @@ describe("CompanySwitcher", () => {
     expect(activeButton).toBeDefined();
   });
 
-  // â”€â”€ Selection & Persistence â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // ── Selection & Persistence ────────────────────────────────────────────
 
   it("selecting a company stores company_id in localStorage", async () => {
     mockGet.mockResolvedValue({ data: MULTI_COMPANIES });
@@ -254,7 +254,7 @@ describe("CompanySwitcher", () => {
     expect(window.location.reload).toHaveBeenCalled();
   });
 
-  // â”€â”€ Auto-select First Company â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // ── Auto-select First Company ──────────────────────────────────────────
 
   it("auto-selects first company when none is stored", async () => {
     mockGet.mockResolvedValue({ data: MULTI_COMPANIES });
@@ -270,7 +270,7 @@ describe("CompanySwitcher", () => {
     });
   });
 
-  // â”€â”€ Dropdown Close Behavior â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // ── Dropdown Close Behavior ────────────────────────────────────────────
 
   it("closes dropdown when clicking the backdrop", async () => {
     mockGet.mockResolvedValue({ data: MULTI_COMPANIES });
@@ -301,7 +301,7 @@ describe("CompanySwitcher", () => {
     expect(screen.queryByText("Acme Corp")).not.toBeInTheDocument();
   });
 
-  // â”€â”€ Error Handling â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // ── Error Handling ─────────────────────────────────────────────────────
 
   it("handles API error gracefully without crashing", async () => {
     mockGet.mockRejectedValue(new Error("Network Error"));
@@ -315,7 +315,7 @@ describe("CompanySwitcher", () => {
     });
   });
 
-  // â”€â”€ API Call â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // ── API Call ───────────────────────────────────────────────────────────
 
   it("calls /companies endpoint on mount", async () => {
     mockGet.mockResolvedValue({ data: SINGLE_COMPANY });

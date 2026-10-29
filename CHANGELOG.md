@@ -12,6 +12,13 @@
   paused, then Resume back to shadow. Empty-sample accuracy no longer blocks shadow resume,
   and Retest stays available when a zero-sample agent has stored accuracy. Production
   promotion gates and restrictions on agents paused from other states are unchanged (#1818).
+## Unreleased - Text encoding repairs
+
+- Correct corrupted punctuation across the dashboard, session loading, agent and company
+  pages, connectors, workflows, public resources and page titles. Empty approval totals
+  keep their existing dash placeholder; real approval percentages are unchanged.
+- Add a repository-wide UTF-8 guard and rendering regressions for English and Hindi,
+  unavailable approval data, session hydration and resource lists.
 ## Unreleased - Merchant onboarding desk end to end
 
 - `scripts/onboarding_desk_production_run.py`: a labelled, disposable run of the desk in a production

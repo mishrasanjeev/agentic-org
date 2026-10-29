@@ -168,11 +168,11 @@ export default function ResourcePage() {
           <div key={i} className="mb-10">
             <h2 className="text-2xl font-bold text-slate-900 mb-4">{section.heading}</h2>
             {section.body.split("\n\n").map((para, j) => {
-              if (para.startsWith("â€¢") || para.startsWith("1.")) {
+              if (para.startsWith("•") || para.startsWith("1.")) {
                 return (
                   <ul key={j} className="list-disc list-inside text-slate-700 leading-relaxed mb-4 space-y-1">
                     {para.split("\n").map((line, k) => (
-                      <li key={k} className="text-slate-700">{line.replace(/^[â€¢\d]+\.?\s*/, "")}</li>
+                      <li key={k} className="text-slate-700">{line.replace(/^[•\d]+\.?\s*/, "")}</li>
                     ))}
                   </ul>
                 );

@@ -424,7 +424,8 @@ class TestRevocationWriters:
         from api.v1.org import deactivate_member
 
         tid = uuid.uuid4()
-        user = SimpleNamespace(id=uuid.uuid4(), email="victim@x.io", status="active", sessions_invalid_before=None)
+        user = SimpleNamespace(id=uuid.uuid4(), email="victim@x.io", status="active", sessions_invalid_before=None,
+                               mfa_challenge_generation=0)
         session = AsyncMock()
         session.execute = AsyncMock(return_value=MagicMock(scalar_one_or_none=MagicMock(return_value=user)))
         session.add = MagicMock()
@@ -447,6 +448,7 @@ class TestRevocationWriters:
         # RLS: the mutation runs inside the caller's tenant session.
         assert tenant_sessions == [tid]
         assert resp["status"] == "deactivated"
+        assert user.mfa_challenge_generation == 1
         assert user.status == "inactive"
         assert isinstance(user.sessions_invalid_before, datetime)
         assert user.sessions_invalid_before <= datetime.now(UTC)

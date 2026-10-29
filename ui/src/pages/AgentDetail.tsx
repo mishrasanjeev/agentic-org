@@ -29,7 +29,7 @@ const ChatPanel = lazy(() => import("@/components/ChatPanel"));
  * Normalise an Axios error's `detail` payload into a human-readable string.
  *
  * Uday CA-Firms 17-May (bug 1): the agent activation gate returns a
- * *structured* 409 â€” `detail` is an object
+ * *structured* 409 — `detail` is an object
  * `{ error, message, connectors: [{ connector, reason }] }`. The lifecycle
  * handlers stored that object straight into the `actionError` string state,
  * and `{actionError}` then rendered an object as a React child, which throws
@@ -560,7 +560,7 @@ export default function AgentDetail() {
   );
 }
 
-/* â”€â”€â”€ Overview Tab â”€â”€â”€ */
+/* ─── Overview Tab ─── */
 function OverviewTab({ agent, onUpdated, canManage }: { agent: Agent; onUpdated: () => void; canManage: boolean }) {
   const [editingParent, setEditingParent] = useState(false);
   const [parentCandidates, setParentCandidates] = useState<Agent[]>([]);
@@ -618,7 +618,7 @@ function OverviewTab({ agent, onUpdated, canManage }: { agent: Agent; onUpdated:
           ))}
         </div>
 
-        {/* Reports To â€” Editable */}
+        {/* Reports To — Editable */}
         <div className="pt-2 border-t">
           <div className="flex items-center justify-between">
             <span className="text-muted-foreground text-xs uppercase tracking-wide">Reports To (Org Chart)</span>
@@ -635,7 +635,7 @@ function OverviewTab({ agent, onUpdated, canManage }: { agent: Agent; onUpdated:
                 onChange={(e) => setSelectedParentId(e.target.value)}
                 className="border rounded px-3 py-1.5 text-sm flex-1"
               >
-                <option value="">â€” No parent (escalates to human) â€”</option>
+                <option value="">— No parent (escalates to human) —</option>
                 {parentCandidates.map((a) => (
                   <option key={a.id} value={a.id}>
                     {a.employee_name || a.name} ({a.agent_type.replace(/_/g, " ")})
@@ -653,7 +653,7 @@ function OverviewTab({ agent, onUpdated, canManage }: { agent: Agent; onUpdated:
             <p className="text-sm mt-1">
               {agent.reporting_to
                 ? <><span className="font-medium">{agent.reporting_to}</span> <span className="text-muted-foreground">(escalates to parent agent)</span></>
-                : <span className="text-muted-foreground">None â€” escalates directly to human</span>}
+                : <span className="text-muted-foreground">None — escalates directly to human</span>}
             </p>
           )}
         </div>
@@ -679,7 +679,7 @@ function OverviewTab({ agent, onUpdated, canManage }: { agent: Agent; onUpdated:
   );
 }
 
-/* â”€â”€â”€ Explainer Panel (collapsible "Why did the agent do this?") â”€â”€â”€ */
+/* ─── Explainer Panel (collapsible "Why did the agent do this?") ─── */
 function ExplainerPanel({ agentId }: { agentId: string }) {
   const [expanded, setExpanded] = useState(false);
   const [explanation, setExplanation] = useState<{
@@ -694,7 +694,7 @@ function ExplainerPanel({ agentId }: { agentId: string }) {
   const [correctionText, setCorrectionText] = useState("");
 
   // Load the latest run explanation when expanded. Real trace data
-  // from GET /agents/{id}/explanation/latest (PR-C1) â€” replaces the
+  // from GET /agents/{id}/explanation/latest (PR-C1) — replaces the
   // hardcoded-bullet mock that shipped pre-Enterprise-Readiness.
   const [explanationHasRun, setExplanationHasRun] = useState<boolean | null>(null);
 
@@ -722,7 +722,7 @@ function ExplainerPanel({ agentId }: { agentId: string }) {
           bullets: Array.isArray(data.bullets) ? data.bullets : [],
           confidence: typeof data.confidence === "number" ? data.confidence : undefined,
           tools_cited: Array.isArray(data.tools_cited) ? data.tools_cited : [],
-          // readability_grade is deliberately not returned â€” we won't
+          // readability_grade is deliberately not returned — we won't
           // fabricate it client-side.
           readability_grade: undefined,
         });
@@ -881,7 +881,7 @@ function ExplainerPanel({ agentId }: { agentId: string }) {
   );
 }
 
-/* â”€â”€â”€ Learning Tab (Feedback + Amendments) â”€â”€â”€ */
+/* ─── Learning Tab (Feedback + Amendments) ─── */
 function LearningTab({ agent, canManage }: { agent: Agent; canManage: boolean }) {
   const [feedback, setFeedback] = useState<any[]>([]);
   const [amendments, setAmendments] = useState<string[]>([]);
@@ -1061,7 +1061,7 @@ function LearningTab({ agent, canManage }: { agent: Agent; canManage: boolean })
   );
 }
 
-/* â”€â”€ï¿½ï¿½ Config Tab â”€â”€â”€ */
+/* Config Tab */
 function ConfigTab({ agent, onUpdated, canManage }: { agent: Agent; onUpdated: () => Promise<void>; canManage: boolean }) {
   const { user } = useAuth();
   // Same domain-lock rule as AgentCreate: developers and admins pick any
@@ -1347,7 +1347,7 @@ function ConfigTab({ agent, onUpdated, canManage }: { agent: Agent; onUpdated: (
   );
 }
 
-/* â”€â”€â”€ Prompt Tab â”€â”€â”€ */
+/* ─── Prompt Tab ─── */
 function PromptTab({ agent, onUpdated, canManage }: { agent: Agent; onUpdated: () => Promise<void>; canManage: boolean }) {
   const [history, setHistory] = useState<PromptEditHistoryEntry[]>([]);
   const [editing, setEditing] = useState(false);
@@ -1469,7 +1469,7 @@ function PromptTab({ agent, onUpdated, canManage }: { agent: Agent; onUpdated: (
                     <p className="text-sm mt-1">Reason: {entry.change_reason}</p>
                   )}
                   <p className="text-xs text-muted-foreground mt-1">
-                    {entry.prompt_before ? `Changed ${entry.prompt_before.length} â†’ ${entry.prompt_after.length} chars` : `Initial prompt (${entry.prompt_after.length} chars)`}
+                    {entry.prompt_before ? `Changed ${entry.prompt_before.length} → ${entry.prompt_after.length} chars` : `Initial prompt (${entry.prompt_after.length} chars)`}
                   </p>
                 </div>
               ))}
@@ -1481,7 +1481,7 @@ function PromptTab({ agent, onUpdated, canManage }: { agent: Agent; onUpdated: (
   );
 }
 
-/* â”€â”€â”€ Shadow Tab â”€â”€â”€ */
+/* ─── Shadow Tab ─── */
 function ShadowTab({ agent, onUpdated, canManage }: { agent: Agent; onUpdated: () => Promise<void>; canManage: boolean }) {
   const [generating, setGenerating] = useState(false);
   const [retesting, setRetesting] = useState(false);
@@ -1499,7 +1499,7 @@ function ShadowTab({ agent, onUpdated, canManage }: { agent: Agent; onUpdated: (
   // ref BETWEEN iterations. For batchSize=1 (the common case) the
   // single iteration's await ran to completion and the user-visible
   // "Stop" did nothing. Real fix: an AbortController whose signal
-  // is passed to api.post â€” clicking Stop now cancels the in-flight
+  // is passed to api.post — clicking Stop now cancels the in-flight
   // POST and the catch+finally fires immediately.
   const abortRef = useRef<AbortController | null>(null);
 
@@ -1559,7 +1559,7 @@ function ShadowTab({ agent, onUpdated, canManage }: { agent: Agent; onUpdated: (
         }
         setGenResult({
           type: "success",
-          msg: `Generating sample ${i + 1}/${plannedRuns}â€¦`,
+          msg: `Generating sample ${i + 1}/${plannedRuns}…`,
         });
         try {
           const response = await api.post(
@@ -1741,7 +1741,7 @@ function ShadowTab({ agent, onUpdated, canManage }: { agent: Agent; onUpdated: (
           <p className="text-xs text-muted-foreground">
             {meetsCount
               ? "Sample count requirement met"
-              : `${minSamples - sampleCount} more samples needed â€” use "Generate Test Sample" to collect samples`}
+              : `${minSamples - sampleCount} more samples needed — use "Generate Test Sample" to collect samples`}
           </p>
         </CardContent>
       </Card>
@@ -1793,7 +1793,7 @@ function ShadowTab({ agent, onUpdated, canManage }: { agent: Agent; onUpdated: (
   );
 }
 
-/* â”€â”€â”€ Cost Tab â”€â”€â”€ */
+/* ─── Cost Tab ─── */
 type AgentBudget = {
   monthly_cap_usd?: number;
   monthly_spent_usd?: number;
@@ -1901,7 +1901,7 @@ function CostTab({ agent }: { agent: Agent }) {
   );
 }
 
-/* â”€â”€â”€ Scope Helpers â”€â”€â”€ */
+/* ─── Scope Helpers ─── */
 type PermissionLevel = "READ" | "WRITE" | "DELETE" | "ADMIN";
 
 function getToolPermission(toolName: string): PermissionLevel {
@@ -2015,7 +2015,7 @@ function enforcementEntries(agent: Agent): EnforcementEntry[] {
   return Array.isArray(raw) ? raw : [];
 }
 
-/* â”€â”€â”€ Voice Tab â”€â”€â”€ */
+/* ─── Voice Tab ─── */
 type VoiceRuntimeHealth = {
   ready: boolean;
   provider?: string | null;
@@ -2242,7 +2242,7 @@ function VoiceTab({ agent }: { agent: Agent }) {
   );
 }
 
-/* â”€â”€â”€ Scopes Tab â”€â”€â”€ */
+/* ─── Scopes Tab ─── */
 function ScopesTab({ agent }: { agent: Agent }) {
   const tools = agent.authorized_tools || [];
   const hasGrantex = grantexConfigured(agent);

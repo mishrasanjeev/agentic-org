@@ -50,7 +50,7 @@ export default function ConnectorDetailPage() {
   const [oauth2TokenUrl, setOauth2TokenUrl] = useState("");
   const [oauth2RedirectUri, setOauth2RedirectUri] = useState("");
   // TC_008 (Aishwarya 2026-04-23): basic auth needs its own
-  // username field in edit â€” the single-token flow above couldn't
+  // username field in edit — the single-token flow above couldn't
   // carry it and the tester saw missing Username during Edit.
   const [basicUsername, setBasicUsername] = useState("");
   // Uday/Ramesh 2026-04-24 (Zoho org_id): connector-specific extras
@@ -95,7 +95,7 @@ export default function ConnectorDetailPage() {
 
   async function handleSave() {
     if (!validateBaseUrl(baseUrl)) {
-      setBaseUrlError("Invalid URL â€” must start with http:// or https://");
+      setBaseUrlError("Invalid URL — must start with http:// or https://");
       return;
     }
     setBaseUrlError("");
@@ -229,7 +229,7 @@ export default function ConnectorDetailPage() {
     } catch (e: unknown) {
       setFeedback({
         type: "error",
-        msg: extractApiError(e, "Reconnect failed â€” start a fresh provider connection from the connector list."),
+        msg: extractApiError(e, "Reconnect failed — start a fresh provider connection from the connector list."),
       });
     } finally {
       setOauthStarting(false);
@@ -244,11 +244,11 @@ export default function ConnectorDetailPage() {
       // Uday CA Firms 2026-04-26 BUG 2: backend returns
       //   {tested: bool, name: str, health: {status: str, http_status?: int}, error?: str}
       // The previous handler dispatched on a fictional `success`
-      // field on the response â€” always undefined â†’ always falsy â†’
+      // field on the response — always undefined → always falsy →
       // tester saw "Connection test failed" even when the connector
       // returned status="healthy". Render against the real response
-      // shape: error string (test could not run) â†’ fail;
-      // tested + health.status==="healthy" â†’ success; everything else
+      // shape: error string (test could not run) → fail;
+      // tested + health.status==="healthy" → success; everything else
       // (status="unhealthy", "not_configured", "not_connected") shows
       // the specific reason from the health probe.
       const tested = Boolean(data?.tested);
@@ -349,11 +349,11 @@ export default function ConnectorDetailPage() {
           <CardContent className="space-y-3 text-sm">
             <div className="flex justify-between py-1 border-b"><span className="text-muted-foreground">Name</span><span className="font-medium">{connector.name}</span></div>
             <div className="flex justify-between py-1 border-b"><span className="text-muted-foreground">Category</span><span className="font-medium">{connector.category}</span></div>
-            <div className="flex justify-between py-1 border-b"><span className="text-muted-foreground">Base URL</span><span className="font-mono text-xs">{connector.base_url || "â€”"}</span></div>
+            <div className="flex justify-between py-1 border-b"><span className="text-muted-foreground">Base URL</span><span className="font-mono text-xs">{connector.base_url || "—"}</span></div>
             <div className="flex justify-between py-1 border-b"><span className="text-muted-foreground">Auth Type</span><span className="font-medium">{connector.auth_type}</span></div>
             <div className="flex justify-between py-1 border-b"><span className="text-muted-foreground">Rate Limit</span><span>{connector.rate_limit_rpm} RPM</span></div>
             <div className="flex justify-between py-1 border-b"><span className="text-muted-foreground">Timeout</span><span>{connector.timeout_ms}ms</span></div>
-            <div className="flex justify-between py-1"><span className="text-muted-foreground">Created</span><span>{connector.created_at ? new Date(connector.created_at).toLocaleString() : "â€”"}</span></div>
+            <div className="flex justify-between py-1"><span className="text-muted-foreground">Created</span><span>{connector.created_at ? new Date(connector.created_at).toLocaleString() : "—"}</span></div>
           </CardContent>
         </Card>
 
@@ -385,7 +385,7 @@ export default function ConnectorDetailPage() {
                     }}
                     onBlur={() => {
                       if (baseUrl.trim() && !validateBaseUrl(baseUrl)) {
-                        setBaseUrlError("Invalid URL â€” must start with http:// or https://");
+                        setBaseUrlError("Invalid URL — must start with http:// or https://");
                       } else {
                         setBaseUrlError("");
                       }
@@ -439,7 +439,7 @@ export default function ConnectorDetailPage() {
                     )}
                     {/* TC_008 (Aishwarya 2026-04-23): basic auth
                         previously rendered ONLY a single Password
-                        input on the Edit screen â€” the matching
+                        input on the Edit screen — the matching
                         Username field was missing, and the label
                         fell through to the generic "Password" helper.
                         Add an explicit Username input so Edit mirrors

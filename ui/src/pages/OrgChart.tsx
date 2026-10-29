@@ -98,7 +98,7 @@ function getMaxPermission(tools: string[]): PermissionLevel {
   return "READ";
 }
 
-/* â•â•â• Org Chart CSS â•â•â• */
+/* ═══ Org Chart CSS ═══ */
 const orgChartStyles = `
 .org-tree ul {
   padding-top: 20px;
@@ -153,7 +153,7 @@ const orgChartStyles = `
 }
 `;
 
-/* â”€â”€â”€ Node Card â”€â”€â”€ */
+/* ─── Node Card ─── */
 function NodeCard({ node, onClick, childCount, collapsed, onToggle }: {
   node: OrgNode; onClick: () => void; childCount: number;
   collapsed: boolean; onToggle?: () => void;
@@ -224,7 +224,7 @@ function NodeCard({ node, onClick, childCount, collapsed, onToggle }: {
   );
 }
 
-/* â”€â”€â”€ Recursive Tree Node â”€â”€â”€ */
+/* ─── Recursive Tree Node ─── */
 function ScopeNarrowLabel({ parent, child }: { parent: OrgNode; child: OrgNode }) {
   const parentTools = parent.authorized_tools || [];
   const childTools = child.authorized_tools || [];
@@ -268,7 +268,7 @@ function TreeNode({ node, onNavigate, depth, parentNode }: { node: OrgNode; onNa
   );
 }
 
-/* â”€â”€â”€ List View â”€â”€â”€ */
+/* ─── List View ─── */
 function ListView({ nodes, onNavigate }: { nodes: OrgNode[]; onNavigate: (id: string) => void }) {
   function flatten(node: OrgNode, level: number): Array<{ node: OrgNode; level: number }> {
     const result = [{ node, level }];
@@ -310,7 +310,7 @@ function ListView({ nodes, onNavigate }: { nodes: OrgNode[]; onNavigate: (id: st
   );
 }
 
-/* â”€â”€â”€ Main Page â”€â”€â”€ */
+/* ─── Main Page ─── */
 export default function OrgChart() {
   const navigate = useNavigate();
   const auth = useAuth();
@@ -346,7 +346,7 @@ export default function OrgChart() {
     if (tree.length === 0) return [];
 
     if (userRole === "admin") {
-      // CEO sees: themselves at top â†’ CXO virtual nodes â†’ department agents
+      // CEO sees: themselves at top → CXO virtual nodes → department agents
       const departments: Record<string, OrgNode[]> = {};
       for (const node of tree) {
         const d = node.domain || "backoffice";
@@ -390,7 +390,7 @@ export default function OrgChart() {
       return [ceoNode];
     }
 
-    // CXO roles (CFO, CHRO, CMO, COO): themselves at top â†’ their department agents
+    // CXO roles (CFO, CHRO, CMO, COO): themselves at top → their department agents
     const cxoNode: OrgNode = {
       id: `virtual-${userRole}`,
       name: userName,

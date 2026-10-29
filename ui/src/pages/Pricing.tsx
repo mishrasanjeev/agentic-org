@@ -54,7 +54,7 @@ function DemoModal({ onClose }: { onClose: () => void }) {
     >
       <div className="relative w-full max-w-md rounded-2xl bg-white p-8 shadow-2xl">
         <button type="button" onClick={onClose} className="absolute right-4 top-4 text-slate-400 hover:text-slate-600" aria-label="Close">
-          <span aria-hidden="true">Ã—</span>
+          <span aria-hidden="true">×</span>
         </button>
         {done ? (
           <div className="py-8 text-center">
@@ -178,7 +178,7 @@ export default function Pricing() {
 
   const plans = catalog ? orderedPlans(catalog) : [];
   const comparisonRows = catalog ? [
-    { label: "Prices", values: plans.map((plan) => plan.prices.map(formatPlanPrice).join(" Â· ")) },
+    { label: "Prices", values: plans.map((plan) => plan.prices.map(formatPlanPrice).join(" · ")) },
     { label: "Agents", values: plans.map((plan) => formatLimit(plan.limits.agent_count)) },
     { label: "Agent runs", values: plans.map((plan) => `${formatLimit(plan.limits.agent_runs)} / ${plan.limits.agent_runs_interval}`) },
     { label: "Storage", values: plans.map((plan) => formatStorage(plan.limits.storage_bytes)) },

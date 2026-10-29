@@ -1011,10 +1011,14 @@ def _effective_shadow_accuracy_floor(agent: Agent) -> Decimal:
     return max(Decimal(str(floor)), _MIN_PRODUCTION_SHADOW_ACCURACY)
 
 
-def _active_agent_below_production_floor(agent: Agent) -> bool:
-    if agent.status != "active" or agent.shadow_accuracy_current is None:
+def _agent_below_production_floor(agent: Agent) -> bool:
+    if agent.shadow_accuracy_current is None:
         return False
     return Decimal(str(agent.shadow_accuracy_current)) < _effective_shadow_accuracy_floor(agent)
+
+
+def _active_agent_below_production_floor(agent: Agent) -> bool:
+    return agent.status == "active" and _agent_below_production_floor(agent)
 
 
 def _derive_default_tools(
@@ -4496,7 +4500,7 @@ async def resume_agent(
                     f"floor {agent.shadow_accuracy_floor}; "
                     f"use /agents/{agent_id}/retest to re-evaluate",
                 )
-        elif resume_to == "active" and _active_agent_below_production_floor(agent):
+        elif resume_to == "active" and _agent_below_production_floor(agent):
             raise HTTPException(
                 409,
                 (

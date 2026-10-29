@@ -10,12 +10,12 @@ import uuid
 from datetime import UTC, datetime
 
 import bcrypt as _bcrypt
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request
 from jwt import PyJWTError
 from pydantic import BaseModel, Field
 from sqlalchemy import func, select, update
 
-from api.deps import require_tenant_admin
+from api.deps import ActiveHumanAdmin, get_active_human_admin, require_tenant_admin
 from api.route_metadata import route_meta
 from auth.jwt import create_access_token, validate_local_token
 from auth.one_time_codes import consume as consume_code
@@ -429,6 +429,8 @@ async def update_onboarding(body: OnboardingUpdate, request: Request):
 )
 async def deactivate_member(user_id: str, request: Request):
     """Soft-deactivate a member by setting status to inactive."""
+    from api.v1.auth import invalidate_mfa_challenges  # noqa: PLC0415 - avoids router import cycles
+
     tenant_id = _get_tenant_id(request)
     current_user_email = getattr(request.state, "user_sub", "")
 
@@ -437,7 +439,7 @@ async def deactivate_member(user_id: str, request: Request):
             select(User).where(
                 User.id == uuid.UUID(user_id),
                 User.tenant_id == uuid.UUID(tenant_id),
-            )
+            ).with_for_update()
         )
         user = result.scalar_one_or_none()
         if not user:
@@ -449,6 +451,7 @@ async def deactivate_member(user_id: str, request: Request):
         # Revoke every outstanding session: tokens issued before this
         # watermark are rejected by the auth middleware (v6z17).
         user.sessions_invalid_before = datetime.now(UTC)
+        invalidate_mfa_challenges(user)
         session.add(user)
         await session.commit()
 
@@ -465,7 +468,7 @@ async def deactivate_member(user_id: str, request: Request):
     idempotency="clears-member-mfa-enrolment",
     audit_event="org.members.mfa_reset",
 )
-async def reset_member_mfa(user_id: str, request: Request):
+async def reset_member_mfa(user_id: str, request: Request, admin: ActiveHumanAdmin = Depends(get_active_human_admin)):
     """Turn off two-factor sign-in for a member who lost their authenticator.
 
     Their sessions are revoked as well, so the next sign-in is with the
@@ -474,24 +477,31 @@ async def reset_member_mfa(user_id: str, request: Request):
     """
     from api.v1.auth_mfa import clear_mfa  # noqa: PLC0415 - avoids an import cycle through api.v1.auth
 
-    tenant_id = _get_tenant_id(request)
-    current_user_email = getattr(request.state, "user_sub", "")
+    tenant_id = str(admin.tenant_id)
     try:
         member_id = uuid.UUID(user_id)
     except ValueError:
         raise HTTPException(status_code=404, detail="Member not found") from None
-    async with get_tenant_session(uuid.UUID(tenant_id)) as session:
-        result = await session.execute(
-            select(User).where(User.id == member_id, User.tenant_id == uuid.UUID(tenant_id)).with_for_update()
+    if member_id == admin.user_id:
+        raise HTTPException(
+            status_code=400,
+            detail="You cannot reset your own two-factor sign-in; turn it off with a code, or ask another admin",
         )
-        user = result.scalar_one_or_none()
+    async with get_tenant_session(admin.tenant_id) as session:
+        # Hold actor authority through commit; stable ordering avoids reciprocal-reset deadlocks.
+        result = await session.execute(
+            select(User)
+            .where(User.tenant_id == admin.tenant_id, User.id.in_((admin.user_id, member_id)))
+            .order_by(User.id)
+            .with_for_update()
+        )
+        users = {user.id: user for user in result.scalars().all()}
+        actor = users.get(admin.user_id)
+        if actor is None or actor.status != "active" or actor.role != "admin":
+            raise HTTPException(status_code=403, detail="An active same-tenant administrator is required")
+        user = users.get(member_id)
         if not user or user.status == "deleted":
             raise HTTPException(status_code=404, detail="Member not found")
-        if user.email == current_user_email:
-            raise HTTPException(
-                status_code=400,
-                detail="You cannot reset your own two-factor sign-in; turn it off with a code, or ask another admin",
-            )
         clear_mfa(user)
         user.sessions_invalid_before = datetime.now(UTC)
         session.add(user)

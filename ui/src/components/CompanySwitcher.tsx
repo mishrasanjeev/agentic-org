@@ -46,7 +46,7 @@ export default function CompanySwitcher() {
           }
         }
       } catch {
-        // Silently fail â€” header should still render
+        // Silently fail — header should still render
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -72,7 +72,7 @@ export default function CompanySwitcher() {
     );
   }
 
-  // Single company â€” no switcher needed
+  // Single company — no switcher needed
   if (companies.length <= 1) {
     return (
       <span className="text-sm text-slate-300 font-medium truncate max-w-[160px]">
@@ -144,7 +144,7 @@ export default function CompanySwitcher() {
                 <span className="block truncate">{c.name}</span>
                 <span className="block text-[10px] text-slate-500 mt-0.5">
                   {c.gstin ? `GSTIN: ${c.gstin}` : ""}
-                  {c.gstin && c.industry ? " Â· " : ""}
+                  {c.gstin && c.industry ? " · " : ""}
                   {c.industry || ""}
                 </span>
               </button>

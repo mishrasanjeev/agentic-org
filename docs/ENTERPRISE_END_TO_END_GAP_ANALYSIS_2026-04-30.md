@@ -112,7 +112,7 @@ Gaps:
 
 - Demo-request forms use direct `fetch("/api/v1/demo-request")` across multiple pages. Confirm spam protection, rate limiting, validation, CRM handoff, and user-visible failure states.
 - Build output shows large public content chunks; ensure Core Web Vitals are measured, not guessed.
-- Some source/doc output shows mojibake in console (`â€”`, `â†’`). Verify source encoding and rendered production text.
+- Some source/doc output shows mojibake in console (escaped examples: `\u00e2\u20ac\u201d`, `\u00e2\u2020\u2019`). Verify source encoding and rendered production text.
 
 ### Signup, Login, Password Reset, Invite, SSO
 

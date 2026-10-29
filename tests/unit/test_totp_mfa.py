@@ -32,6 +32,7 @@ def _user(**overrides) -> User:
         status="active",
         mfa_enabled=False,
         mfa_recovery_codes=[],
+        mfa_challenge_generation=0,
     )
     for key, value in overrides.items():
         setattr(user, key, value)
@@ -72,6 +73,15 @@ def _patch_session(module: str, session):
 def _signed_in(user: User):
     claims = {"sub": user.email, "agenticorg:user_id": str(user.id), "role": user.role}
     return SimpleNamespace(state=SimpleNamespace(auth_mode="legacy", claims=claims, tenant_id=str(TENANT)))
+
+
+@pytest.fixture(autouse=True)
+def _synthetic_account_budget(monkeypatch):
+    """These unit tests keep cache boundaries synthetic; real Redis has separate coverage."""
+    from api.v1 import auth_mfa
+
+    monkeypatch.setattr(auth_mfa, "record_mfa_account_attempt", AsyncMock(return_value=1))
+    monkeypatch.setattr(auth_mfa, "clear_mfa_account_attempts", AsyncMock())
 
 
 def _now_code(secret: str = RFC_SECRET) -> str:
@@ -174,7 +184,7 @@ async def test_enable_refuses_wrong_or_expired_codes_and_setup_refuses_when_on()
     assert exc.value.status_code == 400 and "expired" in exc.value.detail
 
     fresh = _user(mfa_pending_secret=encrypt_credential(secret), mfa_pending_created_at=datetime.now(UTC))
-    wrong = str((int(_now_code(secret)) + 1) % 1_000_000).zfill(6)
+    wrong = "invalid-code"
     ctx = _patch_session("api.v1.auth_mfa", _session(fresh))
     try:
         with pytest.raises(HTTPException) as exc:
@@ -211,7 +221,7 @@ async def test_disable_needs_a_current_code_and_clears_everything() -> None:
     ctx = _patch_session("api.v1.auth_mfa", _session(user))
     try:
         with pytest.raises(HTTPException):
-            await auth_mfa.mfa_disable(auth_mfa.MfaCodeRequest(code="000000"), _signed_in(user))
+            await auth_mfa.mfa_disable(auth_mfa.MfaCodeRequest(code="invalid-code"), _signed_in(user))
     finally:
         ctx.stop()
     assert user.mfa_enabled is True
@@ -237,6 +247,8 @@ async def test_password_login_with_mfa_returns_a_challenge_not_a_session(monkeyp
 
     user = _enrolled(password_hash=_bcrypt.hashpw(b"CorrectPass1", _bcrypt.gensalt(rounds=4)).decode())
     monkeypatch.setattr(auth_mod, "_get_throttle_redis", AsyncMock(return_value=None))
+    clear_ip = AsyncMock()
+    monkeypatch.setattr(auth_mod, "_clear_rate_limit", clear_ip)
     issued = AsyncMock(return_value="challenge-" + "x" * 32)
     monkeypatch.setattr(auth_mod, "issue_code", issued)
     monkeypatch.setattr(auth_mod, "_seed_tenant_defaults_isolated", AsyncMock())
@@ -254,9 +266,12 @@ async def test_password_login_with_mfa_returns_a_challenge_not_a_session(monkeyp
     assert isinstance(result, auth_mod.MfaChallengeResponse) and result.mfa_required is True
     assert result.mfa_challenge.startswith("challenge-")
     response.set_cookie.assert_not_called()
+    clear_ip.assert_not_awaited()
     kind, payload, ttl = issued.await_args.args
     assert kind == "mfa" and ttl == 300
-    assert json.loads(payload) == {"user_id": str(user.id), "tenant_id": str(TENANT), "method": "password"}
+    assert json.loads(payload) == {
+        "version": 1, "user_id": str(user.id), "tenant_id": str(TENANT), "method": "password", "generation": 0,
+    }
 
 
 def test_legacy_flag_without_a_secret_is_not_enrolment() -> None:
@@ -272,7 +287,8 @@ class _Challenges:
     def __init__(self, user: User) -> None:
         self.store = {
             "good-challenge-0123456789": json.dumps(
-                {"user_id": str(user.id), "tenant_id": str(TENANT), "method": "password"}
+                {"version": 1, "user_id": str(user.id), "tenant_id": str(TENANT),
+                 "method": "password", "generation": user.mfa_challenge_generation}
             )
         }
         self.attempts: dict[str, int] = {}
@@ -389,7 +405,8 @@ async def test_a_recovery_code_signs_in_once(monkeypatch) -> None:
     assert len(user.mfa_recovery_codes) == 9
 
     store.store["second-challenge-0123456789"] = json.dumps(
-        {"user_id": str(user.id), "tenant_id": str(TENANT), "method": "password"}
+        {"version": 1, "user_id": str(user.id), "tenant_id": str(TENANT),
+         "method": "password", "generation": user.mfa_challenge_generation}
     )
     ctx = _patch_session("api.v1.auth_mfa", _session(user))
     try:
@@ -409,26 +426,34 @@ async def test_a_recovery_code_signs_in_once(monkeypatch) -> None:
 
 @pytest.mark.asyncio
 async def test_admin_reset_clears_a_member_and_revokes_sessions_but_not_self(monkeypatch) -> None:
+    from api.deps import ActiveHumanAdmin
     from api.v1 import org
 
     member = _enrolled(email="member@example.com")
+    actor = _enrolled(email="owner@example.com")
+    admin = ActiveHumanAdmin(user_id=actor.id, tenant_id=TENANT, email=actor.email, role="admin")
     monkeypatch.setattr(org, "invalidate_user_session_state", AsyncMock())
     request = SimpleNamespace(state=SimpleNamespace(tenant_id=str(TENANT), user_sub="owner@example.com"))
     before = datetime.now(UTC)
-    ctx = _patch_session("api.v1.org", _session(member))
+    session = _session()
+    result = MagicMock()
+    result.scalars.return_value.all.return_value = [actor, member]
+    session.execute = AsyncMock(return_value=result)
+    ctx = _patch_session("api.v1.org", session)
     try:
-        result = await org.reset_member_mfa(str(member.id), request)
+        result = await org.reset_member_mfa(str(member.id), request, admin)
     finally:
         ctx.stop()
     assert result["status"] == "mfa_reset"
     assert member.mfa_enabled is False and member.mfa_totp_secret is None
+    assert member.mfa_challenge_generation == 1
     assert member.sessions_invalid_before is not None and member.sessions_invalid_before >= before
 
-    me = _enrolled(email="owner@example.com")
+    me = actor
     ctx = _patch_session("api.v1.org", _session(me))
     try:
         with pytest.raises(HTTPException) as exc:
-            await org.reset_member_mfa(str(me.id), request)
+            await org.reset_member_mfa(str(me.id), request, admin)
     finally:
         ctx.stop()
     assert exc.value.status_code == 400 and me.mfa_enabled is True

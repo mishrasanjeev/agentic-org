@@ -144,7 +144,7 @@ export default function Dashboard() {
 
   // P6.1 (Enterprise Readiness): every metric is derived from real data
   // pulled above. The old hardcoded "Deflection Rate 73%" card was removed
-  // â€” it was a fabricated KPI with no backing API, exactly the decorative
+  // — it was a fabricated KPI with no backing API, exactly the decorative
   // state the plan bans. "Approvals Resolved" is a real ratio computed
   // from the approvals we already fetched.
   // The default list is pending-only, so "resolved" must come from the
@@ -169,7 +169,7 @@ export default function Dashboard() {
     { label: t("dashboard.shadowAgents", "Shadow Agents"), value: shadowAgents, color: "text-yellow-600", subtitle: "" },
     {
       label: t("dashboard.approvalsResolved", "Approvals Resolved"),
-      value: approvalsTotal > 0 ? `${resolvedPct}%` : "â€”",
+      value: approvalsTotal > 0 ? `${resolvedPct}%` : "—",
       color: "text-green-600",
       subtitle: approvalsTotal > 0
         ? t("dashboard.decisionsCount", "{{resolved}}/{{total}} decisions", {
@@ -192,7 +192,7 @@ export default function Dashboard() {
   return (
     <div className="space-y-6">
       <Helmet>
-        <title>{t("nav.dashboard", "Dashboard")} â€” AgenticOrg</title>
+        <title>{`${t("nav.dashboard", "Dashboard")} — AgenticOrg`}</title>
       </Helmet>
       <h2 className="text-2xl font-bold">{t("nav.dashboard", "Dashboard")}</h2>
 

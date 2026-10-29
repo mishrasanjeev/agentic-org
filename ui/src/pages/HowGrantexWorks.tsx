@@ -3,7 +3,7 @@ import { Link } from "react-router";
 import ProductOwnership from "../components/ProductOwnership";
 
 /* ------------------------------------------------------------------ */
-/*  useInView â€” Intersection Observer hook for scroll animations       */
+/*  useInView — Intersection Observer hook for scroll animations       */
 /* ------------------------------------------------------------------ */
 function useInView(threshold = 0.15): { ref: (el: HTMLDivElement | null) => void; visible: boolean } {
   const [visible, setVisible] = useState(false);
@@ -35,7 +35,7 @@ function useInView(threshold = 0.15): { ref: (el: HTMLDivElement | null) => void
 }
 
 /* ------------------------------------------------------------------ */
-/*  FadeIn â€” scroll-triggered fade                                     */
+/*  FadeIn — scroll-triggered fade                                     */
 /* ------------------------------------------------------------------ */
 function FadeIn({
   children,
@@ -195,7 +195,7 @@ export default function HowGrantexWorks() {
     <>
 
       <div className="min-h-screen bg-white text-slate-900">
-        {/* â”€â”€â”€ Nav â”€â”€â”€ */}
+        {/* ─── Nav ─── */}
         <nav className="fixed top-0 inset-x-0 z-50 bg-slate-900/95 backdrop-blur border-b border-slate-800">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
             <Link to="/" className="text-white font-bold text-lg tracking-tight flex items-center gap-2">
@@ -386,7 +386,7 @@ export default function HowGrantexWorks() {
         </section>
 
         {/* ============================================================ */}
-        {/* S3: HOW IT WORKS â€” STEP BY STEP                              */}
+        {/* S3: HOW IT WORKS — STEP BY STEP                              */}
         {/* ============================================================ */}
         <section id="how-it-works" className="relative py-24 bg-white overflow-hidden">
           <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-blue-300 to-transparent" />
@@ -420,7 +420,7 @@ export default function HowGrantexWorks() {
                       You Grant a Scoped Token
                     </div>
                     <p className="text-slate-600 leading-relaxed">
-                      When you create an agent, Grantex creates a <strong>grant token</strong> â€” like a keycard that only opens specific doors.
+                      When you create an agent, Grantex creates a <strong>grant token</strong> — like a keycard that only opens specific doors.
                     </p>
                     <p className="text-slate-500 text-sm mt-2 italic">
                       "This agent can READ Salesforce contacts but NOTHING else."
@@ -457,7 +457,7 @@ export default function HowGrantexWorks() {
                       Agent Asks to Use a Tool
                     </div>
                     <p className="text-slate-600 leading-relaxed">
-                      The AI agent reasons about its task and decides it needs to call a tool â€” perhaps <code className="px-1.5 py-0.5 rounded bg-slate-100 text-sm font-mono">delete_contact</code>.
+                      The AI agent reasons about its task and decides it needs to call a tool — perhaps <code className="px-1.5 py-0.5 rounded bg-slate-100 text-sm font-mono">delete_contact</code>.
                     </p>
                   </div>
                   <div className="hidden md:flex absolute left-1/2 -translate-x-1/2 w-4 h-4 rounded-full bg-purple-500 border-4 border-white shadow-lg z-10" />
@@ -909,7 +909,7 @@ export default function HowGrantexWorks() {
           </div>
         </section>
 
-        {/* â”€â”€â”€ Footer â”€â”€â”€ */}
+        {/* ─── Footer ─── */}
         <footer className="bg-slate-900 border-t border-slate-800 py-8">
           <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 grid gap-5 sm:grid-cols-[auto_1fr] sm:items-center">
             <div className="flex items-center gap-2 text-slate-400 text-sm">
