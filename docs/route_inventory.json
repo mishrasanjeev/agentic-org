@@ -4298,7 +4298,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "commerce.runtime.orders.read",
-    "source_line": 337,
+    "source_line": 339,
     "tenant_required": true
   },
   {
@@ -10832,7 +10832,7 @@
     "public_exempt_reason": "buyer-return-page-shows-only-checkout-status-no-pii",
     "rate_limit": "public-read",
     "scope": "public:payments.plural.return",
-    "source_line": 461,
+    "source_line": 463,
     "tenant_required": false
   },
   {
@@ -10850,7 +10850,7 @@
     "public_exempt_reason": "buyer-return-page-ignores-the-body-and-reads-status-from-the-provider",
     "rate_limit": "public-read",
     "scope": "public:payments.plural.return",
-    "source_line": 475,
+    "source_line": 477,
     "tenant_required": false
   },
   {
@@ -10868,7 +10868,7 @@
     "public_exempt_reason": "plural-webhook-hmac-signature-verified-with-the-merchant-secret",
     "rate_limit": "provider-webhook",
     "scope": "public:payments.plural.webhook",
-    "source_line": 490,
+    "source_line": 492,
     "tenant_required": false
   },
   {
