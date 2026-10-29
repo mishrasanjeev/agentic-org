@@ -75,7 +75,7 @@ openai==2.54.0
 
 # ─── LangChain & LangGraph (Agent Runtime) ──────────────────────────────────
 langgraph==1.2.16
-langchain==1.4.6
+langchain==1.4.7
 # The provider integrations below require core >=1.6.10.
 langchain-core==1.7.0
 langchain-google-genai==4.4.2
