@@ -3,7 +3,7 @@ import { Link } from "react-router";
 import ProductOwnership from "../components/ProductOwnership";
 
 /* ------------------------------------------------------------------ */
-/*  useInView â€” Intersection Observer hook for scroll animations       */
+/*  useInView — Intersection Observer hook for scroll animations       */
 /* ------------------------------------------------------------------ */
 function useInView(threshold = 0.15): { ref: (el: HTMLDivElement | null) => void; visible: boolean } {
   const [visible, setVisible] = useState(false);

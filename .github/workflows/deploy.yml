@@ -175,6 +175,20 @@ jobs:
         run: npm test
       - name: Build production frontend
         run: npm run build
+      - name: Install local fixture browser
+        run: npx playwright install --with-deps chromium
+      - name: Replay text encoding fixtures on the local production build
+        run: npx playwright test --config=e2e/text-encoding.config.ts
+      - name: Upload local text encoding browser evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: text-encoding-browser-evidence
+          path: |
+            ui/test-results/text-encoding/
+            ui/playwright-report/text-encoding/
+          if-no-files-found: warn
+          retention-days: 7
 
   frontend-quality:
     needs: lint

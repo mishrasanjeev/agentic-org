@@ -10,7 +10,7 @@ import ProductOwnership from "../components/ProductOwnership";
 import { useProductFacts } from "@/lib/productFacts";
 
 /* ------------------------------------------------------------------ */
-/*  useInView â€” Intersection Observer hook for scroll animations       */
+/*  useInView — Intersection Observer hook for scroll animations       */
 /* ------------------------------------------------------------------ */
 function useInView(threshold = 0.15): { ref: (el: HTMLDivElement | null) => void; visible: boolean } {
   const [visible, setVisible] = useState(false);
@@ -49,7 +49,7 @@ function FadeIn({ children, className = "", delay = 0 }: {
 }
 
 /* ------------------------------------------------------------------ */
-/*  Browser Chrome Frame â€” wraps iframes in a macOS-style window       */
+/*  Browser Chrome Frame — wraps iframes in a macOS-style window       */
 /* ------------------------------------------------------------------ */
 export function BrowserFrame({ src, title, alt, className = "", loading = "lazy" }: {
   src: string;
@@ -73,7 +73,7 @@ export function BrowserFrame({ src, title, alt, className = "", loading = "lazy"
           </div>
         </div>
       </div>
-      {/* Content â€” static screenshot */}
+      {/* Content — static screenshot */}
       <img
         src={src}
         width={1920}
@@ -236,7 +236,7 @@ function CheckIcon({ className = "w-4 h-4 text-emerald-500" }: { className?: str
 }
 
 /* ------------------------------------------------------------------ */
-/*  DemoModal â€” Book-a-Demo form overlay                               */
+/*  DemoModal — Book-a-Demo form overlay                               */
 /* ------------------------------------------------------------------ */
 export function DemoModal({ onClose, audience = "general" }: { onClose: () => void; audience?: "general" | "banks" | "fintechs" | "merchants" }) {
   const [form, setForm] = useState({ name: "", email: "", company: "", role: "", phone: "" });
@@ -546,7 +546,7 @@ export default function Landing() {
         />
 
         <div className="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-24 pb-16 grid lg:grid-cols-2 gap-12 items-center">
-          {/* Left â€” Copy */}
+          {/* Left — Copy */}
           <div>
             {/* Badge */}
             <div className="inline-flex items-center gap-2 bg-slate-800/80 border border-slate-700 rounded-full px-4 py-1.5 mb-6">
@@ -598,7 +598,7 @@ export default function Landing() {
             </div>
           </div>
 
-          {/* Right â€” Live agent activity ticker */}
+          {/* Right — Live agent activity ticker */}
           <div className="hidden lg:block">
             <AgentActivityTicker />
           </div>
@@ -896,7 +896,7 @@ export default function Landing() {
       </section>
 
       {/* ============================================================ */}
-      {/* 4b. AGENTS IN ACTION â€” Animated Virtual Employees             */}
+      {/* 4b. AGENTS IN ACTION — Animated Virtual Employees             */}
       {/* ============================================================ */}
       <section className="py-24 bg-slate-900 scroll-mt-16">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -1017,7 +1017,7 @@ export default function Landing() {
             </div>
           </div>
 
-          {/* Org Chart Hierarchy â€” 3-card row */}
+          {/* Org Chart Hierarchy — 3-card row */}
           <div className="grid md:grid-cols-3 gap-8 mt-16">
             <FadeIn delay={0}>
               <div className="bg-gradient-to-br from-slate-50 to-blue-50 rounded-2xl p-6 border border-slate-200 hover:shadow-lg transition-all duration-300 ease-out-quart h-full">

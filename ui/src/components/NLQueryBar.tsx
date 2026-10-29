@@ -58,7 +58,7 @@ function detectNavigationIntent(text: string): NavIntent | null {
 
   // Explicit CxO dashboard navigation only (e.g. "go to finance dashboard",
   // "open hr dashboard"). A free-form query that happens to contain a
-  // finance keyword must fall through to chat â€” redirecting on any mention
+  // finance keyword must fall through to chat — redirecting on any mention
   // of "invoice" or "employee" ate the user's question.
   const cxoMatch = q.match(
     /^(?:show\s+(?:me\s+)?|go\s+to\s+|open\s+)(?:the\s+)?(finance|cfo|hr|chro|marketing|cmo|operations|coo)\s*dashboard$/,
@@ -167,7 +167,7 @@ export default function NLQueryBar({ onOpenChat }: { onOpenChat?: () => void }) 
       setDropdownOpen(false);
       setResult(null);
     }
-    // Do NOT auto-submit on debounce â€” API is only called on Enter or button click
+    // Do NOT auto-submit on debounce — API is only called on Enter or button click
   };
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -206,7 +206,7 @@ export default function NLQueryBar({ onOpenChat }: { onOpenChat?: () => void }) 
           type="text"
           value={query}
           onChange={handleChange}
-          placeholder="Ask anything... (\u2318K)"
+          placeholder={"Ask anything... (\u2318K)"}
           className="h-9 w-64 lg:w-96 rounded-lg border border-slate-700 bg-slate-800/50 pl-8 pr-3 text-sm text-slate-200 placeholder:text-slate-500 focus:outline-none focus:ring-1 focus:ring-primary"
         />
 

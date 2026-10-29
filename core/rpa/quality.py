@@ -30,7 +30,7 @@ Dimensions (each worth 1.0):
 
 5. **Embedding-friendliness** — no excessive whitespace / no
    control characters / no obvious encoding garbage (e.g.
-   "â€™" mojibake from Latin-1 → UTF-8 misencoding).
+   a curly apostrophe misdecoded from UTF-8 as Windows-1252).
 
 The five dimensions can be tuned without changing the storage
 contract: ``score_chunk`` always returns a float in [0, 5].
@@ -54,11 +54,11 @@ _BOILERPLATE_PATTERNS = (
 )
 
 _MOJIBAKE_PATTERNS = (
-    "â€™",
-    "â€œ",
-    "â€�",
-    "Ã©",
-    "Ã ",
+    "\u00e2\u20ac\u2122",
+    "\u00e2\u20ac\u0153",
+    "\u00e2\u20ac\ufffd",
+    "\u00c3\u00a9",
+    "\u00c3 ",
 )
 
 _TERMINAL_PUNCTUATION = (".", "!", "?", '"', "'")

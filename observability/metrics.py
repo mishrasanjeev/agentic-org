@@ -248,7 +248,7 @@ stp_rate = Gauge(
     ["domain"],
 )
 
-# ── Scaling ───────────────────────��─────────────────────────────────
+# Scaling
 
 agent_replicas = Gauge(
     "agenticorg_agent_replicas",

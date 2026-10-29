@@ -67,7 +67,7 @@ export default function ResetPassword() {
 
           {!resetId ? (
             <div className="text-center space-y-4">
-              <p className="text-sm text-muted-foreground">Invalid reset link â€” no code provided.</p>
+              <p className="text-sm text-muted-foreground">Invalid reset link — no code provided.</p>
               <Link to="/forgot-password" className="text-sm text-primary hover:text-primary/80">
                 Request a new reset link
               </Link>

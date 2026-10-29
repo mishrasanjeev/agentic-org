@@ -125,7 +125,7 @@ export default function WorkflowRun() {
       const detail = e?.response?.data?.detail || e?.response?.data?.message;
       const message =
         status === 404
-          ? "Run not found â€” it may have been deleted, or the URL is wrong."
+          ? "Run not found — it may have been deleted, or the URL is wrong."
           : status
             ? `Failed to load workflow run (HTTP ${status})${detail ? `: ${detail}` : ""}`
             : `Failed to load workflow run: ${e?.message || "network error"}`;
@@ -214,7 +214,7 @@ export default function WorkflowRun() {
               onClick={cancelRun}
               disabled={cancelInFlight}
             >
-              {cancelInFlight ? "Cancellingâ€¦" : "Cancel"}
+              {cancelInFlight ? "Cancelling…" : "Cancel"}
             </Button>
           )}
           <Button variant="outline" size="sm" onClick={() => fetchRun({ showLoading: true })}>Refresh</Button>

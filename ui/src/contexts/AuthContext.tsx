@@ -19,7 +19,7 @@ interface AuthUser {
 // SEC-002 (PR-F, 2026-05-01): browser session is now COOKIE-FIRST.
 //
 // The HttpOnly ``agenticorg_session`` cookie is the primary session
-// carrier â€” set by the backend on login/signup/SSO, automatically
+// carrier — set by the backend on login/signup/SSO, automatically
 // echoed by the browser on every same-origin XHR (because
 // ``withCredentials: true`` is configured globally in
 // ui/src/lib/api.ts), and validated by the backend's auth middleware.
@@ -33,7 +33,7 @@ interface AuthUser {
 // Backwards compatibility:
 //   - The ``token`` field on the context is still present so existing
 //     consumers don't break, but it is intentionally always ``null``
-//     for browser users â€” code that branches on its presence should
+//     for browser users — code that branches on its presence should
 //     use ``isAuthenticated`` instead.
 //   - On first render after this change deploys, any stale
 //     ``localStorage.token`` from previous versions is purged. The
@@ -127,7 +127,7 @@ function _purgeLegacyTokenStorage() {
     localStorage.removeItem("token");
     localStorage.removeItem("user");
   } catch {
-    // ignore â€” private browsing or cookies-disabled paths
+    // ignore — private browsing or cookies-disabled paths
   }
 }
 
@@ -162,7 +162,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return sessionUser;
       }
     } catch {
-      // best effort â€” fall through to logged-out state
+      // best effort — fall through to logged-out state
     }
     setUser(null);
     setIsAuthenticated(false);

@@ -191,7 +191,7 @@ describe("CompanyDetail", () => {
     expect(
       screen.getByText("Synchronized Chartered Accountant Firm Pack assets for Acme Manufacturing Pvt Ltd"),
     ).toBeInTheDocument();
-    // "success" appears twice on this page â€” once as a filter option in
+    // "success" appears twice on this page — once as a filter option in
     // the status select, once as the outcome badge on the row we just
     // clicked. Scope the assertion to the row badge so it still proves
     // the audit event rendered, without colliding with the filter UI.
