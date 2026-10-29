@@ -24,7 +24,12 @@ from connectors.framework.verification_provider import (
     RegistryStatus,
     ScreeningResult,
 )
-from core.agents.business_underwriter.facts import activity_mismatch, declared_activity_categories
+from core.agents.business_underwriter.facts import (
+    TAX_ID_NAMES,
+    TAX_ID_SCHEMES,
+    activity_mismatch,
+    declared_activity_categories,
+)
 from core.agents.business_underwriter.reconciliation import Reconciliation
 from core.policy.types import Tier
 
@@ -472,11 +477,10 @@ def missing_items(inv: Investigation, sections: list[dict[str, Any]]) -> list[di
                 f"Declared owner {index + 1} has no date of birth, which screening needs to tell people apart."
             )
             break
-    jurisdiction = str(inv.application.get("jurisdiction") or "")
-    if jurisdiction.startswith("US") and not any(
-        i.get("scheme") == "us_ein" for i in inv.application.get("identifiers") or ()
-    ):
-        items["tax_identifier"] = "The application does not declare a federal employer identification number."
+    country = str(inv.application.get("jurisdiction") or "").split("-")[0]
+    scheme = TAX_ID_SCHEMES.get(country)
+    if scheme is not None and not any(i.get("scheme") == scheme for i in inv.application.get("identifiers") or ()):
+        items["tax_identifier"] = f"The application does not declare {TAX_ID_NAMES[country]}."
     return [{"item": item, "reason": reason} for item, reason in sorted(items.items())]
 
 

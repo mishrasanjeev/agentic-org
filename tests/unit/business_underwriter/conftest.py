@@ -22,6 +22,7 @@ from core.test_doubles.grant_authorizer import ALLOW_PROVIDER_CALLS
 from core.test_doubles.scripted_model import final
 
 ALL_FIXTURES = (
+    "ca-clean-mapleleaf",
     "gb-adversarial-northgate",
     "gb-clean-brightwater",
     "gb-dissolved-ashcombe",
@@ -44,7 +45,9 @@ def frozen() -> datetime:
 
 
 def policy_for(key: str) -> Policy:
-    name = "business_onboarding_uk.yaml" if key.startswith("gb-") else "business_onboarding_us.yaml"
+    name = {"gb-": "business_onboarding_uk.yaml", "ca-": "business_onboarding_ca.yaml"}.get(
+        key[:3], "business_onboarding_us.yaml"
+    )
     return load_policy(EXAMPLES_DIR / name)
 
 

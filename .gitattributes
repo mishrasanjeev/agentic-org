@@ -8,3 +8,6 @@ core/agents/*/prompts/*.txt text eol=lf
 # on Windows makes them unrunnable there, so their line endings must not
 # depend on the checkout platform either.
 *.sh text eol=lf
+# PDFs are binary: a CRLF checkout would shift the byte offsets their cross-reference
+# tables record (ui/e2e/fixtures/onboarding-desk/ is read by the desk's document reader).
+*.pdf binary

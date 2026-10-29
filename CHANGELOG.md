@@ -1,5 +1,35 @@
 # Changelog
 
+## Unreleased - Merchant onboarding desk end to end
+
+- `scripts/onboarding_desk_production_run.py`: a labelled, disposable run of the desk in a production
+  deployment through the live public API. It covers the signed lead and its consents, the contact
+  rules, the applicant's session with a document read and a refused answer, the submission, the
+  signed evidence pack checked with the published key, and the report. It then retires its own
+  tenant. It has no message senders and opens no case, because the checks need the verification
+  partner's credential (docs/onboarding-desk/production-run.md).
+- A new optional application item, `incorporated_in`: the state or province of incorporation when it
+  differs from the registered address, or `FEDERAL` for a federally incorporated Canadian company. The
+  governed case's jurisdiction, and so the registry checked, now follows it; before, a Delaware company
+  with a Californian address was checked as a Californian one.
+- `POST /onboarding-desk/leads/{id}/apply-link` signs the lead's application link for the partner
+  to hand over itself (a partner form redirecting into the application, a call centre reading it
+  out). It sends nothing and needs no consent; the link is the one outreach messages carry.
+- `make e2e-onboarding-desk` (and the `make e2e-decisions` CI job): a signed webhook lead with its
+  consents, the contact rules, the applicant page in a browser reading an uploaded certificate,
+  a refused answer and the submission, the governed case the desk opens, the checks against the
+  mock provider, a real approval on the Grantex approval page, the signed case push to the
+  partner, the signed evidence pack checked with `scripts/verify_onboarding_evidence.py`, and the
+  partner report.
+- A Canadian mock provider fixture (`ca-clean-mapleleaf`); the underwriter suites now decide it
+  with the `business_onboarding_ca` example policy, which reaches the `low` tier on a clean case.
+- The underwriter treats Canada's Business Number (`ca_business_number`) as the tax identifier the
+  registry confirms, as it does the EIN in the United States. Before, `verification.tax_id_match` was
+  never produced for a Canadian case, so the `business_onboarding_ca` rule reading it was indeterminate
+  on every case, and a Canadian application without a Business Number was not reported as missing one.
+- The development stack can run the desk (`AGENTICORG_DEV_ONBOARDING_DESK`, off by default, and
+  `AGENTICORG_DEV_ONBOARDING_DESK_EVIDENCE_KEY`).
+
 ## Unreleased - Merchant onboarding desk foundations (off by default)
 
 - New `AGENTICORG_ONBOARDING_DESK_ENABLED` (off): while off, `GET /onboarding-desk/status`

@@ -17,6 +17,7 @@ Applications are part of the onboarding desk and are off with it. With `AGENTICO
 | `owners` | Owners and people in control: name, person or business, role, optional ownership and date of birth | Required, always |
 | `formation_document` | Articles, or certificate of formation or incorporation | Required |
 | `trading_name` | Name customers know the business by | Optional |
+| `incorporated_in` | State or province of incorporation when it differs from the address, or `FEDERAL` for a federally incorporated Canadian company | Optional |
 | `website` | The business's website | Optional |
 | `tax_id_document` | IRS EIN letter or CRA Business Number confirmation | Optional |
 
@@ -137,7 +138,7 @@ Partners that set `"sms_conversation": true` in the branding (`PUT /onboarding-d
 Reading needs `audit:read`. Changing the application policy or resolving a hand-off needs `approvals:write`, and the policy also needs a tenant administrator.
 
 **The governed-case application.** It uses:
-- the registered address's state or province as the jurisdiction, falling back to the lead's region;
+- the jurisdiction where the business was incorporated, because that is whose registry holds it: the `incorporated_in` answer (only the country for `FEDERAL`), else the registered address's state or province, else the lead's region;
 - the tax and registration numbers as identifiers: `us_ein`, `us_state_file_number`, `ca_business_number`, `ca_corporation_number`, or `ca_qc_neq` in Quebec;
 - the owners as declared owners.
 

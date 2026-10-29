@@ -61,11 +61,11 @@ def deadline(seconds: float = 5) -> Deadline:
 # --- the fixture set covers every required scenario ---------------------------------------------
 
 
-def test_a_dozen_synthetic_businesses_across_the_us_and_uk() -> None:
+def test_synthetic_businesses_across_the_us_uk_and_canada() -> None:
     data = load_dataset()
-    assert len(data.businesses) == 12
+    assert len(data.businesses) == 13
     countries = {b.application["jurisdiction"][:2] for b in data.businesses}
-    assert countries == {"US", "GB"}
+    assert countries == {"US", "GB", "CA"}
     scenarios = {s for b in data.businesses for s in b.scenarios}
     assert scenarios >= {
         "clean",

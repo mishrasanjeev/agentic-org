@@ -83,6 +83,20 @@ The answer says whether a message went out and, when it did not, why:
 
 `GET /onboarding-desk/leads/{id}/attempts` lists every attempt with its channel, kind, status, refusal reason and provider reference.
 
+## Handing over the link yourself
+
+A partner whose own form or call centre is already talking to the person can take them straight to the application instead of waiting for a message. `POST /onboarding-desk/leads/{id}/apply-link` signs a link for that lead and sends nothing:
+
+```json
+{"token": "eyJ...", "url": "https://apply.partner.example/onboarding?t=eyJ...",
+ "expires_at": "2026-11-10T14:02:00+00:00"}
+```
+
+- **The same link as a message carries.** It opens the same application, is valid for 14 days and is bound to its purpose, so it cannot unsubscribe anyone.
+- **`url` needs an onboarding page.** It is `null` until the branding names one; the `token` alone goes to an embedded page as its `link-token` attribute (see [the web page](web-page.md)).
+- **Not a contact.** No consent is needed and no attempt is recorded, because the desk contacts no one. The request is logged with the operator who made it.
+- **Who may ask.** Any signed-in user of the tenant, as for contacting a lead.
+
 ## Due outreach and the sweep
 
 A lead is due when its next contact time has passed, or when it is new, has never been scheduled and has waited the first-contact delay. New leads get a first contact; the rest get reminders, at most the policy's reminder limit and no sooner than its spacing.

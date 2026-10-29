@@ -1,0 +1,123 @@
+{
+  "key": "ca-clean-mapleleaf",
+  "scenarios": [
+    "clean"
+  ],
+  "snapshot_at": "2026-10-01T09:00:00Z",
+  "application": {
+    "legal_name": "Maple Leaf Example Bakery Inc.",
+    "trading_names": [],
+    "jurisdiction": "CA-ON",
+    "identifiers": [
+      {
+        "scheme": "ca_business_number",
+        "value": "000000001"
+      },
+      {
+        "scheme": "ca_corporation_number",
+        "value": "0000001"
+      }
+    ],
+    "registered_address": {
+      "lines": [
+        "100 Example Street"
+      ],
+      "locality": "Toronto",
+      "region": "ON",
+      "postal_code": "A0A 0A0",
+      "country": "CA"
+    },
+    "website": "https://mapleleaf-bakery.example.com",
+    "declared_activity": "food_service",
+    "declared_owners": [
+      {
+        "name": "Maria Example",
+        "kind": "person",
+        "date_of_birth": "1980-04",
+        "nationalities": [
+          "CA"
+        ],
+        "ownership_pct": 100,
+        "identifiers": []
+      }
+    ]
+  },
+  "registry": {
+    "provider_ref": "mock-ca-on-0000001",
+    "jurisdiction": "CA-ON",
+    "identifiers": [
+      {
+        "scheme": "ca_business_number",
+        "value": "000000001"
+      },
+      {
+        "scheme": "ca_corporation_number",
+        "value": "0000001"
+      }
+    ],
+    "legal_name": "Maple Leaf Example Bakery Inc.",
+    "registry_status": "active",
+    "entity_type": "corporation",
+    "incorporated_on": "2019-03-14",
+    "dissolved_on": null,
+    "registered_address": {
+      "lines": [
+        "100 Example Street"
+      ],
+      "locality": "Toronto",
+      "region": "ON",
+      "postal_code": "A0A 0A0",
+      "country": "CA"
+    },
+    "officers": [
+      {
+        "name": "Maria Example",
+        "role": "director",
+        "appointed_on": "2019-03-14",
+        "resigned_on": null,
+        "date_of_birth": "1980-04",
+        "nationalities": [
+          "CA"
+        ]
+      }
+    ],
+    "ownership_completeness": "complete",
+    "owners": [
+      {
+        "node_id": "psn-maria-example",
+        "kind": "person",
+        "name": "Maria Example",
+        "owns": "subject",
+        "relationship": "shareholding",
+        "share_pct": {
+          "min": 100,
+          "max": 100
+        },
+        "voting_pct": {
+          "min": 100,
+          "max": 100
+        },
+        "jurisdiction": null,
+        "identifiers": [],
+        "date_of_birth": "1980-04",
+        "nationalities": [
+          "CA"
+        ],
+        "started_on": "2019-03-14"
+      }
+    ],
+    "monitor_events": []
+  },
+  "web": {
+    "domain": "mapleleaf-bakery.example.com",
+    "registered_on": "2019-04",
+    "pages": [
+      {
+        "path": "/",
+        "http_status": 200,
+        "media_type": "text/html",
+        "content": "<!doctype html><html><head><title>Maple Leaf Example Bakery - fresh bread in Toronto</title></head><body><h1>Neighbourhood bakery</h1><p>Maple Leaf Example Bakery bakes bread and pastries for cafes and walk-in customers in Toronto. Call 555-0142.</p></body></html>"
+      }
+    ]
+  }
+}

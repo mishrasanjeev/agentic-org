@@ -644,6 +644,39 @@ class TestOutreachRoutes:
         assert listed["attempts"][0]["provider_ref"] == "SM1"
         assert client.post("/api/v1/onboarding-desk/outreach/run", json={"limit": 7}).json()["due"] == 7
 
+    def test_apply_link_signs_a_link_and_sends_nothing(self, client, monkeypatch):
+        from core.onboarding_desk import tokens
+
+        async def get_lead(tid, lid):
+            if lid != LEAD:
+                raise DeskError(404, "lead_not_found", "no such lead")
+            return SimpleNamespace(), []
+
+        branding = {"value": full_branding()}
+
+        async def get(tid):
+            return branding["value"]
+
+        async def contact(*args, **kwargs):
+            raise AssertionError("a link is not a contact")
+
+        monkeypatch.setattr(store, "get_lead", get_lead)
+        monkeypatch.setattr(store, "get_branding", get)
+        monkeypatch.setattr(outreach, "contact_lead", contact)
+        body = client.post(f"/api/v1/onboarding-desk/leads/{LEAD}/apply-link").json()
+        claims = tokens.verify(body["token"], "apply")
+        assert claims.tenant_id == TENANT and claims.lead_id == LEAD
+        assert body["url"].startswith(full_branding().onboarding_url + "?t=")
+        assert tokens.verify(body["url"].split("?t=", 1)[1], "apply").lead_id == LEAD
+        assert datetime.fromisoformat(body["expires_at"]) > datetime.now(UTC) + timedelta(days=13)
+        with pytest.raises(tokens.TokenError):
+            tokens.verify(body["token"], "session")
+        branding["value"] = branding_mod.branding_from({"partner_name": "Northwind Payments"})
+        assert client.post(f"/api/v1/onboarding-desk/leads/{LEAD}/apply-link").json()["url"] is None
+        missing = client.post(f"/api/v1/onboarding-desk/leads/{uuid.uuid4()}/apply-link")
+        assert missing.status_code == 404 and missing.json()["detail"]["error"] == "lead_not_found"
+        assert client.post("/api/v1/onboarding-desk/leads/not-a-uuid/apply-link").status_code == 404
+
     def test_unsubscribe_page_and_post(self, client, monkeypatch):
         opted = []
 
