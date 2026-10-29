@@ -14,21 +14,21 @@ Want to see the result first? [Nilgiri Tea House](/docs/oacp-example-nilgiri-tea
 oacp-setup-path | Five phases from shop to sales | Connect your shop, connect to Grantex, publish your UCP profile, open sales channels, and finally turn on payments. The last phase stays off until a payment-provider sandbox run has passed.
 ```
 
-You will use the **Commerce Runtime** page at `/dashboard/commerce-runtime`. You need the administrator role or the merchant role. A few steps are done by your platform operator, the person who runs your AgenticOrg deployment. Those steps say so.
+Phases 1 to 3 are one page for a merchant: **Commerce > Sell Everywhere** (`/dashboard/sell-everywhere`) takes you from a new shop to a published profile, with no step for your platform operator; see [Sell everywhere](/docs/oacp-sell-everywhere). The **Commerce Runtime** page at `/dashboard/commerce-runtime` is the operator console for the same runtime. You need the administrator role or the merchant role. A few steps are done by your platform operator, the person who runs your AgenticOrg deployment. Those steps say so.
 
 ## Phase 1. Connect your shop
 
 ```flow start=1
-Save your merchant settings | In Commerce Runtime, fill in your merchant identity, source system, buyer channels, payment provider, public publishing and any stores. You can change these later. | Owner: Merchant | If blocked: Check that you have the merchant or administrator role.
-Connect Shopify, read-only | Store your Shopify Admin API credentials through the Shopify connector. AgenticOrg encrypts them and never shows them again. | Owner: Merchant | If blocked: Reconnect Shopify and confirm the status shows the store without secrets.
-Run the first sync | Sync products, variants, prices, images and stock. Compare a few items with Shopify. | Owner: Merchant | If blocked: A missing credential or wrong store domain stops the sync and says why.
-Set your purchase limits | In your settings, set the largest order amount, the allowed currencies and the most items per order. Add stricter limits for purchases made while the buyer is not present. | Owner: Merchant | If blocked: Without limits, the arbiter refuses every purchase with merchant_limits_missing.
+Create your shop | On Sell Everywhere, type a shop name and select Create shop. AgenticOrg creates the merchant and its id. | Owner: Merchant | If blocked: Check that you have the merchant or administrator role.
+Connect your catalog | Connect Shopify with the Admin API token of a custom app in your own store (read_products, read_inventory), or upload a CSV or JSON catalog. AgenticOrg encrypts the token and never shows it again. | Owner: Merchant | If blocked: Every sync uses your own stored token; without one it stops with blocked_missing_shopify_credentials.
+Check the first read | Compare a few products, prices and stock levels with your store or file. | Owner: Merchant | If blocked: A wrong store address or a bad file row stops the read and says which.
+Set your order limits | Set the largest single order, the most per day, the most items per order and your currency. Saving other settings later keeps them. | Owner: Merchant | If blocked: Without limits, Sell everywhere stays off and the arbiter refuses every purchase with merchant_limits_missing.
 ```
 
 ## Phase 2. Connect to Grantex
 
 ```flow start=5
-Allow your tenant at Grantex | Your platform operator gives AgenticOrg its Grantex service token and adds your tenant, and your Grantex commerce tenant, to the Grantex allowlist. | Owner: Platform operator | If blocked: Without it, Grantex calls answer unavailable and, in production, no allow decision can be used.
+Enrol your tenant at Grantex | Turning on Sell everywhere enrols your tenant, merchant and catalog source with Grantex using the service token your platform operator configured once. | Owner: AgenticOrg | If blocked: The page shows Waiting while your Grantex has no enrolment route; an older Grantex still needs the operator's allowlist.
 Request authority | From Commerce Runtime, send the Grantex authority request. Grantex signs your synced facts. | Owner: Merchant | If blocked: A 202 answer means connector evidence is missing; sync again first.
 Verify and keep the facts | Cache the returned artifacts. AgenticOrg checks every signature, key, expiry and revocation slot before it keeps anything. | Owner: AgenticOrg | If blocked: A 422 artifact_verification_refused lists each refusal code; nothing from that batch is kept.
 Ask a test question | Ask your seller agent "Which variants are in stock?" and check that the answer shows its source and freshness. | Owner: Merchant | If blocked: A missing answer means catalog, price or stock facts are missing; refresh them.

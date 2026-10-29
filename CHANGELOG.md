@@ -1,5 +1,45 @@
 # Changelog
 
+## Unreleased - Merchant go-live: setup flow, catalog upload, per-merchant Shopify
+
+- **Sell Everywhere is the merchant setup flow.** One page (`/dashboard/sell-everywhere`) takes a
+  merchant from a new shop to every AI surface: pick or create a shop (the id is generated, never
+  typed), connect Shopify with a custom-app Admin API token or upload a CSV/JSON catalog, write
+  returns, shipping and pickup policies, set order limits, then turn it on. Each step shows its state
+  from the API (`GET .../merchant-configs/{id}/setup`). A Payments section is reserved on the page.
+  New routes: `GET /commerce/runtime/merchant-configs`, `POST /commerce/runtime/merchant-setup`,
+  `GET .../setup`, `POST .../catalog/shopify`, `.../catalog/upload`, `.../catalog/sync`,
+  `PUT .../setup/policies`, `.../setup/order-limits`, `POST .../sell-everywhere/publish`.
+- **Catalog upload source.** `catalog_upload` is a runtime connector source (migration
+  `v6z103_catalog_upload_source` widens the C6Z source checks). Rows are validated column by column;
+  the evidence and the Grantex authority request say `source_system: catalog_upload` and
+  `merchant_system_source_of_record: true`.
+- **Going live.** Turning Sell everywhere on (and Publish / Retry) enrols the tenant with Grantex
+  (`POST /v1/commerce/oacp/service-tenants`; an older Grantex answering 404 or 405 is shown as a
+  waiting state), claims the platform subdomain, provisions a missing signing key, publishes the UCP
+  profile when `publish_refusal` allows it (otherwise the exact refusal is shown) and refreshes the
+  artifacts once. The `GET` view adds `grantex_enrolment`, `publication`, `artifacts` and `setup`.
+  **Breaking (network routes only, behind `AGENTICORG_NETWORK_ENABLED`):** turning the network on now
+  needs a catalog, policies and order limits (409 `setup_incomplete`).
+- **Order limits.** The merchant sets the per-order maximum, a daily maximum, items per order and the
+  currency; nothing is defaulted. Saved limits are validated (`provider_policy.arbiter`), and the
+  arbiter refuses `daily_amount_cap_exceeded` when a caller supplies the day's committed total.
+- **Config saves merge `provider_policy`.** A merchant config save changes only the policy keys it
+  sends (a key sent as `null` is removed), so arbiter limits, UCP executor settings and permalink
+  endpoints survive the operator console's saves.
+- **Breaking: no deployment-wide Shopify store for tenants.** A sync, refresh or on-demand refresh
+  without the merchant's own stored connector is refused (`blocked_missing_shopify_credentials`). The
+  `SHOPIFY_*` variables are read only for the tenant in `AGENTICORG_SHOPIFY_ENV_OPERATOR_TENANT_ID`
+  (empty by default), and only for the shop domain its onboarding packet names; credentials for a
+  different store than the packet names are refused (`blocked_shop_domain_mismatch`). Opt-in for the
+  operator's own store: set that variable.
+- **Breaking: per-merchant Shopify webhooks.** `POST /api/v1/webhooks/shopify/{tenant_id}/{path_token}`
+  (public; the token is derived from `AGENTICORG_SECRET_KEY` and redacted in access logs) verifies
+  `X-Shopify-Hmac-Sha256` with the merchant's stored webhook secret. `SHOPIFY_WEBHOOK_SECRET` is no
+  longer read; the signed-in replay route uses the stored secret too.
+- The operator console caches issued artifacts as shared records (no buyer id), as the public catalog
+  reads them.
+
 ## Unreleased - Buyers pay on the merchant's own page
 
 - A merchant can choose where buyers pay (`provider_policy.payments`, set on the new Getting paid

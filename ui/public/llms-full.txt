@@ -872,8 +872,8 @@ These names are parsed from connectors. A listing does not prove credentials, su
 - [Example: Nilgiri Tea House, end to end](https://agenticorg.ai/docs/oacp-example-nilgiri-tea): A live example shop you can try in two minutes: how Nilgiri Tea House was set up, how it got its own address, how a buyer agent searches and checks out, and the same steps for your shop.
 - [How OACP works, end to end](https://agenticorg.ai/docs/oacp-how-it-works): Follow your shop's facts through seven steps: signed by Grantex, verified and kept by AgenticOrg, decided by the arbiter, recorded in the ledger and rendered for every buyer agent.
 - [A purchase, step by step](https://agenticorg.ai/docs/oacp-buyer-journey): Walk through one agent purchase: Intent, Cart and Payment mandates, the buyer's passkey, RBI AFA for UPI AutoPay, the arbiter's decision, the payment and the order.
-- [Merchant setup checklist](https://agenticorg.ai/docs/oacp-merchant-setup): A numbered checklist from Shopify sync and the Grantex allowlist to the DNS TXT step, your UCP profile, checkout, the ACP feed and MCP tools, and what stays off until a payment sandbox run.
-- [Sell everywhere: one switch for every AI surface](https://agenticorg.ai/docs/oacp-sell-everywhere): Turn your shop on once and buyers find it in ChatGPT, Claude and other AI apps, the AgenticOrg shopping bot on Telegram and the open web, with a web address if you have none. You stay the seller.
+- [Merchant setup checklist](https://agenticorg.ai/docs/oacp-merchant-setup): A numbered checklist from creating your shop, your catalog and Grantex enrolment to the DNS TXT step, your UCP profile, checkout, the ACP feed and MCP tools, and what stays off until a payment sandbox run.
+- [Sell everywhere: one switch for every AI surface](https://agenticorg.ai/docs/oacp-sell-everywhere): One page from a new shop to every AI surface: connect Shopify or upload a catalog, set policies and order limits, then turn it on. Buyers find you in ChatGPT, Claude and other AI apps, on Telegram and the open web. You stay the seller.
 - [Getting paid: buyers pay on your own page](https://agenticorg.ai/docs/oacp-getting-paid): Choose where buyers pay: your own Shopify checkout or your Plural account. What the buyer sees, the Orders page and the email you get for each order. AgenticOrg never takes the money.
 - [Your own domain for buyer agents](https://agenticorg.ai/docs/oacp-custom-domains): Connect a subdomain you own for your UCP profile with two DNS records: every check and its fix, your main domain without redirects, and the operator setup, limits and costs.
 - [Safety and trust](https://agenticorg.ai/docs/oacp-safety-and-trust): Revocation everywhere, the arbiter's eight rules in plain words, the ledger and its offline check, agent request signatures in log and enforce mode, and how to read a refusal.
@@ -4227,7 +4227,7 @@ A checkout is always a set-up plus a first debit, so AFA always applies there. T
 ### Merchant setup checklist
 
 URL: https://agenticorg.ai/docs/oacp-merchant-setup
-Audience: Merchants and platform operators. Reviewed: 2026-10-21.
+Audience: Merchants and platform operators. Reviewed: 2026-10-29.
 
 In 30 seconds:
 
@@ -4243,21 +4243,21 @@ Want to see the result first? [Nilgiri Tea House](/docs/oacp-example-nilgiri-tea
 
 Figure: Five phases from shop to sales. Connect your shop, connect to Grantex, publish your UCP profile, open sales channels, and finally turn on payments. The last phase stays off until a payment-provider sandbox run has passed.
 
-You will use the **Commerce Runtime** page at `/dashboard/commerce-runtime`. You need the administrator role or the merchant role. A few steps are done by your platform operator, the person who runs your AgenticOrg deployment. Those steps say so.
+Phases 1 to 3 are one page for a merchant: **Commerce > Sell Everywhere** (`/dashboard/sell-everywhere`) takes you from a new shop to a published profile, with no step for your platform operator; see [Sell everywhere](/docs/oacp-sell-everywhere). The **Commerce Runtime** page at `/dashboard/commerce-runtime` is the operator console for the same runtime. You need the administrator role or the merchant role. A few steps are done by your platform operator, the person who runs your AgenticOrg deployment. Those steps say so.
 
 #### Phase 1. Connect your shop
 
 ```flow start=1
-Save your merchant settings | In Commerce Runtime, fill in your merchant identity, source system, buyer channels, payment provider, public publishing and any stores. You can change these later. | Owner: Merchant | If blocked: Check that you have the merchant or administrator role.
-Connect Shopify, read-only | Store your Shopify Admin API credentials through the Shopify connector. AgenticOrg encrypts them and never shows them again. | Owner: Merchant | If blocked: Reconnect Shopify and confirm the status shows the store without secrets.
-Run the first sync | Sync products, variants, prices, images and stock. Compare a few items with Shopify. | Owner: Merchant | If blocked: A missing credential or wrong store domain stops the sync and says why.
-Set your purchase limits | In your settings, set the largest order amount, the allowed currencies and the most items per order. Add stricter limits for purchases made while the buyer is not present. | Owner: Merchant | If blocked: Without limits, the arbiter refuses every purchase with merchant_limits_missing.
+Create your shop | On Sell Everywhere, type a shop name and select Create shop. AgenticOrg creates the merchant and its id. | Owner: Merchant | If blocked: Check that you have the merchant or administrator role.
+Connect your catalog | Connect Shopify with the Admin API token of a custom app in your own store (read_products, read_inventory), or upload a CSV or JSON catalog. AgenticOrg encrypts the token and never shows it again. | Owner: Merchant | If blocked: Every sync uses your own stored token; without one it stops with blocked_missing_shopify_credentials.
+Check the first read | Compare a few products, prices and stock levels with your store or file. | Owner: Merchant | If blocked: A wrong store address or a bad file row stops the read and says which.
+Set your order limits | Set the largest single order, the most per day, the most items per order and your currency. Saving other settings later keeps them. | Owner: Merchant | If blocked: Without limits, Sell everywhere stays off and the arbiter refuses every purchase with merchant_limits_missing.
 ```
 
 #### Phase 2. Connect to Grantex
 
 ```flow start=5
-Allow your tenant at Grantex | Your platform operator gives AgenticOrg its Grantex service token and adds your tenant, and your Grantex commerce tenant, to the Grantex allowlist. | Owner: Platform operator | If blocked: Without it, Grantex calls answer unavailable and, in production, no allow decision can be used.
+Enrol your tenant at Grantex | Turning on Sell everywhere enrols your tenant, merchant and catalog source with Grantex using the service token your platform operator configured once. | Owner: AgenticOrg | If blocked: The page shows Waiting while your Grantex has no enrolment route; an older Grantex still needs the operator's allowlist.
 Request authority | From Commerce Runtime, send the Grantex authority request. Grantex signs your synced facts. | Owner: Merchant | If blocked: A 202 answer means connector evidence is missing; sync again first.
 Verify and keep the facts | Cache the returned artifacts. AgenticOrg checks every signature, key, expiry and revocation slot before it keeps anything. | Owner: AgenticOrg | If blocked: A 422 artifact_verification_refused lists each refusal code; nothing from that batch is kept.
 Ask a test question | Ask your seller agent "Which variants are in stock?" and check that the answer shows its source and freshness. | Owner: Merchant | If blocked: A missing answer means catalog, price or stock facts are missing; refresh them.
@@ -4322,7 +4322,7 @@ Production, one merchant at a time | After owner approval, name the executor for
 ### Sell everywhere: one switch for every AI surface
 
 URL: https://agenticorg.ai/docs/oacp-sell-everywhere
-Audience: Merchants and business owners. Reviewed: 2026-10-25.
+Audience: Merchants and business owners. Reviewed: 2026-10-29.
 
 In 30 seconds:
 
@@ -4344,15 +4344,76 @@ Figure: One switch, every surface. You turn it on once. AgenticOrg lists your sh
 | Google Gemini and AI Mode, Microsoft Copilot, Perplexity | Coming: AgenticOrg is registering with each program for the whole network | Nothing yet |
 | Payment | When the checkout is ready, buyers get a link to your own payment page and pay you there; see [Getting paid](/docs/oacp-getting-paid) | Choose Shopify checkout or Plural once |
 
-#### Turn it on
+#### Set up and turn it on
 
-You need a merchant in Commerce Runtime with your catalog in it.
+Everything happens on one page: **Commerce > Sell Everywhere**. It takes about ten minutes. Each step shows
+**Done** or **To do**, and the switch stays off until the steps before it are done.
 
 ```flow
-Your catalog | Connect Shopify read-only or add your products in Commerce Runtime. This is what buyers will search.
-Your policies | Check returns, shipping and store pickup in Commerce Runtime. Buyer agents read them before they buy.
-Sell everywhere | Open Commerce > Sell Everywhere, enter your merchant ID and load it. Choose your shop name, accept the network terms and turn it on.
+Your shop | Choose your shop, or type a shop name and select Create shop. AgenticOrg gives it an id; you never type one.
+Your catalog | Connect Shopify, or upload a CSV or JSON file. This is what buyers will search.
+Your policies | Write your returns and shipping terms, and store pickup if you offer it. Buyer agents read them before they buy.
+Order limits | Set the largest single order, the most per day, the most items per order and your currency. Nothing is set for you.
+Payments | Choose where buyers pay: your own Shopify checkout or your own Plural account. See Getting paid.
+Turn on Sell everywhere | Choose your shop name, accept the network terms and turn it on. AgenticOrg enrols you with Grantex, gives you a web address and publishes your shop.
 ```
+
+### Connect Shopify
+
+AgenticOrg reads your products with a custom app you create in your own store. It only reads products,
+prices and stock.
+
+1. In your Shopify admin, open **Settings**, then **Apps and sales channels**, then **Develop apps**.
+2. Create an app, open **Configuration** and allow the Admin API scopes `read_products` and `read_inventory`.
+3. Install the app, open **API credentials** and reveal the Admin API access token. Shopify shows it once.
+4. On the Sell Everywhere page, enter your store address (`your-store.myshopify.com`) and the token, then
+   select **Connect Shopify**. AgenticOrg checks the token with one read, stores it encrypted and reads your
+   catalog.
+
+To keep products current, the page shows your own webhook address once you are connected. In Shopify,
+open **Settings**, **Notifications**, **Webhooks**, create a **Product update** webhook in JSON to that
+address, then paste the signing secret Shopify shows there and connect again. AgenticOrg checks every
+delivery with your secret; a changed product shows **Changed in your store** until the catalog is read
+again.
+
+### Upload a file instead
+
+One product per row, one currency, up to 2,000 products:
+
+| Column | Required | Example |
+| --- | --- | --- |
+| `sku` | Yes | `TEA-1` (letters, digits, dots, hyphens, underscores) |
+| `title` | Yes | `Nilgiri green tea` |
+| `description` | No | `Loose leaf, 100 g` |
+| `price` | Yes | `499.00` |
+| `currency` | Yes | `INR` |
+| `quantity` | Yes | `12` (stock you have) |
+| `image_url` | No | `https://cdn.merchant.example/tea-1.png` |
+| `url` | No | `https://merchant.example/tea-1` |
+
+A JSON file is a list of objects with the same keys. If a row has a problem, nothing is stored and the
+page lists each row and column to fix. Your catalog is recorded as uploaded by you, never as coming from
+a store system. Upload again whenever your products change.
+
+### Order limits
+
+AI agents can only start orders within your limits: the largest single order, the most per day and the
+most items per order, in your currency. The daily maximum must be at least the per-order maximum.
+
+#### After you turn it on
+
+The page shows how going live is progressing:
+
+| Row | Status | Meaning |
+| --- | --- | --- |
+| Grantex enrolment | Enrolled | Grantex signs your catalog facts. |
+| Grantex enrolment | Waiting | Your deployment's Grantex is not ready for enrolment yet; nothing to do. |
+| Grantex enrolment | Needs attention | The enrolment was refused or revoked; contact your platform administrator. |
+| Shop profile | Published | Buyer agents can read your shop at your web address. |
+| Shop profile | Not published | The page says exactly why, for example that your web address is still being set up. |
+| Verified catalog | Done | Grantex has verified your catalog, prices and stock. |
+
+Select **Publish** (or **Refresh listing**) to run these steps again at any time.
 
 Your shop name is the short name buyers see in AI apps and in your Telegram link, such as `nilgiritea`. Use 3 to 40 lowercase letters, digits or hyphens. It cannot change later, so choose it with care.
 
@@ -4389,7 +4450,7 @@ Choose **Pause** on the page. Your shop leaves the directory at once: AI apps an
 
 #### What stays with you
 
-- **Payment.** No surface takes payment in this release. A buyer opens a checkout in the chat and finishes with you.
+- **Payment.** AgenticOrg never takes the buyer's money. A buyer opens a checkout in the chat and finishes and pays with you.
 - **Your rules.** Every network checkout goes through the same checks as any other: your signed facts, your limits and the arbiter's fixed rules, recorded in your ledger.
 - **Your data.** The directory shows your shop name, display name, categories and profile address, nothing else.
 

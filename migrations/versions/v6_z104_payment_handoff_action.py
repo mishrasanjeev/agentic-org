@@ -2,7 +2,7 @@
 """Commerce arbiter: allow the ``payment_handoff`` action.
 
 Revision ID: v6z104_payment_handoff_action
-Revises: v6z102_mfa_challenge_generation
+Revises: v6z103_catalog_upload_source
 Create Date: 2026-10-29
 
 A UCP or ACP Complete for a merchant that takes payment on its own page (a
@@ -17,7 +17,7 @@ lives in the checkout session's state and the merchant's Plural credentials in
 from alembic import op
 
 revision = "v6z104_payment_handoff_action"
-down_revision = "v6z102_mfa_challenge_generation"
+down_revision = "v6z103_catalog_upload_source"
 branch_labels = None
 depends_on = None
 

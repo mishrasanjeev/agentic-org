@@ -27,9 +27,21 @@ Public, under ``/api/v1/network`` (no session; every route answers 404 while
 
 Merchant (``commerce.merchant_config.write`` or tenant admin), under
 ``/api/v1/commerce/runtime/merchant-configs/{merchant_id}/sell-everywhere``:
-``GET`` where the shop stands on each surface; ``PUT`` turn the network on
-(accepting the network terms) or pause it. A shop with no published host of
-its own gets a platform subdomain ``<slug>.<apex>`` (``core.commerce.network``).
+``GET`` where the shop stands on each surface, its Grantex enrolment, its UCP
+publication and its artifacts; ``PUT`` turn the network on (accepting the network
+terms) or pause it; ``POST .../publish`` run the go-live steps again (Publish /
+Retry). A shop with no published host of its own gets a platform subdomain
+``<slug>.<apex>`` (``core.commerce.network``).
+
+Turning the network on needs the setup done (``api.v1.commerce_merchant_setup``: a
+catalog, policies and order limits; 409 ``setup_incomplete`` names what is
+missing). It then goes live in this order, each step after the last one's
+transaction: the Grantex service-tenant enrolment
+(``core.commerce.grantex_enrolment``; an older Grantex is a waiting state, never a
+failure), the listing, the platform subdomain, the UCP profile publication when
+``publish_refusal`` allows it (otherwise the exact refusal is shown), and one
+artifact refresh, so the Grantex request carries the public-discovery opt-in. No
+step's failure undoes an earlier one; the page shows where it stopped.
 """
 
 from __future__ import annotations
@@ -48,12 +60,27 @@ from sqlalchemy import select
 
 from api.deps import get_current_tenant
 from api.route_metadata import route_meta
+from api.v1 import commerce_runtime as runtime
+from api.v1.commerce_merchant_setup import setup_view
 from api.v1.commerce_runtime import require_merchant_commerce_config_write
-from api.v1.commerce_ucp_publishing import _actor, _locked_row
+from api.v1.commerce_ucp_publishing import (
+    UcpScope,
+    _actor,
+    _locked_row,
+    _provision_or_rotate,
+    publish_profile,
+    publish_refusal,
+)
+from core.commerce import grantex_enrolment
 from core.commerce import network as net
+from core.commerce.c6z_runtime_vertical import DEMO_SOURCE_SYSTEM
 from core.commerce.ledger import record_commerce_event_in_own_transaction
+from core.commerce.ucp.catalog import verified_catalog_source
+from core.commerce.ucp.state import attested_host, is_published, ucp_state
+from core.commerce.ucp.store import load_shared_cache_records
 from core.config import settings
 from core.database import get_tenant_session
+from core.models.commerce_c6z_runtime import C6ZConnectorEvidenceRow
 from core.models.merchant_custom_domain import INACTIVE_STATUSES, MerchantCustomDomainRow
 
 logger = structlog.get_logger()
@@ -365,6 +392,12 @@ async def _view(tenant_id: str, merchant_id: str, seller_agent_id: str | None) -
             )
         ).first()
     in_use = await net.platform_subdomains_in_use() if net.platform_apex() else 0
+    enrolment = await grantex_enrolment.read_enrolment(tenant_id)
+    shared = await load_shared_cache_records(
+        tenant_id=tenant_id, merchant_id=config.merchant_id, seller_agent_id=seller
+    )
+    artifacts = verified_catalog_source(cache_records=shared, products=[], now_iso=runtime._now_iso())
+    setup = await setup_view(tenant_id, config.merchant_id)
     return {
         "enabled": True,
         "terms_version": settings.network_terms_version,
@@ -376,7 +409,83 @@ async def _view(tenant_id: str, merchant_id: str, seller_agent_id: str | None) -
             "in_use": in_use,
             "cap": int(settings.platform_subdomain_cap),
         },
+        "grantex_enrolment": grantex_enrolment.enrolment_view(enrolment, config.merchant_id),
+        "publication": _publication_view(config),
+        "artifacts": {
+            "status": "ready" if artifacts.unavailable_reason is None else "missing",
+            "reason": artifacts.unavailable_reason,
+        },
+        "setup": {"missing": setup["missing"], "ready_to_turn_on": setup["ready_to_turn_on"]},
     }
+
+
+def _publication_view(config: Any) -> dict[str, Any]:
+    state = ucp_state(config.public_publishing)
+    published = is_published(state)
+    refusal = None if published else publish_refusal(config, None)[0]
+    return {
+        "published": published,
+        "host": attested_host(state),
+        # The exact reason publication is not possible yet (None once nothing stands in the way).
+        "refusal": refusal,
+    }
+
+
+async def _catalog_source(tenant_id: str, merchant_id: str, seller_agent_id: str) -> str | None:
+    async with get_tenant_session(uuid.UUID(tenant_id)) as session:
+        evidence = (
+            await session.scalars(
+                select(C6ZConnectorEvidenceRow)
+                .where(
+                    C6ZConnectorEvidenceRow.tenant_id == tenant_id,
+                    C6ZConnectorEvidenceRow.merchant_id == merchant_id,
+                    C6ZConnectorEvidenceRow.seller_agent_id == seller_agent_id,
+                )
+                .order_by(C6ZConnectorEvidenceRow.synced_at.desc())
+            )
+        ).first()
+    return evidence.source_system if evidence is not None else None
+
+
+async def _go_live(tenant_id: str, config: Any, actor: dict[str, str]) -> dict[str, Any]:
+    """Grantex enrolment, UCP publication and one artifact refresh; each outcome is reported, none raises."""
+    seller = config.seller_agent_id or ""
+    outcome: dict[str, Any] = {}
+    source = await _catalog_source(tenant_id, config.merchant_id, seller)
+    if source is not None and source != DEMO_SOURCE_SYSTEM:
+        state = await grantex_enrolment.ensure_enrolment(tenant_id, config.merchant_id, source)
+        outcome["enrolment"] = state.get("status")
+    async with get_tenant_session(uuid.UUID(tenant_id)) as session:
+        current = await _locked_row(
+            session, tenant_id=tenant_id, merchant_id=config.merchant_id, seller_agent_id=seller or None, lock=False
+        )
+        already_published = is_published(ucp_state(current.public_publishing))
+        key_missing = not already_published and publish_refusal(current, None)[0] == "signing_key_missing"
+    if key_missing:
+        # A merchant onboarded before the UCP profile flag has no signing key yet: provision it once.
+        await _provision_or_rotate(
+            merchant_id=config.merchant_id,
+            body=UcpScope(seller_agent_id=seller or None),
+            tenant_id=tenant_id,
+            rotate=False,
+            event="commerce.ucp.keys.provision",
+        )
+    if not already_published:
+        published = await publish_profile(
+            tenant_id=tenant_id,
+            merchant_id=config.merchant_id,
+            seller_agent_id=seller or None,
+            namespace=None,
+            actor=actor,
+        )
+        outcome["publication"] = "published" if published.get("published") else published.get("refusal")
+    else:
+        outcome["publication"] = "published"
+    outcome["artifacts"] = await runtime.refresh_scope_artifacts(
+        tenant_id=tenant_id, merchant_id=config.merchant_id, seller_agent_id=seller
+    )
+    logger.info("network_go_live", **{key: str(value) for key, value in outcome.items()})
+    return outcome
 
 
 @merchant_router.get("/merchant-configs/{merchant_id}/sell-everywhere")
@@ -423,6 +532,27 @@ async def put_sell_everywhere(
         config = await _locked_row(
             session, tenant_id=tenant_id, merchant_id=merchant_id, seller_agent_id=body.seller_agent_id, lock=False
         )
+    if body.listed:
+        setup = await setup_view(tenant_id, config.merchant_id)
+        if setup["missing"]:
+            await record_commerce_event_in_own_transaction(
+                tenant_id=tenant_id,
+                event="commerce.network.sell_everywhere.write",
+                outcome="refused",
+                merchant_id=config.merchant_id,
+                seller_agent_id=config.seller_agent_id or "",
+                buyer_agent_id=None,
+                payload={"listed": True, "reason": "setup_incomplete", "missing": setup["missing"]},
+                resource_id=config.config_id,
+            )
+            raise HTTPException(
+                409,
+                {
+                    "code": "setup_incomplete",
+                    "message": "Finish the setup first: " + ", ".join(setup["missing"]).replace("_", " ") + ".",
+                    "missing": setup["missing"],
+                },
+            )
     try:
         listing = await net.save_listing(
             tenant_id=tenant_id, config=config, listed=body.listed, slug=body.slug, actor_label=actor_label
@@ -448,6 +578,67 @@ async def put_sell_everywhere(
             resource_id=config.config_id,
         )
         raise _refusal(exc) from None
+    go_live = await _go_live(tenant_id, config, actor) if body.listed else None
     view = await _view(tenant_id, merchant_id, body.seller_agent_id)
     view["subdomain_note"] = subdomain_note
+    view["go_live"] = go_live
+    return view
+
+
+class SellEverywherePublishRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    seller_agent_id: str | None = Field(default=None, min_length=1, max_length=160)
+
+
+@merchant_router.post("/merchant-configs/{merchant_id}/sell-everywhere/publish")
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="commerce.runtime.merchant_config.write",
+    rate_limit="commerce-runtime-external",
+    idempotency="go-live-steps-converge",
+    audit_event="commerce.network.sell_everywhere.publish",
+)
+async def publish_sell_everywhere(
+    merchant_id: str,
+    body: SellEverywherePublishRequest,
+    request: Request,
+    tenant_id: str = Depends(get_current_tenant),
+) -> dict[str, Any]:
+    """Publish / Retry: the go-live steps again for a listed shop (enrolment, address, publication, artifacts)."""
+    _require_network()
+    actor = _actor(request)
+    actor_label = f"{actor.get('actor_type', 'user')}:{actor.get('actor_id', 'unknown')}"
+    async with get_tenant_session(uuid.UUID(tenant_id)) as session:
+        config = await _locked_row(
+            session, tenant_id=tenant_id, merchant_id=merchant_id, seller_agent_id=body.seller_agent_id, lock=False
+        )
+        listing = await net.get_listing(
+            session, tenant_id=tenant_id, merchant_id=config.merchant_id, seller_agent_id=config.seller_agent_id or ""
+        )
+    if listing is None or listing.status != "listed":
+        raise HTTPException(409, {"code": "not_listed", "message": "Turn on Sell everywhere first."})
+    subdomain_note = None
+    if net.published_host(config) is None and attested_host(ucp_state(config.public_publishing)) is None:
+        try:
+            await net.claim_platform_subdomain(
+                tenant_id=tenant_id, config=config, listing=listing, actor=actor, actor_label=actor_label
+            )
+        except net.NetworkError as exc:
+            subdomain_note = {"code": exc.code, "message": exc.message}
+    go_live = await _go_live(tenant_id, config, actor)
+    await record_commerce_event_in_own_transaction(
+        tenant_id=tenant_id,
+        event="commerce.network.sell_everywhere.publish",
+        outcome="success",
+        merchant_id=config.merchant_id,
+        seller_agent_id=config.seller_agent_id or "",
+        buyer_agent_id=None,
+        payload={"go_live": {key: str(value) for key, value in go_live.items()}, "subdomain_note": subdomain_note},
+        resource_id=config.config_id,
+    )
+    view = await _view(tenant_id, merchant_id, body.seller_agent_id)
+    view["subdomain_note"] = subdomain_note
+    view["go_live"] = go_live
     return view

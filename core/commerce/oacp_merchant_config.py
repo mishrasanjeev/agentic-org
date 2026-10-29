@@ -14,6 +14,7 @@ from typing import Any
 from urllib.parse import parse_qsl, urlsplit
 
 from core.commerce.c6z_runtime_vertical import (
+    CATALOG_UPLOAD_SOURCE_SYSTEM,
     DEMO_SOURCE_SYSTEM,
     EXECUTION_MARKERS,
     PRIVATE_KEY_MARKERS,
@@ -33,6 +34,8 @@ SOURCE_CONNECTOR_TYPES: frozenset[str] = frozenset(
         "oms",
         "wms",
         "custom_api",
+        # The merchant's own uploaded catalog (core/commerce/catalog_upload.py).
+        CATALOG_UPLOAD_SOURCE_SYSTEM,
         # The synthetic demo merchant's source; refused while AGENTICORG_OACP_DEMO_MERCHANT_ENABLED is off.
         DEMO_SOURCE_SYSTEM,
     }
@@ -62,7 +65,7 @@ CREDENTIAL_CUSTODY_OPTIONS: frozenset[str] = frozenset(
         "not_required",
     }
 )
-SUPPORTED_RUNTIME_SOURCE_CONNECTORS: frozenset[str] = frozenset({"shopify"})
+SUPPORTED_RUNTIME_SOURCE_CONNECTORS: frozenset[str] = frozenset({"shopify", CATALOG_UPLOAD_SOURCE_SYSTEM})
 SUPPORTED_RUNTIME_PAYMENT_PROVIDERS: frozenset[str] = frozenset({"plural_pine"})
 
 
@@ -124,7 +127,68 @@ def normalize_merchant_commerce_config(
         validate_provider_policy(config["provider_policy"])
     except SourcePrecedenceError as exc:
         raise MerchantCommerceConfigError(str(exc)) from exc
+    validate_arbiter_limits(config["provider_policy"].get("arbiter"))
     return config
+
+
+# The order limits a merchant sets under provider_policy.arbiter (core/commerce/arbiter.py reads them).
+ARBITER_AMOUNT_FIELDS: tuple[str, ...] = ("max_order_amount_minor_units", "max_daily_amount_minor_units")
+MAX_ARBITER_AMOUNT_MINOR_UNITS = 10**15
+MAX_ARBITER_QUANTITY = 100_000
+
+
+def validate_arbiter_limits(arbiter: Any) -> None:
+    """Refuse malformed order limits when the config is saved (absent limits stay absent: the arbiter refuses)."""
+    if arbiter is None:
+        return
+    if not isinstance(arbiter, Mapping):
+        raise MerchantCommerceConfigError("provider_policy.arbiter must be an object")
+    amounts: dict[str, int] = {}
+    for name in ARBITER_AMOUNT_FIELDS:
+        if arbiter.get(name) is None:
+            continue
+        amounts[name] = _positive_int(
+            arbiter.get(name), f"provider_policy.arbiter.{name}", MAX_ARBITER_AMOUNT_MINOR_UNITS
+        )
+    per_order = amounts.get("max_order_amount_minor_units")
+    daily = amounts.get("max_daily_amount_minor_units")
+    if per_order is not None and daily is not None and daily < per_order:
+        raise MerchantCommerceConfigError("the daily maximum must be at least the per-order maximum")
+    if arbiter.get("max_quantity_per_order") is not None:
+        quantity_name = "provider_policy.arbiter.max_quantity_per_order"
+        _positive_int(arbiter.get("max_quantity_per_order"), quantity_name, MAX_ARBITER_QUANTITY)
+    allowlist = arbiter.get("currency_allowlist")
+    if allowlist is not None:
+        if isinstance(allowlist, str) or not isinstance(allowlist, Sequence) or not allowlist:
+            raise MerchantCommerceConfigError("provider_policy.arbiter.currency_allowlist must be a non-empty list")
+        for code in allowlist:
+            if not isinstance(code, str) or not re.fullmatch(r"[A-Za-z]{3}", code):
+                raise MerchantCommerceConfigError("provider_policy.arbiter.currency_allowlist holds ISO 4217 codes")
+
+
+def _positive_int(value: Any, name: str, maximum: int) -> int:
+    if isinstance(value, bool):
+        raise MerchantCommerceConfigError(f"{name} must be a whole number")
+    if isinstance(value, str) and value.strip().isdigit():
+        value = int(value.strip())
+    if not isinstance(value, int) or value <= 0 or value > maximum:
+        raise MerchantCommerceConfigError(f"{name} must be a whole number between 1 and {maximum}")
+    return value
+
+
+def arbiter_limits_complete(provider_policy: Mapping[str, Any] | None) -> bool:
+    """Whether the merchant set every order limit the Sell everywhere setup asks for."""
+    arbiter = provider_policy.get("arbiter") if isinstance(provider_policy, Mapping) else None
+    if not isinstance(arbiter, Mapping):
+        return False
+    try:
+        validate_arbiter_limits(arbiter)
+    except MerchantCommerceConfigError:
+        return False
+    return all(
+        arbiter.get(name) is not None
+        for name in (*ARBITER_AMOUNT_FIELDS, "max_quantity_per_order", "currency_allowlist")
+    )
 
 
 def merchant_config_readiness(config: Mapping[str, Any]) -> dict[str, Any]:
@@ -278,6 +342,8 @@ def _normalize_source_connector(item: Mapping[str, Any]) -> dict[str, Any]:
         raise MerchantCommerceConfigError("Shopify connector mode must be read_only")
     if connector_type == DEMO_SOURCE_SYSTEM and mode != "read_only":
         raise MerchantCommerceConfigError("synthetic demo connector mode must be read_only")
+    if connector_type == CATALOG_UPLOAD_SOURCE_SYSTEM and mode != "read_only":
+        raise MerchantCommerceConfigError("catalog upload connector mode must be read_only")
     return connector
 
 

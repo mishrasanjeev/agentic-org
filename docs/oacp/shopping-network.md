@@ -20,7 +20,8 @@ force. Payments are not part of the network: the buyer pays with the shop.
 | `POST /api/v1/network/shops/{slug}/checkout-sessions` | Network service credential | Open a checkout at the shop. |
 | `GET`, `PUT /api/v1/network/shops/{slug}/checkout-sessions/{id}` | Network service credential | Read or replace a network checkout. |
 | `POST /api/v1/network/shops/{slug}/checkout-sessions/{id}/complete` | Network service credential | The payment hand-off only: the link to the shop's own payment page ([payment-handoff.md](payment-handoff.md)). |
-| `GET`, `PUT /api/v1/commerce/runtime/merchant-configs/{id}/sell-everywhere` | Merchant (config write) | Where the shop stands on each surface; turn the network on (accepting the terms) or pause it. |
+| `GET`, `PUT /api/v1/commerce/runtime/merchant-configs/{id}/sell-everywhere` | Merchant (config write) | Where the shop stands on each surface, its Grantex enrolment, publication and artifacts; turn the network on (accepting the terms) or pause it. |
+| `POST /api/v1/commerce/runtime/merchant-configs/{id}/sell-everywhere/publish` | Merchant (config write) | Publish / Retry: run the go-live steps again for a listed shop. |
 
 The gateway runs the same UCP handlers as `https://<host>/ucp` (`api.v1.commerce_ucp.run_ucp_operation`)
 in the shop's tenant on its published host, so idempotency, the arbiter and the ledger behave the same.
@@ -28,6 +29,28 @@ Network checkouts answer to the network platform only (`AGENTICORG_NETWORK_AGENT
 the payment hand-off only: a body with a payment instrument, decision or mandate is refused (422
 `payment_execution_not_allowed`), and a shop without a hand-off configured answers
 `payment_handoff_unavailable` instead of running an executor. There is no cancel or payment route.
+
+## Going live
+
+Turning the network on needs the merchant setup done (`api/v1/commerce_merchant_setup.py`): a catalog
+(Shopify with the merchant's own token, or a CSV/JSON upload), returns and shipping policies, and order
+limits (per-order and daily maximum, items per order, currency). Otherwise `PUT` answers 409
+`setup_incomplete` with the missing steps. Then, each step after the previous one's transaction, and none
+undoing an earlier one:
+
+1. **Grantex enrolment** (`core/commerce/grantex_enrolment.py`): `POST /v1/commerce/oacp/service-tenants`
+   with the tenant, merchant and catalog source (`shopify` or `catalog_upload`). The answer is kept in
+   `tenants.settings["grantex_service_enrolment"]`. A Grantex without the route (404 or 405) or without
+   settings is a waiting state; `revoked` needs the platform administrator.
+2. **Listing**, then the **platform subdomain** when the shop has no host.
+3. **Publication**: a missing signing key is provisioned, then the UCP profile is published when
+   `publish_refusal` allows it; otherwise the exact refusal code is shown.
+4. **Artifacts**: one refresh of the merchant scope (`refresh_scope_artifacts`), so the Grantex request
+   carries the public-discovery opt-in. Records are cached shared (no buyer), as the public catalog reads
+   them.
+
+`GET` shows `grantex_enrolment`, `publication` (`published`, `host`, `refusal`), `artifacts` (`ready` or
+`missing` with the reason) and `setup` (what is still missing).
 
 ## Data
 

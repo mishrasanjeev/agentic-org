@@ -11,7 +11,6 @@ from __future__ import annotations
 import re
 import secrets
 import uuid
-from datetime import UTC, datetime
 
 import pytest
 from fastapi import HTTPException
@@ -42,7 +41,33 @@ def network(firebase, monkeypatch):
     net.reset_directory_cache()
 
 
+CATALOG_CSV = "sku,title,price,currency,quantity\nTOTE-1,Canvas tote,499,INR,3\n"
+
+
+async def _ready(tenant: str) -> None:
+    """The setup Sell everywhere needs: a catalog, policies and order limits."""
+    from api.v1 import commerce_merchant_setup as setup_api
+
+    await setup_api.upload_catalog(
+        MERCHANT, setup_api.CatalogUploadRequest(format="csv", content=CATALOG_CSV), tenant
+    )
+    await setup_api.put_policies(
+        MERCHANT,
+        setup_api.PoliciesRequest(returns="Returns within 7 days.", shipping="Ships in 3 to 5 days."),
+        tenant,
+    )
+    await setup_api.put_order_limits(
+        MERCHANT,
+        setup_api.OrderLimitsRequest(
+            currency="INR", max_order_amount="5000", max_daily_amount="20000", max_quantity_per_order=5
+        ),
+        tenant,
+    )
+
+
 async def _opt_in(tenant: str, *, slug: str | None = None, listed: bool = True, claim: bool = True) -> dict:
+    if listed:
+        await _ready(tenant)
     return await api.put_sell_everywhere(
         MERCHANT,
         api.SellEverywhereRequest(
@@ -53,7 +78,7 @@ async def _opt_in(tenant: str, *, slug: str | None = None, listed: bool = True, 
     )
 
 
-async def _publish(tenant: str) -> None:
+async def _unpublish(tenant: str) -> None:
     from core.database import get_tenant_session
     from core.models.commerce_c6z_runtime import C6ZMerchantCommerceConfigRow
 
@@ -68,13 +93,13 @@ async def _publish(tenant: str) -> None:
         ).first()
         config = await session.get(C6ZMerchantCommerceConfigRow, row.config_id)
         state = ucp_state(config.public_publishing)
-        state["published"] = {"published_at": datetime.now(UTC).isoformat(), "published_by": {"actor_type": "user"}}
+        state["published"] = None
         config.public_publishing = with_ucp_state(config.public_publishing, state)
     store.reset_ucp_host_cache()
     net.reset_directory_cache()
 
 
-async def test_opt_in_claims_a_platform_subdomain_and_lists_the_shop_once_published(db, network):
+async def test_opt_in_claims_a_platform_subdomain_publishes_and_lists_the_shop(db, network):
     tenant = await _tenant(db)
     await _merchant(tenant)
     slug = f"example-store-{secrets.token_hex(3)}"
@@ -85,24 +110,33 @@ async def test_opt_in_claims_a_platform_subdomain_and_lists_the_shop_once_publis
     assert view["listing"]["terms_version"] == settings.network_terms_version
     assert view["subdomain_note"] is None
     assert view["surfaces"]["web"] == {"status": "pending_mapping", "host": host}
-    assert view["surfaces"]["mcp"]["status"] == "waiting_for_publication"
+    # Going live published the profile on the attested platform subdomain (no operator step).
+    assert view["publication"] == {"published": True, "host": host, "refusal": None}
+    assert view["surfaces"]["mcp"]["status"] == "live"
     assert view["platform_subdomains"]["apex"] == "shops.example" and view["platform_subdomains"]["in_use"] >= 1
 
-    # Attested as the serving host and indexed publicly, but not in the directory until published.
     binding = await store.find_serving_binding(host)
     assert binding is not None and binding.tenant_id == tenant and binding.merchant_id == MERCHANT
+
+    # Without publication the shop is not in the directory.
+    await _unpublish(tenant)
     assert slug not in [shop["slug"] for shop in await net.directory()]
     with pytest.raises(net.NetworkError) as hidden:
         await net.resolve_shop(slug)
     assert hidden.value.code == "shop_unavailable"
+    assert (await api.get_sell_everywhere(MERCHANT, SELLER, tenant))["publication"]["refusal"] is None
 
-    await _publish(tenant)
+    retried = await api.publish_sell_everywhere(
+        MERCHANT, api.SellEverywherePublishRequest(seller_agent_id=SELLER), _request(), tenant
+    )
+    assert retried["publication"]["published"] is True
+    net.reset_directory_cache()
     shops = [shop for shop in await net.directory() if shop["slug"] == slug]
     assert shops == [
         {
             "slug": slug,
             "name": "Example Store",
-            "categories": [],
+            "categories": ["general"],
             "host": host,
             "profile_url": f"https://{host}/.well-known/ucp",
             "telegram_link": f"https://t.me/ExampleShopBot?start={slug}",

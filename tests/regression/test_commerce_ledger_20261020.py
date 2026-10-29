@@ -240,6 +240,7 @@ def test_every_declared_commerce_write_event_is_written_by_its_handler() -> None
         a2a_interop,
         commerce_acp,
         commerce_ledger,
+        commerce_merchant_setup,
         commerce_payments,
         commerce_runtime,
         commerce_ucp,
@@ -253,6 +254,7 @@ def test_every_declared_commerce_write_event_is_written_by_its_handler() -> None
 
     sources = (
         inspect.getsource(commerce_runtime)
+        + inspect.getsource(commerce_merchant_setup)
         + inspect.getsource(a2a_interop)
         + inspect.getsource(commerce_ledger)
         + inspect.getsource(commerce_ucp_publishing)

@@ -3380,7 +3380,7 @@
     "public_exempt_reason": null,
     "rate_limit": "commerce-runtime-write",
     "scope": "commerce.runtime.artifacts.cache",
-    "source_line": 1032,
+    "source_line": 1152,
     "tenant_required": true
   },
   {
@@ -3398,7 +3398,7 @@
     "public_exempt_reason": null,
     "rate_limit": "commerce-runtime-external",
     "scope": "commerce.runtime.artifacts.refresh",
-    "source_line": 1053,
+    "source_line": 1173,
     "tenant_required": true
   },
   {
@@ -3416,7 +3416,7 @@
     "public_exempt_reason": null,
     "rate_limit": "commerce-runtime-external",
     "scope": "commerce.runtime.grantex.authority_request",
-    "source_line": 971,
+    "source_line": 1091,
     "tenant_required": true
   },
   {
@@ -3434,7 +3434,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "commerce.runtime.bridges.a2a.read",
-    "source_line": 1505,
+    "source_line": 1625,
     "tenant_required": true
   },
   {
@@ -3452,7 +3452,7 @@
     "public_exempt_reason": null,
     "rate_limit": "commerce-buyer-session",
     "scope": "commerce.runtime.bridges.openapi.ask",
-    "source_line": 1474,
+    "source_line": 1594,
     "tenant_required": true
   },
   {
@@ -3470,7 +3470,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "commerce.runtime.bridges.openapi.read",
-    "source_line": 1492,
+    "source_line": 1612,
     "tenant_required": true
   },
   {
@@ -3488,7 +3488,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "commerce.runtime.bridges.surfaces.read",
-    "source_line": 1518,
+    "source_line": 1638,
     "tenant_required": true
   },
   {
@@ -3506,7 +3506,7 @@
     "public_exempt_reason": null,
     "rate_limit": "commerce-webhook",
     "scope": "commerce.runtime.bridges.telegram.webhook",
-    "source_line": 1563,
+    "source_line": 1683,
     "tenant_required": true
   },
   {
@@ -3524,7 +3524,7 @@
     "public_exempt_reason": null,
     "rate_limit": "commerce-buyer-session",
     "scope": "commerce.runtime.bridges.web.ask",
-    "source_line": 1456,
+    "source_line": 1576,
     "tenant_required": true
   },
   {
@@ -3542,7 +3542,7 @@
     "public_exempt_reason": null,
     "rate_limit": "commerce-webhook",
     "scope": "commerce.runtime.bridges.whatsapp.webhook",
-    "source_line": 1531,
+    "source_line": 1651,
     "tenant_required": true
   },
   {
@@ -3560,7 +3560,7 @@
     "public_exempt_reason": null,
     "rate_limit": "commerce-buyer-session",
     "scope": "commerce.runtime.buyer_sessions.ask",
-    "source_line": 1430,
+    "source_line": 1550,
     "tenant_required": true
   },
   {
@@ -3762,6 +3762,24 @@
     "tenant_required": true
   },
   {
+    "audit_event": "commerce.runtime.merchant_config.list",
+    "auth_required": true,
+    "function": "list_merchant_configs",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/commerce/runtime/merchant-configs api/v1/commerce_merchant_setup.py:list_merchant_configs",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/commerce_merchant_setup.py",
+    "path": "/api/v1/commerce/runtime/merchant-configs",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "commerce.runtime.merchant_config.read",
+    "source_line": 143,
+    "tenant_required": true
+  },
+  {
     "audit_event": "commerce.runtime.merchant_config.read",
     "auth_required": true,
     "function": "get_merchant_commerce_config",
@@ -3776,7 +3794,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "commerce.runtime.merchant_config.read",
-    "source_line": 497,
+    "source_line": 513,
     "tenant_required": true
   },
   {
@@ -3794,7 +3812,61 @@
     "public_exempt_reason": null,
     "rate_limit": "commerce-runtime-write",
     "scope": "commerce.runtime.merchant_config.write",
-    "source_line": 424,
+    "source_line": 435,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "commerce.runtime.shopify.credentials.upsert",
+    "auth_required": true,
+    "function": "connect_shopify",
+    "idempotency": "merchant-shopify-credential-upsert",
+    "key": "POST /api/v1/commerce/runtime/merchant-configs/{merchant_id}/catalog/shopify api/v1/commerce_merchant_setup.py:connect_shopify",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/commerce_merchant_setup.py",
+    "path": "/api/v1/commerce/runtime/merchant-configs/{merchant_id}/catalog/shopify",
+    "public_exempt_reason": null,
+    "rate_limit": "credential-write",
+    "scope": "commerce.runtime.merchant_config.write",
+    "source_line": 510,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "commerce.runtime.merchant_setup.catalog_source",
+    "auth_required": true,
+    "function": "sync_catalog",
+    "idempotency": "packet-id-and-source-snapshot",
+    "key": "POST /api/v1/commerce/runtime/merchant-configs/{merchant_id}/catalog/sync api/v1/commerce_merchant_setup.py:sync_catalog",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/commerce_merchant_setup.py",
+    "path": "/api/v1/commerce/runtime/merchant-configs/{merchant_id}/catalog/sync",
+    "public_exempt_reason": null,
+    "rate_limit": "connector-bulk",
+    "scope": "commerce.runtime.merchant_config.write",
+    "source_line": 590,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "commerce.runtime.catalog_upload.store",
+    "auth_required": true,
+    "function": "upload_catalog",
+    "idempotency": "catalog-digest-evidence-upsert",
+    "key": "POST /api/v1/commerce/runtime/merchant-configs/{merchant_id}/catalog/upload api/v1/commerce_merchant_setup.py:upload_catalog",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/commerce_merchant_setup.py",
+    "path": "/api/v1/commerce/runtime/merchant-configs/{merchant_id}/catalog/upload",
+    "public_exempt_reason": null,
+    "rate_limit": "connector-bulk",
+    "scope": "commerce.runtime.merchant_config.write",
+    "source_line": 554,
     "tenant_required": true
   },
   {
@@ -3956,7 +4028,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "commerce.runtime.merchant_config.read",
-    "source_line": 538,
+    "source_line": 554,
     "tenant_required": true
   },
   {
@@ -3974,7 +4046,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "commerce.runtime.merchant_config.read",
-    "source_line": 391,
+    "source_line": 500,
     "tenant_required": true
   },
   {
@@ -3992,7 +4064,79 @@
     "public_exempt_reason": null,
     "rate_limit": "commerce-runtime-write",
     "scope": "commerce.runtime.merchant_config.write",
-    "source_line": 409,
+    "source_line": 518,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "commerce.network.sell_everywhere.publish",
+    "auth_required": true,
+    "function": "publish_sell_everywhere",
+    "idempotency": "go-live-steps-converge",
+    "key": "POST /api/v1/commerce/runtime/merchant-configs/{merchant_id}/sell-everywhere/publish api/v1/network.py:publish_sell_everywhere",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/network.py",
+    "path": "/api/v1/commerce/runtime/merchant-configs/{merchant_id}/sell-everywhere/publish",
+    "public_exempt_reason": null,
+    "rate_limit": "commerce-runtime-external",
+    "scope": "commerce.runtime.merchant_config.write",
+    "source_line": 603,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "commerce.runtime.merchant_setup.read",
+    "auth_required": true,
+    "function": "get_merchant_setup",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/commerce/runtime/merchant-configs/{merchant_id}/setup api/v1/commerce_merchant_setup.py:get_merchant_setup",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/commerce_merchant_setup.py",
+    "path": "/api/v1/commerce/runtime/merchant-configs/{merchant_id}/setup",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "commerce.runtime.merchant_config.read",
+    "source_line": 406,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "commerce.runtime.merchant_setup.order_limits",
+    "auth_required": true,
+    "function": "put_order_limits",
+    "idempotency": "replaces-order-limits",
+    "key": "PUT /api/v1/commerce/runtime/merchant-configs/{merchant_id}/setup/order-limits api/v1/commerce_merchant_setup.py:put_order_limits",
+    "metadata_present": true,
+    "methods": [
+      "PUT"
+    ],
+    "module": "api/v1/commerce_merchant_setup.py",
+    "path": "/api/v1/commerce/runtime/merchant-configs/{merchant_id}/setup/order-limits",
+    "public_exempt_reason": null,
+    "rate_limit": "commerce-runtime-write",
+    "scope": "commerce.runtime.merchant_config.write",
+    "source_line": 718,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "commerce.runtime.merchant_setup.policies",
+    "auth_required": true,
+    "function": "put_policies",
+    "idempotency": "replaces-merchant-policies",
+    "key": "PUT /api/v1/commerce/runtime/merchant-configs/{merchant_id}/setup/policies api/v1/commerce_merchant_setup.py:put_policies",
+    "metadata_present": true,
+    "methods": [
+      "PUT"
+    ],
+    "module": "api/v1/commerce_merchant_setup.py",
+    "path": "/api/v1/commerce/runtime/merchant-configs/{merchant_id}/setup/policies",
+    "public_exempt_reason": null,
+    "rate_limit": "commerce-runtime-write",
+    "scope": "commerce.runtime.merchant_config.write",
+    "source_line": 660,
     "tenant_required": true
   },
   {
@@ -4118,7 +4262,25 @@
     "public_exempt_reason": null,
     "rate_limit": "commerce-runtime-write",
     "scope": "commerce.runtime.merchant_config.write",
-    "source_line": 579,
+    "source_line": 599,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "commerce.runtime.merchant_setup.create",
+    "auth_required": true,
+    "function": "create_merchant",
+    "idempotency": "new-merchant-id-per-call",
+    "key": "POST /api/v1/commerce/runtime/merchant-setup api/v1/commerce_merchant_setup.py:create_merchant",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/commerce_merchant_setup.py",
+    "path": "/api/v1/commerce/runtime/merchant-setup",
+    "public_exempt_reason": null,
+    "rate_limit": "commerce-runtime-write",
+    "scope": "commerce.runtime.merchant_config.write",
+    "source_line": 180,
     "tenant_required": true
   },
   {
@@ -4154,7 +4316,7 @@
     "public_exempt_reason": null,
     "rate_limit": "commerce-webhook",
     "scope": "commerce.runtime.pos.offline.confirmations.write",
-    "source_line": 2100,
+    "source_line": 2220,
     "tenant_required": true
   },
   {
@@ -4172,7 +4334,7 @@
     "public_exempt_reason": null,
     "rate_limit": "commerce-runtime-write",
     "scope": "commerce.runtime.pos.offline.handoffs.write",
-    "source_line": 1899,
+    "source_line": 2019,
     "tenant_required": true
   },
   {
@@ -4190,7 +4352,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "commerce.runtime.pos.offline.read",
-    "source_line": 1854,
+    "source_line": 1974,
     "tenant_required": true
   },
   {
@@ -4208,7 +4370,7 @@
     "public_exempt_reason": null,
     "rate_limit": "commerce-runtime-write",
     "scope": "commerce.runtime.pos.offline.simulator.write",
-    "source_line": 2160,
+    "source_line": 2280,
     "tenant_required": true
   },
   {
@@ -4226,7 +4388,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "commerce.runtime.products.read",
-    "source_line": 2205,
+    "source_line": 2325,
     "tenant_required": true
   },
   {
@@ -4244,7 +4406,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "commerce.runtime.protocol_adapters.read",
-    "source_line": 1630,
+    "source_line": 1750,
     "tenant_required": true
   },
   {
@@ -4262,7 +4424,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "commerce.runtime.protocol_adapters.read",
-    "source_line": 1682,
+    "source_line": 1802,
     "tenant_required": true
   },
   {
@@ -4280,7 +4442,7 @@
     "public_exempt_reason": null,
     "rate_limit": "commerce-runtime-external",
     "scope": "commerce.runtime.providers.plural_pine.verify",
-    "source_line": 1593,
+    "source_line": 1713,
     "tenant_required": true
   },
   {
@@ -4298,7 +4460,7 @@
     "public_exempt_reason": null,
     "rate_limit": "commerce-runtime-write",
     "scope": "commerce.runtime.purchase.prepare",
-    "source_line": 1710,
+    "source_line": 1830,
     "tenant_required": true
   },
   {
@@ -4316,7 +4478,7 @@
     "public_exempt_reason": null,
     "rate_limit": "commerce-runtime-write",
     "scope": "commerce.runtime.shopify.credentials.write",
-    "source_line": 572,
+    "source_line": 588,
     "tenant_required": true
   },
   {
@@ -4334,7 +4496,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "commerce.runtime.shopify.credentials.read",
-    "source_line": 700,
+    "source_line": 729,
     "tenant_required": true
   },
   {
@@ -4352,7 +4514,7 @@
     "public_exempt_reason": null,
     "rate_limit": "commerce-runtime-write",
     "scope": "commerce.runtime.seller_agents.write",
-    "source_line": 349,
+    "source_line": 360,
     "tenant_required": true
   },
   {
@@ -4370,7 +4532,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "commerce.runtime.seller_agents.read",
-    "source_line": 404,
+    "source_line": 415,
     "tenant_required": true
   },
   {
@@ -4388,7 +4550,7 @@
     "public_exempt_reason": null,
     "rate_limit": "connector-bulk",
     "scope": "commerce.runtime.shopify.sync",
-    "source_line": 771,
+    "source_line": 802,
     "tenant_required": true
   },
   {
@@ -4406,7 +4568,7 @@
     "public_exempt_reason": null,
     "rate_limit": "commerce-webhook",
     "scope": "commerce.runtime.shopify.webhook",
-    "source_line": 868,
+    "source_line": 899,
     "tenant_required": true
   },
   {
@@ -9140,7 +9302,7 @@
     "public_exempt_reason": "network-directory-lists-only-published-opted-in-shops",
     "rate_limit": "public-read",
     "scope": "public:network.directory.read",
-    "source_line": 108,
+    "source_line": 135,
     "tenant_required": false
   },
   {
@@ -9158,7 +9320,7 @@
     "public_exempt_reason": "network-service-credential-checked-in-handler",
     "rate_limit": "ucp-platform",
     "scope": "network.checkout.write",
-    "source_line": 289,
+    "source_line": 316,
     "tenant_required": false
   },
   {
@@ -9176,7 +9338,7 @@
     "public_exempt_reason": "network-service-credential-checked-in-handler",
     "rate_limit": "ucp-platform",
     "scope": "network.checkout.read",
-    "source_line": 303,
+    "source_line": 330,
     "tenant_required": false
   },
   {
@@ -9194,7 +9356,7 @@
     "public_exempt_reason": "network-service-credential-checked-in-handler",
     "rate_limit": "ucp-platform",
     "scope": "network.checkout.write",
-    "source_line": 317,
+    "source_line": 344,
     "tenant_required": false
   },
   {
@@ -9212,7 +9374,7 @@
     "public_exempt_reason": "network-service-credential-checked-in-handler-payment-handoff-only-never-executes",
     "rate_limit": "ucp-platform",
     "scope": "network.checkout.write",
-    "source_line": 331,
+    "source_line": 358,
     "tenant_required": false
   },
   {
@@ -9230,7 +9392,7 @@
     "public_exempt_reason": "telegram-webhook-secret-checked-in-handler",
     "rate_limit": "provider-webhook",
     "scope": "public:network.telegram.webhook",
-    "source_line": 261,
+    "source_line": 288,
     "tenant_required": false
   },
   {
@@ -14595,6 +14757,24 @@
     "rate_limit": "provider-webhook",
     "scope": "public:webhooks.providers",
     "source_line": 334,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "commerce.runtime.shopify.product_update_webhook",
+    "auth_required": false,
+    "function": "receive_shopify_webhook",
+    "idempotency": "shopify-webhook-id-or-body-hash",
+    "key": "POST /api/v1/webhooks/shopify/{tenant_id}/{path_token} api/v1/commerce_merchant_setup.py:receive_shopify_webhook",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/commerce_merchant_setup.py",
+    "path": "/api/v1/webhooks/shopify/{tenant_id}/{path_token}",
+    "public_exempt_reason": "per-merchant-path-token-plus-shopify-hmac-verified-with-the-merchant-stored-secret",
+    "rate_limit": "provider-webhook",
+    "scope": "public:webhooks.shopify",
+    "source_line": 763,
     "tenant_required": true
   },
   {

@@ -277,6 +277,29 @@ export const sellEverywhereApi = {
     merchantId: string,
     data: { listed: boolean; accept_terms: boolean; slug?: string; seller_agent_id?: string },
   ) => api.put(`/commerce/runtime/merchant-configs/${encodeURIComponent(merchantId)}/sell-everywhere`, data),
+  publish: (merchantId: string, data: { seller_agent_id?: string } = {}) =>
+    api.post(`/commerce/runtime/merchant-configs/${encodeURIComponent(merchantId)}/sell-everywhere/publish`, data),
+};
+
+// Merchant setup: merchants, catalog, policies and order limits (api/v1/commerce_merchant_setup.py)
+const merchantPath = (merchantId: string) => `/commerce/runtime/merchant-configs/${encodeURIComponent(merchantId)}`;
+export const merchantSetupApi = {
+  list: () => api.get("/commerce/runtime/merchant-configs"),
+  create: (data: { display_name: string; categories?: string[] }) => api.post("/commerce/runtime/merchant-setup", data),
+  get: (merchantId: string) => api.get(`${merchantPath(merchantId)}/setup`),
+  connectShopify: (
+    merchantId: string,
+    data: { shop_domain: string; admin_access_token: string; api_version?: string; webhook_secret?: string },
+  ) => api.post(`${merchantPath(merchantId)}/catalog/shopify`, data),
+  uploadCatalog: (merchantId: string, data: { format: "csv" | "json"; content: string }) =>
+    api.post(`${merchantPath(merchantId)}/catalog/upload`, data),
+  syncCatalog: (merchantId: string) => api.post(`${merchantPath(merchantId)}/catalog/sync`, {}),
+  savePolicies: (merchantId: string, data: { returns: string; shipping: string; pickup: string }) =>
+    api.put(`${merchantPath(merchantId)}/setup/policies`, data),
+  saveOrderLimits: (
+    merchantId: string,
+    data: { currency: string; max_order_amount: string; max_daily_amount: string; max_quantity_per_order: number },
+  ) => api.put(`${merchantPath(merchantId)}/setup/order-limits`, data),
 };
 
 // Merchant custom domains (api/v1/merchant_custom_domains.py)

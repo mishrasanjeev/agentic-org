@@ -40,6 +40,7 @@ from api.v1 import (
     client_portal,
     commerce_acp,
     commerce_ledger,
+    commerce_merchant_setup,
     commerce_payments,
     commerce_public,
     commerce_runtime,
@@ -332,6 +333,9 @@ app.include_router(commerce_payments.public_router, prefix="/api/v1", tags=["Com
 # UCP REST binding at https://<merchant serving host>/ucp (AGENTICORG_UCP_CHECKOUT_ENABLED).
 app.include_router(commerce_ucp.router)
 app.include_router(commerce_ucp_publishing.router, prefix="/api/v1", tags=["Commerce UCP"])
+app.include_router(commerce_merchant_setup.router, prefix="/api/v1", tags=["Merchant Setup"])
+# Per-merchant Shopify product webhooks (path token plus the merchant's own HMAC secret).
+app.include_router(commerce_merchant_setup.webhook_router, prefix="/api/v1", tags=["Merchant Setup"])
 app.include_router(merchant_custom_domains.router, prefix="/api/v1", tags=["Commerce Custom Domains"])
 app.include_router(v1_network.router, prefix="/api/v1", tags=["Network"])
 app.include_router(v1_network.merchant_router, prefix="/api/v1", tags=["Network"])
