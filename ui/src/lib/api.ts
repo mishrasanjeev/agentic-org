@@ -298,6 +298,24 @@ export const customDomainsApi = {
     api.post(`/commerce/custom-domains/operator-queue/${encodeURIComponent(domainId)}/failed`, { reason }),
 };
 
+// How a merchant gets paid: payment hand-off mode and Plural credentials (api/v1/commerce_payments.py)
+export const paymentsApi = {
+  get: (merchantId: string) => api.get(`/commerce/runtime/merchant-configs/${encodeURIComponent(merchantId)}/payments`),
+  setMode: (merchantId: string, mode: "shopify_cart" | "plural_hosted" | "off") =>
+    api.put(`/commerce/runtime/merchant-configs/${encodeURIComponent(merchantId)}/payments`, { mode }),
+  saveCredentials: (
+    merchantId: string,
+    data: { environment: "sandbox" | "production"; client_id: string; client_secret?: string; webhook_secret?: string },
+  ) => api.put(`/commerce/runtime/merchant-configs/${encodeURIComponent(merchantId)}/payments/plural-credentials`, data),
+  testCredentials: (merchantId: string) =>
+    api.post(`/commerce/runtime/merchant-configs/${encodeURIComponent(merchantId)}/payments/plural-credentials/test`, {}),
+};
+
+// The merchant's orders (api/v1/commerce_payments.py)
+export const ordersApi = {
+  list: (params?: { merchant_id?: string; limit?: number; offset?: number }) => api.get("/commerce/runtime/orders", { params }),
+};
+
 // ABM (Account-Based Marketing)
 export const abmApi = {
   listAccounts: (params?: Record<string, string>) => api.get("/abm/accounts", { params }),
