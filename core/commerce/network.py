@@ -443,6 +443,9 @@ def surfaces_view(
     else:
         web = {"status": "not_started", "host": None}
     reachable = listed and host is not None
+    from core.commerce.payment_handoff import payment_settings
+
+    payments = payment_settings({"provider_policy": config.provider_policy or {}})
     return {
         "web": web,
         "mcp": {
@@ -456,7 +459,7 @@ def surfaces_view(
         "google": {"status": "registration_pending"},
         "microsoft": {"status": "registration_pending"},
         "perplexity": {"status": "registration_pending"},
-        "payments": {"status": "off"},
+        "payments": {"status": "live" if payments else "off", "mode": payments.mode if payments else None},
     }
 
 

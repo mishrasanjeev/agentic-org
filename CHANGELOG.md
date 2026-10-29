@@ -22,8 +22,9 @@
   **Breaking (network routes only, behind `AGENTICORG_NETWORK_ENABLED`):** turning the network on now
   needs a catalog, policies and order limits (409 `setup_incomplete`).
 - **Order limits.** The merchant sets the per-order maximum, a daily maximum, items per order and the
-  currency; nothing is defaulted. Saved limits are validated (`provider_policy.arbiter`), and the
-  arbiter refuses `daily_amount_cap_exceeded` when a caller supplies the day's committed total.
+  currency; nothing is defaulted. Saved limits are validated (`provider_policy.arbiter`). The
+  payment hand-off counts the day's paid checkouts and open payment links in the order currency
+  (UTC day), and the arbiter refuses `daily_amount_cap_exceeded` above the daily maximum.
 - **Config saves merge `provider_policy`.** A merchant config save changes only the policy keys it
   sends (a key sent as `null` is removed), so arbiter limits, UCP executor settings and permalink
   endpoints survive the operator console's saves.

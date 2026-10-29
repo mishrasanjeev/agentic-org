@@ -3,6 +3,7 @@ import { useCallback, useEffect, useState } from "react";
 import { Check, Copy, Megaphone } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import PaymentSettings from "@/components/commerce/PaymentSettings";
 import { extractApiError, merchantSetupApi, sellEverywhereApi } from "../lib/api";
 
 interface Listing {
@@ -22,7 +23,7 @@ interface Surfaces {
   google: { status: string };
   microsoft: { status: string };
   perplexity: { status: string };
-  payments: { status: string };
+  payments: { status: string; mode?: string | null };
 }
 
 interface NetworkView {
@@ -695,9 +696,7 @@ export default function SellEverywhere() {
           </Step>
 
           <Step number={5} title="Payments">
-            <p className="text-sm text-muted-foreground" data-testid="payment-settings-slot">
-              Payment settings load here.
-            </p>
+            <PaymentSettings merchantId={merchantId} />
           </Step>
 
           <Step number={6} title="Turn on Sell everywhere" status={listed ? "live" : undefined}>
@@ -821,6 +820,15 @@ export default function SellEverywhere() {
                 <SurfaceRow title="Google Gemini and AI Mode" status={surfaces.google.status} />
                 <SurfaceRow title="Microsoft Copilot" status={surfaces.microsoft.status} />
                 <SurfaceRow title="Perplexity" status={surfaces.perplexity.status} />
+                <SurfaceRow title="Payments" status={surfaces.payments.status}>
+                  <span>
+                    {surfaces.payments.mode === "shopify_cart"
+                      ? "Buyers pay in your own Shopify checkout."
+                      : surfaces.payments.mode === "plural_hosted"
+                        ? "Buyers pay on your own Plural payment page."
+                        : "Choose where buyers pay in step 5."}
+                  </span>
+                </SurfaceRow>
               </ul>
               {network?.platform_subdomains.apex ? (
                 <p className="text-xs text-muted-foreground">

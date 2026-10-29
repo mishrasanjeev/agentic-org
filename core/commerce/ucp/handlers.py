@@ -20,6 +20,7 @@ recorded by the binding in its own transaction.
 
 from __future__ import annotations
 
+import dataclasses
 import json
 import uuid
 from collections.abc import Awaitable, Callable, Mapping, Sequence
@@ -1770,6 +1771,53 @@ async def _handoff_target(req: UcpRequest, merchant: MerchantUcp, settings: Paym
     return _HandoffTarget(plural=credentials)
 
 
+# Sessions read when summing one day's committed hand-offs; a merchant past this many in a day is
+# held to what they add up to (the cap still applies, on a lower bound of the day's total).
+DAILY_COMMITTED_SCAN_LIMIT = 2000
+
+
+async def daily_committed_minor_units(
+    session: Any, *, tenant_id: Any, merchant: MerchantUcp, currency: str | None, exclude_session_id: str, now: datetime
+) -> int:
+    """The merchant's checkouts committed today (UTC) in ``currency``, for the arbiter's daily cap.
+
+    Committed means paid (``completed`` today) or handed to the buyer's payment page and still open
+    (``requires_escalation``, updated today): a link out counts against the cap until it lapses.
+    The checkout being decided is left out; the arbiter adds its own amount.
+    """
+    from sqlalchemy import or_
+
+    from core.models.commerce_ucp import CommerceCheckoutSessionRow as Row
+
+    day_start = now.astimezone(UTC).replace(hour=0, minute=0, second=0, microsecond=0)
+    rows = (
+        await session.execute(
+            select(Row.state)
+            .where(
+                Row.tenant_id == tenant_id,
+                Row.merchant_id == merchant.merchant_id,
+                Row.currency == currency,
+                Row.id != exclude_session_id,
+                or_(
+                    Row.completed_at >= day_start,
+                    (Row.status == "requires_escalation") & (Row.updated_at >= day_start),
+                ),
+            )
+            .limit(DAILY_COMMITTED_SCAN_LIMIT)
+        )
+    ).scalars()
+    committed = 0
+    for state in rows:
+        for line in (state or {}).get("totals") or []:
+            if isinstance(line, Mapping) and line.get("type") == "total":
+                try:
+                    committed += int(line.get("amount") or 0)
+                except (TypeError, ValueError):
+                    continue
+                break
+    return committed
+
+
 async def _complete_with_handoff(
     runtime: UcpRuntime,
     req: UcpRequest,
@@ -1874,19 +1922,30 @@ async def _complete_with_handoff(
         cache_records, merchant_config = (
             await runtime.arbiter_scope(merchant) if runtime.arbiter_scope is not None else ((), None)
         )
+        committed = await daily_committed_minor_units(
+            session,
+            tenant_id=row.tenant_id,
+            merchant=merchant,
+            currency=row.currency,
+            exclude_session_id=row.id,
+            now=now,
+        )
         decision = decide(
             ph.ACTION,
-            arbiter_context(
-                merchant=merchant,
-                now=now,
-                payload=payload,
-                amount_minor_units=total,
-                currency=row.currency,
-                quantity=sum(int(li["quantity"]) for li in state["line_items"]),
-                authority=None,
-                cache_records=cache_records,
-                merchant_config=merchant_config,
-                buyer_agent_id=session_buyer_agent_id(row),
+            dataclasses.replace(
+                arbiter_context(
+                    merchant=merchant,
+                    now=now,
+                    payload=payload,
+                    amount_minor_units=total,
+                    currency=row.currency,
+                    quantity=sum(int(li["quantity"]) for li in state["line_items"]),
+                    authority=None,
+                    cache_records=cache_records,
+                    merchant_config=merchant_config,
+                    buyer_agent_id=session_buyer_agent_id(row),
+                ),
+                daily_committed_amount_minor_units=committed,
             ),
         )
         await persist_decision(session, decision)

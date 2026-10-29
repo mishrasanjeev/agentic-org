@@ -335,6 +335,30 @@ async def test_shopify_handoff_seals_a_decision_and_returns_the_cart_permalink_i
     assert kicks == []
 
 
+
+@pytest.mark.asyncio
+async def test_the_daily_cap_counts_the_days_open_and_paid_handoffs(db, executor, kicks, monkeypatch):
+    tenant = await _tenant(db)
+    runtime = _runtime(monkeypatch, tenant, {"mode": "shopify_cart"})
+    first = await _ready(runtime, tenant)
+    total = int(next(t["amount"] for t in first["totals"] if t["type"] == "total"))
+    # Room for one checkout today, not two.
+    runtime_config = (await runtime.arbiter_scope(None))[1]
+    runtime_config["provider_policy"]["arbiter"]["max_daily_amount_minor_units"] = total * 2 - 1
+
+    done = await _complete(runtime, tenant, first["id"], body=uf.complete_body())
+    assert done.status == 200 and done.body["status"] == "requires_escalation", done.body
+
+    second = await _ready(runtime, tenant)
+    refused = await _complete(runtime, tenant, second["id"], body=uf.complete_body())
+    assert refused.body.get("status") != "requires_escalation", refused.body
+    assert "daily_amount_cap_exceeded" in json.dumps(refused.body)
+    assert executor.calls == []
+
+    # Re-opening the first link is not a new commitment.
+    again = await _complete(runtime, tenant, first["id"])
+    assert again.body["continue_url"] == done.body["continue_url"]
+
 @pytest.mark.asyncio
 async def test_shopify_handoff_refuses_without_a_connected_store_or_artifacts(db, executor, monkeypatch):
     tenant = await _tenant(db)

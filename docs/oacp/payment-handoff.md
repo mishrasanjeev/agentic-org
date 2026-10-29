@@ -49,7 +49,9 @@ evaluates two rules:
 - `oacp_artifacts_valid` for the catalog, price, inventory, policy and protocol
   adapter families (not `mandate_capability`: no agent-held instrument is charged);
 - `handoff_merchant_limits`: the merchant's `provider_policy.arbiter` limits when
-  they are configured; without them it passes.
+  they are configured; without them it passes. The daily maximum counts the
+  merchant's checkouts in the same currency that were paid today (UTC) or hold an
+  open payment link updated today; the checkout being decided adds its own total.
 
 `buyer_authority_verified`, `mandate_present_unexpired`, `consent_active` and
 `passport_amount_cap` are not evaluated. The agent moves no money and holds no

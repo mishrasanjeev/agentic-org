@@ -18,6 +18,9 @@ const setup = {
 };
 
 vi.mock("@/lib/api", () => ({ default: {} }));
+vi.mock("@/components/commerce/PaymentSettings", () => ({
+  default: ({ merchantId }: { merchantId: string }) => <div>Payment settings for {merchantId}</div>,
+}));
 vi.mock("../lib/api", () => ({
   sellEverywhereApi: {
     get: (...a: unknown[]) => get(...a),
@@ -152,7 +155,7 @@ describe("Sell everywhere", () => {
     const slug = await screen.findByLabelText("Shop name on the network");
     expect(setup.get).toHaveBeenCalledWith("tea-corner-1a2b3c");
     expect(slug).toHaveValue("tea-corner");
-    expect(screen.getByText("Payment settings load here.")).toBeInTheDocument();
+    expect(screen.getByText("Payment settings for tea-corner-1a2b3c")).toBeInTheDocument();
     const turnOn = screen.getByRole("button", { name: "Turn on Sell everywhere" });
     expect(turnOn).toBeDisabled();
     fireEvent.click(screen.getByRole("checkbox"));
