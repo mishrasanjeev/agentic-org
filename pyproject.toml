@@ -191,7 +191,7 @@ v4 = [
     "preshed==3.0.13; python_version == '3.14'",
     # Browser RPA is a shipped runtime. Keep the Python driver in the
     # production extra; Dockerfile installs the matching Chromium binary.
-    "playwright>=1.64.0,<2",
+    "playwright>=1.64.1,<2",
 ]
 bge-m3 = [
     # Heavy in-process BGE-M3 loader. This pulls PyTorch, so it stays out
