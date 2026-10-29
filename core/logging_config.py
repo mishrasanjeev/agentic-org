@@ -100,10 +100,13 @@ def build_formatter(log_format: str) -> logging.Formatter:
 
 
 # Per-tenant webhook URLs end in a path token derived from the deployment
-# secret (core/email_webhooks.py, core/cases/provider_webhooks.py). uvicorn's
+# secret (core/email_webhooks.py, core/cases/provider_webhooks.py,
+# api/v1/commerce_runtime.py shopify_webhook_path_token). uvicorn's
 # access log writes the whole request line, so without this every delivery
 # would copy a reusable routing credential into the logs.
-_WEBHOOK_PATH_TOKEN = re.compile(r"(/api/v1/webhooks/(?:email/[^/?\s]+/[^/?\s]+|providers/[^/?\s]+/[^/?\s]+)/)[^/?\s]+")
+_WEBHOOK_PATH_TOKEN = re.compile(
+    r"(/api/v1/webhooks/(?:email/[^/?\s]+/[^/?\s]+|providers/[^/?\s]+/[^/?\s]+|shopify/[^/?\s]+)/)[^/?\s]+"
+)
 _CHANNEL_VERIFY_TOKEN = re.compile(r"((?:hub(?:\.|%2e)verify_token)=)[^&\s\"]*", re.IGNORECASE)
 
 

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import hashlib
+import hmac
 import json
 import logging
 import os
@@ -41,11 +43,11 @@ from core.commerce.arbiter_store import (
 )
 from core.commerce.c6z_runtime_vertical import (
     C6Z_ARTIFACT_FAMILIES,
+    CATALOG_UPLOAD_SOURCE_SYSTEM,
     DEMO_SOURCE_SYSTEM,
     GRANTEX_AUTHORITY_ENV_VARS,
     PLURAL_PINE_ENV_VARS,
     SHOPIFY_ENV_VARS,
-    SHOPIFY_WEBHOOK_ENV_VARS,
     C6ZRuntimeValidationError,
     ShopifyAdminGraphQLClient,
     ShopifyCredentials,
@@ -70,6 +72,12 @@ from core.commerce.c6z_runtime_vertical import (
     verify_shopify_webhook_hmac,
     verify_telegram_webhook_secret,
     verify_whatsapp_webhook_signature,
+)
+from core.commerce.catalog_upload import (
+    CatalogUploadError,
+    build_catalog_upload_evidence,
+    rows_from_products,
+    uploaded_at_of,
 )
 from core.commerce.ledger import record_commerce_event, record_commerce_event_in_own_transaction
 from core.commerce.merchant_keys import active_key_record, add_active_key, new_merchant_key_record
@@ -221,6 +229,9 @@ class ShopifyConnectorCredentialRequest(BaseModel):
     client_secret: str | None = None
     redirect_uri: str | None = None
     validate_read: bool = True
+    # The signing secret Shopify shows under Settings > Notifications > Webhooks (or the custom
+    # app's API secret key for webhooks the app registers). Kept when a later save omits it.
+    webhook_secret: str | None = Field(default=None, min_length=16, max_length=256)
 
 
 class GrantexAuthorityRequest(BaseModel):
@@ -426,10 +437,15 @@ async def upsert_merchant_commerce_config(
     body: MerchantCommerceConfigUpsert,
     tenant_id: str = Depends(get_current_tenant),
 ) -> dict[str, Any]:
-    config = _normalize_merchant_config_from_body(tenant_id=tenant_id, merchant_id=merchant_id, body=body)
-    readiness = merchant_config_readiness(config)
+    seller_scope = body.seller_agent_id or _default_seller_agent_id(merchant_id)
     async with get_tenant_session(_tenant_uuid(tenant_id)) as session:
-        row = await session.get(C6ZMerchantCommerceConfigRow, config["config_id"])
+        row = await session.get(C6ZMerchantCommerceConfigRow, merchant_config_id(tenant_id, merchant_id, seller_scope))
+        # A save changes the policy keys it sends; keys it leaves out (arbiter limits, ucp, acp,
+        # executor settings) survive, and a key sent as null is removed.
+        stored_policy = (row.provider_policy or {}) if row is not None else {}
+        body = body.model_copy(update={"provider_policy": merge_provider_policy(stored_policy, body.provider_policy)})
+        config = _normalize_merchant_config_from_body(tenant_id=tenant_id, merchant_id=merchant_id, body=body)
+        readiness = merchant_config_readiness(config)
         new_config = row is None
         if row is None:
             row = C6ZMerchantCommerceConfigRow(config_id=config["config_id"])
@@ -477,7 +493,7 @@ async def upsert_merchant_commerce_config(
         "onboarding_packet_sync_blocker": (
             None
             if packet is not None
-            else "runtime onboarding packet sync currently supports Shopify source connectors only"
+            else "runtime onboarding packet sync supports Shopify and catalog upload source connectors only"
         ),
         "allowed_to_execute": False,
         "no_payment_execution": True,
@@ -578,12 +594,23 @@ async def upsert_shopify_connector_credentials(
     if body.validate_read:
         await _validate_shopify_read_credentials(credentials)
 
+    connector_name = _shopify_connector_config_name(body.merchant_id)
+    webhook_secret = (body.webhook_secret or "").strip()
+    if not webhook_secret:
+        async with get_tenant_session(tid) as session:
+            previous = await _load_shopify_connector_config_row(session, tid, body.merchant_id)
+        if previous is not None and previous.connector_name == connector_name:
+            # Same store: keep the stored signing secret. A different store needs its own.
+            if (previous.config or {}).get("shop_domain") == credentials.shop_domain:
+                webhook_secret = _stored_shopify_webhook_secret(previous)
     secret_fields = {
         "admin_access_token": credentials.admin_access_token,
         "shop_domain": credentials.shop_domain,
         "api_version": credentials.api_version,
         "credential_source": credential_source,
     }
+    if webhook_secret:
+        secret_fields["webhook_secret"] = webhook_secret
     encrypted = await encrypt_for_tenant(json.dumps(secret_fields), tid)
     config = {
         "merchant_id": body.merchant_id,
@@ -600,8 +627,8 @@ async def upsert_shopify_connector_credentials(
         "non_authoritative_for_transaction": True,
         "configured_by": "commerce_runtime",
         "configured_at": _now_iso(),
+        "webhook_secret_configured": bool(webhook_secret),
     }
-    connector_name = _shopify_connector_config_name(body.merchant_id)
     async with get_tenant_session(tid) as session:
         result = await session.execute(
             select(ConnectorConfig).where(
@@ -679,6 +706,8 @@ async def upsert_shopify_connector_credentials(
         "api_version": credentials.api_version,
         "credential_source": credential_source,
         "validated": body.validate_read,
+        "webhook_status": "configured" if webhook_secret else "blocked_missing_webhook_secret",
+        "webhook_path": shopify_webhook_path(tenant_id, body.merchant_id),
         "credential_values_redacted": True,
         "raw_payload_stored": False,
         "allowed_to_execute": False,
@@ -717,14 +746,15 @@ async def get_shopify_connector_status(
                     .limit(1)
                 )
             ).scalar_one_or_none()
-    webhook_resolution = resolve_env(SHOPIFY_WEBHOOK_ENV_VARS)
+    webhook_path = shopify_webhook_path(tenant_id, merchant_id)
     if row is None:
         return {
             "status": "not_configured",
             "merchant_id": merchant_id,
             "connected": False,
-            "webhook_status": "configured" if webhook_resolution.ready else "blocked_missing_webhook_secret",
-            "webhook_missing_env_vars": list(webhook_resolution.missing),
+            "webhook_status": "blocked_missing_webhook_secret",
+            "webhook_missing_env_vars": [],
+            "webhook_path": webhook_path,
             "credential_values_redacted": True,
             "allowed_to_execute": False,
             "non_authoritative_for_transaction": True,
@@ -747,8 +777,9 @@ async def get_shopify_connector_status(
         "last_sync_product_count": None if latest_evidence is None else latest_evidence.product_count,
         "last_sync_variant_count": None if latest_evidence is None else latest_evidence.variant_count,
         "last_error": row.sync_error,
-        "webhook_status": "configured" if webhook_resolution.ready else "blocked_missing_webhook_secret",
-        "webhook_missing_env_vars": list(webhook_resolution.missing),
+        "webhook_status": "configured" if config.get("webhook_secret_configured") else "blocked_missing_webhook_secret",
+        "webhook_missing_env_vars": [],
+        "webhook_path": webhook_path,
         "redacted_credential_ref": row.connector_name,
         "credential_values_redacted": True,
         "raw_payload_stored": False,
@@ -869,78 +900,167 @@ async def receive_shopify_product_webhook(
     request: Request,
     tenant_id: str = Depends(get_current_tenant),
 ) -> dict[str, Any]:
-    env_resolution = resolve_env(SHOPIFY_WEBHOOK_ENV_VARS)
-    if not env_resolution.ready:
+    """The signed-in variant: verifies with the stored webhook secret of the merchant that owns the shop.
+
+    Shopify itself posts to the per-merchant public path (``POST /api/v1/webhooks/shopify/...``,
+    ``shopify_webhook_path``); this route stays for callers that replay a delivery with a session.
+    """
+    raw_body = await request.body()
+    shop_domain = request.headers.get("x-shopify-shop-domain", "")
+    if not shop_domain:
+        raise HTTPException(status_code=400, detail="X-Shopify-Shop-Domain is required")
+    normalized_shop = _normalize_shopify_domain_for_api(shop_domain)
+    tid = _tenant_uuid(tenant_id)
+    async with get_tenant_session(tid) as session:
+        rows = [
+            row
+            for row in await _shopify_connector_rows(session, tid)
+            if (row.config or {}).get("shop_domain") == normalized_shop and (row.config or {}).get("merchant_id")
+        ]
+    stored = [(row, _stored_shopify_webhook_secret(row)) for row in rows]
+    if not any(secret for _row, secret in stored):
         raise HTTPException(
             status_code=424,
             detail={
-                "status": "blocked_missing_shopify_webhook_env",
-                "missing_env_vars": list(env_resolution.missing),
+                "status": "blocked_missing_shopify_webhook_secret",
+                "message": "Save the Shopify webhook signing secret with the merchant Shopify connection.",
             },
         )
-    raw_body = await request.body()
     hmac_header = request.headers.get("x-shopify-hmac-sha256", "")
-    topic = request.headers.get("x-shopify-topic", "products/update")
-    shop_domain = request.headers.get("x-shopify-shop-domain", "")
-    webhook_id = request.headers.get("x-shopify-webhook-id")
-    verified = verify_shopify_webhook_hmac(raw_body, hmac_header, os.environ["SHOPIFY_WEBHOOK_SECRET"])
+    verified = [row for row, secret in stored if secret and verify_shopify_webhook_hmac(raw_body, hmac_header, secret)]
     if not verified:
         raise HTTPException(status_code=401, detail="Shopify webhook HMAC verification failed")
+    merchant_ids = sorted({str((row.config or {})["merchant_id"]) for row in verified})
+    return await _record_shopify_product_webhook(
+        tenant_id=tenant_id, merchant_ids=merchant_ids, raw_body=raw_body, headers=request.headers
+    )
+
+
+SHOPIFY_WEBHOOK_PATH_TOKEN_BYTES = 16
+_SHOPIFY_WEBHOOK_TOKEN_RE = re.compile(r"^[0-9a-f]{32}$")
+
+
+def shopify_webhook_path_token(tenant_id: str, merchant_id: str) -> str:
+    """The unguessable token in a merchant Shopify webhook path, derived from the application secret.
+
+    Derived rather than stored (as ``core.email_webhooks.webhook_path_token``): rotating
+    ``AGENTICORG_SECRET_KEY`` changes every merchant Shopify webhook address.
+    """
+    message = f"shopify-webhook:v1:{tenant_id}:{merchant_id}".encode()
+    digest = hmac.new(settings.secret_key.encode("utf-8"), message, hashlib.sha256).digest()
+    return digest[:SHOPIFY_WEBHOOK_PATH_TOKEN_BYTES].hex()
+
+
+def shopify_webhook_path(tenant_id: str, merchant_id: str) -> str:
+    """Where the merchant points its Shopify product webhooks (Shopify admin, Notifications, Webhooks)."""
+    return f"/api/v1/webhooks/shopify/{tenant_id}/{shopify_webhook_path_token(tenant_id, merchant_id)}"
+
+
+async def receive_shopify_webhook_for_path(
+    *,
+    tenant_id: str,
+    path_token: str,
+    raw_body: bytes,
+    headers: Mapping[str, str],
+) -> dict[str, Any] | None:
+    """Verify a Shopify delivery on a merchant's own path; None when the path or signature does not hold.
+
+    The path token names the merchant; the ``X-Shopify-Hmac-Sha256`` signature must verify
+    with that merchant's stored webhook secret, and ``X-Shopify-Shop-Domain`` must be its shop.
+    """
+    if not _SHOPIFY_WEBHOOK_TOKEN_RE.match(path_token):
+        return None
+    tid = _tenant_uuid(tenant_id)
+    async with get_tenant_session(tid) as session:
+        rows = await _shopify_connector_rows(session, tid)
+    for row in rows:
+        merchant_id = str((row.config or {}).get("merchant_id") or "")
+        if not merchant_id or not hmac.compare_digest(path_token, shopify_webhook_path_token(tenant_id, merchant_id)):
+            continue
+        secret = _stored_shopify_webhook_secret(row)
+        shop_header = str(headers.get("x-shopify-shop-domain") or "").strip().lower()
+        if not secret or shop_header != (row.config or {}).get("shop_domain"):
+            return None
+        if not verify_shopify_webhook_hmac(raw_body, str(headers.get("x-shopify-hmac-sha256") or ""), secret):
+            return None
+        return await _record_shopify_product_webhook(
+            tenant_id=tenant_id, merchant_ids=[merchant_id], raw_body=raw_body, headers=headers
+        )
+    return None
+
+
+async def _shopify_connector_rows(session: Any, tid: UUID) -> list[ConnectorConfig]:
+    result = await session.execute(
+        select(ConnectorConfig).where(
+            ConnectorConfig.tenant_id == tid,
+            ConnectorConfig.company_id.is_(None),
+            ConnectorConfig.auth_type == "shopify_admin_api",
+        )
+    )
+    return list(result.scalars().all())
+
+
+def _stored_shopify_credential_data(row: ConnectorConfig | None) -> dict[str, Any]:
+    enc = (row.credentials_encrypted or {}).get("_encrypted") if row is not None else None
+    if not isinstance(enc, str) or not enc:
+        return {}
+    try:
+        data = json.loads(decrypt_for_tenant(enc))
+    # enterprise-gate: broad-except-ok reason=unreadable-shopify-vault-fails-closed-as-no-credentials-logged
+    except Exception:
+        logger.warning("shopify_connector_vault_unreadable")
+        return {}
+    return data if isinstance(data, dict) else {}
+
+
+def _stored_shopify_webhook_secret(row: ConnectorConfig) -> str:
+    if not (row.config or {}).get("webhook_secret_configured"):
+        return ""
+    return str(_stored_shopify_credential_data(row).get("webhook_secret") or "").strip()
+
+
+async def _record_shopify_product_webhook(
+    *,
+    tenant_id: str,
+    merchant_ids: Sequence[str],
+    raw_body: bytes,
+    headers: Mapping[str, str],
+) -> dict[str, Any]:
+    """Mark the merchants' packets for refresh and ledger the verified delivery."""
+    topic = str(headers.get("x-shopify-topic") or "products/update")
+    shop_domain = str(headers.get("x-shopify-shop-domain") or "")
+    webhook_id = headers.get("x-shopify-webhook-id")
     stale_packets_marked = 0
-    if shop_domain:
-        normalized_shop = _normalize_shopify_domain_for_api(shop_domain)
-        async with get_tenant_session(_tenant_uuid(tenant_id)) as session:
-            result = await session.execute(
-                select(ConnectorConfig).where(
-                    ConnectorConfig.tenant_id == _tenant_uuid(tenant_id),
-                    ConnectorConfig.company_id.is_(None),
-                )
-            )
-            connector_rows = result.scalars().all()
-            merchant_ids = {
-                str((row.config or {}).get("merchant_id"))
-                for row in connector_rows
-                if (row.config or {}).get("shop_domain") == normalized_shop and (row.config or {}).get("merchant_id")
-            }
-            for merchant_id in merchant_ids:
-                packets = (
-                    await session.scalars(
-                        select(C6ZSellerOnboardingPacketRow).where(
-                            C6ZSellerOnboardingPacketRow.tenant_id == tenant_id,
-                            C6ZSellerOnboardingPacketRow.merchant_id == merchant_id,
-                            C6ZSellerOnboardingPacketRow.status.in_(
-                                (
-                                    "sync_ready",
-                                    "synced",
-                                    "authority_requested",
-                                    "artifacts_cached",
-                                )
-                            ),
-                        )
+    async with get_tenant_session(_tenant_uuid(tenant_id)) as session:
+        for merchant_id in merchant_ids:
+            packets = (
+                await session.scalars(
+                    select(C6ZSellerOnboardingPacketRow).where(
+                        C6ZSellerOnboardingPacketRow.tenant_id == tenant_id,
+                        C6ZSellerOnboardingPacketRow.merchant_id == merchant_id,
+                        C6ZSellerOnboardingPacketRow.status.in_(
+                            (
+                                "sync_ready",
+                                "synced",
+                                "authority_requested",
+                                "artifacts_cached",
+                            )
+                        ),
                     )
-                ).all()
-                for packet in packets:
-                    packet.status = "cache_refresh_needed"
-                    stale_packets_marked += 1
-            await record_commerce_event(
-                session,
-                tenant_id=tenant_id,
-                event="commerce.runtime.shopify.product_update_webhook",
-                outcome="success",
-                merchant_id=None,
-                seller_agent_id=None,
-                buyer_agent_id=None,
-                payload=_webhook_ledger_payload(topic, shop_domain, webhook_id, raw_body, stale_packets_marked),
-            )
-    else:
-        await record_commerce_event_in_own_transaction(
+                )
+            ).all()
+            for packet in packets:
+                packet.status = "cache_refresh_needed"
+                stale_packets_marked += 1
+        await record_commerce_event(
+            session,
             tenant_id=tenant_id,
             event="commerce.runtime.shopify.product_update_webhook",
             outcome="success",
-            merchant_id=None,
+            merchant_id=merchant_ids[0] if len(merchant_ids) == 1 else None,
             seller_agent_id=None,
             buyer_agent_id=None,
-            payload=_webhook_ledger_payload(topic, shop_domain, webhook_id, raw_body, 0),
+            payload=_webhook_ledger_payload(topic, shop_domain, webhook_id, raw_body, stale_packets_marked),
         )
     return {
         "status": "webhook_verified",
@@ -2597,6 +2717,19 @@ def _commerce_a2a_agent_card() -> dict[str, Any]:
     }
 
 
+def merge_provider_policy(stored: Mapping[str, Any], incoming: Mapping[str, Any]) -> dict[str, Any]:
+    """``incoming`` merged into ``stored``: nested objects merge key by key, a null value removes the key."""
+    merged: dict[str, Any] = dict(stored)
+    for key, value in incoming.items():
+        if value is None:
+            merged.pop(key, None)
+        elif isinstance(value, Mapping) and isinstance(merged.get(key), Mapping):
+            merged[key] = merge_provider_policy(cast(Mapping[str, Any], merged[key]), value)
+        else:
+            merged[key] = value
+    return merged
+
+
 def _normalize_merchant_config_from_body(
     *,
     tenant_id: str,
@@ -2699,10 +2832,10 @@ def _build_packet_from_merchant_config(config: Mapping[str, Any]) -> dict[str, A
             else str(first_provider.get("provider_type") or "none")
         )
     connector_metadata = {
-        # The synthetic demo source has no credential to reference.
+        # The synthetic demo source and an uploaded catalog have no credential to reference.
         "credential_ref": (
             None
-            if connector_choice == DEMO_SOURCE_SYSTEM
+            if connector_choice in (DEMO_SOURCE_SYSTEM, CATALOG_UPLOAD_SOURCE_SYSTEM)
             else source_connector.get("credential_ref") or "tenant_connector_config"
         ),
         "connector_type": source_connector.get("connector_type"),
@@ -2925,6 +3058,85 @@ async def sync_demo_catalog(*, tenant_id: str, packet_id: str) -> dict[str, Any]
     }
 
 
+async def store_catalog_upload(
+    *,
+    tenant_id: str,
+    packet: Mapping[str, Any],
+    rows: Sequence[Mapping[str, Any]],
+) -> dict[str, Any]:
+    """Store a merchant's validated catalog upload as the packet's connector evidence (ledgered)."""
+    now_iso = _now_iso()
+    try:
+        evidence = build_catalog_upload_evidence(packet=packet, rows=rows, uploaded_at=now_iso, observed_at=now_iso)
+    except (CatalogUploadError, C6ZRuntimeValidationError) as exc:
+        raise HTTPException(422, {"status": "catalog_upload_refused", "message": str(exc)}) from exc
+    return await _store_upload_evidence(
+        tenant_id=tenant_id, evidence=evidence, event="commerce.runtime.catalog_upload.store"
+    )
+
+
+async def reread_uploaded_catalog(*, tenant_id: str, evidence_id: str) -> dict[str, Any]:
+    """Read the stored upload again for a Grantex request: a new observation time, the same catalog.
+
+    The upload stays the merchant's catalog until it uploads another, so the evidence id and
+    reference do not change and ``uploaded_at`` keeps the original upload time.
+    """
+    async with get_tenant_session(_tenant_uuid(tenant_id)) as session:
+        evidence_row = await session.get(C6ZConnectorEvidenceRow, evidence_id)
+        if evidence_row is None or evidence_row.tenant_id != tenant_id:
+            raise HTTPException(404, "Catalog upload evidence not found")
+        packet_row = await session.get(C6ZSellerOnboardingPacketRow, evidence_row.packet_id)
+        if packet_row is None or packet_row.tenant_id != tenant_id:
+            raise HTTPException(404, "Seller Commerce Agent onboarding packet not found")
+        products = list(evidence_row.products or [])
+        packet = _row_to_packet(packet_row)
+    uploaded_at = uploaded_at_of(products) or _now_iso()
+    try:
+        evidence = build_catalog_upload_evidence(
+            packet=packet, rows=rows_from_products(products), uploaded_at=uploaded_at, observed_at=_now_iso()
+        )
+    except (CatalogUploadError, C6ZRuntimeValidationError) as exc:
+        raise HTTPException(422, {"status": "catalog_upload_refused", "message": str(exc)}) from exc
+    return await _store_upload_evidence(
+        tenant_id=tenant_id, evidence=evidence, event="commerce.runtime.catalog_upload.reread"
+    )
+
+
+async def _store_upload_evidence(*, tenant_id: str, evidence: Mapping[str, Any], event: str) -> dict[str, Any]:
+    async with get_tenant_session(_tenant_uuid(tenant_id)) as session:
+        packet_row = await session.get(C6ZSellerOnboardingPacketRow, str(evidence["packet_id"]))
+        if packet_row is None or packet_row.tenant_id != tenant_id:
+            raise HTTPException(404, "Seller Commerce Agent onboarding packet not found")
+        row = await session.get(C6ZConnectorEvidenceRow, evidence["evidence_id"])
+        if row is None:
+            row = C6ZConnectorEvidenceRow(evidence_id=evidence["evidence_id"])
+            session.add(row)
+        _apply_evidence(row, evidence, hmac_verified=False)
+        packet_row.status = "synced"
+        await record_commerce_event(
+            session,
+            tenant_id=tenant_id,
+            event=event,
+            outcome="success",
+            merchant_id=packet_row.merchant_id,
+            seller_agent_id=packet_row.seller_agent_id,
+            buyer_agent_id=None,
+            payload={key: value for key, value in evidence.items() if key != "products"},
+            resource_id=packet_row.packet_id,
+        )
+    return {
+        "status": "catalog_upload_stored",
+        "evidence_id": evidence["evidence_id"],
+        "source_evidence_ref": evidence["source_evidence_ref"],
+        "product_count": evidence["product_count"],
+        "variant_count": evidence["variant_count"],
+        "currency": evidence.get("currency"),
+        "uploaded_at": evidence.get("uploaded_at"),
+        "merchant_system_source_of_record": True,
+        "allowed_to_execute": False,
+    }
+
+
 # Grantex refuses connector evidence observed more than 15 minutes ago; older evidence is re-read first.
 EVIDENCE_REUSE_SECONDS = 12 * 60
 
@@ -2980,6 +3192,10 @@ async def refresh_scope_artifacts(*, tenant_id: str, merchant_id: str, seller_ag
         if (datetime.now(UTC) - observed).total_seconds() > EVIDENCE_REUSE_SECONDS:
             if source_system == DEMO_SOURCE_SYSTEM:
                 evidence_id = (await sync_demo_catalog(tenant_id=tenant_id, packet_id=packet_id))["evidence_id"]
+            elif source_system == CATALOG_UPLOAD_SOURCE_SYSTEM:
+                evidence_id = (await reread_uploaded_catalog(tenant_id=tenant_id, evidence_id=evidence_id))[
+                    "evidence_id"
+                ]
             elif source_system == "shopify":
                 synced = await _sync_shopify_packet(
                     tenant_id=tenant_id, packet_id=packet_id, page_size=50, max_pages=10, currency=currency
@@ -3325,34 +3541,56 @@ async def _resolve_shopify_credentials_for_packet(
         ).strip()
         if not token:
             raise HTTPException(status_code=424, detail="Shopify connector token is missing")
-        return (
-            ShopifyCredentials(
-                shop_domain=_normalize_shopify_domain_for_api(
-                    credential_data.get("shop_domain")
-                    or (row.config or {}).get("shop_domain")
-                    or ((packet.get("connector_metadata_redacted") or {}).get("shop_domain"))
-                    or "",
-                ),
-                admin_access_token=token,
-                api_version=_validate_shopify_api_version(
-                    str(credential_data.get("api_version") or (row.config or {}).get("api_version") or "2026-04")
-                ),
+        credentials = ShopifyCredentials(
+            shop_domain=_normalize_shopify_domain_for_api(
+                credential_data.get("shop_domain")
+                or (row.config or {}).get("shop_domain")
+                or ((packet.get("connector_metadata_redacted") or {}).get("shop_domain"))
+                or "",
             ),
-            "tenant_connector_config",
+            admin_access_token=token,
+            api_version=_validate_shopify_api_version(
+                str(credential_data.get("api_version") or (row.config or {}).get("api_version") or "2026-04")
+            ),
         )
+        _require_packet_shop_domain(packet, credentials.shop_domain, required=False)
+        return credentials, "tenant_connector_config"
 
-    env_resolution = resolve_env(SHOPIFY_ENV_VARS)
-    if not env_resolution.ready:
+    # A tenant without its own stored connector never reads the deployment's Shopify store,
+    # except the platform operator's tenant, explicitly named, for exactly that shop.
+    operator_tenant = (settings.shopify_env_operator_tenant_id or "").strip()
+    if operator_tenant and operator_tenant == str(tenant_id) and resolve_env(SHOPIFY_ENV_VARS).ready:
+        try:
+            credentials = resolve_shopify_credentials()
+        except C6ZRuntimeValidationError as exc:
+            raise HTTPException(status_code=424, detail="The operator Shopify settings are unusable") from exc
+        _require_packet_shop_domain(packet, credentials.shop_domain, required=True)
+        return credentials, "environment_operator"
+    raise HTTPException(
+        status_code=424,
+        detail={
+            "status": "blocked_missing_shopify_credentials",
+            "message": "Connect this merchant's Shopify store (shop domain and Admin API token) first.",
+            "expected_connector_config": _shopify_connector_config_name(str(packet["merchant_id"])),
+            "external_validation_performed": False,
+        },
+    )
+
+
+def _require_packet_shop_domain(packet: Mapping[str, Any], shop_domain: str, *, required: bool) -> None:
+    """Refuse credentials for a different store than the one the onboarding packet names."""
+    named = str((packet.get("connector_metadata_redacted") or {}).get("shop_domain") or "").strip().lower()
+    if not named and not required:
+        return
+    if named != shop_domain:
         raise HTTPException(
-            status_code=424,
+            status_code=409,
             detail={
-                "status": "blocked_missing_shopify_credentials",
-                "missing_env_vars": list(env_resolution.missing),
-                "expected_connector_config": _shopify_connector_config_name(str(packet["merchant_id"])),
+                "status": "blocked_shop_domain_mismatch",
+                "message": "The Shopify credentials are for a different store than this merchant's onboarding packet.",
                 "external_validation_performed": False,
             },
         )
-    return resolve_shopify_credentials(), "environment"
 
 
 async def _load_shopify_connector_config_row(
@@ -3887,6 +4125,10 @@ def _row_to_evidence(row: C6ZConnectorEvidenceRow) -> dict[str, Any]:
     if row.source_system == DEMO_SOURCE_SYSTEM:
         # The synthetic demo source carries no external data: say so wherever the evidence goes.
         evidence["synthetic_data"] = True
+    if row.source_system == CATALOG_UPLOAD_SOURCE_SYSTEM:
+        # The merchant uploaded the catalog itself: no store system stands behind it.
+        evidence["merchant_system_source_of_record"] = True
+        evidence["uploaded_at"] = uploaded_at_of(row.products or [])
     return evidence
 
 
