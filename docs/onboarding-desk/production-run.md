@@ -71,3 +71,4 @@ own tenant.
 | Date | Commit | Result |
 | --- | --- | --- |
 | 28 October 2026 | 364aea05 (API at 21d782da) | All nine steps passed; tenant `desk-production-run-20261028-fce274` retired. An earlier attempt the same day used `latest` of the secret key and stopped at the applicant's session with `link_invalid`; its tenant was retired too. |
+| 29 October 2026 | 3c442be7 (API at 3c442be7) | All nine steps passed; tenant `desk-production-run-20261029-0bc101` retired. |
