@@ -4474,6 +4474,7 @@ async def resume_agent(
         prev_event_result = await session.execute(
             select(AgentLifecycleEvent)
             .where(
+                AgentLifecycleEvent.tenant_id == tid,
                 AgentLifecycleEvent.agent_id == agent_id,
                 AgentLifecycleEvent.to_status == "paused",
             )
@@ -4489,6 +4490,7 @@ async def resume_agent(
             # Re-validate that shadow accuracy hasn't degraded below floor
             if (
                 agent.shadow_min_samples > 0
+                and agent.shadow_sample_count > 0
                 and agent.shadow_accuracy_current is not None
                 and agent.shadow_accuracy_current < agent.shadow_accuracy_floor
             ):
@@ -5165,19 +5167,36 @@ async def retest_agent(
     tenant_id: str = Depends(get_current_tenant),
     caller: Caller | None = Depends(caller_from_request),
 ):
-    """TC_AGENT-008: Reset shadow counters so users can re-evaluate a shadow agent."""
+    """TC_AGENT-008: Reset shadow counters, including while paused from shadow."""
     tid = _uuid.UUID(tenant_id)
     async with get_tenant_session(tid) as session:
-        result = await session.execute(select(Agent).where(Agent.id == agent_id, Agent.tenant_id == tid))
+        result = await session.execute(
+            select(Agent).where(Agent.id == agent_id, Agent.tenant_id == tid).with_for_update()
+        )
         agent = result.scalar_one_or_none()
         if not agent:
             raise HTTPException(404, "Agent not found")
         # Bug sheet 2026-09-14 rows 19/22: retest had no gate at all.
         require_agent_mutable(agent, _effective_caller(caller))
-        if agent.status != "shadow":
+        shadow_origin = agent.status == "shadow"
+        if agent.status == "paused":
+            pause_event = (
+                await session.execute(
+                    select(AgentLifecycleEvent)
+                    .where(
+                        AgentLifecycleEvent.tenant_id == tid,
+                        AgentLifecycleEvent.agent_id == agent_id,
+                        AgentLifecycleEvent.to_status == "paused",
+                    )
+                    .order_by(AgentLifecycleEvent.created_at.desc())
+                    .limit(1)
+                )
+            ).scalar_one_or_none()
+            shadow_origin = pause_event is not None and pause_event.from_status == "shadow"
+        if not shadow_origin:
             raise HTTPException(
                 409,
-                f"Cannot retest agent in '{agent.status}' status; must be in shadow mode",
+                f"Cannot retest agent in '{agent.status}' status; must be in shadow mode or paused from shadow",
             )
 
         old_sample_count = agent.shadow_sample_count
@@ -5194,7 +5213,9 @@ async def retest_agent(
             tenant_id=tid,
             agent_id=agent.id,
             from_status="shadow",
-            to_status="shadow",
+            # Preserve the shadow origin for resume's latest-pause lookup,
+            # including after repeated retests; retest never lifts the pause.
+            to_status=agent.status,
             triggered_by="api",
             reason="Shadow counters reset for re-evaluation",
             shadow_accuracy=old_accuracy,

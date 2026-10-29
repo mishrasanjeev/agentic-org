@@ -1652,9 +1652,9 @@ function ShadowTab({ agent, onUpdated, canManage }: { agent: Agent; onUpdated: (
       {/* Sample Progress */}
       <Card>
         <CardHeader>
-          <div className="flex justify-between items-center">
+          <div className="flex flex-col gap-3 text-foreground sm:flex-row sm:justify-between sm:items-center">
             <CardTitle className="text-sm font-semibold">Shadow Sample Progress</CardTitle>
-            <div className="flex gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               {/* Uday CA Firms 2026-04-26 BUG (major) part B: explicit
                   batch-size control + Stop button. Default batch=1
                   (one click = one sample), max 10. */}
@@ -1665,13 +1665,14 @@ function ShadowTab({ agent, onUpdated, canManage }: { agent: Agent; onUpdated: (
                 value={batchSize}
                 onChange={(e) => setBatchSize(Math.max(1, Math.min(10, Number(e.target.value) || 1)))}
                 disabled={generating || retesting || meetsCount}
-                className="border rounded px-2 py-1 text-sm w-16"
+                className="border rounded px-2 py-1 text-sm w-16 min-h-11"
                 title="Number of samples to run on next click (1-10)"
                 aria-label="Samples per click"
               />
               <Button
                 variant="outline"
                 size="sm"
+                className="min-h-11 whitespace-nowrap"
                 onClick={generateSample}
                 disabled={generating || retesting || meetsCount}
                 title={`Run ${batchSize} test sample${batchSize === 1 ? "" : "s"}`}
@@ -1697,10 +1698,11 @@ function ShadowTab({ agent, onUpdated, canManage }: { agent: Agent; onUpdated: (
                   Stop
                 </Button>
               )}
-              {sampleCount > 0 && canManage && (
+              {(sampleCount > 0 || agent.shadow_accuracy_current != null) && canManage && (
                 <Button
                   variant="outline"
                   size="sm"
+                  className="min-h-11"
                   onClick={handleRetest}
                   disabled={retesting || generating}
                 >
