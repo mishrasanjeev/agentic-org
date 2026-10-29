@@ -104,6 +104,12 @@ MESSAGE_ERROR_MAP: dict[str, str] = {
     "mandate_required": "missing",
     "executor_unavailable": "unsupported",
     "arbiter_refused": "payment_declined",
+    # payment hand-off (core/commerce/payment_handoff.py): the buyer pays on the merchant's own page
+    "payment_handoff": "intervention_required",
+    "payment_handoff_unavailable": "unsupported",
+    "payment_setup_incomplete": "unsupported",
+    "payment_link_unavailable": "payment_declined",
+    "payment_link_refused": "payment_declined",
     # decision consumption
     "decision_id_missing": "missing",
     "decision_not_found": "not_found",

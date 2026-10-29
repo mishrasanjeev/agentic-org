@@ -3888,7 +3888,7 @@
     "tenant_required": true
   },
   {
-    "audit_event": null,
+    "audit_event": "commerce.payments.settings.write",
     "auth_required": true,
     "function": "put_payment_settings",
     "idempotency": "payment-settings-converge",
@@ -3906,7 +3906,7 @@
     "tenant_required": true
   },
   {
-    "audit_event": null,
+    "audit_event": "commerce.payments.plural.credentials.write",
     "auth_required": true,
     "function": "put_plural_credentials",
     "idempotency": "merchant-plural-credential-upsert",
@@ -3924,7 +3924,7 @@
     "tenant_required": true
   },
   {
-    "audit_event": null,
+    "audit_event": "commerce.payments.plural.credentials.test",
     "auth_required": true,
     "function": "check_plural_credentials",
     "idempotency": "credential-test-has-no-side-effect-beyond-last-test",

@@ -138,7 +138,7 @@ async def get_payment_settings(
     scope="commerce.runtime.merchant_config.write",
     rate_limit="commerce-runtime-write",
     idempotency="payment-settings-converge",
-    audit_event=SETTINGS_EVENT,
+    audit_event="commerce.payments.settings.write",
 )
 async def put_payment_settings(
     merchant_id: str, body: PaymentSettingsRequest, tenant_id: str = Depends(get_current_tenant)
@@ -199,7 +199,7 @@ _SETUP_MESSAGES = {
     scope="commerce.runtime.merchant_config.write",
     rate_limit="commerce-runtime-write",
     idempotency="merchant-plural-credential-upsert",
-    audit_event=CREDENTIALS_EVENT,
+    audit_event="commerce.payments.plural.credentials.write",
 )
 async def put_plural_credentials(
     merchant_id: str, body: PluralCredentialsRequest, tenant_id: str = Depends(get_current_tenant)
@@ -246,7 +246,7 @@ async def put_plural_credentials(
     scope="commerce.runtime.merchant_config.write",
     rate_limit="commerce-runtime-write",
     idempotency="credential-test-has-no-side-effect-beyond-last-test",
-    audit_event=TEST_EVENT,
+    audit_event="commerce.payments.plural.credentials.test",
 )
 async def check_plural_credentials(merchant_id: str, tenant_id: str = Depends(get_current_tenant)) -> dict[str, Any]:
     tenant = _tenant_uuid(tenant_id)

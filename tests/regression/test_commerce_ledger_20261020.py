@@ -240,6 +240,7 @@ def test_every_declared_commerce_write_event_is_written_by_its_handler() -> None
         a2a_interop,
         commerce_acp,
         commerce_ledger,
+        commerce_payments,
         commerce_runtime,
         commerce_ucp,
         commerce_ucp_publishing,
@@ -262,6 +263,7 @@ def test_every_declared_commerce_write_event_is_written_by_its_handler() -> None
         + inspect.getsource(merchant_custom_domains)
         + inspect.getsource(network)
         + inspect.getsource(commerce_network)
+        + inspect.getsource(commerce_payments)
     )
     checked = 0
     for route in http_routes(app):
