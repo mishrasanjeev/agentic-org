@@ -21,14 +21,23 @@ from core.policy import EXAMPLES_DIR, load_policy
 from core.policy.types import AllOf, AnyOf, Compare, Condition, Not, Operator, Policy
 from tests.unit.business_underwriter.conftest import ALL_FIXTURES
 
-EXAMPLE_POLICY_FILES = ("business_onboarding_uk.yaml", "business_onboarding_us.yaml")
+EXAMPLE_POLICY_FILES = ("business_onboarding_uk.yaml", "business_onboarding_us.yaml", "business_onboarding_ca.yaml")
 # Which fixtures each example decides: `conftest.policy_for` picks the UK
 # example for `gb-` fixtures and the US one for the rest, so each policy is
 # checked against its own jurisdiction only.
-POLICY_FIXTURE_PREFIX = {"business_onboarding_uk.yaml": "gb-", "business_onboarding_us.yaml": "us-"}
+POLICY_FIXTURE_PREFIX = {
+    "business_onboarding_uk.yaml": "gb-",
+    "business_onboarding_us.yaml": "us-",
+    "business_onboarding_ca.yaml": "ca-",
+}
 # One clean fixture per jurisdiction, and the tier it must reach: a clean case
 # has to come out `low`, not `medium` on indeterminate reasons.
-CLEAN_FIXTURES = {"gb-clean-brightwater": "low", "us-clean-quillfeather": "low", "us-clean-hollowbrook": "low"}
+CLEAN_FIXTURES = {
+    "gb-clean-brightwater": "low",
+    "us-clean-quillfeather": "low",
+    "us-clean-hollowbrook": "low",
+    "ca-clean-mapleleaf": "low",
+}
 STATUS_PATH = "verification.status"
 # Operators whose operand is a status value rather than a presence test.
 VALUE_OPERATORS = (Operator.EQ, Operator.NE, Operator.IN, Operator.NOT_IN)

@@ -262,7 +262,11 @@ def test_mistake_5_localstorage_auth_bypass_count_below_cap() -> None:
 # Reviewed addition: DELETE /org/members/{user_id}/mfa (api/v1/org.py) deletes no
 # row: it clears the member's MFA enrolment columns and revokes their sessions
 # (admin only, never their own); 39 -> 40.
-DELETE_HANDLER_CAP = 40
+# Reviewed addition: DELETE /onboarding-desk/apply/documents/{document_id}
+# (api/v1/onboarding_desk.py) is a soft delete: it sets removed_at on the
+# applicant's own upload, and the row and its encrypted content stay for the
+# partner's download and the evidence pack; 40 -> 41.
+DELETE_HANDLER_CAP = 41
 
 DELETE_DECORATOR = re.compile(r'^@router\.delete\(', re.MULTILINE)
 

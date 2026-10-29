@@ -83,6 +83,7 @@ _IDENTIFIER_FORMATS = {
     "gb_company_number": re.compile(r"^[0-9]{8}$"),
     "us_ein": re.compile(r"^[0-9]{2}-[0-9]{7}$"),
     "us_state_file_number": re.compile(r"^[0-9]{7}$"),
+    "ca_business_number": re.compile(r"^[0-9]{9}$"),
 }
 
 

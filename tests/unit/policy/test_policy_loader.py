@@ -174,7 +174,7 @@ def test_loading_an_example_policy_logs_a_warning() -> None:
 def test_shipped_examples_are_marked_as_examples_and_warn_on_load() -> None:
     with structlog.testing.capture_logs() as logs:
         policies = load_policies(EXAMPLES_DIR)
-    assert sorted(policies) == ["business_onboarding_uk", "business_onboarding_us"]
+    assert sorted(policies) == ["business_onboarding_ca", "business_onboarding_uk", "business_onboarding_us"]
     for policy in policies.values():
         assert policy.status is PolicyStatus.EXAMPLE
         assert policy.reviewed_by is None
@@ -182,7 +182,7 @@ def test_shipped_examples_are_marked_as_examples_and_warn_on_load() -> None:
         raw = Path(policy.source).read_text(encoding="utf-8")
         assert "EXAMPLE POLICY - NOT REVIEWED - DO NOT USE FOR REAL ONBOARDING DECISIONS" in raw
     warned = sorted(entry["policy"] for entry in logs if entry["event"] == "policy_example_loaded")
-    assert warned == ["business_onboarding_uk", "business_onboarding_us"]
+    assert warned == ["business_onboarding_ca", "business_onboarding_uk", "business_onboarding_us"]
     with pytest.raises(PolicyLoadError) as info:
         load_policies(EXAMPLES_DIR, require_production=True)
     assert info.value.reason is R.NOT_PRODUCTION

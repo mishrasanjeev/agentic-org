@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import copy
 import json
 from types import SimpleNamespace
 
@@ -108,8 +109,7 @@ def test_products_are_summarised_with_rupee_prices():
     }
     assert bot._product_summary("tea-corner", product) == {
         "shop": "tea-corner",
-        "id": "TEA-1",
-        "variant_id": "TEA-1-250",
+        "item_id": "TEA-1-250",
         "title": "Masala Chai Blend",
         "price": "Rs 449.00",
         "available": True,
@@ -125,6 +125,7 @@ def test_products_are_summarised_with_rupee_prices():
         },
     )
     assert bare["price"] == "USD 10.00" and bare["description"] == "plain text" and bare["available"] is None
+    assert bare["item_id"] == "X"
     assert bot._money(None) is None
 
 
@@ -177,7 +178,8 @@ async def test_checkout_tools_default_to_the_chosen_shop_and_failures_reach_the_
     assert calls == [
         ("tea-corner", "create_checkout", {"line_items": [{"item": {"id": "TEA-1"}, "quantity": 20}]}, None),
         ("tea-corner", "get_checkout", None, "chk_1"),
-        ("tea-corner", "update_checkout", {"id": "chk_1"}, "chk_1"),
+        ("tea-corner", "get_checkout", None, "chk_1"),
+        ("tea-corner", "update_checkout", {"id": "chk_1", "line_items": []}, "chk_1"),
     ]
     assert await tools.list_shops() == {"shops": [{"shop": "tea-corner", "name": "Tea Corner"}]}
     assert await tools.search("chai") == {"products": []}
@@ -321,3 +323,137 @@ def test_the_setup_script_entry_point_reads_the_base_url(monkeypatch):
     monkeypatch.setattr(script, "_main", fake_main)
     assert script.main() == 0
     assert seen == ["https://app.example"]
+
+
+class PickupShop:
+    """Answers checkout calls the way the UCP fulfilment handler does for pickup."""
+
+    def __init__(self, locations):
+        self.locations = locations
+        self.updates = []
+
+    async def __call__(self, slug, operation, body, session_id=None):
+        line_items = [{"id": "li_1", "item": {"id": "TEA-1"}, "quantity": 2}]
+        if operation == "get_checkout":
+            return {"http_status": 200, "shop": slug, "id": session_id, "line_items": line_items}
+        self.updates.append(copy.deepcopy(body))
+        if not body.get("line_items"):
+            return {"http_status": 400, "messages": [{"content": "line_items must be a non-empty array"}]}
+        method = (body.get("fulfillment") or {}).get("methods", [{}])[0]
+        selected = method.get("selected_destination_id")
+        options = [{"id": f"pickup-{selected}", "amount": 0}] if selected else []
+        chosen = (method.get("groups") or [{}])[0].get("selected_option_id")
+        group = {"options": options, "selected_option_id": chosen if chosen in [o["id"] for o in options] else None}
+        answer = {
+            "type": "pickup",
+            "destinations": self.locations,
+            "selected_destination_id": selected,
+            "groups": [group],
+        }
+        status = "ready_for_complete" if group["selected_option_id"] else "incomplete"
+        return {
+            "http_status": 200,
+            "shop": slug,
+            "status": status,
+            "line_items": line_items,
+            "fulfillment": {"methods": [answer]},
+        }
+
+
+@pytest.mark.asyncio
+async def test_choose_pickup_picks_the_only_location_and_its_option(monkeypatch):
+    shop = PickupShop([{"id": "ooty", "name": "Nilgiri Tea House, Ooty"}])
+    monkeypatch.setattr(api, "network_checkout", shop)
+    answer = await bot.ShopperTools("tea-corner").choose_pickup("", "chk_1")
+    assert answer["status"] == "ready_for_complete"
+    items = [{"id": "li_1", "item": {"id": "TEA-1"}, "quantity": 2}]
+    assert shop.updates == [
+        {"line_items": items, "fulfillment": {"methods": [{"type": "pickup"}]}},
+        {"line_items": items, "fulfillment": {"methods": [{"type": "pickup", "selected_destination_id": "ooty"}]}},
+        {
+            "line_items": items,
+            "fulfillment": {
+                "methods": [
+                    {
+                        "type": "pickup",
+                        "selected_destination_id": "ooty",
+                        "groups": [{"selected_option_id": "pickup-ooty"}],
+                    }
+                ]
+            },
+        },
+    ]
+
+
+@pytest.mark.asyncio
+async def test_choose_pickup_asks_which_location_when_the_shop_has_several(monkeypatch):
+    shop = PickupShop([{"id": "ooty", "name": "Ooty store"}, {"id": "coonoor", "name": "Coonoor store"}])
+    monkeypatch.setattr(api, "network_checkout", shop)
+    tools = bot.ShopperTools("tea-corner")
+    assert await tools.choose_pickup("", "chk_1") == {
+        "choose_location": [{"id": "ooty", "name": "Ooty store"}, {"id": "coonoor", "name": "Coonoor store"}]
+    }
+    assert (await tools.choose_pickup("", "chk_1", "coonoor"))["status"] == "ready_for_complete"
+    assert shop.updates[-1]["fulfillment"]["methods"][0]["selected_destination_id"] == "coonoor"
+    assert "choose_location" in await tools.choose_pickup("", "chk_1", "store")
+
+
+@pytest.mark.asyncio
+async def test_choose_pickup_passes_shop_answers_through_when_there_is_nothing_to_choose(monkeypatch):
+    missing = {"http_status": 404, "error": "not_found"}
+
+    async def gone(slug, operation, body, session_id=None):
+        return missing
+
+    monkeypatch.setattr(api, "network_checkout", gone)
+    passed = await bot.ShopperTools("tea-corner").choose_pickup("", "chk_1")
+    assert passed["error"] == "not_found" and passed["summary"]["problems"] == ["not_found"]
+    shop = PickupShop([])
+    monkeypatch.setattr(api, "network_checkout", shop)
+    assert (await bot.ShopperTools("tea-corner").choose_pickup("", "chk_1"))["status"] == "incomplete"
+
+
+@pytest.mark.asyncio
+async def test_update_checkout_keeps_the_line_items_the_model_left_out(monkeypatch):
+    shop = PickupShop([{"id": "ooty", "name": "Ooty"}])
+    monkeypatch.setattr(api, "network_checkout", shop)
+    await bot.ShopperTools("tea-corner").update_checkout(
+        "", "chk_1", {"fulfillment": {"methods": [{"type": "pickup"}]}}
+    )
+    assert shop.updates[0]["line_items"] == [{"id": "li_1", "item": {"id": "TEA-1"}, "quantity": 2}]
+
+
+def test_checkout_answers_carry_a_summary_the_model_quotes_from():
+    missing = bot._for_model(
+        {
+            "http_status": 201,
+            "id": "chk_1",
+            "status": "incomplete",
+            "currency": "INR",
+            "totals": [{"type": "subtotal", "amount": 0}, {"type": "total", "amount": 0}],
+            "messages": [
+                {"type": "error", "content": "Item TEA-1 was not found."},
+                {"type": "info", "content": "Prices include tax."},
+            ],
+        }
+    )
+    assert missing["summary"] == {
+        "checkout_id": "chk_1",
+        "status": "incomplete",
+        "ready": False,
+        "total": "Rs 0.00",
+        "problems": ["Item TEA-1 was not found."],
+    }
+    assert missing["id"] == "chk_1"
+    ready = bot._for_model(
+        {
+            "http_status": 200,
+            "id": "chk_2",
+            "status": "ready_for_complete",
+            "totals": [{"type": "total", "amount": 44900}],
+        }
+    )["summary"]
+    assert ready["ready"] is True and ready["total"] == "Rs 449.00" and ready["problems"] == []
+    refused = bot._for_model({"http_status": 404, "error": "not_found", "message": "No such checkout.", "totals": "x"})
+    assert refused["summary"]["problems"] == ["No such checkout."] and refused["summary"]["total"] is None
+    assert bot._for_model({"choose_location": []}) == {"choose_location": []}

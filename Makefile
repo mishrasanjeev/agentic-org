@@ -87,6 +87,12 @@ INTEGRATION_ENV = $(TEST_ENV) \
 
 E2E_CONFIG ?= e2e/dev-stack.config.ts
 # Where `make seed-cases` writes the case references the browser suite reads.
+# The onboarding desk suite's seeded values, and the run it hands between its steps.
+ONBOARDING_DESK_SEED ?= ui/test-results/onboarding-desk-seed.json
+ONBOARDING_DESK_RUN ?= ui/test-results/onboarding-desk-run.json
+# The suite's own push receiver: it listens in the decision-grant runner, which
+# shares the grantex service's network namespace, so the worker reaches it there.
+ONBOARDING_DESK_PUSH_URL ?= http://grantex:3099/case-push
 GOVERNED_CASES_SEED ?= ui/test-results/governed-cases-seed.json
 DEMO_CASE_OUTPUT ?= ui/test-results/demo-case
 E2E_ARGS ?=
@@ -102,7 +108,7 @@ DEV_GRANTEX_SANDBOX_KEY ?= agenticorg-dev-grantex-sandbox-key
 .PHONY: help dev seed seed-cases down clean logs ps \ demo-case
 	tools-image test test-unit test-contract test-integration test-db coverage-gate \
 	check check-ruff check-mypy check-bandit check-secrets check-licence-headers check-schemas check-denylist check-pip-audit check-cross-loop-baseline check-ambient-redis-allowlist \
-	e2e e2e-decisions
+	e2e e2e-decisions e2e-onboarding-desk
 
 help:
 	@echo "make dev     build and start the local stack and smoke-test it"
@@ -118,6 +124,7 @@ help:
 	@echo "make check   ruff, mypy, bandit, gitleaks, licence headers, schemas, vendor denylist, pip-audit"
 	@echo "make e2e     Playwright suite against the running stack (needs make dev)"
 	@echo "make e2e-decisions  decision-grant suite: a real approval on the issuer's approval page"
+	@echo "make e2e-onboarding-desk  onboarding desk from lead to signed evidence (after e2e-decisions)"
 	@echo "             (needs AGENTICORG_DEV_DECISION_GRANTS=true, AGENTICORG_DEV_CASE_DECISION_SERVICE=grantex,"
 	@echo "             AGENTICORG_DEV_GRANTEX_ADMIN_KEY and AGENTICORG_SEED_PASSWORD; see docs/governance/decision-requests.md)"
 
@@ -303,3 +310,48 @@ e2e-decisions:
 	$(COMPOSE) --profile e2e run --rm --no-deps -e HOST_UID=$(HOST_UID) -e HOST_GID=$(HOST_GID) \
 		-e AGENTICORG_SEED_PASSWORD -e GOVERNED_CASES_SEED=$(GOVERNED_CASES_SEED) \
 		e2e-decisions bash scripts/run_e2e.sh $(E2E_CONFIG) $(E2E_ARGS)
+
+# The merchant onboarding desk end to end (ui/e2e/onboarding-desk.spec.ts):
+# a signed webhook lead with its consent, the contact decision, the applicant
+# page in a browser (a document read and confirmed, a refused answer, submit),
+# the case the desk opens, the checks, a real approval on the auth service's
+# page, the signed case push to the suite's receiver, the signed evidence pack
+# and the partner report. It runs on a stack started for `make e2e-decisions`
+# with the desk on, after `make seed seed-cases`:
+#
+#   AGENTICORG_DEV_ONBOARDING_DESK=true AGENTICORG_DEV_ONBOARDING_DESK_EVIDENCE_KEY=<base64 seed> \
+#   AGENTICORG_DEV_DECISION_GRANTS=true ... make dev seed seed-cases e2e-onboarding-desk
+#
+# The checks run in the seed step between the suite's two parts, with the case
+# agents' development root grant, as `make seed-cases` runs them: the stack's
+# worker holds no root grant (scripts/seed_onboarding_desk.py).
+e2e-onboarding-desk: tools-image
+	@[ "$(AGENTICORG_DEV_ONBOARDING_DESK)" = "true" ] || { echo \
+		"make e2e-onboarding-desk: start the stack with AGENTICORG_DEV_ONBOARDING_DESK=true" >&2; exit 1; }
+	@[ -n "$${AGENTICORG_DEV_ONBOARDING_DESK_EVIDENCE_KEY:-}" ] || { echo \
+		"make e2e-onboarding-desk: start the stack with AGENTICORG_DEV_ONBOARDING_DESK_EVIDENCE_KEY, a base64 Ed25519 seed" >&2; exit 1; }
+	@[ "$(AGENTICORG_DEV_DECISION_GRANTS)" = "true" ] && [ "$(AGENTICORG_DEV_CASE_DECISION_SERVICE)" = "grantex" ] || { echo \
+		"make e2e-onboarding-desk: start the stack as for make e2e-decisions" >&2; exit 1; }
+	@[ -n "$(AGENTICORG_SEED_PASSWORD)" ] && [ -n "$${AGENTICORG_DEV_GRANTEX_ADMIN_KEY:-}" ] || { echo \
+		"make e2e-onboarding-desk: set AGENTICORG_SEED_PASSWORD and AGENTICORG_DEV_GRANTEX_ADMIN_KEY as for make e2e-decisions" >&2; exit 1; }
+	@SMOKE_ATTEMPTS=3 bash scripts/dev_stack_smoke.sh >/dev/null || \
+		{ echo "make e2e-onboarding-desk: the dev stack is not healthy; start it with 'make dev'" >&2; exit 1; }
+	$(COMPOSE) --profile decisions up -d --wait --wait-timeout 180 oidc-approvers
+	$(TOOLS) env AGENTICORG_ENV=development AGENTICORG_SECRET_KEY=$(DEV_SECRET_KEY) \
+		AGENTICORG_DB_URL=postgresql+asyncpg://agenticorg:agenticorg_dev@$(TEST_DB_HOST)/$(DEV_DB_NAME) \
+		AGENTICORG_REDIS_URL=redis://$(TEST_REDIS_HOST)/0 AGENTICORG_ONBOARDING_DESK_ENABLED=true \
+		$(PY) -m scripts.seed_onboarding_desk configure --output $(ONBOARDING_DESK_SEED) --push-url $(ONBOARDING_DESK_PUSH_URL)
+	$(COMPOSE) --profile e2e run --rm --no-deps -e HOST_UID=$(HOST_UID) -e HOST_GID=$(HOST_GID) \
+		-e AGENTICORG_SEED_PASSWORD -e ONBOARDING_DESK_SEED=$(ONBOARDING_DESK_SEED) -e ONBOARDING_DESK_RUN=$(ONBOARDING_DESK_RUN) \
+		e2e-decisions bash scripts/run_e2e.sh e2e/onboarding-desk.config.ts --grep @applicant $(E2E_ARGS)
+	$(TOOLS) env AGENTICORG_ENV=development AGENTICORG_SECRET_KEY=$(DEV_SECRET_KEY) \
+		AGENTICORG_DB_URL=postgresql+asyncpg://agenticorg:agenticorg_dev@$(TEST_DB_HOST)/$(DEV_DB_NAME) \
+		AGENTICORG_REDIS_URL=redis://$(TEST_REDIS_HOST)/0 AGENTICORG_ONBOARDING_DESK_ENABLED=true \
+		AGENTICORG_MOCK_PROVIDER_URL=http://mock-provider:8080 VLLM_BASE_URL=http://model-stub:8080 \
+		GRANTEX_BASE_URL=http://grantex:$(or $(AGENTICORG_DEV_GRANTEX_PORT),3001) GRANTEX_API_KEY=$(DEV_GRANTEX_SANDBOX_KEY) \
+		$(PY) -m scripts.seed_onboarding_desk investigate --run $(ONBOARDING_DESK_RUN)
+	$(COMPOSE) --profile e2e run --rm --no-deps -e HOST_UID=$(HOST_UID) -e HOST_GID=$(HOST_GID) \
+		-e AGENTICORG_SEED_PASSWORD -e ONBOARDING_DESK_SEED=$(ONBOARDING_DESK_SEED) -e ONBOARDING_DESK_RUN=$(ONBOARDING_DESK_RUN) \
+		e2e-decisions bash scripts/run_e2e.sh e2e/onboarding-desk.config.ts --grep @decision $(E2E_ARGS)
+	$(TOOLS) sh -c '$(PY) scripts/verify_onboarding_evidence.py ui/test-results/onboarding-desk-evidence-pack.json \
+		--public-key "$$(cat ui/test-results/onboarding-desk-evidence-key.txt)"'

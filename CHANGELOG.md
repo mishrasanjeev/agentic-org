@@ -12,6 +12,125 @@
   paused, then Resume back to shadow. Empty-sample accuracy no longer blocks shadow resume,
   and Retest stays available when a zero-sample agent has stored accuracy. Production
   promotion gates and restrictions on agents paused from other states are unchanged (#1818).
+## Unreleased - Merchant onboarding desk end to end
+
+- `scripts/onboarding_desk_production_run.py`: a labelled, disposable run of the desk in a production
+  deployment through the live public API. It covers the signed lead and its consents, the contact
+  rules, the applicant's session with a document read and a refused answer, the submission, the
+  signed evidence pack checked with the published key, and the report. It then retires its own
+  tenant. It has no message senders and opens no case, because the checks need the verification
+  partner's credential (docs/onboarding-desk/production-run.md).
+- A new optional application item, `incorporated_in`: the state or province of incorporation when it
+  differs from the registered address, or `FEDERAL` for a federally incorporated Canadian company. The
+  governed case's jurisdiction, and so the registry checked, now follows it; before, a Delaware company
+  with a Californian address was checked as a Californian one.
+- `POST /onboarding-desk/leads/{id}/apply-link` signs the lead's application link for the partner
+  to hand over itself (a partner form redirecting into the application, a call centre reading it
+  out). It sends nothing and needs no consent; the link is the one outreach messages carry.
+- `make e2e-onboarding-desk` (and the `make e2e-decisions` CI job): a signed webhook lead with its
+  consents, the contact rules, the applicant page in a browser reading an uploaded certificate,
+  a refused answer and the submission, the governed case the desk opens, the checks against the
+  mock provider, a real approval on the Grantex approval page, the signed case push to the
+  partner, the signed evidence pack checked with `scripts/verify_onboarding_evidence.py`, and the
+  partner report.
+- A Canadian mock provider fixture (`ca-clean-mapleleaf`); the underwriter suites now decide it
+  with the `business_onboarding_ca` example policy, which reaches the `low` tier on a clean case.
+- The underwriter treats Canada's Business Number (`ca_business_number`) as the tax identifier the
+  registry confirms, as it does the EIN in the United States. Before, `verification.tax_id_match` was
+  never produced for a Canadian case, so the `business_onboarding_ca` rule reading it was indeterminate
+  on every case, and a Canadian application without a Business Number was not reported as missing one.
+- The development stack can run the desk (`AGENTICORG_DEV_ONBOARDING_DESK`, off by default, and
+  `AGENTICORG_DEV_ONBOARDING_DESK_EVIDENCE_KEY`).
+
+## Unreleased - Merchant onboarding desk foundations (off by default)
+
+- New `AGENTICORG_ONBOARDING_DESK_ENABLED` (off): while off, `GET /onboarding-desk/status`
+  answers `enabled: false` and every other `/onboarding-desk` route, the signed webhook
+  included, is not found.
+- Leads for partners onboarding merchants in the United States and Canada, from an operator,
+  a CSV import of opted-in leads with an attestation of the consent wording and method, or a
+  partner form posting to a signed webhook (`X-AgenticOrg-Signature: t=..., v1=...`, HMAC
+  with the source's secret, five-minute tolerance). Intake is idempotent per source and
+  external reference. Contact details are encrypted under the tenant key; lists show masked
+  forms and opt-outs match keyed hashes.
+- Consents per channel (SMS, email, WhatsApp, voice) keep the exact wording, its hash, how
+  and where consent was captured, and whether it was captured in writing, which AI voice
+  calls require. Opt-outs suppress the contact, withdraw the matching consents and mark the
+  leads opted out; a later lead with the same contact arrives opted out.
+- `GET /onboarding-desk/leads/{id}/contact-decision` says whether a lead may be contacted on a
+  channel now and, if not, why and when. Defaults are floors a partner policy may only
+  narrow: 08:00 to 21:00 local in the United States (08:00 to 20:00 and three attempts a day
+  in Florida, Oklahoma and Maryland), 09:00 to 21:30 on weekdays and 10:00 to 18:00 at
+  weekends in Canada, and only the hours allowed in every time zone of a multi-zone state or
+  province. Leads in Quebec default to French.
+- Migration `v6z96_onboarding_desk` (six tables under forced row-level security).
+- Consent-gated outreach: `PUT /onboarding-desk/branding` sets the partner name, onboarding page,
+  postal address and senders, which reuse the tenant's Twilio, SendGrid and WhatsApp Business
+  connectors. `POST /leads/{id}/contact` and the minute sweep (for tenants that turn on automatic
+  contact) send a first contact or a reminder only when the contact rules allow, in English or
+  French, with the partner name, an AI-assistant disclosure, a signed onboarding link and opt-out
+  wording; emails add a signed unsubscribe link and the postal address. Attempts are claimed under a
+  lock on the lead. Twilio SMS replies reach `POST /onboarding-desk/webhooks/twilio/{tenant}`
+  (Twilio signature verified): STOP-style keywords opt the contact out of every channel and other
+  replies mark the lead engaged. Migration `v6z97_onboarding_outreach`.
+- Applications: one per lead, shared by the web and text message. The onboarding link opens a
+  two-hour applicant session (`POST /onboarding-desk/apply/session`); answers are saved as the
+  applicant goes, each validated the same way on every channel, and the partner's policy
+  (`PUT /onboarding-desk/application-policy`) decides the required and optional items per merchant
+  type, each with a reason in English and French. Documents (PDF, PNG or JPEG, up to 8 MB and 10
+  pages, recognised by their first bytes) suggest values the applicant confirms before they are
+  saved. "Talk to a person" opens a hand-off with the transcript (`GET /onboarding-desk/handoffs`).
+  Partners that set `sms_conversation` in the branding get the guided application over text: one
+  question at a time, HELP and PERSON keywords, and a link to the secure page for the address,
+  owners and documents. A complete application maps to a `business_case` application. Answers,
+  transcripts and documents are encrypted under the tenant key. Migration
+  `v6z98_onboarding_applications`.
+- The applicant page: `<agenticorg-onboarding>`, a dependency-free element served at
+  `/onboarding-desk/apply.js`, for the partner's own site, and a hosted page at
+  `/onboarding-desk/apply`. It reads the signed link from the page, removes it from the address
+  bar, keeps the session in memory, and shows the application in English or French in the
+  partner's colour (`brand_color`) with its privacy notice (`privacy_url`): every item with its
+  reason, documents with values to confirm, "talk to a person" and submit. The applicant routes
+  accept calls from any site without credentials, since they authenticate only with the session
+  header.
+- The hand-off into a governed case: a submitted application opens a governed case
+  (`POST /onboarding-desk/applications/{id}/case`, or on its own with the case settings
+  `auto_open` and `investigate`, both off by default) under the jurisdiction's case policy; the
+  case reference is stored on the application in the same transaction, so an application never
+  has two cases. From there the governed-case workflow runs the checks, the review, the decision
+  grants and the signed case push. `GET /onboarding-desk/cases/{case_ref}` returns the lead and
+  application behind a case. Adds the example policy `business_onboarding_ca` (not reviewed;
+  refused by strict runtimes like the others).
+- Evidence packs: `GET /onboarding-desk/applications/{id}/evidence` returns the consents with
+  their wording, contact attempts, transcript, document hashes, hand-offs, the case with its
+  policy result, recommendation and decision, and the Grantex-signed case export when that
+  service is on, with a SHA-256 per section and an Ed25519 signature over the manifest
+  (`AGENTICORG_ONBOARDING_DESK_EVIDENCE_SIGNING_KEY`; the public key is at
+  `GET /onboarding-desk/evidence-key`). `scripts/verify_onboarding_evidence.py` checks a pack
+  offline.
+- Reporting: `GET /onboarding-desk/reports/summary` gives the funnel, hours to submission and to
+  decision (median and 90th percentile), consent coverage by channel, and checks per merchant,
+  for leads created in the period. Migration `v6z99_onboarding_cases`.
+- CRM intake: `PUT /onboarding-desk/crm-settings` names a CRM lead source, the HubSpot or
+  Salesforce connector, which contacts to take, the field that records consent per channel, the
+  capture-time field and an attestation of the wording; `POST /onboarding-desk/crm/sync` pulls up
+  to 200 matching contacts into leads, idempotently by CRM id. Consent is recorded only where the
+  CRM says so and has a capture time.
+
+## Unreleased - Shopping bot quotes the real checkout
+
+- Search results give the bot one `item_id` (the variant a checkout takes) instead of a product id
+  and a variant id, so the checkout it opens holds the item the buyer asked for.
+- Every checkout tool result carries a summary (checkout id, status, ready, total, problems), and
+  the bot quotes the total only from it, so a checkout the shop could not fill is never reported
+  with the search price.
+
+## Unreleased - Shopping bot store pickup
+
+- The public shopping bot gains a `choose_pickup` tool: it picks the shop's pickup location (or
+  asks which one when the shop has several) and its pickup option, so "store pickup" leaves a
+  checkout ready for the shop to complete. An update the model sends without line items now keeps
+  the checkout's items instead of being rejected.
 
 ## Unreleased - Shopping bot always answers
 
