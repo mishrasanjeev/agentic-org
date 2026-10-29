@@ -40,6 +40,7 @@ from api.v1 import (
     client_portal,
     commerce_acp,
     commerce_ledger,
+    commerce_payments,
     commerce_public,
     commerce_runtime,
     commerce_ucp,
@@ -325,6 +326,9 @@ app.include_router(commerce_ledger.router, prefix="/api/v1", tags=["Commerce Led
 app.include_router(commerce_runtime.merchant_config_router, prefix="/api/v1", tags=["Commerce Runtime"])
 app.include_router(commerce_runtime.router, prefix="/api/v1", tags=["Commerce Runtime"])
 app.include_router(commerce_ucp.runtime_router, prefix="/api/v1", tags=["Commerce Runtime"])
+# Payment hand-off settings, Plural credentials, orders; the public Plural return page and webhook.
+app.include_router(commerce_payments.merchant_router, prefix="/api/v1", tags=["Commerce Payments"])
+app.include_router(commerce_payments.public_router, prefix="/api/v1", tags=["Commerce Payments"])
 # UCP REST binding at https://<merchant serving host>/ucp (AGENTICORG_UCP_CHECKOUT_ENABLED).
 app.include_router(commerce_ucp.router)
 app.include_router(commerce_ucp_publishing.router, prefix="/api/v1", tags=["Commerce UCP"])

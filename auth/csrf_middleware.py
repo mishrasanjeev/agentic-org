@@ -45,6 +45,7 @@ _UNSAFE_METHODS: Final[frozenset[str]] = frozenset({"POST", "PUT", "PATCH", "DEL
 _EXEMPT_PREFIXES: Final[tuple[str, ...]] = (
     "/api/v1/channels/webhooks/",  # Signed server-to-server callbacks, not browser sessions.
     "/api/v1/network/",  # Directory reads and service-credential calls, not browser sessions.
+    "/api/v1/payments/plural/",  # Provider HMAC webhooks and the provider's buyer redirect (no session).
     "/api/v1/webhooks/",          # provider HMAC signing
     "/api/v1/billing/webhook/",   # Plural & Stripe HMAC
     "/api/v1/aa/consent/callback",  # SEC-004 will sign this in PR-C

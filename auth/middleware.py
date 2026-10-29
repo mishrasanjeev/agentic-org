@@ -42,6 +42,7 @@ class AuthMiddleware(BaseHTTPMiddleware):
     EXEMPT_PREFIXES = (
         "/api/v1/channels/webhooks/",  # Provider signature and receiver binding are mandatory.
         "/api/v1/network/",  # Public directory; the checkout gateway checks the network service credential.
+        "/api/v1/payments/plural/",  # Buyer return page (status only) and HMAC-verified Plural webhooks.
         "/api/v1/evals",
         "/api/v1/billing/webhook/",  # Plural & Stripe webhooks
         "/api/v1/voice/webhooks/twilio/",  # Twilio HMAC signature is verified by the route
