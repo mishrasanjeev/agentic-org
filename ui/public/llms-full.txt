@@ -4352,7 +4352,7 @@ Everything happens on one page: **Commerce > Sell Everywhere**. It takes about t
 ```flow
 Your shop | Choose your shop, or type a shop name and select Create shop. AgenticOrg gives it an id; you never type one.
 Your catalog | Connect Shopify, or upload a CSV or JSON file. This is what buyers will search.
-Your policies | Write your returns and shipping terms, and store pickup if you offer it. Buyer agents read them before they buy.
+Your policies | Write your returns and shipping terms, and store pickup if you offer it. If you uploaded a file, also set your shipping fee. Buyer agents read them before they buy.
 Order limits | Set the largest single order, the most per day, the most items per order and your currency. Nothing is set for you.
 Payments | Choose where buyers pay: your own Shopify checkout or your own Plural account. See Getting paid.
 Turn on Sell everywhere | Choose your shop name, accept the network terms and turn it on. AgenticOrg enrols you with Grantex, gives you a web address and publishes your shop.
@@ -4394,6 +4394,13 @@ One product per row, one currency, up to 2,000 products:
 A JSON file is a list of objects with the same keys. If a row has a problem, nothing is stored and the
 page lists each row and column to fix. Your catalog is recorded as uploaded by you, never as coming from
 a store system. Upload again whenever your products change.
+
+### Shipping fee
+
+A shop that uploads its catalog sets one shipping fee per order in the policies step, with its currency and
+the countries it ships to (two-letter codes such as `IN`; leave them empty to ship everywhere). Enter 0 to
+ship free. Buyers are offered this fee at checkout, and Sell everywhere stays off until it is set. A
+Shopify shop uses the shipping rates of its Shopify delivery profiles instead.
 
 ### Order limits
 

@@ -10,6 +10,11 @@
   New routes: `GET /commerce/runtime/merchant-configs`, `POST /commerce/runtime/merchant-setup`,
   `GET .../setup`, `POST .../catalog/shopify`, `.../catalog/upload`, `.../catalog/sync`,
   `PUT .../setup/policies`, `.../setup/order-limits`, `POST .../sell-everywhere/publish`.
+- **Shipping for uploaded catalogs.** A shop without Shopify delivery profiles sets a flat shipping fee
+  in the policies step (`shipping_fee`, `shipping_currency`, `shipping_countries`; stored at
+  `provider_policy.ucp.fulfillment.flat_rates`), and checkout offers it as the shipping option. Without
+  it no checkout at an uploaded-catalog shop could become ready, so Sell everywhere now lists
+  `shipping_rate` as missing until it is set.
 - **Catalog upload source.** `catalog_upload` is a runtime connector source (migration
   `v6z103_catalog_upload_source` widens the C6Z source checks). Rows are validated column by column;
   the evidence and the Grantex authority request say `source_system: catalog_upload` and

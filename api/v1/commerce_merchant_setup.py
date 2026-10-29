@@ -108,6 +108,11 @@ class PoliciesRequest(BaseModel):
     shipping: str = Field(min_length=10, max_length=MAX_POLICY_TEXT)
     # Empty: the shop offers no store pickup.
     pickup: str = Field(default="", max_length=MAX_POLICY_TEXT)
+    # The shop's flat shipping fee in major units ("0" ships free), for shops without Shopify delivery
+    # profiles; blank removes it. Countries are ISO 3166 alpha-2 codes; none means everywhere.
+    shipping_fee: str | None = Field(default=None, max_length=20)
+    shipping_currency: str | None = Field(default=None, pattern=r"^[A-Za-z]{3}$")
+    shipping_countries: list[str] = Field(default_factory=list, max_length=50)
 
 
 class OrderLimitsRequest(BaseModel):
@@ -262,6 +267,53 @@ async def _config_row(session: Any, tenant_id: str, merchant_id: str) -> C6ZMerc
     return cast(C6ZMerchantCommerceConfigRow, row)
 
 
+def _flat_rates(body: PoliciesRequest) -> list[dict[str, Any]] | None:
+    """The one flat rate the policies step stores, or None (no fee given: the stored rate is removed)."""
+    fee = (body.shipping_fee or "").strip()
+    if not fee:
+        return None
+    if not body.shipping_currency:
+        raise HTTPException(422, {"code": "invalid_setup", "message": "Give the shipping fee's currency."})
+    currency = body.shipping_currency.upper()
+    try:
+        free = Decimal(fee) == 0
+    except (InvalidOperation, ValueError):
+        free = False
+    amount = 0 if free else _minor_units(fee, currency, "The shipping fee")
+    countries: list[str] = []
+    for raw in body.shipping_countries:
+        code = str(raw).strip().upper()
+        if not re.fullmatch(r"[A-Z]{2}", code):
+            raise HTTPException(
+                422, {"code": "invalid_setup", "message": "Shipping countries are two-letter codes such as IN."}
+            )
+        if code not in countries:
+            countries.append(code)
+    return [
+        {
+            "id": "standard",
+            "title": "Standard shipping",
+            "amount_minor_units": amount,
+            "currency": currency,
+            "countries": countries,
+            "rest_of_world": not countries,
+        }
+    ]
+
+
+def shipping_rate_view(provider_policy: Mapping[str, Any] | None) -> dict[str, Any] | None:
+    """The stored flat shipping rate in major units, or None."""
+    from core.commerce.ucp.flat_rates import configured_delivery_rates
+
+    rates = configured_delivery_rates({"provider_policy": provider_policy or {}})
+    if not rates:
+        return None
+    rate = rates[0]
+    exponent = currency_exponent(rate.currency)
+    fee = (Decimal(rate.amount_minor_units) / (Decimal(10) ** exponent)).quantize(Decimal(1).scaleb(-exponent))
+    return {"fee": str(fee), "currency": rate.currency, "countries": list(rate.countries)}
+
+
 def policies_view(provider_policy: Mapping[str, Any] | None) -> dict[str, Any]:
     stored = (provider_policy or {}).get("merchant_policies")
     stored = stored if isinstance(stored, Mapping) else {}
@@ -272,6 +324,7 @@ def policies_view(provider_policy: Mapping[str, Any] | None) -> dict[str, Any]:
         "returns": returns,
         "shipping": shipping,
         "pickup": str(stored.get("pickup") or ""),
+        "shipping_rate": shipping_rate_view(provider_policy),
     }
 
 
@@ -375,6 +428,8 @@ async def setup_view(tenant_id: str, merchant_id: str) -> dict[str, Any]:
         for name, done in (
             ("catalog", catalog_status in ("ready", "changed_in_store")),
             ("policies", policies["status"] == "set"),
+            # Without Shopify delivery profiles a buyer can only be offered the merchant's own rate.
+            ("shipping_rate", source == SHOPIFY_SOURCE_SYSTEM or policies["shipping_rate"] is not None),
             ("order_limits", limits["status"] == "set"),
         )
         if not done
@@ -559,9 +614,7 @@ async def upload_catalog(
     try:
         rows = parse_catalog_upload(body.content, body.format)
     except CatalogUploadError as exc:
-        raise HTTPException(
-            422, {"code": "catalog_upload_invalid", "message": str(exc), "errors": exc.errors}
-        ) from exc
+        raise HTTPException(422, {"code": "catalog_upload_invalid", "message": str(exc), "errors": exc.errors}) from exc
     async with get_tenant_session(_tenant_uuid(tenant_id)) as session:
         row = await _config_row(session, tenant_id, merchant_id)
         saved = await _save_config(
@@ -666,6 +719,7 @@ async def put_policies(
     shipping = _policy_text(body.shipping, "shipping")
     pickup = _policy_text(body.pickup, "pickup") if body.pickup.strip() else ""
     fulfillment = f"Shipping: {shipping}" + (f" Store pickup: {pickup}" if pickup else " No store pickup.")
+    flat_rates = _flat_rates(body)
     async with get_tenant_session(_tenant_uuid(tenant_id)) as session:
         row = await _config_row(session, tenant_id, merchant_id)
         brand = dict(row.public_brand_profile or {})
@@ -675,7 +729,7 @@ async def put_policies(
             row.provider_policy or {},
             {
                 "merchant_policies": {"returns": returns, "shipping": shipping, "pickup": pickup},
-                "ucp": {"fulfillment": {"shipping": True, "pickup": bool(pickup)}},
+                "ucp": {"fulfillment": {"shipping": True, "pickup": bool(pickup), "flat_rates": flat_rates}},
             },
         )
         await _save_config(
@@ -684,7 +738,7 @@ async def put_policies(
             row=row,
             changes={"public_brand_profile": brand, "provider_policy": policy},
             event="commerce.runtime.merchant_setup.policies",
-            payload={"pickup_offered": bool(pickup)},
+            payload={"pickup_offered": bool(pickup), "flat_shipping_rate": flat_rates is not None},
         )
     return await setup_view(tenant_id, merchant_id)
 

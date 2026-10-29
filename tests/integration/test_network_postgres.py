@@ -45,15 +45,18 @@ CATALOG_CSV = "sku,title,price,currency,quantity\nTOTE-1,Canvas tote,499,INR,3\n
 
 
 async def _ready(tenant: str) -> None:
-    """The setup Sell everywhere needs: a catalog, policies and order limits."""
+    """The setup Sell everywhere needs: a catalog, policies with a shipping fee, and order limits."""
     from api.v1 import commerce_merchant_setup as setup_api
 
-    await setup_api.upload_catalog(
-        MERCHANT, setup_api.CatalogUploadRequest(format="csv", content=CATALOG_CSV), tenant
-    )
+    await setup_api.upload_catalog(MERCHANT, setup_api.CatalogUploadRequest(format="csv", content=CATALOG_CSV), tenant)
     await setup_api.put_policies(
         MERCHANT,
-        setup_api.PoliciesRequest(returns="Returns within 7 days.", shipping="Ships in 3 to 5 days."),
+        setup_api.PoliciesRequest(
+            returns="Returns within 7 days.",
+            shipping="Ships in 3 to 5 days.",
+            shipping_fee="40",
+            shipping_currency="INR",
+        ),
         tenant,
     )
     await setup_api.put_order_limits(

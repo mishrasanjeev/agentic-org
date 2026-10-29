@@ -294,7 +294,17 @@ export const merchantSetupApi = {
   uploadCatalog: (merchantId: string, data: { format: "csv" | "json"; content: string }) =>
     api.post(`${merchantPath(merchantId)}/catalog/upload`, data),
   syncCatalog: (merchantId: string) => api.post(`${merchantPath(merchantId)}/catalog/sync`, {}),
-  savePolicies: (merchantId: string, data: { returns: string; shipping: string; pickup: string }) =>
+  savePolicies: (
+    merchantId: string,
+    data: {
+      returns: string;
+      shipping: string;
+      pickup: string;
+      shipping_fee?: string | null;
+      shipping_currency?: string | null;
+      shipping_countries?: string[];
+    },
+  ) =>
     api.put(`${merchantPath(merchantId)}/setup/policies`, data),
   saveOrderLimits: (
     merchantId: string,
