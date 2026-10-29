@@ -635,7 +635,7 @@ async def sync_catalog(merchant_id: str, tenant_id: str = Depends(get_current_te
 
 
 def _policy_text(value: str, field: str) -> str:
-    text = re.sub(r"\s+", " ", re.sub(r"<[^>]+>", " ", value)).strip()
+    text = re.sub(r"\s+", " ", re.sub(r"<[^<>]*>", " ", value)).strip()
     if contains_private_or_executable_value(text):
         raise HTTPException(
             422,
