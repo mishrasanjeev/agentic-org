@@ -629,7 +629,7 @@ async def test_no_orders_skips_the_checkout_lookup(db):
 
 
 @pytest.mark.asyncio
-async def test_an_order_shows_the_buyer_contact_items_total_and_surface(db):
+async def test_an_order_shows_the_buyer_contact_delivery_items_total_and_surface(db):
     state = {
         "buyer": {
             "first_name": "Asha",
@@ -641,7 +641,30 @@ async def test_an_order_shows_the_buyer_contact_items_total_and_surface(db):
         },
         "platform": {"surface": "telegram"},
     }
-    db.scalar_results = [[_order("ord_1", "chk_1")], [_checkout("chk_1", state)]]
+    snapshot = {
+        **_order("ord_1", "chk_1").snapshot,
+        "currency": "INR",
+        "totals": [{"type": "subtotal", "amount": 44900}, {"type": "fulfillment", "amount": 4900}],
+        "fulfillment": {
+            "expectations": [
+                {
+                    "method_type": "shipping",
+                    "description": "Standard delivery",
+                    "destination": {
+                        "first_name": "Asha",
+                        "last_name": "Rao",
+                        "street_address": "12 MG Road",
+                        "address_locality": "Bengaluru",
+                        "address_region": "KA",
+                        "postal_code": "560001",
+                        "address_country": "IN",
+                    },
+                }
+            ],
+            "events": [],
+        },
+    }
+    db.scalar_results = [[_order("ord_1", "chk_1", snapshot=snapshot)], [_checkout("chk_1", state)]]
     async with _client() as client:
         order = (await client.get(ORDERS)).json()["orders"][0]
     assert order == {
@@ -660,6 +683,15 @@ async def test_an_order_shows_the_buyer_contact_items_total_and_surface(db):
             "email": "asha@example.test",
             "phone_number": "+910000000000",
         },
+        # Where the order goes, from the order itself: the merchant ships from this.
+        "delivery": [
+            {
+                "method": "shipping",
+                "option": "Standard delivery",
+                "address": ["Asha Rao", "12 MG Road", "Bengaluru, KA, 560001", "IN"],
+            }
+        ],
+        "shipping": "Rs 49.00",
         "payment": {"status": "paid", "provider": "plural", "provider_order_ref_present": True},
         "surface": "Telegram",
         "permalink_url": "https://tea-corner.shops.example/orders/ord_1",
@@ -684,6 +716,7 @@ async def test_an_order_without_its_checkout_still_lists(db):
         listed = (await client.get(ORDERS)).json()["orders"]
     first = listed[0]
     assert first["created_at"] is None and first["buyer"] == {} and first["surface"] == "UCP platform"
+    assert first["delivery"] == [] and first["shipping"] is None
     assert first["total"] == "USD 12.50" and first["permalink_url"] is None
     assert first["items"] == [{"title": "Mug", "quantity": 1, "unit_price": "", "status": None}]
     assert first["payment"] == {"status": "paid", "provider": "manual_invoice", "provider_order_ref_present": False}
