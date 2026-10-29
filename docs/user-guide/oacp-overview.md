@@ -53,7 +53,7 @@ oacp-standards-map | Each standard answers one question | Discovery, checkout, p
 OACP is three things working together:
 
 1. **Signed facts.** Your catalog, prices, stock and policies become small signed records. Grantex signs them. Each one has an expiry date and a revocation slot.
-2. **One decision before money moves.** A fixed rule set, called the arbiter, says allow or refuse. No allow, no payment.
+2. **One decision before money moves.** A fixed rule set, called the arbiter, says allow or refuse. No allow, no payment link and no payment.
 3. **One record.** Every decision and every commerce write is recorded in a signed ledger you can export and check.
 
 Adapters then render those facts into each standard's own format.
@@ -61,10 +61,10 @@ Adapters then render those facts into each standard's own format.
 ## Who does what
 
 ```flow
-Your shop | Stays the source of truth for products, prices, stock and orders. Shopify is the supported source today.
-Grantex | Signs your facts, publishes the signing keys, runs the revocation list and issues buyer mandates.
+Your shop | Stays the source of truth for products, prices, stock and orders. Shopify, or a CSV or JSON catalog you upload, is the source today.
+Grantex | Signs your facts, publishes the signing keys, runs the revocation list and countersigns decisions. It can also issue buyer mandates, for agent-executed payment, which is switched off.
 AgenticOrg | Checks every signature, decides each purchase with fixed rules, records it and speaks each standard.
-Payment provider | Moves money, and only after an allow decision. Plural is the rail built today.
+Your payment page | The buyer pays on your own Shopify checkout or your own Plural account, and gets the link only after an allow decision. AgenticOrg never holds the money.
 ```
 
 ## What OACP is not
@@ -75,13 +75,15 @@ Honesty matters here, so here is the plain list.
 - **Not a certification.** The groups behind UCP, ACP, AP2 and TAP have not certified or endorsed OACP.
 - **Not regulatory approval.** OACP helps you keep evidence. It does not establish regulatory compliance on its own.
 - **Not AP2's own format.** Mandates are signed JWTs that use AP2 field names, not AP2's SD-JWT format. Passkey signing of the cart is a Grantex extension.
-- **Not switched on by default.** Checkout, payment, mandates and public discovery each sit behind a switch that starts off. See [feature switches](/docs/oacp-feature-switches).
+- **Not switched on by default.** Checkout, the AgenticOrg network, mandates, agent-executed payment and public discovery each sit behind a switch that starts off. Where buyers pay is each merchant's own choice. See [feature switches](/docs/oacp-feature-switches).
+- **Not a payment collector.** AgenticOrg never takes the buyer's money. The buyer pays the merchant on the merchant's own payment page.
 
 ## Read next
 
 - [Example: Nilgiri Tea House, end to end](/docs/oacp-example-nilgiri-tea), a live shop you can try in two minutes
 - [How OACP works, end to end](/docs/oacp-how-it-works)
 - [A purchase, step by step](/docs/oacp-buyer-journey)
+- [Sell everywhere](/docs/oacp-sell-everywhere) and [Getting paid](/docs/oacp-getting-paid)
 - [Merchant setup checklist](/docs/oacp-merchant-setup)
 - The blog post [OACP explained: one trust layer under UCP, ACP and AP2](https://agenticorg.ai/blog/oacp-one-trust-layer-under-ucp-acp-ap2)
 - The technical reference: [OACP runtime docs](https://github.com/mishrasanjeev/agentic-org/blob/main/docs/oacp/README.md)

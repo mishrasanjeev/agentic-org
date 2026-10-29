@@ -1,5 +1,5 @@
 ```summary
-Buyer agents can find your shop on a subdomain you own, such as agent.your-store.example, instead of an AgenticOrg address.
+Buyer agents can find your shop on a subdomain you own, such as agent.your-store.example, instead of an AgenticOrg address such as your-shop.agenticorg.ai.
 You add two DNS records. AgenticOrg checks them, tells you exactly what to fix, and connects the domain itself.
 Google issues the certificate, usually within the hour. You do not wait for anyone or share any account.
 Only the agent addresses are served on your domain; nothing else of AgenticOrg is reachable there.
@@ -13,6 +13,8 @@ Your UCP profile is the file buyer agents read first. It says where your shop is
 ```figure
 oacp-custom-domain | Your own domain, step by step | You add a subdomain and publish two DNS records. AgenticOrg checks them, connects the domain and follows the certificate until the domain is live.
 ```
+
+**Do you need one?** Not to get started. When you turn on Sell everywhere and your shop has no address yet, AgenticOrg gives it `<your-shop>.agenticorg.ai` and sets it up for you, certificate included, with no DNS records on your side. Only 20 of these addresses can be given out in all. Connect your own subdomain when you want your own name, or when they are taken; the network then uses your domain. A shop holds one domain at a time, so a shop already on a platform address removes it here before adding its own. See [Sell everywhere](/docs/oacp-sell-everywhere).
 
 You will use the **Custom Domains** page at `/dashboard/custom-domains`. You need the administrator role or the merchant role. Enter your merchant ID, and your seller agent ID if your shop has more than one, then press **Load**.
 
@@ -34,7 +36,7 @@ Certificate, then live | Google issues the certificate, usually within the hour 
 
 The progress bar on the page shows the same five stages: publish DNS records, verify ownership, connect domain, issue certificate, live. Each stage is marked done, current or failed.
 
-Your profile is served on the domain once it is published. That means your signing key exists, you pressed publish, and Grantex allows public discovery for the host. See [Merchant setup checklist](/docs/oacp-merchant-setup), phase 3.
+Your profile is served on the domain once it is published. That means your signing key exists, you pressed publish, and Grantex allows public discovery for the host. If Sell everywhere is on, select **Publish** on the Sell Everywhere page once the domain is live: it creates a missing signing key, publishes your profile on the domain and shows the exact reason if anything still waits. See [Merchant setup checklist](/docs/oacp-merchant-setup), phase 3.
 
 **If the page also asks for a Search Console owner,** your deployment still connects domains through Cloud Run domain mappings. In that case:
 - The CNAME points at `ghs.googlehosted.com`.
@@ -175,10 +177,18 @@ Disconnect a removed domain | When a merchant removes a connected domain, a "Del
 
 Every operator action is written to the merchant's commerce ledger with you as the actor.
 
+### Platform addresses for Sell everywhere
+
+Shops that turn on Sell everywhere without an address of their own get `<shop>.<apex>`, for example `tea-corner.agenticorg.ai`. AgenticOrg owns the apex, so the address is attested without a TXT record; it is created as a Firebase Hosting custom domain and followed to a live certificate like any other.
+
+- It needs the Firebase setup above and one wildcard record in the apex's DNS zone: `*.<apex> CNAME <site>.web.app.`
+- `AGENTICORG_PLATFORM_SUBDOMAIN_APEX` names the apex (`agenticorg.ai` by default).
+- `AGENTICORG_PLATFORM_SUBDOMAIN_CAP` (20 by default) caps how many are given out, because Firebase connects at most 20 custom domains per domain. Past the cap, a shop can still turn on Sell everywhere and is asked to connect its own domain.
+
 ### Limits and when to change approach
 
 **Firebase Hosting:**
-- Each merchant domain can have at most 20 subdomains connected.
+- Each merchant domain can have at most 20 subdomains connected. The platform addresses all sit under one apex, so they share that limit.
 - A request can take at most 60 seconds.
 - Responses that do not set their own caching are marked not to be cached, so Firebase never serves a stale answer.
 - Hosting meters storage and data transfer beyond its monthly allowance. The site stores no files, and agent responses are small.

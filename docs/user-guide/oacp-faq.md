@@ -1,7 +1,7 @@
 ```summary
 Short answers to the questions sellers ask most about OACP.
 OACP is a trust layer under UCP, ACP and AP2. It feeds them and does not replace them.
-Your shop stays the source of truth. Grantex signs. AgenticOrg checks, decides and records. The payment provider moves money.
+Your shop stays the source of truth. Grantex signs. AgenticOrg checks, decides and records. Buyers pay on your own payment page.
 Nothing that publishes your shop or moves money is on by default.
 For the full picture, start with the overview and the merchant setup checklist.
 ```
@@ -9,7 +9,7 @@ For the full picture, start with the overview and the merchant setup checklist.
 ## Who does what
 
 ```figure
-oacp-roles | Four roles, clear limits | Your shop owns the facts and orders. Grantex signs facts, runs the revocation list and issues mandates, and never moves money. AgenticOrg verifies, decides and records. The payment provider charges, and only after an allow decision.
+oacp-roles | Four roles, clear limits | Your shop owns the facts and orders. Grantex signs facts, runs the revocation list and issues mandates, and never moves money. AgenticOrg verifies, decides and records. The payment provider charges on your own payment page, and only after an allow decision.
 ```
 
 ## Do I have to choose between UCP, ACP and OACP?
@@ -22,35 +22,43 @@ No. OACP is not a certification, and those groups have not endorsed it. It also 
 
 ## What do I need to start?
 
-A Shopify store, the merchant or administrator role in AgenticOrg, and a platform operator who connects your tenant to Grantex. Follow the [merchant setup checklist](/docs/oacp-merchant-setup).
+A Shopify store, or a CSV or JSON file of your products, and the merchant or administrator role in AgenticOrg. Everything else is on one page, Sell Everywhere: your catalog, policies, order limits, where buyers pay and the switch. Turning it on enrols you with Grantex; your platform operator only connects the deployment to Grantex once. Follow [Sell everywhere](/docs/oacp-sell-everywhere) or the [merchant setup checklist](/docs/oacp-merchant-setup).
+
+## How do I get paid?
+
+Buyers pay on your own page: your Shopify checkout, or a Plural payment page under your own Plural account. When a checkout is ready, the buyer gets the link, pays there and authenticates the payment themselves. AgenticOrg never holds the money. Plural payments show on the Orders page with an email to your administrators; Shopify orders are in your Shopify admin. See [Getting paid](/docs/oacp-getting-paid).
+
+## Can an agent pay for the buyer without them?
+
+Not today. Agent-executed payment with buyer mandates is built but switched off, so every purchase ends with the buyer paying on your page. No AI app or bot on the AgenticOrg network has a tool that pays.
 
 ## Does every buyer question go through Grantex?
 
-No. AgenticOrg answers questions from its own verified copy of your facts. Grantex takes part in purchases: it issues the mandates and countersigns the decision. It never moves money.
+No. AgenticOrg answers questions from its own verified copy of your facts. Grantex takes part in purchases: it countersigns the decision, and on the agent-executed path it would also issue the mandates. It never moves money.
 
 ## Can an agent buy something at the wrong price?
 
-OACP is built to refuse it. A decision is bound to the exact cart, price and quantity. Change any of them and the decision no longer matches. Stale, expired or revoked prices are refused.
+OACP is built to refuse it. A decision is bound to the exact cart, price and quantity. Change any of them and the decision no longer matches. Stale, expired or revoked prices are refused, and no payment link is issued.
 
 ## Does a person at my shop approve each order?
 
-No. The arbiter decides at once with fixed rules. You can copy refusals into a review queue, but that never changes or delays a decision.
+No. The arbiter decides at once with fixed rules, including your order limits and daily maximum. You can copy refusals into a review queue, but that never changes or delays a decision.
 
 ## What happens if Grantex is unreachable?
 
-Plain questions can still be answered from facts that are still valid. In production, anything that commits money is refused until Grantex is back. If the revocation list cannot be read, facts are refused.
+Plain questions can still be answered from facts that are still valid. In production, anything that commits money, including a new payment link, is refused until Grantex is back. If the revocation list cannot be read, facts are refused.
 
 ## How do I stop selling a product to agents at once?
 
-Revoke the fact that covers it. Grantex marks it invalid, and every channel stops using it. For one channel only, turn that channel's switch off.
+Revoke the fact that covers it. Grantex marks it invalid, and every channel stops using it. For one channel only, turn that channel's switch off. To leave the AgenticOrg network, pause Sell everywhere.
 
 ## Does this work with UPI in India?
 
-It is built for it: UPI AutoPay mandates on the Plural rail, with RBI AFA as the buyer's own step in their UPI app. Completion is refused until verified AFA evidence arrives. It has not yet run against the Plural sandbox, and payment execution is off by default.
+Yes. A buyer can pay by UPI on your Plural payment page and approves it with their UPI PIN there. Agents paying through UPI AutoPay mandates, with RBI AFA as the buyer's own step in their UPI app, is built but switched off: it has not yet run against the Plural sandbox.
 
 ## What if the buyer is not present when the agent buys?
 
-There is no passkey step. Your stricter not-present limits apply, and without them the purchase is refused.
+Today the buyer always pays on your page, so a payment needs the buyer. On the agent-executed path, which is off, there is no passkey step, your stricter not-present limits apply, and without them the purchase is refused.
 
 ## Can I check the records myself?
 
@@ -58,7 +66,7 @@ Yes. Export the ledger and run `scripts/verify_ledger.py` on your own computer. 
 
 ## What is switched on today?
 
-The safety checks are on in production. Every surface that publishes your shop or moves money starts off: the UCP profile and checkout, the ACP feed and checkout, mandates and payment execution. With the defaults no checkout completes and no money moves. See [feature switches](/docs/oacp-feature-switches).
+The safety checks are on in production. Every surface that publishes your shop starts off: the UCP profile and checkout, the ACP feed and checkout, and the AgenticOrg network. Once checkout is on and you have chosen where buyers pay, a ready checkout gives the buyer a link to your own payment page. Mandates and agent-executed payment stay off. See [feature switches](/docs/oacp-feature-switches).
 
 ## Where can I read more?
 

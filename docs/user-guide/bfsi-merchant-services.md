@@ -14,12 +14,13 @@ AgenticOrg owns seller/buyer runtime. Grantex owns trust/policy/canonical artifa
 
 1. Assign a merchant owner, bank integration owner, provider contact and channel owner.
 2. Configure merchant-scoped Seller Commerce Agent onboarding and source/channel settings.
-3. Obtain read-only access to a sandbox Shopify store with a fictional catalog through the merchant's approved process.
+3. Obtain read-only access to a sandbox Shopify store with a fictional catalog through the merchant's approved process, or prepare a CSV or JSON file of fictional products to upload on the Sell Everywhere page.
 4. Sync synthetic products/variants/images/price/inventory and compare samples with the sandbox store.
 5. Send the bounded Grantex authority request and verify/cache issued artifacts.
 6. Ask product questions about the fictional catalog through the configured web or agent bridge.
 7. Inspect source, freshness, supported facts and refusal behavior.
 8. Prepare a provider/POS handoff and confirm that no order/payment state is fabricated.
+9. If the pilot includes payment, have the merchant choose its own Plural account in Sandbox on the Sell Everywhere page, and confirm a ready checkout returns a link to that payment page and a paid sandbox order appears on the Orders page.
 
 ## Process map
 
@@ -35,15 +36,19 @@ Provider capability | A configured provider path checks non-sensitive capability
 Authoritative handoff | A prepared packet awaits provider, POS or merchant confirmation. | Owner: Provider, POS or merchant system | If blocked: Absent or failed confirmation stays pending or failed; no paid or placed state is fabricated.
 ```
 
-## Plural/Pine and mandates
+## Plural payments and mandates
 
 Arrange the provider onboarding contact, merchant account, sandbox/live access, allowed capability contract and human authorization journey. AgenticOrg can verify provider-owned capability evidence directly through its configured path. Store non-sensitive references, not raw mandate/payment credentials.
 
-A credential/token capability check is not proof of a completed mandate or an allowed payment in every geography. Live execution needs the provider's real contract, authorization, settlement/error/refund handling and institution approval. The current OACP runtime remains prepared/non-executing for those actions.
+**What runs today: the payment hand-off.** A merchant saves its own Plural client ID, client secret and webhook secret (Sandbox or Production), which AgenticOrg encrypts and never shows again. When a buyer's checkout is ready and the arbiter allows it, the buyer gets a link to a Plural hosted payment page under the merchant's own account, pays there and authenticates the payment, for example with 3-D Secure or a UPI PIN. AgenticOrg never holds the money. A payment confirmed for the right amount, by Plural's signed webhook or the once-a-minute status check, becomes an order with an email to the merchant's administrators; any other payment is refused and logged so the merchant can refund it. Settlement, refunds and disputes stay with the merchant's Plural account.
+
+A credential/token capability check is not proof of a completed mandate or an allowed payment in every geography. Agent-executed payment, where AgenticOrg charges against buyer mandates, needs the provider's real contract, authorization, settlement/error/refund handling and institution approval. It stays switched off; for mandates the OACP runtime remains prepared/non-executing.
 
 ## Channels and protocol payloads
 
 UCP/ACP/schema.org/AP2/A2A/MCP-style payloads and bridges are not automatic marketplace placement. Agree each target's supported contract, authentication, publication/approval requirements and actual customer journey. WhatsApp/Telegram need configured credentials and channel rollout; ChatGPT/Claude/Gemini/Perplexity need appropriate client/platform setup.
+
+A merchant that turns on Sell everywhere is listed in AgenticOrg's own network once its profile is published: buyers reach it from ChatGPT and other MCP apps through the AgenticOrg MCP server, from the AgenticOrg shopping bot on Telegram, and on the open web through its UCP profile. Google, Microsoft Copilot and Perplexity are shown as registration pending. See [Sell everywhere](/docs/oacp-sell-everywhere).
 
 ## Physical-store POS
 
