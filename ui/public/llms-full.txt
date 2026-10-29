@@ -4493,7 +4493,7 @@ The buyer always authenticates the payment themselves on that page, for example 
 Open Getting paid | In your merchant setup, open Getting paid for your merchant.
 Shopify | Choose My Shopify checkout. Your Shopify store must already be connected; the page shows the store it will use.
 Plural | Choose My Plural account. Enter your Plural client ID, client secret and webhook secret, choose Sandbox or Production, save, then press Test.
-Webhook | Copy the webhook URL the page shows into your Plural dashboard, so payments are confirmed the moment they happen.
+Webhook | Copy the webhook URL the page shows into your Plural dashboard, or send it to Plural support if your account has no webhook setting, so payments are confirmed the moment they happen.
 Save | Save the payment method. New checkouts use it at once.
 ```
 

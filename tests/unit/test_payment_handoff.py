@@ -180,7 +180,7 @@ def test_reference_fits_plural_and_payload_binds_the_cart() -> None:
 
 
 def test_payment_state_is_paid_only_for_money_received() -> None:
-    assert ph.payment_state("PROCESSED") == ph.payment_state("captured") == "paid"
+    assert ph.payment_state("PROCESSED") == ph.payment_state("captured") == ph.payment_state("SETTLED") == "paid"
     assert ph.payment_state("AUTHORIZED") == ph.payment_state("CREATED") == ph.payment_state(None) == "pending"
     assert ph.payment_state("FAILED") == ph.payment_state("CANCELLED") == "failed"
 

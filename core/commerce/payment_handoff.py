@@ -308,7 +308,7 @@ def webhook_url(tenant_id: str, webhook_key: str) -> str | None:
     return f"{base}/api/v1/payments/plural/webhooks/{tenant_id}/{webhook_key}" if base else None
 
 
-PAID = frozenset({"PROCESSED", "CAPTURED"})
+PAID = frozenset({"PROCESSED", "CAPTURED", "SETTLED"})
 FAILED = frozenset({"FAILED", "CANCELLED", "DECLINED", "REJECTED", "EXPIRED", "ATTEMPTED_FAILED"})
 
 
@@ -316,8 +316,9 @@ def payment_state(status: str | None) -> str:
     """Plural order status -> ``paid``, ``failed`` or ``pending``.
 
     With ``pre_auth: false`` a successful hosted payment is ``PROCESSED``
-    (``CAPTURED`` is accepted too); ``AUTHORIZED`` without a capture is not
-    money received, so it stays pending.
+    (``CAPTURED`` is accepted too, and ``SETTLED``, which follows a processed
+    payment); ``AUTHORIZED`` without a capture is not money received, so it
+    stays pending.
     """
     value = str(status or "").upper()
     if value in PAID:

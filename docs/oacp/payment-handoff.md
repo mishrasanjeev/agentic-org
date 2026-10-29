@@ -132,7 +132,13 @@ Confirmation:
   reads the status from Plural and shows the buyer a plain result. It shows no
   buyer data and ignores the posted fields.
 
-`PROCESSED` or `CAPTURED` with the amount and currency the hand-off asked for
+The signature scheme and the order event shape (`event_type`, then `data` with
+`order_id`, `merchant_order_reference`, `status` and `order_amount`) follow the
+Pine Labs Online webhook documentation for Plural. Plural registers a merchant's
+webhook URL during its onboarding, so the poll and the return page confirm
+payments until it is in place.
+
+`PROCESSED`, `CAPTURED` or `SETTLED` with the amount and currency the hand-off asked for
 creates the order (as an executed Complete would: the order entity with
 `executor` `plural_hosted`, the ledger, the UCP order webhooks). A payment for
 another amount, on a canceled checkout or for a checkout that changed is
