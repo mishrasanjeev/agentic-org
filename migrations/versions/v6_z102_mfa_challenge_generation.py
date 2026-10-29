@@ -59,5 +59,6 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    # Forward-only: dropping durable epochs could revive revoked challenges.
-    raise RuntimeError("MFA challenge revocations are forward-only; downgrade is not supported")
+    # Forward-only: keep the durable epochs, since dropping them could revive
+    # revoked challenges. upgrade() re-applies cleanly over the kept column.
+    pass

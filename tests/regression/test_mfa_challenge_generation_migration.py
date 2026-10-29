@@ -109,8 +109,8 @@ def test_revision_and_forward_only_downgrade(monkeypatch):
     assert module.down_revision == "v6z99_onboarding_cases"
     statements = []
     monkeypatch.setattr(module.op, "execute", statements.append)
-    with pytest.raises(RuntimeError, match="forward-only"):
-        module.downgrade()
+    module.downgrade()
+    # The epochs stay: a downgrade that dropped them could revive revoked challenges.
     assert statements == []
 
 

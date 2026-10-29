@@ -107,8 +107,8 @@ forward revision; `alembic downgrade` is not a production rollback path.
   one-step downgrade of the head followed by `upgrade head` with no drift.
 - Some revisions are intentionally no-op downgrades because undoing them would
   lose data or strand running work (`v6z13_knowledge_documents_repair`,
-  `v6z24_case_pseudonym_maps`; `v6z22` drops checkpoints and abandons paused
-  runs).
+  `v6z24_case_pseudonym_maps`, `v6z102_mfa_challenge_generation`; `v6z22`
+  drops checkpoints and abandons paused runs).
 - Downgrading below the baseline is unsupported. On a bootstrapped database a
   downgrade from head currently fails at `v4913_feed_events` (its downgrade
   drops `ix_feed_events_tenant_sequence`, which does not exist there), and
