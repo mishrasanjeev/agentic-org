@@ -60,6 +60,7 @@ app = Celery(
         "core.tasks.memory_tasks",
         "core.tasks.network_tasks",
         "core.tasks.oacp_freshness_tasks",
+        "core.tasks.payment_handoff_tasks",
         "core.tasks.report_tasks",
         "core.tasks.rpa_tasks",
         "core.tasks.spend_tasks",
@@ -95,6 +96,7 @@ app.conf.update(
         "core.tasks.workflow_tasks.*": {"queue": "workflows"},
         "core.tasks.channel_tasks.*": {"queue": "workflows"},
         "core.tasks.network_tasks.*": {"queue": "workflows"},
+        "core.tasks.payment_handoff_tasks.notify_order": {"queue": "delivery"},
         "core.tasks.onboarding_desk_tasks.open_case": {"queue": "workflows"},
         "core.tasks.knowledge_tasks.*": {"queue": "maintenance"},
         # Retain the historical short task names so messages already in
@@ -140,6 +142,14 @@ app.conf.beat_schedule = {
         "task": "core.tasks.case_push_tasks.sweep_case_pushes",
         "schedule": 30.0,
         "options": {"queue": "delivery"},
+    },
+    "poll-plural-handoffs": {
+        # Plural hosted-checkout payment links whose webhook has not arrived: read the
+        # order status and apply it (core/commerce/plural_hosted.py). A no-op unless
+        # AGENTICORG_UCP_CHECKOUT_ENABLED or AGENTICORG_ACP_CHECKOUT_ENABLED.
+        "task": "core.tasks.payment_handoff_tasks.poll_plural_handoffs",
+        "schedule": 60.0,
+        "options": {"queue": "delivery", "expires": 60},
     },
     "sweep-ucp-order-webhooks": {
         # UCP order webhook retries and missed kicks, and expired Idempotency-Key

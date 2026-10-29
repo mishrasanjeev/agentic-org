@@ -36,6 +36,7 @@ from core.commerce.arbiter import RULE_AFA, AfaEvidence, Decision, decide
 from core.commerce.arbiter_store import DecisionRefusedError, persist_decision
 from core.commerce.ledger import commerce_payload_hash, record_commerce_event
 from core.commerce.oacp_mandates import VerifiedMandateChain
+from core.commerce.payment_handoff import PaymentSettings, payment_settings
 from core.commerce.ucp import idempotency
 from core.commerce.ucp import messages as msg
 from core.commerce.ucp import releases as v
@@ -112,6 +113,11 @@ class UcpRequest:
     # platform that owns the session (ACP: the API key; its sessions answer to that platform only).
     session_id: str | None = None
     platform: str | None = None
+    # Set by a binding that may only hand the buyer a payment link (the network gateway): Complete refuses
+    # unless the merchant configured a payment hand-off, and never runs an executor.
+    handoff_only: bool = False
+    # The buyer surface a binding serves (``telegram``, ``mcp``), recorded on the session at create time.
+    surface: str | None = None
 
     def json(self) -> Any:
         if not self.raw_body:
@@ -549,6 +555,8 @@ async def create_checkout(
             # The buyer agent every arbiter decision of this session names (Grantex countersigns to it).
             "buyer_agent_id": platform_buyer_agent_id(negotiated.platform.url),
         }
+        if req.surface:
+            state["platform"]["surface"] = req.surface
         _tag(state, runtime, kept)
         row = CommerceCheckoutSessionRow(
             id=session_id,
@@ -633,6 +641,13 @@ async def update_checkout(
         frozen = _frozen_error(row, now, negotiated.version, "updated")
         if frozen is not None:
             return frozen
+        if _plural_link_outstanding(row):
+            return _protocol_error(
+                409,
+                "invalid_state",
+                "A payment link was issued for this checkout; cancel it and open a new checkout to change it.",
+                negotiated.version,
+            )
         kept: dict[str, Any] = {}
         if runtime.body_translator is not None:
             body, kept = runtime.body_translator(row.state or {}, body)
@@ -649,6 +664,10 @@ async def update_checkout(
         state = evaluation.state
         state["buyer_authority"] = vendor.get("buyer_authority") or (row.state or {}).get("buyer_authority")
         state["platform"] = (row.state or {}).get("platform")
+        for member in ("handoff_refs", "handoff_orders", "handoff_events"):
+            # A payment on an earlier hand-off link must still find its session (and is checked against it).
+            if (row.state or {}).get(member):
+                state[member] = (row.state or {})[member]
         _tag(state, runtime, kept)
         row.state = state
         row.status = evaluation.status
@@ -893,6 +912,10 @@ async def complete_checkout(
     from core.database import get_tenant_session
 
     body = _object_body(req)
+    handoff_settings = payment_settings(merchant.raw_config)
+    if handoff_settings is not None or req.handoff_only:
+        # The merchant takes payment on its own page: hand the buyer a link (core.commerce.payment_handoff).
+        return await _complete_with_handoff(runtime, req, merchant, negotiated, str(session_id), handoff_settings)
     vendor = vendor_member(body)
     instruments, _term = parse_payment(body.get("payment"))
     version = negotiated.version
@@ -1685,6 +1708,518 @@ def _validated_actions(actions: Mapping[str, Sequence[Mapping[str, Any]]], merch
                 }
             )
     return out
+
+
+# --- payment hand-off -----------------------------------------------------------------------------
+
+HANDOFF_EVENT = "commerce.payments.handoff"
+HANDOFF_CONFIRM_EVENT = "commerce.payments.handoff.confirm"
+
+
+def _plural_link_outstanding(row: Any) -> bool:
+    """A Plural order exists for the checkout as it stands: changing the checkout would orphan the payment."""
+    from core.commerce import payment_handoff as ph
+
+    handoff = (row.state or {}).get("handoff")
+    return (
+        isinstance(handoff, Mapping)
+        and handoff.get("mode") == ph.MODE_PLURAL_HOSTED
+        and handoff.get("status") in ("creating", "issued")
+        and row.status in ("requires_escalation", "complete_in_progress")
+    )
+
+
+@dataclass(frozen=True)
+class _HandoffTarget:
+    """Where the buyer will pay, resolved before the decision's transaction (reads only, no provider call)."""
+
+    problem: str | None = None
+    message: str = ""
+    shop_domain: str | None = None
+    plural: Any = None
+
+
+async def _handoff_target(req: UcpRequest, merchant: MerchantUcp, settings: PaymentSettings) -> _HandoffTarget:
+    from core.commerce import payment_handoff as ph
+    from core.commerce.ucp.store import load_merchant_config_row
+    from core.database import get_tenant_session
+
+    if settings.mode == ph.MODE_SHOPIFY_CART:
+        row = await load_merchant_config_row(
+            tenant_id=str(req.tenant_id), merchant_id=merchant.merchant_id, seller_agent_id=merchant.seller_agent_id
+        )
+        domain = ph.shopify_shop_domain(getattr(row, "source_connectors", None) if row is not None else None)
+        if domain is None:
+            return _HandoffTarget(
+                problem="payment_setup_incomplete", message="This shop has no connected Shopify store to pay in."
+            )
+        return _HandoffTarget(shop_domain=domain)
+    from core.commerce.plural_hosted import load_credentials
+
+    async with get_tenant_session(_tenant(req)) as session:
+        credentials = await load_credentials(
+            session,
+            tenant_id=req.tenant_id,
+            credential_ref=str(settings.credential_ref),
+            merchant_id=merchant.merchant_id,
+        )
+    if credentials is None:
+        return _HandoffTarget(problem="payment_setup_incomplete", message="This shop's payment page is not set up.")
+    if ph.return_url(str(req.tenant_id), "probe") is None:
+        return _HandoffTarget(problem="payment_link_unavailable", message="Payment links are not available here.")
+    return _HandoffTarget(plural=credentials)
+
+
+async def _complete_with_handoff(
+    runtime: UcpRuntime,
+    req: UcpRequest,
+    merchant: MerchantUcp,
+    negotiated: Negotiated,
+    session_id: str,
+    settings: PaymentSettings | None,
+) -> UcpResponse:
+    """Complete for a merchant that takes payment on its own page: decide, consume, then hand the link over.
+
+    Transaction 1 seals a ``payment_handoff`` decision (an unchanged valid link
+    is returned as is). After its commit the decision is offered to Grantex for
+    countersignature; transaction 2 consumes the allow for the exact payload and
+    issues the Shopify cart permalink, or reserves the session
+    (``complete_in_progress``) for the Plural order, which is created outside any
+    transaction; transaction 3 records the Plural link (or returns the session to
+    ``ready_for_complete`` when Plural refused). No executor runs and no
+    payment credential is read.
+    """
+    from core.commerce import payment_handoff as ph
+    from core.commerce.arbiter_grantex import countersign_decision
+    from core.commerce.arbiter_store import require_allow_decision
+    from core.database import get_tenant_session
+
+    version = negotiated.version
+    event = runtime.events["complete_checkout"]
+    now = runtime.clock()
+    target = await _handoff_target(req, merchant, settings) if settings is not None else None
+    cart_url: str | None = None
+    decided: Decision | None = None
+    decided_revision = 0
+    async with get_tenant_session(_tenant(req)) as session:
+        row = await _load_session(session, req, merchant, session_id, lock=True, protocol=runtime.protocol)
+        frozen = _frozen_error(row, now, version, "completed")
+        if frozen is not None:
+            return frozen
+        state = dict(row.state or {})
+
+        async def _blocked(messages: list[dict[str, Any]], outcome: str = "blocked", **details: Any) -> UcpResponse:
+            return await _blocked_response(
+                runtime, session, req, merchant, negotiated, row, now, messages, outcome, **details
+            )
+
+        active = ph.active_handoff(state, now)
+        if row.status == "requires_escalation" and active is not None:
+            # Idempotent: the same link while it is valid.
+            await _record(
+                session,
+                req,
+                merchant,
+                event,
+                "success",
+                row.id,
+                {"handoff": "reused", "mode": active.get("mode"), "decision_id": active.get("decision_id")},
+            )
+            rendered = await _render_checkout(runtime, row, merchant, negotiated, now)
+            return UcpResponse(status=200, body=rendered, recorded=True, resource_id=row.id)
+        if settings is None or target is None:
+            return await _blocked(
+                [
+                    msg.error(
+                        "payment_handoff_unavailable",
+                        "This shop has no payment link set up for this channel; pay with the shop directly.",
+                        severity="unrecoverable",
+                    )
+                ]
+            )
+        reissue = row.status == "requires_escalation" and isinstance(state.get("handoff"), Mapping)
+        if row.status != "ready_for_complete" and not reissue:
+            return await _blocked(
+                [msg.error("missing", "The checkout is not ready to complete; see its messages.", path="$.status")]
+            )
+        if reissue:
+            ph.clear_handoff(state, "expired")
+            if msg.has_errors(state.get("messages") or []):
+                return await _blocked(
+                    [msg.error("missing", "The checkout is not ready to complete; see its messages.", path="$.status")]
+                )
+        if target.problem is not None:
+            return await _blocked([msg.error(target.problem, target.message, severity="unrecoverable")])
+        if settings.mode == ph.MODE_SHOPIFY_CART:
+            cart_url = ph.shopify_cart_url(target.shop_domain, state.get("line_items") or [])
+            if cart_url is None:
+                return await _blocked(
+                    [
+                        msg.error(
+                            "payment_handoff_unavailable",
+                            "These items cannot be paid for in the shop's Shopify checkout.",
+                            severity="unrecoverable",
+                        )
+                    ]
+                )
+        total = int(next(t["amount"] for t in state["totals"] if t["type"] == "total"))
+        payload = ph.handoff_payload(
+            session_id=row.id,
+            revision=int(row.revision),
+            merchant_id=merchant.merchant_id,
+            seller_agent_id=merchant.seller_agent_id,
+            state=state,
+            mode=settings.mode,
+        )
+        cache_records, merchant_config = (
+            await runtime.arbiter_scope(merchant) if runtime.arbiter_scope is not None else ((), None)
+        )
+        decision = decide(
+            ph.ACTION,
+            arbiter_context(
+                merchant=merchant,
+                now=now,
+                payload=payload,
+                amount_minor_units=total,
+                currency=row.currency,
+                quantity=sum(int(li["quantity"]) for li in state["line_items"]),
+                authority=None,
+                cache_records=cache_records,
+                merchant_config=merchant_config,
+                buyer_agent_id=session_buyer_agent_id(row),
+            ),
+        )
+        await persist_decision(session, decision)
+        if not decision.allowed:
+            return await _blocked(
+                [msg.error("arbiter_refused", f"The commerce arbiter refused: {decision.failing_rule}.", path="$")],
+                outcome="refused",
+                vendor={"decision": decision.to_public()},
+            )
+        decided, decided_revision = decision, int(row.revision)
+    # After the decision's commit, outside any transaction: never waits, never retries.
+    client = runtime.grantex_client() if runtime.grantex_client is not None else None
+    countersignature = await countersign_decision(decided, client=client)
+    vendor_out = {"decision": decided.to_public(), "grantex_countersignature": countersignature.to_dict()}
+    reservation: dict[str, Any] | None = None
+    async with get_tenant_session(_tenant(req)) as session:
+        row = await _load_session(session, req, merchant, session_id, lock=True, protocol=runtime.protocol)
+        frozen = _frozen_error(row, now, version, "completed")
+        if frozen is not None:
+            return frozen
+        state = dict(row.state or {})
+
+        async def _refused(code: str, content: str) -> UcpResponse:
+            return await _blocked_response(
+                runtime,
+                session,
+                req,
+                merchant,
+                negotiated,
+                row,
+                now,
+                [msg.error(code, content, path="$")],
+                outcome="refused",
+                vendor=vendor_out,
+            )
+
+        if row.revision != decided_revision or row.status not in ("ready_for_complete", "requires_escalation"):
+            return await _refused("decision_payload_mismatch", "The checkout changed after the decision.")
+        try:
+            await require_allow_decision(
+                session,
+                tenant_id=req.tenant_id,
+                decision_id=decided.decision_id,
+                payload_hash=decided.payload_hash,
+                action=ph.ACTION,
+            )
+        except DecisionRefusedError as exc:
+            return await _refused(exc.code, exc.message)
+        if state.get("handoff") and row.status == "requires_escalation":
+            ph.clear_handoff(state, "expired")
+        row.decision_id = decided.decision_id
+        row.revision = row.revision + 1
+        row.updated_at = now
+        if cart_url is not None:
+            ph.issue(
+                state,
+                mode=ph.MODE_SHOPIFY_CART,
+                continue_url=cart_url,
+                decision_id=decided.decision_id,
+                now=now,
+                expires_at=row.expires_at,
+            )
+            row.state = state
+            row.status = status_for(state["messages"], state["continue_url"])
+            await _record(
+                session,
+                req,
+                merchant,
+                event,
+                "success",
+                row.id,
+                {"handoff": "issued", "mode": ph.MODE_SHOPIFY_CART, "decision_id": decided.decision_id},
+                payload=decided.to_public(),
+            )
+            rendered = await _render_checkout(runtime, row, merchant, negotiated, now, vendor=vendor_out)
+            return UcpResponse(status=200, body=rendered, recorded=True, resource_id=row.id)
+        total = int(next(t["amount"] for t in state["totals"] if t["type"] == "total"))
+        reference = ph.handoff_reference(row.id, decided.decision_id)
+        state["handoff"] = {
+            "mode": ph.MODE_PLURAL_HOSTED,
+            "status": "creating",
+            "decision_id": decided.decision_id,
+            "reference": reference,
+            "credential_ref": settings.credential_ref if settings is not None else None,
+        }
+        ph.remember_reference(
+            state,
+            reference,
+            {
+                "decision_id": decided.decision_id,
+                "amount": total,
+                "currency": str(row.currency or "").upper(),
+                "cart_hash": ph.cart_hash(state),
+                "credential_ref": settings.credential_ref if settings is not None else None,
+            },
+        )
+        row.state = state
+        row.status = "complete_in_progress"
+        await _record(
+            session,
+            req,
+            merchant,
+            event,
+            "success",
+            row.id,
+            {"handoff": "creating", "mode": ph.MODE_PLURAL_HOSTED, "decision_id": decided.decision_id},
+            payload=decided.to_public(),
+        )
+        reservation = {
+            "reference": reference,
+            "total": total,
+            "currency": str(row.currency or ""),
+            "buyer": dict(state.get("buyer") or {}),
+            "expires_at": row.expires_at,
+        }
+    assert target is not None and reservation is not None
+    from core.commerce.plural_hosted import PluralRequestError, PluralUnavailableError, create_hosted_order
+
+    created = None
+    failure = "payment_link_unavailable"
+    try:
+        created = await create_hosted_order(
+            target.plural.credentials,
+            reference=reservation["reference"],
+            amount_minor_units=reservation["total"],
+            currency=reservation["currency"],
+            callback_url=str(ph.return_url(str(req.tenant_id), session_id)),
+            buyer=reservation["buyer"],
+            metadata={
+                "oacp_decision_id": decided.decision_id,
+                "oacp_checkout_session_id": session_id,
+                "oacp_payload_hash": decided.payload_hash,
+            },
+        )
+    except PluralRequestError as exc:
+        logger.warning("plural_hosted_order_refused", code=exc.code, http_status=exc.status_code)
+        failure = "payment_link_refused"
+    except PluralUnavailableError as exc:
+        logger.warning("plural_hosted_order_unavailable", error_type=type(exc).__name__)
+    # enterprise-gate: broad-except-ok reason=plural-order-failure-returns-the-session-to-ready-fails-closed-no-link
+    except Exception as exc:
+        logger.error("plural_hosted_order_failed", error_type=type(exc).__name__)
+    later = runtime.clock()
+    async with get_tenant_session(_tenant(req)) as session:
+        row = await _load_session(session, req, merchant, session_id, lock=True, protocol=runtime.protocol)
+        state = dict(row.state or {})
+        handoff = state.get("handoff") if isinstance(state.get("handoff"), Mapping) else {}
+        if handoff.get("reference") != reservation["reference"] or row.status != "complete_in_progress":
+            rendered = await _render_checkout(runtime, row, merchant, negotiated, later)
+            return UcpResponse(status=200, body=rendered, resource_id=row.id)
+        extra: list[dict[str, Any]] = []
+        if created is not None:
+            expires = min(later + ph.PLURAL_LINK_TTL, reservation["expires_at"])
+            ph.issue(
+                state,
+                mode=ph.MODE_PLURAL_HOSTED,
+                continue_url=created.redirect_url,
+                decision_id=decided.decision_id,
+                now=later,
+                expires_at=expires,
+                extra={"provider_order_id": created.order_id},
+            )
+            ph.remember_reference(state, reservation["reference"], {"provider_order_id": created.order_id})
+            row.status = status_for(state["messages"], state["continue_url"])
+        else:
+            ph.clear_handoff(state, "failed")
+            row.status = "ready_for_complete"
+            extra.append(
+                msg.error(failure, "The shop's payment page could not be opened; try again shortly.", path="$")
+            )
+        row.state = state
+        row.revision = row.revision + 1
+        row.updated_at = later
+        await _record(
+            session,
+            req,
+            merchant,
+            HANDOFF_EVENT,
+            "success" if created is not None else "refused",
+            row.id,
+            {
+                "result": "issued" if created is not None else failure,
+                "mode": ph.MODE_PLURAL_HOSTED,
+                "decision_id": decided.decision_id,
+                "provider_order_ref_present": created is not None,
+            },
+        )
+        rendered = await _render_checkout(
+            runtime, row, merchant, negotiated, later, extra_messages=extra, vendor=vendor_out
+        )
+    return UcpResponse(status=200, body=rendered, recorded=True, resource_id=session_id)
+
+
+async def confirm_handoff_payment(
+    *,
+    tenant_id: str,
+    reference: str,
+    provider_order_id: str,
+    status: str,
+    amount_minor_units: int | None,
+    currency: str | None,
+    source: str,
+    event_id: str | None,
+    now: datetime,
+) -> tuple[str, str | None]:
+    """Apply a verified Plural hosted-order state to the hand-off it belongs to; idempotent.
+
+    ``paid`` (``PROCESSED``/``CAPTURED``) creates the order (as an executed
+    Complete would: order entity, ledger, order webhooks) when the amount and
+    currency are those the hand-off asked for and the checkout is still the one
+    the buyer paid for; ``failed`` retires the current link so the next Complete
+    issues a new one. Returns ``(result, order_id)``; results:
+    ``completed``, ``already_completed``, ``pending``, ``link_retired``,
+    ``unknown_reference``, ``order_mismatch``, ``amount_mismatch``,
+    ``checkout_changed``, ``paid_after_cancel``, ``duplicate_event``, ``not_applicable``.
+    """
+    from core.commerce import payment_handoff as ph
+    from core.commerce.ucp.merchant import config_from_row, merchant_ucp_from_config
+    from core.commerce.ucp.store import load_merchant_config_row
+    from core.database import get_tenant_session
+    from core.models.commerce_ucp import CommerceCheckoutSessionRow as Row
+
+    tenant = uuid.UUID(str(tenant_id))
+    contains = Row.state.contains({"handoff_refs": [reference]})
+    async with get_tenant_session(tenant) as session:
+        scope = (
+            await session.execute(
+                select(Row.id, Row.merchant_id, Row.seller_agent_id).where(Row.tenant_id == tenant, contains)
+            )
+        ).first()
+    if scope is None:
+        return "unknown_reference", None
+    config_row = await load_merchant_config_row(
+        tenant_id=str(tenant), merchant_id=scope.merchant_id, seller_agent_id=scope.seller_agent_id
+    )
+    req = UcpRequest(tenant_id=str(tenant), host="", ucp_agent=None)
+    order_event: OrderEvent | None = None
+    order_id: str | None = None
+    async with get_tenant_session(tenant) as session:
+        row = (
+            await session.execute(select(Row).where(Row.tenant_id == tenant, Row.id == scope.id).with_for_update())
+        ).scalar_one_or_none()
+        if row is None or config_row is None:
+            return "unknown_reference", None
+        merchant = merchant_ucp_from_config(
+            config_from_row(config_row), tenant_id=str(tenant), serving_host=row.serving_host
+        )
+        if merchant is None:
+            return "unknown_reference", None
+        state = dict(row.state or {})
+        record = dict((state.get("handoff_orders") or {}).get(reference) or {})
+        payment = ph.payment_state(status)
+        result: str
+        if payment == "pending" and row.status != "completed":
+            return "pending", None
+        if ph.seen_event(state, event_id):
+            return "duplicate_event", row.order_id
+        if record.get("provider_order_id") and record["provider_order_id"] != provider_order_id:
+            result = "order_mismatch"
+        elif row.status == "completed":
+            result, order_id = "already_completed", row.order_id
+        elif payment == "failed":
+            handoff = state.get("handoff") if isinstance(state.get("handoff"), Mapping) else {}
+            if handoff.get("reference") == reference and row.status in ("requires_escalation", "complete_in_progress"):
+                ph.clear_handoff(state, "failed")
+                row.status = "ready_for_complete"
+                result = "link_retired"
+            else:
+                result = "not_applicable"
+        elif (
+            amount_minor_units is None
+            or amount_minor_units != record.get("amount")
+            or (str(currency or "").upper() != str(record.get("currency") or ""))
+        ):
+            result = "amount_mismatch"
+        elif row.status == "canceled" or (row.canceled_at is not None):
+            result = "paid_after_cancel"
+        elif ph.cart_hash(state) != record.get("cart_hash"):
+            result = "checkout_changed"
+        else:
+            if state.get("protocol") == "acp":
+                from core.commerce.acp.checkout import EVENTS as ACP_EVENTS
+
+                created_event = ACP_EVENTS["order_created"]
+            else:
+                created_event = ORDER_CREATED_EVENT
+            ph.clear_handoff(state, "paid")
+            order_event = await _complete_into_order(
+                session,
+                req,
+                merchant,
+                row,
+                state,
+                version=row.ucp_version,
+                instruments=[],
+                decision_id=str(record.get("decision_id") or row.decision_id or ""),
+                executor_name=ph.ORDER_EXECUTOR[ph.MODE_PLURAL_HOSTED],
+                provider_order_ref=provider_order_id,
+                policies=(),
+                now=now,
+                order_created_event=created_event,
+            )
+            order_id = order_event.order_id
+            result = "completed"
+        row.state = state
+        row.revision = row.revision + 1
+        row.updated_at = now
+        await _record(
+            session,
+            req,
+            merchant,
+            HANDOFF_CONFIRM_EVENT,
+            "success" if result in ("completed", "already_completed", "link_retired") else "refused",
+            row.id,
+            {
+                "result": result,
+                "source": source,
+                "payment_state": payment,
+                "decision_id": record.get("decision_id"),
+                "provider_order_ref_present": bool(provider_order_id),
+            },
+        )
+    if result in ("amount_mismatch", "paid_after_cancel", "checkout_changed", "order_mismatch"):
+        # The merchant's Plural account holds money no order here matches: the ledger event and this log say so.
+        logger.error("plural_hosted_payment_unmatched", result=result, source=source)
+    if order_event is not None:
+        from core.commerce.ucp.webhooks import kick_dispatch
+
+        kick_dispatch(tenant)
+        from core.commerce.order_notifications import kick_order_notification
+
+        kick_order_notification(str(tenant), order_event.order_id)
+    return result, order_id
 
 
 # --- cart -------------------------------------------------------------------------------------

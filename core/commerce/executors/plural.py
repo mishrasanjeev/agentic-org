@@ -188,6 +188,27 @@ class PluralApiClient:
             raise PluralUnavailableError(f"Plural unreachable: {type(exc).__name__}") from exc
         return _parse(response)
 
+    async def check_token(self) -> None:
+        """Fetch an access token and nothing else (a credential test); raises the client errors."""
+        url = f"{self._credentials.base_url}/auth/v1/token"
+        try:
+            await validate_public_url_async(
+                url, allowed_schemes=("https",), require_dns=self._transport_factory is None
+            )
+        except EgressValidationError as exc:
+            raise PluralUnavailableError("unsafe Plural endpoint") from exc
+        transport = (
+            self._transport_factory() if self._transport_factory is not None else build_pinned_async_transport()
+        )
+        self._token = None
+        try:
+            async with httpx.AsyncClient(
+                timeout=TIMEOUT_SECONDS, transport=transport, follow_redirects=False
+            ) as client:
+                await self._access_token(client)
+        except (httpx.HTTPError, EgressValidationError, OSError) as exc:
+            raise PluralUnavailableError(f"Plural unreachable: {type(exc).__name__}") from exc
+
     async def _access_token(self, client: httpx.AsyncClient) -> str:
         now = time.time()
         if self._token is not None and self._token[1] > now + 60:
