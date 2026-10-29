@@ -6,8 +6,11 @@
  * lists only shops whose UCP profile is published. Catalog search and lookup go to each shop's
  * public `/ucp/catalog/*` routes with no credential. Checkouts go through the network checkout
  * gateway (`/api/v1/network/shops/{slug}/checkout-sessions`) with the network service
- * credential, which the caller never sees and cannot change; there is no complete, cancel or
- * payment tool, so nothing here can take a payment.
+ * credential, which the caller never sees and cannot change. `complete_checkout` is the payment
+ * hand-off only: the gateway answers with `continue_url`, the shop's own payment page (its Shopify
+ * cart or its Plural hosted checkout), where the buyer pays. The tool sends no body, and the
+ * gateway refuses any instrument, decision or mandate; there is no cancel or payment tool, so
+ * nothing here can take a payment.
  *
  * Every tool result names its `shop` (the network slug), and every checkout tool needs one, so
  * a checkout is always routed to the shop that created it.
@@ -34,6 +37,7 @@ export const NETWORK_TOOLS: ReadonlySet<string> = new Set([
   "create_checkout",
   "get_checkout",
   "update_checkout",
+  "complete_checkout",
 ]);
 
 const DIRECTORY_TTL_MS = 60 * 1000;
@@ -71,7 +75,7 @@ export interface Network {
   shops(): Promise<NetworkShop[]>;
   shop(slug: string): Promise<NetworkShop | undefined>;
   binding(shop: NetworkShop): Promise<UcpBinding>;
-  gateway(slug: string, id?: string): string;
+  gateway(slug: string, id?: string, action?: "complete"): string;
   serviceToken: string;
   agentProfile: string;
 }
@@ -145,7 +149,8 @@ export function createNetwork(options: NetworkOptions): Network {
     shops,
     shop: async (slug) => (await shops()).find((s) => s.slug === slug),
     binding,
-    gateway: (slug, id) => `${gatewayBase}/${encodeURIComponent(slug)}/checkout-sessions${id ? `/${encodeURIComponent(id)}` : ""}`,
+    gateway: (slug, id, action) =>
+      `${gatewayBase}/${encodeURIComponent(slug)}/checkout-sessions${id ? `/${encodeURIComponent(id)}` : ""}${id && action ? `/${action}` : ""}`,
     serviceToken: options.serviceToken,
     agentProfile: options.agentProfile,
   };
@@ -256,6 +261,8 @@ async function inBatches<T, R>(items: T[], size: number, fn: (item: T) => Promis
 const READ = { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true };
 const CREATE = { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true };
 const REPLACE = { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: true };
+// Repeating it returns the same payment link while it is valid; it never moves money.
+const HANDOFF = { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: true };
 
 const shopSchema = z.string().regex(SLUG, "a shop slug from list_shops").describe("The shop's network slug, from list_shops or a search result");
 const idSchema = z
@@ -392,6 +399,29 @@ export function registerNetworkTools(server: McpServer, net: Network): string[] 
       annotations: REPLACE,
     },
     async ({ shop, id, checkout }) => checkoutTool(shop, "PUT", id, checkout),
+  );
+
+  server.registerTool(
+    "complete_checkout",
+    {
+      title: "Get the payment link",
+      description:
+        "For a checkout whose status is ready_for_complete: get the link to the shop's own payment page. " +
+        "The answer has status requires_escalation and continue_url; give the buyer continue_url exactly as returned. " +
+        "The buyer pays there (card, UPI or net banking); this tool never takes payment and sends no payment data.",
+      inputSchema: { shop: shopSchema, id: idSchema.describe("The checkout id") },
+      annotations: HANDOFF,
+    },
+    async ({ shop, id }) => {
+      const one = await net.shop(shop).catch(() => undefined);
+      if (!one) return unknownShop(shop);
+      const result = await gatewayCall(net, "POST", net.gateway(one.slug, id, "complete"), {});
+      if (!result.ok) return errorResult(result.error);
+      const link = typeof result.body.continue_url === "string" && result.body.continue_url.startsWith("https://")
+        ? result.body.continue_url
+        : null;
+      return okResult({ ...withShop(one.slug, result.body), payment_link: link });
+    },
   );
 
   return [...NETWORK_TOOLS];

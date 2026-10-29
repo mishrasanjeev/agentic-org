@@ -225,6 +225,8 @@ async def run_ucp_operation(
     request_id: str | None = None,
     resource_id: str | None = None,
     platform: str | None = None,
+    handoff_only: bool = False,
+    surface: str | None = None,
 ) -> handlers.UcpResponse:
     """Run one UCP operation for a merchant host inside a tenant and record its ledger event.
 
@@ -239,6 +241,8 @@ async def run_ucp_operation(
         idempotency_key=idempotency_key,
         request_id=request_id,
         platform=platform,
+        handoff_only=handoff_only,
+        surface=surface,
     )
     raw = raw_body
     response = await handlers.run(operation, runtime_factory(), req, resource_id)

@@ -212,8 +212,10 @@ none. OAuth discovery is not implemented. Invalid rate settings fail at startup.
 Set `MCP_NETWORK_DIRECTORY_URL` (for example `https://app.agenticorg.ai/api/v1/network/merchants`)
 and the same endpoint serves every shop the AgenticOrg shopping network lists instead of one shop.
 Its tools are `list_shops`, `search_catalog` (every shop at once, or one with `shop`),
-`lookup_catalog`, `create_checkout`, `get_checkout` and `update_checkout`; the checkout tools take
-the shop's network slug, and every result names its `shop`.
+`lookup_catalog`, `create_checkout`, `get_checkout`, `update_checkout` and `complete_checkout`; the
+checkout tools take the shop's network slug, and every result names its `shop`. `complete_checkout`
+is the payment hand-off: for a ready checkout it returns `continue_url` (also as `payment_link`),
+the shop's own payment page, where the buyer pays. It takes only the shop and the checkout id.
 
 | Setting | Meaning |
 |---|---|
@@ -225,7 +227,8 @@ the shop's network slug, and every result names its `shop`.
 to each shop's public `/ucp/catalog/*` routes with no credential, five shops at a time with a
 five-second limit each; a shop that does not answer is reported under `unavailable` rather than
 failing the search. Checkouts go through the gateway, which opens them in the shop's tenant for the
-network platform. There is still no tool that completes, cancels or pays.
+network platform. No tool cancels or pays: `complete_checkout` sends an empty body, and the gateway
+refuses any payment instrument, decision or mandate.
 
 Direct connector invocation is not exposed by this server. Connector records
 and agent-tool records are discovery data, not proof that provider credentials,

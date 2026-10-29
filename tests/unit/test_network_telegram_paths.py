@@ -247,7 +247,13 @@ async def test_network_checkout_runs_for_a_listed_shop(monkeypatch):
     assert seen["raw"] == b"" and seen["idempotency_key"] is None and seen["session_id"] == "chk_9"
     assert (await api.network_checkout("nobody", "get_checkout", None, "x"))["error"] == "unknown_shop"
     with pytest.raises(ValueError):
-        await real_run("complete_checkout", SHOP, b"", idempotency_key=None, request_id=None, session_id=None)
+        await real_run("cancel_checkout", SHOP, b"", idempotency_key=None, request_id=None, session_id=None)
+    # Complete is the payment hand-off only: a body that tries to pay never reaches the UCP handlers.
+    with pytest.raises(ValueError):
+        await real_run(
+            "complete_checkout", SHOP, b'{"payment": {"instruments": [{"id": "i"}]}}',
+            idempotency_key=None, request_id=None, session_id="chk_9",
+        )
 
 
 @pytest.mark.asyncio
@@ -441,6 +447,7 @@ def test_checkout_answers_carry_a_summary_the_model_quotes_from():
         "checkout_id": "chk_1",
         "status": "incomplete",
         "ready": False,
+        "continue_url": None,
         "total": "Rs 0.00",
         "problems": ["Item TEA-1 was not found."],
     }

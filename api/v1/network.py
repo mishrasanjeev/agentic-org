@@ -12,8 +12,14 @@ Public, under ``/api/v1/network`` (no session; every route answers 404 while
   network service credential (``AGENTICORG_NETWORK_SERVICE_TOKEN``, held by the
   hosted MCP server) is accepted. The UCP handlers run in the shop's tenant on
   its published host, exactly as a platform call to ``https://<host>/ucp``
-  would; network checkouts answer to the network platform only. There is no
-  complete, cancel or payment route: the buyer pays with the shop.
+  would; network checkouts answer to the network platform only.
+* ``POST /network/shops/{slug}/checkout-sessions/{id}/complete`` - the payment
+  hand-off only (``core.commerce.payment_handoff``): a ready checkout answers
+  ``requires_escalation`` with ``continue_url``, the shop's own payment page
+  (its Shopify cart or its Plural hosted checkout). It never runs a payment
+  executor: a shop without a hand-off configured is refused, and any payment
+  instrument, decision or mandate in the body is refused. There is no cancel
+  or payment route: the buyer pays on the shop's page.
 
 * ``POST /network/telegram/webhook`` - the public AgenticOrg shopping bot
   (``core.commerce.network_telegram``): Telegram's secret header is checked and the update is
@@ -59,7 +65,9 @@ merchant_router = APIRouter(
     dependencies=[Depends(require_merchant_commerce_config_write)],
 )
 
-GATEWAY_OPERATIONS = ("create_checkout", "get_checkout", "update_checkout")
+GATEWAY_OPERATIONS = ("create_checkout", "get_checkout", "update_checkout", "complete_checkout")
+# A network Complete may carry nothing that could pay: no instruments, no decision, no mandate.
+_PAYING_COMPLETE_FIELDS = ("payment", "ap2", "ai.agenticorg.commerce", "payment_data", "signals")
 MAX_GATEWAY_BODY_BYTES = 64 * 1024
 
 
@@ -106,6 +114,31 @@ async def list_network_merchants() -> JSONResponse:
 # --- checkout gateway (network service credential) ----------------------------------------------
 
 
+def _paying_complete(operation: str, raw: bytes) -> bool:
+    """True for a Complete body that tries to pay (anything beyond an empty object or ``{}``)."""
+    if operation != "complete_checkout" or not raw.strip():
+        return False
+    try:
+        body = json.loads(raw)
+    except ValueError:
+        return True
+    if not isinstance(body, dict):
+        return True
+    return any(body.get(name) not in (None, {}, []) for name in _PAYING_COMPLETE_FIELDS)
+
+
+def _execution_refusal(request_id: str | None) -> JSONResponse:
+    headers = {"Request-Id": request_id[:128]} if request_id else {}
+    return JSONResponse(
+        {
+            "code": "payment_execution_not_allowed",
+            "message": "Network checkouts never take payment; complete with an empty body to get the payment link.",
+        },
+        status_code=422,
+        headers=headers,
+    )
+
+
 async def _gateway(operation: str, slug: str, request: Request, session_id: str | None = None) -> JSONResponse:
     _require_network()
     if not settings.ucp_checkout_enabled:
@@ -119,6 +152,8 @@ async def _gateway(operation: str, slug: str, request: Request, session_id: str 
     raw = await request.body()
     if len(raw) > MAX_GATEWAY_BODY_BYTES:
         raise HTTPException(413, "Request body too large")
+    if _paying_complete(operation, raw):
+        return _execution_refusal(request.headers.get("request-id"))
     try:
         shop = await net.resolve_shop(slug)
     except net.NetworkError as exc:
@@ -131,6 +166,7 @@ async def _gateway(operation: str, slug: str, request: Request, session_id: str 
         idempotency_key=request.headers.get("idempotency-key"),
         request_id=request_id,
         session_id=session_id,
+        surface="mcp",
     )
     headers = dict(response.headers)
     if request_id:
@@ -146,29 +182,35 @@ async def _run_for_network(
     idempotency_key: str | None,
     request_id: str | None,
     session_id: str | None,
+    surface: str | None = None,
 ) -> Any:
     from api.v1.commerce_ucp import run_ucp_operation  # noqa: PLC0415 - commerce_ucp wires the UCP runtime at import
 
     if operation not in GATEWAY_OPERATIONS:
         raise ValueError(f"not a network operation: {operation}")
+    if _paying_complete(operation, raw):
+        raise ValueError("a network complete carries no payment")
     profile = settings.network_agent_profile
     response = await run_ucp_operation(
         operation,
         tenant_id=shop.tenant_id,
         host=shop.host,
         ucp_agent=f'profile="{profile}"',
-        raw_body=raw,
+        raw_body=b"{}" if operation == "complete_checkout" else raw,
         idempotency_key=idempotency_key,
         request_id=request_id,
         resource_id=session_id,
         platform=profile,
+        # The network may only hand the buyer the shop's payment link, never run an executor.
+        handoff_only=operation == "complete_checkout",
+        surface=surface if operation == "create_checkout" else None,
     )
     logger.info("network_checkout_call", operation=operation, slug=shop.slug, status=response.status)
     return response
 
 
 async def network_checkout(
-    slug: str, operation: str, body: dict[str, Any] | None, session_id: str | None = None
+    slug: str, operation: str, body: dict[str, Any] | None, session_id: str | None = None, surface: str = "telegram"
 ) -> dict[str, Any]:
     """The network checkout path for in-process callers (the public Telegram bot).
 
@@ -189,6 +231,7 @@ async def network_checkout(
         idempotency_key=str(uuid.uuid4()) if operation != "get_checkout" else None,
         request_id=str(uuid.uuid4()),
         session_id=session_id,
+        surface=surface,
     )
     answer = response.body if isinstance(response.body, dict) else {"body": response.body}
     return {"http_status": response.status, "shop": shop.slug, **answer}
@@ -273,6 +316,20 @@ async def network_get_checkout(slug: str, session_id: str, request: Request) -> 
 )
 async def network_update_checkout(slug: str, session_id: str, request: Request) -> JSONResponse:
     return await _gateway("update_checkout", slug, request, session_id)
+
+
+@router.post("/shops/{slug}/checkout-sessions/{session_id}/complete")
+@route_meta(
+    auth_required=False,
+    tenant_required=False,
+    scope="network.checkout.write",
+    rate_limit="ucp-platform",
+    idempotency="idempotency-key-header",
+    audit_event="network.checkout.complete",
+    public_reason="network-service-credential-checked-in-handler-payment-handoff-only-never-executes",
+)
+async def network_complete_checkout(slug: str, session_id: str, request: Request) -> JSONResponse:
+    return await _gateway("complete_checkout", slug, request, session_id)
 
 
 # --- merchant: Sell everywhere ----------------------------------------------------------------
