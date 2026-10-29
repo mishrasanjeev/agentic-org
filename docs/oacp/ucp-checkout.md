@@ -151,7 +151,10 @@ and nothing runs. A 5xx answer is not stored, so the client can retry.
 
 ## Complete: Payment, Arbiter, Executor
 
-In order, each failure being a 200 business outcome with the session unchanged:
+A merchant with `provider_policy.payments` (`shopify_cart` or `plural_hosted`) takes payment on its own
+page instead: Complete seals and consumes a `payment_handoff` decision and answers `requires_escalation`
+with `continue_url`; no executor runs. See [payment-handoff.md](payment-handoff.md). For every other
+merchant, in order, each failure being a 200 business outcome with the session unchanged:
 
 1. The session must be `ready_for_complete` (`missing`).
 2. Payment (`payment_failed`): exactly one instrument unless split payments is active; the

@@ -515,6 +515,21 @@
       ]
     },
     {
+      "slug": "oacp-getting-paid",
+      "title": "Getting paid: buyers pay on your own page",
+      "description": "Choose where buyers pay: your own Shopify checkout or your Plural account. What the buyer sees, the Orders page and the email you get for each order. AgenticOrg never takes the money.",
+      "group": "OACP — agentic commerce, made safe",
+      "audience": "Merchants and business owners",
+      "reviewed": "2026-10-29",
+      "colorScheme": "adaptive",
+      "sources": [
+        "docs/oacp/payment-handoff.md",
+        "ui/src/components/commerce/PaymentSettings.tsx",
+        "ui/src/pages/Orders.tsx",
+        "ui/src/components/docs/OacpGuideFigures.tsx"
+      ]
+    },
+    {
       "slug": "oacp-custom-domains",
       "title": "Your own domain for buyer agents",
       "description": "Connect a subdomain you own for your UCP profile with two DNS records: every check and its fix, your main domain without redirects, and the operator setup, limits and costs.",

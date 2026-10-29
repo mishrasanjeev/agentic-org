@@ -378,14 +378,15 @@ test("public A2A guide links to a hosted page, not a source Markdown soft 404", 
   assert.doesNotMatch(guide.html, /href="[^"]*a2a-interoperability\.md"/);
 });
 
-test("the OACP section has ten adaptive guides with summaries, figures and workflow cards", () => {
+test("the OACP section has eleven adaptive guides with summaries, figures and workflow cards", () => {
   const manual = loadUserGuides();
   const group = "OACP — agentic commerce, made safe";
   assert.ok(manual.groups.includes(group));
   const guides = manual.articles.filter((article) => article.group === group);
   assert.deepEqual(guides.map((guide) => guide.slug), [
     "oacp-overview", "oacp-example-nilgiri-tea", "oacp-how-it-works", "oacp-buyer-journey", "oacp-merchant-setup",
-    "oacp-sell-everywhere", "oacp-custom-domains", "oacp-safety-and-trust", "oacp-feature-switches", "oacp-faq",
+    "oacp-sell-everywhere", "oacp-getting-paid", "oacp-custom-domains", "oacp-safety-and-trust",
+    "oacp-feature-switches", "oacp-faq",
   ]);
   for (const guide of guides) {
     assert.equal(guide.colorScheme, "adaptive", guide.slug);

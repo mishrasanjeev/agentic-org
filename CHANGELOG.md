@@ -1,5 +1,31 @@
 # Changelog
 
+## Unreleased - Buyers pay on the merchant's own page
+
+- A merchant can choose where buyers pay (`provider_policy.payments`, set on the new Getting paid
+  settings): its own Shopify cart (`shopify_cart`) or its own Plural account (`plural_hosted`).
+  UCP and ACP Complete then seal and consume an arbiter decision for the new action
+  `payment_handoff` (verified catalog, price, inventory, policy and protocol adapter artifacts, the
+  merchant's limits when set, and the Grantex grant where it is required; no buyer mandate, because
+  the buyer pays on the payment page) and answer `requires_escalation` with `continue_url`.
+  Repeating Complete returns the same link while it is valid. AgenticOrg never collects the money.
+  Merchants without the setting keep today's agent-executed path unchanged (docs/oacp/payment-handoff.md).
+- Shopify: the cart permalink `https://<shop>.myshopify.com/cart/<variant>:<qty>,...` is built from
+  the numeric variant ids the server keeps; public item ids stay redacted.
+- Plural: per-merchant client id, client secret and webhook secret, encrypted in the tenant vault and
+  never shown again, with a Test that fetches a token; a hosted-checkout order (`pre_auth: false`)
+  per hand-off; the buyer's return page `/api/v1/payments/plural/return/{tenant}/{checkout}`; the
+  signed webhook `/api/v1/payments/plural/webhooks/{tenant}/{key}` verified with the merchant's
+  secret (replays are no-ops); and a 60-second status poll (`poll-plural-handoffs`) as the fallback.
+  A confirmed payment for the right amount becomes the order and fires the UCP order webhooks; any
+  other payment is refused and logged.
+- The merchant gets the order: an email to every active administrator, `GET
+  /api/v1/commerce/runtime/orders`, and a new Orders page.
+- The network checkout gateway gains `POST .../checkout-sessions/{id}/complete`, limited to the
+  hand-off (a body that carries payment is refused). The Telegram bot's `get_payment_link` tool and
+  the MCP network mode's `complete_checkout` tool give the buyer the link.
+- Migration `v6z104_payment_handoff_action` widens the arbiter action check.
+
 ## Unreleased - Text encoding repairs
 
 - Correct corrupted punctuation across the dashboard, session loading, agent and company

@@ -18,7 +18,7 @@ sell-everywhere-network | One switch, every surface | You turn it on once. Agent
 | Telegram | They tap your link, `t.me/<bot>?start=<your-shop>`, or search across shops in the AgenticOrg shopping bot | Share your link if you like |
 | The open web | AI search engines and agents read your shop's profile at your web address | Nothing |
 | Google Gemini and AI Mode, Microsoft Copilot, Perplexity | Coming: AgenticOrg is registering with each program for the whole network | Nothing yet |
-| Payment in the chat | Not in this release: buyers open a checkout in the chat and finish with you | Nothing |
+| Payment | When the checkout is ready, buyers get a link to your own payment page and pay you there; see [Getting paid](/docs/oacp-getting-paid) | Choose Shopify checkout or Plural once |
 
 ## Turn it on
 

@@ -19,12 +19,15 @@ force. Payments are not part of the network: the buyer pays with the shop.
 | `GET /api/v1/network/merchants` | Anyone (rate-limited, cached 60 s) | Listed shops that are servable now: slug, name, categories, profile URL, Telegram link. |
 | `POST /api/v1/network/shops/{slug}/checkout-sessions` | Network service credential | Open a checkout at the shop. |
 | `GET`, `PUT /api/v1/network/shops/{slug}/checkout-sessions/{id}` | Network service credential | Read or replace a network checkout. |
+| `POST /api/v1/network/shops/{slug}/checkout-sessions/{id}/complete` | Network service credential | The payment hand-off only: the link to the shop's own payment page ([payment-handoff.md](payment-handoff.md)). |
 | `GET`, `PUT /api/v1/commerce/runtime/merchant-configs/{id}/sell-everywhere` | Merchant (config write) | Where the shop stands on each surface; turn the network on (accepting the terms) or pause it. |
 
 The gateway runs the same UCP handlers as `https://<host>/ucp` (`api.v1.commerce_ucp.run_ucp_operation`)
 in the shop's tenant on its published host, so idempotency, the arbiter and the ledger behave the same.
-Network checkouts answer to the network platform only (`AGENTICORG_NETWORK_AGENT_PROFILE`). There is no
-complete, cancel or payment route.
+Network checkouts answer to the network platform only (`AGENTICORG_NETWORK_AGENT_PROFILE`). Complete is
+the payment hand-off only: a body with a payment instrument, decision or mandate is refused (422
+`payment_execution_not_allowed`), and a shop without a hand-off configured answers
+`payment_handoff_unavailable` instead of running an executor. There is no cancel or payment route.
 
 ## Data
 
@@ -57,10 +60,11 @@ header and queues the update (`core.tasks.network_tasks`); the worker answers it
 (`core.commerce.network_telegram`).
 
 - `t.me/<bot>?start=<slug>` picks a shop; `/shops` lists the network; `/stop` forgets the chat.
-- Anything else goes to a tool-calling model with five tools: list shops, search (one shop or the
-  network), open, read and update a checkout. The checkout tools use the same network path as the
-  gateway. There is no complete, cancel or payment tool, and the model is told never to ask for
-  payment details.
+- Anything else goes to a tool-calling model with seven tools: list shops, search (one shop or the
+  network), open, read and update a checkout, choose pickup, and get the payment link. The checkout
+  tools use the same network path as the gateway. Once a checkout is ready the model asks for the
+  payment link (the hand-off) and gives the buyer `summary.continue_url`, the shop's own payment page.
+  There is no cancel or payment tool, and the model is told never to ask for payment details.
 - Chat state (the chosen shop and the last six turns, never tool output) is kept in Redis under a
   SHA-256 of the chat id; turns expire after 30 minutes of quiet, the state after seven days.
 - Limits: 20 messages per chat per hour and 60 per minute for the bot, then a short "try later".
