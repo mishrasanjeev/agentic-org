@@ -290,10 +290,16 @@ def seen_event(state: dict[str, Any], event_id: str | None) -> bool:
 
 
 def _public_api_base() -> str | None:
+    """The https origin serving ``/api``: AGENTICORG_PUBLIC_API_BASE_URL, else AGENTICORG_APP_URL."""
+    import os
+
     from core.config import settings
 
-    base = str(getattr(settings, "public_api_base_url", "") or "").strip().rstrip("/")
-    return base if base.lower().startswith("https://") else None
+    for value in (getattr(settings, "public_api_base_url", ""), os.getenv("AGENTICORG_APP_URL", "")):
+        base = str(value or "").strip().rstrip("/")
+        if base:
+            return base if base.lower().startswith("https://") else None
+    return None
 
 
 def return_url(tenant_id: str, session_id: str) -> str | None:

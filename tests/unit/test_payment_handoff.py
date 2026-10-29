@@ -188,6 +188,13 @@ def test_payment_state_is_paid_only_for_money_received() -> None:
 def test_links_need_an_https_public_api_base(monkeypatch: pytest.MonkeyPatch) -> None:
     from core.config import settings
 
+    monkeypatch.delenv("AGENTICORG_APP_URL", raising=False)
+    monkeypatch.setattr(settings, "public_api_base_url", "")
+    assert ph.return_url(TENANT, "chk_1") is None
+    monkeypatch.setenv("AGENTICORG_APP_URL", "https://app.merchant.example")
+    assert (
+        ph.return_url(TENANT, "chk_1") == f"https://app.merchant.example/api/v1/payments/plural/return/{TENANT}/chk_1"
+    )
     monkeypatch.setattr(settings, "public_api_base_url", "http://localhost:8000")
     assert ph.return_url(TENANT, "chk_1") is None
     monkeypatch.setattr(settings, "public_api_base_url", "https://api.merchant.example/")
