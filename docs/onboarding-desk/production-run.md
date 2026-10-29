@@ -34,6 +34,19 @@ Run it as a one-off Cloud Run job on the API image of the deployed commit. Give 
 database URL, secret key (the link tokens and contact hashes must match the API's), vault keyring
 (contact details are encrypted under the tenant key) and evidence signing key. Pass no other secrets.
 
+Use the same secret versions the API service uses, not `latest`. The API pins some of them; if the
+job reads a different version of the secret key, the API refuses the job's link with `link_invalid`.
+List the API's versions by name (this prints no values):
+
+```bash
+gcloud run services describe agenticorg-api \
+  --project=perfect-period-305406 --region=asia-southeast1 \
+  --format='table(spec.template.spec.containers[0].env[].name,spec.template.spec.containers[0].env[].valueFrom.secretKeyRef.name,spec.template.spec.containers[0].env[].valueFrom.secretKeyRef.key)'
+```
+
+At the time of writing the API uses version 1 of `agenticorg-secret-key` and `agenticorg-redis-url`
+and `latest` of the others, as in the command below.
+
 ```bash
 gcloud run jobs create agenticorg-onboarding-desk-production-run \
   --project=perfect-period-305406 --region=asia-southeast1 \
@@ -43,7 +56,7 @@ gcloud run jobs create agenticorg-onboarding-desk-production-run \
   --vpc-connector=agenticorg-conn --vpc-egress=private-ranges-only \
   --max-retries=0 --task-timeout=600 \
   --set-env-vars=AGENTICORG_ENV=production,AGENTICORG_ONBOARDING_DESK_ENABLED=true \
-  --set-secrets=AGENTICORG_DB_URL=agenticorg-db-url:latest,AGENTICORG_SECRET_KEY=agenticorg-secret-key:latest,AGENTICORG_VAULT_KEYRING=agenticorg-vault-keyring:latest,AGENTICORG_REDIS_URL=agenticorg-redis-url:latest,AGENTICORG_ONBOARDING_DESK_EVIDENCE_SIGNING_KEY=agenticorg-onboarding-desk-evidence-signing-key:latest \
+  --set-secrets=AGENTICORG_DB_URL=agenticorg-db-url:latest,AGENTICORG_SECRET_KEY=agenticorg-secret-key:1,AGENTICORG_VAULT_KEYRING=agenticorg-vault-keyring:latest,AGENTICORG_REDIS_URL=agenticorg-redis-url:1,AGENTICORG_ONBOARDING_DESK_EVIDENCE_SIGNING_KEY=agenticorg-onboarding-desk-evidence-signing-key:latest \
   --command=python \
   --args=-m,scripts.onboarding_desk_production_run,--base-url,https://app.agenticorg.ai,--confirm,onboarding-desk-production-run
 gcloud run jobs execute agenticorg-onboarding-desk-production-run \
@@ -52,3 +65,9 @@ gcloud run jobs execute agenticorg-onboarding-desk-production-run \
 
 The summary is in the execution's logs. Do not use `--max-retries` above 0: each attempt creates its
 own tenant.
+
+## Runs
+
+| Date | Commit | Result |
+| --- | --- | --- |
+| 28 October 2026 | 364aea05 (API at 21d782da) | All nine steps passed; tenant `desk-production-run-20261028-fce274` retired. An earlier attempt the same day used `latest` of the secret key and stopped at the applicant's session with `link_invalid`; its tenant was retired too. |
