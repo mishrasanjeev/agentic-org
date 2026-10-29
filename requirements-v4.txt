@@ -27,7 +27,7 @@
 # compatible release for production and keep the newer line for
 # Python 3.12/3.13 environments.
 presidio-analyzer==2.2.359; python_version >= "3.14"
-presidio-analyzer==2.2.364; python_version < "3.14"
+presidio-analyzer==2.2.365; python_version < "3.14"
 # preshed 3.0.14 rejects spaCy's high unsigned token hashes on Python 3.14.
 preshed==3.0.13; python_version == "3.14"
 # Browser RPA runtime. Dockerfile installs the matching Chromium browser and
