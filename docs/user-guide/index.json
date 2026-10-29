@@ -487,10 +487,10 @@
     {
       "slug": "oacp-merchant-setup",
       "title": "Merchant setup checklist",
-      "description": "A numbered checklist from Shopify sync and the Grantex allowlist to the DNS TXT step, your UCP profile, checkout, the ACP feed and MCP tools, and what stays off until a payment sandbox run.",
+      "description": "A numbered checklist from creating your shop, your catalog and Grantex enrolment to the DNS TXT step, your UCP profile, checkout, the ACP feed and MCP tools, and what stays off until a payment sandbox run.",
       "group": "OACP — agentic commerce, made safe",
       "audience": "Merchants and platform operators",
-      "reviewed": "2026-10-21",
+      "reviewed": "2026-10-29",
       "colorScheme": "adaptive",
       "sources": [
         "docs/oacp/merchant-commerce-configuration.md",
@@ -503,10 +503,10 @@
     {
       "slug": "oacp-sell-everywhere",
       "title": "Sell everywhere: one switch for every AI surface",
-      "description": "Turn your shop on once and buyers find it in ChatGPT, Claude and other AI apps, the AgenticOrg shopping bot on Telegram and the open web, with a web address if you have none. You stay the seller.",
+      "description": "One page from a new shop to every AI surface: connect Shopify or upload a catalog, set policies and order limits, then turn it on. Buyers find you in ChatGPT, Claude and other AI apps, on Telegram and the open web. You stay the seller.",
       "group": "OACP — agentic commerce, made safe",
       "audience": "Merchants and business owners",
-      "reviewed": "2026-10-25",
+      "reviewed": "2026-10-29",
       "colorScheme": "adaptive",
       "sources": [
         "docs/oacp/shopping-network.md",

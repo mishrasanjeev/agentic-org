@@ -64,8 +64,8 @@ To list the merchant on Google AI Mode and Gemini through UCP, continue with the
 | --- | --- |
 | Merchant self-service config | `commerce.merchant_config.write` scope or `agenticorg:admin`; save source, channels, payment provider, public publishing, and POS metadata per tenant/merchant/seller. |
 | Shopify read-only sync | Merchant Shopify Admin token or OAuth code exchange material with product read scopes. |
-| Shopify webhooks | `SHOPIFY_WEBHOOK_SECRET`. |
-| Grantex authority | `GRANTEX_COMMERCE_BASE_URL`, `GRANTEX_COMMERCE_INTERNAL_TOKEN`, tenant allowlist in Grantex. |
+| Shopify webhooks | The merchant's own webhook signing secret, saved with its Shopify connection; Shopify posts to the merchant's `/api/v1/webhooks/shopify/{tenant_id}/{path_token}` address shown on the Sell Everywhere page. |
+| Grantex authority | `GRANTEX_COMMERCE_BASE_URL`, `GRANTEX_COMMERCE_INTERNAL_TOKEN`; turning on Sell everywhere enrols the tenant (`POST /v1/commerce/oacp/service-tenants`), and a Grantex without that route still needs the tenant allowlist. |
 | Artifact verification | `AGENTICORG_GRANTEX_ISSUER` (or `GRANTEX_BASE_URL`); the Grantex environment must list an `oacp-` key in its JWKS and serve its status list. `AGENTICORG_OACP_VERIFY_STRICT` is on in strict runtimes. |
 | Commerce arbiter | Merchant config `provider_policy.arbiter` limits; in strict runtimes Grantex countersignature of allows (`AGENTICORG_ARBITER_REQUIRE_GRANTEX_GRANT`) and refusal of caller-asserted buyer authority (`AGENTICORG_ARBITER_REQUIRE_VERIFIED_AUTHORITY`). |
 | ChatGPT/Claude/Gemini/Perplexity bridges | `AGENTICORG_API_KEY` and platform approval/config. |
