@@ -81,6 +81,20 @@ async def _opt_in(tenant: str, *, slug: str | None = None, listed: bool = True, 
     )
 
 
+async def _web_address_live(tenant: str, host: str) -> None:
+    """What the custom-domain status task does once Firebase has mapped the host and issued its certificate."""
+    from core.database import get_tenant_session
+    from core.models.merchant_custom_domain import MerchantCustomDomainRow
+
+    async with get_tenant_session(uuid.UUID(tenant)) as session:
+        await session.execute(
+            MerchantCustomDomainRow.__table__.update()
+            .where(MerchantCustomDomainRow.tenant_id == uuid.UUID(tenant), MerchantCustomDomainRow.host == host)
+            .values(status="live")
+        )
+    net.reset_directory_cache()
+
+
 async def _unpublish(tenant: str) -> None:
     from core.database import get_tenant_session
     from core.models.commerce_c6z_runtime import C6ZMerchantCommerceConfigRow
@@ -115,7 +129,18 @@ async def test_opt_in_claims_a_platform_subdomain_publishes_and_lists_the_shop(d
     assert view["surfaces"]["web"] == {"status": "pending_mapping", "host": host}
     # Going live published the profile on the attested platform subdomain (no operator step).
     assert view["publication"] == {"published": True, "host": host, "refusal": None}
-    assert view["surfaces"]["mcp"]["status"] == "live"
+    # Buyer agents read the shop at its web address, so it joins the network once that address is live.
+    assert view["surfaces"]["mcp"]["status"] == "waiting_for_web_address"
+    assert view["surfaces"]["telegram"]["status"] == "waiting_for_web_address"
+    net.reset_directory_cache()
+    assert slug not in [shop["slug"] for shop in await net.directory()]
+    with pytest.raises(net.NetworkError) as setting_up:
+        await net.resolve_shop(slug)
+    assert setting_up.value.code == "shop_unavailable"
+    await _web_address_live(tenant, host)
+    live = await api.get_sell_everywhere(MERCHANT, SELLER, tenant)
+    assert live["surfaces"]["web"] == {"status": "live", "host": host}
+    assert live["surfaces"]["mcp"]["status"] == "live" and live["surfaces"]["telegram"]["status"] == "live"
     assert view["platform_subdomains"]["apex"] == "shops.example" and view["platform_subdomains"]["in_use"] >= 1
 
     binding = await store.find_serving_binding(host)

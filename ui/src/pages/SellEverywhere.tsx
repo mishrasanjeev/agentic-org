@@ -85,6 +85,7 @@ const STATUS: Record<string, { label: string; variant: "success" | "warning" | "
   pending_certificate: { label: "Issuing certificate", variant: "warning" },
   failed: { label: "Needs attention", variant: "destructive" },
   waiting_for_publication: { label: "Waiting for publication", variant: "warning" },
+  waiting_for_web_address: { label: "Waiting for your web address", variant: "warning" },
   coming_soon: { label: "Coming soon", variant: "secondary" },
   registration_pending: { label: "Coming: registration in progress", variant: "secondary" },
   not_started: { label: "Not started", variant: "secondary" },
