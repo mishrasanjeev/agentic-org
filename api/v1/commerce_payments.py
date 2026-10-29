@@ -62,7 +62,7 @@ merchant_router = APIRouter(
 public_router = APIRouter(prefix="/payments/plural", tags=["Commerce Payments"])
 
 MAX_WEBHOOK_BYTES = 256 * 1024
-_CHECKOUT_ID = re.compile(r"^[A-Za-z0-9_-]{1,80}$")
+_CHECKOUT_ID = re.compile(r"[A-Za-z0-9_-]{1,80}")
 SETTINGS_EVENT = "commerce.payments.settings.write"
 CREDENTIALS_EVENT = "commerce.payments.plural.credentials.write"
 TEST_EVENT = "commerce.payments.plural.credentials.test"
@@ -419,7 +419,7 @@ async def _return_page(tenant_id: str, checkout_id: str) -> HTMLResponse:
         tenant = uuid.UUID(tenant_id)
     except ValueError:
         tenant = None
-    if tenant is None or not _CHECKOUT_ID.match(checkout_id):
+    if tenant is None or not _CHECKOUT_ID.fullmatch(checkout_id):
         return _page("Checkout not found", "We could not find this checkout.", status=404)
     row = await _load_checkout(tenant, checkout_id)
     handoff = (row.state or {}).get("handoff") if row is not None else None

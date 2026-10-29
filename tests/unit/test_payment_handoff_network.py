@@ -218,7 +218,8 @@ def test_the_public_payment_routes_are_declared_and_exempt_from_the_session_midd
 async def test_the_return_page_refuses_malformed_paths_without_reading_anything():
     from api.v1 import commerce_payments
 
-    for tenant, checkout in (("not-a-uuid", "chk_1"), ("00000000-0000-0000-0000-0000000000d1", "../etc")):
+    tenant_ok = "00000000-0000-0000-0000-0000000000d1"
+    for tenant, checkout in (("not-a-uuid", "chk_1"), (tenant_ok, "../etc"), (tenant_ok, "chk_1\n")):
         page = await commerce_payments._return_page(tenant, checkout)
         assert page.status_code == 404 and b"could not find" in page.body
         assert page.headers["cache-control"] == "no-store"
