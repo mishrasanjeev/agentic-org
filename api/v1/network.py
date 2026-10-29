@@ -571,6 +571,16 @@ async def publish_sell_everywhere(
         except net.NetworkError as exc:
             subdomain_note = {"code": exc.code, "message": exc.message}
     go_live = await _go_live(tenant_id, config, actor)
+    await record_commerce_event_in_own_transaction(
+        tenant_id=tenant_id,
+        event="commerce.network.sell_everywhere.publish",
+        outcome="success",
+        merchant_id=config.merchant_id,
+        seller_agent_id=config.seller_agent_id or "",
+        buyer_agent_id=None,
+        payload={"go_live": {key: str(value) for key, value in go_live.items()}, "subdomain_note": subdomain_note},
+        resource_id=config.config_id,
+    )
     view = await _view(tenant_id, merchant_id, body.seller_agent_id)
     view["subdomain_note"] = subdomain_note
     view["go_live"] = go_live

@@ -3834,7 +3834,7 @@
     "tenant_required": true
   },
   {
-    "audit_event": "commerce.runtime.merchant_setup.catalog_sync",
+    "audit_event": "commerce.runtime.merchant_setup.catalog_source",
     "auth_required": true,
     "function": "sync_catalog",
     "idempotency": "packet-id-and-source-snapshot",

@@ -585,7 +585,7 @@ async def upload_catalog(
     scope="commerce.runtime.merchant_config.write",
     rate_limit="connector-bulk",
     idempotency="packet-id-and-source-snapshot",
-    audit_event="commerce.runtime.merchant_setup.catalog_sync",
+    audit_event="commerce.runtime.merchant_setup.catalog_source",
 )
 async def sync_catalog(merchant_id: str, tenant_id: str = Depends(get_current_tenant)) -> dict[str, Any]:
     async with get_tenant_session(_tenant_uuid(tenant_id)) as session:
