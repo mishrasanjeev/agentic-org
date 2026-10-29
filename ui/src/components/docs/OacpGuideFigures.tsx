@@ -162,7 +162,7 @@ function SetupPath() {
       desc="Phase 1, connect your shop: settings, Shopify, sync and limits. Phase 2, connect to Grantex: the allowlist, the authority request and verified facts. Phase 3, publish your UCP profile: the DNS TXT record, the signing key and publishing. Phase 4, open sales channels one by one: UCP checkout, the ACP feed and checkout, and MCP tools. Phase 5, turn on payments, only after a sandbox run passes; it is off for now."
       steps={[
         { owner: "Phase 1", tone: "neutral", title: "Connect your shop", detail: "Settings, Shopify, sync, limits" },
-        { owner: "Phase 2", tone: "grantex", title: "Connect to Grantex", detail: "Allowlist, authority, verified facts" },
+        { owner: "Phase 2", tone: "grantex", title: "Connect to Grantex", detail: "Enrolment, authority, verified facts" },
         { owner: "Phase 3", tone: "oacp", title: "Publish your UCP profile", detail: "DNS TXT, signing key, publish" },
         { owner: "Phase 4", tone: "agenticorg", title: "Open sales channels", detail: "UCP, ACP feed and checkout, MCP", badge: "one by one" },
         { owner: "Phase 5", tone: "hold", title: "Turn on payments", detail: "Only after a sandbox run passes", badge: "off for now", badgeTone: "hold" },
@@ -383,14 +383,14 @@ function Roles() {
   const roles: { owner: string; tone: Tone; does: string; limit: string }[] = [
     { owner: "Your shop", tone: "neutral", does: "Owns products, prices, stock and orders", limit: "Stays the source of truth" },
     { owner: "Grantex", tone: "grantex", does: "Signs facts, revokes, issues mandates", limit: "Never moves money" },
-    { owner: "AgenticOrg", tone: "agenticorg", does: "Verifies, decides, records, renders", limit: "Never charges without an allow" },
-    { owner: "Payment provider", tone: "hold", does: "Charges and refunds", limit: "Only after a consumed allow" },
+    { owner: "AgenticOrg", tone: "agenticorg", does: "Verifies, decides, records, renders", limit: "Never holds the buyer's money" },
+    { owner: "Your payment page", tone: "hold", does: "Takes the buyer's payment", limit: "Your Shopify checkout or Plural account" },
   ];
   const cardH = 92;
   const gap = 12;
   return (
     <Svg id="docfig-roles" width={W} height={12 + roles.length * (cardH + gap) - 0} title="Four roles, clear limits"
-      desc="Your shop owns products, prices, stock and orders and stays the source of truth. Grantex signs facts, revokes them and issues mandates, and never moves money. AgenticOrg verifies, decides, records and renders, and never charges without an allow decision. The payment provider charges and refunds, only after a consumed allow decision.">
+      desc="Your shop owns products, prices, stock and orders and stays the source of truth. Grantex signs facts, revokes them and issues mandates, and never moves money. AgenticOrg verifies, decides, records and renders, and never holds the buyer's money. Your own payment page, your Shopify checkout or your Plural account, takes the payment; AgenticOrg hands the buyer its link only after an allow decision.">
       {roles.map((role, i) => {
         const y = 12 + i * (cardH + gap);
         return (
@@ -499,15 +499,15 @@ function NilgiriRecords() {
 function NilgiriBuyer() {
   return (
     <StepStack id="docfig-nilgiri-buyer" title="A buyer agent shops at Nilgiri Tea House"
-      desc="Seven steps. The buyer agent reads the shop's profile at /.well-known/ucp. It searches the catalog: chai finds the Masala Chai Blend at 449 rupees. AgenticOrg answers only from facts Grantex signed. The agent opens a checkout with its platform API key. Grantex issues Intent, Cart and Payment mandates for that exact cart. The arbiter allows or refuses by fixed rules and records the decision in the ledger. A payment provider would charge once, only on allow; payments are off in this demo."
+      desc="Seven steps. The buyer agent reads the shop's profile at /.well-known/ucp. It searches the catalog: chai finds the Masala Chai Blend at 449 rupees. AgenticOrg answers only from facts Grantex signed. The agent opens a checkout with its platform API key. When the checkout is ready, the agent asks for the payment link. The arbiter allows or refuses by fixed rules and records the decision in the ledger. A shop with payments set up hands the buyer its own payment page; this demo shop has none, so the buyer is told to pay with the shop."
       steps={[
         { owner: "Buyer agent", tone: "neutral", title: "Reads the shop's profile", detail: "GET /.well-known/ucp" },
         { owner: "Buyer agent", tone: "neutral", title: "Searches the catalog", detail: "\"chai\" finds Masala Chai Blend, ₹449" },
         { owner: "AgenticOrg", tone: "agenticorg", title: "Answers from signed facts", detail: "Price and stock verified, never guessed" },
         { owner: "Buyer agent", tone: "neutral", title: "Opens a checkout", detail: "With its own platform API key" },
-        { owner: "Grantex", tone: "grantex", title: "Mandates for this cart", detail: "Intent, Cart and Payment" },
+        { owner: "Buyer agent", tone: "neutral", title: "Asks for the payment link", detail: "complete_checkout on a ready checkout" },
         { owner: "AgenticOrg arbiter", tone: "agenticorg", title: "Allow or refuse", detail: "Fixed rules, sealed in the ledger", badge: "recorded" },
-        { owner: "Payment provider", tone: "hold", title: "Charges once, on allow", detail: "Switched off in this demo", badge: "off in demo", badgeTone: "hold" },
+        { owner: "Shop's payment page", tone: "hold", title: "Buyer pays the shop", detail: "No payment page in this demo", badge: "off in demo", badgeTone: "hold" },
       ]} />
   );
 }
