@@ -19,7 +19,6 @@ who has lost access asks another admin to reset it (``DELETE
 
 from __future__ import annotations
 
-import json
 import logging
 import uuid
 from datetime import UTC, datetime, timedelta
@@ -34,11 +33,21 @@ from api.v1.auth import (
     LoginResponse,
     _check_rate_limit,
     _clear_rate_limit,
+    invalidate_mfa_challenges,
     mfa_enrolled,
+    mfa_generation,
+    mfa_store,
     start_session,
 )
 from auth import totp
-from auth.one_time_codes import MFA_CHALLENGE_TTL_SECONDS, record_attempt
+from auth.mfa_challenges import MfaChallengeClaims
+from auth.one_time_codes import (
+    MFA_ACCOUNT_MAX_ATTEMPTS,
+    MFA_CHALLENGE_TTL_SECONDS,
+    clear_mfa_account_attempts,
+    record_attempt,
+    record_mfa_account_attempt,
+)
 from auth.one_time_codes import consume as consume_code
 from auth.one_time_codes import peek as peek_code
 from core.crypto.credential_vault import decrypt_credential, encrypt_credential
@@ -122,6 +131,7 @@ def _issue_recovery_codes(user: User) -> list[str]:
 
 
 def clear_mfa(user: User) -> None:
+    invalidate_mfa_challenges(user)
     user.mfa_enabled = False
     user.mfa_totp_secret = None
     user.mfa_pending_secret = None
@@ -129,6 +139,16 @@ def clear_mfa(user: User) -> None:
     user.mfa_last_totp_step = None
     user.mfa_recovery_codes = []
     user.mfa_enabled_at = None
+
+
+async def _reserve_factor_attempt(user: User) -> None:
+    count = await mfa_store(record_mfa_account_attempt(str(user.tenant_id), str(user.id)))
+    if count > MFA_ACCOUNT_MAX_ATTEMPTS:
+        raise HTTPException(429, "Too many wrong codes. Try again in 5 minutes.")
+
+
+async def _accept_factor(user: User) -> None:
+    await mfa_store(clear_mfa_account_attempts(str(user.tenant_id), str(user.id)))
 
 
 @router.get("/status")
@@ -209,6 +229,7 @@ async def mfa_enable(body: MfaCodeRequest, request: Request):
         if not user.mfa_pending_secret or created is None or datetime.now(UTC) - created > PENDING_SECRET_TTL:
             raise HTTPException(400, "The QR code has expired. Start setup again.")
         secret = decrypt_credential(user.mfa_pending_secret)
+        await _reserve_factor_attempt(user)
         step = totp.verify(secret, body.code)
         if step is None:
             raise HTTPException(400, "That code is not right. Check the time on your phone and try the newest code.")
@@ -218,7 +239,9 @@ async def mfa_enable(body: MfaCodeRequest, request: Request):
         user.mfa_last_totp_step = step
         user.mfa_enabled = True
         user.mfa_enabled_at = datetime.now(UTC)
+        invalidate_mfa_challenges(user)
         codes = _issue_recovery_codes(user)
+        await _accept_factor(user)
         session.add(user)
         await session.commit()
     return {"enabled": True, "recovery_codes": codes}
@@ -239,9 +262,11 @@ async def mfa_disable(body: MfaCodeRequest, request: Request):
         user = await _locked_user(session, tenant_id, user_id, email)
         if not mfa_enrolled(user):
             raise HTTPException(409, "Two-factor sign-in is not on")
+        await _reserve_factor_attempt(user)
         if check_second_factor(user, body.code) is None:
             raise HTTPException(400, "That code is not right")
         clear_mfa(user)
+        await _accept_factor(user)
         session.add(user)
         await session.commit()
     return {"enabled": False}
@@ -263,9 +288,12 @@ async def mfa_regenerate_recovery_codes(body: MfaCodeRequest, request: Request):
         user = await _locked_user(session, tenant_id, user_id, email)
         if not mfa_enrolled(user):
             raise HTTPException(409, "Two-factor sign-in is not on")
+        await _reserve_factor_attempt(user)
         if check_second_factor(user, body.code) is None:
             raise HTTPException(400, "That code is not right")
         codes = _issue_recovery_codes(user)
+        invalidate_mfa_challenges(user)
+        await _accept_factor(user)
         session.add(user)
         await session.commit()
     return {"recovery_codes": codes}
@@ -288,36 +316,40 @@ async def mfa_verify(body: MfaVerifyRequest, request: Request, response: Respons
         raise HTTPException(429, "Too many attempts — try again in 1 minute")
 
     expired = "This sign-in has expired. Sign in again."
-    payload = await peek_code("mfa", body.challenge)
+    payload = await mfa_store(peek_code("mfa", body.challenge))
     if not payload:
         raise HTTPException(401, expired)
-    if await record_attempt("mfa", body.challenge, MFA_CHALLENGE_TTL_SECONDS) > CHALLENGE_MAX_ATTEMPTS:
-        await consume_code("mfa", body.challenge)
+    if await mfa_store(record_attempt("mfa", body.challenge, MFA_CHALLENGE_TTL_SECONDS)) > CHALLENGE_MAX_ATTEMPTS:
+        await mfa_store(consume_code("mfa", body.challenge))
         raise HTTPException(401, "Too many wrong codes. Sign in again.")
     try:
-        claims = json.loads(payload)
-        tenant_id = uuid.UUID(claims["tenant_id"])
-        user_id = uuid.UUID(claims["user_id"])
-    except (KeyError, TypeError, ValueError):
+        claims = MfaChallengeClaims.model_validate_json(payload)
+        tenant_id = claims.tenant_id
+        user_id = claims.user_id
+    except ValueError:
         raise HTTPException(401, expired) from None
 
     async with get_tenant_session(tenant_id) as session:
         user = await _locked_user(session, tenant_id, user_id, "")
-        if not mfa_enrolled(user):
+        if not mfa_enrolled(user) or claims.generation != mfa_generation(user):
             raise HTTPException(401, expired)
+        await _reserve_factor_attempt(user)
         method = check_second_factor(user, body.code)
         if method is None:
             raise HTTPException(401, "That code is not right")
         # Spend the challenge before committing, so two racing requests with
         # valid codes cannot both become sessions.
-        if await consume_code("mfa", body.challenge) is None:
+        if await mfa_store(consume_code("mfa", body.challenge)) != payload:
             raise HTTPException(401, expired)
+        tenant = (await session.execute(select(Tenant).where(Tenant.id == tenant_id))).scalar_one_or_none()
+        await _accept_factor(user)
+        # Mint under the same lock as revocation. Never issue after a concurrent reset.
+        result = start_session(response, user, tenant.settings if tenant else {})
         session.add(user)
         await session.commit()
-        tenant = (await session.execute(select(Tenant).where(Tenant.id == tenant_id))).scalar_one_or_none()
         recovery_left = len(user.mfa_recovery_codes or [])
 
     await _clear_rate_limit(client_ip)
     if method == "recovery":
         logger.info("MFA sign-in used a recovery code (%s left)", recovery_left)
-    return start_session(response, user, tenant.settings if tenant else {})
+    return result

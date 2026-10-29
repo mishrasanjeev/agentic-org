@@ -77,6 +77,7 @@ async def test_password_reset_code_is_one_shot_and_tenant_bound() -> None:
         email="member@example.com",
         status="active",
         password_hash="old",
+        mfa_challenge_generation=0,
     )
     session = MagicMock()
     db_result = MagicMock()
@@ -105,6 +106,8 @@ async def test_password_reset_code_is_one_shot_and_tenant_bound() -> None:
             )
 
     assert result["status"] == "ok"
+    assert user.mfa_challenge_generation == 1
+    assert session.execute.await_args.args[0]._for_update_arg is not None
     assert replay.value.status_code == 400
     assert seen_tenants == [tenant_id]
 

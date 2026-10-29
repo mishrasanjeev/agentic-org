@@ -381,6 +381,7 @@ class TestDeactivateMember:
         mock_user = MagicMock()
         mock_user.email = "other@test.io"
         mock_user.status = "active"
+        mock_user.mfa_challenge_generation = 0
 
         mock_result = MagicMock()
         mock_result.scalar_one_or_none.return_value = mock_user
@@ -395,6 +396,8 @@ class TestDeactivateMember:
             result = await deactivate_member(user_id, mock_request)
             assert result["status"] == "deactivated"
             assert mock_user.status == "inactive"
+            assert mock_user.mfa_challenge_generation == 1
+            assert mock_session.execute.await_args.args[0]._for_update_arg is not None
 
     @pytest.mark.asyncio
     async def test_deactivate_self_forbidden(self):

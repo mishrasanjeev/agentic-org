@@ -4,13 +4,13 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
-import json
 import logging
 import os
 import re
 import time
 import uuid
 from collections import defaultdict
+from collections.abc import Awaitable
 from datetime import UTC, datetime
 
 import bcrypt as _bcrypt
@@ -18,11 +18,13 @@ from fastapi import APIRouter, HTTPException, Request, Response
 from google.auth.transport import requests as google_requests
 from google.oauth2 import id_token as google_id_token
 from pydantic import BaseModel
+from redis.exceptions import RedisError
 from sqlalchemy import func, select
 
 from api.client_ip import client_ip as resolve_client_ip
 from api.route_metadata import route_meta
 from auth.jwt import blacklist_token, create_access_token, validate_local_token
+from auth.mfa_challenges import MAX_GENERATION, MfaChallengeClaims, challenge_generation
 from auth.one_time_codes import MFA_CHALLENGE_TTL_SECONDS
 from auth.one_time_codes import consume as consume_code
 from auth.one_time_codes import issue as issue_code
@@ -43,6 +45,30 @@ from core.seed_tenant import seed_tenant_defaults
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/auth", tags=["Auth"])
+
+
+async def mfa_store[T](operation: Awaitable[T]) -> T:
+    """MFA state never falls back to process-local memory on store failures."""
+    try:
+        async with asyncio.timeout(sum(redis_socket_timeout_kwargs().values())):
+            return await operation
+    except (RedisError, OSError) as exc:
+        raise HTTPException(503, "Two-factor verification is temporarily unavailable") from exc
+
+
+def mfa_generation(user: User) -> int:
+    try:
+        return challenge_generation(getattr(user, "mfa_challenge_generation", None))
+    except ValueError as exc:
+        raise HTTPException(503, "Two-factor verification is temporarily unavailable") from exc
+
+
+def invalidate_mfa_challenges(user: User) -> None:
+    """Caller holds the user row lock through commit, including session issuance."""
+    generation = mfa_generation(user)
+    if generation == MAX_GENERATION:
+        raise HTTPException(503, "Two-factor verification is temporarily unavailable")
+    user.mfa_challenge_generation = generation + 1
 
 
 def _set_session_cookie(response: Response, token: str, max_age_seconds: int) -> None:
@@ -473,8 +499,10 @@ async def issue_mfa_challenge(user: User, method: str) -> MfaChallengeResponse:
     The challenge is an opaque one-time code in Redis (never a JWT), bound to
     this user and tenant, valid for five minutes and consumed on success.
     """
-    payload = json.dumps({"user_id": str(user.id), "tenant_id": str(user.tenant_id), "method": method})
-    challenge = await issue_code("mfa", payload, MFA_CHALLENGE_TTL_SECONDS)
+    payload = MfaChallengeClaims(
+        version=1, user_id=user.id, tenant_id=user.tenant_id, method=method, generation=mfa_generation(user)
+    ).model_dump_json()
+    challenge = await mfa_store(issue_code("mfa", payload, MFA_CHALLENGE_TTL_SECONDS))
     return MfaChallengeResponse(mfa_challenge=challenge, expires_in=MFA_CHALLENGE_TTL_SECONDS)
 
 
@@ -512,7 +540,6 @@ async def login(body: LoginRequest, request: Request, response: Response):
             raise HTTPException(status_code=401, detail="Invalid email or password")
         if not await _verify_password(body.password, user.password_hash):
             raise HTTPException(status_code=401, detail="Invalid email or password")
-        await _clear_rate_limit(client_ip)
         # Fetch tenant for onboarding status
         tenant_result = await session.execute(
             select(Tenant).where(Tenant.id == user.tenant_id)
@@ -525,6 +552,7 @@ async def login(body: LoginRequest, request: Request, response: Response):
 
     if mfa_enrolled(user):
         return await issue_mfa_challenge(user, "password")
+    await _clear_rate_limit(client_ip)
     return start_session(response, user, tenant.settings if tenant else {})
 
 
@@ -760,7 +788,7 @@ async def reset_password(body: ResetPasswordRequest):
                 User.tenant_id == tenant_id,
                 User.email == email,
                 User.status == "active",
-            )
+            ).with_for_update()
         )
         user = result.scalar_one_or_none()
         if not user:
@@ -770,6 +798,7 @@ async def reset_password(body: ResetPasswordRequest):
         # A password reset invalidates every session issued before it
         # (stolen-credential recovery). Enforced by the auth middleware.
         user.sessions_invalid_before = datetime.now(UTC)
+        invalidate_mfa_challenges(user)
         session.add(user)
         await session.commit()
 
@@ -844,12 +873,13 @@ async def logout_all(request: Request, response: Response):
 
     async with get_tenant_session(tenant_id) as session:
         result = await session.execute(
-            select(User).where(User.tenant_id == tenant_id, User.email == email)
+            select(User).where(User.tenant_id == tenant_id, User.email == email).with_for_update()
         )
         user = result.scalar_one_or_none()
         if user is None:
             raise HTTPException(401, "User not found")
         user.sessions_invalid_before = datetime.now(UTC)
+        invalidate_mfa_challenges(user)
         session.add(user)
         await session.commit()
 
