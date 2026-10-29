@@ -213,6 +213,39 @@ describe("AgentDetail ownership controls (bug sheet 2026-09-14)", () => {
     expect(screen.getByTestId("agent-visibility-toggle")).toHaveTextContent("Make personal");
   });
 
+  it.each(["paused", "shadow"])("offers Retest for zero samples with stored zero accuracy in %s", async (status) => {
+    setUser(OWNER_ID, "cfo", "finance");
+    currentAgent = { ...PERSONAL_AGENT, status, shadow_sample_count: 0, shadow_accuracy_current: 0 };
+    mockPost.mockImplementation(() => {
+      currentAgent = { ...currentAgent, shadow_accuracy_current: null };
+      return Promise.resolve({ data: { retest: true } });
+    });
+    renderPage();
+    await screen.findByText("Ledger Agent");
+    await openTab("shadow");
+    fireEvent.click(await screen.findByRole("button", { name: "Retest" }));
+    await waitFor(() => expect(mockPost).toHaveBeenCalledWith("/agents/a1/retest"));
+    await waitFor(() => expect(screen.queryByRole("button", { name: "Retest" })).not.toBeInTheDocument());
+    expect(currentAgent.status).toBe(status);
+  });
+
+  it("does not offer Retest for a fresh agent or a non-owner", async () => {
+    setUser(OWNER_ID, "cfo", "finance");
+    currentAgent = { ...PERSONAL_AGENT, status: "paused", shadow_sample_count: 0, shadow_accuracy_current: null };
+    const page = renderPage();
+    await screen.findByText("Ledger Agent");
+    await openTab("shadow");
+    expect(screen.queryByRole("button", { name: "Retest" })).not.toBeInTheDocument();
+    page.unmount();
+
+    setUser("u-another-owner", "cfo", "finance");
+    currentAgent = { ...currentAgent, shadow_accuracy_current: 0 };
+    renderPage();
+    await screen.findByText("Ledger Agent");
+    await openTab("shadow");
+    expect(screen.queryByRole("button", { name: "Retest" })).not.toBeInTheDocument();
+  });
+
   it("submits the current arithmetic task verbatim rather than a previous sample", async () => {
     setUser(OWNER_ID, "cfo", "finance");
     mockPost.mockResolvedValue({ data: { status: "completed", confidence: 1, output: { answer: 18 } } });

@@ -1,5 +1,17 @@
 # Changelog
 
+## Unreleased - UI container curl security floor
+
+- Both UI runtime images require curl and libcurl 8.23.0-r0 or newer to address
+  CVE-2026-92392. Builds fail if patched packages are unavailable; existing image
+  pins, healthchecks and vulnerability scan policy are unchanged.
+
+## Unreleased - Paused shadow agent recovery
+
+- Agents paused from shadow mode can reset their evaluation counters with Retest, remain
+  paused, then Resume back to shadow. Empty-sample accuracy no longer blocks shadow resume,
+  and Retest stays available when a zero-sample agent has stored accuracy. Production
+  promotion gates and restrictions on agents paused from other states are unchanged (#1818).
 ## Unreleased - Text encoding repairs
 
 - Correct corrupted punctuation across the dashboard, session loading, agent and company
