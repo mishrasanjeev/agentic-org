@@ -176,9 +176,9 @@ describe("CommerceRuntimeDemo", () => {
     await screen.findByText(/1 products, 1 variants/i);
     fireEvent.click(screen.getByRole("button", { name: /issue/i }));
 
+    // Merchant artifacts are cached as shared records, never against the demo buyer.
     await waitFor(() => expect(apiMock.cacheArtifacts).toHaveBeenCalledWith({
       artifacts: [{ artifact_family: "catalog_snapshot" }],
-      buyer_agent_id: "buyer_agent_demo",
     }));
   });
 

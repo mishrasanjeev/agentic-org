@@ -57,6 +57,26 @@ function parseFigure(content) {
   return { id, title, caption };
 }
 
+// A video fence names one recording kept in ui/public/media/docs/ as <id>.mp4, with
+// English captions <id>.vtt and a poster frame <id>.jpg:
+//   ```video
+//   oacp-end-to-end | Title | What the recording shows, read by search and llms.txt
+//   ```
+export const VIDEO_PATH = "/media/docs";
+function parseVideo(content) {
+  const lines = content.trim().split("\n").filter((line) => line.trim());
+  if (lines.length !== 1) throw new Error("A video fence holds exactly one line.");
+  const [id, title, caption, ...extra] = lines[0].split("|").map((part) => part.trim());
+  if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(id ?? "") || !title || !caption || extra.length)
+    throw new Error(`Video fences need "id | title | caption": ${lines[0]}`);
+  return { id, title, caption };
+}
+
+// The files a video fence needs, relative to ui/public.
+export function videoFiles(id) {
+  return ["mp4", "vtt", "jpg"].map((ext) => `${VIDEO_PATH.slice(1)}/${id}.${ext}`);
+}
+
 // Info string of a flow fence: "flow" or "flow start=N" to continue a numbered checklist.
 function parseFlowInfo(info) {
   const match = /^flow(?:\s+start=(\d+))?$/.exec(info.trim());
@@ -74,6 +94,10 @@ export function plainGuideMarkdown(markdown) {
       const figure = parseFigure(body);
       return `Figure: ${figure.title}. ${figure.caption}`;
     })
+    .replace(/```video\n([\s\S]*?)```/g, (_whole, body) => {
+      const video = parseVideo(body);
+      return `Video: ${video.title}. ${video.caption} Watch it at ${VIDEO_PATH}/${video.id}.mp4 (English captions at ${VIDEO_PATH}/${video.id}.vtt).`;
+    })
     .replace(/```summary\n([\s\S]*?)```/g, (_whole, body) =>
       "In 30 seconds:\n\n" +
       body.trim().split("\n").filter((line) => line.trim()).map((line) => `- ${line.trim()}`).join("\n"));
@@ -88,6 +112,7 @@ export function renderGuide(markdown) {
   });
   const headings = [];
   const figures = [];
+  const videos = [];
   const used = new Set();
   md.renderer.rules.heading_open = (tokens, index) => {
     const title = tokens[index + 1].content;
@@ -112,6 +137,22 @@ export function renderGuide(markdown) {
         `<figure class="docs-figure" data-docs-figure="${figure.id}" aria-labelledby="docs-figure-${figure.id}-title">` +
         `<figcaption><p class="docs-figure-title" id="docs-figure-${figure.id}-title">${escape(figure.title)}</p>` +
         `<p class="docs-figure-caption">${escape(figure.caption)}</p></figcaption></figure>`
+      );
+    }
+    if (info === "video") {
+      const video = parseVideo(tokens[index].content);
+      if (videos.some((item) => item.id === video.id)) throw new Error(`Duplicate video in one guide: ${video.id}`);
+      videos.push(video);
+      const base = `${VIDEO_PATH}/${video.id}`;
+      return (
+        `<figure class="docs-video" aria-labelledby="docs-video-${video.id}-title">` +
+        `<video controls preload="metadata" playsinline poster="${base}.jpg" aria-describedby="docs-video-${video.id}-caption">` +
+        `<source src="${base}.mp4" type="video/mp4">` +
+        `<track kind="captions" src="${base}.vtt" srclang="en" label="English" default>` +
+        `</video>` +
+        `<figcaption><p class="docs-figure-title" id="docs-video-${video.id}-title">${escape(video.title)}</p>` +
+        `<p class="docs-figure-caption" id="docs-video-${video.id}-caption">${escape(video.caption)} ` +
+        `<a href="${base}.mp4">Download the video</a> · <a href="${base}.vtt">Captions</a></p></figcaption></figure>`
       );
     }
     if (info === "summary") {
@@ -172,6 +213,7 @@ export function renderGuide(markdown) {
     html,
     headings,
     figures,
+    videos,
     searchText,
     minutes: Math.max(2, Math.ceil(searchText.split(/\s+/).length / 200)),
   };
@@ -219,11 +261,16 @@ export function loadUserGuides(root = UI_ROOT) {
     const colorScheme = article.colorScheme ?? "light";
     if (!["light", "adaptive"].includes(colorScheme))
       throw new Error(`Invalid colorScheme for ${article.slug}: ${colorScheme}`);
+    const rendered = renderGuide(markdown);
+    for (const video of rendered.videos)
+      for (const file of videoFiles(video.id))
+        if (!existsSync(join(root, "public", file)))
+          throw new Error(`Missing video file for ${article.slug}: ${file}`);
     return {
       ...article,
       colorScheme,
       markdown,
-      ...renderGuide(markdown),
+      ...rendered,
       reviewed: article.reviewed ?? manifest.reviewed,
     };
   });

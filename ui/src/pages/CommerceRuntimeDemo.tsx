@@ -591,10 +591,8 @@ export default function CommerceRuntimeDemo() {
       });
       pushLog("Grantex authority", data.status || "request returned", data.artifacts ? "ok" : "warn");
       if (Array.isArray(data.artifacts) && data.artifacts.length) {
-        await commerceRuntimeApi.cacheArtifacts({
-          artifacts: data.artifacts,
-          buyer_agent_id: buyerAgentId || undefined,
-        });
+        // Merchant artifacts are shared records (no buyer): the public catalog and every buyer read them.
+        await commerceRuntimeApi.cacheArtifacts({ artifacts: data.artifacts });
         pushLog("Artifact cache", `${data.artifacts.length} artifacts cached`, "ok");
         await loadAdapters();
       }
@@ -776,6 +774,13 @@ export default function CommerceRuntimeDemo() {
   return (
     <main className="min-h-screen bg-slate-950 text-slate-100">
       <div className="mx-auto flex max-w-7xl flex-col gap-6 px-4 py-6 lg:px-8">
+        <p className="rounded-lg border border-slate-800 bg-slate-900/70 px-4 py-3 text-sm text-slate-200" role="note">
+          This is the operator console for the runtime. To set up a real shop, use{" "}
+          <a className="underline" href="/dashboard/sell-everywhere">
+            Sell everywhere
+          </a>
+          .
+        </p>
         <section className="grid gap-4 lg:grid-cols-[1.2fr_0.8fr]">
           <div className="rounded-lg border border-slate-800 bg-slate-900/70 p-4">
             <div className="mb-4 flex items-center gap-2 text-sm font-semibold text-slate-200">

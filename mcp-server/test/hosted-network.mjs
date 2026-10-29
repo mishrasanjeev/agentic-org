@@ -82,9 +82,20 @@ const api = http.createServer((req, res) =>
     }
     calls.push({ shop: "gateway", method: req.method, path, body, headers: req.headers });
     if (req.headers.authorization !== `Bearer ${SERVICE}`) return json(res, { detail: { code: "unauthorized" } }, 401);
-    const match = path.match(/^\/api\/v1\/network\/shops\/([a-z0-9-]+)\/checkout-sessions(?:\/([^/]+))?$/);
+    const match = path.match(/^\/api\/v1\/network\/shops\/([a-z0-9-]+)\/checkout-sessions(?:\/([^/]+))?(\/complete)?$/);
     if (!match) return json(res, { detail: "Not Found" }, 404);
     if (match[1] === "kettle-works") return json(res, { detail: { code: "shop_unavailable", content: "Paused." } }, 404);
+    if (match[3]) {
+      if (match[2] === "chk_not_ready") {
+        return json(res, { detail: { code: "payment_execution_not_allowed", message: "No." } }, 422);
+      }
+      return json(res, {
+        id: match[2],
+        status: "requires_escalation",
+        continue_url: "https://tea-corner.myshopify.com/cart/123:1",
+        messages: [{ type: "error", code: "payment_handoff", severity: "requires_buyer_input", content: "Open continue_url." }],
+      });
+    }
     if (req.method === "POST") return json(res, { id: "chk_net_1", status: "incomplete", line_items: body.line_items }, 201);
     return json(res, { id: match[2], status: "ready_for_complete" });
   }),
@@ -122,9 +133,31 @@ async function connect() {
 try {
   await check("exposes the network tools and nothing that can pay", async () => {
     const client = await connect();
-    const names = (await client.listTools()).tools.map((t) => t.name).sort();
+    const tools = (await client.listTools()).tools;
+    const names = tools.map((t) => t.name).sort();
     assert.deepEqual(names, [...NETWORK_TOOLS].sort());
-    for (const banned of ["complete_checkout", "cancel_checkout", "create_cart", "get_order"]) assert.ok(!names.includes(banned));
+    for (const banned of ["cancel_checkout", "create_cart", "get_order"]) assert.ok(!names.includes(banned));
+    // The hand-off tool takes the shop and the checkout id and nothing that could carry a payment.
+    const complete = tools.find((t) => t.name === "complete_checkout");
+    assert.deepEqual(Object.keys(complete.inputSchema.properties).sort(), ["id", "shop"]);
+    await client.close();
+  });
+
+  await check("complete_checkout returns the shop's payment link and sends no payment data", async () => {
+    const client = await connect();
+    const done = await client.callTool({ name: "complete_checkout", arguments: { shop: "tea-corner", id: "chk_net_1" } });
+    assert.notEqual(done.isError, true);
+    assert.equal(done.structuredContent.status, "requires_escalation");
+    assert.equal(done.structuredContent.payment_link, "https://tea-corner.myshopify.com/cart/123:1");
+    assert.equal(done.structuredContent.shop, "tea-corner");
+    const post = calls.at(-1);
+    assert.equal(post.method, "POST");
+    assert.equal(post.path, "/api/v1/network/shops/tea-corner/checkout-sessions/chk_net_1/complete");
+    assert.deepEqual(post.body, {});
+    assert.equal(post.headers.authorization, `Bearer ${SERVICE}`);
+    const refused = await client.callTool({ name: "complete_checkout", arguments: { shop: "tea-corner", id: "chk_not_ready" } });
+    assert.equal(refused.isError, true);
+    assert.equal(refused.structuredContent.error.code, "payment_execution_not_allowed");
     await client.close();
   });
 

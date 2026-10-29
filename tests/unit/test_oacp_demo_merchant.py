@@ -172,12 +172,12 @@ def test_store_has_asia_kolkata_hours_for_every_day() -> None:
 
 @pytest.mark.usefixtures("demo_off")
 def test_flag_off_refuses_the_synthetic_source_on_every_path() -> None:
-    assert runtime_source_systems() == frozenset({"shopify"})
+    assert runtime_source_systems() == frozenset({"shopify", "catalog_upload"})
     with pytest.raises(DemoMerchantError):
         require_demo_merchant_enabled()
     with pytest.raises(Exception, match="unsupported value synthetic_demo"):
         _demo_config()
-    with pytest.raises(C6ZRuntimeValidationError, match="connector_choice must be shopify$"):
+    with pytest.raises(C6ZRuntimeValidationError, match="connector_choice must be shopify or catalog_upload$"):
         build_seller_onboarding_packet(
             tenant_id=DEMO_TENANT_ID,
             merchant_id=DEMO_MERCHANT_ID,

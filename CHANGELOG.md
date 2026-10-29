@@ -1,5 +1,77 @@
 # Changelog
 
+## Unreleased - Merchant go-live: setup flow, catalog upload, per-merchant Shopify
+
+- **Sell Everywhere is the merchant setup flow.** One page (`/dashboard/sell-everywhere`) takes a
+  merchant from a new shop to every AI surface: pick or create a shop (the id is generated, never
+  typed), connect Shopify with a custom-app Admin API token or upload a CSV/JSON catalog, write
+  returns, shipping and pickup policies, set order limits, then turn it on. Each step shows its state
+  from the API (`GET .../merchant-configs/{id}/setup`). The Payments step holds the payment settings.
+  New routes: `GET /commerce/runtime/merchant-configs`, `POST /commerce/runtime/merchant-setup`,
+  `GET .../setup`, `POST .../catalog/shopify`, `.../catalog/upload`, `.../catalog/sync`,
+  `PUT .../setup/policies`, `.../setup/order-limits`, `POST .../sell-everywhere/publish`.
+- **Shipping for uploaded catalogs.** A shop without Shopify delivery profiles sets a flat shipping fee
+  in the policies step (`shipping_fee`, `shipping_currency`, `shipping_countries`; stored at
+  `provider_policy.ucp.fulfillment.flat_rates`), and checkout offers it as the shipping option. Without
+  it no checkout at an uploaded-catalog shop could become ready, so Sell everywhere now lists
+  `shipping_rate` as missing until it is set.
+- **Catalog upload source.** `catalog_upload` is a runtime connector source (migration
+  `v6z103_catalog_upload_source` widens the C6Z source checks). Rows are validated column by column;
+  the evidence and the Grantex authority request say `source_system: catalog_upload` and
+  `merchant_system_source_of_record: true`.
+- **Going live.** Turning Sell everywhere on (and Publish / Retry) enrols the tenant with Grantex
+  (`POST /v1/commerce/oacp/service-tenants`; an older Grantex answering 404 or 405 is shown as a
+  waiting state), claims the platform subdomain, provisions a missing signing key, publishes the UCP
+  profile when `publish_refusal` allows it (otherwise the exact refusal is shown) and refreshes the
+  artifacts once. The `GET` view adds `grantex_enrolment`, `publication`, `artifacts` and `setup`.
+  **Breaking (network routes only, behind `AGENTICORG_NETWORK_ENABLED`):** turning the network on now
+  needs a catalog, policies and order limits (409 `setup_incomplete`).
+- **Order limits.** The merchant sets the per-order maximum, a daily maximum, items per order and the
+  currency; nothing is defaulted. Saved limits are validated (`provider_policy.arbiter`). The
+  payment hand-off counts the day's paid checkouts and open payment links in the order currency
+  (UTC day), and the arbiter refuses `daily_amount_cap_exceeded` above the daily maximum.
+- **Config saves merge `provider_policy`.** A merchant config save changes only the policy keys it
+  sends (a key sent as `null` is removed), so arbiter limits, UCP executor settings and permalink
+  endpoints survive the operator console's saves.
+- **Breaking: no deployment-wide Shopify store for tenants.** A sync, refresh or on-demand refresh
+  without the merchant's own stored connector is refused (`blocked_missing_shopify_credentials`). The
+  `SHOPIFY_*` variables are read only for the tenant in `AGENTICORG_SHOPIFY_ENV_OPERATOR_TENANT_ID`
+  (empty by default), and only for the shop domain its onboarding packet names; credentials for a
+  different store than the packet names are refused (`blocked_shop_domain_mismatch`). Opt-in for the
+  operator's own store: set that variable.
+- **Breaking: per-merchant Shopify webhooks.** `POST /api/v1/webhooks/shopify/{tenant_id}/{path_token}`
+  (public; the token is derived from `AGENTICORG_SECRET_KEY` and redacted in access logs) verifies
+  `X-Shopify-Hmac-Sha256` with the merchant's stored webhook secret. `SHOPIFY_WEBHOOK_SECRET` is no
+  longer read; the signed-in replay route uses the stored secret too.
+- The operator console caches issued artifacts as shared records (no buyer id), as the public catalog
+  reads them.
+
+## Unreleased - Buyers pay on the merchant's own page
+
+- A merchant can choose where buyers pay (`provider_policy.payments`, set on the new Getting paid
+  settings): its own Shopify cart (`shopify_cart`) or its own Plural account (`plural_hosted`).
+  UCP and ACP Complete then seal and consume an arbiter decision for the new action
+  `payment_handoff` (verified catalog, price, inventory, policy and protocol adapter artifacts, the
+  merchant's limits when set, and the Grantex grant where it is required; no buyer mandate, because
+  the buyer pays on the payment page) and answer `requires_escalation` with `continue_url`.
+  Repeating Complete returns the same link while it is valid. AgenticOrg never collects the money.
+  Merchants without the setting keep today's agent-executed path unchanged (docs/oacp/payment-handoff.md).
+- Shopify: the cart permalink `https://<shop>.myshopify.com/cart/<variant>:<qty>,...` is built from
+  the numeric variant ids the server keeps; public item ids stay redacted.
+- Plural: per-merchant client id, client secret and webhook secret, encrypted in the tenant vault and
+  never shown again, with a Test that fetches a token; a hosted-checkout order (`pre_auth: false`)
+  per hand-off; the buyer's return page `/api/v1/payments/plural/return/{tenant}/{checkout}`; the
+  signed webhook `/api/v1/payments/plural/webhooks/{tenant}/{key}` verified with the merchant's
+  secret (replays are no-ops); and a 60-second status poll (`poll-plural-handoffs`) as the fallback.
+  A confirmed payment for the right amount becomes the order and fires the UCP order webhooks; any
+  other payment is refused and logged.
+- The merchant gets the order: an email to every active administrator, `GET
+  /api/v1/commerce/runtime/orders`, and a new Orders page.
+- The network checkout gateway gains `POST .../checkout-sessions/{id}/complete`, limited to the
+  hand-off (a body that carries payment is refused). The Telegram bot's `get_payment_link` tool and
+  the MCP network mode's `complete_checkout` tool give the buyer the link.
+- Migration `v6z104_payment_handoff_action` widens the arbiter action check.
+
 ## Unreleased - UI container curl security floor
 
 - Both UI runtime images require curl and libcurl 8.23.0-r0 or newer to address

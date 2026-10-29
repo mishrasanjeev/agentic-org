@@ -528,8 +528,24 @@ function SellEverywhereNetwork() {
   );
 }
 
+// The buyer payment hand-off (docs/oacp/payment-handoff.md).
+function GettingPaid() {
+  return (
+    <StepStack id="docfig-getting-paid" title="The buyer pays on your page"
+      desc="Five steps. A buyer's checkout is ready in a chat or an AI app. The AgenticOrg arbiter checks the shop's signed facts and records its decision. The buyer gets a link to the merchant's own payment page: its Shopify cart or its Plural payment page. The buyer pays there and authenticates the payment themselves. A Plural payment becomes an order on the Orders page with an email to the merchant; a Shopify order is in the merchant's Shopify admin. AgenticOrg never takes the money."
+      steps={[
+        { owner: "Buyer", tone: "neutral", title: "Checkout is ready", detail: "In Telegram, ChatGPT or another app" },
+        { owner: "AgenticOrg arbiter", tone: "agenticorg", title: "Checks the shop's facts", detail: "Decision sealed in the ledger", badge: "recorded" },
+        { owner: "AgenticOrg", tone: "agenticorg", title: "Hands over your link", detail: "Your Shopify cart or Plural page" },
+        { owner: "Buyer", tone: "neutral", title: "Pays on your page", detail: "Card, UPI or net banking, with 3-D Secure or PIN" },
+        { owner: "Merchant", tone: "neutral", title: "Gets the order", detail: "Orders page and email, or Shopify admin" },
+      ]} />
+  );
+}
+
 const FIGURES: Record<string, { wide?: boolean; render: () => ReactNode }> = {
   "sell-everywhere-network": { render: () => <SellEverywhereNetwork /> },
+  "getting-paid-handoff": { render: () => <GettingPaid /> },
   "nilgiri-story": { render: () => <NilgiriStory /> },
   "nilgiri-shelf": { render: () => <NilgiriShelf /> },
   "nilgiri-records": { render: () => <NilgiriRecords /> },

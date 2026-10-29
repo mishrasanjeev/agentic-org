@@ -69,6 +69,7 @@ listed above.
 - [Agent request signing (RFC 9421, Visa TAP, Web Bot Auth)](agent-request-signing.md)
 - [Plural/Pine P3P capability verifier](plural-pine-p3p-capability-verifier.md)
 - [Plural executor](plural-executor.md)
+- [Buyer payment hand-off](payment-handoff.md): Shopify cart or Plural hosted checkout, the order and the merchant email
 - [Mandates, UPI AutoPay and RBI AFA](mandates.md)
 - [Purchase/mandate handoff](purchase-mandate-handoff.md)
 - [Offline POS bridge](offline-pos-bridge.md)

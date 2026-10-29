@@ -462,6 +462,12 @@ class Settings(BaseSettings):
     # Grantex artifact naming the synthetic source is refused at caching.
     # Env: AGENTICORG_OACP_DEMO_MERCHANT_ENABLED.
     oacp_demo_merchant_enabled: bool = False
+    # The one tenant (the platform operator's own store) that may read Shopify with the
+    # deployment's SHOPIFY_SHOP_DOMAIN / SHOPIFY_ADMIN_ACCESS_TOKEN / SHOPIFY_API_VERSION
+    # when it has no stored connector, and only for that shop domain. Empty: no tenant
+    # does; every merchant uses its own stored Shopify credentials.
+    # Env: AGENTICORG_SHOPIFY_ENV_OPERATOR_TENANT_ID.
+    shopify_env_operator_tenant_id: str = ""
     # On-demand OACP artifact refresh (core/commerce/artifact_freshness.py): when a
     # catalog, feed, checkout or discovery read finds a required artifact expired or
     # expiring (inventory lives 60 s, prices 5 min), one refresh per merchant scope

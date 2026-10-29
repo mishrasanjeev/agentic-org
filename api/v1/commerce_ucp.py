@@ -144,7 +144,10 @@ def _rates_for(merchant: MerchantUcp) -> Any:
     async def _rates(m: MerchantUcp) -> list[Any]:
         reads = await _shopify_reads(m)
         if reads is None:
-            return []
+            # No Shopify store: the flat rate the merchant set in the setup flow, if any.
+            from core.commerce.ucp.flat_rates import configured_delivery_rates
+
+            return configured_delivery_rates(m.raw_config)
         try:
             return list(await reads.delivery_rates())
         # enterprise-gate: broad-except-ok reason=rate-lookup-failure-degrades-to-no-shipping-option-business-message
@@ -225,6 +228,8 @@ async def run_ucp_operation(
     request_id: str | None = None,
     resource_id: str | None = None,
     platform: str | None = None,
+    handoff_only: bool = False,
+    surface: str | None = None,
 ) -> handlers.UcpResponse:
     """Run one UCP operation for a merchant host inside a tenant and record its ledger event.
 
@@ -239,6 +244,8 @@ async def run_ucp_operation(
         idempotency_key=idempotency_key,
         request_id=request_id,
         platform=platform,
+        handoff_only=handoff_only,
+        surface=surface,
     )
     raw = raw_body
     response = await handlers.run(operation, runtime_factory(), req, resource_id)

@@ -84,7 +84,11 @@ or retry.
 UCP transaction flags: `AGENTICORG_UCP_CHECKOUT_ENABLED` (default off; the `/ucp` checkout, cart and
 order routes answer 404 while off). A UCP
 checkout completes only through a registered executor that consumes a `session_complete` `allow`
-decision (`core/commerce/executors/`); see `docs/oacp/ucp-checkout.md`.
+decision (`core/commerce/executors/`); see `docs/oacp/ucp-checkout.md`. A merchant whose
+`provider_policy.payments` names `shopify_cart` or `plural_hosted` gets a payment hand-off instead:
+Complete consumes a `payment_handoff` decision (artifacts and the Grantex grant, no buyer mandate) and
+returns `continue_url`, the merchant's own payment page; AgenticOrg never collects the money (see
+`docs/oacp/payment-handoff.md`).
 Payment execution: `PLURAL_PINE_LIVE_EXECUTION_ENABLED` (unset: off; `true` registers the Plural
 executor, `core/commerce/executors/plural.py`, which calls Plural only with a consumed `allow`
 decision, `session_complete` or `refund`, and journals and ledgers every call; see

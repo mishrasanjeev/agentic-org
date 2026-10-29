@@ -40,7 +40,9 @@ Rules:
     ``buyer_authority_source: caller_asserted``.
 ``merchant_limits``
     The merchant's arbiter limits are configured and the order is within them:
-    a per-order amount cap, a currency allowlist and a per-order quantity cap.
+    a per-order amount cap, a currency allowlist and a per-order quantity cap,
+    and the merchant's daily cap when it set one and the caller supplies the
+    day's committed total.
 ``human_not_present_limits``
     The stricter rule set for an autonomous purchase. When the verified
     mandates say ``human_not_present``: the merchant's not-present limits
@@ -63,6 +65,20 @@ Rules:
 ``refund_within_captured`` (``refund``, the only rule of that action)
     The refund is positive, in the order currency, and the captured amount
     covers it together with every earlier refund of the order.
+``handoff_merchant_limits`` (``payment_handoff``)
+    When the merchant configured arbiter limits, the order is within them
+    (the ``merchant_limits`` checks); without a configuration it passes as
+    ``merchant_limits_not_configured``.
+
+``payment_handoff`` evaluates only ``oacp_artifacts_valid`` (the catalog,
+price, inventory, policy and protocol adapter families) and
+``handoff_merchant_limits``. It hands the buyer to the merchant's own payment
+page (a Shopify cart permalink or a Plural hosted checkout): the agent moves no
+money and holds no payment credential, and the buyer authenticates and pays on
+that page (3-D Secure, UPI PIN). So no mandate, consent or passport is needed
+and ``buyer_authority_verified`` is not evaluated; the allow still needs the
+Grantex grant to be consumed where ``AGENTICORG_ARBITER_REQUIRE_GRANTEX_GRANT``
+is on, exactly like every other action.
 
 The decision binds ``payload_hash`` (the RFC 8785 SHA-256 of the action's
 binding payload, ``binding_payload``) so the executor can refuse anything but
@@ -83,9 +99,16 @@ from core.commerce.ledger import commerce_payload_hash, json_safe
 POLICY_VERSION = "commerce-arbiter-v4"
 DECISION_TTL = timedelta(minutes=10)
 
-Action = Literal["purchase_handoff", "mandate_request", "pos_handoff", "session_complete", "refund"]
+Action = Literal["purchase_handoff", "mandate_request", "pos_handoff", "session_complete", "refund", "payment_handoff"]
 Outcome = Literal["allow", "refuse"]
-ACTIONS: tuple[str, ...] = ("purchase_handoff", "mandate_request", "pos_handoff", "session_complete", "refund")
+ACTIONS: tuple[str, ...] = (
+    "purchase_handoff",
+    "mandate_request",
+    "pos_handoff",
+    "session_complete",
+    "refund",
+    "payment_handoff",
+)
 
 RULE_MANDATE = "mandate_present_unexpired"
 RULE_CONSENT = "consent_active"
@@ -96,6 +119,7 @@ RULE_MERCHANT_LIMITS = "merchant_limits"
 RULE_NOT_PRESENT = "human_not_present_limits"
 RULE_AFA = "afa_evidence_present"
 RULE_REFUND = "refund_within_captured"
+RULE_HANDOFF_LIMITS = "handoff_merchant_limits"
 RULE_ORDER: tuple[str, ...] = (
     RULE_MANDATE,
     RULE_CONSENT,
@@ -126,6 +150,8 @@ REQUIRED_ARTIFACT_FAMILIES: dict[str, tuple[str, ...]] = {
     "pos_handoff": _COMMITMENT_FAMILIES,
     "session_complete": _COMMITMENT_FAMILIES,
     "mandate_request": ("policy", "mandate_capability"),
+    # No mandate_capability: a hand-off never charges an agent-held instrument.
+    "payment_handoff": tuple(f for f in _COMMITMENT_FAMILIES if f != "mandate_capability"),
 }
 RULES_BY_ACTION: dict[str, tuple[str, ...]] = {
     "purchase_handoff": RULE_ORDER,
@@ -133,6 +159,7 @@ RULES_BY_ACTION: dict[str, tuple[str, ...]] = {
     "session_complete": (*RULE_ORDER, RULE_AFA),
     "mandate_request": tuple(rule for rule in RULE_ORDER if rule != RULE_MANDATE),
     "refund": (RULE_REFUND,),
+    "payment_handoff": (RULE_ARTIFACTS, RULE_HANDOFF_LIMITS),
 }
 # ISO 4217 minor-unit exponents that are not 2 (amounts are compared in minor units).
 _CURRENCY_EXPONENTS: dict[str, int] = {"JPY": 0, "KRW": 0, "VND": 0, "CLP": 0, "ISK": 0, "BHD": 3, "KWD": 3, "OMR": 3}
@@ -215,6 +242,9 @@ class MerchantLimits:
     # Not rules: a refusal is also queued for review when escalate_to_human is on.
     escalate_to_human: bool = False
     review_agent_id: str | None = None
+    # The merchant's cap on one day's orders (provider_policy.arbiter.max_daily_amount_minor_units),
+    # checked when the caller supplies the day's committed total (daily_committed_amount_minor_units).
+    max_daily_amount_minor_units: int | None = None
 
 
 @dataclass(frozen=True)
@@ -254,6 +284,9 @@ class ArbiterContext:
     presence: str | None = None
     intent_max_amount_minor_units: int | None = None
     intent_currency: str | None = None
+    # The merchant's orders already committed today in the order currency (minor units), computed by
+    # the caller from its own records; None when the caller does not track it.
+    daily_committed_amount_minor_units: int | None = None
 
     @property
     def buyer_authority_source(self) -> str:
@@ -461,7 +494,18 @@ def rule_merchant_limits(context: ArbiterContext) -> tuple[bool, str]:
         return False, "quantity_cap_exceeded"
     if context.amount_minor_units > limits.max_order_amount_minor_units:
         return False, "order_amount_cap_exceeded"
+    daily_cap = limits.max_daily_amount_minor_units
+    committed = context.daily_committed_amount_minor_units
+    if daily_cap is not None and committed is not None and committed + context.amount_minor_units > daily_cap:
+        return False, "daily_amount_cap_exceeded"
     return True, "within_merchant_limits"
+
+
+def rule_handoff_merchant_limits(context: ArbiterContext) -> tuple[bool, str]:
+    """``merchant_limits`` when the merchant set limits; a hand-off without them passes (the buyer pays)."""
+    if context.merchant_limits is None:
+        return True, "merchant_limits_not_configured"
+    return rule_merchant_limits(context)
 
 
 def rule_human_not_present_limits(context: ArbiterContext) -> tuple[bool, str]:
@@ -543,6 +587,7 @@ _RULES: dict[str, Callable[[ArbiterContext, str], tuple[bool, str]]] = {
     RULE_NOT_PRESENT: lambda context, _action: rule_human_not_present_limits(context),
     RULE_AFA: lambda context, _action: rule_afa_evidence_present(context),
     RULE_REFUND: lambda context, _action: rule_refund_within_captured(context),
+    RULE_HANDOFF_LIMITS: lambda context, _action: rule_handoff_merchant_limits(context),
 }
 
 
@@ -747,6 +792,7 @@ def merchant_limits_from_config(config: Mapping[str, Any] | None) -> MerchantLim
         not_present_max_quantity_per_order=_int_or_none(not_present.get("max_quantity_per_order")),
         escalate_to_human=arbiter.get("escalate_to_human") is True,
         review_agent_id=str(arbiter.get("review_agent_id") or "").strip() or None,
+        max_daily_amount_minor_units=_int_or_none(arbiter.get("max_daily_amount_minor_units")),
     )
 
 

@@ -32,6 +32,7 @@
     "channels": "Channels",
     "commerceRuntime": "Commerce Runtime",
     "sellEverywhere": "Sell Everywhere",
+    "orders": "Orders",
     "customDomains": "Custom Domains",
     "promptTemplates": "Prompt Templates",
     "createFromSop": "Create from SOP",

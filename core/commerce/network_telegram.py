@@ -4,8 +4,10 @@
 Separate from tenant channels (``core.channels``), which answer only a linked owner: this bot is a
 platform surface. It answers any private chat, reads only the public network directory and the
 shops' public catalogs, and opens checkouts through the network checkout path
-(``api.v1.network.network_checkout``) as the AgenticOrg network platform. It has no tool that
-completes, cancels or pays: the buyer finishes and pays with the shop.
+(``api.v1.network.network_checkout``) as the AgenticOrg network platform. It never takes payment:
+its ``get_payment_link`` tool asks the shop for the payment hand-off (``core.commerce.payment_handoff``)
+and passes the buyer the link to the shop's own payment page (its Shopify cart or its Plural
+hosted checkout), where the buyer pays. It has no tool that cancels or pays.
 
 * ``/start <slug>`` (the deep link ``t.me/<bot>?start=<slug>``) picks a shop for the chat;
   ``/shops`` lists the network; ``/stop`` forgets the chat; anything else goes to the shopper.
@@ -31,6 +33,7 @@ import structlog
 from core import auth_state
 from core.channels.replies import final_answer
 from core.commerce import network as net
+from core.commerce import payment_handoff as ph
 from core.config import settings
 
 logger = structlog.get_logger()
@@ -45,7 +48,7 @@ MAX_TEXT = 1000
 
 WELCOME = (
     "Hi! I can find products at shops on the AgenticOrg network and open a checkout for you. "
-    "I never take payment: you finish and pay with the shop.\n\n"
+    "I never take payment: when your checkout is ready I give you a link to the shop's own payment page.\n\n"
     'Try: "find masala chai". Send /shops to see the shops, or /stop to make me forget this chat.'
 )
 BUSY = "I'm getting a lot of messages right now. Please try again in a little while."
@@ -69,7 +72,10 @@ SYSTEM_PROMPT = "\n".join(
         "  search price. If summary.problems is not empty the checkout is not ready: fix it (for example open a",
         "  new checkout with the right item_id) or tell the buyer the problem.",
         "- You cannot take payment and must never ask for card, UPI or bank details. When summary.ready is true,",
-        "  give the checkout id and total and say the buyer completes payment with the shop.",
+        "  call get_payment_link with the checkout id. Give the buyer summary.total and the link from",
+        "  summary.continue_url exactly as returned, and say they pay on the shop's own payment page. If no",
+        "  continue_url comes back, give the checkout id and total and say the buyer completes payment with the shop.",
+        "- Never invent or change a payment link; only summary.continue_url is a real one.",
         "- Keep answers short and plain, for a phone screen. No markdown tables.",
         "- If the buyer has not picked a shop, search across all shops; say which shop each product is from.",
     ]
@@ -249,6 +255,13 @@ class ShopperTools:
             body["line_items"] = _line_items(current)
         return _for_model(await network_checkout(slug, "update_checkout", body, checkout_id))
 
+    async def get_payment_link(self, shop: str, checkout_id: str) -> dict[str, Any]:
+        """The shop's payment page for a ready checkout (a hand-off: the buyer pays there, never here)."""
+        from api.v1.network import network_checkout  # noqa: PLC0415
+
+        slug = shop or self.chosen_shop or ""
+        return _for_model(await network_checkout(slug, "complete_checkout", None, checkout_id))
+
     async def choose_pickup(self, shop: str, checkout_id: str, location: str | None = None) -> dict[str, Any]:
         """Pickup takes three choices (method, location, option); make them from what the shop returns."""
         from api.v1.network import network_checkout  # noqa: PLC0415
@@ -306,16 +319,24 @@ def _for_model(answer: dict[str, Any]) -> dict[str, Any]:
     if answer.get("error"):
         problems.append(str(answer.get("message") or answer["error"]))
     total = totals.get("total")
+    continue_url = answer.get("continue_url")
+    if answer.get("status") == "requires_escalation" and isinstance(continue_url, str):
+        # The payment hand-off message is the buyer's next step, not a problem with the checkout.
+        problems = [p for p in problems if p not in _HANDOFF_CONTENTS]
     summary = {
         "checkout_id": answer.get("id"),
         "status": answer.get("status"),
         "ready": answer.get("status") == "ready_for_complete" and not problems,
+        "continue_url": continue_url if isinstance(continue_url, str) and continue_url.startswith("https://") else None,
         "total": _money({"amount": total, "currency": answer.get("currency") or "INR"})
         if isinstance(total, int)
         else None,
         "problems": problems,
     }
     return {"summary": summary, **answer}
+
+
+_HANDOFF_CONTENTS = frozenset({ph.SHOPIFY_MESSAGE, ph.PLURAL_MESSAGE})
 
 
 def _line_items(checkout: dict[str, Any]) -> list[dict[str, Any]]:
@@ -363,6 +384,12 @@ def _langchain_tools(tools: ShopperTools) -> list[Any]:
             name="update_checkout",
             description="Change a checkout with UCP JSON (line_items, fulfillment), for example a delivery address. "
             "Line items are kept when left out. No payment.",
+        ),
+        StructuredTool.from_function(
+            coroutine=tools.get_payment_link,
+            name="get_payment_link",
+            description="When a checkout is ready (summary.ready), get the link to the shop's own payment page "
+            "(summary.continue_url). The buyer pays there; this tool never takes payment.",
         ),
         StructuredTool.from_function(
             coroutine=tools.choose_pickup,
@@ -468,7 +495,7 @@ async def respond(chat_id: str, text: str, *, model_factory: ModelFactory | None
             await save_state(chat, state)
             return (
                 f'You\'re shopping at {shop.display_name}. Ask me for a product, for example "show me your teas". '
-                "I never take payment: you finish and pay with the shop."
+                "I never take payment: you pay on the shop's own payment page."
             )
         return WELCOME
     if await auth_state.check_window_rate(

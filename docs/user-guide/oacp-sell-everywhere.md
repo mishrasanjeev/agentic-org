@@ -18,17 +18,85 @@ sell-everywhere-network | One switch, every surface | You turn it on once. Agent
 | Telegram | They tap your link, `t.me/<bot>?start=<your-shop>`, or search across shops in the AgenticOrg shopping bot | Share your link if you like |
 | The open web | AI search engines and agents read your shop's profile at your web address | Nothing |
 | Google Gemini and AI Mode, Microsoft Copilot, Perplexity | Coming: AgenticOrg is registering with each program for the whole network | Nothing yet |
-| Payment in the chat | Not in this release: buyers open a checkout in the chat and finish with you | Nothing |
+| Payment | When the checkout is ready, buyers get a link to your own payment page and pay you there; see [Getting paid](/docs/oacp-getting-paid) | Choose Shopify checkout or Plural once |
 
-## Turn it on
+## Set up and turn it on
 
-You need a merchant in Commerce Runtime with your catalog in it.
+Everything happens on one page: **Commerce > Sell Everywhere**. It takes about ten minutes. Each step shows
+**Done** or **To do**, and the switch stays off until the steps before it are done.
 
 ```flow
-Your catalog | Connect Shopify read-only or add your products in Commerce Runtime. This is what buyers will search.
-Your policies | Check returns, shipping and store pickup in Commerce Runtime. Buyer agents read them before they buy.
-Sell everywhere | Open Commerce > Sell Everywhere, enter your merchant ID and load it. Choose your shop name, accept the network terms and turn it on.
+Your shop | Choose your shop, or type a shop name and select Create shop. AgenticOrg gives it an id; you never type one.
+Your catalog | Connect Shopify, or upload a CSV or JSON file. This is what buyers will search.
+Your policies | Write your returns and shipping terms, and store pickup if you offer it. If you uploaded a file, also set your shipping fee. Buyer agents read them before they buy.
+Order limits | Set the largest single order, the most per day, the most items per order and your currency. Nothing is set for you.
+Payments | Choose where buyers pay: your own Shopify checkout or your own Plural account. See Getting paid.
+Turn on Sell everywhere | Choose your shop name, accept the network terms and turn it on. AgenticOrg enrols you with Grantex, gives you a web address and publishes your shop.
 ```
+
+### Connect Shopify
+
+AgenticOrg reads your products with a custom app you create in your own store. It only reads products,
+prices and stock.
+
+1. In your Shopify admin, open **Settings**, then **Apps and sales channels**, then **Develop apps**.
+2. Create an app, open **Configuration** and allow the Admin API scopes `read_products` and `read_inventory`.
+3. Install the app, open **API credentials** and reveal the Admin API access token. Shopify shows it once.
+4. On the Sell Everywhere page, enter your store address (`your-store.myshopify.com`) and the token, then
+   select **Connect Shopify**. AgenticOrg checks the token with one read, stores it encrypted and reads your
+   catalog.
+
+To keep products current, the page shows your own webhook address once you are connected. In Shopify,
+open **Settings**, **Notifications**, **Webhooks**, create a **Product update** webhook in JSON to that
+address, then paste the signing secret Shopify shows there and connect again. AgenticOrg checks every
+delivery with your secret; a changed product shows **Changed in your store** until the catalog is read
+again.
+
+### Upload a file instead
+
+One product per row, one currency, up to 2,000 products:
+
+| Column | Required | Example |
+| --- | --- | --- |
+| `sku` | Yes | `TEA-1` (letters, digits, dots, hyphens, underscores) |
+| `title` | Yes | `Nilgiri green tea` |
+| `description` | No | `Loose leaf, 100 g` |
+| `price` | Yes | `499.00` |
+| `currency` | Yes | `INR` |
+| `quantity` | Yes | `12` (stock you have) |
+| `image_url` | No | `https://cdn.merchant.example/tea-1.png` |
+| `url` | No | `https://merchant.example/tea-1` |
+
+A JSON file is a list of objects with the same keys. If a row has a problem, nothing is stored and the
+page lists each row and column to fix. Your catalog is recorded as uploaded by you, never as coming from
+a store system. Upload again whenever your products change.
+
+### Shipping fee
+
+A shop that uploads its catalog sets one shipping fee per order in the policies step, with its currency and
+the countries it ships to (two-letter codes such as `IN`; leave them empty to ship everywhere). Enter 0 to
+ship free. Buyers are offered this fee at checkout, and Sell everywhere stays off until it is set. A
+Shopify shop uses the shipping rates of its Shopify delivery profiles instead.
+
+### Order limits
+
+AI agents can only start orders within your limits: the largest single order, the most per day and the
+most items per order, in your currency. The daily maximum must be at least the per-order maximum.
+
+## After you turn it on
+
+The page shows how going live is progressing:
+
+| Row | Status | Meaning |
+| --- | --- | --- |
+| Grantex enrolment | Enrolled | Grantex signs your catalog facts. |
+| Grantex enrolment | Waiting | Your deployment's Grantex is not ready for enrolment yet; nothing to do. |
+| Grantex enrolment | Needs attention | The enrolment was refused or revoked; contact your platform administrator. |
+| Shop profile | Published | Buyer agents can read your shop at your web address. |
+| Shop profile | Not published | The page says exactly why, for example that your web address is still being set up. |
+| Verified catalog | Done | Grantex has verified your catalog, prices and stock. |
+
+Select **Publish** (or **Refresh listing**) to run these steps again at any time.
 
 Your shop name is the short name buyers see in AI apps and in your Telegram link, such as `nilgiritea`. Use 3 to 40 lowercase letters, digits or hyphens. It cannot change later, so choose it with care.
 
@@ -65,7 +133,7 @@ Choose **Pause** on the page. Your shop leaves the directory at once: AI apps an
 
 ## What stays with you
 
-- **Payment.** No surface takes payment in this release. A buyer opens a checkout in the chat and finishes with you.
+- **Payment.** AgenticOrg never takes the buyer's money. A buyer opens a checkout in the chat and finishes and pays with you.
 - **Your rules.** Every network checkout goes through the same checks as any other: your signed facts, your limits and the arbiter's fixed rules, recorded in your ledger.
 - **Your data.** The directory shows your shop name, display name, categories and profile address, nothing else.
 

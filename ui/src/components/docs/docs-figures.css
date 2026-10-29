@@ -43,6 +43,24 @@
   padding: 18px 0 22px;
   border-block: 1px solid var(--docs-figure-rule);
 }
+/* A recorded walkthrough (```video fence): the video keeps its 16:9 frame at every width. */
+.docs-video {
+  margin: 26px 0 30px;
+  padding: 18px 0 22px;
+  border-block: 1px solid var(--docs-figure-rule, #dce5e1);
+}
+.docs-video video {
+  display: block;
+  width: 100%;
+  max-width: 960px;
+  height: auto;
+  aspect-ratio: 16 / 9;
+  border-radius: 8px;
+  background: #0b1210;
+}
+.docs-video figcaption {
+  margin-top: 12px;
+}
 .docs-prose .docs-figure-title {
   margin: 0;
   font-size: 17px;

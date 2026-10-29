@@ -531,11 +531,31 @@ async def publish_ucp_profile(
     request: Request,
     tenant_id: str = Depends(get_current_tenant),
 ) -> dict[str, Any]:
+    return await publish_profile(
+        tenant_id=tenant_id,
+        merchant_id=merchant_id,
+        seller_agent_id=body.seller_agent_id,
+        namespace=body.namespace,
+        actor=_actor(request),
+    )
+
+
+async def publish_profile(
+    *,
+    tenant_id: str,
+    merchant_id: str,
+    seller_agent_id: str | None,
+    namespace: str | None,
+    actor: dict[str, str],
+) -> dict[str, Any]:
+    """Publish the merchant's UCP profile when ``publish_refusal`` allows it; ledgered either way.
+
+    The publish route and the Sell everywhere go-live (``api.v1.network``) both call this. The
+    answer carries ``published`` and, when refused, the exact ``refusal`` code.
+    """
     async with get_tenant_session(uuid.UUID(tenant_id)) as session:
-        row = await _locked_row(
-            session, tenant_id=tenant_id, merchant_id=merchant_id, seller_agent_id=body.seller_agent_id
-        )
-        refusal, namespace = publish_refusal(row, body.namespace)
+        row = await _locked_row(session, tenant_id=tenant_id, merchant_id=merchant_id, seller_agent_id=seller_agent_id)
+        refusal, chosen = publish_refusal(row, namespace)
         if refusal is not None:
             await record_commerce_event(
                 session,
@@ -545,13 +565,13 @@ async def publish_ucp_profile(
                 merchant_id=row.merchant_id,
                 seller_agent_id=row.seller_agent_id,
                 buyer_agent_id=None,
-                payload={"reason": refusal, "namespace": body.namespace},
+                payload={"reason": refusal, "namespace": namespace},
                 resource_id=row.config_id,
             )
             return {**_status(row), "published": False, "refusal": refusal}
         state = ucp_state(row.public_publishing)
-        state["namespace"] = namespace
-        state["published"] = {"published_at": _iso(_now()), "published_by": _actor(request), "namespace": namespace}
+        state["namespace"] = chosen
+        state["published"] = {"published_at": _iso(_now()), "published_by": actor, "namespace": chosen}
         row.public_publishing = with_ucp_state(row.public_publishing, state)
         await record_commerce_event(
             session,
@@ -561,7 +581,7 @@ async def publish_ucp_profile(
             merchant_id=row.merchant_id,
             seller_agent_id=row.seller_agent_id,
             buyer_agent_id=None,
-            payload={"host": attested_host(state), "namespace": namespace},
+            payload={"host": attested_host(state), "namespace": chosen},
             resource_id=row.config_id,
         )
         return {**_status(row), "published": True}
