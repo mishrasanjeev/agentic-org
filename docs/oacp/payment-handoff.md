@@ -134,7 +134,7 @@ Confirmation:
 
 The signature scheme and the order event shape (`event_type`, then `data` with
 `order_id`, `merchant_order_reference`, `status` and `order_amount`) follow the
-Pine Labs Online webhook documentation for Plural. Plural registers a merchant's
+webhook documentation of Plural (by Pine Labs). Plural registers a merchant's
 webhook URL during its onboarding, so the poll and the return page confirm
 payments until it is in place.
 
