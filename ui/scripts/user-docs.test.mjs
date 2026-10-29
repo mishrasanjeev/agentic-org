@@ -2,7 +2,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { loadUserGuides, plainGuideMarkdown, renderGuide } from "./generate-user-docs.mjs";
+import { loadUserGuides, plainGuideMarkdown, renderGuide, videoFiles } from "./generate-user-docs.mjs";
 import {
   loadRouteDescriptors,
   renderStaticHtml,
@@ -469,4 +469,26 @@ test("figure, summary and numbered flow fences render safely and read as text", 
   assert.throws(() => renderGuide("```figure\na | t\n```"), /Figure fences need/);
   assert.throws(() => renderGuide("```figure\na | t | c\n```\n\n```figure\na | t | c\n```"), /Duplicate figure/);
   assert.throws(() => renderGuide("```flow start=0\na | b\n```"), /starts at 1/);
+});
+
+test("a video fence plays a local recording with captions and reads as text", () => {
+  const markdown = ["## Watch", "", "```video", "oacp-demo | A <walkthrough> | Merchant & buyer, end to end", "```"].join("\n");
+  const { html, videos, searchText } = renderGuide(markdown);
+  assert.deepEqual(videos, [{ id: "oacp-demo", title: "A <walkthrough>", caption: "Merchant & buyer, end to end" }]);
+  assert.match(html, /<video controls preload="metadata" playsinline poster="\/media\/docs\/oacp-demo\.jpg"/);
+  assert.match(html, /<source src="\/media\/docs\/oacp-demo\.mp4" type="video\/mp4">/);
+  assert.match(html, /<track kind="captions" src="\/media\/docs\/oacp-demo\.vtt" srclang="en" label="English" default>/);
+  assert.match(html, /A &lt;walkthrough&gt;/);
+  assert.match(searchText, /Merchant & buyer, end to end/);
+  assert.match(
+    plainGuideMarkdown(markdown),
+    /^Video: A <walkthrough>\. Merchant & buyer, end to end Watch it at \/media\/docs\/oacp-demo\.mp4/m,
+  );
+  assert.deepEqual(videoFiles("oacp-demo"), [
+    "media/docs/oacp-demo.mp4",
+    "media/docs/oacp-demo.vtt",
+    "media/docs/oacp-demo.jpg",
+  ]);
+  assert.throws(() => renderGuide("```video\nBad Id | t | c\n```"), /Video fences need/);
+  assert.throws(() => renderGuide("```video\na | t | c\n```\n\n```video\na | t | c\n```"), /Duplicate video/);
 });
