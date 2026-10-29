@@ -67,6 +67,9 @@ SHOPIFY_SOURCE_SYSTEM = "shopify"
 # (core/commerce/oacp_demo_merchant.py). Accepted only while
 # AGENTICORG_OACP_DEMO_MERCHANT_ENABLED is on; never a Shopify claim.
 DEMO_SOURCE_SYSTEM = "synthetic_demo"
+# A catalog the merchant uploaded itself (CSV or JSON, core/commerce/catalog_upload.py): the
+# merchant is the source of record, so the lineage says so instead of naming a store system.
+CATALOG_UPLOAD_SOURCE_SYSTEM = "catalog_upload"
 
 
 C6Z_ARTIFACT_FAMILIES: tuple[str, ...] = (
@@ -342,14 +345,14 @@ class PurchasePreparationResult:
 def runtime_source_systems() -> frozenset[str]:
     """Connector sources an onboarding packet, connector evidence and a cached artifact may name.
 
-    Shopify read-only always; the synthetic demo source only while
-    ``AGENTICORG_OACP_DEMO_MERCHANT_ENABLED`` is on.
+    Shopify read-only and the merchant's own catalog upload always; the
+    synthetic demo source only while ``AGENTICORG_OACP_DEMO_MERCHANT_ENABLED`` is on.
     """
     from core.config import settings
 
     if bool(getattr(settings, "oacp_demo_merchant_enabled", False)):
-        return frozenset({SHOPIFY_SOURCE_SYSTEM, DEMO_SOURCE_SYSTEM})
-    return frozenset({SHOPIFY_SOURCE_SYSTEM})
+        return frozenset({SHOPIFY_SOURCE_SYSTEM, CATALOG_UPLOAD_SOURCE_SYSTEM, DEMO_SOURCE_SYSTEM})
+    return frozenset({SHOPIFY_SOURCE_SYSTEM, CATALOG_UPLOAD_SOURCE_SYSTEM})
 
 
 def artifact_names_demo_source(payload: Mapping[str, Any]) -> bool:
@@ -483,8 +486,8 @@ def build_seller_onboarding_packet(
 
 def _source_choice_message(field_name: str) -> str:
     if DEMO_SOURCE_SYSTEM in runtime_source_systems():
-        return f"{field_name} must be shopify or {DEMO_SOURCE_SYSTEM}"
-    return f"{field_name} must be shopify"
+        return f"{field_name} must be shopify, {CATALOG_UPLOAD_SOURCE_SYSTEM} or {DEMO_SOURCE_SYSTEM}"
+    return f"{field_name} must be shopify or {CATALOG_UPLOAD_SOURCE_SYSTEM}"
 
 
 def validate_seller_onboarding_packet(packet: Mapping[str, Any]) -> None:
@@ -976,6 +979,10 @@ def build_grantex_authority_request_payload(
         # Said on the wire, not only in the source name: the catalog is synthetic.
         payload["request"]["synthetic_data"] = True
         payload["connector_evidence"]["synthetic_data"] = True
+    if source_system == CATALOG_UPLOAD_SOURCE_SYSTEM:
+        # The merchant uploaded the catalog itself: no store system stands behind it.
+        payload["request"]["merchant_system_source_of_record"] = True
+        payload["connector_evidence"]["merchant_system_source_of_record"] = True
     if mandate_capability_evidence is not None:
         if (
             mandate_capability_evidence.get("tenant_id") != onboarding_packet["tenant_id"]
@@ -1107,6 +1114,99 @@ async def fetch_grantex_artifact_replay(
                 return items
             cursor = str(next_cursor)
     raise C6ZRuntimeValidationError("Grantex replay exceeded the page limit")
+
+
+GRANTEX_ENROLMENT_PATH = "/v1/commerce/oacp/service-tenants"
+ENROLMENT_ACTIVE = "active"
+# An older Grantex without the enrolment route (404 or 405): the merchant waits, nothing crashes.
+ENROLMENT_UNAVAILABLE = "unavailable"
+ENROLMENT_REVOKED = "revoked"
+ENROLMENT_REFUSED = "refused"
+ENROLMENT_FAILED = "failed"
+ENROLMENT_NOT_CONFIGURED = "not_configured"
+
+
+async def enrol_service_tenant(
+    tenant_id: str,
+    merchant_id: str,
+    source_system: str,
+    *,
+    evidence_ref: str | None = None,
+    env: Mapping[str, str] | None = None,
+    transport: httpx.AsyncBaseTransport | None = None,
+) -> dict[str, Any]:
+    """Enrol the tenant (and this merchant and source) with Grantex as an AgenticOrg service tenant.
+
+    ``POST /v1/commerce/oacp/service-tenants`` with the service token. Idempotent on the
+    Grantex side. Never raises for an answer Grantex gives: the result's ``status`` is
+    ``active`` (with ``merchant_ids``, ``source_systems`` and ``enrolled_at``),
+    ``unavailable`` (404 or 405, an older Grantex), ``revoked`` (403
+    ``service_tenant_revoked``), ``refused`` (any other 4xx), ``failed`` (unreachable,
+    5xx or an unusable answer) or ``not_configured`` (no Grantex settings).
+    """
+    if source_system not in runtime_source_systems() or source_system == DEMO_SOURCE_SYSTEM:
+        raise C6ZRuntimeValidationError(_source_choice_message("source_system"))
+    source = os.environ if env is None else env
+    resolution = resolve_env(GRANTEX_AUTHORITY_ENV_VARS, source)
+    if not resolution.ready:
+        return {"status": ENROLMENT_NOT_CONFIGURED, "missing_env_vars": list(resolution.missing)}
+    url = source["GRANTEX_COMMERCE_BASE_URL"].rstrip("/") + GRANTEX_ENROLMENT_PATH
+    try:
+        await validate_public_url_async(url, require_dns=False)
+    except EgressValidationError as exc:
+        raise C6ZRuntimeValidationError("unsafe Grantex enrolment endpoint") from exc
+    body: dict[str, Any] = {
+        "tenant_id": _require_id("tenant_id", tenant_id),
+        "merchant_id": _require_id("merchant_id", merchant_id),
+        "source_system": source_system,
+    }
+    if evidence_ref:
+        body["evidence_ref"] = _require_text("evidence_ref", evidence_ref)
+    client_transport = transport or build_pinned_async_transport(require_dns=True)
+    try:
+        async with httpx.AsyncClient(timeout=10.0, transport=client_transport, follow_redirects=False) as client:
+            response = await client.post(
+                url,
+                json=body,
+                headers={
+                    "Authorization": f"Bearer {source['GRANTEX_COMMERCE_INTERNAL_TOKEN']}",
+                    "Accept": "application/json",
+                },
+            )
+    except (httpx.HTTPError, EgressValidationError, OSError) as exc:
+        return {"status": ENROLMENT_FAILED, "reason": f"grantex_unreachable:{type(exc).__name__}"}
+    if response.status_code in (404, 405):
+        return {"status": ENROLMENT_UNAVAILABLE, "reason": f"grantex_http_{response.status_code}"}
+    try:
+        answer = response.json()
+    except ValueError:
+        answer = None
+    answer = answer if isinstance(answer, dict) else {}
+    code = _grantex_error_code(answer)
+    if response.status_code == 403 and code == "service_tenant_revoked":
+        return {"status": ENROLMENT_REVOKED, "reason": code}
+    if 400 <= response.status_code < 500:
+        return {"status": ENROLMENT_REFUSED, "reason": code or f"grantex_http_{response.status_code}"}
+    if response.status_code >= 300 or answer.get("status") != ENROLMENT_ACTIVE:
+        return {"status": ENROLMENT_FAILED, "reason": f"grantex_http_{response.status_code}"}
+    if contains_private_or_executable_value(answer):
+        return {"status": ENROLMENT_FAILED, "reason": "grantex_answer_unsafe"}
+    return {
+        "status": ENROLMENT_ACTIVE,
+        "merchant_ids": [str(item) for item in answer.get("merchant_ids") or [] if isinstance(item, str)],
+        "source_systems": [str(item) for item in answer.get("source_systems") or [] if isinstance(item, str)],
+        "enrolled_at": answer.get("enrolled_at") if isinstance(answer.get("enrolled_at"), str) else None,
+    }
+
+
+def _grantex_error_code(answer: Mapping[str, Any]) -> str | None:
+    """A Grantex refusal code from ``{"code"}``, ``{"error": {"code"}}`` or ``{"detail": {"code"}}``."""
+    for candidate in (answer, answer.get("error"), answer.get("detail")):
+        if isinstance(candidate, Mapping) and isinstance(candidate.get("code"), str):
+            return str(candidate["code"])[:80]
+    if isinstance(answer.get("error"), str):
+        return str(answer["error"])[:80]
+    return None
 
 
 def public_discovery_enabling_payload(artifact_family: str, payload: Mapping[str, Any]) -> bool:

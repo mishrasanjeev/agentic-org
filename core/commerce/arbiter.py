@@ -40,7 +40,9 @@ Rules:
     ``buyer_authority_source: caller_asserted``.
 ``merchant_limits``
     The merchant's arbiter limits are configured and the order is within them:
-    a per-order amount cap, a currency allowlist and a per-order quantity cap.
+    a per-order amount cap, a currency allowlist and a per-order quantity cap,
+    and the merchant's daily cap when it set one and the caller supplies the
+    day's committed total.
 ``human_not_present_limits``
     The stricter rule set for an autonomous purchase. When the verified
     mandates say ``human_not_present``: the merchant's not-present limits
@@ -215,6 +217,9 @@ class MerchantLimits:
     # Not rules: a refusal is also queued for review when escalate_to_human is on.
     escalate_to_human: bool = False
     review_agent_id: str | None = None
+    # The merchant's cap on one day's orders (provider_policy.arbiter.max_daily_amount_minor_units),
+    # checked when the caller supplies the day's committed total (daily_committed_amount_minor_units).
+    max_daily_amount_minor_units: int | None = None
 
 
 @dataclass(frozen=True)
@@ -254,6 +259,9 @@ class ArbiterContext:
     presence: str | None = None
     intent_max_amount_minor_units: int | None = None
     intent_currency: str | None = None
+    # The merchant's orders already committed today in the order currency (minor units), computed by
+    # the caller from its own records; None when the caller does not track it.
+    daily_committed_amount_minor_units: int | None = None
 
     @property
     def buyer_authority_source(self) -> str:
@@ -461,6 +469,10 @@ def rule_merchant_limits(context: ArbiterContext) -> tuple[bool, str]:
         return False, "quantity_cap_exceeded"
     if context.amount_minor_units > limits.max_order_amount_minor_units:
         return False, "order_amount_cap_exceeded"
+    daily_cap = limits.max_daily_amount_minor_units
+    committed = context.daily_committed_amount_minor_units
+    if daily_cap is not None and committed is not None and committed + context.amount_minor_units > daily_cap:
+        return False, "daily_amount_cap_exceeded"
     return True, "within_merchant_limits"
 
 
@@ -747,6 +759,7 @@ def merchant_limits_from_config(config: Mapping[str, Any] | None) -> MerchantLim
         not_present_max_quantity_per_order=_int_or_none(not_present.get("max_quantity_per_order")),
         escalate_to_human=arbiter.get("escalate_to_human") is True,
         review_agent_id=str(arbiter.get("review_agent_id") or "").strip() or None,
+        max_daily_amount_minor_units=_int_or_none(arbiter.get("max_daily_amount_minor_units")),
     )
 
 
