@@ -20,9 +20,9 @@ from urllib.parse import urlsplit
 
 from core.onboarding_desk import rules
 
-KINDS: tuple[str, ...] = ("text", "choice", "address", "owners", "url", "document")
+KINDS: tuple[str, ...] = ("text", "choice", "address", "owners", "url", "document", "region")
 #: Item kinds that can be asked and answered in a text message.
-SMS_KINDS: frozenset[str] = frozenset({"text", "choice", "url"})
+SMS_KINDS: frozenset[str] = frozenset({"text", "choice", "url", "region"})
 MAX_OWNERS = 20
 MAX_MERCHANT_TYPES = 50
 _SLUG_RE = re.compile(r"^[a-z][a-z0-9_]{0,63}$")
@@ -137,6 +137,22 @@ ITEMS: dict[str, Item] = {
             },
         ),
         Item(
+            "incorporated_in",
+            "region",
+            {
+                "en": "Where the business was incorporated or registered (state or province code)",
+                "fr": "Lieu de constitution ou d'immatriculation (code de l'État ou de la province)",
+            },
+            {
+                "en": "Registries are kept by the state or province of incorporation, which can differ from your "
+                "address. Leave it empty if they are the same; a federally incorporated Canadian company writes "
+                "FEDERAL.",
+                "fr": "Les registres sont tenus par l'État ou la province de constitution, qui peut différer de "
+                "votre adresse. Laissez vide s'ils sont identiques; une société constituée sous le régime fédéral "
+                "canadien inscrit FEDERAL.",
+            },
+        ),
+        Item(
             "website",
             "url",
             {"en": "Website, if you have one", "fr": "Site Web, le cas échéant"},
@@ -216,7 +232,7 @@ DEFAULT_REQUIRED: tuple[str, ...] = (
     "owners",
     "formation_document",
 )
-DEFAULT_OPTIONAL: tuple[str, ...] = ("trading_name", "website", "tax_id_document")
+DEFAULT_OPTIONAL: tuple[str, ...] = ("trading_name", "incorporated_in", "website", "tax_id_document")
 #: Items every application needs: a governed case cannot be opened without them.
 ALWAYS_REQUIRED: tuple[str, ...] = ("legal_name", "owners")
 OWNER_KINDS = ("person", "business")
@@ -375,6 +391,19 @@ def _address(value: Any, country: str) -> dict[str, Any]:
     }
 
 
+#: A Canadian company incorporated under federal law, which has no provincial registry of incorporation.
+FEDERAL = "FEDERAL"
+
+
+def _incorporated_in(value: Any, country: str) -> str:
+    code = _clean(value, max_length=8).upper()
+    if code == FEDERAL and country == "CA":
+        return code
+    if code not in rules.REGIONS[country]:
+        raise AnswerError("region_invalid")
+    return code
+
+
 def _url(value: Any) -> str:
     text = _clean(value, max_length=2048)
     if text and "://" not in text:
@@ -457,6 +486,8 @@ def validate_answer(item_id: str, value: Any, *, country: str, today: date | Non
         return _address(value, country)
     if item.kind == "url":
         return _url(value)
+    if item.kind == "region":
+        return _incorporated_in(value, country)
     return _owners(value, day)
 
 
@@ -549,16 +580,17 @@ def _identifiers(answers: dict[str, Any], country: str, region: str) -> list[dic
 def business_case_application(answers: dict[str, Any], *, country: str, region: str) -> dict[str, Any]:
     """The ``business_case`` application for a governed case; the declared roles stay with the desk.
 
-    The jurisdiction is the registered address's state or province, where the business is registered,
-    or the lead's region when no address was asked for.
+    The jurisdiction is where the business was incorporated, because that is whose registry holds it:
+    the answer to ``incorporated_in`` when given (only the country for a federal Canadian company),
+    otherwise the registered address's state or province, otherwise the lead's region.
     """
     address = answers.get("registered_address")
     activity = answers.get("activity")
-    region = address["region"] if address else region
+    region = answers.get("incorporated_in") or (address["region"] if address else region)
     return {
         "legal_name": answers["legal_name"],
         "trading_names": [answers["trading_name"]] if answers.get("trading_name") else [],
-        "jurisdiction": f"{country}-{region}",
+        "jurisdiction": country if region == FEDERAL else f"{country}-{region}",
         "identifiers": _identifiers(answers, country, region),
         "registered_address": (
             {

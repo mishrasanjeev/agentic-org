@@ -135,6 +135,8 @@ jobs:
     env:
       AGENTICORG_DEV_DECISION_GRANTS: "true"
       AGENTICORG_DEV_CASE_DECISION_SERVICE: grantex
+      # The onboarding desk suite runs on the same stack after the decision-grant suite.
+      AGENTICORG_DEV_ONBOARDING_DESK: "true"
     steps:
       - uses: actions/checkout@v7
         with:
@@ -148,11 +150,15 @@ jobs:
           set -euo pipefail
           seed_password="$(openssl rand -hex 24)"
           admin_key="$(openssl rand -hex 32)"
+          # The onboarding desk's evidence signing key: a 32-byte Ed25519 seed, base64.
+          evidence_key="$(openssl rand -base64 32)"
           echo "::add-mask::$seed_password"
           echo "::add-mask::$admin_key"
+          echo "::add-mask::$evidence_key"
           {
             echo "AGENTICORG_SEED_PASSWORD=$seed_password"
             echo "AGENTICORG_DEV_GRANTEX_ADMIN_KEY=$admin_key"
+            echo "AGENTICORG_DEV_ONBOARDING_DESK_EVIDENCE_KEY=$evidence_key"
           } >> "$GITHUB_ENV"
       - name: make dev
         run: make dev
@@ -162,6 +168,8 @@ jobs:
         run: make seed-cases
       - name: make e2e-decisions
         run: make e2e-decisions
+      - name: make e2e-onboarding-desk
+        run: make e2e-onboarding-desk
       - name: Stack status and logs
         if: failure()
         run: |
@@ -175,6 +183,8 @@ jobs:
           path: |
             ui/playwright-report/decision-grants
             ui/test-results/decision-grants
+            ui/playwright-report/onboarding-desk
+            ui/test-results/onboarding-desk
             ui/test-results/governed-cases-seed.json
           if-no-files-found: ignore
           retention-days: 14

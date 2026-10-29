@@ -25,6 +25,8 @@ BUSINESS_CASE_TEMPLATE = json.loads(
     ).read_text(encoding="utf-8")
 )
 _RESERVED_IDENTIFIERS = {
+    "ca_business_number": re.compile(r"^00000000[0-9]$"),
+    "ca_corporation_number": re.compile(r"^000000[0-9]$"),
     "gb_company_number": re.compile(r"^0000000[0-9]$"),
     "us_ein": re.compile(r"^00-000000[0-9]$"),
     "us_state_file_number": re.compile(r"^00000[0-9]{2}$"),

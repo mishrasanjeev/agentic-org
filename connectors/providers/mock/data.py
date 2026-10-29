@@ -124,7 +124,7 @@ class WebFixture(DomainModel):
 
 
 class BusinessFixture(DomainModel):
-    key: Annotated[str, StringConstraints(pattern=r"^(us|gb)-[a-z0-9-]+$")]
+    key: Annotated[str, StringConstraints(pattern=r"^(us|gb|ca)-[a-z0-9-]+$")]
     scenarios: Annotated[tuple[Scenario, ...], Field(min_length=1)]
     snapshot_at: AwareDatetime
     application: dict[str, Any]

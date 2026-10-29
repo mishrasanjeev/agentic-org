@@ -35,10 +35,10 @@ It needs no database, cache or application secret; the compose service sets only
 
 ## Fixtures
 
-`connectors/providers/mock/fixtures/` holds a dozen businesses, a watchlist
+`connectors/providers/mock/fixtures/` holds thirteen businesses, a watchlist
 and recorded webhook deliveries. Names are invented, identifiers are in
 reserved ranges (UK company numbers `0000000N`, US EIN `00-000000N`, state file
-numbers `00000NN`), addresses are `Example` streets and domains are under
+numbers `00000NN`, Canadian Business Numbers `00000000N` and postal codes `A0A 0A0`), addresses are `Example` streets and domains are under
 `example.com`. Each business also carries a sample application — what an
 applicant declared — for seeding cases.
 
@@ -56,6 +56,7 @@ applicant declared — for seeding cases.
 | `gb-true-match-corvane` | GB | true match on a person and on the business |
 | `gb-dissolved-ashcombe` | GB | dissolved company with a `business.dissolved` event |
 | `gb-adversarial-northgate` | GB | instructions in the company name and in a watchlist alias, on a true match |
+| `ca-clean-mapleleaf` | CA-ON | clean, with a Business Number and an Ontario corporation number |
 
 Website pages are small HTML documents with a title and a heading, as a real
 site has: the extractor reads a page's activity categories from its title,

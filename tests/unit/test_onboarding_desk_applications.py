@@ -68,6 +68,9 @@ class TestValidation:
             ("tax_id", "123 456 789 RT0001", "CA", "123456789"),
             ("website", "northwind.example", "US", "https://northwind.example"),
             ("activity", "Restauration", "CA", "food_service"),
+            ("incorporated_in", " de ", "US", "DE"),
+            ("incorporated_in", "qc", "CA", "QC"),
+            ("incorporated_in", "Federal", "CA", "FEDERAL"),
         ],
     )
     def test_answers_are_normalised(self, item, value, country, expected):
@@ -91,6 +94,9 @@ class TestValidation:
             ("formation_document", "x", "US", "upload_required"),
             ("favourite_colour", "blue", "US", "item_unknown"),
             ("legal_name", "Acme", "GB", "country_not_supported"),
+            ("incorporated_in", "ON", "US", "region_invalid"),
+            ("incorporated_in", "FEDERAL", "US", "region_invalid"),
+            ("incorporated_in", "Delaware", "US", "region_invalid"),
         ],
     )
     def test_answers_are_refused(self, item, value, country, code):
@@ -263,6 +269,43 @@ class TestPolicy:
                 },
                 ["ca_corporation_number"],
                 "CA-ON",
+            ),
+            (
+                "US",
+                "CA",
+                {**US_ANSWERS, "incorporated_in": "de"},
+                ["us_ein", "us_state_file_number"],
+                "US-DE",
+            ),
+            (
+                "CA",
+                "ON",
+                {
+                    "legal_name": "Maple Ltd",
+                    "registration_number": "1234567",
+                    "incorporated_in": "federal",
+                    "registered_address": {
+                        "lines": ["1 Bay St"],
+                        "locality": "Toronto",
+                        "region": "ON",
+                        "postal_code": "M5J 2N8",
+                    },
+                    "owners": [],
+                },
+                ["ca_corporation_number"],
+                "CA",
+            ),
+            (
+                "CA",
+                "ON",
+                {
+                    "legal_name": "Café Nord Inc",
+                    "registration_number": "1171234567",
+                    "incorporated_in": "QC",
+                    "owners": [],
+                },
+                ["ca_qc_neq"],
+                "CA-QC",
             ),
         ],
     )

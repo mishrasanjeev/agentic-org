@@ -129,6 +129,13 @@ metrics registry, so pytest's coverage includes the prefork path. A standalone
 probe run is useful runtime evidence but does not substitute for the coverage
 data produced by the standard test command.
 
+`make e2e-onboarding-desk` runs the merchant onboarding desk from a signed webhook
+lead to a signed evidence pack on that same decision-enabled stack, started with
+`AGENTICORG_DEV_ONBOARDING_DESK=true` and `AGENTICORG_DEV_ONBOARDING_DESK_EVIDENCE_KEY`
+set to a base64 Ed25519 seed (`openssl rand -base64 32`). The checks run in a seed
+step between the suite's two parts, because the case agents' development root
+grant lives only in a seed process (`scripts/seed_onboarding_desk.py`).
+
 Keep the ordinary browser suite's default decision-service configuration separate
 from the decision-enabled `make e2e-decisions` setup. Run `make seed-cases` first
 and set `AGENTICORG_E2E_REQUIRE_GOVERNED_CASES=true` to fail rather than skip when
@@ -164,7 +171,7 @@ every pull request and push to `main`, in three jobs:
 |---|---|
 | `make check` | `make check` |
 | `make dev && make test` | `make dev`, `make test`, `make coverage-gate` (pull requests), `make seed`, `make seed-cases` and `make e2e` (including the governed-case suites), then `make clean` |
-| `make e2e-decisions` | `make dev` with decision grants on, `make seed`, `make seed-cases` and `make e2e-decisions`, then `make clean` |
+| `make e2e-decisions` | `make dev` with decision grants and the onboarding desk on, `make seed`, `make seed-cases`, `make e2e-decisions` and `make e2e-onboarding-desk`, then `make clean` |
 
 It uses nothing but Docker and make (and the runner's `openssl`, below), so a
 green run means a new contributor's clone works too. The seed password, and for the decision-grant job the auth
