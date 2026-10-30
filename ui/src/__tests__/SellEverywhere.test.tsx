@@ -273,6 +273,61 @@ describe("Sell everywhere", () => {
     expect(screen.getByText(/\/api\/v1\/webhooks\/shopify\/t\//)).toBeInTheDocument();
   }, 20000);
 
+  it("adds the webhook signing secret to a connected store without the token again", async () => {
+    const shopifyCatalog = (webhook_status: string) => ({
+      status: "ready",
+      source: "shopify",
+      shop_domain: "tea-corner.myshopify.com",
+      product_count: 12,
+      last_synced_at: "2026-10-29T08:00:00Z",
+      currency: "INR",
+      last_error: null,
+      webhook_status,
+      webhook_path: "/api/v1/webhooks/shopify/t/0123456789abcdef0123456789abcdef",
+    });
+    setup.list.mockResolvedValue({ data: { merchants: [{ ...merchant, catalog_source: "shopify" }], count: 1 } });
+    setup.get.mockResolvedValue({ data: setupView({ catalog: shopifyCatalog("blocked_missing_webhook_secret") }) });
+    get.mockResolvedValue({ data: view() });
+    setup.connectShopify.mockResolvedValue({
+      data: {
+        connection: { status: "shopify_connector_configured" },
+        sync: { product_count: 12 },
+        sync_error: null,
+        setup: setupView({ catalog: shopifyCatalog("configured") }),
+      },
+    });
+    renderPage();
+
+    const token = await screen.findByLabelText("Admin API access token");
+    expect(screen.getByLabelText("Store address")).toHaveValue("tea-corner.myshopify.com");
+    expect(token).toHaveAttribute("placeholder", "Leave blank to keep the saved token");
+    const connect = screen.getByRole("button", { name: "Connect Shopify" });
+    expect(connect).toBeEnabled();
+
+    // Another store needs its own token: the saved one is kept only for the store it was saved for.
+    fireEvent.change(screen.getByLabelText("Store address"), { target: { value: "another-store.myshopify.com" } });
+    expect(connect).toBeDisabled();
+    expect(token).toHaveAttribute("placeholder", "");
+    fireEvent.change(screen.getByLabelText("Store address"), { target: { value: "tea-corner.myshopify.com" } });
+
+    fireEvent.change(screen.getByLabelText("Webhook signing secret (optional)"), {
+      target: { value: "merchant-webhook-signing-secret-01" },
+    });
+    fireEvent.click(connect);
+    await waitFor(() =>
+      expect(setup.connectShopify).toHaveBeenCalledWith("tea-corner-1a2b3c", {
+        shop_domain: "tea-corner.myshopify.com",
+        webhook_secret: "merchant-webhook-signing-secret-01",
+      }),
+    );
+    expect(await screen.findByText("Webhook: signing secret saved")).toBeInTheDocument();
+    expect(screen.getByLabelText("Webhook signing secret (optional)")).toHaveValue("");
+    expect(screen.getByLabelText("Webhook signing secret (optional)")).toHaveAttribute(
+      "placeholder",
+      "Leave blank to keep the saved secret",
+    );
+  }, 20000);
+
   it("lists each problem in a refused catalog file", async () => {
     setup.list.mockResolvedValue({ data: { merchants: [merchant], count: 1 } });
     setup.get.mockResolvedValue({ data: setupView() });

@@ -589,8 +589,27 @@ async def upsert_shopify_connector_credentials(
     body: ShopifyConnectorCredentialRequest,
     tenant_id: str = Depends(get_current_tenant),
 ) -> dict[str, Any]:
+    return await save_shopify_connector_credentials(body, tenant_id=tenant_id)
+
+
+async def save_shopify_connector_credentials(
+    body: ShopifyConnectorCredentialRequest, *, tenant_id: str, keep_saved_token: bool = False
+) -> dict[str, Any]:
+    """Validate the merchant's Shopify credentials and store them encrypted in the tenant vault.
+
+    ``keep_saved_token`` (the merchant setup page): a save with the token left blank and no OAuth
+    material reuses the merchant's saved token, only to reconnect the same store
+    (``_saved_shopify_credentials``). Shopify shows an Admin API token once, so adding the webhook
+    signing secret later must not need it again.
+    """
     tid = _tenant_uuid(tenant_id)
-    credentials, credential_source, granted_scopes = await _resolve_submitted_shopify_credentials(body)
+    token_left_blank = not (body.admin_access_token or "").strip() and not any(
+        (body.oauth_code, body.client_id, body.client_secret)
+    )
+    if keep_saved_token and token_left_blank:
+        credentials, credential_source, granted_scopes = await _saved_shopify_credentials(tid, body)
+    else:
+        credentials, credential_source, granted_scopes = await _resolve_submitted_shopify_credentials(body)
     if body.validate_read:
         await _validate_shopify_read_credentials(credentials)
 
@@ -3421,6 +3440,45 @@ async def _resolve_submitted_shopify_credentials(
         ),
         credential_source,
         granted_scopes,
+    )
+
+
+async def _saved_shopify_credentials(
+    tid: UUID, body: ShopifyConnectorCredentialRequest
+) -> tuple[ShopifyCredentials, str, list[str]]:
+    """The merchant's saved Shopify token, to save its connection again without re-entering the token.
+
+    Only this merchant's own connector counts (never the tenant-wide ``shopify`` row), and only when
+    both its config and its decrypted credentials name the store being saved. No saved connection,
+    another store or an unreadable vault needs the token (``shopify_token_required``). The token stays
+    server-side: it is re-encrypted with the rest and never returned.
+    """
+    shop_domain = _normalize_shopify_domain_for_api(body.shop_domain)
+    async with get_tenant_session(tid) as session:
+        row = await _load_shopify_connector_config_row(session, tid, body.merchant_id)
+    config = (row.config or {}) if row is not None else {}
+    own = row is not None and row.connector_name == _shopify_connector_config_name(body.merchant_id)
+    stored = _stored_shopify_credential_data(row) if own and config.get("shop_domain") == shop_domain else {}
+    token = str(stored.get("admin_access_token") or stored.get("access_token") or "").strip()
+    if not token or str(stored.get("shop_domain") or "").strip().lower() != shop_domain:
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "error": "shopify_token_required",
+                "message": (
+                    "Paste the Admin API access token. A saved token is kept only to reconnect the store "
+                    "it was saved for."
+                ),
+            },
+        )
+    return (
+        ShopifyCredentials(
+            shop_domain=shop_domain,
+            admin_access_token=token,
+            api_version=_validate_shopify_api_version(body.api_version),
+        ),
+        str(stored.get("credential_source") or config.get("credential_source") or "admin_access_token"),
+        [str(scope) for scope in config.get("granted_scopes") or []],
     )
 
 

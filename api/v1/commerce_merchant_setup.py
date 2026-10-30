@@ -34,7 +34,7 @@ from typing import Any, Literal, cast
 import structlog
 from fastapi import APIRouter, Depends, HTTPException, Path, Request
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 from sqlalchemy import select
 
 from api.deps import get_current_tenant
@@ -548,9 +548,18 @@ class ShopifyConnectRequest(BaseModel):
 
     shop_domain: str = Field(min_length=3, max_length=255)
     # The Admin API access token of the merchant's own custom app (read_products, read_inventory).
-    admin_access_token: str = Field(min_length=10, max_length=512)
+    # Left blank, the saved token is kept, but only to reconnect the same store (Shopify shows it once).
+    admin_access_token: str | None = Field(default=None, max_length=512, repr=False)
     api_version: str = Field(default="2026-04", pattern=r"^\d{4}-\d{2}$")
     webhook_secret: str | None = Field(default=None, min_length=16, max_length=256)
+
+    @field_validator("admin_access_token")
+    @classmethod
+    def _blank_token_keeps_the_saved_one(cls, value: str | None) -> str | None:
+        token = (value or "").strip()
+        if token and len(token) < 10:
+            raise ValueError("admin_access_token must be at least 10 characters")
+        return token or None
 
 
 @router.post("/merchant-configs/{merchant_id}/catalog/shopify")
@@ -567,10 +576,15 @@ async def connect_shopify(
     body: ShopifyConnectRequest,
     tenant_id: str = Depends(get_current_tenant),
 ) -> dict[str, Any]:
-    """Store the merchant's own Shopify custom-app token (validated with one read), then read the catalog."""
+    """Store the merchant's own Shopify custom-app token (validated with one read), then read the catalog.
+
+    With the token left blank the merchant's saved token is kept when the store is the one it was saved
+    for, so the webhook signing secret can be added later without the token Shopify showed once; any
+    other store, or no saved connection, needs the token (``shopify_token_required``).
+    """
     async with get_tenant_session(_tenant_uuid(tenant_id)) as session:
         await _config_row(session, tenant_id, merchant_id)
-    connected = await runtime.upsert_shopify_connector_credentials(
+    connected = await runtime.save_shopify_connector_credentials(
         runtime.ShopifyConnectorCredentialRequest(
             merchant_id=merchant_id,
             shop_domain=body.shop_domain,
@@ -580,6 +594,7 @@ async def connect_shopify(
             validate_read=True,
         ),
         tenant_id=tenant_id,
+        keep_saved_token=True,
     )
     sync_error: Any = None
     try:

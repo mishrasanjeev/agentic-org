@@ -289,7 +289,8 @@ export const merchantSetupApi = {
   get: (merchantId: string) => api.get(`${merchantPath(merchantId)}/setup`),
   connectShopify: (
     merchantId: string,
-    data: { shop_domain: string; admin_access_token: string; api_version?: string; webhook_secret?: string },
+    // Without admin_access_token the saved token is kept, for the same store only.
+    data: { shop_domain: string; admin_access_token?: string; api_version?: string; webhook_secret?: string },
   ) => api.post(`${merchantPath(merchantId)}/catalog/shopify`, data),
   uploadCatalog: (merchantId: string, data: { format: "csv" | "json"; content: string }) =>
     api.post(`${merchantPath(merchantId)}/catalog/upload`, data),

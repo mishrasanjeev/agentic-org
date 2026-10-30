@@ -397,6 +397,65 @@ async def test_shopify_connects_with_the_merchants_own_token_and_webhooks_verify
     assert shopify_reads[-1] == SHOP
 
 
+async def test_the_webhook_secret_is_added_later_without_the_token_for_the_same_store_only(
+    db, network, shopify_reads, monkeypatch
+):
+    validated_with: list[str] = []
+
+    async def validated(credentials):
+        validated_with.append(credentials.admin_access_token)
+
+    monkeypatch.setattr(runtime, "_validate_shopify_read_credentials", validated)
+    tenant = await _tenant(db)
+    merchant_id = (await _create(tenant))["merchant"]["merchant_id"]
+    second_id = (await _create(tenant, "Second Shop"))["merchant"]["merchant_id"]
+
+    async def vault(mid: str) -> dict[str, Any]:
+        async with get_tenant_session(uuid.UUID(tenant)) as session:
+            row = await runtime._load_shopify_connector_config_row(session, uuid.UUID(tenant), mid)
+        return runtime._stored_shopify_credential_data(row)
+
+    async def connect(mid: str, **fields: Any) -> dict[str, Any]:
+        return await setup_api.connect_shopify(mid, setup_api.ShopifyConnectRequest(**fields), tenant)
+
+    first = await connect(merchant_id, shop_domain=SHOP, admin_access_token="fixture-admin-token-0001")
+    assert first["setup"]["catalog"]["webhook_status"] == "blocked_missing_webhook_secret"
+
+    # Shopify showed the token once: the signing secret is added with the token left blank.
+    added = await connect(merchant_id, shop_domain=SHOP, webhook_secret=WEBHOOK_SECRET)
+    assert added["sync_error"] is None and added["setup"]["catalog"]["webhook_status"] == "configured"
+    assert validated_with == ["fixture-admin-token-0001", "fixture-admin-token-0001"]
+    assert "fixture-admin-token-0001" not in json.dumps(added) and WEBHOOK_SECRET not in json.dumps(added)
+    stored = await vault(merchant_id)
+    assert stored["admin_access_token"] == "fixture-admin-token-0001" and stored["webhook_secret"] == WEBHOOK_SECRET
+    assert stored["shop_domain"] == SHOP and stored["credential_source"] == "admin_access_token"
+
+    body = json.dumps({"id": 1}).encode()
+    signature = base64.b64encode(hmac.new(WEBHOOK_SECRET.encode(), body, hashlib.sha256).digest()).decode()
+    accepted = await setup_api.receive_shopify_webhook(
+        uuid.UUID(tenant),
+        _webhook_request(body, {"x-shopify-hmac-sha256": signature, "x-shopify-shop-domain": SHOP}),
+        path_token=runtime.shopify_webhook_path_token(tenant, merchant_id),
+    )
+    assert accepted.status_code == 200
+
+    # Another store, or a merchant with no saved connection of its own (even in the same tenant), needs a token.
+    for mid, shop in (
+        (merchant_id, "another-store.myshopify.com"),
+        (second_id, SHOP),
+    ):
+        with pytest.raises(HTTPException) as required:
+            await connect(mid, shop_domain=shop, webhook_secret="another-signing-secret-value-01")
+        assert required.value.status_code == 400
+        assert required.value.detail["error"] == "shopify_token_required"
+    assert len(validated_with) == 2
+    # The refused saves changed nothing.
+    assert await vault(merchant_id) == stored
+    assert await vault(second_id) == {}
+    setup = await setup_api.get_merchant_setup(merchant_id, tenant)
+    assert setup["catalog"]["shop_domain"] == SHOP and setup["catalog"]["webhook_status"] == "configured"
+
+
 async def test_a_tenant_without_a_connector_is_blocked_even_with_shopify_env(db, network, shopify_reads, monkeypatch):
     monkeypatch.setenv("SHOPIFY_SHOP_DOMAIN", "operator-store.myshopify.com")
     monkeypatch.setenv("SHOPIFY_ADMIN_ACCESS_TOKEN", "fixture-operator-token")
