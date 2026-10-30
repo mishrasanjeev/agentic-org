@@ -103,9 +103,10 @@ AI agents can only start orders within your limits: the largest single order, th
 most items per order, in your currency. The daily maximum must be at least the per-order maximum.
 
 Before a buyer gets a payment link, the arbiter checks the order against these limits. The daily maximum
-counts what buyers paid today (by the UTC day) and the payment links still open, whichever day they were
-issued, in that currency. A link that lapsed unpaid no longer counts. An order that would go over it gets
-no link.
+counts, in that currency: the payments confirmed today (by the UTC day); the payment links still open,
+whichever day they were issued; and every Shopify checkout link issued today, even after it lapses, because
+Shopify does not tell AgenticOrg when a buyer pays. A Plural link that lapsed unpaid no longer counts. An
+order that would go over it gets no link.
 
 ## After you turn it on
 
