@@ -42,10 +42,16 @@ export default defineConfig({
   testDir: ".",
   testMatch: "*.spec.ts",
   // Specs owned by the local-stack configs (dev-stack.config.ts,
-  // decision-grants.config.ts) need the dev stack's seeded data and dev-only
-  // secrets and must never run against a hosted environment. decision-grants
-  // also throws at load without its variables, which aborted this whole run.
-  testIgnore: ["dev-stack.spec.ts", "governed-cases*.spec.ts", "decision-grants.spec.ts"],
+  // decision-grants.config.ts, onboarding-desk.config.ts) need the dev stack's
+  // seeded data and dev-only secrets and must never run against a hosted
+  // environment. decision-grants and onboarding-desk also throw at load without
+  // their variables, which aborted this whole run.
+  testIgnore: [
+    "dev-stack.spec.ts",
+    "governed-cases*.spec.ts",
+    "decision-grants.spec.ts",
+    "onboarding-desk.spec.ts",
+  ],
   // Before a hosted run, soft-delete the shadow agents earlier runs left behind, so
   // agent creation stays under the tenant's shadow limit (see helpers/sweep-stale-test-agents.ts).
   globalSetup: "./helpers/sweep-stale-test-agents.ts",
