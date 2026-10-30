@@ -313,7 +313,9 @@ test.describe("C6Z commerce runtime demo", () => {
     const askCall = calls.find((call) =>
       call.path.endsWith("/api/v1/commerce/runtime/buyer-sessions/ask"),
     );
-    expect(cacheCall?.body.buyer_agent_id).toBe("buyer_agent_demo");
+    // Merchant artifacts are cached as shared records (no buyer): the public catalog and every buyer read them.
+    expect(cacheCall?.body.artifacts.length).toBeGreaterThan(0);
+    expect(cacheCall?.body.buyer_agent_id).toBeUndefined();
     expect(askCall?.body.buyer_agent_id).toBe("buyer_agent_demo");
     expect(askCall?.body.action_intent).toBe("non_binding_preview");
     const purchaseCall = calls.find((call) =>
