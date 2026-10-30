@@ -354,8 +354,29 @@ async def _config_for(listing: CommerceNetworkListingRow) -> C6ZMerchantCommerce
         ).first()
 
 
+def web_address_live(domain: MerchantCustomDomainRow | None, host: str | None) -> bool:
+    """Whether ``host`` answers buyer agents: a host with no active domain row is served directly (a Cloud Run
+    mapping); a platform subdomain or custom domain answers only once its mapping and certificate are live."""
+    return domain is None or domain.host != host or domain.status == "live"
+
+
+async def _domain_for_host(listing: CommerceNetworkListingRow, host: str) -> MerchantCustomDomainRow | None:
+    async with get_tenant_session(listing.tenant_id) as session:
+        return (
+            await session.scalars(
+                select(MerchantCustomDomainRow).where(
+                    MerchantCustomDomainRow.tenant_id == uuid.UUID(str(listing.tenant_id)),
+                    MerchantCustomDomainRow.host == host,
+                    MerchantCustomDomainRow.status.not_in(INACTIVE_STATUSES),
+                )
+            )
+        ).first()
+
+
 async def _servable_host(listing: CommerceNetworkListingRow, config: C6ZMerchantCommerceConfigRow | None) -> str | None:
-    """The published host that the public host index still maps to this exact shop, else None."""
+    """The published host that the public host index still maps to this exact shop and that answers buyer
+    agents now, else None. Buyer agents read the profile and search the catalog at that host, so a shop whose
+    new web address is still being mapped or certified stays off the network until it is live."""
     if config is None or config.status == "disabled":
         return None
     host = published_host(config)
@@ -363,6 +384,8 @@ async def _servable_host(listing: CommerceNetworkListingRow, config: C6ZMerchant
         return None
     binding = await find_serving_binding(host)
     if binding is None or binding.tenant_id != str(listing.tenant_id) or binding.merchant_id != listing.merchant_id:
+        return None
+    if not web_address_live(await _domain_for_host(listing, host), host):
         return None
     return host
 
@@ -442,18 +465,29 @@ def surfaces_view(
         web = {"status": "live", "host": host}
     else:
         web = {"status": "not_started", "host": None}
-    reachable = listed and host is not None
+    # Buyer agents read the shop at its web address, so the shop joins the network once that address is live.
+    waiting_for_web = listed and host is not None and not web_address_live(domain, host)
+    reachable = listed and host is not None and not waiting_for_web
     from core.commerce.payment_handoff import payment_settings
 
     payments = payment_settings({"provider_policy": config.provider_policy or {}})
+    if reachable:
+        mcp_status = "live"
+    elif waiting_for_web:
+        mcp_status = "waiting_for_web_address"
+    else:
+        mcp_status = "waiting_for_publication" if listed else "off"
+    if not listed:
+        telegram_status = "off"
+    elif waiting_for_web:
+        telegram_status = "waiting_for_web_address"
+    else:
+        telegram_status = "live" if reachable and telegram_link(listing.slug) else "coming_soon"
     return {
         "web": web,
-        "mcp": {
-            "status": "live" if reachable else ("waiting_for_publication" if listed else "off"),
-            "server_url": "https://mcp.agenticorg.ai/mcp",
-        },
+        "mcp": {"status": mcp_status, "server_url": "https://mcp.agenticorg.ai/mcp"},
         "telegram": {
-            "status": "live" if reachable and telegram_link(listing.slug) else ("off" if not listed else "coming_soon"),
+            "status": telegram_status,
             "link": telegram_link(listing.slug) if listing is not None else None,
         },
         "google": {"status": "registration_pending"},

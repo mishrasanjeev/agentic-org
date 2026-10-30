@@ -12,6 +12,12 @@ interface OrderItem {
   status: string | null;
 }
 
+interface Delivery {
+  method: string;
+  option: string | null;
+  address: string[];
+}
+
 interface Order {
   id: string;
   merchant_id: string;
@@ -22,6 +28,8 @@ interface Order {
   total: string;
   items: OrderItem[];
   buyer: { first_name?: string; last_name?: string; email?: string; phone_number?: string };
+  delivery?: Delivery[];
+  shipping?: string | null;
   payment: { status: string; provider: string; provider_order_ref_present: boolean };
   surface: string;
   permalink_url: string | null;
@@ -39,6 +47,12 @@ function when(value: string | null): string {
 function buyerLines(buyer: Order["buyer"]): string[] {
   const name = [buyer.first_name, buyer.last_name].filter(Boolean).join(" ");
   return [name, buyer.email, buyer.phone_number].filter((v): v is string => Boolean(v));
+}
+
+function deliveryHeading(delivery: Delivery, shipping: string | null | undefined): string {
+  const parts = [delivery.method === "pickup" ? "Store pickup" : "Ship", delivery.option ?? ""];
+  if (delivery.method !== "pickup") parts.push(shipping ?? "");
+  return parts.filter(Boolean).join(" · ");
 }
 
 /** Every order buyers placed through AgenticOrg, newest first. */
@@ -130,7 +144,7 @@ export default function Orders() {
                 <Badge variant="secondary">{order.surface}</Badge>
               </div>
             </div>
-            <div className="mt-3 grid gap-4 text-sm sm:grid-cols-2">
+            <div className="mt-3 grid gap-4 text-sm sm:grid-cols-3">
               <div>
                 <p className="font-medium">Items</p>
                 <ul className="mt-1 space-y-1 text-muted-foreground">
@@ -141,6 +155,23 @@ export default function Orders() {
                     </li>
                   ))}
                 </ul>
+              </div>
+              <div>
+                <p className="font-medium">Delivery (as given)</p>
+                {order.delivery?.length ? (
+                  order.delivery.map((delivery, index) => (
+                    <div key={`${order.id}-delivery-${index}`} className="mt-1 text-muted-foreground">
+                      <p>{deliveryHeading(delivery, order.shipping)}</p>
+                      <ul className="break-words">
+                        {delivery.address.map((line, lineIndex) => (
+                          <li key={lineIndex}>{line}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  ))
+                ) : (
+                  <p className="mt-1 text-muted-foreground">The buyer gave no delivery details.</p>
+                )}
               </div>
               <div>
                 <p className="font-medium">Buyer contact (as given)</p>

@@ -161,3 +161,32 @@ def test_telegram_link_and_platform_subdomain(monkeypatch):
     assert net.platform_subdomain_for("tea-corner") == "tea-corner.shops.example"
     monkeypatch.setattr(settings, "network_telegram_bot_username", "")
     assert net.telegram_link("tea-corner") is None
+
+
+def test_a_shop_joins_the_network_once_its_web_address_is_live(monkeypatch):
+    host = "tea-corner.shops.example"
+    monkeypatch.setattr(net, "published_host", lambda config: host)
+    monkeypatch.setattr(settings, "network_telegram_bot_username", "ExampleShopBot")
+    listing = SimpleNamespace(status="listed", slug="tea-corner")
+    config = SimpleNamespace(provider_policy={})
+
+    def surfaces(domain):
+        view = net.surfaces_view(listing, config, domain)
+        return view["web"]["status"], view["mcp"]["status"], view["telegram"]["status"]
+
+    # Buyer agents read the shop at its web address: while it is mapped or certified, the shop waits.
+    for status in ("pending_mapping", "pending_certificate", "failed"):
+        assert surfaces(SimpleNamespace(host=host, status=status)) == (
+            status,
+            "waiting_for_web_address",
+            "waiting_for_web_address",
+        )
+    assert surfaces(SimpleNamespace(host=host, status="live")) == ("live", "live", "live")
+    # A host with no domain row (a Cloud Run mapping) is served directly.
+    assert surfaces(None) == ("live", "live", "live")
+    # A domain row for another host does not hold back the published host.
+    assert surfaces(SimpleNamespace(host="old.shops.example", status="pending_mapping"))[1:] == ("live", "live")
+    listing.status = "paused"
+    assert surfaces(SimpleNamespace(host=host, status="pending_mapping"))[1:] == ("off", "off")
+    assert net.web_address_live(None, host)
+    assert not net.web_address_live(SimpleNamespace(host=host, status="failed"), host)

@@ -4,7 +4,8 @@
 Sent after the order's transaction commits, from a Celery task
 (``core.tasks.payment_handoff_tasks.notify_order``), through the platform SMTP
 transport (``core.email.send_email``). The email carries the order, the items,
-the total and the buyer contact exactly as the buyer gave it to the checkout;
+the total, the delivery address and shipping choice, and the buyer contact,
+exactly as the buyer gave them to the checkout;
 nothing is invented. A failed send is logged and never changes the order.
 The ledger records how many administrators were emailed, never their addresses.
 """
@@ -49,16 +50,81 @@ def surface_label(state: Mapping[str, Any] | None, platform_profile_url: str | N
     return SURFACE_LABELS["ucp"]
 
 
+# One line per group of address fields, in reading order.
+_ADDRESS_LINES = (
+    ("first_name", "last_name"),
+    ("street_address",),
+    ("extended_address",),
+    ("address_locality", "address_region", "postal_code"),
+    ("address_country",),
+    ("phone_number",),
+)
+
+
+def _address_lines(address: Mapping[str, Any]) -> list[str]:
+    lines = []
+    for keys in _ADDRESS_LINES:
+        parts = [str(address[key]).strip() for key in keys if str(address.get(key) or "").strip()]
+        if parts:
+            lines.append((" " if keys == ("first_name", "last_name") else ", ").join(parts))
+    return lines
+
+
+def delivery_view(snapshot: Mapping[str, Any]) -> list[dict[str, Any]]:
+    """Where the order goes and how, from the order's fulfillment, exactly as the buyer gave it.
+
+    One entry per fulfillment: ``method`` (shipping or pickup), ``option`` (the
+    shipping rate or pickup the buyer chose) and ``address`` (the destination as
+    lines). The merchant needs this to ship an order paid on its payment page,
+    which collects no address.
+    """
+    out = []
+    for expectation in (snapshot.get("fulfillment") or {}).get("expectations") or []:
+        if not isinstance(expectation, Mapping):
+            continue
+        destination = expectation.get("destination")
+        out.append(
+            {
+                "method": str(expectation.get("method_type") or "shipping"),
+                "option": expectation.get("description") or None,
+                "address": _address_lines(destination) if isinstance(destination, Mapping) else [],
+            }
+        )
+    return out
+
+
+def delivery_heading(item: Mapping[str, Any], shipping: str) -> str:
+    """``Ship - Standard delivery - Rs 49.00`` or ``Store pickup - MG Road store``."""
+    parts = ["Store pickup" if item["method"] == "pickup" else "Ship", str(item["option"] or "")]
+    if item["method"] != "pickup":
+        parts.append(shipping)
+    return " - ".join(part for part in parts if part)
+
+
+def total_of(snapshot: Mapping[str, Any], kind: str) -> Any:
+    return next((t.get("amount") for t in snapshot.get("totals") or [] if t.get("type") == kind), None)
+
+
 def order_email(
     *, merchant_name: str, order_id: str, snapshot: Mapping[str, Any], buyer: Mapping[str, Any], surface: str
 ) -> tuple[str, str]:
     """``(subject, html)`` of the new-order email; every value is escaped."""
-    total = next((t.get("amount") for t in snapshot.get("totals") or [] if t.get("type") == "total"), None)
+    total = total_of(snapshot, "total")
     currency = snapshot.get("currency")
     lines = "".join(
         f"<li>{html.escape(str((li.get('item') or {}).get('title') or ''))} x "
         f"{html.escape(str((li.get('quantity') or {}).get('total', '')))}</li>"
         for li in snapshot.get("line_items") or []
+    )
+    shipping = money(total_of(snapshot, "fulfillment"), currency)
+    delivery = (
+        "".join(
+            f"<li>{html.escape(delivery_heading(item, shipping))}"
+            + "".join(f"<br>{html.escape(line)}" for line in item["address"])
+            + "</li>"
+            for item in delivery_view(snapshot)
+        )
+        or "<li>The buyer gave no delivery details.</li>"
     )
     contact = (
         "".join(
@@ -80,6 +146,7 @@ def order_email(
         f"<strong>Total:</strong> {html.escape(money(total, currency))}<br>"
         f"<strong>Placed through:</strong> {html.escape(surface)}</p>"
         f"<p><strong>Items</strong></p><ul>{lines}</ul>"
+        f"<p><strong>Delivery (as given)</strong></p><ul>{delivery}</ul>"
         f"<p><strong>Buyer contact (as given)</strong></p><ul>{contact}</ul>"
         "<p>See every order on the Orders page of your AgenticOrg console.</p>"
     )
