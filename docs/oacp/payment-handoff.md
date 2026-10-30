@@ -155,9 +155,11 @@ creates the order (as an executed Complete would: the order entity with
 `executor` `plural_hosted`, the ledger, the UCP order webhooks). A payment for
 another amount, on a canceled checkout or for a checkout that changed is
 refused and logged as `plural_hosted_payment_unmatched`, so the merchant can
-refund it in Plural. `FAILED`, `CANCELLED` and the like retire the link; the
-next Complete issues a new one, unless an earlier link can still be paid. On a
-canceled checkout they retire the link too, and the checkout stays canceled. `AUTHORIZED` is not money received and stays
+refund it in Plural. `FAILED`, `CANCELLED` and the like retire the link: the
+latest earlier link that can still be paid becomes the checkout's link again,
+and the next Complete issues a new one. The return page tells the buyer the
+payment did not go through. On a canceled checkout they retire the link too,
+and the checkout stays canceled. `AUTHORIZED` is not money received and stays
 pending.
 
 ## The merchant gets the order

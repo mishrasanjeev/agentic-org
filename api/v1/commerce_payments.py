@@ -440,7 +440,7 @@ async def _return_page(tenant_id: str, checkout_id: str) -> HTMLResponse:
         )
     if row.status == "canceled":
         return _page("Checkout canceled", "This checkout was canceled. Nothing more is needed here.")
-    if row.status == "ready_for_complete":
+    if row.status == "ready_for_complete" or ph.newest_link_failed(row.state or {}):
         return _page(
             "Payment not completed",
             "The payment did not go through.",

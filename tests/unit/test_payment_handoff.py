@@ -262,6 +262,19 @@ def test_a_failed_link_brings_back_the_latest_earlier_link_that_can_still_be_pai
     assert not ph.payable(state["handoff_orders"]["aoh-a"])
 
 
+def test_the_newest_issued_link_decides_whether_the_buyer_was_declined() -> None:
+    state = _state()
+    assert not ph.newest_link_failed(state)
+    ph.remember_reference(state, "aoh-a", ph.link_record({"issued_at": "2026-10-30T09:00:00Z"}))
+    ph.remember_reference(state, "aoh-b", ph.link_record({"issued_at": "2026-10-30T10:00:00Z"}))
+    ph.remember_reference(state, "aoh-c", {"decision_id": "arbdec_c"})  # an order that was never created
+    assert not ph.newest_link_failed(state)
+    ph.set_reference_status(state, "aoh-a", "failed")
+    assert not ph.newest_link_failed(state)
+    ph.set_reference_status(state, "aoh-b", "failed")
+    assert ph.newest_link_failed(state)
+
+
 def test_a_reference_whose_link_can_still_be_paid_is_never_dropped() -> None:
     state = _state()
     ph.remember_reference(state, "aoh-a", {**ph.link_record({"continue_url": "https://pay.plural.example/a"})})

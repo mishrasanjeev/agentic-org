@@ -964,6 +964,13 @@ async def test_a_lapsed_plural_link_keeps_its_place_when_a_fresh_one_cannot_be_o
     assert result["result"] == "link_retired", result
     status, state = await _state_of(db, first["id"])
     assert status == "requires_escalation" and state["handoff"]["reference"] == reference_a
+    # The buyer who was declined on B is told so, not asked to wait.
+    from api.v1 import commerce_payments
+
+    hosted.status = "CREATED"
+    for _ in range(2):
+        page = await commerce_payments._return_page(tenant, first["id"])
+        assert b"Payment not completed" in page.body, page.body
     still_refused = await _complete(runtime, tenant, second["id"])
     assert "daily_amount_cap_exceeded" in json.dumps(still_refused.body)
 

@@ -303,6 +303,20 @@ def clear_handoff(state: dict[str, Any], status: str) -> None:
         state["handoff"] = {**handoff, "status": status}
 
 
+def newest_link_failed(state: Mapping[str, Any]) -> bool:
+    """Whether Plural reported the newest link the checkout handed out as failed: the one the buyer last used.
+
+    When it fails, an earlier link that can still be paid comes back (``retire_failed``) and the
+    checkout waits for payment again, but the buyer who just paid has been declined.
+    """
+    orders = state.get("handoff_orders")
+    if not isinstance(orders, Mapping):
+        return False
+    issued = [orders[r] for r in state.get("handoff_refs") or [] if isinstance(orders.get(r), Mapping)]
+    issued = [record for record in issued if record.get("issued_at")]
+    return bool(issued) and issued[-1].get("status") == "failed"
+
+
 def retire_failed(state: dict[str, Any]) -> str:
     """Retire the current Plural link, or the order being created, as failed; the checkout status that follows.
 

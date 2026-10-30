@@ -825,6 +825,24 @@ async def test_a_waiting_checkout_asks_plural_and_shows_the_fresh_status(db, ref
 
 
 @pytest.mark.asyncio
+async def test_a_declined_payment_on_the_newest_link_is_shown_even_while_an_earlier_link_waits(db, refresh):
+    # The buyer was declined on link B; link A, issued earlier and still payable, is the checkout's link again.
+    state = {
+        "handoff": {"mode": "plural_hosted", "status": "issued", "reference": "ref_a"},
+        "handoff_refs": ["ref_a", "ref_b"],
+        "handoff_orders": {
+            "ref_a": {"status": "issued", "issued_at": "2026-10-30T09:00:00Z"},
+            "ref_b": {"status": "failed", "issued_at": "2026-10-30T10:00:00Z"},
+        },
+    }
+    db.execute_results = [_session_row("requires_escalation", state=state)] * 2
+    async with _client() as client:
+        response = await client.get(RETURN)
+    assert "Payment not completed" in response.text and "ask for a new payment link" in response.text
+    _assert_private_page(response)
+
+
+@pytest.mark.asyncio
 async def test_a_waiting_checkout_that_cannot_be_reread_keeps_asking_the_buyer_to_wait(db, refresh):
     db.execute_results = [_session_row("requires_escalation"), None]
     async with _client() as client:
