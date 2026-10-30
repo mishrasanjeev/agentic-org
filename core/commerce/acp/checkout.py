@@ -18,7 +18,8 @@ decision, executor and order entity; this module only translates in and renders 
   assumed ``{id, quantity}``, the schema of 2026-01-16 and earlier);
 * an update is partial: the members present replace the stored ACP input, and the
   merged input becomes a full UCP replacement under the session lock;
-* ``fulfillment_details.address`` becomes a shipping destination and a
+* ``fulfillment_details.address`` becomes a shipping destination (with the
+  recipient's name and the fulfillment phone number) and a
   ``shipping`` ``selected_fulfillment_options`` entry the selected rate (pickup is
   not offered over ACP: ``FulfillmentOptionPickup`` needs a full store address);
 * ``payment_data`` becomes the one payment instrument; ``risk_signals`` become the
@@ -262,6 +263,32 @@ def _ucp_lines(items: Sequence[Mapping[str, Any]], previous: Sequence[Mapping[st
     return out
 
 
+def _recipient(details: Mapping[str, Any], address: Mapping[str, Any]) -> dict[str, str]:
+    """Who receives the parcel, as UCP destination fields, so the order shows the merchant whom to ship to.
+
+    The name is ``Address.name`` (the recipient; ACP requires it), else
+    ``fulfillment_details.name``. A name of several words splits at its last space
+    (``Asha Rani Rao`` is ``Asha Rani`` and ``Rao``); a one-word name is all
+    ``first_name``. The phone is ``fulfillment_details.phone_number``.
+    """
+    out: dict[str, str] = {}
+    name = next(
+        (
+            " ".join(value.split())
+            for value in (address.get("name"), details.get("name"))
+            if isinstance(value, str) and value.strip()
+        ),
+        "",
+    )
+    if name:
+        first, _, last = name.rpartition(" ")
+        out.update({"first_name": first, "last_name": last} if first else {"first_name": last})
+    phone = details.get("phone_number")
+    if isinstance(phone, str) and phone.strip():
+        out["phone_number"] = phone.strip()
+    return out
+
+
 def _ucp_fulfillment(acp_input: Mapping[str, Any]) -> dict[str, Any] | None:
     details = acp_input.get("fulfillment_details") or {}
     address = details.get("address") if isinstance(details, Mapping) else None
@@ -269,6 +296,7 @@ def _ucp_fulfillment(acp_input: Mapping[str, Any]) -> dict[str, Any] | None:
         return None
     destination = {
         "id": "dest_1",
+        **_recipient(details, address),
         "street_address": address.get("line_one"),
         "extended_address": address.get("line_two"),
         "address_locality": address.get("city"),
