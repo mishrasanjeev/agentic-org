@@ -868,10 +868,11 @@ These names are parsed from connectors. A listing does not prove credentials, su
 - [Seller commerce with an outside A2A buyer](https://agenticorg.ai/docs/seller-a2a-commerce-journey): An interactive third-party buyer transaction map and six checkpoints covering merchant setup, A2A seller access, sourced answers and the Pine Labs Plural payment boundary.
 - [API, SDK, MCP and A2A integration](https://agenticorg.ai/docs/api-sdk-mcp): Connect applications and agent clients with authenticated, scoped APIs; distinguish public discovery from permission to execute.
 - [Self-hosting and deployment handoff](https://agenticorg.ai/docs/self-hosting): Understand hosted versus bank-managed operation, local Docker setup, migration-first releases, backups and operational responsibilities.
+- [Sell through AI assistants: start here](https://agenticorg.ai/docs/oacp-start-here): The whole idea in plain words, with a video of one real order: set up once with Shopify or a spreadsheet, a buyer's AI assistant shops your store, the buyer pays you on your own page and you get the order.
 - [What OACP is and why you need it](https://agenticorg.ai/docs/oacp-overview): OACP is one trust layer under UCP, ACP, AP2, Visa TAP, MCP and A2A: your facts stated once, signed, decided by fixed rules and recorded, then rendered into each standard.
 - [Example: Nilgiri Tea House, end to end](https://agenticorg.ai/docs/oacp-example-nilgiri-tea): A live example shop you can try in two minutes: how Nilgiri Tea House was set up, how it got its own address, how a buyer agent searches and checks out, and the same steps for your shop.
 - [How OACP works, end to end](https://agenticorg.ai/docs/oacp-how-it-works): Follow your shop's facts through seven steps: signed by Grantex, verified and kept by AgenticOrg, decided by the arbiter, recorded in the ledger and rendered for every buyer agent.
-- [A purchase, step by step](https://agenticorg.ai/docs/oacp-buyer-journey): Walk through one agent purchase: Intent, Cart and Payment mandates, the buyer's passkey, RBI AFA for UPI AutoPay, the arbiter's decision, the payment and the order.
+- [A purchase, step by step](https://agenticorg.ai/docs/oacp-buyer-journey): Walk through one purchase as it works today: the buyer's agent opens a checkout, the arbiter checks your signed facts and limits, the buyer pays on your own Shopify checkout or Plural page, and the order reaches you. Agent-executed payment with mandates is built and switched off.
 - [Merchant setup checklist](https://agenticorg.ai/docs/oacp-merchant-setup): A numbered checklist from creating your shop, your catalog and Grantex enrolment to the DNS TXT step, your UCP profile, checkout, the ACP feed and MCP tools, and what stays off until a payment sandbox run.
 - [Sell everywhere: one switch for every AI surface](https://agenticorg.ai/docs/oacp-sell-everywhere): One page from a new shop to every AI surface: connect Shopify or upload a catalog, set policies and order limits, then turn it on. Buyers find you in ChatGPT, Claude and other AI apps, on Telegram and the open web. You stay the seller.
 - [Getting paid: buyers pay on your own page](https://agenticorg.ai/docs/oacp-getting-paid): Choose where buyers pay: your own Shopify checkout or your Plural account. What the buyer sees, the Orders page and the email you get for each order. AgenticOrg never takes the money.
@@ -3699,10 +3700,99 @@ Use the repository's reviewed deployment path and migration-first process. Stric
 The public user manual is available under `/docs` in the UI build. `docs.agenticorg.ai` should be a DNS **subdomain**, not a separate nameserver delegation by default. Hosting/TLS must route that hostname to the reviewed UI/static documentation service before publishing the link. The repository's documentation-domain runbook explains the release checks and ownership; no DNS change is made by reading this guide.
 
 
+### Sell through AI assistants: start here
+
+URL: https://agenticorg.ai/docs/oacp-start-here
+Audience: Anyone new to selling through AI assistants. Reviewed: 2026-10-30.
+
+In 30 seconds:
+
+- AI assistants such as ChatGPT and Claude can now shop for people. AgenticOrg lets your shop sell to them.
+- You set up once: add your products from Shopify or a spreadsheet, write your rules, set your limits and choose where you get paid.
+- A buyer asks their assistant for something. It finds your shop, fills the cart and asks for a payment link.
+- The buyer pays you on your own payment page. The assistant can never pay by itself.
+- You get the order with the delivery address. The video below shows one real order, start to finish.
+
+#### Watch one real order
+
+This recording was made on the live AgenticOrg service with a demo coffee shop, a demo buyer and a Plural test payment. Every screen is the real product, and every answer from the shop's side comes live from AgenticOrg. The buyer's assistant is shown as a simple console that makes the same calls an AI app makes.
+
+Video: One real order, start to finish. A shop owner sets up a demo coffee shop: products from a spreadsheet (a Shopify store connects in one step instead), rules, a shipping fee, limits and their own Plural account. A buyer's AI assistant finds the shop, fills the cart and gets a payment link. The buyer pays the shop, and the order reaches the shop owner with the delivery address. Narrated, with English captions. Watch it at /media/docs/oacp-commerce-walkthrough.mp4 (English captions at /media/docs/oacp-commerce-walkthrough.vtt).
+
+#### How it works, in three parts
+
+### 1. You set up your shop once
+
+It takes about ten minutes, on one page in AgenticOrg: **Sell everywhere** (`/dashboard/sell-everywhere`).
+
+1. **Create your shop.** Give it a name.
+2. **Add your products.** Pick the way that suits you:
+   - **On Shopify?** Connect your store. In your Shopify admin, create an app that may read products and stock, then paste your store address and its access token. AgenticOrg reads your products, prices and stock by itself and never changes them.
+   - **Not on Shopify?** Upload a spreadsheet (a CSV file) with your products, prices and stock.
+3. **Write your rules.** Your returns and delivery policy. Without Shopify, also set a shipping fee; Shopify shops use their Shopify shipping rates.
+4. **Set your limits.** The biggest single order, the most per day and the most items in one order. An AI assistant can never go over them. Nothing is set for you.
+5. **Choose where you get paid.** Your own Shopify checkout, or your own Plural account.
+6. **Turn it on.** AgenticOrg gives your shop a web address, such as `your-shop.agenticorg.ai`, and Grantex checks your products, prices and stock. Once that address is live, usually within minutes and at most an hour, buyers' assistants can find you.
+
+Figure: One switch, every surface. You turn it on once. AgenticOrg lists your shop and connects it to each surface. Buyers finish and pay with you.
+
+### 2. A buyer shops through their AI assistant
+
+- The buyer connects their assistant to AgenticOrg once: ChatGPT, Claude or another app that can add an MCP server, using `https://mcp.agenticorg.ai/mcp`. Or they open the AgenticOrg shopping bot on Telegram.
+- They ask in their own words, for example: "Two packs of filter coffee, delivered to Bengaluru."
+- The assistant finds your shop, picks the product, adds the delivery address and the shipping, and asks for a payment link.
+- AgenticOrg checks the order against your limits and the facts Grantex checked, records the decision, and only then hands back your payment link. If something is off, for example the order is over your limit, no link is given and the reason is recorded.
+
+### 3. The buyer pays you, and you get the order
+
+Figure: The buyer pays on your page. When the checkout is ready, AgenticOrg checks your shop's facts and limits, then the buyer gets your payment link and pays you there. AgenticOrg never takes the money.
+
+- The buyer pays on **your** page: your Shopify checkout, or a Plural payment page under your own Plural account (card, UPI or net banking). They confirm the payment there themselves.
+- A Plural order appears on your **Orders** page (`/dashboard/orders`) with the items, the amount and the delivery address, and your administrators get an email. A Shopify order appears in your Shopify admin, like any other.
+- You pack and ship it as usual.
+
+#### Who does what
+
+| Who | Does | Never does |
+| --- | --- | --- |
+| You, the shop owner | Add products, write rules, set limits, choose where you get paid, ship the order | Give up the sale: you stay the seller |
+| The buyer | Asks for what they want, checks the order and pays you | Share card or UPI details with the assistant |
+| The buyer's AI assistant | Finds your shop, fills the cart, asks for a payment link | Pay on its own or go over your limits |
+| AgenticOrg | Lists your shop, checks every order against your limits, records every decision | Hold the buyer's money |
+| Grantex | Checks and signs your products, prices and stock | Sell anything or take payments |
+
+#### What you need
+
+- An AgenticOrg account where you can open **Sell everywhere**.
+- Your products: a Shopify store, or a spreadsheet.
+- A way to get paid: your Shopify store, or a Plural account. Without one, buyers are told to finish the purchase with you directly.
+
+#### Quick answers
+
+**Do I need Shopify?** No. A spreadsheet works just as well. Shopify only saves you typing, and lets buyers pay in your own Shopify checkout.
+
+**Can the AI assistant spend money without the buyer?** No. It can only ask for a payment link. The buyer opens the link and pays you themselves.
+
+**Where does the money go?** Straight to you, through your own Shopify checkout or Plural account. AgenticOrg never touches it.
+
+**Can I stop selling this way?** Yes. Choose **Pause** on the Sell everywhere page and your shop leaves the network at once. Your shop name and web address stay yours.
+
+**Am I in Google Gemini, Microsoft Copilot or Perplexity?** Not yet. AgenticOrg is registering with each of them for every shop on the network; the Sell everywhere page shows each one as it comes.
+
+#### Go deeper
+
+- [Sell everywhere: one switch for every AI surface](/docs/oacp-sell-everywhere): every step of the setup page.
+- [Getting paid: buyers pay on your own page](/docs/oacp-getting-paid): Shopify checkout, Plural, the Orders page and the email.
+- [What OACP is and why you need it](/docs/oacp-overview): the trust layer underneath, for the curious.
+- [How OACP works, end to end](/docs/oacp-how-it-works): how your facts are checked, decided and recorded.
+- [Example: Nilgiri Tea House](/docs/oacp-example-nilgiri-tea): a live example shop you can try in two minutes.
+- [OACP questions and answers](/docs/oacp-faq).
+
+
 ### What OACP is and why you need it
 
 URL: https://agenticorg.ai/docs/oacp-overview
-Audience: Merchants and business owners. Reviewed: 2026-10-21.
+Audience: Merchants and business owners. Reviewed: 2026-10-30.
 
 In 30 seconds:
 
@@ -3711,6 +3801,12 @@ In 30 seconds:
 - OACP is one trust layer underneath them. You state your facts once, Grantex signs them, and AgenticOrg checks, decides and records.
 - Each standard then receives the same facts in its own format. Revoke a fact once and every channel stops using it.
 - OACP feeds the standards. It does not replace them, and it is not a certification.
+
+#### Watch a real order, end to end
+
+This recording follows one real order on the live service, from the shop owner's setup to the buyer paying the shop. New to all this? Start with [Sell through AI assistants: start here](/docs/oacp-start-here), which explains it in plain words. The rest of this guide covers the trust layer underneath.
+
+Video: A real OACP order, end to end. Recorded on the live service with a demo shop and a Plural test payment. The shop owner adds products (a Shopify store connects in one step; the demo shop uploads a spreadsheet), sets rules, limits and their own Plural account, and turns Sell everywhere on. A buyer's AI assistant finds the shop through the AgenticOrg MCP server, fills the cart and gets a payment link. The buyer pays the shop, and the order reaches the Orders page with the delivery address. Narrated, with English captions. Watch it at /media/docs/oacp-commerce-walkthrough.mp4 (English captions at /media/docs/oacp-commerce-walkthrough.vtt).
 
 #### The short version
 
@@ -3721,12 +3817,6 @@ It is a safety layer for selling to AI agents. It sits under the agent standards
 Think of it as one source of truth for your shop. Every agent channel reads from it. Every purchase passes through the same rules. Every decision lands in the same record.
 
 Figure: Five copies versus one layer. On the left, each standard is wired on its own, so the shop keeps five sets of facts, keys and logs. On the right, the shop feeds one OACP layer, and adapters render it for every buyer agent.
-
-#### Watch a real order, end to end
-
-This recording follows one real order on the live service, from the merchant's setup to the buyer paying the merchant. The rest of this guide, and the guides it links to, explain each step.
-
-Video: A real OACP order, end to end. Recorded on the live service with a demo shop and a Plural sandbox payment. A merchant sets up the shop in Sell everywhere. A buyer's AI agent finds it through the AgenticOrg MCP server, builds the order and gets a payment link. The buyer pays the merchant on the merchant's Plural page, and the order appears on the Orders page. Narrated, with English captions. Watch it at /media/docs/oacp-commerce-walkthrough.mp4 (English captions at /media/docs/oacp-commerce-walkthrough.vtt).
 
 #### Why sellers need it
 
@@ -4066,7 +4156,7 @@ Most steps take a few minutes. Waiting for DNS and the certificate usually takes
 ### How OACP works, end to end
 
 URL: https://agenticorg.ai/docs/oacp-how-it-works
-Audience: Merchants, product and platform teams. Reviewed: 2026-10-21.
+Audience: Merchants, product and platform teams. Reviewed: 2026-10-30.
 
 In 30 seconds:
 
@@ -4086,7 +4176,7 @@ Each step has one owner. The next sections explain them one at a time.
 
 The recording below runs the whole flow once on the live service: the shop states its facts, Grantex verifies them, the arbiter checks the order against the shop's limits, and the buyer gets the merchant's payment link.
 
-Video: A real OACP order, end to end. Recorded on the live service with a demo shop and a Plural sandbox payment. A merchant sets up the shop in Sell everywhere. A buyer's AI agent finds it through the AgenticOrg MCP server, builds the order and gets a payment link. The buyer pays the merchant on the merchant's Plural page, and the order appears on the Orders page. Narrated, with English captions. Watch it at /media/docs/oacp-commerce-walkthrough.mp4 (English captions at /media/docs/oacp-commerce-walkthrough.vtt).
+Video: A real OACP order, end to end. Recorded on the live service with a demo shop and a Plural test payment. The shop owner adds products (a Shopify store connects in one step; the demo shop uploads a spreadsheet), sets rules, limits and their own Plural account, and turns Sell everywhere on. A buyer's AI assistant finds the shop through the AgenticOrg MCP server, fills the cart and gets a payment link. The buyer pays the shop, and the order reaches the Orders page with the delivery address. Narrated, with English captions. Watch it at /media/docs/oacp-commerce-walkthrough.mp4 (English captions at /media/docs/oacp-commerce-walkthrough.vtt).
 
 #### Step 1. Your shop states its facts
 
@@ -4173,7 +4263,7 @@ Hands over the payment link | After a consumed allow, the buyer gets a link to y
 ### A purchase, step by step
 
 URL: https://agenticorg.ai/docs/oacp-buyer-journey
-Audience: Merchants and agent platform teams. Reviewed: 2026-10-21.
+Audience: Merchants and agent platform teams. Reviewed: 2026-10-30.
 
 In 30 seconds:
 
@@ -4391,7 +4481,7 @@ Mandates matter only for agent-executed payment. A payment link needs none: the 
 ### Sell everywhere: one switch for every AI surface
 
 URL: https://agenticorg.ai/docs/oacp-sell-everywhere
-Audience: Merchants and business owners. Reviewed: 2026-10-29.
+Audience: Merchants and business owners. Reviewed: 2026-10-30.
 
 In 30 seconds:
 
@@ -4417,7 +4507,7 @@ Figure: One switch, every surface. You turn it on once. AgenticOrg lists your sh
 
 The recording below shows each step on this page for a demo coffee shop. It then follows a buyer's AI agent as it shops there and the buyer pays on the shop's Plural page.
 
-Video: A real OACP order, end to end. Recorded on the live service with a demo shop and a Plural sandbox payment. A merchant sets up the shop in Sell everywhere. A buyer's AI agent finds it through the AgenticOrg MCP server, builds the order and gets a payment link. The buyer pays the merchant on the merchant's Plural page, and the order appears on the Orders page. Narrated, with English captions. Watch it at /media/docs/oacp-commerce-walkthrough.mp4 (English captions at /media/docs/oacp-commerce-walkthrough.vtt).
+Video: A real OACP order, end to end. Recorded on the live service with a demo shop and a Plural test payment. The shop owner adds products (a Shopify store connects in one step; the demo shop uploads a spreadsheet), sets rules, limits and their own Plural account, and turns Sell everywhere on. A buyer's AI assistant finds the shop through the AgenticOrg MCP server, fills the cart and gets a payment link. The buyer pays the shop, and the order reaches the Orders page with the delivery address. Narrated, with English captions. Watch it at /media/docs/oacp-commerce-walkthrough.mp4 (English captions at /media/docs/oacp-commerce-walkthrough.vtt).
 
 #### Set up and turn it on
 
@@ -4572,7 +4662,7 @@ network Complete that carries a payment instrument, decision or mandate is refus
 ### Getting paid: buyers pay on your own page
 
 URL: https://agenticorg.ai/docs/oacp-getting-paid
-Audience: Merchants and business owners. Reviewed: 2026-10-29.
+Audience: Merchants and business owners. Reviewed: 2026-10-30.
 
 In 30 seconds:
 
@@ -5155,7 +5245,7 @@ The full table, with the exact turn-on condition and rollback for each switch, i
 ### OACP FAQ
 
 URL: https://agenticorg.ai/docs/oacp-faq
-Audience: Merchants. Reviewed: 2026-10-21.
+Audience: Merchants. Reviewed: 2026-10-30.
 
 In 30 seconds:
 

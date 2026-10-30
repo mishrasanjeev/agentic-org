@@ -454,8 +454,8 @@ export default function Documentation() {
                 <Link to="/docs/ai-spend-intelligence">
                   AI spend and invoice reconciliation
                 </Link>
-                <Link to="/docs/oacp-overview">
-                  OACP: agentic commerce, made safe
+                <Link to="/docs/oacp-start-here">
+                  OACP: sell through AI assistants
                 </Link>
               </div>
               <div className="docs-home-note">

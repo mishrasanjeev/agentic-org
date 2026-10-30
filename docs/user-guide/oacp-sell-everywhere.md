@@ -25,7 +25,7 @@ sell-everywhere-network | One switch, every surface | You turn it on once. Agent
 The recording below shows each step on this page for a demo coffee shop. It then follows a buyer's AI agent as it shops there and the buyer pays on the shop's Plural page.
 
 ```video
-oacp-commerce-walkthrough | A real OACP order, end to end | Recorded on the live service with a demo shop and a Plural sandbox payment. A merchant sets up the shop in Sell everywhere. A buyer's AI agent finds it through the AgenticOrg MCP server, builds the order and gets a payment link. The buyer pays the merchant on the merchant's Plural page, and the order appears on the Orders page. Narrated, with English captions.
+oacp-commerce-walkthrough | A real OACP order, end to end | Recorded on the live service with a demo shop and a Plural test payment. The shop owner adds products (a Shopify store connects in one step; the demo shop uploads a spreadsheet), sets rules, limits and their own Plural account, and turns Sell everywhere on. A buyer's AI assistant finds the shop through the AgenticOrg MCP server, fills the cart and gets a payment link. The buyer pays the shop, and the order reaches the Orders page with the delivery address. Narrated, with English captions.
 ```
 
 ## Set up and turn it on

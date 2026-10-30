@@ -6,6 +6,14 @@ Each standard then receives the same facts in its own format. Revoke a fact once
 OACP feeds the standards. It does not replace them, and it is not a certification.
 ```
 
+## Watch a real order, end to end
+
+This recording follows one real order on the live service, from the shop owner's setup to the buyer paying the shop. New to all this? Start with [Sell through AI assistants: start here](/docs/oacp-start-here), which explains it in plain words. The rest of this guide covers the trust layer underneath.
+
+```video
+oacp-commerce-walkthrough | A real OACP order, end to end | Recorded on the live service with a demo shop and a Plural test payment. The shop owner adds products (a Shopify store connects in one step; the demo shop uploads a spreadsheet), sets rules, limits and their own Plural account, and turns Sell everywhere on. A buyer's AI assistant finds the shop through the AgenticOrg MCP server, fills the cart and gets a payment link. The buyer pays the shop, and the order reaches the Orders page with the delivery address. Narrated, with English captions.
+```
+
 ## The short version
 
 OACP stands for Open Agentic Commerce Protocol.
@@ -16,14 +24,6 @@ Think of it as one source of truth for your shop. Every agent channel reads from
 
 ```figure
 oacp-five-copies | Five copies versus one layer | On the left, each standard is wired on its own, so the shop keeps five sets of facts, keys and logs. On the right, the shop feeds one OACP layer, and adapters render it for every buyer agent.
-```
-
-## Watch a real order, end to end
-
-This recording follows one real order on the live service, from the merchant's setup to the buyer paying the merchant. The rest of this guide, and the guides it links to, explain each step.
-
-```video
-oacp-commerce-walkthrough | A real OACP order, end to end | Recorded on the live service with a demo shop and a Plural sandbox payment. A merchant sets up the shop in Sell everywhere. A buyer's AI agent finds it through the AgenticOrg MCP server, builds the order and gets a payment link. The buyer pays the merchant on the merchant's Plural page, and the order appears on the Orders page. Narrated, with English captions.
 ```
 
 ## Why sellers need it
