@@ -144,9 +144,10 @@ export function renderGuide(markdown) {
       if (videos.some((item) => item.id === video.id)) throw new Error(`Duplicate video in one guide: ${video.id}`);
       videos.push(video);
       const base = `${VIDEO_PATH}/${video.id}`;
+      // preload="none": the guide neither waits for nor downloads the video until the reader plays it.
       return (
         `<figure class="docs-video" aria-labelledby="docs-video-${video.id}-title">` +
-        `<video controls preload="metadata" playsinline poster="${base}.jpg" aria-describedby="docs-video-${video.id}-caption">` +
+        `<video controls preload="none" playsinline poster="${base}.jpg" aria-describedby="docs-video-${video.id}-caption">` +
         `<source src="${base}.mp4" type="video/mp4">` +
         `<track kind="captions" src="${base}.vtt" srclang="en" label="English" default>` +
         `</video>` +
