@@ -14,15 +14,19 @@ request title and body).
 
 Text is split into lines on "\\n" alone, as git splits a diff; nothing else
 (not "\\r", "\\f" or U+2028) ends a line. A line that is not UTF-8 is also read
-without its NUL bytes and, if it holds no control bytes, as Windows-1252 (see
-``line_texts``). A binary file - one git's diff calls binary, judged with the
-base commit's attributes so a change cannot reclassify its own files - is read
-whole by object id: as text line by line when it is text with NUL bytes in it,
-UTF-16 or UTF-32, and otherwise for the runs of readable text inside it, where
-video and image metadata keep names; there, terms shorter than five characters
-are left out, as random bytes spell those by chance (see ``_RUN_MIN_CHARS``
-and ``Report.check_file``). ``audit`` reads every file the same way. This
-needs git 2.40 or later (``--attr-source``).
+without its NUL bytes and, if it holds no other control bytes, as Windows-1252
+(see ``line_texts``). Every file the change adds or changes is read by object
+id. One in UTF-16 or UTF-32 (with a byte-order mark, or NUL bytes where they
+fall in that encoding) is decoded and checked line by line, whether git diffs
+it as text or calls it binary. Any other binary file - one git's diff calls
+binary, judged with the base commit's attributes so a change cannot reclassify
+its own files - is checked line by line when it is text apart from its NUL
+bytes and a few odd bytes, and otherwise for the runs of readable text inside
+it, where video and image metadata keep names; there, a term shorter than five
+characters counts only as a word of prose, as random bytes spell short terms
+by chance inside other words (see ``_RUN_MIN_CHARS`` and
+``Report.check_file``). ``audit`` reads every file the same way. This needs
+git 2.40 or later (``--attr-source``).
 
 Each input is split into word tokens - on punctuation, whitespace, digit
 boundaries and camelCase - and every run of consecutive tokens, up to ``max-tokens`` plus a
@@ -63,6 +67,7 @@ import argparse
 import contextlib
 import hashlib
 import heapq
+import itertools
 import os
 import re
 import secrets
@@ -70,7 +75,7 @@ import subprocess
 import sys
 import tempfile
 import unicodedata
-from collections.abc import Iterable, Iterator
+from collections.abc import Container, Iterable, Iterator
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -122,15 +127,45 @@ def looks_encoded(run: str) -> bool:
     return changes / max(len(body) - 1, 1) >= _ENCODED_MIN_TRANSITIONS
 
 
-def tokens(text: str) -> list[str]:
-    """Word tokens of ``text``: accents stripped, split on case and digit boundaries."""
+def _normalise(text: str) -> str:
+    """``text`` as tokens are read from it: accents stripped, encoded data blanked out."""
     if text.isascii():
         stripped = text  # nothing to decompose (and much faster for the many runs in binary files)
     else:
         decomposed = unicodedata.normalize("NFKD", text)
         stripped = "".join(ch for ch in decomposed if not unicodedata.combining(ch))
-    words = _RUN_RE.sub(lambda m: " " if looks_encoded(m.group()) else m.group(), stripped)
-    return [token.lower() for token in _TOKEN_RE.findall(words)]
+    return _RUN_RE.sub(lambda m: " " if looks_encoded(m.group()) else m.group(), stripped)
+
+
+def tokens(text: str) -> list[str]:
+    """Word tokens of ``text``: accents stripped, split on case and digit boundaries."""
+    return [token.lower() for token in _TOKEN_RE.findall(_normalise(text))]
+
+
+# Characters a token is made of; a token with none of these on either side is a whole word.
+_WORD_CHARS = frozenset("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789")
+# The length of the other word a run of binary data must hold for a short term in it to count.
+_PROSE_WORD_CHARS = 3
+_WHITESPACE = re.compile(r"\s")
+
+
+def _letter_word(token: str) -> bool:
+    return len(token) >= _PROSE_WORD_CHARS and token.isalpha()
+
+
+def _prose_word(text: str, start: int, end: int, *, others: int) -> bool:
+    """Whether the token at ``text[start:end]`` stands as a word of prose.
+
+    It must be a whole word (no letter or digit on either side) with whitespace
+    right before or after it, and ``text`` must hold at least one other word
+    of ``_PROSE_WORD_CHARS`` or more letters (``others``): "Encoded with Xyzw
+    Studio", not "q;Xyzw/7". See ``_RUN_MIN_CHARS`` for why.
+    """
+    before = text[start - 1] if start else ""
+    after = text[end] if end < len(text) else ""
+    return (
+        others > 0 and before not in _WORD_CHARS and after not in _WORD_CHARS and (before.isspace() or after.isspace())
+    )
 
 
 def candidates(text: str, max_tokens: int) -> Iterator[tuple[int, str]]:
@@ -140,7 +175,10 @@ def candidates(text: str, max_tokens: int) -> Iterator[tuple[int, str]]:
     tokens. Every tail of a token at least ``MIN_SUFFIX_CHARS`` long is also a
     candidate on its own, for a term glued to the end of a word.
     """
-    words = tokens(text)
+    return _joined(tokens(text), max_tokens)
+
+
+def _joined(words: list[str], max_tokens: int) -> Iterator[tuple[int, str]]:
     window = max_tokens + WINDOW_HEADROOM
     for start, first in enumerate(words):
         joined = first
@@ -169,11 +207,29 @@ class Denylist:
     hashes: frozenset[str]
 
     def matches(self, text: str, *, min_chars: int = 1) -> list[int]:
-        """Token positions in ``text`` where a denylisted term of at least ``min_chars`` characters starts."""
+        """Token positions in ``text`` where a denylisted term starts.
+
+        A term shorter than ``min_chars`` characters counts only as a word of
+        prose (``_prose_word``): never joined to its neighbours, nor as the
+        tail of a longer word.
+        """
+        normalised = _normalise(text)
+        words = [token.lower() for token in _TOKEN_RE.findall(normalised)]
         found: list[int] = []
-        for start, key in candidates(text, self.max_tokens):
+        for start, key in _joined(words, self.max_tokens):
             if (not found or found[-1] != start) and len(key) >= min_chars and digest(self.salt, key) in self.hashes:
                 found.append(start)
+        if min_chars > 1 and _WHITESPACE.search(normalised):
+            hits = [
+                i for i, word in enumerate(words) if len(word) < min_chars and digest(self.salt, word) in self.hashes
+            ]
+            if hits:  # rare: only now is it worth finding where the words are
+                spans = [token.span() for token in _TOKEN_RE.finditer(normalised)]
+                letter_words = sum(1 for word in words if _letter_word(word))
+                short = {
+                    i for i in hits if _prose_word(normalised, *spans[i], others=letter_words - _letter_word(words[i]))
+                }
+                found = sorted(short.union(found))
         return found
 
 
@@ -269,6 +325,7 @@ def house_terms(text: str) -> list[TermMatch]:
 
 # Bytes no line of text holds: C0 controls other than whitespace, and DEL.
 _CONTROL_BYTES = re.compile(rb"[\x00-\x08\x0e-\x1f\x7f]")
+_CONTROL_BYTE_SET = bytes([*range(0x09), *range(0x0E, 0x20), 0x7F])
 
 
 def _utf8(data: bytes) -> str | None:
@@ -283,19 +340,47 @@ def line_texts(raw: bytes) -> list[str]:
 
     The line is read as UTF-8, each invalid byte becoming a word break. A line
     holding NUL bytes is also read with them removed (ASCII text stored as
-    UTF-16 or UTF-32, or a NUL wedged inside a word). A line that is not UTF-8
-    and holds no control bytes is also read as Windows-1252, so legacy 8-bit
-    text keeps its accented letters.
+    UTF-16 or UTF-32, or a NUL wedged inside a word). A line that is not UTF-8,
+    even without its NULs, is also read that way as Windows-1252, so legacy
+    8-bit text keeps its accented letters, unless it holds other control bytes:
+    those mark binary data, in which Windows-1252 would find a letter in nearly
+    every byte.
     """
     text = _utf8(raw)
     if text is not None and "\0" not in text:
         return [text]
     readings = [raw.decode("utf-8", "replace")]
-    if b"\0" in raw:
-        readings.append(raw.replace(b"\0", b"").decode("utf-8", "replace"))
-    elif not _CONTROL_BYTES.search(raw):
-        readings.append(raw.decode("cp1252", "replace"))
+    stripped = raw.replace(b"\0", b"")
+    if len(stripped) != len(raw):
+        readings.append(stripped.decode("utf-8", "replace"))
+    if _utf8(stripped) is None and not _CONTROL_BYTES.search(stripped):
+        readings.append(stripped.decode("cp1252", "replace"))
     return readings
+
+
+# Bytes are text, once their NUL bytes are removed, when odd bytes - control
+# bytes and bytes that are not part of UTF-8 - make up at most 2% of them, or
+# number at most 8. Text holds almost none, so a stray control or invalid byte
+# in a text file, or a few, leaves it text. Compressed data such as video,
+# images and archives is close to random, and there more than half the bytes
+# are odd (11% control bytes, and most bytes from 0x80 up); executables hold
+# more. Text is read for terms of any length (``line_texts``), which in random
+# bytes finds the committed list's terms by chance about once in 2 MB, so the
+# limits keep random-looking bytes in a file read as text to about 4% of it,
+# or a dozen bytes. Legacy 8-bit text with NUL bytes in it can fall on the
+# binary side, as its accented letters are not UTF-8.
+_TEXT_MAX_ODD_SHARE = 0.02
+_TEXT_MAX_ODD = 8
+
+
+def _mostly_text(data: bytes) -> bool:
+    """Whether ``data`` (without NUL bytes) is text by the measure above."""
+    limit = max(_TEXT_MAX_ODD, len(data) * _TEXT_MAX_ODD_SHARE)
+    controls = len(data) - len(data.translate(None, _CONTROL_BYTE_SET))
+    if controls > limit:
+        return False  # most binary data: no need to decode it
+    not_utf8 = len(data) - len(data.decode("utf-8", "ignore").encode("utf-8"))
+    return controls + not_utf8 <= limit
 
 
 _WIDE_BOMS = (
@@ -345,24 +430,36 @@ def _wide_text(data: bytes) -> tuple[str, str] | None:
 
 
 # Readable text inside binary data is checked in runs of at least five
-# characters (readable_runs), for terms of at least five letters and digits
-# (Report.check_file). A metadata value - a title, artist or encoder tag in a
-# video, a field in image metadata - is a run of its own between binary bytes,
-# so a five-letter term standing alone there is still found. Compressed media
-# is close to random bytes, and there short terms turn up by chance: in 3 GB
-# of random bytes a printable run spelled one of the committed list's
-# four-character terms 29 times (about once per 100 MB; a run minimum of eight
-# still left one in 600 MB), while no term of five or more characters matched
-# at all, and neither did anything in the 31 MB of videos and images in the
-# repository's history. A binary file cannot be reworded around a chance
-# match, so terms of four characters or fewer are only looked for in text. A
-# shorter run cannot hold a five-character term, so none is read.
+# characters (readable_runs). A metadata value - a title, artist or encoder tag
+# in a video, a field in image metadata - is a run of its own between binary
+# bytes, so a five-letter term standing alone there is still found, and so is
+# a shorter term standing as a word in a longer value ("Encoded with Xyzw
+# Studio"). Compressed media is close to random bytes, and there short terms
+# turn up by chance inside other words: in 3 GB of random bytes a printable run
+# spelled one of the committed list's four-character terms 29 times (about
+# once per 100 MB; a run minimum of eight still left one in 600 MB), while no
+# term of five or more characters matched at all, and neither did anything in
+# the 31 MB of videos and images in the repository's history. So in a run a
+# term shorter than five characters counts only as a word of prose
+# (``_prose_word``): a whole word, next to whitespace, in a run with another
+# word of three or more letters. 1 GB of random bytes held 14,150 whole
+# four-letter words next to whitespace, which would spell one of the two
+# committed four-character terms about once in 16 GB, and 302 that also had
+# another word beside them: about once in 750 GB. With these rules that 1 GB
+# gave no chance match of any committed term. A run shorter than five
+# characters is not read: a lone metadata value that short is too often a
+# chance one.
 _RUN_MIN_CHARS = 5
 # A UTF-8 run: printable ASCII, whitespace other than "\n" (which ends a run as
 # it ends a line) and any decodable character outside the C0 and C1 controls,
 # so accented letters and non-ASCII spaces stay inside a run. Undecodable bytes
 # are read as lone surrogates (U+DC80-U+DCFF), which end a run.
 _TEXT_RUN = re.compile(r"[\t\v\f\r\x20-\x7e\xa0-\ud7ff\ue000-\U0010ffff]" + f"{{{_RUN_MIN_CHARS},}}")
+# A single NUL or control byte between two words of two or more letters is read
+# as the space it stands for ("Acme<NUL>Verify"), so the run goes on and the
+# words are checked together. Random bytes hold that about once in 5,000
+# bytes, which makes their runs about 4% longer in all.
+_RUN_GLUE = re.compile(r"[\x00-\x08\x0e-\x1f\x7f](?<=[^\W\d_]{2}.)(?=[^\W\d_]{2})")
 # A UTF-16 or UTF-32 run, in either byte order: ASCII characters or Latin-1
 # letters two (or four) bytes apart, with NULs between them. The pattern starts
 # at a NUL so the search can skip ahead quickly; the character before that
@@ -375,7 +472,8 @@ _WIDE_RUNS = {
 
 
 def _utf8_runs(data: bytes) -> Iterator[tuple[int, str]]:
-    text = data.decode("utf-8", "surrogateescape")
+    # The glue byte and the space that replaces it are one byte each in UTF-8, so offsets are unchanged.
+    text = _RUN_GLUE.sub(" ", data.decode("utf-8", "surrogateescape"))
     chars = offset = 0
     for match in _TEXT_RUN.finditer(text):
         offset += len(text[chars : match.start()].encode("utf-8", "surrogateescape"))
@@ -396,11 +494,6 @@ def readable_runs(data: bytes) -> Iterator[tuple[int, str]]:
     """(byte offset, text) of each run of readable UTF-8, UTF-16 or UTF-32 text in binary data, in byte order."""
     runs = (_utf8_runs(data), _wide_runs(data, 2), _wide_runs(data, 4))
     return heapq.merge(*runs, key=lambda run: run[0])
-
-
-def _strip_bom(data: bytes) -> bytes:
-    """``data`` without the NUL-free remains of a UTF-16 or UTF-32 byte-order mark."""
-    return data[2:] if data[:2] in (b"\xff\xfe", b"\xfe\xff") else data
 
 
 # ── Git inputs ──────────────────────────────────────────────────────────────
@@ -509,47 +602,62 @@ class Report:
         if warn and texts:
             self.warnings.extend(TermWarning(where, match) for match in house_terms(texts[0]))
 
-    def check_lines(self, where: str, data: bytes) -> None:
+    def check_lines(self, where: str, data: bytes, *, warn: bool = True) -> None:
         """Check bytes line by line, each line read as ``line_texts`` reads it; lines are numbered from 1."""
         text = _utf8(data)
         if text is not None and "\0" not in text:
             for number, line in enumerate(text.split("\n"), start=1):
-                self.check(f"{where}:{number}", line)
+                self.check(f"{where}:{number}", line, warn=warn)
             return
         for number, raw in enumerate(data.split(b"\n"), start=1):
-            self.check(f"{where}:{number}", *line_texts(raw))
+            self.check(f"{where}:{number}", *line_texts(raw), warn=warn)
+
+    def check_wide(self, where: str, data: bytes) -> bool:
+        """Check ``data`` line by line as UTF-16 or UTF-32 text if it is that (``_wide_text``); whether it was.
+
+        Git splits such a file's diff at every 0x0A byte, which also occurs
+        inside characters (U+200A, a hair space, is 0A 20 in UTF-16LE), so its
+        added lines say little; the decoded text is checked whole instead.
+        """
+        wide = _wide_text(data)
+        if wide is None:
+            return False
+        encoding, text = wide
+        label = f"binary, read as {encoding}" if b"\0" in data else f"read as {encoding}"
+        for number, line in enumerate(text.split("\n"), start=1):
+            readings = (line, line.replace("\0", "")) if "\0" in line else (line,)
+            self.check(f"{where}:{number} ({label})", *readings)
+        return True
 
     def check_file(self, where: str, data: bytes) -> None:
         """Check a whole file's bytes: as text if they are text, otherwise the readable runs inside them.
 
-        Bytes without NUL, or that are UTF-8 once their NULs (and what is left
-        of a byte-order mark) are removed, are checked line by line like any
-        added text. UTF-16 and UTF-32 text is decoded and checked line by line;
-        when that finds no term, its readable runs are checked too, for text in
-        another encoding or byte alignment inside it. Anything else is binary
-        data, and each readable run in it is checked (``readable_runs``) for
-        terms of at least ``_RUN_MIN_CHARS`` characters.
+        UTF-16 and UTF-32 text is decoded and checked line by line
+        (``check_wide``); when that finds no term, the bytes are read as below
+        too, for text in another encoding or byte alignment inside them. Bytes
+        without NUL are checked line by line like any added text, and so are
+        bytes that are text once their NULs are removed, even with a few
+        control or invalid bytes in them (``_mostly_text``). Anything else is
+        binary data, and each readable run in it is checked
+        (``readable_runs``), terms shorter than ``_RUN_MIN_CHARS`` characters
+        only as words of prose.
         """
-        if b"\0" not in data:
-            self.check_lines(where, data)
-            return
-        if _utf8(_strip_bom(data.replace(b"\0", b""))) is not None:
-            for number, raw in enumerate(data.split(b"\n"), start=1):
-                self.check(f"{where}:{number} (binary, read as text)", *line_texts(raw))
-            return
         found = len(self.findings)
-        wide = _wide_text(data)
-        if wide is not None:
-            encoding, text = wide
-            for number, line in enumerate(text.split("\n"), start=1):
-                readings = (line, line.replace("\0", "")) if "\0" in line else (line,)
-                self.check(f"{where}:{number} (binary, read as {encoding})", *readings)
-            if len(self.findings) > found:
-                return
+        wide = self.check_wide(where, data)
+        if len(self.findings) > found:
+            return
+        # The decoded lines of UTF-16 or UTF-32 text have given their warnings.
+        warn = not wide
+        if b"\0" not in data:
+            self.check_lines(where, data, warn=warn)
+            return
+        if _mostly_text(data.replace(b"\0", b"")):
+            for number, raw in enumerate(data.split(b"\n"), start=1):
+                self.check(f"{where}:{number} (binary, read as text)", *line_texts(raw), warn=warn)
+            return
         for offset, run in readable_runs(data):
-            # The runs of UTF-16 or UTF-32 text repeat its lines, which have given their warnings.
             where_run = f"{where} (binary, readable text at byte {offset})"
-            self.check(where_run, run, warn=wide is None, min_chars=_RUN_MIN_CHARS)
+            self.check(where_run, run, warn=warn, min_chars=_RUN_MIN_CHARS)
 
     def add(self, prefix: str, other: Report) -> None:
         """Take over another report's results, with ``prefix`` put before each location."""
@@ -592,7 +700,7 @@ def changes(repo: Path, base: str, head: str) -> list[Change]:
     Binary means git's own check (a ``-`` count in ``--numstat``) with the
     attributes of the base commit, so a ``.gitattributes`` added by the change
     cannot reclassify its files. The patch ``added_lines`` reads uses the same
-    attributes, so it leaves out exactly these files.
+    attributes, so it leaves out the content of these files only.
     """
     out = _git_bytes(
         repo, "diff", "--raw", "--numstat", "-z", "--no-abbrev", *_DIFF_OPTIONS, f"{base}...{head}", attr_source=base
@@ -644,21 +752,28 @@ def _patch_path(target: bytes) -> str:
     return (target[2:] if target.startswith(b"b/") else target).decode("utf-8", "replace")
 
 
-def added_lines(repo: Path, base: str, head: str, *, binary_files: int) -> Iterator[tuple[str, int, bytes]]:
+# A patch header's "index <old>..<new> [mode]" line, with full object ids (--full-index).
+_INDEX_LINE = re.compile(rb"index [0-9a-f]+\.\.([0-9a-f]+)(?: [0-7]+)?")
+
+
+def added_lines(repo: Path, base: str, head: str, *, read_whole: Container[str]) -> Iterator[tuple[str, int, bytes]]:
     """(path, new line number, raw bytes) for every line the range adds to a text file.
 
     The patch is split on "\\n" only, git's own line end, so every line inside
     a hunk starts with "+", "-", " " or "\\" and nothing in a file can look like
-    a header. Binary files appear only as a "Binary files ... differ" line;
-    there must be exactly ``binary_files`` of those (one for each binary file
-    whose content the range changes), and ``Report.check_file`` reads those
-    files instead.
+    a header. A binary file appears only as a "Binary files ... differ" line,
+    and its new object (from the "index" line) must be deleted or in
+    ``read_whole``, the blobs ``Report.check_file`` reads instead: a file the
+    patch leaves out must not go unread. (The reverse does not hold: --numstat
+    also counts an empty file or a new mode as binary, where the patch shows
+    no such line, and reading those whole costs nothing.)
     """
     diff = _git_bytes(
         repo,
         "diff",
         "--unified=0",
         "--no-color",
+        "--full-index",
         "--src-prefix=a/",
         "--dst-prefix=b/",
         *_DIFF_OPTIONS,
@@ -667,7 +782,7 @@ def added_lines(repo: Path, base: str, head: str, *, binary_files: int) -> Itera
     )
     path = ""
     line_no = 0
-    binary_seen = 0
+    new_oid: str | None = None
     # A file's header runs from "diff --git" to its first hunk. "+++ " is a
     # header only there, right after "--- "; inside a hunk the same prefix is
     # an added line that starts with "++" and is checked like any other.
@@ -675,11 +790,16 @@ def added_lines(repo: Path, base: str, head: str, *, binary_files: int) -> Itera
     previous = b""
     for raw in diff.split(b"\n"):
         if raw.startswith(b"diff --git "):
-            in_header, path = True, ""
+            in_header, path, new_oid = True, "", None
         elif in_header and raw.startswith(b"+++ ") and previous.startswith(b"--- "):
             path = _patch_path(raw[4:])
+        elif in_header and raw.startswith(b"index "):
+            index = _INDEX_LINE.fullmatch(raw)
+            new_oid = index.group(1).decode("ascii") if index else None
         elif in_header and raw.startswith(b"Binary files "):
-            binary_seen += 1
+            if new_oid is None or not (_NO_OBJECT.fullmatch(new_oid) or new_oid in read_whole):
+                detail = raw[:200].decode("utf-8", "replace")
+                raise DenylistError(f"git diff shows a binary file that --numstat does not count: {detail}")
         elif raw.startswith(b"@@"):
             match = re.match(rb"@@ -\S+ \+(\d+)", raw)
             if not match:
@@ -692,16 +812,48 @@ def added_lines(repo: Path, base: str, head: str, *, binary_files: int) -> Itera
             yield path, line_no, raw[1:]
             line_no += 1
         previous = raw
-    if binary_seen != binary_files:
-        raise DenylistError(f"git diff shows {binary_seen} binary files where --numstat counts {binary_files}")
 
 
-def commit_messages(repo: Path, base: str, head: str) -> Iterator[tuple[str, bytes]]:
-    """(short id, message bytes) of each commit in the range, read from the commit objects themselves."""
+def _declared_encoding(header: bytes) -> str | None:
+    """The encoding a commit object's ``encoding`` header names, if it has one."""
+    for line in header.split(b"\n"):
+        if line.startswith(b"encoding "):
+            return line[len(b"encoding ") :].decode("ascii", "replace").strip()
+    return None
+
+
+def commit_messages(repo: Path, base: str, head: str) -> Iterator[tuple[str, list[bytes]]]:
+    """(short id, the versions of its message that are checked) of each commit in the range.
+
+    A commit's ``encoding`` header (``i18n.commitEncoding``) names the encoding
+    its message is stored in. The message is read as ``git log
+    --encoding=UTF-8`` shows it, converted from that encoding; as Python
+    decodes it, for an encoding the git build cannot convert; and as stored,
+    in case the header is wrong. Each ``git log -z`` record ends with a NUL,
+    which git refuses in a message; the records must name exactly the commits
+    ``rev-list`` lists.
+    """
     shas = _git(repo, "rev-list", f"{base}..{head}").split()
+    log = _git_bytes(
+        repo, "log", "-z", "--encoding=UTF-8", "--no-show-signature", "--format=%H%n%B", f"{base}..{head}", "--"
+    )
+    records = log.split(b"\0")
+    if records[-1:] == [b""]:
+        records.pop()
+    shown: dict[bytes, bytes] = {}
+    for record in records:
+        sha_line, _, message = record.partition(b"\n")
+        shown[sha_line] = message
+    if len(records) != len(shas) or set(shown) != {sha.encode("ascii") for sha in shas}:
+        raise DenylistError("git log and git rev-list disagree about the commits in the range")
     for sha, data in read_objects(repo, shas, "commit"):
-        _, _, message = data.partition(b"\n\n")
-        yield sha[:12], message
+        header, _, stored = data.partition(b"\n\n")
+        versions = [shown[sha.encode("ascii")], stored]
+        declared = _declared_encoding(header)
+        if declared:
+            with contextlib.suppress(LookupError, UnicodeError):  # not a codec Python has
+                versions.append(stored.decode(declared, "replace").encode("utf-8"))
+        yield sha[:12], list(dict.fromkeys(versions))
 
 
 def current_branch(repo: Path) -> str:
@@ -725,22 +877,31 @@ def scan(
     changed = changes(repo, base_sha, head_sha)
     for change in changed:
         check(f"file path {change.name}", *line_texts(change.path))
-    binary = [change for change in changed if change.binary]
-    # The patch says "Binary files ... differ" only where the content changed, not for a new mode alone.
-    shown = sum(1 for change in binary if change.oid != change.old_oid)
-    for path, line_no, raw in added_lines(repo, base_sha, head_sha, binary_files=shown):
-        check(f"{path}:{line_no}", *line_texts(raw))
     # A deleted file adds nothing, nor does a new mode, and a submodule's commit is not in this repository.
-    readable = [change for change in binary if change.new_content and change.mode != _GITLINK_MODE]
-    per_blob: dict[str, Report] = {}
-    for oid, data in read_objects(repo, dict.fromkeys(change.oid for change in readable), "blob"):
-        per_blob[oid] = Report(denylist)
-        per_blob[oid].check_file("", data)
+    readable = [change for change in changed if change.new_content and change.mode != _GITLINK_MODE]
+    whole = {change.oid for change in readable if change.binary}
+    for path, line_no, raw in added_lines(repo, base_sha, head_sha, read_whole=whole):
+        check(f"{path}:{line_no}", *line_texts(raw))
+    # Every new blob is read once: a binary one is checked whole, and a text one
+    # too if it is UTF-16 or UTF-32, whose added lines git splits at random.
+    ways: dict[str, set[bool]] = {}
     for change in readable:
-        report.add(change.name, per_blob[change.oid])
-    for sha, message in commit_messages(repo, base_sha, head_sha):
-        for offset, raw in enumerate(message.split(b"\n"), start=1):
-            check(f"commit {sha} message line {offset}", *line_texts(raw))
+        ways.setdefault(change.oid, set()).add(change.binary)
+    per_blob: dict[tuple[str, bool], Report] = {}
+    for oid, data in read_objects(repo, ways, "blob"):
+        for binary in ways[oid]:
+            blob_report = per_blob[oid, binary] = Report(denylist)
+            if binary:
+                blob_report.check_file("", data)
+            else:
+                blob_report.check_wide("", data)
+    for change in readable:
+        report.add(change.name, per_blob[change.oid, change.binary])
+    for sha, versions in commit_messages(repo, base_sha, head_sha):
+        lines = itertools.zip_longest(*(version.split(b"\n") for version in versions), fillvalue=b"")
+        for offset, readings in enumerate(lines, start=1):
+            texts = [text for raw in dict.fromkeys(readings) for text in line_texts(raw)]
+            check(f"commit {sha} message line {offset}", *texts)
     branch_name = branch if branch is not None else current_branch(repo)
     check("branch name", branch_name)
     for text_file in text_files:
@@ -757,7 +918,8 @@ def audit(denylist: Denylist, repo: Path, paths: Iterable[str] = ()) -> Report:
     """Check every tracked path and file at the working tree (or those under ``paths``), not just a change.
 
     Each file is read as ``Report.check_file`` reads an added binary file, so
-    a file holding NUL bytes is still checked (as text if it is text).
+    a file holding NUL bytes is still checked (as text if it is text), and
+    UTF-16 or UTF-32 text is decoded first, with or without NUL bytes.
     """
     paths = list(paths)
     names = [name for name in _git_bytes(repo, "ls-files", "-z", "--", *paths).split(b"\0") if name]

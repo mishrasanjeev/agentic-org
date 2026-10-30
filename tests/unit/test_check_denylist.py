@@ -7,6 +7,7 @@ for shape.
 
 from __future__ import annotations
 
+import dataclasses
 import random
 import re
 import subprocess
@@ -297,6 +298,28 @@ def test_a_new_mode_alone_on_a_binary_file_adds_nothing(
     assert "no denylisted terms" in out
 
 
+@pytest.mark.parametrize("delete", [False, True], ids=["added", "deleted"])
+def test_an_empty_file_the_base_marks_binary_can_be_added_or_deleted(
+    repo: Path, hash_file: Path, capsys: pytest.CaptureFixture[str], delete: bool
+) -> None:
+    # This repository's own .gitattributes has "*.pdf binary". --numstat counts
+    # an empty file under it as binary, though the patch has no "Binary files"
+    # line for it: neither side has any content.
+    fixture = "ui/e2e/fixtures/empty.pdf"
+    _commit_bytes(repo, {".gitattributes": b"*.pdf binary\n", **({fixture: b""} if delete else {})}, "attributes")
+    base = _git(repo, "rev-parse", "HEAD")
+    if delete:
+        (repo / fixture).unlink()
+        _git(repo, "commit", "-qam", "drop the fixture")
+    else:
+        _commit_bytes(repo, {fixture: b""}, "an empty upload fixture")
+    numstat = _git(repo, f"--attr-source={base}", "diff", "--numstat", f"{base}...HEAD")
+    assert numstat == f"-\t-\t{fixture}"
+    code, out, err = _scan_from(repo, hash_file, base, capsys)
+    assert code == 0, err
+    assert "no denylisted terms" in out
+
+
 def _commit_entries(repo: Path, entries: dict[str, bytes], message: str = "add media") -> None:
     """Commit files at the top of the tree with git plumbing, for names no checkout can hold (":clip.mp4")."""
     lines = [line for line in _git(repo, "ls-tree", "HEAD").splitlines() if line]
@@ -440,7 +463,8 @@ def test_many_binary_files_scan_without_growing_any_command_line(
     repo: Path, hash_file: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
 ) -> None:
     frames = {f"media/frame-{i:04d}.bin": b"\x00\x01frame\x00" + bytes([i % 200 + 32]) * 64 for i in range(400)}
-    frames["media/frame-0399.bin"] = b"\x00\x01\xff encoded by AcmeVerify Studio \x00"
+    # Control bytes make up most of this one, so it is binary data and its readable runs are checked.
+    frames["media/frame-0399.bin"] = bytes(range(32)) * 4 + b" encoded by AcmeVerify Studio " + bytes(range(32))
     _commit_bytes(repo, frames)
     argvs: list[list[str]] = []
 
@@ -454,7 +478,7 @@ def test_many_binary_files_scan_without_growing_any_command_line(
     monkeypatch.undo()
     assert code == 1, err
     assert out.count("media/frame-") == 1
-    assert "media/frame-0399.bin (binary, readable text at byte 3) (word 3)" in out
+    assert "media/frame-0399.bin (binary, readable text at byte 128) (word 3)" in out
     assert argvs and all("frame-" not in arg for argv in argvs for arg in argv)
     assert max(len(" ".join(argv)) for argv in argvs) < 1_000
 
@@ -530,6 +554,120 @@ def test_a_term_in_utf16_metadata_of_a_binary_file_is_found(
     assert "tools/setup.exe (binary, readable text at byte" in out
 
 
+def _audit(repo: Path, hash_file: Path, capsys: pytest.CaptureFixture[str], *paths: str) -> tuple[int, str]:
+    code = dl.main(["--repo", str(repo), "--hash-file", str(hash_file), "audit", *paths])
+    return code, capsys.readouterr().out
+
+
+def _list_of(tmp_path: Path, *terms: str) -> Path:
+    path = tmp_path / "terms.sha256"
+    path.write_text(dl.render(list(terms), TEST_SALT)[0], encoding="utf-8")
+    return path
+
+
+@pytest.mark.parametrize("encoding", ["utf-16", "utf-16-le", "utf-16-be", "utf-32-le"])
+def test_utf16_and_utf32_text_is_split_into_lines_by_character_not_by_byte(
+    repo: Path, hash_file: Path, capsys: pytest.CaptureFixture[str], encoding: str
+) -> None:
+    # U+200A (a hair space) is the bytes 0A 20 in UTF-16LE: a line end to git
+    # and to a reading that only drops the NULs, but no line end in the text.
+    _commit_bytes(repo, {"docs/notes.txt": "Release notes\nPowered by Acme\N{HAIR SPACE}Verify\n".encode(encoding)})
+    location = f"docs/notes.txt:2 (binary, read as {encoding[:6].upper()}) (word 3)"
+    code, out, _ = _scan(repo, hash_file, capsys)
+    assert code == 1
+    assert location in out
+    assert _audit(repo, hash_file, capsys, "docs") == (1, out.replace("this change", "the tracked files"))
+
+
+@pytest.mark.parametrize("encoding", ["utf-16-le", "utf-16-be"])
+def test_utf16_text_without_a_nul_byte_is_decoded(
+    repo: Path, hash_file: Path, capsys: pytest.CaptureFixture[str], encoding: str
+) -> None:
+    # Latin Extended letters and a thin space have no 00 byte in UTF-16, so git
+    # diffs this file as text; its byte-order mark says what it is. The letters
+    # (A with breve, c with acute, m with acute, ...) fold to the plain term, as
+    # accented letters do in UTF-8.
+    letters = (0x0102, 0x0107, 0x1E3F, 0x0115, 0x2009, 0x1E7C, 0x0115, 0x0155, 0x012D, 0x1E1F, 0x0177)
+    data = ("\N{ZERO WIDTH NO-BREAK SPACE}" + "".join(map(chr, letters))).encode(encoding)
+    assert b"\0" not in data
+    _commit_bytes(repo, {"docs/notes.txt": data})
+    code, out, _ = _scan(repo, hash_file, capsys)
+    assert code == 1
+    assert "docs/notes.txt:1 (read as UTF-16) (word 1)" in out
+    code, out = _audit(repo, hash_file, capsys, "docs")
+    assert code == 1
+    assert "docs/notes.txt:1 (read as UTF-16) (word 1)" in out
+
+
+@pytest.mark.parametrize(
+    "body", [b"intro\xff\nPowered by Acme\x00Verify\n", b"intro\x00\xff\nPowered by Acme\x1fVerify\n"]
+)
+def test_a_text_file_with_a_nul_and_an_invalid_byte_is_still_checked_as_text(
+    repo: Path, hash_file: Path, capsys: pytest.CaptureFixture[str], body: bytes
+) -> None:
+    _commit_bytes(repo, {"docs/notes.md": body})
+    code, out, _ = _scan(repo, hash_file, capsys)
+    assert code == 1
+    assert "docs/notes.md:2 (binary, read as text) (word 3)" in out
+    code, out = _audit(repo, hash_file, capsys, "docs")
+    assert code == 1
+    assert "docs/notes.md:2 (binary, read as text) (word 3)" in out
+
+
+def test_a_four_character_term_in_a_text_file_with_stray_bytes_is_found(
+    repo: Path, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    short = _list_of(tmp_path, "xyzw")
+    _commit_bytes(repo, {"docs/notes.md": b"intro\x00\xff\nPowered by Xyzw\n"})
+    code, out, _ = _scan(repo, short, capsys)
+    assert code == 1
+    assert "docs/notes.md:2 (binary, read as text) (word 3)" in out
+    assert _audit(repo, short, capsys, "docs")[0] == 1
+
+
+@pytest.mark.parametrize("separator", [b"\x00", b"\x1f"])
+def test_words_one_nul_or_control_byte_apart_in_binary_data_are_checked_together(
+    repo: Path, hash_file: Path, capsys: pytest.CaptureFixture[str], separator: bytes
+) -> None:
+    junk = bytes(range(32)) * 8  # NUL and other control bytes: binary data, read for its runs of text
+    _commit_bytes(repo, {"docs/blob.bin": junk + b"Powered by Acme" + separator + b"Verify" + junk})
+    code, out, _ = _scan(repo, hash_file, capsys)
+    assert code == 1
+    assert "docs/blob.bin (binary, readable text at byte 256) (word 3)" in out
+    assert _audit(repo, hash_file, capsys, "docs")[0] == 1
+
+
+def test_a_short_term_standing_as_a_word_in_binary_metadata_is_found(
+    repo: Path, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    short = _list_of(tmp_path, "xyzw")
+    _commit_bytes(repo, {"ui/public/media/walkthrough.mp4": _mp4(b"Encoded with Xyzw Studio", payload_bytes=64 * 1024)})
+    code, out, _ = _scan(repo, short, capsys)
+    assert code == 1
+    assert "walkthrough.mp4 (binary, readable text at byte" in out
+    assert _audit(repo, short, capsys, "ui")[0] == 1
+
+
+@pytest.mark.parametrize(
+    ("run", "counts"),
+    [
+        ("Encoded with Xyzw Studio", True),
+        ("Title: Xyzw", True),
+        ("(c) 2026 Xyzw Media Ltd", True),
+        ("q;Xyzw/7", False),  # no whitespace next to it
+        ("Xyzw 42", False),  # no other word
+        ("XyzwStudio encoded", False),  # part of a longer word
+        ("myxyzw tool", False),  # the tail of a word
+        ("xy zw tool", False),  # joined from two words
+    ],
+)
+def test_a_short_term_in_binary_data_counts_only_as_a_word_of_prose(run: str, counts: bool) -> None:
+    short = _single("xyzw")
+    assert bool(short.matches(run, min_chars=dl._RUN_MIN_CHARS)) is counts
+    if run != "xy zw tool":
+        assert short.matches(run), "in text, every one of these is a match"
+
+
 def test_a_line_in_a_legacy_8_bit_encoding_keeps_its_accents(denylist: dl.Denylist) -> None:
     raw = "vendor Ácme Vérify".encode("cp1252")
     assert not denylist.matches(raw.decode("utf-8", "replace"))
@@ -549,6 +687,47 @@ def test_a_record_separator_in_a_commit_message_hides_nothing(
     code, out, _ = _scan(repo, hash_file, capsys)
     assert code == 1
     assert "message line 1 (word" in out
+
+
+# "Acme Verify" in fullwidth letters (U+FF21 and on), which NFKD folds to ASCII.
+_FULLWIDTH_TERM = "".join(chr(ord(ch) + 0xFEE0) if ch.isalpha() else ch for ch in "Acme Verify")
+_FULLWIDTH_MESSAGE = f"feat: port the {_FULLWIDTH_TERM} adapter\n"
+
+
+@pytest.mark.parametrize(
+    ("declared", "codec", "text"),
+    [
+        ("SHIFT_JIS", "shift_jis", _FULLWIDTH_MESSAGE),
+        ("ISO-2022-JP", "iso2022_jp", _FULLWIDTH_MESSAGE),
+        ("ISO-8859-1", "utf-8", _FULLWIDTH_MESSAGE),
+        ("IBM037", "cp037", "feat: port the Acme Verify adapter\n"),
+    ],
+    ids=["shift-jis", "iso-2022-jp", "wrongly-declared", "ebcdic"],
+)
+def test_a_commit_message_is_read_in_its_declared_encoding_and_as_stored(
+    repo: Path,
+    hash_file: Path,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    declared: str,
+    codec: str,
+    text: str,
+) -> None:
+    # Fullwidth letters fold to the plain term once the message is decoded. The
+    # third message is UTF-8 under a header that says Latin-1, so git log's
+    # conversion garbles it and only the stored bytes read right. Not every git
+    # build can convert EBCDIC (Git for Windows cannot), so Python decodes it.
+    (repo / "providers").mkdir()
+    (repo / "providers" / "mock.py").write_text("ok = True\n")
+    _git(repo, "add", "-A")
+    message = tmp_path / "message.txt"
+    message.write_bytes(text.encode(codec))
+    _git(repo, "-c", f"i18n.commitEncoding={declared}", "commit", "-q", "-F", str(message))
+    stored = subprocess.run(["git", "-C", str(repo), "cat-file", "commit", "HEAD"], capture_output=True, check=True)  # noqa: S603, S607
+    assert f"\nencoding {declared}\n".encode() in stored.stdout
+    code, out, _ = _scan(repo, hash_file, capsys)
+    assert code == 1
+    assert "message line 1 (word 4)" in out
 
 
 def test_a_path_with_a_space_is_reported_by_its_name(
@@ -627,6 +806,47 @@ def test_git_failure_after_refs_resolve_fails_closed(
     code, _, err = _scan(repo, hash_file, capsys)
     assert code == 2
     assert "simulated" in err
+
+
+def test_reading_a_missing_object_or_one_of_another_kind_fails_closed(repo: Path) -> None:
+    commit = _git(repo, "rev-parse", "HEAD")
+    with pytest.raises(dl.DenylistError, match=f"cannot read blob {'1' * 40}: missing"):
+        list(dl.read_objects(repo, ["1" * 40], "blob"))
+    with pytest.raises(dl.DenylistError, match=f"cannot read blob {commit}: commit"):
+        list(dl.read_objects(repo, [commit], "blob"))
+
+
+def test_a_binary_file_the_patch_leaves_out_must_be_read_whole(
+    repo: Path, hash_file: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # Were --numstat and the patch ever to disagree, a file shown only as
+    # "Binary files ... differ" and not read whole would go unchecked.
+    _commit_bytes(repo, {"media/clip.mp4": _VIDEO_LIKE})
+    real_changes = dl.changes
+
+    def counted_as_text(*args: str) -> list[dl.Change]:
+        return [dataclasses.replace(change, binary=False) for change in real_changes(*args)]
+
+    monkeypatch.setattr(dl, "changes", counted_as_text)
+    code, _, err = _scan(repo, hash_file, capsys)
+    assert code == 2
+    assert "git diff shows a binary file that --numstat does not count" in err
+
+
+def test_a_commit_git_log_does_not_show_fails_closed(
+    repo: Path, hash_file: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _commit(repo, {"providers/mock.py": "ok = True\n"})
+    real_git = dl._git_bytes
+
+    def log_without_a_record(repo_path: Path, *args: str, **options: str | None) -> bytes:
+        out = real_git(repo_path, *args, **options)
+        return out.split(b"\0", 1)[1] if args[0] == "log" else out
+
+    monkeypatch.setattr(dl, "_git_bytes", log_without_a_record)
+    code, _, err = _scan(repo, hash_file, capsys)
+    assert code == 2
+    assert "git log and git rev-list disagree" in err
 
 
 def test_missing_hash_file_fails_closed(repo: Path, tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
