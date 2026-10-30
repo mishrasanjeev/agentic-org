@@ -107,8 +107,8 @@ most items per order, in your currency. The daily maximum must be at least the p
 Before a buyer gets a payment link, the arbiter checks the order against these limits. The daily maximum
 counts, in that currency: the payments confirmed today (by the UTC day), the payment links still open
 whichever day they were issued, and every payment link issued today, even after it lapses or its checkout
-is canceled, because the buyer can still pay it. A link stops counting once its payment is confirmed (it
-then counts as paid) or Plural reports the payment failed. Shopify does not tell AgenticOrg when a buyer
+is canceled, because the buyer can still pay it. A link stops counting when its payment becomes an order
+(the order then counts as paid) or when Plural reports the payment failed. Shopify does not tell AgenticOrg when a buyer
 pays, so a Shopify link counts all the day it was issued. An order that would go over the daily maximum
 gets no link.
 

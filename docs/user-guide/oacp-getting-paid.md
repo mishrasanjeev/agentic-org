@@ -41,7 +41,7 @@ You do not need a payment method to turn on Sell everywhere, but until you save 
 When the buyer asks to complete a ready checkout, the arbiter decides first, and the buyer gets a link only on an allow. It checks two things:
 
 - **Your facts are still valid.** The catalog, price, stock and policy facts Grantex signed are fresh and not revoked.
-- **The order is within your limits.** The largest single order, the currency, the most items per order and the daily maximum you set in step 4. The daily maximum counts, in that currency: the payments confirmed today (by the UTC day), the payment links still open whichever day they were issued, and every payment link issued today, even after it lapses or its checkout is canceled, because the buyer can still pay it. A link stops counting once its payment is confirmed (it then counts as paid) or Plural reports the payment failed. Shopify does not tell AgenticOrg when a buyer pays, so a Shopify link counts all the day it was issued.
+- **The order is within your limits.** The largest single order, the currency, the most items per order and the daily maximum you set in step 4. The daily maximum counts, in that currency: the payments confirmed today (by the UTC day), the payment links still open whichever day they were issued, and every payment link issued today, even after it lapses or its checkout is canceled, because the buyer can still pay it. A link stops counting when its payment becomes an order (the order then counts as paid) or when Plural reports the payment failed. Shopify does not tell AgenticOrg when a buyer pays, so a Shopify link counts all the day it was issued.
 
 No buyer mandate is asked for, because the agent holds no payment credential and the buyer pays on your page. The decision is used once and recorded in your ledger. A refusal names the rule that failed and its reason, for example `daily_amount_cap_exceeded`, and no link is issued.
 
@@ -75,4 +75,4 @@ Orders paid in your Shopify checkout appear in your Shopify admin, not on the Or
 | The buyer is told the commerce arbiter refused | The order is over one of your limits, or a signed fact has lapsed. The message names the rule; the decision in your ledger gives the exact reason. |
 | Test fails | Check the client ID and secret and that the environment matches them (Sandbox or Production). |
 | Paid in Plural but no order here | Check the webhook URL in your Plural dashboard. Payments are also checked every minute, so the order appears shortly. |
-| These items cannot be paid for in the shop's Shopify checkout | The items did not come from your Shopify store. Use My Plural account for them. |
+| These items cannot be paid for in the shop's Shopify checkout | An item did not come from your Shopify store, is sold by a unit such as weight, or was ordered more than 9,999 at a time. Use My Plural account for these orders. |
