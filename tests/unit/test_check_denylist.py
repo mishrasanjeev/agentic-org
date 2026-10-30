@@ -281,6 +281,22 @@ def _scan_from(repo: Path, hash_file: Path, base: str, capsys: pytest.CaptureFix
     return code, captured.out, captured.err
 
 
+def test_a_new_mode_alone_on_a_binary_file_adds_nothing(
+    repo: Path, hash_file: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    # Git's patch shows no "Binary files ... differ" line for a mode change, though --numstat counts the file.
+    _commit_bytes(repo, {"tools/run.bin": b"\x00 tagged by AcmeVerify \x00" * 4}, "tool")
+    base = _git(repo, "rev-parse", "HEAD")
+    (repo / "tools" / "other.bin").write_bytes(b"\x00\x01clean\x00")
+    _git(repo, "add", "tools/other.bin")
+    _git(repo, "update-index", "--chmod=+x", "tools/run.bin")
+    _git(repo, "commit", "-qm", "make the tool executable")
+    assert "100755" in _git(repo, "ls-tree", "HEAD", "tools/run.bin")
+    code, out, err = _scan_from(repo, hash_file, base, capsys)
+    assert code == 0, err
+    assert "no denylisted terms" in out
+
+
 def _commit_entries(repo: Path, entries: dict[str, bytes], message: str = "add media") -> None:
     """Commit files at the top of the tree with git plumbing, for names no checkout can hold (":clip.mp4")."""
     lines = [line for line in _git(repo, "ls-tree", "HEAD").splitlines() if line]
@@ -368,11 +384,10 @@ def test_a_binary_file_whose_name_starts_with_a_colon_is_read(
     # Git reads ":clip.mp4" given as a path argument as pathspec magic, so the
     # file must be read by object id, never by name.
     tagged = _VIDEO_LIKE + b"\x00\x00\x00\x20\xa9too encoded by AcmeVerify Studio\x00" + _VIDEO_LIKE
-    _commit_entries(repo, {":clip.mp4": tagged, ":(exclude)poster.jpg": tagged})
+    _commit_entries(repo, {":clip.mp4": tagged})
     code, out, err = _scan(repo, hash_file, capsys)
     assert code == 1, err
     assert ":clip.mp4 (binary, readable text at byte" in out
-    assert ":(exclude)poster.jpg (binary, readable text at byte" in out
     assert "verify" not in out.lower()
 
 

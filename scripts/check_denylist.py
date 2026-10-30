@@ -567,17 +567,23 @@ _GITLINK_MODE = "160000"
 
 @dataclass(frozen=True)
 class Change:
-    """A path the range changes: git's status letter, its new mode and object, and whether git diffs it as binary."""
+    """A path the range changes: git's status letter, its new mode, its objects and whether git diffs it as binary."""
 
     path: bytes
     status: str
     mode: str
+    old_oid: str
     oid: str
     binary: bool
 
     @property
     def name(self) -> str:
         return self.path.decode("utf-8", "replace")
+
+    @property
+    def new_content(self) -> bool:
+        """Whether the path gets content it did not have: not deleted, and not only given a new mode."""
+        return self.status != "D" and self.oid != self.old_oid
 
 
 def changes(repo: Path, base: str, head: str) -> list[Change]:
@@ -592,7 +598,7 @@ def changes(repo: Path, base: str, head: str) -> list[Change]:
         repo, "diff", "--raw", "--numstat", "-z", "--no-abbrev", *_DIFF_OPTIONS, f"{base}...{head}", attr_source=base
     )
     fields = out.split(b"\0")
-    raw: dict[bytes, tuple[str, str, str]] = {}
+    raw: dict[bytes, tuple[str, str, str, str]] = {}
     binary: set[bytes] = set()
     index = 0
     while index < len(fields):
@@ -603,7 +609,7 @@ def changes(repo: Path, base: str, head: str) -> list[Change]:
             meta = record[1:].decode("ascii", "replace").split()
             if len(meta) != 5 or index >= len(fields):
                 raise DenylistError("unparseable git diff --raw record")
-            raw[fields[index]] = (meta[4][:1], meta[1], meta[3])
+            raw[fields[index]] = (meta[4][:1], meta[1], meta[2], meta[3])
             index += 1
         elif record:
             added, deleted, path = (record.split(b"\t", 2) + [b"", b""])[:3]
@@ -614,10 +620,10 @@ def changes(repo: Path, base: str, head: str) -> list[Change]:
     if not binary.issubset(raw):
         raise DenylistError("git diff --numstat names a binary file that --raw does not")
     found = []
-    for path, (status, mode, oid) in raw.items():
+    for path, (status, mode, old_oid, oid) in raw.items():
         if status != "D" and _NO_OBJECT.fullmatch(oid):
             raise DenylistError(f"git diff gives no new object for {path.decode('utf-8', 'replace')}")
-        found.append(Change(path, status, mode, oid, path in binary))
+        found.append(Change(path, status, mode, old_oid, oid, path in binary))
     return found
 
 
@@ -644,8 +650,9 @@ def added_lines(repo: Path, base: str, head: str, *, binary_files: int) -> Itera
     The patch is split on "\\n" only, git's own line end, so every line inside
     a hunk starts with "+", "-", " " or "\\" and nothing in a file can look like
     a header. Binary files appear only as a "Binary files ... differ" line;
-    there must be exactly ``binary_files`` of those (the binary files
-    ``changes`` found), and ``Report.check_file`` reads those files instead.
+    there must be exactly ``binary_files`` of those (one for each binary file
+    whose content the range changes), and ``Report.check_file`` reads those
+    files instead.
     """
     diff = _git_bytes(
         repo,
@@ -719,10 +726,12 @@ def scan(
     for change in changed:
         check(f"file path {change.name}", *line_texts(change.path))
     binary = [change for change in changed if change.binary]
-    for path, line_no, raw in added_lines(repo, base_sha, head_sha, binary_files=len(binary)):
+    # The patch says "Binary files ... differ" only where the content changed, not for a new mode alone.
+    shown = sum(1 for change in binary if change.oid != change.old_oid)
+    for path, line_no, raw in added_lines(repo, base_sha, head_sha, binary_files=shown):
         check(f"{path}:{line_no}", *line_texts(raw))
-    # A deleted file adds nothing, and a submodule's commit is not in this repository.
-    readable = [change for change in binary if change.status != "D" and change.mode != _GITLINK_MODE]
+    # A deleted file adds nothing, nor does a new mode, and a submodule's commit is not in this repository.
+    readable = [change for change in binary if change.new_content and change.mode != _GITLINK_MODE]
     per_blob: dict[str, Report] = {}
     for oid, data in read_objects(repo, dict.fromkeys(change.oid for change in readable), "blob"):
         per_blob[oid] = Report(denylist)
