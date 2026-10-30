@@ -20,7 +20,7 @@ import pytest
 from core.commerce import arbiter, plural_hosted
 from core.commerce import payment_handoff as ph
 from core.commerce.executors.plural import PluralCredentials, PluralWebhookError
-from core.commerce.order_notifications import order_email, surface_label
+from core.commerce.order_notifications import delivery_view, order_email, surface_label
 from core.commerce.ucp.completion import arbiter_context
 from core.commerce.ucp.merchant import merchant_ucp_from_config
 from tests import commerce_arbiter_fixtures as fx
@@ -422,6 +422,40 @@ def test_order_email_escapes_buyer_text_and_names_the_surface() -> None:
     assert (
         "gave no contact" in order_email(merchant_name="m", order_id="o", snapshot=snapshot, buyer={}, surface="x")[1]
     )
+
+
+def test_order_email_carries_the_delivery_address_and_shipping_choice() -> None:
+    snapshot = {
+        "currency": "INR",
+        "totals": [{"type": "fulfillment", "amount": 4900}, {"type": "total", "amount": 88900}],
+        "line_items": [{"item": {"title": "Filter coffee"}, "quantity": {"total": 2}}],
+        "fulfillment": {
+            "expectations": [
+                {
+                    "method_type": "shipping",
+                    "description": "Standard <delivery>",
+                    "destination": {
+                        "first_name": "Asha",
+                        "street_address": "12 MG Road",
+                        "address_locality": "Bengaluru",
+                        "postal_code": "560001",
+                        "address_country": "IN",
+                        "phone_number": "",
+                    },
+                },
+                {"method_type": "pickup", "description": "MG Road store", "destination": "not an address"},
+                "not an expectation",
+            ]
+        },
+    }
+    _, body = order_email(merchant_name="m", order_id="o", snapshot=snapshot, buyer={}, surface="x")
+    assert "Ship - Standard &lt;delivery&gt; - Rs 49.00<br>Asha<br>12 MG Road<br>Bengaluru, 560001<br>IN</li>" in body
+    assert "<li>Store pickup - MG Road store</li>" in body
+    no_delivery = order_email(merchant_name="m", order_id="o", snapshot={"currency": "INR"}, buyer={}, surface="x")[1]
+    assert "The buyer gave no delivery details." in no_delivery
+    assert delivery_view({"fulfillment": {"expectations": [{"destination": {}}]}}) == [
+        {"method": "shipping", "option": None, "address": []}
+    ]
 
 
 def test_surface_label() -> None:

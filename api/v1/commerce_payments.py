@@ -15,8 +15,8 @@ Merchant routes (``commerce.merchant_config.write`` or tenant admin), under
 * ``POST /merchant-configs/{merchant_id}/payments/plural-credentials/test`` -
   fetch a Plural access token with them (nothing else is called).
 * ``GET /orders`` - the tenant's orders, newest first, paginated, with the
-  buyer contact as the buyer gave it, items, total, payment status and the
-  surface the buyer used.
+  buyer contact and delivery address as the buyer gave them, the shipping
+  choice, items, total, payment status and the surface the buyer used.
 
 Public (no session; the handlers check what they need), under
 ``/api/v1/payments/plural``:
@@ -49,7 +49,7 @@ from api.v1.commerce_ucp_publishing import _locked_row
 from core.commerce import payment_handoff as ph
 from core.commerce import plural_hosted
 from core.commerce.ledger import record_commerce_event, record_commerce_event_in_own_transaction
-from core.commerce.order_notifications import money, surface_label
+from core.commerce.order_notifications import delivery_view, money, surface_label, total_of
 from core.database import get_tenant_session
 
 logger = structlog.get_logger()
@@ -316,6 +316,8 @@ def _order_view(order: Any, checkout: Any) -> dict[str, Any]:
             for li in snapshot.get("line_items") or []
         ],
         "buyer": buyer,
+        "delivery": delivery_view(snapshot),
+        "shipping": money(total_of(snapshot, "fulfillment"), order.currency) or None,
         "payment": {
             "status": "paid",
             "provider": provider,
