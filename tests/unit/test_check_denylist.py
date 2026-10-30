@@ -689,10 +689,11 @@ def test_an_array_of_32_bit_numbers_is_not_read_as_utf32_text(
     repo: Path, tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
     # Numbers below 65,536 have NUL high bytes, as UTF-32 text does, but decode to characters all over Unicode.
-    # Four of them here fold to the term's letters, with other numbers between them.
+    # Four of them here fold to the term's letters (X, y, z and w with accents): read as text, they spell it.
     rng = random.Random(7)  # noqa: S311 - test data
     values = [rng.randrange(3000, 55000) for _ in range(4096)]
-    values[100:107] = [0x1E8A, 4000, 0x1EF3, 4001, 0x1E91, 4002, 0x1E89]
+    values[100:104] = [0x1E8A, 0x1EF3, 0x1E91, 0x1E89]
+    assert _single("xyzw").matches(b"".join(v.to_bytes(4, "little") for v in values).decode("utf-32-le"))
     data = b"".join(value.to_bytes(4, "little") for value in values)
     assert dl._wide_codecs(data) == [("utf-32-le", 0)]
     assert dl._wide_text(data) is None
@@ -700,6 +701,30 @@ def test_an_array_of_32_bit_numbers_is_not_read_as_utf32_text(
     _commit_bytes(repo, {"models/tokens.bin": data})
     code, out, _ = _scan(repo, short, capsys)
     assert code == 0, out
+
+
+_PROSE_IN_ANOTHER_SCRIPT = {
+    "ru": "Мы используем Xyzw для проверки документов продавца.\nКаталог обновляется каждый день.\n",
+    "ja": "私たちは販売者の書類を確認するためにXyzwを使っています。\nカタログは毎日更新されます。\n",
+    # One long line with no whitespace, as Chinese text often is.
+    "zh": "我们使用Xyzw来核对商家的文件。目录每天更新，订单在一小时内到达。" * 4,
+}
+
+
+@pytest.mark.parametrize(
+    ("language", "encoding"),
+    [("ru", "utf-16-le"), ("ru", "utf-16-be"), ("ru", "utf-32-le"), ("ja", "utf-32-le"), ("zh", "utf-32-be")],
+)
+def test_utf16_and_utf32_text_in_another_script_is_decoded_without_a_byte_order_mark(
+    repo: Path, tmp_path: Path, capsys: pytest.CaptureFixture[str], language: str, encoding: str
+) -> None:
+    data = _PROSE_IN_ANOTHER_SCRIPT[language].encode(encoding)
+    assert dl._wide_text(data) is not None
+    short = _list_of(tmp_path, "xyzw")
+    _commit_bytes(repo, {"docs/notes.txt": data})
+    code, out, _ = _scan(repo, short, capsys)
+    assert code == 1
+    assert f"docs/notes.txt:1 (binary, read as {encoding[:6].upper()})" in out
 
 
 def test_a_line_in_a_legacy_8_bit_encoding_keeps_its_accents(denylist: dl.Denylist) -> None:
