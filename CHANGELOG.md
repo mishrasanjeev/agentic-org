@@ -1,5 +1,26 @@
 # Changelog
 
+## Unreleased - Gemini daily caps and budget alerts read recorded spend
+
+- **The Gemini daily caps now trip.** `AGENTICORG_GEMINI_DAILY_USD_CAP` (per tenant, default $10)
+  and `AGENTICORG_GEMINI_PLATFORM_DAILY_USD_CAP` (platform, default $100) summed
+  `agent_task_results`, which only the demo seeder writes, so in production neither cap ever
+  refused a call. The LLM router now adds every priced call to a new `llm_daily_spend` table
+  (per tenant, UTC day, provider and model, tenant row-level security forced), and both caps read
+  it. Once a tenant's Gemini calls through the router reach the cap that day, its next one is
+  refused with `DailyBudgetExceeded`. Agent runs on the LangGraph runtime do not go through the
+  router and are still not covered by these caps.
+- **Budget alerts now fire.** The budget evaluator summed `agent_task_results` too. It now reads
+  `agent_cost_ledger`, the per-agent daily cost that agent runs and chat turns write (and the
+  per-agent monthly cap reads), with company and cost centre taken from the agent.
+- Migration `v6z105_llm_daily_spend` creates the table and points
+  `public.gemini_daily_platform_spend()` at it, keeping its owner, SECURITY DEFINER and search path;
+  the aggregate role reads only the cost, day and provider columns and no longer reads
+  `agent_task_results`.
+- Unchanged: the monthly invoice usage count (`core/billing/invoice_generator.py`) and the operator
+  spend report (`python -m core.billing.spend`) still read `agent_task_results`. Changing what
+  invoices count changes what customers are billed, so it needs its own decision.
+
 ## Unreleased - Merchant go-live: setup flow, catalog upload, per-merchant Shopify
 
 - **Sell Everywhere is the merchant setup flow.** One page (`/dashboard/sell-everywhere`) takes a

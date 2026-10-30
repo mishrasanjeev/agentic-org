@@ -23,11 +23,14 @@ Routing modes (``AGENTICORG_LLM_ROUTING``):
   - ``disabled``: use the agent's configured llm_model directly.
 
 Hard cap (``AGENTICORG_GEMINI_DAILY_USD_CAP``, default ``10.0``):
-  Before any Gemini call the router sums today's ``cost_usd`` from
-  ``agent_task_results`` (UTC day). If the running total ≥ cap, the
+  Before any Gemini call the router sums today's Gemini ``cost_usd`` from
+  ``llm_daily_spend`` (UTC day), the ledger every priced router call adds
+  to. If the running total ≥ cap, the
   call is refused with :class:`DailyBudgetExceeded` (HTTP 429 surface)
   so a runaway workflow or shadow-batch cannot blow past the daily
   budget. Set the env var to ``0`` to disable (NOT recommended).
+  Agent runs on the LangGraph runtime do not pass through this router:
+  their spend is in ``agent_cost_ledger`` and is not part of this cap.
 """
 
 from __future__ import annotations
@@ -232,7 +235,7 @@ LOCAL_TIERS: dict[str, str] = {
 # ``llm_routing_decision`` log line so operators can sanity-check
 # tier choices. Authoritative cost computation lives in
 # ``GEMINI_PRICE_PER_1M`` below and is used by the per-call cost
-# write to agent_task_results.
+# write to llm_daily_spend.
 TIER_COST_PER_1K: dict[str, float] = {
     "tier1": 0.002_50,  # gemini-3.5-flash-lite output
     "tier2": 0.002_50,  # gemini-3.5-flash-lite output
@@ -335,7 +338,7 @@ def _gemini_platform_daily_cap_usd() -> float:
 
 
 async def _todays_gemini_spend_usd(tenant_id: str | None = None) -> float:
-    """Sum today's (UTC) ``cost_usd`` from ``agent_task_results``.
+    """Sum today's (UTC) Gemini ``cost_usd`` from ``llm_daily_spend``.
 
     With ``tenant_id`` the SUM is restricted to that tenant so one
     tenant's spend cannot exhaust the cap for everyone; without it the
@@ -343,7 +346,8 @@ async def _todays_gemini_spend_usd(tenant_id: str | None = None) -> float:
     failure fails closed so the cap cannot be bypassed by treating
     unknown spend as zero.
 
-    ``agent_task_results`` is FORCE-RLS protected: a raw session with no
+    ``llm_daily_spend`` is written by :func:`_record_daily_spend` for every
+    priced router call. It is FORCE-RLS protected: a raw session with no
     tenant GUC sums zero rows and the cap silently never trips. The
     per-tenant SUM therefore runs inside ``get_tenant_session`` (an
     unbindable tenant id is a lookup failure → refused), and the
@@ -358,12 +362,11 @@ async def _todays_gemini_spend_usd(tenant_id: str | None = None) -> float:
 
         from core.database import async_session_factory, get_tenant_session
 
-        utc_today = datetime.now(UTC).replace(hour=0, minute=0, second=0, microsecond=0)
         sql = (
-            "SELECT COALESCE(SUM(cost_usd), 0) FROM agent_task_results "
-            "WHERE created_at >= :since AND llm_model LIKE 'gemini%'"
+            "SELECT COALESCE(SUM(cost_usd), 0) FROM llm_daily_spend "
+            "WHERE day = :day AND provider = 'gemini'"
         )
-        params: dict[str, Any] = {"since": utc_today}
+        params: dict[str, Any] = {"day": datetime.now(UTC).date()}
         if tenant_id:
             sql += " AND tenant_id = CAST(:tenant_id AS uuid)"
             params["tenant_id"] = str(tenant_id)
@@ -389,6 +392,61 @@ async def _todays_gemini_spend_usd(tenant_id: str | None = None) -> float:
             "Gemini daily spend lookup unavailable; refusing request to "
             "avoid bypassing AGENTICORG_GEMINI_DAILY_USD_CAP."
         ) from exc
+
+
+async def _record_daily_spend(tenant_id: str, provider: str | None, model: str, cost_usd: float) -> None:
+    """Add one finished router call's cost to the tenant's ``llm_daily_spend`` row for today (UTC).
+
+    Calls that cost nothing write nothing. A cost that is not a finite,
+    non-negative number is logged and not written, so one bad price cannot
+    make every later cap lookup fail. Never raises: it runs inside the
+    router's success path, where an exception would count the answered call
+    as failed and could send a second, billed call to the fallback model. A
+    write failure is logged and the answer kept; the money is already spent,
+    and the next cap check still reads the table and refuses when it cannot.
+    """
+    import uuid
+    from datetime import UTC, datetime
+    from math import isfinite
+
+    from sqlalchemy import func as _func
+    from sqlalchemy.dialects.postgresql import insert as pg_insert
+
+    from core.database import get_tenant_session
+    from core.models.llm_daily_spend import LlmDailySpend
+
+    try:
+        cost = float(cost_usd or 0.0)
+    except (TypeError, ValueError):
+        cost = float("nan")
+    if not isfinite(cost) or cost < 0:
+        logger.warning("llm_daily_spend_invalid_cost", provider=provider, model=model)
+        return
+    if cost == 0:
+        return
+    try:
+        statement = pg_insert(LlmDailySpend).values(
+            id=uuid.uuid4(),
+            tenant_id=uuid.UUID(str(tenant_id)),
+            day=datetime.now(UTC).date(),
+            provider=provider or "unknown",
+            model=(model or "unknown")[:128],
+            call_count=1,
+            cost_usd=cost,
+        )
+        statement = statement.on_conflict_do_update(
+            constraint="uq_llm_daily_spend_key",
+            set_={
+                "call_count": LlmDailySpend.call_count + 1,
+                "cost_usd": LlmDailySpend.cost_usd + statement.excluded.cost_usd,
+                "updated_at": _func.now(),
+            },
+        )
+        async with get_tenant_session(tenant_id) as session:  # type: ignore[arg-type]
+            await session.execute(statement)
+    # enterprise-gate: broad-except-ok reason=daily-spend-write-failure-is-logged-the-answered-call-is-kept
+    except Exception as exc:
+        logger.error("llm_daily_spend_write_failed", error_type=type(exc).__name__, provider=provider)
 
 
 async def assert_under_gemini_cap(estimated_cost_usd: float = 0.0, tenant_id: str | None = None) -> None:
@@ -765,6 +823,10 @@ class LLMRouter:
                     response_digest=content_digest(response.content) if response is not None else None,
                     spend_usage=_spend_usage(response, exc, messages, tenant_id),
                 )
+                # The daily caps read this ledger; it is written whatever the
+                # optional record and spend flags say.
+                if tenant_id and response is not None:
+                    await _record_daily_spend(tenant_id, _model_provider(called), called, response.cost_usd)
 
             started = time.monotonic()
             try:
