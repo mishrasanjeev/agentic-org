@@ -20,7 +20,13 @@ import pytest
 from core.commerce import arbiter, plural_hosted
 from core.commerce import payment_handoff as ph
 from core.commerce.executors.plural import PluralCredentials, PluralWebhookError
-from core.commerce.order_notifications import delivery_view, order_email, surface_label
+from core.commerce.order_notifications import (
+    delivery_heading,
+    delivery_view,
+    order_email,
+    shipping_fee_line,
+    surface_label,
+)
 from core.commerce.ucp.completion import arbiter_context
 from core.commerce.ucp.merchant import merchant_ucp_from_config
 from tests import commerce_arbiter_fixtures as fx
@@ -449,13 +455,43 @@ def test_order_email_carries_the_delivery_address_and_shipping_choice() -> None:
         },
     }
     _, body = order_email(merchant_name="m", order_id="o", snapshot=snapshot, buyer={}, surface="x")
-    assert "Ship - Standard &lt;delivery&gt; - Rs 49.00<br>Asha<br>12 MG Road<br>Bengaluru, 560001<br>IN</li>" in body
+    assert "<li>Ship - Standard &lt;delivery&gt;<br>Asha<br>12 MG Road<br>Bengaluru, 560001<br>IN</li>" in body
     assert "<li>Store pickup - MG Road store</li>" in body
+    assert body.count("Rs 49.00") == 1 and "<p>Shipping fee: Rs 49.00</p>" in body
     no_delivery = order_email(merchant_name="m", order_id="o", snapshot={"currency": "INR"}, buyer={}, surface="x")[1]
-    assert "The buyer gave no delivery details." in no_delivery
+    assert "The buyer gave no delivery details." in no_delivery and "Shipping fee" not in no_delivery
     assert delivery_view({"fulfillment": {"expectations": [{"destination": {}}]}}) == [
         {"method": "shipping", "option": None, "address": []}
     ]
+
+
+def test_an_order_shipped_twice_shows_its_one_shipping_fee_once() -> None:
+    # Two shipping destinations at Rs 49 each: the order keeps one fulfillment total of Rs 98.
+    def shipped(option: str, street: str) -> dict:
+        return {
+            "method_type": "shipping",
+            "description": option,
+            "destination": {"first_name": "Asha", "street_address": street, "address_country": "IN"},
+        }
+
+    snapshot = {
+        "currency": "INR",
+        "totals": [{"type": "fulfillment", "amount": 9800}, {"type": "total", "amount": 98800}],
+        "line_items": [{"item": {"title": "Filter coffee"}, "quantity": {"total": 2}}],
+        "fulfillment": {"expectations": [shipped("Standard", "12 MG Road"), shipped("Express", "4 Park Street")]},
+    }
+    _, body = order_email(merchant_name="m", order_id="o", snapshot=snapshot, buyer={}, surface="x")
+    assert "<li>Ship - Standard<br>Asha<br>12 MG Road<br>IN</li>" in body
+    assert "<li>Ship - Express<br>Asha<br>4 Park Street<br>IN</li>" in body
+    assert body.count("Rs 98.00") == 1 and "<p>Shipping fee for all deliveries: Rs 98.00</p>" in body
+    assert delivery_heading({"method": "shipping", "option": "Standard"}) == "Ship - Standard"
+    assert delivery_heading({"method": "pickup", "option": None}) == "Store pickup"
+    deliveries = delivery_view(snapshot)
+    assert shipping_fee_line(deliveries, "Rs 98.00") == "Shipping fee for all deliveries: Rs 98.00"
+    assert shipping_fee_line(deliveries[:1], "Rs 49.00") == "Shipping fee: Rs 49.00"
+    # Nothing ships (a store pickup), or the order has no fulfillment total: no fee line.
+    assert shipping_fee_line([{"method": "pickup", "option": "MG Road store", "address": []}], "Rs 0.00") == ""
+    assert shipping_fee_line(deliveries, "") == ""
 
 
 def test_surface_label() -> None:

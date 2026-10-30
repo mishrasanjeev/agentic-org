@@ -49,10 +49,17 @@ function buyerLines(buyer: Order["buyer"]): string[] {
   return [name, buyer.email, buyer.phone_number].filter((v): v is string => Boolean(v));
 }
 
-function deliveryHeading(delivery: Delivery, shipping: string | null | undefined): string {
+/** The method and the option the buyer chose; the fee is the order's, shown once (shippingFeeLine). */
+function deliveryHeading(delivery: Delivery): string {
   const parts = [delivery.method === "pickup" ? "Store pickup" : "Ship", delivery.option ?? ""];
-  if (delivery.method !== "pickup") parts.push(shipping ?? "");
   return parts.filter(Boolean).join(" · ");
+}
+
+/** The order's one shipping fee (all its shipping deliveries together), or "" when nothing ships. */
+function shippingFeeLine(deliveries: Delivery[], shipping: string | null | undefined): string {
+  const shipped = deliveries.filter((delivery) => delivery.method !== "pickup").length;
+  if (!shipping || shipped === 0) return "";
+  return `${shipped > 1 ? "Shipping fee for all deliveries" : "Shipping fee"}: ${shipping}`;
 }
 
 /** Every order buyers placed through AgenticOrg, newest first. */
@@ -161,7 +168,7 @@ export default function Orders() {
                 {order.delivery?.length ? (
                   order.delivery.map((delivery, index) => (
                     <div key={`${order.id}-delivery-${index}`} className="mt-1 text-muted-foreground">
-                      <p>{deliveryHeading(delivery, order.shipping)}</p>
+                      <p>{deliveryHeading(delivery)}</p>
                       <ul className="break-words">
                         {delivery.address.map((line, lineIndex) => (
                           <li key={lineIndex}>{line}</li>
@@ -172,6 +179,9 @@ export default function Orders() {
                 ) : (
                   <p className="mt-1 text-muted-foreground">The buyer gave no delivery details.</p>
                 )}
+                {shippingFeeLine(order.delivery ?? [], order.shipping) ? (
+                  <p className="mt-2 text-muted-foreground">{shippingFeeLine(order.delivery ?? [], order.shipping)}</p>
+                ) : null}
               </div>
               <div>
                 <p className="font-medium">Buyer contact (as given)</p>

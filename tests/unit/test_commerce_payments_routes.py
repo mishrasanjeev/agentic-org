@@ -699,6 +699,33 @@ async def test_an_order_shows_the_buyer_contact_delivery_items_total_and_surface
 
 
 @pytest.mark.asyncio
+async def test_an_order_shipped_twice_gives_its_one_shipping_fee_at_order_level(db):
+    def shipped(option: str, street: str) -> dict:
+        return {
+            "method_type": "shipping",
+            "description": option,
+            "destination": {"first_name": "Asha", "street_address": street, "address_country": "IN"},
+        }
+
+    snapshot = {
+        **_order("ord_2", "chk_2").snapshot,
+        "currency": "INR",
+        # Two shipping destinations at Rs 49 each: one fulfillment total for the order.
+        "totals": [{"type": "subtotal", "amount": 44900}, {"type": "fulfillment", "amount": 9800}],
+        "fulfillment": {"expectations": [shipped("Standard", "12 MG Road"), shipped("Express", "4 Park Street")]},
+    }
+    db.scalar_results = [[_order("ord_2", "chk_2", snapshot=snapshot)], [_checkout("chk_2", {})]]
+    async with _client() as client:
+        order = (await client.get(ORDERS)).json()["orders"][0]
+    assert order["shipping"] == "Rs 98.00"
+    # Each delivery is its method, option and address: never a fee of its own.
+    assert order["delivery"] == [
+        {"method": "shipping", "option": "Standard", "address": ["Asha", "12 MG Road", "IN"]},
+        {"method": "shipping", "option": "Express", "address": ["Asha", "4 Park Street", "IN"]},
+    ]
+
+
+@pytest.mark.asyncio
 async def test_an_order_without_its_checkout_still_lists(db):
     order = _order(
         "ord_9",

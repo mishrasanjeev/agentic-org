@@ -316,6 +316,8 @@ def _order_view(order: Any, checkout: Any) -> dict[str, Any]:
             for li in snapshot.get("line_items") or []
         ],
         "buyer": buyer,
+        # Each delivery names its method and the option chosen; the fee is the order's one fulfillment
+        # total, for all its deliveries together, so it is shown once and never per delivery.
         "delivery": delivery_view(snapshot),
         "shipping": money(total_of(snapshot, "fulfillment"), order.currency) or None,
         "payment": {

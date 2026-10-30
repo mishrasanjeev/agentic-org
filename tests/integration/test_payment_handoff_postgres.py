@@ -677,7 +677,9 @@ async def test_order_email_goes_to_this_tenants_active_admins_only_and_orders_li
     assert await notify_merchant_of_order(tenant, order_id) == 1
     assert [s[0] for s in sent] == ["owner@merchant.example"]
     assert order_id in sent[0][1] and "buyer@merchant.example" in sent[0][2] and "+919800000000" in sent[0][2]
-    assert "<br>1 MG Road<br>Pune, 411001<br>IN</li>" in sent[0][2]
+    # The heading is the method and option; the order's shipping fee is shown once, on its own line.
+    assert "<li>Ship - Standard<br>1 MG Road<br>Pune, 411001<br>IN</li>" in sent[0][2]
+    assert "<p>Shipping fee: Rs 50.00</p>" in sent[0][2] and sent[0][2].count("Rs 50.00") == 1
     assert "commerce.order.notification" in await _ledger(db, tenant)
 
     mine = await commerce_payments.list_orders(merchant_id=None, limit=25, offset=0, tenant_id=tenant)
@@ -687,7 +689,10 @@ async def test_order_email_goes_to_this_tenants_active_admins_only_and_orders_li
     assert view["payment"] == {"status": "paid", "provider": "plural", "provider_order_ref_present": True}
     assert view["items"][0]["quantity"] == 1 and view["total"].startswith("Rs ")
     assert [d["address"] for d in view["delivery"]] == [["1 MG Road", "Pune, 411001", "IN"]]
-    assert view["delivery"][0]["method"] == "shipping" and view["shipping"].startswith("Rs ")
+    assert view["delivery"] == [
+        {"method": "shipping", "option": "Standard", "address": ["1 MG Road", "Pune, 411001", "IN"]}
+    ]
+    assert view["shipping"] == "Rs 50.00"
     assert mine["next_offset"] is None
     theirs = await commerce_payments.list_orders(merchant_id=None, limit=25, offset=0, tenant_id=other)
     assert theirs["orders"] == []
