@@ -83,9 +83,9 @@ describe("OACP user guides", () => {
   it("lists the OACP group on the documentation home with an anchor", () => {
     openDocs("/docs");
     expect(document.getElementById("oacp")).toHaveTextContent("OACP — agentic commerce, made safe");
-    expect(screen.getByRole("link", { name: "OACP: agentic commerce, made safe" })).toHaveAttribute(
+    expect(screen.getByRole("link", { name: "OACP: sell through AI assistants" })).toHaveAttribute(
       "href",
-      "/docs/oacp-overview",
+      "/docs/oacp-start-here",
     );
   });
 

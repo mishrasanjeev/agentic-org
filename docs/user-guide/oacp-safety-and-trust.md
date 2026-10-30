@@ -1,6 +1,6 @@
 ```summary
 Revoke a fact once and every channel stops using it. If the revocation list cannot be reached, everything refuses.
-The arbiter checks up to eight fixed rules before money moves. The first rule that fails is the reason, and it is recorded.
+The arbiter decides before money can move: your signed facts and your limits before a buyer gets a payment link, up to eight rules when an agent would pay itself. The first rule that fails is the reason, and it is recorded.
 Every decision is in the commerce ledger. You can export it and check it on your own computer, with no database and no network.
 Agent requests can carry a signature (Visa TAP or Web Bot Auth). AgenticOrg checks and logs them today; refusing unsigned calls is a separate switch.
 A refusal is never a mystery: it names the rule, the reason and how to fix it.
@@ -24,10 +24,25 @@ Good to know:
 
 ## What the arbiter checks
 
-Before a checkout completes, the arbiter runs these rules in a fixed order. Every rule runs. The first one that fails decides the refusal.
+Every rule runs, in a fixed order. The first one that fails decides the refusal.
+
+### Before a payment link
+
+Today a buyer pays on your own Shopify checkout or Plural page. Before the buyer gets that link, the arbiter checks two rules:
+
+| Rule | In plain words | Example refusal |
+| --- | --- | --- |
+| Facts still valid | Your catalog, price, stock, policy and protocol facts are signed, fresh, unexpired and not revoked. | artifact_revoked:price |
+| Merchant limits | The order is within your per-order amount, currency and items per order, and within your daily maximum. The daily maximum counts what buyers paid today and the payment links still open, in that currency, by the UTC day. | daily_amount_cap_exceeded |
+
+Mandate, consent, spending cap, verified buyer authority and RBI AFA are not checked here. The agent holds no payment credential and moves no money, and the buyer authenticates on the payment page, for example with 3-D Secure or their UPI PIN. In production the allow still needs the Grantex countersignature, and it is used up before the link exists.
+
+### When an agent would pay itself (switched off)
+
+Agent-executed payment, where the payment provider charges against buyer mandates, is built but switched off. When it is on, the arbiter runs these eight rules before a checkout completes:
 
 ```figure
-oacp-arbiter-rules | Eight rules, one answer | A purchase passes eight gates in order: mandate, consent, spending cap, verified buyer authority, valid facts, merchant limits, not-present limits and RBI AFA. Passing all gives allow. The first failure gives refuse, with that rule as the reason.
+oacp-arbiter-rules | Eight rules, one answer | An agent-executed purchase passes eight gates in order: mandate, consent, spending cap, verified buyer authority, valid facts, merchant limits, not-present limits and RBI AFA. Passing all gives allow. The first failure gives refuse, with that rule as the reason.
 ```
 
 | # | Rule | In plain words | Example refusal |
@@ -37,7 +52,7 @@ oacp-arbiter-rules | Eight rules, one answer | A purchase passes eight gates in 
 | 3 | Spending cap | The buyer's Commerce Passport allows this amount, in this currency. | passport_amount_cap_exceeded |
 | 4 | Verified buyer authority | AgenticOrg verified the mandates itself. A claim in the request is not enough in production. | buyer_authority_caller_asserted |
 | 5 | Facts still valid | Catalog, price, stock, policy and other facts are signed, fresh, unexpired and not revoked. | artifact_revoked:price |
-| 6 | Merchant limits | The order is within your amount, currency and quantity limits. | order_amount_cap_exceeded |
+| 6 | Merchant limits | The order is within your amount, currency and quantity limits, and your daily maximum when you set one. | order_amount_cap_exceeded |
 | 7 | Not-present limits | If the buyer is away, your stricter limits and the Intent cap cover the order. | not_present_limits_missing |
 | 8 | RBI AFA | A UPI AutoPay payment has verified AFA evidence when RBI rules need it. | afa_evidence_missing |
 
@@ -112,7 +127,9 @@ Read it like this:
 3. **decision_id** finds the sealed decision in the ledger.
 4. **required_config** says what must change before a new attempt.
 
-In a UCP or ACP checkout the decision comes back inside the checkout answer, as a business message. Nothing is charged.
+A refused payment link reads the same way, for example `failing_rule` `handoff_merchant_limits` with the reason `daily_amount_cap_exceeded`.
+
+In a UCP or ACP checkout the decision comes back inside the checkout answer, as a business message. Nothing is charged, and no payment link is issued.
 
 ## Related guides
 

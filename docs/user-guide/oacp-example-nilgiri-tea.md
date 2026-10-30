@@ -23,7 +23,7 @@ Here is what is switched on for it today.
 | Facts signed by Grantex | 11 signed artifacts, all verified | Refreshed automatically when they expire |
 | Checkout, cart and order (UCP), ACP feed and checkout | On | Needs a platform API key issued by the merchant |
 | Shopping from ChatGPT and other MCP apps | Live, no sign-in, no payment tools | `https://mcp.agenticorg.ai/mcp` ([how to connect](#chatgpt-through-the-hosted-agenticorg-mcp-server)) |
-| Real payments | Off | No money can move in this demo |
+| Payments | Off: no payment method chosen, and agent-executed payment is off | No money can move in this demo |
 
 ## Try it yourself in two minutes
 
@@ -96,20 +96,20 @@ nilgiri-shelf | What a buyer agent sees | The 10 products the shop serves, with 
 
 ## Part 1. How the shop was set up
 
-These are the steps behind Nilgiri Tea House, in order. For the demo, a setup script runs them in one go, calling the same AgenticOrg functions the dashboard uses. For your shop, you do them on the **Commerce Runtime** and **Custom Domains** pages. The detail of each step is in the [Merchant setup checklist](/docs/oacp-merchant-setup).
+These are the steps behind Nilgiri Tea House, in order. For the demo, a setup script runs them in one go, calling the same AgenticOrg functions the dashboard uses. For your shop, the **Sell Everywhere** page (`/dashboard/sell-everywhere`) takes you through the same steps and runs the Grantex and publishing steps itself; see [Sell everywhere](/docs/oacp-sell-everywhere). The detail of each step is in the [Merchant setup checklist](/docs/oacp-merchant-setup).
 
 ```flow start=1
-Create the merchant | The shop got its own tenant, an administrator and a merchant record: merchant ID nilgiri_tea_house and seller agent seller_agent_nilgiri_tea. For you: sign up, then save your merchant settings on Commerce Runtime. | Owner: Merchant | If blocked: You need the administrator or merchant role.
-Load the catalog | Its 10 products, prices and stock went in, plus one store with opening hours. A real shop connects Shopify read-only and runs a sync instead. | Owner: Merchant | If blocked: A missing Shopify credential or a wrong store domain stops the sync and says why.
-Set purchase limits | The largest order, the allowed currency (INR) and the most items per order. For you: the same fields in your merchant settings. | Owner: Merchant | If blocked: Without limits the arbiter refuses every purchase with merchant_limits_missing.
-Get the facts signed | The operator added the shop to the Grantex allowlist. AgenticOrg then asked Grantex to sign the catalog, prices, stock, policies and capabilities, and got 11 signed artifacts back. | Owner: Platform operator, then merchant | If blocked: Grantex answers unavailable until your tenant is on its allowlist.
+Create the merchant | The shop got its own tenant, an administrator and a merchant record: merchant ID nilgiri_tea_house and seller agent seller_agent_nilgiri_tea. For you: sign up, then type a shop name on Sell Everywhere and select Create shop; the id is generated. | Owner: Merchant | If blocked: You need the administrator or merchant role.
+Load the catalog | Its 10 products, prices and stock went in, plus one store with opening hours. A real shop connects Shopify read-only, or uploads a CSV or JSON file, on Sell Everywhere. | Owner: Merchant | If blocked: A missing Shopify credential, a wrong store domain or a bad file row stops the read and says why.
+Set purchase limits | The largest order, the allowed currency (INR) and the most items per order. For you: the Order limits step on Sell Everywhere, which also asks for your daily maximum. | Owner: Merchant | If blocked: Without limits, Sell everywhere stays off for your shop.
+Get the facts signed | The operator added the shop to the Grantex allowlist. AgenticOrg then asked Grantex to sign the catalog, prices, stock, policies and capabilities, and got 11 signed artifacts back. For you: turning on Sell everywhere enrols you with Grantex and asks for the signatures, with no allowlist edit for your shop. | Owner: Platform operator for the demo; AgenticOrg for you | If blocked: The Grantex enrolment row says Waiting while your deployment's Grantex cannot enrol tenants yet.
 Check every signature | AgenticOrg checked each artifact's signature, key, expiry and revocation status before keeping it. All 11 passed. | Owner: AgenticOrg | If blocked: A refusal names the reason, for example revocation_status_unavailable; nothing from that batch is kept.
-Create the signing key | One signing key for the shop. Its public half is published in the profile, so agents can check the shop's own answers. | Owner: Merchant | If blocked: Publishing is refused with signing_key_missing until the key exists.
+Create the signing key | One signing key for the shop. Its public half is published in the profile, so agents can check the shop's own answers. For you: Sell everywhere creates it if it is missing. | Owner: Merchant | If blocked: Publishing is refused with signing_key_missing until the key exists.
 ```
 
 ## Part 2. Its own address
 
-Buyer agents need a web address to find a shop. Nilgiri Tea House uses `nilgiritea.agenticorg.ai`. Your shop would use a subdomain you own, such as `agent.your-store.example`.
+Buyer agents need a web address to find a shop. Nilgiri Tea House uses `nilgiritea.agenticorg.ai`, connected by hand with the two records below, the way you would connect a domain of your own. Your shop can get `<your-shop>.agenticorg.ai` from Sell everywhere with no DNS work (while fewer than 20 shops have one), or use a subdomain you own, such as `agent.your-store.example`.
 
 ```figure
 nilgiri-records | Nilgiri Tea House's two DNS records | A CNAME routes the address to AgenticOrg. A TXT record with a one-time code proves the shop controls the address. With both in place, the address was attested and the profile went live.
@@ -129,16 +129,16 @@ Full instructions for your own domain, including every check and its fix, are in
 This is what happens when an AI shopping agent buys tea for someone.
 
 ```figure
-nilgiri-buyer | A buyer agent shops at Nilgiri Tea House | The agent reads the profile, searches, and opens a checkout with its API key. Grantex issues mandates for that exact cart. The arbiter allows or refuses and records the decision. Payments are off in this demo.
+nilgiri-buyer | A buyer agent shops at Nilgiri Tea House | The agent reads the profile, searches, and opens a checkout with its API key. The mandate step belongs to agent-executed payment, which is switched off. The arbiter allows or refuses and records the decision. This demo has no payment method, so it stops before payment.
 ```
 
 ```flow start=11
 Discover | The agent reads /.well-known/ucp and learns the address of the shop's API and which UCP features it supports. | Owner: Buyer agent | If blocked: A 404 means the profile is not published, or its signed facts have lapsed and could not be renewed.
 Search | The agent searches for chai and gets the Masala Chai Blend at ₹449, in stock. The answer comes only from verified facts. | Owner: Buyer agent | If blocked: A catalog_unavailable message means the verified facts lapsed and could not be renewed; nothing is guessed. Try again shortly.
 Open a checkout | The agent creates a checkout for NTH-MASALA-250, quantity 1, using the API key the merchant issued to its platform. The shop prices it from the same verified facts. | Owner: Buyer agent | If blocked: Without a valid key the shop answers 401.
-Get mandates | Grantex issues three signed mandates: what the buyer allowed (Intent), this exact cart (Cart) and the amount and payment rail (Payment). | Owner: Grantex | If blocked: A mandate is refused when it goes beyond what the buyer allowed.
-Decide | The arbiter applies its fixed rules, such as the shop's limits and the mandates, and answers allow or refuse. The decision is sealed in the ledger. | Owner: AgenticOrg arbiter | If blocked: A refusal names the first rule that failed; nothing is charged.
-Pay | With live payments on, the payment provider would charge once, only on allow. In this demo there is no payment step: once pickup is chosen the checkout is ready, and completing it answers payment_failed, "A payment instrument is required to complete." Nothing is charged. | Owner: Payment provider | If blocked: Live payment stays off until a payment-provider sandbox run has passed.
+Mandates, switched off | On the agent-executed path, Grantex would issue three signed mandates: what the buyer allowed (Intent), this exact cart (Cart) and the amount and payment rail (Payment). That path is off, so no mandate is issued here. | Owner: Grantex | If blocked: A mandate is refused when it goes beyond what the buyer allowed.
+Decide | For a shop with a payment method, the arbiter checks its signed facts and its limits before any payment link exists, and answers allow or refuse. The decision is sealed in the ledger. | Owner: AgenticOrg arbiter | If blocked: A refusal names the first rule that failed; no link is issued and nothing is charged.
+Pay | Nilgiri Tea House has no payment method, so there is no payment step: once pickup is chosen the checkout is ready, and completing it answers payment_failed, "A payment instrument is required to complete." Nothing is charged. A shop that chose where buyers pay answers requires_escalation with continue_url instead: the link to its own Shopify checkout or Plural page, where the buyer pays. | Owner: The shop's payment page | If blocked: Without a payment method, buyers get no payment link.
 ```
 
 For an agent platform, the checkout request looks like this. The key and the platform profile are your own.
@@ -152,7 +152,7 @@ curl -s -X POST https://nilgiritea.agenticorg.ai/ucp/checkout-sessions \
   -d '{"line_items":[{"item":{"id":"NTH-MASALA-250"},"quantity":1}]}'
 ```
 
-Every step of the mandates, the passkey and the decision is in [A purchase, step by step](/docs/oacp-buyer-journey).
+How a payment link is issued, and how the switched-off mandate path works, is in [A purchase, step by step](/docs/oacp-buyer-journey).
 
 ## See it with real agents
 
@@ -164,6 +164,11 @@ searches the catalog, opens a checkout and stops at the payment step. Nothing wa
 ChatGPT connects straight to AgenticOrg's hosted MCP server at `https://mcp.agenticorg.ai/mcp`. The
 server needs no sign-in and offers shop tools only: search, product lookup, and opening or updating a
 checkout. It has no tool that pays, and each caller is rate-limited.
+
+For these runs the server served Nilgiri Tea House alone. For Sell everywhere the same address serves
+every shop on the AgenticOrg network and adds two tools: `list_shops`, and `complete_checkout`, which
+returns the shop's payment link for a ready checkout. It still has no tool that pays. See
+[Sell everywhere](/docs/oacp-sell-everywhere).
 
 Connect it once:
 
@@ -191,8 +196,8 @@ time.
 
 3. **Checkout, then stop at payment.** ChatGPT opened the checkout and chose pickup at the Ooty
    store, which costs nothing. The checkout is ready for completion with a total of ₹449.00, and no
-   payment was added or charged. A real shop with live payments would take the buyer's payment here,
-   only after the arbiter allows it.
+   payment was added or charged. A shop that has chosen where buyers pay would give the buyer a link
+   to its own payment page here, only after the arbiter allows it.
 
 ChatGPT may show a product photo it found on its own. The shop's catalog has no real photos, so any
 picture you see there does not come from Nilgiri Tea House.
@@ -216,8 +221,8 @@ Gemini asked before every tool call, and each call was approved by hand.
 ![The shop's answer to completing the checkout: an error message with code payment_failed, "A payment instrument is required to complete.", severity recoverable, path $.payment.](/screenshots/nilgiri-gemini-payment-stop.webp)
 
 3. **Stop at payment.** Asked to complete, the shop answered `payment_failed`: "A payment
-   instrument is required to complete." That is the payment layer. A real shop with live payments
-   would take the buyer's payment here, only after the arbiter allows it.
+   instrument is required to complete." That is the payment layer. A shop that has chosen where
+   buyers pay would answer with a link to its own payment page here, only after the arbiter allows it.
 
 ### Telegram, through an AgenticOrg agent
 
@@ -235,12 +240,14 @@ and answered, in about 30 seconds. To give your own agent these tools, see the
 
 | Nilgiri Tea House did | You do | Where |
 | --- | --- | --- |
-| Created its merchant and seller agent | Sign up and save your merchant settings | Commerce Runtime |
-| Loaded 10 synthetic products | Connect Shopify read-only and run a sync | Commerce Runtime |
-| Set limits in INR | Set your order limits and currencies | Commerce Runtime |
-| Got 11 artifacts signed and verified | Ask your operator to allowlist you at Grantex, then request authority | Commerce Runtime |
-| Proved nilgiritea.agenticorg.ai | Add a subdomain, its CNAME and TXT records, and the Search Console owner | Custom Domains |
-| Published its profile | Create the signing key and publish | Commerce Runtime |
+| Created its merchant and seller agent | Sign up and create your shop | Sell Everywhere |
+| Loaded 10 synthetic products | Connect Shopify read-only, or upload a CSV or JSON file | Sell Everywhere |
+| Had no shipping fee | Write your policies, and set a shipping fee if you have no Shopify | Sell Everywhere |
+| Set limits in INR | Set your order limits, daily maximum and currency | Sell Everywhere |
+| Had no payment method | Choose your Shopify checkout or your Plural account | Sell Everywhere, Payments |
+| Got 11 artifacts signed and verified | Turn on Sell everywhere; it enrols you with Grantex and asks for the signatures | Sell Everywhere |
+| Proved nilgiritea.agenticorg.ai | Take the address Sell everywhere gives you, or add your own subdomain and its records | Sell Everywhere, or Custom Domains |
+| Published its profile | Nothing: Sell everywhere creates the key and publishes, and Publish shows why if it waits | Sell Everywhere |
 | Opened checkout and the ACP feed | Issue each agent platform its own API key | Settings, API keys |
 
 Most steps take a few minutes. Waiting for DNS and the certificate usually takes the longest.
@@ -248,8 +255,8 @@ Most steps take a few minutes. Waiting for DNS and the certificate usually takes
 ## What this demo does not do
 
 - **No real products or customers.** Every product, price, store and address is synthetic, and each product description starts with "Synthetic demo product".
-- **No money moves.** Live payments are off, and the demo has no payment provider attached.
-- **No shipping rates.** Delivery rates need a real Shopify shop. The demo is for discovery, search and checkout decisions.
+- **No money moves.** The demo has no payment method, so no checkout gets a payment link, and agent-executed payment is off.
+- **No shipping rates.** The demo sets no shipping fee, so buyers choose store pickup. A real shop gets its rates from Shopify, or sets a flat fee on Sell Everywhere. The demo is for discovery, search and checkout decisions.
 - **No store-location search yet.** Store locations are part of UCP 2026-08-25. The shop serves UCP 2026-04-08, so a location search answers that the feature is not served.
 
 ## Read next

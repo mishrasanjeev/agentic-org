@@ -1,0 +1,206 @@
+WEBVTT
+
+1
+00:00:00.003 --> 00:00:04.760
+This is a real order, recorded end to end on the live AgenticOrg service.
+
+2
+00:00:04.760 --> 00:00:10.235
+A merchant sets up a shop, a buyer's AI agent finds it and builds the order, and the
+
+3
+00:00:10.235 --> 00:00:14.080
+buyer pays the merchant on the merchant's own payment page.
+
+4
+00:00:20.301 --> 00:00:25.647
+First, the products. A shop on Shopify connects its store in one step:
+
+5
+00:00:25.647 --> 00:00:31.681
+paste the store address and an access token, and AgenticOrg reads the products,
+
+6
+00:00:31.681 --> 00:00:33.743
+prices and stock by itself.
+
+7
+00:00:34.100 --> 00:00:38.524
+Its buyers can then pay in the shop's own Shopify checkout.
+
+8
+00:00:38.524 --> 00:00:43.698
+Our demo shop has no Shopify store, so it uses a spreadsheet instead.
+
+9
+00:00:47.079 --> 00:00:52.095
+The merchant opens Sell everywhere and picks their new shop, Kaveri Coffee.
+
+10
+00:00:52.095 --> 00:00:57.513
+They have already saved the keys of their own Plural account, in sandbox mode for
+
+11
+00:00:57.513 --> 00:00:58.516
+this recording.
+
+12
+00:00:58.877 --> 00:01:03.986
+It uploads a spreadsheet: two coffees, with prices and stock.
+
+13
+00:01:07.592 --> 00:01:13.031
+Next come the policies buyers will see, and a flat shipping fee of forty-nine rupees
+
+14
+00:01:13.031 --> 00:01:14.585
+for orders within India.
+
+15
+00:01:27.572 --> 00:01:31.069
+Then the limits every AI agent must stay within:
+
+16
+00:01:31.069 --> 00:01:36.096
+the largest order, the most per day, and the most items in one order.
+
+17
+00:01:36.096 --> 00:01:37.990
+Nothing is set by default.
+
+18
+00:01:39.721 --> 00:01:45.202
+For payment, AgenticOrg tests the merchant's Plural keys, and the merchant chooses
+
+19
+00:01:45.202 --> 00:01:48.143
+to take payment in their own Plural account.
+
+20
+00:01:48.143 --> 00:01:50.884
+AgenticOrg never holds the buyer's money.
+
+21
+00:01:51.251 --> 00:01:57.487
+Last, the merchant names the shop on the network, accepts the terms, and turns Sell
+
+22
+00:01:57.487 --> 00:01:58.539
+everywhere on.
+
+23
+00:02:01.387 --> 00:02:06.975
+Turning it on enrols the shop with Grantex, which verifies the catalog, prices and
+
+24
+00:02:06.975 --> 00:02:11.745
+stock, and publishes the shop's signed profile at its own web address.
+
+25
+00:02:17.967 --> 00:02:23.608
+A few minutes later, the web address has its certificate, and everything is live.
+
+26
+00:02:23.608 --> 00:02:28.832
+Buyers can reach the shop from AI apps such as ChatGPT and Claude, from the
+
+27
+00:02:28.832 --> 00:02:34.613
+AgenticOrg bot on Telegram, and on the open web, and they pay on the merchant's own
+
+28
+00:02:34.613 --> 00:02:35.449
+Plural page.
+
+29
+00:02:38.574 --> 00:02:44.577
+Now the buyer's side. A buyer asks their AI assistant for two packs of South Indian
+
+30
+00:02:44.577 --> 00:02:50.579
+filter coffee, delivered to Bengaluru. The assistant is connected to the AgenticOrg
+
+31
+00:02:50.579 --> 00:02:53.906
+MCP server, and every call shown here is live.
+
+32
+00:02:54.276 --> 00:02:59.442
+It lists the shops on the network and searches them, and finds the merchant's filter
+
+33
+00:02:59.442 --> 00:03:01.964
+coffee at four hundred and twenty rupees.
+
+34
+00:03:02.426 --> 00:03:07.831
+It opens a checkout for two packs, then adds the buyer's name and delivery address.
+
+35
+00:03:07.831 --> 00:03:13.041
+The shop offers its flat shipping rate, and the total comes to eight hundred and
+
+36
+00:03:13.041 --> 00:03:14.278
+eighty-nine rupees.
+
+37
+00:03:14.677 --> 00:03:18.464
+The checkout is ready, so the agent asks to complete it.
+
+38
+00:03:18.464 --> 00:03:24.076
+AgenticOrg checks the order against the merchant's limits and the verified catalog,
+
+39
+00:03:24.076 --> 00:03:28.945
+records the decision, and returns a link to the merchant's payment page.
+
+40
+00:03:28.945 --> 00:03:31.108
+The agent cannot pay on its own.
+
+41
+00:03:33.980 --> 00:03:38.919
+The buyer opens the link. This is a Plural checkout under the merchant's own
+
+42
+00:03:38.919 --> 00:03:41.843
+account, and the buyer pays with a test card.
+
+43
+00:04:22.957 --> 00:04:29.019
+Plural sends the buyer back. AgenticOrg confirms the payment with Plural, and the
+
+44
+00:04:29.019 --> 00:04:30.440
+order is confirmed.
+
+45
+00:04:39.204 --> 00:04:44.300
+On the merchant's Orders page, the paid order appears with its items, the amount,
+
+46
+00:04:44.300 --> 00:04:49.460
+and the delivery details the buyer gave. The merchant's administrators also get an
+
+47
+00:04:49.460 --> 00:04:51.976
+email, and the merchant ships the order.
+
+48
+00:04:55.843 --> 00:04:59.248
+That is the whole flow. The merchant set up once.
+
+49
+00:04:59.248 --> 00:05:05.015
+A buyer's AI agent found the shop and built the order within the merchant's limits.
+
+50
+00:05:05.015 --> 00:05:07.863
+And the buyer paid the merchant directly.
+
+51
+00:05:07.863 --> 00:05:10.990
+The guides in this section explain each step.
+

@@ -378,13 +378,14 @@ test("public A2A guide links to a hosted page, not a source Markdown soft 404", 
   assert.doesNotMatch(guide.html, /href="[^"]*a2a-interoperability\.md"/);
 });
 
-test("the OACP section has eleven adaptive guides with summaries, figures and workflow cards", () => {
+test("the OACP section has twelve adaptive guides with summaries, figures and workflow cards", () => {
   const manual = loadUserGuides();
   const group = "OACP — agentic commerce, made safe";
   assert.ok(manual.groups.includes(group));
   const guides = manual.articles.filter((article) => article.group === group);
   assert.deepEqual(guides.map((guide) => guide.slug), [
-    "oacp-overview", "oacp-example-nilgiri-tea", "oacp-how-it-works", "oacp-buyer-journey", "oacp-merchant-setup",
+    "oacp-start-here", "oacp-overview", "oacp-example-nilgiri-tea", "oacp-how-it-works", "oacp-buyer-journey",
+    "oacp-merchant-setup",
     "oacp-sell-everywhere", "oacp-getting-paid", "oacp-custom-domains", "oacp-safety-and-trust",
     "oacp-feature-switches", "oacp-faq",
   ]);
@@ -400,7 +401,13 @@ test("the OACP section has eleven adaptive guides with summaries, figures and wo
     assert.equal(guide.colorScheme, "light", guide.slug);
     assert.deepEqual(guide.figures, [], guide.slug);
   }
-  const overview = guides[0];
+  // The plain-words start page leads the section with the recording of one real order.
+  const start = guides[0];
+  assert.equal(start.slug, "oacp-start-here");
+  assert.deepEqual(start.videos.map((video) => video.id), ["oacp-commerce-walkthrough"]);
+  assert.match(start.html, /Connect your store/);
+  assert.match(start.html, /Upload a spreadsheet/);
+  const overview = guides.find((guide) => guide.slug === "oacp-overview");
   assert.match(overview.html, /does not replace them, and it is not a certification/);
   assert.match(overview.html, /Mastercard Agent Pay/);
   // The live example merchant: try-it commands against the real host, four diagrams, one numbering.

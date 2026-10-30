@@ -868,10 +868,11 @@ These names are parsed from connectors. A listing does not prove credentials, su
 - [Seller commerce with an outside A2A buyer](https://agenticorg.ai/docs/seller-a2a-commerce-journey): An interactive third-party buyer transaction map and six checkpoints covering merchant setup, A2A seller access, sourced answers and the Pine Labs Plural payment boundary.
 - [API, SDK, MCP and A2A integration](https://agenticorg.ai/docs/api-sdk-mcp): Connect applications and agent clients with authenticated, scoped APIs; distinguish public discovery from permission to execute.
 - [Self-hosting and deployment handoff](https://agenticorg.ai/docs/self-hosting): Understand hosted versus bank-managed operation, local Docker setup, migration-first releases, backups and operational responsibilities.
+- [Sell through AI assistants: start here](https://agenticorg.ai/docs/oacp-start-here): The whole idea in plain words, with a video of one real order: set up once with Shopify or a spreadsheet, a buyer's AI assistant shops your store, the buyer pays you on your own page and you get the order.
 - [What OACP is and why you need it](https://agenticorg.ai/docs/oacp-overview): OACP is one trust layer under UCP, ACP, AP2, Visa TAP, MCP and A2A: your facts stated once, signed, decided by fixed rules and recorded, then rendered into each standard.
 - [Example: Nilgiri Tea House, end to end](https://agenticorg.ai/docs/oacp-example-nilgiri-tea): A live example shop you can try in two minutes: how Nilgiri Tea House was set up, how it got its own address, how a buyer agent searches and checks out, and the same steps for your shop.
 - [How OACP works, end to end](https://agenticorg.ai/docs/oacp-how-it-works): Follow your shop's facts through seven steps: signed by Grantex, verified and kept by AgenticOrg, decided by the arbiter, recorded in the ledger and rendered for every buyer agent.
-- [A purchase, step by step](https://agenticorg.ai/docs/oacp-buyer-journey): Walk through one agent purchase: Intent, Cart and Payment mandates, the buyer's passkey, RBI AFA for UPI AutoPay, the arbiter's decision, the payment and the order.
+- [A purchase, step by step](https://agenticorg.ai/docs/oacp-buyer-journey): Walk through one purchase as it works today: the buyer's agent opens a checkout, the arbiter checks your signed facts and limits, the buyer pays on your own Shopify checkout or Plural page, and the order reaches you. Agent-executed payment with mandates is built and switched off.
 - [Merchant setup checklist](https://agenticorg.ai/docs/oacp-merchant-setup): A numbered checklist from creating your shop, your catalog and Grantex enrolment to the DNS TXT step, your UCP profile, checkout, the ACP feed and MCP tools, and what stays off until a payment sandbox run.
 - [Sell everywhere: one switch for every AI surface](https://agenticorg.ai/docs/oacp-sell-everywhere): One page from a new shop to every AI surface: connect Shopify or upload a catalog, set policies and order limits, then turn it on. Buyers find you in ChatGPT, Claude and other AI apps, on Telegram and the open web. You stay the seller.
 - [Getting paid: buyers pay on your own page](https://agenticorg.ai/docs/oacp-getting-paid): Choose where buyers pay: your own Shopify checkout or your Plural account. What the buyer sees, the Orders page and the email you get for each order. AgenticOrg never takes the money.
@@ -3269,25 +3270,29 @@ Audience: Merchants and bank merchant-service teams. Reviewed: 2026-10-02.
 
 #### The end-to-end ownership model
 
-AgenticOrg runs seller/buyer agents and their skills, knowledge and approved integration paths. Grantex supplies trust, policy and canonical artifact authority. Shopify or another merchant system remains the operational source of truth. Banks, fintechs, providers and POS systems own payment, mandate and fulfillment execution.
+AgenticOrg runs seller/buyer agents and their skills, knowledge and approved integration paths. Grantex supplies trust, policy and canonical artifact authority. Shopify, another merchant system or a catalog file the merchant uploads remains the operational source of truth. Buyers pay on the merchant's own payment page, its Shopify checkout or its own Plural account; AgenticOrg never collects the money. Banks, fintechs, providers and POS systems own payment, mandate and fulfillment execution.
 
 For a bank-led pilot with explicit owners, human decisions and blocked paths,
 see the [merchant-services process map](/docs/bfsi-merchant-services#process-map).
 
 ```flow
-Merchant setup | Configure the Seller Commerce Agent and merchant-scoped sources/channels.
-Shopify read-only sync | Fetch real products, variants, images, price and inventory snapshots with approved access.
-Grantex authority | Send the bounded authority request and obtain validated artifacts.
+Merchant setup | Create the shop on Sell Everywhere, or configure the Seller Commerce Agent and merchant-scoped sources/channels on Commerce Runtime.
+Catalog read | Read real products, variants, images, price and inventory snapshots from Shopify with the merchant's own read-only token, or take them from a CSV or JSON upload.
+Grantex authority | Send the bounded authority request and obtain validated artifacts. Turning on Sell everywhere does this once by itself.
 AgenticOrg cache | Check each artifact's Grantex signature, scope, expiry and revocation status, then persist it with source and freshness.
 Buyer conversation | Answer through configured web/agent/channel bridges from supported evidence.
-Prepared handoff | Ask the authoritative provider, merchant or POS path to confirm its own action.
+Payment link or prepared handoff | A ready checkout gives the buyer a link to the merchant's own payment page after an allow decision; other paths ask the authoritative provider, merchant or POS to confirm its own action.
 ```
 
 #### Merchant setup checklist
 
-Open **Commerce Runtime** with an administrator or merchant role. Prepare the merchant identity/reference, source system, owner, catalog scope, approved channels, publishing state and provider/POS references. Review the available form and onboarding packet before requesting authority.
+A merchant sets up a real shop on **Sell Everywhere** (`/dashboard/sell-everywhere`): create or pick the shop, add a catalog, write the returns, shipping and pickup policies (and a flat shipping fee without Shopify), set order limits, choose where buyers pay, then turn it on. Going live enrols the tenant with Grantex, gives the shop an address, publishes its profile and refreshes its artifacts. See [Sell everywhere](/docs/oacp-sell-everywhere) and the [merchant setup checklist](/docs/oacp-merchant-setup).
 
-For Shopify, obtain the reviewed Admin API access and webhook configuration from the merchant's authorized administrator. Use least-powerful read scopes and protected merchant credential custody. No scraping is needed for the supported Shopify path.
+**Commerce Runtime** is the operator console for the same runtime. Open it with an administrator or merchant role. Prepare the merchant identity/reference, source system, owner, catalog scope, approved channels, publishing state and provider/POS references. Review the available form and onboarding packet before requesting authority.
+
+For Shopify, the merchant creates a custom app in its own store with the `read_products` and `read_inventory` Admin API scopes and enters its token; AgenticOrg checks it with one read and stores it encrypted. Every sync uses the merchant's own stored token. A deployment-wide Shopify store is read only for the one operator tenant named in `AGENTICORG_SHOPIFY_ENV_OPERATOR_TENANT_ID`. Product webhooks go to the merchant's own webhook address and are checked with the merchant's own signing secret. No scraping is needed for the supported Shopify path.
+
+A shop without Shopify uploads a CSV or JSON catalog: one product per row, one currency, up to 2,000 products. It is recorded as uploaded by the merchant, never as coming from a store system.
 
 Synchronize a bounded catalog and compare SKU/variant, image, amount/currency and inventory timestamp with Shopify. Confirm a signed webhook is rejected when invalid and accepted only under the configured binding. Webhook receipt alone does not prove catalog freshness; inspect the resulting source snapshot.
 
@@ -3309,19 +3314,23 @@ Do not promote stale snapshots into final price, stock, delivery, tax, return or
 
 The runtime includes bounded protocol-adapter payloads and web/MCP/OpenAPI/A2A/WhatsApp/Telegram bridge routes. Client configuration, provider credentials, platform/marketplace approval and merchant publishing are separate dependencies. A UCP/ACP/schema.org payload does not automatically list a merchant in ChatGPT, Gemini or another marketplace.
 
-Current WooCommerce/ERP/PIM/OMS/WMS/custom-source configuration does not have universal runtime parity with Shopify. Treat each as an integration project until its adapter is implemented and validated.
+With Sell everywhere turned on, a published shop is listed in the AgenticOrg network: buyers reach it from ChatGPT and other MCP apps through `https://mcp.agenticorg.ai/mcp`, from the AgenticOrg shopping bot on Telegram, and on the open web through its UCP profile. That is AgenticOrg's own network, not a listing in another company's marketplace.
+
+Current WooCommerce/ERP/PIM/OMS/WMS/custom-source configuration does not have universal runtime parity with Shopify. Treat each as an integration project until its adapter is implemented and validated; until then, a CSV or JSON upload is the supported way to bring such a catalog.
 
 #### Commerce decisions and the ledger
 
-Before a purchase handoff, an Offline POS handoff or a checkout completion goes anywhere, a fixed set of rules decides it: mandate, consent, the buyer's Commerce Passport cap, valid artifacts and the merchant's own limits. The answer is allow or refuse, with the first failing rule as the reason, and it never waits for a person. An allow can be used once, for exactly that payload. Every commerce change is written to the commerce ledger, which an administrator can export and check offline. Optional human review copies a refusal into the review queue without changing it.
+Before a purchase handoff, an Offline POS handoff, a payment link or a checkout completion goes anywhere, a fixed set of rules decides it. A payment link needs valid artifacts and the merchant's own limits, including its daily maximum; agent-executed completion also needs mandate, consent and the buyer's Commerce Passport cap. The answer is allow or refuse, with the first failing rule as the reason, and it never waits for a person. An allow can be used once, for exactly that payload. Every commerce change is written to the commerce ledger, which an administrator can export and check offline. Optional human review copies a refusal into the review queue without changing it.
 
-UCP and ACP checkout for agent platforms, and the public UCP profile, are switched off by default. Turning them on is an operator step, one at a time. Until the payment executor is switched on, a checkout cannot complete, and refunds of completed checkouts are also decided by the same rules.
+UCP and ACP checkout for agent platforms, the AgenticOrg network and the public UCP profile are switched off by default. Turning them on is an operator step, one at a time. Once checkout is on, a merchant that chose where buyers pay hands each ready checkout to its own payment page; see [Getting paid](/docs/oacp-getting-paid). The agent-executed payment executor stays off, and refunds of completed checkouts are also decided by the same rules.
 
 #### Payments and offline POS
 
-Plural/Pine capability verification records provider-owned, non-sensitive capability evidence. It is not a completed payment or mandate. A human sets up and authorizes payment relationships with the fintech/provider under its own process.
+**Payment hand-off.** A merchant chooses its own Shopify checkout or its own Plural account. The buyer pays on that page and authenticates the payment there. A Plural payment confirmed for the right amount, by Plural's signed webhook or the once-a-minute status check, becomes an order on the Orders page with an email to the tenant's administrators; any other payment is refused and logged for a refund. A Shopify-paid order stays in the merchant's Shopify admin.
 
-Offline POS handoff means a bounded interaction with a physical-store/POS confirmation path; it does not mean unlimited offline financial authority. Provider/POS/merchant evidence remains authoritative. AgenticOrg does not execute OACP capture, refunds, holds, shipping or order creation merely from cached artifacts.
+Plural capability verification records provider-owned, non-sensitive capability evidence. It is not a completed payment or mandate. A human sets up and authorizes payment relationships with the fintech/provider under its own process.
+
+Offline POS handoff means a bounded interaction with a physical-store/POS confirmation path; it does not mean unlimited offline financial authority. Provider/POS/merchant evidence remains authoritative. AgenticOrg does not execute OACP capture, refunds, holds, shipping or order creation merely from cached artifacts; an order is created only from a confirmed provider payment.
 
 Public discovery remains off unless explicitly enabled through platform and merchant settings. Readiness, certification and public standardization are not implied by these routes.
 
@@ -3408,9 +3417,9 @@ Audience: Merchants and third-party buyer-agent integrators. Reviewed: 2026-10-0
 
 An outside buyer agent can ask an AgenticOrg Seller Commerce Agent about a merchant's products over authenticated A2A v1 HTTP+JSON. The buyer can run in a consumer app such as Muse, Instinct or Dots, or in any other service that can make this A2A request. Those names are examples of possible clients, **not** claims of a built-in plugin, vendor partnership, verified client identity or automatic discovery.
 
-The working seller question path is **non-binding**. It can return source-labelled product and inventory snapshots, or refuse. It cannot create an order, hold stock, collect money or create a Pine Labs Plural mandate. A complete paid purchase additionally requires merchant and provider integration, human authorization where required, provider confirmation, order creation and reconciliation. Do not tell a buyer they have purchased until those authoritative confirmations exist.
+The working seller question path is **non-binding**. It can return source-labelled product and inventory snapshots, or refuse. It cannot create an order, hold stock, collect money or create a Pine Labs Plural mandate. A complete paid purchase additionally requires merchant and provider integration, human authorization where required, provider confirmation, order creation and reconciliation. Do not tell a buyer they have purchased until those authoritative confirmations exist. For a paid purchase today, use a UCP or ACP checkout with the payment hand-off instead: the buyer pays on the merchant's own Shopify checkout or Plural page; see [Getting paid](/docs/oacp-getting-paid).
 
-**Who can operate this journey.** Merchant staff provide product, source-system and payment-provider approvals. An AgenticOrg **tenant administrator** performs the protected Runtime Actions, connector credential/sync, artifact issuance, capability verification and outside-buyer access issuance described below. The `merchant` role can manage merchant configuration, but it cannot perform those admin-only actions. Arrange the administrator handoff before starting the checkpoints.
+**Who can operate this journey.** Merchant staff provide product, source-system and payment-provider approvals. An AgenticOrg **tenant administrator** performs the protected Runtime Actions, connector credential/sync, artifact issuance, capability verification and outside-buyer access issuance described below. The `merchant` role can manage merchant configuration, but it cannot perform those admin-only actions. Arrange the administrator handoff before starting the checkpoints. On the [Sell Everywhere](/docs/oacp-sell-everywhere) page a merchant can connect Shopify or upload a catalog and run the Grantex steps itself; the checkpoints below use the operator console.
 
 ```flow
 Merchant | Configure the seller, source system, channel approvals and provider reference in AgenticOrg.
@@ -3434,7 +3443,7 @@ The interactive map above lets you select an illustrative buyer app and inspect 
 | 5 | Buyer to provider authorization | The buyer reviews terms and authorizes with an approved provider flow. | Requires merchant/provider integration; not wired through the current A2A seller route. |
 | 6 | Provider outcome to merchant order system | The buyer sees confirmed only after payment and order/inventory evidence agree. | Requires verified callbacks, merchant execution and reconciliation. |
 
-**Authority boundary.** The third-party buyer agent never needs to live on AgenticOrg. AgenticOrg hosts the seller and maintains the sourced cache; Shopify owns current commercial facts, Grantex governs the canonical artifacts, and Pine Labs Plural/P3P owns payment execution. The diagram is an explanatory journey, not a live checkout simulator.
+**Authority boundary.** The third-party buyer agent never needs to live on AgenticOrg. AgenticOrg hosts the seller and maintains the sourced cache; Shopify or the merchant's uploaded catalog owns current commercial facts, Grantex governs the canonical artifacts, and Plural/P3P owns payment execution. The diagram is an explanatory journey, not a live checkout simulator.
 
 #### Checkpoint 1: create the seller
 
@@ -3444,7 +3453,7 @@ The interactive map above lets you select an illustrative buyer app and inspect 
 
 #### Checkpoint 2: bring source facts
 
-**Shopify and tenant-admin action.** Have the Shopify administrator approve the read-only Admin API access and webhook setup. The AgenticOrg tenant administrator then saves the credential through AgenticOrg's protected custody path in **Shopify Connector**, inspects **Status**, and runs **Sync**. Compare a small sample of product IDs, variants, image URLs, amount/currency and inventory timestamps against Shopify. A webhook signals a possible change; it does not itself prove a fresh snapshot. Other configured ERP or commerce systems need their own validated adapter and must not be treated as Shopify-equivalent by default.
+**Shopify and tenant-admin action.** Have the Shopify administrator approve the read-only Admin API access and webhook setup. The AgenticOrg tenant administrator then saves the credential through AgenticOrg's protected custody path in **Shopify Connector**, inspects **Status**, and runs **Sync**. Compare a small sample of product IDs, variants, image URLs, amount/currency and inventory timestamps against Shopify. A webhook signals a possible change; it does not itself prove a fresh snapshot. Other configured ERP or commerce systems need their own validated adapter and must not be treated as Shopify-equivalent by default. A CSV or JSON upload on Sell Everywhere is the other supported catalog source; it is recorded as uploaded by the merchant.
 
 **Pass check.** The sync reports product/variant counts and a source evidence reference for the correct merchant. Prices and stock remain snapshots, not final offers or reservations. Never paste a Shopify token into an A2A message, documentation page or buyer app.
 
@@ -3490,11 +3499,13 @@ Run the [local external-buyer demo](/docs/external-buyer-a2a-demo) to see a sepa
 
 #### Checkpoint 6: hand off payment
 
-**Merchant, provider and tenant-admin action.** The merchant and provider set up the Pine Labs Plural/P3P relationship and buyer authorization under the provider's terms. The AgenticOrg tenant administrator configures the provider reference and uses **Verify** to obtain non-sensitive capability evidence. When the buyer asks to proceed, that administrator can use the separate purchase-preparation path to assemble a bounded, source-aware handoff. This is not the A2A question route and it does not create a mandate or payment.
+**Merchant, provider and tenant-admin action.** The merchant and provider set up the Plural/P3P relationship and buyer authorization under the provider's terms. The AgenticOrg tenant administrator configures the provider reference and uses **Verify** to obtain non-sensitive capability evidence. When the buyer asks to proceed, that administrator can use the separate purchase-preparation path to assemble a bounded, source-aware handoff. This is not the A2A question route and it does not create a mandate or payment.
 
-**What a real paid journey still needs.** The approved provider path must obtain any required human mandate/payment authorization, return a verified outcome, and reconcile with the merchant's order, inventory and receipt systems. AgenticOrg may show a paid or confirmed state only after the authoritative provider and merchant outcomes agree. If capability is unavailable, consent is absent, a price or stock snapshot changed, or confirmation is missing, show a blocker or pending state rather than success. [Plural/Pine capability guide](https://github.com/mishrasanjeev/agentic-org/blob/main/docs/oacp/plural-pine-p3p-capability-verifier.md) explains the current verifier boundary.
+**What a real paid journey still needs.** The approved provider path must obtain any required human mandate/payment authorization, return a verified outcome, and reconcile with the merchant's order, inventory and receipt systems. AgenticOrg may show a paid or confirmed state only after the authoritative provider and merchant outcomes agree. If capability is unavailable, consent is absent, a price or stock snapshot changed, or confirmation is missing, show a blocker or pending state rather than success. [Plural capability guide](https://github.com/mishrasanjeev/agentic-org/blob/main/docs/oacp/plural-pine-p3p-capability-verifier.md) explains the current verifier boundary.
 
 **Current boundary.** AgenticOrg ships a provider capability verifier and non-executing preparation/reconciliation contracts. It does **not** ship a completed Plural/P3P payment or mandate through this external A2A seller route. Provider approval, merchant authorization, checkout/order execution and production rollout are separate integration work. Do not use a simulated capability response as proof of a paid transaction.
+
+**The payment hand-off, outside this route.** UCP and ACP checkout and the AgenticOrg network can end a ready checkout with a link to the merchant's own payment page: its Shopify cart, or a Plural hosted payment page under the merchant's own Plural account. The buyer pays and authenticates there; AgenticOrg never holds the money. A Plural payment confirmed for the right amount becomes an order with an email to the merchant's administrators. That path does not run through the A2A seller route, and agent-executed payment against buyer mandates stays off.
 
 #### Operational acceptance before inviting buyer traffic
 
@@ -3689,10 +3700,99 @@ Use the repository's reviewed deployment path and migration-first process. Stric
 The public user manual is available under `/docs` in the UI build. `docs.agenticorg.ai` should be a DNS **subdomain**, not a separate nameserver delegation by default. Hosting/TLS must route that hostname to the reviewed UI/static documentation service before publishing the link. The repository's documentation-domain runbook explains the release checks and ownership; no DNS change is made by reading this guide.
 
 
+### Sell through AI assistants: start here
+
+URL: https://agenticorg.ai/docs/oacp-start-here
+Audience: Anyone new to selling through AI assistants. Reviewed: 2026-10-30.
+
+In 30 seconds:
+
+- AI assistants such as ChatGPT and Claude can now shop for people. AgenticOrg lets your shop sell to them.
+- You set up once: add your products from Shopify or a spreadsheet, write your rules, set your limits and choose where you get paid.
+- A buyer asks their assistant for something. It finds your shop, fills the cart and asks for a payment link.
+- The buyer pays you on your own payment page. The assistant can never pay by itself.
+- You get the order with the delivery address. The video below shows one real order, start to finish.
+
+#### Watch one real order
+
+This recording was made on the live AgenticOrg service with a demo coffee shop, a demo buyer and a Plural test payment. Every screen is the real product, and every answer from the shop's side comes live from AgenticOrg. The buyer's assistant is shown as a simple console that makes the same calls an AI app makes.
+
+Video: One real order, start to finish. A shop owner sets up a demo coffee shop: products from a spreadsheet (a Shopify store connects in one step instead), rules, a shipping fee, limits and their own Plural account. A buyer's AI assistant finds the shop, fills the cart and gets a payment link. The buyer pays the shop, and the order reaches the shop owner with the delivery address. Narrated, with English captions. Watch it at /media/docs/oacp-commerce-walkthrough.mp4 (English captions at /media/docs/oacp-commerce-walkthrough.vtt).
+
+#### How it works, in three parts
+
+### 1. You set up your shop once
+
+It takes about ten minutes, on one page in AgenticOrg: **Sell everywhere** (`/dashboard/sell-everywhere`).
+
+1. **Create your shop.** Give it a name.
+2. **Add your products.** Pick the way that suits you:
+   - **On Shopify?** Connect your store. In your Shopify admin, create an app that may read products and stock, then paste your store address and its access token. AgenticOrg reads your products, prices and stock by itself and never changes them.
+   - **Not on Shopify?** Upload a spreadsheet (a CSV file) with your products, prices and stock.
+3. **Write your rules.** Your returns and delivery policy. Without Shopify, also set a shipping fee; Shopify shops use their Shopify shipping rates.
+4. **Set your limits.** The biggest single order, the most per day and the most items in one order. An AI assistant can never go over them. Nothing is set for you.
+5. **Choose where you get paid.** Your own Shopify checkout, or your own Plural account.
+6. **Turn it on.** AgenticOrg gives your shop a web address, such as `your-shop.agenticorg.ai`, and Grantex checks your products, prices and stock. Once that address is live, usually within minutes and at most an hour, buyers' assistants can find you.
+
+Figure: One switch, every surface. You turn it on once. AgenticOrg lists your shop and connects it to each surface. Buyers finish and pay with you.
+
+### 2. A buyer shops through their AI assistant
+
+- The buyer connects their assistant to AgenticOrg once: ChatGPT, Claude or another app that can add an MCP server, using `https://mcp.agenticorg.ai/mcp`. Or they open the AgenticOrg shopping bot on Telegram.
+- They ask in their own words, for example: "Two packs of filter coffee, delivered to Bengaluru."
+- The assistant finds your shop, picks the product, adds the delivery address and the shipping, and asks for a payment link.
+- AgenticOrg checks the order against your limits and the facts Grantex checked, records the decision, and only then hands back your payment link. If something is off, for example the order is over your limit, no link is given and the reason is recorded.
+
+### 3. The buyer pays you, and you get the order
+
+Figure: The buyer pays on your page. When the checkout is ready, AgenticOrg checks your shop's facts and limits, then the buyer gets your payment link and pays you there. AgenticOrg never takes the money.
+
+- The buyer pays on **your** page: your Shopify checkout, or a Plural payment page under your own Plural account (card, UPI or net banking). They confirm the payment there themselves.
+- A Plural order appears on your **Orders** page (`/dashboard/orders`) with the items, the amount and the delivery address, and your administrators get an email. A Shopify order appears in your Shopify admin, like any other.
+- You pack and ship it as usual.
+
+#### Who does what
+
+| Who | Does | Never does |
+| --- | --- | --- |
+| You, the shop owner | Add products, write rules, set limits, choose where you get paid, ship the order | Give up the sale: you stay the seller |
+| The buyer | Asks for what they want, checks the order and pays you | Share card or UPI details with the assistant |
+| The buyer's AI assistant | Finds your shop, fills the cart, asks for a payment link | Pay on its own or go over your limits |
+| AgenticOrg | Lists your shop, checks every order against your limits, records every decision | Hold the buyer's money |
+| Grantex | Checks and signs your products, prices and stock | Sell anything or take payments |
+
+#### What you need
+
+- An AgenticOrg account where you can open **Sell everywhere**.
+- Your products: a Shopify store, or a spreadsheet.
+- A way to get paid: your Shopify store, or a Plural account. Without one, buyers are told to finish the purchase with you directly.
+
+#### Quick answers
+
+**Do I need Shopify?** No. A spreadsheet works just as well. Shopify only saves you typing, and lets buyers pay in your own Shopify checkout.
+
+**Can the AI assistant spend money without the buyer?** No. It can only ask for a payment link. The buyer opens the link and pays you themselves.
+
+**Where does the money go?** Straight to you, through your own Shopify checkout or Plural account. AgenticOrg never touches it.
+
+**Can I stop selling this way?** Yes. Choose **Pause** on the Sell everywhere page and your shop leaves the network at once. Your shop name and web address stay yours.
+
+**Am I in Google Gemini, Microsoft Copilot or Perplexity?** Not yet. AgenticOrg is registering with each of them for every shop on the network; the Sell everywhere page shows each one as it comes.
+
+#### Go deeper
+
+- [Sell everywhere: one switch for every AI surface](/docs/oacp-sell-everywhere): every step of the setup page.
+- [Getting paid: buyers pay on your own page](/docs/oacp-getting-paid): Shopify checkout, Plural, the Orders page and the email.
+- [What OACP is and why you need it](/docs/oacp-overview): the trust layer underneath, for the curious.
+- [How OACP works, end to end](/docs/oacp-how-it-works): how your facts are checked, decided and recorded.
+- [Example: Nilgiri Tea House](/docs/oacp-example-nilgiri-tea): a live example shop you can try in two minutes.
+- [OACP questions and answers](/docs/oacp-faq).
+
+
 ### What OACP is and why you need it
 
 URL: https://agenticorg.ai/docs/oacp-overview
-Audience: Merchants and business owners. Reviewed: 2026-10-21.
+Audience: Merchants and business owners. Reviewed: 2026-10-30.
 
 In 30 seconds:
 
@@ -3701,6 +3801,12 @@ In 30 seconds:
 - OACP is one trust layer underneath them. You state your facts once, Grantex signs them, and AgenticOrg checks, decides and records.
 - Each standard then receives the same facts in its own format. Revoke a fact once and every channel stops using it.
 - OACP feeds the standards. It does not replace them, and it is not a certification.
+
+#### Watch a real order, end to end
+
+This recording follows one real order on the live service, from the shop owner's setup to the buyer paying the shop. New to all this? Start with [Sell through AI assistants: start here](/docs/oacp-start-here), which explains it in plain words. The rest of this guide covers the trust layer underneath.
+
+Video: A real OACP order, end to end. Recorded on the live service with a demo shop and a Plural test payment. The shop owner adds products (a Shopify store connects in one step; the demo shop uploads a spreadsheet), sets rules, limits and their own Plural account, and turns Sell everywhere on. A buyer's AI assistant finds the shop through the AgenticOrg MCP server, fills the cart and gets a payment link. The buyer pays the shop, and the order reaches the Orders page with the delivery address. Narrated, with English captions. Watch it at /media/docs/oacp-commerce-walkthrough.mp4 (English captions at /media/docs/oacp-commerce-walkthrough.vtt).
 
 #### The short version
 
@@ -3745,7 +3851,7 @@ Figure: Each standard answers one question. Discovery, checkout, payment permiss
 OACP is three things working together:
 
 1. **Signed facts.** Your catalog, prices, stock and policies become small signed records. Grantex signs them. Each one has an expiry date and a revocation slot.
-2. **One decision before money moves.** A fixed rule set, called the arbiter, says allow or refuse. No allow, no payment.
+2. **One decision before money moves.** A fixed rule set, called the arbiter, says allow or refuse. No allow, no payment link and no payment.
 3. **One record.** Every decision and every commerce write is recorded in a signed ledger you can export and check.
 
 Adapters then render those facts into each standard's own format.
@@ -3753,10 +3859,10 @@ Adapters then render those facts into each standard's own format.
 #### Who does what
 
 ```flow
-Your shop | Stays the source of truth for products, prices, stock and orders. Shopify is the supported source today.
-Grantex | Signs your facts, publishes the signing keys, runs the revocation list and issues buyer mandates.
+Your shop | Stays the source of truth for products, prices, stock and orders. Shopify, or a CSV or JSON catalog you upload, is the source today.
+Grantex | Signs your facts, publishes the signing keys, runs the revocation list and countersigns decisions. It can also issue buyer mandates, for agent-executed payment, which is switched off.
 AgenticOrg | Checks every signature, decides each purchase with fixed rules, records it and speaks each standard.
-Payment provider | Moves money, and only after an allow decision. Plural is the rail built today.
+Your payment page | The buyer pays on your own Shopify checkout or your own Plural account, and gets the link only after an allow decision. AgenticOrg never holds the money.
 ```
 
 #### What OACP is not
@@ -3767,13 +3873,15 @@ Honesty matters here, so here is the plain list.
 - **Not a certification.** The groups behind UCP, ACP, AP2 and TAP have not certified or endorsed OACP.
 - **Not regulatory approval.** OACP helps you keep evidence. It does not establish regulatory compliance on its own.
 - **Not AP2's own format.** Mandates are signed JWTs that use AP2 field names, not AP2's SD-JWT format. Passkey signing of the cart is a Grantex extension.
-- **Not switched on by default.** Checkout, payment, mandates and public discovery each sit behind a switch that starts off. See [feature switches](/docs/oacp-feature-switches).
+- **Not switched on by default.** Checkout, the AgenticOrg network, mandates, agent-executed payment and public discovery each sit behind a switch that starts off. Where buyers pay is each merchant's own choice. See [feature switches](/docs/oacp-feature-switches).
+- **Not a payment collector.** AgenticOrg never takes the buyer's money. The buyer pays the merchant on the merchant's own payment page.
 
 #### Read next
 
 - [Example: Nilgiri Tea House, end to end](/docs/oacp-example-nilgiri-tea), a live shop you can try in two minutes
 - [How OACP works, end to end](/docs/oacp-how-it-works)
 - [A purchase, step by step](/docs/oacp-buyer-journey)
+- [Sell everywhere](/docs/oacp-sell-everywhere) and [Getting paid](/docs/oacp-getting-paid)
 - [Merchant setup checklist](/docs/oacp-merchant-setup)
 - The blog post [OACP explained: one trust layer under UCP, ACP and AP2](https://agenticorg.ai/blog/oacp-one-trust-layer-under-ucp-acp-ap2)
 - The technical reference: [OACP runtime docs](https://github.com/mishrasanjeev/agentic-org/blob/main/docs/oacp/README.md)
@@ -3807,7 +3915,7 @@ Here is what is switched on for it today.
 | Facts signed by Grantex | 11 signed artifacts, all verified | Refreshed automatically when they expire |
 | Checkout, cart and order (UCP), ACP feed and checkout | On | Needs a platform API key issued by the merchant |
 | Shopping from ChatGPT and other MCP apps | Live, no sign-in, no payment tools | `https://mcp.agenticorg.ai/mcp` ([how to connect](#chatgpt-through-the-hosted-agenticorg-mcp-server)) |
-| Real payments | Off | No money can move in this demo |
+| Payments | Off: no payment method chosen, and agent-executed payment is off | No money can move in this demo |
 
 #### Try it yourself in two minutes
 
@@ -3878,20 +3986,20 @@ Figure: What a buyer agent sees. The 10 products the shop serves, with prices an
 
 #### Part 1. How the shop was set up
 
-These are the steps behind Nilgiri Tea House, in order. For the demo, a setup script runs them in one go, calling the same AgenticOrg functions the dashboard uses. For your shop, you do them on the **Commerce Runtime** and **Custom Domains** pages. The detail of each step is in the [Merchant setup checklist](/docs/oacp-merchant-setup).
+These are the steps behind Nilgiri Tea House, in order. For the demo, a setup script runs them in one go, calling the same AgenticOrg functions the dashboard uses. For your shop, the **Sell Everywhere** page (`/dashboard/sell-everywhere`) takes you through the same steps and runs the Grantex and publishing steps itself; see [Sell everywhere](/docs/oacp-sell-everywhere). The detail of each step is in the [Merchant setup checklist](/docs/oacp-merchant-setup).
 
 ```flow start=1
-Create the merchant | The shop got its own tenant, an administrator and a merchant record: merchant ID nilgiri_tea_house and seller agent seller_agent_nilgiri_tea. For you: sign up, then save your merchant settings on Commerce Runtime. | Owner: Merchant | If blocked: You need the administrator or merchant role.
-Load the catalog | Its 10 products, prices and stock went in, plus one store with opening hours. A real shop connects Shopify read-only and runs a sync instead. | Owner: Merchant | If blocked: A missing Shopify credential or a wrong store domain stops the sync and says why.
-Set purchase limits | The largest order, the allowed currency (INR) and the most items per order. For you: the same fields in your merchant settings. | Owner: Merchant | If blocked: Without limits the arbiter refuses every purchase with merchant_limits_missing.
-Get the facts signed | The operator added the shop to the Grantex allowlist. AgenticOrg then asked Grantex to sign the catalog, prices, stock, policies and capabilities, and got 11 signed artifacts back. | Owner: Platform operator, then merchant | If blocked: Grantex answers unavailable until your tenant is on its allowlist.
+Create the merchant | The shop got its own tenant, an administrator and a merchant record: merchant ID nilgiri_tea_house and seller agent seller_agent_nilgiri_tea. For you: sign up, then type a shop name on Sell Everywhere and select Create shop; the id is generated. | Owner: Merchant | If blocked: You need the administrator or merchant role.
+Load the catalog | Its 10 products, prices and stock went in, plus one store with opening hours. A real shop connects Shopify read-only, or uploads a CSV or JSON file, on Sell Everywhere. | Owner: Merchant | If blocked: A missing Shopify credential, a wrong store domain or a bad file row stops the read and says why.
+Set purchase limits | The largest order, the allowed currency (INR) and the most items per order. For you: the Order limits step on Sell Everywhere, which also asks for your daily maximum. | Owner: Merchant | If blocked: Without limits, Sell everywhere stays off for your shop.
+Get the facts signed | The operator added the shop to the Grantex allowlist. AgenticOrg then asked Grantex to sign the catalog, prices, stock, policies and capabilities, and got 11 signed artifacts back. For you: turning on Sell everywhere enrols you with Grantex and asks for the signatures, with no allowlist edit for your shop. | Owner: Platform operator for the demo; AgenticOrg for you | If blocked: The Grantex enrolment row says Waiting while your deployment's Grantex cannot enrol tenants yet.
 Check every signature | AgenticOrg checked each artifact's signature, key, expiry and revocation status before keeping it. All 11 passed. | Owner: AgenticOrg | If blocked: A refusal names the reason, for example revocation_status_unavailable; nothing from that batch is kept.
-Create the signing key | One signing key for the shop. Its public half is published in the profile, so agents can check the shop's own answers. | Owner: Merchant | If blocked: Publishing is refused with signing_key_missing until the key exists.
+Create the signing key | One signing key for the shop. Its public half is published in the profile, so agents can check the shop's own answers. For you: Sell everywhere creates it if it is missing. | Owner: Merchant | If blocked: Publishing is refused with signing_key_missing until the key exists.
 ```
 
 #### Part 2. Its own address
 
-Buyer agents need a web address to find a shop. Nilgiri Tea House uses `nilgiritea.agenticorg.ai`. Your shop would use a subdomain you own, such as `agent.your-store.example`.
+Buyer agents need a web address to find a shop. Nilgiri Tea House uses `nilgiritea.agenticorg.ai`, connected by hand with the two records below, the way you would connect a domain of your own. Your shop can get `<your-shop>.agenticorg.ai` from Sell everywhere with no DNS work (while fewer than 20 shops have one), or use a subdomain you own, such as `agent.your-store.example`.
 
 Figure: Nilgiri Tea House's two DNS records. A CNAME routes the address to AgenticOrg. A TXT record with a one-time code proves the shop controls the address. With both in place, the address was attested and the profile went live.
 
@@ -3908,15 +4016,15 @@ Full instructions for your own domain, including every check and its fix, are in
 
 This is what happens when an AI shopping agent buys tea for someone.
 
-Figure: A buyer agent shops at Nilgiri Tea House. The agent reads the profile, searches, and opens a checkout with its API key. Grantex issues mandates for that exact cart. The arbiter allows or refuses and records the decision. Payments are off in this demo.
+Figure: A buyer agent shops at Nilgiri Tea House. The agent reads the profile, searches, and opens a checkout with its API key. The mandate step belongs to agent-executed payment, which is switched off. The arbiter allows or refuses and records the decision. This demo has no payment method, so it stops before payment.
 
 ```flow start=11
 Discover | The agent reads /.well-known/ucp and learns the address of the shop's API and which UCP features it supports. | Owner: Buyer agent | If blocked: A 404 means the profile is not published, or its signed facts have lapsed and could not be renewed.
 Search | The agent searches for chai and gets the Masala Chai Blend at ₹449, in stock. The answer comes only from verified facts. | Owner: Buyer agent | If blocked: A catalog_unavailable message means the verified facts lapsed and could not be renewed; nothing is guessed. Try again shortly.
 Open a checkout | The agent creates a checkout for NTH-MASALA-250, quantity 1, using the API key the merchant issued to its platform. The shop prices it from the same verified facts. | Owner: Buyer agent | If blocked: Without a valid key the shop answers 401.
-Get mandates | Grantex issues three signed mandates: what the buyer allowed (Intent), this exact cart (Cart) and the amount and payment rail (Payment). | Owner: Grantex | If blocked: A mandate is refused when it goes beyond what the buyer allowed.
-Decide | The arbiter applies its fixed rules, such as the shop's limits and the mandates, and answers allow or refuse. The decision is sealed in the ledger. | Owner: AgenticOrg arbiter | If blocked: A refusal names the first rule that failed; nothing is charged.
-Pay | With live payments on, the payment provider would charge once, only on allow. In this demo there is no payment step: once pickup is chosen the checkout is ready, and completing it answers payment_failed, "A payment instrument is required to complete." Nothing is charged. | Owner: Payment provider | If blocked: Live payment stays off until a payment-provider sandbox run has passed.
+Mandates, switched off | On the agent-executed path, Grantex would issue three signed mandates: what the buyer allowed (Intent), this exact cart (Cart) and the amount and payment rail (Payment). That path is off, so no mandate is issued here. | Owner: Grantex | If blocked: A mandate is refused when it goes beyond what the buyer allowed.
+Decide | For a shop with a payment method, the arbiter checks its signed facts and its limits before any payment link exists, and answers allow or refuse. The decision is sealed in the ledger. | Owner: AgenticOrg arbiter | If blocked: A refusal names the first rule that failed; no link is issued and nothing is charged.
+Pay | Nilgiri Tea House has no payment method, so there is no payment step: once pickup is chosen the checkout is ready, and completing it answers payment_failed, "A payment instrument is required to complete." Nothing is charged. A shop that chose where buyers pay answers requires_escalation with continue_url instead: the link to its own Shopify checkout or Plural page, where the buyer pays. | Owner: The shop's payment page | If blocked: Without a payment method, buyers get no payment link.
 ```
 
 For an agent platform, the checkout request looks like this. The key and the platform profile are your own.
@@ -3930,7 +4038,7 @@ curl -s -X POST https://nilgiritea.agenticorg.ai/ucp/checkout-sessions \
   -d '{"line_items":[{"item":{"id":"NTH-MASALA-250"},"quantity":1}]}'
 ```
 
-Every step of the mandates, the passkey and the decision is in [A purchase, step by step](/docs/oacp-buyer-journey).
+How a payment link is issued, and how the switched-off mandate path works, is in [A purchase, step by step](/docs/oacp-buyer-journey).
 
 #### See it with real agents
 
@@ -3942,6 +4050,11 @@ searches the catalog, opens a checkout and stops at the payment step. Nothing wa
 ChatGPT connects straight to AgenticOrg's hosted MCP server at `https://mcp.agenticorg.ai/mcp`. The
 server needs no sign-in and offers shop tools only: search, product lookup, and opening or updating a
 checkout. It has no tool that pays, and each caller is rate-limited.
+
+For these runs the server served Nilgiri Tea House alone. For Sell everywhere the same address serves
+every shop on the AgenticOrg network and adds two tools: `list_shops`, and `complete_checkout`, which
+returns the shop's payment link for a ready checkout. It still has no tool that pays. See
+[Sell everywhere](/docs/oacp-sell-everywhere).
 
 Connect it once:
 
@@ -3969,8 +4082,8 @@ time.
 
 3. **Checkout, then stop at payment.** ChatGPT opened the checkout and chose pickup at the Ooty
    store, which costs nothing. The checkout is ready for completion with a total of ₹449.00, and no
-   payment was added or charged. A real shop with live payments would take the buyer's payment here,
-   only after the arbiter allows it.
+   payment was added or charged. A shop that has chosen where buyers pay would give the buyer a link
+   to its own payment page here, only after the arbiter allows it.
 
 ChatGPT may show a product photo it found on its own. The shop's catalog has no real photos, so any
 picture you see there does not come from Nilgiri Tea House.
@@ -3994,8 +4107,8 @@ Gemini asked before every tool call, and each call was approved by hand.
 ![The shop's answer to completing the checkout: an error message with code payment_failed, "A payment instrument is required to complete.", severity recoverable, path $.payment.](/screenshots/nilgiri-gemini-payment-stop.webp)
 
 3. **Stop at payment.** Asked to complete, the shop answered `payment_failed`: "A payment
-   instrument is required to complete." That is the payment layer. A real shop with live payments
-   would take the buyer's payment here, only after the arbiter allows it.
+   instrument is required to complete." That is the payment layer. A shop that has chosen where
+   buyers pay would answer with a link to its own payment page here, only after the arbiter allows it.
 
 ### Telegram, through an AgenticOrg agent
 
@@ -4013,12 +4126,14 @@ and answered, in about 30 seconds. To give your own agent these tools, see the
 
 | Nilgiri Tea House did | You do | Where |
 | --- | --- | --- |
-| Created its merchant and seller agent | Sign up and save your merchant settings | Commerce Runtime |
-| Loaded 10 synthetic products | Connect Shopify read-only and run a sync | Commerce Runtime |
-| Set limits in INR | Set your order limits and currencies | Commerce Runtime |
-| Got 11 artifacts signed and verified | Ask your operator to allowlist you at Grantex, then request authority | Commerce Runtime |
-| Proved nilgiritea.agenticorg.ai | Add a subdomain, its CNAME and TXT records, and the Search Console owner | Custom Domains |
-| Published its profile | Create the signing key and publish | Commerce Runtime |
+| Created its merchant and seller agent | Sign up and create your shop | Sell Everywhere |
+| Loaded 10 synthetic products | Connect Shopify read-only, or upload a CSV or JSON file | Sell Everywhere |
+| Had no shipping fee | Write your policies, and set a shipping fee if you have no Shopify | Sell Everywhere |
+| Set limits in INR | Set your order limits, daily maximum and currency | Sell Everywhere |
+| Had no payment method | Choose your Shopify checkout or your Plural account | Sell Everywhere, Payments |
+| Got 11 artifacts signed and verified | Turn on Sell everywhere; it enrols you with Grantex and asks for the signatures | Sell Everywhere |
+| Proved nilgiritea.agenticorg.ai | Take the address Sell everywhere gives you, or add your own subdomain and its records | Sell Everywhere, or Custom Domains |
+| Published its profile | Nothing: Sell everywhere creates the key and publishes, and Publish shows why if it waits | Sell Everywhere |
 | Opened checkout and the ACP feed | Issue each agent platform its own API key | Settings, API keys |
 
 Most steps take a few minutes. Waiting for DNS and the certificate usually takes the longest.
@@ -4026,8 +4141,8 @@ Most steps take a few minutes. Waiting for DNS and the certificate usually takes
 #### What this demo does not do
 
 - **No real products or customers.** Every product, price, store and address is synthetic, and each product description starts with "Synthetic demo product".
-- **No money moves.** Live payments are off, and the demo has no payment provider attached.
-- **No shipping rates.** Delivery rates need a real Shopify shop. The demo is for discovery, search and checkout decisions.
+- **No money moves.** The demo has no payment method, so no checkout gets a payment link, and agent-executed payment is off.
+- **No shipping rates.** The demo sets no shipping fee, so buyers choose store pickup. A real shop gets its rates from Shopify, or sets a flat fee on Sell Everywhere. The demo is for discovery, search and checkout decisions.
 - **No store-location search yet.** Store locations are part of UCP 2026-08-25. The shop serves UCP 2026-04-08, so a location search answers that the feature is not served.
 
 #### Read next
@@ -4041,7 +4156,7 @@ Most steps take a few minutes. Waiting for DNS and the certificate usually takes
 ### How OACP works, end to end
 
 URL: https://agenticorg.ai/docs/oacp-how-it-works
-Audience: Merchants, product and platform teams. Reviewed: 2026-10-21.
+Audience: Merchants, product and platform teams. Reviewed: 2026-10-30.
 
 In 30 seconds:
 
@@ -4049,7 +4164,7 @@ In 30 seconds:
 - The shop states the facts. Grantex signs them. AgenticOrg checks every signature before it keeps a copy.
 - When an agent wants to buy, the arbiter applies fixed rules and answers allow or refuse at once. Nobody waits for a person.
 - Every decision is recorded in the commerce ledger. Adapters then speak each standard, so every agent gets the same answer.
-- A payment runs only after an allow decision, and only once.
+- A buyer gets a link to your own payment page only after an allow decision, and AgenticOrg never holds the money.
 
 #### The whole flow on one page
 
@@ -4057,12 +4172,18 @@ Figure: From your shop to every buyer agent. Seven steps: the shop states its fa
 
 Each step has one owner. The next sections explain them one at a time.
 
+#### See the flow in a real order
+
+The recording below runs the whole flow once on the live service: the shop states its facts, Grantex verifies them, the arbiter checks the order against the shop's limits, and the buyer gets the merchant's payment link.
+
+Video: A real OACP order, end to end. Recorded on the live service with a demo shop and a Plural test payment. The shop owner adds products (a Shopify store connects in one step; the demo shop uploads a spreadsheet), sets rules, limits and their own Plural account, and turns Sell everywhere on. A buyer's AI assistant finds the shop through the AgenticOrg MCP server, fills the cart and gets a payment link. The buyer pays the shop, and the order reaches the Orders page with the delivery address. Narrated, with English captions. Watch it at /media/docs/oacp-commerce-walkthrough.mp4 (English captions at /media/docs/oacp-commerce-walkthrough.vtt).
+
 #### Step 1. Your shop states its facts
 
 Your shop already knows its products, prices, stock and policies. AgenticOrg reads them. It does not invent them.
 
-- Shopify is the supported source today. AgenticOrg reads it with read-only access.
-- Your merchant settings add the rest: limits, stores, payment rail and policies.
+- Shopify is read with read-only access, through a custom app in your own store. A shop without Shopify uploads its catalog as a CSV or JSON file instead, recorded as uploaded by you.
+- Your merchant settings add the rest: order limits, your shipping fee, stores, where buyers pay and your policies.
 - Other systems (WooCommerce, ERP, PIM and others) can be saved as settings. They stay "pending adapter" and are never called.
 
 #### Step 2. Grantex signs each fact
@@ -4093,7 +4214,7 @@ When an agent wants to buy, the arbiter decides. It is a fixed set of rules, not
 - An allow is single use. It is bound to the exact cart, price and quantity, and it expires after 10 minutes.
 - A refusal names the first rule that failed, so you know exactly why.
 
-The rules are listed in plain words in [Safety and trust](/docs/oacp-safety-and-trust#what-the-arbiter-checks).
+Today the decision comes before the payment link: the arbiter checks your signed facts and your order limits, including the daily maximum, and only an allow gives the buyer a link to your own Shopify checkout or Plural page. The rules are listed in plain words in [Safety and trust](/docs/oacp-safety-and-trust#what-the-arbiter-checks).
 
 #### Step 5. The ledger records it
 
@@ -4111,29 +4232,30 @@ The same verified facts are rendered into each standard's own shape:
 
 - a UCP business profile at `/.well-known/ucp`, with catalog, checkout and orders;
 - an ACP product feed and ACP checkout sessions;
-- Intent, Cart and Payment mandates with AP2 field names;
-- checkout tools for MCP clients, and a seller agent for A2A.
+- Intent, Cart and Payment mandates with AP2 field names, for agent-executed payment, which is switched off;
+- checkout tools for MCP clients, the AgenticOrg shopping bot on Telegram, and a seller agent for A2A.
 
 Each surface has its own switch, so you can turn on one channel at a time.
 
 #### Step 7. Buyer agents get the same answer
 
-Because every channel reads the same signed facts, agents see the same price, the same stock and the same refusals. A payment provider moves money only after an allow decision, and only once.
+Because every channel reads the same signed facts, agents see the same price, the same stock and the same refusals. Once you have chosen where buyers pay, every channel ends a ready checkout the same way: a link to your own payment page, where the buyer pays. AgenticOrg never holds the money.
 
 #### Who does what, at a glance
 
 ```flow
-States the facts | Products, prices, stock and policies come from your shop. | Owner: Merchant | If blocked: Reconnect Shopify or fix the merchant settings, then sync again.
+States the facts | Products, prices, stock and policies come from your shop. | Owner: Merchant | If blocked: Reconnect Shopify or upload your catalog again, fix the merchant settings, then read the catalog again.
 Signs the facts | Each fact becomes a signed, expiring, revocable artifact. | Owner: Grantex | If blocked: AgenticOrg keeps nothing new and asks for a fresh request.
 Verifies and keeps | Signature, key, scope, expiry and revocation are checked before storing. | Owner: AgenticOrg | If blocked: The batch is refused with the exact refusal code.
 Decides | Fixed rules answer allow or refuse at once. | Owner: AgenticOrg arbiter | If blocked: The refusal names the first failing rule.
 Records | The decision and every commerce write go to the ledger. | Owner: AgenticOrg ledger | If blocked: A write route that skips its ledger row is answered as an error.
-Pays | The provider charges once, against a consumed allow decision. | Owner: Payment provider | If blocked: Without a registered executor, checkout stops at executor_unavailable.
+Hands over the payment link | After a consumed allow, the buyer gets a link to your own Shopify checkout or Plural page and pays there. A confirmed Plural payment becomes an order. | Owner: AgenticOrg, then your payment page | If blocked: Without a payment method, the buyer gets no link and is told to pay with you directly.
 ```
 
 #### Where to go deeper
 
 - [A purchase, step by step](/docs/oacp-buyer-journey)
+- [Getting paid](/docs/oacp-getting-paid)
 - [Safety and trust](/docs/oacp-safety-and-trust)
 - Technical references: [artifact cache guide](https://github.com/mishrasanjeev/agentic-org/blob/main/docs/oacp/artifact-cache-guide.md) and [arbiter and ledger](https://github.com/mishrasanjeev/agentic-org/blob/main/docs/oacp/arbiter-ledger.md)
 
@@ -4141,23 +4263,42 @@ Pays | The provider charges once, against a consumed allow decision. | Owner: Pa
 ### A purchase, step by step
 
 URL: https://agenticorg.ai/docs/oacp-buyer-journey
-Audience: Merchants and agent platform teams. Reviewed: 2026-10-21.
+Audience: Merchants and agent platform teams. Reviewed: 2026-10-30.
 
 In 30 seconds:
 
 - A buyer's agent finds a product, opens a checkout and asks to complete it.
-- Grantex issues three mandates: Intent (what the buyer allowed), Cart (this exact cart) and Payment (this amount, on this rail).
-- When the buyer is present, their passkey signs the exact cart. In India, a UPI AutoPay payment also needs the buyer's RBI AFA step.
-- AgenticOrg checks the mandates itself, then the arbiter says allow or refuse at once.
-- Only an allow lets the payment provider charge, once. Everything lands in the ledger.
+- Today the buyer pays on your own page: the arbiter checks your signed facts and your limits, then the buyer gets a link to your Shopify checkout or Plural payment page.
+- The buyer authenticates and pays there, for example with 3-D Secure or their UPI PIN. AgenticOrg never holds the money.
+- Agent-executed payment is built but switched off: Grantex Intent, Cart and Payment mandates, the buyer's passkey and RBI AFA for UPI AutoPay.
+- Every decision lands in the ledger, whichever way the buyer pays.
 
-#### The journey in one picture
+#### A purchase today: the buyer pays on your page
 
-The example uses a synthetic shop, Merchant Example, and a buyer who allows up to ₹2,000.
+The example uses a synthetic shop, Merchant Example, that has chosen where its buyers pay on the Sell Everywhere page.
 
-Figure: A purchase with mandates. The buyer agent opens a checkout. Grantex issues the Intent, Cart and Payment mandates, the buyer's passkey signs the cart when the buyer is present, and AgenticOrg verifies all three. The arbiter decides; on allow the payment provider charges once and the order is confirmed; everything is recorded.
+Figure: The buyer pays on your page. The buyer's checkout is ready. The arbiter checks the shop's signed facts and limits and records its decision. The buyer gets a link to the shop's own Shopify cart or Plural payment page and pays there. The shop gets the order.
 
-#### The three mandates, in plain words
+```flow
+Find the product | The buyer's agent searches your catalog through UCP, the ACP feed, the AgenticOrg MCP server or the AgenticOrg bot on Telegram. Prices and stock come from verified facts. | Owner: Buyer agent | If blocked: Without fresh verified facts the catalog answers with no products.
+Open a checkout | The agent opens a checkout and chooses shipping, or store pickup where your shop has store locations. AgenticOrg prices it from the verified catalog and your shipping rates and moves it to ready_for_complete. | Owner: Buyer agent and AgenticOrg | If blocked: An unknown or out-of-stock item, or no shipping option for the buyer's country, keeps the session incomplete.
+Arbiter decides | Before any link exists, the arbiter checks your signed facts and your order limits, including the daily maximum. The allow is used once, for exactly this checkout. | Owner: AgenticOrg arbiter | If blocked: A refusal names the rule and the reason, for example daily_amount_cap_exceeded, and no link is issued.
+Payment link | Complete answers requires_escalation with continue_url: your Shopify cart with the items in it, or a Plural payment page under your own Plural account. Asking again returns the same link while it is valid. | Owner: AgenticOrg | If blocked: payment_setup_incomplete means your payment method is not fully set up; payment_handoff_unavailable means the shop has none for this channel.
+Buyer pays | The buyer opens the link and pays on your page by card, UPI or net banking, authenticating with 3-D Secure or their UPI PIN. | Owner: Buyer and your payment page | If blocked: A Plural link lasts 30 minutes; after that the buyer asks for a new one.
+Order | Plural confirms the payment through its signed webhook or the check AgenticOrg runs every minute, and the checkout becomes an order on your Orders page, with the delivery address the buyer gave and an email to your administrators. A Shopify order is in your Shopify admin. | Owner: Your payment provider and AgenticOrg | If blocked: A payment for the wrong amount never becomes an order; it is logged so you can refund it in Plural.
+```
+
+No mandate, passkey or spending cap is asked for on this path. The agent holds no payment credential and moves no money, and the buyer authenticates on the payment page. See [Getting paid](/docs/oacp-getting-paid) to set it up.
+
+#### Agent-executed payment with mandates (switched off)
+
+AgenticOrg also has a path where the purchase completes without leaving the chat: the payment provider charges against signed buyer mandates. It is built but switched off. Payment execution stays off until a payment-provider sandbox run has passed, and a shop that chose where buyers pay always gets a payment link instead. The rest of this page explains how that path works.
+
+The example uses Merchant Example and a buyer who allows up to ₹2,000.
+
+Figure: A purchase with mandates. The buyer agent opens a checkout. Grantex issues the Intent, Cart and Payment mandates, the buyer's passkey signs the cart when the buyer is present, and AgenticOrg verifies all three. The arbiter decides; on allow the payment provider charges once and the order is confirmed; everything is recorded. This path is switched off.
+
+### The three mandates, in plain words
 
 A mandate is a signed note of what the buyer allowed. Grantex issues all three. Each lives at most 10 minutes.
 
@@ -4171,7 +4312,7 @@ The Cart mandate binds the cart by a hash. Change one item or one price and the 
 
 The Payment mandate never holds the card or UPI token itself. It holds a fingerprint of it.
 
-#### Step by step: who does what
+### Step by step: who does what
 
 ```flow
 Find the product | The buyer agent reads the shop's catalog through UCP or the ACP feed. Prices and stock come from verified facts. | Owner: Buyer agent | If blocked: Without fresh verified facts the catalog answers with no products.
@@ -4182,15 +4323,15 @@ Payment mandate | Grantex binds the amount, the currency, the rail and a fingerp
 AgenticOrg verifies | AgenticOrg checks all three signatures, the revocation list and that the chain links to this exact checkout. | Owner: AgenticOrg | If blocked: Any failed check stops the purchase with its refusal code.
 Arbiter decides | Eight fixed rules run in order. The answer is allow or refuse, at once. | Owner: AgenticOrg arbiter | If blocked: The first failing rule is the reason, and it is recorded.
 RBI AFA, India only | A UPI AutoPay payment needs the buyer to approve with their UPI PIN in their own UPI app. AgenticOrg returns that step and waits for nothing. | Owner: Buyer and their bank | If blocked: Completion is refused until verified AFA evidence arrives from the provider.
-Payment | The payment provider charges once, against the consumed allow decision. The three mandate hashes travel with the order. | Owner: Payment provider | If blocked: With payment execution off, checkout stops at executor_unavailable and nothing is charged.
+Payment | The payment provider charges once, against the consumed allow decision. The three mandate hashes travel with the order. | Owner: Payment provider | If blocked: With payment execution off, as it is today, checkout stops at executor_unavailable and nothing is charged.
 Order and receipt | The order is created and a signed order update goes to the agent platform. The ledger holds the mandates, the decision and every payment call. | Owner: AgenticOrg and the merchant | If blocked: A failed payment returns the session to ready_for_complete.
 ```
 
-#### What the decision can say
+### What the decision can say
 
-Figure: Three possible answers. The arbiter allows, and the payment runs once; or it refuses and names the first failing rule, and nothing is charged; or, for UPI AutoPay, it asks for the buyer's AFA step, and the next attempt gets a fresh decision.
+Figure: Three possible answers. On the mandate path the arbiter allows, and the payment runs once; or it refuses and names the first failing rule, and nothing is charged; or, for UPI AutoPay, it asks for the buyer's AFA step, and the next attempt gets a fresh decision.
 
-#### When the buyer is not present
+### When the buyer is not present
 
 Sometimes an agent buys while the person is away. This is called "human not present".
 
@@ -4199,7 +4340,7 @@ Sometimes an agent buys while the person is away. This is called "human not pres
 - The Intent mandate's cap must cover the total.
 - For UPI AutoPay, the AFA exemption never applies.
 
-#### RBI AFA for India, in plain words
+### RBI AFA for India, in plain words
 
 RBI rules ask for an additional factor of authentication (AFA) on some UPI AutoPay payments.
 
@@ -4213,15 +4354,18 @@ RBI rules ask for an additional factor of authentication (AFA) on some UPI AutoP
 
 A checkout is always a set-up plus a first debit, so AFA always applies there. The limits are settings, so a future RBI change is a configuration change.
 
+On today's path a buyer who pays by UPI on your Plural page approves the payment with their UPI PIN there, as with any online payment.
+
 #### What is on by default
 
-> The checkout routes, mandates and payment execution each start switched off. With the defaults, a checkout can reach ready_for_complete but never completes, and no money moves. See [feature switches](/docs/oacp-feature-switches).
+> The checkout routes, the AgenticOrg network, mandates and payment execution each start switched off. Once checkout is on and you have chosen where buyers pay, a ready checkout gives the buyer a link to your own payment page. Agent-executed payment stays off, so no money moves without the buyer paying on that page. See [feature switches](/docs/oacp-feature-switches).
 
 #### Related guides
 
+- [Getting paid](/docs/oacp-getting-paid)
 - [Safety and trust](/docs/oacp-safety-and-trust)
 - [Merchant setup checklist](/docs/oacp-merchant-setup)
-- Technical references: [mandates, UPI AutoPay and RBI AFA](https://github.com/mishrasanjeev/agentic-org/blob/main/docs/oacp/mandates.md) and [UCP checkout](https://github.com/mishrasanjeev/agentic-org/blob/main/docs/oacp/ucp-checkout.md)
+- Technical references: [payment hand-off](https://github.com/mishrasanjeev/agentic-org/blob/main/docs/oacp/payment-handoff.md), [mandates, UPI AutoPay and RBI AFA](https://github.com/mishrasanjeev/agentic-org/blob/main/docs/oacp/mandates.md) and [UCP checkout](https://github.com/mishrasanjeev/agentic-org/blob/main/docs/oacp/ucp-checkout.md)
 
 
 ### Merchant setup checklist
@@ -4231,35 +4375,37 @@ Audience: Merchants and platform operators. Reviewed: 2026-10-29.
 
 In 30 seconds:
 
-- Setup has five phases: connect your shop, connect to Grantex, publish your UCP profile, open sales channels, and payments.
-- Most steps are done once. Each step has an owner and a clear "if blocked" answer.
-- Your UCP profile goes live only after you prove you own the web address with a DNS TXT record.
-- Checkout, the ACP feed and MCP tools each have their own switch, so you can open one channel at a time.
-- Live payment stays off until a payment-provider sandbox run has passed. Nothing charges a buyer before then.
+- Setup has five phases: connect your shop, connect to Grantex, publish your UCP profile, open sales channels, and agent-executed payment.
+- For a merchant, phases 1 to 3 are one page, Sell Everywhere, with no step for your platform operator.
+- Your UCP profile goes live on an address you control: a platform address AgenticOrg gives you, or your own subdomain proved with a DNS TXT record.
+- Buyers pay on your own Shopify checkout or Plural page, which you choose on the Sell Everywhere page. AgenticOrg never holds the money.
+- Agent-executed payment with buyer mandates stays off until a payment-provider sandbox run has passed.
 
 #### The five phases
 
-Want to see the result first? [Nilgiri Tea House](/docs/oacp-example-nilgiri-tea) is a live example shop that went through every phase except payments.
+Want to see the result first? [Nilgiri Tea House](/docs/oacp-example-nilgiri-tea) is a live example shop that went through phases 1 to 4 without a payment method.
 
-Figure: Five phases from shop to sales. Connect your shop, connect to Grantex, publish your UCP profile, open sales channels, and finally turn on payments. The last phase stays off until a payment-provider sandbox run has passed.
+Figure: Five phases from shop to sales. Connect your shop, connect to Grantex, publish your UCP profile and open sales channels. The fifth phase, agent-executed payment, stays off until a payment-provider sandbox run has passed. Buyers already pay on your own page once checkout is open.
 
-Phases 1 to 3 are one page for a merchant: **Commerce > Sell Everywhere** (`/dashboard/sell-everywhere`) takes you from a new shop to a published profile, with no step for your platform operator; see [Sell everywhere](/docs/oacp-sell-everywhere). The **Commerce Runtime** page at `/dashboard/commerce-runtime` is the operator console for the same runtime. You need the administrator role or the merchant role. A few steps are done by your platform operator, the person who runs your AgenticOrg deployment. Those steps say so.
+Phases 1 to 3 are one page for a merchant: **Sell Everywhere** (`/dashboard/sell-everywhere`) takes you from a new shop to a published profile, with no step for your platform operator; see [Sell everywhere](/docs/oacp-sell-everywhere). The **Commerce Runtime** page at `/dashboard/commerce-runtime` is the operator console for the same runtime. You need the administrator role or the merchant role. A few steps are done by your platform operator, the person who runs your AgenticOrg deployment. Those steps say so.
 
 #### Phase 1. Connect your shop
 
 ```flow start=1
-Create your shop | On Sell Everywhere, type a shop name and select Create shop. AgenticOrg creates the merchant and its id. | Owner: Merchant | If blocked: Check that you have the merchant or administrator role.
-Connect your catalog | Connect Shopify with the Admin API token of a custom app in your own store (read_products, read_inventory), or upload a CSV or JSON catalog. AgenticOrg encrypts the token and never shows it again. | Owner: Merchant | If blocked: Every sync uses your own stored token; without one it stops with blocked_missing_shopify_credentials.
-Check the first read | Compare a few products, prices and stock levels with your store or file. | Owner: Merchant | If blocked: A wrong store address or a bad file row stops the read and says which.
-Set your order limits | Set the largest single order, the most per day, the most items per order and your currency. Saving other settings later keeps them. | Owner: Merchant | If blocked: Without limits, Sell everywhere stays off and the arbiter refuses every purchase with merchant_limits_missing.
+Create your shop | On Sell Everywhere, choose your shop, or type a shop name and select Create shop. AgenticOrg creates the merchant and its id; you never type one. | Owner: Merchant | If blocked: Check that you have the merchant or administrator role.
+Connect your catalog | Connect Shopify with the Admin API token of a custom app in your own store (read_products, read_inventory), or upload a CSV or JSON catalog. AgenticOrg encrypts the token and never shows it again. Then compare a few products, prices and stock levels with your store or file. | Owner: Merchant | If blocked: Every sync uses your own stored token; without one it stops with blocked_missing_shopify_credentials. A wrong store address or a bad file row stops the read and says which.
+Write your policies | Write your returns and shipping terms, and store pickup if you offer it. Without Shopify, also set one shipping fee per order, its currency and the countries you ship to; 0 ships free. | Owner: Merchant | If blocked: A shop without Shopify and without a shipping fee can offer buyers no shipping, so Sell everywhere stays off until it is set.
+Set your order limits | Set the largest single order, the most per day, the most items per order and your currency. Nothing is set for you, and the daily maximum must be at least the per-order maximum. | Owner: Merchant | If blocked: Without limits, Sell everywhere stays off.
 ```
+
+Where buyers pay is the next step on the same page; the checklist covers it in phase 4, where checkouts end.
 
 #### Phase 2. Connect to Grantex
 
 ```flow start=5
-Enrol your tenant at Grantex | Turning on Sell everywhere enrols your tenant, merchant and catalog source with Grantex using the service token your platform operator configured once. | Owner: AgenticOrg | If blocked: The page shows Waiting while your Grantex has no enrolment route; an older Grantex still needs the operator's allowlist.
-Request authority | From Commerce Runtime, send the Grantex authority request. Grantex signs your synced facts. | Owner: Merchant | If blocked: A 202 answer means connector evidence is missing; sync again first.
-Verify and keep the facts | Cache the returned artifacts. AgenticOrg checks every signature, key, expiry and revocation slot before it keeps anything. | Owner: AgenticOrg | If blocked: A 422 artifact_verification_refused lists each refusal code; nothing from that batch is kept.
+Turn on Sell everywhere | Choose your shop name, accept the network terms and turn it on. AgenticOrg enrols your tenant, merchant and catalog source with Grantex itself; nobody edits a list for your shop. | Owner: Merchant, then AgenticOrg | If blocked: The switch stays off until your catalog, policies, shipping fee and limits are done (setup_incomplete names what is missing). Waiting means your deployment's Grantex cannot enrol tenants yet.
+Request authority | Going live sends the Grantex authority request once by itself, and Grantex signs your catalog, prices, stock and policies. Your operator can also send it from Commerce Runtime. | Owner: AgenticOrg | If blocked: A 202 answer means connector evidence is missing; read your catalog again first.
+Verify and keep the facts | AgenticOrg checks every signature, key, expiry and revocation slot before it keeps anything. The Verified catalog row then shows Done. | Owner: AgenticOrg | If blocked: Verified catalog shows To do; select Publish to try again. A 422 artifact_verification_refused lists each refusal code, and nothing from that batch is kept.
 Ask a test question | Ask your seller agent "Which variants are in stock?" and check that the answer shows its source and freshness. | Owner: Merchant | If blocked: A missing answer means catalog, price or stock facts are missing; refresh them.
 ```
 
@@ -4267,62 +4413,75 @@ Ask a test question | Ask your seller agent "Which variants are in stock?" and c
 
 Your UCP profile tells buyer agents where your shop is and what it offers. It is served at `https://<your shop host>/.well-known/ucp`.
 
+With Sell everywhere this phase runs by itself:
+
+- A shop with no address gets `<your-shop>.agenticorg.ai`. It needs no TXT record, because AgenticOrg owns that domain. At most 20 shops get one.
+- A missing signing key is created, and the profile is published as soon as nothing stands in the way.
+- The **Shop profile** row shows the exact reason when it waits. Select **Publish** to run the steps again.
+
+For a host of your own, ownership is proved with a DNS TXT record. The **Custom Domains** page runs these steps for you:
+
 Figure: The DNS TXT step. AgenticOrg gives you a TXT record name and value. You add it at your DNS provider. AgenticOrg looks it up and, on a match, records that you control the host.
 
 ```flow start=9
 Choose your shop host | Ask AgenticOrg for a challenge for your host, for example shop.merchant.example. It returns a TXT record name and value. | Owner: Merchant | If blocked: An IP address or a single-word host is not accepted.
 Add the DNS TXT record | At your DNS provider, add the TXT record _agenticorg-ucp.shop.merchant.example with the value AgenticOrg gave you. | Owner: Merchant | If blocked: DNS changes can take time to spread; wait and try the check again.
 Verify the host | Ask AgenticOrg to check the record. On a match it stores the proof and links the host to your merchant. | Owner: AgenticOrg | If blocked: A host already linked to another tenant is refused.
-Create your signing key | AgenticOrg creates one signing key for your shop. Your profile publishes its public half. Rotated keys stay published for at least 7 days. | Owner: Merchant | If blocked: Publishing is refused with signing_key_missing until a key exists.
+Create your signing key | AgenticOrg creates one signing key for your shop. Your profile publishes its public half. Rotated keys stay published for at least 7 days. | Owner: Merchant | If blocked: Publishing is refused with signing_key_missing until a key exists; Publish on Sell Everywhere creates it.
 Publish | Record your opt-in to public discovery. The next Grantex authority request asks Grantex to allow discovery for this host. | Owner: Merchant | If blocked: Refusals name the reason, such as serving_host_not_attested.
 Profile goes live | When the UCP profile switch is on and Grantex has issued an allowing discovery artifact, the profile is served. | Owner: Platform operator | If blocked: The profile answers 404 until every condition holds; the UCP status view shows which one is missing.
 ```
 
-Your operator must also route your shop host to the AgenticOrg service with the original host name intact. The easiest way is the **Custom Domains** page. It runs the TXT step above for you, adds the CNAME record that routes the host, and follows the domain until its certificate is live. See [Your own domain for buyer agents](/docs/oacp-custom-domains).
+Your host must also reach the AgenticOrg service with the original host name intact. The easiest way is the **Custom Domains** page. It runs the TXT step above for you, adds the CNAME record that routes the host, and follows the domain until its certificate is live. See [Your own domain for buyer agents](/docs/oacp-custom-domains).
 
 #### Phase 4. Open your sales channels
 
 Each channel has its own switch. Turn on one, test it, then the next.
 
 ```flow start=15
-UCP checkout | The operator turns on UCP checkout and you issue each agent platform its own API key. Agents can then open checkouts at your /ucp address. | Owner: Platform operator and merchant | If blocked: With the switch off, every checkout route answers 404.
+UCP checkout | The operator turns on UCP checkout and you issue each agent platform its own API key. Agents can then open checkouts at your /ucp address. | Owner: Platform operator and merchant | If blocked: With the switch off, every checkout route answers 404, the network included.
 ACP product feed | The operator turns on the ACP feed. You export it as JSON, JSON Lines or CSV and upload the files where the agent platform asks. | Owner: Platform operator and merchant | If blocked: The feed is refused until the catalog's verified facts are fresh.
 ACP checkout | The operator turns on ACP checkout, you opt your shop in, and you issue the platform a key with ACP write access. | Owner: Platform operator and merchant | If blocked: Without your opt-in your ACP routes answer 404.
-MCP checkout tools | On each MCP server install, set the address of your UCP profile. The checkout tools appear only while your profile lists checkout. | Owner: Platform operator | If blocked: No profile address, or checkout off, means no tools are registered.
-Grantex mandates | The operator turns on mandates and you name your Grantex commerce tenant and merchant in your settings. | Owner: Platform operator and merchant | If blocked: Without mandates, production refuses checkout decisions as buyer_authority_verified.
+MCP checkout tools | Sell everywhere shops are served by the AgenticOrg server at https://mcp.agenticorg.ai/mcp, with nothing to set. For an MCP server of your own, set the address of your UCP profile on each install; its checkout tools appear only while your profile lists checkout. | Owner: AgenticOrg, or the platform operator for your own install | If blocked: No profile address, or checkout off, means no tools are registered.
+Choose where buyers pay | In the Payments step of Sell Everywhere, choose your own Shopify checkout, or your own Plural account (client ID, client secret and webhook secret, Sandbox or Production, then Test). On every channel above, a ready checkout then answers requires_escalation with continue_url, the link to that page. | Owner: Merchant | If blocked: Shopify checkout needs a connected store; Plural needs saved credentials with a webhook secret. Without a method, buyers get no payment link.
 ```
 
-Turn mandates on before payments. In production, a checkout without verified mandates is refused.
+See [Getting paid](/docs/oacp-getting-paid) for what the buyer sees, the Orders page and the email for each order.
 
-#### Phase 5. Payments: off until a sandbox run passes
+#### Phase 5. Agent-executed payment: off until a sandbox run passes
 
-> Live payment execution stays off. It is turned on only after a full run against the payment provider's sandbox has passed in staging, and then one merchant at a time. Until then, a checkout stops at executor_unavailable and no buyer is charged.
+> Agent-executed payment, where AgenticOrg charges through a payment provider against verified buyer mandates, stays off. It is turned on only after a full run against the payment provider's sandbox has passed in staging, and then one merchant at a time. A shop that chose where buyers pay always hands the buyer a link instead. A shop with neither gives no payment link, its checkouts stop before payment, and no buyer is charged.
 
 ```flow start=20
+Grantex mandates | The operator turns on mandates and you name your Grantex commerce tenant and merchant in your settings. | Owner: Platform operator and merchant | If blocked: Without mandates, production refuses agent-executed decisions as buyer_authority_verified.
 Sandbox credentials | The operator stores the provider's sandbox credentials in the secret manager. | Owner: Platform operator | If blocked: Without credentials the sandbox tests are skipped, not passed.
 Staging run | In staging, turn on payment execution for one test merchant and run the sandbox tests and the checkout smoke test. | Owner: Platform operator | If blocked: Any failure keeps payments off.
 Check the ledger | Confirm each payment call comes after a consumed allow decision. | Owner: Platform operator | If blocked: A payment row without a consumed decision is an irregularity; stop and investigate.
-Production, one merchant at a time | After owner approval, name the executor for one merchant and watch its first orders. | Owner: Platform operator | If blocked: Remove the merchant's executor setting to stop it at once.
+Production, one merchant at a time | After owner approval, name the executor for one merchant whose payment method is off, and watch its first orders. A shop with a payment method keeps getting links. | Owner: Platform operator | If blocked: Remove the merchant's executor setting to stop it at once.
 ```
+
+Mandates matter only for agent-executed payment. A payment link needs none: the buyer authenticates and pays on your own page.
 
 #### Quick test before you go live
 
 - Ask a buyer question and check the source and freshness label.
 - Open a test checkout and confirm it reaches ready_for_complete.
-- With payments still off, confirm Complete answers executor_unavailable and nothing is charged.
+- Complete it and confirm the answer is `requires_escalation` with a `continue_url` to your payment page. With Plural in Sandbox, pay the link and check the order on the Orders page and the email.
 - Export the ledger and run `scripts/verify_ledger.py` on it.
 
 #### Related guides
 
+- [Sell everywhere](/docs/oacp-sell-everywhere)
+- [Getting paid](/docs/oacp-getting-paid)
 - [Feature switches reference](/docs/oacp-feature-switches)
 - [Commerce runtime and Shopify](/docs/commerce)
-- Technical references: [UCP profile](https://github.com/mishrasanjeev/agentic-org/blob/main/docs/oacp/ucp-profile.md), [ACP feed and sessions](https://github.com/mishrasanjeev/agentic-org/blob/main/docs/oacp/acp-feed-and-sessions.md) and the [launch and rollback runbook](https://github.com/mishrasanjeev/agentic-org/blob/main/docs/oacp/explainers/launch-rollback-runbook.md)
+- Technical references: [UCP profile](https://github.com/mishrasanjeev/agentic-org/blob/main/docs/oacp/ucp-profile.md), [ACP feed and sessions](https://github.com/mishrasanjeev/agentic-org/blob/main/docs/oacp/acp-feed-and-sessions.md), [payment hand-off](https://github.com/mishrasanjeev/agentic-org/blob/main/docs/oacp/payment-handoff.md) and the [launch and rollback runbook](https://github.com/mishrasanjeev/agentic-org/blob/main/docs/oacp/explainers/launch-rollback-runbook.md)
 
 
 ### Sell everywhere: one switch for every AI surface
 
 URL: https://agenticorg.ai/docs/oacp-sell-everywhere
-Audience: Merchants and business owners. Reviewed: 2026-10-29.
+Audience: Merchants and business owners. Reviewed: 2026-10-30.
 
 In 30 seconds:
 
@@ -4330,7 +4489,7 @@ In 30 seconds:
 - Buyers then find you in ChatGPT, Claude and other AI apps, in the AgenticOrg shopping bot on Telegram, and on the open web.
 - You do no setup on each surface: AgenticOrg connects to them once, for every shop on the network.
 - If you have no web address for buyer agents yet, AgenticOrg gives you one, such as your-shop.agenticorg.ai.
-- You stay the seller. Buyers always finish and pay with you, and you can pause it at any time.
+- You stay the seller. Buyers pay on your own Shopify checkout or Plural page, and you can pause it at any time.
 
 #### One switch, every surface
 
@@ -4338,24 +4497,33 @@ Figure: One switch, every surface. You turn it on once. AgenticOrg lists your sh
 
 | Surface | How buyers reach you | What you do |
 | --- | --- | --- |
-| ChatGPT, Claude and other AI apps | They add AgenticOrg's server once and can then shop every network shop | Nothing |
-| Telegram | They tap your link, `t.me/<bot>?start=<your-shop>`, or search across shops in the AgenticOrg shopping bot | Share your link if you like |
+| ChatGPT, Claude and other AI apps | They add AgenticOrg's server, `https://mcp.agenticorg.ai/mcp`, once as a custom MCP server. They can then list the network's shops, search them, open or update a checkout and get the payment link | Nothing |
+| Telegram | They tap your link, `t.me/<bot>?start=<your-shop>`, or search across shops in the AgenticOrg shopping bot. The page shows your exact link | Share your link if you like |
 | The open web | AI search engines and agents read your shop's profile at your web address | Nothing |
 | Google Gemini and AI Mode, Microsoft Copilot, Perplexity | Coming: AgenticOrg is registering with each program for the whole network | Nothing yet |
 | Payment | When the checkout is ready, buyers get a link to your own payment page and pay you there; see [Getting paid](/docs/oacp-getting-paid) | Choose Shopify checkout or Plural once |
 
+#### Watch it end to end
+
+The recording below shows each step on this page for a demo coffee shop. It then follows a buyer's AI agent as it shops there and the buyer pays on the shop's Plural page.
+
+Video: A real OACP order, end to end. Recorded on the live service with a demo shop and a Plural test payment. The shop owner adds products (a Shopify store connects in one step; the demo shop uploads a spreadsheet), sets rules, limits and their own Plural account, and turns Sell everywhere on. A buyer's AI assistant finds the shop through the AgenticOrg MCP server, fills the cart and gets a payment link. The buyer pays the shop, and the order reaches the Orders page with the delivery address. Narrated, with English captions. Watch it at /media/docs/oacp-commerce-walkthrough.mp4 (English captions at /media/docs/oacp-commerce-walkthrough.vtt).
+
 #### Set up and turn it on
 
-Everything happens on one page: **Commerce > Sell Everywhere**. It takes about ten minutes. Each step shows
-**Done** or **To do**, and the switch stays off until the steps before it are done.
+Everything happens on one page: **Sell Everywhere** (`/dashboard/sell-everywhere`). It takes about ten minutes.
+Each step shows **Done** or **To do**. The switch stays off until your catalog, your policies, your shipping
+fee (for a shop without Shopify) and your order limits are done; the page names whatever is missing.
+Payments is not needed to turn it on, but until you choose a method buyers get no payment link and are told
+to pay you directly.
 
 ```flow
 Your shop | Choose your shop, or type a shop name and select Create shop. AgenticOrg gives it an id; you never type one.
 Your catalog | Connect Shopify, or upload a CSV or JSON file. This is what buyers will search.
-Your policies | Write your returns and shipping terms, and store pickup if you offer it. If you uploaded a file, also set your shipping fee. Buyer agents read them before they buy.
+Your policies | Write your returns and shipping terms, and store pickup if you offer it. Without Shopify, also set your shipping fee, its currency and the countries you ship to. Buyer agents read your policies before they buy.
 Order limits | Set the largest single order, the most per day, the most items per order and your currency. Nothing is set for you.
 Payments | Choose where buyers pay: your own Shopify checkout or your own Plural account. See Getting paid.
-Turn on Sell everywhere | Choose your shop name, accept the network terms and turn it on. AgenticOrg enrols you with Grantex, gives you a web address and publishes your shop.
+Turn on Sell everywhere | Choose your shop name, accept the network terms and turn it on. AgenticOrg enrols you with Grantex, gives you a web address, publishes your shop and has your catalog facts signed.
 ```
 
 ### Connect Shopify
@@ -4402,10 +4570,21 @@ the countries it ships to (two-letter codes such as `IN`; leave them empty to sh
 ship free. Buyers are offered this fee at checkout, and Sell everywhere stays off until it is set. A
 Shopify shop uses the shipping rates of its Shopify delivery profiles instead.
 
+### Store pickup
+
+The pickup text is part of your policies: buyer agents read it as wording. Checkout offers store pickup
+only when your shop also has a store location in its merchant settings, which the Commerce Runtime page
+sets. Sell Everywhere does not add store locations, so a shop that only uploads a catalog offers shipping
+and no pickup.
+
 ### Order limits
 
 AI agents can only start orders within your limits: the largest single order, the most per day and the
 most items per order, in your currency. The daily maximum must be at least the per-order maximum.
+
+Before a buyer gets a payment link, the arbiter checks the order against these limits. The daily maximum
+counts what buyers paid today and the payment links still open, in that currency, by the UTC day. An
+order that would go over it gets no link.
 
 #### After you turn it on
 
@@ -4413,14 +4592,19 @@ The page shows how going live is progressing:
 
 | Row | Status | Meaning |
 | --- | --- | --- |
-| Grantex enrolment | Enrolled | Grantex signs your catalog facts. |
+| Grantex enrolment | Enrolled | Grantex signs your catalog facts. No operator edit is needed for your shop. |
 | Grantex enrolment | Waiting | Your deployment's Grantex is not ready for enrolment yet; nothing to do. |
-| Grantex enrolment | Needs attention | The enrolment was refused or revoked; contact your platform administrator. |
+| Grantex enrolment | Needs attention | Grantex refused or revoked the enrolment, or could not be reached. The message says whether to retry or contact your platform administrator. |
 | Shop profile | Published | Buyer agents can read your shop at your web address. |
 | Shop profile | Not published | The page says exactly why, for example that your web address is still being set up. |
 | Verified catalog | Done | Grantex has verified your catalog, prices and stock. |
+| Verified catalog | To do | Grantex has not verified your catalog yet. Select Publish to try again. |
 
-Select **Publish** (or **Refresh listing**) to run these steps again at any time.
+Grantex's signed facts for your prices and stock last only minutes. AgenticOrg renews them whenever a buyer's agent reads your shop, and each time you open this page, so **Done** means Grantex verifies your catalog now, not only when you turned the shop on.
+
+Select **Publish** (or **Refresh listing** once your profile is published) to run the steps again at any
+time: Grantex enrolment, your web address, publication and the signed catalog facts. Each row then shows
+the exact reason if something still waits.
 
 Your shop name is the short name buyers see in AI apps and in your Telegram link, such as `nilgiritea`. Use 3 to 40 lowercase letters, digits or hyphens. It cannot change later, so choose it with care.
 
@@ -4433,9 +4617,9 @@ Buyer agents read your shop's profile at `https://<your address>/.well-known/ucp
 - **You already have an address.** If you connected your own domain in Custom Domains, or your profile is already published, the network uses it.
 - **You have no address yet.** AgenticOrg gives you `<your-shop>.agenticorg.ai` and sets it up for you, certificate included. It usually goes live within an hour.
 
-AgenticOrg can give out 20 of these addresses in all. If they are taken, you can still turn on Sell everywhere and connect your own domain instead; see [Your own domain for buyer agents](/docs/oacp-custom-domains).
+AgenticOrg can give out 20 of these addresses in all, and the page shows how many are in use. If they are taken, you can still turn on Sell everywhere and connect your own domain instead; see [Your own domain for buyer agents](/docs/oacp-custom-domains).
 
-Your shop appears on the network only once its profile is published at that address. Until then, the page shows **Waiting for publication**.
+Your shop appears on the network only once its profile is published at that address and the address is live, certificate included. Buyer agents read your profile and search your catalog there, so a shop whose address is still being set up would only give them errors. Until then, the AI apps and Telegram rows show **Waiting for your web address**, or **Waiting for publication** if the profile is not published yet. A new `agenticorg.ai` address usually takes a few minutes, and at most an hour.
 
 #### Where buyers can find you
 
@@ -4443,11 +4627,13 @@ The page lists each surface and where it stands:
 
 | Status | Meaning |
 | --- | --- |
-| Live | Buyers can reach you there now. |
-| Setting up, Issuing certificate | Your web address is being connected. Check back in a few minutes. |
+| Live | Buyers can reach you there now. For Payments: you chose where buyers pay. |
+| Waiting for DNS, Setting up, Issuing certificate | Your web address is being connected. Check back in a few minutes. |
+| Waiting for your web address | You are on the network and your profile is published, but your web address is still being set up. AI apps and the Telegram bot offer your shop as soon as it is live. |
 | Waiting for publication | You are on the network, but your profile is not published yet. |
+| Coming soon | Telegram only: the shopping bot is not reachable for your shop yet, for example because your profile is not published. |
 | Coming: registration in progress | AgenticOrg is still registering with that program. |
-| Off | Sell everywhere is paused or not turned on. |
+| Off | Sell everywhere is paused or not turned on. For Payments: you have not chosen where buyers pay. |
 
 To see what buyers see in ChatGPT, follow [the ChatGPT run in the Nilgiri Tea House example](/docs/oacp-example-nilgiri-tea).
 
@@ -4457,12 +4643,16 @@ Choose **Pause** on the page. Your shop leaves the directory at once: AI apps an
 
 #### What stays with you
 
-- **Payment.** AgenticOrg never takes the buyer's money. A buyer opens a checkout in the chat and finishes and pays with you.
+- **Payment.** AgenticOrg never takes the buyer's money. A buyer opens a checkout in the chat; when it is ready, the buyer gets a link to your own Shopify checkout or Plural payment page and pays you there. See [Getting paid](/docs/oacp-getting-paid).
 - **Your rules.** Every network checkout goes through the same checks as any other: your signed facts, your limits and the arbiter's fixed rules, recorded in your ledger.
-- **Your data.** The directory shows your shop name, display name, categories and profile address, nothing else.
+- **Your data.** The directory shows your shop name, display name, categories, web address, profile address and Telegram link, nothing else.
+
+Agents never pay on a buyer's behalf here. The AI apps and the Telegram bot have no tool that pays, and a
+network Complete that carries a payment instrument, decision or mandate is refused.
 
 #### Read next
 
+- [Getting paid: buyers pay on your own page](/docs/oacp-getting-paid)
 - [Merchant setup checklist](/docs/oacp-merchant-setup)
 - [Your own domain for buyer agents](/docs/oacp-custom-domains)
 - [Example: Nilgiri Tea House, end to end](/docs/oacp-example-nilgiri-tea)
@@ -4472,7 +4662,7 @@ Choose **Pause** on the page. Your shop leaves the directory at once: AI apps an
 ### Getting paid: buyers pay on your own page
 
 URL: https://agenticorg.ai/docs/oacp-getting-paid
-Audience: Merchants and business owners. Reviewed: 2026-10-29.
+Audience: Merchants and business owners. Reviewed: 2026-10-30.
 
 In 30 seconds:
 
@@ -4480,54 +4670,73 @@ In 30 seconds:
 - AgenticOrg never takes your buyers' money and never sees their card or UPI details.
 - Shopify stores send buyers to their own Shopify cart. Stores with a Plural account send buyers to a Plural payment page.
 - Plural payments become orders on the Orders page, and every administrator gets an email.
-- You choose the method once, in Getting paid, and can switch it off at any time.
+- You choose the method once, in the Payments step of Sell Everywhere, and can switch it off at any time.
 
 #### Choose where buyers pay
 
-Figure: The buyer pays on your page. When the checkout is ready, the buyer gets your payment link and pays you there. AgenticOrg never takes the money.
+Figure: The buyer pays on your page. When the checkout is ready, the arbiter checks your shop's facts and limits, then the buyer gets your payment link and pays you there. AgenticOrg never takes the money.
 
 | Method | What the buyer sees | Where the order appears |
 | --- | --- | --- |
 | My Shopify checkout | A link to your store's own cart with the items already in it. They pay in your Shopify checkout. | Your Shopify admin, as with any other Shopify order |
 | My Plural account | A link to a Plural payment page for your Plural account. They pay by card, UPI or net banking. | The Orders page here, with an email to your administrators |
-| Off | No payment link. The buyer finishes with you directly. | Wherever you take the order |
+| Off | No payment link. On the AgenticOrg network the buyer is told to pay with you directly. | Wherever you take the order |
 
-The buyer always authenticates the payment themselves on that page, for example with 3-D Secure or their UPI PIN. Nothing is charged in the chat.
+The buyer always authenticates the payment themselves on that page, for example with 3-D Secure or their UPI PIN. Nothing is charged in the chat, and no agent pays on the buyer's behalf.
 
 #### Set it up
 
 ```flow
-Open Getting paid | In your merchant setup, open Getting paid for your merchant.
-Shopify | Choose My Shopify checkout. Your Shopify store must already be connected; the page shows the store it will use.
-Plural | Choose My Plural account. Enter your Plural client ID, client secret and webhook secret, choose Sandbox or Production, save, then press Test.
+Open Payments | On the Sell Everywhere page (/dashboard/sell-everywhere), choose your shop and go to step 5, Payments. It holds the Getting paid settings.
+Shopify | Choose My Shopify checkout. Your Shopify store must already be connected in step 2; the page shows the store it will use.
+Plural | Under Your Plural account, choose Sandbox or Production, enter your Plural client ID, client secret and webhook secret, and select Save Plural credentials. Then select Test, which only asks Plural for an access token.
 Webhook | Copy the webhook URL the page shows into your Plural dashboard, or send it to Plural support if your account has no webhook setting, so payments are confirmed the moment they happen.
-Save | Save the payment method. New checkouts use it at once.
+Save | Choose My Plural account or My Shopify checkout and select Save payment method. New checkouts use it at once.
 ```
+
+My Plural account can be saved only once your Plural credentials, including the webhook secret, are saved. My Shopify checkout can be saved only once your Shopify store is connected.
 
 Your Plural secrets are stored encrypted and are never shown again. To change one, enter the new value and save; leave a field blank to keep the saved secret. Use Sandbox until a test payment has gone through, then switch to Production with your live credentials.
 
+You do not need a payment method to turn on Sell everywhere, but until you save one, buyers get no payment link.
+
+#### Before a link is issued
+
+When the buyer asks to complete a ready checkout, the arbiter decides first, and the buyer gets a link only on an allow. It checks two things:
+
+- **Your facts are still valid.** The catalog, price, stock and policy facts Grantex signed are fresh and not revoked.
+- **The order is within your limits.** The largest single order, the currency, the most items per order and the daily maximum you set in step 4. The daily maximum counts what buyers paid today and the payment links still open, in that currency, by the UTC day.
+
+No buyer mandate is asked for, because the agent holds no payment credential and the buyer pays on your page. The decision is used once and recorded in your ledger. A refusal names the rule that failed and its reason, for example `daily_amount_cap_exceeded`, and no link is issued.
+
 #### What the buyer sees
 
-1. The buyer asks the assistant, the Telegram bot or another AI app for a product and opens a checkout.
-2. When the checkout is ready, the assistant gives them your payment link and the total.
+1. The buyer asks for a product in ChatGPT or another AI app, in the AgenticOrg bot on Telegram, or on another agent platform, and opens a checkout.
+2. When the checkout is ready, the buyer gets your payment link and the total.
 3. They open the link and pay on your page. Asking again gives the same link while it is valid.
 4. With Plural, they return to a short page that says whether the payment went through. If it did not, they ask for a new link.
 
-A Plural link is valid for 30 minutes. While it is open, the checkout cannot be changed; the buyer starts a new checkout to change the items.
+A Plural link is valid for 30 minutes, or until the checkout expires if that is sooner. While it is open, the checkout cannot be changed; the buyer starts a new checkout to change the items. A Shopify link stays the same for the life of the checkout.
 
 #### Your orders
 
-Open **Commerce > Orders** to see every order buyers paid for through a Plural link, newest first: the total, the items, the buyer's contact details exactly as they gave them, the payment status and where they shopped (Telegram, an AI app, or another platform). Each order also sends an email to every active administrator of your workspace.
+Open **Orders** (`/dashboard/orders`) to see every order buyers paid for through a Plural link, newest first: the total, the items, where to deliver it, the buyer's contact details, the payment status and where they shopped (Telegram, an AI app, or another platform). Each order also sends the same details in an email to every active administrator of your workspace.
 
-AgenticOrg creates an order only when Plural confirms the full amount. If Plural reports a payment that does not match the checkout, for example a different amount, no order is created and the payment is logged so you can refund it in Plural.
+The delivery column shows how the buyer chose to receive the order: shipping with the rate and fee they chose, or store pickup with the store. For shipping it also shows the address they gave their agent at checkout, line by line. The Plural payment page does not ask for an address, so ship to the one shown here. The address and contact details appear exactly as the buyer gave them; AgenticOrg does not check or correct them.
 
-Orders paid in your Shopify checkout appear in your Shopify admin.
+AgenticOrg creates an order only when Plural confirms the full amount, through its signed webhook or the check AgenticOrg runs every minute. If Plural reports a payment that does not match the checkout, for example a different amount, no order is created and the payment is logged so you can refund it in Plural. A payment that is only authorised, not captured, stays pending.
+
+Orders paid in your Shopify checkout appear in your Shopify admin, not on the Orders page.
 
 #### If something goes wrong
 
 | What you see | What to do |
 | --- | --- |
+| Connect your Shopify store first | Connect your store in step 2, then save My Shopify checkout again. |
+| Save your Plural credentials first, or add your Plural webhook secret | Save the client ID, client secret and webhook secret, then save My Plural account again. |
 | The buyer is told the shop's payment page is not set up | Save your Plural credentials, or connect your Shopify store, then save the payment method again. |
+| The buyer is told payment links are not available here | Your platform operator has not set the public web address of the AgenticOrg service, which Plural links need. |
+| The buyer is told the commerce arbiter refused | The order is over one of your limits, or a signed fact has lapsed. The message names the rule; the decision in your ledger gives the exact reason. |
 | Test fails | Check the client ID and secret and that the environment matches them (Sandbox or Production). |
 | Paid in Plural but no order here | Check the webhook URL in your Plural dashboard. Payments are also checked every minute, so the order appears shortly. |
 | These items cannot be paid for in the shop's Shopify checkout | The items did not come from your Shopify store. Use My Plural account for them. |
@@ -4540,7 +4749,7 @@ Audience: Merchants and platform operators. Reviewed: 2026-10-21.
 
 In 30 seconds:
 
-- Buyer agents can find your shop on a subdomain you own, such as agent.your-store.example, instead of an AgenticOrg address.
+- Buyer agents can find your shop on a subdomain you own, such as agent.your-store.example, instead of an AgenticOrg address such as your-shop.agenticorg.ai.
 - You add two DNS records. AgenticOrg checks them, tells you exactly what to fix, and connects the domain itself.
 - Google issues the certificate, usually within the hour. You do not wait for anyone or share any account.
 - Only the agent addresses are served on your domain; nothing else of AgenticOrg is reachable there.
@@ -4551,6 +4760,8 @@ In 30 seconds:
 Your UCP profile is the file buyer agents read first. It says where your shop is and what it offers. With a custom domain it is served at `https://agent.your-store.example/.well-known/ucp`, together with your catalog and store locations under `/ucp`.
 
 Figure: Your own domain, step by step. You add a subdomain and publish two DNS records. AgenticOrg checks them, connects the domain and follows the certificate until the domain is live.
+
+**Do you need one?** Not to get started. When you turn on Sell everywhere and your shop has no address yet, AgenticOrg gives it `<your-shop>.agenticorg.ai` and sets it up for you, certificate included, with no DNS records on your side. Only 20 of these addresses can be given out in all. Connect your own subdomain when you want your own name, or when they are taken; the network then uses your domain. A shop holds one domain at a time, so a shop already on a platform address removes it here before adding its own. See [Sell everywhere](/docs/oacp-sell-everywhere).
 
 You will use the **Custom Domains** page at `/dashboard/custom-domains`. You need the administrator role or the merchant role. Enter your merchant ID, and your seller agent ID if your shop has more than one, then press **Load**.
 
@@ -4572,7 +4783,7 @@ Certificate, then live | Google issues the certificate, usually within the hour 
 
 The progress bar on the page shows the same five stages: publish DNS records, verify ownership, connect domain, issue certificate, live. Each stage is marked done, current or failed.
 
-Your profile is served on the domain once it is published. That means your signing key exists, you pressed publish, and Grantex allows public discovery for the host. See [Merchant setup checklist](/docs/oacp-merchant-setup), phase 3.
+Your profile is served on the domain once it is published. That means your signing key exists, you pressed publish, and Grantex allows public discovery for the host. If Sell everywhere is on, select **Publish** on the Sell Everywhere page once the domain is live: it creates a missing signing key, publishes your profile on the domain and shows the exact reason if anything still waits. See [Merchant setup checklist](/docs/oacp-merchant-setup), phase 3.
 
 **If the page also asks for a Search Console owner,** your deployment still connects domains through Cloud Run domain mappings. In that case:
 - The CNAME points at `ghs.googlehosted.com`.
@@ -4713,10 +4924,18 @@ Disconnect a removed domain | When a merchant removes a connected domain, a "Del
 
 Every operator action is written to the merchant's commerce ledger with you as the actor.
 
+### Platform addresses for Sell everywhere
+
+Shops that turn on Sell everywhere without an address of their own get `<shop>.<apex>`, for example `tea-corner.agenticorg.ai`. AgenticOrg owns the apex, so the address is attested without a TXT record; it is created as a Firebase Hosting custom domain and followed to a live certificate like any other.
+
+- It needs the Firebase setup above and one wildcard record in the apex's DNS zone: `*.<apex> CNAME <site>.web.app.`
+- `AGENTICORG_PLATFORM_SUBDOMAIN_APEX` names the apex (`agenticorg.ai` by default).
+- `AGENTICORG_PLATFORM_SUBDOMAIN_CAP` (20 by default) caps how many are given out, because Firebase connects at most 20 custom domains per domain. Past the cap, a shop can still turn on Sell everywhere and is asked to connect its own domain.
+
 ### Limits and when to change approach
 
 **Firebase Hosting:**
-- Each merchant domain can have at most 20 subdomains connected.
+- Each merchant domain can have at most 20 subdomains connected. The platform addresses all sit under one apex, so they share that limit.
 - A request can take at most 60 seconds.
 - Responses that do not set their own caching are marked not to be cached, so Firebase never serves a stale answer.
 - Hosting meters storage and data transfer beyond its monthly allowance. The site stores no files, and agent responses are small.
@@ -4741,7 +4960,7 @@ Audience: Merchants, risk and audit teams. Reviewed: 2026-10-21.
 In 30 seconds:
 
 - Revoke a fact once and every channel stops using it. If the revocation list cannot be reached, everything refuses.
-- The arbiter checks up to eight fixed rules before money moves. The first rule that fails is the reason, and it is recorded.
+- The arbiter decides before money can move: your signed facts and your limits before a buyer gets a payment link, up to eight rules when an agent would pay itself. The first rule that fails is the reason, and it is recorded.
 - Every decision is in the commerce ledger. You can export it and check it on your own computer, with no database and no network.
 - Agent requests can carry a signature (Visa TAP or Web Bot Auth). AgenticOrg checks and logs them today; refusing unsigned calls is a separate switch.
 - A refusal is never a mystery: it names the rule, the reason and how to fix it.
@@ -4762,9 +4981,24 @@ Good to know:
 
 #### What the arbiter checks
 
-Before a checkout completes, the arbiter runs these rules in a fixed order. Every rule runs. The first one that fails decides the refusal.
+Every rule runs, in a fixed order. The first one that fails decides the refusal.
 
-Figure: Eight rules, one answer. A purchase passes eight gates in order: mandate, consent, spending cap, verified buyer authority, valid facts, merchant limits, not-present limits and RBI AFA. Passing all gives allow. The first failure gives refuse, with that rule as the reason.
+### Before a payment link
+
+Today a buyer pays on your own Shopify checkout or Plural page. Before the buyer gets that link, the arbiter checks two rules:
+
+| Rule | In plain words | Example refusal |
+| --- | --- | --- |
+| Facts still valid | Your catalog, price, stock, policy and protocol facts are signed, fresh, unexpired and not revoked. | artifact_revoked:price |
+| Merchant limits | The order is within your per-order amount, currency and items per order, and within your daily maximum. The daily maximum counts what buyers paid today and the payment links still open, in that currency, by the UTC day. | daily_amount_cap_exceeded |
+
+Mandate, consent, spending cap, verified buyer authority and RBI AFA are not checked here. The agent holds no payment credential and moves no money, and the buyer authenticates on the payment page, for example with 3-D Secure or their UPI PIN. In production the allow still needs the Grantex countersignature, and it is used up before the link exists.
+
+### When an agent would pay itself (switched off)
+
+Agent-executed payment, where the payment provider charges against buyer mandates, is built but switched off. When it is on, the arbiter runs these eight rules before a checkout completes:
+
+Figure: Eight rules, one answer. An agent-executed purchase passes eight gates in order: mandate, consent, spending cap, verified buyer authority, valid facts, merchant limits, not-present limits and RBI AFA. Passing all gives allow. The first failure gives refuse, with that rule as the reason.
 
 | # | Rule | In plain words | Example refusal |
 | --- | --- | --- | --- |
@@ -4773,7 +5007,7 @@ Figure: Eight rules, one answer. A purchase passes eight gates in order: mandate
 | 3 | Spending cap | The buyer's Commerce Passport allows this amount, in this currency. | passport_amount_cap_exceeded |
 | 4 | Verified buyer authority | AgenticOrg verified the mandates itself. A claim in the request is not enough in production. | buyer_authority_caller_asserted |
 | 5 | Facts still valid | Catalog, price, stock, policy and other facts are signed, fresh, unexpired and not revoked. | artifact_revoked:price |
-| 6 | Merchant limits | The order is within your amount, currency and quantity limits. | order_amount_cap_exceeded |
+| 6 | Merchant limits | The order is within your amount, currency and quantity limits, and your daily maximum when you set one. | order_amount_cap_exceeded |
 | 7 | Not-present limits | If the buyer is away, your stricter limits and the Intent cap cover the order. | not_present_limits_missing |
 | 8 | RBI AFA | A UPI AutoPay payment has verified AFA evidence when RBI rules need it. | afa_evidence_missing |
 
@@ -4844,7 +5078,9 @@ Read it like this:
 3. **decision_id** finds the sealed decision in the ledger.
 4. **required_config** says what must change before a new attempt.
 
-In a UCP or ACP checkout the decision comes back inside the checkout answer, as a business message. Nothing is charged.
+A refused payment link reads the same way, for example `failing_rule` `handoff_merchant_limits` with the reason `daily_amount_cap_exceeded`.
+
+In a UCP or ACP checkout the decision comes back inside the checkout answer, as a business message. Nothing is charged, and no payment link is issued.
 
 #### Related guides
 
@@ -4860,7 +5096,7 @@ Audience: Platform operators and merchants. Reviewed: 2026-10-21.
 
 In 30 seconds:
 
-- Every OACP surface that could expose your shop or move money starts switched off.
+- Every OACP surface that could expose your shop or move money starts switched off. Where buyers pay is each merchant's own choice, not a switch.
 - The safety checks start switched on in production: signature checks, verified buyer authority and the Grantex countersignature.
 - Request signatures start in log mode: checked and logged, never refused, until someone chooses enforce.
 - Switches are settings on the AgenticOrg service. They are read at start-up, so a change needs a restart.
@@ -4907,13 +5143,39 @@ Turning a safety check off weakens the shop's protection. Do it only as a record
 | `AGENTICORG_CUSTOM_DOMAIN_OPERATOR_EMAIL` | Empty | Where each new operator queue item is emailed, with its command. |
 | `AGENTICORG_CUSTOM_DOMAIN_CLOUD_RUN_PROJECT` | Empty | The project the queue's commands name. Region (`asia-southeast1`), service (`agenticorg-api`) and CNAME target (`ghs.googlehosted.com`) have their own settings with these defaults. |
 | `AGENTICORG_CUSTOM_DOMAIN_CLOUD_RUN_AUTOMAP_ENABLED` | Off | Lets AgenticOrg connect and disconnect domains itself. Keep it off: Google names a very broad role for it. |
-| `AGENTICORG_UCP_CHECKOUT_ENABLED` | Off | Serves UCP checkout, cart and order routes. Off, they answer 404. |
+| `AGENTICORG_UCP_CHECKOUT_ENABLED` | Off | Serves UCP checkout, cart and order routes. Off, they answer 404. The network checkout gateway needs it too, and the once-a-minute Plural payment check runs only while UCP or ACP checkout is on. |
 | `AGENTICORG_ACP_FEED_ENABLED` | Off | Lets you export the ACP product feed. |
 | `AGENTICORG_ACP_CHECKOUT_ENABLED` | Off | Serves ACP checkout sessions (your shop must also opt in). |
 | `AGENTICORG_ACP_SIGNATURE_MODE` | `log` | Keep `log`. ACP publishes no signing method yet, so `enforce` would refuse every request. |
 | `OACP_PUBLIC_CATALOG_PLATFORM_DISABLED` | Unset | An operator override that withdraws the public catalog pages for every merchant. |
 
-#### Mandates and payments (off by default)
+#### Sell everywhere network (off by default)
+
+| Switch | Default | What it does |
+| --- | --- | --- |
+| `AGENTICORG_NETWORK_ENABLED` | Off | Serves the network directory, the network checkout gateway and the Turn on Sell everywhere step. Off, they answer 404 and the page says Sell everywhere is not enabled; the setup steps before it still work. |
+| `AGENTICORG_NETWORK_SERVICE_TOKEN` | Empty | The credential the hosted MCP server presents to the network checkout gateway (at least 32 characters, from the secret manager). Empty, the gateway refuses every call. |
+| `AGENTICORG_NETWORK_AGENT_PROFILE` | `https://agenticorg.ai/ucp/platforms/agenticorg-network/profile.json` | The platform profile network checkouts are opened for. |
+| `AGENTICORG_NETWORK_TERMS_VERSION` | `2026-10-25` | The network terms version a merchant accepts when turning Sell everywhere on. |
+| `AGENTICORG_NETWORK_TELEGRAM_ENABLED` | Off | Serves the webhook of the public AgenticOrg shopping bot on Telegram. Off, it answers 404. |
+| `AGENTICORG_NETWORK_TELEGRAM_BOT_USERNAME` | Empty | The bot's username, for each shop's `t.me/<bot>?start=<shop>` link. Empty, no Telegram link is shown. |
+| `AGENTICORG_NETWORK_TELEGRAM_BOT_TOKEN`, `AGENTICORG_NETWORK_TELEGRAM_WEBHOOK_SECRET` | Empty | The bot's token and webhook secret, from the secret manager. |
+| `AGENTICORG_NETWORK_TELEGRAM_CHAT_LIMIT_PER_HOUR`, `AGENTICORG_NETWORK_TELEGRAM_GLOBAL_LIMIT_PER_MINUTE` | `20` and `60` | How many messages one chat may send in an hour, and the whole bot in a minute. |
+| `AGENTICORG_PLATFORM_SUBDOMAIN_APEX` | `agenticorg.ai` | Shops without an address of their own get `<shop>.<apex>`. Needs custom domains through Firebase and one wildcard CNAME for the apex. |
+| `AGENTICORG_PLATFORM_SUBDOMAIN_CAP` | `20` | How many platform addresses may be given out, Firebase's limit per domain. Past it, a shop is asked to connect its own domain. |
+| `AGENTICORG_SHOPIFY_ENV_OPERATOR_TENANT_ID` | Empty | The only tenant that may read the deployment's own `SHOPIFY_*` store settings. Every other shop uses the token it stored itself. |
+
+#### Payment links
+
+The payment hand-off has no switch of its own: each merchant chooses where buyers pay on the Sell Everywhere page. It needs UCP or ACP checkout on and, for Plural, a public address:
+
+| Setting | Default | What it does |
+| --- | --- | --- |
+| `AGENTICORG_PUBLIC_API_BASE_URL` | Empty | The public `https://` address of the AgenticOrg API. Plural payment links, the buyer's return page and the merchant's webhook URL are built on it, or on `AGENTICORG_APP_URL` when it is empty. Without either, Plural links are not offered. |
+
+#### Agent-executed payment and mandates (off by default)
+
+These switches belong to the path where AgenticOrg charges through a payment provider against buyer mandates. It stays off until a payment-provider sandbox run has passed. A merchant that chose where buyers pay keeps getting payment links whatever these say.
 
 | Switch | Default | What it does |
 | --- | --- | --- |
@@ -4940,7 +5202,11 @@ Turning a safety check off weakens the shop's protection. Do it only as a record
 | Setting | Default | What it does |
 | --- | --- | --- |
 | MCP server `AGENTICORG_UCP_PROFILE_URL` and `AGENTICORG_UCP_AGENT_PROFILE` | Unset | Point an MCP install at your UCP profile. Unset, no checkout tools appear. |
-| Merchant `provider_policy.ucp.executor` | None | Names the payment executor for your shop. None means no charge. |
+| MCP server `MCP_NETWORK_DIRECTORY_URL` and `AGENTICORG_NETWORK_SERVICE_TOKEN` | Unset | Network mode: one hosted server serves every listed shop, with list, search, checkout and payment-link tools and no tool that pays. |
+| Merchant `provider_policy.payments` | None | Where buyers pay: `shopify_cart` or `plural_hosted`, set in the Payments step of Sell Everywhere. None means no payment link. |
+| Merchant `provider_policy.arbiter` | None | Your order limits: per order, per day, items per order and currency, set in the Order limits step. |
+| Merchant `provider_policy.ucp.fulfillment.flat_rates` | None | Your flat shipping fee, for a shop without Shopify, set in the policies step. |
+| Merchant `provider_policy.ucp.executor` | None | Names the payment executor for agent-executed payment. None means no charge. It is not used while `provider_policy.payments` is set. |
 | Merchant `provider_policy.ucp.grantex_mandates` | None | Names your Grantex commerce tenant and merchant for mandates. |
 | Merchant `provider_policy.acp.checkout_enabled` | False | Your opt-in to ACP checkout. |
 | Merchant `provider_policy.arbiter.escalate_to_human` | False | Copies refusals into your review queue. It never changes or delays a decision. |
@@ -4953,9 +5219,10 @@ First run the release in staging with route enforcement and signatures in `log`,
 Staging run | Route enforcement log, signatures log, UCP checkout off, payments off. Check the ledger has no missing rows. | Owner: Platform operator | If blocked: Fix every missing ledger row before production.
 Route enforcement | Keep enforce in production, the default. | Owner: Platform operator | If blocked: Use log only for a short, recorded window.
 Request signatures | Start in log. Move to enforce only when the expected callers show as verified and the owner records the decision. | Owner: Platform operator | If blocked: Set log again; requests are answered again.
-UCP profile and checkout | Turn on for a published merchant and run the UCP smoke test. | Owner: Platform operator | If blocked: Set false; routes answer 404 and stored sessions are kept.
-Grantex mandates | Turn on before payments, merchant by merchant. | Owner: Platform operator | If blocked: Set false; production refuses checkout decisions again.
-Payments | Only after the sandbox run passes, one merchant at a time. | Owner: Platform operator | If blocked: Unset and restart; checkout answers executor_unavailable.
+UCP profile and checkout | Turn on for a published merchant and run the UCP smoke test. Merchants that chose where buyers pay now get payment links. | Owner: Platform operator | If blocked: Set false; routes answer 404 and stored sessions are kept.
+Sell everywhere network | Set the service token on the API and the hosted MCP server, turn on the network, then the Telegram bot. | Owner: Platform operator | If blocked: Set false; the directory and gateway answer 404 and listings are kept.
+Grantex mandates | Turn on before agent-executed payments, merchant by merchant. | Owner: Platform operator | If blocked: Set false; production refuses agent-executed decisions again.
+Agent-executed payments | Only after the sandbox run passes, one merchant at a time. | Owner: Platform operator | If blocked: Unset and restart; checkout answers executor_unavailable.
 ```
 
 The ACP feed and checkout, mandate-capability evidence, witnessing, retention and audit-chain sealing follow the same pattern, one at a time.
@@ -4965,7 +5232,7 @@ The ACP feed and checkout, mandate-capability evidence, witnessing, retention an
 Set the switch back and restart the service. For worker tasks (witness, retention, sealing), change the worker and scheduler too.
 
 - Data already written is kept: decisions, ledger rows, sessions, orders and payment records.
-- To stop one merchant only, use its merchant setting instead, for example remove its executor.
+- To stop one merchant only, use its merchant setting instead, for example set its payment method to Off or remove its executor.
 
 The full table, with the exact turn-on condition and rollback for each switch, is in the [launch and rollback runbook](https://github.com/mishrasanjeev/agentic-org/blob/main/docs/oacp/explainers/launch-rollback-runbook.md).
 
@@ -4978,19 +5245,19 @@ The full table, with the exact turn-on condition and rollback for each switch, i
 ### OACP FAQ
 
 URL: https://agenticorg.ai/docs/oacp-faq
-Audience: Merchants. Reviewed: 2026-10-21.
+Audience: Merchants. Reviewed: 2026-10-30.
 
 In 30 seconds:
 
 - Short answers to the questions sellers ask most about OACP.
 - OACP is a trust layer under UCP, ACP and AP2. It feeds them and does not replace them.
-- Your shop stays the source of truth. Grantex signs. AgenticOrg checks, decides and records. The payment provider moves money.
+- Your shop stays the source of truth. Grantex signs. AgenticOrg checks, decides and records. Buyers pay on your own payment page.
 - Nothing that publishes your shop or moves money is on by default.
 - For the full picture, start with the overview and the merchant setup checklist.
 
 #### Who does what
 
-Figure: Four roles, clear limits. Your shop owns the facts and orders. Grantex signs facts, runs the revocation list and issues mandates, and never moves money. AgenticOrg verifies, decides and records. The payment provider charges, and only after an allow decision.
+Figure: Four roles, clear limits. Your shop owns the facts and orders. Grantex signs facts, runs the revocation list and issues mandates, and never moves money. AgenticOrg verifies, decides and records. The payment provider charges on your own payment page, and only after an allow decision.
 
 #### Do I have to choose between UCP, ACP and OACP?
 
@@ -5002,35 +5269,43 @@ No. OACP is not a certification, and those groups have not endorsed it. It also 
 
 #### What do I need to start?
 
-A Shopify store, the merchant or administrator role in AgenticOrg, and a platform operator who connects your tenant to Grantex. Follow the [merchant setup checklist](/docs/oacp-merchant-setup).
+A Shopify store, or a CSV or JSON file of your products, and the merchant or administrator role in AgenticOrg. Everything else is on one page, Sell Everywhere: your catalog, policies, order limits, where buyers pay and the switch. Turning it on enrols you with Grantex; your platform operator only connects the deployment to Grantex once. Follow [Sell everywhere](/docs/oacp-sell-everywhere) or the [merchant setup checklist](/docs/oacp-merchant-setup).
+
+#### How do I get paid?
+
+Buyers pay on your own page: your Shopify checkout, or a Plural payment page under your own Plural account. When a checkout is ready, the buyer gets the link, pays there and authenticates the payment themselves. AgenticOrg never holds the money. Plural payments show on the Orders page, with the delivery address the buyer gave, and in an email to your administrators; Shopify orders are in your Shopify admin. See [Getting paid](/docs/oacp-getting-paid).
+
+#### Can an agent pay for the buyer without them?
+
+Not today. Agent-executed payment with buyer mandates is built but switched off, so every purchase ends with the buyer paying on your page. No AI app or bot on the AgenticOrg network has a tool that pays.
 
 #### Does every buyer question go through Grantex?
 
-No. AgenticOrg answers questions from its own verified copy of your facts. Grantex takes part in purchases: it issues the mandates and countersigns the decision. It never moves money.
+No. AgenticOrg answers questions from its own verified copy of your facts. Grantex takes part in purchases: it countersigns the decision, and on the agent-executed path it would also issue the mandates. It never moves money.
 
 #### Can an agent buy something at the wrong price?
 
-OACP is built to refuse it. A decision is bound to the exact cart, price and quantity. Change any of them and the decision no longer matches. Stale, expired or revoked prices are refused.
+OACP is built to refuse it. A decision is bound to the exact cart, price and quantity. Change any of them and the decision no longer matches. Stale, expired or revoked prices are refused, and no payment link is issued.
 
 #### Does a person at my shop approve each order?
 
-No. The arbiter decides at once with fixed rules. You can copy refusals into a review queue, but that never changes or delays a decision.
+No. The arbiter decides at once with fixed rules, including your order limits and daily maximum. You can copy refusals into a review queue, but that never changes or delays a decision.
 
 #### What happens if Grantex is unreachable?
 
-Plain questions can still be answered from facts that are still valid. In production, anything that commits money is refused until Grantex is back. If the revocation list cannot be read, facts are refused.
+Plain questions can still be answered from facts that are still valid. In production, anything that commits money, including a new payment link, is refused until Grantex is back. If the revocation list cannot be read, facts are refused.
 
 #### How do I stop selling a product to agents at once?
 
-Revoke the fact that covers it. Grantex marks it invalid, and every channel stops using it. For one channel only, turn that channel's switch off.
+Revoke the fact that covers it. Grantex marks it invalid, and every channel stops using it. For one channel only, turn that channel's switch off. To leave the AgenticOrg network, pause Sell everywhere.
 
 #### Does this work with UPI in India?
 
-It is built for it: UPI AutoPay mandates on the Plural rail, with RBI AFA as the buyer's own step in their UPI app. Completion is refused until verified AFA evidence arrives. It has not yet run against the Plural sandbox, and payment execution is off by default.
+Yes. A buyer can pay by UPI on your Plural payment page and approves it with their UPI PIN there. Agents paying through UPI AutoPay mandates, with RBI AFA as the buyer's own step in their UPI app, is built but switched off: it has not yet run against the Plural sandbox.
 
 #### What if the buyer is not present when the agent buys?
 
-There is no passkey step. Your stricter not-present limits apply, and without them the purchase is refused.
+Today the buyer always pays on your page, so a payment needs the buyer. On the agent-executed path, which is off, there is no passkey step, your stricter not-present limits apply, and without them the purchase is refused.
 
 #### Can I check the records myself?
 
@@ -5038,7 +5313,7 @@ Yes. Export the ledger and run `scripts/verify_ledger.py` on your own computer. 
 
 #### What is switched on today?
 
-The safety checks are on in production. Every surface that publishes your shop or moves money starts off: the UCP profile and checkout, the ACP feed and checkout, mandates and payment execution. With the defaults no checkout completes and no money moves. See [feature switches](/docs/oacp-feature-switches).
+The safety checks are on in production. Every surface that publishes your shop starts off: the UCP profile and checkout, the ACP feed and checkout, and the AgenticOrg network. Once checkout is on and you have chosen where buyers pay, a ready checkout gives the buyer a link to your own payment page. Mandates and agent-executed payment stay off. See [feature switches](/docs/oacp-feature-switches).
 
 #### Where can I read more?
 
@@ -5330,12 +5605,13 @@ AgenticOrg owns seller/buyer runtime. Grantex owns trust/policy/canonical artifa
 
 1. Assign a merchant owner, bank integration owner, provider contact and channel owner.
 2. Configure merchant-scoped Seller Commerce Agent onboarding and source/channel settings.
-3. Obtain read-only access to a sandbox Shopify store with a fictional catalog through the merchant's approved process.
+3. Obtain read-only access to a sandbox Shopify store with a fictional catalog through the merchant's approved process, or prepare a CSV or JSON file of fictional products to upload on the Sell Everywhere page.
 4. Sync synthetic products/variants/images/price/inventory and compare samples with the sandbox store.
 5. Send the bounded Grantex authority request and verify/cache issued artifacts.
 6. Ask product questions about the fictional catalog through the configured web or agent bridge.
 7. Inspect source, freshness, supported facts and refusal behavior.
 8. Prepare a provider/POS handoff and confirm that no order/payment state is fabricated.
+9. If the pilot includes payment, have the merchant choose its own Plural account in Sandbox on the Sell Everywhere page, and confirm a ready checkout returns a link to that payment page and a paid sandbox order appears on the Orders page.
 
 #### Process map
 
@@ -5351,15 +5627,19 @@ Provider capability | A configured provider path checks non-sensitive capability
 Authoritative handoff | A prepared packet awaits provider, POS or merchant confirmation. | Owner: Provider, POS or merchant system | If blocked: Absent or failed confirmation stays pending or failed; no paid or placed state is fabricated.
 ```
 
-#### Plural/Pine and mandates
+#### Plural payments and mandates
 
 Arrange the provider onboarding contact, merchant account, sandbox/live access, allowed capability contract and human authorization journey. AgenticOrg can verify provider-owned capability evidence directly through its configured path. Store non-sensitive references, not raw mandate/payment credentials.
 
-A credential/token capability check is not proof of a completed mandate or an allowed payment in every geography. Live execution needs the provider's real contract, authorization, settlement/error/refund handling and institution approval. The current OACP runtime remains prepared/non-executing for those actions.
+**What runs today: the payment hand-off.** A merchant saves its own Plural client ID, client secret and webhook secret (Sandbox or Production), which AgenticOrg encrypts and never shows again. When a buyer's checkout is ready and the arbiter allows it, the buyer gets a link to a Plural hosted payment page under the merchant's own account, pays there and authenticates the payment, for example with 3-D Secure or a UPI PIN. AgenticOrg never holds the money. A payment confirmed for the right amount, by Plural's signed webhook or the once-a-minute status check, becomes an order with an email to the merchant's administrators; any other payment is refused and logged so the merchant can refund it. Settlement, refunds and disputes stay with the merchant's Plural account.
+
+A credential/token capability check is not proof of a completed mandate or an allowed payment in every geography. Agent-executed payment, where AgenticOrg charges against buyer mandates, needs the provider's real contract, authorization, settlement/error/refund handling and institution approval. It stays switched off; for mandates the OACP runtime remains prepared/non-executing.
 
 #### Channels and protocol payloads
 
 UCP/ACP/schema.org/AP2/A2A/MCP-style payloads and bridges are not automatic marketplace placement. Agree each target's supported contract, authentication, publication/approval requirements and actual customer journey. WhatsApp/Telegram need configured credentials and channel rollout; ChatGPT/Claude/Gemini/Perplexity need appropriate client/platform setup.
+
+A merchant that turns on Sell everywhere is listed in AgenticOrg's own network once its profile is published: buyers reach it from ChatGPT and other MCP apps through the AgenticOrg MCP server, from the AgenticOrg shopping bot on Telegram, and on the open web through its UCP profile. Google, Microsoft Copilot and Perplexity are shown as registration pending. See [Sell everywhere](/docs/oacp-sell-everywhere).
 
 #### Physical-store POS
 

@@ -424,12 +424,25 @@
       ]
     },
     {
+      "slug": "oacp-start-here",
+      "title": "Sell through AI assistants: start here",
+      "description": "The whole idea in plain words, with a video of one real order: set up once with Shopify or a spreadsheet, a buyer's AI assistant shops your store, the buyer pays you on your own page and you get the order.",
+      "group": "OACP — agentic commerce, made safe",
+      "audience": "Anyone new to selling through AI assistants",
+      "reviewed": "2026-10-30",
+      "colorScheme": "adaptive",
+      "sources": [
+        "docs/oacp/shopping-network.md",
+        "docs/oacp/README.md"
+      ]
+    },
+    {
       "slug": "oacp-overview",
       "title": "What OACP is and why you need it",
       "description": "OACP is one trust layer under UCP, ACP, AP2, Visa TAP, MCP and A2A: your facts stated once, signed, decided by fixed rules and recorded, then rendered into each standard.",
       "group": "OACP — agentic commerce, made safe",
       "audience": "Merchants and business owners",
-      "reviewed": "2026-10-21",
+      "reviewed": "2026-10-30",
       "colorScheme": "adaptive",
       "sources": [
         "docs/oacp/README.md",
@@ -460,7 +473,7 @@
       "description": "Follow your shop's facts through seven steps: signed by Grantex, verified and kept by AgenticOrg, decided by the arbiter, recorded in the ledger and rendered for every buyer agent.",
       "group": "OACP — agentic commerce, made safe",
       "audience": "Merchants, product and platform teams",
-      "reviewed": "2026-10-21",
+      "reviewed": "2026-10-30",
       "colorScheme": "adaptive",
       "sources": [
         "docs/oacp/end-user-flow.md",
@@ -472,10 +485,10 @@
     {
       "slug": "oacp-buyer-journey",
       "title": "A purchase, step by step",
-      "description": "Walk through one agent purchase: Intent, Cart and Payment mandates, the buyer's passkey, RBI AFA for UPI AutoPay, the arbiter's decision, the payment and the order.",
+      "description": "Walk through one purchase as it works today: the buyer's agent opens a checkout, the arbiter checks your signed facts and limits, the buyer pays on your own Shopify checkout or Plural page, and the order reaches you. Agent-executed payment with mandates is built and switched off.",
       "group": "OACP — agentic commerce, made safe",
       "audience": "Merchants and agent platform teams",
-      "reviewed": "2026-10-21",
+      "reviewed": "2026-10-30",
       "colorScheme": "adaptive",
       "sources": [
         "docs/oacp/mandates.md",
@@ -506,7 +519,7 @@
       "description": "One page from a new shop to every AI surface: connect Shopify or upload a catalog, set policies and order limits, then turn it on. Buyers find you in ChatGPT, Claude and other AI apps, on Telegram and the open web. You stay the seller.",
       "group": "OACP — agentic commerce, made safe",
       "audience": "Merchants and business owners",
-      "reviewed": "2026-10-29",
+      "reviewed": "2026-10-30",
       "colorScheme": "adaptive",
       "sources": [
         "docs/oacp/shopping-network.md",
@@ -520,7 +533,7 @@
       "description": "Choose where buyers pay: your own Shopify checkout or your Plural account. What the buyer sees, the Orders page and the email you get for each order. AgenticOrg never takes the money.",
       "group": "OACP — agentic commerce, made safe",
       "audience": "Merchants and business owners",
-      "reviewed": "2026-10-29",
+      "reviewed": "2026-10-30",
       "colorScheme": "adaptive",
       "sources": [
         "docs/oacp/payment-handoff.md",
@@ -574,7 +587,7 @@
       "description": "Short answers to the questions sellers ask: standards, certification, Grantex's role, prices, approvals, outages, revocation, UPI and what is switched on today.",
       "group": "OACP — agentic commerce, made safe",
       "audience": "Merchants",
-      "reviewed": "2026-10-21",
+      "reviewed": "2026-10-30",
       "colorScheme": "adaptive",
       "sources": [
         "docs/oacp/README.md",

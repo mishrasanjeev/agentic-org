@@ -1,5 +1,5 @@
 ```summary
-Every OACP surface that could expose your shop or move money starts switched off.
+Every OACP surface that could expose your shop or move money starts switched off. Where buyers pay is each merchant's own choice, not a switch.
 The safety checks start switched on in production: signature checks, verified buyer authority and the Grantex countersignature.
 Request signatures start in log mode: checked and logged, never refused, until someone chooses enforce.
 Switches are settings on the AgenticOrg service. They are read at start-up, so a change needs a restart.
@@ -49,13 +49,39 @@ Turning a safety check off weakens the shop's protection. Do it only as a record
 | `AGENTICORG_CUSTOM_DOMAIN_OPERATOR_EMAIL` | Empty | Where each new operator queue item is emailed, with its command. |
 | `AGENTICORG_CUSTOM_DOMAIN_CLOUD_RUN_PROJECT` | Empty | The project the queue's commands name. Region (`asia-southeast1`), service (`agenticorg-api`) and CNAME target (`ghs.googlehosted.com`) have their own settings with these defaults. |
 | `AGENTICORG_CUSTOM_DOMAIN_CLOUD_RUN_AUTOMAP_ENABLED` | Off | Lets AgenticOrg connect and disconnect domains itself. Keep it off: Google names a very broad role for it. |
-| `AGENTICORG_UCP_CHECKOUT_ENABLED` | Off | Serves UCP checkout, cart and order routes. Off, they answer 404. |
+| `AGENTICORG_UCP_CHECKOUT_ENABLED` | Off | Serves UCP checkout, cart and order routes. Off, they answer 404. The network checkout gateway needs it too, and the once-a-minute Plural payment check runs only while UCP or ACP checkout is on. |
 | `AGENTICORG_ACP_FEED_ENABLED` | Off | Lets you export the ACP product feed. |
 | `AGENTICORG_ACP_CHECKOUT_ENABLED` | Off | Serves ACP checkout sessions (your shop must also opt in). |
 | `AGENTICORG_ACP_SIGNATURE_MODE` | `log` | Keep `log`. ACP publishes no signing method yet, so `enforce` would refuse every request. |
 | `OACP_PUBLIC_CATALOG_PLATFORM_DISABLED` | Unset | An operator override that withdraws the public catalog pages for every merchant. |
 
-## Mandates and payments (off by default)
+## Sell everywhere network (off by default)
+
+| Switch | Default | What it does |
+| --- | --- | --- |
+| `AGENTICORG_NETWORK_ENABLED` | Off | Serves the network directory, the network checkout gateway and the Turn on Sell everywhere step. Off, they answer 404 and the page says Sell everywhere is not enabled; the setup steps before it still work. |
+| `AGENTICORG_NETWORK_SERVICE_TOKEN` | Empty | The credential the hosted MCP server presents to the network checkout gateway (at least 32 characters, from the secret manager). Empty, the gateway refuses every call. |
+| `AGENTICORG_NETWORK_AGENT_PROFILE` | `https://agenticorg.ai/ucp/platforms/agenticorg-network/profile.json` | The platform profile network checkouts are opened for. |
+| `AGENTICORG_NETWORK_TERMS_VERSION` | `2026-10-25` | The network terms version a merchant accepts when turning Sell everywhere on. |
+| `AGENTICORG_NETWORK_TELEGRAM_ENABLED` | Off | Serves the webhook of the public AgenticOrg shopping bot on Telegram. Off, it answers 404. |
+| `AGENTICORG_NETWORK_TELEGRAM_BOT_USERNAME` | Empty | The bot's username, for each shop's `t.me/<bot>?start=<shop>` link. Empty, no Telegram link is shown. |
+| `AGENTICORG_NETWORK_TELEGRAM_BOT_TOKEN`, `AGENTICORG_NETWORK_TELEGRAM_WEBHOOK_SECRET` | Empty | The bot's token and webhook secret, from the secret manager. |
+| `AGENTICORG_NETWORK_TELEGRAM_CHAT_LIMIT_PER_HOUR`, `AGENTICORG_NETWORK_TELEGRAM_GLOBAL_LIMIT_PER_MINUTE` | `20` and `60` | How many messages one chat may send in an hour, and the whole bot in a minute. |
+| `AGENTICORG_PLATFORM_SUBDOMAIN_APEX` | `agenticorg.ai` | Shops without an address of their own get `<shop>.<apex>`. Needs custom domains through Firebase and one wildcard CNAME for the apex. |
+| `AGENTICORG_PLATFORM_SUBDOMAIN_CAP` | `20` | How many platform addresses may be given out, Firebase's limit per domain. Past it, a shop is asked to connect its own domain. |
+| `AGENTICORG_SHOPIFY_ENV_OPERATOR_TENANT_ID` | Empty | The only tenant that may read the deployment's own `SHOPIFY_*` store settings. Every other shop uses the token it stored itself. |
+
+## Payment links
+
+The payment hand-off has no switch of its own: each merchant chooses where buyers pay on the Sell Everywhere page. It needs UCP or ACP checkout on and, for Plural, a public address:
+
+| Setting | Default | What it does |
+| --- | --- | --- |
+| `AGENTICORG_PUBLIC_API_BASE_URL` | Empty | The public `https://` address of the AgenticOrg API. Plural payment links, the buyer's return page and the merchant's webhook URL are built on it, or on `AGENTICORG_APP_URL` when it is empty. Without either, Plural links are not offered. |
+
+## Agent-executed payment and mandates (off by default)
+
+These switches belong to the path where AgenticOrg charges through a payment provider against buyer mandates. It stays off until a payment-provider sandbox run has passed. A merchant that chose where buyers pay keeps getting payment links whatever these say.
 
 | Switch | Default | What it does |
 | --- | --- | --- |
@@ -82,7 +108,11 @@ Turning a safety check off weakens the shop's protection. Do it only as a record
 | Setting | Default | What it does |
 | --- | --- | --- |
 | MCP server `AGENTICORG_UCP_PROFILE_URL` and `AGENTICORG_UCP_AGENT_PROFILE` | Unset | Point an MCP install at your UCP profile. Unset, no checkout tools appear. |
-| Merchant `provider_policy.ucp.executor` | None | Names the payment executor for your shop. None means no charge. |
+| MCP server `MCP_NETWORK_DIRECTORY_URL` and `AGENTICORG_NETWORK_SERVICE_TOKEN` | Unset | Network mode: one hosted server serves every listed shop, with list, search, checkout and payment-link tools and no tool that pays. |
+| Merchant `provider_policy.payments` | None | Where buyers pay: `shopify_cart` or `plural_hosted`, set in the Payments step of Sell Everywhere. None means no payment link. |
+| Merchant `provider_policy.arbiter` | None | Your order limits: per order, per day, items per order and currency, set in the Order limits step. |
+| Merchant `provider_policy.ucp.fulfillment.flat_rates` | None | Your flat shipping fee, for a shop without Shopify, set in the policies step. |
+| Merchant `provider_policy.ucp.executor` | None | Names the payment executor for agent-executed payment. None means no charge. It is not used while `provider_policy.payments` is set. |
 | Merchant `provider_policy.ucp.grantex_mandates` | None | Names your Grantex commerce tenant and merchant for mandates. |
 | Merchant `provider_policy.acp.checkout_enabled` | False | Your opt-in to ACP checkout. |
 | Merchant `provider_policy.arbiter.escalate_to_human` | False | Copies refusals into your review queue. It never changes or delays a decision. |
@@ -95,9 +125,10 @@ First run the release in staging with route enforcement and signatures in `log`,
 Staging run | Route enforcement log, signatures log, UCP checkout off, payments off. Check the ledger has no missing rows. | Owner: Platform operator | If blocked: Fix every missing ledger row before production.
 Route enforcement | Keep enforce in production, the default. | Owner: Platform operator | If blocked: Use log only for a short, recorded window.
 Request signatures | Start in log. Move to enforce only when the expected callers show as verified and the owner records the decision. | Owner: Platform operator | If blocked: Set log again; requests are answered again.
-UCP profile and checkout | Turn on for a published merchant and run the UCP smoke test. | Owner: Platform operator | If blocked: Set false; routes answer 404 and stored sessions are kept.
-Grantex mandates | Turn on before payments, merchant by merchant. | Owner: Platform operator | If blocked: Set false; production refuses checkout decisions again.
-Payments | Only after the sandbox run passes, one merchant at a time. | Owner: Platform operator | If blocked: Unset and restart; checkout answers executor_unavailable.
+UCP profile and checkout | Turn on for a published merchant and run the UCP smoke test. Merchants that chose where buyers pay now get payment links. | Owner: Platform operator | If blocked: Set false; routes answer 404 and stored sessions are kept.
+Sell everywhere network | Set the service token on the API and the hosted MCP server, turn on the network, then the Telegram bot. | Owner: Platform operator | If blocked: Set false; the directory and gateway answer 404 and listings are kept.
+Grantex mandates | Turn on before agent-executed payments, merchant by merchant. | Owner: Platform operator | If blocked: Set false; production refuses agent-executed decisions again.
+Agent-executed payments | Only after the sandbox run passes, one merchant at a time. | Owner: Platform operator | If blocked: Unset and restart; checkout answers executor_unavailable.
 ```
 
 The ACP feed and checkout, mandate-capability evidence, witnessing, retention and audit-chain sealing follow the same pattern, one at a time.
@@ -107,7 +138,7 @@ The ACP feed and checkout, mandate-capability evidence, witnessing, retention an
 Set the switch back and restart the service. For worker tasks (witness, retention, sealing), change the worker and scheduler too.
 
 - Data already written is kept: decisions, ledger rows, sessions, orders and payment records.
-- To stop one merchant only, use its merchant setting instead, for example remove its executor.
+- To stop one merchant only, use its merchant setting instead, for example set its payment method to Off or remove its executor.
 
 The full table, with the exact turn-on condition and rollback for each switch, is in the [launch and rollback runbook](https://github.com/mishrasanjeev/agentic-org/blob/main/docs/oacp/explainers/launch-rollback-runbook.md).
 
