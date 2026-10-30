@@ -20,6 +20,14 @@ sell-everywhere-network | One switch, every surface | You turn it on once. Agent
 | Google Gemini and AI Mode, Microsoft Copilot, Perplexity | Coming: AgenticOrg is registering with each program for the whole network | Nothing yet |
 | Payment | When the checkout is ready, buyers get a link to your own payment page and pay you there; see [Getting paid](/docs/oacp-getting-paid) | Choose Shopify checkout or Plural once |
 
+## Watch it end to end
+
+The recording below shows each step on this page for a demo coffee shop. It then follows a buyer's AI agent as it shops there and the buyer pays on the shop's Plural page.
+
+```video
+oacp-commerce-walkthrough | A real OACP order, end to end | Recorded on the live service with a demo shop and a Plural sandbox payment. A merchant sets up the shop in Sell everywhere. A buyer's AI agent finds it through the AgenticOrg MCP server, builds the order and gets a payment link. The buyer pays the merchant on the merchant's Plural page, and the order appears on the Orders page. Narrated, with English captions.
+```
+
 ## Set up and turn it on
 
 Everything happens on one page: **Sell Everywhere** (`/dashboard/sell-everywhere`). It takes about ten minutes.
@@ -111,6 +119,8 @@ The page shows how going live is progressing:
 | Verified catalog | Done | Grantex has verified your catalog, prices and stock. |
 | Verified catalog | To do | Grantex has not verified your catalog yet. Select Publish to try again. |
 
+Grantex's signed facts for your prices and stock last only minutes. AgenticOrg renews them whenever a buyer's agent reads your shop, and each time you open this page, so **Done** means Grantex verifies your catalog now, not only when you turned the shop on.
+
 Select **Publish** (or **Refresh listing** once your profile is published) to run the steps again at any
 time: Grantex enrolment, your web address, publication and the signed catalog facts. Each row then shows
 the exact reason if something still waits.
@@ -128,7 +138,7 @@ Buyer agents read your shop's profile at `https://<your address>/.well-known/ucp
 
 AgenticOrg can give out 20 of these addresses in all, and the page shows how many are in use. If they are taken, you can still turn on Sell everywhere and connect your own domain instead; see [Your own domain for buyer agents](/docs/oacp-custom-domains).
 
-Your shop appears on the network only once its profile is published at that address. Until then, the page shows **Waiting for publication**.
+Your shop appears on the network only once its profile is published at that address and the address is live, certificate included. Buyer agents read your profile and search your catalog there, so a shop whose address is still being set up would only give them errors. Until then, the AI apps and Telegram rows show **Waiting for your web address**, or **Waiting for publication** if the profile is not published yet. A new `agenticorg.ai` address usually takes a few minutes, and at most an hour.
 
 ## Where buyers can find you
 
@@ -138,6 +148,7 @@ The page lists each surface and where it stands:
 | --- | --- |
 | Live | Buyers can reach you there now. For Payments: you chose where buyers pay. |
 | Waiting for DNS, Setting up, Issuing certificate | Your web address is being connected. Check back in a few minutes. |
+| Waiting for your web address | You are on the network and your profile is published, but your web address is still being set up. AI apps and the Telegram bot offer your shop as soon as it is live. |
 | Waiting for publication | You are on the network, but your profile is not published yet. |
 | Coming soon | Telegram only: the shopping bot is not reachable for your shop yet, for example because your profile is not published. |
 | Coming: registration in progress | AgenticOrg is still registering with that program. |

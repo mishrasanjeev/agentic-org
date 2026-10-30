@@ -14,6 +14,14 @@ oacp-docs-flow | From your shop to every buyer agent | Seven steps: the shop sta
 
 Each step has one owner. The next sections explain them one at a time.
 
+## See the flow in a real order
+
+The recording below runs the whole flow once on the live service: the shop states its facts, Grantex verifies them, the arbiter checks the order against the shop's limits, and the buyer gets the merchant's payment link.
+
+```video
+oacp-commerce-walkthrough | A real OACP order, end to end | Recorded on the live service with a demo shop and a Plural sandbox payment. A merchant sets up the shop in Sell everywhere. A buyer's AI agent finds it through the AgenticOrg MCP server, builds the order and gets a payment link. The buyer pays the merchant on the merchant's Plural page, and the order appears on the Orders page. Narrated, with English captions.
+```
+
 ## Step 1. Your shop states its facts
 
 Your shop already knows its products, prices, stock and policies. AgenticOrg reads them. It does not invent them.

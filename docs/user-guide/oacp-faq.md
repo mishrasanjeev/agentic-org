@@ -26,7 +26,7 @@ A Shopify store, or a CSV or JSON file of your products, and the merchant or adm
 
 ## How do I get paid?
 
-Buyers pay on your own page: your Shopify checkout, or a Plural payment page under your own Plural account. When a checkout is ready, the buyer gets the link, pays there and authenticates the payment themselves. AgenticOrg never holds the money. Plural payments show on the Orders page with an email to your administrators; Shopify orders are in your Shopify admin. See [Getting paid](/docs/oacp-getting-paid).
+Buyers pay on your own page: your Shopify checkout, or a Plural payment page under your own Plural account. When a checkout is ready, the buyer gets the link, pays there and authenticates the payment themselves. AgenticOrg never holds the money. Plural payments show on the Orders page, with the delivery address the buyer gave, and in an email to your administrators; Shopify orders are in your Shopify admin. See [Getting paid](/docs/oacp-getting-paid).
 
 ## Can an agent pay for the buyer without them?
 

@@ -18,6 +18,14 @@ Think of it as one source of truth for your shop. Every agent channel reads from
 oacp-five-copies | Five copies versus one layer | On the left, each standard is wired on its own, so the shop keeps five sets of facts, keys and logs. On the right, the shop feeds one OACP layer, and adapters render it for every buyer agent.
 ```
 
+## Watch a real order, end to end
+
+This recording follows one real order on the live service, from the merchant's setup to the buyer paying the merchant. The rest of this guide, and the guides it links to, explain each step.
+
+```video
+oacp-commerce-walkthrough | A real OACP order, end to end | Recorded on the live service with a demo shop and a Plural sandbox payment. A merchant sets up the shop in Sell everywhere. A buyer's AI agent finds it through the AgenticOrg MCP server, builds the order and gets a payment link. The buyer pays the merchant on the merchant's Plural page, and the order appears on the Orders page. Narrated, with English captions.
+```
+
 ## Why sellers need it
 
 AI agents now shop for people. One agent compares prices. Another fills a cart. A third pays.
