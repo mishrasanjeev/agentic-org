@@ -186,6 +186,32 @@ async def test_opt_in_claims_a_platform_subdomain_publishes_and_lists_the_shop(d
     assert gone.value.code == "unknown_shop"
 
 
+async def test_the_page_renews_the_catalog_facts_of_a_listed_shop_as_a_buyer_read_would(db, network, monkeypatch):
+    from core.commerce import artifact_freshness
+
+    tenant = await _tenant(db)
+    await _merchant(tenant)
+    slug = f"example-store-{secrets.token_hex(3)}"
+    await _opt_in(tenant, slug=slug)
+    calls: list[dict] = []
+
+    async def ensure_fresh(**kwargs):
+        calls.append(kwargs)
+        return len(calls) == 1  # the first read renews, so the page reads the cache again
+
+    monkeypatch.setattr(artifact_freshness, "ensure_fresh", ensure_fresh)
+    view = await api.get_sell_everywhere(MERCHANT, SELLER, tenant)
+    assert [(c["tenant_id"], c["merchant_id"], c["seller_agent_id"]) for c in calls] == [(tenant, MERCHANT, SELLER)]
+    assert tuple(calls[0]["required"]) == artifact_freshness.CATALOG_TYPES
+    assert view["artifacts"]["status"] in ("ready", "missing")
+
+    # A paused shop is not read on buyers' behalf, so nothing is renewed for it.
+    await _opt_in(tenant, listed=False)
+    calls.clear()
+    await api.get_sell_everywhere(MERCHANT, SELLER, tenant)
+    assert calls == []
+
+
 async def test_slugs_are_unique_across_tenants_reserved_names_refused_and_terms_required(db, network):
     first, second = await _tenant(db), await _tenant(db)
     await _merchant(first)

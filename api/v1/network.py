@@ -396,6 +396,21 @@ async def _view(tenant_id: str, merchant_id: str, seller_agent_id: str | None) -
     shared = await load_shared_cache_records(
         tenant_id=tenant_id, merchant_id=config.merchant_id, seller_agent_id=seller
     )
+    if listing is not None and listing.status == "listed":
+        # The catalog facts live minutes and renew when read. Read them as a buyer agent would, so the page
+        # says whether Grantex still verifies the catalog, not whether anyone shopped in the last minute.
+        from core.commerce.artifact_freshness import CATALOG_TYPES, ensure_fresh
+
+        if await ensure_fresh(
+            tenant_id=tenant_id,
+            merchant_id=config.merchant_id,
+            seller_agent_id=seller,
+            records=list(shared),
+            required=CATALOG_TYPES,
+        ):
+            shared = await load_shared_cache_records(
+                tenant_id=tenant_id, merchant_id=config.merchant_id, seller_agent_id=seller
+            )
     artifacts = verified_catalog_source(cache_records=shared, products=[], now_iso=runtime._now_iso())
     setup = await setup_view(tenant_id, config.merchant_id)
     return {
