@@ -227,6 +227,28 @@ def active_handoff(state: Mapping[str, Any], now: datetime) -> Mapping[str, Any]
     return handoff
 
 
+def holds_daily_cap(state: Mapping[str, Any], *, now: datetime, day_start: datetime) -> bool:
+    """Whether a ``requires_escalation`` checkout's hand-off still counts against today's daily maximum.
+
+    A link counts while it is open (``active_handoff``). A Plural link counts for nothing once it
+    lapses: Plural confirms every payment back, and a confirmed payment is counted as paid. A
+    Shopify cart link also counts for the UTC day it was issued after it lapses: the cart
+    permalink never expires on Shopify's side and Shopify never reports the payment back to us,
+    so the issued link is the only sign of the sale we have.
+    """
+    if active_handoff(state, now) is not None:
+        return True
+    handoff = state.get("handoff")
+    if (
+        not isinstance(handoff, Mapping)
+        or handoff.get("mode") != MODE_SHOPIFY_CART
+        or handoff.get("status") != "issued"
+    ):
+        return False
+    issued = _parse(handoff.get("issued_at"))
+    return issued is not None and issued >= day_start
+
+
 def clear_handoff(state: dict[str, Any], status: str) -> None:
     """Retire the current hand-off: its message and ``continue_url`` go, its record stays with ``status``."""
     state["messages"] = [m for m in state.get("messages") or [] if m.get("code") != MESSAGE_CODE]

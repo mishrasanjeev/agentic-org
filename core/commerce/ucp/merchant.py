@@ -65,6 +65,8 @@ from typing import Any, Protocol
 from core.commerce.india_rails import INSTRUMENT_UPI_AUTOPAY, UpiAutopayCapability, parse_upi_autopay_capability
 
 DEFAULT_CHECKOUT_TTL_SECONDS = 6 * 60 * 60
+# The longest a checkout session lives, whatever the merchant asks for (the daily cap's scan relies on it).
+MAX_CHECKOUT_TTL_SECONDS = 24 * 60 * 60
 _HOST_RE = re.compile(r"^(?=.{1,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z][a-z0-9-]{0,62}$")
 
 
@@ -300,7 +302,9 @@ def merchant_ucp_from_config(
         if isinstance(ucp.get("quantity_units"), Mapping)
         else {},
         permalink_endpoint=_permalink_endpoint(ucp.get("permalink_endpoint")),
-        checkout_ttl_seconds=max(60, min(_int(ucp.get("checkout_ttl_seconds")) or DEFAULT_CHECKOUT_TTL_SECONDS, 86400)),
+        checkout_ttl_seconds=max(
+            60, min(_int(ucp.get("checkout_ttl_seconds")) or DEFAULT_CHECKOUT_TTL_SECONDS, MAX_CHECKOUT_TTL_SECONDS)
+        ),
         namespace=namespace,
         signing_available=signing_available,
         raw_config=dict(config),

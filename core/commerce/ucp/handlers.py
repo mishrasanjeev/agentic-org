@@ -1774,6 +1774,9 @@ async def _handoff_target(req: UcpRequest, merchant: MerchantUcp, settings: Paym
 # Sessions read when summing one day's committed hand-offs; a merchant past this many in a day is
 # held to what they add up to (the cap still applies, on a lower bound of the day's total).
 DAILY_COMMITTED_SCAN_LIMIT = 2000
+# How long after its checkout ended a Plural payment confirmed today still counts as paid today
+# (the webhook, or the status poll that runs every minute, normally confirms within minutes).
+DAILY_COMMITTED_LATE_PAYMENT = timedelta(days=1)
 
 
 async def daily_committed_minor_units(
@@ -1781,43 +1784,51 @@ async def daily_committed_minor_units(
 ) -> int:
     """The merchant's money committed in ``currency``, for the arbiter's daily cap.
 
-    Committed means paid today (UTC: ``completed_at`` today) or a payment link that is still open
-    now, whatever day it was issued: a ``requires_escalation`` checkout whose hand-off is
-    ``issued`` and whose link ``expires_at`` is still ahead (``payment_handoff.active_handoff``).
-    A lapsed or retired link counts for nothing, even on the day it was issued.
+    Committed means paid today (UTC: ``completed_at`` today), or a ``requires_escalation``
+    checkout whose hand-off still holds the cap (``payment_handoff.holds_daily_cap``): a payment
+    link that is still open, whatever day it was issued, or a Shopify cart link issued today even
+    after it lapsed (Shopify never reports the payment back and its cart link never expires). A
+    lapsed or retired Plural link counts for nothing: Plural confirms each payment, and it counts
+    as paid. The checkout being decided is left out; the arbiter adds its own amount.
 
-    A link never outlives its checkout: the Shopify cart link expires with the session
-    (``row.expires_at``) and a Plural link at ``min(issued + PLURAL_LINK_TTL, row.expires_at)``.
-    So an open link needs ``expires_at > now`` on the row too, which keeps the scan to sessions
-    created within the longest checkout TTL (24 hours, ``merchant.checkout_ttl_seconds``) and on
-    ``ix_commerce_checkout_sessions_status`` (tenant, status, expires_at).
-    The checkout being decided is left out; the arbiter adds its own amount.
+    The read is two ranges of ``ix_commerce_checkout_sessions_status`` (tenant, status, expires_at),
+    one per status, so it never reads the merchant's history. A link never outlives its checkout
+    (the Shopify cart link ends with it, a Plural link at ``min(issued + PLURAL_LINK_TTL, checkout
+    end)``) and is issued before the checkout ends, so an open link or one issued today belongs to
+    a checkout that ends after midnight. A checkout paid today ends after midnight too, unless
+    Plural confirmed the payment after the checkout ended: ``DAILY_COMMITTED_LATE_PAYMENT`` covers
+    that (a payment confirmed later than that is not counted). A session lives at most
+    ``MAX_CHECKOUT_TTL_SECONDS``, so the same bounds hold on ``created_at`` one TTL earlier, which
+    lets ``ix_commerce_checkout_sessions_scope`` serve the ranges too.
     """
-    from sqlalchemy import or_
+    from sqlalchemy import or_, union_all
 
-    from core.commerce.payment_handoff import active_handoff
+    from core.commerce.payment_handoff import MODE_SHOPIFY_CART, holds_daily_cap
+    from core.commerce.ucp.merchant import MAX_CHECKOUT_TTL_SECONDS
     from core.models.commerce_ucp import CommerceCheckoutSessionRow as Row
 
     day_start = now.astimezone(UTC).replace(hour=0, minute=0, second=0, microsecond=0)
-    rows = (
-        await session.execute(
-            select(Row.status, Row.state)
-            .where(
-                Row.tenant_id == tenant_id,
-                Row.merchant_id == merchant.merchant_id,
-                Row.currency == currency,
-                Row.id != exclude_session_id,
-                or_(
-                    Row.completed_at >= day_start,
-                    (Row.status == "requires_escalation") & (Row.expires_at > now),
-                ),
-            )
-            .limit(DAILY_COMMITTED_SCAN_LIMIT)
+    ttl = timedelta(seconds=MAX_CHECKOUT_TTL_SECONDS)
+
+    def ending_after(status: str, moment: datetime) -> Any:
+        return select(Row.status, Row.state).where(
+            Row.tenant_id == tenant_id,
+            Row.status == status,
+            Row.expires_at > moment,
+            Row.created_at > moment - ttl,
+            Row.merchant_id == merchant.merchant_id,
+            Row.currency == currency,
+            Row.id != exclude_session_id,
         )
-    ).all()
+
+    paid = ending_after("completed", day_start - DAILY_COMMITTED_LATE_PAYMENT).where(Row.completed_at >= day_start)
+    handed_off = ending_after("requires_escalation", day_start).where(
+        or_(Row.expires_at > now, Row.state["handoff"]["mode"].astext == MODE_SHOPIFY_CART)
+    )
+    rows = (await session.execute(union_all(paid, handed_off).limit(DAILY_COMMITTED_SCAN_LIMIT))).all()
     committed = 0
     for status, state in rows:
-        if status == "requires_escalation" and active_handoff(state or {}, now) is None:
+        if status == "requires_escalation" and not holds_daily_cap(state or {}, now=now, day_start=day_start):
             continue
         for line in (state or {}).get("totals") or []:
             if isinstance(line, Mapping) and line.get("type") == "total":

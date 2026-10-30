@@ -360,16 +360,22 @@ async def test_the_daily_cap_counts_the_days_open_and_paid_handoffs(db, executor
     again = await _complete(runtime, tenant, first["id"])
     assert again.body["continue_url"] == done.body["continue_url"]
 
-    # A lapsed link counts for nothing, even on the day it was issued: the second checkout now fits.
+    # The checkout ends, but Shopify's cart permalink never does and Shopify never reports the payment back:
+    # a Shopify link keeps counting for the UTC day it was issued, so the second checkout still does not fit.
     now = datetime.now(UTC)
-    await _move_handoff(db, first["id"], expires_at=now - timedelta(minutes=1))
+    await _move_handoff(db, first["id"], expires_at=now)
+    still_refused = await _complete(runtime, tenant, second["id"], body=uf.complete_body())
+    assert still_refused.body.get("status") != "requires_escalation", still_refused.body
+    assert "daily_amount_cap_exceeded" in json.dumps(still_refused.body)
+
+    # A lapsed Shopify link issued before UTC midnight belongs to yesterday: the second checkout now fits.
+    before_midnight = now.replace(hour=0, minute=0, second=0, microsecond=0) - timedelta(hours=1)
+    await _move_handoff(db, first["id"], issued_at=before_midnight)
     allowed = await _complete(runtime, tenant, second["id"], body=uf.complete_body())
     assert allowed.body["status"] == "requires_escalation", allowed.body
 
     # A link issued before UTC midnight that is still open counts: no room for a third checkout.
-    before_midnight = now.replace(hour=0, minute=0, second=0, microsecond=0) - timedelta(hours=1)
-    for session_id in (first["id"], second["id"]):
-        await _move_handoff(db, session_id, issued_at=before_midnight)
+    await _move_handoff(db, second["id"], issued_at=before_midnight)
     third = await _ready(runtime, tenant)
     held = await _complete(runtime, tenant, third["id"], body=uf.complete_body())
     assert held.body.get("status") != "requires_escalation", held.body
@@ -378,7 +384,7 @@ async def test_the_daily_cap_counts_the_days_open_and_paid_handoffs(db, executor
 
 async def _move_handoff(engine, session_id: str, *, issued_at=None, expires_at=None) -> None:
     """Move a hand-off in time as the clock would: when its link was issued (the row's last update), or when
-    the link lapses."""
+    the link lapses (a Shopify cart link lapses with its checkout, so the checkout ends then too)."""
     from core.commerce.payment_handoff import iso
 
     if issued_at is not None:
@@ -393,8 +399,9 @@ async def _move_handoff(engine, session_id: str, *, issued_at=None, expires_at=N
     if expires_at is not None:
         await _exec(
             engine,
-            "UPDATE commerce_checkout_sessions "
-            "SET state = jsonb_set(state, '{handoff,expires_at}', to_jsonb(CAST(:iso AS text))) WHERE id = :i",
+            "UPDATE commerce_checkout_sessions SET expires_at = :at, "
+            "state = jsonb_set(state, '{handoff,expires_at}', to_jsonb(CAST(:iso AS text))) WHERE id = :i",
+            at=expires_at,
             iso=iso(expires_at),
             i=session_id,
         )
@@ -409,26 +416,84 @@ async def test_the_daily_total_is_todays_payments_plus_the_links_still_open(db):
     merchant = uf.merchant(tenant)
     now = datetime.now(UTC)
     midnight = now.replace(hour=0, minute=0, second=0, microsecond=0)
-    url = "https://example-store.myshopify.com/cart/1:1"
-    open_link = {"status": "issued", "continue_url": url, "expires_at": iso(now + timedelta(minutes=20))}
-    lapsed_link = {**open_link, "expires_at": iso(now - timedelta(seconds=1))}
-    retired_link = {"status": "failed", "expires_at": open_link["expires_at"]}
+    later = now + timedelta(hours=1)
+    lapsed_today = midnight + (now - midnight) / 2
+    plural, shopify = "plural_hosted", "shopify_cart"
+
+    def link(mode: str, *, issued: datetime, expires: datetime, status: str = "issued") -> dict[str, Any]:
+        url = "https://pay.plural.example/checkout?token=v1" if mode == plural else f"https://{SHOP}/cart/1:1"
+        return {
+            "mode": mode,
+            "status": status,
+            "continue_url": url,
+            "issued_at": iso(issued),
+            "expires_at": iso(expires),
+        }
+
     escalated = "requires_escalation"
-    # name: (status, amount, hand-off, completed_at, currency)
-    sessions: dict[str, tuple[str, int, dict[str, Any] | None, datetime | None, str]] = {
-        "paid_today": ("completed", 100, None, midnight + timedelta(seconds=1), "INR"),
-        "paid_yesterday": ("completed", 200, None, midnight - timedelta(seconds=1), "INR"),
-        "open": (escalated, 400, open_link, None, "INR"),
-        "lapsed": (escalated, 800, lapsed_link, None, "INR"),
-        "retired": (escalated, 1600, retired_link, None, "INR"),
-        "no_link": (escalated, 3200, None, None, "INR"),
-        "usd": (escalated, 6400, open_link, None, "USD"),
-        "deciding": (escalated, 12800, open_link, None, "INR"),
+    # name: (status, amount, hand-off, completed_at, currency, when the checkout ends)
+    sessions: dict[str, tuple[str, int, dict[str, Any] | None, datetime | None, str, datetime]] = {
+        # Paid: a payment confirmed today counts, even one confirmed after its checkout had ended.
+        "paid_today": ("completed", 1, None, midnight + timedelta(seconds=1), "INR", later),
+        "paid_yesterday": ("completed", 2, None, midnight - timedelta(seconds=1), "INR", later),
+        "paid_after_the_checkout_ended": ("completed", 4, None, now, "INR", midnight - timedelta(hours=2)),
+        # Plural confirms every payment back, so only a link still open counts.
+        "plural_open_since_yesterday": (
+            escalated,
+            8,
+            link(plural, issued=midnight - timedelta(hours=1), expires=now + timedelta(minutes=20)),
+            None,
+            "INR",
+            later,
+        ),
+        "plural_lapsed_today": (
+            escalated,
+            16,
+            link(plural, issued=midnight, expires=now - timedelta(seconds=1)),
+            None,
+            "INR",
+            later,
+        ),
+        "plural_retired": (
+            escalated,
+            32,
+            link(plural, issued=midnight, expires=now + timedelta(minutes=20), status="failed"),
+            None,
+            "INR",
+            later,
+        ),
+        "no_link": (escalated, 64, None, None, "INR", later),
+        # Shopify never reports a payment and its cart link never expires: a link counts for the UTC day it
+        # was issued, even after its checkout ended, and while its checkout is open.
+        "shopify_lapsed_today": (
+            escalated,
+            128,
+            link(shopify, issued=midnight, expires=lapsed_today),
+            None,
+            "INR",
+            lapsed_today,
+        ),
+        "shopify_lapsed_yesterday": (
+            escalated,
+            256,
+            link(shopify, issued=midnight - timedelta(hours=6), expires=midnight - timedelta(seconds=1)),
+            None,
+            "INR",
+            midnight - timedelta(seconds=1),
+        ),
+        "shopify_open_since_yesterday": (
+            escalated,
+            512,
+            link(shopify, issued=midnight - timedelta(hours=1), expires=later),
+            None,
+            "INR",
+            later,
+        ),
+        "usd": (escalated, 1024, link(plural, issued=now, expires=later), None, "USD", later),
+        "deciding": (escalated, 2048, link(plural, issued=now, expires=later), None, "INR", later),
     }
-    # The open link was issued before UTC midnight; the lapsed, retired and link-less ones were touched today.
-    touched_today = {"lapsed", "retired", "no_link"}
-    ids = {name: f"chk_{name}_{uuid.uuid4().hex[:8]}" for name in sessions}
-    for name, (status, amount, handoff, completed_at, currency) in sessions.items():
+    ids = {name: f"chk_{name[:40]}_{uuid.uuid4().hex[:8]}" for name in sessions}
+    for name, (status, amount, handoff, completed_at, currency, ends_at) in sessions.items():
         state: dict[str, Any] = {"totals": [{"type": "total", "amount": amount}]}
         if handoff is not None:
             state["handoff"] = handoff
@@ -446,9 +511,9 @@ async def test_the_daily_total_is_todays_payments_plus_the_links_still_open(db):
             currency=currency,
             state=json.dumps(state),
             order_id=f"ord_{name}" if status == "completed" else None,
-            exp=now + timedelta(hours=1),
-            created=midnight - timedelta(hours=2),
-            updated=now if name in touched_today else completed_at or midnight - timedelta(hours=2),
+            exp=ends_at,
+            created=ends_at - timedelta(hours=6),
+            updated=now,
             completed_at=completed_at,
         )
     async with get_tenant_session(uuid.UUID(tenant)) as session:
@@ -460,8 +525,62 @@ async def test_the_daily_total_is_todays_payments_plus_the_links_still_open(db):
             exclude_session_id=ids["deciding"],
             now=now,
         )
-    # Paid today plus the one link still open (issued yesterday); nothing else.
-    assert committed == 100 + 400
+    # Paid today (two), the Plural link still open, and the Shopify links issued today or still open.
+    assert committed == 1 + 4 + 8 + 128 + 512
+
+
+def _plan_nodes(node: dict[str, Any]):
+    yield node
+    for child in node.get("Plans") or []:
+        yield from _plan_nodes(child)
+
+
+@pytest.mark.asyncio
+async def test_the_daily_total_reads_recent_checkouts_through_an_index_not_the_whole_history(db):
+    """Every index scan of the daily total is a time range on the index's leading columns, so a decision never
+    reads the merchant's history (an index condition on the tenant alone reads all of it)."""
+    from core.database import get_tenant_session
+
+    tenant = await _tenant(db)
+    merchant = uf.merchant(tenant)
+    statements: list[Any] = []
+
+    class Recorder:
+        def __init__(self, session: Any) -> None:
+            self._session = session
+
+        async def execute(self, statement: Any, *args: Any, **kwargs: Any) -> Any:
+            statements.append(statement)
+            return await self._session.execute(statement, *args, **kwargs)
+
+    async with get_tenant_session(uuid.UUID(tenant)) as session:
+        await handlers.daily_committed_minor_units(
+            Recorder(session),
+            tenant_id=uuid.UUID(tenant),
+            merchant=merchant,
+            currency="INR",
+            exclude_session_id="chk_deciding",
+            now=datetime.now(UTC),
+        )
+        assert len(statements) == 1
+        sql = str(statements[0].compile(dialect=db.dialect, compile_kwargs={"literal_binds": True}))
+        # As on a table too large to read in full: the planner must find an index that bounds the read.
+        await session.execute(text("SET LOCAL enable_seqscan = off"))
+        plan = (await session.execute(text(f"EXPLAIN (FORMAT JSON) {sql}"))).scalar_one()
+    nodes = list(_plan_nodes(plan[0]["Plan"]))
+    assert not [n for n in nodes if n["Node Type"] == "Seq Scan"], plan
+    # Each index, with the columns its condition must hold for the range to be a recent slice of one merchant.
+    ranges = {
+        "ix_commerce_checkout_sessions_status": ("tenant_id", "status", "expires_at"),
+        "ix_commerce_checkout_sessions_scope": ("tenant_id", "merchant_id", "created_at"),
+    }
+    scans = [n for n in nodes if n.get("Index Name")]
+    assert scans, plan
+    for scan in scans:
+        assert scan["Index Name"] in ranges, plan
+        condition = str(scan.get("Index Cond") or "")
+        for column in ranges[scan["Index Name"]]:
+            assert column in condition, (scan["Index Name"], condition)
 
 
 @pytest.mark.asyncio
