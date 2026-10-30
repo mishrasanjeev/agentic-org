@@ -1729,7 +1729,7 @@ def _payment_link_outstanding(row: Any) -> bool:
     from core.commerce import payment_handoff as ph
 
     state = row.state or {}
-    handoff = state.get("handoff") if isinstance(state.get("handoff"), Mapping) else {}
+    handoff: Mapping[str, Any] = state["handoff"] if isinstance(state.get("handoff"), Mapping) else {}
     if handoff.get("mode") == ph.MODE_SHOPIFY_CART:
         return handoff.get("status") == "issued" and row.status == "requires_escalation"
     if (

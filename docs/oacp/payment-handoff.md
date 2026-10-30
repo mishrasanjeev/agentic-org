@@ -158,9 +158,9 @@ refused and logged as `plural_hosted_payment_unmatched`, so the merchant can
 refund it in Plural. `FAILED`, `CANCELLED` and the like retire the link: the
 latest earlier link that can still be paid becomes the checkout's link again,
 and the next Complete issues a new one. The return page tells the buyer the
-payment did not go through, unless the earlier link is being paid (its Plural
-status is past `CREATED`) or its status cannot be read, when it asks the buyer
-to wait. On a canceled checkout they retire the link too, and the checkout
+payment did not go through, unless a payment on the earlier link is in progress
+(its Plural status is neither `CREATED` nor `ATTEMPTED`, the state after a failed
+attempt) or its status cannot be read, when it asks the buyer to wait. On a canceled checkout they retire the link too, and the checkout
 stays canceled. The poll and the return page read the checkout's current link;
 a late payment on a link a newer one replaced is confirmed by the webhook, or by
 the poll once that link is current again. `AUTHORIZED` is not money received and stays

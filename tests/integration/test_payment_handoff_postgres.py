@@ -971,6 +971,10 @@ async def test_a_lapsed_plural_link_keeps_its_place_when_a_fresh_one_cannot_be_o
     for _ in range(2):
         page = await commerce_payments._return_page(tenant, first["id"])
         assert b"Payment not completed" in page.body, page.body
+    # A failed attempt on A leaves no payment in progress either.
+    hosted.status = "ATTEMPTED"
+    page = await commerce_payments._return_page(tenant, first["id"])
+    assert b"Payment not completed" in page.body, page.body
     # Once the buyer starts paying A, the page asks them to wait for it instead.
     hosted.status = "PENDING"
     page = await commerce_payments._return_page(tenant, first["id"])

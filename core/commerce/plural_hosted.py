@@ -475,8 +475,9 @@ async def refresh_handoff(
 ) -> str:
     """Ask Plural for the current hand-off order of one session and apply it (the poll and the return page).
 
-    With ``report_untouched``, an order nobody has started to pay (``CREATED``) answers
-    ``not_attempted`` instead of ``pending``.
+    With ``report_untouched``, an order with no payment in progress answers ``not_attempted``
+    instead of ``pending``: nobody has started to pay it (``CREATED``), or the last attempt on it
+    failed and it waits for another (``ATTEMPTED``).
     """
     from core.commerce.ucp.handlers import confirm_handoff_payment
     from core.database import get_tenant_session
@@ -515,12 +516,14 @@ async def refresh_handoff(
         event_id=None,
         now=datetime.now(UTC),
     )
-    if report_untouched and result == "pending" and outcome.status == "CREATED":
+    if report_untouched and result == "pending" and outcome.status in NO_PAYMENT_IN_PROGRESS:
         return "not_attempted"
     return result
 
 
 POLL_BATCH = 50
+# Plural order states with no payment in progress: none started yet, or the last attempt failed.
+NO_PAYMENT_IN_PROGRESS = frozenset({"CREATED", "ATTEMPTED"})
 
 
 async def open_handoffs(tenant_id: str, *, limit: int = POLL_BATCH) -> list[Any]:
