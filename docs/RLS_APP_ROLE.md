@@ -170,6 +170,11 @@ later head:
     before the cut-over.
   * `public.oacp_delete_due_manifest(text, text)`: v6z88. It is granted once
     it exists.
+  * `public.gemini_daily_ledger_spend()`: v6z105, the platform Gemini cap on
+    recorded spend (`AGENTICORG_RECORDED_SPEND_CONTROLS_ENABLED`). Same owner
+    and installation as v6z85's function. The migration grants it where the
+    application role exists, and the script grants it once it exists. With
+    the flag on and no grant, the platform cap fails closed.
 * **Later migrations add their own grants in the migration.**
   `ALTER DEFAULT PRIVILEGES` gives tables that later migrations create (as
   the role that ran the script) the ordinary row DML, and sequences

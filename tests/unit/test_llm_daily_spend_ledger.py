@@ -1,8 +1,11 @@
 # SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
-"""The LLM router records each priced call in ``llm_daily_spend``, the table the Gemini daily caps read.
+"""Recorded-spend cost controls (``AGENTICORG_RECORDED_SPEND_CONTROLS_ENABLED``, off by default).
 
-Budget alerts read ``agent_cost_ledger``, which agent runs and chat turns write.
-The Postgres proofs are in tests/integration/test_llm_daily_spend_postgres.py.
+On, the LLM router records each priced call in ``llm_daily_spend``, the Gemini
+daily caps read it, and budget alerts read ``agent_cost_ledger``, which agent
+runs and chat turns write. Off, nothing is recorded and both read
+``agent_task_results`` as before. The Postgres proofs are in
+tests/integration/test_llm_daily_spend_postgres.py.
 """
 
 from __future__ import annotations
@@ -43,6 +46,12 @@ def _sql(statement) -> str:
     return " ".join(str(statement.compile(dialect=postgresql.dialect())).split())
 
 
+def _controls(monkeypatch, enabled: bool) -> None:
+    from core.config import settings
+
+    monkeypatch.setattr(settings, "recorded_spend_controls_enabled", enabled)
+
+
 def _pass_gateway(monkeypatch):
     """The router with the model gateway passed through and the signed record skipped."""
     from core.llm import router
@@ -57,7 +66,8 @@ def _pass_gateway(monkeypatch):
 
 @pytest.fixture
 def router_module(monkeypatch):
-    """The router with the ledger write captured."""
+    """The router with recorded-spend controls on and the ledger write captured."""
+    _controls(monkeypatch, True)
     router = _pass_gateway(monkeypatch)
     monkeypatch.setattr(router, "_record_daily_spend", AsyncMock())
     return router
@@ -147,6 +157,7 @@ async def test_a_failed_ledger_write_keeps_the_answer(monkeypatch):
 
 
 async def test_an_unexpected_ledger_error_never_turns_an_answer_into_a_second_billed_call(monkeypatch):
+    _controls(monkeypatch, True)
     router = _pass_gateway(monkeypatch)
 
     def _broken(*args, **kwargs):
@@ -167,13 +178,45 @@ async def test_an_unexpected_ledger_error_never_turns_an_answer_into_a_second_bi
 async def test_cap_reads_todays_gemini_spend_from_the_ledger(monkeypatch):
     from core.llm import router
 
+    _controls(monkeypatch, True)
     session = _Session(result=1.5)
     monkeypatch.setattr("core.database.get_tenant_session", lambda *a, **k: session)
+    platform = _Session(result=2.5)
+    monkeypatch.setattr("core.database.async_session_factory", lambda: platform)
 
     assert await router._todays_gemini_spend_usd(TENANT) == 1.5
+    assert await router._todays_gemini_spend_usd() == 2.5
     sql = " ".join(str(session.statements[0]).split())
     assert "FROM llm_daily_spend WHERE day = :day AND provider = 'gemini'" in sql
     assert "agent_task_results" not in sql
+    assert [str(s) for s in platform.statements] == ["SELECT public.gemini_daily_ledger_spend()"]
+
+
+async def test_controls_off_record_nothing_and_keep_the_previous_sources(monkeypatch):
+    """Off (the default) behaves as before: no ledger write, both caps and budgets on agent_task_results."""
+    from core.billing import budget_evaluator
+
+    _controls(monkeypatch, False)
+    router = _pass_gateway(monkeypatch)
+    monkeypatch.setattr(router, "_record_daily_spend", AsyncMock())
+    llm = router.LLMRouter()
+    monkeypatch.setattr(llm, "_call_model", AsyncMock(return_value=_response(router, "gemini-2.5-flash", 0.6)))
+    await llm.complete(MESSAGES, model_override="gemini-2.5-flash", tenant_id=TENANT)
+    router._record_daily_spend.assert_not_awaited()
+
+    tenant_session = _Session(result=0)
+    platform = _Session(result=0)
+    monkeypatch.setattr("core.database.get_tenant_session", lambda *a, **k: tenant_session)
+    monkeypatch.setattr("core.database.async_session_factory", lambda: platform)
+    await router._todays_gemini_spend_usd(TENANT)
+    await router._todays_gemini_spend_usd()
+    assert "FROM agent_task_results" in str(tenant_session.statements[0])
+    assert [str(s) for s in platform.statements] == ["SELECT public.gemini_daily_platform_spend()"]
+
+    budget_session = _Session(result=0)
+    monkeypatch.setattr(budget_evaluator, "get_tenant_session", lambda *a, **k: budget_session)
+    await budget_evaluator._spend_since(uuid.UUID(TENANT), None, None, datetime(2026, 10, 1, tzinfo=UTC))
+    assert "FROM agent_task_results" in str(budget_session.statements[0])
 
 
 @pytest.mark.parametrize(
@@ -183,6 +226,7 @@ async def test_cap_reads_todays_gemini_spend_from_the_ledger(monkeypatch):
 async def test_budget_spend_reads_the_agent_cost_ledger(monkeypatch, company_id, cost_center_id, joined):
     from core.billing import budget_evaluator
 
+    _controls(monkeypatch, True)
     session = _Session(result=None)
     entered: list = []
 

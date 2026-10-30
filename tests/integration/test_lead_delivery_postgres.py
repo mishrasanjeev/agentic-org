@@ -146,7 +146,7 @@ async def test_restricted_role_spend_and_outbox_isolation(monkeypatch):
     role = "lead_runtime_" + uuid.uuid4().hex[:12]
     tenant_a = demo_delivery.MARKETING_TENANT
     tenant_b = uuid.uuid4()
-    spend_a, spend_b, spend_b_other = uuid.uuid4(), uuid.uuid4(), uuid.uuid4()
+    task_a, task_b = uuid.uuid4(), uuid.uuid4()
     app_engine = None
     try:
         async with admin.begin() as conn:
@@ -157,20 +157,17 @@ async def test_restricted_role_spend_and_outbox_isolation(monkeypatch):
                     INSERT INTO tenants(id,name,slug,plan,data_region,settings)
                     VALUES (:id,'Synthetic test',:slug,'free','IN','{}') ON CONFLICT(id) DO NOTHING
                 """), {"id": tenant, "slug": "lead-test-" + tenant.hex})
-            # Another provider's spend never counts toward the Gemini caps.
-            for row, tenant, provider, cost in (
-                (spend_a, tenant_a, "gemini", 1.25),
-                (spend_b, tenant_b, "gemini", 2.75),
-                (spend_b_other, tenant_b, "claude", 9.0),
-            ):
+            for task, tenant, cost in ((task_a, tenant_a, 1.25), (task_b, tenant_b, 2.75)):
                 await conn.execute(text("""
-                    INSERT INTO llm_daily_spend(id,tenant_id,day,provider,model,call_count,cost_usd)
-                    VALUES (:id,:tenant,(CURRENT_TIMESTAMP AT TIME ZONE 'UTC')::date,:provider,:model,1,:cost)
-                """), {"id": row, "tenant": tenant, "provider": provider, "model": f"{provider}-test", "cost": cost})
+                    INSERT INTO agent_task_results(id,tenant_id,agent_id,agent_type,domain,task_type,
+                        tokens_used,cost_usd,duration_ms,status,llm_model,hitl_required)
+                    VALUES (:id,:tenant,:agent,'sales_agent','marketing','test',1,:cost,1,
+                        'completed','gemini-test',false)
+                """), {"id": task, "tenant": tenant, "agent": uuid.uuid4(), "cost": cost})
             # Identifier is a fixed prefix plus UUID hex; never provider/client input.
             await conn.exec_driver_sql(f'CREATE ROLE "{role}" LOGIN PASSWORD \'local-test-password\' NOBYPASSRLS')
             await conn.exec_driver_sql(f'GRANT USAGE ON SCHEMA public TO "{role}"')
-            await conn.exec_driver_sql(f'GRANT SELECT ON tenants,llm_daily_spend TO "{role}"')
+            await conn.exec_driver_sql(f'GRANT SELECT ON tenants,agent_task_results TO "{role}"')
             await conn.exec_driver_sql(f'GRANT SELECT,INSERT,UPDATE ON demo_delivery_jobs TO "{role}"')
             await conn.exec_driver_sql(f'GRANT EXECUTE ON FUNCTION public.gemini_daily_platform_spend() TO "{role}"')
             expected = float((await conn.execute(text("SELECT public.gemini_daily_platform_spend()"))).scalar_one())
@@ -182,7 +179,7 @@ async def test_restricted_role_spend_and_outbox_isolation(monkeypatch):
         assert await _todays_gemini_spend_usd() == pytest.approx(expected)
         assert await _todays_gemini_spend_usd(str(tenant_b)) == pytest.approx(2.75)
         async with database.get_tenant_session(tenant_a) as session:
-            assert (await session.execute(text("SELECT count(*) FROM llm_daily_spend WHERE tenant_id=:other"),
+            assert (await session.execute(text("SELECT count(*) FROM agent_task_results WHERE tenant_id=:other"),
                                           {"other": tenant_b})).scalar_one() == 0
             membership = await session.execute(text(
                 "SELECT pg_has_role(current_user,'agenticorg_spend_aggregate','MEMBER')"))
@@ -253,8 +250,7 @@ async def test_restricted_role_spend_and_outbox_isolation(monkeypatch):
         if app_engine:
             await app_engine.dispose()
         async with admin.begin() as conn:
-            await conn.execute(text("DELETE FROM llm_daily_spend WHERE id IN (:a,:b,:c)"),
-                               {"a": spend_a, "b": spend_b, "c": spend_b_other})
+            await conn.execute(text("DELETE FROM agent_task_results WHERE id IN (:a,:b)"), {"a": task_a, "b": task_b})
             if (await conn.execute(text("SELECT 1 FROM pg_roles WHERE rolname=:role"), {"role": role})).scalar():
                 await conn.exec_driver_sql(f'DROP OWNED BY "{role}"')
                 await conn.exec_driver_sql(f'DROP ROLE "{role}"')

@@ -52,6 +52,8 @@ APP_CALLABLE_FUNCTIONS = {
     "gemini_daily_platform_spend": "core/llm/router.py",
     # v6z88_commerce_ledger: tenant-bound retention delete of a due manifest.
     "oacp_delete_due_manifest": "core/commerce/oacp_retention.py",
+    # v6z105_llm_daily_spend: platform Gemini cap on recorded spend.
+    "gemini_daily_ledger_spend": "core/llm/router.py",
 }
 NOT_APP_CALLABLE_FUNCTIONS: set[str] = set()
 

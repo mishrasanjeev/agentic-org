@@ -1,13 +1,14 @@
 # SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
-"""The Gemini daily cap and budget alerts against real Postgres, through the paths that write spend.
+"""Recorded-spend cost controls against real Postgres, through the paths that write spend.
 
-Both controls summed ``agent_task_results``, which only the demo seeder
-writes, so in production the cap never refused a call and no budget alert
-fired. Here a tenant's router calls are priced by the real Gemini path (the
-SDK client is the only stand-in) and recorded in ``llm_daily_spend``; the
-third call is refused at a $1 cap while another tenant is unaffected. An agent
-run's cost, written by the run route's ledger writer, fires a budget alert.
-The runtime connects as a NOBYPASSRLS role with the production grants.
+Both controls sum ``agent_task_results``, which only the demo seeder writes,
+so in production the cap never refuses a call and no budget alert fires. With
+``AGENTICORG_RECORDED_SPEND_CONTROLS_ENABLED`` a tenant's router calls, priced
+by the real Gemini path (the SDK client is the only stand-in), are recorded in
+``llm_daily_spend``; the third call is refused at a $1 cap while another
+tenant is unaffected. An agent run's cost, written by the run route's ledger
+writer, fires a budget alert. Off, nothing is recorded. The runtime connects
+as a NOBYPASSRLS role with the production grants.
 """
 
 from __future__ import annotations
@@ -74,6 +75,7 @@ async def _runtime_role(admin) -> tuple[str, object]:
         await conn.exec_driver_sql(f'GRANT USAGE ON SCHEMA public TO "{role}"')
         await conn.exec_driver_sql(f'GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO "{role}"')
         await conn.exec_driver_sql(f'GRANT EXECUTE ON FUNCTION public.gemini_daily_platform_spend() TO "{role}"')
+        await conn.exec_driver_sql(f'GRANT EXECUTE ON FUNCTION public.gemini_daily_ledger_spend() TO "{role}"')
     engine = create_async_engine(admin.url.set(username=role, password="local-test-password"), poolclass=NullPool)
     return role, engine
 
@@ -91,6 +93,12 @@ def _use_engine(monkeypatch, engine) -> None:
     factory = async_sessionmaker(engine, expire_on_commit=False)
     monkeypatch.setattr(database, "async_session_factory", factory)
     monkeypatch.setattr(database, "current_session_factory", lambda: factory)
+
+
+def _controls(monkeypatch, enabled: bool) -> None:
+    from core.config import settings
+
+    monkeypatch.setattr(settings, "recorded_spend_controls_enabled", enabled)
 
 
 @pytest.mark.asyncio
@@ -118,6 +126,16 @@ async def test_gemini_cap_refuses_once_recorded_router_spend_reaches_it(monkeypa
         router = LLMRouter()
         messages = [{"role": "user", "content": "Summarise the synthetic ledger"}]
 
+        # Off (the default): the call is answered and nothing is recorded.
+        _controls(monkeypatch, False)
+        await router.complete(messages, model_override=MODEL, tenant_id=str(tenant_a))
+        async with admin.connect() as conn:
+            recorded = await conn.execute(text("SELECT count(*) FROM llm_daily_spend WHERE tenant_id=:t"),
+                                          {"t": tenant_a})
+            assert recorded.scalar_one() == 0
+        assert models.calls == 1
+
+        _controls(monkeypatch, True)
         for _ in range(2):
             response = await router.complete(messages, model_override=MODEL, tenant_id=str(tenant_a))
             assert response.cost_usd == pytest.approx(CALL_COST)
@@ -132,11 +150,11 @@ async def test_gemini_cap_refuses_once_recorded_router_spend_reaches_it(monkeypa
         # $1.20 recorded against a $1 cap: refused before the provider is called.
         with pytest.raises(DailyBudgetExceeded, match="daily spend cap reached"):
             await router.complete(messages, model_override=MODEL, tenant_id=str(tenant_a))
-        assert models.calls == 2
+        assert models.calls == 3
 
         # The cap is per tenant: another tenant's first call goes through.
         await router.complete(messages, model_override=MODEL, tenant_id=str(tenant_b))
-        assert models.calls == 3
+        assert models.calls == 4
 
         from core import database
 
@@ -153,14 +171,14 @@ async def test_gemini_cap_refuses_once_recorded_router_spend_reaches_it(monkeypa
                 "WHERE provider='gemini' AND day=(CURRENT_TIMESTAMP AT TIME ZONE 'UTC')::date"
             ))).scalar_one()
         async with runtime.connect() as conn:
-            platform = (await conn.execute(text("SELECT public.gemini_daily_platform_spend()"))).scalar_one()
+            platform = (await conn.execute(text("SELECT public.gemini_daily_ledger_spend()"))).scalar_one()
         assert float(platform) == pytest.approx(float(expected))
         assert float(platform) >= 3 * CALL_COST - 1e-9
         monkeypatch.setenv("AGENTICORG_GEMINI_DAILY_USD_CAP", "100.0")
         monkeypatch.setenv("AGENTICORG_GEMINI_PLATFORM_DAILY_USD_CAP", "1.0")
         with pytest.raises(DailyBudgetExceeded, match="platform daily spend cap reached"):
             await router.complete(messages, model_override=MODEL, tenant_id=str(tenant_b))
-        assert models.calls == 3
+        assert models.calls == 4
     finally:
         if runtime is not None:
             await runtime.dispose()
@@ -216,6 +234,10 @@ async def test_budget_alert_fires_from_recorded_agent_run_cost(monkeypatch):
         assert await _record_cost_ledger(tenant, agent_tenant_wide, {"llm_cost_usd": 1.0, "llm_tokens_used": 300})
 
         month_start = datetime.now(UTC).replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+        # Off (the default): the evaluator still reads agent_task_results, which nothing wrote.
+        _controls(monkeypatch, False)
+        assert await budget_evaluator._spend_since(tenant, None, None, month_start) == Decimal("0")
+        _controls(monkeypatch, True)
         assert await budget_evaluator._spend_since(tenant, None, None, month_start) == Decimal("4.0000")
         assert await budget_evaluator._spend_since(tenant, company_id, None, month_start) == Decimal("3.0000")
         assert await budget_evaluator._spend_since(tenant, uuid.uuid4(), None, month_start) == Decimal("0")
@@ -249,31 +271,39 @@ async def test_budget_alert_fires_from_recorded_agent_run_cost(monkeypatch):
         await admin.dispose()
 
 
-async def _platform_function(conn) -> dict:
-    return dict((await conn.execute(text("""
-        SELECT r.rolname AS owner, p.prosecdef AS definer, p.proconfig AS config, p.prosrc AS body,
-            pg_has_role(current_user,'agenticorg_spend_aggregate','USAGE') AS inherits,
+async def _spend_functions(conn) -> tuple[dict, dict]:
+    """Both platform spend functions, and the rights the installer and aggregate role are left with."""
+    rows = (await conn.execute(text("""
+        SELECT p.proname AS name, r.rolname AS owner, p.prosecdef AS definer, p.proconfig AS config,
+            p.prosrc AS body
+        FROM pg_proc p JOIN pg_roles r ON r.oid=p.proowner JOIN pg_namespace n ON n.oid=p.pronamespace
+        WHERE n.nspname='public' AND p.proname IN ('gemini_daily_platform_spend','gemini_daily_ledger_spend')
+    """))).mappings().all()
+    rights = (await conn.execute(text("""
+        SELECT pg_has_role(current_user,'agenticorg_spend_aggregate','USAGE') AS inherits,
             pg_has_role(current_user,'agenticorg_spend_aggregate','SET') AS can_set,
+            has_schema_privilege('agenticorg_spend_aggregate','public','CREATE') AS aggregate_creates,
             has_column_privilege('agenticorg_spend_aggregate','public.agent_task_results','cost_usd','SELECT')
-                AS reads_task_results
-        FROM pg_proc p JOIN pg_roles r ON r.oid=p.proowner
-        WHERE p.oid='public.gemini_daily_platform_spend()'::regprocedure
-    """))).mappings().one())
+                AS aggregate_reads_task_results
+    """))).mappings().one()
+    return {row["name"]: dict(row) for row in rows}, dict(rights)
 
 
 @pytest.mark.asyncio
 async def test_non_superuser_install_replay_and_rollback(monkeypatch, tmp_path):
-    """The function is replaced as its owner by an installer that keeps no aggregate rights afterwards."""
+    """The ledger function is created as the aggregate role's by an installer that keeps no rights afterwards."""
     url = os.getenv("AGENTICORG_DB_URL")
     admin = create_async_engine(url, poolclass=NullPool)
     role = "spend_installer_" + uuid.uuid4().hex[:12]
     db = "spend_ledger_" + uuid.uuid4().hex[:12]
     installer = None
     created = False
+    created_app_role = False
     v6z85 = importlib.import_module("migrations.versions.v6_z85_lead_delivery_spend")
     migration = importlib.import_module("migrations.versions.v6_z105_llm_daily_spend")
     progress = importlib.import_module("migrations.versions.v4_9_7_migration_progress")
     monkeypatch.setenv("AGENTICORG_MIGRATION_AUDIT_DIR", str(tmp_path))
+    unchanged = {"inherits": False, "can_set": False, "aggregate_creates": False, "aggregate_reads_task_results": True}
 
     def apply(conn, action):
         with Operations.context(MigrationContext.configure(conn)):
@@ -289,6 +319,11 @@ async def test_non_superuser_install_replay_and_rollback(monkeypatch, tmp_path):
                                       'WITH ADMIN TRUE, INHERIT FALSE, SET FALSE')
             await conn.exec_driver_sql(f'CREATE DATABASE "{db}" OWNER "{role}"')
             created = True
+            # The application role the migration must grant the function to, created by the
+            # script in a real deployment; a stand-in only for this test when the cluster has none.
+            if (await conn.execute(text("SELECT to_regrole('agenticorg_app')"))).scalar() is None:
+                await conn.exec_driver_sql("CREATE ROLE agenticorg_app NOLOGIN NOBYPASSRLS")
+                created_app_role = True
         installer = create_async_engine(admin.url.set(username=role, password="local-test-password", database=db),
                                         poolclass=NullPool)
         async with installer.begin() as conn:
@@ -309,15 +344,24 @@ async def test_non_superuser_install_replay_and_rollback(monkeypatch, tmp_path):
             await conn.run_sync(lambda c: apply(c, migration.upgrade))
             # A replay is a no-op.
             await conn.run_sync(lambda c: apply(c, migration.upgrade))
-            state = await _platform_function(conn)
-            assert state["owner"] == "agenticorg_spend_aggregate"
-            assert state["definer"] is True
-            assert state["config"] == ["search_path=pg_catalog"]
-            assert "public.llm_daily_spend" in state["body"]
-            assert (state["inherits"], state["can_set"], state["reads_task_results"]) == (False, False, False)
+            functions, rights = await _spend_functions(conn)
+            ledger = functions["gemini_daily_ledger_spend"]
+            assert (ledger["owner"], ledger["definer"], ledger["config"]) == (
+                "agenticorg_spend_aggregate", True, ["search_path=pg_catalog"])
+            assert "public.llm_daily_spend" in ledger["body"]
+            # The v6z85 function the flag-off path calls is untouched.
+            assert "public.agent_task_results" in functions["gemini_daily_platform_spend"]["body"]
+            assert rights == unchanged
+            # The migration alone, without a script re-run, lets the application role call it.
+            assert (await conn.execute(text(
+                "SELECT has_function_privilege('agenticorg_app','public.gemini_daily_ledger_spend()','EXECUTE')"
+            ))).scalar() is True
+            assert (await conn.execute(text(
+                "SELECT has_function_privilege('public','public.gemini_daily_ledger_spend()','EXECUTE')"
+            ))).scalar() is False
             assert (await conn.execute(text("SELECT relforcerowsecurity FROM pg_class "
                                            "WHERE oid='public.llm_daily_spend'::regclass"))).scalar() is True
-            assert (await conn.execute(text("SELECT public.gemini_daily_platform_spend()"))).scalar() == 0
+            assert (await conn.execute(text("SELECT public.gemini_daily_ledger_spend()"))).scalar() == 0
             tenant = uuid.uuid4()
             await conn.execute(text("INSERT INTO tenants VALUES (:id)"), {"id": tenant})
             await conn.execute(text("SELECT set_config('agenticorg.tenant_id',:tenant,true)"),
@@ -331,18 +375,17 @@ async def test_non_superuser_install_replay_and_rollback(monkeypatch, tmp_path):
         async with installer.begin() as conn:
             # Without tenant context the owner sees no rows; the function sums Gemini across tenants.
             assert (await conn.execute(text("SELECT count(*) FROM llm_daily_spend"))).scalar() == 0
-            assert float((await conn.execute(text("SELECT public.gemini_daily_platform_spend()"))).scalar()) == 0.75
-        async with installer.begin() as conn:
-            await conn.run_sync(lambda c: apply(c, migration.downgrade))
-            state = await _platform_function(conn)
-            assert state["owner"] == "agenticorg_spend_aggregate"
-            assert "public.agent_task_results" in state["body"]
-            assert (state["inherits"], state["can_set"], state["reads_task_results"]) == (False, False, True)
-            assert (await conn.execute(text("SELECT to_regclass('public.llm_daily_spend')"))).scalar() is None
+            assert float((await conn.execute(text("SELECT public.gemini_daily_ledger_spend()"))).scalar()) == 0.75
             assert (await conn.execute(text("SELECT public.gemini_daily_platform_spend()"))).scalar() == 0
         async with installer.begin() as conn:
+            await conn.run_sync(lambda c: apply(c, migration.downgrade))
+            functions, rights = await _spend_functions(conn)
+            assert set(functions) == {"gemini_daily_platform_spend"}
+            assert rights == unchanged
+            assert (await conn.execute(text("SELECT to_regclass('public.llm_daily_spend')"))).scalar() is None
+        async with installer.begin() as conn:
             await conn.run_sync(lambda c: apply(c, migration.upgrade))
-            assert "public.llm_daily_spend" in (await _platform_function(conn))["body"]
+            assert (await conn.execute(text("SELECT public.gemini_daily_ledger_spend()"))).scalar() == 0
     finally:
         if installer:
             await installer.dispose()
@@ -352,4 +395,6 @@ async def test_non_superuser_install_replay_and_rollback(monkeypatch, tmp_path):
                 await conn.exec_driver_sql(f'DROP DATABASE "{db}" WITH (FORCE)')
             if (await conn.execute(text("SELECT 1 FROM pg_roles WHERE rolname=:role"), {"role": role})).scalar():
                 await conn.exec_driver_sql(f'DROP ROLE "{role}"')
+            if created_app_role:
+                await conn.exec_driver_sql("DROP ROLE agenticorg_app")
         await admin.dispose()

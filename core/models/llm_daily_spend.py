@@ -1,9 +1,9 @@
 # SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """Per-tenant daily spend of the calls the LLM router makes (UTC days).
 
-``core.llm.router`` adds each priced call here, and the Gemini daily caps read
-it back (per tenant in the tenant's session, platform-wide through
-``public.gemini_daily_platform_spend()``).
+With ``AGENTICORG_RECORDED_SPEND_CONTROLS_ENABLED``, ``core.llm.router`` adds
+each priced call here and the Gemini daily caps read it back (per tenant in the
+tenant's session, platform-wide through ``public.gemini_daily_ledger_spend()``).
 """
 
 import uuid
