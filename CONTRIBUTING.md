@@ -151,6 +151,13 @@ maintainers, which keeps the names out of the tree and its diffs. The hashes
 are not a secret: with the committed salt anyone can test a guessed name. Failures give the location, not the matched words. The check fails
 closed when git or the hash file misbehaves.
 
+Each binary file a change adds or changes is read whole: line by line when it
+is text that git counts as binary (a NUL byte in it, or UTF-16 or UTF-32), and
+otherwise for the readable text inside it, such as video and image metadata,
+where only terms of five or more characters are matched (shorter ones turn up
+by chance in compressed data). Git's own check decides what is binary, with
+the `.gitattributes` of the base branch, so the scan needs git 2.40 or later.
+
 ```bash
 python scripts/check_denylist.py scan --base origin/main   # this branch (also part of make check)
 python scripts/check_denylist.py audit                     # every tracked file
