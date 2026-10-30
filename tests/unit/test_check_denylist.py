@@ -714,7 +714,7 @@ _PROSE_IN_ANOTHER_SCRIPT = {
     "preamble": "This guide is in English first. " * 700
     + "我们使用这个工具来核对商家的文件。" * 2500
     + "我们使用Xyzw来核对。",
-    # Terms with a soft hyphen or a zero-width space inside, and dashes some Japanese encodings decode to symbols.
+    # A soft hyphen inside a term and a zero-width space after one; dashes Japanese encodings decode to symbols.
     "ru-invisible": "Мы используем Acme\u00adVerify и Xyzw\u200b для проверки.\n",
     "ja-dashes": "販売者の管理画面では、システムはAcme\u2212Verify（Xyzw\uff5e）、Acme\u30fcVerifyと"
     "自動的に連携して、在庫と注文を毎日同期します。",
@@ -768,6 +768,31 @@ def test_utf16_and_utf32_text_in_another_script_is_decoded_without_a_byte_order_
     assert code == 1
     expected = sum(len(_single(term).matches(line)) for term in terms for line in text.split("\n"))
     assert out.count(f"(binary, read as {encoding[:6].upper()})") == expected, out
+
+
+@pytest.mark.parametrize(
+    "between",
+    ["\u00ad", "\u200b", "\u2060", "\u2212", "\uff5e", "\uff0b", "\u30fc", "\uff70"],
+    ids=[
+        "soft hyphen",
+        "zero-width space",
+        "word joiner",
+        "minus",
+        "fullwidth tilde",
+        "fullwidth plus",
+        "long-vowel mark",
+        "halfwidth long-vowel mark",
+    ],
+)
+def test_a_term_in_wide_text_is_found_with_an_invisible_character_or_dash_symbol_between_its_words(
+    between: str,
+) -> None:
+    text = f"販売者の管理画面では、システムはAcme{between}Verifyと自動的に連携して、在庫と注文を毎日同期します。"
+    data = text.encode("utf-16-le")
+    assert dl._wide_text(data)[2], "not mostly ASCII: read by stretches of ASCII text"
+    report = dl.Report(_single("acme verify"))
+    report.check_file("docs/notes.txt", data)
+    assert len(report.findings) == 1, report.findings
 
 
 def _zipf_token_ids(count: int, *, vocab: int, newline_id: int) -> list[int]:

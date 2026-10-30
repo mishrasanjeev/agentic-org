@@ -441,10 +441,11 @@ def _wide_codecs(data: bytes) -> list[tuple[str, int]]:
     return [(codec, 0) for codec, high, low in guesses if mostly_nul(high, low)]
 
 
-# Symbols that stand for a dash between the words of a name: the minus sign and the
-# wave dash that shift_jis and euc_jp decode Japanese dashes to, the fullwidth plus,
-# and the katakana long-vowel mark typed as a dash.
-_STRETCH_DASHES = frozenset("\u2212\uff5e\uff0b\u30fc")
+# Symbols that can sit between the words of a name in Japanese text: the minus sign
+# shift_jis and euc_jp decode the Japanese minus to, the fullwidth tilde cp932
+# decodes the wave dash to, the fullwidth plus sign, and the katakana long-vowel
+# mark (fullwidth and halfwidth) typed as a dash.
+_STRETCH_DASHES = frozenset("\u2212\uff5e\uff0b\u30fc\uff70")
 
 
 @functools.lru_cache(maxsize=65_536)
