@@ -404,9 +404,9 @@ _WIDE_MAX_NON_TEXT = 0.02
 # Without a byte-order mark the encoding is a guess. A decoding that is at least
 # half ASCII text is checked as text. Any other is checked in stretches of ASCII
 # text (``_ascii_stretches``): a term counts only when written in ASCII letters,
-# with spaces or punctuation between its words, never across another character.
-# A name in Russian, Japanese or Chinese text is written so, however the text
-# around it is punctuated. An array of 16- or 32-bit numbers below 65,536 has the
+# with spaces, punctuation, dashes or invisible formatting characters between its
+# words, never across another character, as a name in Russian, Japanese or
+# Chinese text usually is. An array of 16- or 32-bit numbers below 65,536 has the
 # NULs of such text, but decodes to characters all over Unicode with few ASCII
 # letters among them, so letters no longer join into a term by chance (accented
 # Latin letters from small numbers and token ids did). With 2,000 invented
@@ -441,10 +441,23 @@ def _wide_codecs(data: bytes) -> list[tuple[str, int]]:
     return [(codec, 0) for codec, high, low in guesses if mostly_nul(high, low)]
 
 
+# Symbols that stand for a dash between the words of a name: the minus sign and the
+# wave dash that shift_jis and euc_jp decode Japanese dashes to, the fullwidth plus,
+# and the katakana long-vowel mark typed as a dash.
+_STRETCH_DASHES = frozenset("\u2212\uff5e\uff0b\u30fc")
+
+
 @functools.lru_cache(maxsize=65_536)
 def _ends_stretch(ch: str) -> bool:
-    """Whether a non-ASCII character ends a stretch of ASCII text: anything but a space, punctuation or a combining mark."""
-    return not (ch.isspace() or unicodedata.category(ch).startswith("P") or unicodedata.combining(ch))
+    """Whether a non-ASCII character ends a stretch of ASCII text.
+
+    Spaces, punctuation, combining marks, invisible formatting characters (a soft
+    hyphen, zero-width spaces and joiners) and ``_STRETCH_DASHES`` do not.
+    """
+    if ch.isspace() or ch in _STRETCH_DASHES or unicodedata.combining(ch):
+        return False
+    category = unicodedata.category(ch)
+    return not (category.startswith("P") or category == "Cf")
 
 
 def _ascii_stretches(line: str) -> list[str]:

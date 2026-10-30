@@ -714,6 +714,10 @@ _PROSE_IN_ANOTHER_SCRIPT = {
     "preamble": "This guide is in English first. " * 700
     + "我们使用这个工具来核对商家的文件。" * 2500
     + "我们使用Xyzw来核对。",
+    # Terms with a soft hyphen or a zero-width space inside, and dashes some Japanese encodings decode to symbols.
+    "ru-invisible": "Мы используем Acme\u00adVerify и Xyzw\u200b для проверки.\n",
+    "ja-dashes": "販売者の管理画面では、システムはAcme\u2212Verify（Xyzw\uff5e）、Acme\u30fcVerifyと"
+    "自動的に連携して、在庫と注文を毎日同期します。",
     # A five-letter term followed by a kana, and a two-word term joined by a middle dot.
     "ja-zorbx": "契約書：Zorbxの条件は以下のとおりです。システムはAcme・Verifyと連携します。",
     "ja": "私たちは販売者の書類を確認するためにXyzwを使っています。\nカタログは毎日更新されます。\n",
@@ -748,6 +752,8 @@ _PROSE_IN_ANOTHER_SCRIPT = {
         ("preamble", "utf-16-le"),
         ("ja-zorbx", "utf-16-le"),
         ("ja-zorbx", "utf-32-le"),
+        ("ru-invisible", "utf-16-le"),
+        ("ja-dashes", "utf-32-le"),
     ],
 )
 def test_utf16_and_utf32_text_in_another_script_is_decoded_without_a_byte_order_mark(
