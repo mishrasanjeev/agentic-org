@@ -75,7 +75,6 @@ import subprocess
 import sys
 import tempfile
 import unicodedata
-from collections import Counter
 from collections.abc import Container, Iterable, Iterator
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -401,21 +400,28 @@ _WIDE_BOMS = (
 _WIDE_NUL_SHARE = 0.1
 _WIDE_MAX_NON_TEXT = 0.02
 # Without a byte-order mark the encoding is a guess, and a decoding counts only
-# when it reads as text in some script (``_reads_as_text``): half its characters
-# ASCII text, or one in a hundred whitespace, or all but one in twenty of the
-# others from at most four scripts (Japanese mixes kanji, hiragana and katakana;
-# Chinese has long lines with no whitespace). An array of 16- or 32-bit numbers
-# below 65,536 has the NULs of such text but decodes to characters all over
-# Unicode: in random arrays of numbers from ranges between 0 and 65,535, under
-# 0.2% of the characters were whitespace, and the four commonest scripts held at
-# most 90% of the others.
+# when it reads as text (``_reads_as_text``): half its characters ASCII text, or
+# else one in a hundred a separator (a space, a line end, or the punctuation
+# that ends words and sentences in CJK, Hindi and Arabic text) with under one in
+# ten of its other characters folding to an ASCII letter or digit. Prose in
+# Russian, Greek, Hindi, Arabic, Thai, Korean, Japanese and Chinese, long lines
+# and katakana-heavy text included, had 5% to 23% separators and no folding
+# letters. An array of 16- or 32-bit numbers below 65,536 has the NULs of such
+# text but rarely its shape: of uniform arrays from 16 ranges between 0 and
+# 65,535, only values inside the CJK punctuation block passed, and those fold to
+# no letter; arrays of BPE token ids have spaces and line ends, but 18% to 24% of
+# their other characters fold to letters.
 _WIDE_GUESS_MIN_ASCII = 0.5
-_WIDE_GUESS_MIN_WHITESPACE = 0.01
-_WIDE_GUESS_SCRIPTS = 4
-_WIDE_GUESS_MIN_SCRIPT_SHARE = 0.95
-_WIDE_GUESS_SAMPLE = 20_000  # the characters the script count looks at
+_WIDE_GUESS_MIN_SEPARATORS = 0.01
+_WIDE_GUESS_MAX_FOLDING = 0.1
+_WIDE_GUESS_SAMPLE = 20_000  # the characters the separator and folding counts look at
 _ASCII_TEXT = re.compile(r"[\t\n\r\x20-\x7e]")
-_ANY_WHITESPACE = re.compile(r"\s")
+_SEPARATORS = frozenset(
+    " \t\n\u00a0\u3000"  # spaces and line ends (a lone CR is not one)
+    "\u3001\u3002\u3008\u3009\u300a\u300b\u300c\u300d\u300e\u300f\u3010\u3011\u3014\u3015"  # CJK
+    "\uff01\uff08\uff09\uff0c\uff0e\uff1a\uff1b\uff1f\uff3b\uff3d\uff5b\uff5d\uff5e"  # fullwidth
+    "\u2018\u2019\u201c\u201d\u2014\u2026\u00b7\u0964\u060c"  # quotes, dashes, danda, Arabic comma
+)
 # Characters text does not hold: controls other than whitespace, and code units that did not decode.
 _NON_TEXT = re.compile(r"[\x00-\x08\x0e-\x1f\x7f-\x9f\N{REPLACEMENT CHARACTER}]")
 
@@ -441,23 +447,21 @@ def _wide_codecs(data: bytes) -> list[tuple[str, int]]:
     return [(codec, 0) for codec, high, low in guesses if mostly_nul(high, low)]
 
 
-def _script(ch: str) -> str:
-    """The first word of a character's Unicode name ("CYRILLIC", "CJK", "HIRAGANA"); "" when it has none."""
-    return unicodedata.name(ch, "").split(" ", 1)[0]
+def _folds_to_letter(ch: str) -> bool:
+    """Whether a character reads as an ASCII letter or digit once accents are stripped ("ā", "Ａ", "①")."""
+    decomposed = unicodedata.normalize("NFKD", ch)
+    return bool(decomposed) and decomposed[0].isascii() and decomposed[0].isalnum()
 
 
 def _reads_as_text(text: str) -> bool:
-    """Whether a decoding guessed without a byte-order mark reads as text in some script (see ``_WIDE_GUESS_MIN_ASCII``)."""
+    """Whether a decoding guessed without a byte-order mark reads as text (see ``_WIDE_GUESS_MIN_ASCII``)."""
     if _ASCII_TEXT.subn("", text)[1] >= len(text) * _WIDE_GUESS_MIN_ASCII:
         return True
-    if _ANY_WHITESPACE.subn("", text)[1] >= len(text) * _WIDE_GUESS_MIN_WHITESPACE:
-        return True
-    others = [ch for ch in text[:_WIDE_GUESS_SAMPLE] if ch > "\x7f"]
-    scripts = Counter(_script(ch) for ch in others)
-    scripts.pop("", None)  # unassigned code points
-    scripts.pop("REPLACEMENT", None)  # code units that did not decode
-    held = sum(count for _, count in scripts.most_common(_WIDE_GUESS_SCRIPTS))
-    return held >= len(others) * _WIDE_GUESS_MIN_SCRIPT_SHARE
+    sample = text[:_WIDE_GUESS_SAMPLE]
+    separators = sum(1 for ch in sample if ch in _SEPARATORS)
+    others = [ch for ch in sample if ch > "\x7f"]
+    folding = sum(1 for ch in others if _folds_to_letter(ch))
+    return separators >= len(sample) * _WIDE_GUESS_MIN_SEPARATORS and folding < len(others) * _WIDE_GUESS_MAX_FOLDING
 
 
 def _wide_text(data: bytes) -> tuple[str, str] | None:

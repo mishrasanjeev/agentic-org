@@ -708,12 +708,30 @@ _PROSE_IN_ANOTHER_SCRIPT = {
     "ja": "私たちは販売者の書類を確認するためにXyzwを使っています。\nカタログは毎日更新されます。\n",
     # One long line with no whitespace, as Chinese text often is.
     "zh": "我们使用Xyzw来核对商家的文件。目录每天更新，订单在一小时内到达。" * 4,
+    "zh-title": "《Xyzw用户手册》第三章：如何连接商店——设置、同步与核对…" * 4,
+    # A technical guide: katakana-heavy, with brackets and parentheses, on long lines.
+    "ja-guide": (
+        "このガイドでは、APIキーの作成からWebhookの設定までを説明します。管理画面の「設定」から"
+        "「APIアクセス」を開き、新しいキー（api_key）を作成してください。Xyzwとの連携は、"
+        "カタログの同期が完了したあとに有効になります。"
+    )
+    * 3
+    + "\n",
 }
 
 
 @pytest.mark.parametrize(
     ("language", "encoding"),
-    [("ru", "utf-16-le"), ("ru", "utf-16-be"), ("ru", "utf-32-le"), ("ja", "utf-32-le"), ("zh", "utf-32-be")],
+    [
+        ("ru", "utf-16-le"),
+        ("ru", "utf-16-be"),
+        ("ru", "utf-32-le"),
+        ("ja", "utf-32-le"),
+        ("zh", "utf-32-be"),
+        ("zh-title", "utf-32-le"),
+        ("ja-guide", "utf-16-le"),
+        ("ja-guide", "utf-32-le"),
+    ],
 )
 def test_utf16_and_utf32_text_in_another_script_is_decoded_without_a_byte_order_mark(
     repo: Path, tmp_path: Path, capsys: pytest.CaptureFixture[str], language: str, encoding: str
@@ -725,6 +743,35 @@ def test_utf16_and_utf32_text_in_another_script_is_decoded_without_a_byte_order_
     code, out, _ = _scan(repo, short, capsys)
     assert code == 1
     assert f"docs/notes.txt:1 (binary, read as {encoding[:6].upper()})" in out
+
+
+def _zipf_token_ids(count: int, *, vocab: int, newline_id: int) -> list[int]:
+    """Token ids as a BPE tokenizer's output spreads them, in Llama's layout.
+
+    Ids 3 to 258 are the byte tokens, of which a stream of text mostly holds the
+    line end (<0x0A>, id 13); the merges, from 259 on, have small ids when they
+    are frequent.
+    """
+    rng = random.Random(11)  # noqa: S311 - test data
+    weights = [1 / (rank + 1) ** 1.1 for rank in range(vocab - 259)]
+    ids = rng.choices(range(vocab - 259), weights=weights, k=count)
+    return [newline_id if rng.random() < 0.02 else 259 + rank for rank in ids]
+
+
+@pytest.mark.parametrize(
+    ("label", "values"),
+    [
+        ("Latin Extended values", [random.Random(1).randrange(300, 500) for _ in range(8192)]),  # noqa: S311
+        ("Latin Extended Additional values", [random.Random(2).randrange(0x1E00, 0x1F00) for _ in range(8192)]),  # noqa: S311
+        ("token ids", _zipf_token_ids(8192, vocab=32000, newline_id=13)),
+    ],
+)
+def test_arrays_of_numbers_in_a_narrow_range_or_of_token_ids_are_not_read_as_utf32_text(
+    label: str, values: list[int]
+) -> None:
+    data = b"".join(value.to_bytes(4, "little") for value in values)
+    assert dl._wide_codecs(data) == [("utf-32-le", 0)], label
+    assert dl._wide_text(data) is None, label
 
 
 def test_a_line_in_a_legacy_8_bit_encoding_keeps_its_accents(denylist: dl.Denylist) -> None:
@@ -934,9 +981,7 @@ def test_malformed_hash_file_fails_closed(tmp_path: Path, hash_file: Path, mutat
 # ── Building and the committed list ─────────────────────────────────────────
 
 
-def test_build_writes_only_salt_and_digests(
-    repo: Path, tmp_path: Path, capsys: pytest.CaptureFixture[str]
-) -> None:
+def test_build_writes_only_salt_and_digests(repo: Path, tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
     terms = tmp_path / "private-terms.txt"
     terms.write_text("# invented\nacme verify\nGlobex Screening Hub\n\n", encoding="utf-8")
     out_file = repo / "config" / "denylist.sha256"
@@ -966,9 +1011,7 @@ def test_build_keep_salt_reuses_the_existing_salt(repo: Path, tmp_path: Path) ->
     assert dl.load(out_file).salt != first
 
 
-def test_build_refuses_a_terms_file_inside_the_repository(
-    repo: Path, capsys: pytest.CaptureFixture[str]
-) -> None:
+def test_build_refuses_a_terms_file_inside_the_repository(repo: Path, capsys: pytest.CaptureFixture[str]) -> None:
     terms = repo / "terms.txt"
     terms.write_text("acme verify\n", encoding="utf-8")
     out_file = repo / "denylist.sha256"
