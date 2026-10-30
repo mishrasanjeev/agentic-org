@@ -32,7 +32,7 @@ Save | Choose My Plural account or My Shopify checkout and select Save payment m
 
 My Plural account can be saved only once your Plural credentials, including the webhook secret, are saved. My Shopify checkout can be saved only once your Shopify store is connected.
 
-Your Plural secrets are stored encrypted and are never shown again. To change one, enter the new value and save; leave a field blank to keep the saved secret. Use Sandbox until a test payment has gone through, then switch to Production with your live credentials.
+Your Plural secrets are stored encrypted and are never shown again. To change one, enter your client ID again with the new value and save; leave a secret field blank to keep the saved one. Use Sandbox until a test payment has gone through, then switch to Production with your live credentials.
 
 You do not need a payment method to turn on Sell everywhere, but until you save one, buyers get no payment link.
 
@@ -41,7 +41,7 @@ You do not need a payment method to turn on Sell everywhere, but until you save 
 When the buyer asks to complete a ready checkout, the arbiter decides first, and the buyer gets a link only on an allow. It checks two things:
 
 - **Your facts are still valid.** The catalog, price, stock and policy facts Grantex signed are fresh and not revoked.
-- **The order is within your limits.** The largest single order, the currency, the most items per order and the daily maximum you set in step 4. The daily maximum counts what buyers paid today and the payment links still open, in that currency, by the UTC day.
+- **The order is within your limits.** The largest single order, the currency, the most items per order and the daily maximum you set in step 4. The daily maximum counts what buyers paid today (by the UTC day) and the payment links still open, whichever day they were issued, in that currency. A link that lapsed unpaid no longer counts.
 
 No buyer mandate is asked for, because the agent holds no payment credential and the buyer pays on your page. The decision is used once and recorded in your ledger. A refusal names the rule that failed and its reason, for example `daily_amount_cap_exceeded`, and no link is issued.
 
@@ -52,7 +52,7 @@ No buyer mandate is asked for, because the agent holds no payment credential and
 3. They open the link and pay on your page. Asking again gives the same link while it is valid.
 4. With Plural, they return to a short page that says whether the payment went through. If it did not, they ask for a new link.
 
-A Plural link is valid for 30 minutes, or until the checkout expires if that is sooner. While it is open, the checkout cannot be changed; the buyer starts a new checkout to change the items. A Shopify link stays the same for the life of the checkout.
+A Plural link is valid for 30 minutes, or until the checkout expires if that is sooner. Once a Plural link has been issued, the checkout's items cannot be changed, even after the link lapses: asking to complete it again gives the same link while it is valid, or a fresh one after it lapses, and the buyer starts a new checkout to change the items. A Shopify link stays the same for the life of the checkout.
 
 ## Your orders
 
