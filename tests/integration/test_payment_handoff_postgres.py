@@ -17,6 +17,7 @@ import subprocess
 import sys
 import time
 import uuid
+from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
 from typing import Any
 
@@ -358,6 +359,110 @@ async def test_the_daily_cap_counts_the_days_open_and_paid_handoffs(db, executor
     # Re-opening the first link is not a new commitment.
     again = await _complete(runtime, tenant, first["id"])
     assert again.body["continue_url"] == done.body["continue_url"]
+
+    # A lapsed link counts for nothing, even on the day it was issued: the second checkout now fits.
+    now = datetime.now(UTC)
+    await _move_handoff(db, first["id"], expires_at=now - timedelta(minutes=1))
+    allowed = await _complete(runtime, tenant, second["id"], body=uf.complete_body())
+    assert allowed.body["status"] == "requires_escalation", allowed.body
+
+    # A link issued before UTC midnight that is still open counts: no room for a third checkout.
+    before_midnight = now.replace(hour=0, minute=0, second=0, microsecond=0) - timedelta(hours=1)
+    for session_id in (first["id"], second["id"]):
+        await _move_handoff(db, session_id, issued_at=before_midnight)
+    third = await _ready(runtime, tenant)
+    held = await _complete(runtime, tenant, third["id"], body=uf.complete_body())
+    assert held.body.get("status") != "requires_escalation", held.body
+    assert "daily_amount_cap_exceeded" in json.dumps(held.body)
+
+
+async def _move_handoff(engine, session_id: str, *, issued_at=None, expires_at=None) -> None:
+    """Move a hand-off in time as the clock would: when its link was issued (the row's last update), or when
+    the link lapses."""
+    from core.commerce.payment_handoff import iso
+
+    if issued_at is not None:
+        await _exec(
+            engine,
+            "UPDATE commerce_checkout_sessions SET updated_at = :at, "
+            "state = jsonb_set(state, '{handoff,issued_at}', to_jsonb(CAST(:iso AS text))) WHERE id = :i",
+            at=issued_at,
+            iso=iso(issued_at),
+            i=session_id,
+        )
+    if expires_at is not None:
+        await _exec(
+            engine,
+            "UPDATE commerce_checkout_sessions "
+            "SET state = jsonb_set(state, '{handoff,expires_at}', to_jsonb(CAST(:iso AS text))) WHERE id = :i",
+            iso=iso(expires_at),
+            i=session_id,
+        )
+
+
+@pytest.mark.asyncio
+async def test_the_daily_total_is_todays_payments_plus_the_links_still_open(db):
+    from core.commerce.payment_handoff import iso
+    from core.database import get_tenant_session
+
+    tenant = await _tenant(db)
+    merchant = uf.merchant(tenant)
+    now = datetime.now(UTC)
+    midnight = now.replace(hour=0, minute=0, second=0, microsecond=0)
+    url = "https://example-store.myshopify.com/cart/1:1"
+    open_link = {"status": "issued", "continue_url": url, "expires_at": iso(now + timedelta(minutes=20))}
+    lapsed_link = {**open_link, "expires_at": iso(now - timedelta(seconds=1))}
+    retired_link = {"status": "failed", "expires_at": open_link["expires_at"]}
+    escalated = "requires_escalation"
+    # name: (status, amount, hand-off, completed_at, currency)
+    sessions: dict[str, tuple[str, int, dict[str, Any] | None, datetime | None, str]] = {
+        "paid_today": ("completed", 100, None, midnight + timedelta(seconds=1), "INR"),
+        "paid_yesterday": ("completed", 200, None, midnight - timedelta(seconds=1), "INR"),
+        "open": (escalated, 400, open_link, None, "INR"),
+        "lapsed": (escalated, 800, lapsed_link, None, "INR"),
+        "retired": (escalated, 1600, retired_link, None, "INR"),
+        "no_link": (escalated, 3200, None, None, "INR"),
+        "usd": (escalated, 6400, open_link, None, "USD"),
+        "deciding": (escalated, 12800, open_link, None, "INR"),
+    }
+    # The open link was issued before UTC midnight; the lapsed, retired and link-less ones were touched today.
+    touched_today = {"lapsed", "retired", "no_link"}
+    ids = {name: f"chk_{name}_{uuid.uuid4().hex[:8]}" for name in sessions}
+    for name, (status, amount, handoff, completed_at, currency) in sessions.items():
+        state: dict[str, Any] = {"totals": [{"type": "total", "amount": amount}]}
+        if handoff is not None:
+            state["handoff"] = handoff
+        await _exec(
+            db,
+            "INSERT INTO commerce_checkout_sessions (id, tenant_id, merchant_id, seller_agent_id, serving_host, "
+            "ucp_version, status, currency, state, revision, order_id, expires_at, created_at, updated_at, "
+            "completed_at) VALUES (:id, :t, :m, :s, 'h.example', '2026-04-08', :status, :currency, "
+            "CAST(:state AS jsonb), 1, :order_id, :exp, :created, :updated, :completed_at)",
+            id=ids[name],
+            t=uuid.UUID(tenant),
+            m=merchant.merchant_id,
+            s=merchant.seller_agent_id,
+            status=status,
+            currency=currency,
+            state=json.dumps(state),
+            order_id=f"ord_{name}" if status == "completed" else None,
+            exp=now + timedelta(hours=1),
+            created=midnight - timedelta(hours=2),
+            updated=now if name in touched_today else completed_at or midnight - timedelta(hours=2),
+            completed_at=completed_at,
+        )
+    async with get_tenant_session(uuid.UUID(tenant)) as session:
+        committed = await handlers.daily_committed_minor_units(
+            session,
+            tenant_id=uuid.UUID(tenant),
+            merchant=merchant,
+            currency="INR",
+            exclude_session_id=ids["deciding"],
+            now=now,
+        )
+    # Paid today plus the one link still open (issued yesterday); nothing else.
+    assert committed == 100 + 400
+
 
 @pytest.mark.asyncio
 async def test_shopify_handoff_refuses_without_a_connected_store_or_artifacts(db, executor, monkeypatch):

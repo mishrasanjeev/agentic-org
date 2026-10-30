@@ -1779,20 +1779,29 @@ DAILY_COMMITTED_SCAN_LIMIT = 2000
 async def daily_committed_minor_units(
     session: Any, *, tenant_id: Any, merchant: MerchantUcp, currency: str | None, exclude_session_id: str, now: datetime
 ) -> int:
-    """The merchant's checkouts committed today (UTC) in ``currency``, for the arbiter's daily cap.
+    """The merchant's money committed in ``currency``, for the arbiter's daily cap.
 
-    Committed means paid (``completed`` today) or handed to the buyer's payment page and still open
-    (``requires_escalation``, updated today): a link out counts against the cap until it lapses.
+    Committed means paid today (UTC: ``completed_at`` today) or a payment link that is still open
+    now, whatever day it was issued: a ``requires_escalation`` checkout whose hand-off is
+    ``issued`` and whose link ``expires_at`` is still ahead (``payment_handoff.active_handoff``).
+    A lapsed or retired link counts for nothing, even on the day it was issued.
+
+    A link never outlives its checkout: the Shopify cart link expires with the session
+    (``row.expires_at``) and a Plural link at ``min(issued + PLURAL_LINK_TTL, row.expires_at)``.
+    So an open link needs ``expires_at > now`` on the row too, which keeps the scan to sessions
+    created within the longest checkout TTL (24 hours, ``merchant.checkout_ttl_seconds``) and on
+    ``ix_commerce_checkout_sessions_status`` (tenant, status, expires_at).
     The checkout being decided is left out; the arbiter adds its own amount.
     """
     from sqlalchemy import or_
 
+    from core.commerce.payment_handoff import active_handoff
     from core.models.commerce_ucp import CommerceCheckoutSessionRow as Row
 
     day_start = now.astimezone(UTC).replace(hour=0, minute=0, second=0, microsecond=0)
     rows = (
         await session.execute(
-            select(Row.state)
+            select(Row.status, Row.state)
             .where(
                 Row.tenant_id == tenant_id,
                 Row.merchant_id == merchant.merchant_id,
@@ -1800,14 +1809,16 @@ async def daily_committed_minor_units(
                 Row.id != exclude_session_id,
                 or_(
                     Row.completed_at >= day_start,
-                    (Row.status == "requires_escalation") & (Row.updated_at >= day_start),
+                    (Row.status == "requires_escalation") & (Row.expires_at > now),
                 ),
             )
             .limit(DAILY_COMMITTED_SCAN_LIMIT)
         )
-    ).scalars()
+    ).all()
     committed = 0
-    for state in rows:
+    for status, state in rows:
+        if status == "requires_escalation" and active_handoff(state or {}, now) is None:
+            continue
         for line in (state or {}).get("totals") or []:
             if isinstance(line, Mapping) and line.get("type") == "total":
                 try:
