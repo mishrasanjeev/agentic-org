@@ -466,9 +466,18 @@ async def apply_webhook(
 
 
 async def refresh_handoff(
-    *, tenant_id: str, session_row: Any, source: str, transport_factory: TransportFactory | None = None
+    *,
+    tenant_id: str,
+    session_row: Any,
+    source: str,
+    transport_factory: TransportFactory | None = None,
+    report_untouched: bool = False,
 ) -> str:
-    """Ask Plural for the current hand-off order of one session and apply it (the poll and the return page)."""
+    """Ask Plural for the current hand-off order of one session and apply it (the poll and the return page).
+
+    With ``report_untouched``, an order nobody has started to pay (``CREATED``) answers
+    ``not_attempted`` instead of ``pending``.
+    """
     from core.commerce.ucp.handlers import confirm_handoff_payment
     from core.database import get_tenant_session
 
@@ -506,6 +515,8 @@ async def refresh_handoff(
         event_id=None,
         now=datetime.now(UTC),
     )
+    if report_untouched and result == "pending" and outcome.status == "CREATED":
+        return "not_attempted"
     return result
 
 

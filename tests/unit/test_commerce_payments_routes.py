@@ -819,13 +819,28 @@ async def test_a_waiting_checkout_asks_plural_and_shows_the_fresh_status(db, ref
     db.execute_results = [waiting, _session_row("completed", order_id="ord_7")]
     async with _client() as client:
         response = await client.get(RETURN)
-    assert refresh == [{"tenant_id": str(TENANT), "session_row": waiting, "source": "return"}]
+    assert refresh == [{"tenant_id": str(TENANT), "session_row": waiting, "source": "return", "report_untouched": True}]
     assert "Payment received" in response.text and "ord_7" in response.text
     assert db.opened == [TENANT, TENANT]
 
 
+@pytest.mark.parametrize(
+    ("current_link", "title"),
+    [
+        ("link_retired", "Payment not completed"),
+        ("not_attempted", "Payment not completed"),
+        ("pending", "Confirming your payment"),
+        ("status_unavailable", "Confirming your payment"),
+    ],
+)
 @pytest.mark.asyncio
-async def test_a_declined_payment_on_the_newest_link_is_shown_even_while_an_earlier_link_waits(db, refresh):
+async def test_a_declined_payment_on_the_newest_link_is_shown_even_while_an_earlier_link_waits(
+    db, monkeypatch, current_link, title
+):
+    async def refresh_handoff(**kwargs):
+        return current_link
+
+    monkeypatch.setattr(plural_hosted, "refresh_handoff", refresh_handoff)
     # The buyer was declined on link B; link A, issued earlier and still payable, is the checkout's link again.
     state = {
         "handoff": {"mode": "plural_hosted", "status": "issued", "reference": "ref_a"},
@@ -838,7 +853,7 @@ async def test_a_declined_payment_on_the_newest_link_is_shown_even_while_an_earl
     db.execute_results = [_session_row("requires_escalation", state=state)] * 2
     async with _client() as client:
         response = await client.get(RETURN)
-    assert "Payment not completed" in response.text and "ask for a new payment link" in response.text
+    assert f"<title>{title}</title>" in response.text
     _assert_private_page(response)
 
 
