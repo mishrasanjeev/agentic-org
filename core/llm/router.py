@@ -33,7 +33,9 @@ Hard cap (``AGENTICORG_GEMINI_DAILY_USD_CAP``, default ``10.0``):
   every priced router call is recorded in ``llm_daily_spend`` and the cap
   sums that instead. Agent runs on the LangGraph runtime do not pass
   through this router; their spend is in ``agent_cost_ledger`` and is not
-  part of this cap.
+  part of this cap. A check without a tenant applies this cap to the
+  platform-wide total, except the Telegram shopper, which with the flag on
+  is held to ``AGENTICORG_GEMINI_PLATFORM_DAILY_USD_CAP`` only.
 """
 
 from __future__ import annotations
@@ -482,6 +484,18 @@ async def assert_under_gemini_cap(estimated_cost_usd: float = 0.0, tenant_id: st
                 f"${cap:.2f}/day. Set AGENTICORG_GEMINI_DAILY_USD_CAP higher "
                 "or wait for the UTC day to roll over."
             )
+    await assert_under_gemini_platform_cap(estimated_cost_usd)
+
+
+async def assert_under_gemini_platform_cap(estimated_cost_usd: float = 0.0) -> None:
+    """Refuse the call when today's platform-wide spend + estimate would exceed
+    ``AGENTICORG_GEMINI_PLATFORM_DAILY_USD_CAP``.
+
+    For a caller that belongs to no tenant and should not be held to the
+    per-tenant cap: the Telegram shopper uses it while
+    ``AGENTICORG_RECORDED_SPEND_CONTROLS_ENABLED`` is on. Fails closed like
+    :func:`assert_under_gemini_cap`. Set the cap to ``0`` to disable it.
+    """
     platform_cap = _gemini_platform_daily_cap_usd()
     if platform_cap > 0:
         platform_spent = await _todays_gemini_spend_usd()
