@@ -66,7 +66,7 @@ dnspython==2.9.0
 twilio==9.12.0
 # Billing checkout SDK. Required in the production API image whenever
 # STRIPE_SECRET_KEY and Stripe price IDs are configured.
-stripe==15.6.1
+stripe==15.6.2
 
 # ─── LLM Providers ──────────────────────────────────────────────────────────
 google-genai==2.33.0
