@@ -16,15 +16,15 @@ Text is split into lines on "\\n" alone, as git splits a diff; nothing else
 (not "\\r", "\\f" or U+2028) ends a line. A line that is not UTF-8 is also read
 without its NUL bytes and, if it holds no other control bytes, as Windows-1252
 (see ``line_texts``). Every file the change adds or changes is read by object
-id. One in UTF-16 or UTF-32 (with a byte-order mark, or NUL bytes where they
-fall in that encoding) is decoded and checked line by line, whether git diffs
-it as text or calls it binary. Any other binary file - one git's diff calls
+id. One in UTF-16 or UTF-32 (with a byte-order mark, or mostly ASCII text with
+NUL bytes where they fall in that encoding) is decoded and checked line by
+line, whether git diffs it as text or calls it binary. Any other binary file - one git's diff calls
 binary, judged with the base commit's attributes so a change cannot reclassify
 its own files - is checked line by line when it is text apart from its NUL
 bytes and a few odd bytes, and otherwise for the runs of readable text inside
 it, where video and image metadata keep names; there, a term shorter than five
-characters counts only as a word of prose, as random bytes spell short terms
-by chance inside other words (see ``_RUN_MIN_CHARS`` and
+characters counts only as a whole word beside other words, as random bytes
+spell short terms by chance inside other words (see ``_RUN_MIN_CHARS`` and
 ``Report.check_file``). ``audit`` reads every file the same way. This needs
 git 2.40 or later (``--attr-source``).
 
@@ -144,9 +144,10 @@ def tokens(text: str) -> list[str]:
 
 # Characters a token is made of; a token with none of these on either side is a whole word.
 _WORD_CHARS = frozenset("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789")
-# The length of the other word a run of binary data must hold for a short term in it to count.
+# The length of the other words a run of binary data must hold for a short term in it to count.
 _PROSE_WORD_CHARS = 3
-_WHITESPACE = re.compile(r"\s")
+# How many such words the run must hold when no whitespace is beside the short term, as for a value in markup.
+_MARKUP_OTHER_WORDS = 2
 
 
 def _letter_word(token: str) -> bool:
@@ -154,18 +155,21 @@ def _letter_word(token: str) -> bool:
 
 
 def _prose_word(text: str, start: int, end: int, *, others: int) -> bool:
-    """Whether the token at ``text[start:end]`` stands as a word of prose.
+    """Whether the token at ``text[start:end]`` stands as a word among other words.
 
-    It must be a whole word (no letter or digit on either side) with whitespace
-    right before or after it, and ``text`` must hold at least one other word
-    of ``_PROSE_WORD_CHARS`` or more letters (``others``): "Encoded with Xyzw
-    Studio", not "q;Xyzw/7". See ``_RUN_MIN_CHARS`` for why.
+    It must be a whole word (no letter or digit on either side), and ``text``
+    must hold other words of ``_PROSE_WORD_CHARS`` or more letters
+    (``others``): one when whitespace is right before or after it ("Encoded
+    with Xyzw Studio"), and ``_MARKUP_OTHER_WORDS`` when only punctuation
+    bounds it, as it does a value in markup ("<xmp:CreatorTool>Xyzw</xmp:
+    CreatorTool>", "/Producer (Xyzw) /Title (Demo)"). Not "q;Xyzw/7", and
+    not a value with no words beside it. See ``_RUN_MIN_CHARS`` for why.
     """
     before = text[start - 1] if start else ""
     after = text[end] if end < len(text) else ""
-    return (
-        others > 0 and before not in _WORD_CHARS and after not in _WORD_CHARS and (before.isspace() or after.isspace())
-    )
+    if before in _WORD_CHARS or after in _WORD_CHARS:
+        return False
+    return others >= (1 if before.isspace() or after.isspace() else _MARKUP_OTHER_WORDS)
 
 
 def candidates(text: str, max_tokens: int) -> Iterator[tuple[int, str]]:
@@ -219,7 +223,7 @@ class Denylist:
         for start, key in _joined(words, self.max_tokens):
             if (not found or found[-1] != start) and len(key) >= min_chars and digest(self.salt, key) in self.hashes:
                 found.append(start)
-        if min_chars > 1 and _WHITESPACE.search(normalised):
+        if min_chars > 1 and len(words) > 1:  # a short term counts only beside another word
             hits = [
                 i for i, word in enumerate(words) if len(word) < min_chars and digest(self.salt, word) in self.hashes
             ]
@@ -395,6 +399,12 @@ _WIDE_BOMS = (
 # almost all text.
 _WIDE_NUL_SHARE = 0.1
 _WIDE_MAX_NON_TEXT = 0.02
+# Without a byte-order mark, a decoding counts only when at least this share of
+# its characters is ASCII text. Such text is found by the NULs of its ASCII
+# characters; an array of 16- or 32-bit numbers below 65,536 has the same NULs,
+# but its characters fall all over Unicode.
+_WIDE_GUESS_MIN_ASCII = 0.5
+_ASCII_TEXT = re.compile(r"[\t\n\r\x20-\x7e]")
 # Characters text does not hold: controls other than whitespace, and code units that did not decode.
 _NON_TEXT = re.compile(r"[\x00-\x08\x0e-\x1f\x7f-\x9f\N{REPLACEMENT CHARACTER}]")
 
@@ -424,8 +434,11 @@ def _wide_text(data: bytes) -> tuple[str, str] | None:
     """(encoding name, text) when ``data`` is UTF-16 or UTF-32 text."""
     for codec, skip in _wide_codecs(data):
         text = data[skip:].decode(codec, "replace")
-        if text and _NON_TEXT.subn("", text)[1] <= len(text) * _WIDE_MAX_NON_TEXT:
-            return codec[:6].upper(), text
+        if not text or _NON_TEXT.subn("", text)[1] > len(text) * _WIDE_MAX_NON_TEXT:
+            continue
+        if not skip and _ASCII_TEXT.subn("", text)[1] < len(text) * _WIDE_GUESS_MIN_ASCII:
+            continue
+        return codec[:6].upper(), text
     return None
 
 
@@ -440,14 +453,16 @@ def _wide_text(data: bytes) -> tuple[str, str] | None:
 # once per 100 MB; a run minimum of eight still left one in 600 MB), while no
 # term of five or more characters matched at all, and neither did anything in
 # the 31 MB of videos and images in the repository's history. So in a run a
-# term shorter than five characters counts only as a word of prose
-# (``_prose_word``): a whole word, next to whitespace, in a run with another
-# word of three or more letters. 1 GB of random bytes held 14,150 whole
-# four-letter words next to whitespace, which would spell one of the two
-# committed four-character terms about once in 16 GB, and 302 that also had
-# another word beside them: about once in 750 GB. With these rules that 1 GB
-# gave no chance match of any committed term. A run shorter than five
-# characters is not read: a lone metadata value that short is too often a
+# term shorter than five characters counts only as a word among words
+# (``_prose_word``): a whole word, in a run with another word of three or more
+# letters when whitespace is next to it, or with two such words when only
+# punctuation bounds it (a value in XMP, a PDF dictionary or JSON). 1 GB of
+# random bytes held 14,179 whole four-letter words next to whitespace, which
+# would spell one of the two committed four-character terms about once in
+# 16 GB, and 326 that also had the other words these rules ask for (one of
+# them bounded only by punctuation): about once in 700 GB. With these rules
+# that 1 GB gave no chance match of any committed term. A run shorter than
+# five characters is not read: a lone metadata value that short is too often a
 # chance one.
 _RUN_MIN_CHARS = 5
 # A UTF-8 run: printable ASCII, whitespace other than "\n" (which ends a run as

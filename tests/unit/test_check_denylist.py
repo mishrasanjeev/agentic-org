@@ -654,7 +654,13 @@ def test_a_short_term_standing_as_a_word_in_binary_metadata_is_found(
         ("Encoded with Xyzw Studio", True),
         ("Title: Xyzw", True),
         ("(c) 2026 Xyzw Media Ltd", True),
-        ("q;Xyzw/7", False),  # no whitespace next to it
+        # A value in markup: punctuation bounds it, and the run holds two other words.
+        ("<xmp:CreatorTool>Xyzw</xmp:CreatorTool>", True),
+        ("/Producer (Xyzw) /Title (Merchant onboarding desk)", True),
+        ('{"encoder":"Xyzw","title":"product demo"}', True),
+        ('"encoder":"Xyzw"', False),  # punctuation only, and one other word
+        ("(Xyzw)", False),  # a value with no word beside it
+        ("q;Xyzw/7", False),  # no other word
         ("Xyzw 42", False),  # no other word
         ("XyzwStudio encoded", False),  # part of a longer word
         ("myxyzw tool", False),  # the tail of a word
@@ -666,6 +672,34 @@ def test_a_short_term_in_binary_data_counts_only_as_a_word_of_prose(run: str, co
     assert bool(short.matches(run, min_chars=dl._RUN_MIN_CHARS)) is counts
     if run != "xy zw tool":
         assert short.matches(run), "in text, every one of these is a match"
+
+
+def test_a_short_term_as_a_value_in_image_metadata_is_found(
+    repo: Path, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    short = _list_of(tmp_path, "xyzw")
+    xmp = b"<x:xmpmeta><rdf:Description><xmp:CreatorTool>Xyzw</xmp:CreatorTool></rdf:Description></x:xmpmeta>"
+    _commit_bytes(repo, {"ui/public/media/walkthrough.mp4": _mp4(xmp, payload_bytes=64 * 1024)})
+    code, out, _ = _scan(repo, short, capsys)
+    assert code == 1
+    assert "walkthrough.mp4 (binary, readable text at byte" in out
+
+
+def test_an_array_of_32_bit_numbers_is_not_read_as_utf32_text(
+    repo: Path, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    # Numbers below 65,536 have NUL high bytes, as UTF-32 text does, but decode to characters all over Unicode.
+    # Four of them here fold to the term's letters, with other numbers between them.
+    rng = random.Random(7)  # noqa: S311 - test data
+    values = [rng.randrange(3000, 55000) for _ in range(4096)]
+    values[100:107] = [0x1E8A, 4000, 0x1EF3, 4001, 0x1E91, 4002, 0x1E89]
+    data = b"".join(value.to_bytes(4, "little") for value in values)
+    assert dl._wide_codecs(data) == [("utf-32-le", 0)]
+    assert dl._wide_text(data) is None
+    short = _list_of(tmp_path, "xyzw")
+    _commit_bytes(repo, {"models/tokens.bin": data})
+    code, out, _ = _scan(repo, short, capsys)
+    assert code == 0, out
 
 
 def test_a_line_in_a_legacy_8_bit_encoding_keeps_its_accents(denylist: dl.Denylist) -> None:
