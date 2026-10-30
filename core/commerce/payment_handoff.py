@@ -237,22 +237,57 @@ def _link_holds_cap(handoff: Any, *, now: datetime, day_start: datetime) -> bool
 
 
 def holds_daily_cap(state: Mapping[str, Any], *, now: datetime, day_start: datetime) -> bool:
-    """Whether a checkout's hand-off link still counts against today's daily maximum.
+    """Whether a checkout's hand-off links still count against today's daily maximum.
 
-    A link counts while it is open, and for the whole UTC day it was issued until it is retired.
-    A lapsed link can still be paid: Shopify's cart permalink never expires and Shopify never
-    reports the payment back, and a Plural order has no expiry of its own (a late payment on it is
-    still confirmed). A Plural order being created counts as its link will, and so does the lapsed
-    link it is replacing (``handoff_previous``) until the new link is issued. A retired link counts
-    for nothing: a paid one is counted as paid, a failed one cannot be paid, and a replaced one gave
-    way to the checkout's new link.
+    A link counts while it is open, and for the whole UTC day it was issued, until it is paid or
+    fails. A lapsed link can still be paid: Shopify's cart permalink never expires and Shopify
+    never reports the payment back, and a Plural order has no expiry of its own (a late payment on
+    it is still confirmed). Every Plural link the checkout handed out stays on its reference's
+    record (``handoff_orders``) and counts from there, so a link a newer one replaced still holds
+    the cap. A Plural order being created counts as its link will. A paid link is counted as paid;
+    a failed one counts for nothing.
     """
     handoff = state.get("handoff")
     if isinstance(handoff, Mapping) and handoff.get("status") == "creating":
         return True
-    return _link_holds_cap(handoff, now=now, day_start=day_start) or _link_holds_cap(
-        state.get("handoff_previous"), now=now, day_start=day_start
+    if _link_holds_cap(handoff, now=now, day_start=day_start):
+        return True
+    orders = state.get("handoff_orders")
+    return isinstance(orders, Mapping) and any(
+        _link_holds_cap(record, now=now, day_start=day_start) for record in orders.values()
     )
+
+
+# What a Plural reference's record keeps of its issued link, so the link can be counted and brought back.
+_LINK_FIELDS = ("continue_url", "issued_at", "expires_at", "provider_order_id", "decision_id", "credential_ref")
+
+
+def payable(record: Any) -> bool:
+    """Whether a Plural reference's record is a link that can still be paid: issued, neither paid nor failed."""
+    return isinstance(record, Mapping) and record.get("status") == "issued"
+
+
+def link_record(handoff: Mapping[str, Any]) -> dict[str, Any]:
+    """An issued Plural hand-off as its reference's record keeps it: payable, with its link."""
+    return {**{key: handoff[key] for key in _LINK_FIELDS if key in handoff}, "status": "issued"}
+
+
+def remember_link(state: dict[str, Any], handoff: Mapping[str, Any]) -> None:
+    """Keep an issued Plural link on its reference's record (a link issued before records kept links)."""
+    reference = str(handoff.get("reference") or "")
+    if reference not in (state.get("handoff_refs") or []):
+        return
+    orders = dict(state.get("handoff_orders") or {})
+    orders[reference] = {**dict(orders.get(reference) or {}), **link_record(handoff)}
+    state["handoff_orders"] = orders
+
+
+def set_reference_status(state: dict[str, Any], reference: str, status: str) -> None:
+    """Mark a remembered Plural reference ``paid`` or ``failed``: its link no longer counts or locks the items."""
+    orders = dict(state.get("handoff_orders") or {})
+    if isinstance(orders.get(reference), Mapping):
+        orders[reference] = {**orders[reference], "status": status}
+        state["handoff_orders"] = orders
 
 
 def clear_handoff(state: dict[str, Any], status: str) -> None:
@@ -269,19 +304,30 @@ def clear_handoff(state: dict[str, Any], status: str) -> None:
 
 
 def retire_failed(state: dict[str, Any]) -> str:
-    """Retire the current link as failed; the checkout status that follows.
+    """Retire the current Plural link, or the order being created, as failed; the checkout status that follows.
 
-    A lapsed link the failed one was replacing (``handoff_previous``) can still be paid, so it
-    comes back and the checkout waits for that payment again (``requires_escalation``). Otherwise
-    the checkout is ready to complete again.
+    The checkout's latest other link that can still be paid becomes its link again, and the
+    checkout waits for that payment (``requires_escalation``). With none, it is ready to complete
+    again.
     """
-    previous = state.pop("handoff_previous", None)
+    current = state.get("handoff")
+    if isinstance(current, Mapping) and current.get("reference"):
+        set_reference_status(state, str(current["reference"]), "failed")
     clear_handoff(state, "failed")
-    if not isinstance(previous, Mapping) or previous.get("status") != "issued":
+    orders = state.get("handoff_orders") or {}
+    still_payable = [reference for reference in state.get("handoff_refs") or [] if payable(orders.get(reference))]
+    if not still_payable:
         return "ready_for_complete"
-    state["handoff"] = dict(previous)
-    state["continue_url"] = previous.get("continue_url")
-    state["messages"] = [*state["messages"], buyer_message(str(previous.get("mode")))]
+    reference = still_payable[-1]
+    record = orders[reference]
+    state["handoff"] = {
+        "mode": MODE_PLURAL_HOSTED,
+        **{key: record[key] for key in _LINK_FIELDS if key in record},
+        "status": "issued",
+        "reference": reference,
+    }
+    state["continue_url"] = record.get("continue_url")
+    state["messages"] = [*state["messages"], buyer_message(MODE_PLURAL_HOSTED)]
     return "requires_escalation"
 
 
@@ -315,14 +361,20 @@ def issue(
 
 
 def remember_reference(state: dict[str, Any], reference: str, record: Mapping[str, Any]) -> None:
-    """Keep every Plural reference of the session (a late payment on an older link must still match)."""
+    """Keep every Plural reference of the session (a late payment on an older link must still match).
+
+    Past ``MAX_REFERENCES`` the oldest are dropped, but never a reference whose link can still be
+    paid (``payable``), nor the one just remembered.
+    """
     refs = [r for r in state.get("handoff_refs") or [] if r != reference]
     refs.append(reference)
     orders = dict(state.get("handoff_orders") or {})
     orders[reference] = {**dict(orders.get(reference) or {}), **dict(record)}
-    for stale in refs[:-MAX_REFERENCES]:
+    droppable = [r for r in refs[:-1] if not payable(orders.get(r))]
+    for stale in droppable[: max(len(refs) - MAX_REFERENCES, 0)]:
+        refs.remove(stale)
         orders.pop(stale, None)
-    state["handoff_refs"] = refs[-MAX_REFERENCES:]
+    state["handoff_refs"] = refs
     state["handoff_orders"] = orders
 
 

@@ -561,7 +561,7 @@ async def release_stale_reservations(tenant_id: str, *, now: datetime | None = N
 
     The reference stays remembered, so a payment on an order that was created
     after all still finds its session (and is held to the amount it asked for).
-    A lapsed link the order was replacing comes back (``payment_handoff.retire_failed``),
+    An earlier link that can still be paid comes back (``payment_handoff.retire_failed``),
     and the checkout waits for that payment again.
     """
     from core.commerce import payment_handoff as ph

@@ -55,10 +55,11 @@ evaluates two rules:
   payment or was canceled (`payment_handoff.holds_daily_cap`). A lapsed link still
   counts on its issue day, because the buyer can still pay it: a Shopify cart link
   never expires and Shopify never reports the payment, and a Plural order has no
-  expiry of its own. A Plural order being created counts, and so does the lapsed
-  link it replaces until the new link is issued. A link stops counting when it is
-  paid (the checkout then counts as paid), when Plural reports the payment failed,
-  or when a new link replaces it. The checkout being decided adds its own total.
+  expiry of its own. Every Plural link the checkout handed out keeps its record
+  (`handoff_orders`), so a link a newer one replaced still counts, and a Plural
+  order being created counts too. A link stops counting when its payment becomes
+  an order (the checkout then counts as paid) or when Plural reports the payment
+  failed. The checkout being decided adds its own total.
 
 `buyer_authority_verified`, `mandate_present_unexpired`, `consent_active` and
 `passport_amount_cap` are not evaluated. The agent moves no money and holds no
@@ -122,10 +123,12 @@ Plural answers `order_id`, `redirect_url`, `token` and `response_code`; the
 `redirect_url` is the buyer's link. The order is created outside any database
 transaction and never retried. While it is being created the session is
 `complete_in_progress`; a reservation that never finishes is released by the
-poll after five minutes. When the order was to replace a lapsed link, that link
-(kept as `handoff_previous`) comes back, whether the order failed or was never
-finished. While a payment link is out, Plural or Shopify, the checkout cannot be
-updated (409); cancel it and open a new one to change it.
+poll after five minutes. Every issued Plural link stays payable on its record
+until Plural reports it paid or failed, and its reference is never dropped while
+it is. When a new order fails or is never finished, or Plural reports the current
+link failed, the latest earlier link that can still be paid becomes the
+checkout's link again. While a payment link is out, Plural or Shopify, the
+checkout cannot be updated (409); cancel it and open a new one to change it.
 
 Confirmation:
 
@@ -153,8 +156,8 @@ creates the order (as an executed Complete would: the order entity with
 another amount, on a canceled checkout or for a checkout that changed is
 refused and logged as `plural_hosted_payment_unmatched`, so the merchant can
 refund it in Plural. `FAILED`, `CANCELLED` and the like retire the link; the
-next Complete issues a new one. On a canceled checkout they retire the link too,
-and the checkout stays canceled. `AUTHORIZED` is not money received and stays
+next Complete issues a new one, unless an earlier link can still be paid. On a
+canceled checkout they retire the link too, and the checkout stays canceled. `AUTHORIZED` is not money received and stays
 pending.
 
 ## The merchant gets the order

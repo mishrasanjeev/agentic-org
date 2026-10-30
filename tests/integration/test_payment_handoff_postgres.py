@@ -28,6 +28,7 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from sqlalchemy.pool import NullPool
 
 from core.commerce import executors, plural_hosted
+from core.commerce import payment_handoff as ph
 from core.commerce.executors.plural import PluralWebhookError
 from core.commerce.ucp import handlers
 from core.commerce.ucp.catalog import ucp_variant_id
@@ -928,7 +929,7 @@ async def test_a_lapsed_plural_link_keeps_its_place_when_a_fresh_one_cannot_be_o
     assert failed.body["status"] == "requires_escalation", failed.body
     assert failed.body["messages"][-1]["code"] == "payment_link_refused"
     status, state = await _state_of(db, first["id"])
-    assert status == "requires_escalation" and "handoff_previous" not in state
+    assert status == "requires_escalation"
     assert state["handoff"]["status"] == "issued" and state["handoff"]["reference"] == reference_a
     # A still locks the checkout's items and holds the daily maximum.
     changed = await handlers.run(
@@ -944,11 +945,35 @@ async def test_a_lapsed_plural_link_keeps_its_place_when_a_fresh_one_cannot_be_o
     assert refused.body.get("status") != "requires_escalation", refused.body
     assert "daily_amount_cap_exceeded" in json.dumps(refused.body)
 
-    # Plural opens the fresh link B: A gives way to it, and a late payment on A still completes the order.
+    # Plural opens the fresh link B. A stays on record and can still be paid.
     fresh = await _complete(runtime, tenant, first["id"])
     assert fresh.body["status"] == "requires_escalation" and fresh.body["continue_url"] != done.body["continue_url"]
     status, state = await _state_of(db, first["id"])
-    assert state["handoff"]["reference"] != reference_a and "handoff_previous" not in state
+    reference_b = state["handoff"]["reference"]
+    assert reference_b != reference_a and state["handoff_orders"][reference_a]["status"] == "issued"
+
+    # Plural reports B failed: A comes back, and still holds the daily maximum.
+    hosted.status = "FAILED"
+    b_failed = _event("v1-hosted-2", reference_b, "FAILED", None)
+    result = await plural_hosted.apply_webhook(
+        tenant_id=tenant,
+        webhook_key=stored.webhook_key,
+        raw_body=b_failed,
+        headers=_signed(b_failed, webhook_id="wh_b_failed"),
+    )
+    assert result["result"] == "link_retired", result
+    status, state = await _state_of(db, first["id"])
+    assert status == "requires_escalation" and state["handoff"]["reference"] == reference_a
+    still_refused = await _complete(runtime, tenant, second["id"])
+    assert "daily_amount_cap_exceeded" in json.dumps(still_refused.body)
+
+    # However many fresh links fail, A stays on record, and a late payment on it still completes the order.
+    hosted.order_http_status = 503
+    for _ in range(ph.MAX_REFERENCES + 1):
+        again = await _complete(runtime, tenant, first["id"])
+        assert again.body["status"] == "requires_escalation", again.body
+    status, state = await _state_of(db, first["id"])
+    assert reference_a in state["handoff_refs"] and state["handoff"]["reference"] == reference_a
     late = _event("v1-hosted-1", reference_a, "PROCESSED", total)
     result = await plural_hosted.apply_webhook(
         tenant_id=tenant, webhook_key=stored.webhook_key, raw_body=late, headers=_signed(late, webhook_id="wh_late")
@@ -1013,20 +1038,20 @@ async def test_stale_reservation_is_released(db, monkeypatch):
         exp=datetime.now(UTC) + timedelta(hours=1),
         old=old,
     )
-    # A re-issue that never finished: the lapsed link it was replacing comes back.
-    lapsed_link = {
-        "mode": "plural_hosted",
+    # A re-issue that never finished: the earlier link, which can still be paid, comes back.
+    link_a = {
         "status": "issued",
-        "reference": "aoh-a",
         "continue_url": "https://pay.plural.example/checkout?token=a",
         "issued_at": "2026-10-30T09:00:00Z",
         "expires_at": "2026-10-30T09:30:00Z",
+        "provider_order_id": "v1-a",
+        "credential_ref": "commerce_plural_x",
     }
     reissue_id = f"chk_{uuid.uuid4().hex}"
     reissue_state = {
         "handoff": {"mode": "plural_hosted", "status": "creating", "reference": "aoh-b"},
-        "handoff_previous": lapsed_link,
         "handoff_refs": ["aoh-a", "aoh-b"],
+        "handoff_orders": {"aoh-a": link_a, "aoh-b": {"amount": 100}},
         "messages": [],
     }
     await _exec(
@@ -1046,8 +1071,10 @@ async def test_stale_reservation_is_released(db, monkeypatch):
     assert row["status"] == "ready_for_complete" and row["state"]["handoff"]["status"] == "failed"
     assert row["state"]["handoff_refs"] == ["aoh-x"]
     row = (await _rows(db, "SELECT status, state FROM commerce_checkout_sessions WHERE id = :i", i=reissue_id))[0]
-    assert row["status"] == "requires_escalation" and row["state"]["handoff"] == lapsed_link
-    assert "handoff_previous" not in row["state"] and row["state"]["continue_url"] == lapsed_link["continue_url"]
+    assert row["status"] == "requires_escalation"
+    assert row["state"]["handoff"] == {"mode": "plural_hosted", "reference": "aoh-a", **link_a}
+    assert row["state"]["continue_url"] == link_a["continue_url"]
+    assert row["state"]["handoff_orders"]["aoh-b"]["status"] == "failed"
 
 
 # --- the merchant gets the order -------------------------------------------------------------------

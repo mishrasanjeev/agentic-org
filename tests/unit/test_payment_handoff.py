@@ -188,26 +188,28 @@ def test_a_link_holds_the_daily_cap_while_open_and_all_the_day_it_was_issued(mod
     assert not ph.holds_daily_cap(_state(), now=issued, day_start=day_start)
 
 
-def test_a_plural_order_being_created_and_the_lapsed_link_it_replaces_hold_the_daily_cap() -> None:
+def test_a_plural_order_being_created_and_every_payable_link_on_record_hold_the_daily_cap() -> None:
     day_start = datetime(2026, 10, 30, tzinfo=UTC)
     issued = day_start + timedelta(hours=9)
+    later = issued + timedelta(hours=1)
     state = _state()
     state["handoff"] = {"mode": "plural_hosted", "status": "creating", "reference": "aoh-b"}
     assert ph.holds_daily_cap(state, now=issued, day_start=day_start)
-    # A lapsed link it replaces counts for the day it was issued, until the new link is issued.
-    state["handoff"] = {"mode": "plural_hosted", "status": "expired", "reference": "aoh-b"}
-    assert not ph.holds_daily_cap(state, now=issued + timedelta(hours=1), day_start=day_start)
-    state["handoff_previous"] = {
-        "mode": "plural_hosted",
-        "status": "issued",
-        "reference": "aoh-a",
+    # The current link failed, but an earlier one on record can still be paid: it counts on its issue day.
+    state["handoff"] = {"mode": "plural_hosted", "status": "failed", "reference": "aoh-b"}
+    assert not ph.holds_daily_cap(state, now=later, day_start=day_start)
+    link_a = {
+        "continue_url": "https://pay.plural.example/a",
         "issued_at": ph.iso(issued),
         "expires_at": ph.iso(issued + timedelta(minutes=30)),
     }
-    assert ph.holds_daily_cap(state, now=issued + timedelta(hours=1), day_start=day_start)
-    assert not ph.holds_daily_cap(
-        state, now=day_start + timedelta(days=1, hours=1), day_start=day_start + timedelta(days=1)
-    )
+    state["handoff_orders"] = {"aoh-a": ph.link_record(link_a), "aoh-b": {"status": "failed"}}
+    assert ph.holds_daily_cap(state, now=later, day_start=day_start)
+    tomorrow = day_start + timedelta(days=1)
+    assert not ph.holds_daily_cap(state, now=tomorrow + timedelta(hours=1), day_start=tomorrow)
+    for retired in ("paid", "failed"):
+        ph.set_reference_status(state, "aoh-a", retired)
+        assert not ph.holds_daily_cap(state, now=later, day_start=day_start)
 
 
 def test_clearing_a_link_replaces_its_record_instead_of_changing_the_stored_one() -> None:
@@ -228,9 +230,11 @@ def test_clearing_a_link_replaces_its_record_instead_of_changing_the_stored_one(
     assert stored["handoff"]["status"] == "issued" and copy != stored
 
 
-def test_a_failed_link_puts_back_the_lapsed_link_it_was_replacing() -> None:
+def test_a_failed_link_brings_back_the_latest_earlier_link_that_can_still_be_paid() -> None:
     now = datetime.now(UTC)
     state = _state()
+    ph.remember_reference(state, "aoh-a", {"decision_id": "arbdec_a", "amount": 2500})
+    state["handoff"] = {"mode": "plural_hosted", "status": "creating", "reference": "aoh-a", "decision_id": "arbdec_a"}
     ph.issue(
         state,
         mode="plural_hosted",
@@ -238,18 +242,36 @@ def test_a_failed_link_puts_back_the_lapsed_link_it_was_replacing() -> None:
         decision_id="arbdec_a",
         now=now - timedelta(hours=1),
         expires_at=now - timedelta(minutes=30),
+        extra={"provider_order_id": "v1-a"},
     )
-    lapsed = dict(state["handoff"])
+    ph.remember_reference(state, "aoh-a", ph.link_record(state["handoff"]))
+    issued_a = dict(state["handoff"])
+    # The re-issue: A lapsed, keeps its record, and the order for B is being created.
+    ph.remember_link(state, state["handoff"])
     ph.clear_handoff(state, "expired")
-    state["handoff_previous"] = lapsed
     state["handoff"] = {"mode": "plural_hosted", "status": "creating", "reference": "aoh-b"}
+    ph.remember_reference(state, "aoh-b", {"decision_id": "arbdec_b", "amount": 2500})
     assert ph.retire_failed(state) == "requires_escalation"
-    assert state["handoff"] == lapsed and "handoff_previous" not in state
+    assert state["handoff"] == issued_a
     assert state["continue_url"] == "https://pay.plural.example/a"
     assert [m["code"] for m in state["messages"]] == [ph.MESSAGE_CODE]
-    # With nothing to put back, the checkout is ready to complete again.
+    assert state["handoff_orders"]["aoh-b"]["status"] == "failed" and ph.payable(state["handoff_orders"]["aoh-a"])
+    # When A fails too, nothing can be paid: the checkout is ready to complete again.
     assert ph.retire_failed(state) == "ready_for_complete"
     assert state["handoff"]["status"] == "failed" and "continue_url" not in state and state["messages"] == []
+    assert not ph.payable(state["handoff_orders"]["aoh-a"])
+
+
+def test_a_reference_whose_link_can_still_be_paid_is_never_dropped() -> None:
+    state = _state()
+    ph.remember_reference(state, "aoh-a", {**ph.link_record({"continue_url": "https://pay.plural.example/a"})})
+    for attempt in range(ph.MAX_REFERENCES + 5):
+        ph.remember_reference(state, f"aoh-b{attempt}", {"decision_id": f"arbdec_{attempt}"})
+        ph.set_reference_status(state, f"aoh-b{attempt}", "failed")
+    assert "aoh-a" in state["handoff_refs"] and ph.payable(state["handoff_orders"]["aoh-a"])
+    assert len(state["handoff_refs"]) == ph.MAX_REFERENCES
+    assert state["handoff_refs"][-1] == f"aoh-b{ph.MAX_REFERENCES + 4}"
+    assert set(state["handoff_orders"]) == set(state["handoff_refs"])
 
 
 def test_references_and_events_are_bounded_and_deduplicated() -> None:
