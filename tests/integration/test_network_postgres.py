@@ -31,10 +31,12 @@ pytestmark = pytest.mark.asyncio
 
 
 @pytest.fixture()
-def network(firebase, monkeypatch):
+async def network(db, firebase, monkeypatch):
     monkeypatch.setattr(settings, "network_enabled", True)
     monkeypatch.setattr(settings, "platform_subdomain_apex", "shops.example")
-    monkeypatch.setattr(settings, "platform_subdomain_cap", 20)
+    # The cap counts platform subdomains across every tenant, and the shared test database keeps the ones
+    # earlier runs claimed: leave room above them, so only the cap test (which sets its own) meets the cap.
+    monkeypatch.setattr(settings, "platform_subdomain_cap", await net.platform_subdomains_in_use() + 20)
     monkeypatch.setattr(settings, "network_telegram_bot_username", "ExampleShopBot")
     net.reset_directory_cache()
     yield firebase
