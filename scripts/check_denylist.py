@@ -18,15 +18,16 @@ without its NUL bytes and, if it holds no other control bytes, as Windows-1252
 (see ``line_texts``). Every file the change adds or changes is read by object
 id. One in UTF-16 or UTF-32 (with a byte-order mark, or text with NUL bytes
 where they fall in that encoding) is decoded and checked line by line, whether
-git diffs it as text or calls it binary. Any other binary file - one git's diff calls
-binary, judged with the base commit's attributes so a change cannot reclassify
-its own files - is checked line by line when it is text apart from its NUL
-bytes and a few odd bytes, and otherwise for the runs of readable text inside
-it, where video and image metadata keep names; there, a term shorter than five
-characters counts only as a whole word beside other words, as random bytes
-spell short terms by chance inside other words (see ``_RUN_MIN_CHARS`` and
-``Report.check_file``). ``audit`` reads every file the same way. This needs
-git 2.40 or later (``--attr-source``).
+git diffs it as text or calls it binary; without a byte-order mark, text that
+is not mostly ASCII is checked in its stretches of ASCII text. Any other binary
+file - one git's diff calls binary, judged with the base commit's attributes so
+a change cannot reclassify its own files - is checked line by line when it is
+text apart from its NUL bytes and a few odd bytes, and otherwise for the runs
+of readable text inside it, where video and image metadata keep names; there, a
+term shorter than five characters counts only as a whole word beside other
+words, as random bytes spell short terms by chance inside other words (see
+``_RUN_MIN_CHARS`` and ``Report.check_file``). ``audit`` reads every file the
+same way. This needs git 2.40 or later (``--attr-source``).
 
 Each input is split into word tokens - on punctuation, whitespace, digit
 boundaries and camelCase - and every run of consecutive tokens, up to ``max-tokens`` plus a
@@ -65,6 +66,7 @@ from __future__ import annotations
 
 import argparse
 import contextlib
+import functools
 import hashlib
 import heapq
 import itertools
@@ -399,29 +401,21 @@ _WIDE_BOMS = (
 # almost all text.
 _WIDE_NUL_SHARE = 0.1
 _WIDE_MAX_NON_TEXT = 0.02
-# Without a byte-order mark the encoding is a guess, and a decoding counts only
-# when it reads as text (``_reads_as_text``): half its characters ASCII text, or
-# else one in a hundred a separator (a space, a line end, or the punctuation
-# that ends words and sentences in CJK, Hindi and Arabic text) with under one in
-# ten of its other characters folding to an ASCII letter or digit. Prose in
-# Russian, Greek, Hindi, Arabic, Thai, Korean, Japanese and Chinese, long lines
-# and katakana-heavy text included, had 5% to 23% separators and no folding
-# letters. An array of 16- or 32-bit numbers below 65,536 has the NULs of such
-# text but rarely its shape: of uniform arrays from 16 ranges between 0 and
-# 65,535, only values inside the CJK punctuation block passed, and those fold to
-# no letter; arrays of BPE token ids have spaces and line ends, but 18% to 24% of
-# their other characters fold to letters.
+# Without a byte-order mark the encoding is a guess. A decoding that is at least
+# half ASCII text is checked as text. Any other is checked in stretches of ASCII
+# text (``_ascii_stretches``): a term counts only when written in ASCII letters,
+# with spaces or punctuation between its words, never across another character.
+# A name in Russian, Japanese or Chinese text is written so, however the text
+# around it is punctuated. An array of 16- or 32-bit numbers below 65,536 has the
+# NULs of such text, but decodes to characters all over Unicode with few ASCII
+# letters among them, so letters no longer join into a term by chance (accented
+# Latin letters from small numbers and token ids did). With 2,000 invented
+# four-letter terms, arrays of 65,536 numbers (uniform, in one range of accented
+# or fullwidth letters, or token ids) gave up to 53 chance matches read as text,
+# and none read by stretches. The cost: in such text, a name written in accented
+# or fullwidth letters is not found.
 _WIDE_GUESS_MIN_ASCII = 0.5
-_WIDE_GUESS_MIN_SEPARATORS = 0.01
-_WIDE_GUESS_MAX_FOLDING = 0.1
-_WIDE_GUESS_SAMPLE = 20_000  # the characters the separator and folding counts look at
 _ASCII_TEXT = re.compile(r"[\t\n\r\x20-\x7e]")
-_SEPARATORS = frozenset(
-    " \t\n\u00a0\u3000"  # spaces and line ends (a lone CR is not one)
-    "\u3001\u3002\u3008\u3009\u300a\u300b\u300c\u300d\u300e\u300f\u3010\u3011\u3014\u3015"  # CJK
-    "\uff01\uff08\uff09\uff0c\uff0e\uff1a\uff1b\uff1f\uff3b\uff3d\uff5b\uff5d\uff5e"  # fullwidth
-    "\u2018\u2019\u201c\u201d\u2014\u2026\u00b7\u0964\u060c"  # quotes, dashes, danda, Arabic comma
-)
 # Characters text does not hold: controls other than whitespace, and code units that did not decode.
 _NON_TEXT = re.compile(r"[\x00-\x08\x0e-\x1f\x7f-\x9f\N{REPLACEMENT CHARACTER}]")
 
@@ -447,32 +441,38 @@ def _wide_codecs(data: bytes) -> list[tuple[str, int]]:
     return [(codec, 0) for codec, high, low in guesses if mostly_nul(high, low)]
 
 
-def _folds_to_letter(ch: str) -> bool:
-    """Whether a character reads as an ASCII letter or digit once accents are stripped ("ā", "Ａ", "①")."""
-    decomposed = unicodedata.normalize("NFKD", ch)
-    return bool(decomposed) and decomposed[0].isascii() and decomposed[0].isalnum()
+@functools.lru_cache(maxsize=65_536)
+def _ends_stretch(ch: str) -> bool:
+    """Whether a non-ASCII character ends a stretch of ASCII text: anything but a space, punctuation or a combining mark."""
+    return not (ch.isspace() or unicodedata.category(ch).startswith("P") or unicodedata.combining(ch))
 
 
-def _reads_as_text(text: str) -> bool:
-    """Whether a decoding guessed without a byte-order mark reads as text (see ``_WIDE_GUESS_MIN_ASCII``)."""
-    if _ASCII_TEXT.subn("", text)[1] >= len(text) * _WIDE_GUESS_MIN_ASCII:
-        return True
-    sample = text[:_WIDE_GUESS_SAMPLE]
-    separators = sum(1 for ch in sample if ch in _SEPARATORS)
-    others = [ch for ch in sample if ch > "\x7f"]
-    folding = sum(1 for ch in others if _folds_to_letter(ch))
-    return separators >= len(sample) * _WIDE_GUESS_MIN_SEPARATORS and folding < len(others) * _WIDE_GUESS_MAX_FOLDING
+def _ascii_stretches(line: str) -> list[str]:
+    """``line`` cut at every non-ASCII character that ends a stretch of ASCII text (``_ends_stretch``)."""
+    stretches: list[str] = []
+    start = 0
+    for index, ch in enumerate(line):
+        if ch > "\x7f" and _ends_stretch(ch):
+            if index > start:
+                stretches.append(line[start:index])
+            start = index + 1
+    if start < len(line):
+        stretches.append(line[start:])
+    return stretches
 
 
-def _wide_text(data: bytes) -> tuple[str, str] | None:
-    """(encoding name, text) when ``data`` is UTF-16 or UTF-32 text."""
+def _wide_text(data: bytes) -> tuple[str, str, bool] | None:
+    """(encoding name, text, by stretches) when ``data`` is UTF-16 or UTF-32 text.
+
+    By stretches: the encoding was guessed without a byte-order mark and the text is not mostly
+    ASCII, so it is checked in stretches of ASCII text (see ``_WIDE_GUESS_MIN_ASCII``).
+    """
     for codec, skip in _wide_codecs(data):
         text = data[skip:].decode(codec, "replace")
         if not text or _NON_TEXT.subn("", text)[1] > len(text) * _WIDE_MAX_NON_TEXT:
             continue
-        if not skip and not _reads_as_text(text):
-            continue
-        return codec[:6].upper(), text
+        by_stretches = not skip and _ASCII_TEXT.subn("", text)[1] < len(text) * _WIDE_GUESS_MIN_ASCII
+        return codec[:6].upper(), text, by_stretches
     return None
 
 
@@ -671,12 +671,33 @@ class Report:
         wide = _wide_text(data)
         if wide is None:
             return False
-        encoding, text = wide
+        encoding, text, by_stretches = wide
         label = f"binary, read as {encoding}" if b"\0" in data else f"read as {encoding}"
         for number, line in enumerate(text.split("\n"), start=1):
             readings = (line, line.replace("\0", "")) if "\0" in line else (line,)
-            self.check(f"{where}:{number} ({label})", *readings)
+            if by_stretches:
+                self.check_stretches(f"{where}:{number} ({label})", *readings)
+            else:
+                self.check(f"{where}:{number} ({label})", *readings)
         return True
+
+    def check_stretches(self, where: str, *texts: str) -> None:
+        """Check each stretch of ASCII text in each reading on its own (``_ascii_stretches``).
+
+        A word number counts the words of the stretches before it, so it is the
+        ASCII word's place in the line.
+        """
+        positions: set[int] = set()
+        for text in texts:
+            offset = 0
+            for stretch in _ascii_stretches(text):
+                positions.update(offset + position for position in self.denylist.matches(stretch))
+                offset += len(tokens(stretch))
+        self.findings.extend(Finding(where, position) for position in sorted(positions))
+        if texts:
+            self.warnings.extend(
+                TermWarning(where, match) for match in house_terms(" ".join(_ascii_stretches(texts[0])))
+            )
 
     def check_file(self, where: str, data: bytes) -> None:
         """Check a whole file's bytes: as text if they are text, otherwise the readable runs inside them.

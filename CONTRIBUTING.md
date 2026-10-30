@@ -152,18 +152,20 @@ are not a secret: with the committed salt anyone can test a guessed name. Failur
 closed when git or the hash file misbehaves.
 
 Every file a change adds or changes is also read whole. UTF-16 or UTF-32 text
-(with a byte-order mark, or text in any script with NUL bytes where that
-encoding puts them) is decoded and checked line by line, even when it holds no
-NUL byte and git diffs it as text; arrays of numbers that only look like it are
-not. Any other file git counts as binary is checked line by line when it is
-text apart from NUL bytes and a few stray bytes, and otherwise for the readable
-text inside it, such as video and image metadata; there a term shorter than
-five characters counts only as a whole word beside other words ("Encoded with
-Xyzw Studio", or a value in XMP, PDF or JSON metadata with other words around
-it), not as a value standing alone, as compressed data spells short terms by
-chance inside other words. Git's own check decides what is binary, with the `.gitattributes` of
-the base branch, so the scan needs git 2.40 or later. Commit messages are read
-as stored and in the encoding their `encoding` header names.
+(with a byte-order mark, or text with NUL bytes where that encoding puts them)
+is decoded and checked line by line, even when it holds no NUL byte and git
+diffs it as text. Without a byte-order mark, text that is not mostly ASCII is
+checked in its stretches of ASCII text, so a term there counts only when
+written in ASCII letters. Any other file git counts as binary is checked line
+by line when it is text apart from NUL bytes and a few stray bytes, and
+otherwise for the readable text inside it, such as video and image metadata;
+there a term shorter than five characters counts only as a whole word beside
+other words ("Encoded with Xyzw Studio", or a value in XMP, PDF or JSON
+metadata with other words around it), not as a value standing alone, as
+compressed data spells short terms by chance inside other words. Git's own
+check decides what is binary, with the `.gitattributes` of the base branch, so
+the scan needs git 2.40 or later. Commit messages are read as stored and in the
+encoding their `encoding` header names.
 
 ```bash
 python scripts/check_denylist.py scan --base origin/main   # this branch (also part of make check)

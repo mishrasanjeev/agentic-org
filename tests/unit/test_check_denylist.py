@@ -685,7 +685,7 @@ def test_a_short_term_as_a_value_in_image_metadata_is_found(
     assert "walkthrough.mp4 (binary, readable text at byte" in out
 
 
-def test_an_array_of_32_bit_numbers_is_not_read_as_utf32_text(
+def test_an_array_of_32_bit_numbers_gives_no_chance_match(
     repo: Path, tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
     # Numbers below 65,536 have NUL high bytes, as UTF-32 text does, but decode to characters all over Unicode.
@@ -696,7 +696,7 @@ def test_an_array_of_32_bit_numbers_is_not_read_as_utf32_text(
     assert _single("xyzw").matches(b"".join(v.to_bytes(4, "little") for v in values).decode("utf-32-le"))
     data = b"".join(value.to_bytes(4, "little") for value in values)
     assert dl._wide_codecs(data) == [("utf-32-le", 0)]
-    assert dl._wide_text(data) is None
+    assert dl._wide_text(data)[2], "not mostly ASCII: read by stretches of ASCII text"
     short = _list_of(tmp_path, "xyzw")
     _commit_bytes(repo, {"models/tokens.bin": data})
     code, out, _ = _scan(repo, short, capsys)
@@ -705,6 +705,17 @@ def test_an_array_of_32_bit_numbers_is_not_read_as_utf32_text(
 
 _PROSE_IN_ANOTHER_SCRIPT = {
     "ru": "Мы используем Xyzw для проверки документов продавца.\nКаталог обновляется каждый день.\n",
+    # A table with fullwidth digits, as Japanese business text writes addresses and phone numbers.
+    "ja-table": "顧客\t住所\t電話\r\n山田\t東京都港区１－２－３\t０３－１２３４－５６７８\tXyzw連携\r\n" * 3,
+    # Developer notes with half-width punctuation, on one long line, under half ASCII.
+    "zh-notes": "调用create_order之前,先检查商家的merchant_id是否正确.然后通过Xyzw接口同步目录和库存;"
+    "如果同步失败,请等待五分钟后重试三次." * 3,
+    # A long English preamble before the text that holds the term; under half ASCII in all.
+    "preamble": "This guide is in English first. " * 700
+    + "我们使用这个工具来核对商家的文件。" * 2500
+    + "我们使用Xyzw来核对。",
+    # A five-letter term followed by a kana, and a two-word term joined by a middle dot.
+    "ja-zorbx": "契約書：Zorbxの条件は以下のとおりです。システムはAcme・Verifyと連携します。",
     "ja": "私たちは販売者の書類を確認するためにXyzwを使っています。\nカタログは毎日更新されます。\n",
     # One long line with no whitespace, as Chinese text often is.
     "zh": "我们使用Xyzw来核对商家的文件。目录每天更新，订单在一小时内到达。" * 4,
@@ -731,18 +742,26 @@ _PROSE_IN_ANOTHER_SCRIPT = {
         ("zh-title", "utf-32-le"),
         ("ja-guide", "utf-16-le"),
         ("ja-guide", "utf-32-le"),
+        ("ja-table", "utf-16-le"),
+        ("ja-table", "utf-32-le"),
+        ("zh-notes", "utf-16-le"),
+        ("preamble", "utf-16-le"),
+        ("ja-zorbx", "utf-16-le"),
+        ("ja-zorbx", "utf-32-le"),
     ],
 )
 def test_utf16_and_utf32_text_in_another_script_is_decoded_without_a_byte_order_mark(
     repo: Path, tmp_path: Path, capsys: pytest.CaptureFixture[str], language: str, encoding: str
 ) -> None:
-    data = _PROSE_IN_ANOTHER_SCRIPT[language].encode(encoding)
+    text = _PROSE_IN_ANOTHER_SCRIPT[language]
+    data = text.encode(encoding)
     assert dl._wide_text(data) is not None
-    short = _list_of(tmp_path, "xyzw")
+    terms = ("xyzw", "zorbx", "acme verify")
     _commit_bytes(repo, {"docs/notes.txt": data})
-    code, out, _ = _scan(repo, short, capsys)
+    code, out, _ = _scan(repo, _list_of(tmp_path, *terms), capsys)
     assert code == 1
-    assert f"docs/notes.txt:1 (binary, read as {encoding[:6].upper()})" in out
+    expected = sum(len(_single(term).matches(line)) for term in terms for line in text.split("\n"))
+    assert out.count(f"(binary, read as {encoding[:6].upper()})") == expected, out
 
 
 def _zipf_token_ids(count: int, *, vocab: int, newline_id: int) -> list[int]:
@@ -758,20 +777,38 @@ def _zipf_token_ids(count: int, *, vocab: int, newline_id: int) -> list[int]:
     return [newline_id if rng.random() < 0.02 else 259 + rank for rank in ids]
 
 
+def _uniform(low: int, high: int, count: int, seed: int) -> list[int]:
+    rng = random.Random(seed)  # noqa: S311 - test data
+    return [rng.randrange(low, high) for _ in range(count)]
+
+
+def _invented_list(count: int) -> dl.Denylist:
+    """Many invented four-letter terms, so chance matches show up in a small array."""
+    rng = random.Random(3)  # noqa: S311 - test data
+    terms = {"".join(rng.choice("abcdefghijklmnopqrstuvwxyz") for _ in range(4)) for _ in range(count)}
+    return dl.load_text(dl.render(sorted(terms), TEST_SALT)[0])
+
+
 @pytest.mark.parametrize(
     ("label", "values"),
     [
-        ("Latin Extended values", [random.Random(1).randrange(300, 500) for _ in range(8192)]),  # noqa: S311
-        ("Latin Extended Additional values", [random.Random(2).randrange(0x1E00, 0x1F00) for _ in range(8192)]),  # noqa: S311
-        ("token ids", _zipf_token_ids(8192, vocab=32000, newline_id=13)),
+        ("accented Latin letters", _uniform(300, 500, 16384, 1)),
+        ("Latin Extended Additional", _uniform(0x1E00, 0x1F00, 16384, 2)),
+        ("fullwidth forms", _uniform(0xFF00, 0xFFF0, 16384, 3)),
+        ("token ids, line ends as id 13", _zipf_token_ids(16384, vocab=32000, newline_id=13)),
+        ("token ids, line ends as id 10", _zipf_token_ids(16384, vocab=32000, newline_id=10)),
     ],
 )
-def test_arrays_of_numbers_in_a_narrow_range_or_of_token_ids_are_not_read_as_utf32_text(
-    label: str, values: list[int]
-) -> None:
+def test_arrays_of_numbers_read_as_utf32_text_give_no_chance_match(label: str, values: list[int]) -> None:
+    invented = _invented_list(2000)
     data = b"".join(value.to_bytes(4, "little") for value in values)
     assert dl._wide_codecs(data) == [("utf-32-le", 0)], label
-    assert dl._wide_text(data) is None, label
+    # Read as text, the accented and fullwidth letters among the numbers spell invented terms by chance.
+    plain = sum(len(invented.matches(line)) for line in data.decode("utf-32-le").split("\n"))
+    assert plain > 0, label
+    report = dl.Report(invented)
+    report.check_file("models/tokens.bin", data)
+    assert report.findings == [], label
 
 
 def test_a_line_in_a_legacy_8_bit_encoding_keeps_its_accents(denylist: dl.Denylist) -> None:
