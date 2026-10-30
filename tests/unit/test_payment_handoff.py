@@ -161,7 +161,7 @@ def test_issue_reuse_and_retire_a_link() -> None:
 
 
 @pytest.mark.parametrize("mode", ["shopify_cart", "plural_hosted"])
-def test_a_link_holds_the_daily_cap_while_open_and_a_shopify_link_all_the_day_it_was_issued(mode: str) -> None:
+def test_a_link_holds_the_daily_cap_while_open_and_all_the_day_it_was_issued(mode: str) -> None:
     day_start = datetime(2026, 10, 30, tzinfo=UTC)
     issued = day_start + timedelta(hours=9)
     state = _state()
@@ -174,15 +174,17 @@ def test_a_link_holds_the_daily_cap_while_open_and_a_shopify_link_all_the_day_it
         expires_at=issued + timedelta(minutes=30),
     )
     assert ph.holds_daily_cap(state, now=issued + timedelta(minutes=29), day_start=day_start)
-    # Lapsed the same UTC day: Plural would have confirmed a payment; Shopify never does, and its link still pays.
+    # Lapsed the same UTC day, the link can still be paid: a Shopify cart permalink never expires, and a
+    # Plural order has no expiry of its own.
     lapsed = issued + timedelta(hours=2)
-    assert ph.holds_daily_cap(state, now=lapsed, day_start=day_start) is (mode == "shopify_cart")
+    assert ph.holds_daily_cap(state, now=lapsed, day_start=day_start)
     # The next UTC day a lapsed link counts for nothing, whatever the mode.
     tomorrow = day_start + timedelta(days=1)
     assert not ph.holds_daily_cap(state, now=tomorrow + timedelta(hours=1), day_start=tomorrow)
-    # A retired link counts for nothing, even on the day it was issued.
-    ph.clear_handoff(state, "expired")
-    assert not ph.holds_daily_cap(state, now=issued + timedelta(minutes=1), day_start=day_start)
+    # A retired link (paid, failed or replaced) counts for nothing, even on the day it was issued.
+    for retired in ("paid", "failed", "expired"):
+        state["handoff"]["status"] = retired
+        assert not ph.holds_daily_cap(state, now=issued + timedelta(minutes=1), day_start=day_start)
     assert not ph.holds_daily_cap(_state(), now=issued, day_start=day_start)
 
 

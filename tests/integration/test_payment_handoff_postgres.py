@@ -336,7 +336,6 @@ async def test_shopify_handoff_seals_a_decision_and_returns_the_cart_permalink_i
     assert kicks == []
 
 
-
 @pytest.mark.asyncio
 async def test_the_daily_cap_counts_the_days_open_and_paid_handoffs(db, executor, kicks, monkeypatch):
     tenant = await _tenant(db)
@@ -359,6 +358,21 @@ async def test_the_daily_cap_counts_the_days_open_and_paid_handoffs(db, executor
     # Re-opening the first link is not a new commitment.
     again = await _complete(runtime, tenant, first["id"])
     assert again.body["continue_url"] == done.body["continue_url"]
+
+    # The cart link stays payable whatever becomes of its checkout: the checkout cannot change under it, and
+    # canceling the checkout does not take the link back, so it still counts.
+    changed = await handlers.run(
+        "update_checkout",
+        runtime,
+        uf.request(tenant, uf.create_body(2, item_id=ITEM_ID, fulfillment=uf.SHIPPING)),
+        first["id"],
+    )
+    assert changed.status == 409, changed.body
+    canceled = await handlers.run("cancel_checkout", runtime, uf.request(tenant), first["id"])
+    assert canceled.status == 200 and canceled.body["status"] == "canceled", canceled.body
+    after_cancel = await _complete(runtime, tenant, second["id"], body=uf.complete_body())
+    assert after_cancel.body.get("status") != "requires_escalation", after_cancel.body
+    assert "daily_amount_cap_exceeded" in json.dumps(after_cancel.body)
 
     # The checkout ends, but Shopify's cart permalink never does and Shopify never reports the payment back:
     # a Shopify link keeps counting for the UTC day it was issued, so the second checkout still does not fit.
@@ -437,7 +451,8 @@ async def test_the_daily_total_is_todays_payments_plus_the_links_still_open(db):
         "paid_today": ("completed", 1, None, midnight + timedelta(seconds=1), "INR", later),
         "paid_yesterday": ("completed", 2, None, midnight - timedelta(seconds=1), "INR", later),
         "paid_after_the_checkout_ended": ("completed", 4, None, now, "INR", midnight - timedelta(hours=2)),
-        # Plural confirms every payment back, so only a link still open counts.
+        # A link counts while it is open, and all the UTC day it was issued: a Plural order stays payable after
+        # its link lapses. A link Plural reported as failed counts for nothing.
         "plural_open_since_yesterday": (
             escalated,
             8,
@@ -462,7 +477,41 @@ async def test_the_daily_total_is_todays_payments_plus_the_links_still_open(db):
             "INR",
             later,
         ),
+        "plural_lapsed_yesterday": (
+            escalated,
+            4096,
+            link(plural, issued=midnight - timedelta(hours=6), expires=midnight - timedelta(seconds=1)),
+            None,
+            "INR",
+            later,
+        ),
         "no_link": (escalated, 64, None, None, "INR", later),
+        # Canceling a checkout does not take its link back: it counts as it would have before.
+        "canceled_shopify_issued_today": (
+            "canceled",
+            8192,
+            link(shopify, issued=midnight, expires=lapsed_today),
+            None,
+            "INR",
+            lapsed_today,
+        ),
+        "canceled_plural_lapsed_today": (
+            "canceled",
+            16384,
+            link(plural, issued=midnight, expires=now - timedelta(seconds=1)),
+            None,
+            "INR",
+            later,
+        ),
+        "canceled_plural_retired": (
+            "canceled",
+            32768,
+            link(plural, issued=midnight, expires=later, status="failed"),
+            None,
+            "INR",
+            later,
+        ),
+        "canceled_without_a_link": ("canceled", 65536, None, None, "INR", later),
         # Shopify never reports a payment and its cart link never expires: a link counts for the UTC day it
         # was issued, even after its checkout ended, and while its checkout is open.
         "shopify_lapsed_today": (
@@ -525,8 +574,8 @@ async def test_the_daily_total_is_todays_payments_plus_the_links_still_open(db):
             exclude_session_id=ids["deciding"],
             now=now,
         )
-    # Paid today (two), the Plural link still open, and the Shopify links issued today or still open.
-    assert committed == 1 + 4 + 8 + 128 + 512
+    # Paid today (two), and the links issued today or still open, canceled checkouts' links included.
+    assert committed == 1 + 4 + 8 + 16 + 128 + 512 + 8192 + 16384
 
 
 def _plan_nodes(node: dict[str, Any]):

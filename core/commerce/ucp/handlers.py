@@ -642,7 +642,7 @@ async def update_checkout(
         frozen = _frozen_error(row, now, negotiated.version, "updated")
         if frozen is not None:
             return frozen
-        if _plural_link_outstanding(row):
+        if _payment_link_outstanding(row):
             return _protocol_error(
                 409,
                 "invalid_state",
@@ -1717,14 +1717,22 @@ HANDOFF_EVENT = "commerce.payments.handoff"
 HANDOFF_CONFIRM_EVENT = "commerce.payments.handoff.confirm"
 
 
-def _plural_link_outstanding(row: Any) -> bool:
-    """A Plural order exists for the checkout as it stands: changing the checkout would orphan the payment."""
+def _payment_link_outstanding(row: Any) -> bool:
+    """A payment link is out for the checkout as it stands: changing the checkout would orphan the payment.
+
+    A Plural order exists while its link is being created or is issued. A Shopify cart link stays
+    payable for good (Shopify never reports the payment back), so a checkout that handed one out
+    keeps its items, and the daily maximum keeps counting the link for the day it was issued.
+    """
     from core.commerce import payment_handoff as ph
 
     handoff = (row.state or {}).get("handoff")
+    if not isinstance(handoff, Mapping):
+        return False
+    if handoff.get("mode") == ph.MODE_SHOPIFY_CART:
+        return handoff.get("status") == "issued" and row.status == "requires_escalation"
     return (
-        isinstance(handoff, Mapping)
-        and handoff.get("mode") == ph.MODE_PLURAL_HOSTED
+        handoff.get("mode") == ph.MODE_PLURAL_HOSTED
         and handoff.get("status") in ("creating", "issued")
         and row.status in ("requires_escalation", "complete_in_progress")
     )
@@ -1784,14 +1792,15 @@ async def daily_committed_minor_units(
 ) -> int:
     """The merchant's money committed in ``currency``, for the arbiter's daily cap.
 
-    Committed means paid today (UTC: ``completed_at`` today), or a ``requires_escalation``
-    checkout whose hand-off still holds the cap (``payment_handoff.holds_daily_cap``): a payment
-    link that is still open, whatever day it was issued, or a Shopify cart link issued today even
-    after it lapsed (Shopify never reports the payment back and its cart link never expires). A
-    lapsed or retired Plural link counts for nothing: Plural confirms each payment, and it counts
-    as paid. The checkout being decided is left out; the arbiter adds its own amount.
+    Committed means paid today (UTC: ``completed_at`` today), or a payment link that still holds
+    the cap (``payment_handoff.holds_daily_cap``): a link still open, whatever day it was issued, or
+    one issued today even after it lapsed (Shopify never reports a payment and its cart link never
+    expires; a Plural order stays payable after its link lapses). The link counts whether its
+    checkout still waits for the payment or was canceled: canceling the checkout does not take the
+    link back. A retired link counts for nothing: a paid one counts as paid, a failed one cannot be
+    paid. The checkout being decided is left out; the arbiter adds its own amount.
 
-    The read is two ranges of ``ix_commerce_checkout_sessions_status`` (tenant, status, expires_at),
+    The read is three ranges of ``ix_commerce_checkout_sessions_status`` (tenant, status, expires_at),
     one per status, so it never reads the merchant's history. A link never outlives its checkout
     (the Shopify cart link ends with it, a Plural link at ``min(issued + PLURAL_LINK_TTL, checkout
     end)``) and is issued before the checkout ends, so an open link or one issued today belongs to
@@ -1801,9 +1810,9 @@ async def daily_committed_minor_units(
     ``MAX_CHECKOUT_TTL_SECONDS``, so the same bounds hold on ``created_at`` one TTL earlier, which
     lets ``ix_commerce_checkout_sessions_scope`` serve the ranges too.
     """
-    from sqlalchemy import or_, union_all
+    from sqlalchemy import union_all
 
-    from core.commerce.payment_handoff import MODE_SHOPIFY_CART, holds_daily_cap
+    from core.commerce.payment_handoff import holds_daily_cap
     from core.commerce.ucp.merchant import MAX_CHECKOUT_TTL_SECONDS
     from core.models.commerce_ucp import CommerceCheckoutSessionRow as Row
 
@@ -1822,13 +1831,14 @@ async def daily_committed_minor_units(
         )
 
     paid = ending_after("completed", day_start - DAILY_COMMITTED_LATE_PAYMENT).where(Row.completed_at >= day_start)
-    handed_off = ending_after("requires_escalation", day_start).where(
-        or_(Row.expires_at > now, Row.state["handoff"]["mode"].astext == MODE_SHOPIFY_CART)
-    )
-    rows = (await session.execute(union_all(paid, handed_off).limit(DAILY_COMMITTED_SCAN_LIMIT))).all()
+    handed_off = [
+        ending_after(status, day_start).where(Row.state["handoff"]["status"].astext == "issued")
+        for status in ("requires_escalation", "canceled")
+    ]
+    rows = (await session.execute(union_all(paid, *handed_off).limit(DAILY_COMMITTED_SCAN_LIMIT))).all()
     committed = 0
     for status, state in rows:
-        if status == "requires_escalation" and not holds_daily_cap(state or {}, now=now, day_start=day_start):
+        if status != "completed" and not holds_daily_cap(state or {}, now=now, day_start=day_start):
             continue
         for line in (state or {}).get("totals") or []:
             if isinstance(line, Mapping) and line.get("type") == "total":

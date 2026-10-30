@@ -228,22 +228,18 @@ def active_handoff(state: Mapping[str, Any], now: datetime) -> Mapping[str, Any]
 
 
 def holds_daily_cap(state: Mapping[str, Any], *, now: datetime, day_start: datetime) -> bool:
-    """Whether a ``requires_escalation`` checkout's hand-off still counts against today's daily maximum.
+    """Whether a checkout's hand-off link still counts against today's daily maximum.
 
-    A link counts while it is open (``active_handoff``). A Plural link counts for nothing once it
-    lapses: Plural confirms every payment back, and a confirmed payment is counted as paid. A
-    Shopify cart link also counts for the UTC day it was issued after it lapses: the cart
-    permalink never expires on Shopify's side and Shopify never reports the payment back to us,
-    so the issued link is the only sign of the sale we have.
+    A link counts while it is open (``active_handoff``), and for the whole UTC day it was issued
+    until it is retired. A lapsed link can still be paid: Shopify's cart permalink never expires
+    and Shopify never reports the payment back, and a Plural order has no expiry of its own (a late
+    payment on it is still confirmed). A retired link counts for nothing: a paid one is counted as
+    paid, a failed one cannot be paid, and a replaced one gave way to the checkout's new link.
     """
     if active_handoff(state, now) is not None:
         return True
     handoff = state.get("handoff")
-    if (
-        not isinstance(handoff, Mapping)
-        or handoff.get("mode") != MODE_SHOPIFY_CART
-        or handoff.get("status") != "issued"
-    ):
+    if not isinstance(handoff, Mapping) or handoff.get("status") != "issued":
         return False
     issued = _parse(handoff.get("issued_at"))
     return issued is not None and issued >= day_start
