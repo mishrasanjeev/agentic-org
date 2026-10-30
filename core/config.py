@@ -840,6 +840,14 @@ class Settings(BaseSettings):
     # list price instead of the historical flat rates. Off by default: the
     # figures feed the cost counters and budget controls (FINDINGS A-116).
     model_pricing_for_router_costs: bool = False
+    # Cost controls on recorded spend. Off by default: the Gemini daily caps
+    # (AGENTICORG_GEMINI_DAILY_USD_CAP, AGENTICORG_GEMINI_PLATFORM_DAILY_USD_CAP)
+    # and budget alerts keep reading agent_task_results, which only the demo
+    # seeder writes, so they never trip on real usage. On: the LLM router
+    # records each priced call in llm_daily_spend, both caps read it and refuse
+    # calls once a cap is reached, and budget alerts read agent_cost_ledger.
+    # Env: AGENTICORG_RECORDED_SPEND_CONTROLS_ENABLED.
+    recorded_spend_controls_enabled: bool = False
     # A workflow halted by an override is re-driven by the ``resume_halted_workflow``
     # task on this countdown until the override is released or the run is cancelled.
     operator_halt_retry_seconds: int = 30

@@ -21,9 +21,11 @@ from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 
 import structlog
-from sqlalchemy import select, text
+from sqlalchemy import func, select, text
 
+from core.config import settings
 from core.database import async_session_factory, get_tenant_session
+from core.models.agent import Agent, AgentCostLedger
 from core.models.budget_alert import BudgetAlert
 from core.models.company import Company
 from core.models.tenant import Tenant
@@ -50,7 +52,15 @@ async def _spend_since(
     cost_center_id: uuid.UUID | None,
     since: datetime,
 ) -> Decimal:
-    """Sum cost_usd from cost ledger for the given scope since ``since``."""
+    """Sum cost_usd from cost ledger for the given scope since ``since``.
+
+    ``agent_task_results`` has no production writer (only the demo seeder),
+    so on real usage this sum stays zero; with
+    ``recorded_spend_controls_enabled`` it reads ``agent_cost_ledger``
+    instead (:func:`_ledger_spend_since`).
+    """
+    if settings.recorded_spend_controls_enabled:
+        return await _ledger_spend_since(tenant_id, company_id, cost_center_id, since)
     # The existing ledger table has different column names across
     # scaling/cost_ledger.py and agent_task_results.  We read from
     # agent_task_results because that's guaranteed to exist in prod.
@@ -74,6 +84,38 @@ async def _spend_since(
             params["ccid"] = str(cost_center_id)
         result = await session.execute(text(q), params)
         total: float | None = result.scalar_one()
+        return Decimal(str(total or 0))
+
+
+async def _ledger_spend_since(
+    tenant_id: uuid.UUID,
+    company_id: uuid.UUID | None,
+    cost_center_id: uuid.UUID | None,
+    since: datetime,
+) -> Decimal:
+    """Sum ``agent_cost_ledger`` cost for the given scope since ``since``.
+
+    ``agent_cost_ledger`` holds each agent's cost per UTC day; every agent
+    run and chat turn adds to it (``api/v1/agents.py::_record_cost_ledger``),
+    and the per-agent monthly cap reads it too. Company and cost centre come
+    from the agent. ``since`` is a UTC period start, so whole ledger days
+    match it.
+    """
+    if since.tzinfo is not None:
+        # The ledger stores naive UTC midnights.
+        since = since.astimezone(UTC).replace(tzinfo=None)
+    async with get_tenant_session(tenant_id) as session:
+        query = select(func.coalesce(func.sum(AgentCostLedger.cost_usd), 0)).where(
+            AgentCostLedger.tenant_id == tenant_id,
+            AgentCostLedger.period_date >= since,
+        )
+        if company_id is not None or cost_center_id is not None:
+            query = query.join(Agent, Agent.id == AgentCostLedger.agent_id)
+            if company_id is not None:
+                query = query.where(Agent.company_id == company_id)
+            if cost_center_id is not None:
+                query = query.where(Agent.cost_center_id == cost_center_id)
+        total = (await session.execute(query)).scalar_one()
         return Decimal(str(total or 0))
 
 

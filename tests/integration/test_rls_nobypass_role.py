@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import asyncio
 import os
+import re
 import uuid
 from collections.abc import AsyncGenerator
 from datetime import UTC, datetime, timedelta
@@ -58,7 +59,9 @@ async def _bootstrap_engine():
             f"AGENTICORG_RLS_TEST_DB_URL role {posture.role!r} is superuser={posture.superuser} "
             f"bypassrls={posture.bypass_rls}; this proof requires a NOBYPASSRLS role"
         )
-    if head != "v6z87_platform_ctx_policies" and head < "v6z87":
+    # Compare the revision number, not the string: "v6z104_..." sorts before "v6z87".
+    number = re.match(r"v6z(\d+)_", head)
+    if number is None or int(number.group(1)) < 87:
         await engine.dispose()
         pytest.fail(f"database is at {head}; migrate to v6z87_platform_ctx_policies or later first")
     return engine

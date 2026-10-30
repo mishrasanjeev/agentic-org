@@ -122,6 +122,7 @@ from core.models.lineage import LineageNode as LineageNode
 from core.models.lineage import LineageStep as LineageStep
 from core.models.lineage_sync import LineageSyncRun as LineageSyncRun
 from core.models.lineage_sync import LineageSyncSource as LineageSyncSource
+from core.models.llm_daily_spend import LlmDailySpend as LlmDailySpend
 from core.models.merchant_custom_domain import MerchantCustomDomainRow as MerchantCustomDomainRow
 from core.models.model_access_policy import ModelAccessPolicy as ModelAccessPolicy
 from core.models.model_card import ModelCard as ModelCard

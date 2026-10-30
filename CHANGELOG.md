@@ -1,5 +1,35 @@
 # Changelog
 
+## Unreleased - Cost controls on recorded spend (off by default)
+
+- The Gemini daily caps (`AGENTICORG_GEMINI_DAILY_USD_CAP`, per tenant, default $10;
+  `AGENTICORG_GEMINI_PLATFORM_DAILY_USD_CAP`, platform, default $100) and budget alerts sum
+  `agent_task_results`, which only the demo seeder writes, so on real usage no cap refuses a call
+  and no budget alert fires. Nothing changes by default.
+- New `AGENTICORG_RECORDED_SPEND_CONTROLS_ENABLED` (off). On:
+  - the LLM router records every priced call in the new `llm_daily_spend` table (per tenant, UTC
+    day, provider and model, tenant row-level security forced);
+  - both Gemini caps sum that table, so once a tenant's Gemini calls through the router reach the
+    cap that day its next one is refused with `DailyBudgetExceeded` (and every tenant's once the
+    platform cap is reached);
+  - budget alerts read `agent_cost_ledger`, the per-agent daily cost that agent runs and chat turns
+    write and the per-agent monthly cap reads, with company and cost centre taken from the agent.
+- Turning it on starts enforcing the caps. Check recent per-tenant usage or raise the caps first;
+  set a cap to `0` to leave it off. A check with no tenant (the Telegram shopper) applies the
+  per-tenant cap to the platform-wide total, as the cap code already does. Agent runs on the
+  LangGraph runtime do not go through the router and are not counted toward or limited by these
+  caps.
+- Migration `v6z105_llm_daily_spend` creates the table and `public.gemini_daily_ledger_spend()`, the
+  platform-wide sum (SECURITY DEFINER, owned by the v6z85 aggregate role, which reads only the cost,
+  day and provider columns). It grants the function to `agenticorg_app` where that role exists, and
+  `scripts/create_app_role.sql` includes it in its allow-list. `public.gemini_daily_platform_spend()`
+  is unchanged.
+- Unchanged either way: the monthly invoice usage count (`core/billing/invoice_generator.py`) and the
+  operator spend report (`python -m core.billing.spend`) still read `agent_task_results`. Changing
+  what invoices count changes what customers are billed, so it needs its own decision.
+- `tests/integration/test_rls_nobypass_role.py` compares the migration head by number: since
+  `v6z100`, the string comparison refused every database.
+
 ## Unreleased - Merchant go-live: setup flow, catalog upload, per-merchant Shopify
 
 - **Sell Everywhere is the merchant setup flow.** One page (`/dashboard/sell-everywhere`) takes a

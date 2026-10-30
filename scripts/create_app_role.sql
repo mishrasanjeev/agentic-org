@@ -33,7 +33,7 @@
 --                        columns only, for the sealing task
 --   no-delete tables     SELECT, INSERT, UPDATE
 --   migration-owned      SELECT only, or nothing
---   functions            EXECUTE only on public.gemini_daily_platform_spend();
+--   functions            EXECUTE only on the restricted functions in section 7;
 --                        trigger functions need no EXECUTE to fire
 
 \set ON_ERROR_STOP on
@@ -182,6 +182,9 @@ REVOKE ALL ON alembic_migration_progress FROM agenticorg_app;
 --                                                    (core/llm/router.py); required
 --   public.oacp_delete_due_manifest(text, text)      v6z88, tenant-bound manifest
 --                                                    retention; granted once it exists
+--   public.gemini_daily_ledger_spend()               v6z105, platform Gemini cap on
+--                                                    recorded spend (core/llm/router.py);
+--                                                    granted once it exists
 --
 -- A function owned by the installer is granted directly. One owned by a
 -- NOLOGIN role (the v6z85 aggregation role) is granted through a temporary
@@ -195,7 +198,8 @@ BEGIN
         RAISE EXCEPTION 'public.gemini_daily_platform_spend() is missing: migrate to head first';
     END IF;
     FOREACH fn IN ARRAY ARRAY['public.gemini_daily_platform_spend()',
-                              'public.oacp_delete_due_manifest(text, text)'] LOOP
+                              'public.oacp_delete_due_manifest(text, text)',
+                              'public.gemini_daily_ledger_spend()'] LOOP
         CONTINUE WHEN to_regprocedure(fn) IS NULL;
         SELECT r.rolname INTO owner_role
         FROM pg_proc p JOIN pg_roles r ON r.oid = p.proowner
@@ -278,7 +282,8 @@ BEGIN
     FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
     WHERE n.nspname = 'public' AND p.prosecdef
       AND p.oid NOT IN (SELECT to_regprocedure(f)::oid FROM unnest(ARRAY['public.gemini_daily_platform_spend()',
-                            'public.oacp_delete_due_manifest(text, text)']) AS f WHERE to_regprocedure(f) IS NOT NULL)
+                            'public.oacp_delete_due_manifest(text, text)',
+                            'public.gemini_daily_ledger_spend()']) AS f WHERE to_regprocedure(f) IS NOT NULL)
       AND has_function_privilege('agenticorg_app', p.oid, 'EXECUTE');
     IF bad IS NOT NULL THEN
         RAISE EXCEPTION 'agenticorg_app can EXECUTE restricted functions: %', bad;
