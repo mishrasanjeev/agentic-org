@@ -186,6 +186,56 @@ async def test_opt_in_claims_a_platform_subdomain_publishes_and_lists_the_shop(d
     assert gone.value.code == "unknown_shop"
 
 
+async def test_another_merchants_pending_row_for_the_same_host_never_hides_a_live_shop(db, network):
+    from core.database import get_tenant_session
+    from core.models.merchant_custom_domain import MerchantCustomDomainRow
+
+    tenant = await _tenant(db)
+    await _merchant(tenant)
+    await _merchant(tenant, "merchant-b")
+    slug = f"shared-host-{secrets.token_hex(3)}"
+    host = f"{slug}.shops.example"
+    await _opt_in(tenant, slug=slug)
+    await _web_address_live(tenant, host)
+    # A second merchant of the same tenant adds the host: its claim stays pending_dns (host_in_use).
+    async with get_tenant_session(uuid.UUID(tenant)) as session:
+        session.add(
+            MerchantCustomDomainRow(
+                tenant_id=uuid.UUID(tenant),
+                merchant_id="merchant-b",
+                seller_agent_id=SELLER,
+                host=host,
+                status="pending_dns",
+                cname_target="ghs.googlehosted.com",
+                created_by="other@merchant.example",
+            )
+        )
+
+    async def servable() -> bool:
+        net.reset_directory_cache()
+        listed = slug in [shop["slug"] for shop in await net.directory()]
+        shop = await net.resolve_shop(slug)
+        assert (shop.tenant_id, shop.merchant_id, shop.host) == (tenant, MERCHANT, host)
+        page = await api.get_sell_everywhere(MERCHANT, SELLER, tenant)
+        assert page["surfaces"]["mcp"]["status"] == "live" and page["surfaces"]["telegram"]["status"] == "live"
+        return listed
+
+    # The shop's own live row decides, not the other merchant's pending one.
+    assert await servable()
+    # With no active row of its own the host is served directly; the other merchant's row still does not count.
+    async with get_tenant_session(uuid.UUID(tenant)) as session:
+        await session.execute(
+            MerchantCustomDomainRow.__table__.update()
+            .where(
+                MerchantCustomDomainRow.tenant_id == uuid.UUID(tenant),
+                MerchantCustomDomainRow.merchant_id == MERCHANT,
+                MerchantCustomDomainRow.host == host,
+            )
+            .values(status="removed")
+        )
+    assert await servable()
+
+
 async def test_the_page_renews_the_catalog_facts_of_a_listed_shop_as_a_buyer_read_would(db, network, monkeypatch):
     from core.commerce import artifact_freshness
 
