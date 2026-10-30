@@ -41,7 +41,7 @@ You do not need a payment method to turn on Sell everywhere, but until you save 
 When the buyer asks to complete a ready checkout, the arbiter decides first, and the buyer gets a link only on an allow. It checks two things:
 
 - **Your facts are still valid.** The catalog, price, stock and policy facts Grantex signed are fresh and not revoked.
-- **The order is within your limits.** The largest single order, the currency, the most items per order and the daily maximum you set in step 4. The daily maximum counts, in that currency: the payments confirmed today (by the UTC day); the payment links still open, whichever day they were issued; and every Shopify checkout link issued today, even after it lapses, because Shopify does not tell AgenticOrg when a buyer pays. A Plural link that lapsed unpaid no longer counts.
+- **The order is within your limits.** The largest single order, the currency, the most items per order and the daily maximum you set in step 4. The daily maximum counts, in that currency: the payments confirmed today (by the UTC day), the payment links still open whichever day they were issued, and every payment link issued today, even after it lapses or its checkout is canceled, because the buyer can still pay it. A link stops counting once its payment is confirmed (it then counts as paid) or Plural reports the payment failed. Shopify does not tell AgenticOrg when a buyer pays, so a Shopify link counts all the day it was issued.
 
 No buyer mandate is asked for, because the agent holds no payment credential and the buyer pays on your page. The decision is used once and recorded in your ledger. A refusal names the rule that failed and its reason, for example `daily_amount_cap_exceeded`, and no link is issued.
 
@@ -52,7 +52,7 @@ No buyer mandate is asked for, because the agent holds no payment credential and
 3. They open the link and pay on your page. Asking again gives the same link while it is valid.
 4. With Plural, they return to a short page that says whether the payment went through. If it did not, they ask for a new link.
 
-A Plural link is valid for 30 minutes, or until the checkout expires if that is sooner. Once a Plural link has been issued, the checkout's items cannot be changed, even after the link lapses: asking to complete it again gives the same link while it is valid, or a fresh one after it lapses, and the buyer starts a new checkout to change the items. A Shopify link stays the same for the life of the checkout.
+A Plural link is valid for 30 minutes, or until the checkout expires if that is sooner: asking to complete the checkout again gives the same link while it is valid, or a fresh one after it lapses. A Shopify link stays the same for the life of the checkout. Once either link has been issued, the checkout's items cannot be changed, even after a Plural link lapses, because the buyer can still pay it; the buyer starts a new checkout to change the items. The one exception: when Plural reports the payment failed, the checkout can be changed and completed again.
 
 ## Your orders
 

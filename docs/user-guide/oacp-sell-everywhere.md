@@ -31,7 +31,9 @@ oacp-commerce-walkthrough | A real OACP order, end to end | Recorded on the live
 ## Set up and turn it on
 
 Everything happens on one page: **Sell Everywhere** (`/dashboard/sell-everywhere`). It takes about ten minutes.
-Each step except Payments shows **Done** or **To do**. The switch stays off until your catalog, your policies, your shipping
+Steps 1 to 4 show **Done** or **To do**; the catalog step can also show **Read your catalog** (your Shopify
+store is connected but not read yet) or **Changed in your store**. Payments has no badge, and step 6 shows
+**Live** once your shop is on. The switch stays off until your catalog, your policies, your shipping
 fee (for a shop without Shopify) and your order limits are done; the page names whatever is missing.
 Payments is not needed to turn it on, but until you choose a method buyers get no payment link and are told
 to pay you directly.
@@ -103,10 +105,12 @@ AI agents can only start orders within your limits: the largest single order, th
 most items per order, in your currency. The daily maximum must be at least the per-order maximum.
 
 Before a buyer gets a payment link, the arbiter checks the order against these limits. The daily maximum
-counts, in that currency: the payments confirmed today (by the UTC day); the payment links still open,
-whichever day they were issued; and every Shopify checkout link issued today, even after it lapses, because
-Shopify does not tell AgenticOrg when a buyer pays. A Plural link that lapsed unpaid no longer counts. An
-order that would go over it gets no link.
+counts, in that currency: the payments confirmed today (by the UTC day), the payment links still open
+whichever day they were issued, and every payment link issued today, even after it lapses or its checkout
+is canceled, because the buyer can still pay it. A link stops counting once its payment is confirmed (it
+then counts as paid) or Plural reports the payment failed. Shopify does not tell AgenticOrg when a buyer
+pays, so a Shopify link counts all the day it was issued. An order that would go over the daily maximum
+gets no link.
 
 ## After you turn it on
 

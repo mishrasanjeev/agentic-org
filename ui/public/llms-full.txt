@@ -4283,7 +4283,7 @@ Figure: The buyer pays on your page. The buyer's checkout is ready. The arbiter 
 Find the product | The buyer's agent searches your catalog through UCP, the ACP feed, the AgenticOrg MCP server or the AgenticOrg bot on Telegram. Prices and stock come from verified facts. | Owner: Buyer agent | If blocked: Without fresh verified facts the catalog answers with no products.
 Open a checkout | The agent opens a checkout and chooses shipping, or store pickup where your shop has store locations. AgenticOrg prices it from the verified catalog and your shipping rates and moves it to ready_for_complete. | Owner: Buyer agent and AgenticOrg | If blocked: An unknown or out-of-stock item, or no shipping option for the buyer's country, keeps the session incomplete.
 Arbiter decides | Before any link exists, the arbiter checks your signed facts and your order limits, including the daily maximum. The allow is used once, for exactly this checkout. | Owner: AgenticOrg arbiter | If blocked: A refusal names the rule and the reason, for example daily_amount_cap_exceeded, and no link is issued.
-Payment link | Complete answers requires_escalation with continue_url: your Shopify cart with the items in it, or a Plural payment page under your own Plural account. Asking again returns the same link while it is valid. | Owner: AgenticOrg | If blocked: payment_setup_incomplete means your payment method is not fully set up; payment_handoff_unavailable means the shop has no payment link for this channel, or that the items cannot be paid in its Shopify checkout because they did not come from its Shopify store.
+Payment link | Complete answers requires_escalation with continue_url: your Shopify cart with the items in it, or a Plural payment page under your own Plural account. Asking again returns the same link while it is valid. | Owner: AgenticOrg | If blocked: payment_setup_incomplete means your payment method is not fully set up; payment_handoff_unavailable means the shop has no payment link for this channel, or that the items cannot be paid in its Shopify checkout: an item that is not from its Shopify store, an item sold by a unit such as weight, or more than 9,999 of one item.
 Buyer pays | The buyer opens the link and pays on your page by card, UPI or net banking, authenticating with 3-D Secure or their UPI PIN. | Owner: Buyer and your payment page | If blocked: A Plural link lasts 30 minutes; after that the buyer asks for a new one.
 Order | Plural confirms the payment through its signed webhook or the check AgenticOrg runs every minute, and the checkout becomes an order on your Orders page, with the delivery address the buyer gave and an email to your administrators. A Shopify order is in your Shopify admin. | Owner: Your payment provider and AgenticOrg | If blocked: A payment for the wrong amount never becomes an order; it is logged so you can refund it in Plural.
 ```
@@ -4512,7 +4512,9 @@ Video: A real OACP order, end to end. Recorded on the live service with a demo s
 #### Set up and turn it on
 
 Everything happens on one page: **Sell Everywhere** (`/dashboard/sell-everywhere`). It takes about ten minutes.
-Each step except Payments shows **Done** or **To do**. The switch stays off until your catalog, your policies, your shipping
+Steps 1 to 4 show **Done** or **To do**; the catalog step can also show **Read your catalog** (your Shopify
+store is connected but not read yet) or **Changed in your store**. Payments has no badge, and step 6 shows
+**Live** once your shop is on. The switch stays off until your catalog, your policies, your shipping
 fee (for a shop without Shopify) and your order limits are done; the page names whatever is missing.
 Payments is not needed to turn it on, but until you choose a method buyers get no payment link and are told
 to pay you directly.
@@ -4584,10 +4586,12 @@ AI agents can only start orders within your limits: the largest single order, th
 most items per order, in your currency. The daily maximum must be at least the per-order maximum.
 
 Before a buyer gets a payment link, the arbiter checks the order against these limits. The daily maximum
-counts, in that currency: the payments confirmed today (by the UTC day); the payment links still open,
-whichever day they were issued; and every Shopify checkout link issued today, even after it lapses, because
-Shopify does not tell AgenticOrg when a buyer pays. A Plural link that lapsed unpaid no longer counts. An
-order that would go over it gets no link.
+counts, in that currency: the payments confirmed today (by the UTC day), the payment links still open
+whichever day they were issued, and every payment link issued today, even after it lapses or its checkout
+is canceled, because the buyer can still pay it. A link stops counting once its payment is confirmed (it
+then counts as paid) or Plural reports the payment failed. Shopify does not tell AgenticOrg when a buyer
+pays, so a Shopify link counts all the day it was issued. An order that would go over the daily maximum
+gets no link.
 
 #### After you turn it on
 
@@ -4708,7 +4712,7 @@ You do not need a payment method to turn on Sell everywhere, but until you save 
 When the buyer asks to complete a ready checkout, the arbiter decides first, and the buyer gets a link only on an allow. It checks two things:
 
 - **Your facts are still valid.** The catalog, price, stock and policy facts Grantex signed are fresh and not revoked.
-- **The order is within your limits.** The largest single order, the currency, the most items per order and the daily maximum you set in step 4. The daily maximum counts, in that currency: the payments confirmed today (by the UTC day); the payment links still open, whichever day they were issued; and every Shopify checkout link issued today, even after it lapses, because Shopify does not tell AgenticOrg when a buyer pays. A Plural link that lapsed unpaid no longer counts.
+- **The order is within your limits.** The largest single order, the currency, the most items per order and the daily maximum you set in step 4. The daily maximum counts, in that currency: the payments confirmed today (by the UTC day), the payment links still open whichever day they were issued, and every payment link issued today, even after it lapses or its checkout is canceled, because the buyer can still pay it. A link stops counting once its payment is confirmed (it then counts as paid) or Plural reports the payment failed. Shopify does not tell AgenticOrg when a buyer pays, so a Shopify link counts all the day it was issued.
 
 No buyer mandate is asked for, because the agent holds no payment credential and the buyer pays on your page. The decision is used once and recorded in your ledger. A refusal names the rule that failed and its reason, for example `daily_amount_cap_exceeded`, and no link is issued.
 
@@ -4719,7 +4723,7 @@ No buyer mandate is asked for, because the agent holds no payment credential and
 3. They open the link and pay on your page. Asking again gives the same link while it is valid.
 4. With Plural, they return to a short page that says whether the payment went through. If it did not, they ask for a new link.
 
-A Plural link is valid for 30 minutes, or until the checkout expires if that is sooner. Once a Plural link has been issued, the checkout's items cannot be changed, even after the link lapses: asking to complete it again gives the same link while it is valid, or a fresh one after it lapses, and the buyer starts a new checkout to change the items. A Shopify link stays the same for the life of the checkout.
+A Plural link is valid for 30 minutes, or until the checkout expires if that is sooner: asking to complete the checkout again gives the same link while it is valid, or a fresh one after it lapses. A Shopify link stays the same for the life of the checkout. Once either link has been issued, the checkout's items cannot be changed, even after a Plural link lapses, because the buyer can still pay it; the buyer starts a new checkout to change the items. The one exception: when Plural reports the payment failed, the checkout can be changed and completed again.
 
 #### Your orders
 
@@ -4993,7 +4997,7 @@ Today a buyer pays on your own Shopify checkout or Plural page. Before the buyer
 | Rule | In plain words | Example refusal |
 | --- | --- | --- |
 | Facts still valid | Your catalog, price, stock, policy and protocol facts are signed, fresh, unexpired and not revoked. | artifact_revoked:price |
-| Merchant limits | The order is within your per-order amount, currency and items per order, and within your daily maximum. The daily maximum counts, in that currency: the payments confirmed today (by the UTC day); the payment links still open, whichever day they were issued; and every Shopify checkout link issued today, even after it lapses, because Shopify does not tell AgenticOrg when a buyer pays. A Plural link that lapsed unpaid no longer counts. | daily_amount_cap_exceeded |
+| Merchant limits | The order is within your per-order amount, currency and items per order, and within your daily maximum. The daily maximum counts, in that currency: the payments confirmed today (by the UTC day), the payment links still open whichever day they were issued, and every payment link issued today, even after it lapses or its checkout is canceled, because the buyer can still pay it. A link stops counting once its payment is confirmed (it then counts as paid) or Plural reports the payment failed. Shopify does not tell AgenticOrg when a buyer pays, so a Shopify link counts all the day it was issued. | daily_amount_cap_exceeded |
 
 Mandate, consent, spending cap, verified buyer authority and RBI AFA are not checked here. The agent holds no payment credential and moves no money, and the buyer authenticates on the payment page, for example with 3-D Secure or their UPI PIN. In production the allow still needs the Grantex countersignature, and it is used up before the link exists.
 
