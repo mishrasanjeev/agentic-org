@@ -8,8 +8,10 @@ the names out of the tree, diffs and search results. The hashes are not a
 secret: the salt is committed next to them, so anyone can test a guessed name.
 
 ``scan`` looks at everything a pull request adds: the added lines of the diff,
-the changed file paths, the branch name, the commit messages and any extra
-text files (the CI job passes the pull request title and body). Each input is
+the readable text inside each binary file it adds or changes (runs of printable
+characters, where video and image metadata keep names), the changed file paths,
+the branch name, the commit messages and any extra text files (the CI job passes
+the pull request title and body). Each input is
 split into word tokens - on punctuation, whitespace, digit boundaries and
 camelCase - and every run of consecutive tokens, up to ``max-tokens`` plus a
 little headroom for inputs that split a term into more pieces than the list
@@ -242,7 +244,7 @@ def house_terms(text: str) -> list[TermMatch]:
 # ── Git inputs ──────────────────────────────────────────────────────────────
 
 
-def _git(repo: Path, *args: str) -> str:
+def _git_bytes(repo: Path, *args: str) -> bytes:
     argv = ["git", "-C", str(repo), *args]
     try:
         result = subprocess.run(argv, capture_output=True, check=False)  # noqa: S603, S607 - fixed argv, no shell
@@ -251,7 +253,11 @@ def _git(repo: Path, *args: str) -> str:
     if result.returncode != 0:
         detail = result.stderr.decode("utf-8", "replace").strip()
         raise DenylistError(f"git {args[0]} failed: {detail or f'exit {result.returncode}'}")
-    return result.stdout.decode("utf-8", "replace")
+    return result.stdout
+
+
+def _git(repo: Path, *args: str) -> str:
+    return _git_bytes(repo, *args).decode("utf-8", "replace")
 
 
 def _resolve(repo: Path, ref: str) -> str:
@@ -286,9 +292,51 @@ class Report:
         self.warnings.extend(TermWarning(where, match) for match in house_terms(text))
 
 
-def added_lines(repo: Path, base: str, head: str) -> Iterator[tuple[str, int, str]]:
-    """(path, new line number, text) for every line the range adds."""
-    diff = _git(repo, "diff", "--unified=0", "--no-color", "--no-ext-diff", "--text", f"{base}...{head}")
+def binary_paths(repo: Path, base: str, head: str) -> list[str]:
+    """Paths git counts as binary in the range (``-`` added and deleted counts in ``--numstat``)."""
+    out = _git(repo, "diff", "--numstat", "-z", "--no-renames", f"{base}...{head}")
+    paths = []
+    for record in out.split("\0"):
+        added, _, rest = record.partition("\t")
+        deleted, _, path = rest.partition("\t")
+        if added == "-" and deleted == "-" and path:
+            paths.append(path)
+    return paths
+
+
+# Printable runs this long are words or metadata, not chance bytes of compressed data.
+_READABLE_RUN = re.compile(rb"[\x20-\x7e]{6,}")
+
+
+def binary_text(repo: Path, head: str, paths: Iterable[str]) -> Iterator[tuple[str, int, str]]:
+    """(path, run number, text) for every readable run inside the binary files present at ``head``."""
+    present = set(_git(repo, "ls-tree", "-r", "-z", "--name-only", head, "--", *paths).split("\0")) if paths else set()
+    for path in paths:
+        if path not in present:
+            continue  # deleted by the range: nothing is added
+        data = _git_bytes(repo, "cat-file", "blob", f"{head}:{path}")
+        for number, run in enumerate(_READABLE_RUN.findall(data), start=1):
+            yield path, number, run.decode("ascii")
+
+
+def added_lines(repo: Path, base: str, head: str, *, skip: Iterable[str] = ()) -> Iterator[tuple[str, int, str]]:
+    """(path, new line number, text) for every line the range adds, outside the ``skip`` paths.
+
+    Binary files belong in ``skip``: diffed as text their bytes split into
+    arbitrary "lines", some of which look like hunk headers. ``binary_text``
+    checks what they contain instead.
+    """
+    excluded = [f":(exclude,literal){path}" for path in skip]
+    diff = _git(
+        repo,
+        "diff",
+        "--unified=0",
+        "--no-color",
+        "--no-ext-diff",
+        "--text",
+        f"{base}...{head}",
+        *(["--", ".", *excluded] if excluded else []),
+    )
     path = ""
     line_no = 0
     # A file's header runs from "diff --git" to its first hunk. "+++ " is a
@@ -353,8 +401,11 @@ def scan(
 
     for path in changed_paths(repo, base_sha, head_sha):
         check(f"file path {path}", path)
-    for path, line_no, text in added_lines(repo, base_sha, head_sha):
+    binary = binary_paths(repo, base_sha, head_sha)
+    for path, line_no, text in added_lines(repo, base_sha, head_sha, skip=binary):
         check(f"{path}:{line_no}", text)
+    for path, number, text in binary_text(repo, head_sha, binary):
+        check(f"{path} (binary, readable text {number})", text)
     for sha, body in commit_messages(repo, base_sha, head_sha):
         for offset, line in enumerate(body.splitlines(), start=1):
             check(f"commit {sha} message line {offset}", line)

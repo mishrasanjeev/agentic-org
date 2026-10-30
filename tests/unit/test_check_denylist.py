@@ -230,6 +230,50 @@ def test_added_lines_that_look_like_diff_headers_are_checked(
     assert "notes.md:2" in out
 
 
+def _commit_bytes(repo: Path, files: dict[str, bytes], message: str = "add media") -> None:
+    for name, body in files.items():
+        path = repo / name
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(body)
+    _git(repo, "add", "-A")
+    _git(repo, "commit", "-qm", message)
+
+
+# Bytes that, diffed as text, give a line starting "@@" that is no hunk header.
+_VIDEO_LIKE = b"\x00\x00\x00\x18ftypmp42\x00\x00\n@@\x9c\x01\xff\xfe junk\n+\x00\x01\x02\n" * 50
+
+
+def test_a_binary_file_is_read_for_its_text_not_diffed_as_lines(
+    repo: Path, hash_file: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    _commit_bytes(repo, {"ui/public/media/clip.mp4": _VIDEO_LIKE, "ui/public/media/poster.jpg": b"\xff\xd8\x00" * 40})
+    code, out, err = _scan(repo, hash_file, capsys)
+    assert code == 0, err
+    assert "no denylisted terms" in out
+
+
+def test_a_term_in_a_binary_files_metadata_is_found(
+    repo: Path, hash_file: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    tagged = _VIDEO_LIKE + b"\x00\x00\x00\x20\xa9too encoded by AcmeVerify Studio\x00" + _VIDEO_LIKE
+    _commit_bytes(repo, {"ui/public/media/clip.mp4": tagged})
+    code, out, _ = _scan(repo, hash_file, capsys)
+    assert code == 1
+    assert "ui/public/media/clip.mp4 (binary, readable text" in out
+    assert "verify" not in out.lower()
+
+
+def test_a_deleted_binary_file_adds_nothing(repo: Path, hash_file: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    (repo / "old.bin").write_bytes(b"\x00 tagged by AcmeVerify \x00" * 4)
+    _git(repo, "add", "-A")
+    _git(repo, "commit", "-qm", "old binary")
+    base = _git(repo, "rev-parse", "HEAD")
+    (repo / "old.bin").unlink()
+    _git(repo, "commit", "-qam", "remove it")
+    code = dl.main(["--repo", str(repo), "--hash-file", str(hash_file), "scan", "--base", base, "--head", "HEAD"])
+    assert code == 0, capsys.readouterr().err
+
+
 def test_non_utf8_text_file_fails_closed(
     repo: Path, hash_file: Path, tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
