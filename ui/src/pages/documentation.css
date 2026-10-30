@@ -248,6 +248,10 @@
 .docs-prose p {
   margin: 14px 0;
 }
+/* Links in guide text are underlined, so they stand out without relying on colour (WCAG 1.4.1). */
+.docs-prose a {
+  text-decoration: underline;
+}
 .docs-prose ul,
 .docs-prose ol {
   padding-left: 24px;

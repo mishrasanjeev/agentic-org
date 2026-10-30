@@ -50,6 +50,8 @@ test("public guide routes preserve security headers and deliberate cache policy"
 test("all guide routes, source images, canonical metadata and narrow layouts work", async ({
   page,
 }, testInfo) => {
+  // One full page load per guide, so the time limit grows with the manual.
+  test.setTimeout(Math.max(90_000, manual.articles.length * 2_000));
   const errors: string[] = [];
   page.on("pageerror", (error) => errors.push(error.message));
   for (const article of manual.articles) {

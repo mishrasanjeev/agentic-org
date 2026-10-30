@@ -3715,9 +3715,9 @@ In 30 seconds:
 
 #### Watch one real order
 
-This recording was made on the live AgenticOrg service with a demo coffee shop, a demo buyer and a Plural test payment. Every screen is the real product, and every answer from the shop's side comes live from AgenticOrg. The buyer's assistant is shown as a simple console that makes the same calls an AI app makes.
+This recording was made on the live AgenticOrg service with a demo coffee shop, a demo buyer and a Plural test payment. The setup, payment and Orders screens are the real product, and every answer from the shop's side comes live from AgenticOrg. The buyer's assistant is shown as a simple console that makes the same calls an AI app makes, and the opening and closing cards were added for the video.
 
-Video: One real order, start to finish. A shop owner sets up a demo coffee shop: products from a spreadsheet (a Shopify store connects in one step instead), rules, a shipping fee, limits and their own Plural account. A buyer's AI assistant finds the shop, fills the cart and gets a payment link. The buyer pays the shop, and the order reaches the shop owner with the delivery address. Narrated, with English captions. Watch it at /media/docs/oacp-commerce-walkthrough.mp4 (English captions at /media/docs/oacp-commerce-walkthrough.vtt).
+Video: One real order, start to finish. A shop owner sets up a demo coffee shop: products from a spreadsheet (a Shopify store connects through a read-only app in its Shopify admin instead), rules, a shipping fee, limits and their own Plural account. A buyer's AI assistant finds the shop, fills the cart and gets a payment link. The buyer pays the shop, and the order reaches the shop owner with the delivery address. Narrated, with English captions. Watch it at /media/docs/oacp-commerce-walkthrough.mp4 (English captions at /media/docs/oacp-commerce-walkthrough.vtt).
 
 #### How it works, in three parts
 
@@ -3727,7 +3727,7 @@ It takes about ten minutes, on one page in AgenticOrg: **Sell everywhere** (`/da
 
 1. **Create your shop.** Give it a name.
 2. **Add your products.** Pick the way that suits you:
-   - **On Shopify?** Connect your store. In your Shopify admin, create an app that may read products and stock, then paste your store address and its access token. AgenticOrg reads your products, prices and stock by itself and never changes them.
+   - **On Shopify?** Connect your store. In your Shopify admin, create an app that may read products and stock, then paste your store address and its access token. Shopify shows the token only once, but you do not need it again: AgenticOrg stores it encrypted, reads your products, prices and stock by itself and never changes them.
    - **Not on Shopify?** Upload a spreadsheet (a CSV file) with your products, prices and stock.
 3. **Write your rules.** Your returns and delivery policy. Without Shopify, also set a shipping fee; Shopify shops use their Shopify shipping rates.
 4. **Set your limits.** The biggest single order, the most per day and the most items in one order. An AI assistant can never go over them. Nothing is set for you.
@@ -3806,7 +3806,7 @@ In 30 seconds:
 
 This recording follows one real order on the live service, from the shop owner's setup to the buyer paying the shop. New to all this? Start with [Sell through AI assistants: start here](/docs/oacp-start-here), which explains it in plain words. The rest of this guide covers the trust layer underneath.
 
-Video: A real OACP order, end to end. Recorded on the live service with a demo shop and a Plural test payment. The shop owner adds products (a Shopify store connects in one step; the demo shop uploads a spreadsheet), sets rules, limits and their own Plural account, and turns Sell everywhere on. A buyer's AI assistant finds the shop through the AgenticOrg MCP server, fills the cart and gets a payment link. The buyer pays the shop, and the order reaches the Orders page with the delivery address. Narrated, with English captions. Watch it at /media/docs/oacp-commerce-walkthrough.mp4 (English captions at /media/docs/oacp-commerce-walkthrough.vtt).
+Video: A real OACP order, end to end. Recorded on the live service with a demo shop and a Plural test payment. The shop owner adds products (a Shopify store connects through a read-only app in its Shopify admin; the demo shop uploads a spreadsheet), sets rules, limits and their own Plural account, and turns Sell everywhere on. A buyer's AI assistant finds the shop through the AgenticOrg MCP server, fills the cart and gets a payment link. The buyer pays the shop, and the order reaches the Orders page with the delivery address. Narrated, with English captions. Watch it at /media/docs/oacp-commerce-walkthrough.mp4 (English captions at /media/docs/oacp-commerce-walkthrough.vtt).
 
 #### The short version
 
@@ -4176,7 +4176,7 @@ Each step has one owner. The next sections explain them one at a time.
 
 The recording below runs the whole flow once on the live service: the shop states its facts, Grantex verifies them, the arbiter checks the order against the shop's limits, and the buyer gets the merchant's payment link.
 
-Video: A real OACP order, end to end. Recorded on the live service with a demo shop and a Plural test payment. The shop owner adds products (a Shopify store connects in one step; the demo shop uploads a spreadsheet), sets rules, limits and their own Plural account, and turns Sell everywhere on. A buyer's AI assistant finds the shop through the AgenticOrg MCP server, fills the cart and gets a payment link. The buyer pays the shop, and the order reaches the Orders page with the delivery address. Narrated, with English captions. Watch it at /media/docs/oacp-commerce-walkthrough.mp4 (English captions at /media/docs/oacp-commerce-walkthrough.vtt).
+Video: A real OACP order, end to end. Recorded on the live service with a demo shop and a Plural test payment. The shop owner adds products (a Shopify store connects through a read-only app in its Shopify admin; the demo shop uploads a spreadsheet), sets rules, limits and their own Plural account, and turns Sell everywhere on. A buyer's AI assistant finds the shop through the AgenticOrg MCP server, fills the cart and gets a payment link. The buyer pays the shop, and the order reaches the Orders page with the delivery address. Narrated, with English captions. Watch it at /media/docs/oacp-commerce-walkthrough.mp4 (English captions at /media/docs/oacp-commerce-walkthrough.vtt).
 
 #### Step 1. Your shop states its facts
 
@@ -4283,7 +4283,7 @@ Figure: The buyer pays on your page. The buyer's checkout is ready. The arbiter 
 Find the product | The buyer's agent searches your catalog through UCP, the ACP feed, the AgenticOrg MCP server or the AgenticOrg bot on Telegram. Prices and stock come from verified facts. | Owner: Buyer agent | If blocked: Without fresh verified facts the catalog answers with no products.
 Open a checkout | The agent opens a checkout and chooses shipping, or store pickup where your shop has store locations. AgenticOrg prices it from the verified catalog and your shipping rates and moves it to ready_for_complete. | Owner: Buyer agent and AgenticOrg | If blocked: An unknown or out-of-stock item, or no shipping option for the buyer's country, keeps the session incomplete.
 Arbiter decides | Before any link exists, the arbiter checks your signed facts and your order limits, including the daily maximum. The allow is used once, for exactly this checkout. | Owner: AgenticOrg arbiter | If blocked: A refusal names the rule and the reason, for example daily_amount_cap_exceeded, and no link is issued.
-Payment link | Complete answers requires_escalation with continue_url: your Shopify cart with the items in it, or a Plural payment page under your own Plural account. Asking again returns the same link while it is valid. | Owner: AgenticOrg | If blocked: payment_setup_incomplete means your payment method is not fully set up; payment_handoff_unavailable means the shop has none for this channel.
+Payment link | Complete answers requires_escalation with continue_url: your Shopify cart with the items in it, or a Plural payment page under your own Plural account. Asking again returns the same link while it is valid. | Owner: AgenticOrg | If blocked: payment_setup_incomplete means your payment method is not fully set up; payment_handoff_unavailable means the shop has no payment link for this channel, or that the items cannot be paid in its Shopify checkout: an item that is not from its Shopify store, an item sold by a unit such as weight, or more than 9,999 of one item.
 Buyer pays | The buyer opens the link and pays on your page by card, UPI or net banking, authenticating with 3-D Secure or their UPI PIN. | Owner: Buyer and your payment page | If blocked: A Plural link lasts 30 minutes; after that the buyer asks for a new one.
 Order | Plural confirms the payment through its signed webhook or the check AgenticOrg runs every minute, and the checkout becomes an order on your Orders page, with the delivery address the buyer gave and an email to your administrators. A Shopify order is in your Shopify admin. | Owner: Your payment provider and AgenticOrg | If blocked: A payment for the wrong amount never becomes an order; it is logged so you can refund it in Plural.
 ```
@@ -4507,12 +4507,14 @@ Figure: One switch, every surface. You turn it on once. AgenticOrg lists your sh
 
 The recording below shows each step on this page for a demo coffee shop. It then follows a buyer's AI agent as it shops there and the buyer pays on the shop's Plural page.
 
-Video: A real OACP order, end to end. Recorded on the live service with a demo shop and a Plural test payment. The shop owner adds products (a Shopify store connects in one step; the demo shop uploads a spreadsheet), sets rules, limits and their own Plural account, and turns Sell everywhere on. A buyer's AI assistant finds the shop through the AgenticOrg MCP server, fills the cart and gets a payment link. The buyer pays the shop, and the order reaches the Orders page with the delivery address. Narrated, with English captions. Watch it at /media/docs/oacp-commerce-walkthrough.mp4 (English captions at /media/docs/oacp-commerce-walkthrough.vtt).
+Video: A real OACP order, end to end. Recorded on the live service with a demo shop and a Plural test payment. The shop owner adds products (a Shopify store connects through a read-only app in its Shopify admin; the demo shop uploads a spreadsheet), sets rules, limits and their own Plural account, and turns Sell everywhere on. A buyer's AI assistant finds the shop through the AgenticOrg MCP server, fills the cart and gets a payment link. The buyer pays the shop, and the order reaches the Orders page with the delivery address. Narrated, with English captions. Watch it at /media/docs/oacp-commerce-walkthrough.mp4 (English captions at /media/docs/oacp-commerce-walkthrough.vtt).
 
 #### Set up and turn it on
 
 Everything happens on one page: **Sell Everywhere** (`/dashboard/sell-everywhere`). It takes about ten minutes.
-Each step shows **Done** or **To do**. The switch stays off until your catalog, your policies, your shipping
+Steps 1 to 4 show **Done** or **To do**; the catalog step can also show **Read your catalog** (your Shopify
+store is connected but not read yet) or **Changed in your store**. Payments has no badge, and step 6 shows
+**Live** once your shop is on. The switch stays off until your catalog, your policies, your shipping
 fee (for a shop without Shopify) and your order limits are done; the page names whatever is missing.
 Payments is not needed to turn it on, but until you choose a method buyers get no payment link and are told
 to pay you directly.
@@ -4540,7 +4542,8 @@ prices and stock.
 
 To keep products current, the page shows your own webhook address once you are connected. In Shopify,
 open **Settings**, **Notifications**, **Webhooks**, create a **Product update** webhook in JSON to that
-address, then paste the signing secret Shopify shows there and connect again. AgenticOrg checks every
+address, then paste the signing secret Shopify shows there and select **Connect Shopify** again. Leave the
+access token blank to keep the one you saved: Shopify shows a token only once. AgenticOrg checks every
 delivery with your secret; a changed product shows **Changed in your store** until the catalog is read
 again.
 
@@ -4583,8 +4586,12 @@ AI agents can only start orders within your limits: the largest single order, th
 most items per order, in your currency. The daily maximum must be at least the per-order maximum.
 
 Before a buyer gets a payment link, the arbiter checks the order against these limits. The daily maximum
-counts what buyers paid today and the payment links still open, in that currency, by the UTC day. An
-order that would go over it gets no link.
+counts, in that currency: the payments confirmed today (by the UTC day), the payment links still open
+whichever day they were issued, and every payment link issued today, even after it lapses or its checkout
+is canceled, because the buyer can still pay it. A link stops counting when its payment becomes an order
+(the order then counts as paid) or when Plural reports the payment failed. Shopify does not tell AgenticOrg when a buyer
+pays, so a Shopify link counts all the day it was issued. An order that would go over the daily maximum
+gets no link.
 
 #### After you turn it on
 
@@ -4595,7 +4602,7 @@ The page shows how going live is progressing:
 | Grantex enrolment | Enrolled | Grantex signs your catalog facts. No operator edit is needed for your shop. |
 | Grantex enrolment | Waiting | Your deployment's Grantex is not ready for enrolment yet; nothing to do. |
 | Grantex enrolment | Needs attention | Grantex refused or revoked the enrolment, or could not be reached. The message says whether to retry or contact your platform administrator. |
-| Shop profile | Published | Buyer agents can read your shop at your web address. |
+| Shop profile | Published | Your profile is published on your web address. Buyer agents can read it once the **Your web address** row shows **Live**. |
 | Shop profile | Not published | The page says exactly why, for example that your web address is still being set up. |
 | Verified catalog | Done | Grantex has verified your catalog, prices and stock. |
 | Verified catalog | To do | Grantex has not verified your catalog yet. Select Publish to try again. |
@@ -4619,7 +4626,7 @@ Buyer agents read your shop's profile at `https://<your address>/.well-known/ucp
 
 AgenticOrg can give out 20 of these addresses in all, and the page shows how many are in use. If they are taken, you can still turn on Sell everywhere and connect your own domain instead; see [Your own domain for buyer agents](/docs/oacp-custom-domains).
 
-Your shop appears on the network only once its profile is published at that address and the address is live, certificate included. Buyer agents read your profile and search your catalog there, so a shop whose address is still being set up would only give them errors. Until then, the AI apps and Telegram rows show **Waiting for your web address**, or **Waiting for publication** if the profile is not published yet. A new `agenticorg.ai` address usually takes a few minutes, and at most an hour.
+Your shop appears on the network only once its profile is published at that address and the address is live, certificate included. Buyer agents read your profile and search your catalog there, so a shop whose address is still being set up would only give them errors. While the profile is published but the address is still being set up, the AI apps and Telegram rows show **Waiting for your web address**. Before the profile is published, the AI apps row shows **Waiting for publication** and the Telegram row shows **Coming soon**. A new `agenticorg.ai` address usually takes a few minutes, and at most an hour.
 
 #### Where buyers can find you
 
@@ -4639,7 +4646,7 @@ To see what buyers see in ChatGPT, follow [the ChatGPT run in the Nilgiri Tea Ho
 
 #### Pause or resume
 
-Choose **Pause** on the page. Your shop leaves the directory at once: AI apps and the Telegram bot stop offering it, and new network checkouts are refused. Your web address and your shop name stay yours. Choose **Resume Sell everywhere** to come back.
+Choose **Pause** on the page. New network checkouts are refused at once, and your shop leaves the directory: AI apps and the Telegram bot stop offering it within about two minutes, as their short-lived lists refresh. Your web address and your shop name stay yours. Choose **Resume Sell everywhere** to come back.
 
 #### What stays with you
 
@@ -4696,7 +4703,7 @@ Save | Choose My Plural account or My Shopify checkout and select Save payment m
 
 My Plural account can be saved only once your Plural credentials, including the webhook secret, are saved. My Shopify checkout can be saved only once your Shopify store is connected.
 
-Your Plural secrets are stored encrypted and are never shown again. To change one, enter the new value and save; leave a field blank to keep the saved secret. Use Sandbox until a test payment has gone through, then switch to Production with your live credentials.
+Your Plural secrets are stored encrypted and are never shown again. To change one, enter your client ID again with the new value and save; leave a secret field blank to keep the saved one. Use Sandbox until a test payment has gone through, then switch to Production with your live credentials.
 
 You do not need a payment method to turn on Sell everywhere, but until you save one, buyers get no payment link.
 
@@ -4705,7 +4712,7 @@ You do not need a payment method to turn on Sell everywhere, but until you save 
 When the buyer asks to complete a ready checkout, the arbiter decides first, and the buyer gets a link only on an allow. It checks two things:
 
 - **Your facts are still valid.** The catalog, price, stock and policy facts Grantex signed are fresh and not revoked.
-- **The order is within your limits.** The largest single order, the currency, the most items per order and the daily maximum you set in step 4. The daily maximum counts what buyers paid today and the payment links still open, in that currency, by the UTC day.
+- **The order is within your limits.** The largest single order, the currency, the most items per order and the daily maximum you set in step 4. The daily maximum counts, in that currency: the payments confirmed today (by the UTC day), the payment links still open whichever day they were issued, and every payment link issued today, even after it lapses or its checkout is canceled, because the buyer can still pay it. A link stops counting when its payment becomes an order (the order then counts as paid) or when Plural reports the payment failed. Shopify does not tell AgenticOrg when a buyer pays, so a Shopify link counts all the day it was issued.
 
 No buyer mandate is asked for, because the agent holds no payment credential and the buyer pays on your page. The decision is used once and recorded in your ledger. A refusal names the rule that failed and its reason, for example `daily_amount_cap_exceeded`, and no link is issued.
 
@@ -4716,13 +4723,13 @@ No buyer mandate is asked for, because the agent holds no payment credential and
 3. They open the link and pay on your page. Asking again gives the same link while it is valid.
 4. With Plural, they return to a short page that says whether the payment went through. If it did not, they ask for a new link.
 
-A Plural link is valid for 30 minutes, or until the checkout expires if that is sooner. While it is open, the checkout cannot be changed; the buyer starts a new checkout to change the items. A Shopify link stays the same for the life of the checkout.
+A Plural link is valid for 30 minutes, or until the checkout expires if that is sooner: asking to complete the checkout again gives the same link while it is valid, or a fresh one after it lapses. A Shopify link stays the same for the life of the checkout. Once either link has been issued, the checkout's items cannot be changed, even after a Plural link lapses, because the buyer can still pay it; the buyer starts a new checkout to change the items. The one exception: once Plural reports that every link the checkout gave out failed, the checkout can be changed and completed again.
 
 #### Your orders
 
 Open **Orders** (`/dashboard/orders`) to see every order buyers paid for through a Plural link, newest first: the total, the items, where to deliver it, the buyer's contact details, the payment status and where they shopped (Telegram, an AI app, or another platform). Each order also sends the same details in an email to every active administrator of your workspace.
 
-The delivery column shows how the buyer chose to receive the order: shipping with the rate and fee they chose, or store pickup with the store. For shipping it also shows the address they gave their agent at checkout, line by line. The Plural payment page does not ask for an address, so ship to the one shown here. The address and contact details appear exactly as the buyer gave them; AgenticOrg does not check or correct them.
+The delivery column shows how the buyer chose to receive the order: shipping with the delivery option they chose, or store pickup with the store. For shipping it also shows the address they gave their agent at checkout, line by line, with the recipient's name and phone when the buyer gave them. The shipping fee is shown once for the whole order, even when it ships to more than one place. The Plural payment page does not ask for an address, so ship to the one shown here. The address and contact details appear exactly as the buyer gave them; AgenticOrg does not check or correct them.
 
 AgenticOrg creates an order only when Plural confirms the full amount, through its signed webhook or the check AgenticOrg runs every minute. If Plural reports a payment that does not match the checkout, for example a different amount, no order is created and the payment is logged so you can refund it in Plural. A payment that is only authorised, not captured, stays pending.
 
@@ -4739,7 +4746,7 @@ Orders paid in your Shopify checkout appear in your Shopify admin, not on the Or
 | The buyer is told the commerce arbiter refused | The order is over one of your limits, or a signed fact has lapsed. The message names the rule; the decision in your ledger gives the exact reason. |
 | Test fails | Check the client ID and secret and that the environment matches them (Sandbox or Production). |
 | Paid in Plural but no order here | Check the webhook URL in your Plural dashboard. Payments are also checked every minute, so the order appears shortly. |
-| These items cannot be paid for in the shop's Shopify checkout | The items did not come from your Shopify store. Use My Plural account for them. |
+| These items cannot be paid for in the shop's Shopify checkout | An item did not come from your Shopify store, is sold by a unit such as weight, or was ordered more than 9,999 at a time. Use My Plural account for these orders. |
 
 
 ### Your own domain for buyer agents
@@ -4990,7 +4997,7 @@ Today a buyer pays on your own Shopify checkout or Plural page. Before the buyer
 | Rule | In plain words | Example refusal |
 | --- | --- | --- |
 | Facts still valid | Your catalog, price, stock, policy and protocol facts are signed, fresh, unexpired and not revoked. | artifact_revoked:price |
-| Merchant limits | The order is within your per-order amount, currency and items per order, and within your daily maximum. The daily maximum counts what buyers paid today and the payment links still open, in that currency, by the UTC day. | daily_amount_cap_exceeded |
+| Merchant limits | The order is within your per-order amount, currency and items per order, and within your daily maximum. The daily maximum counts, in that currency: the payments confirmed today (by the UTC day), the payment links still open whichever day they were issued, and every payment link issued today, even after it lapses or its checkout is canceled, because the buyer can still pay it. A link stops counting when its payment becomes an order (the order then counts as paid) or when Plural reports the payment failed. Shopify does not tell AgenticOrg when a buyer pays, so a Shopify link counts all the day it was issued. | daily_amount_cap_exceeded |
 
 Mandate, consent, spending cap, verified buyer authority and RBI AFA are not checked here. The agent holds no payment credential and moves no money, and the buyer authenticates on the payment page, for example with 3-D Secure or their UPI PIN. In production the allow still needs the Grantex countersignature, and it is used up before the link exists.
 

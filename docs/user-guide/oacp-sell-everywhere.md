@@ -25,13 +25,15 @@ sell-everywhere-network | One switch, every surface | You turn it on once. Agent
 The recording below shows each step on this page for a demo coffee shop. It then follows a buyer's AI agent as it shops there and the buyer pays on the shop's Plural page.
 
 ```video
-oacp-commerce-walkthrough | A real OACP order, end to end | Recorded on the live service with a demo shop and a Plural test payment. The shop owner adds products (a Shopify store connects in one step; the demo shop uploads a spreadsheet), sets rules, limits and their own Plural account, and turns Sell everywhere on. A buyer's AI assistant finds the shop through the AgenticOrg MCP server, fills the cart and gets a payment link. The buyer pays the shop, and the order reaches the Orders page with the delivery address. Narrated, with English captions.
+oacp-commerce-walkthrough | A real OACP order, end to end | Recorded on the live service with a demo shop and a Plural test payment. The shop owner adds products (a Shopify store connects through a read-only app in its Shopify admin; the demo shop uploads a spreadsheet), sets rules, limits and their own Plural account, and turns Sell everywhere on. A buyer's AI assistant finds the shop through the AgenticOrg MCP server, fills the cart and gets a payment link. The buyer pays the shop, and the order reaches the Orders page with the delivery address. Narrated, with English captions.
 ```
 
 ## Set up and turn it on
 
 Everything happens on one page: **Sell Everywhere** (`/dashboard/sell-everywhere`). It takes about ten minutes.
-Each step shows **Done** or **To do**. The switch stays off until your catalog, your policies, your shipping
+Steps 1 to 4 show **Done** or **To do**; the catalog step can also show **Read your catalog** (your Shopify
+store is connected but not read yet) or **Changed in your store**. Payments has no badge, and step 6 shows
+**Live** once your shop is on. The switch stays off until your catalog, your policies, your shipping
 fee (for a shop without Shopify) and your order limits are done; the page names whatever is missing.
 Payments is not needed to turn it on, but until you choose a method buyers get no payment link and are told
 to pay you directly.
@@ -59,7 +61,8 @@ prices and stock.
 
 To keep products current, the page shows your own webhook address once you are connected. In Shopify,
 open **Settings**, **Notifications**, **Webhooks**, create a **Product update** webhook in JSON to that
-address, then paste the signing secret Shopify shows there and connect again. AgenticOrg checks every
+address, then paste the signing secret Shopify shows there and select **Connect Shopify** again. Leave the
+access token blank to keep the one you saved: Shopify shows a token only once. AgenticOrg checks every
 delivery with your secret; a changed product shows **Changed in your store** until the catalog is read
 again.
 
@@ -102,8 +105,12 @@ AI agents can only start orders within your limits: the largest single order, th
 most items per order, in your currency. The daily maximum must be at least the per-order maximum.
 
 Before a buyer gets a payment link, the arbiter checks the order against these limits. The daily maximum
-counts what buyers paid today and the payment links still open, in that currency, by the UTC day. An
-order that would go over it gets no link.
+counts, in that currency: the payments confirmed today (by the UTC day), the payment links still open
+whichever day they were issued, and every payment link issued today, even after it lapses or its checkout
+is canceled, because the buyer can still pay it. A link stops counting when its payment becomes an order
+(the order then counts as paid) or when Plural reports the payment failed. Shopify does not tell AgenticOrg when a buyer
+pays, so a Shopify link counts all the day it was issued. An order that would go over the daily maximum
+gets no link.
 
 ## After you turn it on
 
@@ -114,7 +121,7 @@ The page shows how going live is progressing:
 | Grantex enrolment | Enrolled | Grantex signs your catalog facts. No operator edit is needed for your shop. |
 | Grantex enrolment | Waiting | Your deployment's Grantex is not ready for enrolment yet; nothing to do. |
 | Grantex enrolment | Needs attention | Grantex refused or revoked the enrolment, or could not be reached. The message says whether to retry or contact your platform administrator. |
-| Shop profile | Published | Buyer agents can read your shop at your web address. |
+| Shop profile | Published | Your profile is published on your web address. Buyer agents can read it once the **Your web address** row shows **Live**. |
 | Shop profile | Not published | The page says exactly why, for example that your web address is still being set up. |
 | Verified catalog | Done | Grantex has verified your catalog, prices and stock. |
 | Verified catalog | To do | Grantex has not verified your catalog yet. Select Publish to try again. |
@@ -138,7 +145,7 @@ Buyer agents read your shop's profile at `https://<your address>/.well-known/ucp
 
 AgenticOrg can give out 20 of these addresses in all, and the page shows how many are in use. If they are taken, you can still turn on Sell everywhere and connect your own domain instead; see [Your own domain for buyer agents](/docs/oacp-custom-domains).
 
-Your shop appears on the network only once its profile is published at that address and the address is live, certificate included. Buyer agents read your profile and search your catalog there, so a shop whose address is still being set up would only give them errors. Until then, the AI apps and Telegram rows show **Waiting for your web address**, or **Waiting for publication** if the profile is not published yet. A new `agenticorg.ai` address usually takes a few minutes, and at most an hour.
+Your shop appears on the network only once its profile is published at that address and the address is live, certificate included. Buyer agents read your profile and search your catalog there, so a shop whose address is still being set up would only give them errors. While the profile is published but the address is still being set up, the AI apps and Telegram rows show **Waiting for your web address**. Before the profile is published, the AI apps row shows **Waiting for publication** and the Telegram row shows **Coming soon**. A new `agenticorg.ai` address usually takes a few minutes, and at most an hour.
 
 ## Where buyers can find you
 
@@ -158,7 +165,7 @@ To see what buyers see in ChatGPT, follow [the ChatGPT run in the Nilgiri Tea Ho
 
 ## Pause or resume
 
-Choose **Pause** on the page. Your shop leaves the directory at once: AI apps and the Telegram bot stop offering it, and new network checkouts are refused. Your web address and your shop name stay yours. Choose **Resume Sell everywhere** to come back.
+Choose **Pause** on the page. New network checkouts are refused at once, and your shop leaves the directory: AI apps and the Telegram bot stop offering it within about two minutes, as their short-lived lists refresh. Your web address and your shop name stay yours. Choose **Resume Sell everywhere** to come back.
 
 ## What stays with you
 

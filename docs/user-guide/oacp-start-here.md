@@ -8,10 +8,10 @@ You get the order with the delivery address. The video below shows one real orde
 
 ## Watch one real order
 
-This recording was made on the live AgenticOrg service with a demo coffee shop, a demo buyer and a Plural test payment. Every screen is the real product, and every answer from the shop's side comes live from AgenticOrg. The buyer's assistant is shown as a simple console that makes the same calls an AI app makes.
+This recording was made on the live AgenticOrg service with a demo coffee shop, a demo buyer and a Plural test payment. The setup, payment and Orders screens are the real product, and every answer from the shop's side comes live from AgenticOrg. The buyer's assistant is shown as a simple console that makes the same calls an AI app makes, and the opening and closing cards were added for the video.
 
 ```video
-oacp-commerce-walkthrough | One real order, start to finish | A shop owner sets up a demo coffee shop: products from a spreadsheet (a Shopify store connects in one step instead), rules, a shipping fee, limits and their own Plural account. A buyer's AI assistant finds the shop, fills the cart and gets a payment link. The buyer pays the shop, and the order reaches the shop owner with the delivery address. Narrated, with English captions.
+oacp-commerce-walkthrough | One real order, start to finish | A shop owner sets up a demo coffee shop: products from a spreadsheet (a Shopify store connects through a read-only app in its Shopify admin instead), rules, a shipping fee, limits and their own Plural account. A buyer's AI assistant finds the shop, fills the cart and gets a payment link. The buyer pays the shop, and the order reaches the shop owner with the delivery address. Narrated, with English captions.
 ```
 
 ## How it works, in three parts
@@ -22,7 +22,7 @@ It takes about ten minutes, on one page in AgenticOrg: **Sell everywhere** (`/da
 
 1. **Create your shop.** Give it a name.
 2. **Add your products.** Pick the way that suits you:
-   - **On Shopify?** Connect your store. In your Shopify admin, create an app that may read products and stock, then paste your store address and its access token. AgenticOrg reads your products, prices and stock by itself and never changes them.
+   - **On Shopify?** Connect your store. In your Shopify admin, create an app that may read products and stock, then paste your store address and its access token. Shopify shows the token only once, but you do not need it again: AgenticOrg stores it encrypted, reads your products, prices and stock by itself and never changes them.
    - **Not on Shopify?** Upload a spreadsheet (a CSV file) with your products, prices and stock.
 3. **Write your rules.** Your returns and delivery policy. Without Shopify, also set a shipping fee; Shopify shops use their Shopify shipping rates.
 4. **Set your limits.** The biggest single order, the most per day and the most items in one order. An AI assistant can never go over them. Nothing is set for you.

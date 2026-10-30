@@ -32,7 +32,7 @@ Save | Choose My Plural account or My Shopify checkout and select Save payment m
 
 My Plural account can be saved only once your Plural credentials, including the webhook secret, are saved. My Shopify checkout can be saved only once your Shopify store is connected.
 
-Your Plural secrets are stored encrypted and are never shown again. To change one, enter the new value and save; leave a field blank to keep the saved secret. Use Sandbox until a test payment has gone through, then switch to Production with your live credentials.
+Your Plural secrets are stored encrypted and are never shown again. To change one, enter your client ID again with the new value and save; leave a secret field blank to keep the saved one. Use Sandbox until a test payment has gone through, then switch to Production with your live credentials.
 
 You do not need a payment method to turn on Sell everywhere, but until you save one, buyers get no payment link.
 
@@ -41,7 +41,7 @@ You do not need a payment method to turn on Sell everywhere, but until you save 
 When the buyer asks to complete a ready checkout, the arbiter decides first, and the buyer gets a link only on an allow. It checks two things:
 
 - **Your facts are still valid.** The catalog, price, stock and policy facts Grantex signed are fresh and not revoked.
-- **The order is within your limits.** The largest single order, the currency, the most items per order and the daily maximum you set in step 4. The daily maximum counts what buyers paid today and the payment links still open, in that currency, by the UTC day.
+- **The order is within your limits.** The largest single order, the currency, the most items per order and the daily maximum you set in step 4. The daily maximum counts, in that currency: the payments confirmed today (by the UTC day), the payment links still open whichever day they were issued, and every payment link issued today, even after it lapses or its checkout is canceled, because the buyer can still pay it. A link stops counting when its payment becomes an order (the order then counts as paid) or when Plural reports the payment failed. Shopify does not tell AgenticOrg when a buyer pays, so a Shopify link counts all the day it was issued.
 
 No buyer mandate is asked for, because the agent holds no payment credential and the buyer pays on your page. The decision is used once and recorded in your ledger. A refusal names the rule that failed and its reason, for example `daily_amount_cap_exceeded`, and no link is issued.
 
@@ -52,13 +52,13 @@ No buyer mandate is asked for, because the agent holds no payment credential and
 3. They open the link and pay on your page. Asking again gives the same link while it is valid.
 4. With Plural, they return to a short page that says whether the payment went through. If it did not, they ask for a new link.
 
-A Plural link is valid for 30 minutes, or until the checkout expires if that is sooner. While it is open, the checkout cannot be changed; the buyer starts a new checkout to change the items. A Shopify link stays the same for the life of the checkout.
+A Plural link is valid for 30 minutes, or until the checkout expires if that is sooner: asking to complete the checkout again gives the same link while it is valid, or a fresh one after it lapses. A Shopify link stays the same for the life of the checkout. Once either link has been issued, the checkout's items cannot be changed, even after a Plural link lapses, because the buyer can still pay it; the buyer starts a new checkout to change the items. The one exception: once Plural reports that every link the checkout gave out failed, the checkout can be changed and completed again.
 
 ## Your orders
 
 Open **Orders** (`/dashboard/orders`) to see every order buyers paid for through a Plural link, newest first: the total, the items, where to deliver it, the buyer's contact details, the payment status and where they shopped (Telegram, an AI app, or another platform). Each order also sends the same details in an email to every active administrator of your workspace.
 
-The delivery column shows how the buyer chose to receive the order: shipping with the rate and fee they chose, or store pickup with the store. For shipping it also shows the address they gave their agent at checkout, line by line. The Plural payment page does not ask for an address, so ship to the one shown here. The address and contact details appear exactly as the buyer gave them; AgenticOrg does not check or correct them.
+The delivery column shows how the buyer chose to receive the order: shipping with the delivery option they chose, or store pickup with the store. For shipping it also shows the address they gave their agent at checkout, line by line, with the recipient's name and phone when the buyer gave them. The shipping fee is shown once for the whole order, even when it ships to more than one place. The Plural payment page does not ask for an address, so ship to the one shown here. The address and contact details appear exactly as the buyer gave them; AgenticOrg does not check or correct them.
 
 AgenticOrg creates an order only when Plural confirms the full amount, through its signed webhook or the check AgenticOrg runs every minute. If Plural reports a payment that does not match the checkout, for example a different amount, no order is created and the payment is logged so you can refund it in Plural. A payment that is only authorised, not captured, stays pending.
 
@@ -75,4 +75,4 @@ Orders paid in your Shopify checkout appear in your Shopify admin, not on the Or
 | The buyer is told the commerce arbiter refused | The order is over one of your limits, or a signed fact has lapsed. The message names the rule; the decision in your ledger gives the exact reason. |
 | Test fails | Check the client ID and secret and that the environment matches them (Sandbox or Production). |
 | Paid in Plural but no order here | Check the webhook URL in your Plural dashboard. Payments are also checked every minute, so the order appears shortly. |
-| These items cannot be paid for in the shop's Shopify checkout | The items did not come from your Shopify store. Use My Plural account for them. |
+| These items cannot be paid for in the shop's Shopify checkout | An item did not come from your Shopify store, is sold by a unit such as weight, or was ordered more than 9,999 at a time. Use My Plural account for these orders. |

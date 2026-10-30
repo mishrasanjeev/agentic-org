@@ -482,7 +482,7 @@ test("a video fence plays a local recording with captions and reads as text", ()
   const markdown = ["## Watch", "", "```video", "oacp-demo | A <walkthrough> | Merchant & buyer, end to end", "```"].join("\n");
   const { html, videos, searchText } = renderGuide(markdown);
   assert.deepEqual(videos, [{ id: "oacp-demo", title: "A <walkthrough>", caption: "Merchant & buyer, end to end" }]);
-  assert.match(html, /<video controls preload="metadata" playsinline poster="\/media\/docs\/oacp-demo\.jpg"/);
+  assert.match(html, /<video controls preload="none" playsinline poster="\/media\/docs\/oacp-demo\.jpg"/);
   assert.match(html, /<source src="\/media\/docs\/oacp-demo\.mp4" type="video\/mp4">/);
   assert.match(html, /<track kind="captions" src="\/media\/docs\/oacp-demo\.vtt" srclang="en" label="English" default>/);
   assert.match(html, /A &lt;walkthrough&gt;/);
