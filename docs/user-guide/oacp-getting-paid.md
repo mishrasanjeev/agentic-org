@@ -52,7 +52,7 @@ No buyer mandate is asked for, because the agent holds no payment credential and
 3. They open the link and pay on your page. Asking again gives the same link while it is valid.
 4. With Plural, they return to a short page that says whether the payment went through. If it did not, they ask for a new link.
 
-A Plural link is valid for 30 minutes, or until the checkout expires if that is sooner: asking to complete the checkout again gives the same link while it is valid, or a fresh one after it lapses. A Shopify link stays the same for the life of the checkout. Once either link has been issued, the checkout's items cannot be changed, even after a Plural link lapses, because the buyer can still pay it; the buyer starts a new checkout to change the items. The one exception: when Plural reports the payment failed, the checkout can be changed and completed again.
+A Plural link is valid for 30 minutes, or until the checkout expires if that is sooner: asking to complete the checkout again gives the same link while it is valid, or a fresh one after it lapses. A Shopify link stays the same for the life of the checkout. Once either link has been issued, the checkout's items cannot be changed, even after a Plural link lapses, because the buyer can still pay it; the buyer starts a new checkout to change the items. The one exception: once Plural reports that every link the checkout gave out failed, the checkout can be changed and completed again.
 
 ## Your orders
 
