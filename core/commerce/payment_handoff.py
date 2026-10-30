@@ -227,31 +227,62 @@ def active_handoff(state: Mapping[str, Any], now: datetime) -> Mapping[str, Any]
     return handoff
 
 
+def _link_holds_cap(handoff: Any, *, now: datetime, day_start: datetime) -> bool:
+    """An issued link that is still open, or was issued on the UTC day starting at ``day_start``."""
+    if not isinstance(handoff, Mapping) or handoff.get("status") != "issued":
+        return False
+    expires = _parse(handoff.get("expires_at"))
+    issued = _parse(handoff.get("issued_at"))
+    return (expires is not None and expires > now) or (issued is not None and issued >= day_start)
+
+
 def holds_daily_cap(state: Mapping[str, Any], *, now: datetime, day_start: datetime) -> bool:
     """Whether a checkout's hand-off link still counts against today's daily maximum.
 
-    A link counts while it is open (``active_handoff``), and for the whole UTC day it was issued
-    until it is retired. A lapsed link can still be paid: Shopify's cart permalink never expires
-    and Shopify never reports the payment back, and a Plural order has no expiry of its own (a late
-    payment on it is still confirmed). A retired link counts for nothing: a paid one is counted as
-    paid, a failed one cannot be paid, and a replaced one gave way to the checkout's new link.
+    A link counts while it is open, and for the whole UTC day it was issued until it is retired.
+    A lapsed link can still be paid: Shopify's cart permalink never expires and Shopify never
+    reports the payment back, and a Plural order has no expiry of its own (a late payment on it is
+    still confirmed). A Plural order being created counts as its link will, and so does the lapsed
+    link it is replacing (``handoff_previous``) until the new link is issued. A retired link counts
+    for nothing: a paid one is counted as paid, a failed one cannot be paid, and a replaced one gave
+    way to the checkout's new link.
     """
-    if active_handoff(state, now) is not None:
-        return True
     handoff = state.get("handoff")
-    if not isinstance(handoff, Mapping) or handoff.get("status") != "issued":
-        return False
-    issued = _parse(handoff.get("issued_at"))
-    return issued is not None and issued >= day_start
+    if isinstance(handoff, Mapping) and handoff.get("status") == "creating":
+        return True
+    return _link_holds_cap(handoff, now=now, day_start=day_start) or _link_holds_cap(
+        state.get("handoff_previous"), now=now, day_start=day_start
+    )
 
 
 def clear_handoff(state: dict[str, Any], status: str) -> None:
-    """Retire the current hand-off: its message and ``continue_url`` go, its record stays with ``status``."""
+    """Retire the current hand-off: its message and ``continue_url`` go, its record stays with ``status``.
+
+    The record is replaced, never changed in place: ``state`` is usually a shallow copy of a row's
+    stored state, and a change inside the stored record would leave the row looking unchanged.
+    """
     state["messages"] = [m for m in state.get("messages") or [] if m.get("code") != MESSAGE_CODE]
     state.pop("continue_url", None)
     handoff = state.get("handoff")
-    if isinstance(handoff, dict):
-        handoff["status"] = status
+    if isinstance(handoff, Mapping):
+        state["handoff"] = {**handoff, "status": status}
+
+
+def retire_failed(state: dict[str, Any]) -> str:
+    """Retire the current link as failed; the checkout status that follows.
+
+    A lapsed link the failed one was replacing (``handoff_previous``) can still be paid, so it
+    comes back and the checkout waits for that payment again (``requires_escalation``). Otherwise
+    the checkout is ready to complete again.
+    """
+    previous = state.pop("handoff_previous", None)
+    clear_handoff(state, "failed")
+    if not isinstance(previous, Mapping) or previous.get("status") != "issued":
+        return "ready_for_complete"
+    state["handoff"] = dict(previous)
+    state["continue_url"] = previous.get("continue_url")
+    state["messages"] = [*state["messages"], buyer_message(str(previous.get("mode")))]
+    return "requires_escalation"
 
 
 def issue(

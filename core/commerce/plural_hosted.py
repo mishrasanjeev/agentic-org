@@ -561,6 +561,8 @@ async def release_stale_reservations(tenant_id: str, *, now: datetime | None = N
 
     The reference stays remembered, so a payment on an order that was created
     after all still finds its session (and is held to the amount it asked for).
+    A lapsed link the order was replacing comes back (``payment_handoff.retire_failed``),
+    and the checkout waits for that payment again.
     """
     from core.commerce import payment_handoff as ph
     from core.commerce.ledger import record_commerce_event
@@ -585,9 +587,8 @@ async def release_stale_reservations(tenant_id: str, *, now: datetime | None = N
         ).all()
         for row in rows:
             state = dict(row.state or {})
-            ph.clear_handoff(state, "failed")
+            row.status = ph.retire_failed(state)
             row.state = state
-            row.status = "ready_for_complete"
             row.revision = row.revision + 1
             row.updated_at = moment
             released += 1

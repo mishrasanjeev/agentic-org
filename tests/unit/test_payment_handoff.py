@@ -188,6 +188,70 @@ def test_a_link_holds_the_daily_cap_while_open_and_all_the_day_it_was_issued(mod
     assert not ph.holds_daily_cap(_state(), now=issued, day_start=day_start)
 
 
+def test_a_plural_order_being_created_and_the_lapsed_link_it_replaces_hold_the_daily_cap() -> None:
+    day_start = datetime(2026, 10, 30, tzinfo=UTC)
+    issued = day_start + timedelta(hours=9)
+    state = _state()
+    state["handoff"] = {"mode": "plural_hosted", "status": "creating", "reference": "aoh-b"}
+    assert ph.holds_daily_cap(state, now=issued, day_start=day_start)
+    # A lapsed link it replaces counts for the day it was issued, until the new link is issued.
+    state["handoff"] = {"mode": "plural_hosted", "status": "expired", "reference": "aoh-b"}
+    assert not ph.holds_daily_cap(state, now=issued + timedelta(hours=1), day_start=day_start)
+    state["handoff_previous"] = {
+        "mode": "plural_hosted",
+        "status": "issued",
+        "reference": "aoh-a",
+        "issued_at": ph.iso(issued),
+        "expires_at": ph.iso(issued + timedelta(minutes=30)),
+    }
+    assert ph.holds_daily_cap(state, now=issued + timedelta(hours=1), day_start=day_start)
+    assert not ph.holds_daily_cap(
+        state, now=day_start + timedelta(days=1, hours=1), day_start=day_start + timedelta(days=1)
+    )
+
+
+def test_clearing_a_link_replaces_its_record_instead_of_changing_the_stored_one() -> None:
+    now = datetime.now(UTC)
+    stored = _state()
+    ph.issue(
+        stored,
+        mode="plural_hosted",
+        continue_url="https://pay.plural.example/1",
+        decision_id="arbdec_1",
+        now=now,
+        expires_at=now + timedelta(minutes=30),
+    )
+    copy = dict(stored)  # what a handler does with a row's state
+    ph.clear_handoff(copy, "failed")
+    assert copy["handoff"]["status"] == "failed"
+    # The row's stored state is untouched, so the change to the copy is seen and written.
+    assert stored["handoff"]["status"] == "issued" and copy != stored
+
+
+def test_a_failed_link_puts_back_the_lapsed_link_it_was_replacing() -> None:
+    now = datetime.now(UTC)
+    state = _state()
+    ph.issue(
+        state,
+        mode="plural_hosted",
+        continue_url="https://pay.plural.example/a",
+        decision_id="arbdec_a",
+        now=now - timedelta(hours=1),
+        expires_at=now - timedelta(minutes=30),
+    )
+    lapsed = dict(state["handoff"])
+    ph.clear_handoff(state, "expired")
+    state["handoff_previous"] = lapsed
+    state["handoff"] = {"mode": "plural_hosted", "status": "creating", "reference": "aoh-b"}
+    assert ph.retire_failed(state) == "requires_escalation"
+    assert state["handoff"] == lapsed and "handoff_previous" not in state
+    assert state["continue_url"] == "https://pay.plural.example/a"
+    assert [m["code"] for m in state["messages"]] == [ph.MESSAGE_CODE]
+    # With nothing to put back, the checkout is ready to complete again.
+    assert ph.retire_failed(state) == "ready_for_complete"
+    assert state["handoff"]["status"] == "failed" and "continue_url" not in state and state["messages"] == []
+
+
 def test_references_and_events_are_bounded_and_deduplicated() -> None:
     state = _state()
     for i in range(ph.MAX_REFERENCES + 3):
