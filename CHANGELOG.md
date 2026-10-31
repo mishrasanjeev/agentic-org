@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased - Security advisories of 2026-10-30 (pypdf, follow-redirects)
+
+### Security
+
+- pypdf moves from 6.21.2 to 6.21.4 (`pyproject.toml` floor `pypdf>=6.21.4` and the exact
+  `requirements.txt` pin), fixing the seven advisories pip-audit reports against 6.21.2 (fixed in
+  6.21.3 and 6.21.4). `tests/regression/test_security_20260618_alerts.py` now requires 6.21.4.
+- UI: follow-redirects (via axios) moves from 1.16.1 to 1.16.2 through the `overrides` floor
+  (`>=1.16.2`), fixing GHSA-mrwp-f3q8-3g9p (high).
+
 ## Unreleased - Telegram shopper held to the platform Gemini cap
 
 - The Telegram shopper belongs to no tenant, and a check without a tenant applies the per-tenant
