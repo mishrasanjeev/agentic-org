@@ -17,7 +17,7 @@ oacp-commerce-walkthrough | One order, start to finish | A shop owner sets up a 
 Short on time? The same order in under 4 minutes: the silent stretches are left out, the key screens are shown closer, and the buyer's test screen is redrawn in large type with the same words and prices.
 
 ```video
-one-order-in-4-minutes | One order, in 4 minutes | The same recording, cut to under 4 minutes: the shop owner sets up the demo coffee shop and turns Sell everywhere on, the buyer's AI assistant finds the shop and fills the cart, the buyer pays the shop on its own Plural page with a test payment, and the order reaches the shop owner. Narrated, with English captions.
+one-order-in-4-minutes | One order, in 4 minutes | A shorter version of the same recording, 3 minutes 53 seconds long: the shop owner sets up the demo coffee shop and turns Sell everywhere on, the buyer's AI assistant finds the shop and fills the cart, the buyer pays the shop on its own Plural page with a test payment, and the order reaches the shop owner. Narrated, with English captions.
 ```
 
 ## How it works, in three parts
