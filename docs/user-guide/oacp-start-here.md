@@ -3,15 +3,15 @@ AI assistants such as ChatGPT and Claude can now shop for people. AgenticOrg let
 You set up once: add your products from Shopify or a spreadsheet, write your rules, set your limits and choose where you get paid.
 A buyer asks their assistant for something. It finds your shop, fills the cart and asks for a payment link.
 The buyer pays you on your own payment page. The assistant can never pay by itself.
-You get the order with the delivery address. The video below shows one real order, start to finish.
+You get the order with the delivery address. The video below follows one order, start to finish.
 ```
 
-## Watch one real order
+## Watch one order, start to finish
 
 This recording was made on the live AgenticOrg service with a demo coffee shop, a demo buyer and a Plural test payment. The setup, payment and Orders screens are the real product, and every answer from the shop's side comes live from AgenticOrg. The buyer's assistant is shown as a simple console that makes the same calls an AI app makes, and the opening and closing cards were added for the video.
 
 ```video
-oacp-commerce-walkthrough | One real order, start to finish | A shop owner sets up a demo coffee shop: products from a spreadsheet (a Shopify store connects through a read-only app in its Shopify admin instead), rules, a shipping fee, limits and their own Plural account. A buyer's AI assistant finds the shop, fills the cart and gets a payment link. The buyer pays the shop, and the order reaches the shop owner with the delivery address. Narrated, with English captions.
+oacp-commerce-walkthrough | One order, start to finish | A shop owner sets up a demo coffee shop: products from a spreadsheet (a Shopify store connects through a read-only app in its Shopify admin instead), rules, a shipping fee, limits and their own Plural account. A buyer's AI assistant finds the shop, fills the cart and gets a payment link. The buyer pays the shop, and the order reaches the shop owner with the delivery address. Narrated, with English captions.
 ```
 
 ## How it works, in three parts

@@ -401,7 +401,7 @@ test("the OACP section has twelve adaptive guides with summaries, figures and wo
     assert.equal(guide.colorScheme, "light", guide.slug);
     assert.deepEqual(guide.figures, [], guide.slug);
   }
-  // The plain-words start page leads the section with the recording of one real order.
+  // The plain-words start page leads the section with the recording of one order.
   const start = guides[0];
   assert.equal(start.slug, "oacp-start-here");
   assert.deepEqual(start.videos.map((video) => video.id), ["oacp-commerce-walkthrough"]);
