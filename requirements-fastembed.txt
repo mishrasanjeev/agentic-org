@@ -10,5 +10,6 @@
 # other runtime requirements are declared in pyproject.toml with the same
 # ranges. When a fastembed release accepts Pillow 13, move fastembed back into
 # pyproject.toml and delete this file.
-fastembed==0.9.0 \
-    --hash=sha256:273d408edec8c0f161711d8f6e44e4a5b559d18e8edf6bf805415d55dc772846
+fastembed==0.9.1 \
+    --hash=sha256:8b4b2881ea85a4d36e8f284466671437b3fed869c33cdc71d6f6c48ddff115c7 \
+    --hash=sha256:95042ac7f685bda6697861066d49f8b119fbde8b75ed5162bbb7e84e2dad0e1d
