@@ -404,7 +404,7 @@ test("the OACP section has twelve adaptive guides with summaries, figures and wo
   // The plain-words start page leads the section with the recording of one order.
   const start = guides[0];
   assert.equal(start.slug, "oacp-start-here");
-  assert.deepEqual(start.videos.map((video) => video.id), ["oacp-commerce-walkthrough"]);
+  assert.deepEqual(start.videos.map((video) => video.id), ["oacp-commerce-walkthrough", "one-order-in-4-minutes"]);
   assert.match(start.html, /Connect your store/);
   assert.match(start.html, /Upload a spreadsheet/);
   const overview = guides.find((guide) => guide.slug === "oacp-overview");

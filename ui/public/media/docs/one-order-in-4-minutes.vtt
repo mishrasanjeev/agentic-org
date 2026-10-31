@@ -1,0 +1,323 @@
+WEBVTT
+
+1
+00:00:00.001 --> 00:00:02.885
+This is one order,
+recorded start to finish
+
+2
+00:00:02.925 --> 00:00:06.185
+on the live AgenticOrg service,
+with a test payment.
+
+3
+00:00:06.775 --> 00:00:08.739
+A shop owner sets up a shop,
+
+4
+00:00:08.906 --> 00:00:12.023
+a buyer's AI assistant
+finds it and builds the order,
+
+5
+00:00:12.145 --> 00:00:15.616
+and the buyer pays the shop
+on the shop's own payment page.
+
+6
+00:00:18.017 --> 00:00:19.848
+The merchant opens Sell everywhere
+
+7
+00:00:19.888 --> 00:00:22.696
+and picks their new shop, Kaveri Coffee.
+
+8
+00:00:23.290 --> 00:00:26.554
+They have already saved the keys
+of their own Plural account,
+
+9
+00:00:26.594 --> 00:00:28.853
+in sandbox mode for this recording.
+
+10
+00:00:29.817 --> 00:00:34.067
+The shop has no Shopify store,
+so it uploads a spreadsheet:
+
+11
+00:00:34.218 --> 00:00:36.890
+two coffees, with prices and stock.
+
+12
+00:00:38.519 --> 00:00:41.005
+Next come the policies buyers will see,
+
+13
+00:00:41.045 --> 00:00:43.831
+and a flat shipping fee
+of forty-nine rupees
+
+14
+00:00:43.871 --> 00:00:45.283
+for orders within India.
+
+15
+00:00:47.733 --> 00:00:50.622
+Then the limits every AI agent
+must stay within:
+
+16
+00:00:50.770 --> 00:00:52.004
+the largest order,
+
+17
+00:00:52.154 --> 00:00:55.262
+the most per day,
+and the most items in one order.
+
+18
+00:00:55.848 --> 00:00:57.517
+Nothing is set by default.
+
+19
+00:00:59.879 --> 00:01:03.759
+For payment, AgenticOrg tests
+the merchant's Plural keys,
+
+20
+00:01:03.887 --> 00:01:05.850
+and the merchant chooses to take payment
+
+21
+00:01:05.890 --> 00:01:07.537
+in their own Plural account.
+
+22
+00:01:07.855 --> 00:01:10.427
+AgenticOrg never holds the buyer's money.
+
+23
+00:01:11.379 --> 00:01:14.646
+Last, the merchant names the shop
+on the network,
+
+24
+00:01:14.686 --> 00:01:19.720
+accepts the terms,
+and turns Sell everywhere on.
+
+25
+00:01:20.336 --> 00:01:23.388
+Shops on Shopify
+add their products another way.
+
+26
+00:01:23.961 --> 00:01:25.487
+In the Shopify admin,
+
+27
+00:01:25.639 --> 00:01:28.661
+they create an app
+that can read products and stock,
+
+28
+00:01:28.701 --> 00:01:32.289
+then paste the store address
+and the app's access token here.
+
+29
+00:01:32.623 --> 00:01:34.937
+AgenticOrg then reads the products,
+
+30
+00:01:34.977 --> 00:01:36.977
+prices and stock by itself.
+
+31
+00:01:37.965 --> 00:01:41.614
+Their buyers can also pay
+in the shop's own Shopify checkout,
+
+32
+00:01:41.760 --> 00:01:43.018
+instead of Plural.
+
+33
+00:01:44.610 --> 00:01:48.044
+A few minutes later,
+the web address has its certificate,
+
+34
+00:01:48.189 --> 00:01:49.516
+and the shop is live.
+
+35
+00:01:50.104 --> 00:01:53.022
+AI apps such as ChatGPT and Claude,
+
+36
+00:01:53.163 --> 00:01:55.468
+the AgenticOrg bot on Telegram,
+
+37
+00:01:55.609 --> 00:01:57.408
+and the open web can reach it,
+
+38
+00:01:57.448 --> 00:02:00.197
+and buyers pay
+on the shop's own Plural page.
+
+39
+00:02:00.796 --> 00:02:04.251
+Google, Microsoft and Perplexity
+are still to come.
+
+40
+00:02:06.742 --> 00:02:08.122
+Now the buyer's side.
+
+41
+00:02:08.730 --> 00:02:12.100
+A simple console stands in
+for the buyer's AI assistant,
+
+42
+00:02:12.244 --> 00:02:15.175
+and makes the same live calls
+an AI app makes.
+
+43
+00:02:15.774 --> 00:02:18.446
+The buyer wants two packs
+of filter coffee,
+
+44
+00:02:18.591 --> 00:02:20.072
+delivered to Bengaluru.
+
+45
+00:02:22.437 --> 00:02:25.362
+It lists the shops
+on the network and searches them,
+
+46
+00:02:25.402 --> 00:02:27.785
+and finds the merchant's filter coffee
+
+47
+00:02:27.825 --> 00:02:29.825
+at four hundred and twenty rupees.
+
+48
+00:02:30.587 --> 00:02:32.812
+It opens a checkout for two packs,
+
+49
+00:02:32.959 --> 00:02:35.782
+then adds the buyer's name
+and delivery address.
+
+50
+00:02:36.245 --> 00:02:38.564
+The shop offers its flat shipping rate,
+
+51
+00:02:38.715 --> 00:02:42.244
+and the total comes
+to eight hundred and eighty-nine rupees.
+
+52
+00:02:42.855 --> 00:02:46.521
+The checkout is ready,
+so the agent asks to complete it.
+
+53
+00:02:47.107 --> 00:02:50.295
+AgenticOrg checks the order
+against the merchant's limits
+
+54
+00:02:50.335 --> 00:02:53.209
+and the verified catalog,
+records the decision,
+
+55
+00:02:53.347 --> 00:02:56.288
+and returns a link
+to the merchant's payment page.
+
+56
+00:02:56.628 --> 00:02:58.694
+The agent cannot pay on its own.
+
+57
+00:03:02.156 --> 00:03:03.648
+The buyer opens the link.
+
+58
+00:03:04.270 --> 00:03:07.329
+This is a Plural checkout
+under the merchant's own account,
+
+59
+00:03:07.369 --> 00:03:09.487
+and the buyer pays with a test card.
+
+60
+00:03:18.348 --> 00:03:20.119
+Plural sends the buyer back.
+
+61
+00:03:20.727 --> 00:03:23.441
+AgenticOrg confirms the payment
+with Plural,
+
+62
+00:03:23.577 --> 00:03:25.199
+and the order is confirmed.
+
+63
+00:03:27.185 --> 00:03:29.056
+On the merchant's Orders page,
+
+64
+00:03:29.096 --> 00:03:31.520
+the paid order appears with its items,
+
+65
+00:03:31.560 --> 00:03:34.626
+the amount,
+and the delivery details the buyer gave.
+
+66
+00:03:34.666 --> 00:03:37.582
+The merchant's administrators
+also get an email,
+
+67
+00:03:37.622 --> 00:03:39.564
+and the merchant ships the order.
+
+68
+00:03:40.363 --> 00:03:41.716
+That is the whole flow.
+
+69
+00:03:42.260 --> 00:03:43.854
+The merchant set up once.
+
+70
+00:03:44.433 --> 00:03:46.155
+A buyer's AI agent found the shop
+
+71
+00:03:46.195 --> 00:03:49.077
+and built the order
+within the merchant's limits.
+
+72
+00:03:49.543 --> 00:03:51.880
+And the buyer paid the merchant directly.
