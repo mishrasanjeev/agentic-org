@@ -1,5 +1,16 @@
 # Changelog
 
+## Unreleased - Telegram shopper held to the platform Gemini cap
+
+- The Telegram shopper belongs to no tenant, and a check without a tenant applies the per-tenant
+  Gemini cap (`AGENTICORG_GEMINI_DAILY_USD_CAP`, default $10) to every tenant's spend combined.
+  With `AGENTICORG_RECORDED_SPEND_CONTROLS_ENABLED` on, that total is real, so once all tenants'
+  router Gemini spend reached $10 in a UTC day every buyer turn on Telegram failed until the day
+  rolled over. With the flag on, the shopper now checks only the platform cap
+  (`AGENTICORG_GEMINI_PLATFORM_DAILY_USD_CAP`, default $100), still failing closed. With the flag
+  off nothing changes. Router calls without a tenant keep both caps. The shopper's own model calls
+  do not go through the router and are not recorded, so they count toward neither cap, as before.
+
 ## Unreleased - Cost controls on recorded spend (off by default)
 
 - The Gemini daily caps (`AGENTICORG_GEMINI_DAILY_USD_CAP`, per tenant, default $10;
@@ -15,8 +26,9 @@
   - budget alerts read `agent_cost_ledger`, the per-agent daily cost that agent runs and chat turns
     write and the per-agent monthly cap reads, with company and cost centre taken from the agent.
 - Turning it on starts enforcing the caps. Check recent per-tenant usage or raise the caps first;
-  set a cap to `0` to leave it off. A check with no tenant (the Telegram shopper) applies the
-  per-tenant cap to the platform-wide total, as the cap code already does. Agent runs on the
+  set a cap to `0` to leave it off. A check with no tenant applies the per-tenant cap to the
+  platform-wide total, as the cap code already does (the Telegram shopper is now held to the
+  platform cap only; see above). Agent runs on the
   LangGraph runtime do not go through the router and are not counted toward or limited by these
   caps.
 - Migration `v6z105_llm_daily_spend` creates the table and `public.gemini_daily_ledger_spend()`, the

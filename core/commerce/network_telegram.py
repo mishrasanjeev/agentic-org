@@ -412,9 +412,14 @@ async def run_shopper(state: dict[str, Any], text: str, model_factory: ModelFact
     """One buyer turn through the tool-calling model; returns the reply text."""
     from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, ToolMessage  # noqa: PLC0415
 
-    from core.llm.router import assert_under_gemini_cap  # noqa: PLC0415
+    from core.llm.router import assert_under_gemini_cap, assert_under_gemini_platform_cap  # noqa: PLC0415
 
-    await assert_under_gemini_cap(0.0)
+    # The shopper belongs to no tenant. With recorded spend, the per-tenant cap would be measured
+    # against every tenant's spend combined and stop the bot for the rest of the UTC day.
+    if settings.recorded_spend_controls_enabled:
+        await assert_under_gemini_platform_cap(0.0)
+    else:
+        await assert_under_gemini_cap(0.0)
     tools = ShopperTools(state.get("shop"))
     bound = _langchain_tools(tools)
     by_name = {t.name: t for t in bound}

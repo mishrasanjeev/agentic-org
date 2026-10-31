@@ -6,9 +6,11 @@ so in production the cap never refuses a call and no budget alert fires. With
 ``AGENTICORG_RECORDED_SPEND_CONTROLS_ENABLED`` a tenant's router calls, priced
 by the real Gemini path (the SDK client is the only stand-in), are recorded in
 ``llm_daily_spend``; the third call is refused at a $1 cap while another
-tenant is unaffected. An agent run's cost, written by the run route's ledger
-writer, fires a budget alert. Off, nothing is recorded. The runtime connects
-as a NOBYPASSRLS role with the production grants.
+tenant is unaffected. The Telegram shopper, which has no tenant, keeps
+answering when tenants' combined spend passes the per-tenant cap and is
+refused at the platform cap. An agent run's cost, written by the run route's
+ledger writer, fires a budget alert. Off, nothing is recorded. The runtime
+connects as a NOBYPASSRLS role with the production grants.
 """
 
 from __future__ import annotations
@@ -179,6 +181,71 @@ async def test_gemini_cap_refuses_once_recorded_router_spend_reaches_it(monkeypa
         with pytest.raises(DailyBudgetExceeded, match="platform daily spend cap reached"):
             await router.complete(messages, model_override=MODEL, tenant_id=str(tenant_b))
         assert models.calls == 4
+    finally:
+        if runtime is not None:
+            await runtime.dispose()
+        async with admin.begin() as conn:
+            await conn.execute(text("DELETE FROM llm_daily_spend WHERE tenant_id IN (:a,:b)"),
+                               {"a": tenant_a, "b": tenant_b})
+            await conn.execute(text("DELETE FROM tenants WHERE id IN (:a,:b)"), {"a": tenant_a, "b": tenant_b})
+        if role:
+            await _drop_role(admin, role)
+        await admin.dispose()
+
+
+@pytest.mark.asyncio
+async def test_telegram_shopper_is_held_to_the_platform_cap_only(monkeypatch):
+    """Two tenants' recorded spend past the per-tenant cap no longer stops the tenantless shopper."""
+    from google import genai
+
+    from core.commerce import network_telegram as bot
+    from core.llm.router import DailyBudgetExceeded, LLMRouter, assert_under_gemini_cap
+    from core.test_doubles.scripted_model import ScriptedChatModel, final
+
+    url = os.getenv("AGENTICORG_DB_URL")
+    admin = create_async_engine(url, poolclass=NullPool)
+    tenant_a, tenant_b = uuid.uuid4(), uuid.uuid4()
+    role, runtime = None, None
+    models = _FakeGeminiModels()
+    try:
+        await _make_tenants(admin, tenant_a, tenant_b)
+        role, runtime = await _runtime_role(admin)
+        _use_engine(monkeypatch, runtime)
+        monkeypatch.setenv("AGENTICORG_TEST_FAKE_LLM", "0")
+        monkeypatch.delenv("AGENTICORG_MODEL_MODE", raising=False)
+        monkeypatch.setenv("AGENTICORG_GEMINI_DAILY_USD_CAP", "0")
+        monkeypatch.setenv("AGENTICORG_GEMINI_PLATFORM_DAILY_USD_CAP", "0")
+        monkeypatch.setattr(genai, "Client", lambda api_key=None: SimpleNamespace(aio=SimpleNamespace(models=models)))
+        monkeypatch.setattr(LLMRouter, "_provider_secret", AsyncMock(return_value="synthetic-key"))
+        _controls(monkeypatch, True)
+        router = LLMRouter()
+        messages = [{"role": "user", "content": "Summarise the synthetic ledger"}]
+        for tenant in (tenant_a, tenant_b):
+            await router.complete(messages, model_override=MODEL, tenant_id=str(tenant))
+
+        async with runtime.connect() as conn:
+            platform = float((await conn.execute(text("SELECT public.gemini_daily_ledger_spend()"))).scalar_one())
+        assert platform >= 2 * CALL_COST - 1e-9
+        # Each tenant is under the per-tenant cap; combined they are over it.
+        monkeypatch.setenv("AGENTICORG_GEMINI_DAILY_USD_CAP", f"{platform - 0.01:.4f}")
+        monkeypatch.setenv("AGENTICORG_GEMINI_PLATFORM_DAILY_USD_CAP", f"{platform + 1.0:.4f}")
+
+        # The check the shopper made before: the combined total trips the per-tenant cap.
+        with pytest.raises(DailyBudgetExceeded, match="AGENTICORG_GEMINI_DAILY_USD_CAP"):
+            await assert_under_gemini_cap(0.0)
+
+        state = {"shop": "tea-corner", "shop_name": "Tea Corner", "turns": []}
+        answering = ScriptedChatModel(steps=[final("Tea Corner has three teas.")])
+        assert await bot.run_shopper(dict(state), "show me your teas", model_factory=lambda: answering) == (
+            "Tea Corner has three teas."
+        )
+
+        # At the platform cap the shopper is refused before its model is called.
+        monkeypatch.setenv("AGENTICORG_GEMINI_PLATFORM_DAILY_USD_CAP", f"{platform:.4f}")
+        silent = ScriptedChatModel(steps=[])
+        with pytest.raises(DailyBudgetExceeded, match="platform daily spend cap reached"):
+            await bot.run_shopper(dict(state), "show me your teas", model_factory=lambda: silent)
+        assert silent.calls == []
     finally:
         if runtime is not None:
             await runtime.dispose()
