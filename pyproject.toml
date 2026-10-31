@@ -188,7 +188,7 @@ v4 = [
     "presidio-analyzer>=2.2.364,<2.2.365; python_version >= '3.14'",
     "presidio-analyzer>=2.2.362; python_version < '3.14'",
     # preshed 3.0.14 rejects spaCy's high unsigned token hashes on Python 3.14.
-    "preshed==3.0.13; python_version == '3.14'",
+    "preshed==3.0.15; python_version == '3.14'",
     # Browser RPA is a shipped runtime. Keep the Python driver in the
     # production extra; Dockerfile installs the matching Chromium binary.
     "playwright>=1.64.1,<2",
@@ -218,7 +218,7 @@ dev = [
     # so the wheel stays lean for downstream SDK consumers.
     "presidio-analyzer>=2.2.363",
     # Keep the Python 3.14 NLP hash-map constraint aligned with the v4 runtime.
-    "preshed==3.0.13; python_version == '3.14'",
+    "preshed==3.0.15; python_version == '3.14'",
 ]
 
 [project.scripts]
