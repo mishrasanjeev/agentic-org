@@ -24,14 +24,14 @@ def test_ui_lockfile_uses_patched_security_alert_versions() -> None:
 def test_pypdf_security_floor_and_exact_pin_are_patched() -> None:
     project = tomllib.loads(Path("pyproject.toml").read_text(encoding="utf-8"))["project"]
     declared = next(Requirement(raw) for raw in project["dependencies"] if Requirement(raw).name == "pypdf")
-    assert not declared.specifier.contains("6.21.1")
-    assert declared.specifier.contains("6.21.2")
+    assert not declared.specifier.contains("6.21.3")
+    assert declared.specifier.contains("6.21.4")
     pinned = next(
         Requirement(raw.strip())
         for raw in Path("requirements.txt").read_text(encoding="utf-8").splitlines()
         if raw.strip() and not raw.lstrip().startswith("#") and Requirement(raw.strip()).name == "pypdf"
     )
-    assert str(pinned.specifier) == "==6.21.2"
+    assert str(pinned.specifier) == "==6.21.4"
 
 
 @pytest.mark.asyncio
