@@ -85,7 +85,7 @@ langchain-openai==1.7.2
 # (core/langgraph/checkpoint_postgres.py) is verified against these versions.
 langgraph-checkpoint-postgres==3.2.0
 langgraph-checkpoint==4.3.0
-langsmith==0.14.11
+langsmith==0.14.14
 
 # ─── Google Cloud Platform ───────────────────────────────────────────────────
 google-cloud-storage==2.19.0
