@@ -361,14 +361,24 @@ def web_address_live(domain: MerchantCustomDomainRow | None, host: str | None) -
 
 
 async def _domain_for_host(listing: CommerceNetworkListingRow, host: str) -> MerchantCustomDomainRow | None:
+    """The listed shop's own active domain row for ``host`` (the row Sell everywhere shows the merchant).
+
+    Scoped to the listing's merchant and seller agent: another merchant of the tenant may hold a
+    ``pending_dns`` row for the same host (a claim that never verifies), and that row must not hide
+    this shop. At most one active row exists per scope (``uq_merchant_custom_domains_scope_active``).
+    """
     async with get_tenant_session(listing.tenant_id) as session:
         return (
             await session.scalars(
-                select(MerchantCustomDomainRow).where(
+                select(MerchantCustomDomainRow)
+                .where(
                     MerchantCustomDomainRow.tenant_id == uuid.UUID(str(listing.tenant_id)),
+                    MerchantCustomDomainRow.merchant_id == listing.merchant_id,
+                    MerchantCustomDomainRow.seller_agent_id == (listing.seller_agent_id or ""),
                     MerchantCustomDomainRow.host == host,
                     MerchantCustomDomainRow.status.not_in(INACTIVE_STATUSES),
                 )
+                .order_by(MerchantCustomDomainRow.created_at.desc())
             )
         ).first()
 

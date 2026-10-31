@@ -93,12 +93,23 @@ def delivery_view(snapshot: Mapping[str, Any]) -> list[dict[str, Any]]:
     return out
 
 
-def delivery_heading(item: Mapping[str, Any], shipping: str) -> str:
-    """``Ship - Standard delivery - Rs 49.00`` or ``Store pickup - MG Road store``."""
+def delivery_heading(item: Mapping[str, Any]) -> str:
+    """``Ship - Standard delivery`` or ``Store pickup - MG Road store``: the method and the option chosen.
+
+    No fee here: the order keeps one fulfillment total for all its deliveries
+    (``shipping_fee_line`` shows it once), not a fee per delivery.
+    """
     parts = ["Store pickup" if item["method"] == "pickup" else "Ship", str(item["option"] or "")]
-    if item["method"] != "pickup":
-        parts.append(shipping)
     return " - ".join(part for part in parts if part)
+
+
+def shipping_fee_line(deliveries: list[Mapping[str, Any]], shipping: str | None) -> str:
+    """The order's shipping fee, once: ``Shipping fee: Rs 49.00``, or ``Shipping fee for all deliveries:
+    Rs 98.00`` when the order ships more than once; empty when nothing ships or there is no fee."""
+    shipped = sum(1 for item in deliveries if item["method"] != "pickup")
+    if not shipping or not shipped:
+        return ""
+    return f"{'Shipping fee for all deliveries' if shipped > 1 else 'Shipping fee'}: {shipping}"
 
 
 def total_of(snapshot: Mapping[str, Any], kind: str) -> Any:
@@ -116,16 +127,18 @@ def order_email(
         f"{html.escape(str((li.get('quantity') or {}).get('total', '')))}</li>"
         for li in snapshot.get("line_items") or []
     )
-    shipping = money(total_of(snapshot, "fulfillment"), currency)
+    deliveries = delivery_view(snapshot)
     delivery = (
         "".join(
-            f"<li>{html.escape(delivery_heading(item, shipping))}"
+            f"<li>{html.escape(delivery_heading(item))}"
             + "".join(f"<br>{html.escape(line)}" for line in item["address"])
             + "</li>"
-            for item in delivery_view(snapshot)
+            for item in deliveries
         )
         or "<li>The buyer gave no delivery details.</li>"
     )
+    fee = shipping_fee_line(deliveries, money(total_of(snapshot, "fulfillment"), currency))
+    fee_html = f"<p>{html.escape(fee)}</p>" if fee else ""
     contact = (
         "".join(
             f"<li>{html.escape(label)}: {html.escape(str(buyer[key]))}</li>"
@@ -146,7 +159,7 @@ def order_email(
         f"<strong>Total:</strong> {html.escape(money(total, currency))}<br>"
         f"<strong>Placed through:</strong> {html.escape(surface)}</p>"
         f"<p><strong>Items</strong></p><ul>{lines}</ul>"
-        f"<p><strong>Delivery (as given)</strong></p><ul>{delivery}</ul>"
+        f"<p><strong>Delivery (as given)</strong></p><ul>{delivery}</ul>{fee_html}"
         f"<p><strong>Buyer contact (as given)</strong></p><ul>{contact}</ul>"
         "<p>See every order on the Orders page of your AgenticOrg console.</p>"
     )

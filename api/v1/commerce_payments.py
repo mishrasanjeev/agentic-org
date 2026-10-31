@@ -316,6 +316,8 @@ def _order_view(order: Any, checkout: Any) -> dict[str, Any]:
             for li in snapshot.get("line_items") or []
         ],
         "buyer": buyer,
+        # Each delivery names its method and the option chosen; the fee is the order's one fulfillment
+        # total, for all its deliveries together, so it is shown once and never per delivery.
         "delivery": delivery_view(snapshot),
         "shipping": money(total_of(snapshot, "fulfillment"), order.currency) or None,
         "payment": {
@@ -427,8 +429,11 @@ async def _return_page(tenant_id: str, checkout_id: str) -> HTMLResponse:
     handoff = (row.state or {}).get("handoff") if row is not None else None
     if row is None or not isinstance(handoff, dict) and not (row.state or {}).get("handoff_refs"):
         return _page("Checkout not found", "We could not find this checkout.", status=404)
+    refreshed = None
     if row.status == "requires_escalation":
-        await plural_hosted.refresh_handoff(tenant_id=str(tenant), session_row=row, source="return")
+        refreshed = await plural_hosted.refresh_handoff(
+            tenant_id=str(tenant), session_row=row, source="return", report_untouched=True
+        )
         row = await _load_checkout(tenant, checkout_id) or row
     if row.status == "completed":
         return _page(
@@ -438,7 +443,10 @@ async def _return_page(tenant_id: str, checkout_id: str) -> HTMLResponse:
         )
     if row.status == "canceled":
         return _page("Checkout canceled", "This checkout was canceled. Nothing more is needed here.")
-    if row.status == "ready_for_complete":
+    # Declined on the newest link while an earlier one, which nobody has started to pay, waits again. While the
+    # earlier link is being paid, or Plural cannot say, the buyer is asked to wait instead.
+    declined = refreshed in ("link_retired", "not_attempted") and ph.newest_link_failed(row.state or {})
+    if row.status == "ready_for_complete" or declined:
         return _page(
             "Payment not completed",
             "The payment did not go through.",

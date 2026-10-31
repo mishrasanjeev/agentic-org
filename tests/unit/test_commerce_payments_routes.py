@@ -699,6 +699,33 @@ async def test_an_order_shows_the_buyer_contact_delivery_items_total_and_surface
 
 
 @pytest.mark.asyncio
+async def test_an_order_shipped_twice_gives_its_one_shipping_fee_at_order_level(db):
+    def shipped(option: str, street: str) -> dict:
+        return {
+            "method_type": "shipping",
+            "description": option,
+            "destination": {"first_name": "Asha", "street_address": street, "address_country": "IN"},
+        }
+
+    snapshot = {
+        **_order("ord_2", "chk_2").snapshot,
+        "currency": "INR",
+        # Two shipping destinations at Rs 49 each: one fulfillment total for the order.
+        "totals": [{"type": "subtotal", "amount": 44900}, {"type": "fulfillment", "amount": 9800}],
+        "fulfillment": {"expectations": [shipped("Standard", "12 MG Road"), shipped("Express", "4 Park Street")]},
+    }
+    db.scalar_results = [[_order("ord_2", "chk_2", snapshot=snapshot)], [_checkout("chk_2", {})]]
+    async with _client() as client:
+        order = (await client.get(ORDERS)).json()["orders"][0]
+    assert order["shipping"] == "Rs 98.00"
+    # Each delivery is its method, option and address: never a fee of its own.
+    assert order["delivery"] == [
+        {"method": "shipping", "option": "Standard", "address": ["Asha", "12 MG Road", "IN"]},
+        {"method": "shipping", "option": "Express", "address": ["Asha", "4 Park Street", "IN"]},
+    ]
+
+
+@pytest.mark.asyncio
 async def test_an_order_without_its_checkout_still_lists(db):
     order = _order(
         "ord_9",
@@ -792,9 +819,42 @@ async def test_a_waiting_checkout_asks_plural_and_shows_the_fresh_status(db, ref
     db.execute_results = [waiting, _session_row("completed", order_id="ord_7")]
     async with _client() as client:
         response = await client.get(RETURN)
-    assert refresh == [{"tenant_id": str(TENANT), "session_row": waiting, "source": "return"}]
+    assert refresh == [{"tenant_id": str(TENANT), "session_row": waiting, "source": "return", "report_untouched": True}]
     assert "Payment received" in response.text and "ord_7" in response.text
     assert db.opened == [TENANT, TENANT]
+
+
+@pytest.mark.parametrize(
+    ("current_link", "title"),
+    [
+        ("link_retired", "Payment not completed"),
+        ("not_attempted", "Payment not completed"),
+        ("pending", "Confirming your payment"),
+        ("status_unavailable", "Confirming your payment"),
+    ],
+)
+@pytest.mark.asyncio
+async def test_a_declined_payment_on_the_newest_link_is_shown_even_while_an_earlier_link_waits(
+    db, monkeypatch, current_link, title
+):
+    async def refresh_handoff(**kwargs):
+        return current_link
+
+    monkeypatch.setattr(plural_hosted, "refresh_handoff", refresh_handoff)
+    # The buyer was declined on link B; link A, issued earlier and still payable, is the checkout's link again.
+    state = {
+        "handoff": {"mode": "plural_hosted", "status": "issued", "reference": "ref_a"},
+        "handoff_refs": ["ref_a", "ref_b"],
+        "handoff_orders": {
+            "ref_a": {"status": "issued", "issued_at": "2026-10-30T09:00:00Z"},
+            "ref_b": {"status": "failed", "issued_at": "2026-10-30T10:00:00Z"},
+        },
+    }
+    db.execute_results = [_session_row("requires_escalation", state=state)] * 2
+    async with _client() as client:
+        response = await client.get(RETURN)
+    assert f"<title>{title}</title>" in response.text
+    _assert_private_page(response)
 
 
 @pytest.mark.asyncio

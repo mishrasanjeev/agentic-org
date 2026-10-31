@@ -337,7 +337,8 @@ export default function SellEverywhere() {
       try {
         const { data } = await merchantSetupApi.connectShopify(merchantId, {
           shop_domain: shopDomain.trim(),
-          admin_access_token: shopToken.trim(),
+          // Left blank, the server keeps the saved token for the same store.
+          ...(shopToken.trim() ? { admin_access_token: shopToken.trim() } : {}),
           ...(webhookSecret.trim() ? { webhook_secret: webhookSecret.trim() } : {}),
         });
         applySetup(data.setup);
@@ -426,6 +427,12 @@ export default function SellEverywhere() {
   const listed = listing?.status === "listed";
   const surfaces = network?.surfaces;
   const webhookUrl = setup?.catalog.webhook_path ? `${window.location.origin}${setup.catalog.webhook_path}` : null;
+  // Shopify shows the Admin API token once: reconnecting the store already connected keeps the saved token.
+  const savedShopDomain = setup?.catalog.source === "shopify" ? setup.catalog.shop_domain : null;
+  const keepsSavedToken = Boolean(savedShopDomain) && shopDomain.trim() === savedShopDomain;
+  const canConnectShopify =
+    shopDomain.endsWith(".myshopify.com") &&
+    (shopToken.trim().length >= 10 || (keepsSavedToken && shopToken.trim() === ""));
   const limitsValid =
     /^[A-Za-z]{3}$/.test(currency.trim()) &&
     Number(maxOrder) > 0 &&
@@ -550,6 +557,7 @@ export default function SellEverywhere() {
                       autoComplete="off"
                       value={shopToken}
                       onChange={(e) => setShopToken(e.target.value)}
+                      placeholder={keepsSavedToken ? "Leave blank to keep the saved token" : ""}
                     />
                   </label>
                   <label className="flex flex-col gap-1">
@@ -560,12 +568,14 @@ export default function SellEverywhere() {
                       autoComplete="off"
                       value={webhookSecret}
                       onChange={(e) => setWebhookSecret(e.target.value)}
+                      placeholder={
+                        keepsSavedToken && setup.catalog.webhook_status === "configured"
+                          ? "Leave blank to keep the saved secret"
+                          : ""
+                      }
                     />
                   </label>
-                  <Button
-                    disabled={busy !== null || !shopDomain.endsWith(".myshopify.com") || shopToken.trim().length < 10}
-                    onClick={() => void connectShopify()}
-                  >
+                  <Button disabled={busy !== null || !canConnectShopify} onClick={() => void connectShopify()}>
                     Connect Shopify
                   </Button>
                 </div>
@@ -574,7 +584,7 @@ export default function SellEverywhere() {
                     <p>
                       Keep products current: in Shopify, open Settings, then Notifications, then Webhooks. Create a
                       Product update webhook in JSON format to this address, then paste the signing secret Shopify
-                      shows there above and connect again.
+                      shows there above and connect again. Leave the token blank to keep the saved one.
                     </p>
                     <span className="flex items-center gap-2">
                       <code className="break-all">{webhookUrl}</code>

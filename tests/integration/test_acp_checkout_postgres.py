@@ -188,6 +188,10 @@ async def test_create_update_complete_on_the_shared_session_table_with_signed_ac
         await _rows(db, "SELECT * FROM commerce_arbiter_decisions WHERE decision_id = :d", d=decision.decision_id)
     )[0]
     assert decision_row["action"] == "session_complete" and decision_row["consumed_at"] is not None
+    # The order names whom to ship to: the ACP address's recipient name.
+    stored = (await _rows(db, "SELECT snapshot FROM commerce_orders WHERE id = :i", i=order_id))[0]["snapshot"]
+    destination = stored["fulfillment"]["expectations"][0]["destination"]
+    assert (destination["first_name"], destination["last_name"]) == ("Asha", "Buyer")
 
     events = await _ledger(db, tenant)
     for expected in (

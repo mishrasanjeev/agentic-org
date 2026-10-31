@@ -642,7 +642,7 @@ async def update_checkout(
         frozen = _frozen_error(row, now, negotiated.version, "updated")
         if frozen is not None:
             return frozen
-        if _plural_link_outstanding(row):
+        if _payment_link_outstanding(row):
             return _protocol_error(
                 409,
                 "invalid_state",
@@ -1717,17 +1717,29 @@ HANDOFF_EVENT = "commerce.payments.handoff"
 HANDOFF_CONFIRM_EVENT = "commerce.payments.handoff.confirm"
 
 
-def _plural_link_outstanding(row: Any) -> bool:
-    """A Plural order exists for the checkout as it stands: changing the checkout would orphan the payment."""
+def _payment_link_outstanding(row: Any) -> bool:
+    """A payment link is out for the checkout as it stands: changing the checkout would orphan the payment.
+
+    A Plural order exists while its link is being created or is issued, and an earlier Plural link
+    stays payable until Plural reports it paid or failed (``payment_handoff.payable``). A Shopify
+    cart link stays payable for good (Shopify never reports the payment back), so a checkout that
+    handed one out keeps its items, and the daily maximum keeps counting the link for the day it
+    was issued.
+    """
     from core.commerce import payment_handoff as ph
 
-    handoff = (row.state or {}).get("handoff")
-    return (
-        isinstance(handoff, Mapping)
-        and handoff.get("mode") == ph.MODE_PLURAL_HOSTED
+    state = row.state or {}
+    handoff: Mapping[str, Any] = state["handoff"] if isinstance(state.get("handoff"), Mapping) else {}
+    if handoff.get("mode") == ph.MODE_SHOPIFY_CART:
+        return handoff.get("status") == "issued" and row.status == "requires_escalation"
+    if (
+        handoff.get("mode") == ph.MODE_PLURAL_HOSTED
         and handoff.get("status") in ("creating", "issued")
         and row.status in ("requires_escalation", "complete_in_progress")
-    )
+    ):
+        return True
+    orders = state.get("handoff_orders")
+    return isinstance(orders, Mapping) and any(ph.payable(record) for record in orders.values())
 
 
 @dataclass(frozen=True)
@@ -1774,40 +1786,69 @@ async def _handoff_target(req: UcpRequest, merchant: MerchantUcp, settings: Paym
 # Sessions read when summing one day's committed hand-offs; a merchant past this many in a day is
 # held to what they add up to (the cap still applies, on a lower bound of the day's total).
 DAILY_COMMITTED_SCAN_LIMIT = 2000
+# How long after its checkout ended a Plural payment confirmed today still counts as paid today
+# (the webhook, or the status poll that runs every minute, normally confirms within minutes).
+DAILY_COMMITTED_LATE_PAYMENT = timedelta(days=1)
 
 
 async def daily_committed_minor_units(
     session: Any, *, tenant_id: Any, merchant: MerchantUcp, currency: str | None, exclude_session_id: str, now: datetime
 ) -> int:
-    """The merchant's checkouts committed today (UTC) in ``currency``, for the arbiter's daily cap.
+    """The merchant's money committed in ``currency``, for the arbiter's daily cap.
 
-    Committed means paid (``completed`` today) or handed to the buyer's payment page and still open
-    (``requires_escalation``, updated today): a link out counts against the cap until it lapses.
-    The checkout being decided is left out; the arbiter adds its own amount.
+    Committed means paid today (UTC: ``completed_at`` today), or a payment link that still holds
+    the cap (``payment_handoff.holds_daily_cap``): a link still open, whatever day it was issued, or
+    one issued today even after it lapsed (Shopify never reports a payment and its cart link never
+    expires; a Plural order stays payable after its link lapses). The link counts whether its
+    checkout still waits for the payment or was canceled: canceling the checkout does not take the
+    link back. Every Plural link the checkout handed out counts from its reference's record until
+    Plural reports it paid or failed, and a Plural order being created counts too. A paid link
+    counts as paid; a failed one cannot be paid. The checkout being decided is left out; the
+    arbiter adds its own amount.
+
+    The read is four ranges of ``ix_commerce_checkout_sessions_status`` (tenant, status, expires_at),
+    one per status, so it never reads the merchant's history. A link never outlives its checkout
+    (the Shopify cart link ends with it, a Plural link at ``min(issued + PLURAL_LINK_TTL, checkout
+    end)``) and is issued before the checkout ends, so an open link or one issued today belongs to
+    a checkout that ends after midnight. A checkout paid today ends after midnight too, unless
+    Plural confirmed the payment after the checkout ended: ``DAILY_COMMITTED_LATE_PAYMENT`` covers
+    that (a payment confirmed later than that is not counted). A session lives at most
+    ``MAX_CHECKOUT_TTL_SECONDS``, so the same bounds hold on ``created_at`` one TTL earlier, which
+    lets ``ix_commerce_checkout_sessions_scope`` serve the ranges too.
     """
-    from sqlalchemy import or_
+    from sqlalchemy import union_all
 
+    from core.commerce.payment_handoff import holds_daily_cap
+    from core.commerce.ucp.merchant import MAX_CHECKOUT_TTL_SECONDS
     from core.models.commerce_ucp import CommerceCheckoutSessionRow as Row
 
     day_start = now.astimezone(UTC).replace(hour=0, minute=0, second=0, microsecond=0)
-    rows = (
-        await session.execute(
-            select(Row.state)
-            .where(
-                Row.tenant_id == tenant_id,
-                Row.merchant_id == merchant.merchant_id,
-                Row.currency == currency,
-                Row.id != exclude_session_id,
-                or_(
-                    Row.completed_at >= day_start,
-                    (Row.status == "requires_escalation") & (Row.updated_at >= day_start),
-                ),
-            )
-            .limit(DAILY_COMMITTED_SCAN_LIMIT)
+    ttl = timedelta(seconds=MAX_CHECKOUT_TTL_SECONDS)
+
+    def ending_after(status: str, moment: datetime) -> Any:
+        return select(Row.status, Row.state).where(
+            Row.tenant_id == tenant_id,
+            Row.status == status,
+            Row.expires_at > moment,
+            Row.created_at > moment - ttl,
+            Row.merchant_id == merchant.merchant_id,
+            Row.currency == currency,
+            Row.id != exclude_session_id,
         )
-    ).scalars()
+
+    paid = ending_after("completed", day_start - DAILY_COMMITTED_LATE_PAYMENT).where(Row.completed_at >= day_start)
+    handed_off = [
+        ending_after(status, day_start).where(Row.state.has_key("handoff"))
+        for status in ("requires_escalation", "canceled")
+    ]
+    handed_off.append(
+        ending_after("complete_in_progress", day_start).where(Row.state["handoff"]["status"].astext == "creating")
+    )
+    rows = (await session.execute(union_all(paid, *handed_off).limit(DAILY_COMMITTED_SCAN_LIMIT))).all()
     committed = 0
-    for state in rows:
+    for status, state in rows:
+        if status != "completed" and not holds_daily_cap(state or {}, now=now, day_start=day_start):
+            continue
         for line in (state or {}).get("totals") or []:
             if isinstance(line, Mapping) and line.get("type") == "total":
                 try:
@@ -1995,6 +2036,14 @@ async def _complete_with_handoff(
         except DecisionRefusedError as exc:
             return await _refused(exc.code, exc.message)
         if state.get("handoff") and row.status == "requires_escalation":
+            replaced = state.get("handoff")
+            if (
+                isinstance(replaced, Mapping)
+                and replaced.get("mode") == ph.MODE_PLURAL_HOSTED
+                and replaced.get("status") == "issued"
+            ):
+                # The lapsed link can still be paid: it stays on its record, counting and locking the items.
+                ph.remember_link(state, replaced)
             ph.clear_handoff(state, "expired")
         row.decision_id = decided.decision_id
         row.revision = row.revision + 1
@@ -2108,11 +2157,10 @@ async def _complete_with_handoff(
                 expires_at=expires,
                 extra={"provider_order_id": created.order_id},
             )
-            ph.remember_reference(state, reservation["reference"], {"provider_order_id": created.order_id})
+            ph.remember_reference(state, reservation["reference"], ph.link_record(state["handoff"]))
             row.status = status_for(state["messages"], state["continue_url"])
         else:
-            ph.clear_handoff(state, "failed")
-            row.status = "ready_for_complete"
+            row.status = ph.retire_failed(state)
             extra.append(
                 msg.error(failure, "The shop's payment page could not be opened; try again shortly.", path="$")
             )
@@ -2210,8 +2258,16 @@ async def confirm_handoff_payment(
         elif payment == "failed":
             handoff = state.get("handoff") if isinstance(state.get("handoff"), Mapping) else {}
             if handoff.get("reference") == reference and row.status in ("requires_escalation", "complete_in_progress"):
+                row.status = ph.retire_failed(state)
+                result = "link_retired"
+            elif handoff.get("reference") == reference and row.status == "canceled":
+                # The checkout stays canceled; its link no longer holds the daily maximum.
+                ph.set_reference_status(state, reference, "failed")
                 ph.clear_handoff(state, "failed")
-                row.status = "ready_for_complete"
+                result = "link_retired"
+            elif ph.payable(record):
+                # An earlier link of the checkout: it no longer counts or locks the items.
+                ph.set_reference_status(state, reference, "failed")
                 result = "link_retired"
             else:
                 result = "not_applicable"
@@ -2232,6 +2288,7 @@ async def confirm_handoff_payment(
                 created_event = ACP_EVENTS["order_created"]
             else:
                 created_event = ORDER_CREATED_EVENT
+            ph.set_reference_status(state, reference, "paid")
             ph.clear_handoff(state, "paid")
             order_event = await _complete_into_order(
                 session,

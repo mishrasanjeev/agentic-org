@@ -466,9 +466,19 @@ async def apply_webhook(
 
 
 async def refresh_handoff(
-    *, tenant_id: str, session_row: Any, source: str, transport_factory: TransportFactory | None = None
+    *,
+    tenant_id: str,
+    session_row: Any,
+    source: str,
+    transport_factory: TransportFactory | None = None,
+    report_untouched: bool = False,
 ) -> str:
-    """Ask Plural for the current hand-off order of one session and apply it (the poll and the return page)."""
+    """Ask Plural for the current hand-off order of one session and apply it (the poll and the return page).
+
+    With ``report_untouched``, an order with no payment in progress answers ``not_attempted``
+    instead of ``pending``: nobody has started to pay it (``CREATED``), or the last attempt on it
+    failed and it waits for another (``ATTEMPTED``).
+    """
     from core.commerce.ucp.handlers import confirm_handoff_payment
     from core.database import get_tenant_session
 
@@ -506,10 +516,14 @@ async def refresh_handoff(
         event_id=None,
         now=datetime.now(UTC),
     )
+    if report_untouched and result == "pending" and outcome.status in NO_PAYMENT_IN_PROGRESS:
+        return "not_attempted"
     return result
 
 
 POLL_BATCH = 50
+# Plural order states with no payment in progress: none started yet, or the last attempt failed.
+NO_PAYMENT_IN_PROGRESS = frozenset({"CREATED", "ATTEMPTED"})
 
 
 async def open_handoffs(tenant_id: str, *, limit: int = POLL_BATCH) -> list[Any]:
@@ -561,6 +575,8 @@ async def release_stale_reservations(tenant_id: str, *, now: datetime | None = N
 
     The reference stays remembered, so a payment on an order that was created
     after all still finds its session (and is held to the amount it asked for).
+    An earlier link that can still be paid comes back (``payment_handoff.retire_failed``),
+    and the checkout waits for that payment again.
     """
     from core.commerce import payment_handoff as ph
     from core.commerce.ledger import record_commerce_event
@@ -585,9 +601,8 @@ async def release_stale_reservations(tenant_id: str, *, now: datetime | None = N
         ).all()
         for row in rows:
             state = dict(row.state or {})
-            ph.clear_handoff(state, "failed")
+            row.status = ph.retire_failed(state)
             row.state = state
-            row.status = "ready_for_complete"
             row.revision = row.revision + 1
             row.updated_at = moment
             released += 1

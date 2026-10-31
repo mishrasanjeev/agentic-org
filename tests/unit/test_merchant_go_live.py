@@ -536,3 +536,160 @@ async def test_public_webhook_verifies_with_the_merchants_own_secret(monkeypatch
             is None
         )
     assert len(recorded) == 1
+
+
+# --- Shopify: add the webhook secret without the token Shopify shows once ------------------------
+
+SHOP = "tea-corner.myshopify.com"
+MERCHANT = "tea-corner-1a2b3c"
+
+
+class _Ctx:
+    async def __aenter__(self) -> Any:
+        return object()
+
+    async def __aexit__(self, *_exc: Any) -> None:
+        return None
+
+
+def _saved_row(**overrides: Any) -> SimpleNamespace:
+    values = {
+        "connector_name": runtime._shopify_connector_config_name(MERCHANT),
+        "config": {
+            "merchant_id": MERCHANT,
+            "shop_domain": SHOP,
+            "credential_source": "admin_access_token",
+            "granted_scopes": [],
+            "webhook_secret_configured": False,
+        },
+        "credentials_encrypted": {"_encrypted": "ciphertext"},
+    }
+    values.update(overrides)
+    return SimpleNamespace(**values)
+
+
+def _saved_vault(monkeypatch: pytest.MonkeyPatch, row: Any, vault: Any) -> None:
+    async def load(_session: Any, _tid: Any, merchant_id: str) -> Any:
+        assert merchant_id == MERCHANT
+        return row
+
+    def decrypt(_value: str) -> str:
+        if isinstance(vault, Exception):
+            raise vault
+        return json.dumps(vault)
+
+    monkeypatch.setattr(runtime, "get_tenant_session", lambda _tid: _Ctx())
+    monkeypatch.setattr(runtime, "_load_shopify_connector_config_row", load)
+    monkeypatch.setattr(runtime, "decrypt_for_tenant", decrypt)
+
+
+def _request(shop: str = SHOP, **extra: Any) -> runtime.ShopifyConnectorCredentialRequest:
+    return runtime.ShopifyConnectorCredentialRequest(merchant_id=MERCHANT, shop_domain=shop, **extra)
+
+
+@pytest.mark.asyncio
+async def test_a_blank_token_reuses_the_saved_token_for_the_same_store(monkeypatch: pytest.MonkeyPatch) -> None:
+    config = {**_saved_row().config, "credential_source": "oauth_code_exchange", "granted_scopes": ["read_products"]}
+    row = _saved_row(config=config)
+    _saved_vault(monkeypatch, row, {"admin_access_token": "fixture-saved-token-0001", "shop_domain": SHOP})
+    credentials, source, scopes = await runtime._saved_shopify_credentials(
+        runtime._tenant_uuid(TENANT), _request(f"https://{SHOP.upper()}/")
+    )
+    assert (credentials.shop_domain, credentials.admin_access_token) == (SHOP, "fixture-saved-token-0001")
+    # The saved connection's own facts stay as they were.
+    assert source == "oauth_code_exchange" and scopes == ["read_products"]
+
+
+@pytest.mark.parametrize(
+    ("row", "vault", "shop"),
+    [
+        # No saved connection.
+        (None, {}, SHOP),
+        # Another store than the one saved.
+        ("own", {"admin_access_token": "fixture-saved-token-0001", "shop_domain": SHOP}, "another-store.myshopify.com"),
+        # The tenant-wide legacy row is never this merchant's saved token.
+        ("legacy", {"admin_access_token": "fixture-saved-token-0001", "shop_domain": SHOP}, SHOP),
+        # The vault names another store than the row, holds no token, or cannot be read.
+        ("own", {"admin_access_token": "fixture-saved-token-0001", "shop_domain": "old-store.myshopify.com"}, SHOP),
+        ("own", {"shop_domain": SHOP}, SHOP),
+        ("own", ValueError("unreadable"), SHOP),
+    ],
+)
+@pytest.mark.asyncio
+async def test_without_a_saved_token_for_that_store_a_token_is_required(
+    monkeypatch: pytest.MonkeyPatch, row: Any, vault: Any, shop: str
+) -> None:
+    saved = {"own": _saved_row(), "legacy": _saved_row(connector_name="shopify"), None: None}[row]
+    _saved_vault(monkeypatch, saved, vault)
+    with pytest.raises(HTTPException) as required:
+        await runtime._saved_shopify_credentials(runtime._tenant_uuid(TENANT), _request(shop))
+    assert required.value.status_code == 400
+    assert required.value.detail["error"] == "shopify_token_required"
+    assert "fixture-saved-token-0001" not in json.dumps(required.value.detail)
+
+
+@pytest.mark.asyncio
+async def test_only_the_setup_page_keeps_a_saved_token(monkeypatch: pytest.MonkeyPatch) -> None:
+    async def refuse(*_args: Any, **_kwargs: Any) -> Any:
+        raise AssertionError("the saved token is read only when the caller asks to keep it")
+
+    monkeypatch.setattr(runtime, "_saved_shopify_credentials", refuse)
+    # The runtime credentials route is unchanged: a blank token means the OAuth code exchange.
+    with pytest.raises(HTTPException) as oauth:
+        await runtime.upsert_shopify_connector_credentials(_request(), tenant_id=TENANT)
+    assert oauth.value.detail["error"] == "shopify_oauth_material_required"
+    # OAuth material alongside keep_saved_token is not a blank token either.
+    with pytest.raises(HTTPException) as still_oauth:
+        await runtime.save_shopify_connector_credentials(
+            _request(oauth_code="code-example"), tenant_id=TENANT, keep_saved_token=True
+        )
+    assert still_oauth.value.detail["error"] == "shopify_oauth_material_required"
+
+
+def test_the_setup_request_takes_a_blank_token_and_refuses_a_short_one() -> None:
+    from pydantic import ValidationError
+
+    from api.v1 import commerce_merchant_setup as setup_api
+
+    for blank in (None, "", "   "):
+        assert setup_api.ShopifyConnectRequest(shop_domain=SHOP, admin_access_token=blank).admin_access_token is None
+    assert setup_api.ShopifyConnectRequest(shop_domain=SHOP).admin_access_token is None
+    token = setup_api.ShopifyConnectRequest(shop_domain=SHOP, admin_access_token=" fixture-admin-token-0001 ")
+    assert token.admin_access_token == "fixture-admin-token-0001"
+    assert "fixture-admin-token-0001" not in repr(token)
+    with pytest.raises(ValidationError):
+        setup_api.ShopifyConnectRequest(shop_domain=SHOP, admin_access_token="short")
+
+
+@pytest.mark.asyncio
+async def test_connect_shopify_asks_to_keep_the_saved_token(monkeypatch: pytest.MonkeyPatch) -> None:
+    from api.v1 import commerce_merchant_setup as setup_api
+
+    saved: list[tuple[Any, str, bool]] = []
+
+    async def save(body: Any, *, tenant_id: str, keep_saved_token: bool = False) -> dict[str, Any]:
+        saved.append((body, tenant_id, keep_saved_token))
+        return {"status": "shopify_connector_configured", "shop_domain": SHOP, "webhook_status": "configured"}
+
+    async def config_row(_session: Any, _tenant: str, _merchant: str) -> Any:
+        return object()
+
+    async def sync(_merchant: str, tenant_id: str) -> dict[str, Any]:
+        return {"sync": {"product_count": 1}}
+
+    async def view(_tenant: str, _merchant: str) -> dict[str, Any]:
+        return {"catalog": {"status": "ready"}}
+
+    monkeypatch.setattr(setup_api, "get_tenant_session", lambda _tid: _Ctx())
+    monkeypatch.setattr(setup_api, "_config_row", config_row)
+    monkeypatch.setattr(setup_api, "sync_catalog", sync)
+    monkeypatch.setattr(setup_api, "setup_view", view)
+    monkeypatch.setattr(runtime, "save_shopify_connector_credentials", save)
+    secret = "merchant-webhook-secret-0001"
+    result = await setup_api.connect_shopify(
+        MERCHANT, setup_api.ShopifyConnectRequest(shop_domain=SHOP, webhook_secret=secret), TENANT
+    )
+    body, tenant_id, keep = saved[0]
+    assert keep is True and tenant_id == TENANT
+    assert (body.shop_domain, body.admin_access_token, body.webhook_secret) == (SHOP, None, secret)
+    assert result["connection"]["webhook_status"] == "configured" and secret not in json.dumps(result)

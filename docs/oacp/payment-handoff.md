@@ -49,9 +49,17 @@ evaluates two rules:
 - `oacp_artifacts_valid` for the catalog, price, inventory, policy and protocol
   adapter families (not `mandate_capability`: no agent-held instrument is charged);
 - `handoff_merchant_limits`: the merchant's `provider_policy.arbiter` limits when
-  they are configured; without them it passes. The daily maximum counts the
-  merchant's checkouts in the same currency that were paid today (UTC) or hold an
-  open payment link updated today; the checkout being decided adds its own total.
+  they are configured; without them it passes. The daily maximum counts, in the
+  same currency, the merchant's checkouts paid today (UTC) and every payment link
+  that is still open or was issued today, whether its checkout still waits for the
+  payment or was canceled (`payment_handoff.holds_daily_cap`). A lapsed link still
+  counts on its issue day, because the buyer can still pay it: a Shopify cart link
+  never expires and Shopify never reports the payment, and a Plural order has no
+  expiry of its own. Every Plural link the checkout handed out keeps its record
+  (`handoff_orders`), so a link a newer one replaced still counts, and a Plural
+  order being created counts too. A link stops counting when its payment becomes
+  an order (the checkout then counts as paid) or when Plural reports the payment
+  failed. The checkout being decided adds its own total.
 
 `buyer_authority_verified`, `mandate_present_unexpired`, `consent_active` and
 `passport_amount_cap` are not evaluated. The agent moves no money and holds no
@@ -83,8 +91,8 @@ in the body are ignored. ACP sessions run through the same handler and render
 | Business message | Meaning |
 | --- | --- |
 | `payment_setup_incomplete` | No connected Shopify store, or no usable Plural credentials. |
-| `payment_handoff_unavailable` | The items are not Shopify variants (cart mode), or the binding allows only a hand-off and the merchant has none. |
-| `payment_link_unavailable`, `payment_link_refused` | Plural could not be reached or refused the order; the session is ready again. |
+| `payment_handoff_unavailable` | The items cannot be paid in a Shopify cart (cart mode: an item that is not a Shopify variant, an item sold by a unit such as weight, or more than 9,999 of one item), or the binding allows only a hand-off and the merchant has none. |
+| `payment_link_unavailable`, `payment_link_refused` | Plural could not be reached or refused the order; the session is ready again, or, when the order was to replace a lapsed link, that link comes back and the session waits for its payment. |
 | `arbiter_refused` | The decision refused (for example a stale artifact). |
 
 ## Plural hosted checkout
@@ -115,8 +123,12 @@ Plural answers `order_id`, `redirect_url`, `token` and `response_code`; the
 `redirect_url` is the buyer's link. The order is created outside any database
 transaction and never retried. While it is being created the session is
 `complete_in_progress`; a reservation that never finishes is released by the
-poll after five minutes. While a Plural link is out the checkout cannot be
-updated (409); cancel and open a new one to change it.
+poll after five minutes. Every issued Plural link stays payable on its record
+until Plural reports it paid or failed, and its reference is never dropped while
+it is. When a new order fails or is never finished, or Plural reports the current
+link failed, the latest earlier link that can still be paid becomes the
+checkout's link again. While a payment link is out, Plural or Shopify, the
+checkout cannot be updated (409); cancel it and open a new one to change it.
 
 Confirmation:
 
@@ -143,8 +155,15 @@ creates the order (as an executed Complete would: the order entity with
 `executor` `plural_hosted`, the ledger, the UCP order webhooks). A payment for
 another amount, on a canceled checkout or for a checkout that changed is
 refused and logged as `plural_hosted_payment_unmatched`, so the merchant can
-refund it in Plural. `FAILED`, `CANCELLED` and the like retire the link; the
-next Complete issues a new one. `AUTHORIZED` is not money received and stays
+refund it in Plural. `FAILED`, `CANCELLED` and the like retire the link: the
+latest earlier link that can still be paid becomes the checkout's link again,
+and the next Complete issues a new one. The return page tells the buyer the
+payment did not go through, unless a payment on the earlier link is in progress
+(its Plural status is neither `CREATED` nor `ATTEMPTED`, the state after a failed
+attempt) or its status cannot be read, when it asks the buyer to wait. On a canceled checkout they retire the link too, and the checkout
+stays canceled. The poll and the return page read the checkout's current link;
+a late payment on a link a newer one replaced is confirmed by the webhook, or by
+the poll once that link is current again. `AUTHORIZED` is not money received and stays
 pending.
 
 ## The merchant gets the order

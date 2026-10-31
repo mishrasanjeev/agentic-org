@@ -98,6 +98,58 @@ async def test_address_and_selected_option_drive_shipping_and_totals() -> None:
 
 
 @pytest.mark.asyncio
+async def test_the_recipient_name_and_phone_reach_the_order_the_merchant_ships() -> None:
+    from core.commerce.order_notifications import delivery_view
+    from core.commerce.ucp.orders import build_order_snapshot
+
+    body = af.create_body(**af.select_shipping("ship-std"))
+    body["fulfillment_details"]["phone_number"] = "+919800000000"
+    merchant, runtime, ucp_body, row = await _session(body)
+    destination = ucp_body["fulfillment"]["methods"][0]["destinations"][0]
+    assert destination["first_name"] == "Asha" and destination["last_name"] == "Buyer"
+    assert destination["phone_number"] == "+919800000000"
+    af.assert_session(_render(merchant, runtime, row))
+    snapshot = build_order_snapshot(
+        order_id="ord_1", checkout_id="chk_test", merchant=merchant, state=row.state, accepted_term=None
+    )
+    assert delivery_view(snapshot) == [
+        {
+            "method": "shipping",
+            "option": "Standard",
+            "address": ["Asha Buyer", "1 MG Road", "Pune, MH, 411001", "IN", "+919800000000"],
+        }
+    ]
+
+
+@pytest.mark.parametrize(
+    ("details", "expected"),
+    [
+        # The address names the recipient; it wins over the fulfillment contact name.
+        (
+            {"name": "Contact Person", "address": {"name": " Asha  Rani   Rao "}},
+            {"first_name": "Asha Rani", "last_name": "Rao"},
+        ),
+        # A one-word name cannot be split: it is all first_name.
+        ({"address": {"name": "Asha"}}, {"first_name": "Asha"}),
+        # No usable recipient on the address: the fulfillment contact name, and its phone.
+        (
+            {"name": "Ravi Kumar", "phone_number": " +919800000001 ", "address": {"name": "  "}},
+            {"first_name": "Ravi", "last_name": "Kumar", "phone_number": "+919800000001"},
+        ),
+        ({"name": 7, "phone_number": "", "address": {}}, {}),
+    ],
+)
+def test_recipient_fields_from_the_acp_fulfillment_details(details: dict, expected: dict) -> None:
+    address = {**af.ADDRESS, **details["address"]}
+    if "name" not in details["address"]:
+        address.pop("name")
+    method = acp._ucp_fulfillment({"fulfillment_details": {**details, "address": address}})["methods"][0]
+    destination = method["destinations"][0]
+    assert {k: destination[k] for k in ("first_name", "last_name", "phone_number") if k in destination} == expected
+    assert destination["street_address"] == "1 MG Road"
+
+
+@pytest.mark.asyncio
 async def test_ready_for_payment_with_an_issued_allowance() -> None:
     delegate = {"status": "issued", **af.allowance_answer("chk_test")}
     body = af.create_body(**af.select_shipping())

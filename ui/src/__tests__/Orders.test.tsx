@@ -51,7 +51,8 @@ describe("Orders", () => {
     expect(screen.getByText(/Synthetic Masala Chai × 2/)).toBeInTheDocument();
     expect(screen.getByText("buyer@merchant.example")).toBeInTheDocument();
     expect(screen.getByText("Asha")).toBeInTheDocument();
-    expect(screen.getByText("Ship · Standard delivery · Rs 49.00")).toBeInTheDocument();
+    expect(screen.getByText("Ship · Standard delivery")).toBeInTheDocument();
+    expect(screen.getByText("Shipping fee: Rs 49.00")).toBeInTheDocument();
     expect(screen.getByText("12 MG Road")).toBeInTheDocument();
     expect(screen.getByText("Bengaluru, KA, 560001")).toBeInTheDocument();
     expect(screen.getByText("Paid via Plural")).toBeInTheDocument();
@@ -80,6 +81,7 @@ describe("Orders", () => {
     show();
     expect(await screen.findByText("The buyer gave no contact details.")).toBeInTheDocument();
     expect(screen.getByText("The buyer gave no delivery details.")).toBeInTheDocument();
+    expect(screen.queryByText(/Shipping fee/)).not.toBeInTheDocument();
     list.mockRejectedValueOnce(new Error("down"));
     fireEvent.click(screen.getByRole("button", { name: /Refresh/ }));
     expect(await screen.findByRole("alert")).toHaveTextContent("Orders could not be loaded");
@@ -91,5 +93,28 @@ describe("Orders", () => {
     });
     show();
     expect(await screen.findByText("Store pickup · MG Road store")).toBeInTheDocument();
+    expect(screen.queryByText(/Shipping fee/)).not.toBeInTheDocument();
+  });
+
+  it("shows the order's one shipping fee once when it ships to two places", async () => {
+    list.mockResolvedValueOnce({
+      data: {
+        orders: [
+          order({
+            delivery: [
+              { method: "shipping", option: "Standard", address: ["Asha Rao", "12 MG Road"] },
+              { method: "shipping", option: "Express", address: ["Ravi Rao", "4 Park Street"] },
+            ],
+            shipping: "Rs 98.00",
+          }),
+        ],
+        next_offset: null,
+      },
+    });
+    show();
+    expect(await screen.findByText("Ship · Standard")).toBeInTheDocument();
+    expect(screen.getByText("Ship · Express")).toBeInTheDocument();
+    expect(screen.getAllByText(/Rs 98\.00/)).toHaveLength(1);
+    expect(screen.getByText("Shipping fee for all deliveries: Rs 98.00")).toBeInTheDocument();
   });
 });

@@ -20,7 +20,13 @@ import pytest
 from core.commerce import arbiter, plural_hosted
 from core.commerce import payment_handoff as ph
 from core.commerce.executors.plural import PluralCredentials, PluralWebhookError
-from core.commerce.order_notifications import delivery_view, order_email, surface_label
+from core.commerce.order_notifications import (
+    delivery_heading,
+    delivery_view,
+    order_email,
+    shipping_fee_line,
+    surface_label,
+)
 from core.commerce.ucp.completion import arbiter_context
 from core.commerce.ucp.merchant import merchant_ucp_from_config
 from tests import commerce_arbiter_fixtures as fx
@@ -152,6 +158,133 @@ def test_issue_reuse_and_retire_a_link() -> None:
     assert ph.active_handoff(state, now + timedelta(hours=2)) is None
     ph.clear_handoff(state, "expired")
     assert "continue_url" not in state and state["messages"] == [] and state["handoff"]["status"] == "expired"
+
+
+@pytest.mark.parametrize("mode", ["shopify_cart", "plural_hosted"])
+def test_a_link_holds_the_daily_cap_while_open_and_all_the_day_it_was_issued(mode: str) -> None:
+    day_start = datetime(2026, 10, 30, tzinfo=UTC)
+    issued = day_start + timedelta(hours=9)
+    state = _state()
+    ph.issue(
+        state,
+        mode=mode,
+        continue_url="https://a.myshopify.com/cart/1:1",
+        decision_id="arbdec_1",
+        now=issued,
+        expires_at=issued + timedelta(minutes=30),
+    )
+    assert ph.holds_daily_cap(state, now=issued + timedelta(minutes=29), day_start=day_start)
+    # Lapsed the same UTC day, the link can still be paid: a Shopify cart permalink never expires, and a
+    # Plural order has no expiry of its own.
+    lapsed = issued + timedelta(hours=2)
+    assert ph.holds_daily_cap(state, now=lapsed, day_start=day_start)
+    # The next UTC day a lapsed link counts for nothing, whatever the mode.
+    tomorrow = day_start + timedelta(days=1)
+    assert not ph.holds_daily_cap(state, now=tomorrow + timedelta(hours=1), day_start=tomorrow)
+    # A retired link (paid, failed or replaced) counts for nothing, even on the day it was issued.
+    for retired in ("paid", "failed", "expired"):
+        state["handoff"]["status"] = retired
+        assert not ph.holds_daily_cap(state, now=issued + timedelta(minutes=1), day_start=day_start)
+    assert not ph.holds_daily_cap(_state(), now=issued, day_start=day_start)
+
+
+def test_a_plural_order_being_created_and_every_payable_link_on_record_hold_the_daily_cap() -> None:
+    day_start = datetime(2026, 10, 30, tzinfo=UTC)
+    issued = day_start + timedelta(hours=9)
+    later = issued + timedelta(hours=1)
+    state = _state()
+    state["handoff"] = {"mode": "plural_hosted", "status": "creating", "reference": "aoh-b"}
+    assert ph.holds_daily_cap(state, now=issued, day_start=day_start)
+    # The current link failed, but an earlier one on record can still be paid: it counts on its issue day.
+    state["handoff"] = {"mode": "plural_hosted", "status": "failed", "reference": "aoh-b"}
+    assert not ph.holds_daily_cap(state, now=later, day_start=day_start)
+    link_a = {
+        "continue_url": "https://pay.plural.example/a",
+        "issued_at": ph.iso(issued),
+        "expires_at": ph.iso(issued + timedelta(minutes=30)),
+    }
+    state["handoff_orders"] = {"aoh-a": ph.link_record(link_a), "aoh-b": {"status": "failed"}}
+    assert ph.holds_daily_cap(state, now=later, day_start=day_start)
+    tomorrow = day_start + timedelta(days=1)
+    assert not ph.holds_daily_cap(state, now=tomorrow + timedelta(hours=1), day_start=tomorrow)
+    for retired in ("paid", "failed"):
+        ph.set_reference_status(state, "aoh-a", retired)
+        assert not ph.holds_daily_cap(state, now=later, day_start=day_start)
+
+
+def test_clearing_a_link_replaces_its_record_instead_of_changing_the_stored_one() -> None:
+    now = datetime.now(UTC)
+    stored = _state()
+    ph.issue(
+        stored,
+        mode="plural_hosted",
+        continue_url="https://pay.plural.example/1",
+        decision_id="arbdec_1",
+        now=now,
+        expires_at=now + timedelta(minutes=30),
+    )
+    copy = dict(stored)  # what a handler does with a row's state
+    ph.clear_handoff(copy, "failed")
+    assert copy["handoff"]["status"] == "failed"
+    # The row's stored state is untouched, so the change to the copy is seen and written.
+    assert stored["handoff"]["status"] == "issued" and copy != stored
+
+
+def test_a_failed_link_brings_back_the_latest_earlier_link_that_can_still_be_paid() -> None:
+    now = datetime.now(UTC)
+    state = _state()
+    ph.remember_reference(state, "aoh-a", {"decision_id": "arbdec_a", "amount": 2500})
+    state["handoff"] = {"mode": "plural_hosted", "status": "creating", "reference": "aoh-a", "decision_id": "arbdec_a"}
+    ph.issue(
+        state,
+        mode="plural_hosted",
+        continue_url="https://pay.plural.example/a",
+        decision_id="arbdec_a",
+        now=now - timedelta(hours=1),
+        expires_at=now - timedelta(minutes=30),
+        extra={"provider_order_id": "v1-a"},
+    )
+    ph.remember_reference(state, "aoh-a", ph.link_record(state["handoff"]))
+    issued_a = dict(state["handoff"])
+    # The re-issue: A lapsed, keeps its record, and the order for B is being created.
+    ph.remember_link(state, state["handoff"])
+    ph.clear_handoff(state, "expired")
+    state["handoff"] = {"mode": "plural_hosted", "status": "creating", "reference": "aoh-b"}
+    ph.remember_reference(state, "aoh-b", {"decision_id": "arbdec_b", "amount": 2500})
+    assert ph.retire_failed(state) == "requires_escalation"
+    assert state["handoff"] == issued_a
+    assert state["continue_url"] == "https://pay.plural.example/a"
+    assert [m["code"] for m in state["messages"]] == [ph.MESSAGE_CODE]
+    assert state["handoff_orders"]["aoh-b"]["status"] == "failed" and ph.payable(state["handoff_orders"]["aoh-a"])
+    # When A fails too, nothing can be paid: the checkout is ready to complete again.
+    assert ph.retire_failed(state) == "ready_for_complete"
+    assert state["handoff"]["status"] == "failed" and "continue_url" not in state and state["messages"] == []
+    assert not ph.payable(state["handoff_orders"]["aoh-a"])
+
+
+def test_the_newest_issued_link_decides_whether_the_buyer_was_declined() -> None:
+    state = _state()
+    assert not ph.newest_link_failed(state)
+    ph.remember_reference(state, "aoh-a", ph.link_record({"issued_at": "2026-10-30T09:00:00Z"}))
+    ph.remember_reference(state, "aoh-b", ph.link_record({"issued_at": "2026-10-30T10:00:00Z"}))
+    ph.remember_reference(state, "aoh-c", {"decision_id": "arbdec_c"})  # an order that was never created
+    assert not ph.newest_link_failed(state)
+    ph.set_reference_status(state, "aoh-a", "failed")
+    assert not ph.newest_link_failed(state)
+    ph.set_reference_status(state, "aoh-b", "failed")
+    assert ph.newest_link_failed(state)
+
+
+def test_a_reference_whose_link_can_still_be_paid_is_never_dropped() -> None:
+    state = _state()
+    ph.remember_reference(state, "aoh-a", {**ph.link_record({"continue_url": "https://pay.plural.example/a"})})
+    for attempt in range(ph.MAX_REFERENCES + 5):
+        ph.remember_reference(state, f"aoh-b{attempt}", {"decision_id": f"arbdec_{attempt}"})
+        ph.set_reference_status(state, f"aoh-b{attempt}", "failed")
+    assert "aoh-a" in state["handoff_refs"] and ph.payable(state["handoff_orders"]["aoh-a"])
+    assert len(state["handoff_refs"]) == ph.MAX_REFERENCES
+    assert state["handoff_refs"][-1] == f"aoh-b{ph.MAX_REFERENCES + 4}"
+    assert set(state["handoff_orders"]) == set(state["handoff_refs"])
 
 
 def test_references_and_events_are_bounded_and_deduplicated() -> None:
@@ -449,13 +582,43 @@ def test_order_email_carries_the_delivery_address_and_shipping_choice() -> None:
         },
     }
     _, body = order_email(merchant_name="m", order_id="o", snapshot=snapshot, buyer={}, surface="x")
-    assert "Ship - Standard &lt;delivery&gt; - Rs 49.00<br>Asha<br>12 MG Road<br>Bengaluru, 560001<br>IN</li>" in body
+    assert "<li>Ship - Standard &lt;delivery&gt;<br>Asha<br>12 MG Road<br>Bengaluru, 560001<br>IN</li>" in body
     assert "<li>Store pickup - MG Road store</li>" in body
+    assert body.count("Rs 49.00") == 1 and "<p>Shipping fee: Rs 49.00</p>" in body
     no_delivery = order_email(merchant_name="m", order_id="o", snapshot={"currency": "INR"}, buyer={}, surface="x")[1]
-    assert "The buyer gave no delivery details." in no_delivery
+    assert "The buyer gave no delivery details." in no_delivery and "Shipping fee" not in no_delivery
     assert delivery_view({"fulfillment": {"expectations": [{"destination": {}}]}}) == [
         {"method": "shipping", "option": None, "address": []}
     ]
+
+
+def test_an_order_shipped_twice_shows_its_one_shipping_fee_once() -> None:
+    # Two shipping destinations at Rs 49 each: the order keeps one fulfillment total of Rs 98.
+    def shipped(option: str, street: str) -> dict:
+        return {
+            "method_type": "shipping",
+            "description": option,
+            "destination": {"first_name": "Asha", "street_address": street, "address_country": "IN"},
+        }
+
+    snapshot = {
+        "currency": "INR",
+        "totals": [{"type": "fulfillment", "amount": 9800}, {"type": "total", "amount": 98800}],
+        "line_items": [{"item": {"title": "Filter coffee"}, "quantity": {"total": 2}}],
+        "fulfillment": {"expectations": [shipped("Standard", "12 MG Road"), shipped("Express", "4 Park Street")]},
+    }
+    _, body = order_email(merchant_name="m", order_id="o", snapshot=snapshot, buyer={}, surface="x")
+    assert "<li>Ship - Standard<br>Asha<br>12 MG Road<br>IN</li>" in body
+    assert "<li>Ship - Express<br>Asha<br>4 Park Street<br>IN</li>" in body
+    assert body.count("Rs 98.00") == 1 and "<p>Shipping fee for all deliveries: Rs 98.00</p>" in body
+    assert delivery_heading({"method": "shipping", "option": "Standard"}) == "Ship - Standard"
+    assert delivery_heading({"method": "pickup", "option": None}) == "Store pickup"
+    deliveries = delivery_view(snapshot)
+    assert shipping_fee_line(deliveries, "Rs 98.00") == "Shipping fee for all deliveries: Rs 98.00"
+    assert shipping_fee_line(deliveries[:1], "Rs 49.00") == "Shipping fee: Rs 49.00"
+    # Nothing ships (a store pickup), or the order has no fulfillment total: no fee line.
+    assert shipping_fee_line([{"method": "pickup", "option": "MG Road store", "address": []}], "Rs 0.00") == ""
+    assert shipping_fee_line(deliveries, "") == ""
 
 
 def test_surface_label() -> None:
