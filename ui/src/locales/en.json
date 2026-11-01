@@ -925,12 +925,14 @@
     "cancel": "Cancel",
     "connection": {
       "title": "How a BI tool connects",
-      "body": "Use these details with the login and password created below. Connections must use TLS.",
+      "body": "Use these details with the login and password created below. Connections must use TLS, verify the server certificate and bind the password exchange to the TLS channel.",
       "host": "Host",
       "port": "Port",
       "database": "Database",
       "sslmode": "SSL mode",
+      "channelBinding": "Channel binding",
       "views": "Views",
+      "serverCa": "SSL mode verify-ca checks the server certificate against the database's server CA certificate. Ask your AgenticOrg operator for that certificate and set it as your BI tool's root certificate (sslrootcert). Use verify-ca, not verify-full: the certificate names the database instance, not this host.",
       "isolation": "Each login reads these views only, and only this organisation's rows. It cannot change any data."
     },
     "logins": {

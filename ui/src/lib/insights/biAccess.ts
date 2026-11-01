@@ -22,6 +22,7 @@ export interface BiConnection {
   port: number;
   database: string;
   sslmode: string;
+  channel_binding: string;
   schema: string;
   views: string[];
 }
@@ -56,7 +57,8 @@ function normaliseConnection(raw: Record<string, unknown>): BiConnection {
     host: text(raw.host),
     port: typeof raw.port === "number" ? raw.port : 5432,
     database: text(raw.database),
-    sslmode: text(raw.sslmode) || "require",
+    sslmode: text(raw.sslmode) || "verify-ca",
+    channel_binding: text(raw.channel_binding) || "require",
     schema: text(raw.schema) || "insights_bi",
     views: Array.isArray(raw.views) ? raw.views.filter((v): v is string => typeof v === "string") : [],
   };

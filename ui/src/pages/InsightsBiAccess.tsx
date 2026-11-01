@@ -149,6 +149,8 @@ export default function InsightsBiAccess() {
             <dd className="font-mono">{data.connection.database}</dd>
             <dt className="text-muted-foreground">{t("insightsBi.connection.sslmode")}</dt>
             <dd className="font-mono">{data.connection.sslmode}</dd>
+            <dt className="text-muted-foreground">{t("insightsBi.connection.channelBinding")}</dt>
+            <dd className="font-mono">{data.connection.channel_binding}</dd>
             <dt className="text-muted-foreground">{t("insightsBi.connection.views")}</dt>
             <dd>
               <ul className="flex flex-wrap gap-2">
@@ -160,7 +162,8 @@ export default function InsightsBiAccess() {
               </ul>
             </dd>
           </dl>
-          <p className="mt-3 text-xs text-muted-foreground">{t("insightsBi.connection.isolation")}</p>
+          <p className="mt-3 text-xs text-muted-foreground">{t("insightsBi.connection.serverCa")}</p>
+          <p className="mt-2 text-xs text-muted-foreground">{t("insightsBi.connection.isolation")}</p>
         </section>
 
         <section aria-labelledby="bi-logins" className="flex flex-col gap-3">

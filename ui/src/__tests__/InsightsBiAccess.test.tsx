@@ -42,7 +42,8 @@ const CONNECTION = {
   host: "10.20.0.7",
   port: 5432,
   database: "agenticorg",
-  sslmode: "require",
+  sslmode: "verify-ca",
+  channel_binding: "require",
   schema: "insights_bi",
   views: ["insights_bi.run_facts", "insights_bi.daily", "insights_bi.spend_daily", "insights_bi.agents", "insights_bi.approvals"],
 };
@@ -99,7 +100,9 @@ describe("InsightsBiAccess", () => {
     expect(mockGet).toHaveBeenCalledWith("/insights/bi-access");
     expect(screen.getByTestId("bi-host").textContent).toBe("10.20.0.7");
     expect(screen.getByText("insights_bi.spend_daily")).toBeTruthy();
+    expect(screen.getByText("verify-ca")).toBeTruthy();
     expect(screen.getByText("require")).toBeTruthy();
+    expect(screen.getByText(/root certificate \(sslrootcert\)/)).toBeTruthy();
     expect(screen.getByTestId("bi-usage").textContent).toBe("1 of 3 active logins");
     const active = screen.getByTestId("bi-login-bi_000000b1_abcdefghij");
     expect(within(active).getByText("Active")).toBeTruthy();
@@ -116,7 +119,7 @@ describe("InsightsBiAccess", () => {
       data: {
         role_name: "bi_000000b1_newnewnewn",
         password: PASSWORD,
-        connection_string: `postgresql://bi_000000b1_newnewnewn:${PASSWORD}@10.20.0.7:5432/agenticorg?sslmode=require`,
+        connection_string: `postgresql://bi_000000b1_newnewnewn:${PASSWORD}@10.20.0.7:5432/agenticorg?sslmode=verify-ca&channel_binding=require`,
         created_at: "2026-11-01T10:00:00Z",
         ...CONNECTION,
       },
@@ -134,7 +137,7 @@ describe("InsightsBiAccess", () => {
     await waitFor(() => expect(writeText).toHaveBeenCalledWith(PASSWORD));
     expect(await screen.findByRole("button", { name: "Copied" })).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Copy connection string" }));
-    await waitFor(() => expect(writeText).toHaveBeenLastCalledWith(expect.stringContaining("sslmode=require")));
+    await waitFor(() => expect(writeText).toHaveBeenLastCalledWith(expect.stringContaining("sslmode=verify-ca&channel_binding=require")));
 
     fireEvent.click(screen.getByRole("button", { name: "I have saved it" }));
     await waitFor(() => expect(screen.queryByTestId("bi-secret")).toBeNull());
@@ -202,7 +205,7 @@ describe("InsightsBiAccess", () => {
   it("normalises a partial response without inventing logins", () => {
     expect(normaliseList({})).toEqual({
       logins: [],
-      connection: { host: "", port: 5432, database: "", sslmode: "require", schema: "insights_bi", views: [] },
+      connection: { host: "", port: 5432, database: "", sslmode: "verify-ca", channel_binding: "require", schema: "insights_bi", views: [] },
       max_logins: 0,
       active_logins: 0,
     });
