@@ -162,7 +162,7 @@ async def test_resolve_wraps_the_resolver_in_the_shared_envelope() -> None:
     out = await registry.resolve(metric, ctx)
     assert out["key"] == "runs.success_rate" and out["unit"] == "percent"
     assert out["period"] == {"from": "2026-10-01", "to": "2026-10-30", "granularity": "day"}
-    assert out["compare"] == {"from": "2026-09-01", "to": "2026-09-30"}
+    assert out["compare"] == {"from": "2026-09-01", "to": "2026-09-30", "basis": "full_period"}
     assert out["value"] == 91.0 and out["compare_value"] == 97.0 and out["state"] == "watch"
     assert out["data_quality"] == "measured" and out["source"] == "run_facts" and "computed_at" in out
     assert "hint" not in out and "rows" not in out
@@ -179,3 +179,49 @@ async def test_resolve_wraps_the_resolver_in_the_shared_envelope() -> None:
 
     with pytest.raises(ValueError):
         await registry.resolve(replace(metric, resolver=bad), ctx)
+
+
+@pytest.mark.asyncio
+async def test_a_period_with_a_partial_today_compares_complete_days_only() -> None:
+    """Replay: a 7-day period ending on a running today against the 7 days before it.
+
+    The tile value covers all 7 days (today included); the change is computed over
+    the 6 complete days against the first 6 days of the comparison window, and the
+    response says so.
+    """
+    from dataclasses import replace
+    from datetime import UTC, date, datetime
+
+    from core.insights.metrics import MetricContext, Period
+    from core.insights.reporting_settings import defaults_for_region
+
+    seen: list[tuple[str, str, str | None, str | None]] = []
+
+    async def days_counted(ctx):
+        # Stands in for a count metric: one per day of each window.
+        seen.append((ctx.period.start.isoformat(), ctx.period.end.isoformat(),
+                     ctx.compare.start.isoformat() if ctx.compare else None,
+                     ctx.compare.end.isoformat() if ctx.compare else None))
+        return {"value": ctx.period.days, "compare_value": ctx.compare.days if ctx.compare else None,
+                "series": [{"t": ctx.period.start.isoformat(), "value": ctx.period.days}],
+                "source": "run_facts", "data_quality": "measured"}
+
+    metric = replace(METRICS["runs.volume"], resolver=days_counted)
+    period = Period(date(2026, 10, 26), date(2026, 11, 1))
+    ctx = MetricContext(session=None, tenant_id=None, reporting=defaults_for_region("IN"), period=period,
+                        compare=Period(date(2026, 10, 19), date(2026, 10, 25)),
+                        now=datetime(2026, 11, 1, 6, 0, tzinfo=UTC))  # 11:30 IST, today is running
+    out = await registry.resolve(metric, ctx)
+    assert out["value"] == 7  # the tile still includes today
+    assert out["compare"] == {"from": "2026-10-19", "to": "2026-10-25", "basis": "complete_days",
+                              "complete_days": 6, "current_value": 6}
+    assert out["compare_value"] == 6
+    assert out["series"] == [{"t": "2026-10-26", "value": 7}]  # the sparkline is unchanged
+    assert seen[1] == ("2026-10-26", "2026-10-31", "2026-10-19", "2026-10-24")
+
+    # A period that starts today has no complete day to compare.
+    today_only = replace(ctx, period=Period(date(2026, 11, 1), date(2026, 11, 1)),
+                         compare=Period(date(2026, 10, 31), date(2026, 10, 31)), cache={})
+    out = await registry.resolve(metric, today_only)
+    assert out["compare"]["basis"] == "complete_days" and out["compare"]["current_value"] is None
+    assert out["compare_value"] is None
