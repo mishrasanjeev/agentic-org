@@ -266,7 +266,10 @@ def test_mistake_5_localstorage_auth_bypass_count_below_cap() -> None:
 # (api/v1/onboarding_desk.py) is a soft delete: it sets removed_at on the
 # applicant's own upload, and the row and its encrypted content stay for the
 # partner's download and the evidence pack; 40 -> 41.
-DELETE_HANDLER_CAP = 41
+# Reviewed addition: DELETE /insights/bi-access/{role_name} (api/v1/insights_bi.py)
+# keeps the insights_bi_logins row (sets revoked_at) and drops only the tenant's
+# read-only Postgres login, which owns no data; 41 -> 42.
+DELETE_HANDLER_CAP = 42
 
 DELETE_DECORATOR = re.compile(r'^@router\.delete\(', re.MULTILINE)
 
