@@ -622,6 +622,7 @@ async def run_agent(
         if debugger.enabled():
             # The console links a recorded run to its checkpoint thread.
             run_span.set(**{"agent.thread_id": run_thread_id})
+    # enterprise-gate: broad-except-ok reason=insights-records-failed-run-then-reraises
     except (Exception, asyncio.CancelledError) as exc:
         # Insights: a failure here (the credential prefetch, building the graph, the checkpointer) never
         # reaches the main block's ``finally``: record the run failed with the exception class, then
@@ -1181,6 +1182,7 @@ async def resume_agent(
         run_span = tracing.start(
             "agenticorg.agent.resume", tenant=tenant_id, root=True, **_run_span_attributes(route, agent_id)
         )
+    # enterprise-gate: broad-except-ok reason=insights-records-failed-run-then-reraises
     except (Exception, asyncio.CancelledError) as exc:
         # Insights: a failure here (the credential prefetch, building the graph, the checkpointer) never
         # reaches the main block's ``finally``: record the run failed with the exception class, then

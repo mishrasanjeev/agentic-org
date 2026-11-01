@@ -84,6 +84,7 @@ def _records_run_fact(execute: _Execute) -> _Execute:
         start = time.monotonic()
         try:
             result = await execute(self, task, *args, **kwargs)
+        # enterprise-gate: broad-except-ok reason=insights-records-failed-run-then-reraises
         except (Exception, asyncio.CancelledError) as exc:
             latency = int((time.monotonic() - start) * 1000)
             await run_facts.record_task_result_fact(
