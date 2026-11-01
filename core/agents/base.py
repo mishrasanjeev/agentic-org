@@ -2,18 +2,22 @@
 
 from __future__ import annotations
 
+import asyncio
+import contextvars
+import functools
 import inspect
 import json
 import os
 import time
 import uuid
+from collections.abc import Awaitable, Callable
 from typing import Any
 
 import structlog
 
 from auth.grant_enforcement import EnforcementMode
 from auth.run_grants import NO_CALLER, CallerGrant, RunGrant, refresh_run_grant, resolve_run_grant
-from core.insights.run_facts import schedule_task_result_fact
+from core.insights import run_facts
 from core.llm.content import model_answer, strip_code_fence
 from core.llm.router import LLMResponse, llm_router
 from core.pii import pseudonymiser as pseudonymisation
@@ -53,8 +57,56 @@ def _gateway_takes_run_grant(gateway: Any) -> bool:
     return any(p.name == "run_grant" or p.kind is inspect.Parameter.VAR_KEYWORD for p in parameters)
 
 
+# The agents whose ``execute`` is recording its run fact in this context: a subclass's ``execute`` that calls
+# ``super().execute`` is recorded once, by the outermost call.
+_RECORDING: contextvars.ContextVar[frozenset[int]] = contextvars.ContextVar(
+    "base_agent_run_fact_recording", default=frozenset()
+)
+
+_Execute = Callable[..., Awaitable[Any]]
+
+
+def _records_run_fact(execute: _Execute) -> _Execute:
+    """Wrap an agent's ``execute`` so its result's run fact is written (awaited) before the result is returned.
+
+    The result object is returned as is; a failing write is swallowed by
+    ``record_task_result_fact``, so it can neither change nor fail the result.
+    An ``execute`` that raises is recorded ``failed`` with the exception's
+    class name and the same exception propagates.
+    """
+
+    @functools.wraps(execute)
+    async def recorded(self: Any, task: Any, *args: Any, **kwargs: Any) -> Any:
+        active = _RECORDING.get()
+        if id(self) in active:
+            return await execute(self, task, *args, **kwargs)
+        token = _RECORDING.set(active | {id(self)})
+        start = time.monotonic()
+        try:
+            result = await execute(self, task, *args, **kwargs)
+        except (Exception, asyncio.CancelledError) as exc:
+            latency = int((time.monotonic() - start) * 1000)
+            await run_facts.record_task_result_fact(
+                self, task, None, latency_ms=latency, error_class=type(exc).__name__
+            )
+            raise
+        finally:
+            _RECORDING.reset(token)
+        latency = int((time.monotonic() - start) * 1000)
+        await run_facts.record_task_result_fact(self, task, result, latency_ms=latency)
+        return result
+
+    recorded._records_run_fact = True  # type: ignore[attr-defined]
+    return recorded
+
+
 class BaseAgent:
-    """Abstract agent with LLM reasoning, tool calling, HITL, and confidence scoring."""
+    """Abstract agent with LLM reasoning, tool calling, HITL, and confidence scoring.
+
+    Insights: ``execute`` records one run fact per call (``_records_run_fact``),
+    including a subclass's own ``execute``, which is wrapped when the class is
+    defined.
+    """
 
     agent_type: str = ""
     domain: str = ""
@@ -122,7 +174,18 @@ class BaseAgent:
                 )
         return self._system_prompt
 
+    def __init_subclass__(cls, **kwargs: Any) -> None:
+        super().__init_subclass__(**kwargs)
+        own = cls.__dict__.get("execute")
+        if own is not None and not getattr(own, "_records_run_fact", False):
+            cls.execute = _records_run_fact(own)  # type: ignore[method-assign]
+
+    @_records_run_fact
     async def execute(self, task: TaskAssignment) -> TaskResult:
+        """Run ``_execute`` and record the result's run fact (awaited, never raising) before returning it unchanged."""
+        return await self._execute(task)
+
+    async def _execute(self, task: TaskAssignment) -> TaskResult:
         """Main execution pipeline — LLM reasoning, tool execution, validation, HITL."""
         start = time.monotonic()
         trace: list[str] = []
@@ -696,6 +759,5 @@ class BaseAgent:
             error=error,
             performance=PerformanceMetrics(total_latency_ms=latency),
         )
-        # Insights: the result's run fact, written in the background; never changes or fails the result.
-        schedule_task_result_fact(self, task, result, latency_ms=latency)
+        # Insights: ``execute`` records the result's run fact once it is returned (``_records_run_fact``).
         return result

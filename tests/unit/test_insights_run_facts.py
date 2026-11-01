@@ -100,6 +100,13 @@ class TestNormalise:
         row = run_facts.normalise_fact({"tenant_id": TENANT, "status": "HITL_TRIGGERED"})
         assert row["status"] == "hitl_triggered" and row["hitl_required"] is True
 
+    def test_an_approval_resume_is_always_hitl_required(self):
+        # The resume of a paused run exists because a person approved it: never straight through.
+        row = run_facts.normalise_fact({"tenant_id": TENANT, "status": "completed", "entrypoint": "hitl_resume"})
+        assert row["entrypoint"] == "hitl_resume" and row["status"] == "completed" and row["hitl_required"] is True
+        plain = run_facts.normalise_fact({"tenant_id": TENANT, "status": "completed", "entrypoint": "agents"})
+        assert plain["hitl_required"] is False
+
     def test_unknown_codes_fall_back_to_their_defaults(self):
         row = run_facts.normalise_fact(
             {
@@ -237,6 +244,10 @@ class TestWriter:
         # A malformed field never reaches the database layer as an exception either.
         monkeypatch.setattr(run_facts, "normalise_fact", MagicMock(side_effect=TypeError("bad")))
         assert await run_facts.record_run_fact(tenant_id=TENANT) is False
+
+    def test_the_write_waits_at_most_two_seconds(self):
+        # The write is awaited in the run's finally (and by BaseAgent.execute): it may hold a response 2 s at most.
+        assert run_facts.WRITE_TIMEOUT_SECONDS == 2.0
 
     async def test_a_slow_database_cannot_hold_the_run(self, monkeypatch, insights_on):
         async def hang(*_args: Any) -> None:
@@ -548,6 +559,53 @@ class TestRunnerHook:
         assert rows[0]["status"] == "completed" and rows[0]["run_key"] == "agents:corr-run-1"
         assert rows[0]["agent_id"] == uuid.UUID(AGENT)
 
+    @pytest.mark.parametrize("stage", ["prefetch_llm_credential", "build_agent_graph", "get_checkpointer"])
+    async def test_a_setup_failure_records_one_failed_fact_and_raises_unchanged(
+        self, offline, monkeypatch, recorded, stage
+    ):
+        boom = ConnectionError("credential store unreachable: secret-detail")
+        arguments: dict[str, Any] = {
+            "agent_id": AGENT,
+            "agent_type": "analyst",
+            "domain": "finance",
+            "tenant_id": TENANT,
+            "system_prompt": "x",
+            "authorized_tools": [],
+            "task_input": {"action": "summarise"},
+            "run_grant": NO_RUN_GRANT_FOR_TESTS,
+        }
+        if stage == "build_agent_graph":
+            monkeypatch.setattr(offline, "build_agent_graph", MagicMock(side_effect=boom))
+        else:
+            monkeypatch.setattr(offline, "build_agent_graph", lambda **_kwargs: _Graph({"status": "completed"}))
+            monkeypatch.setattr(offline, stage, AsyncMock(side_effect=boom))
+        with pytest.raises(ConnectionError) as raised:
+            await offline.run_agent(**arguments)
+        assert raised.value is boom  # the same exception, unchanged
+        assert len(recorded.calls) == 1
+        fact = recorded.calls[0]
+        assert fact["status"] == "failed" and fact["error_class"] == "ConnectionError"
+        assert fact["entrypoint"] == "agents" and "secret-detail" not in str(fact)
+
+    async def test_a_resume_setup_failure_records_one_failed_fact_and_raises_unchanged(
+        self, offline, monkeypatch, recorded
+    ):
+        boom = RuntimeError("no checkpoint store")
+        monkeypatch.setattr(offline, "get_checkpointer", AsyncMock(side_effect=boom))
+        with pytest.raises(RuntimeError) as raised:
+            await offline.resume_agent(
+                agent_id=AGENT,
+                thread_id=offline._run_thread_id(TENANT, "t-1", AGENT),
+                decision={"action": "approve"},
+                system_prompt="x",
+                authorized_tools=[],
+                tenant_id=TENANT,
+            )
+        assert raised.value is boom
+        assert [(f["entrypoint"], f["status"], f["error_class"]) for f in recorded.calls] == [
+            ("hitl_resume", "failed", "RuntimeError")
+        ]
+
     async def test_a_resume_records_hitl_resume_with_no_usage(self, offline, monkeypatch, recorded):
         from auth.grant_enforcement import EnforcementMode
         from auth.run_grants import RunGrant
@@ -578,7 +636,8 @@ class TestRunnerHook:
         fact = recorded.calls[0]
         assert fact["entrypoint"] == "hitl_resume" and fact["status"] == "completed"
         assert "tokens_total" not in fact and "cost_usd" not in fact
-        assert run_facts.normalise_fact(fact)["tokens_total"] == 0
+        row = run_facts.normalise_fact(fact)
+        assert row["tokens_total"] == 0 and row["hitl_required"] is True
 
     async def test_a_refused_resume_records_its_reason(self, offline, monkeypatch, recorded):
         other = str(uuid.uuid4())
@@ -626,28 +685,30 @@ def _agent() -> Any:
     return agent
 
 
-async def _drain() -> None:
-    await asyncio.gather(*list(run_facts._PENDING))
+def _result(agent: Any, assignment: Any, status: str = "completed", **kwargs: Any) -> Any:
+    return agent._make_result(assignment, "msg_9", status, {"a": 1}, 0.9, ["t"], [], **kwargs)
 
 
 class TestBaseAgentHook:
-    async def test_the_result_is_unchanged_and_one_workflow_fact_is_written(self, monkeypatch, recorded):
+    async def test_make_result_alone_writes_nothing(self, monkeypatch, recorded):
+        monkeypatch.setattr(settings, "insights_enabled", True)
+        result = _result(_agent(), _assignment(str(uuid.uuid4())))
+        assert result.status == "completed" and recorded.calls == [] and not run_facts._PENDING
+
+    async def test_execute_awaits_one_workflow_fact_and_returns_the_same_result(self, monkeypatch, recorded):
         import time
 
+        monkeypatch.setattr(settings, "insights_enabled", True)
         run_id = str(uuid.uuid4())
         agent = _agent()
-        before = agent._make_result(_assignment(run_id), "msg_9", "completed", {"a": 1}, 0.9, ["t"], [])
-        assert not run_facts._PENDING and recorded.calls == []
-
-        monkeypatch.setattr(settings, "insights_enabled", True)
-        start = time.monotonic() - 1.5
-        result = agent._make_result(
-            _assignment(run_id), "msg_9", "completed", {"a": 1}, 0.9, ["t"], [], start=start
-        )
-        await _drain()
-        excluded = {"completed_at", "performance"}
-        assert result.model_dump(exclude=excluded) == before.model_dump(exclude=excluded)
-        assert result.performance.total_latency_ms >= 1500
+        assignment = _assignment(run_id)
+        produced = _result(agent, assignment, start=time.monotonic() - 1.5)
+        snapshot = produced.model_dump()
+        monkeypatch.setattr(agent, "_execute", AsyncMock(return_value=produced))
+        returned = await agent.execute(assignment)
+        # The very object built by _make_result, unchanged; the fact is already written (awaited, not scheduled).
+        assert returned is produced and returned.model_dump() == snapshot
+        assert not run_facts._PENDING
         assert len(recorded.calls) == 1
         fact = recorded.calls[0]
         assert fact["entrypoint"] == "workflow" and fact["workflow_run_id"] == run_id
@@ -660,23 +721,91 @@ class TestBaseAgentHook:
     async def test_sales_and_plain_runs_have_their_entrypoints(self, monkeypatch, recorded):
         monkeypatch.setattr(settings, "insights_enabled", True)
         agent = _agent()
-        with insights_context.entrypoint("sales"):
-            agent._make_result(_assignment("sales_pipeline_ab12cd34"), "msg_s", "hitl_triggered", {}, 0.5, [], [])
-        agent._make_result(
-            _assignment(), "msg_a", "failed", {}, 0.0, [], [], error={"code": "E5001", "message": "boom: secret"}
+        sales_task = _assignment("sales_pipeline_ab12cd34")
+        plain_task = _assignment()
+        sales_result = agent._make_result(sales_task, "msg_s", "hitl_triggered", {}, 0.5, [], [])
+        plain_result = agent._make_result(
+            plain_task, "msg_a", "failed", {}, 0.0, [], [], error={"code": "E5001", "message": "boom: secret"}
         )
-        await _drain()
+        monkeypatch.setattr(agent, "_execute", AsyncMock(side_effect=[sales_result, plain_result]))
+        with insights_context.entrypoint("sales"):
+            await agent.execute(sales_task)
+        await agent.execute(plain_task)
         sales, plain = recorded.calls
         assert sales["entrypoint"] == "sales" and sales["hitl_required"] is True
         assert run_facts.normalise_fact(sales)["workflow_run_id"] is None
         assert plain["entrypoint"] == "agents" and plain["error_class"] == "E5001"
         assert "secret" not in str(plain)
 
-    async def test_a_broken_hook_never_fails_the_result(self, monkeypatch):
+    @pytest.mark.parametrize("breakage", ["fields", "write", "insert"])
+    async def test_a_failing_write_cannot_change_or_fail_the_result(self, monkeypatch, breakage):
         monkeypatch.setattr(settings, "insights_enabled", True)
-        monkeypatch.setattr(run_facts, "schedule_run_fact", MagicMock(side_effect=RuntimeError("bug")))
-        result = _agent()._make_result(_assignment(), "msg_x", "completed", {}, 1.0, [], [])
-        assert result.status == "completed"
+        monkeypatch.setattr("core.feature_flags.is_enabled", AsyncMock(return_value=True))
+        if breakage == "fields":
+            monkeypatch.setattr(run_facts, "task_result_fields", MagicMock(side_effect=RuntimeError("bug")))
+        elif breakage == "write":
+            monkeypatch.setattr(run_facts, "record_run_fact", AsyncMock(side_effect=RuntimeError("bug")))
+        else:
+            monkeypatch.setattr(run_facts, "_insert", AsyncMock(side_effect=ConnectionError("db down")))
+        agent = _agent()
+        assignment = _assignment(str(uuid.uuid4()))
+        produced = _result(agent, assignment)
+        snapshot = produced.model_dump()
+        monkeypatch.setattr(agent, "_execute", AsyncMock(return_value=produced))
+        returned = await agent.execute(assignment)
+        assert returned is produced and returned.model_dump() == snapshot
+
+    async def test_a_subclass_execute_is_recorded_once(self, monkeypatch, recorded):
+        from core.agents.base import BaseAgent
+
+        monkeypatch.setattr(settings, "insights_enabled", True)
+
+        class OwnPipeline(BaseAgent):
+            agent_type = "own_pipeline"
+
+            async def execute(self, task):
+                return self._make_result(task, "msg_own", "completed", {}, 0.95, [], [])
+
+        class Delegating(BaseAgent):
+            agent_type = "delegating"
+
+            async def execute(self, task):
+                return await super().execute(task)
+
+        own = OwnPipeline(agent_id=AGENT, tenant_id=TENANT, domain="finance")
+        result = await own.execute(_assignment())
+        assert result.message_id == "msg_own"
+        delegating = Delegating(agent_id=AGENT, tenant_id=TENANT, domain="finance")
+        produced = _result(delegating, _assignment())
+        monkeypatch.setattr(delegating, "_execute", AsyncMock(return_value=produced))
+        assert await delegating.execute(_assignment()) is produced
+        assert [(f["agent_type"], f["run_key"]) for f in recorded.calls] == [
+            ("own_pipeline", "agents:msg_own"),
+            ("delegating", "agents:msg_9"),
+        ]
+
+    async def test_an_execute_that_raises_records_failed_and_raises_unchanged(self, monkeypatch, recorded):
+        from core.agents.base import BaseAgent
+
+        monkeypatch.setattr(settings, "insights_enabled", True)
+        boom = LookupError("vendor missing")
+
+        class Raising(BaseAgent):
+            async def execute(self, task):
+                raise boom
+
+        with pytest.raises(LookupError) as raised:
+            await Raising(agent_id=AGENT, tenant_id=TENANT, domain="finance").execute(_assignment())
+        assert raised.value is boom
+        assert [(f["status"], f["error_class"]) for f in recorded.calls] == [("failed", "LookupError")]
+
+    async def test_while_off_execute_writes_nothing(self, monkeypatch, recorded):
+        monkeypatch.setattr(settings, "insights_enabled", False)
+        agent = _agent()
+        produced = _result(agent, _assignment())
+        monkeypatch.setattr(agent, "_execute", AsyncMock(return_value=produced))
+        assert await agent.execute(_assignment()) is produced
+        assert recorded.calls == []
 
 
 # ---------------------------------------------------------------------------

@@ -356,269 +356,278 @@ async def run_agent(
         use_case="agent_run",
     )
 
-    # --- Step 0: Billing entitlement gate (core.billing.metering, never raises) ---
-    from core.billing.metering import gate_agent_run, meter_agent_run
-
-    limit_block = await gate_agent_run(tenant_id)
-    if limit_block is not None:
-        return await fact.finish(limit_block)
-
-    # --- Step 0b: operator override (halt or throttle on this agent or every agent) ---
-    from core.governance.operator_override import blocked_run_result
-    from core.governance.operator_override import check as check_operator_override
-
-    override = await check_operator_override(tenant_id, agent_id=agent_id, throttle_unit="agent")
-    if override.blocked:
-        logger.warning("agent_run_refused_operator_override", agent_id=agent_id, reason=override.reason)
-        return await fact.finish(blocked_run_result(override))
-
-    run_thread_id = _run_thread_id(tenant_id, thread_id, agent_id)
-
-    # PRD F-1: resolve the grant the run's tool calls are checked against.
-    # In ``off`` this passes ``grant_token`` through untouched.
-    if run_grant is None:
-        run_grant = await resolve_run_grant(
-            tenant_id=tenant_id,
-            agent_id=agent_id,
-            supplied_token=grant_token,
-            runtime="langgraph",
-        )
-
-    # --- Step 1: Load prompt amendments (self-improving agents) ---
-    prompt_amendments: list[str] = []
     try:
-        import uuid as _uuid_mod
+        # --- Step 0: Billing entitlement gate (core.billing.metering, never raises) ---
+        from core.billing.metering import gate_agent_run, meter_agent_run
 
-        from core.database import get_tenant_session as _get_session
+        limit_block = await gate_agent_run(tenant_id)
+        if limit_block is not None:
+            return await fact.finish(limit_block)
 
-        if tenant_id:
-            _tid = _uuid_mod.UUID(tenant_id) if isinstance(tenant_id, str) else tenant_id
-            async with _get_session(_tid) as _sess:
-                from sqlalchemy import text as _sql_text
+        # --- Step 0b: operator override (halt or throttle on this agent or every agent) ---
+        from core.governance.operator_override import blocked_run_result
+        from core.governance.operator_override import check as check_operator_override
 
-                _row = await _sess.execute(
-                    _sql_text("SELECT prompt_amendments FROM agents WHERE id = :aid AND tenant_id = :tid"),
-                    {"aid": agent_id, "tid": str(_tid)},
-                )
-                _result = _row.fetchone()
-                if _result and _result[0]:
-                    import json as _json_mod
+        override = await check_operator_override(tenant_id, agent_id=agent_id, throttle_unit="agent")
+        if override.blocked:
+            logger.warning("agent_run_refused_operator_override", agent_id=agent_id, reason=override.reason)
+            return await fact.finish(blocked_run_result(override))
 
-                    raw = _result[0]
-                    if isinstance(raw, str):
-                        raw = _json_mod.loads(raw)
-                    if isinstance(raw, list):
-                        prompt_amendments = [str(a) for a in raw]
-    # enterprise-gate: broad-except-ok reason=prompt-amendments-read-model-is-optional
-    except Exception:
-        logger.debug("prompt_amendments_load_skipped", agent_id=agent_id)
+        run_thread_id = _run_thread_id(tenant_id, thread_id, agent_id)
 
-    # Prepend learned rules to system prompt
-    amended_prompt = system_prompt
-    if prompt_amendments:
-        amendments_block = format_amendments_for_prompt(prompt_amendments)
-        amended_prompt = amendments_block + system_prompt
-        logger.info("prompt_amendments_applied", agent_id=agent_id, count=len(prompt_amendments))
-    amended_prompt = _with_reference_resolution_guidance(amended_prompt)
-    # Long-term memory: what is remembered about the subject the run names, as context. It joins
-    # the prompt only after the PII step below, which treats it as model input like the task.
-    memory_subject = long_term_memory.subject_of(task_input) if long_term_memory.enabled() else ""
-    memory_block = ""
-    if memory_subject:
-        try:
-            from core.database import get_tenant_session as _memory_session
-
-            async with _memory_session(uuid.UUID(str(tenant_id))) as memory_db:
-                remembered = await long_term_memory.recall(
-                    memory_db, uuid.UUID(str(tenant_id)), subject=memory_subject, agent_id=agent_id
-                )
-                memory_block = long_term_memory.prompt_block(remembered)
-        except long_term_memory.SIDECAR_ERRORS as exc:
-            memory_block = ""
-            logger.warning("memory_recall_failed", error=type(exc).__name__)
-
-    # P1.2: PII redaction MUST happen before any LLM input. Raise loud error
-    # if production has redaction disabled — never silently send PII to LLMs.
-    pii_redactor = PIIRedactor()
-    pii_mode = pii_redactor.mode
-    env = os.getenv("AGENTICORG_ENV", "production").lower()
-    if pii_mode == "disabled" and env == "production":
-        raise RuntimeError(
-            "PII redaction is disabled in production. Set "
-            "AGENTICORG_PII_REDACTION_MODE=before_llm. Refusing to send "
-            "user data to LLM without sanitization."
-        )
-
-    # F-5: with ``pseudonymisation.pre_model`` on for the tenant, a persistent
-    # pseudonym map replaces the per-run redaction below. It covers the system
-    # prompt, and every later model turn is pseudonymised again inside the
-    # graph. The map is keyed by the server-generated thread id, never by
-    # anything in the request: whoever names a case can read its values back.
-    pseudonymiser: pseudonymisation.PseudonymSession | None = None
-    try:
-        if await pseudonymisation.pseudonymisation_enabled(tenant_id):
-            pseudonymiser = await pseudonymisation.open_session(tenant_id, pseudonymisation.case_key(run_thread_id))
-    except pseudonymisation.PseudonymisationError as exc:
-        return await fact.finish(_pseudonymisation_failed(exc))
-
-    # Build user message FROM ALREADY-REDACTED task_input
-    # Apply redaction at the source (each task_input field) so no concatenation
-    # ever sees raw PII.
-    pii_token_map: dict[str, str] = {}
-    trusted_shadow_fixture_prompt = (
-        isinstance(task_input, dict)
-        and task_input.get("action") == "shadow_sample"
-        and isinstance(task_input.get("inputs"), dict)
-        and task_input["inputs"].get("shadow_fixture_origin") is True
-        and isinstance(task_input["inputs"].get("shadow_prompt"), str)
-    )
-    if pseudonymiser is not None:
-        try:
-            masked_input = await pseudonymiser.pseudonymise_value(task_input)
-            user_message, amended_prompt = await pseudonymiser.pseudonymise_texts(
-                [
-                    _build_user_message(masked_input),
-                    pseudonymisation.with_model_guidance(memory_block + amended_prompt),
-                ]
+        # PRD F-1: resolve the grant the run's tool calls are checked against.
+        # In ``off`` this passes ``grant_token`` through untouched.
+        if run_grant is None:
+            run_grant = await resolve_run_grant(
+                tenant_id=tenant_id,
+                agent_id=agent_id,
+                supplied_token=grant_token,
+                runtime="langgraph",
             )
+
+        # --- Step 1: Load prompt amendments (self-improving agents) ---
+        prompt_amendments: list[str] = []
+        try:
+            import uuid as _uuid_mod
+
+            from core.database import get_tenant_session as _get_session
+
+            if tenant_id:
+                _tid = _uuid_mod.UUID(tenant_id) if isinstance(tenant_id, str) else tenant_id
+                async with _get_session(_tid) as _sess:
+                    from sqlalchemy import text as _sql_text
+
+                    _row = await _sess.execute(
+                        _sql_text("SELECT prompt_amendments FROM agents WHERE id = :aid AND tenant_id = :tid"),
+                        {"aid": agent_id, "tid": str(_tid)},
+                    )
+                    _result = _row.fetchone()
+                    if _result and _result[0]:
+                        import json as _json_mod
+
+                        raw = _result[0]
+                        if isinstance(raw, str):
+                            raw = _json_mod.loads(raw)
+                        if isinstance(raw, list):
+                            prompt_amendments = [str(a) for a in raw]
+        # enterprise-gate: broad-except-ok reason=prompt-amendments-read-model-is-optional
+        except Exception:
+            logger.debug("prompt_amendments_load_skipped", agent_id=agent_id)
+
+        # Prepend learned rules to system prompt
+        amended_prompt = system_prompt
+        if prompt_amendments:
+            amendments_block = format_amendments_for_prompt(prompt_amendments)
+            amended_prompt = amendments_block + system_prompt
+            logger.info("prompt_amendments_applied", agent_id=agent_id, count=len(prompt_amendments))
+        amended_prompt = _with_reference_resolution_guidance(amended_prompt)
+        # Long-term memory: what is remembered about the subject the run names, as context. It joins
+        # the prompt only after the PII step below, which treats it as model input like the task.
+        memory_subject = long_term_memory.subject_of(task_input) if long_term_memory.enabled() else ""
+        memory_block = ""
+        if memory_subject:
+            try:
+                from core.database import get_tenant_session as _memory_session
+
+                async with _memory_session(uuid.UUID(str(tenant_id))) as memory_db:
+                    remembered = await long_term_memory.recall(
+                        memory_db, uuid.UUID(str(tenant_id)), subject=memory_subject, agent_id=agent_id
+                    )
+                    memory_block = long_term_memory.prompt_block(remembered)
+            except long_term_memory.SIDECAR_ERRORS as exc:
+                memory_block = ""
+                logger.warning("memory_recall_failed", error=type(exc).__name__)
+
+        # P1.2: PII redaction MUST happen before any LLM input. Raise loud error
+        # if production has redaction disabled — never silently send PII to LLMs.
+        pii_redactor = PIIRedactor()
+        pii_mode = pii_redactor.mode
+        env = os.getenv("AGENTICORG_ENV", "production").lower()
+        if pii_mode == "disabled" and env == "production":
+            raise RuntimeError(
+                "PII redaction is disabled in production. Set "
+                "AGENTICORG_PII_REDACTION_MODE=before_llm. Refusing to send "
+                "user data to LLM without sanitization."
+            )
+
+        # F-5: with ``pseudonymisation.pre_model`` on for the tenant, a persistent
+        # pseudonym map replaces the per-run redaction below. It covers the system
+        # prompt, and every later model turn is pseudonymised again inside the
+        # graph. The map is keyed by the server-generated thread id, never by
+        # anything in the request: whoever names a case can read its values back.
+        pseudonymiser: pseudonymisation.PseudonymSession | None = None
+        try:
+            if await pseudonymisation.pseudonymisation_enabled(tenant_id):
+                pseudonymiser = await pseudonymisation.open_session(tenant_id, pseudonymisation.case_key(run_thread_id))
         except pseudonymisation.PseudonymisationError as exc:
             return await fact.finish(_pseudonymisation_failed(exc))
-    elif pii_mode in ("before_llm", "before_log") and not trusted_shadow_fixture_prompt:
-        # Recursively redact all string values in task_input
-        from copy import deepcopy
 
-        redacted_input = deepcopy(task_input) if isinstance(task_input, dict) else task_input
-        if isinstance(redacted_input, dict):
-            for k, v in list(redacted_input.items()):
-                if isinstance(v, str):
-                    new_v, tokens = pii_redactor.redact(v)
-                    redacted_input[k] = new_v
-                    pii_token_map.update(tokens)
-        user_message = _build_user_message(redacted_input)
-        # Defense in depth: redact the assembled message too
-        user_message, extra_tokens = pii_redactor.redact(user_message)
-        pii_token_map.update(extra_tokens)
-        if pii_token_map:
-            logger.info("pii_redacted_before_llm", entities=len(pii_token_map), agent_id=agent_id)
-    else:
-        if trusted_shadow_fixture_prompt and pii_mode in ("before_llm", "before_log"):
-            logger.info("pii_redaction_skipped_for_shadow_fixture", agent_id=agent_id)
-        user_message = _build_user_message(task_input)
-    if memory_block and pseudonymiser is None:
-        # Recalled memory is never a trusted fixture: redacted under the mode whatever the task.
-        amended_prompt = _redacted_memory_block(memory_block, pii_mode, pii_redactor, pii_token_map) + amended_prompt
-
-    # The model gateway applies the tenant's routing policy to the agent's
-    # model before the credential is resolved; a refusal ends the run here.
-    try:
-        route = await route_for_agent(
-            tenant_id,
-            use_case="agent_run",
-            agent_id=agent_id,
-            business_unit=domain,
-            requested_provider=llm_provider,
-            requested_model=llm_model,
+        # Build user message FROM ALREADY-REDACTED task_input
+        # Apply redaction at the source (each task_input field) so no concatenation
+        # ever sees raw PII.
+        pii_token_map: dict[str, str] = {}
+        trusted_shadow_fixture_prompt = (
+            isinstance(task_input, dict)
+            and task_input.get("action") == "shadow_sample"
+            and isinstance(task_input.get("inputs"), dict)
+            and task_input["inputs"].get("shadow_fixture_origin") is True
+            and isinstance(task_input["inputs"].get("shadow_prompt"), str)
         )
-    except ModelGatewayRefused as exc:
-        logger.warning("agent_run_refused_model_gateway", agent_id=agent_id, reason=exc.reason)
-        return await fact.finish(refused_run_result(exc))
-    llm_provider, llm_model = route.provider if route.applied else llm_provider, route.model
-    fact.routed(route, provider=llm_provider, model=llm_model, thread_id=run_thread_id)
+        if pseudonymiser is not None:
+            try:
+                masked_input = await pseudonymiser.pseudonymise_value(task_input)
+                user_message, amended_prompt = await pseudonymiser.pseudonymise_texts(
+                    [
+                        _build_user_message(masked_input),
+                        pseudonymisation.with_model_guidance(memory_block + amended_prompt),
+                    ]
+                )
+            except pseudonymisation.PseudonymisationError as exc:
+                return await fact.finish(_pseudonymisation_failed(exc))
+        elif pii_mode in ("before_llm", "before_log") and not trusted_shadow_fixture_prompt:
+            # Recursively redact all string values in task_input
+            from copy import deepcopy
 
-    # Build the graph. The tool wrappers share ``pii_token_map`` so the
-    # model's tokenized tool arguments are restored before the connector
-    # call and connector results are re-masked before returning to the LLM.
-    credential_token = await prefetch_llm_credential(llm_model, llm_provider, tenant_id)
-    try:
-        graph = build_agent_graph(
-            system_prompt=amended_prompt,
-            authorized_tools=authorized_tools,
-            llm_model=llm_model,
-            confidence_floor=confidence_floor,
-            hitl_condition=hitl_condition,
-            connector_config=connector_config,
-            connector_names=connector_names,
-            tenant_id=tenant_id,
-            company_id=company_id,
-            domain=domain,
-            pii_token_map=pii_token_map if pii_mode == "before_llm" and pseudonymiser is None else None,
-            llm_provider=llm_provider,
-            agent_id=agent_id,
-            run_grant=run_grant,
-            output_schema=output_schema,
-            output_schema_json=output_schema_json,
-            pseudonymiser=pseudonymiser,
-            limits=limits,
-            **({"thinking_level": thinking_level} if thinking_level is not None else {}),
-        )
-    finally:
-        reset_prefetched_llm_credential(credential_token)
-    # The agent's own limits, bounded by the platform's (core/langgraph/limits.py).
-    run_limits = execution_limits.effective(limits)
+            redacted_input = deepcopy(task_input) if isinstance(task_input, dict) else task_input
+            if isinstance(redacted_input, dict):
+                for k, v in list(redacted_input.items()):
+                    if isinstance(v, str):
+                        new_v, tokens = pii_redactor.redact(v)
+                        redacted_input[k] = new_v
+                        pii_token_map.update(tokens)
+            user_message = _build_user_message(redacted_input)
+            # Defense in depth: redact the assembled message too
+            user_message, extra_tokens = pii_redactor.redact(user_message)
+            pii_token_map.update(extra_tokens)
+            if pii_token_map:
+                logger.info("pii_redacted_before_llm", entities=len(pii_token_map), agent_id=agent_id)
+        else:
+            if trusted_shadow_fixture_prompt and pii_mode in ("before_llm", "before_log"):
+                logger.info("pii_redaction_skipped_for_shadow_fixture", agent_id=agent_id)
+            user_message = _build_user_message(task_input)
+        if memory_block and pseudonymiser is None:
+            # Recalled memory is never a trusted fixture: redacted under the mode whatever the task.
+            amended_prompt = (
+                _redacted_memory_block(memory_block, pii_mode, pii_redactor, pii_token_map) + amended_prompt
+            )
 
-    # Compile with checkpointer
-    # The configured store (core/langgraph/checkpointer.py); raises rather
-    # than falling back to memory when a Postgres store is unavailable.
-    checkpointer = await get_checkpointer()
-    if breakpoints:
-        # Breakpoints (core/langgraph/debugger.py): the run pauses before these nodes.
-        compiled = graph.compile(checkpointer=checkpointer, interrupt_before=list(breakpoints))
-    else:
-        compiled = graph.compile(checkpointer=checkpointer)
+        # The model gateway applies the tenant's routing policy to the agent's
+        # model before the credential is resolved; a refusal ends the run here.
+        try:
+            route = await route_for_agent(
+                tenant_id,
+                use_case="agent_run",
+                agent_id=agent_id,
+                business_unit=domain,
+                requested_provider=llm_provider,
+                requested_model=llm_model,
+            )
+        except ModelGatewayRefused as exc:
+            logger.warning("agent_run_refused_model_gateway", agent_id=agent_id, reason=exc.reason)
+            return await fact.finish(refused_run_result(exc))
+        llm_provider, llm_model = route.provider if route.applied else llm_provider, route.model
+        fact.routed(route, provider=llm_provider, model=llm_model, thread_id=run_thread_id)
 
-    initial_state: AgentState = {
-        "messages": [
-            SystemMessage(content=amended_prompt),
-            HumanMessage(content=user_message),
-        ],
-        "agent_id": agent_id,
-        "agent_type": agent_type,
-        "domain": domain,
-        "tenant_id": tenant_id,
-        "grant_token": run_grant.token,
-        # A reused thread (voice ``voice:{call_sid}``) must not inherit a
-        # denial from an earlier turn.
-        "grant_denial": {},
-        # Nor an earlier turn's limit stop.
-        "limit_stop": {},
-        # Nor an earlier turn's output-schema corrections.
-        "output_repairs": 0,
-        "output_repair": False,
-        "output_invalid": "",
-        "output_errors": [],
-        "confidence": 0.0,
-        "status": "running",
-        "output": {},
-        "reasoning_trace": [],
-        "tool_calls_log": [],
-        "hitl_trigger": "",
-        "error": "",
-    }
-    if pseudonymiser is not None:
-        initial_state["pseudonym_case_id"] = pseudonymiser.case_id
+        # Build the graph. The tool wrappers share ``pii_token_map`` so the
+        # model's tokenized tool arguments are restored before the connector
+        # call and connector results are re-masked before returning to the LLM.
+        credential_token = await prefetch_llm_credential(llm_model, llm_provider, tenant_id)
+        try:
+            graph = build_agent_graph(
+                system_prompt=amended_prompt,
+                authorized_tools=authorized_tools,
+                llm_model=llm_model,
+                confidence_floor=confidence_floor,
+                hitl_condition=hitl_condition,
+                connector_config=connector_config,
+                connector_names=connector_names,
+                tenant_id=tenant_id,
+                company_id=company_id,
+                domain=domain,
+                pii_token_map=pii_token_map if pii_mode == "before_llm" and pseudonymiser is None else None,
+                llm_provider=llm_provider,
+                agent_id=agent_id,
+                run_grant=run_grant,
+                output_schema=output_schema,
+                output_schema_json=output_schema_json,
+                pseudonymiser=pseudonymiser,
+                limits=limits,
+                **({"thinking_level": thinking_level} if thinking_level is not None else {}),
+            )
+        finally:
+            reset_prefetched_llm_credential(credential_token)
+        # The agent's own limits, bounded by the platform's (core/langgraph/limits.py).
+        run_limits = execution_limits.effective(limits)
 
-    # Config for checkpointing
-    config = {
-        "configurable": {
-            "thread_id": run_thread_id,
+        # Compile with checkpointer
+        # The configured store (core/langgraph/checkpointer.py); raises rather
+        # than falling back to memory when a Postgres store is unavailable.
+        checkpointer = await get_checkpointer()
+        if breakpoints:
+            # Breakpoints (core/langgraph/debugger.py): the run pauses before these nodes.
+            compiled = graph.compile(checkpointer=checkpointer, interrupt_before=list(breakpoints))
+        else:
+            compiled = graph.compile(checkpointer=checkpointer)
+
+        initial_state: AgentState = {
+            "messages": [
+                SystemMessage(content=amended_prompt),
+                HumanMessage(content=user_message),
+            ],
+            "agent_id": agent_id,
+            "agent_type": agent_type,
+            "domain": domain,
+            "tenant_id": tenant_id,
+            "grant_token": run_grant.token,
+            # A reused thread (voice ``voice:{call_sid}``) must not inherit a
+            # denial from an earlier turn.
+            "grant_denial": {},
+            # Nor an earlier turn's limit stop.
+            "limit_stop": {},
+            # Nor an earlier turn's output-schema corrections.
+            "output_repairs": 0,
+            "output_repair": False,
+            "output_invalid": "",
+            "output_errors": [],
+            "confidence": 0.0,
+            "status": "running",
+            "output": {},
+            "reasoning_trace": [],
+            "tool_calls_log": [],
+            "hitl_trigger": "",
+            "error": "",
         }
-    }
+        if pseudonymiser is not None:
+            initial_state["pseudonym_case_id"] = pseudonymiser.case_id
 
-    # Execute the graph — bounded by MAX_AGENT_DURATION_SEC so a runaway
-    # agent can't burn through the tenant's budget. LangGraph's recursion
-    # limit caps the step count.
-    # The routing decision stays bound for the run: the graph's reasoning
-    # node admits each model call under the per-model limits against it.
-    route_token = bind_route(route, use_case="agent_run", agent_id=agent_id)
-    run_span = tracing.start(
-        "agenticorg.agent.run",
-        tenant=tenant_id,
-        root=True,
-        **_run_span_attributes(route, agent_id, agent_type, domain),
-    )
-    if debugger.enabled():
-        # The console links a recorded run to its checkpoint thread.
-        run_span.set(**{"agent.thread_id": run_thread_id})
+        # Config for checkpointing
+        config = {
+            "configurable": {
+                "thread_id": run_thread_id,
+            }
+        }
+
+        # Execute the graph — bounded by MAX_AGENT_DURATION_SEC so a runaway
+        # agent can't burn through the tenant's budget. LangGraph's recursion
+        # limit caps the step count.
+        # The routing decision stays bound for the run: the graph's reasoning
+        # node admits each model call under the per-model limits against it.
+        route_token = bind_route(route, use_case="agent_run", agent_id=agent_id)
+        run_span = tracing.start(
+            "agenticorg.agent.run",
+            tenant=tenant_id,
+            root=True,
+            **_run_span_attributes(route, agent_id, agent_type, domain),
+        )
+        if debugger.enabled():
+            # The console links a recorded run to its checkpoint thread.
+            run_span.set(**{"agent.thread_id": run_thread_id})
+    except (Exception, asyncio.CancelledError) as exc:
+        # Insights: a failure here (the credential prefetch, building the graph, the checkpointer) never
+        # reaches the main block's ``finally``: record the run failed with the exception class, then
+        # re-raise the same exception unchanged. A run already recorded is not recorded again.
+        await fact.fail(exc)
+        raise
     t0 = time.perf_counter()
     try:
         invoke_config = {**config, "recursion_limit": MAX_AGENT_STEPS}
@@ -1028,9 +1037,12 @@ async def resume_agent(
     """
     from langgraph.types import Command
 
-    # Insights: the resumed run's fact. Tokens and cost are recorded as 0 because a resume reports the
-    # whole thread's usage, which the run that paused already recorded; a debugging step reports only
-    # what the step itself spent, so its usage is kept.
+    # Insights: the resumed run's fact (entry point ``hitl_resume``, always ``hitl_required``). Tokens and
+    # cost are recorded as 0 because a resume reports the whole thread's usage, not what the resume itself
+    # spent: the usage after an approval resume is therefore NOT counted in run facts (the paused run's
+    # fact holds only what was spent before the pause). Spend metering (spend_usage_rollups) and the cost
+    # ledger are the cost truth. A debugging step reports only what the step itself spent, so its usage is
+    # kept.
     fact = RunRecorder(
         tenant_id=tenant_id,
         agent_id=agent_id,
@@ -1045,127 +1057,136 @@ async def resume_agent(
         record_usage=bool((debug or {}).get("mode")),
     )
 
-    if canonical_tenant_id(tenant_id) is not None or configured_backend() == BACKEND_POSTGRES:
-        if not thread_belongs_to_tenant(thread_id, tenant_id):
-            reason = (
-                "checkpoint_thread_tenant_mismatch"
-                if canonical_tenant_id(tenant_id) is not None
-                else "checkpoint_thread_tenant_invalid"
+    try:
+        if canonical_tenant_id(tenant_id) is not None or configured_backend() == BACKEND_POSTGRES:
+            if not thread_belongs_to_tenant(thread_id, tenant_id):
+                reason = (
+                    "checkpoint_thread_tenant_mismatch"
+                    if canonical_tenant_id(tenant_id) is not None
+                    else "checkpoint_thread_tenant_invalid"
+                )
+                logger.warning("langgraph_resume_refused", agent_id=agent_id, reason=reason)
+                return await fact.finish({"status": "failed", "error": reason, "reason": reason})
+
+        from core.governance.operator_override import blocked_run_result
+        from core.governance.operator_override import check as check_operator_override
+
+        override = await check_operator_override(tenant_id, agent_id=agent_id, throttle_unit="agent")
+        if override.blocked:
+            logger.warning("agent_resume_refused_operator_override", agent_id=agent_id, reason=override.reason)
+            return await fact.finish(blocked_run_result(override))
+
+        config = {"configurable": {"thread_id": thread_id}}
+        # The configured store (core/langgraph/checkpointer.py); raises rather
+        # than falling back to memory when a Postgres store is unavailable.
+        checkpointer = await get_checkpointer()
+
+        # A run started with pseudonymisation holds tokens in its checkpoint: its
+        # map is required to resume, whatever the flag says now, and only the
+        # tokens in that conversation may be restored.
+        pseudonymiser: pseudonymisation.PseudonymSession | None = None
+        try:
+            case_id, checkpoint_messages = await _checkpoint_pseudonym_state(checkpointer, config)
+            if case_id is not None:
+                pseudonymiser = await pseudonymisation.open_session(tenant_id, case_id, require_existing=True)
+                pseudonymiser.note_issued(checkpoint_messages)
+        except pseudonymisation.PseudonymisationError as exc:
+            logger.warning("langgraph_resume_pseudonymisation_unavailable", agent_id=agent_id, reason=exc.reason)
+            return await fact.finish(
+                {
+                    "status": "failed",
+                    "error": f"pseudonymisation_unavailable: {exc.reason}",
+                    "reason": "pseudonymisation_unavailable",
+                }
             )
-            logger.warning("langgraph_resume_refused", agent_id=agent_id, reason=reason)
-            return await fact.finish({"status": "failed", "error": reason, "reason": reason})
+        # enterprise-gate: broad-except-ok reason=checkpoint-read-failure-returns-explicit-failed-status
+        except Exception as e:
+            logger.error("langgraph_resume_failed", agent_id=agent_id, error=str(e))
+            reason = e.reason if isinstance(e, CheckpointIntegrityError) else "resume_failed"
+            return await fact.finish({"status": "failed", "error": str(e), "reason": reason})
 
-    from core.governance.operator_override import blocked_run_result
-    from core.governance.operator_override import check as check_operator_override
+        if run_grant is None:
+            run_grant = await resolve_run_grant(
+                tenant_id=tenant_id,
+                agent_id=agent_id,
+                supplied_token=grant_token,
+                runtime="langgraph_resume",
+            )
 
-    override = await check_operator_override(tenant_id, agent_id=agent_id, throttle_unit="agent")
-    if override.blocked:
-        logger.warning("agent_resume_refused_operator_override", agent_id=agent_id, reason=override.reason)
-        return await fact.finish(blocked_run_result(override))
+        try:
+            route = await route_for_agent(
+                tenant_id,
+                use_case="agent_resume",
+                agent_id=agent_id,
+                business_unit=domain,
+                requested_provider=llm_provider,
+                requested_model=llm_model,
+            )
+        except ModelGatewayRefused as exc:
+            logger.warning("agent_resume_refused_model_gateway", agent_id=agent_id, reason=exc.reason)
+            return await fact.finish(refused_run_result(exc))
+        llm_provider, llm_model = route.provider if route.applied else llm_provider, route.model
+        fact.routed(route, provider=llm_provider, model=llm_model)
 
-    config = {"configurable": {"thread_id": thread_id}}
-    # The configured store (core/langgraph/checkpointer.py); raises rather
-    # than falling back to memory when a Postgres store is unavailable.
-    checkpointer = await get_checkpointer()
+        credential_token = await prefetch_llm_credential(llm_model, llm_provider, tenant_id)
+        try:
+            graph = build_agent_graph(
+                system_prompt=system_prompt,
+                agent_id=agent_id,
+                authorized_tools=authorized_tools,
+                llm_model=llm_model,
+                confidence_floor=confidence_floor,
+                hitl_condition=hitl_condition,
+                connector_config=connector_config,
+                connector_names=connector_names,
+                tenant_id=tenant_id,
+                company_id=company_id,
+                domain=domain,
+                llm_provider=llm_provider,
+                pseudonymiser=pseudonymiser,
+                run_grant=run_grant,
+                output_schema=output_schema,
+                output_schema_json=output_schema_json,
+                limits=limits,
+                **({"thinking_level": thinking_level} if thinking_level is not None else {}),
+            )
+        finally:
+            reset_prefetched_llm_credential(credential_token)
+        debug_mode = str((debug or {}).get("mode") or "")
+        if debug_mode:
+            # The console re-enters a run paused at a breakpoint: one node (step) or on to the next breakpoint.
+            pause_before = (
+                list(debugger.NODES) if debug_mode == "step" else list((debug or {}).get("breakpoints") or [])
+            )
+            compiled = graph.compile(checkpointer=checkpointer, interrupt_before=pause_before)
+        else:
+            compiled = graph.compile(checkpointer=checkpointer)
 
-    # A run started with pseudonymisation holds tokens in its checkpoint: its
-    # map is required to resume, whatever the flag says now, and only the
-    # tokens in that conversation may be restored.
-    pseudonymiser: pseudonymisation.PseudonymSession | None = None
-    try:
-        case_id, checkpoint_messages = await _checkpoint_pseudonym_state(checkpointer, config)
-        if case_id is not None:
-            pseudonymiser = await pseudonymisation.open_session(tenant_id, case_id, require_existing=True)
-            pseudonymiser.note_issued(checkpoint_messages)
-    except pseudonymisation.PseudonymisationError as exc:
-        logger.warning("langgraph_resume_pseudonymisation_unavailable", agent_id=agent_id, reason=exc.reason)
-        return await fact.finish(
-            {
-                "status": "failed",
-                "error": f"pseudonymisation_unavailable: {exc.reason}",
-                "reason": "pseudonymisation_unavailable",
-            }
+        resume_command: Command[Any] | None
+        if debug_mode:
+            # A static breakpoint continues on a bare invoke; the fresh grant still replaces the checkpointed one.
+            resume_command = (
+                None
+                if run_grant.mode is EnforcementMode.OFF
+                else Command(update={"grant_token": run_grant.token, "grant_denial": {}})
+            )
+        else:
+            resume_command = (
+                Command(resume=decision)
+                if run_grant.mode is EnforcementMode.OFF
+                else Command(resume=decision, update={"grant_token": run_grant.token, "grant_denial": {}})
+            )
+
+        route_token = bind_route(route, use_case="agent_resume", agent_id=agent_id)
+        run_span = tracing.start(
+            "agenticorg.agent.resume", tenant=tenant_id, root=True, **_run_span_attributes(route, agent_id)
         )
-    # enterprise-gate: broad-except-ok reason=checkpoint-read-failure-returns-explicit-failed-status
-    except Exception as e:
-        logger.error("langgraph_resume_failed", agent_id=agent_id, error=str(e))
-        reason = e.reason if isinstance(e, CheckpointIntegrityError) else "resume_failed"
-        return await fact.finish({"status": "failed", "error": str(e), "reason": reason})
-
-    if run_grant is None:
-        run_grant = await resolve_run_grant(
-            tenant_id=tenant_id,
-            agent_id=agent_id,
-            supplied_token=grant_token,
-            runtime="langgraph_resume",
-        )
-
-    try:
-        route = await route_for_agent(
-            tenant_id,
-            use_case="agent_resume",
-            agent_id=agent_id,
-            business_unit=domain,
-            requested_provider=llm_provider,
-            requested_model=llm_model,
-        )
-    except ModelGatewayRefused as exc:
-        logger.warning("agent_resume_refused_model_gateway", agent_id=agent_id, reason=exc.reason)
-        return await fact.finish(refused_run_result(exc))
-    llm_provider, llm_model = route.provider if route.applied else llm_provider, route.model
-    fact.routed(route, provider=llm_provider, model=llm_model)
-
-    credential_token = await prefetch_llm_credential(llm_model, llm_provider, tenant_id)
-    try:
-        graph = build_agent_graph(
-            system_prompt=system_prompt,
-            agent_id=agent_id,
-            authorized_tools=authorized_tools,
-            llm_model=llm_model,
-            confidence_floor=confidence_floor,
-            hitl_condition=hitl_condition,
-            connector_config=connector_config,
-            connector_names=connector_names,
-            tenant_id=tenant_id,
-            company_id=company_id,
-            domain=domain,
-            llm_provider=llm_provider,
-            pseudonymiser=pseudonymiser,
-            run_grant=run_grant,
-            output_schema=output_schema,
-            output_schema_json=output_schema_json,
-            limits=limits,
-            **({"thinking_level": thinking_level} if thinking_level is not None else {}),
-        )
-    finally:
-        reset_prefetched_llm_credential(credential_token)
-    debug_mode = str((debug or {}).get("mode") or "")
-    if debug_mode:
-        # The console re-enters a run paused at a breakpoint: one node (step) or on to the next breakpoint.
-        pause_before = list(debugger.NODES) if debug_mode == "step" else list((debug or {}).get("breakpoints") or [])
-        compiled = graph.compile(checkpointer=checkpointer, interrupt_before=pause_before)
-    else:
-        compiled = graph.compile(checkpointer=checkpointer)
-
-    resume_command: Command[Any] | None
-    if debug_mode:
-        # A static breakpoint continues on a bare invoke; the fresh grant still replaces the checkpointed one.
-        resume_command = (
-            None
-            if run_grant.mode is EnforcementMode.OFF
-            else Command(update={"grant_token": run_grant.token, "grant_denial": {}})
-        )
-    else:
-        resume_command = (
-            Command(resume=decision)
-            if run_grant.mode is EnforcementMode.OFF
-            else Command(resume=decision, update={"grant_token": run_grant.token, "grant_denial": {}})
-        )
-
-    route_token = bind_route(route, use_case="agent_resume", agent_id=agent_id)
-    run_span = tracing.start(
-        "agenticorg.agent.resume", tenant=tenant_id, root=True, **_run_span_attributes(route, agent_id)
-    )
+    except (Exception, asyncio.CancelledError) as exc:
+        # Insights: a failure here (the credential prefetch, building the graph, the checkpointer) never
+        # reaches the main block's ``finally``: record the run failed with the exception class, then
+        # re-raise the same exception unchanged. A run already recorded is not recorded again.
+        await fact.fail(exc)
+        raise
     t0 = time.perf_counter()
     try:
         # A debug step reports what it spent: the thread's usage at the pause is subtracted.

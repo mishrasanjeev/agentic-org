@@ -16,9 +16,9 @@ Call sites:
 
 - ``RunRecorder``: the LangGraph runner collects a run's outcome while it runs
   and records it once from its ``finally`` block;
-- ``schedule_task_result_fact``: ``BaseAgent._make_result`` (workflow steps and
-  the sales pipeline) is synchronous, so its fact is written by a background
-  task;
+- ``record_task_result_fact``: ``BaseAgent.execute`` (workflow steps and the
+  sales pipeline) awaits the write of its result's fact before it returns the
+  result unchanged;
 - ``record_run_facts``: the demo seeder writes its ``seeded`` facts in one
   statement.
 
@@ -101,9 +101,11 @@ _INT_MAX = 2_147_483_647  # INTEGER columns
 _COST_MAX = Decimal("99999999.999999")  # NUMERIC(14,6)
 _COST_QUANTUM = Decimal("0.000001")
 
-# A fact write waits at most this long, so a slow database cannot hold a run's response.
-WRITE_TIMEOUT_SECONDS = 5.0
-# Background writes (``schedule_run_fact``) in flight at once; beyond it a fact is dropped and logged.
+# A fact write waits at most this long, so a slow database cannot hold a run's response
+# (the runner awaits it in its ``finally``, and ``BaseAgent.execute`` before returning).
+WRITE_TIMEOUT_SECONDS = 2.0
+# Background writes (``schedule_run_fact``, for synchronous callers) in flight at once; beyond it a fact is
+# dropped and logged.
 MAX_PENDING_WRITES = 500
 
 # enterprise-gate: process-local-ok reason=strong-refs-to-in-flight-run-fact-writes-bounded
@@ -191,7 +193,8 @@ def normalise_fact(fields: Mapping[str, Any]) -> dict[str, Any] | None:
     as ``operator_override`` becomes ``refused``), keeping the given
     ``error_class`` or, without one, the original status as the error code.
     ``entrypoint``, ``environment`` and ``data_quality`` outside their sets
-    become ``agents``, ``production`` and ``measured``.
+    become ``agents``, ``production`` and ``measured``. A ``hitl_resume``
+    fact (an approval resuming a paused run) is always ``hitl_required``.
     """
     tenant_id = _uuid_or_none(fields.get("tenant_id"))
     if tenant_id is None:
@@ -242,7 +245,8 @@ def normalise_fact(fields: Mapping[str, Any]) -> dict[str, Any] | None:
         "confidence": _unit_interval(fields.get("confidence")),
         "confidence_floor": _unit_interval(fields.get("confidence_floor")),
         "duration_ms": duration_ms,
-        "hitl_required": bool(fields.get("hitl_required")) or status == "hitl_triggered",
+        # A resume exists only because a person decided, so it always involved one.
+        "hitl_required": bool(fields.get("hitl_required")) or status == "hitl_triggered" or entrypoint == "hitl_resume",
         "tokens_in": tokens["tokens_in"],
         "tokens_out": tokens["tokens_out"],
         "tokens_cached": tokens["tokens_cached"],
@@ -546,6 +550,12 @@ class RunRecorder:
                 fields["tokens_in"], fields["tokens_out"], fields["tokens_cached"] = self.tokens
         return fields
 
+    async def fail(self, exc: BaseException) -> None:
+        """Record the run as ``failed`` with ``exc``'s class name, unless it was already recorded. Never raises."""
+        if not self._recorded and self.result is None:
+            self.error_class = type(exc).__name__
+        await self.finish()
+
     async def finish(self, result: Any = None, *, error_class: str | None = None, span: Any = None) -> Any:
         """Record the run once (``result`` when given, else what was captured) and return ``result``. Never raises."""
         if result is not None:
@@ -571,45 +581,67 @@ def _error_code(error: Any) -> str | None:
     return None
 
 
-def schedule_task_result_fact(agent: Any, task: Any, result: Any, *, latency_ms: int = 0) -> None:
-    """Record a ``BaseAgent`` result's fact in the background. Never raises; never reads or changes ``result``'s value.
+def task_result_fields(
+    agent: Any, task: Any, result: Any, *, latency_ms: int = 0, error_class: str | None = None
+) -> dict[str, Any]:
+    """The fact fields of a ``BaseAgent`` result (``result`` is ``None`` when ``execute`` raised). Reads only.
 
     The entry point is ``sales`` inside the sales pipeline (which also sets a
     synthetic ``workflow_run_id``), else ``workflow`` for a result with a
     workflow run, else the bound entry point, else ``agents``. Tokens are 0:
     the base agent does not accumulate them.
     """
+    workflow_run_id = str(getattr(result, "workflow_run_id", "") or getattr(task, "workflow_run_id", "") or "")
+    bound = current_entrypoint.get()
+    entrypoint = bound if bound == "sales" else ("workflow" if workflow_run_id else get_entrypoint())
+    status = "failed" if result is None else str(getattr(result, "status", "") or "failed")
+    latency = _non_negative_int(latency_ms)
+    message_id = str(getattr(result, "message_id", "") or uuid.uuid4().hex)
+    task_input = getattr(task, "task", None)
+    return {
+        "tenant_id": getattr(agent, "tenant_id", None),
+        "company_id": getattr(agent, "company_id", None),
+        "run_key": f"{entrypoint}:{message_id}",
+        "entrypoint": entrypoint,
+        "agent_id": getattr(result, "agent_id", None) or getattr(agent, "agent_id", None),
+        "agent_type": getattr(agent, "agent_type", None),
+        "domain": getattr(agent, "domain", None),
+        "correlation_id": getattr(result, "correlation_id", None) or getattr(task, "correlation_id", None),
+        "workflow_run_id": workflow_run_id or None,
+        "step_id": getattr(result, "step_id", None) or getattr(task, "step_id", None),
+        "task_type": getattr(task_input, "action", None),
+        "status": status,
+        "confidence": getattr(result, "confidence", None),
+        "confidence_floor": getattr(agent, "confidence_floor", None),
+        "duration_ms": latency,
+        "hitl_required": status == "hitl_triggered",
+        "error_class": error_class or _error_code(getattr(result, "error", None)),
+        "model": getattr(agent, "llm_model", None),
+        "started_at": datetime.now(UTC) - timedelta(milliseconds=latency),
+    }
+
+
+def _result_latency(result: Any) -> int | None:
+    performance = getattr(result, "performance", None)
+    latency = getattr(performance, "total_latency_ms", None)
+    return _non_negative_int(latency) if latency else None
+
+
+async def record_task_result_fact(
+    agent: Any, task: Any, result: Any, *, latency_ms: int = 0, error_class: str | None = None
+) -> None:
+    """Record a ``BaseAgent`` result's fact, awaited. Never raises; never reads or changes ``result``'s value.
+
+    The result's own ``total_latency_ms`` is the duration when it has one,
+    else ``latency_ms`` (what the caller measured). ``result`` is ``None``
+    for an ``execute`` that raised: the fact is ``failed`` with
+    ``error_class``.
+    """
     if not settings.insights_enabled:
         return
     try:
-        workflow_run_id = str(getattr(result, "workflow_run_id", "") or "")
-        bound = current_entrypoint.get()
-        entrypoint = bound if bound == "sales" else ("workflow" if workflow_run_id else get_entrypoint())
-        status = str(getattr(result, "status", "") or "failed")
-        latency = _non_negative_int(latency_ms)
-        message_id = str(getattr(result, "message_id", "") or uuid.uuid4().hex)
-        task_input = getattr(task, "task", None)
-        schedule_run_fact(
-            tenant_id=getattr(agent, "tenant_id", None),
-            company_id=getattr(agent, "company_id", None),
-            run_key=f"{entrypoint}:{message_id}",
-            entrypoint=entrypoint,
-            agent_id=getattr(result, "agent_id", None) or getattr(agent, "agent_id", None),
-            agent_type=getattr(agent, "agent_type", None),
-            domain=getattr(agent, "domain", None),
-            correlation_id=getattr(result, "correlation_id", None),
-            workflow_run_id=workflow_run_id or None,
-            step_id=getattr(result, "step_id", None),
-            task_type=getattr(task_input, "action", None),
-            status=status,
-            confidence=getattr(result, "confidence", None),
-            confidence_floor=getattr(agent, "confidence_floor", None),
-            duration_ms=latency,
-            hitl_required=status == "hitl_triggered",
-            error_class=_error_code(getattr(result, "error", None)),
-            model=getattr(agent, "llm_model", None),
-            started_at=datetime.now(UTC) - timedelta(milliseconds=latency),
-        )
-    # enterprise-gate: broad-except-ok reason=run-fact-scheduling-never-fails-the-agent-result
+        latency = _result_latency(result) or latency_ms
+        await record_run_fact(**task_result_fields(agent, task, result, latency_ms=latency, error_class=error_class))
+    # enterprise-gate: broad-except-ok reason=run-fact-write-never-fails-the-agent-result
     except Exception as exc:
         logger.warning("run_fact_write_failed", error_type=type(exc).__name__)
