@@ -45,9 +45,25 @@ export interface MetricPoint {
   t: string;
   value: number | string | null;
   group?: string | null;
+  /** The bucket includes days left out of the read (not rolled up yet): its value is incomplete. */
+  partial?: boolean | null;
 }
 
 export type MetricRow = Record<string, unknown>;
+
+/**
+ * The comparison window. With a running today in the period, `basis` is
+ * `complete_days`: `compare_value` covers `complete_days` days of the window and
+ * `current_value` the period's days before today, so the change compares like
+ * with like. Otherwise `basis` is `full_period`.
+ */
+export interface MetricCompare {
+  from: string;
+  to: string;
+  basis?: "complete_days" | "full_period" | string;
+  complete_days?: number | null;
+  current_value?: number | string | null;
+}
 
 export interface MetricResponse {
   key: string;
@@ -59,13 +75,15 @@ export interface MetricResponse {
   data_quality: DataQuality | string;
   computed_at: string;
   period: MetricPeriod;
-  compare?: { from: string; to: string } | null;
+  compare?: MetricCompare | null;
   value?: number | string | null;
   compare_value?: number | string | null;
   state?: MetricState | null;
   series?: MetricPoint[] | null;
   rows?: MetricRow[] | null;
   hint?: string | null;
+  /** The value is only a floor (a latency percentile over 10 minutes): show it as "> 10m". */
+  lower_bound?: boolean | null;
 }
 
 export interface NeedsYouItem {

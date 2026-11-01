@@ -8,8 +8,17 @@ by, and the resolver that computes it. :func:`resolve` wraps a resolver's
 result in the response every metric shares::
 
     {key, title, definition, unit, currency?, source, data_quality, computed_at,
-     period {from, to, granularity}, compare {from, to}?, value?, compare_value?,
-     state?, series?, rows?, hint?}
+     period {from, to, granularity}, compare {from, to, basis, ...}?, value?, compare_value?,
+     state?, series?, rows?, hint?, lower_bound?}
+
+Comparisons are like with like. ``compare`` is the same number of days
+immediately before the period. When the period includes the tenant-local
+today, which is still running, the change is computed over complete days
+only: ``compare.basis`` is ``complete_days``, ``compare.current_value`` is the
+metric over the period's days before today and ``compare_value`` over as many
+days from the start of the comparison window (``compare.complete_days`` of
+them). Otherwise ``compare.basis`` is ``full_period`` and ``compare_value``
+covers the whole comparison window. The tile ``value`` always includes today.
 
 Views: ``executive`` (administrators) and ``finance`` (administrators and the
 CFO). A metric may be read by a role that may read any view showing it.
@@ -20,13 +29,13 @@ CFO). A metric may be read by a role that may read any view showing it.
 from __future__ import annotations
 
 from collections.abc import Awaitable, Callable
-from dataclasses import dataclass, field
-from datetime import UTC, datetime
+from dataclasses import dataclass, field, replace
+from datetime import UTC, datetime, timedelta
 from typing import Any, Literal
 
 from core.insights import metrics as runs
 from core.insights import metrics_cost as cost
-from core.insights.metrics import RUN_GROUPS, MetricContext
+from core.insights.metrics import RUN_GROUPS, MetricContext, Period
 
 Unit = Literal["count", "percent", "duration_ms", "usd", "inr", "tokens"]
 UNITS: tuple[str, ...] = ("count", "percent", "duration_ms", "usd", "inr", "tokens")
@@ -48,7 +57,10 @@ RUN_QUALITY_RULE = (
     "measured when every run read was recorded live; seeded when every run came from demo seeding; "
     "mixed when both; no_data when no run is recorded in the period."
 )
-COST_QUALITY_RULE = "measured from the cost source; no_data when the source has no spend in the period."
+COST_QUALITY_RULE = (
+    "measured from one cost source; mixed when some days come from metered usage and others from the "
+    "agent cost ledger; no_data when there is no spend in the period."
+)
 SNAPSHOT_QUALITY_RULE = "measured from the current rows; no_data when there is nothing to count."
 
 
@@ -124,7 +136,10 @@ _METRICS: tuple[Metric, ...] = (
     Metric(
         key="runs.volume",
         title="Agent runs",
-        definition="The number of agent runs that started in the period, across every entry point.",
+        definition=(
+            "The number of agent runs that started in the period, across every entry point. An approval "
+            "resuming a paused run is part of that run, not a new one; debugging-console runs are not counted."
+        ),
         unit="count",
         source=RUN_SOURCE,
         views=(EXECUTIVE, FINANCE),
@@ -136,8 +151,11 @@ _METRICS: tuple[Metric, ...] = (
         key="runs.success_rate",
         title="Run success rate",
         definition=(
-            "Completed runs as a share of finished runs. Runs still waiting on a person "
-            "(sent for approval or paused) are left out until they finish."
+            "Completed runs as a share of runs that completed or failed. A run paused for approval counts "
+            "by its outcome once it is resumed. Runs still waiting on a person, refused by the platform "
+            "(operator halt, billing limit, guardrail or gateway block) or rejected are neither successes "
+            "nor failures and are left out; rows break the runs down by status. Debugging-console runs are "
+            "not counted."
         ),
         unit="percent",
         source=RUN_SOURCE,
@@ -150,7 +168,10 @@ _METRICS: tuple[Metric, ...] = (
     Metric(
         key="runs.straight_through_rate",
         title="Straight-through rate",
-        definition="Runs that completed with no person involved, as a share of all runs.",
+        definition=(
+            "Completed runs that no person was involved in (no approval), as a share of all completed runs. "
+            "A run approved and resumed counts as completed with a person involved."
+        ),
         unit="percent",
         source=RUN_SOURCE,
         views=(EXECUTIVE,),
@@ -164,7 +185,9 @@ _METRICS: tuple[Metric, ...] = (
         title="Run latency (p95)",
         definition=(
             "The 95th percentile of run duration, estimated from latency buckets as the upper bound "
-            "of the bucket holding it, so it never understates. Rows give p50, p95 and the mean."
+            "of the bucket holding it. When it lands in the last, open-ended bucket (over 10 minutes) "
+            "the value is 10 minutes with lower_bound true: the runs took longer than that. Rows give "
+            "p50, p95 and the mean."
         ),
         unit="duration_ms",
         source=RUN_SOURCE,
@@ -202,8 +225,9 @@ _METRICS: tuple[Metric, ...] = (
         key="cost.spend",
         title="AI spend",
         definition=(
-            "Spend in the period from the cost source (metered usage when AI spend metering is on, "
-            "otherwise the agent cost ledger), in the tenant's reporting currency."
+            "Spend in the period, in the tenant's reporting currency. Each day comes from metered usage "
+            "when AI spend metering has rows for it, otherwise from the agent cost ledger; the source "
+            "names what was read."
         ),
         unit="usd",
         source=COST_SOURCE,
@@ -216,11 +240,18 @@ _METRICS: tuple[Metric, ...] = (
     Metric(
         key="cost.per_run",
         title="Cost per run",
-        definition="Spend in the period divided by the agent runs that started in it, tenant-wide.",
+        definition=(
+            "Spend divided by the agent runs that started on the same days, tenant-wide. Only days with run "
+            "data count on both sides (from the tenant's first recorded run, less days not yet rolled up); "
+            "when that is fewer days than the period, the hint names the days covered."
+        ),
         unit="usd",
         source=(*COST_SOURCE, *RUN_SOURCE),
         views=(FINANCE,),
-        data_quality_rule="measured when both spend and runs are recorded; no_data otherwise.",
+        data_quality_rule=(
+            "measured when spend and runs cover the whole period from one cost source; mixed when they "
+            "cover fewer days than the period or both cost sources; no_data when either is missing."
+        ),
         resolver=cost.resolve_cost_per_run,
         kind="cost",
     ),
@@ -252,14 +283,15 @@ _METRICS: tuple[Metric, ...] = (
         key="cost.forecast",
         title="Month-end spend forecast",
         definition=(
-            "This month's spend to date plus the daily trend carried to month end, with a 95% band "
-            "from the day-to-day scatter. Always an estimate; it covers the current month whatever "
-            "period is selected."
+            "This month's spend on its complete days plus the daily trend carried from today to month end, "
+            "with a 95% band from the day-to-day scatter. The trend is fitted on complete days only: this "
+            "month's once 7 of them have spend, else the last 14 complete days. Always an estimate; it "
+            "covers the current month whatever period is selected."
         ),
         unit="usd",
         source=COST_SOURCE,
         views=(FINANCE,),
-        data_quality_rule="estimated whenever there is spend this month; no_data otherwise.",
+        data_quality_rule="estimated when there are 7 days of spend to fit; no_data otherwise.",
         resolver=cost.resolve_cost_forecast,
         comparable=False,
         kind="cost",
@@ -284,13 +316,18 @@ _METRICS: tuple[Metric, ...] = (
         key="tokens.by_unit",
         title="Tokens by unit",
         definition=(
-            "Tokens used in the period by unit: metered token units when AI spend metering is on, "
-            "otherwise the input, output and cached tokens agent runs report."
+            "Tokens used in the period by unit: metered token units when every spend day of the period is "
+            "metered, otherwise the input, output and cached tokens agent runs report. Run figures leave "
+            "out usage after an approval resumes a paused run (a resume reports the whole thread's usage, "
+            "so it is recorded as 0); spend metering is the cost truth."
         ),
         unit="tokens",
         source=("spend_usage_rollups", *RUN_SOURCE),
         views=(FINANCE,),
-        data_quality_rule="measured from the source read; no_data when it has no tokens in the period.",
+        data_quality_rule=(
+            "measured from the source read; mixed when run figures cover fewer days than the period; "
+            "no_data when it has no tokens in the period."
+        ),
         resolver=cost.resolve_tokens_by_unit,
         kind="cost",
     ),
@@ -379,6 +416,17 @@ def readable_metrics(views: list[str] | set[str]) -> list[Metric]:
     return [metric for metric in _METRICS if allowed.intersection(metric.views)]
 
 
+async def _complete_days_compare(metric: Metric, ctx: MetricContext, days: int) -> tuple[Any, Any]:
+    """The metric over the period's first ``days`` complete days, and over as many days of the comparison window."""
+    if days <= 0 or ctx.compare is None:
+        return None, None
+    current = Period(ctx.period.start, ctx.period.start + timedelta(days=days - 1), ctx.period.granularity)
+    previous = Period(ctx.compare.start, ctx.compare.start + timedelta(days=days - 1), ctx.compare.granularity)
+    part = await metric.resolver(replace(ctx, period=current, compare=previous))
+    current_value = part.get("value") if part.get("data_quality") != "no_data" else None
+    return current_value, part.get("compare_value")
+
+
 async def resolve(metric: Metric, ctx: MetricContext) -> dict[str, Any]:
     """The metric's response for ``ctx``."""
     part = await metric.resolver(ctx)
@@ -402,13 +450,22 @@ async def resolve(metric: Metric, ctx: MetricContext) -> dict[str, Any]:
     if currency:
         response["currency"] = currency
     if metric.comparable and ctx.compare is not None:
-        response["compare"] = ctx.compare.range_dict()
-        response["compare_value"] = part.pop("compare_value", None)
-    else:
-        part.pop("compare_value", None)
+        compare: dict[str, Any] = ctx.compare.range_dict()
+        today = ctx.today
+        if ctx.period.start <= today <= ctx.period.end:
+            # Today is still running: compare complete days with as many days of the comparison window.
+            days = (today - ctx.period.start).days
+            current_value, compare_value = await _complete_days_compare(metric, ctx, days)
+            compare.update(basis="complete_days", complete_days=days, current_value=current_value)
+            response["compare_value"] = compare_value
+        else:
+            compare["basis"] = "full_period"
+            response["compare_value"] = part.pop("compare_value", None)
+        response["compare"] = compare
+    part.pop("compare_value", None)
     if state is not None:
         response["state"] = state
-    for name in ("series", "rows", "hint", "conversion"):
+    for name in ("series", "rows", "hint", "conversion", "lower_bound"):
         if part.get(name) is not None:
             response[name] = part[name]
     if response["data_quality"] not in DATA_QUALITIES:

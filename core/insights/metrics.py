@@ -11,10 +11,24 @@ Nothing here invents a number: a period with no recorded data answers
 ``data_quality: no_data``, never a placeholder.
 
 Run metrics read ``insights_daily`` for the closed days the rollup has
-written and ``run_facts`` for the rest of the period (today, and any recent
-day not rolled yet), at most ``MAX_RAW_DAYS`` days of raw facts per read.
-They are limited to the caller's domains (``None`` = every domain). Every
-query runs in the caller's tenant session, under forced row-level security.
+written (a day counts as closed once its rollup ran at least
+``CLOSED_DAY_SETTLE`` after the day ended) and ``run_facts`` for the rest of
+the period (today, and any recent day not rolled yet), at most
+``MAX_RAW_DAYS`` days of raw facts per read. Days before the tenant's first
+recorded run hold no run data and are not read. They are limited to the
+caller's domains (``None`` = every domain). Every query runs in the caller's
+tenant session, under forced row-level security.
+
+What a run is: one fact per run, except that an approval resuming a paused
+run writes a second fact (entry point ``hitl_resume``, always
+``hitl_required``). So ``runs.volume`` counts facts that are not resumes; the
+success rate is completed / (completed + failed) over every fact, the
+resume's outcome being the run's outcome while the paused fact
+(``hitl_triggered``) waits outside the rate; refusals (``refused``,
+``limit_exceeded``: operator halts, billing limits, guardrail and gateway
+blocks) and rejections are neither successes nor failures; straight-through
+is completed with no person involved over all completed. Debug-console runs
+(entry point ``debug``) are left out of every business metric.
 """
 
 from __future__ import annotations
@@ -28,11 +42,22 @@ from decimal import Decimal
 from typing import Any
 from zoneinfo import ZoneInfo
 
-from core.insights.buckets import BUCKET_COUNT, FINITE_BOUNDS_MS, percentile_from_buckets, sum_buckets
+from core.insights.buckets import (
+    BUCKET_COUNT,
+    FINITE_BOUNDS_MS,
+    percentile_estimate,
+    percentile_from_buckets,
+    sum_buckets,
+)
 from core.insights.reporting_settings import ReportingSettings
 
 MAX_RANGE_DAYS = 366
 MAX_RAW_DAYS = 31
+# The closed-day sweep catches up days with no rollup this far back (core/tasks/insights_tasks.py).
+CATCH_UP_WINDOW_DAYS = 31
+# A day is read from its rollup only when the rollup ran at least this long after the day ended,
+# so facts written at the end of the day are in it; earlier, the day is read from the raw facts.
+CLOSED_DAY_SETTLE = timedelta(minutes=15)
 STATEMENT_TIMEOUT = "5s"
 GRANULARITIES: tuple[str, ...] = ("day", "week", "month")
 COMPARE_MODES: tuple[str, ...] = ("previous", "none")
@@ -47,6 +72,12 @@ UNATTRIBUTED = "unattributed"
 
 # Run statuses that are not an outcome yet: a person still has to act.
 WAITING_STATUSES = frozenset({"hitl_triggered", "paused"})
+# Refusals: the platform declined to run (operator halt, billing limit, guardrail or gateway block).
+# Neither a success nor a failure of the agent.
+REFUSED_STATUSES = frozenset({"refused", "limit_exceeded"})
+# Entry points: an approval resuming a paused run (not a new run), and the debugging console (never counted).
+RESUME_ENTRYPOINT = "hitl_resume"
+DEBUG_ENTRYPOINT = "debug"
 
 # Dimensions a run metric may be grouped by (``group_by``); ``agent`` is the
 # agent id, or the raw agent reference when the caller's id was not a UUID.
@@ -255,11 +286,21 @@ _RUN_SUMS: tuple[str, ...] = (
 
 @dataclass
 class RunData:
-    """Run sums per (day, group, status, data quality) over a period, and where they came from."""
+    """Run sums per (day, group, status, resume, data quality) over a period, and where they came from.
+
+    ``covered`` are the days the sums cover (closed days from the rollup and
+    raw days); ``skipped`` are days in the period after the tenant's first
+    run that were neither (beyond the raw cap with no rollup yet).
+    """
 
     rows: list[dict[str, Any]]
     sources: set[str]
-    skipped_days: int = 0
+    skipped: list[date] = field(default_factory=list)
+    covered: list[date] = field(default_factory=list)
+
+    @property
+    def skipped_days(self) -> int:
+        return len(self.skipped)
 
     @property
     def source(self) -> str:
@@ -284,7 +325,8 @@ def _group_expr(table: Any, group: str | None) -> Any:
 
 
 def _filters(ctx: MetricContext, table: Any, *, domain_filter: bool) -> list[Any]:
-    clauses = [table.tenant_id == ctx.tenant_id]
+    # Debug-console runs are never a business run.
+    clauses = [table.tenant_id == ctx.tenant_id, table.entrypoint != DEBUG_ENTRYPOINT]
     if ctx.company_id is not None:
         clauses.append(table.company_id == ctx.company_id)
     if domain_filter and ctx.domains is not None:
@@ -298,13 +340,14 @@ def _daily_query(ctx: MetricContext, days: list[date], group: str | None, domain
     from core.models.insights import InsightsDaily as D
 
     grp = _group_expr(D, group)
+    resume = (D.entrypoint == RESUME_ENTRYPOINT).label("resume")
     sums = [func.coalesce(func.sum(getattr(D, name)), 0).label(name) for name in _RUN_SUMS]
     # Postgres arrays are 1-based.
     buckets = [func.coalesce(func.sum(D.latency_buckets[i + 1]), 0).label(f"b{i}") for i in range(BUCKET_COUNT)]
     return (
-        select(D.day.label("day"), grp, D.status, D.data_quality, *sums, *buckets)
+        select(D.day.label("day"), grp, D.status, resume, D.data_quality, *sums, *buckets)
         .where(*_filters(ctx, D, domain_filter=domain_filter), D.day.in_(days))
-        .group_by(D.day, grp, D.status, D.data_quality)
+        .group_by(D.day, grp, D.status, resume, D.data_quality)
     )
 
 
@@ -316,9 +359,10 @@ def _raw_query(ctx: MetricContext, days: list[date], group: str | None, domain_f
     zone = ctx.zone
     local_day = cast(func.timezone(ctx.reporting.timezone, F.started_at), Date).label("day")
     grp = _group_expr(F, group)
+    resume = (F.entrypoint == RESUME_ENTRYPOINT).label("resume")
     lo = day_bounds(days[0], zone)[0]
     hi = day_bounds(days[-1], zone)[1]
-    buckets = []
+    buckets: list[Any] = []
     previous: int | None = None
     for bound in FINITE_BOUNDS_MS:
         cond = F.duration_ms <= bound if previous is None else and_(F.duration_ms > previous, F.duration_ms <= bound)
@@ -330,6 +374,7 @@ def _raw_query(ctx: MetricContext, days: list[date], group: str | None, domain_f
             local_day,
             grp,
             F.status,
+            resume,
             F.data_quality,
             func.count().label("runs"),
             func.count().filter(F.hitl_required.is_(True)).label("hitl_required"),
@@ -353,7 +398,7 @@ def _raw_query(ctx: MetricContext, days: list[date], group: str | None, domain_f
             F.started_at < hi,
             local_day.in_(days),
         )
-        .group_by(local_day, grp, F.status, F.data_quality)
+        .group_by(local_day, grp, F.status, resume, F.data_quality)
     )
 
 
@@ -363,6 +408,7 @@ def _run_row(row: Any) -> dict[str, Any]:
         "day": data["day"],
         "grp": data["grp"] or "",
         "status": data["status"],
+        "resume": bool(data["resume"]),
         "data_quality": data["data_quality"],
     }
     for name in _RUN_SUMS:
@@ -372,10 +418,54 @@ def _run_row(row: Any) -> dict[str, Any]:
     return out
 
 
+async def first_run_day(ctx: MetricContext) -> date | None:
+    """The tenant-local day of the tenant's first recorded run (raw fact or rollup), or None when it has none.
+
+    Run data exists from this day on; earlier days are not missing, there was
+    simply nothing recorded yet. Tenant-wide, cached per request.
+    """
+    from sqlalchemy import func, select
+
+    from core.models.insights import InsightsDaily as D
+    from core.models.insights import RunFact as F
+
+    if "first_run_day" in ctx.cache:
+        return ctx.cache["first_run_day"]
+    first_fact = (
+        await ctx.session.execute(
+            select(F.started_at).where(F.tenant_id == ctx.tenant_id).order_by(F.started_at.asc()).limit(1)
+        )
+    ).scalar_one_or_none()
+    first_rolled = (
+        await ctx.session.execute(select(func.min(D.day)).where(D.tenant_id == ctx.tenant_id))
+    ).scalar_one_or_none()
+    candidates: list[date] = []
+    if isinstance(first_fact, datetime):
+        moment = first_fact if first_fact.tzinfo is not None else first_fact.replace(tzinfo=UTC)
+        candidates.append(moment.astimezone(ctx.zone).date())
+    if isinstance(first_rolled, date):
+        candidates.append(first_rolled)
+    first = min(candidates) if candidates else None
+    ctx.cache["first_run_day"] = first
+    return first
+
+
+def closed_at(day: date, zone: ZoneInfo) -> datetime:
+    """When a rollup of the local ``day`` counts as final: ``CLOSED_DAY_SETTLE`` after the day ended (UTC)."""
+    return day_bounds(day, zone)[1] + CLOSED_DAY_SETTLE
+
+
 async def run_data(
     ctx: MetricContext, period: Period, *, group: str | None = None, domain_filter: bool = True
 ) -> RunData:
-    """Run sums for ``period``: rolled closed days from ``insights_daily``, the rest from ``run_facts``."""
+    """Run sums for ``period``: rolled closed days from ``insights_daily``, the rest from ``run_facts``.
+
+    A day is read from its rollup only when the rollup ran at least
+    ``CLOSED_DAY_SETTLE`` after the day ended (a rollup made while the day was
+    still open, by the 15-minute sweep, may miss its last facts). Days before
+    the tenant's first run are not read; of the remaining unrolled days at most
+    the latest ``MAX_RAW_DAYS`` are read raw and older ones are ``skipped``.
+    """
     from sqlalchemy import select
 
     from core.models.insights import InsightsRollupState as S
@@ -385,22 +475,24 @@ async def run_data(
         return ctx.cache[key]
     today = ctx.today
     last = min(period.end, today)
-    if period.start > last or (domain_filter and ctx.domains is not None and not ctx.domains):
+    no_domains = domain_filter and ctx.domains is not None and not ctx.domains
+    first = await first_run_day(ctx) if period.start <= last and not no_domains else None
+    start = max(period.start, first) if first is not None else None
+    if start is None or start > last:
         data = RunData(rows=[], sources=set())
         ctx.cache[key] = data
         return data
-    rolled = {
-        day
-        for (day,) in await ctx.session.execute(
-            select(S.day).where(S.tenant_id == ctx.tenant_id, S.day >= period.start, S.day <= last, S.day < today)
-        )
-    }
-    days = [period.start + timedelta(days=offset) for offset in range((last - period.start).days + 1)]
+    zone = ctx.zone
+    states = await ctx.session.execute(
+        select(S.day, S.rolled_at).where(S.tenant_id == ctx.tenant_id, S.day >= start, S.day <= last, S.day < today)
+    )
+    rolled = {day for day, rolled_at in states if rolled_at is not None and rolled_at >= closed_at(day, zone)}
+    days = [start + timedelta(days=offset) for offset in range((last - start).days + 1)]
     closed = [day for day in days if day in rolled]
     raw = [day for day in days if day not in rolled]
-    skipped = 0
+    skipped: list[date] = []
     if len(raw) > MAX_RAW_DAYS:
-        skipped = len(raw) - MAX_RAW_DAYS
+        skipped = raw[:-MAX_RAW_DAYS]
         raw = raw[-MAX_RAW_DAYS:]
     rows: list[dict[str, Any]] = []
     sources: set[str] = set()
@@ -412,35 +504,81 @@ async def run_data(
         found = [_run_row(r) for r in await ctx.session.execute(_raw_query(ctx, raw, group, domain_filter))]
         rows.extend(found)
         sources.add("run_facts")
-    data = RunData(rows=rows, sources=sources, skipped_days=skipped)
+    data = RunData(rows=rows, sources=sources, skipped=skipped, covered=sorted(closed + raw))
     ctx.cache[key] = data
     return data
 
 
-def _skipped_hint(data: RunData) -> str | None:
-    if not data.skipped_days:
+def _skipped_hint(ctx: MetricContext, data: RunData) -> str | None:
+    """What the left-out days are and when they will appear; None when nothing was left out."""
+    if not data.skipped:
         return None
-    return (
-        f"{data.skipped_days} older day(s) of this period are not rolled up yet and are left out; "
-        "they appear once the daily rollup has run."
+    window_start = ctx.today - timedelta(days=CATCH_UP_WINDOW_DAYS)
+    recent = [day for day in data.skipped if day >= window_start]
+    older = [day for day in data.skipped if day < window_start]
+    parts = []
+    if recent:
+        parts.append(
+            f"{len(recent)} day(s) from {recent[0].isoformat()} to {recent[-1].isoformat()} are not rolled up yet "
+            "and are left out; the hourly rollup catches up the last 31 days, so they appear after its next run."
+        )
+    if older:
+        parts.append(
+            f"{len(older)} day(s) from {older[0].isoformat()} to {older[-1].isoformat()} are older than the "
+            "31-day catch-up window and have no rollup, so they are left out of this period."
+        )
+    return " ".join(parts)
+
+
+def coverage(ctx: MetricContext, period: Period, data: RunData) -> tuple[list[date], str | None]:
+    """The days of ``period`` (up to today) that have run data, and a hint naming them when that is not all of them."""
+    last = min(period.end, ctx.today)
+    wanted = [period.start + timedelta(days=offset) for offset in range(max(0, (last - period.start).days + 1))]
+    have = set(data.covered)
+    covered = [day for day in wanted if day in have]
+    if not covered or covered == wanted:
+        return covered, None
+    hint = (
+        f"Run data covers {len(covered)} of the period's {len(wanted)} day(s), from {covered[0].isoformat()} "
+        f"to {covered[-1].isoformat()}"
     )
+    if len(covered) != (covered[-1] - covered[0]).days + 1:
+        hint += " (with gaps)"
+    return covered, hint + "; the figure is computed over those days only."
 
 
 def totals(rows: Iterable[dict[str, Any]]) -> dict[str, Any]:
+    """Sums of run rows, and the counts the run metrics are defined on.
+
+    ``volume`` counts runs (facts that are not approval resumes); ``completed``,
+    ``failed``, ``refused``, ``rejected`` and ``waiting`` count facts by status
+    (a resume's outcome is its run's outcome); ``straight_through`` counts the
+    completed ones no person was involved in (never a resume).
+    """
     out: dict[str, Any] = dict.fromkeys(_RUN_SUMS, 0)
     out["cost_usd"] = Decimal("0")
     out["confidence_sum"] = 0.0
-    out["completed"] = 0
-    out["waiting"] = 0
-    out["straight_through"] = 0
+    for name in ("volume", "completed", "failed", "refused", "rejected", "waiting", "straight_through"):
+        out[name] = 0
     bucket_rows = []
     for row in rows:
         for name in _RUN_SUMS:
             out[name] += row[name]
-        if row["status"] == "completed":
+        resume = bool(row.get("resume"))
+        if not resume:
+            out["volume"] += row["runs"]
+        status = row["status"]
+        if status == "completed":
             out["completed"] += row["runs"]
-            out["straight_through"] += row["runs"] - row["hitl_required"]
-        if row["status"] in WAITING_STATUSES:
+            if not resume:
+                out["straight_through"] += row["runs"] - row["hitl_required"]
+        elif status == "failed":
+            out["failed"] += row["runs"]
+        elif status in REFUSED_STATUSES:
+            out["refused"] += row["runs"]
+        elif status == "rejected":
+            out["rejected"] += row["runs"]
+        elif status in WAITING_STATUSES:
             out["waiting"] += row["runs"]
         bucket_rows.append(row["buckets"])
     out["buckets"] = sum_buckets(bucket_rows)
@@ -474,16 +612,29 @@ async def _run_series(
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]] | None]:
     """The series of ``measure(totals)`` per bucket (and group), and per-group rows when grouped."""
     grouped = _by_bucket(data.rows, ctx.period.granularity)
+    # Days left out (not rolled up, beyond the raw cap) are missing, never zero: a bucket made only of
+    # them is not drawn, and one that is partly them is marked partial.
+    missing: dict[date, int] = defaultdict(int)
+    for day in data.skipped:
+        missing[bucket_start(day, ctx.period.granularity)] += 1
+    days_in: dict[date, int] = defaultdict(int)
+    for day in ctx.period.each_day():
+        days_in[bucket_start(day, ctx.period.granularity)] += 1
     series: list[dict[str, Any]] = []
     if ctx.group_by is None:
         for start in bucket_starts(ctx.period):
             rows = grouped.get((start, ""), [])
+            if missing.get(start, 0) >= days_in[start]:
+                continue
             if not rows and not fill_zero:
                 continue
             value = measure(totals(rows))
             if value is None:
                 continue
-            series.append({"t": start.isoformat(), "value": value})
+            point: dict[str, Any] = {"t": start.isoformat(), "value": value}
+            if missing.get(start):
+                point["partial"] = True
+            series.append(point)
         return series, None
     labels = await _group_labels(ctx, {row["grp"] for row in data.rows})
     for (start, grp), rows in sorted(grouped.items()):
@@ -502,7 +653,7 @@ async def _run_series(
 async def _run_metric(ctx: MetricContext, measure: Any, *, fill_zero: bool, empty: Any = None) -> dict[str, Any]:
     data = await run_data(ctx, ctx.period, group=ctx.group_by)
     if not any(row["runs"] for row in data.rows):
-        hint = NO_RUNS_HINT if not data.skipped_days else _skipped_hint(data)
+        hint = NO_RUNS_HINT if not data.skipped_days else _skipped_hint(ctx, data)
         return no_data(data.source, hint or NO_RUNS_HINT)
     value = measure(totals(data.rows))
     out: dict[str, Any] = {"value": value, "source": data.source, "data_quality": data.quality()}
@@ -513,7 +664,7 @@ async def _run_metric(ctx: MetricContext, measure: Any, *, fill_zero: bool, empt
     out["series"] = series
     if group_rows is not None:
         out["rows"] = group_rows
-    hint = _skipped_hint(data)
+    hint = _skipped_hint(ctx, data)
     if value is None:
         out["hint"] = empty
     elif hint:
@@ -522,15 +673,18 @@ async def _run_metric(ctx: MetricContext, measure: Any, *, fill_zero: bool, empt
 
 
 def _volume(t: dict[str, Any]) -> int:
-    return int(t["runs"])
+    """Runs: facts that are not approval resumes (one run paused and approved is one run)."""
+    return int(t["volume"])
 
 
 def _success_rate(t: dict[str, Any]) -> float | None:
-    return pct(t["completed"], t["runs"] - t["waiting"])
+    """Completed over completed plus failed; waiting, refused and rejected runs are outside the rate."""
+    return pct(t["completed"], t["completed"] + t["failed"])
 
 
 def _straight_through(t: dict[str, Any]) -> float | None:
-    return pct(t["straight_through"], t["runs"])
+    """Completed runs no person was involved in, over all completed runs."""
+    return pct(t["straight_through"], t["completed"])
 
 
 def _p95(t: dict[str, Any]) -> float | None:
@@ -542,12 +696,23 @@ async def resolve_runs_volume(ctx: MetricContext) -> dict[str, Any]:
 
 
 async def resolve_runs_success_rate(ctx: MetricContext) -> dict[str, Any]:
-    return await _run_metric(
+    out = await _run_metric(
         ctx,
         _success_rate,
         fill_zero=False,
-        empty="Every run in this period is still waiting on a person; the rate counts finished runs only.",
+        empty=(
+            "No run in this period has finished as completed or failed yet: runs waiting on a person, "
+            "refused or rejected are outside the rate."
+        ),
     )
+    if out.get("data_quality") == "no_data" or ctx.group_by is not None:
+        return out
+    # The status breakdown behind the rate; refusals are reported here, never as failures.
+    t = totals((await run_data(ctx, ctx.period)).rows)
+    out["rows"] = [
+        {"label": label, "value": int(t[label])} for label in ("completed", "failed", "refused", "rejected", "waiting")
+    ]
+    return out
 
 
 async def resolve_runs_straight_through_rate(ctx: MetricContext) -> dict[str, Any]:
@@ -565,13 +730,18 @@ async def resolve_runs_latency(ctx: MetricContext) -> dict[str, Any]:
         return out
     data = await run_data(ctx, ctx.period, group=ctx.group_by)
     t = totals(data.rows)
+    p95, over = percentile_estimate(t["buckets"], 0.95)
+    if over:
+        # The p95 is in the open-ended bucket: the value is a floor, the runs took longer than it.
+        out["lower_bound"] = True
     if ctx.group_by is None:
         mean = round(t["duration_ms_sum"] / t["duration_n"], 1) if t["duration_n"] else None
+        p50, p50_over = percentile_estimate(t["buckets"], 0.5)
         out["rows"] = [
-            {"label": "p50", "value": percentile_from_buckets(t["buckets"], 0.5)},
-            {"label": "p95", "value": percentile_from_buckets(t["buckets"], 0.95)},
-            {"label": "mean", "value": mean},
-            {"label": "measured_runs", "value": t["duration_n"]},
+            {"label": "p50", "value": p50, "lower_bound": p50_over},
+            {"label": "p95", "value": p95, "lower_bound": over},
+            {"label": "mean", "value": mean, "lower_bound": False},
+            {"label": "measured_runs", "value": t["duration_n"], "lower_bound": False},
         ]
     return out
 

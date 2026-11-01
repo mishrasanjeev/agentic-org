@@ -142,6 +142,14 @@ export function formatMetricValue(
   }
 }
 
+/**
+ * A value that is only a floor, such as a latency percentile in the open-ended
+ * last bucket (over 10 minutes): "> 10m". A missing value stays an em dash.
+ */
+export function formatLowerBound(text: string): string {
+  return text === MISSING ? MISSING : `> ${text}`;
+}
+
 export interface Delta {
   /** Relative change in percent, or null when there is nothing to compare against. */
   pct: number | null;

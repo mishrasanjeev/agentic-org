@@ -95,6 +95,43 @@ describe("DecisionTile", () => {
     withRouter(<DecisionTile metric={metric({ value: 5, compare_value: 0, unit: "count" })} />);
     expect(screen.getByTestId("tile-delta")).toHaveTextContent("No comparison period");
   });
+
+  it("with a running today, computes the change over complete days only and says so", () => {
+    // 29 complete days ran 290 against 290 in the comparison; today's partial 3 is in the value only.
+    withRouter(
+      <DecisionTile
+        metric={metric({
+          unit: "count",
+          value: 293,
+          compare_value: 290,
+          compare: {
+            from: "2026-09-03",
+            to: "2026-10-02",
+            basis: "complete_days",
+            complete_days: 29,
+            current_value: 290,
+          },
+        })}
+      />,
+    );
+    expect(screen.getByTestId("tile-value")).toHaveTextContent("293");
+    expect(screen.getByTestId("tile-delta")).toHaveTextContent("0.0%");
+    expect(screen.getByTestId("tile-delta")).not.toHaveTextContent("+1.0%");
+    expect(screen.getByTestId("tile-delta")).toHaveTextContent("same complete days");
+  });
+
+  it("shows a latency over ten minutes as more than ten minutes", () => {
+    const { container } = withRouter(
+      <DecisionTile metric={metric({ key: "runs.latency", unit: "duration_ms", value: 600000, lower_bound: true })} />,
+    );
+    expect(screen.getByTestId("tile-value")).toHaveTextContent("> 10m");
+    expectNoBadText(container);
+  });
+
+  it("shows a bounded latency as is", () => {
+    withRouter(<DecisionTile metric={metric({ key: "runs.latency", unit: "duration_ms", value: 600000 })} />);
+    expect(screen.getByTestId("tile-value").textContent).toBe("10m");
+  });
 });
 
 describe("DataQualityBadge and EmptyState", () => {
@@ -142,6 +179,25 @@ describe("DataTable", () => {
     expect(cells).toEqual(["$20.00", "$5.00", "$1.00"]);
     expect(valueHeader.closest("th")).toHaveAttribute("aria-sort", "descending");
     expect(screen.getByRole("region", { name: "Spend data" })).toHaveAttribute("tabindex", "0");
+  });
+
+  it("marks a row whose value is only a floor", () => {
+    render(
+      <DataTable
+        caption="Latency"
+        unit="duration_ms"
+        columns={["label", "value"]}
+        rows={[
+          { label: "p50", value: 5000, lower_bound: false },
+          { label: "p95", value: 600000, lower_bound: true },
+        ]}
+      />,
+    );
+    const cells = within(screen.getByTestId("insights-data-table"))
+      .getAllByRole("row")
+      .slice(1)
+      .map((r) => r.lastElementChild?.textContent);
+    expect(cells).toEqual(["5.0 s", "> 10m"]);
   });
 
   it("renders missing cells as a dash", () => {

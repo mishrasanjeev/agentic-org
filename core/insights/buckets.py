@@ -6,7 +6,8 @@ open ended. A run of ``ms`` milliseconds falls in the first bucket whose bound
 is ``>= ms`` (so 500 ms is in bucket 0 and 501 ms in bucket 1). Summing the
 bucket arrays of several daily rows gives the distribution over all of them,
 and a percentile is estimated as the upper bound of the bucket that holds the
-quantile.
+quantile; in the open-ended last bucket it is only a lower bound (see
+``percentile_estimate``).
 """
 
 from __future__ import annotations
@@ -75,14 +76,15 @@ def sum_buckets(arrays: Iterable[Sequence[int] | None]) -> list[int]:
     return total
 
 
-def percentile_from_buckets(buckets: Sequence[int], q: float) -> float | None:
-    """The estimated ``q`` quantile (``0 <= q <= 1``) of the durations counted in ``buckets``, in ms.
+def percentile_estimate(buckets: Sequence[int], q: float) -> tuple[float | None, bool]:
+    """The estimated ``q`` quantile (``0 <= q <= 1``) of the durations counted in ``buckets``, in ms, and a flag.
 
-    The estimate is the upper bound of the bucket holding the quantile, so it
-    never understates latency. ``None`` when nothing was counted. A quantile in
-    the open-ended last bucket answers ``OPEN_BUCKET_FLOOR_MS`` (600000): the
-    true value is at least that, and the answer stays a finite number a JSON
-    response can carry.
+    In a bounded bucket the estimate is the bucket's upper bound, so it does
+    not understate latency, and the flag is False. A quantile that lands in
+    the open-ended last bucket has no upper bound: the answer is the last
+    finite bound, ``OPEN_BUCKET_FLOOR_MS`` (600000 ms, ten minutes), and the
+    flag is True, meaning the true value is *more than* that (a lower bound,
+    which understates). ``(None, False)`` when nothing was counted.
     """
     if len(buckets) != BUCKET_COUNT:
         raise ValueError(f"a latency bucket array has {BUCKET_COUNT} counts, not {len(buckets)}")
@@ -92,7 +94,7 @@ def percentile_from_buckets(buckets: Sequence[int], q: float) -> float | None:
     counts = [max(0, int(count or 0)) for count in buckets]
     total = sum(counts)
     if total == 0:
-        return None
+        return None, False
     # The rank of the quantile among the counted durations, 1-based.
     rank = max(1, math.ceil(q * total))
     cumulative = 0
@@ -100,5 +102,18 @@ def percentile_from_buckets(buckets: Sequence[int], q: float) -> float | None:
         cumulative += count
         if cumulative >= rank:
             bound = LATENCY_BOUNDS_MS[index]
-            return float(bound) if math.isfinite(bound) else float(OPEN_BUCKET_FLOOR_MS)
-    return float(OPEN_BUCKET_FLOOR_MS)  # unreachable: cumulative reaches total
+            if math.isfinite(bound):
+                return float(bound), False
+            return float(OPEN_BUCKET_FLOOR_MS), True
+    return float(OPEN_BUCKET_FLOOR_MS), True  # unreachable: cumulative reaches total
+
+
+def percentile_from_buckets(buckets: Sequence[int], q: float) -> float | None:
+    """The value of :func:`percentile_estimate` without its flag.
+
+    An upper bound for a quantile in a bounded bucket; ``OPEN_BUCKET_FLOOR_MS``
+    (a lower bound: the true value is more) for one in the open-ended last
+    bucket; ``None`` when nothing was counted. Callers that show the number
+    should use :func:`percentile_estimate` and say "over" when it is flagged.
+    """
+    return percentile_estimate(buckets, q)[0]

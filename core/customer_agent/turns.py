@@ -425,7 +425,8 @@ async def run_customer_turn(
 def _turn_outcome(turn: Turn) -> dict[str, Any]:
     """A turn as a run outcome: refused, waiting on the customer's step-up, handed to a person, or completed."""
     payload = turn.payload if isinstance(turn.payload, dict) else {}
-    outcome = payload.get("outcome") if isinstance(payload.get("outcome"), dict) else {}
+    raw_outcome = payload.get("outcome")
+    outcome: dict[str, Any] = raw_outcome if isinstance(raw_outcome, dict) else {}
     if turn.refusal:
         status, code = "refused", "autonomy_refused"
     elif turn.approval_required:

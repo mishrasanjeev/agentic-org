@@ -2,7 +2,15 @@
 import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import type { MetricRow } from "@/lib/insights/api";
-import { formatDecimal, formatMetricValue, formatMoney, humaniseKey, MISSING, toFiniteNumber } from "@/lib/insights/format";
+import {
+  formatDecimal,
+  formatLowerBound,
+  formatMetricValue,
+  formatMoney,
+  humaniseKey,
+  MISSING,
+  toFiniteNumber,
+} from "@/lib/insights/format";
 
 type SortDir = "ascending" | "descending";
 
@@ -17,13 +25,18 @@ export function formatCell(
   unit?: string | null,
   currency?: string | null,
   rowCurrency?: unknown,
+  lowerBound?: boolean,
 ): string {
   if (value === null || value === undefined || value === "") return MISSING;
   if (MONEY_COLUMNS.has(column) && typeof rowCurrency === "string" && rowCurrency && toFiniteNumber(value) !== null) {
     return formatMoney(value, rowCurrency);
   }
   if (typeof value === "number" || (typeof value === "string" && UNIT_COLUMNS.has(column) && toFiniteNumber(value) !== null)) {
-    if (UNIT_COLUMNS.has(column) && unit) return formatMetricValue(value, unit, currency);
+    if (UNIT_COLUMNS.has(column) && unit) {
+      const shown = formatMetricValue(value, unit, currency);
+      // A row whose value is only a floor (a latency percentile over 10 minutes) reads "> 10m".
+      return lowerBound && column === "value" ? formatLowerBound(shown) : shown;
+    }
     return formatDecimal(value, currency);
   }
   if (typeof value === "boolean") return value ? "true" : "false";
@@ -123,7 +136,7 @@ export default function DataTable({
               <tr key={i} className="border-t">
                 {columns.map((col) => (
                   <td key={col} className="px-3 py-1.5 tabular-nums">
-                    {formatCell(col, row[col], unit, currency, row.currency)}
+                    {formatCell(col, row[col], unit, currency, row.currency, row.lower_bound === true)}
                   </td>
                 ))}
               </tr>

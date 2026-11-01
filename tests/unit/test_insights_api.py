@@ -18,7 +18,7 @@ import re
 import uuid
 from contextlib import asynccontextmanager, contextmanager
 from dataclasses import replace
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
 from pathlib import Path
 from types import SimpleNamespace
@@ -540,7 +540,17 @@ def test_config_reporting_get_and_put_are_admin_only_and_audited(app) -> None:
 # ---------------------------------------------------------------- resolver arithmetic
 
 
-def _row(day: date, status: str, runs: int, *, hitl: int = 0, dq: str = "measured", grp: str = "", ms: int = 0):
+def _row(
+    day: date,
+    status: str,
+    runs: int,
+    *,
+    hitl: int = 0,
+    dq: str = "measured",
+    grp: str = "",
+    ms: int = 0,
+    resume: bool = False,
+):
     buckets = [0] * 12
     buckets[0] = runs if ms <= 500 else 0
     buckets[3] = runs if 2000 < ms <= 5000 else 0
@@ -548,6 +558,7 @@ def _row(day: date, status: str, runs: int, *, hitl: int = 0, dq: str = "measure
         "day": day,
         "grp": grp,
         "status": status,
+        "resume": resume,
         "data_quality": dq,
         "runs": runs,
         "hitl_required": hitl,
@@ -577,10 +588,41 @@ def test_rates_count_what_their_definitions_say() -> None:
         ]
     )
     assert metrics._volume(t) == 10
-    assert metrics._success_rate(t) == pytest.approx(88.9)  # 8 of the 9 finished runs
-    assert metrics._straight_through(t) == pytest.approx(60.0)  # 6 of 10 runs, no person involved
+    assert metrics._success_rate(t) == pytest.approx(88.9)  # 8 of the 9 completed or failed runs
+    assert metrics._straight_through(t) == pytest.approx(75.0)  # 6 of the 8 completed runs, no person involved
     assert metrics.totals([])["buckets"] == [0] * 12
     assert metrics._success_rate(metrics.totals([_row(day, "hitl_triggered", 3)])) is None
+
+
+def test_one_run_paused_for_approval_and_approved_is_one_successful_run() -> None:
+    """Replay: a run pauses for approval (its fact: hitl_triggered) and is approved (the resume's fact: completed)."""
+    day = date(2026, 10, 1)
+    paused = _row(day, "hitl_triggered", 1, hitl=1)
+    resumed = _row(day, "completed", 1, hitl=1, resume=True)
+    t = metrics.totals([paused, resumed])
+    assert metrics._volume(t) == 1
+    assert metrics._success_rate(t) == 100.0
+    assert metrics._straight_through(t) == 0.0
+    # A resume fact written before resumes were always hitl_required is still not straight through.
+    legacy = metrics.totals([paused, _row(day, "completed", 1, hitl=0, resume=True)])
+    assert metrics._straight_through(legacy) == 0.0 and metrics._volume(legacy) == 1
+
+
+def test_refusals_are_neither_successes_nor_failures() -> None:
+    day = date(2026, 10, 1)
+    t = metrics.totals(
+        [
+            _row(day, "completed", 9),
+            _row(day, "failed", 1),
+            _row(day, "refused", 5),  # operator halts, guardrail and gateway blocks
+            _row(day, "limit_exceeded", 3),  # billing limits
+            _row(day, "rejected", 2),
+        ]
+    )
+    assert metrics._success_rate(t) == 90.0  # 9 of 10, the 10 refusals and rejections left out
+    assert (t["refused"], t["rejected"], t["failed"]) == (8, 2, 1)
+    assert metrics._volume(t) == 20
+    assert metrics._success_rate(metrics.totals([_row(day, "refused", 4)])) is None
 
 
 def test_latency_percentiles_come_from_the_buckets() -> None:
@@ -588,6 +630,64 @@ def test_latency_percentiles_come_from_the_buckets() -> None:
     t = metrics.totals([_row(day, "completed", 90, ms=100), _row(day, "completed", 10, ms=3000)])
     assert metrics._p95(t) == 5000.0
     assert metrics.totals([_row(day, "completed", 1, ms=100)])["buckets"][0] == 1
+
+
+@pytest.mark.asyncio
+async def test_a_p95_over_ten_minutes_is_reported_as_a_lower_bound(monkeypatch) -> None:
+    day = date(2026, 10, 30)
+    slow = _row(day, "completed", 10)
+    slow["buckets"] = [0] * 11 + [10]  # every run took longer than 10 minutes
+    slow["duration_ms_sum"], slow["duration_n"] = 10 * 900_000, 10
+
+    async def fake_run_data(ctx, period, *, group=None, domain_filter=True):
+        return metrics.RunData(rows=[slow], sources={"run_facts"}, covered=[day])
+
+    monkeypatch.setattr(metrics, "run_data", fake_run_data)
+    ctx = _ctx()
+    ctx.period = metrics.Period(day, day)
+    out = await metrics.resolve_runs_latency(ctx)
+    assert out["value"] == 600_000.0 and out["lower_bound"] is True
+    rows = {r["label"]: r for r in out["rows"]}
+    assert rows["p95"]["lower_bound"] is True and rows["p50"]["lower_bound"] is True
+    response = await registry.resolve(registry.METRICS["runs.latency"], ctx)
+    assert response["lower_bound"] is True and response["value"] == 600_000.0
+
+    fast = _row(day, "completed", 10, ms=100)
+    monkeypatch.setattr(
+        metrics,
+        "run_data",
+        AsyncMock(return_value=metrics.RunData(rows=[fast], sources={"run_facts"}, covered=[day])),
+    )
+    out = await metrics.resolve_runs_latency(_ctx())
+    assert out["value"] == 500.0 and "lower_bound" not in out
+
+
+@pytest.mark.asyncio
+async def test_skipped_days_are_missing_from_the_series_never_zero(monkeypatch) -> None:
+    """Replay: days beyond the raw cap with no rollup are left out of the volume line, and the hint is accurate."""
+    ctx = _ctx()  # October 2026, today is 31 October (IST)
+    ctx.period = metrics.Period(date(2026, 10, 1), date(2026, 10, 31))
+    skipped = [date(2026, 10, 1), date(2026, 10, 2)]
+    covered = [date(2026, 10, 1) + timedelta(days=offset) for offset in range(2, 31)]
+    rows = [_row(day, "completed", 2) for day in covered]
+
+    async def fake_run_data(ctx, period, *, group=None, domain_filter=True):
+        return metrics.RunData(rows=rows, sources={"run_facts"}, skipped=skipped, covered=covered)
+
+    monkeypatch.setattr(metrics, "run_data", fake_run_data)
+    out = await metrics.resolve_runs_volume(ctx)
+    drawn = {point["t"] for point in out["series"]}
+    assert "2026-10-01" not in drawn and "2026-10-02" not in drawn and "2026-10-03" in drawn
+    assert out["value"] == 58
+    assert "2 day(s) from 2026-10-01 to 2026-10-02 are not rolled up yet" in out["hint"]
+    assert "catches up the last 31 days" in out["hint"] and "appear after its next run" in out["hint"]
+
+    # Weekly: a week with some skipped days is drawn but marked partial.
+    ctx.period = metrics.Period(date(2026, 10, 1), date(2026, 10, 31), "week")
+    ctx.cache.clear()
+    out = await metrics.resolve_runs_volume(ctx)
+    first = out["series"][0]
+    assert first["t"] == "2026-09-28" and first["partial"] is True
 
 
 def test_data_quality_labels() -> None:
@@ -621,40 +721,144 @@ def _ctx(currency: str = "INR") -> metrics.MetricContext:
                                  period=period, now=datetime(2026, 10, 31, 12, tzinfo=UTC))
 
 
+def _days(*days: int) -> frozenset[date]:
+    return frozenset(date(2026, 10, d) for d in days)
+
+
 @pytest.mark.asyncio
-async def test_cost_source_and_currency_conversion(monkeypatch) -> None:
+async def test_cost_basis_and_currency_conversion(monkeypatch) -> None:
     from core.config import settings
-
-    async def no_rollups(ctx, start, end):
-        return False
-
-    async def rollups(ctx, start, end):
-        return True
 
     rate = (Decimal("84.0"), date(2026, 10, 30))
     monkeypatch.setattr(metrics_cost, "_usd_rate", AsyncMock(return_value=rate))
-    monkeypatch.setattr(metrics_cost, "_has_rollups", no_rollups)
+    monkeypatch.setattr(metrics_cost, "_ledger_days", AsyncMock(return_value=_days(1, 2)))
     monkeypatch.setattr(settings, "spend_intelligence_enabled", True)
+
+    # No metered day: the ledger (USD) converted to an INR tenant's currency.
+    monkeypatch.setattr(metrics_cost, "_rollup_days", AsyncMock(return_value=frozenset()))
     basis = await metrics_cost.cost_basis(_ctx("INR"))
-    assert (basis.source, basis.native, basis.currency) == ("agent_cost_ledger", "USD", "INR")
-    assert basis.shown(Decimal("2")) == Decimal("168.0")
+    assert (basis.currency, basis.rollups_on) == ("INR", False)
+    assert basis.shown(Decimal("2"), "USD") == Decimal("168.0")
     assert basis.conversion == {"kind": "fx_converted", "rate_to_inr": "84.0", "rate_date": "2026-10-30"}
 
-    monkeypatch.setattr(metrics_cost, "_has_rollups", rollups)
+    # Metered days (INR) and ledger-only days (USD): both converted to the tenant's currency.
+    monkeypatch.setattr(metrics_cost, "_rollup_days", AsyncMock(return_value=_days(2, 3)))
     basis = await metrics_cost.cost_basis(_ctx("USD"))
-    assert (basis.source, basis.currency) == ("spend_usage_rollups", "USD")
-    assert basis.shown(Decimal("168")) == Decimal("2")
+    assert (basis.currency, basis.rollups_on) == ("USD", True)
+    assert basis.shown(Decimal("168"), "INR") == Decimal("2") and basis.shown(Decimal("2"), "USD") == Decimal("2")
     basis = await metrics_cost.cost_basis(_ctx("INR"))
-    assert basis.shown(Decimal("5")) == Decimal("5") and basis.conversion is None
+    assert basis.shown(Decimal("5"), "INR") == Decimal("5") and basis.conversion is not None
 
-    # Spend metering off: the ledger even when rollup rows exist.
-    monkeypatch.setattr(settings, "spend_intelligence_enabled", False)
-    assert (await metrics_cost.cost_basis(_ctx("USD"))).source == "agent_cost_ledger"
+    # Every day metered and an INR tenant: no conversion needed.
+    monkeypatch.setattr(metrics_cost, "_ledger_days", AsyncMock(return_value=_days(2)))
+    basis = await metrics_cost.cost_basis(_ctx("INR"))
+    assert basis.conversion is None and basis.rollups_on and basis.currency == "INR"
 
-    # No FX row: the source's own currency, and the hint says so.
+    # No FX row with both sources: INR and USD days cannot be added, so every day is read from the ledger.
+    monkeypatch.setattr(metrics_cost, "_ledger_days", AsyncMock(return_value=_days(1, 2)))
     monkeypatch.setattr(metrics_cost, "_usd_rate", AsyncMock(return_value=None))
     basis = await metrics_cost.cost_basis(_ctx("INR"))
-    assert basis.currency == "USD" and basis.shown(Decimal("5")) == Decimal("5") and "No USD to INR rate" in basis.hint
+    assert basis.currency == "USD" and basis.rollups_on is False
+    assert "cannot be added" in basis.hint and "No USD to INR rate" in basis.hint
+
+    # No FX row, ledger only: the ledger's own currency, and the hint says so.
+    monkeypatch.setattr(metrics_cost, "_rollup_days", AsyncMock(return_value=frozenset()))
+    basis = await metrics_cost.cost_basis(_ctx("INR"))
+    assert basis.currency == "USD" and basis.shown(Decimal("5"), "USD") == Decimal("5")
+    assert "No USD to INR rate" in basis.hint
+
+
+class _SpendSession:
+    """Answers the per-day spend statements: rollup rows (INR) and ledger rows (USD) by day."""
+
+    def __init__(self, rollups: dict[date, str], ledger: dict[date, str]) -> None:
+        self.rollups = rollups
+        self.ledger = ledger
+
+    async def execute(self, statement, params=None):
+        text = str(statement)
+        if "spend_usage_rollups" in text:
+            return [(day, "", Decimal(amount)) for day, amount in self.rollups.items()]
+        return [(day, "", Decimal(amount)) for day, amount in self.ledger.items()]
+
+
+@pytest.mark.asyncio
+async def test_spend_is_read_per_day_from_rollups_where_metered_else_the_ledger(monkeypatch) -> None:
+    """Replay: metering turned on mid-period. Earlier days come from the ledger, later ones from the rollups."""
+    from core.config import settings
+
+    monkeypatch.setattr(settings, "spend_intelligence_enabled", True)
+    ledger = {date(2026, 10, d): "1.00" for d in range(1, 31)}  # the ledger has every day, in USD
+    rollups = {date(2026, 10, d): "100.00" for d in range(20, 31)}  # metered from 20 October, in INR
+    ctx = _ctx("INR")
+    ctx.session = _SpendSession(rollups, ledger)
+    monkeypatch.setattr(metrics_cost, "_rollup_days", AsyncMock(return_value=frozenset(rollups)))
+    monkeypatch.setattr(metrics_cost, "_ledger_days", AsyncMock(return_value=frozenset(ledger)))
+    monkeypatch.setattr(metrics_cost, "_usd_rate", AsyncMock(return_value=(Decimal("80"), date(2026, 10, 1))))
+    spend = await metrics_cost.daily_spend(ctx, date(2026, 10, 1), date(2026, 10, 31))
+    assert spend.sources == {"spend_usage_rollups", "agent_cost_ledger"} and spend.mixed
+    assert spend.amounts[(date(2026, 10, 19), "")] == Decimal("80.00")  # 1 USD from the ledger, in INR
+    assert spend.amounts[(date(2026, 10, 20), "")] == Decimal("100.00")  # from the rollups, the ledger ignored
+    assert spend.total() == Decimal("80") * 19 + Decimal("100") * 11
+    out = await metrics_cost.resolve_cost_spend(ctx)
+    assert out["source"] == "spend_usage_rollups+agent_cost_ledger" and out["data_quality"] == "mixed"
+    assert out["value"] == float(Decimal("80") * 19 + Decimal("100") * 11) and out["currency"] == "INR"
+    assert "Days with metered usage" in out["hint"]
+
+
+def _spend(amounts: dict[date, str], sources: set[str] | None = None) -> metrics_cost.Spend:
+    return metrics_cost.Spend(
+        amounts={(day, ""): Decimal(value) for day, value in amounts.items()},
+        sources=sources or {"agent_cost_ledger"},
+    )
+
+
+@pytest.mark.asyncio
+async def test_the_forecast_fits_complete_days_and_needs_seven_days_of_spend(monkeypatch) -> None:
+    from core.config import settings
+
+    monkeypatch.setattr(settings, "spend_intelligence_enabled", False)
+    monkeypatch.setattr(metrics_cost, "_usd_rate", AsyncMock(return_value=(Decimal("80"), date(2026, 10, 1))))
+    monkeypatch.setattr(metrics_cost, "_rollup_days", AsyncMock(return_value=frozenset()))
+    spans: list[tuple[date, date]] = []
+
+    def serve(data: dict[date, str]):
+        async def fake(ctx, start, end, *, group=None):
+            spans.append((start, end))
+            return _spend({day: v for day, v in data.items() if start <= day <= end})
+
+        return fake
+
+    # 31 October (today, still running): 30 complete days of 1.00 USD, and today already 5.00 USD.
+    month = {date(2026, 10, d): "1.00" for d in range(1, 31)} | {date(2026, 10, 31): "5.00"}
+    monkeypatch.setattr(metrics_cost, "daily_spend", serve(month))
+    out = await metrics_cost.resolve_cost_forecast(_ctx("USD"))
+    row = out["rows"][0]
+    assert out["data_quality"] == "estimated" and row["fit"] == "month_to_date" and row["fit_days"] == 30
+    # A flat trend of 1.00 a day, fitted without today's partial 5.00: the rest of the month is today,
+    # which has already spent 5.00, so the forecast is 30 + 5.
+    assert row["point"] == 35.0 and row["actual"] == 35.0 and row["low"] == 35.0
+
+    # A young month (3 November): fewer than 7 complete days of spend, so the last 14 complete days are fitted.
+    ctx = _ctx("USD")
+    ctx.now = datetime(2026, 11, 3, 6, tzinfo=UTC)
+    history = {date(2026, 10, 20) + timedelta(days=i): "2.00" for i in range(14)}
+    history |= {date(2026, 11, 3): "0.50"}
+    spans.clear()
+    monkeypatch.setattr(metrics_cost, "daily_spend", serve(history))
+    out = await metrics_cost.resolve_cost_forecast(ctx)
+    row = out["rows"][0]
+    assert row["fit"] == "trailing_14_days" and row["fit_days"] == 14
+    assert (date(2026, 10, 20), date(2026, 11, 2)) in spans  # complete days only: today is not fitted
+    # 2 complete November days at 2.00, then 28 days (3 to 30 November) at the trend of 2.00.
+    assert row["point"] == 4.0 + 28 * 2.0
+    assert row["low"] < row["point"] < row["high"] or row["low"] == row["point"] == row["high"]
+
+    # One day of spend: no forecast at all, never a zero-width band from a 1-point fit.
+    monkeypatch.setattr(metrics_cost, "daily_spend", serve({date(2026, 11, 2): "9.00"}))
+    out = await metrics_cost.resolve_cost_forecast(ctx)
+    assert out["data_quality"] == "no_data" and out["value"] is None
+    assert "needs 7 days of spend" in out["hint"] and "rows" not in out
 
 
 def test_budget_state() -> None:

@@ -2,11 +2,15 @@
 """Insights rollup sweeps (``core/insights/rollup.py``), each over every tenant in its own local day.
 
 ``rollup_today`` (every 15 minutes) rebuilds each tenant's local today.
-``rollup_closed_days`` (hourly at :05) rolls a tenant's local yesterday once
-it is 02:00 there and the day has no rollup yet or facts newer than its
-rollup, and catches up the two days before it when they were never rolled.
-``reconcile_yesterday`` (hourly at :35) reconciles each tenant's local
-yesterday once it is 02:30 there, until the day is reconciled.
+``rollup_closed_days`` (hourly at :05) rolls, for each tenant, every one of
+its last ``LATE_FACT_DAYS`` local days (yesterday from 02:00 local) whose
+rollup is missing, was made before the day had closed (plus the settle time
+the metrics wait for), or is older than the newest fact *created* for that
+day (a late fact); and it catches up every day of the last
+``CATCH_UP_DAYS`` with no rollup at all (after a reporting time zone change
+cleared them, or a gap in the sweep). ``reconcile_yesterday`` (hourly at :35)
+reconciles each tenant's last ``RECONCILE_DAYS`` closed local days (yesterday
+from 02:30 local) that are not reconciled yet.
 
 Every task answers ``{"skipped": "insights_disabled"}`` while
 ``insights_enabled`` is off, and skips a tenant that turned Insights off. One
@@ -25,6 +29,7 @@ from zoneinfo import ZoneInfo
 
 import structlog
 
+from core.insights.metrics import closed_at
 from core.tasks.async_runner import run_async
 from core.tasks.celery_app import app
 
@@ -34,8 +39,12 @@ _OFF = {"skipped": "insights_disabled"}
 # A closed day is rolled from this local time on, and reconciled from RECONCILE_AFTER.
 CLOSED_DAY_AFTER = time(2, 0)
 RECONCILE_AFTER = time(2, 30)
-# Days before yesterday that are rolled when they have no rollup state yet.
-CATCH_UP_DAYS = 3
+# Recent days rolled again when their rollup is older than their newest fact (or made before they closed).
+LATE_FACT_DAYS = 7
+# Days rolled when they have no rollup state at all, this far back (bounded).
+CATCH_UP_DAYS = 31
+# Closed days reconciled until they are.
+RECONCILE_DAYS = 3
 
 
 @dataclass(frozen=True)
@@ -104,39 +113,60 @@ async def _sweep(task: str, per_tenant: Callable[[TenantClock, datetime], Awaita
 
 
 def closed_days_to_roll(
-    local_now: datetime, rolled_at: Mapping[date, datetime | None], last_fact_created: datetime | None
+    local_now: datetime,
+    rolled_at: Mapping[date, datetime | None],
+    last_fact_created: Mapping[date, datetime],
 ) -> list[date]:
     """The closed local days to roll for a tenant, oldest first.
 
+    ``local_now`` is the tenant's local time (aware, in its zone);
     ``rolled_at`` maps each day that has a rollup state to when it was last
-    rolled (``None`` if never). Yesterday is rolled from 02:00 local when it
-    has no rollup or a fact was created after its rollup
-    (``last_fact_created`` is the newest ``created_at`` among yesterday's
-    facts). The days before yesterday, back to the third day ago, are rolled
-    when they have no state at all.
+    rolled (``None`` if never); ``last_fact_created`` maps a day to the newest
+    ``created_at`` among its facts (by their local start day). A day of the
+    last ``LATE_FACT_DAYS`` is rolled when it has no rollup, was never rolled,
+    was rolled before it closed (``closed_at``: what the metrics wait for
+    before reading the rollup), or a fact was created after its rollup. Older
+    days of the last ``CATCH_UP_DAYS`` are rolled when they have no state.
+    Yesterday waits for 02:00 local.
     """
+    zone = local_now.tzinfo if isinstance(local_now.tzinfo, ZoneInfo) else ZoneInfo("UTC")
     today = local_now.date()
     yesterday = today - timedelta(days=1)
     out: list[date] = []
-    for back in range(CATCH_UP_DAYS, 1, -1):
+    for back in range(CATCH_UP_DAYS, 0, -1):
         day = today - timedelta(days=back)
+        if day == yesterday and local_now.time() < CLOSED_DAY_AFTER:
+            continue
         if day not in rolled_at:
             out.append(day)
-    if local_now.time() >= CLOSED_DAY_AFTER:
-        when = rolled_at.get(yesterday)
-        if when is None or (last_fact_created is not None and when < last_fact_created):
-            out.append(yesterday)
+            continue
+        if back > LATE_FACT_DAYS:
+            continue
+        when = rolled_at[day]
+        newest = last_fact_created.get(day)
+        if when is None or when < closed_at(day, zone) or (newest is not None and when < newest):
+            out.append(day)
     return out
 
 
-def should_reconcile(local_now: datetime, status: str | None) -> bool:
-    """Whether to reconcile the tenant's local yesterday now (from 02:30 local, until reconciled)."""
-    return local_now.time() >= RECONCILE_AFTER and status != "reconciled"
+def days_to_reconcile(local_now: datetime, statuses: Mapping[date, str | None]) -> list[date]:
+    """The last ``RECONCILE_DAYS`` closed local days not reconciled yet, oldest first (yesterday from 02:30 local)."""
+    today = local_now.date()
+    out = []
+    for back in range(RECONCILE_DAYS, 0, -1):
+        day = today - timedelta(days=back)
+        if back == 1 and local_now.time() < RECONCILE_AFTER:
+            continue
+        if statuses.get(day) != "reconciled":
+            out.append(day)
+    return out
 
 
-async def _closed_day_inputs(tenant: TenantClock, today: date) -> tuple[dict[date, datetime | None], datetime | None]:
-    """The rollup states of the last ``CATCH_UP_DAYS`` local days and the newest fact of yesterday."""
-    from sqlalchemy import func, select
+async def _closed_day_inputs(
+    tenant: TenantClock, today: date
+) -> tuple[dict[date, datetime | None], dict[date, datetime]]:
+    """The rollup states of the last ``CATCH_UP_DAYS`` local days and the newest fact created per recent day."""
+    from sqlalchemy import Date, cast, func, select
 
     from core.database import get_tenant_session
     from core.insights.rollup import day_bounds
@@ -144,7 +174,9 @@ async def _closed_day_inputs(tenant: TenantClock, today: date) -> tuple[dict[dat
     from core.models.insights import RunFact as F
 
     yesterday = today - timedelta(days=1)
-    start, end = day_bounds(yesterday, tenant.zone)
+    start = day_bounds(today - timedelta(days=LATE_FACT_DAYS), tenant.zone)[0]
+    end = day_bounds(yesterday, tenant.zone)[1]
+    local_day = cast(func.timezone(tenant.zone.key, F.started_at), Date)
     async with get_tenant_session(tenant.tenant_id) as session:
         states = (
             await session.execute(
@@ -155,26 +187,30 @@ async def _closed_day_inputs(tenant: TenantClock, today: date) -> tuple[dict[dat
                 )
             )
         ).all()
-        last_created = (
+        # created_at, not started_at: a fact written late for an earlier day is what makes a rollup stale.
+        newest = (
             await session.execute(
-                select(func.max(F.created_at)).where(
-                    F.tenant_id == tenant.tenant_id, F.started_at >= start, F.started_at < end
-                )
+                select(local_day, func.max(F.created_at))
+                .where(F.tenant_id == tenant.tenant_id, F.started_at >= start, F.started_at < end)
+                .group_by(local_day)
             )
-        ).scalar_one_or_none()
-    return {row[0]: row[1] for row in states}, last_created
+        ).all()
+    return {row[0]: row[1] for row in states}, {row[0]: row[1] for row in newest if row[1] is not None}
 
 
-async def _state_status(tenant: TenantClock, day: date) -> str | None:
+async def _state_statuses(tenant: TenantClock, first: date, last: date) -> dict[date, str | None]:
     from sqlalchemy import select
 
     from core.database import get_tenant_session
     from core.models.insights import InsightsRollupState as S
 
     async with get_tenant_session(tenant.tenant_id) as session:
-        return (
-            await session.execute(select(S.status).where(S.tenant_id == tenant.tenant_id, S.day == day))
-        ).scalar_one_or_none()
+        rows = (
+            await session.execute(
+                select(S.day, S.status).where(S.tenant_id == tenant.tenant_id, S.day >= first, S.day <= last)
+            )
+        ).all()
+    return {row[0]: row[1] for row in rows}
 
 
 async def _roll_today(tenant: TenantClock, now: datetime) -> int:
@@ -199,13 +235,12 @@ async def _reconcile(tenant: TenantClock, now: datetime) -> int:
     from core.insights.rollup import reconcile_day
 
     local_now = now.astimezone(tenant.zone)
-    yesterday = local_now.date() - timedelta(days=1)
-    if local_now.time() < RECONCILE_AFTER:
-        return 0
-    if not should_reconcile(local_now, await _state_status(tenant, yesterday)):
-        return 0
-    await reconcile_day(tenant.tenant_id, yesterday, zone=tenant.zone)
-    return 1
+    today = local_now.date()
+    statuses = await _state_statuses(tenant, today - timedelta(days=RECONCILE_DAYS), today - timedelta(days=1))
+    days = days_to_reconcile(local_now, statuses)
+    for day in days:
+        await reconcile_day(tenant.tenant_id, day, zone=tenant.zone)
+    return len(days)
 
 
 @app.task(name="core.tasks.insights_tasks.rollup_today")
@@ -228,7 +263,7 @@ def rollup_closed_days() -> dict[str, Any]:
 
 @app.task(name="core.tasks.insights_tasks.reconcile_yesterday")
 def reconcile_yesterday() -> dict[str, Any]:
-    """Hourly at :35: reconcile each enabled tenant's local yesterday once it is 02:30 there."""
+    """Hourly at :35: reconcile each enabled tenant's last closed local days that are not reconciled yet."""
     off = _off()
     if off is not None:
         return off
