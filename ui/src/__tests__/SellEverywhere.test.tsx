@@ -14,6 +14,7 @@ const setup = {
   uploadCatalog: vi.fn(),
   syncCatalog: vi.fn(),
   savePolicies: vi.fn(),
+  saveShopDetails: vi.fn(),
   saveOrderLimits: vi.fn(),
 };
 
@@ -35,6 +36,7 @@ vi.mock("../lib/api", () => ({
     uploadCatalog: (...a: unknown[]) => setup.uploadCatalog(...a),
     syncCatalog: (...a: unknown[]) => setup.syncCatalog(...a),
     savePolicies: (...a: unknown[]) => setup.savePolicies(...a),
+    saveShopDetails: (...a: unknown[]) => setup.saveShopDetails(...a),
     saveOrderLimits: (...a: unknown[]) => setup.saveOrderLimits(...a),
   },
   extractApiError: (_e: unknown, fallback: string) => fallback,
@@ -359,6 +361,51 @@ describe("Sell everywhere", () => {
     expect(setup.uploadCatalog).toHaveBeenCalledWith("tea-corner-1a2b3c", {
       format: "csv",
       content: "sku,title,price,currency,quantity\n",
+    });
+  }, 20000);
+
+  it("saves shop details once for the whole shop and names the row of a refused one", async () => {
+    setup.list.mockResolvedValue({ data: { merchants: [merchant], count: 1 } });
+    setup.get.mockResolvedValue({
+      data: setupView({ shop_details: [{ label: "FSSAI licence number", value: "10019022008571" }] }),
+    });
+    get.mockResolvedValue({ data: view() });
+    setup.saveShopDetails.mockRejectedValueOnce({
+      response: {
+        status: 422,
+        data: {
+          detail: {
+            code: "shop_details_invalid",
+            message: "1 problem(s) in the shop details",
+            errors: [{ row: 2, column: "Supplier", message: "looks like private business data" }],
+          },
+        },
+      },
+    });
+    renderPage();
+
+    expect(await screen.findByDisplayValue("10019022008571")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Add a detail" }));
+    fireEvent.change(screen.getByLabelText("Shop detail 2 name"), { target: { value: "Supplier" } });
+    fireEvent.change(screen.getByLabelText("Shop detail 2 value"), { target: { value: "Nandini" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save shop details" }));
+    expect(await screen.findByText("Row 2, Supplier: looks like private business data")).toBeInTheDocument();
+    expect(setup.saveShopDetails).toHaveBeenCalledWith("tea-corner-1a2b3c", {
+      details: [
+        { label: "FSSAI licence number", value: "10019022008571" },
+        { label: "Supplier", value: "Nandini" },
+      ],
+    });
+
+    setup.saveShopDetails.mockResolvedValueOnce({
+      data: setupView({ shop_details: [{ label: "FSSAI licence number", value: "10019022008571" }] }),
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Remove shop detail 2" }));
+    fireEvent.click(screen.getByRole("button", { name: "Save shop details" }));
+    expect(await screen.findByText("Shop details saved.")).toBeInTheDocument();
+    expect(screen.queryByText("Row 2, Supplier: looks like private business data")).not.toBeInTheDocument();
+    expect(setup.saveShopDetails).toHaveBeenLastCalledWith("tea-corner-1a2b3c", {
+      details: [{ label: "FSSAI licence number", value: "10019022008571" }],
     });
   }, 20000);
 

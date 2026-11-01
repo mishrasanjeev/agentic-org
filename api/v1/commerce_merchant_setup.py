@@ -12,6 +12,8 @@ Merchant (``commerce.merchant_config.write`` or tenant admin), under ``/api/v1/c
 * ``POST /merchant-configs/{merchant_id}/catalog/sync`` - read the connected Shopify store
   again (or the stored upload).
 * ``PUT /merchant-configs/{merchant_id}/setup/policies`` - returns, shipping and store pickup.
+* ``PUT /merchant-configs/{merchant_id}/setup/shop-details`` - details that hold for the whole shop
+  (a food-safety licence, a certification), read by buyers' AI assistants on every product.
 * ``PUT /merchant-configs/{merchant_id}/setup/order-limits`` - the per-order and daily maximums
   the commerce arbiter enforces (``provider_policy.arbiter``); nothing is defaulted silently.
 
@@ -48,10 +50,15 @@ from core.commerce.c6z_runtime_vertical import (
     contains_private_or_executable_value,
 )
 from core.commerce.catalog_upload import (
+    MAX_ATTRIBUTE_NAME,
+    MAX_SHOP_DETAIL_VALUE,
+    MAX_SHOP_DETAILS,
     CatalogUploadError,
     currency_exponent,
     detail_labels,
     parse_catalog_upload,
+    shop_details_from_entries,
+    shop_details_of,
     skipped_columns,
 )
 from core.commerce.ledger import record_commerce_event
@@ -120,6 +127,21 @@ class PoliciesRequest(BaseModel):
     shipping_fee: str | None = Field(default=None, max_length=20)
     shipping_currency: str | None = Field(default=None, pattern=r"^[A-Za-z]{3}$")
     shipping_countries: list[str] = Field(default_factory=list, max_length=50)
+
+
+class ShopDetail(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    # Detail names are at most MAX_ATTRIBUTE_NAME characters, as catalog columns are.
+    label: str = Field(max_length=MAX_ATTRIBUTE_NAME)
+    value: str = Field(max_length=MAX_SHOP_DETAIL_VALUE)
+
+
+class ShopDetailsRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    # The whole list, in the order buyers' AI assistants read it; an empty list removes them all.
+    details: list[ShopDetail] = Field(default_factory=list, max_length=MAX_SHOP_DETAILS)
 
 
 class OrderLimitsRequest(BaseModel):
@@ -450,6 +472,9 @@ async def setup_view(tenant_id: str, merchant_id: str) -> dict[str, Any]:
         },
         "catalog": catalog,
         "policies": policies,
+        "shop_details": [
+            {"label": item["label"], "value": item["value"]} for item in shop_details_of(row.provider_policy)
+        ],
         "order_limits": limits,
         "missing": missing,
         "ready_to_turn_on": not missing,
@@ -768,6 +793,44 @@ async def put_policies(
             changes={"public_brand_profile": brand, "provider_policy": policy},
             event="commerce.runtime.merchant_setup.policies",
             payload={"pickup_offered": bool(pickup), "flat_shipping_rate": flat_rates is not None},
+        )
+    return await setup_view(tenant_id, merchant_id)
+
+
+@router.put("/merchant-configs/{merchant_id}/setup/shop-details")
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="commerce.runtime.merchant_config.write",
+    rate_limit="commerce-runtime-write",
+    idempotency="replaces-shop-details",
+    audit_event="commerce.runtime.merchant_setup.shop_details",
+)
+async def put_shop_details(
+    merchant_id: str,
+    body: ShopDetailsRequest,
+    tenant_id: str = Depends(get_current_tenant),
+) -> dict[str, Any]:
+    """Replace the details that hold for the whole shop (a food-safety licence, a certification).
+
+    Buyers' AI assistants read them on every product, marked as declared by the shop. They are
+    checked as catalog details are: names that read as private business data, credentials and
+    http links are refused, naming the row.
+    """
+    try:
+        details = shop_details_from_entries([item.model_dump() for item in body.details])
+    except CatalogUploadError as exc:
+        raise HTTPException(422, {"code": "shop_details_invalid", "message": str(exc), "errors": exc.errors}) from exc
+    async with get_tenant_session(_tenant_uuid(tenant_id)) as session:
+        row = await _config_row(session, tenant_id, merchant_id)
+        policy = runtime.merge_provider_policy(row.provider_policy or {}, {"shop_details": details or None})
+        await _save_config(
+            session,
+            tenant_id=tenant_id,
+            row=row,
+            changes={"provider_policy": policy},
+            event="commerce.runtime.merchant_setup.shop_details",
+            payload={"shop_detail_count": len(details)},
         )
     return await setup_view(tenant_id, merchant_id)
 

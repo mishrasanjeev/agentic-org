@@ -50,7 +50,7 @@
     "public_exempt_reason": "ucp-business-profile-public-by-spec-host-bound",
     "rate_limit": "ucp-discovery",
     "scope": "public:ucp.profile.read",
-    "source_line": 302,
+    "source_line": 303,
     "tenant_required": false
   },
   {
@@ -68,7 +68,7 @@
     "public_exempt_reason": "ucp-leaf-profile-public-by-spec-host-bound",
     "rate_limit": "ucp-discovery",
     "scope": "public:ucp.profile.read",
-    "source_line": 319,
+    "source_line": 320,
     "tenant_required": false
   },
   {
@@ -3776,7 +3776,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "commerce.runtime.merchant_config.read",
-    "source_line": 155,
+    "source_line": 177,
     "tenant_required": true
   },
   {
@@ -3830,7 +3830,7 @@
     "public_exempt_reason": null,
     "rate_limit": "credential-write",
     "scope": "commerce.runtime.merchant_config.write",
-    "source_line": 581,
+    "source_line": 606,
     "tenant_required": true
   },
   {
@@ -3848,7 +3848,7 @@
     "public_exempt_reason": null,
     "rate_limit": "connector-bulk",
     "scope": "commerce.runtime.merchant_config.write",
-    "source_line": 672,
+    "source_line": 697,
     "tenant_required": true
   },
   {
@@ -3866,7 +3866,7 @@
     "public_exempt_reason": null,
     "rate_limit": "connector-bulk",
     "scope": "commerce.runtime.merchant_config.write",
-    "source_line": 631,
+    "source_line": 656,
     "tenant_required": true
   },
   {
@@ -4100,7 +4100,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "commerce.runtime.merchant_config.read",
-    "source_line": 468,
+    "source_line": 493,
     "tenant_required": true
   },
   {
@@ -4118,7 +4118,7 @@
     "public_exempt_reason": null,
     "rate_limit": "commerce-runtime-write",
     "scope": "commerce.runtime.merchant_config.write",
-    "source_line": 801,
+    "source_line": 864,
     "tenant_required": true
   },
   {
@@ -4136,7 +4136,25 @@
     "public_exempt_reason": null,
     "rate_limit": "commerce-runtime-write",
     "scope": "commerce.runtime.merchant_config.write",
-    "source_line": 742,
+    "source_line": 767,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "commerce.runtime.merchant_setup.shop_details",
+    "auth_required": true,
+    "function": "put_shop_details",
+    "idempotency": "replaces-shop-details",
+    "key": "PUT /api/v1/commerce/runtime/merchant-configs/{merchant_id}/setup/shop-details api/v1/commerce_merchant_setup.py:put_shop_details",
+    "metadata_present": true,
+    "methods": [
+      "PUT"
+    ],
+    "module": "api/v1/commerce_merchant_setup.py",
+    "path": "/api/v1/commerce/runtime/merchant-configs/{merchant_id}/setup/shop-details",
+    "public_exempt_reason": null,
+    "rate_limit": "commerce-runtime-write",
+    "scope": "commerce.runtime.merchant_config.write",
+    "source_line": 809,
     "tenant_required": true
   },
   {
@@ -4280,7 +4298,7 @@
     "public_exempt_reason": null,
     "rate_limit": "commerce-runtime-write",
     "scope": "commerce.runtime.merchant_config.write",
-    "source_line": 192,
+    "source_line": 214,
     "tenant_required": true
   },
   {
@@ -14486,7 +14504,7 @@
     "public_exempt_reason": "ucp-catalog-public-access-level-verified-artifacts-only",
     "rate_limit": "ucp-catalog-read",
     "scope": "public:ucp.catalog.read",
-    "source_line": 403,
+    "source_line": 405,
     "tenant_required": false
   },
   {
@@ -14504,7 +14522,7 @@
     "public_exempt_reason": "ucp-catalog-public-access-level-verified-artifacts-only",
     "rate_limit": "ucp-catalog-read",
     "scope": "public:ucp.catalog.read",
-    "source_line": 343,
+    "source_line": 344,
     "tenant_required": false
   },
   {
@@ -14612,7 +14630,7 @@
     "public_exempt_reason": "ucp-location-public-store-hours-and-address-only",
     "rate_limit": "ucp-catalog-read",
     "scope": "public:ucp.location.read",
-    "source_line": 516,
+    "source_line": 521,
     "tenant_required": false
   },
   {
@@ -14630,7 +14648,7 @@
     "public_exempt_reason": "ucp-location-public-store-hours-and-address-only",
     "rate_limit": "ucp-catalog-read",
     "scope": "public:ucp.location.read",
-    "source_line": 466,
+    "source_line": 471,
     "tenant_required": false
   },
   {
@@ -15008,7 +15026,7 @@
     "public_exempt_reason": "per-merchant-path-token-plus-shopify-hmac-verified-with-the-merchant-stored-secret",
     "rate_limit": "provider-webhook",
     "scope": "public:webhooks.shopify",
-    "source_line": 846,
+    "source_line": 909,
     "tenant_required": true
   },
   {

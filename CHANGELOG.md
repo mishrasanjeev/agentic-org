@@ -63,6 +63,27 @@ off with the `insights_dashboard` feature flag. Off, nothing is written and `/in
 - `business-metrics-read` is now a declared rate class.
 - Analysts landed on a page their role cannot open; they now land on the workbench, also after onboarding.
 
+## Unreleased - Shop details and product details from Shopify
+
+- Shop details: a shop sets up to 10 details that hold for the whole shop (a food-safety licence number, a
+  certification) once on the setup page (`PUT /merchant-configs/{merchant_id}/setup/shop-details`, stored as
+  `provider_policy.shop_details`). They are checked as catalog details are, and an empty list removes them. UCP
+  catalog search and lookup serve them on every product as `metadata.shop_details` with
+  `shop_details_declared_by: shop`; search does not match on them. The Telegram shopper shows up to three, on the
+  first product from each shop.
+- Shopify: the product read also takes tags, the online-store link, variant barcodes (valid GTINs only) and the
+  product metafields whose definition gives the storefront `PUBLIC_READ` access, as `attributes` like upload
+  details. Text, number, date, boolean, https link, rating, weight, volume, dimension, money and rich-text values
+  are read; references and JSON are not. A metafield, tag or link that fails the detail checks is left out, never
+  the product or the sync.
+- Shopify reads ask again in smaller pages, sized from the cost Shopify reports, when a query is over its cost
+  limit; the read limit counts products (page size times pages), so smaller pages never shorten the catalog, and
+  a store with more products than one read logs `shopify_catalog_read_limit_reached`. A throttled read waits for
+  Shopify's cost bucket to refill and retries. Only an error saying the API version lacks a detail field falls
+  back to the query without them; any other error fails the read as before.
+- Shop details saved through the whole-config route are checked again when read, detail names are scanned for
+  credentials as values are, and store links with a user name or password are left out.
+
 ## Unreleased - Product details in the catalog upload
 
 - The catalog upload (CSV or JSON) takes optional named columns: `brand`, `category` (or `product_type`),
@@ -76,7 +97,7 @@ off with the `insights_dashboard` feature flag. Off, nothing is written and `/in
   the same; catalogs uploaded before keep their digest.
 - UCP catalog products carry `url`, `tags`, `metadata` (`brand`, `attributes`, `attributes_declared_by: shop`)
   and variant `barcodes`, and search matches tags and details. The Telegram shopper shows the brand and up to
-  six details. Grantex is unchanged: product content never leaves AgenticOrg.
+  four details. Grantex is unchanged: product content never leaves AgenticOrg.
 - The private-value scanner no longer reads ordinary sentences or web links as a compact JWS (a whole value must be
   three base64url parts; a JWT inside longer text is still found by its "eyJ" header), nor the word "basic" alone
   as a Basic credential (the value after it must decode to "user:password"). Real tokens and credentials, short

@@ -408,25 +408,131 @@ def _attribute_key(name: str) -> str:
 
 
 @functools.lru_cache(maxsize=4096)
-def _detail_name_problem(name: str) -> str | None:
-    """Why a column or key cannot be a product detail, or None."""
+def _detail_name_problem(name: str, upload: bool = True) -> str | None:
+    """Why a column or key (``upload``), or a detail name a shop typed or Shopify holds, cannot be a detail."""
     key = _attribute_key(name)
     if not key or unicodedata.category(key[0])[0] != "L" or len(key) > MAX_ATTRIBUTE_NAME:
         return f"name it with letters, digits and spaces, starting with a letter, up to {MAX_ATTRIBUTE_NAME} characters"
-    close = difflib.get_close_matches(key, KNOWN_COLUMNS + tuple(COLUMN_ALIASES), n=1, cutoff=0.85)
-    if close:
-        return f"looks like a misspelled {close[0]}; use {close[0]}, or rename it if it is a different detail"
+    if upload:
+        close = difflib.get_close_matches(key, KNOWN_COLUMNS + tuple(COLUMN_ALIASES), n=1, cutoff=0.85)
+        if close:
+            return f"looks like a misspelled {close[0]}; use {close[0]}, or rename it if it is a different detail"
+    reserved = _reserved_name(key)
+    if reserved == "action":
+        return "this name is reserved for credentials or actions; rename " + ("the column" if upload else "it")
+    if reserved == "private":
+        return "looks like private business data that buyers' AI assistants would see; " + (
+            "start the column name with _ to keep it out of the catalog, or rename it"
+            if upload
+            else "leave it out, or rename it"
+        )
+    return None
+
+
+def _reserved_name(key: str) -> str | None:
+    """``"action"`` for a credential or action name, ``"private"`` for private business data, else None."""
     markers = PRIVATE_KEY_MARKERS + EXECUTION_MARKERS
     if any(marker in key or marker.replace(".", "_") in key for marker in markers):
-        return "this name is reserved for credentials or actions; rename the column"
+        return "action"
     words = {word[:-1] if word.endswith("s") and len(word) > 3 else word for word in key.split("_")}
     compact = key.replace("_", "")
     if PRIVATE_BUSINESS_WORDS & words or any(stem in compact for stem in PRIVATE_BUSINESS_STEMS):
-        return (
-            "looks like private business data that buyers' AI assistants would see; "
-            "start the column name with _ to keep it out of the catalog, or rename it"
-        )
+        return "private"
     return None
+
+
+def reads_private_or_reserved(name: str) -> bool:
+    """True when a name (a Shopify metafield key, a tag) reads as private business data or a credential."""
+    return _reserved_name(_attribute_key(name)) is not None
+
+
+def declared_detail(
+    name: str, label: str, value: Any, *, max_value: int = MAX_ATTRIBUTE_VALUE
+) -> tuple[dict[str, str] | None, str | None]:
+    """A detail declared outside the upload (a shop detail, a Shopify metafield), checked as upload details are.
+
+    ``(detail, None)``; ``(None, None)`` when the value is empty; ``(None, problem)`` when it cannot be published.
+    """
+    problem = _detail_name_problem(name, False) or (_detail_name_problem(label, False) if label != name else None)
+    if problem:
+        return None, problem
+    if contains_private_or_executable_value(name) or contains_private_or_executable_value(label):
+        # The whole product is scanned before it is stored; a name that reads as a credential would fail it.
+        return None, "this name looks like a credential or an executable instruction; rename it"
+    problems: list[str] = []
+    text = _detail_text(value, label, lambda _column, message: problems.append(message), max_value)
+    if text is None:
+        return None, problems[0] if problems else "cannot be read"
+    if not text:
+        return None, None
+    key = _attribute_key(name)
+    return {"name": key, "label": _plain(label)[:MAX_ATTRIBUTE_LABEL] or key, "value": text}, None
+
+
+# Details that hold for the whole shop (a food-safety licence, a certification), typed once on the setup page.
+MAX_SHOP_DETAILS = 10
+MAX_SHOP_DETAIL_VALUE = 500
+
+
+def shop_details_from_entries(entries: Sequence[Mapping[str, Any]]) -> list[dict[str, str]]:
+    """The shop details a merchant typed as ``{label, value}`` pairs, checked as product details are.
+
+    Rows with neither a name nor a value are ignored. Raises ``CatalogUploadError``
+    naming the row and the detail when any row cannot be published.
+    """
+    errors: list[dict[str, Any]] = []
+    details: list[dict[str, str]] = []
+    seen: set[str] = set()
+    for index, entry in enumerate(entries, start=1):
+        label = _plain(entry.get("label"))
+        value = entry.get("value")
+        if not label and not _plain(value):
+            continue
+        if not label:
+            errors.append({"row": index, "column": "label", "message": "needs a name"})
+            continue
+        detail, problem = declared_detail(label, label, value, max_value=MAX_SHOP_DETAIL_VALUE)
+        if problem or detail is None:
+            errors.append({"row": index, "column": label, "message": problem or "needs a value"})
+            continue
+        if detail["name"] in seen:
+            errors.append({"row": index, "column": label, "message": "repeats another detail"})
+            continue
+        seen.add(detail["name"])
+        details.append(detail)
+    if len(details) > MAX_SHOP_DETAILS:
+        errors.append({"row": None, "column": None, "message": f"at most {MAX_SHOP_DETAILS} shop details"})
+    if errors:
+        raise CatalogUploadError(f"{len(errors)} problem(s) in the shop details", errors)
+    return details
+
+
+def shop_details_of(provider_policy: Mapping[str, Any] | None) -> list[dict[str, str]]:
+    """The stored shop details (``provider_policy.shop_details``) that still pass the shop-detail checks.
+
+    They are checked again here because a whole-config save can write ``provider_policy`` without the
+    setup page's checks; an entry that fails is left out.
+    """
+    stored = (provider_policy or {}).get("shop_details")
+    if not isinstance(stored, Sequence) or isinstance(stored, str | bytes):
+        return []
+    details: list[dict[str, str]] = []
+    for item in stored:
+        if not isinstance(item, Mapping) or not isinstance(item.get("label"), str):
+            continue
+        detail, problem = declared_detail(
+            item["label"], item["label"], item.get("value"), max_value=MAX_SHOP_DETAIL_VALUE
+        )
+        if detail is not None and problem is None and detail["name"] not in {d["name"] for d in details}:
+            details.append(detail)
+    return details[:MAX_SHOP_DETAILS]
+
+
+def safe_https_link(value: Any) -> str | None:
+    """An https link without a user name or password (host in lower case), else None."""
+    if not isinstance(value, str) or contains_private_or_executable_value(value):
+        return None
+    return _https_url(value, "url", lambda *_args: None)
 
 
 def _json_rows(content: str) -> list[dict[str, Any]]:
@@ -557,6 +663,24 @@ def _gtin(value: Any, fail: Any) -> str | None:
     return text
 
 
+def gtin_or_none(value: Any) -> str | None:
+    """A barcode number of 8, 12, 13 or 14 digits with a valid check digit, else None."""
+    return _gtin(value, lambda *_args: None)
+
+
+def public_tags(values: Any) -> list[str]:
+    """Tags held in another store system (Shopify), kept as upload tags are, leaving out private-looking ones."""
+    tags: list[str] = []
+    for item in values if isinstance(values, list) else []:
+        tag = _plain(item)
+        if not tag or len(tag) > MAX_TAG or reads_private_or_reserved(tag):
+            continue
+        if contains_private_or_executable_value(tag) or tag.lower() in {existing.lower() for existing in tags}:
+            continue
+        tags.append(tag)
+    return tags[:MAX_TAGS]
+
+
 def _tags(value: Any, fail: Any) -> list[str]:
     if value is None:
         return []
@@ -605,30 +729,38 @@ def _attributes(raw: Mapping[str, Any], fail: Any) -> list[dict[str, str]]:
             fail(label, "repeats another detail")
             continue
         seen.add(name)
-        text = _detail_value(value)
-        if text is None:
-            fail(label, "must be text, a number or a list of them")
-            continue
+        text = _detail_text(value, label, fail, MAX_ATTRIBUTE_VALUE)
         if not text:
-            continue
-        if len(text) > MAX_ATTRIBUTE_VALUE:
-            fail(label, f"is longer than {MAX_ATTRIBUTE_VALUE} characters")
-            continue
-        if text.lower().startswith(("http://", "https://")):
-            normalized = _https_url(text, label, fail)
-            if normalized is None:
-                continue
-            text = normalized
-        if any(_has_userinfo(match.group(0)) for match in _URL_IN_TEXT_RE.finditer(text)):
-            fail(label, "has a link with a user name or password; remove them")
-            continue
-        if contains_private_or_executable_value(text):
-            fail(label, "looks like a credential, a token or an executable instruction; remove it")
             continue
         details.append({"name": name, "label": _plain(label)[:MAX_ATTRIBUTE_LABEL] or name, "value": text})
     if len(details) > MAX_ATTRIBUTES:
         fail(None, f"has more than {MAX_ATTRIBUTES} product details")
     return details[:MAX_ATTRIBUTES]
+
+
+def _detail_text(value: Any, label: str, fail: Any, max_value: int) -> str | None:
+    """A detail value as checked plain text: "" when empty, None after ``fail`` named the problem."""
+    text = _detail_value(value)
+    if text is None:
+        fail(label, "must be text, a number or a list of them")
+        return None
+    if not text:
+        return ""
+    if len(text) > max_value:
+        fail(label, f"is longer than {max_value} characters")
+        return None
+    if text.lower().startswith(("http://", "https://")):
+        normalized = _https_url(text, label, fail)
+        if normalized is None:
+            return None
+        text = normalized
+    if any(_has_userinfo(match.group(0)) for match in _URL_IN_TEXT_RE.finditer(text)):
+        fail(label, "has a link with a user name or password; remove them")
+        return None
+    if contains_private_or_executable_value(text):
+        fail(label, "looks like a credential, a token or an executable instruction; remove it")
+        return None
+    return text
 
 
 def _has_userinfo(url: str) -> bool:
