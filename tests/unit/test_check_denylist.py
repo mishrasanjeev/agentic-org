@@ -122,6 +122,31 @@ def test_cached_hashes_do_not_cache_policy_membership(denylist: dl.Denylist) -> 
     assert denylist.matches("acme verify") == [0]
 
 
+@pytest.mark.parametrize("max_tokens", [1, 2, 8])
+@pytest.mark.parametrize("text", ["", "acme verify", "ac me ve rify", "\u00e9cole", "x" * 128])
+def test_cached_token_windows_preserve_every_candidate(text: str, max_tokens: int) -> None:
+    words = dl.tokens(text)
+    expected = tuple(dl._joined(words, max_tokens))
+    assert dl._cached_joined(tuple(words), max_tokens) == expected
+    assert dl._cached_joined(tuple(words), max_tokens) == expected
+
+
+def test_token_window_cache_is_bounded_and_bypassed_for_large_inputs(denylist: dl.Denylist) -> None:
+    dl._cached_joined.cache_clear()
+    try:
+        assert denylist.matches("acmeverify") == [0]
+        assert denylist.matches("acmeverify") == [0]
+        info = dl._cached_joined.cache_info()
+        assert info.hits == 1 and info.currsize == 1
+        assert info.maxsize == 1_024
+        assert denylist.matches("x" * 129 + " acmeverify")
+        assert denylist.matches("\ufb03" * 50 + " acmeverify")
+        assert dataclasses.replace(denylist, max_tokens=9).matches("acmeverify") == [0]
+        assert dl._cached_joined.cache_info() == info
+    finally:
+        dl._cached_joined.cache_clear()
+
+
 @pytest.mark.parametrize(
     "text",
     [

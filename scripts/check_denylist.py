@@ -198,6 +198,11 @@ def _joined(words: list[str], max_tokens: int) -> Iterator[tuple[int, str]]:
             yield start, first[cut:]
 
 
+@functools.lru_cache(maxsize=1_024)
+def _cached_joined(words: tuple[str, ...], max_tokens: int) -> tuple[tuple[int, str], ...]:
+    return tuple(_joined(list(words), max_tokens))
+
+
 def term_key(term: str) -> str:
     return "".join(tokens(term))
 
@@ -224,10 +229,16 @@ class Denylist:
         """
         normalised = _normalise(text)
         # Candidates cannot exceed the normalized line; bound retained hash inputs.
-        hash_key = _cached_digest if len(normalised) <= 128 and len(self.salt) <= 64 else digest
+        short_line = len(normalised) <= 128
+        hash_key = _cached_digest if short_line and len(self.salt) <= 64 else digest
         words = [token.lower() for token in _TOKEN_RE.findall(normalised)]
+        joined = (
+            _cached_joined(tuple(words), self.max_tokens)
+            if short_line and 1 <= self.max_tokens <= _MAX_TOKENS_LIMIT
+            else _joined(words, self.max_tokens)
+        )
         found: list[int] = []
-        for start, key in _joined(words, self.max_tokens):
+        for start, key in joined:
             if (not found or found[-1] != start) and len(key) >= min_chars and hash_key(self.salt, key) in self.hashes:
                 found.append(start)
         if min_chars > 1 and len(words) > 1:  # a short term counts only beside another word
