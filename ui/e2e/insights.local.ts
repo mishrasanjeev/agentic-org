@@ -1,11 +1,13 @@
 // SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 import { expect, test, type Page } from "@playwright/test";
+import { verifyInsightsSurface } from "./insights-visuals";
 
 test.setTimeout(120_000);
 
 // Browser contracts use synthetic responses; backend tenant/RLS enforcement
 // has separate PostgreSQL tests. This file belongs only to the local config.
 const COMPANY = "11111111-1111-4111-8111-111111111111";
+const SECOND_COMPANY = "44444444-4444-4444-8444-444444444444";
 const PERIOD = { from: "2026-10-01", to: "2026-10-31" };
 const path = "/dashboard/insights?range=custom&from=2026-10-01&to=2026-10-31";
 const pendingCompanies = new Set<() => void>();
@@ -43,7 +45,7 @@ async function fixture(page: Page, baseURL: string, options: {
     });
     if (url.pathname.endsWith("/companies")) {
       if (options.delayedCompany) await companyReady;
-      return reply({ items: [{ id: COMPANY, name: "Acme Example" }], total: 1 });
+      return reply({ items: [{ id: COMPANY, name: "Acme Example" }, { id: SECOND_COMPANY, name: "Second Example" }], total: 2 });
     }
     if (url.pathname.endsWith("/insights/status")) return reply({
       enabled: options.enabled !== false, views: ["executive", "finance"], platform_operator: false,
@@ -73,7 +75,9 @@ async function fixture(page: Page, baseURL: string, options: {
 }
 
 test.beforeEach(async ({ baseURL }) => {
-  expect(["localhost", "127.0.0.1"]).toContain(new URL(baseURL!).hostname);
+  const origin = new URL(baseURL!);
+  expect(origin.protocol).toBe("http:");
+  expect(["localhost", "127.0.0.1", "ui"]).toContain(origin.hostname);
 });
 
 for (const width of [1440, 390]) {
@@ -103,51 +107,27 @@ for (const width of [1440, 390]) {
         for (const [key, value] of Object.entries({ ...PERIOD, company_id: COMPANY, compare: "none" })) {
           expect(state.exports[0].searchParams.get(key)).toBe(value);
         }
-        const dashboard = page.getByTestId("insights-dashboard");
-        expect(await page.evaluate(() => document.documentElement.scrollWidth === document.documentElement.clientWidth)).toBe(true);
-        const controls = await dashboard.locator("button, select, input").evaluateAll((elements) => elements
-          .filter((el) => el.getBoundingClientRect().height > 0 && getComputedStyle(el).visibility !== "hidden")
-          .map((el) => ({ height: el.getBoundingClientRect().height, fits: el.scrollWidth <= el.clientWidth })));
-        for (const control of controls) {
-          expect(control.fits).toBe(true);
-          if (width === 390) expect(control.height).toBeGreaterThanOrEqual(44);
+        await page.getByRole("button", { name: "Acme Example", exact: true }).click();
+        await Promise.all([
+          page.waitForEvent("load"),
+          page.getByRole("button", { name: "Second Example", exact: true }).click(),
+        ]);
+        await expect(page.getByRole("button", { name: "Second Example", exact: true })).toBeVisible({ timeout: 60_000 });
+        await expect.poll(() => state.views.at(-1)?.searchParams.get("company_id")).toBe(SECOND_COMPANY);
+        const otherTab = await page.context().newPage();
+        try {
+          await otherTab.goto(`${baseURL}/robots.txt`);
+          await otherTab.evaluate((id) => localStorage.setItem("company_id", id), COMPANY);
+          await expect(page.getByRole("button", { name: "Acme Example", exact: true })).toBeVisible();
+          await expect.poll(() => state.views.at(-1)?.searchParams.get("company_id")).toBe(COMPANY);
+        } finally {
+          await otherTab.close();
         }
-        const contrasts = await dashboard.evaluate((root) => {
-          const canvas = document.createElement("canvas");
-          canvas.width = canvas.height = 1;
-          const ctx = canvas.getContext("2d")!;
-          const luminance = (pixels: Uint8ClampedArray) => {
-            const c = Array.from(pixels).slice(0, 3).map((value) => {
-              const n = value / 255;
-              return n <= 0.04045 ? n / 12.92 : ((n + 0.055) / 1.055) ** 2.4;
-            });
-            return c[0] * 0.2126 + c[1] * 0.7152 + c[2] * 0.0722;
-          };
-          return Array.from(root.querySelectorAll("h1,h2,h3,p,th,td,button,label,select,a"))
-            .filter((element) => element.getBoundingClientRect().height > 1 && element.textContent?.trim())
-            .map((element) => {
-              ctx.fillStyle = "white";
-              ctx.fillRect(0, 0, 1, 1);
-              const ancestors: Element[] = [];
-              for (let parent: Element | null = element; parent; parent = parent.parentElement) ancestors.unshift(parent);
-              for (const parent of ancestors) {
-                ctx.fillStyle = getComputedStyle(parent).backgroundColor;
-                ctx.fillRect(0, 0, 1, 1);
-              }
-              const bg = luminance(ctx.getImageData(0, 0, 1, 1).data);
-              ctx.fillStyle = getComputedStyle(element).color;
-              ctx.fillRect(0, 0, 1, 1);
-              const fg = luminance(ctx.getImageData(0, 0, 1, 1).data);
-              return {
-                text: element.textContent!.trim().slice(0, 80),
-                contrast: (Math.max(fg, bg) + 0.05) / (Math.min(fg, bg) + 0.05),
-              };
-            });
-        });
-        await info.attach("text-contrast", { body: JSON.stringify(contrasts, null, 2), contentType: "application/json" });
-        expect(contrasts.length).toBeGreaterThan(20);
-        expect(contrasts.filter((item) => item.contrast < 4.5)).toEqual([]);
-        await page.screenshot({ path: info.outputPath("insights.png"), fullPage: true });
+        await expect(page.getByTestId("insights-tiles")).toBeVisible();
+        await page.getByTestId("chart-card").getByRole("button", { name: "View data", exact: true }).click();
+        await page.evaluate((color) => document.documentElement.classList.toggle("dark", color === "dark"), scheme);
+        await verifyInsightsSurface(page, page.getByRole("button", { name: "Acme Example", exact: true }), width, info, "company-scope", 0);
+        await verifyInsightsSurface(page, page.getByTestId("insights-dashboard"), width, info, "insights");
         expect(state.errors).toEqual([]);
       });
     });
@@ -178,6 +158,15 @@ test("failed metric request can be retried", async ({ page, baseURL }) => {
   state.recover();
   await page.getByRole("button", { name: /Try again|Retry/, exact: true }).click();
   await expect(page.getByTestId("insights-tiles")).toBeVisible();
+  expect(state.errors).toEqual([]);
+});
+
+test("a server-side forbidden response never exposes metrics", async ({ page, baseURL }) => {
+  const state = await fixture(page, baseURL!, { failure: 403 });
+  await page.goto(path);
+  await expect(page.getByText("No Insights view for your role", { exact: true })).toBeVisible();
+  await expect(page.getByTestId("insights-tiles")).toHaveCount(0);
+  await expect(page.getByRole("button", { name: /Export/ })).toHaveCount(0);
   expect(state.errors).toEqual([]);
 });
 

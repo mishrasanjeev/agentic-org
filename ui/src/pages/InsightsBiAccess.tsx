@@ -184,7 +184,7 @@ export default function InsightsBiAccess() {
           {data.logins.length === 0 ? (
             <EmptyState compact title={t("insightsBi.logins.emptyTitle")} hint={t("insightsBi.logins.emptyBody")} />
           ) : (
-            <div className="overflow-x-auto rounded-md border">
+            <div className="relative overflow-x-auto rounded-md border">
               <table className="w-full text-sm" data-testid="bi-logins">
                 <caption className="sr-only">{t("insightsBi.logins.title")}</caption>
                 <thead className="bg-muted/50 text-left text-xs uppercase text-muted-foreground">

@@ -10,8 +10,12 @@
 - Refresh the Insights company filter when the header validates or changes
   its selection, including a delayed first company load and cross-tab changes.
   Server-side company ownership checks remain authoritative.
+- Keep the header company label subscribed to the same selection, including
+  native cross-tab storage updates, and use theme tokens for its controls.
 - Apply the console's background and foreground theme tokens at its shared
   root, so inherited control and table text remains readable in dark mode.
+- Keep the BI login table's visually hidden labels inside its horizontal
+  scroll container at mobile widths.
 
 ## Unreleased - Insights Platform view and per-tenant BI database access
 

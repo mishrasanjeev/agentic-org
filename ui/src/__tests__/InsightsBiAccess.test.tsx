@@ -97,6 +97,7 @@ describe("InsightsBiAccess", () => {
     mockGet.mockResolvedValue({ data: listBody() });
     renderPage();
     expect(await screen.findByTestId("bi-logins")).toBeTruthy();
+    expect(screen.getByTestId("bi-logins").parentElement).toHaveClass("relative", "overflow-x-auto");
     expect(mockGet).toHaveBeenCalledWith("/insights/bi-access");
     expect(screen.getByTestId("bi-host").textContent).toBe("10.20.0.7");
     expect(screen.getByText("insights_bi.spend_daily")).toBeTruthy();
