@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { Link } from "react-router";
 import api from "../lib/api";
+import { setSelectedCompanyId } from "../lib/companyScope";
 
 interface Company {
   id: string;
@@ -39,10 +40,10 @@ export default function CompanySwitcher() {
           if (list.length > 0) {
             const first = list[0].id;
             setCurrent(first);
-            localStorage.setItem("company_id", first);
+            setSelectedCompanyId(first);
           } else if (current) {
             setCurrent("");
-            localStorage.removeItem("company_id");
+            setSelectedCompanyId("");
           }
         }
       } catch {
@@ -58,7 +59,7 @@ export default function CompanySwitcher() {
 
   const handleSelect = (id: string) => {
     setCurrent(id);
-    localStorage.setItem("company_id", id);
+    setSelectedCompanyId(id);
     setDropdownOpen(false);
     // Reload the page so all data refreshes for the new company context
     window.location.reload();

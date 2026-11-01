@@ -59,6 +59,14 @@ describe("Layout Insights entry", () => {
     mockGet.mockReset();
   });
 
+  it("provides the theme background and inherited text color to console pages", async () => {
+    mockRole = "admin";
+    statusAnswers(true);
+    const { container } = renderLayout();
+    expect(container.firstElementChild).toHaveClass("bg-background", "text-foreground");
+    await waitFor(() => expect(mockGet).toHaveBeenCalledWith("/insights/status"));
+  });
+
   it.each(["admin", "cfo"])("%s sees Insights once the status says enabled", async (role) => {
     mockRole = role;
     statusAnswers(true);

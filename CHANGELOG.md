@@ -1,11 +1,17 @@
 # Changelog
 
-## Unreleased - Dependency resolution
+## Unreleased - Release integration fixes
 
 - Resolve fastembed 0.9.1 normally with patched Pillow 13. Remove the old
   no-dependency install and Pillow conflict waiver; container and CI installs
   now require strict dependency checks. Keep the compatible Hugging Face Hub
   and preshed constraints, and align Presidio's Python 3.14 requirements.
+
+- Refresh the Insights company filter when the header validates or changes
+  its selection, including a delayed first company load and cross-tab changes.
+  Server-side company ownership checks remain authoritative.
+- Apply the console's background and foreground theme tokens at its shared
+  root, so inherited control and table text remains readable in dark mode.
 
 ## Unreleased - Insights Platform view and per-tenant BI database access
 
