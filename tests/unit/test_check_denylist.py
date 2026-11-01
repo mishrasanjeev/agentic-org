@@ -8,6 +8,7 @@ for shape.
 from __future__ import annotations
 
 import dataclasses
+import hashlib
 import random
 import re
 import subprocess
@@ -78,6 +79,47 @@ def _scan(repo: Path, hash_file: Path, capsys: pytest.CaptureFixture[str], *extr
 
 
 # ── Matching ────────────────────────────────────────────────────────────────
+
+
+@pytest.mark.parametrize("salt", [b"a" * 16, b"b" * 32, b"c" * 64, b"d" * 65])
+@pytest.mark.parametrize("key", ["", "acmeverify", "\u00e9cole", "x" * 128, "x" * 129])
+def test_digest_preserves_the_exact_salted_hash(salt: bytes, key: str) -> None:
+    expected = hashlib.sha256(salt + b"\x00" + key.encode("utf-8")).hexdigest()
+    assert dl.digest(salt, key) == expected
+    assert dl.digest(salt, key) == expected
+
+
+def test_digest_cache_is_bounded_and_does_not_retain_large_inputs(denylist: dl.Denylist) -> None:
+    dl._cached_digest.cache_clear()
+    try:
+        denylist.matches("acmeverify")
+        denylist.matches("acmeverify")
+        info = dl._cached_digest.cache_info()
+        assert info.hits > 0 and info.currsize > 0
+        assert info.maxsize == 65_536
+        assert denylist.matches("x" * 513 + " acmeverify")
+        assert denylist.matches("\ufb03" * 50 + " acmeverify")
+        dataclasses.replace(denylist, salt=b"x" * 65).matches("acmeverify")
+        assert dl._cached_digest.cache_info() == info
+    finally:
+        dl._cached_digest.cache_clear()
+
+
+def test_cached_hashes_do_not_cache_policy_membership(denylist: dl.Denylist) -> None:
+    assert denylist.matches("acme verify")
+    changed = dataclasses.replace(denylist, hashes=frozenset({dl.digest(TEST_SALT, "distinct")}))
+    assert changed.matches("acme verify") == []
+    assert changed.matches("distinct") == [0]
+    other_salt = dataclasses.replace(denylist, salt=b"other-salt-value!")
+    assert other_salt.matches("acme verify") == []
+    narrow = dataclasses.replace(denylist, max_tokens=1)
+    assert narrow.matches("ac me ve rify") == []
+    assert dataclasses.replace(narrow, max_tokens=2).matches("ac me ve rify") == [0]
+    assert denylist.matches("myacmeverify") == [0]
+    assert denylist.matches("myacmeverify", min_chars=12) == []
+    result = denylist.matches("acme verify")
+    result.clear()
+    assert denylist.matches("acme verify") == [0]
 
 
 @pytest.mark.parametrize(

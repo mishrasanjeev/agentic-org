@@ -206,6 +206,9 @@ def digest(salt: bytes, key: str) -> str:
     return hashlib.sha256(salt + b"\x00" + key.encode("utf-8")).hexdigest()
 
 
+_cached_digest = functools.lru_cache(maxsize=65_536)(digest)
+
+
 @dataclass(frozen=True)
 class Denylist:
     salt: bytes
@@ -220,14 +223,16 @@ class Denylist:
         tail of a longer word.
         """
         normalised = _normalise(text)
+        # Candidates cannot exceed the normalized line; bound retained hash inputs.
+        hash_key = _cached_digest if len(normalised) <= 128 and len(self.salt) <= 64 else digest
         words = [token.lower() for token in _TOKEN_RE.findall(normalised)]
         found: list[int] = []
         for start, key in _joined(words, self.max_tokens):
-            if (not found or found[-1] != start) and len(key) >= min_chars and digest(self.salt, key) in self.hashes:
+            if (not found or found[-1] != start) and len(key) >= min_chars and hash_key(self.salt, key) in self.hashes:
                 found.append(start)
         if min_chars > 1 and len(words) > 1:  # a short term counts only beside another word
             hits = [
-                i for i, word in enumerate(words) if len(word) < min_chars and digest(self.salt, word) in self.hashes
+                i for i, word in enumerate(words) if len(word) < min_chars and hash_key(self.salt, word) in self.hashes
             ]
             if hits:  # rare: only now is it worth finding where the words are
                 spans = [token.span() for token in _TOKEN_RE.finditer(normalised)]

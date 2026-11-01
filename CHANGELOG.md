@@ -2,6 +2,10 @@
 
 ## Unreleased - Release integration fixes
 
+- Reuse bounded, salt-scoped digest calculations in the vendor check without
+  caching policy membership or changing matching, decoding or exception rules.
+  Select the cache once per normalized short line; larger inputs remain uncached.
+
 - Resolve fastembed 0.9.1 normally with patched Pillow 13. Remove the old
   no-dependency install and Pillow conflict waiver; container and CI installs
   now require strict dependency checks. Keep the compatible Hugging Face Hub
