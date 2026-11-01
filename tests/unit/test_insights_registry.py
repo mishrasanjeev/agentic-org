@@ -138,6 +138,27 @@ def test_ui_metric_keys_file_matches_the_registry() -> None:
     assert path.read_text(encoding="utf-8") == render()
 
 
+def test_the_metric_keys_generator_writes_the_file_and_checks_it(tmp_path, monkeypatch, capsys) -> None:
+    import scripts.generate_insights_metric_keys as gen
+
+    out = tmp_path / "ui" / "metricKeys.generated.json"
+    monkeypatch.setattr(gen, "REPO_ROOT", tmp_path)
+    monkeypatch.setattr(gen, "OUTPUT", out)
+
+    # Missing file: --check fails and names the file; a plain run writes it.
+    assert gen.main(["--check"]) == 1
+    assert "metricKeys.generated.json is out of date" in capsys.readouterr().out
+    assert gen.main([]) == 0
+    assert json.loads(out.read_text(encoding="utf-8")) == registry.metric_keys()
+    assert gen.main(["--check"]) == 0
+
+    # A stale file fails the check until it is rewritten.
+    out.write_text('["runs.volume"]\n', encoding="utf-8")
+    assert gen.main(["--check"]) == 1
+    assert gen.main([]) == 0
+    assert gen.main(["--check"]) == 0
+
+
 @pytest.mark.asyncio
 async def test_resolve_wraps_the_resolver_in_the_shared_envelope() -> None:
     from dataclasses import replace
