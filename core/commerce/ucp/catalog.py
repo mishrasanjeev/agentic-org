@@ -227,14 +227,16 @@ def _ucp_variant(variant: Mapping[str, Any], product: Mapping[str, Any]) -> dict
     return item
 
 
-# Product details the shop declared (catalog upload columns), as UCP product metadata.
+# Product details the shop declared (catalog upload columns, public Shopify metafields), and the
+# details that hold for the whole shop (set once on the setup page), as UCP product metadata.
 MAX_SERVED_DETAILS = 30
 MAX_SERVED_DETAIL_VALUE = 1000
+MAX_SERVED_SHOP_DETAILS = 10
 
 
-def _product_details(product: Mapping[str, Any]) -> list[dict[str, str]]:
+def _product_details(items: Any, limit: int = MAX_SERVED_DETAILS) -> list[dict[str, str]]:
     details: list[dict[str, str]] = []
-    for item in product.get("attributes") or ():
+    for item in items or ():
         if not isinstance(item, Mapping):
             continue
         name = _plain(item.get("label"), 60) or _plain(item.get("name"), 60)
@@ -248,13 +250,17 @@ def _product_details(product: Mapping[str, Any]) -> list[dict[str, str]]:
             if value is None:
                 continue
         details.append({"name": name, "value": value})
-        if len(details) >= MAX_SERVED_DETAILS:
+        if len(details) >= limit:
             break
     return details
 
 
-def ucp_product(product: Mapping[str, Any]) -> dict[str, Any] | None:
-    """One synced product as a UCP ``product``; None when it has no priceable variant or is not public."""
+def ucp_product(product: Mapping[str, Any], shop_details: Sequence[Mapping[str, Any]] = ()) -> dict[str, Any] | None:
+    """One synced product as a UCP ``product``; None when it has no priceable variant or is not public.
+
+    ``shop_details`` (the shop's own details, ``catalog_upload.shop_details_of``) go on every product,
+    apart from the product's details, so an assistant that reads one product also reads them.
+    """
     product_id = ucp_product_id(product)
     status = str(product.get("status") or "").upper()
     if product_id is None or status in _EXCLUDED_PRODUCT_STATUSES:
@@ -290,12 +296,15 @@ def ucp_product(product: Mapping[str, Any]) -> dict[str, Any] | None:
     tags = [tag for tag in (_plain(value, 50) for value in product.get("tags") or ()) if tag][:20]
     if tags:
         result["tags"] = tags
-    details = _product_details(product)
+    details = _product_details(product.get("attributes"))
+    shop = _product_details(shop_details, MAX_SERVED_SHOP_DETAILS)
     brand = _plain(product.get("vendor"), 120)
-    if brand or details:
+    if brand or details or shop:
         metadata: dict[str, Any] = {"brand": brand} if brand else {}
         if details:
             metadata.update({"attributes": details, "attributes_declared_by": "shop"})
+        if shop:
+            metadata.update({"shop_details": shop, "shop_details_declared_by": "shop"})
         result["metadata"] = metadata
     media = []
     for image in product.get("images") or ():
@@ -376,8 +385,12 @@ def search_catalog(
     price_min: int | None,
     price_max: int | None,
     price_currency: str | None = None,
+    shop_details: Sequence[Mapping[str, Any]] = (),
 ) -> list[dict[str, Any]]:
     """Matching UCP products, ordered by title. Every query token must match (case-insensitive).
+
+    Queries match the product's own fields and details, not ``shop_details`` (they hold for every
+    product, so they would match all of them).
 
     The price filter is denominated in ``price_currency`` (the request's
     ``context.currency``) and applies only to products priced in it; there is no
@@ -387,7 +400,7 @@ def search_catalog(
     wanted_categories = {item.strip().lower() for item in categories or () if isinstance(item, str) and item.strip()}
     matches: list[tuple[str, dict[str, Any]]] = []
     for product in products:
-        rendered = ucp_product(product)
+        rendered = ucp_product(product, shop_details)
         if rendered is None:
             continue
         haystack = _search_text(product)
@@ -410,6 +423,7 @@ def search_catalog(
 def lookup_catalog(
     products: Sequence[Mapping[str, Any]],
     ids: Sequence[str],
+    shop_details: Sequence[Mapping[str, Any]] = (),
 ) -> tuple[list[dict[str, Any]], list[int]]:
     """Products for ``ids`` (product id, variant id or SKU) and the positions of ids that matched nothing.
 
@@ -419,7 +433,7 @@ def lookup_catalog(
     """
     rendered_by_id: dict[str, dict[str, Any]] = {}
     for product in products:
-        rendered = ucp_product(product)
+        rendered = ucp_product(product, shop_details)
         if rendered is not None:
             rendered_by_id[rendered["id"]] = rendered
     sku_index: dict[str, tuple[str, str]] = {}

@@ -623,13 +623,19 @@ class ShopifyAdminGraphQLClient:
 
         products: list[dict[str, Any]] = []
         after_cursor: str | None = None
+        # The query with product details first; a store whose API version refuses its fields is read
+        # with the query without them, as before details were read.
+        query = SHOPIFY_PRODUCTS_WITH_DETAILS_QUERY
+        # The limit is in products (page_size x max_pages), so smaller pages never shorten the catalog.
+        max_products = page_size * max_pages
+        size = page_size
+        throttled = 0
+        more = False
         transport = self._transport or build_pinned_async_transport(require_dns=True)
         async with httpx.AsyncClient(timeout=self._timeout_seconds, transport=transport) as client:
-            for _ in range(max_pages):
-                payload: dict[str, Any] = {
-                    "query": SHOPIFY_PRODUCTS_QUERY,
-                    "variables": {"first": page_size, "after": after_cursor},
-                }
+            while len(products) < max_products:
+                first = min(size, max_products - len(products))
+                payload: dict[str, Any] = {"query": query, "variables": {"first": first, "after": after_cursor}}
                 response: httpx.Response | None = None
                 for attempt in range(self._retry_attempts):
                     try:
@@ -652,16 +658,32 @@ class ShopifyAdminGraphQLClient:
                 response.raise_for_status()
                 body = response.json()
                 if body.get("errors"):
+                    codes = _shopify_error_codes(body["errors"])
+                    if codes == {"MAX_COST_EXCEEDED"} and first > 1:
+                        # Shopify caps the cost of one query; the same page is asked for in smaller pages.
+                        size = _shopify_smaller_page(body["errors"], first)
+                        continue
+                    if codes == {"THROTTLED"} and throttled < self._retry_attempts:
+                        throttled += 1
+                        await asyncio.sleep(_shopify_throttle_wait(body, throttled))
+                        continue
+                    if query is SHOPIFY_PRODUCTS_WITH_DETAILS_QUERY and _shopify_schema_refusal(body["errors"]):
+                        logger.warning("shopify_product_details_unavailable", error_codes=sorted(codes))
+                        query = SHOPIFY_PRODUCTS_QUERY
+                        continue
                     raise C6ZRuntimeValidationError("Shopify GraphQL returned errors")
+                throttled = 0
                 connection = body.get("data", {}).get("products", {})
                 nodes = connection.get("nodes") or []
                 products.extend(cast(list[dict[str, Any]], nodes))
                 page_info = connection.get("pageInfo") or {}
-                if not page_info.get("hasNextPage"):
-                    break
                 after_cursor = str(page_info.get("endCursor") or "")
-                if not after_cursor:
+                more = bool(page_info.get("hasNextPage")) and bool(after_cursor) and bool(nodes)
+                if not more:
                     break
+        if more:
+            # The store has more products than one sync reads; say so instead of passing it silently.
+            logger.warning("shopify_catalog_read_limit_reached", products_read=len(products), limit=max_products)
         return products
 
     @property
@@ -670,6 +692,56 @@ class ShopifyAdminGraphQLClient:
             f"https://{self.credentials.shop_domain}/admin/api/"
             f"{self.credentials.api_version}/graphql.json"
         )
+
+
+# GraphQL validation codes Shopify returns for a field or argument the API version does not have.
+_SHOPIFY_SCHEMA_CODES = frozenset({"undefinedField", "argumentNotAccepted", "undefinedType"})
+
+
+def _shopify_schema_refusal(errors: Any) -> bool:
+    """True when every error says the query names a field or argument this API version does not have."""
+    items = errors if isinstance(errors, list) else [errors]
+    return bool(items) and all(
+        isinstance(error, Mapping)
+        and (
+            (error.get("extensions") or {}).get("code") in _SHOPIFY_SCHEMA_CODES
+            or "doesn't exist on type" in str(error.get("message") or "")
+        )
+        for error in items
+    )
+
+
+def _shopify_smaller_page(errors: Any, size: int) -> int:
+    """A page size under Shopify's single-query cost limit, from the reported cost when it is given."""
+    for error in errors if isinstance(errors, list) else [errors]:
+        extensions = error.get("extensions") if isinstance(error, Mapping) else None
+        cost = extensions.get("cost") if isinstance(extensions, Mapping) else None
+        limit = extensions.get("maxCost") if isinstance(extensions, Mapping) else None
+        if isinstance(cost, int | float) and isinstance(limit, int | float) and cost > limit > 0:
+            return max(1, min(size - 1, int(size * limit / cost * 0.9)))
+    return max(1, size // 2)
+
+
+def _shopify_throttle_wait(body: Mapping[str, Any], attempt: int) -> float:
+    """Seconds until Shopify's cost bucket refills enough for the query (1 to 30), else 1, 2, 4 ..."""
+    cost = (body.get("extensions") or {}).get("cost") if isinstance(body.get("extensions"), Mapping) else None
+    status = cost.get("throttleStatus") if isinstance(cost, Mapping) else None
+    if isinstance(cost, Mapping) and isinstance(status, Mapping):
+        requested, available = cost.get("requestedQueryCost"), status.get("currentlyAvailable")
+        rate = status.get("restoreRate")
+        if all(isinstance(item, int | float) for item in (requested, available, rate)) and rate > 0:
+            return float(min(30.0, max(1.0, (requested - available) / rate)))
+    return float(2 ** (attempt - 1))
+
+
+def _shopify_error_codes(errors: Any) -> set[str]:
+    """The ``extensions.code`` of each Shopify GraphQL error ("UNKNOWN" when one has none)."""
+    codes: set[str] = set()
+    for error in errors if isinstance(errors, list) else [errors]:
+        extensions = error.get("extensions") if isinstance(error, Mapping) else None
+        code = extensions.get("code") if isinstance(extensions, Mapping) else None
+        codes.add(str(code) if code else "UNKNOWN")
+    return codes
 
 
 SHOPIFY_PRODUCTS_QUERY = """
@@ -721,6 +793,74 @@ query C6ZProducts($first: Int!, $after: String) {
 }
 """
 
+# Read first: tags, the online-store link, barcodes and the metafields the storefront can read
+# (core/commerce/shopify_product_details.py decides which become product details).
+SHOPIFY_PRODUCTS_WITH_DETAILS_QUERY = """
+query C6ZProductsWithDetails($first: Int!, $after: String) {
+  products(first: $first, after: $after) {
+    pageInfo {
+      hasNextPage
+      endCursor
+    }
+    nodes {
+      id
+      title
+      descriptionHtml
+      vendor
+      productType
+      tags
+      onlineStoreUrl
+      status
+      updatedAt
+      media(first: 10) {
+        nodes {
+          mediaContentType
+          preview {
+            image {
+              url
+              altText
+            }
+          }
+        }
+      }
+      metafields(first: 20) {
+        nodes {
+          namespace
+          key
+          type
+          value
+          definition {
+            name
+            access {
+              storefront
+            }
+          }
+        }
+      }
+      variants(first: 50) {
+        nodes {
+          id
+          sku
+          title
+          price
+          compareAtPrice
+          barcode
+          inventoryQuantity
+          updatedAt
+          selectedOptions {
+            name
+            value
+          }
+          inventoryItem {
+            id
+          }
+        }
+      }
+    }
+  }
+}
+"""
+
 
 def normalize_shopify_product_node(
     node: Mapping[str, Any],
@@ -731,6 +871,8 @@ def normalize_shopify_product_node(
     synced_at: str,
     default_currency: str | None = None,
 ) -> dict[str, Any]:
+    from core.commerce.shopify_product_details import product_extras, variant_gtin
+
     product_id = _require_text("shopify_product_id", str(node.get("id", "")))
     title = _require_text("title", str(node.get("title", "")))
     variants = []
@@ -749,6 +891,7 @@ def normalize_shopify_product_node(
                     variant.get("inventoryItem", {}).get("id"),
                 ),
                 "updated_at": _safe_optional_text(variant.get("updatedAt")),
+                **({"gtin": gtin} if (gtin := variant_gtin(variant)) else {}),
                 "selected_options": tuple(
                     {
                         "name": _safe_optional_text(option.get("name")),
@@ -786,6 +929,7 @@ def normalize_shopify_product_node(
         "synced_at": _require_text("synced_at", synced_at),
         "source_system": "shopify",
         "source_mode": "read_only",
+        **product_extras(node),
     }
     if contains_private_or_executable_value(normalized):
         raise C6ZRuntimeValidationError("normalized Shopify product contains unsafe values")

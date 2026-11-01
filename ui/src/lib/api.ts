@@ -307,6 +307,9 @@ export const merchantSetupApi = {
     },
   ) =>
     api.put(`${merchantPath(merchantId)}/setup/policies`, data),
+  // The whole list; an empty list removes every shop detail.
+  saveShopDetails: (merchantId: string, data: { details: { label: string; value: string }[] }) =>
+    api.put(`${merchantPath(merchantId)}/setup/shop-details`, data),
   saveOrderLimits: (
     merchantId: string,
     data: { currency: string; max_order_amount: string; max_daily_amount: string; max_quantity_per_order: number },

@@ -31,6 +31,7 @@ from fastapi.responses import JSONResponse, Response
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from api.route_metadata import route_meta
+from core.commerce.catalog_upload import shop_details_of
 from core.commerce.source_precedence import products_with_precedence
 from core.commerce.ucp.authority import normalize_host
 from core.commerce.ucp.catalog import (
@@ -380,6 +381,7 @@ async def ucp_catalog_search(request: Request) -> JSONResponse:
             price_min=price.min if price else None,
             price_max=price.max if price else None,
             price_currency=currency,
+            shop_details=shop_details_of(_provider_policy(serve)),
         )
         page, pagination = paginate(results, offset=offset, limit=body.pagination.limit if body.pagination else None)
     policies = _catalog_policies(serve, records, now_iso) if version == UCP_2026_08_25 and page else []
@@ -422,7 +424,10 @@ async def ucp_catalog_lookup(request: Request) -> JSONResponse:
         results: list[dict[str, Any]] = []
         messages.append(catalog_unavailable_message())
     else:
-        results, missing = lookup_catalog(products_with_precedence(source.products, _provider_policy(serve)), body.ids)
+        policy = _provider_policy(serve)
+        results, missing = lookup_catalog(
+            products_with_precedence(source.products, policy), body.ids, shop_details=shop_details_of(policy)
+        )
         messages.extend(not_found_message(index) for index in missing)
     policies = _catalog_policies(serve, records, now_iso) if version == UCP_2026_08_25 and results else []
     return JSONResponse(
