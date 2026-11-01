@@ -4551,6 +4551,15 @@ access token blank to keep the one you saved: Shopify shows a token only once. A
 delivery with your secret; a changed product shows **Changed in your store** until the catalog is read
 again.
 
+**Product details from Shopify.** Along with titles, prices and stock, AgenticOrg reads each product's tags,
+its barcode, its page on your online store and the product metafields you show on your storefront. In
+Shopify, a metafield is shown on the storefront when its definition (**Settings**, **Custom data**,
+**Products**) has storefront access turned on; metafields without it stay private. Buyers' AI assistants
+read each one under its definition name, as something your shop declares. Text, numbers, dates, yes/no,
+links starting with https://, ratings, weights, volumes, sizes and money amounts are read; references to
+files, other products or metaobjects are not, and the first 20 metafields of each product are read. Metafields and tags whose names read as private business data
+or credentials are left out, and so are barcodes without a valid check digit.
+
 ### Upload a file instead
 
 One product per row, one currency, up to 2,000 products:
@@ -4598,6 +4607,16 @@ The pickup text is part of your policies: buyer agents read it as wording. Check
 only when your shop also has a store location in its merchant settings, which the Commerce Runtime page
 sets. Sell Everywhere does not add store locations, so a shop that only uploads a catalog offers shipping
 and no pickup.
+
+### Shop details
+
+Some facts hold for the whole shop, such as a food-safety licence number, a certification or where your
+products are made. Add them once under **Shop details** in the policies step, as a name and a value, for
+example `FSSAI licence number` and the number. Buyers' AI assistants read them with every product, marked as
+declared by your shop, and the Telegram shopping bot shows them too. Up to 10 shop details, each name up to
+40 characters and each value up to 500. They are checked as product details are: names that read as private business data are
+refused, and links must start with https://. Details for one product go in a column of your catalog, or in a
+Shopify metafield, instead.
 
 ### Order limits
 

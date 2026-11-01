@@ -176,6 +176,7 @@ def _money(price: Any) -> str | None:
 
 
 MAX_DETAILS = 4
+MAX_SHOP_DETAILS = 3
 MAX_DETAIL_CHARS = 100
 MAX_SUMMARY_DESCRIPTION = 300
 # Tool results are cut at 8000 characters; search answers are built to fit well inside that.
@@ -202,17 +203,25 @@ def _product_summary(shop: str, product: dict[str, Any]) -> dict[str, Any]:
         or None,
     }
     metadata: dict[str, Any] = product["metadata"] if isinstance(product.get("metadata"), dict) else {}
-    details = [
-        f"{item.get('name')}: {str(item.get('value'))[:MAX_DETAIL_CHARS]}"
-        for item in metadata.get("attributes") or []
-        if isinstance(item, dict) and item.get("name") and item.get("value")
-    ][:MAX_DETAILS]
+    details = _detail_lines(metadata.get("attributes"), MAX_DETAILS)
+    shop_details = _detail_lines(metadata.get("shop_details"), MAX_SHOP_DETAILS)
     if metadata.get("brand"):
         summary["brand"] = metadata["brand"]
     if details:
         # The shop's own declarations (ingredients, licence numbers and so on), kept short for the tool result cap.
         summary["details_declared_by_shop"] = details
+    if shop_details:
+        # Declared once for the whole shop (a food-safety licence, a certification).
+        summary["shop_details_declared_by_shop"] = shop_details
     return summary
+
+
+def _detail_lines(items: Any, limit: int) -> list[str]:
+    return [
+        f"{item.get('name')}: {str(item.get('value'))[:MAX_DETAIL_CHARS]}"
+        for item in items or []
+        if isinstance(item, dict) and item.get("name") and item.get("value")
+    ][:limit]
 
 
 def _fit_search_results(results: list[dict[str, Any]]) -> dict[str, Any]:
@@ -226,11 +235,19 @@ def _fit_search_results(results: list[dict[str, Any]]) -> dict[str, Any]:
         for shop_items in by_shop.values()
         if index < len(shop_items)
     ]
+    shops_with_details: set[str] = set()
+    for item in ordered:
+        # The shop's details are the same on each of its products; the first one carries them.
+        if "shop_details_declared_by_shop" in item:
+            if item.get("shop") in shops_with_details:
+                item.pop("shop_details_declared_by_shop")
+            shops_with_details.add(str(item.get("shop")))
     body: dict[str, Any] = {"products": ordered}
     if len(json.dumps(body, default=str)) <= SEARCH_RESULT_BUDGET:
         return body
     for item in ordered:
         item.pop("details_declared_by_shop", None)
+        item.pop("shop_details_declared_by_shop", None)
     while ordered and len(json.dumps(body, default=str)) > SEARCH_RESULT_BUDGET:
         ordered.pop()
     body["more_results_left_out"] = True

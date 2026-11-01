@@ -65,6 +65,7 @@ interface Setup {
     pickup: string;
     shipping_rate?: { fee: string; currency: string; countries: string[] } | null;
   };
+  shop_details?: ShopDetail[];
   order_limits: {
     status: string;
     currency: string | null;
@@ -77,6 +78,12 @@ interface Setup {
 }
 
 type UploadProblem = { row: number | null; column: string | null; message: string };
+type ShopDetail = { label: string; value: string };
+
+// Matches MAX_SHOP_DETAILS, MAX_SHOP_DETAIL_VALUE and MAX_ATTRIBUTE_NAME in core/commerce/catalog_upload.py.
+const MAX_SHOP_DETAILS = 10;
+const MAX_SHOP_DETAIL_VALUE = 500;
+const MAX_SHOP_DETAIL_NAME = 40;
 
 const STATUS: Record<string, { label: string; variant: "success" | "warning" | "destructive" | "secondary" }> = {
   live: { label: "Live", variant: "success" },
@@ -216,6 +223,8 @@ export default function SellEverywhere() {
   const [shippingFee, setShippingFee] = useState("");
   const [shippingCurrency, setShippingCurrency] = useState("");
   const [shippingCountries, setShippingCountries] = useState("");
+  const [shopDetails, setShopDetails] = useState<ShopDetail[]>([]);
+  const [shopDetailProblems, setShopDetailProblems] = useState<UploadProblem[]>([]);
 
   const [currency, setCurrency] = useState("");
   const [maxOrder, setMaxOrder] = useState("");
@@ -233,6 +242,7 @@ export default function SellEverywhere() {
     setShippingFee(data.policies.shipping_rate?.fee ?? "");
     setShippingCurrency(data.policies.shipping_rate?.currency ?? data.catalog.currency ?? "");
     setShippingCountries((data.policies.shipping_rate?.countries ?? []).join(", "));
+    setShopDetails(data.shop_details ?? []);
     setCurrency(data.order_limits.currency ?? data.catalog.currency ?? "");
     setMaxOrder(data.order_limits.max_order_amount ?? "");
     setMaxDaily(data.order_limits.max_daily_amount ?? "");
@@ -398,6 +408,26 @@ export default function SellEverywhere() {
       });
       applySetup(data);
       setNotice("Policies saved.");
+    });
+
+  const updateShopDetail = (index: number, change: Partial<ShopDetail>) =>
+    setShopDetails((items) => items.map((item, i) => (i === index ? { ...item, ...change } : item)));
+
+  const saveShopDetails = () =>
+    run("shop-details", async () => {
+      setShopDetailProblems([]);
+      try {
+        const { data } = await merchantSetupApi.saveShopDetails(merchantId, {
+          // Blank rows are sent too (the server skips them), so a problem's row number matches the page.
+          details: shopDetails.map((item) => ({ label: item.label.trim(), value: item.value.trim() })),
+        });
+        applySetup(data);
+        setNotice("Shop details saved.");
+      } catch (e: any) {
+        const problems = e?.response?.data?.detail?.errors;
+        if (Array.isArray(problems)) setShopDetailProblems(problems);
+        throw e;
+      }
     });
 
   const saveLimits = () =>
@@ -723,6 +753,65 @@ export default function SellEverywhere() {
             >
               Save policies
             </Button>
+
+            <div className="space-y-2 border-t pt-3 text-sm">
+              <p className="font-medium">Shop details (optional)</p>
+              <p className="text-xs text-muted-foreground">
+                Facts that hold for your whole shop, such as your FSSAI licence number or a certification. Buyers&apos; AI
+                assistants read them with every product, marked as stated by your shop. Details for one product go in a
+                column of your catalog instead.
+              </p>
+              {shopDetails.map((item, index) => (
+                <div key={index} className="flex flex-wrap items-start gap-2">
+                  <input
+                    className={`${inputClass} w-56`}
+                    aria-label={`Shop detail ${index + 1} name`}
+                    maxLength={MAX_SHOP_DETAIL_NAME}
+                    placeholder="FSSAI licence number"
+                    value={item.label}
+                    onChange={(e) => updateShopDetail(index, { label: e.target.value })}
+                  />
+                  <input
+                    className={`${inputClass} min-w-0 flex-1`}
+                    aria-label={`Shop detail ${index + 1} value`}
+                    maxLength={MAX_SHOP_DETAIL_VALUE}
+                    placeholder="12345678901234"
+                    value={item.value}
+                    onChange={(e) => updateShopDetail(index, { value: e.target.value })}
+                  />
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    aria-label={`Remove shop detail ${index + 1}`}
+                    onClick={() => setShopDetails((items) => items.filter((_, i) => i !== index))}
+                  >
+                    Remove
+                  </Button>
+                </div>
+              ))}
+              {shopDetailProblems.length ? (
+                <ul className="list-disc space-y-1 pl-5 text-destructive" aria-label="Problems in the shop details">
+                  {shopDetailProblems.map((problem, index) => (
+                    <li key={index}>
+                      {problem.row ? `Row ${problem.row}` : "Shop details"}
+                      {problem.column ? `, ${problem.column}` : ""}: {problem.message}
+                    </li>
+                  ))}
+                </ul>
+              ) : null}
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  variant="outline"
+                  disabled={busy !== null || shopDetails.length >= MAX_SHOP_DETAILS}
+                  onClick={() => setShopDetails((items) => [...items, { label: "", value: "" }])}
+                >
+                  Add a detail
+                </Button>
+                <Button variant="outline" disabled={busy !== null} onClick={() => void saveShopDetails()}>
+                  Save shop details
+                </Button>
+              </div>
+            </div>
           </Step>
 
           <Step number={4} title="Order limits" status={setup.order_limits.status}>
