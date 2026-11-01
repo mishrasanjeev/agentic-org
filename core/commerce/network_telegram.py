@@ -175,12 +175,16 @@ def _money(price: Any) -> str | None:
     return None
 
 
+MAX_DETAILS = 6
+MAX_DETAIL_CHARS = 160
+
+
 def _product_summary(shop: str, product: dict[str, Any]) -> dict[str, Any]:
     variants = product.get("variants") if isinstance(product.get("variants"), list) else []
     first = variants[0] if variants and isinstance(variants[0], dict) else {}
     price = (product.get("price_range") or {}).get("min") if isinstance(product.get("price_range"), dict) else None
     available = first.get("availability", {}).get("available") if isinstance(first.get("availability"), dict) else None
-    return {
+    summary = {
         "shop": shop,
         # Checkouts take the variant, so the model sees only the id it should buy with.
         "item_id": first.get("id") or product.get("id"),
@@ -191,6 +195,18 @@ def _product_summary(shop: str, product: dict[str, Any]) -> dict[str, Any]:
         if isinstance(product.get("description"), dict)
         else product.get("description"),
     }
+    metadata: dict[str, Any] = product["metadata"] if isinstance(product.get("metadata"), dict) else {}
+    details = [
+        f"{item.get('name')}: {str(item.get('value'))[:MAX_DETAIL_CHARS]}"
+        for item in metadata.get("attributes") or []
+        if isinstance(item, dict) and item.get("name") and item.get("value")
+    ][:MAX_DETAILS]
+    if metadata.get("brand"):
+        summary["brand"] = metadata["brand"]
+    if details:
+        # The shop's own declarations (ingredients, licence numbers and so on), kept short for the tool result cap.
+        summary["details_declared_by_shop"] = details
+    return summary
 
 
 async def _catalog_search(entry: dict[str, Any], query: str) -> list[dict[str, Any]]:

@@ -1,5 +1,23 @@
 # Changelog
 
+## Unreleased - Product details in the catalog upload
+
+- The catalog upload (CSV or JSON) takes optional named columns: `brand`, `category` (or `product_type`),
+  `tags`, `mrp` (or `compare_at_price`) and `barcode` (or `gtin`, check digit verified). Any other column is a
+  product detail, such as ingredients, allergens, shelf life, an FSSAI licence number or a lab-report link,
+  stored as `attributes` [{name, label, value}] (up to 30, values up to 1,000 characters, https-only links).
+  Columns starting with `_` are skipped; names that read as private business data (cost, margin, supplier and
+  the like), misspelled known columns and credential-like names are refused per column. The upload answer lists
+  the details buyers will read and the skipped columns, and the setup page has an example file.
+- Re-reading an uploaded catalog keeps every new field, so the evidence id and the Grantex catalog version stay
+  the same; catalogs uploaded before keep their digest.
+- UCP catalog products carry `url`, `tags`, `metadata` (`brand`, `attributes`, `attributes_declared_by: shop`)
+  and variant `barcodes`, and search matches tags and details. The Telegram shopper shows the brand and up to
+  six details. Grantex is unchanged: product content never leaves AgenticOrg.
+- The private-value scanner no longer reads ordinary sentences or web links as a compact JWS (each part must be
+  base64url), nor the word "basic" alone as a Basic credential (it needs an encoded value with a digit, `+`,
+  `/` or `=`). Real tokens and credentials are still refused.
+
 ## Unreleased - Security advisories of 2026-10-30 (pypdf, follow-redirects)
 
 ### Security

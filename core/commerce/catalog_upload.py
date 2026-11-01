@@ -8,6 +8,17 @@ object): ``sku``, ``title``, ``description``, ``price``, ``currency``,
 variant. Every row is validated before anything is stored, and the errors name
 the row and the column.
 
+Optional named columns fill the fields every catalog source shares: ``brand``,
+``category`` (or ``product_type``), ``tags`` (separated by ``;``, ``,`` or ``|``),
+``compare_at_price`` (or ``mrp``) and ``gtin`` (or ``barcode``). Any other column
+is a product detail buyers' AI assistants can read, such as ingredients,
+allergens, shelf life, a food-safety licence number or a lab-report link: it is
+stored as ``attributes`` [{name, label, value}] in column order, and empty cells
+are left out. A JSON product may also carry an ``attributes`` object. Columns
+whose name starts with ``_`` are skipped, so a merchant can keep internal
+columns in the same file; a name that reads as private business data (cost,
+margin, supplier and the like) is refused rather than published.
+
 The evidence says where the catalog came from: ``source_system`` is
 ``catalog_upload`` and ``merchant_system_source_of_record`` is true (the
 merchant uploaded it; no store system stands behind it). ``uploaded_at`` is
@@ -19,6 +30,7 @@ catalog until it uploads another).
 from __future__ import annotations
 
 import csv
+import difflib
 import hashlib
 import io
 import json
@@ -30,6 +42,8 @@ from urllib.parse import urlsplit
 
 from core.commerce.c6z_runtime_vertical import (
     CATALOG_UPLOAD_SOURCE_SYSTEM,
+    EXECUTION_MARKERS,
+    PRIVATE_KEY_MARKERS,
     contains_private_or_executable_value,
     validate_connector_evidence,
     validate_seller_onboarding_packet,
@@ -40,6 +54,22 @@ MAX_ROWS = 2000
 MAX_REPORTED_ERRORS = 20
 COLUMNS: tuple[str, ...] = ("sku", "title", "description", "price", "currency", "quantity", "image_url", "url")
 REQUIRED_COLUMNS: tuple[str, ...] = ("sku", "title", "price", "currency", "quantity")
+OPTIONAL_COLUMNS: tuple[str, ...] = ("brand", "category", "tags", "compare_at_price", "gtin")
+COLUMN_ALIASES: dict[str, str] = {"product_type": "category", "mrp": "compare_at_price", "barcode": "gtin"}
+KNOWN_COLUMNS: tuple[str, ...] = COLUMNS + OPTIONAL_COLUMNS
+MAX_ATTRIBUTES = 30
+MAX_ATTRIBUTE_NAME = 40
+MAX_ATTRIBUTE_LABEL = 60
+MAX_ATTRIBUTE_VALUE = 1000
+MAX_BRAND = 120
+MAX_CATEGORY = 120
+MAX_TAGS = 20
+MAX_TAG = 50
+GTIN_LENGTHS = frozenset({8, 12, 13, 14})
+# Column-name words that read as the merchant's own business data, never as a buyer-facing detail.
+PRIVATE_BUSINESS_WORDS: frozenset[str] = frozenset(
+    {"cost", "margin", "profit", "supplier", "purchase", "wholesale", "internal", "private", "confidential"}
+)
 FORMATS: frozenset[str] = frozenset({"csv", "json"})
 MAX_TITLE = 200
 MAX_DESCRIPTION = 2000
@@ -54,6 +84,8 @@ _SKU_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$")
 _CURRENCY_RE = re.compile(r"^[A-Z]{3}$")
 _TAG_RE = re.compile(r"<[^>]+>")
 _CONTROL_RE = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]")
+_ATTRIBUTE_NAME_RE = re.compile(r"^[a-z][a-z0-9_]*$")
+_TAG_SPLIT_RE = re.compile(r"[;,|]")
 
 
 class CatalogUploadError(ValueError):
@@ -100,6 +132,35 @@ def parse_catalog_upload(content: str, fmt: str) -> list[dict[str, Any]]:
     return rows
 
 
+def detail_labels(rows: Sequence[Mapping[str, Any]]) -> list[str]:
+    """The product-detail columns buyers' AI assistants will read, in first-seen order."""
+    labels: list[str] = []
+    for row in rows:
+        for item in row.get("attributes") or ():
+            label = str(item.get("label") or item.get("name") or "")
+            if label and label not in labels:
+                labels.append(label)
+    return labels
+
+
+def skipped_columns(content: str, fmt: str) -> list[str]:
+    """CSV columns, or JSON keys, the upload left out because their name starts with ``_``."""
+    names: list[str] = []
+    try:
+        if fmt == "csv":
+            reader = csv.reader(io.StringIO(content.lstrip("\ufeff")))
+            names = [str(name).strip() for name in next(reader, [])]
+        elif fmt == "json":
+            parsed = json.loads(content)
+            items = parsed.get("products") if isinstance(parsed, Mapping) else parsed
+            for item in items if isinstance(items, list) else []:
+                if isinstance(item, Mapping):
+                    names.extend(str(key).strip() for key in item if str(key).strip() not in names)
+    except (csv.Error, ValueError):
+        return []
+    return [name for name in dict.fromkeys(names) if name.startswith("_")]
+
+
 def catalog_digest(rows: Sequence[Mapping[str, Any]]) -> str:
     """SHA-256 of the validated rows: the evidence id changes only when the catalog does."""
     return hashlib.sha256(json.dumps(list(rows), sort_keys=True).encode("utf-8")).hexdigest()
@@ -127,8 +188,8 @@ def upload_products(
             "seller_agent_id": seller_agent_id,
             "title": row["title"],
             "description": row.get("description"),
-            "vendor": None,
-            "product_type": None,
+            "vendor": row.get("brand"),
+            "product_type": row.get("category"),
             "status": "ACTIVE",
             "images": [{"url": row["image_url"], "alt_text": row["title"]}] if row.get("image_url") else [],
             "variants": [
@@ -137,7 +198,7 @@ def upload_products(
                     "sku": sku,
                     "title": "Default",
                     "price": row["price"],
-                    "compare_at_price": None,
+                    "compare_at_price": row.get("compare_at_price"),
                     "currency": row["currency"],
                     "inventory_quantity_snapshot": row["quantity"],
                     "inventory_item_ref": f"{CATALOG_UPLOAD_SOURCE_SYSTEM}_inventory_item:{sku_digest[24:48]}",
@@ -154,6 +215,12 @@ def upload_products(
         }
         if row.get("url"):
             product["url"] = row["url"]
+        if row.get("gtin"):
+            product["variants"][0]["gtin"] = row["gtin"]
+        if row.get("tags"):
+            product["tags"] = list(row["tags"])
+        if row.get("attributes"):
+            product["attributes"] = [dict(item) for item in row["attributes"]]
         products.append(product)
     return products
 
@@ -234,18 +301,27 @@ def rows_from_products(products: Sequence[Mapping[str, Any]]) -> list[dict[str, 
         variant = variants[0] if variants and isinstance(variants[0], Mapping) else {}
         images = product.get("images") or []
         image = images[0] if images and isinstance(images[0], Mapping) else {}
-        rows.append(
-            {
-                "sku": variant.get("sku"),
-                "title": product.get("title"),
-                "description": product.get("description"),
-                "price": variant.get("price"),
-                "currency": variant.get("currency"),
-                "quantity": variant.get("inventory_quantity_snapshot"),
-                "image_url": image.get("url"),
-                "url": product.get("url"),
-            }
-        )
+        row: dict[str, Any] = {
+            "sku": variant.get("sku"),
+            "title": product.get("title"),
+            "description": product.get("description"),
+            "price": variant.get("price"),
+            "currency": variant.get("currency"),
+            "quantity": variant.get("inventory_quantity_snapshot"),
+            "image_url": image.get("url"),
+            "url": product.get("url"),
+        }
+        # The optional fields only when set, so a catalog uploaded before they existed keeps its digest.
+        optional = {
+            "brand": product.get("vendor"),
+            "category": product.get("product_type"),
+            "tags": list(product.get("tags") or []),
+            "compare_at_price": variant.get("compare_at_price"),
+            "gtin": variant.get("gtin"),
+            "attributes": [dict(item) for item in product.get("attributes") or [] if isinstance(item, Mapping)],
+        }
+        row.update({key: value for key, value in optional.items() if value})
+        rows.append(row)
     return rows
 
 
@@ -258,12 +334,8 @@ def _csv_rows(content: str) -> list[dict[str, Any]]:
             "the CSV header is missing " + ", ".join(missing),
             [{"row": None, "column": name, "message": "column missing from the header"} for name in missing],
         )
-    unknown = [name for name in header if name and name not in COLUMNS]
-    if unknown:
-        raise CatalogUploadError(
-            "the CSV header has unknown columns: " + ", ".join(unknown[:10]),
-            [{"row": None, "column": name, "message": "unknown column"} for name in unknown],
-        )
+    labels = {str(name or "").strip().lower(): " ".join(str(name or "").split()) for name in reader.fieldnames or []}
+    _check_header(header, labels)
     rows: list[dict[str, Any]] = []
     try:
         for record in reader:
@@ -272,10 +344,57 @@ def _csv_rows(content: str) -> list[dict[str, Any]]:
             values = {str(key or "").strip().lower(): value for key, value in record.items() if key is not None}
             if not any(str(value or "").strip() for key, value in values.items() if key in COLUMNS):
                 continue
+            values["__labels__"] = labels
             rows.append(values)
     except csv.Error as exc:
         raise CatalogUploadError(f"the CSV could not be read: {exc}") from exc
     return rows
+
+
+def _check_header(header: Sequence[str], labels: Mapping[str, str]) -> None:
+    """Refuse detail columns that are misspelled known columns, unsafe names or private business data."""
+    errors: list[dict[str, Any]] = []
+    seen: dict[str, str] = {}
+    details = 0
+    for name in header:
+        if not name or name.startswith("_") or name in KNOWN_COLUMNS or name in COLUMN_ALIASES:
+            continue
+        label = labels.get(name, name)
+        problem = _detail_name_problem(name)
+        if problem:
+            errors.append({"row": None, "column": label, "message": problem})
+            continue
+        key = _attribute_key(name)
+        if key in seen:
+            errors.append({"row": None, "column": label, "message": f"reads the same as the column {seen[key]}"})
+        seen[key] = label
+        details += 1
+    if details > MAX_ATTRIBUTES:
+        errors.append({"row": None, "column": None, "message": f"more than {MAX_ATTRIBUTES} product-detail columns"})
+    if errors:
+        raise CatalogUploadError(f"{len(errors)} problem(s) in the header", errors)
+
+
+def _attribute_key(name: str) -> str:
+    return re.sub(r"[^a-z0-9]+", "_", name.lower()).strip("_")
+
+
+def _detail_name_problem(name: str) -> str | None:
+    """Why a column or key cannot be a product detail, or None."""
+    key = _attribute_key(name)
+    if not _ATTRIBUTE_NAME_RE.match(key) or len(key) > MAX_ATTRIBUTE_NAME:
+        return f"name it with letters, digits and spaces, starting with a letter, up to {MAX_ATTRIBUTE_NAME} characters"
+    close = difflib.get_close_matches(key, KNOWN_COLUMNS + tuple(COLUMN_ALIASES), n=1, cutoff=0.85)
+    if close:
+        return f"looks like a misspelled {close[0]}; use {close[0]}, or rename it if it is a different detail"
+    if any(marker in key for marker in PRIVATE_KEY_MARKERS + EXECUTION_MARKERS):
+        return "this name is reserved for credentials or actions; rename the column"
+    if PRIVATE_BUSINESS_WORDS & set(key.split("_")):
+        return (
+            "looks like private business data that buyers' AI assistants would see; "
+            "start the column name with _ to keep it out of the catalog, or rename it"
+        )
+    return None
 
 
 def _json_rows(content: str) -> list[dict[str, Any]]:
@@ -291,10 +410,8 @@ def _json_rows(content: str) -> list[dict[str, Any]]:
         if not isinstance(item, Mapping):
             rows.append({"__not_object__": True})
             continue
-        unknown = [str(key) for key in item if str(key).lower() not in COLUMNS]
-        row = {str(key).lower(): value for key, value in item.items()}
-        if unknown:
-            row["__unknown__"] = unknown
+        row = {str(key).strip().lower(): value for key, value in item.items() if not str(key).strip().startswith("_")}
+        row["__labels__"] = {str(key).strip().lower(): " ".join(str(key).split()) for key in item}
         rows.append(row)
     return rows
 
@@ -310,8 +427,7 @@ def _validate_row(index: int, raw: Mapping[str, Any]) -> tuple[dict[str, Any] | 
         return None, errors
     if raw.get("__extra__"):
         fail(None, "has more values than the header has columns")
-    for name in raw.get("__unknown__") or ():
-        fail(str(name), "unknown column")
+    raw = {COLUMN_ALIASES.get(key, key): value for key, value in raw.items()}
     sku = _text(raw.get("sku"))
     if not sku:
         fail("sku", "is required")
@@ -332,6 +448,7 @@ def _validate_row(index: int, raw: Mapping[str, Any]) -> tuple[dict[str, Any] | 
     quantity = _quantity(raw.get("quantity"), fail)
     image_url = _https_url(raw.get("image_url"), "image_url", fail)
     url = _https_url(raw.get("url"), "url", fail)
+    optional = _optional_fields(raw, currency, price, fail)
     row = {
         "sku": sku,
         "title": title,
@@ -345,9 +462,138 @@ def _validate_row(index: int, raw: Mapping[str, Any]) -> tuple[dict[str, Any] | 
     for column, value in row.items():
         if isinstance(value, str) and contains_private_or_executable_value(value):
             fail(column, "looks like a credential, a token or an executable instruction; remove it")
+    row.update({key: value for key, value in optional.items() if value})
     if errors:
         return (row if sku else None), errors
     return row, errors
+
+
+def _optional_fields(raw: Mapping[str, Any], currency: str, price: str | None, fail: Any) -> dict[str, Any]:
+    """The optional named fields and the product details of one row; unset ones are left empty."""
+    brand = _plain(raw.get("brand"))
+    if len(brand) > MAX_BRAND:
+        fail("brand", f"is longer than {MAX_BRAND} characters")
+    category = _plain(raw.get("category"))
+    if len(category) > MAX_CATEGORY:
+        fail("category", f"is longer than {MAX_CATEGORY} characters")
+    compare_at_price = None
+    if _text(raw.get("compare_at_price")):
+        compare_at_price = _price(
+            raw.get("compare_at_price"), currency, lambda _c, message: fail("compare_at_price", message)
+        )
+    gtin = _gtin(raw.get("gtin"), fail)
+    tags = _tags(raw.get("tags"), fail)
+    attributes = _attributes(raw, fail)
+    for column, value in (("brand", brand), ("category", category)):
+        if value and contains_private_or_executable_value(value):
+            fail(column, "looks like a credential, a token or an executable instruction; remove it")
+    for tag in tags:
+        if contains_private_or_executable_value(tag):
+            fail("tags", "looks like a credential, a token or an executable instruction; remove it")
+    return {
+        "brand": brand[:MAX_BRAND] or None,
+        "category": category[:MAX_CATEGORY] or None,
+        "tags": tags,
+        "compare_at_price": compare_at_price,
+        "gtin": gtin,
+        "attributes": attributes,
+    }
+
+
+def _gtin(value: Any, fail: Any) -> str | None:
+    text = _text(value).replace(" ", "")
+    if not text:
+        return None
+    if not text.isdigit() or len(text) not in GTIN_LENGTHS:
+        fail("gtin", "must be a barcode number of 8, 12, 13 or 14 digits")
+        return None
+    digits = [int(char) for char in text]
+    total = sum(digit * (3 if index % 2 == 0 else 1) for index, digit in enumerate(reversed(digits[:-1])))
+    if (10 - total % 10) % 10 != digits[-1]:
+        fail("gtin", "has a wrong check digit; copy the number from the barcode again")
+        return None
+    return text
+
+
+def _tags(value: Any, fail: Any) -> list[str]:
+    if value is None:
+        return []
+    items = value if isinstance(value, list) else _TAG_SPLIT_RE.split(_text(value))
+    tags: list[str] = []
+    for item in items:
+        tag = _plain(item)
+        if not tag:
+            continue
+        if len(tag) > MAX_TAG:
+            fail("tags", f"each tag can be at most {MAX_TAG} characters")
+            continue
+        if tag.lower() not in {existing.lower() for existing in tags}:
+            tags.append(tag)
+    if len(tags) > MAX_TAGS:
+        fail("tags", f"at most {MAX_TAGS} tags per product")
+    return tags[:MAX_TAGS]
+
+
+def _attributes(raw: Mapping[str, Any], fail: Any) -> list[dict[str, str]]:
+    """Every column that is not a known one, plus a JSON ``attributes`` object, as product details."""
+    labels = raw.get("__labels__") or {}
+    pairs: list[tuple[str, str, Any]] = []
+    for key, value in raw.items():
+        if key.startswith("_") or key in KNOWN_COLUMNS or key == "attributes":
+            continue
+        pairs.append((key, str(labels.get(key) or key), value))
+    nested = raw.get("attributes")
+    if isinstance(nested, Mapping):
+        pairs.extend((str(key).strip().lower(), " ".join(str(key).split()), value) for key, value in nested.items())
+    elif nested not in (None, ""):
+        fail("attributes", 'must be an object such as {"ingredients": "..."}')
+    details: list[dict[str, str]] = []
+    seen: set[str] = set()
+    for key, label, value in pairs:
+        problem = _detail_name_problem(key)
+        if problem:
+            fail(label, problem)
+            continue
+        name = _attribute_key(key)
+        if name in seen:
+            fail(label, "repeats another detail")
+            continue
+        seen.add(name)
+        text = _detail_value(value)
+        if text is None:
+            fail(label, "must be text, a number or a list of them")
+            continue
+        if not text:
+            continue
+        if len(text) > MAX_ATTRIBUTE_VALUE:
+            fail(label, f"is longer than {MAX_ATTRIBUTE_VALUE} characters")
+            continue
+        if text.lower().startswith(("http://", "https://")) and _https_url(text, label, fail) is None:
+            continue
+        if contains_private_or_executable_value(text):
+            fail(label, "looks like a credential, a token or an executable instruction; remove it")
+            continue
+        details.append({"name": name, "label": _plain(label)[:MAX_ATTRIBUTE_LABEL] or name, "value": text})
+    if len(details) > MAX_ATTRIBUTES:
+        fail(None, f"has more than {MAX_ATTRIBUTES} product details")
+    return details[:MAX_ATTRIBUTES]
+
+
+def _detail_value(value: Any) -> str | None:
+    """A detail as plain text: strings, numbers and booleans as they are, lists joined with "; "."""
+    if value is None:
+        return ""
+    if isinstance(value, bool):
+        return "yes" if value else "no"
+    if isinstance(value, (int, float, Decimal)):
+        return str(value)
+    if isinstance(value, str):
+        return _plain(value)
+    if isinstance(value, list) and all(
+        isinstance(item, (str, int, float)) and not isinstance(item, bool) for item in value
+    ):
+        return "; ".join(text for item in value if (text := _plain(str(item))))
+    return None
 
 
 def _text(value: Any) -> str:

@@ -46,7 +46,13 @@ from core.commerce.c6z_runtime_vertical import (
     SHOPIFY_SOURCE_SYSTEM,
     contains_private_or_executable_value,
 )
-from core.commerce.catalog_upload import CatalogUploadError, currency_exponent, parse_catalog_upload
+from core.commerce.catalog_upload import (
+    CatalogUploadError,
+    currency_exponent,
+    detail_labels,
+    parse_catalog_upload,
+    skipped_columns,
+)
 from core.commerce.ledger import record_commerce_event
 from core.commerce.oacp_merchant_config import (
     MerchantCommerceConfigError,
@@ -643,7 +649,13 @@ async def upload_catalog(
     packet = saved["packet"]
     assert packet is not None
     stored = await runtime.store_catalog_upload(tenant_id=tenant_id, packet=packet, rows=rows)
-    return {"upload": stored, "setup": await setup_view(tenant_id, merchant_id)}
+    return {
+        "upload": stored,
+        # What buyers' AI assistants will also read, and what the upload left out on purpose.
+        "details": detail_labels(rows),
+        "skipped_columns": skipped_columns(body.content, body.format),
+        "setup": await setup_view(tenant_id, merchant_id),
+    }
 
 
 @router.post("/merchant-configs/{merchant_id}/catalog/sync")

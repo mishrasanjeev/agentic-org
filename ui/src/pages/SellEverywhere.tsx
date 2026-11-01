@@ -362,7 +362,13 @@ export default function SellEverywhere() {
       try {
         const { data } = await merchantSetupApi.uploadCatalog(merchantId, { format, content });
         applySetup(data.setup);
-        setNotice(`${data.upload.product_count} products uploaded.`);
+        const details: string[] = Array.isArray(data.details) ? data.details : [];
+        const skipped: string[] = Array.isArray(data.skipped_columns) ? data.skipped_columns : [];
+        setNotice(
+          `${data.upload.product_count} products uploaded.` +
+            (details.length ? ` Buyers' AI assistants will also read: ${details.join(", ")}.` : "") +
+            (skipped.length ? ` Skipped columns: ${skipped.join(", ")}.` : ""),
+        );
       } catch (e: any) {
         const problems = e?.response?.data?.detail?.errors;
         if (Array.isArray(problems)) setUploadProblems(problems);
@@ -600,9 +606,14 @@ export default function SellEverywhere() {
             ) : (
               <div className="space-y-2 text-sm">
                 <p className="text-muted-foreground">
-                  One product per row. Columns: sku, title, description, price, currency, quantity, image_url, url
-                  (sku, title, price, currency and quantity are required; links start with https://). Up to 2,000
-                  products, one currency.
+                  One product per row. Required columns: sku, title, price, currency, quantity. Optional: description,
+                  image_url, url, brand, category, tags, mrp, barcode. Add any other column, such as ingredients,
+                  allergens, shelf life, a licence number or a lab-report link: buyers&apos; AI assistants read it as
+                  a product detail your shop declares. Columns starting with _ are skipped. Links start with
+                  https://. Up to 2,000 products, one currency.{" "}
+                  <a className="underline" href="/media/catalog-example.csv" download>
+                    Download an example file
+                  </a>
                 </p>
                 <label className="flex flex-col gap-1">
                   Catalog file

@@ -2034,13 +2034,22 @@ def contains_private_or_executable_value(value: Any) -> bool:
         text = value.strip().lower()
         if not text:
             return False
-        if any(marker in text for marker in PRIVATE_VALUE_MARKERS):
+        if any(marker in text for marker in _PROSE_SAFE_VALUE_MARKERS) or _has_basic_credential(text):
             return True
         if any(marker in text for marker in EXECUTION_MARKERS):
             return True
         if _looks_like_jwt(text):
             return True
     return False
+
+
+# "basic " on its own also matches prose ("a basic ghee"); a Basic credential is the word and an encoded blob.
+_PROSE_SAFE_VALUE_MARKERS: tuple[str, ...] = tuple(marker for marker in PRIVATE_VALUE_MARKERS if marker != "basic ")
+_BASIC_CREDENTIAL_RE = re.compile(r"\bbasic\s+([a-z0-9+/]{12,}={0,2})(?![a-z0-9+/=])")
+
+
+def _has_basic_credential(text: str) -> bool:
+    return any(re.search(r"[0-9+/=]", blob) for blob in _BASIC_CREDENTIAL_RE.findall(text))
 
 
 def _normalize_shopify_domain(value: str) -> str:
@@ -2140,11 +2149,15 @@ def _utc_now() -> datetime:
     return datetime.now(tz=UTC)
 
 
+# A compact JWS is three base64url segments; sentences and web addresses have spaces, colons or slashes.
+_JWS_SEGMENT_RE = re.compile(r"[A-Za-z0-9_-]{9,}")
+
+
 def _looks_like_jwt(value: str) -> bool:
     parts = value.split(".")
     if len(parts) != 3:
         return False
-    return all(len(part) > 8 for part in parts)
+    return all(_JWS_SEGMENT_RE.fullmatch(part) for part in parts)
 
 
 def _looks_like_final_commitment(question: str) -> bool:
