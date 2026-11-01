@@ -14,6 +14,7 @@ index normally belongs in the ORM model as well as in its migration.
 
 from __future__ import annotations
 
+from core.models.insights import RUN_FACTS_STATIC_PARTITIONS
 from core.spend.partitions import STATIC_PARTITIONS
 
 # Tables created and owned by migrations with no ORM model. Their indexes are
@@ -35,6 +36,8 @@ MIGRATION_OWNED_TABLES: dict[str, str] = {
     # The monthly partitions of spend_usage_records (an ORM table, declared partitioned): created by the
     # migration only, never by the ORM. The list is static, so this does not depend on today's date.
     **dict.fromkeys(STATIC_PARTITIONS, "v6z80: spend_usage_records partition"),
+    # The same for the monthly partitions of run_facts (v6z106).
+    **dict.fromkeys(RUN_FACTS_STATIC_PARTITIONS, "v6z106: run_facts partition"),
 }
 
 # Indexes the migrations create on ORM tables that the models do not declare:

@@ -25,6 +25,7 @@ from core.conversation import runtime as conversation_runtime
 from core.database import get_tenant_session
 from core.governance.agent_status import refusal_for as agent_status_refusal
 from core.governance.operator_override import check as check_operator_override
+from core.insights.context import entrypoint as insights_entrypoint
 from core.langgraph import limits as execution_limits
 from core.models.agent import Agent
 from core.models.hitl import HITLQueue
@@ -1119,7 +1120,7 @@ async def chat_query(
             from core.langgraph.runner import run_agent as langgraph_run
 
             grant_token = getattr(request.state, "grant_token", None)
-            with spend_context.scope(application="chat"):
+            with spend_context.scope(application="chat"), insights_entrypoint("chat"):
                 lg_result = await langgraph_run(
                     agent_id=agent_id,
                     agent_type=resolved_agent_type,

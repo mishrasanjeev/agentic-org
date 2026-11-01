@@ -5,6 +5,7 @@
   },
   "nav": {
     "dashboard": "Dashboard",
+    "insights": "Insights",
     "partner": "Partner Dashboard",
     "companies": "Companies",
     "caOperations": "CA Operations",
@@ -714,6 +715,117 @@
     "trend": "30-day cost trend",
     "byDomain": "Spend by domain",
     "topAgents": "Top agents (30d)"
+  },
+  "insights": {
+    "title": "Insights",
+    "subtitle": "Agents, runs, approvals and cost from recorded data, with what needs your attention.",
+    "loading": "Loading Insights",
+    "refresh": "Refresh",
+    "updated": "Updated {{time}}",
+    "period": "{{from}} to {{to}}",
+    "tabsLabel": "Insights views",
+    "tabs": {
+      "executive": "Executive",
+      "finance": "Finance"
+    },
+    "filters": {
+      "label": "Filters",
+      "range": "Date range",
+      "presets": {
+        "7d": "Last 7 days",
+        "30d": "Last 30 days",
+        "mtd": "Month to date",
+        "qtd": "Quarter to date",
+        "custom": "Custom range"
+      },
+      "from": "From",
+      "to": "To",
+      "apply": "Apply",
+      "compare": "Compare with",
+      "comparePrevious": "Previous period",
+      "compareNone": "No comparison",
+      "companyScoped": "Showing the company selected in the header.",
+      "invalidRange": "Choose valid dates with the start on or before the end."
+    },
+    "tile": {
+      "vsCompare": "vs previous period",
+      "noCompare": "No comparison period",
+      "trendLabel": "{{title}} trend"
+    },
+    "state": {
+      "prefix": "State:",
+      "ok": "On track",
+      "watch": "Watch",
+      "act": "Act now"
+    },
+    "quality": {
+      "prefix": "Data quality:",
+      "label": "Data quality: {{quality}}",
+      "measured": "Measured",
+      "estimated": "Estimated",
+      "seeded": "Sample data",
+      "no_data": "No data",
+      "mixed": "Mixed",
+      "source": "Source: {{source}}"
+    },
+    "chart": {
+      "viewData": "View data",
+      "hideData": "Hide data",
+      "forecast": "Forecast",
+      "actual": "Actual so far",
+      "low": "low",
+      "high": "high",
+      "threshold": "Budget threshold",
+      "summaryLine": "{{title}}: {{count}} points from {{from}} to {{to}}. Latest {{latest}}; highest {{max}} on {{maxAt}}.",
+      "summaryStacked": "{{title}}: {{count}} periods from {{from}} to {{to}} across {{groups}} groups. Largest group {{top}} with {{value}}.",
+      "summaryRanked": "{{title}}: {{count}} items. Largest is {{top}} with {{value}}.",
+      "summaryBullet": "{{title}}: {{count}} budgets, {{breached}} breached and {{warn}} at warning.",
+      "summaryForecast": "{{title}}: forecast {{point}}, likely between {{low}} and {{high}}.",
+      "summaryForecastNoBand": "{{title}}: forecast {{point}}.",
+      "summaryEmpty": "{{title}}: no data for this period."
+    },
+    "table": {
+      "caption": "{{title}} data",
+      "sortBy": "Sort by {{column}}",
+      "empty": "No rows for this period.",
+      "truncated": "Showing the first {{shown}} of {{total}} rows. Export for the full set."
+    },
+    "export": {
+      "button": "Export",
+      "menuLabel": "Export {{title}}",
+      "csv": "CSV",
+      "xlsx": "Excel (XLSX)",
+      "json": "JSON",
+      "downloading": "Preparing...",
+      "failed": "The export could not be created. Try again or narrow the date range."
+    },
+    "empty": {
+      "title": "No data yet",
+      "default": "Nothing was recorded for this period."
+    },
+    "needsYou": {
+      "title": "Needs you",
+      "empty": "Nothing needs you right now.",
+      "age": "waiting {{age}}",
+      "open": "Open"
+    },
+    "actions": {
+      "openAgents": "Open agents",
+      "openApprovals": "Open approvals",
+      "openCosts": "Open cost details"
+    },
+    "disabled": {
+      "title": "Insights is turned off",
+      "body": "Insights is not enabled for this organisation. A tenant administrator can turn it on in feature settings."
+    },
+    "forbidden": {
+      "title": "No Insights view for your role",
+      "body": "Your role does not include an Insights view. Ask an administrator if you need one."
+    },
+    "error": {
+      "load": "Could not load Insights.",
+      "retry": "Try again"
+    }
   },
   "reportSchedules": {
     "title": "Report Schedules",

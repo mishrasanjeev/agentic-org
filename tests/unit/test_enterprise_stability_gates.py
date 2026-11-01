@@ -1094,7 +1094,7 @@ def test_final_control_target_routes_have_metadata() -> None:
     routes = gates.scan_routes(target_paths, gates.REPO_ROOT)
     findings = gates.route_metadata_findings(routes)
 
-    assert len(routes) == 45
+    assert len(routes) == 47  # config.py: + GET/PUT /config/reporting
     assert findings == []
     assert all(route.metadata_present for route in routes)
     assert all(route.scope for route in routes)
@@ -1154,7 +1154,7 @@ def test_final_control_mutating_routes_include_audit_and_idempotency() -> None:
     routes = gates.scan_routes(target_paths, gates.REPO_ROOT)
     mutating_routes = [route for route in routes if any(method in gates.MUTATING_METHODS for method in route.methods)]
 
-    assert len(mutating_routes) == 18
+    assert len(mutating_routes) == 19  # config.py: + PUT /config/reporting
     assert all(route.audit_event for route in mutating_routes)
     assert all(route.idempotency for route in mutating_routes)
 

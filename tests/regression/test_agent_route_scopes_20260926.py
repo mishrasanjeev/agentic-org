@@ -128,7 +128,10 @@ def _audits(session: MagicMock) -> list[AuditLog]:
 
 
 def test_grantable_scopes_are_exactly_the_route_family_scopes() -> None:
-    assert GRANTABLE_ROUTE_SCOPES == {scope for pair in SCOPE_FAMILIES.values() for scope in pair}
+    # A family may name the admin scope as its write side (``kpis``); that
+    # never makes the admin scope grantable.
+    family_scopes = {scope for pair in SCOPE_FAMILIES.values() for scope in pair}
+    assert GRANTABLE_ROUTE_SCOPES == family_scopes - {"agenticorg:admin"}
     assert "agenticorg:admin" not in GRANTABLE_ROUTE_SCOPES
 
 

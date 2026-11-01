@@ -26,6 +26,7 @@ from sqlalchemy import select
 from api.deps import get_current_tenant
 from api.route_metadata import route_meta
 from core.database import get_tenant_session
+from core.insights.context import entrypoint as insights_entrypoint
 from core.models.a2a_task import A2ATask
 from core.spend import context as spend_context
 
@@ -242,7 +243,7 @@ async def create_task(
             caller_agent_id=str(getattr(request.state, "agent_id", "") or ""),
             runtime="a2a",
         )
-        with spend_context.scope(application="a2a"):
+        with spend_context.scope(application="a2a"), insights_entrypoint("a2a"):
             result = await langgraph_run(
                 agent_id=task_id,
                 agent_type=body.agent_type,

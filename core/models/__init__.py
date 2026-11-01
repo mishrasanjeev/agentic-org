@@ -114,6 +114,9 @@ from core.models.guardrail_rule import GuardrailRule as GuardrailRule
 from core.models.hitl import HITLQueue as HITLQueue
 from core.models.idp_document import IdpDocument as IdpDocument
 from core.models.industry_pack_install import IndustryPackInstall as IndustryPackInstall
+from core.models.insights import InsightsDaily as InsightsDaily
+from core.models.insights import InsightsRollupState as InsightsRollupState
+from core.models.insights import RunFact as RunFact
 from core.models.invoice import Invoice as Invoice
 from core.models.kpi_cache import KPICache as KPICache
 from core.models.lead_pipeline import EmailSequence as EmailSequence

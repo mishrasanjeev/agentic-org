@@ -13,6 +13,7 @@ import structlog
 
 from auth.grant_enforcement import EnforcementMode
 from auth.run_grants import NO_CALLER, CallerGrant, RunGrant, refresh_run_grant, resolve_run_grant
+from core.insights.run_facts import schedule_task_result_fact
 from core.llm.content import model_answer, strip_code_fence
 from core.llm.router import LLMResponse, llm_router
 from core.pii import pseudonymiser as pseudonymisation
@@ -680,7 +681,7 @@ class BaseAgent:
         start=0,
     ) -> TaskResult:
         latency = int((time.monotonic() - start) * 1000) if start else 0
-        return TaskResult(
+        result = TaskResult(
             message_id=msg_id,
             correlation_id=task.correlation_id,
             workflow_run_id=task.workflow_run_id,
@@ -695,3 +696,6 @@ class BaseAgent:
             error=error,
             performance=PerformanceMetrics(total_latency_ms=latency),
         )
+        # Insights: the result's run fact, written in the background; never changes or fails the result.
+        schedule_task_result_fact(self, task, result, latency_ms=latency)
+        return result

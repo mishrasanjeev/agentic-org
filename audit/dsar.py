@@ -21,6 +21,12 @@ Everything runs inline in the request that submitted it (no background
 worker is wired), so a ``completed`` status means the work is done; a
 ``failed`` status carries the error. ``GET /api/v1/dsar/{id}`` reads back the
 row, including the collected data for access/export requests.
+
+The Insights tables (``run_facts``, ``insights_daily``,
+``insights_rollup_state``) hold no subject identifiers: no user id, e-mail,
+customer reference or message text, only agent, run, token and cost
+dimensions (``core/insights/run_facts.py``). Access and erasure therefore
+need no change for them.
 """
 
 from __future__ import annotations

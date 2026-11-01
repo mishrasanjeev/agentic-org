@@ -1,5 +1,44 @@
 # Changelog
 
+## Unreleased - Insights dashboard v1 (Executive and Finance views) and KPI access fixes
+
+### Added
+
+- Insights dashboard at `/dashboard/insights`: an Executive view (admin) and a Finance view (admin, CFO)
+  built from one metric registry (`core/insights/registry.py`, 15 metrics). Every tile states its source
+  and data quality (`measured`, `estimated`, `seeded`, `no_data` with a hint), never a placeholder number,
+  and every metric downloads as CSV, XLSX (Data, Filters and Definitions sheets) or JSON with the filters
+  applied, up to 50,000 rows, with a formula guard and a signed `insights.export` audit row.
+- API: `GET /insights/status`, `/insights/catalog`, `/insights/views/{view}`, `/insights/metrics/{key}` and
+  `/insights/metrics/{key}/export`, in a new `insights` scope family (`insights:read`) with the
+  `reporting-read` and `reporting-export` rate classes; the role-to-view check is server-side.
+- `run_facts`: one row per agent run, written by the LangGraph runner (agents, channels, chat, A2A, MCP,
+  voice, HITL resume, debug), `BaseAgent` (workflow steps, sales), customer-agent turns and RPA. The write
+  never fails or changes a run. Migration `v6z106_insights_foundation` adds `run_facts` (monthly
+  partitions to December 2028), `insights_daily` (with summable latency buckets) and
+  `insights_rollup_state`, all with forced row-level security.
+- Rollups: today every 15 minutes, closed tenant-local days hourly after 02:00, and a nightly reconciliation
+  of the daily rollup against the raw facts (runs and tokens exact, cost within 0.01%).
+- Tenant reporting settings (time zone, fiscal-year start month, reporting currency):
+  `GET`/`PUT /config/reporting` (admin). Defaults: Asia/Kolkata, April and INR for Indian tenants; UTC,
+  January and USD otherwise.
+- `AGENTICORG_TRACING_EXPORT=none` keeps spans in the process for the run timelines without an OTLP
+  collector; a strict runtime then starts without `OTEL_EXPORTER_OTLP_ENDPOINT`. The default stays `otlp`.
+
+Off by default: `AGENTICORG_INSIGHTS_ENABLED` turns Insights on for the deployment, and a tenant can turn it
+off with the `insights_dashboard` feature flag. Off, nothing is written and `/insights/*` returns 404.
+
+### Fixed
+
+- `/kpis/*` had no scope family, so any signed-in credential in a tenant could read every KPI page. The
+  routes now need `kpis:read` (CFO, CHRO, CMO, COO) or admin, and each page checks the role: CEO and
+  back-office pages admin only, each CxO page admin or that role. Existing CxO sessions get the new scope
+  when their token is next issued.
+- The KPI cache was read without the company, so a company-scoped request could get tenant-wide numbers.
+- The COO and CEO KPI pages missed agents in the `ops` domain.
+- `business-metrics-read` is now a declared rate class.
+- Analysts landed on a page their role cannot open; they now land on the workbench, also after onboarding.
+
 ## Unreleased - Security advisories of 2026-10-30 (pypdf, follow-redirects)
 
 ### Security

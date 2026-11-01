@@ -26,6 +26,7 @@ const NotificationBell = lazy(() => import("./NotificationBell"));
 // that status answers enabled, so a disabled deployment never offers a page that cannot work.
 const ALL_NAV: Array<{ path: string; labelKey: string; label: string; roles: readonly string[]; statusPath?: string }> = [
   { path: "/dashboard", labelKey: "nav.dashboard", label: "Dashboard", roles: ["admin", "cfo", "chro", "cmo", "coo", "auditor"] },
+  { path: "/dashboard/insights", labelKey: "nav.insights", label: "Insights", roles: ["admin", "cfo"], statusPath: "/insights/status" },
   { path: "/dashboard/partner", labelKey: "nav.partner", label: "Partner Dashboard", roles: ["admin", "cfo", "coo", "auditor"] },
   { path: "/dashboard/companies", labelKey: "nav.companies", label: "Companies", roles: ["admin", "cfo", "coo", "auditor"] },
   { path: "/dashboard/ca-operations", labelKey: "nav.caOperations", label: "CA Operations", roles: ["admin", "cfo", "coo", "auditor"] },

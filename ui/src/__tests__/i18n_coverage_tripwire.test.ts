@@ -41,6 +41,13 @@ const layoutSource = (
   }) as Record<string, string>
 )["../components/Layout.tsx"];
 
+// Insights components hold most of the Insights page's visible strings.
+const insightsComponentSources = import.meta.glob("../components/insights/*.tsx", {
+  query: "?raw",
+  import: "default",
+  eager: true,
+}) as Record<string, string>;
+
 const CRITICAL_PAGES = [
   "Dashboard.tsx",
   "PartnerDashboard.tsx",
@@ -53,6 +60,7 @@ const CRITICAL_PAGES = [
   "CHRODashboard.tsx",
   "CMODashboard.tsx",
   "COODashboard.tsx",
+  "InsightsDashboard.tsx",
 ];
 
 function findSource(filename: string): string {
@@ -143,6 +151,7 @@ describe("i18n coverage tripwire (Codex 2026-04-22 gap)", () => {
   it("static page/component t() keys exist in English and Hindi", () => {
     const sources = {
       ...pageSources,
+      ...insightsComponentSources,
       "../components/Layout.tsx": layoutSource,
       "../components/ChatPanel.tsx": chatPanelSource,
     };

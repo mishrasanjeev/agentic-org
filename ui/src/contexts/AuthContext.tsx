@@ -93,6 +93,9 @@ export function defaultLandingForRole(role: string | null | undefined): string {
   // admitted to /dashboard but can build personal agents, so land them on
   // the agent fleet instead of an Access Denied page.
   if (role === "domain_lead" || role === "developer") return "/dashboard/agents";
+  // An analyst is not admitted to /dashboard either; the workbench shell
+  // (WORKBENCH_ROLES in lib/roles.ts) is open to them.
+  if (role === "analyst") return "/dashboard/workbench";
   return "/dashboard";
 }
 

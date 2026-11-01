@@ -333,8 +333,13 @@ class Settings(BaseSettings):
     # span, the log context carries the trace id and signed audit rows record
     # it. Spans go to OTEL_EXPORTER_OTLP_ENDPOINT over http/protobuf or grpc,
     # sampled at the ratio; a strict runtime refuses to start with tracing on
-    # and no endpoint.
+    # and no endpoint, unless tracing_export is "none".
     tracing_enabled: bool = False
+    # "otlp" sends spans to the endpoint; "none" keeps them in the process (for
+    # the run timelines below) and exports nothing. An operator chooses "none"
+    # on purpose, so a strict runtime then needs no endpoint.
+    # Env: AGENTICORG_TRACING_EXPORT.
+    tracing_export: str = "otlp"
     tracing_protocol: str = "http/protobuf"
     tracing_sample_ratio: float = 1.0
     # Run timelines for the console's waterfall: with tracing on, the spans of
@@ -801,6 +806,13 @@ class Settings(BaseSettings):
     # published at GET /onboarding-desk/evidence-key. Empty: packs are built unsigned.
     # Env: AGENTICORG_ONBOARDING_DESK_EVIDENCE_SIGNING_KEY.
     onboarding_desk_evidence_signing_key: str = ""
+    # Insights (core/insights/): run facts, daily rollups and the Executive and
+    # Finance views. Off by default, the kill switch for the whole deployment:
+    # off, no run fact is written, the rollup tasks skip, GET /insights/status
+    # answers ``enabled: false`` and every other /insights route is not found.
+    # A tenant opts out with the ``insights_dashboard`` feature flag.
+    # Env: AGENTICORG_INSIGHTS_ENABLED.
+    insights_enabled: bool = False
     # AI spend intelligence (core/spend/): an organisation tree, rate cards,
     # commitments and FX rates; a usage record with its attribution for every
     # model call and metered service, priced in the card's currency and in INR;

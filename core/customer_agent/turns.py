@@ -36,6 +36,7 @@ from core.conversation import dialogue as dialogue_engine
 from core.conversation import runtime
 from core.conversation.intents import INTENTS
 from core.customer_agent import autonomy, explanations, sessions
+from core.insights.run_facts import RunRecorder
 
 logger = structlog.get_logger()
 
@@ -403,7 +404,42 @@ def _status_of(execution: dict[str, Any] | None) -> str:
 async def run_customer_turn(
     session_row: Any, text: str, *, channel: str = "web", approval: dict[str, Any] | None = None
 ) -> Turn:
-    """Advance the customer's dialogue by one turn under the autonomy ladder."""
+    """Advance the customer's dialogue by one turn under the autonomy ladder; one run fact per turn (Insights)."""
+    fact = RunRecorder(
+        tenant_id=session_row.tenant_id,
+        agent_id=sessions.agent_id() or None,
+        entrypoint="customer_agent",
+        agent_type="customer_agent",
+        company_id=sessions.company_id() or None,
+        use_case="customer_turn",
+    )
+    turn: Turn | None = None
+    try:
+        turn = await _advance_turn(session_row, text, channel=channel, approval=approval)
+        return turn
+    finally:
+        # Never fails the turn; a turn that raised is recorded as failed with the exception's class.
+        await fact.finish(_turn_outcome(turn) if turn is not None else None)
+
+
+def _turn_outcome(turn: Turn) -> dict[str, Any]:
+    """A turn as a run outcome: refused, waiting on the customer's step-up, handed to a person, or completed."""
+    payload = turn.payload if isinstance(turn.payload, dict) else {}
+    outcome = payload.get("outcome") if isinstance(payload.get("outcome"), dict) else {}
+    if turn.refusal:
+        status, code = "refused", "autonomy_refused"
+    elif turn.approval_required:
+        status, code = "paused", "approval_required"
+    elif outcome.get("kind") in ("escalate", "handed_over"):
+        status, code = "hitl_triggered", None
+    else:
+        status, code = "completed", None
+    return {"status": status, "confidence": payload.get("confidence"), "error_code": code}
+
+
+async def _advance_turn(
+    session_row: Any, text: str, *, channel: str = "web", approval: dict[str, Any] | None = None
+) -> Turn:
     tid = session_row.tenant_id
     key = session_key_for(session_row)
     user_id = user_id_for(session_row)

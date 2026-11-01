@@ -132,6 +132,13 @@ RATE_LIMIT_CLASSES: dict[str, tuple[int, int]] = {
     "commerce-webhook": (600, 60),
     "gateway-webhook": (600, 60),
     "aa-callback-signed": (300, 60),
+    # Executive KPI dashboards (/kpis/*): cached aggregates, per tenant.
+    "business-metrics-read": (120, 60),
+    # Insights (/insights/*, api/v1/insights.py): status, catalog, views and
+    # metrics read rollups, per tenant; exports build files of up to 50,000
+    # rows, so they have their own, tighter class.
+    "reporting-read": (300, 60),
+    "reporting-export": (30, 60),
 }
 _DEFAULT_RATE = (300, 60)
 
@@ -231,6 +238,17 @@ SCOPE_FAMILIES: dict[str, tuple[str, str]] = {
     # ACP checkout sessions (/acp, api/v1/commerce_acp.py): the same model for the
     # API key a merchant tenant issues to an ACP agent platform.
     "acp": ("acp:read", "acp:write"),
+    # Executive KPI dashboards (/kpis/*, api/v1/kpis.py): read-only. The
+    # CxO roles with a KPI page hold kpis:read; each handler then admits only
+    # the roles of its own page (admin plus the matching CxO role). There
+    # are no writes, so the write scope is the administrator's.
+    "kpis": ("kpis:read", ADMIN_SCOPE),
+    # Insights (/insights/*, api/v1/insights.py): read-only. Every role but
+    # admin is given insights:read (administrators pass on agenticorg:admin);
+    # each handler then admits only the roles of the view it serves
+    # (executive: admin; finance: admin, cfo). No writes, so the write scope
+    # is the administrator's.
+    "insights": ("insights:read", ADMIN_SCOPE),
 }
 
 # Families above that are enforced only while ``route_scope_a2a_mcp`` is on.
@@ -257,7 +275,11 @@ KNOWN_AUTH_MODES = frozenset({"api_key", "grantex", "legacy", "commerce_buyer"})
 # canonical family scopes: never ``agenticorg:admin``, legacy aliases or any
 # scope outside SCOPE_FAMILIES. The A2A and MCP scopes are included even while
 # their setting is off, so an agent can hold them before they are required.
-GRANTABLE_ROUTE_SCOPES: frozenset[str] = frozenset(scope for pair in SCOPE_FAMILIES.values() for scope in pair)
+# A family whose write side is the administrator's (``kpis``) must not make
+# ``agenticorg:admin`` grantable, so it is removed explicitly.
+GRANTABLE_ROUTE_SCOPES: frozenset[str] = frozenset(
+    scope for pair in SCOPE_FAMILIES.values() for scope in pair if scope != ADMIN_SCOPE
+)
 
 
 def validate_route_scopes(scopes: object) -> list[str]:
