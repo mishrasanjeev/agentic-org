@@ -94,7 +94,7 @@ dependencies = [
     # Billing checkout is a production request path. Keep the Stripe SDK in
     # base deps so Docker's `pip install .[v4]` image can create Checkout
     # Sessions when STRIPE_SECRET_KEY and price IDs are configured.
-    "stripe>=15.6.2",
+    "stripe>=15.6.2,<16",
     # langchain-google-genai 4.4.x requires the google-genai 2.x API line.
     "google-genai>=2.33.0",
     "anthropic>=0.125.0",
@@ -154,14 +154,9 @@ dependencies = [
     # advisories reachable through document and image OCR (core/rag/extractors.py,
     # core/idp/). Keep the patched floor direct so resolution cannot drift back.
     "pillow>=13.0.0",
-    # fastembed, the default local embedding runtime (core/embeddings.py), is
-    # installed from requirements-fastembed.txt with --no-deps: its latest
-    # release (0.9.0) declares pillow<13 although it only uses Pillow for
-    # image embeddings, which this platform does not load. Its other runtime
-    # requirements are declared here with fastembed 0.9.0's own ranges
-    # (tests/regression/test_pillow13_fastembed_install.py keeps them in step).
-    # Once a fastembed release accepts Pillow 13, restore "fastembed>=<that
-    # release>" here and delete requirements-fastembed.txt and these entries.
+    # 0.9.1 supports patched Pillow 13; resolve all dependencies normally.
+    "fastembed==0.9.1",
+    # Retain the embedding runtime's explicit compatibility and security floors.
     "huggingface-hub>=0.20,<2.0",
     "loguru>=0.7.3,<0.8.0",
     "mmh3>=5.3.1,<6.0.0",
@@ -181,10 +176,7 @@ dependencies = [
 v4 = [
     # composio-core==0.7.21 is intentionally excluded from production
     # extras until it supports Pillow>=12.2.0.
-    # Python 3.14 is the production container runtime. Presidio
-    # 2.2.360+ currently declares Python<3.14, so the production-safe
-    # floor is intentionally marker-scoped instead of pretending the
-    # latest package can install everywhere.
+    # Presidio 2.2.366 supports the Python 3.14 production runtime.
     "presidio-analyzer>=2.2.366,<2.2.367; python_version >= '3.14'",
     "presidio-analyzer>=2.2.362; python_version < '3.14'",
     # preshed 3.0.14 rejects spaCy's high unsigned token hashes on Python 3.14.

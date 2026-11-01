@@ -64,7 +64,7 @@ def test_requirements_v4_stays_installable_without_unsafe_optional_sdks() -> Non
     content = (REPO / "requirements-v4.txt").read_text(encoding="utf-8").lower()
     for package in ("composio-core", "routellm", "litellm", "torch", "flagembedding"):
         assert f"\n{package}" not in content
-    assert 'presidio-analyzer==2.2.359; python_version >= "3.14"' in content
+    assert 'presidio-analyzer==2.2.366; python_version >= "3.14"' in content
     assert "\npresidio-anonymizer" not in content
 
 
@@ -112,9 +112,8 @@ def test_runtime_image_does_not_install_curl_for_healthcheck() -> None:
 def test_runtime_image_validates_dependencies_and_removes_pip() -> None:
     dockerfile = (REPO / "Dockerfile").read_text(encoding="utf-8")
     runtime_stage = dockerfile.split("FROM python:3.14-slim@sha256:", 2)[2]
-    # pip check, accepting only fastembed's Pillow ceiling (requirements-fastembed.txt).
-    assert "COPY scripts/pip_check.py /tmp/pip_check.py" in runtime_stage
-    assert "RUN python /tmp/pip_check.py" in runtime_stage
+    assert "RUN python -m pip check" in runtime_stage
+    assert "scripts/pip_check.py" not in runtime_stage
     assert "/site-packages/pip " in runtime_stage
     assert "/site-packages/pip-*.dist-info" in runtime_stage
     assert "/usr/local/bin/pip3.14" in runtime_stage

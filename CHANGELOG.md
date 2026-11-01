@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased - Dependency resolution
+
+- Resolve fastembed 0.9.1 normally with patched Pillow 13. Remove the old
+  no-dependency install and Pillow conflict waiver; container and CI installs
+  now require strict dependency checks. Keep the compatible Hugging Face Hub
+  and preshed constraints, and align Presidio's Python 3.14 requirements.
+
 ## Unreleased - Insights Platform view and per-tenant BI database access
 
 ### Added
