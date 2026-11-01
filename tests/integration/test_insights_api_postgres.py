@@ -208,8 +208,8 @@ def _seed(world: World) -> SimpleNamespace:
     a, b = uuid.uuid4(), uuid.uuid4()
     company_a, company_b = uuid.uuid4(), uuid.uuid4()
     world.add(
-        Tenant(id=a, name="Synthetic insights A", slug="insights-a-" + a.hex[:8], data_region="IN", settings={}),
-        Tenant(id=b, name="Synthetic insights B", slug="insights-b-" + b.hex[:8], data_region="IN", settings={}),
+        Tenant(id=a, name="Synthetic insights A", slug="insights-a-" + a.hex, data_region="IN", settings={}),
+        Tenant(id=b, name="Synthetic insights B", slug="insights-b-" + b.hex, data_region="IN", settings={}),
     )
     world.add(
         Company(id=company_a, tenant_id=a, name="Acme Books", pan="AAAPA1234A"),
@@ -425,7 +425,7 @@ async def test_an_approved_run_is_one_successful_run_in_raw_and_rolled_days(worl
     tenant = uuid.uuid4()
     from core.models.tenant import Tenant
 
-    world.add(Tenant(id=tenant, name="Synthetic insights C", slug="insights-c-" + tenant.hex[:8],
+    world.add(Tenant(id=tenant, name="Synthetic insights C", slug="insights-c-" + tenant.hex,
                      data_region="IN", settings={}))  # fmt: skip
 
     def run_and_resume(day_start):

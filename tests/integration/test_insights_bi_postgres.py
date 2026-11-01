@@ -193,6 +193,10 @@ def installed() -> Iterator[dict[str, Any]]:
                 f"CREATE ROLE \"{installer}\" LOGIN NOSUPERUSER CREATEROLE NOCREATEDB NOBYPASSRLS PASSWORD '{PASSWORD}'"
             )
             conn.exec_driver_sql(f'ALTER DATABASE "{db}" OWNER TO "{installer}"')
+            # Cloud SQL's migrator can create in schema public; where public belongs to a named role
+            # rather than pg_database_owner (the CI local stack), owning the database is not enough;
+            # the migration also passes schema rights on to its helper roles, as v6z85 and v6z105 do.
+            conn.exec_driver_sql(f'GRANT USAGE, CREATE ON SCHEMA public TO "{installer}" WITH GRANT OPTION')
             for rel in INSTALLER_OWNS:
                 conn.exec_driver_sql(f'ALTER TABLE public.{rel} OWNER TO "{installer}"')
             for role in BI_ROLES:
@@ -862,7 +866,10 @@ def test_logins_read_nothing_on_a_primary_unless_allowed(world) -> None:
 @pytest.mark.parametrize("grantee", ["PUBLIC", "agenticorg_bi"])
 def test_creation_is_refused_while_schema_public_is_writable(world, grantee: str) -> None:
     admin, app, tenant_a = world["admin"], world["app"], world["a"]
-    with admin.begin() as conn:
+    # Granted and revoked by the installer, as production's migrator would: a grant recorded under
+    # another grantor is not one the migration can revoke.
+    installer = create_engine(world["installer_url"], poolclass=NullPool)
+    with installer.begin() as conn:
         conn.exec_driver_sql(f"GRANT CREATE ON SCHEMA public TO {grantee}")
     try:
         with pytest.raises(bi_access.BiAccessUnavailableError):
@@ -879,8 +886,9 @@ def test_creation_is_refused_while_schema_public_is_writable(world, grantee: str
                     text("SELECT has_schema_privilege('agenticorg_bi', 'public', 'CREATE')")
                 ).scalar_one()
     finally:
-        with admin.begin() as conn:
+        with installer.begin() as conn:
             conn.exec_driver_sql(f"REVOKE CREATE ON SCHEMA public FROM {grantee}")
+        installer.dispose()
     with admin.connect() as conn:
         assert (
             conn.execute(
