@@ -150,7 +150,7 @@ def _aggregate_query(tenant_id: uuid.UUID, start: datetime, end: datetime) -> An
     from core.models.insights import RunFact as F
 
     dims = [getattr(F, name) for name in DIMENSIONS]
-    buckets = []
+    buckets: list[Any] = []
     previous: int | None = None
     for bound in FINITE_BOUNDS_MS:
         # Inclusive upper bounds; a negative duration lands in the first bucket.

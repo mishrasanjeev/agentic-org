@@ -318,7 +318,7 @@ def _raw_query(ctx: MetricContext, days: list[date], group: str | None, domain_f
     grp = _group_expr(F, group)
     lo = day_bounds(days[0], zone)[0]
     hi = day_bounds(days[-1], zone)[1]
-    buckets = []
+    buckets: list[Any] = []
     previous: int | None = None
     for bound in FINITE_BOUNDS_MS:
         cond = F.duration_ms <= bound if previous is None else and_(F.duration_ms > previous, F.duration_ms <= bound)
