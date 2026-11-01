@@ -35,7 +35,6 @@ from __future__ import annotations
 import asyncio
 import importlib.util
 import json
-import logging
 import os
 import subprocess
 import sys
@@ -105,27 +104,23 @@ def _migration():
 def _apply(url: str, fn: str, version: str) -> list[str]:
     """Run the migration's ``upgrade``/``downgrade`` as the URL's role, and record the version, in one transaction.
 
-    Returns the server notices the run raised. SQLAlchemy's psycopg2 dialect
-    takes every notice off the driver and hands it to ``logger.info``, so they
-    are collected with a handler on that logger. A global ``logging.disable``
-    left by another test in the run would swallow them, so it is lifted for the
-    run and put back afterwards.
+    Returns the server notices the run raised, recorded as psycopg2 delivers
+    them: the driver appends each notice to ``connection.notices``, which is
+    replaced here by a list that keeps a copy of everything appended. What
+    SQLAlchemy later does with that list (log it, clear it, or neither,
+    depending on the version and the logging setup) cannot lose a notice.
     """
     notices: list[str] = []
 
-    class _Collect(logging.Handler):
-        def emit(self, record: logging.LogRecord) -> None:
-            notices.append(record.getMessage())
+    class _Recorder(list):
+        def append(self, item: object) -> None:
+            notices.append(str(item).strip())
+            super().append(item)
 
-    dialect_logger = logging.getLogger("sqlalchemy.dialects.postgresql")
-    handler, level = _Collect(level=logging.INFO), dialect_logger.level
-    disabled = logging.root.manager.disable
-    logging.disable(logging.NOTSET)
-    dialect_logger.addHandler(handler)
-    dialect_logger.setLevel(logging.INFO)
     engine = create_engine(url, poolclass=NullPool)
     try:
         with engine.begin() as conn:
+            conn.connection.dbapi_connection.notices = _Recorder()
             conn.exec_driver_sql("SET LOCAL client_min_messages = notice")
             context = MigrationContext.configure(conn)
             with Operations.context(context):
@@ -134,9 +129,6 @@ def _apply(url: str, fn: str, version: str) -> list[str]:
         return notices
     finally:
         engine.dispose()
-        dialect_logger.removeHandler(handler)
-        dialect_logger.setLevel(level)
-        logging.disable(disabled)
 
 
 def _exists(conn, role: str) -> bool:
@@ -882,16 +874,24 @@ def test_creation_is_refused_while_schema_public_is_writable(world, grantee: str
         with pytest.raises(bi_access.BiAccessUnavailableError):
             asyncio.run(_as_app(app, tenant_a, lambda s: bi_access.create_login(s, tenant_a, created_by=None, limit=5)))
         # The migration itself goes through. A grant to PUBLIC it leaves alone (other users of the
-        # schema may rely on it) and says why logins will be refused; the BI group's own grant it revokes.
-        notices = _apply(world["installer_url"], "upgrade", HEAD)
+        # schema may rely on it; it only raises a NOTICE, whose delivery depends on the client), so
+        # logins stay refused; the BI group's own grant it revokes.
+        _apply(world["installer_url"], "upgrade", HEAD)
+        with admin.connect() as conn:
+            public_can_create = conn.execute(
+                text("SELECT has_schema_privilege('public', 'public', 'CREATE')")
+            ).scalar_one()
+            bi_can_create = conn.execute(
+                text("SELECT has_schema_privilege('agenticorg_bi', 'public', 'CREATE')")
+            ).scalar_one()
         if grantee == "PUBLIC":
-            assert any("Schema public is writable" in notice for notice in notices), notices
+            assert public_can_create
+            with pytest.raises(bi_access.BiAccessUnavailableError):
+                asyncio.run(
+                    _as_app(app, tenant_a, lambda s: bi_access.create_login(s, tenant_a, created_by=None, limit=5))
+                )
         else:
-            assert not any("Schema public is writable" in notice for notice in notices), notices
-            with admin.connect() as conn:
-                assert not conn.execute(
-                    text("SELECT has_schema_privilege('agenticorg_bi', 'public', 'CREATE')")
-                ).scalar_one()
+            assert not bi_can_create
     finally:
         with installer.begin() as conn:
             conn.exec_driver_sql(f"REVOKE CREATE ON SCHEMA public FROM {grantee}")
