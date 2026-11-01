@@ -5342,7 +5342,7 @@
     "public_exempt_reason": null,
     "rate_limit": "config-read",
     "scope": "config.fleet_limits.control_plane.sensitive.read",
-    "source_line": 38,
+    "source_line": 39,
     "tenant_required": true
   },
   {
@@ -5360,7 +5360,7 @@
     "public_exempt_reason": null,
     "rate_limit": "config-write",
     "scope": "config.fleet_limits.control_plane.sensitive.write",
-    "source_line": 64,
+    "source_line": 65,
     "tenant_required": true
   },
   {
@@ -5378,7 +5378,7 @@
     "public_exempt_reason": null,
     "rate_limit": "config-read",
     "scope": "config.reporting.control_plane.read",
-    "source_line": 93,
+    "source_line": 94,
     "tenant_required": true
   },
   {
@@ -5396,7 +5396,7 @@
     "public_exempt_reason": null,
     "rate_limit": "config-write",
     "scope": "config.reporting.control_plane.write",
-    "source_line": 116,
+    "source_line": 117,
     "tenant_required": true
   },
   {
@@ -8370,6 +8370,60 @@
     "tenant_required": true
   },
   {
+    "audit_event": "insights.bi_access.read",
+    "auth_required": true,
+    "function": "list_bi_access",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/insights/bi-access api/v1/insights_bi.py:list_bi_access",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/insights_bi.py",
+    "path": "/api/v1/insights/bi-access",
+    "public_exempt_reason": null,
+    "rate_limit": "reporting-admin",
+    "scope": "insights.bi.read",
+    "source_line": 66,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "insights.bi_access.create",
+    "auth_required": true,
+    "function": "create_bi_access",
+    "idempotency": "not-idempotent-create",
+    "key": "POST /api/v1/insights/bi-access api/v1/insights_bi.py:create_bi_access",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/insights_bi.py",
+    "path": "/api/v1/insights/bi-access",
+    "public_exempt_reason": null,
+    "rate_limit": "reporting-admin",
+    "scope": "insights.bi.write",
+    "source_line": 88,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "insights.bi_access.revoke",
+    "auth_required": true,
+    "function": "revoke_bi_access",
+    "idempotency": "idempotent-delete",
+    "key": "DELETE /api/v1/insights/bi-access/{role_name} api/v1/insights_bi.py:revoke_bi_access",
+    "metadata_present": true,
+    "methods": [
+      "DELETE"
+    ],
+    "module": "api/v1/insights_bi.py",
+    "path": "/api/v1/insights/bi-access/{role_name}",
+    "public_exempt_reason": null,
+    "rate_limit": "reporting-admin",
+    "scope": "insights.bi.write",
+    "source_line": 128,
+    "tenant_required": true
+  },
+  {
     "audit_event": "insights.catalog.read",
     "auth_required": true,
     "function": "insights_catalog",
@@ -11211,6 +11265,60 @@
     "rate_limit": "standard",
     "scope": "personalisation.read",
     "source_line": 123,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "platform.insights.posture.read",
+    "auth_required": true,
+    "function": "platform_posture",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/platform/insights/posture api/v1/insights_platform.py:platform_posture",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/insights_platform.py",
+    "path": "/api/v1/platform/insights/posture",
+    "public_exempt_reason": null,
+    "rate_limit": "reporting-read",
+    "scope": "platform.insights.read",
+    "source_line": 128,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "platform.insights.summary.read",
+    "auth_required": true,
+    "function": "platform_summary",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/platform/insights/summary api/v1/insights_platform.py:platform_summary",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/insights_platform.py",
+    "path": "/api/v1/platform/insights/summary",
+    "public_exempt_reason": null,
+    "rate_limit": "reporting-read",
+    "scope": "platform.insights.read",
+    "source_line": 75,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "platform.insights.tenants.read",
+    "auth_required": true,
+    "function": "platform_tenants",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/platform/insights/tenants api/v1/insights_platform.py:platform_tenants",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/insights_platform.py",
+    "path": "/api/v1/platform/insights/tenants",
+    "public_exempt_reason": null,
+    "rate_limit": "reporting-read",
+    "scope": "platform.insights.read",
+    "source_line": 102,
     "tenant_required": true
   },
   {
