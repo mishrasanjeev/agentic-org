@@ -80,8 +80,23 @@ One product per row, one currency, up to 2,000 products:
 | `quantity` | Yes | `12` (stock you have) |
 | `image_url` | No | `https://cdn.merchant.example/tea-1.png` |
 | `url` | No | `https://merchant.example/tea-1` |
+| `brand` | No | `Nilgiri Estates` |
+| `category` (or `product_type`) | No | `Green tea` |
+| `tags` | No | `tea; green tea; loose leaf` (separate with `;`, `,` or `\|`) |
+| `mrp` (or `compare_at_price`) | No | `549.00` (shown as the list price when it is higher than `price`) |
+| `barcode` (or `gtin`) | No | The 8, 12, 13 or 14 digit number under the barcode |
 
-A JSON file is a list of objects with the same keys. If a row has a problem, nothing is stored and the
+**Any other column is a product detail.** Add the columns your buyers care about, such as `Ingredients`,
+`Allergens`, `Shelf life`, `Storage`, `Weight`, `Country of origin`, `Certifications`, `FSSAI licence number`
+or `Lab report` (a link starting with https://). Buyers' AI assistants read each one, under your column name,
+as something your shop declares. Up to 30 detail columns, each value up to 1,000 characters; empty cells are
+left out. A column whose name starts with `_` is skipped, so you can keep your own notes, such as
+`_cost_price`, in the same file. Names that read as private business data (cost, margin, profit, supplier and
+the like) are refused, so they are never shown to buyers by mistake. The setup page has an example file to
+download.
+
+A JSON file is a list of objects with the same keys; a product can also carry an `attributes` object of
+extra details. If a row has a problem, nothing is stored and the
 page lists each row and column to fix. Your catalog is recorded as uploaded by you, never as coming from
 a store system. Upload again whenever your products change.
 

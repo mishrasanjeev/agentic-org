@@ -41,7 +41,7 @@ TENANT = "11111111-1111-4111-8111-111111111111"
 OTHER_TENANT = "22222222-2222-4222-8222-222222222222"
 CSV = (
     "sku,title,description,price,currency,quantity,image_url,url\n"
-    "TEA-1,Nilgiri green tea,\"<p>Loose leaf, 100 g</p>\",499,INR,12,https://cdn.example/tea-1.png,https://merchant.example/tea-1\n"
+    'TEA-1,Nilgiri green tea,"<p>Loose leaf, 100 g</p>",499,INR,12,https://cdn.example/tea-1.png,https://merchant.example/tea-1\n'
     "TEA-2,Masala chai,,350.50,INR,0,,\n"
 )
 
@@ -103,11 +103,13 @@ def test_upload_errors_name_the_row_and_column() -> None:
     assert (None, "currency") in problems  # mixed currencies
 
 
-def test_upload_refuses_missing_and_unknown_columns_and_credentials() -> None:
+def test_upload_refuses_missing_and_private_business_columns_and_credentials() -> None:
     with pytest.raises(CatalogUploadError, match="missing price"):
         parse_catalog_upload("sku,title,currency,quantity\nA,B,INR,1\n", "csv")
-    with pytest.raises(CatalogUploadError, match="unknown columns: cost"):
+    with pytest.raises(CatalogUploadError) as private:
         parse_catalog_upload("sku,title,price,currency,quantity,cost\nA,B,1,INR,1,2\n", "csv")
+    assert private.value.errors[0]["column"] == "cost"
+    assert "private business data" in private.value.errors[0]["message"]
     with pytest.raises(CatalogUploadError) as secret:
         parse_catalog_upload("sku,title,price,currency,quantity\nA,shpat_0123456789,1,INR,1\n", "csv")
     assert secret.value.errors[0]["column"] == "title"

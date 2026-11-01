@@ -115,3 +115,7 @@ c4de4ba34461d69618aa7502f3ccbe64b2d894ab:tests/integration/test_feature_flags_rl
 # plus a counter) in request bodies, not credentials. Baselined by fingerprint.
 9ff1945d7b64e22ac96f57c74b6239e89a247838:tests/integration/test_commerce_ledger_routes_postgres.py:generic-api-key:123
 0a020a0e631257dd9231c4fa996ac7e3d38e1e15:tests/integration/test_commerce_arbiter_ledger_postgres.py:generic-api-key:91
+# Catalog upload detail tests: an invented JWS-shaped string the private-value scanner must refuse,
+# not a credential. Later commits build it at run time. Baselined by fingerprint.
+0c7485360824a56a434094b9972814a997afab02:tests/unit/test_catalog_upload_details.py:jwt:191
+85f3caadc77bdafc0cb2fff6720ef033ff1b5b6d:tests/unit/test_catalog_upload_details.py:jwt:237

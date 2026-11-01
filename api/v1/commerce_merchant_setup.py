@@ -36,6 +36,7 @@ from fastapi import APIRouter, Depends, HTTPException, Path, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 from sqlalchemy import select
+from starlette.concurrency import run_in_threadpool
 
 from api.deps import get_current_tenant
 from api.route_metadata import route_meta
@@ -46,7 +47,13 @@ from core.commerce.c6z_runtime_vertical import (
     SHOPIFY_SOURCE_SYSTEM,
     contains_private_or_executable_value,
 )
-from core.commerce.catalog_upload import CatalogUploadError, currency_exponent, parse_catalog_upload
+from core.commerce.catalog_upload import (
+    CatalogUploadError,
+    currency_exponent,
+    detail_labels,
+    parse_catalog_upload,
+    skipped_columns,
+)
 from core.commerce.ledger import record_commerce_event
 from core.commerce.oacp_merchant_config import (
     MerchantCommerceConfigError,
@@ -627,7 +634,8 @@ async def upload_catalog(
     tenant_id: str = Depends(get_current_tenant),
 ) -> dict[str, Any]:
     try:
-        rows = parse_catalog_upload(body.content, body.format)
+        # A large file takes a second or two to check; keep the event loop free meanwhile.
+        rows = await run_in_threadpool(parse_catalog_upload, body.content, body.format)
     except CatalogUploadError as exc:
         raise HTTPException(422, {"code": "catalog_upload_invalid", "message": str(exc), "errors": exc.errors}) from exc
     async with get_tenant_session(_tenant_uuid(tenant_id)) as session:
@@ -643,7 +651,13 @@ async def upload_catalog(
     packet = saved["packet"]
     assert packet is not None
     stored = await runtime.store_catalog_upload(tenant_id=tenant_id, packet=packet, rows=rows)
-    return {"upload": stored, "setup": await setup_view(tenant_id, merchant_id)}
+    return {
+        "upload": stored,
+        # What buyers' AI assistants will also read, and what the upload left out on purpose.
+        "details": detail_labels(rows),
+        "skipped_columns": skipped_columns(body.content, body.format),
+        "setup": await setup_view(tenant_id, merchant_id),
+    }
 
 
 @router.post("/merchant-configs/{merchant_id}/catalog/sync")

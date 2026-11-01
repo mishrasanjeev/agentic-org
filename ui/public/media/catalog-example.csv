@@ -1,0 +1,3 @@
+sku,title,description,price,currency,quantity,image_url,url,brand,category,tags,mrp,barcode,Ingredients,Allergens,Shelf life,Storage,FSSAI licence number,Lab report,_cost_price
+GHEE-500,Cow ghee 500 ml,Slow-cooked ghee made from cow milk butter,649,INR,40,,https://example.com/ghee-500,Example Dairy,Ghee,ghee; cow ghee; bilona,699,2001234567893,Cow milk fat,Milk,9 months,Store in a cool dry place,12345678901234,https://example.com/lab-report-ghee.pdf,410
+GHEE-1L,Cow ghee 1 litre,Slow-cooked ghee made from cow milk butter,1249,INR,25,,https://example.com/ghee-1l,Example Dairy,Ghee,ghee; cow ghee; bilona,1349,,Cow milk fat,Milk,9 months,Store in a cool dry place,12345678901234,https://example.com/lab-report-ghee.pdf,790
