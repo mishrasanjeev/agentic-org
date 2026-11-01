@@ -56,6 +56,19 @@
   }
 }
 
+/* Insights: text links and filter controls get the same touch target. */
+@media (pointer: coarse) {
+  .insights-target,
+  .insights-filter select,
+  .insights-filter input {
+    min-height: 44px;
+  }
+  .insights-target {
+    display: inline-flex;
+    align-items: center;
+  }
+}
+
 /* Respect prefers-reduced-motion — disables animations system-wide */
 @media (prefers-reduced-motion: reduce) {
   *,
@@ -80,12 +93,26 @@
     --accent: 210 40% 96%; --accent-foreground: 222 47% 11%;
     --destructive: 0 84% 60%; --destructive-foreground: 210 40% 98%;
     --border: 214 32% 91%; --radius: 0.5rem;
+    /* Insights chart palette: eight categorical hues (blue, teal, violet,
+       magenta, sky, brown, indigo, slate). Green, amber and red are kept
+       out so they only ever mean state. */
+    --chart-1: 217 91% 45%; --chart-2: 174 72% 30%;
+    --chart-3: 263 60% 52%; --chart-4: 330 70% 45%;
+    --chart-5: 199 89% 36%; --chart-6: 25 45% 38%;
+    --chart-7: 239 50% 40%; --chart-8: 215 20% 45%;
+    /* State colours (ok / watch / act), dark enough for text on a tinted chip. */
+    --state-ok: 142 72% 27%; --state-watch: 32 95% 33%; --state-act: 0 72% 42%;
   }
   .dark {
     --background: 222 84% 5%; --foreground: 210 40% 98%;
     --primary: 210 40% 98%; --primary-foreground: 222 47% 11%;
     --muted: 217 33% 17%; --muted-foreground: 215 20% 65%;
     --border: 217 33% 17%;
+    --chart-1: 213 94% 68%; --chart-2: 172 66% 50%;
+    --chart-3: 258 90% 76%; --chart-4: 329 86% 70%;
+    --chart-5: 199 89% 60%; --chart-6: 27 55% 62%;
+    --chart-7: 234 89% 74%; --chart-8: 215 20% 65%;
+    --state-ok: 142 69% 58%; --state-watch: 43 96% 56%; --state-act: 0 91% 71%;
   }
 }
 

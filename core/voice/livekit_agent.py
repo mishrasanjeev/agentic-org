@@ -15,6 +15,7 @@ from typing import Any
 
 import structlog
 
+from core.insights.context import entrypoint as insights_entrypoint
 from core.spend import context as spend_context
 
 logger = structlog.get_logger()
@@ -99,7 +100,10 @@ class VoiceAgentWorker:
             "context": {"channel": "voice", "session_id": str(id(session))},
         }
 
-        with spend_context.scope(application="voice", tenant_id=cfg.get("tenant_id") or None):
+        with (
+            spend_context.scope(application="voice", tenant_id=cfg.get("tenant_id") or None),
+            insights_entrypoint("voice"),
+        ):
             result = await run_agent(
                 agent_id=cfg.get("agent_id", "voice-agent"),
                 agent_type=cfg.get("agent_type", "voice"),

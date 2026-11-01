@@ -262,13 +262,13 @@ async def test_session_is_minted_before_commit_and_context_release(verification,
     state = verification
     original = auth_mfa.start_session
 
-    def mint(*args):
+    def mint(*args, **kwargs):
         assert state.events == ["lock-context"]
         state.session.commit.assert_not_awaited()
         query = state.session.execute.await_args_list[0].args[0]
         assert query._for_update_arg is not None
         state.events.append("mint")
-        return original(*args)
+        return original(*args, **kwargs)
 
     monkeypatch.setattr(auth_mfa, "start_session", mint)
     response = await _verify(state)

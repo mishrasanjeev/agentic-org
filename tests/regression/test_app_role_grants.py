@@ -13,6 +13,7 @@ same rules against a live database connected as the role.
 
 from __future__ import annotations
 
+import importlib.util
 import re
 from pathlib import Path
 
@@ -54,8 +55,33 @@ APP_CALLABLE_FUNCTIONS = {
     "oacp_delete_due_manifest": "core/commerce/oacp_retention.py",
     # v6z105_llm_daily_spend: platform Gemini cap on recorded spend.
     "gemini_daily_ledger_spend": "core/llm/router.py",
+    # v6z107_insights_platform: the platform operator's cross-tenant aggregates.
+    "insights_platform_daily": "core/insights/platform.py",
+    "insights_platform_tenants": "core/insights/platform.py",
+    # v6z108_insights_bi: a tenant administrator's BI database logins, tenant-bound.
+    "insights_bi_create_login": "core/insights/bi_access.py",
+    "insights_bi_revoke_login": "core/insights/bi_access.py",
 }
-NOT_APP_CALLABLE_FUNCTIONS: set[str] = set()
+# v6z108_insights_bi: the tenant of a BI login's session, called by the BI
+# reader's functions and policies (only agenticorg_bi_reader may execute it),
+# and the reader functions under the insights_bi views (only agenticorg_bi).
+BI_READER_FUNCTIONS: set[str] = {"run_facts_rows", "daily_rows", "spend_daily_rows", "agents_rows", "approvals_rows"}
+NOT_APP_CALLABLE_FUNCTIONS: set[str] = {"insights_bi_tenant", *BI_READER_FUNCTIONS}
+
+
+def _v6z108_reader_functions() -> set[str]:
+    spec = importlib.util.spec_from_file_location("_v6z108_for_grants", MIGRATIONS / "v6_z108_insights_bi.py")
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return set(module.READER_FUNCTIONS.values())
+
+
+def test_v6z108_reader_functions_are_classified_not_app_callable():
+    assert _v6z108_reader_functions() == BI_READER_FUNCTIONS
+    assert not BI_READER_FUNCTIONS & set(APP_CALLABLE_FUNCTIONS)
+    # The script's fail-closed check also looks in the schema they live in.
+    assert "n.nspname IN ('public', 'insights_bi')" in _do_blocks()
 
 
 def _statements() -> list[str]:
@@ -195,7 +221,7 @@ def test_every_append_only_trigger_is_mirrored_in_the_grants():
 
 
 def test_new_immutability_functions_are_classified():
-    defined = set(re.findall(r"CREATE (?:OR REPLACE )?FUNCTION\s+(?:public\.)?(\w+)\s*\(", _migrations_text(), re.I))
+    defined = set(re.findall(r"CREATE (?:OR REPLACE )?FUNCTION\s+(?:\w+\.)?(\w+)\s*\(", _migrations_text(), re.I))
     unclassified = {name for name in defined if IMMUTABILITY_NAME.search(name)} - IMMUTABILITY_FUNCTIONS
     assert not unclassified, (
         f"new append-only trigger functions {sorted(unclassified)}: add their tables to "
@@ -206,11 +232,13 @@ def test_new_immutability_functions_are_classified():
 def test_only_the_platform_spend_function_is_granted_execute():
     text = _migrations_text()
     definer = set()
-    header_re = r"CREATE (?:OR REPLACE )?FUNCTION\s+(?:public\.)?(\w+)\s*\([^$]*?\bAS\b"
+    header_re = r"CREATE (?:OR REPLACE )?FUNCTION\s+(?:\w+\.)?(\w+)\s*\([^$]*?\bAS\b"
     for match in re.finditer(header_re, text, re.I):
         header = " ".join(match.group(0).upper().split())
         if "SECURITY DEFINER" in header and "RETURNS TRIGGER" not in header:
             definer.add(match.group(1))
+    # v6z108 builds its reader functions' DDL from the view list: take their names from the migration.
+    definer |= _v6z108_reader_functions()
     assert "gemini_daily_platform_spend" in definer
     unclassified = definer - set(APP_CALLABLE_FUNCTIONS) - NOT_APP_CALLABLE_FUNCTIONS
     assert not unclassified, f"classify these SECURITY DEFINER functions: {sorted(unclassified)}"
@@ -246,6 +274,10 @@ def test_trigger_rule_lists_every_immutability_function():
 
 def test_migration_owned_tables_are_not_writable():
     assert {"INSERT", "UPDATE", "DELETE"} <= _withheld("alembic_version")
+    # BI login mappings: written only by the v6z108 functions.
+    assert {"INSERT", "UPDATE", "DELETE"} <= _withheld("insights_bi_logins")
+    # The BI primary/replica switch: the migration owner's alone.
+    assert {"SELECT", "INSERT", "UPDATE", "DELETE"} <= _withheld("insights_bi_settings")
     assert {"INSERT", "UPDATE", "DELETE"} <= _withheld("checkpoint_migrations")
     assert {"SELECT", "INSERT", "UPDATE", "DELETE"} <= _withheld("alembic_migration_progress")
     assert "DELETE" in _withheld("audit_chain_anchors")

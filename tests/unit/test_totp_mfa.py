@@ -489,3 +489,101 @@ def test_migration_chain_and_columns() -> None:
     ):
         assert f"ADD COLUMN IF NOT EXISTS {column}" in source
         assert column in User.__table__.columns
+
+
+# ── The second-factor claim on the session (Insights platform view) ────────
+
+
+def _claims(token: str) -> dict:
+    from auth.jwt import validate_local_token
+
+    return validate_local_token(token)
+
+
+@pytest.mark.asyncio
+async def test_a_totp_sign_in_session_carries_the_mfa_claim_and_nothing_else_changes(monkeypatch) -> None:
+    from api.v1 import auth as auth_mod
+    from api.v1 import auth_mfa
+
+    user = _enrolled()
+    _verify_env(monkeypatch, user)
+    ctx = _patch_session("api.v1.auth_mfa", _session(user, SimpleNamespace(settings={})))
+    try:
+        result = await auth_mfa.mfa_verify(
+            auth_mfa.MfaVerifyRequest(challenge="good-challenge-0123456789", code=_now_code()),
+            _ip_request(),
+            MagicMock(),
+        )
+    finally:
+        ctx.stop()
+    claims = _claims(result.access_token)
+    assert claims[auth_mod.MFA_CLAIM] is True and auth_mod.session_completed_mfa(claims)
+    # Every other claim is exactly what a session without the second factor carries.
+    plain = _claims(auth_mod.session_token_for(user))
+    assert auth_mod.MFA_CLAIM not in plain and not auth_mod.session_completed_mfa(plain)
+    timing = {"iat", "exp"}
+    assert {k: v for k, v in claims.items() if k not in timing | {auth_mod.MFA_CLAIM}} == {
+        k: v for k, v in plain.items() if k not in timing
+    }
+
+
+@pytest.mark.asyncio
+async def test_a_recovery_code_sign_in_session_carries_the_mfa_claim(monkeypatch) -> None:
+    from api.v1 import auth as auth_mod
+    from api.v1 import auth_mfa
+
+    codes = totp.generate_recovery_codes()
+    user = _enrolled()
+    user.mfa_recovery_codes = [totp.hash_recovery_code(str(user.id), code) for code in codes]
+    _verify_env(monkeypatch, user)
+    ctx = _patch_session("api.v1.auth_mfa", _session(user, SimpleNamespace(settings={})))
+    try:
+        result = await auth_mfa.mfa_verify(
+            auth_mfa.MfaVerifyRequest(challenge="good-challenge-0123456789", code=codes[1]), _ip_request(), MagicMock()
+        )
+    finally:
+        ctx.stop()
+    assert auth_mod.session_completed_mfa(_claims(result.access_token))
+
+
+@pytest.mark.asyncio
+async def test_a_password_only_sign_in_session_has_no_mfa_claim(monkeypatch) -> None:
+    """A user not enrolled (yet) gets a session at once; it never counts as a second factor, even after enrolment."""
+    import bcrypt as _bcrypt
+
+    from api.v1 import auth as auth_mod
+
+    user = _user(password_hash=_bcrypt.hashpw(b"CorrectPass1", _bcrypt.gensalt(rounds=4)).decode())
+    monkeypatch.setattr(auth_mod, "_get_throttle_redis", AsyncMock(return_value=None))
+    monkeypatch.setattr(auth_mod, "_clear_rate_limit", AsyncMock())
+    monkeypatch.setattr(auth_mod, "_seed_tenant_defaults_isolated", AsyncMock())
+    request = MagicMock()
+    request.client.host = f"pwd-{uuid.uuid4().hex[:8]}"
+    with patch("api.v1.auth.get_platform_session") as factory:
+        session = AsyncMock()
+        session.execute = AsyncMock(side_effect=[_result(user), _result(SimpleNamespace(settings={}))])
+        factory.return_value.__aenter__ = AsyncMock(return_value=session)
+        factory.return_value.__aexit__ = AsyncMock(return_value=False)
+        result = await auth_mod.login(
+            auth_mod.LoginRequest(email=user.email, password="CorrectPass1"), request, MagicMock()
+        )
+    assert isinstance(result, auth_mod.LoginResponse)
+    claims = _claims(result.access_token)
+    assert auth_mod.MFA_CLAIM not in claims and not auth_mod.session_completed_mfa(claims)
+
+
+def test_only_a_locally_issued_literal_true_counts_as_the_second_factor() -> None:
+    from api.v1.auth import MFA_CLAIM, session_completed_mfa
+    from auth.jwt import local_issuer
+
+    assert session_completed_mfa({MFA_CLAIM: True, "iss": local_issuer()})
+    for claims in (
+        {MFA_CLAIM: "true", "iss": local_issuer()},
+        {MFA_CLAIM: 1, "iss": local_issuer()},
+        {MFA_CLAIM: True, "iss": "https://idp.example.com"},
+        {MFA_CLAIM: True},
+        {"iss": local_issuer()},
+        {},
+        None,
+    ):
+        assert not session_completed_mfa(claims), claims

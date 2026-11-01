@@ -21,6 +21,7 @@ from auth.run_grants import NO_CALLER, CallerGrant, caller_grant_from_request
 from core.agents.registry import AgentRegistry
 from core.database import get_tenant_session
 from core.file_ingestion.limits import cleanup_tempfile, stream_to_tempfile
+from core.insights.context import entrypoint as insights_entrypoint
 from core.models.audit import AuditLog
 from core.models.lead_pipeline import EmailSequence, LeadPipeline
 from core.schemas.messages import (
@@ -416,7 +417,8 @@ async def _run_sales_agent_on_lead(
     )
 
     try:
-        task_result = await agent_instance.execute(task_assignment)
+        with insights_entrypoint("sales"):
+            task_result = await agent_instance.execute(task_assignment)
     # enterprise-gate: broad-except-ok reason=sales-agent-execution-failure-returns-explicit-error-body
     except Exception as exc:
         logger.error("sales_agent_error", lead_id=lead_id, error=str(exc))

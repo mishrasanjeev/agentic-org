@@ -5,6 +5,8 @@
   },
   "nav": {
     "dashboard": "Dashboard",
+    "insights": "Insights",
+    "platform": "Platform",
     "partner": "Partner Dashboard",
     "companies": "Companies",
     "caOperations": "CA Operations",
@@ -714,6 +716,257 @@
     "trend": "30-day cost trend",
     "byDomain": "Spend by domain",
     "topAgents": "Top agents (30d)"
+  },
+  "platformInsights": {
+    "title": "Platform",
+    "subtitle": "Totals across every tenant, each tenant's usage and rollup gate, and the platform's posture. Aggregates only.",
+    "loading": "Loading the platform view",
+    "period": "{{from}} to {{to}} (UTC days)",
+    "source": "Platform aggregates of the tenants' daily rollups",
+    "noRuns": "No tenant recorded a run in this period.",
+    "range": {
+      "label": "Period",
+      "7d": "7 days",
+      "30d": "30 days",
+      "90d": "90 days"
+    },
+    "unavailable": {
+      "title": "The platform view is not available",
+      "body": "It is open only to multi-factor-enrolled administrators of the platform operator tenant."
+    },
+    "error": {
+      "load": "The platform view could not be loaded",
+      "retry": "Try again"
+    },
+    "tiles": {
+      "tenantsActive": "Tenants active",
+      "tenantsActiveDef": "Tenants with at least one run in the period.",
+      "runs": "Runs",
+      "runsDef": "Agent runs across all tenants in the period.",
+      "failureRate": "Failure rate",
+      "failureRateDef": "Failed runs as a share of all runs in the period.",
+      "spend": "Spend",
+      "spendDef": "Recorded model cost across all tenants, in US dollars."
+    },
+    "chart": {
+      "runsPerDay": "Runs per day",
+      "runsPerDayDef": "Agent runs per day across all tenants."
+    },
+    "tenants": {
+      "title": "Tenants",
+      "definition": "One row per tenant. Reconciled nights are the consecutive most recent nights whose rollup matched the run facts; {{nights}} nights meet the gate.",
+      "empty": "There are no tenants yet.",
+      "truncated": "Showing the first {{shown}} tenants.",
+      "name": "Tenant",
+      "plan": "Plan",
+      "runs": "Runs",
+      "failureRate": "Failure rate",
+      "spend": "Spend",
+      "activeAgents": "Active agents",
+      "lastActive": "Last active",
+      "reconciledNights": "Reconciled nights"
+    },
+    "gate": {
+      "label": "{{nights}} of {{gate}} reconciled nights",
+      "short": "{{nights}} / {{gate}}",
+      "latest": "Latest rollup: {{status}}"
+    },
+    "posture": {
+      "title": "Platform posture",
+      "empty": "No posture checks were returned.",
+      "checks": {
+        "schema": "Database schema at the code's migration head",
+        "rls": "Row-level security forced on every tenant table",
+        "role": "Application role subject to row-level security",
+        "health": "Health snapshots in the last day"
+      },
+      "schemaDetail": "Database: {{database}}. Code: {{code}}.",
+      "rlsDetail": "{{forced}} of {{total}} tables with a tenant column force row-level security.",
+      "rlsUnforced": "Not forced: {{tables}}.",
+      "roleOk": "Connected as {{role}}, which neither is a superuser nor bypasses row-level security.",
+      "roleBypass": "Connected as {{role}}, which bypasses row-level security.",
+      "healthNone": "No health snapshot in the last {{hours}} hours.",
+      "healthDetail": "{{snapshots}} snapshots in the last {{hours}} hours, {{unhealthy}} unhealthy. Latest version {{version}}, commit {{commit}}."
+    }
+  },
+  "insights": {
+    "title": "Insights",
+    "subtitle": "Agents, runs, approvals and cost from recorded data, with what needs your attention.",
+    "loading": "Loading Insights",
+    "refresh": "Refresh",
+    "updated": "Updated {{time}}",
+    "period": "{{from}} to {{to}}",
+    "tabsLabel": "Insights views",
+    "tabs": {
+      "executive": "Executive",
+      "finance": "Finance"
+    },
+    "filters": {
+      "label": "Filters",
+      "range": "Date range",
+      "presets": {
+        "7d": "Last 7 days",
+        "30d": "Last 30 days",
+        "mtd": "Month to date",
+        "qtd": "Quarter to date",
+        "custom": "Custom range"
+      },
+      "from": "From",
+      "to": "To",
+      "apply": "Apply",
+      "compare": "Compare with",
+      "comparePrevious": "Previous period",
+      "compareNone": "No comparison",
+      "companyScoped": "Showing the company selected in the header.",
+      "invalidRange": "Choose valid dates with the start on or before the end."
+    },
+    "tile": {
+      "vsCompare": "vs previous period",
+      "vsCompareCompleteDays": "vs the same complete days of the previous period (today left out)",
+      "noCompare": "No comparison period",
+      "trendLabel": "{{title}} trend"
+    },
+    "state": {
+      "prefix": "State:",
+      "ok": "On track",
+      "watch": "Watch",
+      "act": "Act now"
+    },
+    "quality": {
+      "prefix": "Data quality:",
+      "label": "Data quality: {{quality}}",
+      "measured": "Measured",
+      "estimated": "Estimated",
+      "seeded": "Sample data",
+      "no_data": "No data",
+      "mixed": "Mixed",
+      "source": "Source: {{source}}"
+    },
+    "chart": {
+      "viewData": "View data",
+      "hideData": "Hide data",
+      "forecast": "Forecast",
+      "actual": "Actual so far",
+      "low": "low",
+      "high": "high",
+      "threshold": "Budget threshold",
+      "summaryLine": "{{title}}: {{count}} points from {{from}} to {{to}}. Latest {{latest}}; highest {{max}} on {{maxAt}}.",
+      "summaryStacked": "{{title}}: {{count}} periods from {{from}} to {{to}} across {{groups}} groups. Largest group {{top}} with {{value}}.",
+      "summaryRanked": "{{title}}: {{count}} items. Largest is {{top}} with {{value}}.",
+      "summaryBullet": "{{title}}: {{count}} budgets, {{breached}} breached and {{warn}} at warning.",
+      "summaryForecast": "{{title}}: forecast {{point}}, likely between {{low}} and {{high}}.",
+      "summaryForecastNoBand": "{{title}}: forecast {{point}}.",
+      "summaryEmpty": "{{title}}: no data for this period."
+    },
+    "table": {
+      "caption": "{{title}} data",
+      "sortBy": "Sort by {{column}}",
+      "empty": "No rows for this period.",
+      "truncated": "Showing the first {{shown}} of {{total}} rows. Export for the full set."
+    },
+    "export": {
+      "button": "Export",
+      "menuLabel": "Export {{title}}",
+      "csv": "CSV",
+      "xlsx": "Excel (XLSX)",
+      "json": "JSON",
+      "downloading": "Preparing...",
+      "failed": "The export could not be created. Try again or narrow the date range."
+    },
+    "empty": {
+      "title": "No data yet",
+      "default": "Nothing was recorded for this period."
+    },
+    "needsYou": {
+      "title": "Needs you",
+      "empty": "Nothing needs you right now.",
+      "age": "waiting {{age}}",
+      "open": "Open"
+    },
+    "actions": {
+      "openAgents": "Open agents",
+      "openApprovals": "Open approvals",
+      "openCosts": "Open cost details"
+    },
+    "disabled": {
+      "title": "Insights is turned off",
+      "body": "Insights is not enabled for this organisation. A tenant administrator can turn it on in feature settings."
+    },
+    "forbidden": {
+      "title": "No Insights view for your role",
+      "body": "Your role does not include an Insights view. Ask an administrator if you need one."
+    },
+    "error": {
+      "load": "Could not load Insights.",
+      "retry": "Try again"
+    }
+  },
+  "insightsBi": {
+    "title": "BI database access",
+    "subtitle": "Read-only database logins for a BI tool such as Metabase, limited to this organisation's data.",
+    "link": "BI database access",
+    "back": "Back to Insights",
+    "loading": "Loading BI access",
+    "loadFailed": "Could not load BI access.",
+    "create": "Create login",
+    "creating": "Creating...",
+    "createFailed": "The login could not be created. Try again.",
+    "limitReached": "This organisation already has the maximum number of active logins. Revoke one first.",
+    "limitHint": "The limit of active logins is reached. Revoke a login to create another.",
+    "revoke": "Revoke",
+    "revokeLabel": "Revoke {{role}}",
+    "revoking": "Revoking...",
+    "revoked": "{{role}} was revoked. It can no longer connect.",
+    "revokeFailed": "The login could not be revoked. Try again.",
+    "notFound": "That login does not belong to this organisation.",
+    "confirmTitle": "Revoke this login?",
+    "confirmBody": "Revoke {{role}}? Any BI tool using it stops working at once. This cannot be undone.",
+    "confirmRevoke": "Yes, revoke",
+    "cancel": "Cancel",
+    "connection": {
+      "title": "How a BI tool connects",
+      "body": "Use these details with the login and password created below. Connections must use TLS, verify the server certificate and bind the password exchange to the TLS channel.",
+      "host": "Host",
+      "port": "Port",
+      "database": "Database",
+      "sslmode": "SSL mode",
+      "channelBinding": "Channel binding",
+      "views": "Views",
+      "serverCa": "SSL mode verify-ca checks the server certificate against the database's server CA certificate. Ask your AgenticOrg operator for that certificate and set it as your BI tool's root certificate (sslrootcert). Use verify-ca, not verify-full: the certificate names the database instance, not this host.",
+      "isolation": "Each login reads these views only, and only this organisation's rows. It cannot change any data."
+    },
+    "logins": {
+      "title": "Logins",
+      "usage": "{{active}} of {{max}} active logins",
+      "role": "Login",
+      "created": "Created",
+      "status": "Status",
+      "actions": "Actions",
+      "active": "Active",
+      "revokedAt": "Revoked {{time}}",
+      "emptyTitle": "No logins yet",
+      "emptyBody": "Create a login to connect a BI tool."
+    },
+    "secret": {
+      "title": "Save this password now",
+      "body": "This is the only time the password is shown. It is not stored anywhere and cannot be shown again.",
+      "user": "Login",
+      "password": "Password",
+      "connectionString": "Connection string",
+      "copyPassword": "Copy password",
+      "copyConnection": "Copy connection string",
+      "copied": "Copied",
+      "copyFailed": "Copy failed. Select the text and copy it by hand.",
+      "saved": "I have saved it"
+    },
+    "disabled": {
+      "title": "BI database access is not available",
+      "body": "BI database access is not turned on for this deployment. Ask your platform operator."
+    },
+    "forbidden": {
+      "title": "Administrators only",
+      "body": "Only an organisation administrator signed in as a person can manage BI database logins."
+    }
   },
   "reportSchedules": {
     "title": "Report Schedules",

@@ -1,0 +1,17 @@
+[
+  "agents.by_status",
+  "approvals.cycle_time",
+  "approvals.pending",
+  "cost.budgets",
+  "cost.by_agent",
+  "cost.by_model",
+  "cost.data_quality",
+  "cost.forecast",
+  "cost.per_run",
+  "cost.spend",
+  "runs.latency",
+  "runs.straight_through_rate",
+  "runs.success_rate",
+  "runs.volume",
+  "tokens.by_unit"
+]

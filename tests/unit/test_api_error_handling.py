@@ -208,8 +208,12 @@ class TestCFOKPIErrors:
         resp = auth_client.get("/api/v1/kpis/cfo?company_id=")
         assert resp.status_code in (200, 400, 500)
 
-    def test_cfo_kpis_read_only_any_role(self, auth_client):
-        """KPIs are read-only — any authenticated user should access them."""
+    def test_cfo_kpis_readable_by_admin(self, auth_client):
+        """The admin scope reads every KPI board.
+
+        Other roles are limited to their own board; the full role matrix is
+        in tests/unit/test_kpis_role_guard.py.
+        """
         resp = auth_client.get("/api/v1/kpis/cfo")
         assert resp.status_code in (200, 400, 500)
 
