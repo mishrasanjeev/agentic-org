@@ -8384,7 +8384,7 @@
     "public_exempt_reason": null,
     "rate_limit": "reporting-read",
     "scope": "insights.read",
-    "source_line": 198,
+    "source_line": 202,
     "tenant_required": true
   },
   {
@@ -8402,7 +8402,7 @@
     "public_exempt_reason": null,
     "rate_limit": "reporting-read",
     "scope": "insights.read",
-    "source_line": 274,
+    "source_line": 278,
     "tenant_required": true
   },
   {
@@ -8420,7 +8420,7 @@
     "public_exempt_reason": null,
     "rate_limit": "reporting-export",
     "scope": "insights.read",
-    "source_line": 316,
+    "source_line": 320,
     "tenant_required": true
   },
   {
@@ -8438,7 +8438,7 @@
     "public_exempt_reason": null,
     "rate_limit": "reporting-read",
     "scope": "insights.read",
-    "source_line": 173,
+    "source_line": 175,
     "tenant_required": true
   },
   {
@@ -8456,7 +8456,7 @@
     "public_exempt_reason": null,
     "rate_limit": "reporting-read",
     "scope": "insights.read",
-    "source_line": 230,
+    "source_line": 234,
     "tenant_required": true
   },
   {

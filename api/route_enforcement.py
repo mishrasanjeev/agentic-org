@@ -139,6 +139,9 @@ RATE_LIMIT_CLASSES: dict[str, tuple[int, int]] = {
     # rows, so they have their own, tighter class.
     "reporting-read": (300, 60),
     "reporting-export": (30, 60),
+    # Insights BI access (/insights/bi-access, api/v1/insights_bi.py): an
+    # administrator lists, creates and revokes BI database logins, per tenant.
+    "reporting-admin": (20, 60),
 }
 _DEFAULT_RATE = (300, 60)
 
@@ -249,6 +252,10 @@ SCOPE_FAMILIES: dict[str, tuple[str, str]] = {
     # (executive: admin; finance: admin, cfo). No writes, so the write scope
     # is the administrator's.
     "insights": ("insights:read", ADMIN_SCOPE),
+    # Platform operator surfaces (/platform/insights/*, api/v1/insights_platform.py):
+    # administrators only at this layer; the handler then admits only an
+    # MFA-enrolled administrator of the platform operator tenant (404 otherwise).
+    "platform": (ADMIN_SCOPE, ADMIN_SCOPE),
 }
 
 # Families above that are enforced only while ``route_scope_a2a_mcp`` is on.

@@ -12,18 +12,21 @@ import InsightChart, { chartSummary } from "./InsightChart";
 
 /**
  * A chart with its title, data-quality badge, source, a text summary for
- * assistive technology, a "View data" table toggle and the export menu.
+ * assistive technology, a "View data" table toggle and the export menu
+ * (left out with `exportable={false}` for data that has no export endpoint).
  */
 export default function ChartCard({
   metric,
   filters,
   currency,
   kind,
+  exportable = true,
 }: {
   metric: MetricResponse;
   filters: InsightsFilters;
   currency?: string | null;
   kind?: ChartKind;
+  exportable?: boolean;
 }) {
   const { t } = useTranslation();
   const [showData, setShowData] = useState(false);
@@ -65,7 +68,7 @@ export default function ChartCard({
               {showData ? t("insights.chart.hideData") : t("insights.chart.viewData")}
             </button>
           ) : null}
-          <ExportMenu metricKey={metric.key} title={metric.title} filters={filters} />
+          {exportable ? <ExportMenu metricKey={metric.key} title={metric.title} filters={filters} /> : null}
         </div>
       </header>
 

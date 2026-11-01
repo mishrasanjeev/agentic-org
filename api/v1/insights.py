@@ -37,6 +37,7 @@ from core.database import get_tenant_session
 from core.insights import export as exports
 from core.insights import registry
 from core.insights.audit import audit_entry
+from core.insights.bi_access import bi_configured
 from core.insights.flags import insights_enabled_for
 from core.insights.metrics import (
     MetricContext,
@@ -48,6 +49,7 @@ from core.insights.metrics import (
     needs_you,
     previous_period,
 )
+from core.insights.platform import is_platform_operator
 from core.insights.reporting_settings import load_reporting_settings
 from core.ownership import Caller, caller_from_request
 
@@ -180,9 +182,11 @@ async def insights_status(request: Request, tenant_id: str = Depends(get_current
     return {
         "enabled": enabled,
         "views": _views_for(caller) if enabled else [],
-        # The cross-tenant platform view is not part of this release.
-        "platform_operator": False,
+        # The caller may open the cross-tenant platform view (never raises; see core/insights/platform.py).
+        "platform_operator": await is_platform_operator(request),
         "settings": reporting.model_dump(),
+        # Per-tenant BI database access is on and configured, for a human administrator.
+        "bi_access": bi_configured() and caller.is_admin and not caller.is_machine,
     }
 
 

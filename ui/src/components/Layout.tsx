@@ -24,9 +24,12 @@ const NotificationBell = lazy(() => import("./NotificationBell"));
 // lib/roles.ts so nav and route guards cannot drift (bug sheet 2026-09-14).
 // An entry with a statusPath belongs to a subsystem behind a default-off flag: it is shown only once
 // that status answers enabled, so a disabled deployment never offers a page that cannot work.
-const ALL_NAV: Array<{ path: string; labelKey: string; label: string; roles: readonly string[]; statusPath?: string }> = [
+// statusField names a different boolean of that status (default "enabled"); each status is read once.
+const ALL_NAV: Array<{ path: string; labelKey: string; label: string; roles: readonly string[]; statusPath?: string; statusField?: string }> = [
   { path: "/dashboard", labelKey: "nav.dashboard", label: "Dashboard", roles: ["admin", "cfo", "chro", "cmo", "coo", "auditor"] },
   { path: "/dashboard/insights", labelKey: "nav.insights", label: "Insights", roles: ["admin", "cfo"], statusPath: "/insights/status" },
+  // The cross-tenant platform view, for the platform operator only (the API answers 404 to anyone else).
+  { path: "/dashboard/platform", labelKey: "nav.platform", label: "Platform", roles: ["admin"], statusPath: "/insights/status", statusField: "platform_operator" },
   { path: "/dashboard/partner", labelKey: "nav.partner", label: "Partner Dashboard", roles: ["admin", "cfo", "coo", "auditor"] },
   { path: "/dashboard/companies", labelKey: "nav.companies", label: "Companies", roles: ["admin", "cfo", "coo", "auditor"] },
   { path: "/dashboard/ca-operations", labelKey: "nav.caOperations", label: "CA Operations", roles: ["admin", "cfo", "coo", "auditor"] },
@@ -109,14 +112,22 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     let live = true;
     const gated = ALL_NAV.filter((item) => item.statusPath);
+    const statuses = new Map<string, Promise<Record<string, unknown> | null>>();
+    const readStatus = (path: string) => {
+      let pending = statuses.get(path);
+      if (!pending) {
+        pending = api.get(path).then(
+          ({ data }) => (data && typeof data === "object" ? (data as Record<string, unknown>) : null),
+          () => null, // off, or unreachable: the entries stay hidden
+        );
+        statuses.set(path, pending);
+      }
+      return pending;
+    };
     void Promise.all(
       gated.map(async (item) => {
-        try {
-          const { data } = await api.get(item.statusPath as string);
-          return (data as { enabled?: unknown } | null)?.enabled === true ? item.path : null;
-        } catch {
-          return null; // off, or unreachable: the entry stays hidden
-        }
+        const data = await readStatus(item.statusPath as string);
+        return data?.[item.statusField ?? "enabled"] === true ? item.path : null;
       }),
     ).then((paths) => {
       if (live) setSubsystemsOn(new Set(paths.filter((p): p is string => p !== null)));

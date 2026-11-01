@@ -54,8 +54,16 @@ APP_CALLABLE_FUNCTIONS = {
     "oacp_delete_due_manifest": "core/commerce/oacp_retention.py",
     # v6z105_llm_daily_spend: platform Gemini cap on recorded spend.
     "gemini_daily_ledger_spend": "core/llm/router.py",
+    # v6z107_insights_platform: the platform operator's cross-tenant aggregates.
+    "insights_platform_daily": "core/insights/platform.py",
+    "insights_platform_tenants": "core/insights/platform.py",
+    # v6z108_insights_bi: a tenant administrator's BI database logins, tenant-bound.
+    "insights_bi_create_login": "core/insights/bi_access.py",
+    "insights_bi_revoke_login": "core/insights/bi_access.py",
 }
-NOT_APP_CALLABLE_FUNCTIONS: set[str] = set()
+# v6z108_insights_bi: the tenant of a BI login's session, called by the BI
+# policies; only agenticorg_bi may execute it.
+NOT_APP_CALLABLE_FUNCTIONS: set[str] = {"insights_bi_tenant"}
 
 
 def _statements() -> list[str]:
@@ -246,6 +254,8 @@ def test_trigger_rule_lists_every_immutability_function():
 
 def test_migration_owned_tables_are_not_writable():
     assert {"INSERT", "UPDATE", "DELETE"} <= _withheld("alembic_version")
+    # BI login mappings: written only by the v6z108 functions.
+    assert {"INSERT", "UPDATE", "DELETE"} <= _withheld("insights_bi_logins")
     assert {"INSERT", "UPDATE", "DELETE"} <= _withheld("checkpoint_migrations")
     assert {"SELECT", "INSERT", "UPDATE", "DELETE"} <= _withheld("alembic_migration_progress")
     assert "DELETE" in _withheld("audit_chain_anchors")

@@ -61,6 +61,7 @@ const CRITICAL_PAGES = [
   "CMODashboard.tsx",
   "COODashboard.tsx",
   "InsightsDashboard.tsx",
+  "PlatformInsights.tsx",
 ];
 
 function findSource(filename: string): string {

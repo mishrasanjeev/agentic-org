@@ -10,7 +10,7 @@
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Helmet } from "react-helmet-async";
-import { useSearchParams } from "react-router";
+import { Link, useSearchParams } from "react-router";
 import { useTranslation } from "react-i18next";
 import { useAuth } from "@/contexts/AuthContext";
 import ChartCard from "@/components/insights/ChartCard";
@@ -212,14 +212,26 @@ export default function InsightsDashboard() {
         <p className="text-sm text-muted-foreground">{t("insights.subtitle")}</p>
       </div>
       {statusState.kind === "ready" ? (
-        <button
-          type="button"
-          onClick={retry}
-          className="h-8 rounded-md border px-3 text-sm font-medium hover:bg-muted"
-          disabled={viewState.kind === "loading"}
-        >
-          {t("insights.refresh")}
-        </button>
+        <div className="flex flex-wrap items-center gap-2">
+          {/* Per-tenant BI database access, for administrators while it is on and configured. */}
+          {role === "admin" && statusState.status.bi_access ? (
+            <Link
+              to="/dashboard/insights/bi-access"
+              className="inline-flex h-8 items-center rounded-md border px-3 text-sm font-medium hover:bg-muted"
+              data-testid="insights-bi-access-link"
+            >
+              {t("insightsBi.link")}
+            </Link>
+          ) : null}
+          <button
+            type="button"
+            onClick={retry}
+            className="h-8 rounded-md border px-3 text-sm font-medium hover:bg-muted"
+            disabled={viewState.kind === "loading"}
+          >
+            {t("insights.refresh")}
+          </button>
+        </div>
       ) : null}
     </div>
   );

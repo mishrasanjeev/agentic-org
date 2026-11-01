@@ -87,6 +87,8 @@ const Orders = lazyRetry(() => import("./pages/Orders"));
 const CFODashboard = lazyRetry(() => import("./pages/CFODashboard"));
 const CostDashboard = lazyRetry(() => import("./pages/CostDashboard"));
 const InsightsDashboard = lazyRetry(() => import("./pages/InsightsDashboard"));
+const InsightsBiAccess = lazyRetry(() => import("./pages/InsightsBiAccess"));
+const PlatformInsights = lazyRetry(() => import("./pages/PlatformInsights"));
 const StatusPage = lazyRetry(() => import("./pages/Status"));
 const SSOCallback = lazyRetry(() => import("./pages/SSOCallback"));
 const CMODashboard = lazyRetry(() => import("./pages/CMODashboard"));
@@ -260,6 +262,26 @@ export default function App() {
           <ProtectedRoute allowedRoles={["admin", "cfo"]}>
             <Layout>
               <InsightsDashboard />
+            </Layout>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/dashboard/insights/bi-access"
+        element={
+          <ProtectedRoute allowedRoles={["admin"]}>
+            <Layout>
+              <InsightsBiAccess />
+            </Layout>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/dashboard/platform"
+        element={
+          <ProtectedRoute allowedRoles={["admin"]}>
+            <Layout>
+              <PlatformInsights />
             </Layout>
           </ProtectedRoute>
         }

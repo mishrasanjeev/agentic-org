@@ -30,6 +30,8 @@ export interface InsightsStatus {
   enabled: boolean;
   views: InsightsViewKey[];
   platform_operator: boolean;
+  /** Per-tenant BI database access is on and configured, and the caller is a human administrator. */
+  bi_access?: boolean;
   settings?: ReportingSettings | null;
 }
 
@@ -130,6 +132,7 @@ function normaliseStatus(data: unknown): InsightsStatus {
     enabled: raw.enabled === true,
     views,
     platform_operator: raw.platform_operator === true,
+    bi_access: raw.bi_access === true,
     settings,
   };
 }

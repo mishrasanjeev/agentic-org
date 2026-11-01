@@ -813,6 +813,22 @@ class Settings(BaseSettings):
     # A tenant opts out with the ``insights_dashboard`` feature flag.
     # Env: AGENTICORG_INSIGHTS_ENABLED.
     insights_enabled: bool = False
+    # The tenant whose MFA-enrolled administrators may open the cross-tenant
+    # Insights platform view (/platform/insights, aggregates only). Empty: no
+    # platform operator, and the platform routes answer 404 for everyone.
+    # Env: AGENTICORG_PLATFORM_OPERATOR_TENANT_ID.
+    platform_operator_tenant_id: str = ""
+    # Per-tenant BI database access (core/insights/bi_access.py, migration
+    # v6z108): tenant administrators create read-only SQL logins for a BI tool
+    # on the read replica. Off by default; the /insights/bi-access routes answer
+    # 404 ``insights_bi_disabled`` unless this is on and the replica's host and
+    # database (shown to administrators) are set. docs/runbooks/insights-bi-access.md.
+    # Env: AGENTICORG_INSIGHTS_BI_ENABLED, AGENTICORG_INSIGHTS_BI_HOST,
+    # AGENTICORG_INSIGHTS_BI_DATABASE, AGENTICORG_INSIGHTS_BI_MAX_LOGINS_PER_TENANT.
+    insights_bi_enabled: bool = False
+    insights_bi_host: str = ""
+    insights_bi_database: str = ""
+    insights_bi_max_logins_per_tenant: int = 3
     # AI spend intelligence (core/spend/): an organisation tree, rate cards,
     # commitments and FX rates; a usage record with its attribution for every
     # model call and metered service, priced in the card's currency and in INR;

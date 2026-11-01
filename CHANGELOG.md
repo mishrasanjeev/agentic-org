@@ -1,5 +1,25 @@
 # Changelog
 
+## Unreleased - Insights Platform view and per-tenant BI database access
+
+### Added
+
+- Platform view (`/dashboard/platform`, `/platform/insights/summary|tenants|posture`) for platform
+  operators: an active, MFA-enrolled admin of the tenant named by `AGENTICORG_PLATFORM_OPERATOR_TENANT_ID`.
+  Everyone else gets 404 (or 403 without the admin scope). It shows cross-tenant daily totals, per-tenant
+  usage with the rollup reconciliation streak, and a posture checklist (Alembic head, forced RLS coverage,
+  whether the database role bypasses RLS, health history). Cross-tenant figures come only from two
+  aggregate `SECURITY DEFINER` functions owned by a NOLOGIN role (migration `v6z107_insights_platform`),
+  limited to 92 days.
+- Per-tenant BI database access (`/insights/bi-access`, `/dashboard/insights/bi-access`, human admins only):
+  a tenant admin creates up to three read-only Postgres logins for Metabase, Superset or Grafana. Each login
+  sees five `insights_bi.*` views (run facts, daily rollup, spend by day, agents, approvals) through
+  policies tied to the login itself, plus restrictive policies so the existing tenant setting cannot widen
+  a BI session (migration `v6z108_insights_bi`). The password is shown once and only its SCRAM verifier
+  reaches the database. Off until `AGENTICORG_INSIGHTS_BI_ENABLED`, `AGENTICORG_INSIGHTS_BI_HOST` and
+  `AGENTICORG_INSIGHTS_BI_DATABASE` are set; logins connect to a read replica. Runbook:
+  `docs/runbooks/insights-bi-access.md`.
+
 ## Unreleased - Insights dashboard v1 (Executive and Finance views) and KPI access fixes
 
 ### Added
