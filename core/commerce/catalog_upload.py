@@ -431,11 +431,12 @@ def _detail_name_problem(name: str, upload: bool = True) -> str | None:
 
 def _reserved_name(key: str) -> str | None:
     """``"action"`` for a credential or action name, ``"private"`` for private business data, else None."""
-    markers = PRIVATE_KEY_MARKERS + EXECUTION_MARKERS
-    if any(marker in key or marker.replace(".", "_") in key for marker in markers):
+    key = unicodedata.normalize("NFKC", key).casefold()
+    compact = key.replace("_", "")
+    markers = PRIVATE_KEY_MARKERS + EXECUTION_MARKERS + ("api_key", "access_key")
+    if any(marker in key or marker.replace(".", "").replace("_", "") in compact for marker in markers):
         return "action"
     words = {word[:-1] if word.endswith("s") and len(word) > 3 else word for word in key.split("_")}
-    compact = key.replace("_", "")
     if PRIVATE_BUSINESS_WORDS & words or any(stem in compact for stem in PRIVATE_BUSINESS_STEMS):
         return "private"
     return None

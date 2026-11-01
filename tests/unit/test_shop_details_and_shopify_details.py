@@ -16,6 +16,7 @@ from core.commerce.catalog_upload import (
     CatalogUploadError,
     declared_detail,
     gtin_or_none,
+    parse_catalog_upload,
     public_tags,
     shop_details_from_entries,
     shop_details_of,
@@ -27,6 +28,10 @@ from core.commerce.ucp.catalog import lookup_catalog, search_catalog, ucp_produc
 
 LICENCE = {"label": "FSSAI licence number", "value": "10019022008571"}
 CERTIFIED = {"label": "Certified organic", "value": "India Organic, certificate ORG-2026-114"}
+_CREDENTIAL_DETAIL_NAMES = (
+    "API key", "APIKey", "api.key", "API-key", "Access key", "AccessKey", "ClientSecret", "PrivateKey",
+    "CheckoutCreate", "paymentCreate", "\uff21\uff30\uff29 \uff4b\uff45\uff59", "Client Secret",
+)
 
 
 def _upload_product() -> dict[str, Any]:
@@ -82,6 +87,36 @@ def test_shop_details_refuse_what_should_not_be_published(entry: dict[str, str],
         shop_details_from_entries([LICENCE, entry])
     assert caught.value.errors[0]["row"] == 2
     assert message in caught.value.errors[0]["message"]
+
+
+@pytest.mark.parametrize("label", _CREDENTIAL_DETAIL_NAMES)
+def test_credential_detail_names_are_refused_and_hidden_when_already_stored(label: str) -> None:
+    entry = {"label": label, "value": "synthetic-placeholder"}
+    with pytest.raises(CatalogUploadError) as caught:
+        shop_details_from_entries([entry])
+    assert caught.value.errors[0]["row"] == 1
+    assert "reserved for credentials" in caught.value.errors[0]["message"]
+    assert shop_details_of({"shop_details": [entry]}) == []
+    assert public_tags([label]) == []
+
+
+@pytest.mark.parametrize("label", _CREDENTIAL_DETAIL_NAMES)
+@pytest.mark.parametrize("fmt", ["csv", "json"])
+def test_uploaded_product_details_refuse_the_same_credential_names(label: str, fmt: str) -> None:
+    product = {"sku": "SYNTHETIC-1", "title": "Synthetic item", "price": "1.00", "currency": "INR", "quantity": 1}
+    if fmt == "json":
+        content = json.dumps([{**product, "attributes": {label: "synthetic-placeholder"}}])
+    else:
+        content = "sku,title,price,currency,quantity," + label + "\n"
+        content += "SYNTHETIC-1,Synthetic item,1.00,INR,1,synthetic-placeholder\n"
+    with pytest.raises(CatalogUploadError):
+        parse_catalog_upload(content, fmt)
+
+
+@pytest.mark.parametrize("label", ["Key features", "Key ingredients", "Product access instructions"])
+def test_public_details_without_a_credential_or_action_name_remain_available(label: str) -> None:
+    details = shop_details_from_entries([{"label": label, "value": "Synthetic public statement"}])
+    assert details[0]["label"] == label
 
 
 def test_shop_details_refuse_repeats_and_more_than_the_limit() -> None:
@@ -541,6 +576,17 @@ def test_a_metafield_name_that_reads_as_a_credential_is_left_out_not_the_sync() 
     ]
     product = _normalize(_shopify_node(metafields={"nodes": nodes}))
     assert product["attributes"] == ({"name": "shelf_life", "label": "Shelf life", "value": "9 months"},)
+
+
+@pytest.mark.parametrize("label", _CREDENTIAL_DETAIL_NAMES)
+def test_shopify_details_skip_credential_names_in_keys_labels_and_namespaces(label: str) -> None:
+    for field in ("key", "namespace", "name"):
+        node = _metafield("public_detail", "single_line_text_field", "synthetic-placeholder", name="Public detail")
+        if field == "name":
+            node["definition"]["name"] = label
+        else:
+            node[field] = label
+        assert metafield_details([node]) == []
 
 
 def test_shop_details_saved_without_the_setup_page_are_checked_when_read() -> None:

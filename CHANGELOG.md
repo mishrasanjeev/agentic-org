@@ -2,6 +2,10 @@
 
 ## Unreleased - Release integration fixes
 
+- Refuse credential and action names in public shop and product details even
+  when written as API keys, camel-case names, or compatibility Unicode. Apply
+  the same check to stored details, catalog uploads, Shopify fields and tags.
+
 - Reuse bounded token windows and salt-scoped digest calculations in the vendor
   check without caching policy membership or changing matching, decoding or
   exception rules. Select caches once per normalized short line; larger inputs
