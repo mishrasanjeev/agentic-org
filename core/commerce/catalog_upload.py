@@ -31,14 +31,16 @@ from __future__ import annotations
 
 import csv
 import difflib
+import functools
 import hashlib
 import io
 import json
 import re
+import unicodedata
 from collections.abc import Mapping, Sequence
 from decimal import Decimal, InvalidOperation
 from typing import Any
-from urllib.parse import urlsplit
+from urllib.parse import urlsplit, urlunsplit
 
 from core.commerce.c6z_runtime_vertical import (
     CATALOG_UPLOAD_SOURCE_SYSTEM,
@@ -68,8 +70,14 @@ MAX_TAG = 50
 GTIN_LENGTHS = frozenset({8, 12, 13, 14})
 # Column-name words that read as the merchant's own business data, never as a buyer-facing detail.
 PRIVATE_BUSINESS_WORDS: frozenset[str] = frozenset(
-    {"cost", "margin", "profit", "supplier", "purchase", "wholesale", "internal", "private", "confidential"}
-)
+    {"cost", "margin", "profit", "supplier", "purchase", "wholesale", "internal", "private", "confidential",
+     "cogs", "markup", "landed"}
+)  # fmt: skip
+# The same, written as one word ("CostPrice", "buyingprice", "dealer price").
+PRIVATE_BUSINESS_STEMS: tuple[str, ...] = (
+    "cost", "margin", "profit", "supplier", "purchase", "wholesale", "cogs", "markup", "landed", "buyprice",
+    "buyingprice", "dealerprice", "distributorprice", "vendorprice", "tradeprice", "netrate", "b2bprice", "b2brate",
+)  # fmt: skip
 FORMATS: frozenset[str] = frozenset({"csv", "json"})
 MAX_TITLE = 200
 MAX_DESCRIPTION = 2000
@@ -84,7 +92,7 @@ _SKU_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$")
 _CURRENCY_RE = re.compile(r"^[A-Z]{3}$")
 _TAG_RE = re.compile(r"<[^>]+>")
 _CONTROL_RE = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]")
-_ATTRIBUTE_NAME_RE = re.compile(r"^[a-z][a-z0-9_]*$")
+_URL_IN_TEXT_RE = re.compile(r"[a-z][a-z0-9+.-]*://[^\s]+", re.I)
 _TAG_SPLIT_RE = re.compile(r"[;,|]")
 
 
@@ -155,10 +163,15 @@ def skipped_columns(content: str, fmt: str) -> list[str]:
             items = parsed.get("products") if isinstance(parsed, Mapping) else parsed
             for item in items if isinstance(items, list) else []:
                 if isinstance(item, Mapping):
-                    names.extend(str(key).strip() for key in item if str(key).strip() not in names)
+                    names.extend(str(key).strip() for key in item)
+                    nested = item.get("attributes")
+                    if isinstance(nested, Mapping):
+                        names.extend(
+                            f"attributes.{str(key).strip()}" for key in nested if str(key).strip().startswith("_")
+                        )
     except (csv.Error, ValueError):
         return []
-    return [name for name in dict.fromkeys(names) if name.startswith("_")]
+    return [name for name in dict.fromkeys(names) if name.startswith(("_", "attributes._"))]
 
 
 def catalog_digest(rows: Sequence[Mapping[str, Any]]) -> str:
@@ -341,7 +354,10 @@ def _csv_rows(content: str) -> list[dict[str, Any]]:
         for record in reader:
             if len(rows) > MAX_ROWS:
                 break
-            values = {str(key or "").strip().lower(): value for key, value in record.items() if key is not None}
+            # Excel often adds empty columns at the end: a column without a name holds nothing.
+            values = {
+                str(key).strip().lower(): value for key, value in record.items() if key is not None and str(key).strip()
+            }
             if not any(str(value or "").strip() for key, value in values.items() if key in COLUMNS):
                 continue
             values["__labels__"] = labels
@@ -355,9 +371,18 @@ def _check_header(header: Sequence[str], labels: Mapping[str, str]) -> None:
     """Refuse detail columns that are misspelled known columns, unsafe names or private business data."""
     errors: list[dict[str, Any]] = []
     seen: dict[str, str] = {}
+    known: dict[str, str] = {}
     details = 0
     for name in header:
-        if not name or name.startswith("_") or name in KNOWN_COLUMNS or name in COLUMN_ALIASES:
+        if not name or name.startswith("_"):
+            continue
+        if name in KNOWN_COLUMNS or name in COLUMN_ALIASES:
+            canonical = COLUMN_ALIASES.get(name, name)
+            if canonical in known:
+                other = known[canonical]
+                message = "appears twice" if other == name else f"use one of {other} or {name}, not both"
+                errors.append({"row": None, "column": labels.get(name, name), "message": message})
+            known[canonical] = name
             continue
         label = labels.get(name, name)
         problem = _detail_name_problem(name)
@@ -375,21 +400,28 @@ def _check_header(header: Sequence[str], labels: Mapping[str, str]) -> None:
         raise CatalogUploadError(f"{len(errors)} problem(s) in the header", errors)
 
 
+@functools.lru_cache(maxsize=4096)
 def _attribute_key(name: str) -> str:
-    return re.sub(r"[^a-z0-9]+", "_", name.lower()).strip("_")
+    """Letters (any script), their marks and digits; everything else becomes one underscore."""
+    folded = "".join(char if unicodedata.category(char)[0] in "LMN" else "_" for char in name.casefold())
+    return re.sub(r"_+", "_", folded).strip("_")
 
 
+@functools.lru_cache(maxsize=4096)
 def _detail_name_problem(name: str) -> str | None:
     """Why a column or key cannot be a product detail, or None."""
     key = _attribute_key(name)
-    if not _ATTRIBUTE_NAME_RE.match(key) or len(key) > MAX_ATTRIBUTE_NAME:
+    if not key or unicodedata.category(key[0])[0] != "L" or len(key) > MAX_ATTRIBUTE_NAME:
         return f"name it with letters, digits and spaces, starting with a letter, up to {MAX_ATTRIBUTE_NAME} characters"
     close = difflib.get_close_matches(key, KNOWN_COLUMNS + tuple(COLUMN_ALIASES), n=1, cutoff=0.85)
     if close:
         return f"looks like a misspelled {close[0]}; use {close[0]}, or rename it if it is a different detail"
-    if any(marker in key for marker in PRIVATE_KEY_MARKERS + EXECUTION_MARKERS):
+    markers = PRIVATE_KEY_MARKERS + EXECUTION_MARKERS
+    if any(marker in key or marker.replace(".", "_") in key for marker in markers):
         return "this name is reserved for credentials or actions; rename the column"
-    if PRIVATE_BUSINESS_WORDS & set(key.split("_")):
+    words = {word[:-1] if word.endswith("s") and len(word) > 3 else word for word in key.split("_")}
+    compact = key.replace("_", "")
+    if PRIVATE_BUSINESS_WORDS & words or any(stem in compact for stem in PRIVATE_BUSINESS_STEMS):
         return (
             "looks like private business data that buyers' AI assistants would see; "
             "start the column name with _ to keep it out of the catalog, or rename it"
@@ -410,7 +442,12 @@ def _json_rows(content: str) -> list[dict[str, Any]]:
         if not isinstance(item, Mapping):
             rows.append({"__not_object__": True})
             continue
-        row = {str(key).strip().lower(): value for key, value in item.items() if not str(key).strip().startswith("_")}
+        row = {
+            str(key).strip().lower(): value
+            for key, value in item.items()
+            if str(key).strip() and not str(key).strip().startswith("_")
+        }
+        row["__conflicts__"] = [(alias, name) for alias, name in COLUMN_ALIASES.items() if alias in row and name in row]
         row["__labels__"] = {str(key).strip().lower(): " ".join(str(key).split()) for key in item}
         rows.append(row)
     return rows
@@ -427,6 +464,8 @@ def _validate_row(index: int, raw: Mapping[str, Any]) -> tuple[dict[str, Any] | 
         return None, errors
     if raw.get("__extra__"):
         fail(None, "has more values than the header has columns")
+    for alias, name in raw.get("__conflicts__") or ():
+        fail(alias, f"use one of {name} or {alias}, not both")
     raw = {COLUMN_ALIASES.get(key, key): value for key, value in raw.items()}
     sku = _text(raw.get("sku"))
     if not sku:
@@ -470,6 +509,9 @@ def _validate_row(index: int, raw: Mapping[str, Any]) -> tuple[dict[str, Any] | 
 
 def _optional_fields(raw: Mapping[str, Any], currency: str, price: str | None, fail: Any) -> dict[str, Any]:
     """The optional named fields and the product details of one row; unset ones are left empty."""
+    for column in ("brand", "category"):
+        if isinstance(raw.get(column), (Mapping, list)):
+            fail(column, "must be text")
     brand = _plain(raw.get("brand"))
     if len(brand) > MAX_BRAND:
         fail("brand", f"is longer than {MAX_BRAND} characters")
@@ -544,7 +586,11 @@ def _attributes(raw: Mapping[str, Any], fail: Any) -> list[dict[str, str]]:
         pairs.append((key, str(labels.get(key) or key), value))
     nested = raw.get("attributes")
     if isinstance(nested, Mapping):
-        pairs.extend((str(key).strip().lower(), " ".join(str(key).split()), value) for key, value in nested.items())
+        pairs.extend(
+            (str(key).strip().lower(), " ".join(str(key).split()), value)
+            for key, value in nested.items()
+            if str(key).strip() and not str(key).strip().startswith("_")
+        )
     elif nested not in (None, ""):
         fail("attributes", 'must be an object such as {"ingredients": "..."}')
     details: list[dict[str, str]] = []
@@ -568,7 +614,13 @@ def _attributes(raw: Mapping[str, Any], fail: Any) -> list[dict[str, str]]:
         if len(text) > MAX_ATTRIBUTE_VALUE:
             fail(label, f"is longer than {MAX_ATTRIBUTE_VALUE} characters")
             continue
-        if text.lower().startswith(("http://", "https://")) and _https_url(text, label, fail) is None:
+        if text.lower().startswith(("http://", "https://")):
+            normalized = _https_url(text, label, fail)
+            if normalized is None:
+                continue
+            text = normalized
+        if any(_has_userinfo(match.group(0)) for match in _URL_IN_TEXT_RE.finditer(text)):
+            fail(label, "has a link with a user name or password; remove them")
             continue
         if contains_private_or_executable_value(text):
             fail(label, "looks like a credential, a token or an executable instruction; remove it")
@@ -577,6 +629,14 @@ def _attributes(raw: Mapping[str, Any], fail: Any) -> list[dict[str, str]]:
     if len(details) > MAX_ATTRIBUTES:
         fail(None, f"has more than {MAX_ATTRIBUTES} product details")
     return details[:MAX_ATTRIBUTES]
+
+
+def _has_userinfo(url: str) -> bool:
+    try:
+        parts = urlsplit(url)
+    except ValueError:
+        return True
+    return bool(parts.username or parts.password)
 
 
 def _detail_value(value: Any) -> str | None:
@@ -663,4 +723,5 @@ def _https_url(value: Any, column: str, fail: Any) -> str | None:
     if parts.scheme != "https" or not parts.hostname or parts.username or parts.password or " " in text:
         fail(column, "must be an https:// address without a user name or password")
         return None
-    return text
+    # "HTTPS://Shop.Example" is the same address; buyers' assistants are served the lower-case form.
+    return urlunsplit((parts.scheme, parts.netloc.lower(), parts.path, parts.query, parts.fragment))

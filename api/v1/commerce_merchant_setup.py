@@ -36,6 +36,7 @@ from fastapi import APIRouter, Depends, HTTPException, Path, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 from sqlalchemy import select
+from starlette.concurrency import run_in_threadpool
 
 from api.deps import get_current_tenant
 from api.route_metadata import route_meta
@@ -633,7 +634,8 @@ async def upload_catalog(
     tenant_id: str = Depends(get_current_tenant),
 ) -> dict[str, Any]:
     try:
-        rows = parse_catalog_upload(body.content, body.format)
+        # A large file takes a second or two to check; keep the event loop free meanwhile.
+        rows = await run_in_threadpool(parse_catalog_upload, body.content, body.format)
     except CatalogUploadError as exc:
         raise HTTPException(422, {"code": "catalog_upload_invalid", "message": str(exc), "errors": exc.errors}) from exc
     async with get_tenant_session(_tenant_uuid(tenant_id)) as session:

@@ -14,9 +14,15 @@
 - UCP catalog products carry `url`, `tags`, `metadata` (`brand`, `attributes`, `attributes_declared_by: shop`)
   and variant `barcodes`, and search matches tags and details. The Telegram shopper shows the brand and up to
   six details. Grantex is unchanged: product content never leaves AgenticOrg.
-- The private-value scanner no longer reads ordinary sentences or web links as a compact JWS (each part must be
-  base64url), nor the word "basic" alone as a Basic credential (it needs an encoded value with a digit, `+`,
-  `/` or `=`). Real tokens and credentials are still refused.
+- The private-value scanner no longer reads ordinary sentences or web links as a compact JWS (a whole value must be
+  three base64url parts; a JWT inside longer text is still found by its "eyJ" header), nor the word "basic" alone
+  as a Basic credential (the value after it must decode to "user:password"). Real tokens and credentials, short
+  ones and ones inside longer text included, are still refused.
+- Upload guards: Excel's trailing empty columns are ignored, a column and its alias together are refused, `_` keys
+  inside a JSON `attributes` object are skipped and reported, private-business names are matched as one word,
+  plural or abbreviated (CostPrice, buying price, COGS), detail links with a user name or password are refused,
+  upper-case `HTTPS://` links are served in lower case, column names in any script work, and a large file is
+  checked off the event loop.
 
 ## Unreleased - Security advisories of 2026-10-30 (pypdf, follow-redirects)
 

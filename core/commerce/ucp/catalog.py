@@ -239,10 +239,14 @@ def _product_details(product: Mapping[str, Any]) -> list[dict[str, str]]:
             continue
         name = _plain(item.get("label"), 60) or _plain(item.get("name"), 60)
         value = _plain(item.get("value"), MAX_SERVED_DETAIL_VALUE)
-        if not name or not value or contains_private_or_executable_value(value):
+        if not name or not value or contains_private_or_executable_value(f"{name} {value}"):
             continue
-        if value.lower().startswith("http") and _https_media(value) is None:
+        if value.lower().startswith("http://"):
             continue
+        if value.lower().startswith("https://"):
+            value = _https_media("https://" + value[8:])
+            if value is None:
+                continue
         details.append({"name": name, "value": value})
         if len(details) >= MAX_SERVED_DETAILS:
             break

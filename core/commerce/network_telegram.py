@@ -175,8 +175,11 @@ def _money(price: Any) -> str | None:
     return None
 
 
-MAX_DETAILS = 6
-MAX_DETAIL_CHARS = 160
+MAX_DETAILS = 4
+MAX_DETAIL_CHARS = 100
+MAX_SUMMARY_DESCRIPTION = 300
+# Tool results are cut at 8000 characters; search answers are built to fit well inside that.
+SEARCH_RESULT_BUDGET = 7000
 
 
 def _product_summary(shop: str, product: dict[str, Any]) -> dict[str, Any]:
@@ -191,9 +194,12 @@ def _product_summary(shop: str, product: dict[str, Any]) -> dict[str, Any]:
         "title": product.get("title"),
         "price": _money(price or first.get("price")),
         "available": available,
-        "description": (product.get("description") or {}).get("plain")
-        if isinstance(product.get("description"), dict)
-        else product.get("description"),
+        "description": str(
+            (product.get("description") or {}).get("plain")
+            if isinstance(product.get("description"), dict)
+            else product.get("description") or ""
+        )[:MAX_SUMMARY_DESCRIPTION]
+        or None,
     }
     metadata: dict[str, Any] = product["metadata"] if isinstance(product.get("metadata"), dict) else {}
     details = [
@@ -207,6 +213,28 @@ def _product_summary(shop: str, product: dict[str, Any]) -> dict[str, Any]:
         # The shop's own declarations (ingredients, licence numbers and so on), kept short for the tool result cap.
         summary["details_declared_by_shop"] = details
     return summary
+
+
+def _fit_search_results(results: list[dict[str, Any]]) -> dict[str, Any]:
+    """Products from every shop in turn, trimmed to fit the tool-result cap as whole products."""
+    by_shop: dict[str, list[dict[str, Any]]] = {}
+    for item in results:
+        by_shop.setdefault(str(item.get("shop")), []).append(item)
+    ordered = [
+        shop_items[index]
+        for index in range(max((len(items) for items in by_shop.values()), default=0))
+        for shop_items in by_shop.values()
+        if index < len(shop_items)
+    ]
+    body: dict[str, Any] = {"products": ordered}
+    if len(json.dumps(body, default=str)) <= SEARCH_RESULT_BUDGET:
+        return body
+    for item in ordered:
+        item.pop("details_declared_by_shop", None)
+    while ordered and len(json.dumps(body, default=str)) > SEARCH_RESULT_BUDGET:
+        ordered.pop()
+    body["more_results_left_out"] = True
+    return body
 
 
 async def _catalog_search(entry: dict[str, Any], query: str) -> list[dict[str, Any]]:
@@ -246,7 +274,7 @@ class ShopperTools:
             # enterprise-gate: broad-except-ok reason=one-shop-failing-never-fails-the-search
             except Exception:
                 logger.warning("network_telegram_search_failed", shop=entry["slug"])
-        return {"products": results}
+        return _fit_search_results(results)
 
     async def open_checkout(self, shop: str, item_id: str, quantity: int = 1) -> dict[str, Any]:
         from api.v1.network import network_checkout  # noqa: PLC0415 - the API module wires the UCP runtime

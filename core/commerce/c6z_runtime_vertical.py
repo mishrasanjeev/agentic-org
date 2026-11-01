@@ -2034,7 +2034,7 @@ def contains_private_or_executable_value(value: Any) -> bool:
         text = value.strip().lower()
         if not text:
             return False
-        if any(marker in text for marker in _PROSE_SAFE_VALUE_MARKERS) or _has_basic_credential(text):
+        if any(marker in text for marker in _PROSE_SAFE_VALUE_MARKERS) or _has_basic_credential(value.strip()):
             return True
         if any(marker in text for marker in EXECUTION_MARKERS):
             return True
@@ -2043,13 +2043,21 @@ def contains_private_or_executable_value(value: Any) -> bool:
     return False
 
 
-# "basic " on its own also matches prose ("a basic ghee"); a Basic credential is the word and an encoded blob.
+# "basic " on its own also matches prose ("a basic ghee"). A Basic credential is the word and base64 of
+# "user:password", so the value is decoded (in its original case) instead of matched on the word.
 _PROSE_SAFE_VALUE_MARKERS: tuple[str, ...] = tuple(marker for marker in PRIVATE_VALUE_MARKERS if marker != "basic ")
-_BASIC_CREDENTIAL_RE = re.compile(r"\bbasic\s+([a-z0-9+/]{12,}={0,2})(?![a-z0-9+/=])")
+_BASIC_CREDENTIAL_RE = re.compile(r"\bbasic\s+([A-Za-z0-9+/]{4,}={0,2})(?![A-Za-z0-9+/=])", re.IGNORECASE)
 
 
-def _has_basic_credential(text: str) -> bool:
-    return any(re.search(r"[0-9+/=]", blob) for blob in _BASIC_CREDENTIAL_RE.findall(text))
+def _has_basic_credential(value: str) -> bool:
+    for blob in _BASIC_CREDENTIAL_RE.findall(value):
+        try:
+            decoded = base64.b64decode(blob + "=" * (-len(blob) % 4), validate=True).decode("ascii")
+        except ValueError:
+            continue
+        if ":" in decoded and decoded.isprintable():
+            return True
+    return False
 
 
 def _normalize_shopify_domain(value: str) -> str:
@@ -2150,14 +2158,18 @@ def _utc_now() -> datetime:
 
 
 # A compact JWS is three base64url segments; sentences and web addresses have spaces, colons or slashes.
-_JWS_SEGMENT_RE = re.compile(r"[A-Za-z0-9_-]{9,}")
+_JWS_SEGMENT_RE = re.compile(r"[A-Za-z0-9_-]{9,}={0,2}")
+# A JWT anywhere in longer text: its header is base64url JSON, so it starts "eyJ" ("eyj" once lowercased).
+_EMBEDDED_JWT_RE = re.compile(
+    r"(?<![a-z0-9_-])eyj[a-z0-9_-]{6,}={0,2}\.[a-z0-9_-]{9,}={0,2}\.[a-z0-9_-]{9,}={0,2}(?![a-z0-9_-])", re.IGNORECASE
+)
 
 
 def _looks_like_jwt(value: str) -> bool:
     parts = value.split(".")
-    if len(parts) != 3:
-        return False
-    return all(_JWS_SEGMENT_RE.fullmatch(part) for part in parts)
+    if len(parts) == 3 and all(_JWS_SEGMENT_RE.fullmatch(part) for part in parts):
+        return True
+    return _EMBEDDED_JWT_RE.search(value) is not None
 
 
 def _looks_like_final_commitment(question: str) -> bool:

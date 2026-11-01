@@ -3776,7 +3776,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "commerce.runtime.merchant_config.read",
-    "source_line": 154,
+    "source_line": 155,
     "tenant_required": true
   },
   {
@@ -3830,7 +3830,7 @@
     "public_exempt_reason": null,
     "rate_limit": "credential-write",
     "scope": "commerce.runtime.merchant_config.write",
-    "source_line": 580,
+    "source_line": 581,
     "tenant_required": true
   },
   {
@@ -3848,7 +3848,7 @@
     "public_exempt_reason": null,
     "rate_limit": "connector-bulk",
     "scope": "commerce.runtime.merchant_config.write",
-    "source_line": 670,
+    "source_line": 672,
     "tenant_required": true
   },
   {
@@ -3866,7 +3866,7 @@
     "public_exempt_reason": null,
     "rate_limit": "connector-bulk",
     "scope": "commerce.runtime.merchant_config.write",
-    "source_line": 630,
+    "source_line": 631,
     "tenant_required": true
   },
   {
@@ -4100,7 +4100,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "commerce.runtime.merchant_config.read",
-    "source_line": 467,
+    "source_line": 468,
     "tenant_required": true
   },
   {
@@ -4118,7 +4118,7 @@
     "public_exempt_reason": null,
     "rate_limit": "commerce-runtime-write",
     "scope": "commerce.runtime.merchant_config.write",
-    "source_line": 799,
+    "source_line": 801,
     "tenant_required": true
   },
   {
@@ -4136,7 +4136,7 @@
     "public_exempt_reason": null,
     "rate_limit": "commerce-runtime-write",
     "scope": "commerce.runtime.merchant_config.write",
-    "source_line": 740,
+    "source_line": 742,
     "tenant_required": true
   },
   {
@@ -4280,7 +4280,7 @@
     "public_exempt_reason": null,
     "rate_limit": "commerce-runtime-write",
     "scope": "commerce.runtime.merchant_config.write",
-    "source_line": 191,
+    "source_line": 192,
     "tenant_required": true
   },
   {
@@ -14774,7 +14774,7 @@
     "public_exempt_reason": "per-merchant-path-token-plus-shopify-hmac-verified-with-the-merchant-stored-secret",
     "rate_limit": "provider-webhook",
     "scope": "public:webhooks.shopify",
-    "source_line": 844,
+    "source_line": 846,
     "tenant_required": true
   },
   {

@@ -230,3 +230,126 @@ def test_the_example_file_on_the_setup_page_uploads_cleanly() -> None:
     assert len(rows) == 2
     assert skipped_columns(content, "csv") == ["_cost_price"]
     assert "Lab report" in detail_labels(rows)
+
+
+# --- review fixes ---------------------------------------------------------------------------------------------
+
+JWT = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c"
+
+
+@pytest.mark.parametrize(
+    "value",
+    [
+        f"token {JWT}",
+        f"jwt={JWT}",
+        f"{JWT}\nnext line",
+        f"{JWT}=",
+        "Basic dXNlcjpwYXNz",
+        "BASIC dXNlcjpwYXNz",
+        "Authorization: Basic dXNlcjpwYXNz",
+        "Basic YWI6Y2Q=",
+        "Basic dTpw",
+    ],
+)
+def test_tokens_inside_text_and_short_basic_credentials_are_still_caught(value: str) -> None:
+    assert contains_private_or_executable_value(value)
+
+
+@pytest.mark.parametrize(
+    "value",
+    [
+        "basic pack of 6",
+        "Wheat. Sugar. Salt",
+        "v1.2.3 build 2026.11.01",
+        "See https://shop.example.com/a.b.c for details",
+    ],
+)
+def test_ordinary_text_is_not_a_credential(value: str) -> None:
+    assert not contains_private_or_executable_value(value)
+
+
+def test_excel_trailing_empty_columns_are_ignored() -> None:
+    rows = parse_catalog_upload("sku,title,price,currency,quantity,,\r\nA1,Ghee,499,INR,3,,\r\n", "csv")
+    assert rows[0]["sku"] == "A1" and "attributes" not in rows[0]
+
+
+@pytest.mark.parametrize(
+    "header",
+    ["category,product_type", "compare_at_price,mrp", "gtin,barcode", "brand,brand"],
+)
+def test_a_column_and_its_alias_or_a_repeated_column_are_refused(header: str) -> None:
+    with pytest.raises(CatalogUploadError) as refused:
+        parse_catalog_upload(f"sku,title,price,currency,quantity,{header}\nA1,Ghee,499,INR,3,x,\n", "csv")
+    assert any("not both" in item["message"] or "twice" in item["message"] for item in refused.value.errors)
+
+
+def test_json_alias_conflicts_and_non_text_brand_are_refused() -> None:
+    base = {"sku": "G", "title": "Ghee", "price": "1", "currency": "INR", "quantity": 1}
+    with pytest.raises(CatalogUploadError, match="problem"):
+        parse_catalog_upload(json.dumps([{**base, "mrp": "5", "compare_at_price": None}]), "json")
+    with pytest.raises(CatalogUploadError) as refused:
+        parse_catalog_upload(json.dumps([{**base, "brand": ["Amul"]}]), "json")
+    assert refused.value.errors[0]["column"] == "brand"
+
+
+@pytest.mark.parametrize(
+    "column", ["CostPrice", "buying price", "COGS", "Costs", "dealer price", "landed", "Profit margin %"]
+)
+def test_one_word_and_plural_private_business_names_are_refused(column: str) -> None:
+    with pytest.raises(CatalogUploadError, match="problem"):
+        parse_catalog_upload(f"sku,title,price,currency,quantity,{column}\nA,B,1,INR,1,2\n", "csv")
+
+
+def test_an_action_name_with_dots_is_refused() -> None:
+    with pytest.raises(CatalogUploadError, match="problem"):
+        parse_catalog_upload("sku,title,price,currency,quantity,order.create\nA,B,1,INR,1,yes\n", "csv")
+
+
+def test_underscore_keys_inside_a_json_attributes_object_are_skipped_and_reported() -> None:
+    content = json.dumps(
+        [{"sku": "G", "title": "Ghee", "price": "1", "currency": "INR", "quantity": 1,
+          "attributes": {"Ingredients": "milk", "_notes": "batch 7 had complaints"}}]
+    )  # fmt: skip
+    row = parse_catalog_upload(content, "json")[0]
+    assert row["attributes"] == [{"name": "ingredients", "label": "Ingredients", "value": "milk"}]
+    assert skipped_columns(content, "json") == ["attributes._notes"]
+
+
+def test_links_with_credentials_are_refused_and_upper_case_links_are_served() -> None:
+    with pytest.raises(CatalogUploadError, match="problem"):
+        parse_catalog_upload(
+            "sku,title,price,currency,quantity,Lab report\nA,B,1,INR,1,Report: https://user:pass@lab.example.com/r\n",
+            "csv",
+        )
+    rows = parse_catalog_upload(
+        "sku,title,price,currency,quantity,url,Lab report,Protocol\n"
+        "A,B,1,INR,1,HTTPS://Shop.Example.in/g,HTTPS://labs.example.in/r1,HTTP/2 and HTTP/3\n",
+        "csv",
+    )
+    served = ucp_product(dict(_products(rows)[0], _evidence_currency="INR"))
+    assert served is not None
+    assert served["url"] == "https://shop.example.in/g"
+    assert {"name": "Lab report", "value": "https://labs.example.in/r1"} in served["metadata"]["attributes"]
+    assert {"name": "Protocol", "value": "HTTP/2 and HTTP/3"} in served["metadata"]["attributes"]
+
+
+def test_column_names_in_any_script_are_details() -> None:
+    rows = parse_catalog_upload(
+        "sku,title,price,currency,quantity,सामग्री,Région d'origine\nA1,Ghee,1,INR,1,दूध,France\n", "csv"
+    )
+    assert [item["label"] for item in rows[0]["attributes"]] == ["सामग्री", "Région d'origine"]
+    assert rows_from_products(_products(rows)) == rows
+
+
+def test_telegram_search_results_fit_the_tool_cap_and_take_shops_in_turn() -> None:
+    from core.commerce.network_telegram import SEARCH_RESULT_BUDGET, _fit_search_results
+
+    items = [
+        {"shop": f"s{shop}", "title": "T" * 50, "description": "d" * 300, "details_declared_by_shop": ["x" * 100] * 4}
+        for shop in range(10)
+        for _ in range(5)
+    ]
+    body = _fit_search_results(items)
+    assert len(json.dumps(body)) <= SEARCH_RESULT_BUDGET
+    assert body["more_results_left_out"] is True
+    assert [item["shop"] for item in body["products"][:10]] == [f"s{shop}" for shop in range(10)]
