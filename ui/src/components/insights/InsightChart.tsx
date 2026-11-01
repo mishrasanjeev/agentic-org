@@ -105,10 +105,12 @@ export function chartSummary(metric: MetricResponse, kind: ChartKind, t: TFuncti
 }
 
 function BulletBars({ items, fmt, t }: { items: BulletItem[]; fmt: (v: unknown) => string; t: TFunction }) {
-  const scale = Math.max(...items.map((i) => Math.max(i.actual, i.threshold ?? 0)), 1);
   return (
     <ul className="flex flex-col gap-3" data-testid="bullet-bars">
       {items.map((item, idx) => {
+        // Each budget has its own scale: budgets of ₹100 and ₹2,500 share no axis. The track runs to the
+        // larger of actual and threshold, so an overspend fills the bar and the marker shows the limit.
+        const scale = Math.max(item.actual, item.threshold ?? 0) || 1;
         const s = normaliseState(item.state) ?? "ok";
         const actualPct = Math.min(100, (item.actual / scale) * 100);
         const thresholdPct = item.threshold !== null ? Math.min(100, (item.threshold / scale) * 100) : null;

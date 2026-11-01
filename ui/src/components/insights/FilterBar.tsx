@@ -50,7 +50,7 @@ export default function FilterBar({
     <div
       role="group"
       aria-label={t("insights.filters.label")}
-      className="flex flex-wrap items-end gap-3 rounded-lg border bg-muted/30 p-3"
+      className="insights-filter flex flex-wrap items-end gap-3 rounded-lg border bg-muted/30 p-3"
       data-testid="insights-filter-bar"
     >
       <label className="flex flex-col gap-1 text-xs font-medium text-muted-foreground" htmlFor={`${id}-preset`}>

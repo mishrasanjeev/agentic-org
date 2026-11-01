@@ -323,6 +323,35 @@ describe("ChartCard", () => {
     expect(screen.getByTestId("bullet-bars")).toHaveTextContent("monthly");
   });
 
+  it("scales each budget bar to its own budget, not the largest one", () => {
+    withRouter(
+      <ChartCard
+        metric={metric({
+          key: "cost.budgets",
+          title: "Budgets",
+          unit: "count",
+          value: 1,
+          rows: [
+            { name: "Ops", period: "monthly", actual: 112, threshold: 100, state: "breached", currency: "USD" },
+            { name: "Finance", period: "monthly", actual: 1900, threshold: 2500, state: "ok", currency: "USD" },
+            { name: "Daily", period: "daily", actual: 8.7, threshold: 10, state: "warn", currency: "USD" },
+          ],
+        })}
+        filters={{}}
+      />,
+    );
+    const bars = [...screen.getByTestId("bullet-bars").querySelectorAll<HTMLElement>("li")].map((li) => {
+      const [fill, marker] = li.querySelectorAll<HTMLElement>(".relative > div");
+      return { fill: fill.style.width, marker: marker.style.left };
+    });
+    // Overspend fills the track and the limit marker sits at 100/112 of it.
+    expect(bars[0].fill).toBe("100%");
+    expect(bars[0].marker).toContain("89.28");
+    expect(bars[1].fill).toBe("76%");
+    expect(bars[1].marker).toContain("100%");
+    expect(parseFloat(bars[2].fill)).toBeCloseTo(87, 5);
+  });
+
   it("formats budget amounts in the row's currency and tabulates the rows", async () => {
     const user = userEvent.setup();
     withRouter(

@@ -103,7 +103,7 @@ export default function DecisionTile({
       <div className="mt-auto flex items-center justify-between gap-2 pt-1">
         <DataQualityBadge quality={metric.data_quality} />
         {action ? (
-          <Link to={action.to} className="text-xs font-medium text-primary underline-offset-4 hover:underline">
+          <Link to={action.to} className="insights-target text-xs font-medium text-primary underline-offset-4 hover:underline">
             {action.label}
           </Link>
         ) : null}

@@ -51,7 +51,7 @@ export default function NeedsYouList({ items }: { items: NeedsYouItem[] }) {
                 <div className="flex items-center gap-2">
                   <StateChip state={item.state} />
                   {to ? (
-                    <Link to={to} className="text-xs font-medium text-primary underline-offset-4 hover:underline">
+                    <Link to={to} className="insights-target text-xs font-medium text-primary underline-offset-4 hover:underline">
                       {t("insights.needsYou.open")}
                     </Link>
                   ) : null}

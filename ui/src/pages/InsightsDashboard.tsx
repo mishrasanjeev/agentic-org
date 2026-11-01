@@ -217,7 +217,7 @@ export default function InsightsDashboard() {
           {role === "admin" && statusState.status.bi_access ? (
             <Link
               to="/dashboard/insights/bi-access"
-              className="inline-flex h-8 items-center rounded-md border px-3 text-sm font-medium hover:bg-muted"
+              className="insights-target inline-flex h-8 items-center rounded-md border px-3 text-sm font-medium hover:bg-muted"
               data-testid="insights-bi-access-link"
             >
               {t("insightsBi.link")}

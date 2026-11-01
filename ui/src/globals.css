@@ -56,6 +56,19 @@
   }
 }
 
+/* Insights: text links and filter controls get the same touch target. */
+@media (pointer: coarse) {
+  .insights-target,
+  .insights-filter select,
+  .insights-filter input {
+    min-height: 44px;
+  }
+  .insights-target {
+    display: inline-flex;
+    align-items: center;
+  }
+}
+
 /* Respect prefers-reduced-motion — disables animations system-wide */
 @media (prefers-reduced-motion: reduce) {
   *,

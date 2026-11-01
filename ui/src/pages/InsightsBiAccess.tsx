@@ -231,7 +231,7 @@ export default function InsightsBiAccess() {
           <h1 className="text-xl font-bold md:text-2xl">{t("insightsBi.title")}</h1>
           <p className="text-sm text-muted-foreground">{t("insightsBi.subtitle")}</p>
         </div>
-        <Link to="/dashboard/insights" className="text-sm font-medium text-primary hover:underline">
+        <Link to="/dashboard/insights" className="insights-target text-sm font-medium text-primary hover:underline">
           {t("insightsBi.back")}
         </Link>
       </div>
