@@ -105,8 +105,11 @@ def _migration():
 def _apply(url: str, fn: str, version: str) -> list[str]:
     """Run the migration's ``upgrade``/``downgrade`` as the URL's role, and record the version, in one transaction.
 
-    Returns the server notices the run raised (SQLAlchemy's psycopg2 dialect
-    logs each one at INFO and clears the driver's list).
+    Returns the server notices the run raised. SQLAlchemy's psycopg2 dialect
+    takes every notice off the driver and hands it to ``logger.info``, so they
+    are collected with a handler on that logger. A global ``logging.disable``
+    left by another test in the run would swallow them, so it is lifted for the
+    run and put back afterwards.
     """
     notices: list[str] = []
 
@@ -116,11 +119,14 @@ def _apply(url: str, fn: str, version: str) -> list[str]:
 
     dialect_logger = logging.getLogger("sqlalchemy.dialects.postgresql")
     handler, level = _Collect(level=logging.INFO), dialect_logger.level
+    disabled = logging.root.manager.disable
+    logging.disable(logging.NOTSET)
     dialect_logger.addHandler(handler)
     dialect_logger.setLevel(logging.INFO)
     engine = create_engine(url, poolclass=NullPool)
     try:
         with engine.begin() as conn:
+            conn.exec_driver_sql("SET LOCAL client_min_messages = notice")
             context = MigrationContext.configure(conn)
             with Operations.context(context):
                 getattr(_migration(), fn)()
@@ -130,6 +136,7 @@ def _apply(url: str, fn: str, version: str) -> list[str]:
         engine.dispose()
         dialect_logger.removeHandler(handler)
         dialect_logger.setLevel(level)
+        logging.disable(disabled)
 
 
 def _exists(conn, role: str) -> bool:
