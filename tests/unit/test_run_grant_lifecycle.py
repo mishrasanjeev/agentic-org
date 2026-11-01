@@ -337,10 +337,12 @@ def test_every_graph_builder_requires_run_grant_as_a_keyword(name, builder):
 
 def test_production_code_never_passes_the_test_sentinel_or_none():
     offenders: list[str] = []
+    candidate_types = (ast.Name, ast.alias, ast.keyword)
     for top in ("api", "auth", "core", "workflows", "connectors"):
         for path in (REPO / top).rglob("*.py"):
             text = path.read_text(encoding="utf-8")
-            for node in ast.walk(ast.parse(text)):
+            nodes = (node for node in ast.walk(ast.parse(text)) if isinstance(node, candidate_types))
+            for node in nodes:
                 uses_sentinel = (isinstance(node, ast.Name) and node.id == "NO_RUN_GRANT_FOR_TESTS") or (
                     isinstance(node, ast.alias) and node.name == "NO_RUN_GRANT_FOR_TESTS"
                 )
