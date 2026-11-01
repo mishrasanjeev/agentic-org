@@ -375,12 +375,12 @@ describe("InsightsDashboard", () => {
     await screen.findByTestId("insights-tiles");
     const company = "11111111-2222-3333-4444-555555555555";
     act(() => setSelectedCompanyId(company));
-    await waitFor(() => expect(viewCalls().at(-1)?.[1]).toEqual({
+    await waitFor(() => expect(viewCalls()[viewCalls().length - 1]?.[1]).toEqual({
       params: { from: "2026-10-01", to: "2026-10-31", compare: "previous", company_id: company },
     }));
     expect(screen.getByTestId("insights-company-scope")).toBeInTheDocument();
     act(() => setSelectedCompanyId(""));
-    await waitFor(() => expect(viewCalls().at(-1)?.[1]).toEqual({
+    await waitFor(() => expect(viewCalls()[viewCalls().length - 1]?.[1]).toEqual({
       params: { from: "2026-10-01", to: "2026-10-31", compare: "previous" },
     }));
     expect(screen.queryByTestId("insights-company-scope")).not.toBeInTheDocument();

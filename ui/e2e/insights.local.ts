@@ -105,10 +105,12 @@ for (const width of [1440, 390]) {
         }
         const dashboard = page.getByTestId("insights-dashboard");
         expect(await page.evaluate(() => document.documentElement.scrollWidth === document.documentElement.clientWidth)).toBe(true);
-        for (const control of await dashboard.locator("button, select, input").all()) {
-          if (!(await control.isVisible())) continue;
-          expect(await control.evaluate((el) => el.scrollWidth <= el.clientWidth)).toBe(true);
-          if (width === 390) expect((await control.boundingBox())!.height).toBeGreaterThanOrEqual(44);
+        const controls = await dashboard.locator("button, select, input").evaluateAll((elements) => elements
+          .filter((el) => el.getBoundingClientRect().height > 0 && getComputedStyle(el).visibility !== "hidden")
+          .map((el) => ({ height: el.getBoundingClientRect().height, fits: el.scrollWidth <= el.clientWidth })));
+        for (const control of controls) {
+          expect(control.fits).toBe(true);
+          if (width === 390) expect(control.height).toBeGreaterThanOrEqual(44);
         }
         const contrasts = await dashboard.evaluate((root) => {
           const canvas = document.createElement("canvas");
