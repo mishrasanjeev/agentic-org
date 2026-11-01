@@ -344,7 +344,7 @@ async def mfa_verify(body: MfaVerifyRequest, request: Request, response: Respons
         tenant = (await session.execute(select(Tenant).where(Tenant.id == tenant_id))).scalar_one_or_none()
         await _accept_factor(user)
         # Mint under the same lock as revocation. Never issue after a concurrent reset.
-        result = start_session(response, user, tenant.settings if tenant else {})
+        result = start_session(response, user, tenant.settings if tenant else {}, mfa_verified=True)
         session.add(user)
         await session.commit()
         recovery_left = len(user.mfa_recovery_codes or [])

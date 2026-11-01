@@ -5,7 +5,9 @@
 ### Added
 
 - Platform view (`/dashboard/platform`, `/platform/insights/summary|tenants|posture`) for platform
-  operators: an active, MFA-enrolled admin of the tenant named by `AGENTICORG_PLATFORM_OPERATOR_TENANT_ID`.
+  operators: an active, MFA-enrolled admin of the tenant named by `AGENTICORG_PLATFORM_OPERATOR_TENANT_ID`,
+  signed in with a session that passed the authenticator (or recovery-code) step: sessions minted by
+  `POST /auth/mfa/verify` carry `agenticorg:mfa`; password-only, Google-only and SSO sessions do not.
   Everyone else gets 404 (or 403 without the admin scope). It shows cross-tenant daily totals, per-tenant
   usage with the rollup reconciliation streak, and a posture checklist (Alembic head, forced RLS coverage,
   whether the database role bypasses RLS, health history). Cross-tenant figures come only from two

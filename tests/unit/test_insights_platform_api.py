@@ -23,6 +23,8 @@ from fastapi import HTTPException
 from fastapi.testclient import TestClient
 from sqlalchemy.dialects import postgresql
 
+from api.v1.auth import MFA_CLAIM
+from auth.jwt import local_issuer
 from core.insights import platform
 from core.rbac import ROLE_SCOPES
 
@@ -31,6 +33,8 @@ OTHER_TENANT = uuid.UUID("00000000-0000-4000-8000-0000000000a2")
 LISTED_TENANT = uuid.UUID("00000000-0000-4000-8000-0000000000a3")
 USER_ID = uuid.UUID("00000000-0000-4000-8000-0000000000d1")
 ADMIN_SCOPES = list(ROLE_SCOPES["admin"])
+# A claims_extra value that removes the claim.
+_ABSENT = object()
 PATHS = ("/summary", "/tenants", "/posture")
 POSTURE = {
     "computed_at": "2026-11-01T00:00:00+00:00",
@@ -140,8 +144,13 @@ def _client(
         "grantex:scopes": scopes,
         "role": role,
         "agenticorg:domains": None,
+        # As minted by POST /auth/mfa/verify (api.v1.auth.session_token_for(mfa_verified=True)).
+        MFA_CLAIM: True,
+        "iss": local_issuer(),
         **(claims_extra or {}),
     }
+    for key in [key for key, value in claims.items() if value is _ABSENT]:
+        del claims[key]
     user_session = UserSession(_user() if user == "default" else user)
     platform_session = PlatformSession()
     sessions: dict[str, Any] = {"user": user_session, "platform": platform_session, "tenants": []}
@@ -251,6 +260,35 @@ def test_an_operator_without_mfa_is_not_found(app) -> None:
         _assert_hidden(client)
 
 
+@pytest.mark.parametrize(
+    "extra",
+    [
+        # A session minted without the second factor: password-only, Google-only, or before enrolment.
+        {MFA_CLAIM: _ABSENT},
+        {MFA_CLAIM: False},
+        {MFA_CLAIM: "true"},
+        # Not minted by this service.
+        {"iss": "https://idp.example.com"},
+        # SSO never sets the claim; refused even if a token somehow carried it.
+        {"auth_method": "sso_oidc", "sso_provider": "okta"},
+        {"auth_method": "sso_oidc", MFA_CLAIM: _ABSENT},
+    ],
+)
+def test_an_enrolled_operator_without_a_second_factor_session_is_not_found(app, extra) -> None:
+    # The user row is an active admin of the operator tenant, enrolled in MFA: only the session differs.
+    with _client(app, claims_extra=extra) as client:
+        _assert_hidden(client)
+        # Decided on the token alone: no user lookup.
+        assert client.sessions["tenants"] == []
+    with (
+        _client(app, claims_extra=extra) as client,
+        patch("api.v1.insights.insights_enabled_for", AsyncMock(return_value=False)),
+        patch("api.v1.insights.get_tenant_session", _noop_session),
+        patch("api.v1.insights.load_reporting_settings", AsyncMock(return_value=_reporting())),
+    ):
+        assert client.get("/api/v1/insights/status").json()["platform_operator"] is False
+
+
 def test_an_api_key_is_not_found(app) -> None:
     with _client(app, claims_extra={"sub": "apikey:ao_sk_test"}) as client:
         _assert_hidden(client)
@@ -279,7 +317,8 @@ def test_no_operator_tenant_setting_hides_the_view_from_everyone(app, setting: s
 @pytest.mark.parametrize("mode", ["api_key", "grantex", "commerce_buyer", "something_else"])
 async def test_machine_auth_modes_are_never_an_operator(mode: str) -> None:
     request = SimpleNamespace(state=SimpleNamespace(
-        claims={"sub": "operator@example.test", "agenticorg:user_id": str(USER_ID)},
+        claims={"sub": "operator@example.test", "agenticorg:user_id": str(USER_ID), MFA_CLAIM: True,
+                "iss": local_issuer()},
         auth_mode=mode,
         tenant_id=str(OPERATOR_TENANT),
         agent_id=None,

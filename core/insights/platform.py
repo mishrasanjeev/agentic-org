@@ -3,7 +3,9 @@
 
 The operator is an active ``admin`` user of the tenant named by
 ``settings.platform_operator_tenant_id`` (``AGENTICORG_PLATFORM_OPERATOR_TENANT_ID``),
-signed in with a human session (no API key, Grantex or agent token) and
+signed in with a human session (no API key, Grantex or agent token) that
+passed the second factor when it was minted (``agenticorg:mfa``, set only by
+``POST /auth/mfa/verify``; never an SSO or password-only session) and still
 enrolled in MFA, loaded from the database on every request. Anyone else gets
 404, so the surface is not revealed; an empty setting means nobody.
 
@@ -105,6 +107,12 @@ async def platform_operator(request: Request) -> PlatformOperator | None:
         return None
     claims = _human_session(request)
     if claims is None:
+        return None
+    from api.v1.auth import session_completed_mfa
+
+    # Enrolment is not enough: this session must have passed the second factor
+    # when it was minted (never an SSO, password-only or pre-enrolment session).
+    if claims.get("auth_method") == "sso_oidc" or not session_completed_mfa(claims):
         return None
     try:
         tenant_id = uuid.UUID(str(getattr(request.state, "tenant_id", "") or ""))

@@ -221,13 +221,17 @@ async def _is_blacklisted(token: str) -> bool:
 # ---------------------------------------------------------------------------
 
 
+def local_issuer() -> str:
+    """The ``iss`` of the tokens this service signs (and the only one the local validator accepts)."""
+    return "agenticorg.ai" if settings.env == "production" else "agenticorg-local"
+
+
 def create_access_token(data: dict, expires_minutes: int = 60) -> str:
     """Create an HS256-signed JWT for local authentication."""
     now = int(time.time())
-    issuer = "agenticorg.ai" if settings.env == "production" else "agenticorg-local"
     payload = {
         **data,
-        "iss": issuer,
+        "iss": local_issuer(),
         "aud": "agenticorg-tool-gateway",
         "iat": now,
         "exp": now + expires_minutes * 60,
@@ -244,7 +248,7 @@ def validate_local_token(token: str) -> dict:
     ):
         raise ValueError("Token has been revoked")
     try:
-        expected_issuer = "agenticorg.ai" if settings.env == "production" else "agenticorg-local"
+        expected_issuer = local_issuer()
         payload = jwt.decode(
             token,
             settings.secret_key,

@@ -431,3 +431,18 @@ class TestRateLimitOutage:
             cb = client.get(CALLBACK, params={"code": "c", "state": state}, follow_redirects=False)
             assert cb.status_code == 303, cb.text
             assert any(c.startswith("agenticorg_session=") for c in _set_cookies(cb))
+
+
+class TestSsoSessionHasNoSecondFactorClaim:
+    def test_an_sso_session_never_counts_as_a_completed_second_factor(self, harness):
+        """The Insights platform view needs ``agenticorg:mfa``; an SSO sign-in never sets it."""
+        from api.v1.auth import MFA_CLAIM, session_completed_mfa
+        from auth.jwt import validate_local_token
+
+        _login_resp, state, _query = _login(harness.client)
+        resp = harness.client.get(CALLBACK, params={"code": "idp-code", "state": state}, follow_redirects=False)
+        assert resp.status_code == 303, resp.text
+        cookie = next(c for c in _set_cookies(resp) if c.startswith("agenticorg_session="))
+        claims = validate_local_token(cookie.split(";", 1)[0].split("=", 1)[1])
+        assert claims["auth_method"] == "sso_oidc"
+        assert MFA_CLAIM not in claims and not session_completed_mfa(claims)

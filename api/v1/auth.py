@@ -12,6 +12,7 @@ import uuid
 from collections import defaultdict
 from collections.abc import Awaitable
 from datetime import UTC, datetime
+from typing import Any
 
 import bcrypt as _bcrypt
 from fastapi import APIRouter, HTTPException, Request, Response
@@ -23,7 +24,7 @@ from sqlalchemy import func, select
 
 from api.client_ip import client_ip as resolve_client_ip
 from api.route_metadata import route_meta
-from auth.jwt import blacklist_token, create_access_token, validate_local_token
+from auth.jwt import blacklist_token, create_access_token, local_issuer, validate_local_token
 from auth.mfa_challenges import MAX_GENERATION, MfaChallengeClaims, challenge_generation
 from auth.one_time_codes import MFA_CHALLENGE_TTL_SECONDS
 from auth.one_time_codes import consume as consume_code
@@ -460,25 +461,42 @@ def mfa_enrolled(user: User) -> bool:
     return bool(user.mfa_enabled and user.mfa_totp_secret)
 
 
-def session_token_for(user: User) -> str:
-    return create_access_token(
-        data={
-            "sub": user.email,
-            "agenticorg:user_id": str(user.id),
-            "agenticorg:tenant_id": str(user.tenant_id),
-            "grantex:scopes": get_scopes_for_role(user.role),
-            "name": user.name,
-            "role": user.role,
-            "domain": user.domain,
-            "agenticorg:domains": get_allowed_domains(user.role, user.domain),
-        },
-        expires_minutes=getattr(settings, "token_ttl_minutes", 60),
-    )
+# Set (to true) only on a session minted right after a successful second factor
+# (authenticator or recovery code, ``POST /auth/mfa/verify``). Password-only,
+# Google-only and SSO sessions never carry it, nor do sessions minted before the
+# user enrolled. Surfaces that need a verified second factor (the platform
+# view) require it; the token TTL bounds how old that verification can be.
+MFA_CLAIM = "agenticorg:mfa"
 
 
-def start_session(response: Response, user: User, tenant_settings: dict | None) -> LoginResponse:
+def session_token_for(user: User, *, mfa_verified: bool = False) -> str:
+    data: dict[str, Any] = {
+        "sub": user.email,
+        "agenticorg:user_id": str(user.id),
+        "agenticorg:tenant_id": str(user.tenant_id),
+        "grantex:scopes": get_scopes_for_role(user.role),
+        "name": user.name,
+        "role": user.role,
+        "domain": user.domain,
+        "agenticorg:domains": get_allowed_domains(user.role, user.domain),
+    }
+    if mfa_verified:
+        data[MFA_CLAIM] = True
+    return create_access_token(data=data, expires_minutes=getattr(settings, "token_ttl_minutes", 60))
+
+
+def session_completed_mfa(claims: dict[str, Any] | None) -> bool:
+    """The session was minted by this service right after a successful second factor."""
+    if not isinstance(claims, dict):
+        return False
+    return claims.get(MFA_CLAIM) is True and claims.get("iss") == local_issuer()
+
+
+def start_session(
+    response: Response, user: User, tenant_settings: dict | None, *, mfa_verified: bool = False
+) -> LoginResponse:
     """Mint the session cookie and the login body for a fully authenticated user."""
-    token = session_token_for(user)
+    token = session_token_for(user, mfa_verified=mfa_verified)
     _set_session_cookie(response, token, getattr(settings, "token_ttl_minutes", 60) * 60)
     return LoginResponse(
         access_token=token,
