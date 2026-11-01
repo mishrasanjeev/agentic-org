@@ -175,22 +175,66 @@ def _money(price: Any) -> str | None:
     return None
 
 
+MAX_DETAILS = 4
+MAX_DETAIL_CHARS = 100
+MAX_SUMMARY_DESCRIPTION = 300
+# Tool results are cut at 8000 characters; search answers are built to fit well inside that.
+SEARCH_RESULT_BUDGET = 7000
+
+
 def _product_summary(shop: str, product: dict[str, Any]) -> dict[str, Any]:
     variants = product.get("variants") if isinstance(product.get("variants"), list) else []
     first = variants[0] if variants and isinstance(variants[0], dict) else {}
     price = (product.get("price_range") or {}).get("min") if isinstance(product.get("price_range"), dict) else None
     available = first.get("availability", {}).get("available") if isinstance(first.get("availability"), dict) else None
-    return {
+    summary = {
         "shop": shop,
         # Checkouts take the variant, so the model sees only the id it should buy with.
         "item_id": first.get("id") or product.get("id"),
         "title": product.get("title"),
         "price": _money(price or first.get("price")),
         "available": available,
-        "description": (product.get("description") or {}).get("plain")
-        if isinstance(product.get("description"), dict)
-        else product.get("description"),
+        "description": str(
+            (product.get("description") or {}).get("plain")
+            if isinstance(product.get("description"), dict)
+            else product.get("description") or ""
+        )[:MAX_SUMMARY_DESCRIPTION]
+        or None,
     }
+    metadata: dict[str, Any] = product["metadata"] if isinstance(product.get("metadata"), dict) else {}
+    details = [
+        f"{item.get('name')}: {str(item.get('value'))[:MAX_DETAIL_CHARS]}"
+        for item in metadata.get("attributes") or []
+        if isinstance(item, dict) and item.get("name") and item.get("value")
+    ][:MAX_DETAILS]
+    if metadata.get("brand"):
+        summary["brand"] = metadata["brand"]
+    if details:
+        # The shop's own declarations (ingredients, licence numbers and so on), kept short for the tool result cap.
+        summary["details_declared_by_shop"] = details
+    return summary
+
+
+def _fit_search_results(results: list[dict[str, Any]]) -> dict[str, Any]:
+    """Products from every shop in turn, trimmed to fit the tool-result cap as whole products."""
+    by_shop: dict[str, list[dict[str, Any]]] = {}
+    for item in results:
+        by_shop.setdefault(str(item.get("shop")), []).append(item)
+    ordered = [
+        shop_items[index]
+        for index in range(max((len(items) for items in by_shop.values()), default=0))
+        for shop_items in by_shop.values()
+        if index < len(shop_items)
+    ]
+    body: dict[str, Any] = {"products": ordered}
+    if len(json.dumps(body, default=str)) <= SEARCH_RESULT_BUDGET:
+        return body
+    for item in ordered:
+        item.pop("details_declared_by_shop", None)
+    while ordered and len(json.dumps(body, default=str)) > SEARCH_RESULT_BUDGET:
+        ordered.pop()
+    body["more_results_left_out"] = True
+    return body
 
 
 async def _catalog_search(entry: dict[str, Any], query: str) -> list[dict[str, Any]]:
@@ -230,7 +274,7 @@ class ShopperTools:
             # enterprise-gate: broad-except-ok reason=one-shop-failing-never-fails-the-search
             except Exception:
                 logger.warning("network_telegram_search_failed", shop=entry["slug"])
-        return {"products": results}
+        return _fit_search_results(results)
 
     async def open_checkout(self, shop: str, item_id: str, quantity: int = 1) -> dict[str, Any]:
         from api.v1.network import network_checkout  # noqa: PLC0415 - the API module wires the UCP runtime

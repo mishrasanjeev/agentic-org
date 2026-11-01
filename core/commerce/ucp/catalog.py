@@ -221,7 +221,36 @@ def _ucp_variant(variant: Mapping[str, Any], product: Mapping[str, Any]) -> dict
     ]
     if options:
         item["options"] = options
+    gtin = variant.get("gtin")
+    if isinstance(gtin, str) and gtin.isdigit():
+        item["barcodes"] = [{"type": "GTIN", "value": gtin}]
     return item
+
+
+# Product details the shop declared (catalog upload columns), as UCP product metadata.
+MAX_SERVED_DETAILS = 30
+MAX_SERVED_DETAIL_VALUE = 1000
+
+
+def _product_details(product: Mapping[str, Any]) -> list[dict[str, str]]:
+    details: list[dict[str, str]] = []
+    for item in product.get("attributes") or ():
+        if not isinstance(item, Mapping):
+            continue
+        name = _plain(item.get("label"), 60) or _plain(item.get("name"), 60)
+        value = _plain(item.get("value"), MAX_SERVED_DETAIL_VALUE)
+        if not name or not value or contains_private_or_executable_value(f"{name} {value}"):
+            continue
+        if value.lower().startswith("http://"):
+            continue
+        if value.lower().startswith("https://"):
+            value = _https_media("https://" + value[8:])
+            if value is None:
+                continue
+        details.append({"name": name, "value": value})
+        if len(details) >= MAX_SERVED_DETAILS:
+            break
+    return details
 
 
 def ucp_product(product: Mapping[str, Any]) -> dict[str, Any] | None:
@@ -255,6 +284,19 @@ def ucp_product(product: Mapping[str, Any]) -> dict[str, Any] | None:
     category = _plain(product.get("product_type"), 255)
     if category:
         result["categories"] = [{"value": category}]
+    url = _https_media(product.get("url"))
+    if url:
+        result["url"] = url
+    tags = [tag for tag in (_plain(value, 50) for value in product.get("tags") or ()) if tag][:20]
+    if tags:
+        result["tags"] = tags
+    details = _product_details(product)
+    brand = _plain(product.get("vendor"), 120)
+    if brand or details:
+        metadata: dict[str, Any] = {"brand": brand} if brand else {}
+        if details:
+            metadata.update({"attributes": details, "attributes_declared_by": "shop"})
+        result["metadata"] = metadata
     media = []
     for image in product.get("images") or ():
         if not isinstance(image, Mapping):
@@ -287,6 +329,10 @@ def ucp_product(product: Mapping[str, Any]) -> dict[str, Any] | None:
 
 def _search_text(product: Mapping[str, Any]) -> str:
     parts = [product.get("title"), product.get("description"), product.get("vendor"), product.get("product_type")]
+    parts.extend(tag for tag in product.get("tags") or () if isinstance(tag, str))
+    for item in product.get("attributes") or ():
+        if isinstance(item, Mapping):
+            parts.extend([item.get("label"), item.get("value")])
     for variant in product.get("variants") or ():
         if isinstance(variant, Mapping):
             parts.extend([variant.get("title"), variant.get("sku")])

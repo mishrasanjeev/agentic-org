@@ -1,5 +1,29 @@
 # Changelog
 
+## Unreleased - Product details in the catalog upload
+
+- The catalog upload (CSV or JSON) takes optional named columns: `brand`, `category` (or `product_type`),
+  `tags`, `mrp` (or `compare_at_price`) and `barcode` (or `gtin`, check digit verified). Any other column is a
+  product detail, such as ingredients, allergens, shelf life, an FSSAI licence number or a lab-report link,
+  stored as `attributes` [{name, label, value}] (up to 30, values up to 1,000 characters, https-only links).
+  Columns starting with `_` are skipped; names that read as private business data (cost, margin, supplier and
+  the like), misspelled known columns and credential-like names are refused per column. The upload answer lists
+  the details buyers will read and the skipped columns, and the setup page has an example file.
+- Re-reading an uploaded catalog keeps every new field, so the evidence id and the Grantex catalog version stay
+  the same; catalogs uploaded before keep their digest.
+- UCP catalog products carry `url`, `tags`, `metadata` (`brand`, `attributes`, `attributes_declared_by: shop`)
+  and variant `barcodes`, and search matches tags and details. The Telegram shopper shows the brand and up to
+  six details. Grantex is unchanged: product content never leaves AgenticOrg.
+- The private-value scanner no longer reads ordinary sentences or web links as a compact JWS (a whole value must be
+  three base64url parts; a JWT inside longer text is still found by its "eyJ" header), nor the word "basic" alone
+  as a Basic credential (the value after it must decode to "user:password"). Real tokens and credentials, short
+  ones and ones inside longer text included, are still refused.
+- Upload guards: Excel's trailing empty columns are ignored, a column and its alias together are refused, `_` keys
+  inside a JSON `attributes` object are skipped and reported, private-business names are matched as one word,
+  plural or abbreviated (CostPrice, buying price, COGS), detail links with a user name or password are refused,
+  upper-case `HTTPS://` links are served in lower case, column names in any script work, and a large file is
+  checked off the event loop.
+
 ## Unreleased - Security advisories of 2026-10-30 (pypdf, follow-redirects)
 
 ### Security
