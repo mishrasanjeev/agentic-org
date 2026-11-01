@@ -30,6 +30,7 @@ from decimal import Decimal
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
+from zoneinfo import ZoneInfo
 
 import pytest
 from alembic.migration import MigrationContext
@@ -42,6 +43,8 @@ from sqlalchemy.orm import Session
 from sqlalchemy.pool import NullPool
 
 from core.insights.metrics import day_bounds, local_today
+
+KOLKATA = ZoneInfo("Asia/Kolkata")
 
 MIGRATION = Path(__file__).resolve().parents[2] / "migrations" / "versions" / "v6_z106_insights_foundation.py"
 PASSWORD = "local-test-password"  # noqa: S105 - a throwaway role in a disposable test database
@@ -270,6 +273,19 @@ def _by_key(view: dict) -> dict:
     return {m["key"]: m for m in view["tiles"] + view["charts"]}
 
 
+def _closed_at(day):
+    return day_bounds(day, KOLKATA)[1] + timedelta(minutes=15)
+
+
+def _settle(world: World, day, rolled_at=None) -> None:
+    """Mark the day's rollups as made at ``rolled_at`` (default: once the day had closed)."""
+    world.scalar(
+        "UPDATE insights_rollup_state SET rolled_at = :at WHERE day = :d RETURNING 1",
+        at=rolled_at or _closed_at(day) + timedelta(minutes=1),
+        d=day,
+    )
+
+
 @pytest.mark.asyncio
 async def test_views_metrics_and_exports_keep_to_the_tenant(world, monkeypatch) -> None:
     from api.v1 import insights as api
@@ -280,6 +296,7 @@ async def test_views_metrics_and_exports_keep_to_the_tenant(world, monkeypatch) 
     seed = _seed(world)
     for tenant in (seed.a, seed.b):
         await rollup.rollup_day(tenant, seed.yesterday)
+    _settle(world, seed.yesterday)
 
     view_a = _by_key(await api.insights_view("executive", ADMIN, tenant_id=str(seed.a)))
     volume = view_a["runs.volume"]
@@ -310,7 +327,11 @@ async def test_views_metrics_and_exports_keep_to_the_tenant(world, monkeypatch) 
     finance = _by_key(await api.insights_view("finance", CFO, tenant_id=str(seed.a)))
     assert finance["runs.volume"]["value"] == 5
     assert finance["cost.spend"]["value"] == 2.0
-    assert finance["cost.per_run"]["value"] == pytest.approx(2.0 / 6, abs=1e-6)  # all of tenant A's runs
+    per_run = finance["cost.per_run"]
+    assert per_run["value"] == pytest.approx(2.0 / 6, abs=1e-6)  # all of tenant A's runs
+    # Run data starts yesterday (the first fact): a 30-day period is covered on 2 days only, and says so.
+    assert per_run["data_quality"] == "mixed"
+    assert f"from {seed.yesterday.isoformat()} to {seed.today.isoformat()}" in per_run["hint"]
     budgets = finance["cost.budgets"]
     assert budgets["state"] == "act" and budgets["rows"][0]["state"] == "breached"
 
@@ -369,18 +390,119 @@ async def test_cost_source_falls_back_to_the_ledger_and_converts_currency(world,
             record_count=4, call_count=4, unpriced_count=1,
         )
     )
+    # Metering started today: today is read from the rollups (500 INR), yesterday from the ledger (0.5 USD at 80).
     metered = await api.insights_metric("cost.spend", CFO, tenant_id=str(seed.a))
-    assert metered["source"] == "spend_usage_rollups" and metered["currency"] == "INR" and metered["value"] == 500.0
+    assert metered["source"] == "spend_usage_rollups+agent_cost_ledger" and metered["data_quality"] == "mixed"
+    assert metered["currency"] == "INR" and metered["value"] == 540.0
+    series = {p["t"]: p["value"] for p in metered["series"]}
+    assert series[seed.today.isoformat()] == 500.0 and series[seed.yesterday.isoformat()] == 40.0
     models = await api.insights_metric("cost.by_model", CFO, tenant_id=str(seed.a))
     assert models["rows"] == [{"provider": "gemini", "model": "gemini-2.5-flash", "value": 500.0}]
     quality = await api.insights_metric("cost.data_quality", CFO, tenant_id=str(seed.a))
     assert quality["value"] == 75.0 and quality["data_quality"] == "measured"
+    # Not every spend day is metered: tokens come from the runs, not a mix of units.
     tokens = await api.insights_metric("tokens.by_unit", CFO, tenant_id=str(seed.a))
-    assert tokens["source"] == "spend_usage_rollups" and tokens["rows"] == [{"unit": "input_token", "value": 1000}]
+    # Tenant-wide for a CFO: the 6 raw facts of yesterday and today, 150 tokens each.
+    assert tokens["source"] == "run_facts" and tokens["value"] == 6 * 150
 
     # Tenant B has no rollup rows: its cost stays on its own ledger.
     other = await api.insights_metric("cost.spend", CFO, tenant_id=str(seed.b))
     assert other["source"] == "agent_cost_ledger" and other["value"] == 10.0 and other["currency"] == "USD"
+    # One day of spend is not enough to fit a trend: no forecast.
     forecast = await api.insights_metric("cost.forecast", CFO, tenant_id=str(seed.b))
-    assert forecast["data_quality"] == "estimated" and forecast["rows"][0]["actual"] == 10.0
-    assert forecast["value"] >= 10.0
+    assert forecast["data_quality"] == "no_data" and "needs 7 days of spend" in forecast["hint"]
+
+
+@pytest.mark.asyncio
+async def test_an_approved_run_is_one_successful_run_in_raw_and_rolled_days(world, monkeypatch) -> None:
+    """Replay: one run pauses for approval (hitl_triggered) and is approved (hitl_resume, completed)."""
+    from api.v1 import insights as api
+    from core.insights import rollup
+    from core.insights.run_facts import normalise_fact
+    from core.models.insights import RunFact
+
+    seed = _seed(world)
+    tenant = uuid.uuid4()
+    from core.models.tenant import Tenant
+
+    world.add(Tenant(id=tenant, name="Synthetic insights C", slug="insights-c-" + tenant.hex[:8],
+                     data_region="IN", settings={}))  # fmt: skip
+
+    def run_and_resume(day_start):
+        paused = normalise_fact({"tenant_id": tenant, "run_key": "agents:t1", "entrypoint": "agents",
+                                 "status": "hitl_triggered", "started_at": day_start, "duration_ms": 900})
+        resumed = normalise_fact({"tenant_id": tenant, "run_key": "hitl_resume:t1", "entrypoint": "hitl_resume",
+                                  "status": "completed", "started_at": day_start + timedelta(minutes=5),
+                                  "duration_ms": 400})
+        debug = normalise_fact({"tenant_id": tenant, "run_key": "debug:t1", "entrypoint": "debug",
+                                "status": "failed", "started_at": day_start + timedelta(minutes=6)})
+        return [RunFact(**paused), RunFact(**resumed), RunFact(**debug)]
+
+    zone_today = day_bounds(seed.today, KOLKATA)[0]
+    zone_yesterday = day_bounds(seed.yesterday, KOLKATA)[0]
+    world.add(*run_and_resume(zone_today + timedelta(minutes=1)))
+    world.add(*run_and_resume(zone_yesterday + timedelta(hours=2)))
+    await rollup.rollup_day(tenant, seed.yesterday)
+    _settle(world, seed.yesterday)
+
+    for when in (seed.today, seed.yesterday):
+        day = when.isoformat()
+        args = {"tenant_id": str(tenant), "from_": when, "to": when, "compare": "none"}
+        volume = await api.insights_metric("runs.volume", ADMIN, **args)
+        success = await api.insights_metric("runs.success_rate", ADMIN, **args)
+        straight = await api.insights_metric("runs.straight_through_rate", ADMIN, **args)
+        expected_source = "run_facts" if when == seed.today else "insights_daily"
+        assert volume["source"] == expected_source, day
+        assert (volume["value"], success["value"], straight["value"]) == (1, 100.0, 0.0), day
+
+
+@pytest.mark.asyncio
+async def test_a_rollup_made_before_the_day_closed_is_not_read(world, monkeypatch) -> None:
+    """Replay: the 15-minute sweep rolled yesterday at 23:50; a fact at 23:55 must still count."""
+    from api.v1 import insights as api
+    from core.insights import rollup
+    from core.models.insights import RunFact
+
+    seed = _seed(world)
+    end = day_bounds(seed.yesterday, KOLKATA)[1]
+    await rollup.rollup_day(seed.a, seed.yesterday)
+    _settle(world, seed.yesterday, end - timedelta(minutes=10))  # rolled at 23:50, while the day was open
+    world.add(RunFact(tenant_id=seed.a, run_key="agents:late", entrypoint="agents", status="completed",
+                      started_at=end - timedelta(minutes=5)))  # fmt: skip
+    args = {"tenant_id": str(seed.a), "from_": seed.yesterday, "to": seed.yesterday, "compare": "none"}
+    volume = await api.insights_metric("runs.volume", ADMIN, **args)
+    assert volume["value"] == 3 and volume["source"] == "run_facts"
+    # Once a rollup made after the day closed exists, the day is read from it.
+    await rollup.rollup_day(seed.a, seed.yesterday)
+    _settle(world, seed.yesterday)
+    volume = await api.insights_metric("runs.volume", ADMIN, **args)
+    assert volume["value"] == 3 and volume["source"] == "insights_daily"
+
+
+@pytest.mark.asyncio
+async def test_changing_the_reporting_time_zone_clears_the_rollups(world, monkeypatch) -> None:
+    from api.v1 import config
+    from core.insights import rollup
+    from core.insights.reporting_settings import ReportingSettings
+
+    seed = _seed(world)
+    for tenant in (seed.a, seed.b):
+        await rollup.rollup_day(tenant, seed.yesterday)
+    claims = {"agenticorg:user_id": str(uuid.uuid4())}
+    count = "SELECT count(*) FROM {table} WHERE tenant_id = :t"
+
+    # The same zone again: nothing is cleared.
+    same = ReportingSettings(timezone="Asia/Kolkata", fiscal_year_start_month=4, currency="INR")
+    await config.update_reporting_settings(same, tenant_id=str(seed.a), claims=claims)
+    assert world.scalar(count.format(table="insights_daily"), t=seed.a) > 0
+    assert world.scalar(count.format(table="insights_rollup_state"), t=seed.a) == 1
+
+    moved = ReportingSettings(timezone="UTC", fiscal_year_start_month=4, currency="INR")
+    await config.update_reporting_settings(moved, tenant_id=str(seed.a), claims=claims)
+    assert world.scalar(count.format(table="insights_daily"), t=seed.a) == 0
+    assert world.scalar(count.format(table="insights_rollup_state"), t=seed.a) == 0
+    # Tenant B keeps its rollups; the audit row was written in the same transaction.
+    assert world.scalar(count.format(table="insights_rollup_state"), t=seed.b) == 1
+    assert world.scalar(
+        "SELECT count(*) FROM audit_log WHERE tenant_id = :t AND event_type = 'config.reporting.write'", t=seed.a
+    ) == 2

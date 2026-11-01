@@ -5,7 +5,7 @@ from __future__ import annotations
 import uuid as _uuid
 
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy import select
+from sqlalchemy import delete, select
 
 from api.deps import get_current_tenant, get_current_user, require_tenant_admin
 from api.route_metadata import route_meta
@@ -17,6 +17,7 @@ from core.insights.reporting_settings import (
     settings_from_tenant,
     store_reporting_settings,
 )
+from core.models.insights import InsightsDaily, InsightsRollupState
 from core.models.tenant import Tenant
 from core.schemas.api import FleetLimits
 
@@ -118,7 +119,14 @@ async def update_reporting_settings(
     tenant_id: str = Depends(get_current_tenant),
     claims: dict = Depends(get_current_user),
 ):
-    """Replace the reporting settings; the change is audited (``config.reporting.write``) in the same transaction."""
+    """Replace the reporting settings; the change is audited (``config.reporting.write``) in the same transaction.
+
+    A new time zone moves every tenant-local day, so the tenant's Insights
+    rollups (``insights_daily`` and ``insights_rollup_state``) are deleted in
+    the same transaction: until the closed-day sweep rolls them again in the
+    new zone (it catches up the last 31 days with no rollup, hourly), run
+    metrics read those days from the raw facts.
+    """
     tid = _uuid.UUID(tenant_id)
     actor = str(claims.get("agenticorg:user_id") or claims.get("sub") or "")
     async with get_tenant_session(tid) as session:
@@ -128,6 +136,9 @@ async def update_reporting_settings(
             raise HTTPException(404, "Tenant not found")
         before = settings_from_tenant(tenant.settings, tenant.data_region)
         tenant.settings = store_reporting_settings(tenant.settings, body)
+        if before.timezone != body.timezone:
+            await session.execute(delete(InsightsDaily).where(InsightsDaily.tenant_id == tid))
+            await session.execute(delete(InsightsRollupState).where(InsightsRollupState.tenant_id == tid))
         session.add(
             audit_entry(
                 tid,

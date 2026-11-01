@@ -114,6 +114,17 @@ def test_percentile_in_the_open_bucket_is_a_finite_floor() -> None:
     assert math.isfinite(found)
 
 
+def test_a_percentile_in_the_open_bucket_is_flagged_as_a_lower_bound() -> None:
+    counts = buckets.empty_buckets()
+    counts[11] = 3
+    # Over 10 minutes: the value is the last finite bound and only a floor.
+    assert buckets.percentile_estimate(counts, 0.95) == (600_000.0, True)
+    counts[11], counts[3] = 1, 99
+    assert buckets.percentile_estimate(counts, 0.95) == (5_000.0, False)
+    assert buckets.percentile_estimate(counts, 1.0) == (600_000.0, True)
+    assert buckets.percentile_estimate(buckets.empty_buckets(), 0.5) == (None, False)
+
+
 def test_percentile_matches_bucket_counts_from_raw_durations() -> None:
     durations = [120, 480, 950, 1500, 1800, 2500, 7000, 15000, 45000, 90000]
     counts = buckets.bucket_counts(durations)
@@ -295,37 +306,72 @@ TODAY = date(2026, 11, 5)
 YESTERDAY = TODAY - timedelta(days=1)
 
 
-def test_before_two_am_only_unrolled_older_days_are_caught_up() -> None:
-    assert insights_tasks.closed_days_to_roll(_local(1, 59), {}, None) == [date(2026, 11, 2), date(2026, 11, 3)]
-    full = {date(2026, 11, 2): _local(0), date(2026, 11, 3): _local(0)}
-    assert insights_tasks.closed_days_to_roll(_local(1, 59), full, None) == []
+def _all_rolled(after: datetime, *, days: int = 31) -> dict[date, datetime | None]:
+    """A state for each of the last ``days`` days before today, rolled at ``after``."""
+    return {TODAY - timedelta(days=back): after for back in range(1, days + 1)}
+
+
+# Rolled long after every one of those days closed.
+SETTLED = datetime(2026, 11, 4, 23, 0, tzinfo=UTC)
+
+
+def test_before_two_am_days_without_state_are_caught_up_but_not_yesterday() -> None:
+    # Nothing rolled yet: the last 31 days before yesterday are caught up, oldest first; yesterday waits for 02:00.
+    days = insights_tasks.closed_days_to_roll(_local(1, 59), {}, {})
+    assert days == [TODAY - timedelta(days=back) for back in range(31, 1, -1)]
+    assert YESTERDAY not in days and len(days) == 30
+    assert insights_tasks.closed_days_to_roll(_local(1, 59), _all_rolled(SETTLED), {}) == []
+
+
+def test_the_catch_up_is_bounded_to_31_days() -> None:
+    days = insights_tasks.closed_days_to_roll(_local(3), {}, {})
+    assert days[0] == TODAY - timedelta(days=31) and days[-1] == YESTERDAY and len(days) == 31
 
 
 def test_from_two_am_yesterday_without_state_is_rolled() -> None:
-    states = {date(2026, 11, 2): _local(0), date(2026, 11, 3): _local(0)}
-    assert insights_tasks.closed_days_to_roll(_local(2), states, None) == [YESTERDAY]
+    states = _all_rolled(SETTLED)
+    del states[YESTERDAY]
+    assert insights_tasks.closed_days_to_roll(_local(2), states, {}) == [YESTERDAY]
 
 
-def test_yesterday_is_rolled_again_when_a_fact_arrived_after_its_rollup() -> None:
-    rolled = datetime(2026, 11, 4, 18, 0, tzinfo=UTC)
-    states = {date(2026, 11, 2): rolled, date(2026, 11, 3): rolled, YESTERDAY: rolled}
-    assert insights_tasks.closed_days_to_roll(_local(3), states, rolled + timedelta(seconds=1)) == [YESTERDAY]
-    assert insights_tasks.closed_days_to_roll(_local(3), states, rolled - timedelta(seconds=1)) == []
-    assert insights_tasks.closed_days_to_roll(_local(3), states, None) == []
+def test_a_recent_day_is_rolled_again_when_a_fact_was_created_after_its_rollup() -> None:
+    # A late fact for five days ago (created now, started then) makes that day's rollup stale.
+    late_day = TODAY - timedelta(days=5)
+    states = _all_rolled(SETTLED)
+    assert insights_tasks.closed_days_to_roll(_local(3), states, {late_day: SETTLED + timedelta(seconds=1)}) == [
+        late_day
+    ]
+    assert insights_tasks.closed_days_to_roll(_local(3), states, {late_day: SETTLED - timedelta(seconds=1)}) == []
+    # Within the last 7 days only: a late fact for a day 8 days back is left to the reconciliation window.
+    old_day = TODAY - timedelta(days=8)
+    assert insights_tasks.closed_days_to_roll(_local(3), states, {old_day: SETTLED + timedelta(hours=1)}) == []
+
+
+def test_a_rollup_made_before_the_day_closed_is_rolled_again() -> None:
+    # The 15-minute sweep rolled yesterday at 23:50 IST, while it was still open: roll it once it has closed.
+    states = _all_rolled(SETTLED)
+    states[YESTERDAY] = datetime(2026, 11, 4, 18, 20, tzinfo=UTC)  # 23:50 IST on 4 November
+    assert insights_tasks.closed_days_to_roll(_local(3), states, {}) == [YESTERDAY]
+    # Rolled 15 minutes after midnight IST: closed.
+    states[YESTERDAY] = datetime(2026, 11, 4, 18, 45, tzinfo=UTC)
+    assert insights_tasks.closed_days_to_roll(_local(3), states, {}) == []
 
 
 def test_a_state_never_rolled_counts_as_needing_a_roll() -> None:
-    states = {date(2026, 11, 2): None, date(2026, 11, 3): None, YESTERDAY: None}
-    # Older days with any state are left alone; yesterday without a roll time is rolled.
-    assert insights_tasks.closed_days_to_roll(_local(4), states, None) == [YESTERDAY]
+    states = _all_rolled(SETTLED)
+    states[TODAY - timedelta(days=3)] = None
+    states[YESTERDAY] = None
+    states[TODAY - timedelta(days=20)] = None  # older than 7 days: a state exists, left alone
+    assert insights_tasks.closed_days_to_roll(_local(4), states, {}) == [TODAY - timedelta(days=3), YESTERDAY]
 
 
-def test_reconcile_waits_for_two_thirty_and_stops_once_reconciled() -> None:
-    assert insights_tasks.should_reconcile(_local(2, 29), None) is False
-    assert insights_tasks.should_reconcile(_local(2, 30), None) is True
-    assert insights_tasks.should_reconcile(_local(2, 30), "rolled") is True
-    assert insights_tasks.should_reconcile(_local(9), "mismatch") is True
-    assert insights_tasks.should_reconcile(_local(9), "reconciled") is False
+def test_the_last_three_closed_days_are_reconciled_until_they_are() -> None:
+    three = [TODAY - timedelta(days=3), TODAY - timedelta(days=2), YESTERDAY]
+    assert insights_tasks.days_to_reconcile(_local(2, 29), {}) == three[:2]  # yesterday waits for 02:30
+    assert insights_tasks.days_to_reconcile(_local(2, 30), {}) == three
+    statuses = {three[0]: "reconciled", three[1]: "mismatch", YESTERDAY: "rolled"}
+    assert insights_tasks.days_to_reconcile(_local(9), statuses) == three[1:]
+    assert insights_tasks.days_to_reconcile(_local(9), dict.fromkeys(three, "reconciled")) == []
 
 
 # ── reconcile_day flow (no database) ────────────────────────────────
@@ -524,9 +570,13 @@ def test_rollup_closed_days_rolls_what_the_decision_names(monkeypatch) -> None:
     async def fake_enabled(tenant_id):
         return True
 
+    states = _all_rolled(SETTLED)
+    del states[date(2026, 11, 3)]
+    del states[YESTERDAY]
+
     async def fake_inputs(tenant, today):
         assert today == TODAY
-        return {date(2026, 11, 2): datetime(2026, 11, 2, tzinfo=UTC)}, None
+        return states, {}
 
     async def fake_rollup(tenant_id, day, *, zone=None):
         rolled.append(day)
@@ -543,16 +593,24 @@ def test_rollup_closed_days_rolls_what_the_decision_names(monkeypatch) -> None:
     assert found == {"tenants": 1, "days": 2, "skipped": 0, "failed": 0}
 
 
+D3, D2 = TODAY - timedelta(days=3), TODAY - timedelta(days=2)
+
+
 @pytest.mark.parametrize(
-    ("utc_now", "status", "expected"),
+    ("utc_now", "statuses", "expected"),
     [
-        (datetime(2026, 11, 4, 20, 59, tzinfo=UTC), None, []),  # 02:29 IST: too early
-        (datetime(2026, 11, 4, 21, 0, tzinfo=UTC), None, [YESTERDAY]),  # 02:30 IST
-        (datetime(2026, 11, 4, 22, 0, tzinfo=UTC), "rolled", [YESTERDAY]),
-        (datetime(2026, 11, 4, 22, 0, tzinfo=UTC), "reconciled", []),
+        (datetime(2026, 11, 4, 20, 59, tzinfo=UTC), {}, [D3, D2]),  # 02:29 IST: yesterday too early
+        (datetime(2026, 11, 4, 21, 0, tzinfo=UTC), {}, [D3, D2, YESTERDAY]),  # 02:30 IST
+        (datetime(2026, 11, 4, 22, 0, tzinfo=UTC), {D3: "reconciled", D2: "reconciled", YESTERDAY: "rolled"},
+         [YESTERDAY]),
+        (datetime(2026, 11, 4, 22, 0, tzinfo=UTC), {D3: "mismatch", D2: "reconciled", YESTERDAY: "reconciled"},
+         [D3]),
+        (datetime(2026, 11, 4, 22, 0, tzinfo=UTC), dict.fromkeys((D3, D2, YESTERDAY), "reconciled"), []),
     ],
 )
-def test_reconcile_yesterday_once_per_tenant_day_after_two_thirty(monkeypatch, utc_now, status, expected) -> None:
+def test_reconcile_yesterday_reconciles_the_last_three_closed_days_not_reconciled(
+    monkeypatch, utc_now, statuses, expected
+) -> None:
     from core.config import settings
 
     monkeypatch.setattr(settings, "insights_enabled", True)
@@ -566,9 +624,9 @@ def test_reconcile_yesterday_once_per_tenant_day_after_two_thirty(monkeypatch, u
     async def fake_enabled(tenant_id):
         return True
 
-    async def fake_status(tenant, day):
-        assert day == YESTERDAY
-        return status
+    async def fake_statuses(tenant, first, last):
+        assert (first, last) == (D3, YESTERDAY)
+        return statuses
 
     async def fake_reconcile(tenant_id, day, *, zone=None):
         reconciled.append(day)
@@ -576,7 +634,7 @@ def test_reconcile_yesterday_once_per_tenant_day_after_two_thirty(monkeypatch, u
 
     monkeypatch.setattr(insights_tasks, "_tenants", fake_tenants)
     monkeypatch.setattr(insights_tasks, "_enabled_for", fake_enabled)
-    monkeypatch.setattr(insights_tasks, "_state_status", fake_status)
+    monkeypatch.setattr(insights_tasks, "_state_statuses", fake_statuses)
     monkeypatch.setattr(rollup, "reconcile_day", fake_reconcile)
     monkeypatch.setattr(insights_tasks, "_now", lambda: utc_now)
     insights_tasks.reconcile_yesterday()

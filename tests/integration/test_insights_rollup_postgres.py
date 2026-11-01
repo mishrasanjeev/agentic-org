@@ -300,30 +300,42 @@ async def test_closed_day_and_reconcile_sweeps(scratch: Scratch, monkeypatch) ->
 
     monkeypatch.setattr(insights_tasks, "_enabled_for", enabled)
     # 03:00 IST on 2 November: yesterday is DAY.
-    monkeypatch.setattr(insights_tasks, "_now", lambda: datetime(2026, 11, 2, 3, 0, tzinfo=IST).astimezone(UTC))
+    now = datetime(2026, 11, 2, 3, 0, tzinfo=IST).astimezone(UTC)
+    monkeypatch.setattr(insights_tasks, "_now", lambda: now)
+
+    def as_of_now() -> None:
+        # rolled_at is the database clock; the sweep's clock is faked: the rollups ran "now".
+        s.rows("UPDATE insights_rollup_state SET rolled_at = :now WHERE rolled_at IS NOT NULL RETURNING 1", now=now)
 
     found = await insights_tasks._sweep("rollup_closed_days", insights_tasks._roll_closed)
-    # DAY plus the two unrolled days before it, for the one enabled tenant.
-    assert found == {"tenants": 1, "days": 3, "skipped": 1, "failed": 0}
+    # Every one of the last 31 days had no rollup: all caught up, for the one enabled tenant.
+    assert found == {"tenants": 1, "days": 31, "skipped": 1, "failed": 0}
     states = {r.day: r for r in s.rows("SELECT day, status, rolled_runs FROM insights_rollup_state "
                                         "WHERE tenant_id = :t", t=tenant_on)}  # fmt: skip
-    assert set(states) == {DAY, DAY - timedelta(days=1), DAY - timedelta(days=2)}
+    assert set(states) == {DAY - timedelta(days=back) for back in range(31)}
     assert states[DAY].rolled_runs == 1 and states[DAY - timedelta(days=1)].rolled_runs == 0
     assert s.rows("SELECT id FROM insights_rollup_state WHERE tenant_id IN (:a, :b)", a=tenant_off, b=deleted) == []
+    as_of_now()
 
     # Nothing new: the next hourly run rolls nothing.
     found = await insights_tasks._sweep("rollup_closed_days", insights_tasks._roll_closed)
     assert found["days"] == 0
     # A late fact for DAY (created after its rollup) makes the sweep roll DAY again.
-    s.fact(tenant_on, _utc(2026, 11, 1, 7, 0), tokens_total=5, duration_ms=100)
+    s.fact(tenant_on, _utc(2026, 11, 1, 7, 0), tokens_total=5, duration_ms=100, created_at=now + timedelta(minutes=1))
+    # A late fact five days back, written now: its day is rolled again too (created_at, not started_at).
+    five_back = DAY - timedelta(days=4)
+    s.fact(tenant_on, datetime(2026, 10, 28, 12, 0, tzinfo=IST), duration_ms=100,
+           created_at=now + timedelta(minutes=1))  # fmt: skip
     found = await insights_tasks._sweep("rollup_closed_days", insights_tasks._roll_closed)
-    assert found["days"] == 1
-    assert _state(s, tenant_on, DAY).rolled_runs == 2
+    assert found["days"] == 2
+    assert _state(s, tenant_on, DAY).rolled_runs == 2 and _state(s, tenant_on, five_back).rolled_runs == 1
+    as_of_now()
 
-    # Reconcile from 02:30 IST, once per tenant-day.
+    # Reconcile from 02:30 IST: the last three closed days not reconciled yet.
     found = await insights_tasks._sweep("reconcile_yesterday", insights_tasks._reconcile)
-    assert found == {"tenants": 1, "days": 1, "skipped": 1, "failed": 0}
-    assert _state(s, tenant_on, DAY).status == "reconciled"
+    assert found == {"tenants": 1, "days": 3, "skipped": 1, "failed": 0}
+    for back in range(3):
+        assert _state(s, tenant_on, DAY - timedelta(days=back)).status == "reconciled"
     found = await insights_tasks._sweep("reconcile_yesterday", insights_tasks._reconcile)
     assert found["days"] == 0
 
