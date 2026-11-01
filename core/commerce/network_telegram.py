@@ -34,6 +34,8 @@ from core import auth_state
 from core.channels.replies import final_answer
 from core.commerce import network as net
 from core.commerce import payment_handoff as ph
+from core.commerce.c6z_runtime_vertical import contains_private_or_executable_value
+from core.commerce.catalog_upload import reads_private_or_reserved
 from core.config import settings
 
 logger = structlog.get_logger()
@@ -221,6 +223,8 @@ def _detail_lines(items: Any, limit: int) -> list[str]:
         f"{item.get('name')}: {str(item.get('value'))[:MAX_DETAIL_CHARS]}"
         for item in items or []
         if isinstance(item, dict) and item.get("name") and item.get("value")
+        and not reads_private_or_reserved(str(item["name"]))
+        and not contains_private_or_executable_value(f"{item['name']} {item['value']}")
     ][:limit]
 
 

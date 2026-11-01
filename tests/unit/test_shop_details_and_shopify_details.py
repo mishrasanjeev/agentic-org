@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import json
+from copy import deepcopy
 from types import SimpleNamespace
 from typing import Any
 
@@ -168,6 +169,39 @@ def test_served_shop_details_skip_stored_values_that_became_unsafe() -> None:
     ]
     served = ucp_product(_upload_product(), stored)
     assert served is not None and served["metadata"]["shop_details"] == [{"name": "Plain", "value": "yes"}]
+
+
+@pytest.mark.parametrize("label", _CREDENTIAL_DETAIL_NAMES)
+@pytest.mark.parametrize("field", ["name", "label"])
+def test_legacy_product_details_are_hidden_from_lookup_search_and_tags_without_rewriting_history(
+    label: str, field: str
+) -> None:
+    product = _upload_product()
+    unsafe = {"name": "old_detail", "label": "Old detail", "value": "legacy-only-credential-value"}
+    unsafe[field] = label
+    product["attributes"] = [unsafe, *product["attributes"]]
+    product["tags"] = [label, "organic"]
+    original = deepcopy(product)
+    served = ucp_product(product)
+    assert served is not None
+    assert served["metadata"]["attributes"] == [{"name": "Ingredients", "value": "Cow milk fat"}]
+    assert served["tags"] == ["organic"]
+    looked_up, missing = lookup_catalog([product], [served["id"]])
+    assert not missing and looked_up[0]["metadata"] == served["metadata"]
+    assert looked_up[0]["tags"] == ["organic"]
+    assert "legacy-only-credential-value" not in json.dumps(looked_up)
+    assert not search_catalog(
+        [product], query="legacy-only-credential-value", categories=None, price_min=None, price_max=None
+    )
+    assert search_catalog([product], query="milk", categories=None, price_min=None, price_max=None)
+    assert product == original
+
+
+@pytest.mark.parametrize("label", _CREDENTIAL_DETAIL_NAMES)
+def test_legacy_private_tags_cannot_be_matched_in_public_search(label: str) -> None:
+    product = _upload_product()
+    product["tags"] = [label]
+    assert not search_catalog([product], query=label, categories=None, price_min=None, price_max=None)
 
 
 def test_merchant_config_keeps_shop_details_with_links() -> None:
@@ -628,3 +662,18 @@ def test_telegram_shows_the_shop_details_once_per_shop() -> None:
     )
     carried = [item["shop"] for item in body["products"] if "shop_details_declared_by_shop" in item]
     assert carried == ["kaveri", "nilgiri"]
+
+
+@pytest.mark.parametrize("label", _CREDENTIAL_DETAIL_NAMES)
+def test_telegram_hides_legacy_credential_details_without_rewriting_the_product(label: str) -> None:
+    product = ucp_product(_upload_product())
+    assert product is not None
+    unsafe = {"name": label, "value": "legacy-only-credential-value"}
+    safe = {"name": "Ingredients", "value": "Cow milk fat"}
+    product["metadata"]["attributes"] = [unsafe, safe]
+    product["metadata"]["shop_details"] = [unsafe, {"name": "Certification", "value": "Synthetic statement"}]
+    original = deepcopy(product)
+    summary = _product_summary("synthetic-shop", product)
+    assert summary["details_declared_by_shop"] == ["Ingredients: Cow milk fat"]
+    assert summary["shop_details_declared_by_shop"] == ["Certification: Synthetic statement"]
+    assert product == original

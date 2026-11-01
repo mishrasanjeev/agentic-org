@@ -5,6 +5,9 @@
 - Refuse credential and action names in public shop and product details even
   when written as API keys, camel-case names, or compatibility Unicode. Apply
   the same check to stored details, catalog uploads, Shopify fields and tags.
+- Filter legacy product snapshots and cached shopper details at read time too.
+  Refused attributes and tags cannot affect public catalog search or Telegram
+  summaries; stored products and audit history are not rewritten.
 
 - Reuse bounded token windows and salt-scoped digest calculations in the vendor
   check without caching policy membership or changing matching, decoding or

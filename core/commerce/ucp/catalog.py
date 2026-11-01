@@ -32,6 +32,7 @@ from core.commerce.c6z_runtime_vertical import (
     contains_private_or_executable_value,
     evaluate_runtime_cache_record,
 )
+from core.commerce.catalog_upload import reads_private_or_reserved
 from core.commerce.oacp_artifacts import OacpPersistentArtifactCacheRecord, is_verified_oacp_cache_record
 
 # The artifact types (Grantex families merchant_profile, seller_agent_card, catalog_snapshot,
@@ -234,14 +235,26 @@ MAX_SERVED_DETAIL_VALUE = 1000
 MAX_SERVED_SHOP_DETAILS = 10
 
 
+def _product_tags(product: Mapping[str, Any]) -> list[str]:
+    return [
+        tag for tag in (_plain(value, 50) for value in product.get("tags") or ())
+        if tag and not reads_private_or_reserved(tag)
+    ][:20]
+
+
 def _product_details(items: Any, limit: int = MAX_SERVED_DETAILS) -> list[dict[str, str]]:
     details: list[dict[str, str]] = []
     for item in items or ():
         if not isinstance(item, Mapping):
             continue
-        name = _plain(item.get("label"), 60) or _plain(item.get("name"), 60)
+        stored_name = _plain(item.get("name"), 60)
+        name = _plain(item.get("label"), 60) or stored_name
         value = _plain(item.get("value"), MAX_SERVED_DETAIL_VALUE)
-        if not name or not value or contains_private_or_executable_value(f"{name} {value}"):
+        if (
+            not name or not value
+            or any(reads_private_or_reserved(candidate) for candidate in (name, stored_name) if candidate)
+            or contains_private_or_executable_value(f"{name} {value}")
+        ):
             continue
         if value.lower().startswith("http://"):
             continue
@@ -293,7 +306,7 @@ def ucp_product(product: Mapping[str, Any], shop_details: Sequence[Mapping[str, 
     url = _https_media(product.get("url"))
     if url:
         result["url"] = url
-    tags = [tag for tag in (_plain(value, 50) for value in product.get("tags") or ()) if tag][:20]
+    tags = _product_tags(product)
     if tags:
         result["tags"] = tags
     details = _product_details(product.get("attributes"))
@@ -338,10 +351,9 @@ def ucp_product(product: Mapping[str, Any], shop_details: Sequence[Mapping[str, 
 
 def _search_text(product: Mapping[str, Any]) -> str:
     parts = [product.get("title"), product.get("description"), product.get("vendor"), product.get("product_type")]
-    parts.extend(tag for tag in product.get("tags") or () if isinstance(tag, str))
-    for item in product.get("attributes") or ():
-        if isinstance(item, Mapping):
-            parts.extend([item.get("label"), item.get("value")])
+    parts.extend(_product_tags(product))
+    for item in _product_details(product.get("attributes")):
+        parts.extend([item["name"], item["value"]])
     for variant in product.get("variants") or ():
         if isinstance(variant, Mapping):
             parts.extend([variant.get("title"), variant.get("sku")])
