@@ -6,6 +6,7 @@ import {
   formatCount,
   formatDuration,
   formatInr,
+  formatLowerBound,
   formatMetricValue,
   formatMoney,
   formatPercent,
@@ -87,6 +88,11 @@ describe("insights formatters", () => {
         expect(out).not.toMatch(/NaN|undefined|Infinity|null/);
       }
     }
+  });
+
+  it("marks a floor value as more than it", () => {
+    expect(formatLowerBound(formatDuration(600000))).toBe("> 10m");
+    expect(formatLowerBound(MISSING)).toBe(MISSING);
   });
 
   it("computes the delta against the comparison value", () => {

@@ -749,6 +749,7 @@
     },
     "tile": {
       "vsCompare": "vs previous period",
+      "vsCompareCompleteDays": "vs the same complete days of the previous period (today left out)",
       "noCompare": "No comparison period",
       "trendLabel": "{{title}} trend"
     },

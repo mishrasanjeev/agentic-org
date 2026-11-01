@@ -2,7 +2,7 @@
 import { Link } from "react-router";
 import { useTranslation } from "react-i18next";
 import type { MetricResponse } from "@/lib/insights/api";
-import { computeDelta, formatMetricValue } from "@/lib/insights/format";
+import { computeDelta, formatLowerBound, formatMetricValue } from "@/lib/insights/format";
 import { isEmptyMetric, lineData } from "@/lib/insights/chartData";
 import { chartColor } from "@/lib/insights/tokens";
 import DataQualityBadge from "./DataQualityBadge";
@@ -51,10 +51,15 @@ export default function DecisionTile({
   const { t } = useTranslation();
   const cur = metric.currency || currency || null;
   const empty = isEmptyMetric(metric);
-  const delta = computeDelta(metric.value, metric.compare_value);
+  // With a running today in the period the API compares complete days only: the change is the
+  // complete days' value against the comparison's, never today's partial value.
+  const completeDays = metric.compare?.basis === "complete_days";
+  const delta = computeDelta(completeDays ? metric.compare?.current_value : metric.value, metric.compare_value);
   const hasCompare = Boolean(metric.compare) && metric.compare_value !== undefined && metric.compare_value !== null;
   const trend = lineData(metric.series).map((p) => p.value);
-  const valueText = formatMetricValue(metric.value, metric.unit, cur);
+  const shown = formatMetricValue(metric.value, metric.unit, cur);
+  // A latency in the open-ended bucket is only a floor: "> 10m", never "10m".
+  const valueText = metric.lower_bound ? formatLowerBound(shown) : shown;
   const arrow = delta.direction === "up" ? "↑" : delta.direction === "down" ? "↓" : "";
 
   return (
@@ -85,7 +90,7 @@ export default function DecisionTile({
                   <span aria-hidden="true">{arrow} </span>
                   {delta.text}
                 </span>{" "}
-                {t("insights.tile.vsCompare")}
+                {completeDays ? t("insights.tile.vsCompareCompleteDays") : t("insights.tile.vsCompare")}
               </>
             ) : (
               t("insights.tile.noCompare")
