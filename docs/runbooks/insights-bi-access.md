@@ -20,26 +20,41 @@ policies cannot isolate a login that a customer controls. A BI login is tied to
 its tenant by its own name instead:
 
 - Every BI login is a member of the NOLOGIN group `agenticorg_bi` (inherit
-  only; it cannot `SET ROLE` to the group). The group may read the five views
-  in schema `insights_bi` and, because the views are `security_invoker`, the
-  exposed columns of their source tables. Nothing else: no table-level
-  privilege anywhere, no partition of `run_facts`, no write privilege, no
-  provisioning function.
+  only; it cannot `SET ROLE` to the group). The group may SELECT the five views
+  in schema `insights_bi` and EXECUTE the five functions under them, and
+  nothing else: no privilege on any table or column (so `EXPLAIN` and
+  `pg_stats` tell it nothing about the tables' contents), no partition of
+  `run_facts`, no write privilege, no provisioning function.
+- Each view `insights_bi.<view>` is a plain `security_invoker` view over
+  `insights_bi.<view>_rows()`, a SQL function without arguments that is
+  `SECURITY DEFINER` with `search_path = pg_catalog, pg_temp` and owned by the
+  NOLOGIN, NOBYPASSRLS role `agenticorg_bi_reader`. Such a function is never
+  inlined: the BI query's own conditions apply to the function's output only,
+  and the planner's estimate for it is a constant that no tenant's data moves.
+  `run_facts_rows()` returns the last 400 days (and anything dated later).
+- `agenticorg_bi_reader` holds the column grants on the source tables
+  (`run_facts`, `insights_daily`, `spend_usage_rollups`, `agents`,
+  `hitl_queue`; the `run_facts` parent only): the exposed columns and
+  `tenant_id`. Nobody is a member of it. Each source has a permissive and a
+  RESTRICTIVE `FOR SELECT TO agenticorg_bi_reader` policy, both `tenant_id =
+  (SELECT public.insights_bi_tenant())`, and each function filters on the same
+  tenant. The restrictive policy is what stops a BI session that sets
+  `agenticorg.tenant_id` (or `agenticorg.platform_ctx`) from widening the rows
+  through the application's own permissive policies.
 - `insights_bi_logins` maps each login (`role_name`) to its tenant.
-  `public.insights_bi_tenant()` returns the tenant of `session_user` while the
-  mapping is not revoked.
-- Each source table (`run_facts`, `insights_daily`, `spend_usage_rollups`,
-  `agents`, `hitl_queue`) has a permissive and a RESTRICTIVE `FOR SELECT TO
-  agenticorg_bi` policy, both `tenant_id = (SELECT public.insights_bi_tenant())`.
-  The restrictive one is what stops a BI session that sets
-  `agenticorg.tenant_id` (or `agenticorg.platform_ctx`) from widening its rows.
+  `public.insights_bi_tenant()` (owned by `agenticorg_bi_lookup`, executable by
+  the reader only) returns the tenant of `session_user`, which stays the BI
+  login inside the SECURITY DEFINER functions, while the mapping is not revoked
+  and the server is a read replica (see "Read replica only" below).
 - Logins are created and dropped only by `public.insights_bi_create_login` and
   `public.insights_bi_revoke_login`, SECURITY DEFINER functions owned by the
   NOLOGIN `agenticorg_bi_admin` role (CREATEROLE, ADMIN OPTION on the group).
   On PostgreSQL 16 a CREATEROLE role administers only the roles it created, so
   these functions cannot alter any other role. The application holds EXECUTE
   only, never CREATEROLE. Both functions refuse a tenant that differs from the
-  session's tenant context.
+  session's tenant context. Creation is refused (the page shows an error, the
+  API answers 503 `insights_bi_unavailable`) while `PUBLIC` or `agenticorg_bi`
+  may `CREATE` in schema `public`.
 - The application generates the password, shows it to the administrator once
   and sends the database only its SCRAM-SHA-256 verifier. The plaintext is not
   stored anywhere and is in no log or audit row.
@@ -67,11 +82,30 @@ The views:
    two functions to `agenticorg_app` itself when that role exists; the script
    keeps the mapping table read-only for it).
 3. `PUBLIC` has no `CREATE` on schema `public` (the PostgreSQL 15+ default;
-   `scripts/create_app_role.sql` refuses to finish otherwise). Check:
+   `scripts/create_app_role.sql` refuses to finish otherwise). The migration
+   does not change it, but it logs a NOTICE ("Schema public is writable ...")
+   and `insights_bi_create_login` refuses to create logins until it is fixed.
+   Check:
 
    ```sql
-   SELECT has_schema_privilege('agenticorg_bi', 'public', 'CREATE');  -- must be false
+   SELECT has_schema_privilege('public', 'public', 'CREATE');          -- must be false
+   SELECT has_schema_privilege('agenticorg_bi', 'public', 'CREATE');   -- must be false
+   -- if not: REVOKE CREATE ON SCHEMA public FROM PUBLIC;
    ```
+
+## Read replica only
+
+BI logins read nothing on a writable primary: `public.insights_bi_tenant()`
+answers only when `pg_is_in_recovery()` is true (a read replica) or the
+one-row table `insights_bi_settings` has `allow_primary = true`. It is `false`
+after the migration, and only the migration user may change it; the
+application role cannot read or write it. A login that connects to the
+primary sees every view empty. Leave it `false` in production. (The Postgres
+tests set it to `true`, because their database is a primary.)
+
+```sql
+SELECT allow_primary FROM insights_bi_settings;   -- as the migration user: false
+```
 
 ## 1. Create the read replica
 
@@ -103,10 +137,35 @@ Refuse unencrypted connections on the replica:
 gcloud sql instances patch <replica-name> --ssl-mode=ENCRYPTED_ONLY
 ```
 
-(Older gcloud releases: `--require-ssl`.) The connection details the page shows
-always say `sslmode=require`. BI tools that can verify the server certificate
-should use `verify-ca` with the replica's server CA
-(`gcloud sql instances describe <replica-name> --format="value(serverCaCert.cert)"`).
+(Older gcloud releases: `--require-ssl`.)
+
+The connection details the page shows say `sslmode=verify-ca` and
+`channel_binding=require`:
+
+- `verify-ca` checks the server certificate's chain against the replica's
+  server CA, so a BI tool cannot be talked into sending its password to a
+  machine in the middle. Not `verify-full`: Cloud SQL's server certificate is
+  issued to the instance (its name, not the IP address or DNS name a BI tool
+  dials), so the host name check of `verify-full` fails.
+- `channel_binding=require` makes the SCRAM-SHA-256 exchange use
+  SCRAM-SHA-256-PLUS, bound to that TLS session (libpq 13 and later; JDBC
+  drivers that support it take `channelBinding=require`). A tool whose driver
+  cannot do channel binding fails to connect with it; it may leave it out
+  (`verify-ca` still protects the password) and should be upgraded.
+
+Download the replica's server CA certificate and give it to the tenant's BI
+administrator (it is public material, not a secret):
+
+```bash
+gcloud sql instances describe <replica-name> \
+  --format="value(serverCaCert.cert)" > agenticorg-bi-server-ca.pem
+```
+
+The BI tool takes it as its root certificate (`sslrootcert` for libpq and
+psql, "SSL root certificate" in Metabase). Download it again after the
+replica's server CA is rotated (`gcloud sql ssl server-ca-certs list
+--instance=<replica-name>`), and hand out the new one before the rotation
+completes.
 
 ## 3. Allow a tenant's BI host to connect
 
@@ -150,9 +209,12 @@ Smoke test as a tenant administrator: Insights, then "BI database access",
 then "Create login". Connect with `psql` from an authorised address:
 
 ```bash
-psql "host=<replica> port=5432 dbname=<db> user=<role> sslmode=require"
-SELECT count(*) FROM insights_bi.run_facts;      -- your tenant's facts
+psql "host=<replica> port=5432 dbname=<db> user=<role> sslmode=verify-ca \
+  sslrootcert=agenticorg-bi-server-ca.pem channel_binding=require"
+SELECT pg_is_in_recovery();                      -- true: the replica
+SELECT count(*) FROM insights_bi.run_facts;      -- your tenant's facts (last 400 days)
 SELECT * FROM public.users LIMIT 1;              -- permission denied
+SELECT id FROM public.run_facts LIMIT 1;         -- permission denied
 ```
 
 Then revoke the login from the page.
@@ -167,24 +229,31 @@ In Metabase: Admin settings, Databases, Add database.
 3. Username: the login (`bi_<8 hex>_<10 characters>`). Password: the one shown
    once when the login was created. If it was lost, revoke the login and create
    a new one; it cannot be shown again.
-4. Use a secure connection (SSL): on. SSL mode: `require` (or `verify-ca` with
-   the server CA).
+4. Use a secure connection (SSL): on. SSL mode: `verify-ca`. SSL root
+   certificate: the replica's server CA certificate (section 2). If the
+   Metabase version offers additional JDBC options, add
+   `channelBinding=require`.
 5. Schemas: "Only these", `insights_bi`.
 6. Save. Metabase syncs the five views. Queries that run longer than 30 seconds
    are cancelled by the database; add date filters.
 
 Other tools take the same values, or the connection string the page shows once
-(`postgresql://<login>:<password>@<host>:5432/<db>?sslmode=require`).
+(`postgresql://<login>:<password>@<host>:5432/<db>?sslmode=verify-ca&channel_binding=require`;
+add `&sslrootcert=<path to the CA file>` where the tool reads it from the URL).
 
 ## Revoking a login
 
 A tenant administrator revokes a login on the page (Revoke, then confirm) or
 with `DELETE /api/v1/insights/bi-access/<login>`. The function marks the
-mapping revoked (from that moment the login maps to no tenant and every view is
-empty, also for a session that is still open), sets the role NOLOGIN and drops
-it. The response says `dropped`, or `nologin` when something still depends on
-the role; it then stays, unable to log in and mapped to nothing. To clean such a
-role up, as the migration user on the primary:
+mapping revoked (from that moment every new statement of the login, in any
+transaction that started after the revoke, finds every view empty), sets the
+role NOLOGIN and drops it, which ends the membership of `agenticorg_bi` and
+with it every privilege. The response says `dropped`, or `nologin` when
+something still depends on the role (for example a large object the login
+created: any role may create one on a primary); the role then stays, unable to
+log in, mapped to nothing and no longer a member of `agenticorg_bi`, so it
+cannot read any view either. To clean such a role up, as the migration user on
+the primary:
 
 ```sql
 -- what depends on it
@@ -215,10 +284,15 @@ never the password.
    COMMIT;
    ```
 
+   A transaction a BI session opened before this (REPEATABLE READ) still sees
+   the old mapping; step 4 ends that too.
 3. Turn `AGENTICORG_INSIGHTS_BI_ENABLED` off so no new login is created.
 4. Drop the roles: for each row with a role still in `pg_roles`, as the
    migration user with `SET ROLE agenticorg_bi_admin` (see above),
-   `ALTER ROLE "<login>" NOLOGIN; DROP ROLE "<login>";`.
+   `ALTER ROLE "<login>" NOLOGIN; REVOKE agenticorg_bi FROM "<login>"; DROP ROLE "<login>";`.
+   Then, on the replica, end the sessions still open (as a user holding
+   `pg_signal_backend`):
+   `SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE usename LIKE 'bi\_%';`
 
 Turning the variable off alone does not stop existing logins.
 
@@ -227,8 +301,15 @@ Turning the variable off alone does not stop existing logins.
 `v6z108_insights_bi` refuses to downgrade while any login is active or any BI
 login role is still a member of `agenticorg_bi`. Revoke every login first. The
 downgrade then drops the functions, views, schema, policies, grants, the mapping
-table and the three roles (a role that another database on the same cluster
-still uses is kept, with a notice).
+and settings tables and the four roles (a role that another database on the
+same cluster still uses is kept, with a notice).
+
+Re-running the upgrade (for example after a failed deploy) is safe while logins
+exist: the views and reader functions are rebuilt, the three public functions
+are replaced in place, and the ADMIN-only membership PostgreSQL 16 gives
+`agenticorg_bi_admin` in each login it creates is expected. Any other
+membership of the four roles, or any role able to use the reader, lookup or
+admin role, makes the upgrade fail.
 
 ## Known limits
 
@@ -249,9 +330,20 @@ still uses is kept, with a notice).
   the connection limit of 3 bounds it.
 - The login roles exist on the primary too (roles replicate from it). Never add
   a tenant CIDR to the primary's authorised networks: on the writable primary a
-  login could create temporary tables and large objects (PostgreSQL allows both
-  to every role), though it still reads only its tenant's rows and writes no
-  table.
-- A login can read the exposed columns of the five source tables directly
-  (`public.run_facts` and so on), with the same tenant rows as the views: the
-  views are `security_invoker`, which needs those column grants.
+  login reads no rows (`allow_primary` is off) but could still create
+  temporary tables and large objects (PostgreSQL allows both to every role).
+  A large object it owns makes its revocation answer `nologin`.
+- A REPEATABLE READ transaction that a login opened before its revocation, and
+  that already read a view, can read that view again at its old snapshot until
+  the transaction ends or the next statement that touches a relation it has not
+  locked yet (PostgreSQL applies the membership change to a session at that
+  point). It sees no data newer than its snapshot. Step 4 of the emergency
+  procedure ends such sessions.
+- Catalogue-wide figures stay visible to every role, as PostgreSQL shows them
+  to anyone: `pg_class.reltuples` and `pg_stat_user_tables` give the total rows
+  of each table and partition across all tenants (not per tenant). The
+  per-column statistics in `pg_stats` are not visible to BI logins.
+- The views' row estimates are constants, so BI tools that plan by them may
+  pick poor join orders on large results; add date filters.
+- Each login gets `insights_bi.run_facts` for the last 400 days only; use
+  `insights_bi.daily` for longer history.

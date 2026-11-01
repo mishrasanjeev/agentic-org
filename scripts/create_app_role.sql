@@ -168,6 +168,11 @@ BEGIN
     IF to_regclass('public.insights_bi_logins') IS NOT NULL THEN
         REVOKE INSERT, UPDATE, DELETE ON insights_bi_logins FROM agenticorg_app;
     END IF;
+    -- v6z108_insights_bi: whether BI logins may read on a primary; the
+    -- migration owner alone reads or writes it.
+    IF to_regclass('public.insights_bi_settings') IS NOT NULL THEN
+        REVOKE ALL ON insights_bi_settings FROM agenticorg_app;
+    END IF;
 END $$;
 
 -- 6. Migration-owned tables. init_db() and the checkpoint store only read
@@ -202,6 +207,10 @@ REVOKE ALL ON alembic_migration_progress FROM agenticorg_app;
 --                                                    database logins, tenant-bound
 --                                                    (core/insights/bi_access.py); granted
 --                                                    once they exist
+--
+-- Not the application's: public.insights_bi_tenant() and the reader
+-- functions insights_bi.<view>_rows() (v6z108; the BI reader and the BI
+-- group only). The fail-closed check below covers schema insights_bi too.
 --
 -- A function owned by the installer is granted directly. One owned by a
 -- NOLOGIN role (the v6z85 aggregation role) is granted through a temporary
@@ -301,7 +310,7 @@ BEGIN
     END IF;
     SELECT string_agg(p.oid::regprocedure::text, ', ') INTO bad
     FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
-    WHERE n.nspname = 'public' AND p.prosecdef
+    WHERE n.nspname IN ('public', 'insights_bi') AND p.prosecdef
       AND p.oid NOT IN (SELECT to_regprocedure(f)::oid FROM unnest(ARRAY['public.gemini_daily_platform_spend()',
                             'public.oacp_delete_due_manifest(text, text)',
                             'public.gemini_daily_ledger_spend()',

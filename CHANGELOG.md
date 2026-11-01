@@ -13,12 +13,14 @@
   limited to 92 days.
 - Per-tenant BI database access (`/insights/bi-access`, `/dashboard/insights/bi-access`, human admins only):
   a tenant admin creates up to three read-only Postgres logins for Metabase, Superset or Grafana. Each login
-  sees five `insights_bi.*` views (run facts, daily rollup, spend by day, agents, approvals) through
-  policies tied to the login itself, plus restrictive policies so the existing tenant setting cannot widen
-  a BI session (migration `v6z108_insights_bi`). The password is shown once and only its SCRAM verifier
-  reaches the database. Off until `AGENTICORG_INSIGHTS_BI_ENABLED`, `AGENTICORG_INSIGHTS_BI_HOST` and
-  `AGENTICORG_INSIGHTS_BI_DATABASE` are set; logins connect to a read replica. Runbook:
-  `docs/runbooks/insights-bi-access.md`.
+  sees five `insights_bi.*` views (run facts for the last 400 days, daily rollup, spend by day, agents,
+  approvals), each over a `SECURITY DEFINER` function owned by a NOLOGIN reader role, and holds no privilege
+  on any table, so planner statistics reveal nothing about other tenants. Rows are tied to the login itself,
+  with restrictive policies so the existing tenant setting cannot widen a BI session, and only on a read
+  replica (`insights_bi_settings.allow_primary` is off) (migration `v6z108_insights_bi`). The password is
+  shown once and only its SCRAM verifier reaches the database; connections use `sslmode=verify-ca` and
+  `channel_binding=require`. Off until `AGENTICORG_INSIGHTS_BI_ENABLED`, `AGENTICORG_INSIGHTS_BI_HOST` and
+  `AGENTICORG_INSIGHTS_BI_DATABASE` are set. Runbook: `docs/runbooks/insights-bi-access.md`.
 
 ## Unreleased - Insights dashboard v1 (Executive and Finance views) and KPI access fixes
 

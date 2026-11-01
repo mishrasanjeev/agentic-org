@@ -15,10 +15,15 @@ Each tenant's login then connects with password authentication (asyncpg) using
 the password whose SCRAM verifier the application computed, and the tests show
 that it reads only its own tenant's rows in every view, also after setting
 ``agenticorg.tenant_id`` (or the platform context) to something else; that it
-cannot read ``users``, ``api_keys``, ``tenants``, the mapping table, any other
-public table, any ``run_facts`` partition or any unexposed column; that it can
-write nothing; and that once revoked it cannot log in and a session it still
-holds reads nothing.
+holds no privilege on any table, so ``EXPLAIN`` and ``pg_stats`` reveal nothing
+about other tenants' volumes or values; that it cannot read ``users``,
+``api_keys``, ``tenants``, the mapping table, any other public table, any
+``run_facts`` partition or any unexposed column; that it can write nothing;
+that it reads nothing on a primary unless ``insights_bi_settings`` allows it;
+and that once revoked it cannot log in and a session it still holds, even
+inside a transaction opened before the revoke, reads nothing.
+
+The test database is a primary, so the module sets ``allow_primary`` on.
 
 Roles are cluster-wide: every role a test creates has a unique name and is
 dropped at the end, and the database is returned to the superuser-installed
@@ -29,12 +34,14 @@ from __future__ import annotations
 
 import asyncio
 import importlib.util
+import json
+import logging
 import os
 import subprocess
 import sys
 import uuid
 from collections.abc import Awaitable, Callable, Iterator
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -53,9 +60,11 @@ ROOT = Path(__file__).resolve().parents[2]
 MIGRATION = ROOT / "migrations" / "versions" / "v6_z108_insights_bi.py"
 PREVIOUS = "v6z107_insights_platform"
 HEAD = "v6z108_insights_bi"
-BI_ROLES = ("agenticorg_bi", "agenticorg_bi_lookup", "agenticorg_bi_admin")
+BI_ROLES = ("agenticorg_bi", "agenticorg_bi_lookup", "agenticorg_bi_admin", "agenticorg_bi_reader")
 SOURCES = ("run_facts", "insights_daily", "spend_usage_rollups", "agents", "hitl_queue")
 VIEWS = ("run_facts", "daily", "spend_daily", "agents", "approvals")
+READER_FUNCTIONS = {f"{view}_rows" for view in VIEWS}
+SEARCH_PATH_CONFIG = ["search_path=pg_catalog, pg_temp"]
 # What the installer must own to run v6z108; in production it owns the whole schema.
 INSTALLER_OWNS = ("tenants", *SOURCES, "alembic_version")
 PASSWORD = "local-test-password-" + uuid.uuid4().hex[:12]
@@ -93,8 +102,22 @@ def _migration():
     return module
 
 
-def _apply(url: str, fn: str, version: str) -> None:
-    """Run the migration's ``upgrade``/``downgrade`` as the URL's role, and record the version, in one transaction."""
+def _apply(url: str, fn: str, version: str) -> list[str]:
+    """Run the migration's ``upgrade``/``downgrade`` as the URL's role, and record the version, in one transaction.
+
+    Returns the server notices the run raised (SQLAlchemy's psycopg2 dialect
+    logs each one at INFO and clears the driver's list).
+    """
+    notices: list[str] = []
+
+    class _Collect(logging.Handler):
+        def emit(self, record: logging.LogRecord) -> None:
+            notices.append(record.getMessage())
+
+    dialect_logger = logging.getLogger("sqlalchemy.dialects.postgresql")
+    handler, level = _Collect(level=logging.INFO), dialect_logger.level
+    dialect_logger.addHandler(handler)
+    dialect_logger.setLevel(logging.INFO)
     engine = create_engine(url, poolclass=NullPool)
     try:
         with engine.begin() as conn:
@@ -102,12 +125,20 @@ def _apply(url: str, fn: str, version: str) -> None:
             with Operations.context(context):
                 getattr(_migration(), fn)()
             conn.execute(text("UPDATE alembic_version SET version_num = :v"), {"v": version})
+        return notices
     finally:
         engine.dispose()
+        dialect_logger.removeHandler(handler)
+        dialect_logger.setLevel(level)
 
 
 def _exists(conn, role: str) -> bool:
     return bool(conn.execute(text("SELECT 1 FROM pg_roles WHERE rolname = :r"), {"r": role}).scalar())
+
+
+def _allow_primary(admin: Engine, allowed: bool) -> None:
+    with admin.begin() as conn:
+        conn.execute(text("UPDATE insights_bi_settings SET allow_primary = :a"), {"a": allowed})
 
 
 async def _bi_connect(role: str, password: str) -> asyncpg.Connection:
@@ -240,21 +271,7 @@ def _seed(conn, tenant: uuid.UUID, runs: int, daily: int, spend: int, agents: in
             ),
             {"id": uuid.uuid4(), "t": tenant, "d": date(2026, 11, 1 + i), "h": uuid.uuid4().hex * 2},
         )
-    agent_ids = []
-    for i in range(agents):
-        agent_id = uuid.uuid4()
-        agent_ids.append(agent_id)
-        conn.execute(
-            text(
-                "INSERT INTO agents(id, tenant_id, name, agent_type, domain, system_prompt_ref, prompt_variables, "
-                "llm_model, llm_config, confidence_floor, hitl_condition, max_retries, retry_backoff, "
-                "authorized_tools, status, version, shadow_sample_count, shadow_scored_sample_count, "
-                "shadow_feedback_count, cost_controls, scaling, tags, config, routing_filter, is_builtin, org_level) "
-                "VALUES (:id, :t, :n, 'bi_test', 'finance', 'prompt', '{}', 'model', '{}', 0.8, '', 1, 'exponential', "
-                "'[]', 'active', :v, 0, 0, 0, '{}', '{}', '{}', '{}', '{}', false, 0)"
-            ),
-            {"id": agent_id, "t": tenant, "n": f"BI agent {i}", "v": f"1.{i}"},
-        )
+    agent_ids = [_insert_agent(conn, tenant, f"BI agent {i}", f"1.{i}") for i in range(agents)]
     conn.execute(
         text(
             "INSERT INTO hitl_queue(id, tenant_id, agent_id, title, trigger_type, priority, status, assignee_role, "
@@ -264,6 +281,22 @@ def _seed(conn, tenant: uuid.UUID, runs: int, daily: int, spend: int, agents: in
         {"id": uuid.uuid4(), "t": tenant, "a": agent_ids[0]},
     )
     return {"run_facts": runs, "daily": daily, "spend_daily": spend, "agents": agents, "approvals": 1}
+
+
+def _insert_agent(conn, tenant: uuid.UUID, name: str, version: str) -> uuid.UUID:
+    agent_id = uuid.uuid4()
+    conn.execute(
+        text(
+            "INSERT INTO agents(id, tenant_id, name, agent_type, domain, system_prompt_ref, prompt_variables, "
+            "llm_model, llm_config, confidence_floor, hitl_condition, max_retries, retry_backoff, "
+            "authorized_tools, status, version, shadow_sample_count, shadow_scored_sample_count, "
+            "shadow_feedback_count, cost_controls, scaling, tags, config, routing_filter, is_builtin, org_level) "
+            "VALUES (:id, :t, :n, 'bi_test', 'finance', 'prompt', '{}', 'model', '{}', 0.8, '', 1, 'exponential', "
+            "'[]', 'active', :v, 0, 0, 0, '{}', '{}', '{}', '{}', '{}', false, 0)"
+        ),
+        {"id": agent_id, "t": tenant, "n": name, "v": version},
+    )
+    return agent_id
 
 
 def _unseed(conn, tenant: uuid.UUID) -> None:
@@ -291,6 +324,8 @@ def world(installed) -> Iterator[dict[str, Any]]:
             conn.exec_driver_sql(f'GRANT USAGE ON SCHEMA public TO "{app["role"]}"')
             conn.exec_driver_sql(f'GRANT SELECT ON public.insights_bi_logins TO "{app["role"]}"')
             conn.exec_driver_sql(f'GRANT EXECUTE ON FUNCTION {CREATE_FN}, {REVOKE_FN} TO "{app["role"]}"')
+        # The test database is a writable primary: let the logins read on it.
+        _allow_primary(admin, True)
 
         async def _create(tenant: uuid.UUID) -> bi_access.CreatedLogin:
             return await _as_app(app, tenant, lambda s: bi_access.create_login(s, tenant, created_by=None, limit=2))
@@ -306,6 +341,7 @@ def world(installed) -> Iterator[dict[str, Any]]:
             "login_a": login_a,
             "login_b": login_b,
             "installer": installed["installer"],
+            "installer_url": installed["installer_url"],
         }
     finally:
         with admin.begin() as conn:
@@ -322,12 +358,15 @@ def world(installed) -> Iterator[dict[str, Any]]:
                 leftovers = []
             for role in leftovers:
                 if _exists(conn, role):
+                    conn.exec_driver_sql(f'DROP OWNED BY "{role}"')
                     conn.exec_driver_sql(f'DROP ROLE "{role}"')
             for tenant in (tenant_a, tenant_b):
                 _unseed(conn, tenant)
             if _exists(conn, app["role"]):
                 conn.exec_driver_sql(f'DROP OWNED BY "{app["role"]}"')
                 conn.exec_driver_sql(f'DROP ROLE "{app["role"]}"')
+            if conn.execute(text("SELECT to_regclass('public.insights_bi_settings') IS NOT NULL")).scalar():
+                conn.execute(text("UPDATE insights_bi_settings SET allow_primary = false"))
 
 
 # ---------------------------------------------------------------- the installation
@@ -350,7 +389,7 @@ def test_installed_by_a_non_superuser_that_keeps_no_access(world) -> None:
             for row in conn.execute(
                 text(
                     "SELECT rolname, rolcanlogin, rolsuper, rolbypassrls, rolcreaterole, rolinherit "
-                    "FROM pg_roles WHERE rolname IN ('agenticorg_bi','agenticorg_bi_lookup','agenticorg_bi_admin')"
+                    "FROM pg_roles WHERE rolname LIKE 'agenticorg\\_bi%'"
                 )
             )
         }
@@ -358,29 +397,51 @@ def test_installed_by_a_non_superuser_that_keeps_no_access(world) -> None:
         for name, row in roles.items():
             assert not row.rolcanlogin and not row.rolsuper and not row.rolbypassrls, name
             assert row.rolcreaterole == (name == "agenticorg_bi_admin"), name
+        # Nobody (but a superuser) can use the reader's privileges.
+        assert not conn.execute(
+            text(
+                "SELECT string_agg(r.rolname, ', ') FROM pg_roles r WHERE NOT r.rolsuper "
+                "AND r.rolname <> 'agenticorg_bi_reader' AND (pg_has_role(r.oid, 'agenticorg_bi_reader', 'USAGE') "
+                "OR pg_has_role(r.oid, 'agenticorg_bi_reader', 'SET'))"
+            )
+        ).scalar()
         functions = {
             row.proname: row
             for row in conn.execute(
                 text(
-                    "SELECT p.proname, pg_get_userbyid(p.proowner) AS owner, p.prosecdef, p.proconfig, "
-                    "has_function_privilege('public', p.oid, 'EXECUTE') AS public_exec, "
-                    "has_function_privilege('agenticorg_bi', p.oid, 'EXECUTE') AS bi_exec "
-                    "FROM pg_proc p WHERE p.proname LIKE 'insights_bi_%'"
+                    "SELECT p.proname, n.nspname, pg_get_userbyid(p.proowner) AS owner, p.prosecdef, p.proconfig, "
+                    "p.pronargs, has_function_privilege('public', p.oid, 'EXECUTE') AS public_exec, "
+                    "has_function_privilege('agenticorg_bi', p.oid, 'EXECUTE') AS bi_exec, "
+                    "has_function_privilege('agenticorg_bi_reader', p.oid, 'EXECUTE') AS reader_exec "
+                    "FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace "
+                    "WHERE p.proname LIKE 'insights_bi_%' OR n.nspname = 'insights_bi'"
                 )
             )
         }
-        assert set(functions) == {"insights_bi_tenant", "insights_bi_create_login", "insights_bi_revoke_login"}
+        assert set(functions) == {
+            "insights_bi_tenant",
+            "insights_bi_create_login",
+            "insights_bi_revoke_login",
+            *READER_FUNCTIONS,
+        }
         for name, row in functions.items():
-            assert row.prosecdef and row.proconfig == ["search_path=pg_catalog"], name
+            assert row.prosecdef and row.proconfig == SEARCH_PATH_CONFIG, name
             assert not row.public_exec, name
-            assert row.owner == ("agenticorg_bi_lookup" if name == "insights_bi_tenant" else "agenticorg_bi_admin")
-            assert row.bi_exec == (name == "insights_bi_tenant"), name
-        # Both policies on every source, for the BI group only, and none on any partition.
+            if name in READER_FUNCTIONS:
+                assert (row.nspname, row.owner, row.pronargs) == ("insights_bi", "agenticorg_bi_reader", 0), name
+                assert row.bi_exec, name
+            else:
+                assert row.nspname == "public", name
+                assert row.owner == ("agenticorg_bi_lookup" if name == "insights_bi_tenant" else "agenticorg_bi_admin")
+                assert not row.bi_exec, name
+                # Only the reader resolves the tenant (from its functions and policies).
+                assert row.reader_exec == (name == "insights_bi_tenant"), name
+        # Both policies on every source, for the reader only, and none on any partition.
         policies = conn.execute(
             text(
                 "SELECT c.relname, p.polname, p.polpermissive, p.polroles::regrole[]::text[] AS roles "
                 "FROM pg_policy p JOIN pg_class c ON c.oid = p.polrelid WHERE p.polname LIKE 'insights_bi_%' "
-                "AND c.relname <> 'insights_bi_logins'"
+                "AND c.relname NOT IN ('insights_bi_logins', 'insights_bi_settings')"
             )
         ).all()
         assert {(r.relname, r.polname, r.polpermissive) for r in policies} == {
@@ -388,7 +449,28 @@ def test_installed_by_a_non_superuser_that_keeps_no_access(world) -> None:
             for t in SOURCES
             for name, permissive in (("insights_bi_read", True), ("insights_bi_only_own", False))
         }
-        assert all(r.roles == ["agenticorg_bi"] for r in policies)
+        assert all(r.roles == ["agenticorg_bi_reader"] for r in policies)
+        # The BI group holds no privilege on any table or column anywhere (it reads through the functions).
+        tables = conn.execute(
+            text(
+                "SELECT string_agg(c.oid::regclass::text, ', ') FROM pg_class c "
+                "JOIN pg_namespace n ON n.oid = c.relnamespace WHERE c.relkind IN ('r', 'p', 'm', 'f') "
+                "AND n.nspname NOT IN ('pg_catalog', 'information_schema') "
+                "AND has_any_column_privilege('agenticorg_bi', c.oid, 'SELECT')"
+            )
+        ).scalar()
+        assert tables is None
+        # The primary/replica switch: off by default, read by the lookup role only.
+        assert (
+            conn.execute(
+                text(
+                    "SELECT has_table_privilege('agenticorg_bi', 'public.insights_bi_settings', 'SELECT') "
+                    "OR has_any_column_privilege('agenticorg_bi_reader', 'public.insights_bi_settings', 'SELECT') "
+                    "OR has_table_privilege('agenticorg_bi_lookup', 'public.insights_bi_settings', 'UPDATE')"
+                )
+            ).scalar()
+            is False
+        )
 
 
 # ---------------------------------------------------------------- isolation, connected as the logins
@@ -406,6 +488,9 @@ async def _assert_only_own(conn: asyncpg.Connection, counts: dict[str, int], ten
             assert {row["tenant_id"] for row in rows} == {tenant}, view
     # Unqualified names resolve to the views (search_path = insights_bi).
     assert await conn.fetchval("SELECT count(*) FROM run_facts") == counts["run_facts"]
+    # The functions under the views return the same rows when called directly.
+    for view in VIEWS:
+        assert await conn.fetchval(f"SELECT count(*) FROM insights_bi.{view}_rows()") == counts[view], view
 
 
 def test_each_login_sees_only_its_own_tenant_in_every_view(world) -> None:
@@ -415,7 +500,6 @@ def test_each_login_sees_only_its_own_tenant_in_every_view(world) -> None:
             conn = await _bi_connect(login.role_name, login.password)
             try:
                 assert await conn.fetchval("SELECT session_user") == login.role_name
-                assert await conn.fetchval("SELECT public.insights_bi_tenant()") == tenant
                 await _assert_only_own(conn, world["counts"][tenant], tenant)
                 # The tenant setting the application's policies read does not widen a BI session ...
                 await conn.execute(f"SET agenticorg.tenant_id = '{world[other]}'")
@@ -427,10 +511,10 @@ def test_each_login_sees_only_its_own_tenant_in_every_view(world) -> None:
                     await conn.execute(f"SET LOCAL agenticorg.tenant_id = '{world[other]}'")
                     await _assert_only_own(conn, world["counts"][tenant], tenant)
                 await conn.execute("RESET ALL")
-                # The source table itself (security_invoker views need the column grant): same rows.
-                rows = await conn.fetch("SELECT tenant_id FROM public.run_facts")
-                assert {r["tenant_id"] for r in rows} == {tenant}
-                assert len(rows) == world["counts"][tenant]["run_facts"]
+                # The source tables are closed to it altogether, and so is the tenant lookup.
+                for sql in ("SELECT tenant_id FROM public.run_facts", "SELECT public.insights_bi_tenant()"):
+                    with pytest.raises(asyncpg.InsufficientPrivilegeError):
+                        await conn.fetch(sql)
                 # The login's own settings, as the function set them.
                 assert await conn.fetchval("SHOW statement_timeout") == "30s"
                 assert await conn.fetchval("SHOW default_transaction_read_only") == "on"
@@ -484,8 +568,7 @@ def test_a_login_reads_nothing_else(world) -> None:
         login = world["login_a"]
         conn = await _bi_connect(login.role_name, login.password)
         try:
-            # Catalogue sweep: no table-level SELECT anywhere in public, and column
-            # privileges only on the five sources (the parent of run_facts only).
+            # Catalogue sweep: no table-level or column-level SELECT anywhere in public.
             rows = await conn.fetch(
                 "SELECT c.relname, c.relkind, has_table_privilege(c.oid, 'SELECT') AS whole, "
                 "has_any_column_privilege(c.oid, 'SELECT') AS any_col FROM pg_class c "
@@ -493,20 +576,22 @@ def test_a_login_reads_nothing_else(world) -> None:
                 "WHERE n.nspname = 'public' AND c.relkind IN ('r', 'p', 'v', 'm', 'f')"
             )
             assert len(rows) > 50
-            assert not [r["relname"] for r in rows if r["whole"]]
-            assert {r["relname"] for r in rows if r["any_col"]} == set(SOURCES)
+            assert not [r["relname"] for r in rows if r["whole"] or r["any_col"]]
             sequences = await conn.fetch(
                 "SELECT c.relname FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace "
                 "WHERE n.nspname = 'public' AND c.relkind = 'S' "
                 "AND (has_sequence_privilege(c.oid, 'SELECT') OR has_sequence_privilege(c.oid, 'USAGE'))"
             )
             assert not sequences
-            # The only restricted (SECURITY DEFINER) function it may call is its own tenant lookup.
+            # The only restricted (SECURITY DEFINER) functions it may call are the reader functions.
             callable_definers = await conn.fetch(
-                "SELECT p.proname FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace "
-                "WHERE n.nspname = 'public' AND p.prosecdef AND has_function_privilege(p.oid, 'EXECUTE')"
+                "SELECT n.nspname, p.proname FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace "
+                "WHERE n.nspname NOT IN ('pg_catalog', 'information_schema') AND p.prosecdef "
+                "AND has_function_privilege(p.oid, 'EXECUTE')"
             )
-            assert {r["proname"] for r in callable_definers} == {"insights_bi_tenant"}
+            assert {(r["nspname"], r["proname"]) for r in callable_definers} == {
+                ("insights_bi", name) for name in READER_FUNCTIONS
+            }
             schema_rels = await conn.fetch(
                 "SELECT c.relname, has_table_privilege(c.oid, 'SELECT') AS can FROM pg_class c "
                 "JOIN pg_namespace n ON n.oid = c.relnamespace WHERE n.nspname = 'insights_bi'"
@@ -521,6 +606,8 @@ def test_a_login_reads_nothing_else(world) -> None:
                 "SELECT id FROM public.tenants LIMIT 1",
                 "SELECT * FROM public.insights_bi_logins",
                 "SELECT role_name FROM public.insights_bi_logins",
+                "SELECT * FROM public.insights_bi_settings",
+                "SELECT allow_primary FROM public.insights_bi_settings",
                 "SELECT * FROM public.audit_log LIMIT 1",
                 "SELECT * FROM public.agent_task_results LIMIT 1",
                 "SELECT * FROM public.llm_daily_spend LIMIT 1",
@@ -529,6 +616,15 @@ def test_a_login_reads_nothing_else(world) -> None:
                 "SELECT * FROM public.run_facts_y2026m11",
                 "SELECT tenant_id FROM public.run_facts_y2026m11",
                 "SELECT * FROM public.run_facts_default",
+                # The source tables, even the columns the views expose, and their plans.
+                "SELECT id FROM public.run_facts",
+                "SELECT tenant_id FROM public.run_facts",
+                "SELECT name FROM public.agents",
+                "SELECT status FROM public.hitl_queue",
+                "SELECT day FROM public.insights_daily",
+                "SELECT provider FROM public.spend_usage_rollups",
+                "EXPLAIN SELECT id FROM public.run_facts",
+                "EXPLAIN SELECT id FROM public.agents WHERE name < 'B'",
                 # Columns no view exposes.
                 "SELECT correlation_id FROM public.run_facts",
                 "SELECT trace_id FROM public.run_facts",
@@ -538,7 +634,8 @@ def test_a_login_reads_nothing_else(world) -> None:
                 "SELECT context FROM public.hitl_queue",
                 "SELECT system_prompt_ref FROM public.agents",
                 "SELECT amount FROM public.spend_usage_rollups",
-                # The provisioning functions.
+                # The tenant lookup and the provisioning functions.
+                "SELECT public.insights_bi_tenant()",
                 f"SELECT public.insights_bi_revoke_login('{world['b']}', '{world['login_b'].role_name}')",
                 "SELECT public.insights_bi_create_login(gen_random_uuid(), 'bi_aaaaaaaaaa', 'x', NULL, 3)",
                 "SELECT public.gemini_daily_platform_spend()",
@@ -546,9 +643,11 @@ def test_a_login_reads_nothing_else(world) -> None:
             for sql in denied:
                 with pytest.raises(asyncpg.InsufficientPrivilegeError):
                     await conn.fetch(sql)
-            # Membership is for inheritance only: it cannot become the group (PostgreSQL 16 SET FALSE).
-            with pytest.raises(asyncpg.InsufficientPrivilegeError):
-                await conn.execute("SET ROLE agenticorg_bi")
+            # Membership is for inheritance only: it cannot become the group (PostgreSQL 16 SET FALSE),
+            # and it is no member of the reader at all.
+            for role in ("agenticorg_bi", "agenticorg_bi_reader", "agenticorg_bi_lookup", "agenticorg_bi_admin"):
+                with pytest.raises(asyncpg.InsufficientPrivilegeError):
+                    await conn.execute(f"SET ROLE {role}")
         finally:
             await conn.close()
 
@@ -565,10 +664,15 @@ def test_a_login_writes_nothing(world) -> None:
                 await conn.execute("CREATE TEMP TABLE bi_scratch(id int)")
             # ... and refused by privilege once the login turns that off.
             await conn.execute("SET default_transaction_read_only = off")
-            writes = [
+            # The views select from a function, so they are not updatable at all.
+            for sql in (
                 "DELETE FROM insights_bi.agents",
                 "UPDATE insights_bi.agents SET name = 'x'",
                 "INSERT INTO insights_bi.daily(id) VALUES (gen_random_uuid())",
+            ):
+                with pytest.raises((asyncpg.InsufficientPrivilegeError, asyncpg.ObjectNotInPrerequisiteStateError)):
+                    await conn.execute(sql)
+            writes = [
                 "DELETE FROM public.run_facts",
                 "UPDATE public.agents SET status = 'paused'",
                 "INSERT INTO public.agents(id) VALUES (gen_random_uuid())",
@@ -576,12 +680,15 @@ def test_a_login_writes_nothing(world) -> None:
                 "DELETE FROM public.insights_bi_logins",
                 f"INSERT INTO public.insights_bi_logins(id, tenant_id, role_name) "
                 f"VALUES (gen_random_uuid(), '{world['b']}', 'bi_forgedforged')",
+                "UPDATE public.insights_bi_settings SET allow_primary = true",
                 "TRUNCATE public.agents",
                 "CREATE TABLE public.bi_planted(id int)",
                 "CREATE TABLE insights_bi.bi_planted(id int)",
                 "CREATE FUNCTION public.bi_planted() RETURNS int LANGUAGE sql AS 'SELECT 1'",
+                "CREATE FUNCTION insights_bi.bi_planted() RETURNS int LANGUAGE sql AS 'SELECT 1'",
                 "CREATE VIEW insights_bi.bi_planted AS SELECT 1",
                 "CREATE SCHEMA bi_planted",
+                "ALTER FUNCTION insights_bi.run_facts_rows() SECURITY INVOKER",
             ]
             for sql in writes:
                 with pytest.raises(asyncpg.InsufficientPrivilegeError):
@@ -590,6 +697,247 @@ def test_a_login_writes_nothing(world) -> None:
             await conn.close()
 
     asyncio.run(scenario())
+
+
+# ---------------------------------------------------------------- statistics side channel (M1)
+
+
+async def _estimate(conn: asyncpg.Connection, sql: str) -> float:
+    plan = json.loads(await conn.fetchval(f"EXPLAIN (FORMAT JSON) {sql}"))
+    return float(plan[0]["Plan"]["Plan Rows"])
+
+
+def test_planner_statistics_reveal_nothing_about_other_tenants(world) -> None:
+    """Other tenants' volumes and values do not move a BI login's row estimates, and pg_stats is empty for it.
+
+    Tenant B gets thousands of facts with a value only it uses and dozens of
+    agents with confidential names, and the tables are analysed. Login A's
+    estimates for B's tenant id, B's value and a range over B's names must equal
+    those for values that exist nowhere.
+    """
+    admin, tenant_a, tenant_b = world["admin"], world["a"], world["b"]
+    secret, nowhere = "acme_secret_merger", "no_such_use_case_value"
+    with admin.begin() as conn:
+        conn.execute(
+            text(
+                "INSERT INTO run_facts(id, tenant_id, run_key, entrypoint, status, started_at, use_case) "
+                "SELECT gen_random_uuid(), :t, 'stat:' || g, 'agents', 'completed', "
+                "timestamptz '2026-11-02' + (g % 20) * interval '1 day', :uc FROM generate_series(1, 4000) g"
+            ),
+            {"t": tenant_b, "uc": secret},
+        )
+        for i in range(60):
+            _insert_agent(conn, tenant_b, f"B-confidential-agent-{i:03d}", "9.9")
+        conn.exec_driver_sql("ANALYZE run_facts")
+        conn.exec_driver_sql("ANALYZE agents")
+        # The statistics really do separate these values (so the comparison below means something).
+        assert (
+            conn.execute(
+                text("SELECT count(*) FROM pg_stats WHERE tablename LIKE 'run_facts%' AND attname = 'use_case'")
+            ).scalar_one()
+        ) > 0
+
+    async def scenario() -> None:
+        login = world["login_a"]
+        conn = await _bi_connect(login.role_name, login.password)
+        try:
+            unknown = uuid.uuid4()
+            pairs = [
+                (f"SELECT id FROM insights_bi.run_facts WHERE tenant_id = '{tenant_b}'",
+                 f"SELECT id FROM insights_bi.run_facts WHERE tenant_id = '{unknown}'"),
+                (f"SELECT id FROM insights_bi.run_facts WHERE tenant_id >= '{tenant_b}'",
+                 f"SELECT id FROM insights_bi.run_facts WHERE tenant_id >= '{unknown}'"),
+                (f"SELECT id FROM insights_bi.run_facts WHERE use_case = '{secret}'",
+                 f"SELECT id FROM insights_bi.run_facts WHERE use_case = '{nowhere}'"),
+                (f"SELECT id FROM run_facts WHERE use_case = '{secret}'",
+                 f"SELECT id FROM run_facts WHERE use_case = '{nowhere}'"),
+                ("SELECT id FROM insights_bi.agents WHERE name < 'B-confidential-agent-030'",
+                 "SELECT id FROM insights_bi.agents WHERE name < '!'"),
+                ("SELECT id FROM insights_bi.agents WHERE name = 'B-confidential-agent-007'",
+                 "SELECT id FROM insights_bi.agents WHERE name = 'nobody at all'"),
+                (f"SELECT id FROM insights_bi.run_facts_rows() WHERE use_case = '{secret}'",
+                 f"SELECT id FROM insights_bi.run_facts_rows() WHERE use_case = '{nowhere}'"),
+            ]  # fmt: skip
+            for leaky, blank in pairs:
+                assert await _estimate(conn, leaky) == await _estimate(conn, blank), leaky
+            # Even the unfiltered estimate is the constant for a function scan, not the table's size.
+            assert await _estimate(conn, "SELECT id FROM insights_bi.run_facts") == await _estimate(
+                conn, "SELECT id FROM insights_bi.approvals"
+            )
+            # The plan shows the function scan only, never the tables or indexes behind it.
+            plan = "\n".join(
+                r[0] for r in await conn.fetch(f"EXPLAIN VERBOSE SELECT id FROM run_facts WHERE use_case = '{secret}'")
+            )
+            assert "Function Scan" in plan and "run_facts_rows" in plan
+            assert "public.run_facts" not in plan and "Index" not in plan and "Seq Scan" not in plan
+            # pg_stats shows a column's statistics only to roles that may read the column.
+            assert (
+                await conn.fetchval(
+                    "SELECT count(*) FROM pg_stats WHERE schemaname = 'public' AND tablename IN "
+                    "('run_facts', 'run_facts_y2026m11', 'run_facts_default', 'agents', 'insights_daily', "
+                    "'spend_usage_rollups', 'hitl_queue')"
+                )
+                == 0
+            )
+            # And the extra rows are B's alone: A still reads its own.
+            assert await conn.fetchval(f"SELECT count(*) FROM run_facts WHERE use_case = '{secret}'") == 0
+            assert await conn.fetchval("SELECT count(*) FROM agents") == world["counts"][tenant_a]["agents"]
+        finally:
+            await conn.close()
+
+    try:
+        asyncio.run(scenario())
+    finally:
+        with admin.begin() as conn:
+            conn.execute(
+                text("DELETE FROM run_facts WHERE tenant_id = :t AND use_case = :uc"), {"t": tenant_b, "uc": secret}
+            )
+            conn.execute(
+                text("DELETE FROM agents WHERE tenant_id = :t AND name LIKE 'B-confidential-agent-%'"), {"t": tenant_b}
+            )
+
+
+def test_run_facts_reach_back_400_days(world) -> None:
+    admin, tenant_a = world["admin"], world["a"]
+    now = datetime.now(UTC)
+    ids = {"old": uuid.uuid4(), "recent": uuid.uuid4()}
+    with admin.begin() as conn:
+        for key, started in (("old", now - timedelta(days=401)), ("recent", now - timedelta(days=399))):
+            conn.execute(
+                text(
+                    "INSERT INTO run_facts(id, tenant_id, run_key, entrypoint, status, started_at) "
+                    "VALUES (:id, :t, :k, 'agents', 'completed', :s)"
+                ),
+                {"id": ids[key], "t": tenant_a, "k": f"window:{key}:{uuid.uuid4().hex}", "s": started},
+            )
+
+    async def scenario() -> None:
+        login = world["login_a"]
+        conn = await _bi_connect(login.role_name, login.password)
+        try:
+            seen = {r["id"] for r in await conn.fetch("SELECT id FROM insights_bi.run_facts")}
+            assert ids["recent"] in seen and ids["old"] not in seen
+            assert len(seen) == world["counts"][tenant_a]["run_facts"] + 1
+        finally:
+            await conn.close()
+
+    try:
+        asyncio.run(scenario())
+    finally:
+        with admin.begin() as conn:
+            conn.execute(text("DELETE FROM run_facts WHERE id IN (:a, :b)"), {"a": ids["old"], "b": ids["recent"]})
+
+
+# ---------------------------------------------------------------- primary or replica (L2)
+
+
+def test_logins_read_nothing_on_a_primary_unless_allowed(world) -> None:
+    admin, tenant_a = world["admin"], world["a"]
+    login = world["login_a"]
+
+    async def counts() -> dict[str, int]:
+        conn = await _bi_connect(login.role_name, login.password)
+        try:
+            assert await conn.fetchval("SELECT pg_is_in_recovery()") is False
+            return {view: await conn.fetchval(f"SELECT count(*) FROM insights_bi.{view}") for view in VIEWS}
+        finally:
+            await conn.close()
+
+    try:
+        _allow_primary(admin, False)
+        assert asyncio.run(counts()) == dict.fromkeys(VIEWS, 0)
+    finally:
+        _allow_primary(admin, True)
+    assert asyncio.run(counts()) == world["counts"][tenant_a]
+    with admin.connect() as conn:
+        # One row, and only that one.
+        with pytest.raises(Exception, match="ck_insights_bi_settings_single_row|duplicate key"):
+            with conn.begin():
+                conn.execute(text("INSERT INTO insights_bi_settings (id, allow_primary) VALUES (false, true)"))
+
+
+# ---------------------------------------------------------------- schema public writable (L1)
+
+
+@pytest.mark.parametrize("grantee", ["PUBLIC", "agenticorg_bi"])
+def test_creation_is_refused_while_schema_public_is_writable(world, grantee: str) -> None:
+    admin, app, tenant_a = world["admin"], world["app"], world["a"]
+    with admin.begin() as conn:
+        conn.exec_driver_sql(f"GRANT CREATE ON SCHEMA public TO {grantee}")
+    try:
+        with pytest.raises(bi_access.BiAccessUnavailableError):
+            asyncio.run(_as_app(app, tenant_a, lambda s: bi_access.create_login(s, tenant_a, created_by=None, limit=5)))
+        # The migration itself goes through. A grant to PUBLIC it leaves alone (other users of the
+        # schema may rely on it) and says why logins will be refused; the BI group's own grant it revokes.
+        notices = _apply(world["installer_url"], "upgrade", HEAD)
+        if grantee == "PUBLIC":
+            assert any("Schema public is writable" in notice for notice in notices), notices
+        else:
+            assert not any("Schema public is writable" in notice for notice in notices), notices
+            with admin.connect() as conn:
+                assert not conn.execute(
+                    text("SELECT has_schema_privilege('agenticorg_bi', 'public', 'CREATE')")
+                ).scalar_one()
+    finally:
+        with admin.begin() as conn:
+            conn.exec_driver_sql(f"REVOKE CREATE ON SCHEMA public FROM {grantee}")
+    with admin.connect() as conn:
+        assert (
+            conn.execute(
+                text("SELECT count(*) FROM insights_bi_logins WHERE tenant_id = :t AND revoked_at IS NULL"),
+                {"t": tenant_a},
+            ).scalar_one()
+            == 1
+        )
+
+
+# ---------------------------------------------------------------- re-running the upgrade (M2)
+
+
+def test_the_upgrade_runs_again_with_logins_on_the_cluster(world) -> None:
+    admin, login = world["admin"], world["login_a"]
+    with admin.connect() as conn:
+        # PostgreSQL 16 made the admin role (the login's creator) an ADMIN-only member of the login.
+        assert conn.execute(
+            text(
+                "SELECT m.admin_option AND NOT m.inherit_option AND NOT m.set_option FROM pg_auth_members m "
+                "WHERE m.member = 'agenticorg_bi_admin'::regrole AND m.roleid = CAST(:r AS regrole)"
+            ),
+            {"r": login.role_name},
+        ).scalar_one()
+    notices = _apply(world["installer_url"], "upgrade", HEAD)
+    assert not any("Schema public is writable" in notice for notice in notices)
+
+    async def still_reads() -> int:
+        conn = await _bi_connect(login.role_name, login.password)
+        try:
+            return int(await conn.fetchval("SELECT count(*) FROM insights_bi.agents"))
+        finally:
+            await conn.close()
+
+    assert asyncio.run(still_reads()) == world["counts"][world["a"]]["agents"]
+
+
+@pytest.mark.parametrize(
+    ("grant", "message"),
+    [
+        ("GRANT {probe} TO agenticorg_bi_lookup", "must not be members of other roles"),
+        ("GRANT {probe} TO agenticorg_bi", "must not be members of other roles"),
+        ("GRANT agenticorg_bi_reader TO {probe}", "hold access to the BI reader"),
+    ],
+)
+def test_the_upgrade_still_refuses_an_unsafe_membership(world, grant: str, message: str) -> None:
+    admin = world["admin"]
+    probe = "t_biprobe_" + uuid.uuid4().hex[:12]
+    with admin.begin() as conn:
+        conn.exec_driver_sql(f'CREATE ROLE "{probe}" NOLOGIN')
+        conn.exec_driver_sql(grant.format(probe=f'"{probe}"'))
+    try:
+        with pytest.raises(Exception, match=message):
+            _apply(world["installer_url"], "upgrade", HEAD)
+    finally:
+        with admin.begin() as conn:
+            conn.exec_driver_sql(f'DROP ROLE "{probe}"')
 
 
 # ---------------------------------------------------------------- limits, tenant binding and revocation
@@ -663,36 +1011,70 @@ def test_limit_tenant_binding_and_revocation(world) -> None:
         assert revoked_at is not None
 
 
-def test_a_revoked_role_that_cannot_be_dropped_logs_in_no_more_and_reads_nothing(world) -> None:
-    app, tenant_b, admin = world["app"], world["b"], world["admin"]
-    schema = "t_bidep_" + uuid.uuid4().hex[:12]
+def test_a_revoked_login_that_owns_a_large_object_loses_access_inside_its_open_transaction(world) -> None:
+    """DROP ROLE fails while the login owns a large object (any login can create one).
 
-    async def scenario() -> None:
+    The revoke then leaves the role, unable to log in, and takes away its BI
+    group membership. A REPEATABLE READ transaction the login opened before the
+    revoke still sees the mapping row as it was, so only the membership revoke
+    (privilege checks read the current catalogue) ends its access there: from
+    its next statement that takes a lock it does not hold yet, and from then
+    on for every view, including the ones it had already read.
+    """
+    app, tenant_b, admin = world["app"], world["b"], world["admin"]
+
+    async def scenario() -> str:
         extra = await _as_app(app, tenant_b, lambda s: bi_access.create_login(s, tenant_b, created_by=None, limit=2))
-        # Something now depends on the role (an object it owns), so DROP ROLE must fail.
-        with admin.begin() as conn:
-            conn.exec_driver_sql(f'CREATE SCHEMA "{schema}" AUTHORIZATION "{extra.role_name}"')
         held = await _bi_connect(extra.role_name, extra.password)
         try:
+            await held.execute("SET default_transaction_read_only = off")
+            assert await held.fetchval("SELECT lo_create(0)")
+            await held.execute("RESET default_transaction_read_only")
+            transaction = held.transaction(isolation="repeatable_read", readonly=True)
+            await transaction.start()
             assert await held.fetchval("SELECT count(*) FROM insights_bi.spend_daily") == 2
             result = await _as_app(app, tenant_b, lambda s: bi_access.revoke_login(s, tenant_b, extra.role_name))
             assert result == "nologin"
-            # Still a member of the group, but mapped to no tenant: every view is empty.
+            # Same transaction, same snapshot (the mapping still reads as active there), but the
+            # group membership is gone: a view it has not touched yet is refused ...
+            with pytest.raises(asyncpg.InsufficientPrivilegeError):
+                async with held.transaction():
+                    await held.fetchval("SELECT count(*) FROM insights_bi.agents")
+            # ... and so, from then on, is the one it already read.
+            with pytest.raises(asyncpg.InsufficientPrivilegeError):
+                async with held.transaction():
+                    await held.fetchval("SELECT count(*) FROM insights_bi.spend_daily")
+            await transaction.rollback()
             for view in VIEWS:
-                assert await held.fetchval(f"SELECT count(*) FROM insights_bi.{view}") == 0, view
-            assert await held.fetchval("SELECT public.insights_bi_tenant()") is None
+                with pytest.raises(asyncpg.InsufficientPrivilegeError):
+                    await held.fetchval(f"SELECT count(*) FROM insights_bi.{view}")
+                with pytest.raises(asyncpg.InsufficientPrivilegeError):
+                    await held.fetchval(f"SELECT count(*) FROM insights_bi.{view}_rows()")
         finally:
             await held.close()
         with pytest.raises(asyncpg.InvalidAuthorizationSpecificationError):
             await _bi_connect(extra.role_name, extra.password)
-        with admin.begin() as conn:
-            assert not conn.execute(
-                text("SELECT rolcanlogin FROM pg_roles WHERE rolname = :r"), {"r": extra.role_name}
-            ).scalar_one()
-            conn.exec_driver_sql(f'DROP SCHEMA "{schema}"')
-            conn.exec_driver_sql(f'DROP ROLE "{extra.role_name}"')
+        return extra.role_name
 
-    asyncio.run(scenario())
+    role = asyncio.run(scenario())
+    with admin.begin() as conn:
+        assert not conn.execute(text("SELECT rolcanlogin FROM pg_roles WHERE rolname = :r"), {"r": role}).scalar_one()
+        assert not conn.execute(
+            text("SELECT pg_has_role(CAST(:r AS regrole), 'agenticorg_bi', 'MEMBER')"), {"r": role}
+        ).scalar_one()
+        assert conn.execute(
+            text("SELECT revoked_at IS NOT NULL FROM insights_bi_logins WHERE role_name = :r"), {"r": role}
+        ).scalar_one()
+        # Revoking it again changes nothing and still answers nologin.
+        conn.execute(text("SELECT set_config('agenticorg.tenant_id', :t, true)"), {"t": str(tenant_b)})
+        assert (
+            conn.execute(
+                text("SELECT public.insights_bi_revoke_login(:t, :r)"), {"t": tenant_b, "r": role}
+            ).scalar_one()
+            == "nologin"
+        )
+        conn.exec_driver_sql(f'DROP OWNED BY "{role}"')
+        conn.exec_driver_sql(f'DROP ROLE "{role}"')
 
 
 def test_downgrade_refuses_while_a_login_is_active(world) -> None:

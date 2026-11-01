@@ -128,14 +128,29 @@ def test_configuration_needs_the_switch_host_and_database(monkeypatch) -> None:
         monkeypatch.setattr(settings, "insights_bi_database", database)
         assert bi_access.bi_configured() is expected
     details = bi_access.connection_details()
-    assert details["port"] == 5432 and details["sslmode"] == "require"
+    # The chain is verified against the replica's CA (its certificate names the instance, not the
+    # address, so verify-full cannot work) and the SCRAM exchange is bound to the TLS channel.
+    assert details["port"] == 5432 and details["sslmode"] == "verify-ca" and details["channel_binding"] == "require"
     assert details["views"] == [f"insights_bi.{v}" for v in bi_access.BI_VIEWS]
     assert bi_access.connection_string("bi_00000000_abcdefghij", "p-w_d") == (
-        "postgresql://bi_00000000_abcdefghij:p-w_d@10.0.0.5:5432/agenticorg?sslmode=require"
+        "postgresql://bi_00000000_abcdefghij:p-w_d@10.0.0.5:5432/agenticorg?sslmode=verify-ca&channel_binding=require"
     )
 
 
 # ---------------------------------------------------------------- the migration
+
+
+class _Bind:
+    """Answers the migration's catalogue read of the source columns' types (all built-in here)."""
+
+    def execute(self, statement, params=None):
+        source = params["rel"].removeprefix("public.")
+        columns = {"tenant_id"}
+        for table, cols in _migration().VIEWS.values():
+            if table == source:
+                columns |= set(cols)
+        rows = [SimpleNamespace(attname=c, type_name="text", builtin=True) for c in sorted(columns)]
+        return SimpleNamespace(all=lambda: rows)
 
 
 class _Op:
@@ -144,6 +159,9 @@ class _Op:
 
     def execute(self, sql) -> None:
         self.sql.append(" ".join(str(sql).split()))
+
+    def get_bind(self) -> _Bind:
+        return _Bind()
 
 
 def _upgrade_sql(monkeypatch) -> list[str]:
@@ -192,13 +210,26 @@ def test_views_expose_only_the_listed_columns(monkeypatch) -> None:
     assert run_columns == set(RunFact.__table__.c.keys()) - {"correlation_id", "trace_id", "run_key"}
 
     sql = _upgrade_sql(monkeypatch)
+    joined = "\n".join(sql)
     for view, (source, columns) in migration.VIEWS.items():
-        created = [s for s in sql if s.startswith(f"CREATE OR REPLACE VIEW insights_bi.{view} ")]
+        # The view reads its reader function only; the BI group gets no grant on the source.
+        created = [s for s in sql if s.startswith(f"CREATE VIEW insights_bi.{view} ")]
         assert created == [
-            f"CREATE OR REPLACE VIEW insights_bi.{view} WITH (security_invoker = true, security_barrier = true) "
-            f"AS SELECT {', '.join(columns)} FROM public.{source}"
+            f"CREATE VIEW insights_bi.{view} WITH (security_invoker = true, security_barrier = true) "
+            f"AS SELECT {', '.join(columns)} FROM insights_bi.{view}_rows()"
         ]
-        assert f"GRANT SELECT ({', '.join(columns)}) ON public.{source} TO agenticorg_bi" in sql
+        readable = ", ".join(dict.fromkeys(("tenant_id", *columns)))
+        assert f"GRANT SELECT ({readable}) ON public.{source} TO agenticorg_bi_reader" in sql
+        assert f"REVOKE ALL ON public.{source} FROM agenticorg_bi" in sql
+        # The function: no arguments, the reader's, the caller's tenant only, exactly the view's columns.
+        function = f"CREATE FUNCTION insights_bi.{view}_rows() RETURNS TABLE ("
+        assert function in joined
+        body = joined[joined.index(function) :].split("$function$")[1]
+        assert body.strip().startswith(f"SELECT {', '.join(f's.{c}' for c in columns)} FROM public.{source} s ")
+        assert "WHERE s.tenant_id = (SELECT public.insights_bi_tenant())" in body
+        assert ("interval '400 days'" in body) == (view == "run_facts")
+        assert f"ALTER FUNCTION insights_bi.{view}_rows() OWNER TO agenticorg_bi_reader;" in joined
+        assert f"GRANT EXECUTE ON FUNCTION insights_bi.{view}_rows() TO agenticorg_bi;" in joined
 
 
 def test_both_policies_on_every_source_and_nothing_on_a_partition(monkeypatch) -> None:
@@ -206,7 +237,7 @@ def test_both_policies_on_every_source_and_nothing_on_a_partition(monkeypatch) -
     for source in _migration().SOURCES:
         for kind, name in (("PERMISSIVE", "insights_bi_read"), ("RESTRICTIVE", "insights_bi_only_own")):
             statement = (
-                f"CREATE POLICY {name} ON public.{source} AS {kind} FOR SELECT TO agenticorg_bi "
+                f"CREATE POLICY {name} ON public.{source} AS {kind} FOR SELECT TO agenticorg_bi_reader "
                 "USING (tenant_id = (SELECT public.insights_bi_tenant()))"
             )
             assert statement in sql, statement
@@ -222,8 +253,15 @@ def test_functions_are_definer_with_a_fixed_search_path_and_session_user(monkeyp
     migration = _migration()
     for ddl in (migration._TENANT_FN_SQL, migration._CREATE_FN_SQL, migration._REVOKE_FN_SQL):
         flat = " ".join(ddl.split())
-        assert "SECURITY DEFINER SET search_path = pg_catalog" in flat
+        assert "SECURITY DEFINER SET search_path = pg_catalog, pg_temp AS" in flat
+        assert "FROM pg_roles" not in flat and "JOIN pg_roles" not in flat
     assert "session_user" in migration._TENANT_FN_SQL and "current_user" not in migration._TENANT_FN_SQL
+    # Nothing on a writable primary unless the migration owner's switch allows it.
+    tenant = " ".join(migration._TENANT_FN_SQL.split())
+    assert (
+        "pg_catalog.pg_is_in_recovery() OR COALESCE((SELECT s.allow_primary FROM public.insights_bi_settings s), false)"
+        in (tenant)
+    )
     create = " ".join(migration._CREATE_FN_SQL.split())
     for required in (
         "current_setting('agenticorg.tenant_id', true) IS DISTINCT FROM p_tenant::text",
@@ -235,14 +273,22 @@ def test_functions_are_definer_with_a_fixed_search_path_and_session_user(monkeyp
         "pg_advisory_xact_lock",
         "'insights_bi_limit_reached' USING ERRCODE = 'BI409'",
         "format('CREATE ROLE %I LOGIN PASSWORD %L",
+        # Refused while schema public is writable by PUBLIC or the BI group.
+        "pg_catalog.has_schema_privilege('public', 'public', 'CREATE') "
+        "OR pg_catalog.has_schema_privilege('agenticorg_bi', 'public', 'CREATE')",
+        "'insights_bi_public_schema_writable' USING ERRCODE = 'BI503'",
     ):
         assert required in create, required
     revoke = " ".join(migration._REVOKE_FN_SQL.split())
     assert "WHERE l.tenant_id = p_tenant AND l.role_name = p_role" in revoke
     assert "ERRCODE = 'BI404'" in revoke and "NOLOGIN" in revoke and "dependent_objects_still_exist" in revoke
+    # The role that cannot be dropped loses the group at once.
+    fallback = revoke[revoke.index("dependent_objects_still_exist") :]
+    assert fallback.index("format('REVOKE agenticorg_bi FROM %I', p_role)") < fallback.index("RETURN 'nologin'")
     joined = "\n".join(_upgrade_sql(monkeypatch))
-    # EXECUTE: the tenant lookup to the BI group only; the provisioning functions to the installer and the app.
-    assert "GRANT EXECUTE ON FUNCTION public.insights_bi_tenant() TO agenticorg_bi;" in joined
+    # EXECUTE: the tenant lookup to the reader only; the provisioning functions to the installer and the app.
+    assert "REVOKE ALL ON FUNCTION public.insights_bi_tenant() FROM agenticorg_bi;" in joined
+    assert "GRANT EXECUTE ON FUNCTION public.insights_bi_tenant() TO agenticorg_bi_reader;" in joined
     for fn in (migration.CREATE_FN, migration.REVOKE_FN):
         assert f"GRANT EXECUTE ON FUNCTION {fn} TO agenticorg_app;" in joined
         assert f"REVOKE ALL ON FUNCTION {fn} FROM PUBLIC;" in joined
@@ -250,14 +296,18 @@ def test_functions_are_definer_with_a_fixed_search_path_and_session_user(monkeyp
 
 
 def test_upgrade_sql_is_idempotent(monkeypatch) -> None:
-    for statement in _upgrade_sql(monkeypatch):
+    sql = _upgrade_sql(monkeypatch)
+    for index, statement in enumerate(sql):
+        previous = sql[:index]
         upper = statement.upper()
         if upper.startswith("CREATE TABLE"):
             assert "IF NOT EXISTS" in upper, statement
         elif upper.startswith("CREATE INDEX") or upper.startswith("CREATE UNIQUE INDEX"):
             assert "IF NOT EXISTS" in upper, statement
         elif upper.startswith("CREATE VIEW"):
-            raise AssertionError(statement)
+            # Rebuilt on every run: dropped first.
+            name = statement.split()[2]
+            assert f"DROP VIEW IF EXISTS {name}" in previous, statement
         elif upper.startswith("CREATE POLICY"):
             pass  # each is preceded by DROP POLICY IF EXISTS (checked above for the sources)
         elif upper.startswith("CREATE ROLE") or upper.startswith("CREATE SCHEMA"):
@@ -282,6 +332,36 @@ def test_logins_table_matches_the_model_and_is_tenant_scoped(monkeypatch) -> Non
         "GRANT SELECT ON public.insights_bi_logins TO agenticorg_app;",
     ):
         assert needed in joined, needed
+
+
+def test_settings_table_is_one_row_off_by_default_and_read_by_the_lookup_role_only(monkeypatch) -> None:
+    joined = "\n".join(_upgrade_sql(monkeypatch))
+    for needed in (
+        "CREATE TABLE IF NOT EXISTS insights_bi_settings ( id BOOLEAN PRIMARY KEY DEFAULT true, "
+        "allow_primary BOOLEAN NOT NULL DEFAULT false, CONSTRAINT ck_insights_bi_settings_single_row CHECK (id) )",
+        "INSERT INTO insights_bi_settings (id, allow_primary) VALUES (true, false) ON CONFLICT (id) DO NOTHING",
+        "ALTER TABLE insights_bi_settings ENABLE ROW LEVEL SECURITY",
+        "REVOKE ALL ON public.insights_bi_settings FROM PUBLIC",
+        "REVOKE ALL ON public.insights_bi_settings FROM agenticorg_bi_lookup, agenticorg_bi_admin, agenticorg_bi, "
+        "agenticorg_bi_reader",
+        "GRANT SELECT (allow_primary) ON public.insights_bi_settings TO agenticorg_bi_lookup",
+        "REVOKE ALL ON public.insights_bi_settings FROM agenticorg_app;",
+    ):
+        assert needed in joined, needed
+    assert not re.search(r"GRANT (INSERT|UPDATE|DELETE|ALL)[^;]* ON public\.insights_bi_settings", joined)
+    # A writable schema public is reported, not fixed or failed on.
+    assert "RAISE NOTICE 'Schema public is writable by PUBLIC or agenticorg_bi" in joined
+
+
+def test_rerun_expects_the_admin_roles_own_membership_in_each_login(monkeypatch) -> None:
+    roles = " ".join(_migration()._roles_sql().split())
+    assert (
+        "AND NOT (r.rolname = 'agenticorg_bi_admin' AND g.rolcanlogin AND EXISTS ( SELECT 1 FROM "
+        "pg_catalog.pg_auth_members b JOIN pg_catalog.pg_roles bg ON bg.oid = b.roleid WHERE b.member = g.oid "
+        "AND bg.rolname = 'agenticorg_bi'))"
+    ) in roles
+    assert "RAISE EXCEPTION 'BI roles must not be members of other roles'" in roles
+    assert "RAISE EXCEPTION 'Roles hold access to the BI reader, lookup or admin role'" in roles
 
 
 # ---------------------------------------------------------------- the API
@@ -485,7 +565,8 @@ def test_list_returns_logins_and_connection_details(app, configured) -> None:
             "host": "10.20.0.7",
             "port": 5432,
             "database": "agenticorg",
-            "sslmode": "require",
+            "sslmode": "verify-ca",
+            "channel_binding": "require",
             "schema": "insights_bi",
             "views": [f"insights_bi.{v}" for v in bi_access.BI_VIEWS],
         }
@@ -506,8 +587,9 @@ def test_create_returns_the_password_once_and_never_logs_or_audits_it(app, confi
     password, role_name = body["password"], body["role_name"]
     assert len(password) == 32 and re.fullmatch(rf"bi_{TENANT.hex[:8]}_[a-z0-9]{{10}}", role_name)
     assert body["connection_string"].startswith(f"postgresql://{role_name}:")
-    assert body["connection_string"].endswith("@10.20.0.7:5432/agenticorg?sslmode=require")
-    assert body["port"] == 5432 and body["sslmode"] == "require" and body["created_at"]
+    assert body["connection_string"].endswith("@10.20.0.7:5432/agenticorg?sslmode=verify-ca&channel_binding=require")
+    assert body["port"] == 5432 and body["sslmode"] == "verify-ca" and body["channel_binding"] == "require"
+    assert body["created_at"]
     # The database got the verifier, bound to the caller's tenant and the configured limit.
     (call,) = [params for sql, params in session.calls if "insights_bi_create_login" in sql]
     assert call["tenant"] == TENANT and call["role"] == role_name and call["max"] == 3
@@ -535,6 +617,14 @@ def test_create_at_the_limit_is_a_conflict(app, configured) -> None:
         resp = client.post("/api/v1/insights/bi-access")
     assert resp.status_code == 409
     assert resp.json()["detail"] == {"error": "insights_bi_limit_reached", "max_logins": 3}
+    assert session.added == []
+
+
+def test_a_writable_public_schema_makes_creation_unavailable(app, configured) -> None:
+    session = FakeSession(user=_admin_user(), create_error=bi_access.SQLSTATE_UNAVAILABLE)
+    with _client(app, role="admin", session=session) as client:
+        resp = client.post("/api/v1/insights/bi-access")
+    assert resp.status_code == 503 and "insights_bi_unavailable" in resp.text and "SCRAM" not in resp.text
     assert session.added == []
 
 

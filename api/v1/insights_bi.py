@@ -2,10 +2,13 @@
 """Insights BI access: a tenant administrator's read-only SQL logins for a BI tool.
 
 ``GET /insights/bi-access`` lists the tenant's logins and the connection
-details (replica host, port 5432, database, ``sslmode=require``, the views).
+details (replica host, port 5432, database, ``sslmode=verify-ca``,
+``channel_binding=require``, the views).
 ``POST /insights/bi-access`` creates a login and returns its password once,
 with a connection string; the password is not stored anywhere and is in no
-log or audit row. ``DELETE /insights/bi-access/{role_name}`` revokes one.
+log or audit row; it answers 503 ``insights_bi_unavailable`` while the
+database refuses to create logins (schema ``public`` writable by PUBLIC or the
+BI group). ``DELETE /insights/bi-access/{role_name}`` revokes one.
 
 Every route needs an active human administrator of the tenant
 (``get_active_human_admin``: API keys and agent tokens are refused) and
@@ -93,6 +96,9 @@ async def create_bi_access(admin: Admin) -> JSONResponse:
             created = await bi_access.create_login(session, admin.tenant_id, created_by=admin.user_id, limit=limit)
         except bi_access.BiLoginLimitError:
             raise HTTPException(409, detail={"error": "insights_bi_limit_reached", "max_logins": limit}) from None
+        except bi_access.BiAccessUnavailableError:
+            logger.warning("insights_bi_login_refused_public_schema_writable")
+            raise HTTPException(503, "insights_bi_unavailable") from None
         session.add(
             audit_entry(
                 admin.tenant_id,

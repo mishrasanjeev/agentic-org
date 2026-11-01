@@ -33,6 +33,7 @@ MIGRATION_OWNED_TABLES: dict[str, str] = {
     "knowledge_documents": "v4_0_0 / v6_z13: knowledge base documents (pgvector columns)",
     "knowledge_entities": "v6_z52: graph retrieval entities per chunk, keyed to the raw-SQL knowledge_documents",
     "knowledge_retrieval_metrics": "v6_z53: figures-only retrieval quality samples written by raw SQL",
+    "insights_bi_settings": "v6z108: one-row BI primary/replica switch, written by the migration owner only",
     # The monthly partitions of spend_usage_records (an ORM table, declared partitioned): created by the
     # migration only, never by the ORM. The list is static, so this does not depend on today's date.
     **dict.fromkeys(STATIC_PARTITIONS, "v6z80: spend_usage_records partition"),

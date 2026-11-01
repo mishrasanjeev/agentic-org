@@ -4,8 +4,9 @@
 A tenant administrator creates a login for a BI tool (Metabase and the like)
 that connects to the read replica. Migration ``v6z108_insights_bi`` ties each
 login to its tenant by name (``insights_bi_logins``) and lets it read the
-views in schema ``insights_bi`` only, its own tenant's rows only, whatever it
-sets ``agenticorg.tenant_id`` to.
+views in schema ``insights_bi`` only (no table at all), its own tenant's rows
+only, whatever it sets ``agenticorg.tenant_id`` to, and only on a standby
+unless ``insights_bi_settings.allow_primary`` is on.
 
 The application never holds CREATEROLE: it calls
 ``public.insights_bi_create_login`` and ``public.insights_bi_revoke_login``
@@ -42,7 +43,12 @@ from core.config import settings
 BI_SCHEMA = "insights_bi"
 BI_VIEWS: tuple[str, ...] = ("run_facts", "daily", "spend_daily", "agents", "approvals")
 BI_PORT = 5432
-BI_SSLMODE = "require"
+# Cloud SQL's server certificate names the instance, not the address a BI tool
+# dials, so ``verify-full`` would fail; ``verify-ca`` checks the chain against
+# the replica's server CA (docs/runbooks/insights-bi-access.md). Channel binding
+# (SCRAM-SHA-256-PLUS) ties the password exchange to that TLS session.
+BI_SSLMODE = "verify-ca"
+BI_CHANNEL_BINDING = "require"
 
 # The login names the database functions accept.
 ROLE_NAME_RE = re.compile(r"^bi_[a-z0-9_]{8,48}$")
@@ -53,6 +59,8 @@ SCRAM_SALT_BYTES = 16
 # SQLSTATEs the v6z108 functions raise for the outcomes the API maps.
 SQLSTATE_LIMIT_REACHED = "BI409"
 SQLSTATE_NOT_FOUND = "BI404"
+# Schema public is writable by PUBLIC or the BI group: creation is refused.
+SQLSTATE_UNAVAILABLE = "BI503"
 
 
 class BiLoginLimitError(Exception):
@@ -61,6 +69,10 @@ class BiLoginLimitError(Exception):
 
 class BiLoginNotFoundError(Exception):
     """No such BI login for this tenant."""
+
+
+class BiAccessUnavailableError(Exception):
+    """The database refuses to create BI logins in its current state (schema public is writable)."""
 
 
 class BiAccessError(Exception):
@@ -90,12 +102,13 @@ def max_logins() -> int:
 
 
 def connection_details() -> dict[str, Any]:
-    """What a BI tool needs besides the login: host, port, database, TLS mode and the views."""
+    """What a BI tool needs besides the login: host, port, database, TLS settings and the views."""
     return {
         "host": settings.insights_bi_host.strip(),
         "port": BI_PORT,
         "database": settings.insights_bi_database.strip(),
         "sslmode": BI_SSLMODE,
+        "channel_binding": BI_CHANNEL_BINDING,
         "schema": BI_SCHEMA,
         "views": [f"{BI_SCHEMA}.{view}" for view in BI_VIEWS],
     }
@@ -105,7 +118,7 @@ def connection_string(role_name: str, password: str) -> str:
     details = connection_details()
     return (
         f"postgresql://{quote(role_name, safe='')}:{quote(password, safe='')}@{details['host']}:{details['port']}/"
-        f"{quote(details['database'], safe='')}?sslmode={BI_SSLMODE}"
+        f"{quote(details['database'], safe='')}?sslmode={BI_SSLMODE}&channel_binding={BI_CHANNEL_BINDING}"
     )
 
 
@@ -184,7 +197,8 @@ async def list_logins(session: Any, tenant_id: uuid.UUID) -> list[dict[str, Any]
 async def create_login(session: Any, tenant_id: uuid.UUID, *, created_by: uuid.UUID | None, limit: int) -> CreatedLogin:
     """Create a login for ``tenant_id`` through ``public.insights_bi_create_login``.
 
-    Raises :class:`BiLoginLimitError` at the limit. The statement carries the
+    Raises :class:`BiLoginLimitError` at the limit and :class:`BiAccessUnavailableError`
+    while schema public is writable by PUBLIC or the BI group. The statement carries the
     verifier, never the password; a refusal is re-raised without the statement.
     """
     role_name = new_role_name(tenant_id)
@@ -207,6 +221,8 @@ async def create_login(session: Any, tenant_id: uuid.UUID, *, created_by: uuid.U
         code = _sqlstate(exc)
         if code == SQLSTATE_LIMIT_REACHED:
             raise BiLoginLimitError() from None
+        if code == SQLSTATE_UNAVAILABLE:
+            raise BiAccessUnavailableError() from None
         raise BiAccessError(code or "unknown") from None
     created_at = (
         await session.execute(text("SELECT created_at FROM insights_bi_logins WHERE id = :id"), {"id": login_id})
