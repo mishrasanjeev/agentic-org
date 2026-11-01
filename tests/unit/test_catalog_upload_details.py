@@ -32,6 +32,20 @@ GHEE_CSV = (
 )
 
 
+def _test_jwt() -> str:
+    """An invented token in JWS compact form, built at run time so the file holds no token literal."""
+    import base64
+    import json
+
+    def part(value: dict[str, str]) -> str:
+        return base64.urlsafe_b64encode(json.dumps(value).encode()).decode().rstrip("=")
+
+    return ".".join([part({"alg": "HS256", "typ": "JWT"}), part({"sub": "test-only"}), "c2lnbmF0dXJlLXRlc3Qtb25seQ"])
+
+
+JWT = _test_jwt()
+
+
 def _products(rows: list[dict]) -> list[dict]:
     return upload_products(
         rows=rows,
@@ -188,7 +202,7 @@ def test_food_prose_and_report_links_are_not_mistaken_for_credentials() -> None:
     assert not contains_private_or_executable_value("A basic ghee for daily cooking")
     assert not contains_private_or_executable_value("https://labreports.mybrandname.com/report-2026")
     # Real credentials are still caught.
-    assert contains_private_or_executable_value("eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3OCJ9.c2lnbmF0dXJlMTIz")
+    assert contains_private_or_executable_value(JWT)
     assert contains_private_or_executable_value("Authorization: Basic dXNlcjpwYXNzd29yZDEyMw==")
     assert contains_private_or_executable_value("Bearer abc")
 
@@ -233,8 +247,6 @@ def test_the_example_file_on_the_setup_page_uploads_cleanly() -> None:
 
 
 # --- review fixes ---------------------------------------------------------------------------------------------
-
-JWT = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c"
 
 
 @pytest.mark.parametrize(
