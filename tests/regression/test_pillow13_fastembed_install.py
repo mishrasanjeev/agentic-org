@@ -61,8 +61,10 @@ def test_all_fastembed_runtime_requirements_are_satisfied_including_pillow() -> 
         installed = _installed(requirement.name)
         assert requirement.specifier.contains(installed, prereleases=True), f"{raw}, installed {installed}"
         checked.add(requirement.name.lower())
-    assert {"pillow", "huggingface-hub", "onnxruntime", "tokenizers", "numpy"} <= checked
-    assert len(checked) >= 12
+    assert checked == {
+        "numpy", "onnxruntime", "tqdm", "requests", "tokenizers",
+        "huggingface-hub", "loguru", "pillow", "mmh3", "py-rust-stemmers",
+    }
 
 
 def test_fastembed_text_embedding_imports_with_patched_pillow() -> None:
