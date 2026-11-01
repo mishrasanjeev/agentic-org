@@ -729,8 +729,9 @@ def _shopify_throttle_wait(body: Mapping[str, Any], attempt: int) -> float:
     if isinstance(cost, Mapping) and isinstance(status, Mapping):
         requested, available = cost.get("requestedQueryCost"), status.get("currentlyAvailable")
         rate = status.get("restoreRate")
-        if all(isinstance(item, int | float) for item in (requested, available, rate)) and rate > 0:
-            return float(min(30.0, max(1.0, (requested - available) / rate)))
+        if isinstance(requested, int | float) and isinstance(available, int | float) and isinstance(rate, int | float):
+            if rate > 0:
+                return float(min(30.0, max(1.0, (requested - available) / rate)))
     return float(2 ** (attempt - 1))
 
 
