@@ -184,7 +184,13 @@ def test_registry_declarations_are_consistent() -> None:
     assert explore_registry.readable_explorers("admin", is_admin=False) == []
     assert "audit" not in {e.key for e in explore_registry.readable_explorers("cfo", is_admin=False)}
     assert [e.key for e in explore_registry.readable_explorers("coo", is_admin=False)] == [
-        "agents", "runs", "workflows", "approvals", "cost", "quality", "connectors"
+        "agents",
+        "runs",
+        "workflows",
+        "approvals",
+        "cost",
+        "quality",
+        "connectors",
     ]
     for role in ("analyst", "auditor", "developer", "merchant", "domain_lead", ""):
         assert explore_registry.readable_explorers(role, is_admin=False) == [], role
@@ -206,5 +212,7 @@ def test_explorer_exports_describe_their_columns() -> None:
 
     rows = export_rows(RUNS, {"rows": [{"started_at": "x", "status": "failed", "links": {"run": "/r"}, "extra": 1}]})
     assert list(rows[0]) == [c.key for c in RUNS.columns] and rows[0]["status"] == "failed"
-    pairs = dict(export.definition_rows({"key": "explore.runs", "columns": [("status", "Status", ""), ("a", "A", "d.")]}))
+    pairs = dict(
+        export.definition_rows({"key": "explore.runs", "columns": [("status", "Status", ""), ("a", "A", "d.")]})
+    )
     assert pairs["column:status"] == "Status" and pairs["column:a"] == "A. d."
