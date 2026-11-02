@@ -1,5 +1,17 @@
 # Changelog
 
+## Unreleased - Insights role views
+
+- Four more Insights views, each the landing view of its role: Operations (COO), HR (CHRO), Marketing (CMO) and
+  Commerce (merchant); administrators switch between all six. A role view's run and approval metrics read its own
+  domains only (Operations: agents filed under `ops` and `operations`), within the caller's.
+- New metrics: workflow runs and stalled workflow runs, unhealthy connectors (Operations); professional tax returns
+  filed (HR); new leads, content drafts and the median draft approval time (Marketing); the shopping funnel (carts,
+  checkouts started and completed, orders, orders paid, drawn in order with the share kept between stages), orders
+  and order webhooks given up (Commerce). Each tile drills to the explorer or page behind it.
+- `docs/insights/phase2-usability-test.md`: the moderated usability test that gates Phase 2 (five roles, seven tasks,
+  three minutes each, at least six of seven per participant).
+
 ## Unreleased - Insights money saved and alerts
 
 - Money saved (estimated), on the Executive and Finance views and the Money saved page

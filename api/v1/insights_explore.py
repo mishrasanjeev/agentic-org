@@ -28,7 +28,17 @@ from fastapi.responses import Response
 
 from api.deps import get_current_tenant
 from api.route_metadata import route_meta
-from api.v1.insights import CompanyId, FromDay, ToDay, _actor, _company, _context, _require_enabled, _tenant
+from api.v1.insights import (
+    DOMAIN_ALIASES,
+    CompanyId,
+    FromDay,
+    ToDay,
+    _actor,
+    _company,
+    _context,
+    _require_enabled,
+    _tenant,
+)
 from core.database import get_tenant_session
 from core.insights import explore_registry
 from core.insights import explorers as ex
@@ -40,8 +50,6 @@ from core.ownership import Caller, caller_from_request
 router = APIRouter(prefix="/insights", tags=["Insights"])
 
 ExportFormat = Literal["csv", "xlsx", "json"]
-# Domains filed under another name: the COO's "ops" also covers agents in "operations".
-DOMAIN_ALIASES: dict[str, tuple[str, ...]] = {"ops": ("operations",)}
 _RESERVED = frozenset({"from", "to", "compare", "company_id", "format"})
 
 

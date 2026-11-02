@@ -799,7 +799,11 @@
     "tabsLabel": "इनसाइट्स व्यू",
     "tabs": {
       "executive": "कार्यकारी",
-      "finance": "वित्त"
+      "finance": "वित्त",
+      "operations": "संचालन",
+      "hr": "मानव संसाधन",
+      "marketing": "मार्केटिंग",
+      "commerce": "कॉमर्स"
     },
     "filters": {
       "label": "फ़िल्टर",
@@ -857,7 +861,9 @@
       "summaryForecast": "{{title}}: पूर्वानुमान {{point}}, संभवतः {{low}} और {{high}} के बीच।",
       "summaryForecastNoBand": "{{title}}: पूर्वानुमान {{point}}।",
       "summaryEmpty": "{{title}}: इस अवधि के लिए कोई डेटा नहीं।",
-      "summaryWaterfall": "{{title}}: कुल बचत {{gross}}, खर्च, समीक्षा समय और त्रुटियों के बाद शुद्ध बचत {{net}}।"
+      "summaryWaterfall": "{{title}}: कुल बचत {{gross}}, खर्च, समीक्षा समय और त्रुटियों के बाद शुद्ध बचत {{net}}।",
+      "summaryFunnel": "{{title}}: {{firstValue}} {{first}} से घटकर {{lastValue}} {{last}}।",
+      "kept": "पिछले चरण का {{pct}}%"
     },
     "table": {
       "caption": "{{title}} का डेटा",
@@ -899,7 +905,11 @@
       "explorePending": "लंबित अनुमोदन देखें",
       "exploreApprovals": "अनुमोदन देखें",
       "exploreCost": "खर्च समझें",
-      "openValue": "मान्यताएँ देखें"
+      "openValue": "मान्यताएँ देखें",
+      "exploreWorkflows": "वर्कफ़्लो देखें",
+      "exploreStalled": "रुके हुए रन देखें",
+      "exploreConnectors": "खराब कनेक्टर देखें",
+      "openOrders": "ऑर्डर खोलें"
     },
     "disabled": {
       "title": "इनसाइट्स बंद है",
@@ -927,6 +937,13 @@
       "review_cost": "समीक्षा समय",
       "error_cost": "त्रुटियाँ",
       "net_saved": "शुद्ध बचत"
+    },
+    "funnel": {
+      "carts": "कार्ट",
+      "checkouts": "शुरू हुए चेकआउट",
+      "checkouts_completed": "पूरे हुए चेकआउट",
+      "orders": "ऑर्डर",
+      "orders_paid": "भुगतान हुए ऑर्डर"
     }
   },
   "insightsBi": {

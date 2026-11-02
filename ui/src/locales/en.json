@@ -799,7 +799,11 @@
     "tabsLabel": "Insights views",
     "tabs": {
       "executive": "Executive",
-      "finance": "Finance"
+      "finance": "Finance",
+      "operations": "Operations",
+      "hr": "HR",
+      "marketing": "Marketing",
+      "commerce": "Commerce"
     },
     "filters": {
       "label": "Filters",
@@ -857,7 +861,9 @@
       "summaryForecast": "{{title}}: forecast {{point}}, likely between {{low}} and {{high}}.",
       "summaryForecastNoBand": "{{title}}: forecast {{point}}.",
       "summaryEmpty": "{{title}}: no data for this period.",
-      "summaryWaterfall": "{{title}}: gross saved {{gross}}, net saved {{net}} after spend, review time and errors."
+      "summaryWaterfall": "{{title}}: gross saved {{gross}}, net saved {{net}} after spend, review time and errors.",
+      "summaryFunnel": "{{title}}: {{firstValue}} {{first}} down to {{lastValue}} {{last}}.",
+      "kept": "{{pct}}% of the stage before"
     },
     "table": {
       "caption": "{{title}} data",
@@ -899,7 +905,11 @@
       "explorePending": "See pending approvals",
       "exploreApprovals": "Explore approvals",
       "exploreCost": "Explain the spend",
-      "openValue": "Review assumptions"
+      "openValue": "Review assumptions",
+      "exploreWorkflows": "Explore workflows",
+      "exploreStalled": "See stalled runs",
+      "exploreConnectors": "See unhealthy connectors",
+      "openOrders": "Open orders"
     },
     "disabled": {
       "title": "Insights is turned off",
@@ -927,6 +937,13 @@
       "review_cost": "Review time",
       "error_cost": "Errors",
       "net_saved": "Net saved"
+    },
+    "funnel": {
+      "carts": "Carts",
+      "checkouts": "Checkouts started",
+      "checkouts_completed": "Checkouts completed",
+      "orders": "Orders",
+      "orders_paid": "Orders paid"
     }
   },
   "insightsBi": {

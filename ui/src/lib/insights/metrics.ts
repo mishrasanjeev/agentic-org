@@ -15,8 +15,9 @@ import type { InsightsViewKey } from "./api";
  * - bullet: actual against a threshold (budgets)
  * - forecast: point estimate with a low/high whisker
  * - waterfall: gross to net, each step from the running total
+ * - funnel: stages in their order, with the share kept from one stage to the next
  */
-export type ChartKind = "line" | "stacked" | "hbar" | "bullet" | "forecast" | "waterfall";
+export type ChartKind = "line" | "stacked" | "hbar" | "bullet" | "forecast" | "waterfall" | "funnel";
 
 export interface MetricPresentation {
   chart: ChartKind;
@@ -30,6 +31,9 @@ const AGENTS = "/dashboard/insights/explore/agents";
 const COST = "/dashboard/insights/explore/cost";
 const COSTS_PAGE = "/dashboard/costs";
 const VALUE_PAGE = "/dashboard/insights/value";
+const WORKFLOWS = "/dashboard/insights/explore/workflows";
+const CONNECTORS = "/dashboard/insights/explore/connectors";
+const ORDERS_PAGE = "/dashboard/orders";
 
 /** Every tile drills to the explorer rows behind it, with the filter or sort that produced the number. */
 export const METRIC_PRESENTATION: Record<string, MetricPresentation> = {
@@ -72,6 +76,22 @@ export const METRIC_PRESENTATION: Record<string, MetricPresentation> = {
   "value.money_saved": { chart: "waterfall", action: { to: VALUE_PAGE, labelKey: "insights.actions.openValue" } },
   "value.hours_saved": { chart: "hbar", action: { to: VALUE_PAGE, labelKey: "insights.actions.openValue" } },
   "value.roi": { chart: "line", action: { to: VALUE_PAGE, labelKey: "insights.actions.openValue" } },
+  "workflows.runs": { chart: "line", action: { to: WORKFLOWS, labelKey: "insights.actions.exploreWorkflows" } },
+  "workflows.stalled": {
+    chart: "hbar",
+    action: { to: `${WORKFLOWS}?filter%5Bpast_timeout%5D=true`, labelKey: "insights.actions.exploreStalled" },
+  },
+  "connectors.unhealthy": {
+    chart: "hbar",
+    action: { to: `${CONNECTORS}?filter%5Bhealth%5D=unhealthy`, labelKey: "insights.actions.exploreConnectors" },
+  },
+  "hr.pt_returns": { chart: "line", action: { to: AGENTS, labelKey: "insights.actions.exploreAgents" } },
+  "marketing.leads": { chart: "line", action: { to: AGENTS, labelKey: "insights.actions.exploreAgents" } },
+  "marketing.content_drafts": { chart: "line", action: { to: AGENTS, labelKey: "insights.actions.exploreAgents" } },
+  "marketing.draft_cycle_time": { chart: "line", action: { to: AGENTS, labelKey: "insights.actions.exploreAgents" } },
+  "commerce.funnel": { chart: "funnel", action: { to: ORDERS_PAGE, labelKey: "insights.actions.openOrders" } },
+  "commerce.orders": { chart: "line", action: { to: ORDERS_PAGE, labelKey: "insights.actions.openOrders" } },
+  "commerce.webhook_failures": { chart: "hbar", action: { to: ORDERS_PAGE, labelKey: "insights.actions.openOrders" } },
 };
 
 /** Expected metric keys per view (registry views; the API decides what it returns). */
@@ -101,22 +121,40 @@ export const VIEW_METRICS: Record<InsightsViewKey, readonly string[]> = {
     "value.money_saved",
     "value.roi",
   ],
+  operations: ["workflows.runs", "workflows.stalled", "runs.success_rate", "runs.latency", "approvals.pending",
+    "connectors.unhealthy", "runs.volume"],
+  hr: ["runs.volume", "runs.success_rate", "approvals.pending", "approvals.cycle_time", "hr.pt_returns"],
+  marketing: ["marketing.leads", "marketing.content_drafts", "marketing.draft_cycle_time", "runs.volume",
+    "approvals.pending"],
+  commerce: ["commerce.orders", "commerce.webhook_failures", "commerce.funnel"],
 };
 
 /** Views each role may open; mirrors the server-side check (admin both, cfo finance). */
 export const ROLE_VIEWS: Record<string, readonly InsightsViewKey[]> = {
-  admin: ["executive", "finance"],
+  admin: ["executive", "finance", "operations", "hr", "marketing", "commerce"],
   cfo: ["finance"],
+  coo: ["operations"],
+  chro: ["hr"],
+  cmo: ["marketing"],
+  merchant: ["commerce"],
 };
 
 /**
  * Insights is offered to these roles; the route guard and the nav entry use the same list. The CHRO, CMO and
  * COO open the explorers for their domains (their landing views arrive with the role views).
  */
-export const INSIGHTS_ROLES: readonly string[] = ["admin", "cfo", "chro", "cmo", "coo"];
+export const INSIGHTS_ROLES: readonly string[] = ["admin", "cfo", "chro", "cmo", "coo", "merchant"];
+
+const DEFAULT_VIEW: Record<string, InsightsViewKey> = {
+  cfo: "finance",
+  coo: "operations",
+  chro: "hr",
+  cmo: "marketing",
+  merchant: "commerce",
+};
 
 export function defaultViewForRole(role: string | null | undefined): InsightsViewKey {
-  return role === "cfo" ? "finance" : "executive";
+  return DEFAULT_VIEW[role ?? ""] ?? "executive";
 }
 
 export interface DataShape {

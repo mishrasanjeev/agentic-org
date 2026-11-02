@@ -23,7 +23,14 @@ import {
   tableRows,
 } from "@/lib/insights/chartData";
 import { addDays, fiscalQuarterStart, isIsoDate, presetRange, todayIn } from "@/lib/insights/dates";
-import { chartKindFor, METRIC_PRESENTATION, ROLE_VIEWS, tableFromSeries, VIEW_METRICS } from "@/lib/insights/metrics";
+import {
+  chartKindFor,
+  defaultViewForRole,
+  METRIC_PRESENTATION,
+  ROLE_VIEWS,
+  tableFromSeries,
+  VIEW_METRICS,
+} from "@/lib/insights/metrics";
 import { chartColor, normaliseState } from "@/lib/insights/tokens";
 
 const pageSource = (
@@ -85,10 +92,41 @@ describe("metric keys used by the Insights page", () => {
     }
   });
 
-  it("role views mirror the server rule: admin both, cfo finance only", () => {
-    expect(ROLE_VIEWS.admin).toEqual(["executive", "finance"]);
+  it("role views mirror the server rule (core/insights/registry.py VIEW_ROLES)", () => {
+    expect(ROLE_VIEWS.admin).toEqual(["executive", "finance", "operations", "hr", "marketing", "commerce"]);
     expect(ROLE_VIEWS.cfo).toEqual(["finance"]);
+    expect(ROLE_VIEWS.coo).toEqual(["operations"]);
+    expect(ROLE_VIEWS.chro).toEqual(["hr"]);
+    expect(ROLE_VIEWS.cmo).toEqual(["marketing"]);
+    expect(ROLE_VIEWS.merchant).toEqual(["commerce"]);
     expect(ROLE_VIEWS.analyst).toBeUndefined();
+    expect(defaultViewForRole("coo")).toBe("operations");
+    expect(defaultViewForRole("merchant")).toBe("commerce");
+    expect(defaultViewForRole("admin")).toBe("executive");
+  });
+
+  it("every role view's tiles drill to a page that role can open", () => {
+    const explorersFor: Record<string, string[]> = {
+      coo: ["agents", "runs", "workflows", "approvals", "cost", "quality", "connectors"],
+      chro: ["agents", "runs", "approvals", "cost", "quality"],
+      cmo: ["agents", "runs", "approvals", "cost", "quality"],
+      merchant: [],
+    };
+    const pagesFor: Record<string, string[]> = { coo: [], chro: [], cmo: [], merchant: ["/dashboard/orders"] };
+    const views: Record<string, "operations" | "hr" | "marketing" | "commerce"> = {
+      coo: "operations",
+      chro: "hr",
+      cmo: "marketing",
+      merchant: "commerce",
+    };
+    for (const [role, view] of Object.entries(views)) {
+      for (const key of VIEW_METRICS[view]) {
+        const target = METRIC_PRESENTATION[key].action.to;
+        const explorer = /^\/dashboard\/insights\/explore\/([a-z]+)/.exec(target)?.[1];
+        if (explorer) expect(explorersFor[role], `${role} ${key}`).toContain(explorer);
+        else expect(pagesFor[role], `${role} ${key}`).toContain(target);
+      }
+    }
   });
 
   it("every finance tile drills to a page or explorer the CFO can open", () => {
