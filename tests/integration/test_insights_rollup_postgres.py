@@ -87,6 +87,7 @@ class Scratch:
             "entrypoint": "agents",
             "status": "completed",
             "started_at": started_at,
+            "created_at": started_at,
             **extra,
         }
         columns = ", ".join(values)

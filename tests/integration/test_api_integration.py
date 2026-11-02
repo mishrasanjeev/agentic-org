@@ -7,12 +7,23 @@ by the CI workflow's ``services`` block.
 
 from __future__ import annotations
 
+import ipaddress
 import uuid
+from unittest.mock import AsyncMock
 
 import pytest
 from httpx import AsyncClient
 
 pytestmark = pytest.mark.asyncio
+
+
+@pytest.fixture
+def connector_dns(monkeypatch: pytest.MonkeyPatch) -> AsyncMock:
+    from core.security import egress
+
+    resolver = AsyncMock(return_value=(ipaddress.ip_address("93.184.216.34"),))
+    monkeypatch.setattr(egress, "_resolve_host_async", resolver)
+    return resolver
 
 
 # =========================================================================
@@ -320,10 +331,10 @@ class TestConnectorRegistration:
         return {
             "name": f"oracle-fusion-{uuid.uuid4().hex[:8]}",
             "category": "erp",
-            "base_url": "https://www.oracle.com/api/v1",
+            "base_url": "https://erp.example.test/api/v1",
             "auth_type": "oauth2",
             "auth_config": {
-                "token_url": "https://www.oracle.com/oauth/token",
+                "token_url": "https://erp.example.test/oauth/token",
                 "grant_type": "client_credentials",
             },
             "secret_ref": "vault://secrets/oracle-fusion-creds",
@@ -346,7 +357,8 @@ class TestConnectorRegistration:
         }
 
     async def test_register_connector(
-        self, client: AsyncClient, auth_headers: dict, connector_payload: dict
+        self, client: AsyncClient, auth_headers: dict, connector_payload: dict,
+        connector_dns: AsyncMock,
     ) -> None:
         resp = await client.post("/api/v1/connectors", json=connector_payload, headers=auth_headers)
         assert resp.status_code == 201
@@ -354,6 +366,20 @@ class TestConnectorRegistration:
         assert "connector_id" in body
         assert body["name"] == connector_payload["name"]
         assert body["status"] == "active"
+        connector_dns.assert_awaited_once_with("erp.example.test")
+
+    @pytest.mark.parametrize("addresses", [
+        (), ("127.0.0.1",), ("169.254.169.254",), ("93.184.216.34", "10.1.2.3"),
+    ])
+    async def test_register_connector_refuses_unsafe_dns(
+        self, client: AsyncClient, auth_headers: dict, connector_payload: dict,
+        connector_dns: AsyncMock, addresses: tuple[str, ...],
+    ) -> None:
+        connector_dns.return_value = tuple(ipaddress.ip_address(address) for address in addresses)
+        resp = await client.post("/api/v1/connectors", json=connector_payload, headers=auth_headers)
+        assert resp.status_code == 403
+        assert "public HTTPS host" in resp.json()["detail"]
+        connector_dns.assert_awaited_once_with("erp.example.test")
 
     async def test_connector_health(self, client: AsyncClient, auth_headers: dict) -> None:
         conn_id = str(uuid.uuid4())
@@ -619,7 +645,7 @@ class TestFullPipeline:
         assert promote_resp.status_code in (200, 409)
 
     async def test_connector_register_and_health_check(
-        self, client: AsyncClient, auth_headers: dict
+        self, client: AsyncClient, auth_headers: dict, connector_dns: AsyncMock,
     ) -> None:
         """Register a connector then verify its health endpoint."""
         reg_resp = await client.post(
@@ -627,7 +653,7 @@ class TestFullPipeline:
             json={
                 "name": "tally-prime-test",
                 "category": "accounting",
-                "base_url": "https://tallysolutions.com/api",
+                "base_url": "https://accounting.example.test/api",
                 "auth_type": "api_key",
                 "auth_config": {"header": "X-API-Key"},
                 "secret_ref": "vault://secrets/tally-key",
@@ -648,6 +674,7 @@ class TestFullPipeline:
         assert "tested" in body
         assert "healthy" in body
         assert body["status"] in ("healthy", "active", "error", "degraded")
+        connector_dns.assert_awaited_once_with("accounting.example.test")
 
     async def test_approval_flow_after_workflow_trigger(
         self, client: AsyncClient, auth_headers: dict
