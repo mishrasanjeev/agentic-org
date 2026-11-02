@@ -4682,6 +4682,18 @@ The page lists each surface and where it stands:
 
 To see what buyers see in ChatGPT, follow [the ChatGPT run in the Nilgiri Tea House example](/docs/oacp-example-nilgiri-tea).
 
+### How a search across shops is ordered
+
+AgenticOrg does not rank shops, and no shop can pay to be listed first. When a buyer's AI app or the
+Telegram bot searches the whole network, it asks a fresh random selection of shops in a fresh random
+order every time, so no shop is always first. Within your shop, your products come best match first: a
+search word that is a whole word of the product title counts most, then a whole word of your brand,
+category or tags, then part of a word, then the description and product details. When several shops
+sell the same product (the same barcode with a valid check digit), the answer also lists it together,
+with each shop's price and stock for that item, lowest price first (in the currency most of those shops
+use). Adding the barcode to your products lets a buyer's AI app see that you sell the same item as
+another shop and compare the offers.
+
 #### Pause or resume
 
 Choose **Pause** on the page. New network checkouts are refused at once, and your shop leaves the directory: AI apps and the Telegram bot stop offering it within about two minutes, as their short-lived lists refresh. Your web address and your shop name stay yours. Choose **Resume Sell everywhere** to come back.

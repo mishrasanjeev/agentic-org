@@ -1,5 +1,21 @@
 # Changelog
 
+## Unreleased - Fair search across the network's shops
+
+- UCP catalog search orders a shop's products best match first: a whole word of the title counts most (more
+  again when the whole query is in the title), then a whole word of the brand, category or tags, then part of a
+  word, then the description, details and variants. Words are split on spaces and trimmed of punctuation, so
+  hyphenated and Devanagari words count whole. Ties and searches without a query keep title order. Only the
+  product's own text counts. Variant barcodes are served only with a valid GTIN check digit.
+- The Telegram shopper asks up to 20 shops (it asked the first 10 to join, one after another), ten at a time,
+  picked and ordered at random on every search, keeps a share of about 20 products across them with shorter
+  descriptions so the answer fits, gives each shop at most 10 seconds, and its instructions say the order means
+  nothing. The hosted MCP endpoint's network search asks up to 50 of up to 500 listed shops at random, 3
+  products each by default, and shuffles `list_shops`.
+- One product sold by several shops (the same GTIN, check digit verified) is also listed together, one offer per
+  shop with that item's own price, lowest price first in the currency most offers use:
+  `same_product_at_several_shops` in the Telegram shopper, `same_products` in the MCP network search.
+
 ## Unreleased - Shop details and product details from Shopify
 
 - Shop details: a shop sets up to 10 details that hold for the whole shop (a food-safety licence number, a

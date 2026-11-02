@@ -20,8 +20,10 @@ hosted checkout), where the buyer pays. It has no tool that cancels or pays.
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import json
+import random
 import time
 import uuid
 from collections.abc import Awaitable, Callable
@@ -34,6 +36,7 @@ from core import auth_state
 from core.channels.replies import final_answer
 from core.commerce import network as net
 from core.commerce import payment_handoff as ph
+from core.commerce.catalog_upload import gtin_or_none
 from core.config import settings
 
 logger = structlog.get_logger()
@@ -44,6 +47,15 @@ MAX_TURNS = 6
 MAX_TOOL_ROUNDS = 8
 UPDATE_TTL_SECONDS = 24 * 3600
 SEARCH_TIMEOUT_SECONDS = 8.0
+# A search across the network asks this many shops at once, and at most this many in all, chosen
+# afresh in random order on every search so no shop is always first or always left out. The answer
+# keeps about NETWORK_PRODUCTS products in all (fewer per shop when more shops answer) with shorter
+# descriptions, so it fits the tool-result cap instead of being cut down to the first few shops.
+SEARCH_CONCURRENCY = 10
+MAX_SEARCH_SHOPS = 20
+NETWORK_PRODUCTS = 20
+NETWORK_DESCRIPTION = 120
+SHOP_PRODUCTS = 5
 MAX_TEXT = 1000
 
 WELCOME = (
@@ -78,6 +90,9 @@ SYSTEM_PROMPT = "\n".join(
         "- Never invent or change a payment link; only summary.continue_url is a real one.",
         "- Keep answers short and plain, for a phone screen. No markdown tables.",
         "- If the buyer has not picked a shop, search across all shops; say which shop each product is from.",
+        "- Shops come back in a random order on every search, and AgenticOrg does not rank them: never favour a",
+        "  shop or product for being listed first. Compare what the buyer cares about (price, stock, details).",
+        "  When same_product_at_several_shops lists one product at several shops, show the buyer the choice.",
     ]
 )
 
@@ -202,6 +217,9 @@ def _product_summary(shop: str, product: dict[str, Any]) -> dict[str, Any]:
         )[:MAX_SUMMARY_DESCRIPTION]
         or None,
     }
+    barcode = _barcode(first)
+    if barcode:
+        summary["barcode"] = barcode
     metadata: dict[str, Any] = product["metadata"] if isinstance(product.get("metadata"), dict) else {}
     details = _detail_lines(metadata.get("attributes"), MAX_DETAILS)
     shop_details = _detail_lines(metadata.get("shop_details"), MAX_SHOP_DETAILS)
@@ -216,6 +234,72 @@ def _product_summary(shop: str, product: dict[str, Any]) -> dict[str, Any]:
     return summary
 
 
+def _offer_price(product: dict[str, Any]) -> dict[str, Any]:
+    """``{"_price": (currency, minor units)}`` of the variant the summary offers (its ``item_id`` and
+    ``barcode``), for grouping one product across shops; ``_fit_search_results`` removes it before the
+    model sees the result. The product's lowest price may belong to another variant, so it is not used."""
+    variants = product.get("variants") if isinstance(product.get("variants"), list) else []
+    first = variants[0] if variants and isinstance(variants[0], dict) else {}
+    money = first.get("price")
+    if isinstance(money, dict) and isinstance(money.get("amount"), int) and isinstance(money.get("currency"), str):
+        return {"_price": (money["currency"], money["amount"])}
+    return {}
+
+
+def _barcode(variant: dict[str, Any]) -> str | None:
+    """The variant's GTIN (8, 12, 13 or 14 digits with a valid check digit), as the UCP catalog serves it."""
+    for item in variant.get("barcodes") or []:
+        if isinstance(item, dict) and item.get("type") == "GTIN" and (gtin := gtin_or_none(item.get("value"))):
+            return gtin
+    return None
+
+
+def _same_product_groups(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Products with the same barcode at two or more shops, each shop's offer listed once.
+
+    Prices are compared only in the group's main currency (the one most of its offers use): those offers
+    come first, lowest price first, and each shop's cheapest one stands for it. Offers in another currency,
+    or without a readable price, follow in the order the shops answered (shuffled on every search).
+    """
+    groups: dict[str, list[dict[str, Any]]] = {}
+    for item in items:
+        if item.get("barcode"):
+            groups.setdefault(str(item["barcode"]), []).append(item)
+    same: list[dict[str, Any]] = []
+    for barcode, offers in groups.items():
+        if len({str(offer.get("shop")) for offer in offers}) < 2:
+            continue
+        priced = [offer["_price"][0] for offer in offers if isinstance(offer.get("_price"), tuple)]
+        main = max(priced, key=lambda currency: (priced.count(currency), -priced.index(currency))) if priced else None
+        compared = sorted(
+            (offer for offer in offers if isinstance(offer.get("_price"), tuple) and offer["_price"][0] == main),
+            key=lambda offer: offer["_price"][1],
+        )
+        rest = [offer for offer in offers if all(offer is not chosen for chosen in compared)]
+        ranked: list[dict[str, Any]] = []
+        for offer in compared + rest:
+            if offer.get("shop") not in {kept.get("shop") for kept in ranked}:
+                ranked.append(offer)
+        same.append(
+            {
+                "barcode": barcode,
+                "title": ranked[0].get("title"),
+                "offers": [
+                    {
+                        "shop": o.get("shop"),
+                        "item_id": o.get("item_id"),
+                        "price": _money({"amount": o["_price"][1], "currency": o["_price"][0]})
+                        if isinstance(o.get("_price"), tuple)
+                        else o.get("price"),
+                        "available": o.get("available"),
+                    }
+                    for o in ranked
+                ],
+            }
+        )
+    return same
+
+
 def _detail_lines(items: Any, limit: int) -> list[str]:
     return [
         f"{item.get('name')}: {str(item.get('value'))[:MAX_DETAIL_CHARS]}"
@@ -225,7 +309,11 @@ def _detail_lines(items: Any, limit: int) -> list[str]:
 
 
 def _fit_search_results(results: list[dict[str, Any]]) -> dict[str, Any]:
-    """Products from every shop in turn, trimmed to fit the tool-result cap as whole products."""
+    """Products from every shop in turn, trimmed to fit the tool-result cap as whole products.
+
+    Shops take turns in the order their results arrive (the search shuffles that order every time),
+    and the same product at several shops (by barcode) is listed with each shop's offer.
+    """
     by_shop: dict[str, list[dict[str, Any]]] = {}
     for item in results:
         by_shop.setdefault(str(item.get("shop")), []).append(item)
@@ -242,16 +330,40 @@ def _fit_search_results(results: list[dict[str, Any]]) -> dict[str, Any]:
             if item.get("shop") in shops_with_details:
                 item.pop("shop_details_declared_by_shop")
             shops_with_details.add(str(item.get("shop")))
+    same = _same_product_groups(ordered)
+    for item in ordered:
+        item.pop("_price", None)
     body: dict[str, Any] = {"products": ordered}
+    if len(by_shop) > 1:
+        body["shops_in_random_order"] = True
+    if same:
+        body["same_product_at_several_shops"] = same
     if len(json.dumps(body, default=str)) <= SEARCH_RESULT_BUDGET:
         return body
     for item in ordered:
         item.pop("details_declared_by_shop", None)
         item.pop("shop_details_declared_by_shop", None)
     while ordered and len(json.dumps(body, default=str)) > SEARCH_RESULT_BUDGET:
-        ordered.pop()
+        # Drop whole products from the end (the shops' later turns), keeping each group's offers in step.
+        dropped = ordered.pop()
+        _drop_offer(body, dropped)
     body["more_results_left_out"] = True
     return body
+
+
+def _drop_offer(body: dict[str, Any], product: dict[str, Any]) -> None:
+    groups = body.get("same_product_at_several_shops") or []
+    for group in groups:
+        group["offers"] = [
+            offer
+            for offer in group["offers"]
+            if (offer.get("shop"), offer.get("item_id")) != (product.get("shop"), product.get("item_id"))
+        ]
+    kept = [group for group in groups if len({offer.get("shop") for offer in group["offers"]}) >= 2]
+    if kept:
+        body["same_product_at_several_shops"] = kept
+    else:
+        body.pop("same_product_at_several_shops", None)
 
 
 async def _catalog_search(entry: dict[str, Any], query: str) -> list[dict[str, Any]]:
@@ -265,7 +377,16 @@ async def _catalog_search(entry: dict[str, Any], query: str) -> list[dict[str, A
         return []
     body = response.json()
     products = body.get("products") if isinstance(body, dict) else None
-    return [_product_summary(entry["slug"], p) for p in (products or [])[:5] if isinstance(p, dict)]
+    return [
+        {**_product_summary(entry["slug"], p), **_offer_price(p)}
+        for p in (products or [])[:SHOP_PRODUCTS]
+        if isinstance(p, dict)
+    ]
+
+
+def _shuffle(items: list[Any]) -> None:
+    """Shuffle in place (a seam for tests); fairness only, so the default generator is enough."""
+    random.shuffle(items)  # noqa: S311  # nosec B311 - not security-sensitive: the order of shops in one answer
 
 
 class ShopperTools:
@@ -281,17 +402,41 @@ class ShopperTools:
     async def search(self, query: str, shop: str | None = None) -> dict[str, Any]:
         slug = shop or self.chosen_shop
         shops = await net.directory()
-        targets = [s for s in shops if s["slug"] == slug] if slug else shops[:10]
-        if slug and not targets:
-            return {"error": f"No shop {slug!r} in the network."}
-        results: list[dict[str, Any]] = []
-        for entry in targets:
-            try:
-                results.extend(await _catalog_search(entry, query))
-            # enterprise-gate: broad-except-ok reason=one-shop-failing-never-fails-the-search
-            except Exception:
-                logger.warning("network_telegram_search_failed", shop=entry["slug"])
-        return _fit_search_results(results)
+        if slug:
+            targets = [s for s in shops if s["slug"] == slug]
+            if not targets:
+                return {"error": f"No shop {slug!r} in the network."}
+        else:
+            # A fresh random order each search: no shop is always first, or always past the limit.
+            targets = list(shops)
+            _shuffle(targets)
+            targets = targets[:MAX_SEARCH_SHOPS]
+        gate = asyncio.Semaphore(SEARCH_CONCURRENCY)
+        # One shop's best matches when it is the only one asked; across shops, a share of the answer each.
+        per_shop = SHOP_PRODUCTS if slug else max(1, min(SHOP_PRODUCTS, NETWORK_PRODUCTS // max(1, len(targets))))
+
+        async def one(entry: dict[str, Any]) -> list[dict[str, Any]]:
+            async with gate:
+                try:
+                    # The client's timeout is per phase; this bounds the whole answer from one shop.
+                    found = await asyncio.wait_for(_catalog_search(entry, query), SEARCH_TIMEOUT_SECONDS + 2)
+                # enterprise-gate: broad-except-ok reason=one-shop-failing-never-fails-the-search
+                except Exception:
+                    logger.warning("network_telegram_search_failed", shop=entry["slug"])
+                    return []
+            items = found[:per_shop]
+            if not slug:
+                for item in items:
+                    if isinstance(item.get("description"), str):
+                        item["description"] = item["description"][:NETWORK_DESCRIPTION]
+            return items
+
+        answers = await asyncio.gather(*(one(entry) for entry in targets))
+        body = _fit_search_results([item for answer in answers for item in answer])
+        if not slug and len(shops) > len(targets):
+            body["shops_searched"] = len(targets)
+            body["shops_in_network"] = len(shops)
+        return body
 
     async def open_checkout(self, shop: str, item_id: str, quantity: int = 1) -> dict[str, Any]:
         from api.v1.network import network_checkout  # noqa: PLC0415 - the API module wires the UCP runtime
