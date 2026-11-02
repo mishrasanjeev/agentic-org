@@ -2,6 +2,8 @@
 
 ## Unreleased - Release integration fixes
 
+- Give the legacy bootstrap's complete ORM drift comparison the same bounded
+  test budget as the other full-schema migration replays, retaining every check.
 - Resolve spend test-query operands once per execution while preserving tenant
   predicates, mutable row reads and the complete 450-row import audit replay.
 - Keep local-only Insights browser fixtures out of the hosted regression suite.

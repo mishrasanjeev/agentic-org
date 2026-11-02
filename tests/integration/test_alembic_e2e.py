@@ -509,6 +509,8 @@ def test_empty_db_bootstraps_baseline_then_upgrades_to_head():
     _assert_hot_query_plans()
 
 
+# Bootstrap and full ORM drift comparison need the same budget as the bare-upgrade cases.
+@pytest.mark.timeout(300)
 def test_legacy_db_gets_stamped_at_baseline():
     """A legacy-shaped DB (no alembic_version) must be stamped at the
     baseline and then upgraded to the current head.
