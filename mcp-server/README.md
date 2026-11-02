@@ -217,6 +217,16 @@ checkout tools take the shop's network slug, and every result names its `shop`. 
 is the payment hand-off: for a ready checkout it returns `continue_url` (also as `payment_link`),
 the shop's own payment page, where the buyer pays. It takes only the shop and the checkout id.
 
+A search across the network does not rank shops. It asks up to 50 of the directory's shops (it reads
+up to 500), five at a time, picked and ordered at random on every search, and each shop answers with 3
+products unless `request.pagination.limit` asks for more (up to 10; a cursor is not passed on). It
+returns `shops_searched`, `shops_in_network` and, when more than one shop was asked,
+`shops_in_random_order`. `list_shops` is shuffled too. Within each shop, products come best match
+first (a whole word of the title counts most, then a whole word of the brand, category or tags, then
+part of a word, then the rest). `same_products` also lists one product (the same GTIN, check digit
+verified) sold by two or more shops, one offer per shop: in the currency most of the offers use, lowest
+price first, then the other offers in the order the shops answered.
+
 | Setting | Meaning |
 |---|---|
 | `MCP_NETWORK_DIRECTORY_URL` | The network directory (https, path ending in `/network/merchants`). The list is cached for a minute and each shop's profile for five; a failed refresh keeps the last good copy. |

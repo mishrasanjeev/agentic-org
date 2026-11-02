@@ -14,6 +14,10 @@
  *
  * Every tool result names its `shop` (the network slug), and every checkout tool needs one, so
  * a checkout is always routed to the shop that created it.
+ *
+ * A search across the network does not rank shops: it asks up to MAX_SEARCH_SHOPS of them, picked and
+ * ordered at random on every search, and also lists the same product (by barcode) sold by several
+ * shops with each shop's offer, lowest price first within the group's main currency.
  */
 
 import { randomUUID } from "node:crypto";
@@ -46,7 +50,12 @@ const DIRECTORY_TIMEOUT_MS = 5_000;
 const SEARCH_TIMEOUT_MS = 5_000;
 const CALL_TIMEOUT_MS = 30_000;
 const FAN_OUT_CONCURRENCY = 5;
-const MAX_SHOPS = 50;
+// The directory is read in full (up to MAX_SHOPS); one search asks at most MAX_SEARCH_SHOPS of them.
+const MAX_SHOPS = 500;
+const MAX_SEARCH_SHOPS = 50;
+// Across shops each one answers with a few products unless the request sets pagination.limit (capped).
+const FAN_OUT_PAGE = 3;
+const MAX_FAN_OUT_PAGE = 10;
 const SLUG = /^[a-z0-9](?:[a-z0-9-]{1,38})[a-z0-9]$/;
 const CATALOG_SEARCH = "dev.ucp.shopping.catalog.search";
 const CATALOG_LOOKUP = "dev.ucp.shopping.catalog.lookup";
@@ -250,6 +259,89 @@ function withShop(slug: string, body: Json): Json {
   return out;
 }
 
+/** A shuffled copy (Fisher-Yates); fairness only, so Math.random is enough. `random` is a test seam. */
+export function shuffled<T>(items: readonly T[], random: () => number = Math.random): T[] {
+  const out = [...items];
+  for (let i = out.length - 1; i > 0; i -= 1) {
+    const j = Math.floor(random() * (i + 1));
+    [out[i], out[j]] = [out[j], out[i]];
+  }
+  return out;
+}
+
+interface Offer {
+  shop: string;
+  product_id: unknown;
+  variant_id: unknown;
+  title: unknown;
+  price: { amount: number; currency: string } | null;
+  availability: unknown;
+}
+
+/** A GTIN-8, -12, -13 or -14 with a valid mod-10 check digit (as the AgenticOrg catalog checks it). */
+export function validGtin(value: unknown): value is string {
+  if (typeof value !== "string" || !/^[0-9]+$/.test(value) || ![8, 12, 13, 14].includes(value.length)) return false;
+  const digits = [...value].map(Number);
+  const check = digits.pop() as number;
+  const total = digits.reverse().reduce((sum, digit, i) => sum + digit * (i % 2 === 0 ? 3 : 1), 0);
+  return (10 - (total % 10)) % 10 === check;
+}
+
+/**
+ * The same product (one GTIN) sold by two or more shops, each shop's offer listed once.
+ *
+ * Prices are compared only in the group's main currency (the one most of its offers use): those offers
+ * come first, lowest price first, and each shop's cheapest one stands for it. Offers in another
+ * currency, or without a price, follow in the order the shops answered (shuffled on every search).
+ */
+export function sameProducts(results: Json[]): Json[] {
+  const byBarcode = new Map<string, Offer[]>();
+  for (const result of results) {
+    const shop = typeof result.shop === "string" ? result.shop : "";
+    for (const product of Array.isArray(result.products) ? result.products : []) {
+      if (!isObject(product) || !Array.isArray(product.variants)) continue;
+      for (const variant of product.variants) {
+        if (!isObject(variant) || !Array.isArray(variant.barcodes)) continue;
+        const gtin = variant.barcodes.find((b) => isObject(b) && b.type === "GTIN" && validGtin(b.value));
+        if (!isObject(gtin)) continue;
+        const price = isObject(variant.price) && typeof variant.price.amount === "number" && typeof variant.price.currency === "string"
+          ? { amount: variant.price.amount, currency: variant.price.currency }
+          : null;
+        const offers = byBarcode.get(gtin.value as string) ?? [];
+        offers.push({ shop, product_id: product.id, variant_id: variant.id, title: product.title, price, availability: variant.availability });
+        byBarcode.set(gtin.value as string, offers);
+      }
+    }
+  }
+  const groups: Json[] = [];
+  for (const [barcode, offers] of byBarcode) {
+    if (new Set(offers.map((o) => o.shop)).size < 2) continue;
+    const counts = new Map<string, number>();
+    for (const o of offers) if (o.price) counts.set(o.price.currency, (counts.get(o.price.currency) ?? 0) + 1);
+    // The most used currency; a tie goes to the one seen first (Map keeps insertion order).
+    let main: string | null = null;
+    for (const [currency, count] of counts) if (main === null || count > (counts.get(main) ?? 0)) main = currency;
+    const compared = offers
+      .filter((o) => o.price?.currency === main)
+      .sort((a, b) => (a.price as { amount: number }).amount - (b.price as { amount: number }).amount);
+    const rest = offers.filter((o) => !compared.includes(o));
+    const ranked: Offer[] = [];
+    for (const o of [...compared, ...rest]) if (!ranked.some((kept) => kept.shop === o.shop)) ranked.push(o);
+    groups.push({ barcode, title: ranked[0].title, offers: ranked });
+  }
+  return groups;
+}
+
+/** The search request sent to each shop of a network search: a small page each, so 50 shops stay readable. */
+export function fanOutRequest(request: Json): Json {
+  const pagination = isObject(request.pagination) ? request.pagination : {};
+  const asked = typeof pagination.limit === "number" && Number.isInteger(pagination.limit) ? pagination.limit : FAN_OUT_PAGE;
+  // A cursor belongs to one shop's results; it means nothing across shops.
+  const rest: Json = { ...pagination };
+  delete rest.cursor;
+  return { ...request, pagination: { ...rest, limit: Math.max(1, Math.min(asked, MAX_FAN_OUT_PAGE)) } };
+}
+
 async function inBatches<T, R>(items: T[], size: number, fn: (item: T) => Promise<R>): Promise<R[]> {
   const out: R[] = [];
   for (let i = 0; i < items.length; i += size) out.push(...(await Promise.all(items.slice(i, i + size).map(fn))));
@@ -287,7 +379,8 @@ export function registerNetworkTools(server: McpServer, net: Network): string[] 
     },
     async () => {
       try {
-        const shops = await net.shops();
+        // Shuffled too, so the list never reads as a ranking by when shops joined.
+        const shops = shuffled(await net.shops());
         return okResult({ shops: shops.map(({ slug, name, categories }) => ({ shop: slug, name, categories })) });
       } catch {
         return errorResult({ status: 503, code: "unavailable", content: "The network directory is unavailable; retry later." });
@@ -302,7 +395,10 @@ export function registerNetworkTools(server: McpServer, net: Network): string[] 
       description:
         "Search products by free text across every network shop, or in one shop when `shop` is given. " +
         "Answers come only from each shop's verified catalog; prices are in minor units (44900 INR is 449.00). " +
-        "Every product names its `shop`, which the checkout tools need.",
+        "Every product names its `shop`, which the checkout tools need. Shops come back in a random order on " +
+        "every search and are not ranked, so do not favour one for being first; `same_products` lists one " +
+        "product (by barcode) sold by several shops, with each shop's offer. Across shops each shop sends " +
+        "3 products unless request.pagination.limit asks for more (up to 10).",
       inputSchema: {
         request: objectSchema.describe('UCP catalog search request, e.g. {"query":"chai","context":{"currency":"INR"}}'),
         shop: shopSchema.optional(),
@@ -322,9 +418,12 @@ export function registerNetworkTools(server: McpServer, net: Network): string[] 
         const result = await publicCatalogCall(net, one, "/catalog/search", CATALOG_SEARCH, request, SEARCH_TIMEOUT_MS * 6);
         return result.ok ? okResult(withShop(one.slug, result.body)) : errorResult(result.error);
       }
-      const answers = await inBatches(shops, FAN_OUT_CONCURRENCY, async (s) => ({
+      // A fresh random order (and, past MAX_SEARCH_SHOPS, a fresh random pick) on every search.
+      const targets = shuffled(shops).slice(0, MAX_SEARCH_SHOPS);
+      const fanOut = fanOutRequest(request);
+      const answers = await inBatches(targets, FAN_OUT_CONCURRENCY, async (s) => ({
         shop: s,
-        result: await publicCatalogCall(net, s, "/catalog/search", CATALOG_SEARCH, request, SEARCH_TIMEOUT_MS),
+        result: await publicCatalogCall(net, s, "/catalog/search", CATALOG_SEARCH, fanOut, SEARCH_TIMEOUT_MS),
       }));
       const results: Json[] = [];
       const unavailable: Json[] = [];
@@ -332,7 +431,15 @@ export function registerNetworkTools(server: McpServer, net: Network): string[] 
         if (result.ok) results.push({ name: s.name, ...withShop(s.slug, result.body) });
         else unavailable.push({ shop: s.slug, code: result.error.code });
       }
-      return okResult({ results, unavailable, shops_searched: shops.length });
+      const same = sameProducts(results);
+      return okResult({
+        results,
+        ...(same.length ? { same_products: same } : {}),
+        unavailable,
+        shops_searched: targets.length,
+        shops_in_network: shops.length,
+        ...(targets.length > 1 ? { shops_in_random_order: true } : {}),
+      });
     },
   );
 
