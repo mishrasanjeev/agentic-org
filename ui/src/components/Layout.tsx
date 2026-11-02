@@ -5,6 +5,7 @@ import HITLBadge from "./HITLBadge";
 import { useAuth } from "../contexts/AuthContext";
 import { ALL_ROLES, AGENT_CREATOR_ROLES, APPROVAL_ROLES, CONNECTOR_ROLES, LINEAGE_ROLES, SUPERVISOR_ROLES, WORKBENCH_ROLES } from "../lib/roles";
 import api from "../lib/api";
+import { INSIGHTS_ROLES } from "../lib/insights/metrics";
 
 const LANGUAGES = [
   { code: "en", label: "EN" },
@@ -27,7 +28,7 @@ const NotificationBell = lazy(() => import("./NotificationBell"));
 // statusField names a different boolean of that status (default "enabled"); each status is read once.
 const ALL_NAV: Array<{ path: string; labelKey: string; label: string; roles: readonly string[]; statusPath?: string; statusField?: string }> = [
   { path: "/dashboard", labelKey: "nav.dashboard", label: "Dashboard", roles: ["admin", "cfo", "chro", "cmo", "coo", "auditor"] },
-  { path: "/dashboard/insights", labelKey: "nav.insights", label: "Insights", roles: ["admin", "cfo"], statusPath: "/insights/status" },
+  { path: "/dashboard/insights", labelKey: "nav.insights", label: "Insights", roles: INSIGHTS_ROLES, statusPath: "/insights/status" },
   // The cross-tenant platform view, for the platform operator only (the API answers 404 to anyone else).
   { path: "/dashboard/platform", labelKey: "nav.platform", label: "Platform", roles: ["admin"], statusPath: "/insights/status", statusField: "platform_operator" },
   { path: "/dashboard/partner", labelKey: "nav.partner", label: "Partner Dashboard", roles: ["admin", "cfo", "coo", "auditor"] },

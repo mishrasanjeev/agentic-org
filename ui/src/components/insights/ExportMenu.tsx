@@ -26,16 +26,19 @@ function saveBlob(blob: Blob, filename: string) {
  * Export menu (CSV / XLSX / JSON) for one metric, using the same filters as
  * the view. The file comes from GET /insights/metrics/{key}/export through
  * the authenticated client; the server audits every export and answers 413
- * with a hint when the range is too large, which is shown here.
+ * with a hint when the range is too large, which is shown here. An explorer
+ * passes its own ``download`` (the explorer export with its table filters).
  */
 export default function ExportMenu({
   metricKey,
   title,
   filters,
+  download,
 }: {
   metricKey: string;
   title: string;
   filters: InsightsFilters;
+  download?: (format: ExportFormat) => Promise<{ blob: Blob; filename: string }>;
 }) {
   const { t } = useTranslation();
   const [open, setOpen] = useState(false);
@@ -59,8 +62,13 @@ export default function ExportMenu({
     setBusy(format);
     setError(null);
     try {
-      const blob = await insightsApi.exportBlob(metricKey, format, filters);
-      saveBlob(blob, exportFilename(metricKey, format, filters));
+      if (download) {
+        const file = await download(format);
+        saveBlob(file.blob, file.filename);
+      } else {
+        const blob = await insightsApi.exportBlob(metricKey, format, filters);
+        saveBlob(blob, exportFilename(metricKey, format, filters));
+      }
     } catch (e) {
       setError((await readErrorDetail(e)) || t("insights.export.failed"));
     } finally {

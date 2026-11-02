@@ -30,6 +30,7 @@ import {
   type InsightsViewResponse,
 } from "@/lib/insights/api";
 import { isIsoDate, presetRange, RANGE_PRESETS, todayIn, type RangePreset } from "@/lib/insights/dates";
+import { exploreApi, type ExplorerDescription } from "@/lib/insights/explore";
 import { defaultViewForRole, METRIC_PRESENTATION, ROLE_VIEWS } from "@/lib/insights/metrics";
 
 type StatusState =
@@ -62,6 +63,7 @@ export default function InsightsDashboard() {
   const [statusState, setStatusState] = useState<StatusState>({ kind: "loading" });
   const [viewState, setViewState] = useState<ViewState>({ kind: "idle" });
   const [reloadKey, setReloadKey] = useState(0);
+  const [explorers, setExplorers] = useState<ExplorerDescription[]>([]);
   const tabRefs = useRef<Partial<Record<InsightsViewKey, HTMLButtonElement | null>>>({});
 
   // -- status -------------------------------------------------------------
@@ -73,6 +75,17 @@ export default function InsightsDashboard() {
       .then((status) => {
         if (!live) return;
         setStatusState(status.enabled ? { kind: "ready", status } : { kind: "disabled" });
+        if (status.enabled) {
+          // The tables behind the tiles; a role with no landing view yet still opens these.
+          exploreApi
+            .list()
+            .then((list) => {
+              if (live) setExplorers(list);
+            })
+            .catch(() => {
+              if (live) setExplorers([]);
+            });
+        }
       })
       .catch(async (e) => {
         if (!live) return;
@@ -250,7 +263,15 @@ export default function InsightsDashboard() {
       />
     );
   } else if (!activeView) {
-    content = <EmptyState title={t("insights.forbidden.title")} hint={t("insights.forbidden.body")} />;
+    content =
+      explorers.length > 0 ? (
+        <>
+          <EmptyState compact title={t("insights.exploreOnly.title")} hint={t("insights.exploreOnly.body")} />
+          <ExploreLinks explorers={explorers} />
+        </>
+      ) : (
+        <EmptyState title={t("insights.forbidden.title")} hint={t("insights.forbidden.body")} />
+      );
   } else {
     content = (
       <>
@@ -303,6 +324,7 @@ export default function InsightsDashboard() {
         >
           <ViewBody state={viewState} filters={filters} currency={currency} onRetry={retry} />
         </div>
+        {explorers.length > 0 ? <ExploreLinks explorers={explorers} /> : null}
       </>
     );
   }
@@ -315,6 +337,30 @@ export default function InsightsDashboard() {
       {header}
       {content}
     </div>
+  );
+}
+
+/** The explorers this role may open: the rows behind every tile. */
+function ExploreLinks({ explorers }: { explorers: ExplorerDescription[] }) {
+  const { t } = useTranslation();
+  return (
+    <nav aria-labelledby="insights-explore-heading" className="flex flex-col gap-2" data-testid="insights-explore-links">
+      <h2 id="insights-explore-heading" className="text-sm font-semibold">
+        {t("insights.explore.heading")}
+      </h2>
+      <ul className="flex flex-wrap gap-2">
+        {explorers.map((e) => (
+          <li key={e.key}>
+            <Link
+              to={`/dashboard/insights/explore/${e.key}`}
+              className="insights-target inline-flex h-8 items-center rounded-md border px-3 text-sm font-medium hover:bg-muted"
+            >
+              {t(`insightsExplore.explorers.${e.key}`, { defaultValue: e.title })}
+            </Link>
+          </li>
+        ))}
+      </ul>
+    </nav>
   );
 }
 

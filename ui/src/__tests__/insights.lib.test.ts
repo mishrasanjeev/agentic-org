@@ -91,10 +91,15 @@ describe("metric keys used by the Insights page", () => {
     expect(ROLE_VIEWS.analyst).toBeUndefined();
   });
 
-  it("every action target is a route both view roles can open, except executive-only metrics", () => {
-    const financeKeys = new Set(VIEW_METRICS.finance);
-    const cfoRoutes = ["/dashboard/costs", "/dashboard/agents", "/dashboard/approvals"];
-    for (const key of financeKeys) expect(cfoRoutes, key).toContain(METRIC_PRESENTATION[key].action.to);
+  it("every finance tile drills to a page or explorer the CFO can open", () => {
+    // The CFO's explorers (core/insights/explore_registry.py): agents, runs, approvals, cost, quality.
+    const cfoExplorers = ["agents", "runs", "approvals", "cost", "quality"];
+    for (const key of VIEW_METRICS.finance) {
+      const target = METRIC_PRESENTATION[key].action.to;
+      const explorer = /^\/dashboard\/insights\/explore\/([a-z]+)/.exec(target)?.[1];
+      if (explorer) expect(cfoExplorers, key).toContain(explorer);
+      else expect(target, key).toBe("/dashboard/costs");
+    }
   });
 });
 

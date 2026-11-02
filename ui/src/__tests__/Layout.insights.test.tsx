@@ -77,8 +77,15 @@ describe("Layout Insights entry", () => {
     expect(screen.queryAllByText("Insights")).toHaveLength(0);
   });
 
-  it("is never offered to roles without a view", async () => {
+  it("is offered to the COO, who opens the explorers for their domain", async () => {
     mockRole = "coo";
+    statusAnswers(true);
+    renderLayout();
+    expect((await screen.findAllByText("Insights")).length).toBeGreaterThan(0);
+  });
+
+  it("is never offered to roles outside Insights", async () => {
+    mockRole = "analyst";
     statusAnswers(true);
     renderLayout();
     await waitFor(() => expect(mockGet).toHaveBeenCalled());

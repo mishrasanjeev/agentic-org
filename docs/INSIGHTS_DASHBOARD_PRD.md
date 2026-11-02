@@ -23,6 +23,12 @@ Being delivered first:
 - **Platform view.** The cross-tenant operator view, for the platform-operator identity only.
 - **BI access.** Per-tenant BI database access over read-only `insights_*` views (see Exports, downloads, reports and API).
 
+**Phase 2, in progress (2 November 2026).** Three releases: (1) the explorers and run evidence (Level 2 and
+Level 4; shipped first), (2) the money-saved model and alerts, (3) the Operations, HR, Marketing and Commerce
+views. Release 1 delivers eight of the nine explorers (Value and savings arrives with the money-saved model);
+the Security and audit explorer reads the audit log, and sign-in, lockout and rate-limit counters arrive with
+`security_events_daily` later. Connector call counts wait for a `tool_calls` writer.
+
 Later phases are unchanged. In v1 the legacy dashboard pages stay: deleting them would remove working features that need a new home first, namely the CMO work queue, approvals, connector setup and promotion gates; the Observability run debugger and synthetic-check management; the Company management list, bulk upload and archive; and ABM account upload and campaign launch.
 
 ## Personas and what each must find end to end

@@ -8460,6 +8460,60 @@
     "tenant_required": true
   },
   {
+    "audit_event": "insights.explore.read",
+    "auth_required": true,
+    "function": "insights_explore",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/insights/explore/{key} api/v1/insights_explore.py:insights_explore",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/insights_explore.py",
+    "path": "/api/v1/insights/explore/{key}",
+    "public_exempt_reason": null,
+    "rate_limit": "reporting-read",
+    "scope": "insights.read",
+    "source_line": 123,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "insights.export",
+    "auth_required": true,
+    "function": "insights_explore_export",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/insights/explore/{key}/export api/v1/insights_explore.py:insights_explore_export",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/insights_explore.py",
+    "path": "/api/v1/insights/explore/{key}/export",
+    "public_exempt_reason": null,
+    "rate_limit": "reporting-export",
+    "scope": "insights.read",
+    "source_line": 153,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "insights.explorers.read",
+    "auth_required": true,
+    "function": "insights_explorers",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/insights/explorers api/v1/insights_explore.py:insights_explorers",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/insights_explore.py",
+    "path": "/api/v1/insights/explorers",
+    "public_exempt_reason": null,
+    "rate_limit": "reporting-read",
+    "scope": "insights.read",
+    "source_line": 101,
+    "tenant_required": true
+  },
+  {
     "audit_event": "insights.metric.read",
     "auth_required": true,
     "function": "insights_metric",
@@ -8493,6 +8547,24 @@
     "rate_limit": "reporting-export",
     "scope": "insights.read",
     "source_line": 320,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "insights.run_evidence.read",
+    "auth_required": true,
+    "function": "insights_run_evidence",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/insights/runs/{fact_id} api/v1/insights_explore.py:insights_run_evidence",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/insights_explore.py",
+    "path": "/api/v1/insights/runs/{fact_id}",
+    "public_exempt_reason": null,
+    "rate_limit": "reporting-read",
+    "scope": "insights.read",
+    "source_line": 228,
     "tenant_required": true
   },
   {

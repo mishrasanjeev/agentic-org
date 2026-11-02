@@ -886,7 +886,15 @@
     "actions": {
       "openAgents": "Open agents",
       "openApprovals": "Open approvals",
-      "openCosts": "Open cost details"
+      "openCosts": "Open cost details",
+      "exploreAgents": "Explore agents",
+      "exploreRuns": "Explore runs",
+      "exploreFailedRuns": "See failed runs",
+      "exploreApprovedRuns": "See runs that needed approval",
+      "exploreSlowRuns": "See slowest runs",
+      "explorePending": "See pending approvals",
+      "exploreApprovals": "Explore approvals",
+      "exploreCost": "Explain the spend"
     },
     "disabled": {
       "title": "Insights is turned off",
@@ -899,6 +907,13 @@
     "error": {
       "load": "Could not load Insights.",
       "retry": "Try again"
+    },
+    "exploreOnly": {
+      "title": "Your landing view is on its way",
+      "body": "Until then, open the tables for your domain below: agents, runs, approvals, cost and learned rules."
+    },
+    "explore": {
+      "heading": "Explore the data"
     }
   },
   "insightsBi": {
@@ -991,5 +1006,109 @@
     "save": "Save Settings",
     "saving": "Saving...",
     "saved": "Settings saved successfully."
+  },
+  "insightsExplore": {
+    "title": "Explore",
+    "subtitle": "The rows behind every number: filter, sort, open a row, export.",
+    "back": "Back to Insights",
+    "loading": "Loading the table…",
+    "tabsLabel": "Tables",
+    "snapshot": "A snapshot of now; the date range does not apply.",
+    "none": {
+      "title": "No tables for your role",
+      "body": "Ask an administrator for a role with Insights access."
+    },
+    "forbidden": {
+      "title": "This table is not available to your role",
+      "body": "Pick another table above."
+    },
+    "invalid": "That filter or sort is not available",
+    "empty": "No rows match",
+    "results": "Rows {{first}}–{{last}} of {{total}}",
+    "actions": "Actions",
+    "yes": "Yes",
+    "no": "No",
+    "pagination": "Pages",
+    "previous": "Previous",
+    "next": "Next",
+    "pageOf": "Page {{page}} of {{pages}}",
+    "explorers": {
+      "agents": "Agents",
+      "runs": "Runs",
+      "workflows": "Workflows",
+      "approvals": "Approvals",
+      "cost": "Cost and drivers",
+      "quality": "Quality and learning",
+      "connectors": "Connectors",
+      "audit": "Security and audit"
+    },
+    "filters": {
+      "label": "Filters",
+      "any": "Any",
+      "atLeast": "{{title}} at least",
+      "clear": "Clear filters ({{count}})",
+      "applied": "Applied filters",
+      "remove": "Remove the {{label}} filter"
+    },
+    "revoke": {
+      "button": "Revoke",
+      "label": "Revoke learned rule {{index}}",
+      "confirm": "Yes, revoke",
+      "cancel": "Cancel",
+      "changed": "The agent's rules changed since this page loaded. Reload and try again.",
+      "forbidden": "Only the agent's owner or an administrator can revoke its rules.",
+      "failed": "The rule could not be revoked."
+    },
+    "emptyHint": "Widen the date range or clear filters.",
+    "noRows": "No rows"
+  },
+  "insightsRun": {
+    "title": "Run evidence",
+    "subtitle": "One run and the records around it. Output text and prompts are never shown here.",
+    "back": "Back to runs",
+    "loading": "Loading the run…",
+    "agent": "Agent run",
+    "missing": {
+      "title": "Run not found",
+      "body": "It may belong to another domain or company, or the link is incomplete. Open it again from the Runs table."
+    },
+    "gateway": "Model calls",
+    "spans": "Trace spans (longest first)",
+    "approvals": "Approvals",
+    "audit": "Audit rows",
+    "noGateway": "No model gateway records for this run.",
+    "noSpans": "No trace spans for this run.",
+    "noApprovals": "No approval was raised for this run.",
+    "noAudit": "No audit rows for this run.",
+    "tokensSplit": "Input {{input}} · output {{output}} · cached {{cached}}",
+    "fields": {
+      "status": "Status",
+      "started": "Started",
+      "duration": "Duration",
+      "entrypoint": "Entry point",
+      "task": "Task",
+      "model": "Model",
+      "tokens": "Tokens",
+      "cost": "Cost (USD)",
+      "confidence": "Confidence",
+      "approval": "Approval",
+      "error": "Error",
+      "environment": "Environment",
+      "when": "When",
+      "provider": "Provider",
+      "outcome": "Outcome",
+      "fallback": "Fallback from",
+      "latency": "Latency",
+      "input": "Input tokens",
+      "output": "Output tokens",
+      "span": "Span",
+      "kind": "Kind",
+      "decision": "Decision",
+      "decidedBy": "Decided by",
+      "decided": "Decided",
+      "event": "Event",
+      "action": "Action",
+      "signed": "Signed"
+    }
   }
 }
