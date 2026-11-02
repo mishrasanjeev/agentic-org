@@ -90,7 +90,7 @@ async def resolve_workflow_runs(ctx: MetricContext) -> dict[str, Any]:
 
 
 async def resolve_workflows_stalled(ctx: MetricContext) -> dict[str, Any]:
-    from sqlalchemy import func, select
+    from sqlalchemy import exists, func, select
 
     from core.models.workflow import WorkflowDefinition as D
     from core.models.workflow import WorkflowRun as W
@@ -103,6 +103,8 @@ async def resolve_workflows_stalled(ctx: MetricContext) -> dict[str, Any]:
         W.timeout_at < ctx.now,
     ]
     count = int((await ctx.session.execute(select(func.count()).select_from(W).where(*clauses))).scalar_one() or 0)
+    if count == 0 and not (await ctx.session.execute(select(exists().where(W.tenant_id == ctx.tenant_id)))).scalar():
+        return no_data("workflow_runs", "No workflow has run yet. Start one from the Workflows page.")
     rows = (
         await ctx.session.execute(
             select(D.name, W.status, W.timeout_at)
