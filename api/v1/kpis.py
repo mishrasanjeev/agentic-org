@@ -13,7 +13,7 @@ import uuid as _uuid
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy import case, select, text
 from sqlalchemy.exc import SQLAlchemyError
 
@@ -46,6 +46,7 @@ from core.marketing.weekly_report_pilot_proof import (
 )
 from core.marketing.work_queue import build_cmo_work_queue_projection
 from core.marketing.workflow_activation import build_cmo_workflow_activation
+from core.rbac import has_admin_scope
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -53,13 +54,58 @@ logger = logging.getLogger(__name__)
 # ── Role-to-domain mapping for agent_task_results queries ──────────────
 # enterprise-gate: process-local-ok reason=static-rbac-domain-query-map
 ROLE_DOMAIN_MAP: dict[str, list[str]] = {
-    "ceo": ["finance", "hr", "marketing", "operations", "legal", "strategy"],
+    # Operations agents register under ``ops`` (core/agents/ops, core.rbac);
+    # ``operations`` is kept for rows written under the older name.
+    "ceo": ["finance", "hr", "marketing", "ops", "operations", "legal", "strategy"],
     "cfo": ["finance", "treasury", "tax", "compliance"],
     "chro": ["hr", "payroll", "recruitment"],
     "cmo": ["marketing", "sales", "content"],
-    "coo": ["operations", "it", "support", "facilities"],
+    "coo": ["ops", "operations", "it", "support", "facilities"],
     "cbo": ["legal", "risk", "corporate", "comms"],
 }
+
+# ── Per-page role guard ────────────────────────────────────────────────
+# Each KPI page is readable by the tenant administrator and the CxO role
+# whose dashboard it is, matching the UI routes in ui/src/App.tsx. The
+# global scope check (SCOPE_FAMILIES["kpis"]) only says the caller holds
+# kpis:read; without this guard a CHRO could read the CFO board.
+# enterprise-gate: process-local-ok reason=static-kpi-page-role-policy-map
+KPI_PAGE_ROLES: dict[str, frozenset[str]] = {
+    "ceo": frozenset({"admin"}),
+    "cbo": frozenset({"admin"}),
+    "cfo": frozenset({"admin", "cfo"}),
+    "chro": frozenset({"admin", "chro"}),
+    "cmo": frozenset({"admin", "cmo"}),
+    "coo": frozenset({"admin", "coo"}),
+}
+
+
+def _kpi_page_guard(page: str):
+    """Dependency admitting only the roles of one KPI page (403 otherwise).
+
+    The administrator scope always passes (an admin API key carries no
+    role). Anything else needs a role claim in the page's allow-list; a
+    missing or unknown role fails closed.
+    """
+    allowed = KPI_PAGE_ROLES[page]
+
+    def checker(request: Request) -> None:
+        scopes = getattr(request.state, "scopes", None) or []
+        if has_admin_scope(scopes):
+            return
+        claims = getattr(request.state, "claims", None) or {}
+        role = str(claims.get("role") or "")
+        if role in allowed:
+            return
+        raise HTTPException(
+            403,
+            detail={
+                "error": "kpis_role_forbidden",
+                "message": f"The {page.upper()} dashboard is not available to your role.",
+            },
+        )
+
+    return Depends(checker)
 
 
 # ── Real metrics computation from agent_task_results ────────────────────
@@ -446,7 +492,9 @@ async def _build_kpi_response(
     3. Return demo data if nothing available.
     """
     cache = KPICache()
-    cached = await cache.get_all_for_role(tenant_id, role)
+    # The cache is keyed by company: a company-scoped request must never be
+    # answered from the tenant-wide entries (or another company's).
+    cached = await cache.get_all_for_role(tenant_id, role, _parse_company_uuid(company_id))
 
     now_iso = datetime.now(UTC).isoformat()
 
@@ -895,7 +943,7 @@ async def _build_cmo_kpi_response(tenant_id: str, company_id: str) -> dict[str, 
 
 # ── CEO KPIs ───────────────────────────────────────────────────────────
 
-@router.get("/kpis/ceo")
+@router.get("/kpis/ceo", dependencies=[_kpi_page_guard("ceo")])
 @route_meta(
     auth_required=True,
     tenant_required=True,
@@ -924,7 +972,7 @@ async def get_ceo_kpis(
 
 # ── CFO KPIs ───────────────────────────────────────────────────────────
 
-@router.get("/kpis/cfo")
+@router.get("/kpis/cfo", dependencies=[_kpi_page_guard("cfo")])
 @route_meta(
     auth_required=True,
     tenant_required=True,
@@ -958,7 +1006,7 @@ async def get_cfo_kpis(
 
 # ── CHRO KPIs ──────────────────────────────────────────────────────────
 
-@router.get("/kpis/chro")
+@router.get("/kpis/chro", dependencies=[_kpi_page_guard("chro")])
 @route_meta(
     auth_required=True,
     tenant_required=True,
@@ -977,7 +1025,7 @@ async def get_chro_kpis(
 
 # ── CMO KPIs ───────────────────────────────────────────────────────────
 
-@router.get("/kpis/cmo")
+@router.get("/kpis/cmo", dependencies=[_kpi_page_guard("cmo")])
 @route_meta(
     auth_required=True,
     tenant_required=True,
@@ -996,7 +1044,7 @@ async def get_cmo_kpis(
 
 # ── COO KPIs ───────────────────────────────────────────────────────────
 
-@router.get("/kpis/coo")
+@router.get("/kpis/coo", dependencies=[_kpi_page_guard("coo")])
 @route_meta(
     auth_required=True,
     tenant_required=True,
@@ -1015,7 +1063,7 @@ async def get_coo_kpis(
 
 # ── CBO KPIs ───────────────────────────────────────────────────────────
 
-@router.get("/kpis/cbo")
+@router.get("/kpis/cbo", dependencies=[_kpi_page_guard("cbo")])
 @route_meta(
     auth_required=True,
     tenant_required=True,

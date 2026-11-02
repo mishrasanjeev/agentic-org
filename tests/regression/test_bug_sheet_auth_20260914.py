@@ -46,7 +46,8 @@ class TestUserIdClaim:
         # behind session_token_for / start_session).
         helper_src = inspect.getsource(auth_mod.session_token_for)
         assert '"agenticorg:user_id": str(user.id)' in helper_src
-        assert "session_token_for(user)" in inspect.getsource(auth_mod.start_session)
+        # (start_session passes whether the second factor was just verified: session_token_for(user, mfa_verified=...).)
+        assert "session_token_for(user" in inspect.getsource(auth_mod.start_session)
         fn = getattr(auth_mod, fn_name, None) or getattr(auth_mfa, fn_name)
         src = inspect.getsource(fn)
         assert (

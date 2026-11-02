@@ -314,6 +314,9 @@ def test_celery_beat_schedule_registers_all_seven_periodic_tasks() -> None:
         "dispatch-due-rpa-schedules",
         "shadow-reconciliation-report",
         "record-health-snapshot",
+        "insights-rollup-today",
+        "insights-rollup-closed-days",
+        "insights-reconcile-yesterday",
     }
     missing = expected - set(schedule.keys())
     assert not missing, (
@@ -348,6 +351,7 @@ def test_worker_registers_all_task_modules_on_startup() -> None:
     expected_includes = {
         "core.tasks.budget_tasks",
         "core.tasks.health_snapshot",
+        "core.tasks.insights_tasks",
         "core.tasks.invoice_tasks",
         "core.tasks.report_tasks",
         "core.tasks.rpa_tasks",
@@ -377,6 +381,9 @@ def test_worker_registers_all_task_modules_on_startup() -> None:
         "core.tasks.invoice_tasks.generate_monthly_invoices",
         "core.tasks.rpa_tasks.dispatch_due_rpa_schedules",
         "core.tasks.health_snapshot.record_health_snapshot",
+        "core.tasks.insights_tasks.rollup_today",
+        "core.tasks.insights_tasks.rollup_closed_days",
+        "core.tasks.insights_tasks.reconcile_yesterday",
     }
     missing_tasks = expected_periodic - registered
     assert not missing_tasks, (

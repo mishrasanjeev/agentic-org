@@ -53,6 +53,7 @@ app = Celery(
         "core.tasks.demo_tasks",
         "core.tasks.gateway_tasks",
         "core.tasks.health_snapshot",
+        "core.tasks.insights_tasks",
         "core.tasks.invoice_tasks",
         "core.tasks.knowledge_tasks",
         "core.tasks.lineage_tasks",
@@ -220,6 +221,29 @@ app.conf.beat_schedule = {
         # unless spend intelligence and its sweeps are on.
         "task": "core.tasks.spend_tasks.allocate_gpu_hours",
         "schedule": crontab(minute=20),
+        "options": {"queue": "maintenance"},
+    },
+    "insights-rollup-today": {
+        # Rebuilds each tenant's local today in insights_daily from run_facts
+        # (core/tasks/insights_tasks.py). A no-op unless AGENTICORG_INSIGHTS_ENABLED.
+        "task": "core.tasks.insights_tasks.rollup_today",
+        "schedule": 900.0,
+        "options": {"queue": "maintenance", "expires": 900},
+    },
+    "insights-rollup-closed-days": {
+        # Rolls each tenant's local yesterday from 02:00 local when it has no rollup
+        # or newer facts, and catches up unrolled days. Hourly at :05. A no-op
+        # unless AGENTICORG_INSIGHTS_ENABLED.
+        "task": "core.tasks.insights_tasks.rollup_closed_days",
+        "schedule": crontab(minute=5),
+        "options": {"queue": "maintenance"},
+    },
+    "insights-reconcile-yesterday": {
+        # Reconciles each tenant's local yesterday against its run facts from 02:30
+        # local, until reconciled. Hourly at :35. A no-op unless
+        # AGENTICORG_INSIGHTS_ENABLED.
+        "task": "core.tasks.insights_tasks.reconcile_yesterday",
+        "schedule": crontab(minute=35),
         "options": {"queue": "maintenance"},
     },
     "generate-scheduled-reports": {

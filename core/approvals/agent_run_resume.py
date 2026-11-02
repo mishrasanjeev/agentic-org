@@ -40,6 +40,7 @@ from sqlalchemy import select
 
 from auth.run_grants import CALLER_GRANT_KEY, caller_grant_for_run, resolve_run_grant
 from core.database import get_tenant_session
+from core.insights.context import entrypoint as insights_entrypoint
 from core.langgraph.thread_ids import thread_belongs_to_tenant
 from core.models.agent import Agent
 from core.models.audit import AuditLog
@@ -286,7 +287,10 @@ async def resume_approved_agent_run(tenant_id: uuid.UUID, hitl_id: uuid.UUID) ->
             **caller_grant_for_run(spec[CALLER_GRANT_KEY]).resolve_kwargs(),
         )
     try:
-        with spend_context.scope(application="agents", agent_id=str(claim.agent_id)):
+        with (
+            spend_context.scope(application="agents", agent_id=str(claim.agent_id)),
+            insights_entrypoint("hitl_resume"),
+        ):
             result = await runner.resume_agent(
                 agent_id=str(claim.agent_id),
                 thread_id=claim.thread_id,

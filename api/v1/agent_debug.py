@@ -29,6 +29,7 @@ from core.billing.metering import gate_agent_run
 from core.database import get_tenant_session
 from core.finops import attribution as cost_attribution
 from core.finops import thresholds as finops_thresholds
+from core.insights.context import entrypoint as insights_entrypoint
 from core.langgraph import debugger
 from core.models.agent import Agent
 from core.models.hitl import HITLQueue
@@ -395,8 +396,11 @@ async def _advance_claimed(agent: Any, thread_id: str, tenant_id: str, caller: C
             **caller_grant_for_run(spec[CALLER_GRANT_KEY]).resolve_kwargs(),
         )
     try:
-        with spend_context.scope(
-            application="agents", agent_id=str(agent_id), agent_version=getattr(agent, "version", None)
+        with (
+            spend_context.scope(
+                application="agents", agent_id=str(agent_id), agent_version=getattr(agent, "version", None)
+            ),
+            insights_entrypoint("debug"),
         ):
             result = await runner.resume_agent(
                 agent_id=str(agent_id),

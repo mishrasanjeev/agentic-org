@@ -163,6 +163,16 @@ BEGIN
     IF to_regclass('public.commerce_afa_evidence') IS NOT NULL THEN
         REVOKE UPDATE, DELETE ON commerce_afa_evidence FROM agenticorg_app;
     END IF;
+    -- v6z108_insights_bi: BI login mappings are read by the application and
+    -- written only by public.insights_bi_create_login / _revoke_login.
+    IF to_regclass('public.insights_bi_logins') IS NOT NULL THEN
+        REVOKE INSERT, UPDATE, DELETE ON insights_bi_logins FROM agenticorg_app;
+    END IF;
+    -- v6z108_insights_bi: whether BI logins may read on a primary; the
+    -- migration owner alone reads or writes it.
+    IF to_regclass('public.insights_bi_settings') IS NOT NULL THEN
+        REVOKE ALL ON insights_bi_settings FROM agenticorg_app;
+    END IF;
 END $$;
 
 -- 6. Migration-owned tables. init_db() and the checkpoint store only read
@@ -185,6 +195,22 @@ REVOKE ALL ON alembic_migration_progress FROM agenticorg_app;
 --   public.gemini_daily_ledger_spend()               v6z105, platform Gemini cap on
 --                                                    recorded spend (core/llm/router.py);
 --                                                    granted once it exists
+--   public.insights_platform_daily(date, date)
+--   public.insights_platform_tenants(date, date)
+--                                                    v6z107, the platform operator's
+--                                                    cross-tenant aggregates
+--                                                    (core/insights/platform.py); granted
+--                                                    once they exist
+--   public.insights_bi_create_login(uuid, text, text, uuid, integer)
+--   public.insights_bi_revoke_login(uuid, text)
+--                                                    v6z108, a tenant administrator's BI
+--                                                    database logins, tenant-bound
+--                                                    (core/insights/bi_access.py); granted
+--                                                    once they exist
+--
+-- Not the application's: public.insights_bi_tenant() and the reader
+-- functions insights_bi.<view>_rows() (v6z108; the BI reader and the BI
+-- group only). The fail-closed check below covers schema insights_bi too.
 --
 -- A function owned by the installer is granted directly. One owned by a
 -- NOLOGIN role (the v6z85 aggregation role) is granted through a temporary
@@ -199,7 +225,11 @@ BEGIN
     END IF;
     FOREACH fn IN ARRAY ARRAY['public.gemini_daily_platform_spend()',
                               'public.oacp_delete_due_manifest(text, text)',
-                              'public.gemini_daily_ledger_spend()'] LOOP
+                              'public.gemini_daily_ledger_spend()',
+                              'public.insights_platform_daily(date, date)',
+                              'public.insights_platform_tenants(date, date)',
+                              'public.insights_bi_create_login(uuid, text, text, uuid, integer)',
+                              'public.insights_bi_revoke_login(uuid, text)'] LOOP
         CONTINUE WHEN to_regprocedure(fn) IS NULL;
         SELECT r.rolname INTO owner_role
         FROM pg_proc p JOIN pg_roles r ON r.oid = p.proowner
@@ -280,10 +310,14 @@ BEGIN
     END IF;
     SELECT string_agg(p.oid::regprocedure::text, ', ') INTO bad
     FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
-    WHERE n.nspname = 'public' AND p.prosecdef
+    WHERE n.nspname IN ('public', 'insights_bi') AND p.prosecdef
       AND p.oid NOT IN (SELECT to_regprocedure(f)::oid FROM unnest(ARRAY['public.gemini_daily_platform_spend()',
                             'public.oacp_delete_due_manifest(text, text)',
-                            'public.gemini_daily_ledger_spend()']) AS f WHERE to_regprocedure(f) IS NOT NULL)
+                            'public.gemini_daily_ledger_spend()',
+                            'public.insights_platform_daily(date, date)',
+                            'public.insights_platform_tenants(date, date)',
+                            'public.insights_bi_create_login(uuid, text, text, uuid, integer)',
+                            'public.insights_bi_revoke_login(uuid, text)']) AS f WHERE to_regprocedure(f) IS NOT NULL)
       AND has_function_privilege('agenticorg_app', p.oid, 'EXECUTE');
     IF bad IS NOT NULL THEN
         RAISE EXCEPTION 'agenticorg_app can EXECUTE restricted functions: %', bad;
