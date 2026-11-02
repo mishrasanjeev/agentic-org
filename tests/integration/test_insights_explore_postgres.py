@@ -238,16 +238,47 @@ def _seed(world: World) -> SimpleNamespace:
     base = {"system_prompt_ref": "prompts/synthetic.txt", "hitl_condition": "confidence < 0.8"}
     a_fin, a_hr, a_shadow, b_fin = uuid.uuid4(), uuid.uuid4(), uuid.uuid4(), uuid.uuid4()
     world.add(
-        Agent(id=a_fin, tenant_id=a, name="Invoice matcher", agent_type="ap_processor", domain="finance",
-              status="active", prompt_amendments=["Always quote the PO number", "Use INR"], **base),
-        Agent(id=a_hr, tenant_id=a, name="Leave checker", agent_type="leave_bot", domain="hr", status="active",
-              **base),
-        Agent(id=a_shadow, tenant_id=a, name="Shadow screener", agent_type="talent_acquisition", domain="hr",
-              status="shadow", shadow_min_samples=10, shadow_sample_count=4, shadow_scored_sample_count=4, **base),
-        Agent(tenant_id=a, name="Dormant payroll", agent_type="payroll_engine", domain="hr", status="active",
-              created_at=now - timedelta(days=200), **base),
-        Agent(id=b_fin, tenant_id=b, name="Tenant B agent", agent_type="ap_processor", domain="finance",
-              status="active", **base),
+        Agent(
+            id=a_fin,
+            tenant_id=a,
+            name="Invoice matcher",
+            agent_type="ap_processor",
+            domain="finance",
+            status="active",
+            prompt_amendments=["Always quote the PO number", "Use INR"],
+            **base,
+        ),
+        Agent(id=a_hr, tenant_id=a, name="Leave checker", agent_type="leave_bot", domain="hr", status="active", **base),
+        Agent(
+            id=a_shadow,
+            tenant_id=a,
+            name="Shadow screener",
+            agent_type="talent_acquisition",
+            domain="hr",
+            status="shadow",
+            shadow_min_samples=10,
+            shadow_sample_count=4,
+            shadow_scored_sample_count=4,
+            **base,
+        ),
+        Agent(
+            tenant_id=a,
+            name="Dormant payroll",
+            agent_type="payroll_engine",
+            domain="hr",
+            status="active",
+            created_at=now - timedelta(days=200),
+            **base,
+        ),
+        Agent(
+            id=b_fin,
+            tenant_id=b,
+            name="Tenant B agent",
+            agent_type="ap_processor",
+            domain="finance",
+            status="active",
+            **base,
+        ),
     )
     correlation = "corr-" + uuid.uuid4().hex
     trace = uuid.uuid4().hex
@@ -255,10 +286,19 @@ def _seed(world: World) -> SimpleNamespace:
 
     def fact(tenant, agent_id, domain, started, **extra):
         values = {
-            "tenant_id": tenant, "run_key": "agents:" + uuid.uuid4().hex, "entrypoint": "agents",
-            "agent_id": agent_id, "agent_type": "ap_processor" if domain == "finance" else "leave_bot",
-            "domain": domain, "status": "completed", "duration_ms": 1200, "tokens_in": 100, "tokens_out": 50,
-            "tokens_total": 150, "cost_usd": Decimal("0.01"), "started_at": started,
+            "tenant_id": tenant,
+            "run_key": "agents:" + uuid.uuid4().hex,
+            "entrypoint": "agents",
+            "agent_id": agent_id,
+            "agent_type": "ap_processor" if domain == "finance" else "leave_bot",
+            "domain": domain,
+            "status": "completed",
+            "duration_ms": 1200,
+            "tokens_in": 100,
+            "tokens_out": 50,
+            "tokens_total": 150,
+            "cost_usd": Decimal("0.01"),
+            "started_at": started,
         }
         values.update(extra)
         return RunFact(**values)
@@ -266,8 +306,15 @@ def _seed(world: World) -> SimpleNamespace:
     world.add(
         fact(a, a_fin, "finance", start, id=traced, correlation_id=correlation, trace_id=trace, company_id=company_a),
         fact(a, a_fin, "finance", start + timedelta(minutes=1)),
-        fact(a, a_fin, "finance", start + timedelta(minutes=2), status="failed", duration_ms=9000,
-             error_class="TimeoutError"),
+        fact(
+            a,
+            a_fin,
+            "finance",
+            start + timedelta(minutes=2),
+            status="failed",
+            duration_ms=9000,
+            error_class="TimeoutError",
+        ),
         fact(a, a_hr, "hr", start + timedelta(minutes=3)),
         *(fact(b, b_fin, "finance", start + timedelta(minutes=i)) for i in range(4)),
     )
@@ -277,28 +324,103 @@ def _seed(world: World) -> SimpleNamespace:
         "expires_at": now + timedelta(days=2),
     }
     world.add(
-        HITLQueue(tenant_id=a, agent_id=a_fin, title="Approve invoice INV-1", assignee_role="finance",
-                  context={"correlation_id": correlation}, status="decided", decision="approve",
-                  decision_by=reviewer, decision_at=start + timedelta(minutes=30), created_at=start, **common),
-        HITLQueue(tenant_id=a, agent_id=a_hr, title="Approve leave L-7", assignee_role="hr", context={},
-                  created_at=start + timedelta(minutes=5), **common),
-        HITLQueue(tenant_id=b, agent_id=b_fin, title="Tenant B approval", assignee_role="finance", context={},
-                  created_at=start, **common),
+        HITLQueue(
+            tenant_id=a,
+            agent_id=a_fin,
+            title="Approve invoice INV-1",
+            assignee_role="finance",
+            context={"correlation_id": correlation},
+            status="decided",
+            decision="approve",
+            decision_by=reviewer,
+            decision_at=start + timedelta(minutes=30),
+            created_at=start,
+            **common,
+        ),
+        HITLQueue(
+            tenant_id=a,
+            agent_id=a_hr,
+            title="Approve leave L-7",
+            assignee_role="hr",
+            context={},
+            created_at=start + timedelta(minutes=5),
+            **common,
+        ),
+        HITLQueue(
+            tenant_id=b,
+            agent_id=b_fin,
+            title="Tenant B approval",
+            assignee_role="finance",
+            context={},
+            created_at=start,
+            **common,
+        ),
     )
     world.add(
-        ModelGatewayRecord(tenant_id=a, correlation_id=correlation, use_case="agent_run", provider="gemini",
-                           model="gemini-2.5-flash", outcome="ok", latency_ms=800, tokens=150, input_tokens=100,
-                           output_tokens=50, cost_usd=0.01, created_at=start + timedelta(seconds=1)),
-        ModelGatewayRecord(tenant_id=b, correlation_id=correlation, use_case="agent_run", provider="gemini",
-                           model="gemini-2.5-flash", outcome="ok", latency_ms=800, tokens=1, cost_usd=0.0),
-        RunSpan(tenant_id=a, trace_id=trace, run_span_id=uuid.uuid4().hex[:16], span_id=uuid.uuid4().hex[:16], name="llm.call",
-                kind="llm", status="ok", started_at=start, duration_ms=800),
-        AuditLog(tenant_id=a, event_type="agent.run", actor_type="agent", actor_id=str(a_fin), action="run",
-                 outcome="success", trace_id=trace, created_at=start + timedelta(seconds=2)),
-        AuditLog(tenant_id=a, event_type="hitl.decided", actor_type="user", actor_id=str(reviewer), action="approve",
-                 outcome="success", created_at=start + timedelta(minutes=30)),
-        AuditLog(tenant_id=b, event_type="hitl.decided", actor_type="user", actor_id="someone", action="approve",
-                 outcome="success", created_at=start),
+        ModelGatewayRecord(
+            tenant_id=a,
+            correlation_id=correlation,
+            use_case="agent_run",
+            provider="gemini",
+            model="gemini-2.5-flash",
+            outcome="ok",
+            latency_ms=800,
+            tokens=150,
+            input_tokens=100,
+            output_tokens=50,
+            cost_usd=0.01,
+            created_at=start + timedelta(seconds=1),
+        ),
+        ModelGatewayRecord(
+            tenant_id=b,
+            correlation_id=correlation,
+            use_case="agent_run",
+            provider="gemini",
+            model="gemini-2.5-flash",
+            outcome="ok",
+            latency_ms=800,
+            tokens=1,
+            cost_usd=0.0,
+        ),
+        RunSpan(
+            tenant_id=a,
+            trace_id=trace,
+            run_span_id=uuid.uuid4().hex[:16],
+            span_id=uuid.uuid4().hex[:16],
+            name="llm.call",
+            kind="llm",
+            status="ok",
+            started_at=start,
+            duration_ms=800,
+        ),
+        AuditLog(
+            tenant_id=a,
+            event_type="agent.run",
+            actor_type="agent",
+            actor_id=str(a_fin),
+            action="run",
+            outcome="success",
+            trace_id=trace,
+            created_at=start + timedelta(seconds=2),
+        ),
+        AuditLog(
+            tenant_id=a,
+            event_type="hitl.decided",
+            actor_type="user",
+            actor_id=str(reviewer),
+            action="approve",
+            outcome="success",
+            created_at=start + timedelta(minutes=30),
+        ),
+        AuditLog(
+            tenant_id=b,
+            event_type="hitl.decided",
+            actor_type="user",
+            actor_id="someone",
+            action="approve",
+            outcome="success",
+            created_at=start,
+        ),
     )
     world.add(
         AgentFeedback(tenant_id=a, agent_id=a_fin, run_id="r1", feedback_type="thumbs_down", created_at=start),
@@ -311,15 +433,25 @@ def _seed(world: World) -> SimpleNamespace:
         Connector(tenant_id=b, name="zoho", category="accounting", auth_type="oauth2"),
         ConnectorConfig(tenant_id=a, connector_name="tally", company_id=company_a, health_status="unhealthy"),
     )
-    world.scalar("UPDATE agents SET connector_ids = CAST(:ids AS JSONB) WHERE id = :id RETURNING 1",
-                 ids=f'["{conn_a}"]', id=a_fin)
+    world.scalar(
+        "UPDATE agents SET connector_ids = CAST(:ids AS JSONB) WHERE id = :id RETURNING 1",
+        ids=f'["{conn_a}"]',
+        id=a_fin,
+    )
     wf_a = uuid.uuid4()
     world.add(
         WorkflowDefinition(id=wf_a, tenant_id=a, name="Invoice to pay", domain="finance", definition={"steps": []}),
     )
     world.add(
-        WorkflowRun(tenant_id=a, workflow_def_id=wf_a, status="completed", steps_total=3, steps_completed=3,
-                    started_at=start, completed_at=start + timedelta(minutes=4)),
+        WorkflowRun(
+            tenant_id=a,
+            workflow_def_id=wf_a,
+            status="completed",
+            steps_total=3,
+            steps_completed=3,
+            started_at=start,
+            completed_at=start + timedelta(minutes=4),
+        ),
     )
     midnight = datetime(today.year, today.month, today.day)  # noqa: DTZ001 - the ledger is naive UTC
     world.add(
@@ -327,8 +459,9 @@ def _seed(world: World) -> SimpleNamespace:
         AgentCostLedger(tenant_id=a, agent_id=a_hr, period_date=midnight, cost_usd=Decimal("1.0"), token_count=10),
         AgentCostLedger(tenant_id=b, agent_id=b_fin, period_date=midnight, cost_usd=Decimal("9.0"), token_count=10),
     )
-    return SimpleNamespace(a=a, b=b, a_fin=a_fin, a_hr=a_hr, a_shadow=a_shadow, traced=traced, start=start,
-                           company_a=company_a)
+    return SimpleNamespace(
+        a=a, b=b, a_fin=a_fin, a_hr=a_hr, a_shadow=a_shadow, traced=traced, start=start, company_a=company_a
+    )
 
 
 def _names(page: dict, column: str = "agent") -> set:
@@ -415,15 +548,17 @@ async def test_filters_sort_paging_and_export(world) -> None:
     failed = await api.insights_explore("runs", admin_req(**{"filter[status]": "failed"}), tenant_id=a)
     assert failed["total"] == 1 and failed["rows"][0]["error_class"] == "TimeoutError"
     assert failed["filters"] == {"status": "failed"}
-    slowest = await api.insights_explore("runs", admin_req(sort="duration_ms", order="desc", page_size="2"),
-                                         tenant_id=a)
+    slowest = await api.insights_explore(
+        "runs", admin_req(sort="duration_ms", order="desc", page_size="2"), tenant_id=a
+    )
     assert slowest["total"] == 4 and len(slowest["rows"]) == 2 and slowest["rows"][0]["duration_ms"] == 9000
     second = await api.insights_explore("runs", admin_req(sort="duration_ms", page_size="2", page="2"), tenant_id=a)
     assert len(second["rows"]) == 2 and not {r["started_at"] for r in second["rows"]} & {
         r["started_at"] for r in slowest["rows"]
     }
-    idle = await api.insights_explore("agents", admin_req(**{"filter[idle_days]": "30", "filter[status]": "active"}),
-                                      tenant_id=a)
+    idle = await api.insights_explore(
+        "agents", admin_req(**{"filter[idle_days]": "30", "filter[status]": "active"}), tenant_id=a
+    )
     assert _names(idle) == {"Dormant payroll"}
     company = await api.insights_explore("runs", admin_req(), tenant_id=a, company_id=str(seed.company_a))
     assert company["total"] == 1
@@ -432,8 +567,9 @@ async def test_filters_sort_paging_and_export(world) -> None:
             await api.insights_explore("runs", admin_req(**bad), tenant_id=a)
         assert refused.value.status_code == 422
 
-    exported = await api.insights_explore_export("approvals", admin_req(**{"filter[status]": "decided"}),
-                                                 tenant_id=a, format="csv")
+    exported = await api.insights_explore_export(
+        "approvals", admin_req(**{"filter[status]": "decided"}), tenant_id=a, format="csv"
+    )
     rows = list(csv.DictReader(io.StringIO(exported.body.decode("utf-8"))))
     assert [r["title"] for r in rows] == ["Approve invoice INV-1"]
     assert "links" not in rows[0] and rows[0]["decided_by"] == "Asha Reviewer"
@@ -444,11 +580,14 @@ async def test_filters_sort_paging_and_export(world) -> None:
     assert book.sheetnames == ["Data", "Filters", "Definitions"]
     assert sum(1 for _ in book["Data"].iter_rows()) == 3  # header and two approvals
     # Read-only rows drop trailing empty cells.
-    definitions = {row[0]: (row[1] if len(row) > 1 else None) for row in book["Definitions"].iter_rows(values_only=True)}
+    definitions = {
+        row[0]: (row[1] if len(row) > 1 else None) for row in book["Definitions"].iter_rows(values_only=True)
+    }
     assert definitions["key"] == "explore.approvals" and "column:cycle_time_ms" in definitions
-    assert world.scalar(
-        "SELECT count(*) FROM audit_log WHERE tenant_id = :t AND event_type = 'insights.export'", t=seed.a
-    ) == 2
+    assert (
+        world.scalar("SELECT count(*) FROM audit_log WHERE tenant_id = :t AND event_type = 'insights.export'", t=seed.a)
+        == 2
+    )
     entry = world.scalar(
         "SELECT details FROM audit_log WHERE tenant_id = :t AND event_type = 'insights.export' "
         "AND details->>'format' = 'csv'",
@@ -456,8 +595,10 @@ async def test_filters_sort_paging_and_export(world) -> None:
     )
     assert entry["explorer"] == "approvals" and entry["row_count"] == 1
     assert entry["filters"]["filter[status]"] == "decided"
-    assert world.scalar("SELECT count(*) FROM audit_log WHERE tenant_id = :t AND event_type = 'insights.export'",
-                        t=seed.b) == 0
+    assert (
+        world.scalar("SELECT count(*) FROM audit_log WHERE tenant_id = :t AND event_type = 'insights.export'", t=seed.b)
+        == 0
+    )
 
 
 @pytest.mark.asyncio
