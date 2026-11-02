@@ -14,8 +14,9 @@ import type { InsightsViewKey } from "./api";
  * - hbar: items ranked by value, sorted descending
  * - bullet: actual against a threshold (budgets)
  * - forecast: point estimate with a low/high whisker
+ * - waterfall: gross to net, each step from the running total
  */
-export type ChartKind = "line" | "stacked" | "hbar" | "bullet" | "forecast";
+export type ChartKind = "line" | "stacked" | "hbar" | "bullet" | "forecast" | "waterfall";
 
 export interface MetricPresentation {
   chart: ChartKind;
@@ -28,6 +29,7 @@ const APPROVALS = "/dashboard/insights/explore/approvals";
 const AGENTS = "/dashboard/insights/explore/agents";
 const COST = "/dashboard/insights/explore/cost";
 const COSTS_PAGE = "/dashboard/costs";
+const VALUE_PAGE = "/dashboard/insights/value";
 
 /** Every tile drills to the explorer rows behind it, with the filter or sort that produced the number. */
 export const METRIC_PRESENTATION: Record<string, MetricPresentation> = {
@@ -67,6 +69,9 @@ export const METRIC_PRESENTATION: Record<string, MetricPresentation> = {
     action: { to: `${RUNS}?sort=tokens_total&order=desc`, labelKey: "insights.actions.exploreRuns" },
   },
   "cost.data_quality": { chart: "hbar", action: { to: COSTS_PAGE, labelKey: "insights.actions.openCosts" } },
+  "value.money_saved": { chart: "waterfall", action: { to: VALUE_PAGE, labelKey: "insights.actions.openValue" } },
+  "value.hours_saved": { chart: "hbar", action: { to: VALUE_PAGE, labelKey: "insights.actions.openValue" } },
+  "value.roi": { chart: "line", action: { to: VALUE_PAGE, labelKey: "insights.actions.openValue" } },
 };
 
 /** Expected metric keys per view (registry views; the API decides what it returns). */
@@ -80,6 +85,8 @@ export const VIEW_METRICS: Record<InsightsViewKey, readonly string[]> = {
     "approvals.pending",
     "approvals.cycle_time",
     "cost.spend",
+    "value.money_saved",
+    "value.hours_saved",
   ],
   finance: [
     "cost.spend",
@@ -91,6 +98,8 @@ export const VIEW_METRICS: Record<InsightsViewKey, readonly string[]> = {
     "tokens.by_unit",
     "cost.data_quality",
     "runs.volume",
+    "value.money_saved",
+    "value.roi",
   ],
 };
 

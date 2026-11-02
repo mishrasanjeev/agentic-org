@@ -108,6 +108,7 @@ export function primaryLink(row: ExplorerRow): string | null {
     "workflow_run",
     "agent",
     "connector",
+    "value",
   ]) {
     const target = links[name];
     if (typeof target === "string" && target.startsWith("/")) return target;

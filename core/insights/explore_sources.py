@@ -904,3 +904,31 @@ async def explore_audit(ctx: ExploreContext) -> ExploreData:
     if not total:
         hint = "Nothing was audited in this period. " + hint
     return ExploreData(rows, "audit_log", "measured" if total else "no_data", paged=True, total=total, hint=hint)
+
+
+# ------------------------------------------------------------------ value and savings
+
+
+async def explore_value(ctx: ExploreContext) -> ExploreData:
+    """One row per agent type and task type with runs in the period: the inputs and the estimate per line."""
+    from core.insights import value
+
+    m = ctx.metric
+    est = await value.estimate_for(m, m.period)
+    rows = value.lines_as_rows(est)
+    if not rows:
+        return ExploreData([], value.SOURCE, "no_data", hint=value.NO_TASKS_HINT, summary={"currency": est.currency})
+    hint_parts = [
+        "Estimated. Each completed task counts once at its agent type's baseline minutes; failed tasks are the "
+        "error cost. Rows without a baseline are not valued."
+    ]
+    if not est.confirmed:
+        hint_parts.append(value.CONFIRM_HINT)
+    hint_parts.extend(est.hints)
+    return ExploreData(
+        rows,
+        value.SOURCE,
+        "estimated",
+        hint=" ".join(hint_parts),
+        summary={"currency": est.currency, "confirmed": est.confirmed, "confidence": est.confidence},
+    )

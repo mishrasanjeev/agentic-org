@@ -230,6 +230,13 @@ app.conf.beat_schedule = {
         "schedule": 900.0,
         "options": {"queue": "maintenance", "expires": 900},
     },
+    "insights-evaluate-alerts": {
+        # Opens, refreshes and resolves each tenant's Insights alerts and emails new act alerts once
+        # (core/insights/alerts.py). A no-op unless AGENTICORG_INSIGHTS_ENABLED.
+        "task": "core.tasks.insights_tasks.evaluate_alerts",
+        "schedule": 900.0,
+        "options": {"queue": "maintenance", "expires": 900},
+    },
     "insights-rollup-closed-days": {
         # Rolls each tenant's local yesterday from 02:00 local when it has no rollup
         # or newer facts, and catches up unrolled days. Hourly at :05. A no-op

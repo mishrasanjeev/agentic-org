@@ -82,6 +82,8 @@ DEBUG_ENTRYPOINT = "debug"
 # Dimensions a run metric may be grouped by (``group_by``); ``agent`` is the
 # agent id, or the raw agent reference when the caller's id was not a UUID.
 RUN_GROUPS: tuple[str, ...] = ("agent", "agent_type", "domain", "entrypoint", "task_type", "environment", "status")
+# An internal grouping by agent type and task type together (core/insights/value.py).
+AGENT_TASK_GROUP = "agent_task"
 
 NO_RUNS_HINT = (
     "No agent runs are recorded for this period. Runs are recorded as agents run; "
@@ -317,6 +319,13 @@ def _group_expr(table: Any, group: str | None) -> Any:
 
     if group is None:
         return literal("").label("grp")
+    if group == AGENT_TASK_GROUP:
+        # Internal (money saved): "agent_type|task_type", never offered as an API grouping.
+        return func.concat(
+            func.coalesce(table.agent_type, literal(UNATTRIBUTED)),
+            literal("|"),
+            func.coalesce(table.task_type, literal("")),
+        ).label("grp")
     if group == "agent":
         return func.coalesce(cast(table.agent_id, String), table.agent_ref, literal(UNATTRIBUTED)).label("grp")
     if group not in RUN_GROUPS:

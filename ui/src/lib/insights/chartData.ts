@@ -195,3 +195,45 @@ export function tableRows(metric: MetricResponse, fromSeries = false): MetricRow
   if (!useSeries) return rows.filter((r) => r && typeof r === "object");
   return (metric.series ?? []).filter((p) => p && typeof p.t === "string").map((p) => ({ ...p }));
 }
+
+export interface WaterfallStep {
+  label: string;
+  /** Invisible offset under the bar, so each step starts where the previous one ended. */
+  base: number;
+  /** The bar's height (always positive). */
+  size: number;
+  /** The signed amount the step adds or takes away (a total for the first and last steps). */
+  value: number;
+  kind: "total" | "decrease" | "increase";
+}
+
+/**
+ * Gross-to-net steps from rows of `{label, value}`: the first and last rows are
+ * totals drawn from zero, the rows between are signed changes drawn from the
+ * running total. Rows without a number are skipped.
+ */
+export function waterfallData(rows: MetricRow[] | null | undefined): WaterfallStep[] {
+  const items = (rows ?? [])
+    .map((r) => ({ label: typeof r?.label === "string" ? r.label : "", value: toFiniteNumber(r?.value) }))
+    .filter((r): r is { label: string; value: number } => r.label !== "" && r.value !== null);
+  const out: WaterfallStep[] = [];
+  let running = 0;
+  items.forEach((item, i) => {
+    const total = i === 0 || i === items.length - 1;
+    if (total) {
+      out.push({ label: item.label, base: Math.min(0, item.value), size: Math.abs(item.value), value: item.value, kind: "total" });
+      running = item.value;
+      return;
+    }
+    const end = running + item.value;
+    out.push({
+      label: item.label,
+      base: Math.min(running, end),
+      size: Math.abs(item.value),
+      value: item.value,
+      kind: item.value < 0 ? "decrease" : "increase",
+    });
+    running = end;
+  });
+  return out;
+}

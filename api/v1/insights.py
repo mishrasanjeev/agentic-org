@@ -160,6 +160,31 @@ def _actor(request: Request) -> str:
     return str(claims.get("agenticorg:user_id") or claims.get("sub") or "")
 
 
+# Rules whose items the needs-you list already shows live (pending approvals, budgets).
+_LIVE_IN_NEEDS_YOU = frozenset({"approvals.pending", "cost.budget"})
+
+
+async def _alert_items(session: Any, tid: uuid.UUID, caller: Caller) -> list[dict[str, Any]]:
+    """The caller's open alerts as needs-you items (each can be acknowledged by its id)."""
+    from core.insights.alerts import open_alerts
+
+    items = []
+    for alert in await open_alerts(session, tid, caller.role, is_admin=caller.is_admin):
+        if alert["rule_key"] in _LIVE_IN_NEEDS_YOU:
+            continue
+        items.append(
+            {
+                "kind": "alert",
+                "id": alert["id"],
+                "title": alert["title"],
+                "link": alert["link"],
+                "state": alert["severity"],
+                "rule_key": alert["rule_key"],
+            }
+        )
+    return items
+
+
 # ---------------------------------------------------------------- status and catalog
 
 
@@ -256,6 +281,7 @@ async def insights_view(
         for key in spec.keys:
             resolved[key] = await registry.resolve(registry.METRICS[key], ctx)
         attention = await needs_you(ctx)
+        attention = [*await _alert_items(session, tid, caller), *attention]
     return {
         "view": view,
         "period": ctx.period.as_dict(),

@@ -1,5 +1,31 @@
 # Changelog
 
+## Unreleased - Insights money saved and alerts
+
+- Money saved (estimated), on the Executive and Finance views and the Money saved page
+  (`/dashboard/insights/value`): completed tasks times the minutes of work each replaces, valued at the hourly
+  rate of the role that would do it by hand, less AI spend, the time people spent deciding approvals (from when
+  they first saw them, capped at 30 minutes, 5 minutes when never opened) and the redo of failed tasks. Only
+  measured runs count; agent types with no baseline are listed and never valued. Net saved, hours saved and ROI
+  stay hidden until a tenant administrator has confirmed every baseline and rate the period uses; ROI shows once
+  the period's spend reaches INR 5,000 or USD 60 (or the tenant's own floor). The estimate carries a confidence
+  (the share of hours from confirmed baselines) and a gross-to-net waterfall.
+- Seeded defaults: minutes per task for the 29 built-in agent types, and loaded hourly rates per role with their
+  source: for USD tenants the BLS OEWS May 2025 national median hourly wage times 1.43 (BLS ECEC, June 2026); for
+  INR tenants the MoSPI PLFS Annual Report 2025 monthly earnings by occupation division over 208 hours, times 1.17
+  (employer EPF and gratuity). An administrator confirms, edits or adds baselines and rates (an edit counts as
+  confirmed by its author); every change writes a signed `insights.value.change` audit row. The CFO reads the page.
+- A ninth explorer, Value and savings, shows the estimate line by line.
+- Insights alerts: every 15 minutes each tenant's rules open one alert per condition (run success rate, pending
+  and expired approvals, budgets, cost per run up more than 25% week on week, pricing coverage, unhealthy
+  connectors, workflows past their timeout, agents idle 30 days, shadow agents ready to promote), refresh it while
+  it holds and resolve it when it clears. Each alert has an owner role (an agent's alerts go to the head of its
+  domain); `act` alerts email the owner role's active users once. Alerts appear in the needs-you list, where a
+  person acknowledges them (`POST /insights/alerts/{id}/ack`, audited).
+- `POST /approvals/viewed` records when a person first saw a pending approval; the Approvals page sends it.
+- Migration `v6z109_insights_value_alerts`: `value_baselines`, `value_rates` and `insights_alerts` (forced
+  row-level security), and `hitl_queue.first_viewed_at`.
+
 ## Unreleased - Insights explorers and run evidence
 
 - Eight Insights explorers, the tables behind every tile (`/dashboard/insights/explore/<key>`): Agents, Runs,

@@ -167,7 +167,7 @@ def test_parse_at_accepts_offsets_and_a_decoded_plus() -> None:
 
 def test_registry_declarations_are_consistent() -> None:
     assert explore_registry.explorer_keys() == sorted(
-        ["agents", "runs", "workflows", "approvals", "cost", "quality", "connectors", "audit"]
+        ["agents", "runs", "workflows", "approvals", "cost", "value", "quality", "connectors", "audit"]
     )
     for explorer in explore_registry.EXPLORERS.values():
         keys = [c.key for c in explorer.columns]

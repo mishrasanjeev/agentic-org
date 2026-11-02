@@ -13,5 +13,8 @@
   "runs.straight_through_rate",
   "runs.success_rate",
   "runs.volume",
-  "tokens.by_unit"
+  "tokens.by_unit",
+  "value.hours_saved",
+  "value.money_saved",
+  "value.roi"
 ]

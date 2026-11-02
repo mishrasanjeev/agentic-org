@@ -226,6 +226,16 @@ export default function InsightsDashboard() {
       </div>
       {statusState.kind === "ready" ? (
         <div className="flex flex-wrap items-center gap-2">
+          {/* The assumptions behind money saved: administrators edit and confirm them, the CFO reads them. */}
+          {role === "admin" || role === "cfo" ? (
+            <Link
+              to="/dashboard/insights/value"
+              className="insights-target inline-flex h-8 items-center rounded-md border px-3 text-sm font-medium hover:bg-muted"
+              data-testid="insights-value-link"
+            >
+              {t("insights.valueLink")}
+            </Link>
+          ) : null}
           {/* Per-tenant BI database access, for administrators while it is on and configured. */}
           {role === "admin" && statusState.status.bi_access ? (
             <Link

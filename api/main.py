@@ -79,9 +79,11 @@ from api.v1 import (
     idp_review,
     idp_statements,
     insights,
+    insights_alerts,
     insights_bi,
     insights_explore,
     insights_platform,
+    insights_value,
     integrations_status,
     invoices,
     knowledge,
@@ -394,9 +396,11 @@ app.include_router(personalisation.router, prefix="/api/v1")
 app.include_router(onboarding_desk.router, prefix="/api/v1")
 app.include_router(spend.router, prefix="/api/v1")
 app.include_router(insights.router, prefix="/api/v1")
+app.include_router(insights_alerts.router, prefix="/api/v1")
 app.include_router(insights_bi.router, prefix="/api/v1")
 app.include_router(insights_explore.router, prefix="/api/v1")
 app.include_router(insights_platform.router, prefix="/api/v1")
+app.include_router(insights_value.router, prefix="/api/v1")
 app.include_router(companies.router, prefix="/api/v1", tags=["Companies"])
 app.include_router(ca_operations.router, prefix="/api/v1", tags=["CA Operations"])
 app.include_router(

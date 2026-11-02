@@ -8,6 +8,8 @@ from uuid import UUID
 
 import structlog
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request
+from pydantic import BaseModel as PydanticModel
+from pydantic import Field
 from sqlalchemy import func, select
 
 from api.deps import get_current_tenant, get_current_user, get_user_domains, get_user_role
@@ -350,6 +352,60 @@ def _voter_identities(claims: dict) -> set[str]:
     if isinstance(recorded, list):
         values.extend(recorded)
     return {str(v).strip().lower() for v in values if isinstance(v, str) and v.strip()}
+
+
+class ApprovalsViewed(PydanticModel):
+    ids: list[UUID] = Field(default_factory=list, max_length=100)
+
+
+# ── POST /approvals/viewed ──────────────────────────────────────────────────
+@router.post("/approvals/viewed")
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="approvals.decide",
+    rate_limit="standard",
+    idempotency="idempotent-first-write-wins",
+    audit_event="approvals.viewed",
+)
+async def mark_approvals_viewed(
+    body: ApprovalsViewed,
+    request: Request,
+    tenant_id: str = Depends(get_current_tenant),
+):
+    """Record when a person first saw pending approvals (money saved prices review time from it).
+
+    Only a human caller counts, only pending items the caller may see, and only
+    the first time: a later call never moves ``first_viewed_at``. Answers how
+    many items were marked now.
+    """
+    caller = caller_from_request(request)
+    if caller.is_machine or not body.ids:
+        return {"marked": 0}
+    tid = _uuid.UUID(tenant_id)
+    from sqlalchemy import update
+
+    async with get_tenant_session(tid) as session:
+        statement = (
+            update(HITLQueue)
+            .where(
+                HITLQueue.tenant_id == tid,
+                HITLQueue.id.in_(list(dict.fromkeys(body.ids))),
+                HITLQueue.status == "pending",
+                HITLQueue.first_viewed_at.is_(None),
+            )
+            .values(first_viewed_at=datetime.now(UTC))
+            .execution_options(synchronize_session=False)
+        )
+        if not caller.is_admin:
+            visible_agent_ids = (
+                select(Agent.id)
+                .where(Agent.tenant_id == tid, approval_visibility_clause(Agent, caller))
+                .scalar_subquery()
+            )
+            statement = statement.where(HITLQueue.agent_id.in_(visible_agent_ids))
+        result = await session.execute(statement)
+    return {"marked": int(result.rowcount or 0)}
 
 
 # ── POST /approvals/{id}/decide ─────────────────────────────────────────────
