@@ -285,7 +285,7 @@ class _Session:
         self.rows = list(rows or [])
         self.statements: list[str] = []
 
-    async def execute(self, statement):
+    async def execute(self, statement, parameters=None):
         text = str(statement)
         self.statements.append(text)
         if isinstance(statement, Insert):
@@ -295,15 +295,9 @@ class _Session:
             model, key = (
                 (TxnRecord, "record_ref") if statement.table.name == "txn_records" else (TxnFinding, "fingerprint")
             )
-            params = statement.compile().params
             inserted = []
-            index = 0
-            while f"{key}_m{index}" in params:
-                values = {
-                    column.name: params[f"{column.name}_m{index}"]
-                    for column in model.__table__.columns
-                    if f"{column.name}_m{index}" in params
-                }
+            assert isinstance(parameters, list)
+            for values in parameters:
                 if not any(
                     row.tenant_id == values["tenant_id"] and getattr(row, key) == values[key]
                     for row in self.rows
@@ -311,7 +305,6 @@ class _Session:
                 ):
                     self.add(model(**values))
                     inserted.append(values[key])
-                index += 1
             return _Result(inserted)
         table = statement.get_final_froms()[0].name
         if text.startswith("SELECT txn_records.record_ref") or text.startswith("SELECT txn_findings.fingerprint"):
@@ -340,6 +333,50 @@ def _use(monkeypatch, session):
 
 
 class TestStore:
+    @pytest.mark.asyncio
+    async def test_ingest_keeps_bulk_parameters_out_of_statement_compilation(self, monkeypatch):
+        session = _Session()
+        refs = [f"synthetic-{index:04d}" for index in range(records.MAX_BATCH)]
+        session.execute = AsyncMock(return_value=_Result(refs))
+        _use(monkeypatch, session)
+        movements = [dict(STRUCTURED[0], record_ref=ref) for ref in reversed(refs)]
+        result = await records.ingest(TENANT, movements)
+        assert result["kept"] == records.MAX_BATCH and result["skipped"] == 0
+        statement, parameters = session.execute.call_args.args
+        assert statement.table.name == "txn_records"
+        assert [row["record_ref"] for row in parameters] == refs
+        assert all(row["tenant_id"] == TENANT for row in parameters)
+        assert all(row["amount"] == STRUCTURED[0]["amount"] for row in parameters)
+        assert len(statement.compile().params) < len(parameters)
+        assert "ON CONFLICT (tenant_id, record_ref) DO NOTHING RETURNING txn_records.record_ref" in str(statement)
+
+    @pytest.mark.asyncio
+    async def test_detect_bounds_bulk_parameters_without_compiling_every_row(self, monkeypatch):
+        base = detectors.run_all(STRUCTURED, detectors.Thresholds())[0]
+        found = [dict(base, fingerprint=f"synthetic-{index:04d}") for index in range(2 * records.MAX_BATCH + 1)]
+        session = _Session()
+        batches = [found[start : start + records.MAX_BATCH] for start in range(0, len(found), records.MAX_BATCH)]
+        session.execute = AsyncMock(side_effect=[_Result([row["fingerprint"] for row in batch]) for batch in batches])
+        _use(monkeypatch, session)
+        monkeypatch.setattr(records, "list_records", AsyncMock(return_value=STRUCTURED))
+        monkeypatch.setattr(findings, "thresholds_for", AsyncMock(return_value=detectors.Thresholds()))
+        monkeypatch.setattr(detectors, "run_all", lambda *args, **kwargs: list(reversed(found)))
+        result = await findings.detect(TENANT)
+        assert result["new"] == len(found) and result["known"] == 0
+        assert len(result["findings"]) == len(found)
+        assert session.execute.await_count == 3
+        for call, expected in zip(session.execute.call_args_list, batches, strict=True):
+            statement, parameters = call.args
+            assert statement.table.name == "txn_findings"
+            assert [row["fingerprint"] for row in parameters] == [row["fingerprint"] for row in expected]
+            assert all(row["tenant_id"] == TENANT and row["status"] == "open" for row in parameters)
+            assert all(row["facts"] == base["facts"] and row["disposition"] == {} for row in parameters)
+            assert len(statement.compile().params) < records.MAX_BATCH
+            assert (
+                "ON CONFLICT (tenant_id, fingerprint) DO NOTHING RETURNING txn_findings.fingerprint"
+                in str(statement)
+            )
+
     @pytest.mark.asyncio
     async def test_ingest_keeps_each_reference_once(self, monkeypatch):
         session = _Session()
@@ -376,10 +413,10 @@ class TestStore:
         session.execute.assert_awaited_once()
         statement = session.execute.call_args.args[0]
         assert "ON CONFLICT (tenant_id, record_ref) DO NOTHING RETURNING txn_records.record_ref" in str(statement)
-        params = statement.compile().params
-        assert params["tenant_id_m0"] == params["tenant_id_m1"] == TENANT
-        assert params["record_ref_m0"] == "already-kept" and params["record_ref_m1"] == "new"
-        assert params["amount_m1"] == fresh["amount"]
+        parameters = session.execute.call_args.args[1]
+        assert parameters[0]["tenant_id"] == parameters[1]["tenant_id"] == TENANT
+        assert parameters[0]["record_ref"] == "already-kept" and parameters[1]["record_ref"] == "new"
+        assert parameters[1]["amount"] == fresh["amount"]
         noted.assert_awaited_once_with(TENANT, source="statement:synthetic", records=[records.check_record(fresh)])
 
     @pytest.mark.asyncio
@@ -464,13 +501,13 @@ class TestStore:
         session.execute.assert_awaited_once()
         statement = session.execute.call_args.args[0]
         assert "ON CONFLICT (tenant_id, fingerprint) DO NOTHING RETURNING txn_findings.fingerprint" in str(statement)
-        params = statement.compile().params
+        parameters = session.execute.call_args.args[1]
         expected = sorted(detected, key=lambda item: item["fingerprint"])
         for index, item in enumerate(expected):
-            assert params[f"tenant_id_m{index}"] == TENANT
-            assert params[f"fingerprint_m{index}"] == item["fingerprint"]
-            assert params[f"summary_m{index}"] == item["summary"]
-        assert "fingerprint_m2" not in params
+            assert parameters[index]["tenant_id"] == TENANT
+            assert parameters[index]["fingerprint"] == item["fingerprint"]
+            assert parameters[index]["summary"] == item["summary"]
+        assert len(parameters) == 2
 
     @pytest.mark.asyncio
     async def test_thresholds_come_from_the_console_with_defaults(self, monkeypatch):

@@ -2,8 +2,12 @@
 
 ## Unreleased - Release integration fixes
 
-- Give the legacy bootstrap's complete ORM drift comparison the same bounded
-  test budget as the other full-schema migration replays, retaining every check.
+- Pass transaction insert rows as bounded Core parameter batches to avoid
+  repeated multi-row ORM compilation, preserving conflict order, tenant RLS,
+  first-payload retention, returned-row accounting and provenance hooks.
+- Give the legacy bootstrap's complete ORM drift comparison and repeated
+  admin-scope upgrade replay the existing 300-second full-schema test budget,
+  retaining every drift, authorization and idempotency check.
 - Resolve spend test-query operands once per execution while preserving tenant
   predicates, mutable row reads and the complete 450-row import audit replay.
 - Keep local-only Insights browser fixtures out of the hosted regression suite.

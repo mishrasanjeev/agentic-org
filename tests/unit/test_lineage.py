@@ -484,9 +484,8 @@ class TestHooks:
             def __init__(self):
                 self.rows = []
 
-            async def execute(self, statement):
-                params = statement.compile().params
-                return _Result([value for key, value in params.items() if key.startswith("record_ref_m")])
+            async def execute(self, statement, parameters):
+                return _Result([row["record_ref"] for row in parameters])
 
             def add(self, row):
                 self.rows.append(row)

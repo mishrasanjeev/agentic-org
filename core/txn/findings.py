@@ -100,32 +100,34 @@ async def detect(
     ordered = sorted(by_fingerprint.items())
     now = datetime.now(UTC)
     inserted_fingerprints: set[str] = set()
+    table = TxnFinding.__table__
+    statement = (
+        insert(table)
+        .on_conflict_do_nothing(index_elements=[table.c.tenant_id, table.c.fingerprint])
+        .returning(table.c.fingerprint)
+    )
     async with get_tenant_session(tenant_id) as session:
         # Bound SQL parameters while keeping one transaction and a stable conflict-lock order.
         for start in range(0, len(ordered), records.MAX_BATCH):
             result = await session.execute(
-                insert(TxnFinding)
-                .values(
-                    [
-                        {
-                            "tenant_id": tenant_id,
-                            "kind": item["kind"],
-                            "entity_kind": item["entity_kind"],
-                            "entity_ref": item["entity_ref"][:64],
-                            "severity": item["severity"],
-                            "status": "open",
-                            "summary": item["summary"][:1000],
-                            "facts": item["facts"],
-                            "record_refs": item["record_refs"],
-                            "fingerprint": fingerprint,
-                            "detected_at": now,
-                            "disposition": {},
-                        }
-                        for fingerprint, item in ordered[start : start + records.MAX_BATCH]
-                    ]
-                )
-                .on_conflict_do_nothing(index_elements=[TxnFinding.tenant_id, TxnFinding.fingerprint])
-                .returning(TxnFinding.fingerprint)
+                statement,
+                [
+                    {
+                        "tenant_id": tenant_id,
+                        "kind": item["kind"],
+                        "entity_kind": item["entity_kind"],
+                        "entity_ref": item["entity_ref"][:64],
+                        "severity": item["severity"],
+                        "status": "open",
+                        "summary": item["summary"][:1000],
+                        "facts": item["facts"],
+                        "record_refs": item["record_refs"],
+                        "fingerprint": fingerprint,
+                        "detected_at": now,
+                        "disposition": {},
+                    }
+                    for fingerprint, item in ordered[start : start + records.MAX_BATCH]
+                ],
             )
             inserted_fingerprints.update(result.scalars().all())
     created = [item for fingerprint, item in by_fingerprint.items() if fingerprint in inserted_fingerprints]

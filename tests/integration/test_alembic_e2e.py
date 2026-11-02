@@ -1727,6 +1727,8 @@ _BEFORE_EXACT_MATCH = datetime(2026, 9, 1, tzinfo=UTC)
 _AFTER_EXACT_MATCH = datetime(2026, 9, 26, tzinfo=UTC)
 
 
+# Both complete downgrade/upgrade replays include every later migration.
+@pytest.mark.timeout(300)
 def test_admin_scope_compat_migration_restores_only_old_admin_owned_sub_scope_keys():
     """``v6z29_admin_scope_compat`` gives the exact admin scope only to keys that held
     ``agenticorg:admin:<sub>``, predate the exact-match fix and whose owner is an admin.

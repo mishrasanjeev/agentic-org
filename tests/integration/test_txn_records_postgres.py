@@ -182,6 +182,34 @@ async def test_detector_replay_preserves_human_disposition_and_narrative(txn_sch
 
 
 @pytest.mark.asyncio
+async def test_parameter_batches_keep_row_defaults_and_optional_nulls(txn_schema, monkeypatch):
+    tenant = uuid.uuid4()
+    movements = structured_movements()
+    movements[0].update(customer_ref="synthetic-customer", attributes={"label": "synthetic-\u00e9"})
+    monkeypatch.setattr(findings, "thresholds_for", AsyncMock(return_value=detectors.Thresholds()))
+    async with txn_store(txn_schema, monkeypatch) as (engine, _):
+        assert (await records.ingest(tenant, movements))["kept"] == 3
+        assert (await findings.detect(tenant))["new"] == 1
+        async with engine.connect() as connection:
+            stored = (
+                (await connection.execute(select(TxnRecord.__table__).order_by(TxnRecord.record_ref))).mappings().all()
+            )
+            finding = (await connection.execute(select(TxnFinding.__table__))).mappings().one()
+        assert len({row["id"] for row in stored}) == 3
+        assert all(isinstance(row["id"], uuid.UUID) and row["created_at"].tzinfo is not None for row in stored)
+        assert stored[0]["customer_ref"] == "synthetic-customer"
+        assert stored[0]["attributes"] == {"label": "synthetic-\u00e9"}
+        assert all(row["customer_ref"] is None and row["attributes"] == {} for row in stored[1:])
+        assert all(
+            row["counterparty"] is None and row["counterparty_name"] is None and row["branch"] is None for row in stored
+        )
+        assert isinstance(finding["id"], uuid.UUID)
+        assert finding["created_at"].tzinfo is not None and finding["updated_at"].tzinfo is not None
+        assert finding["narrative"] == {} and finding["disposition"] == {}
+        assert finding["case_ref"] is None and finding["narrative_at"] is None and finding["evidence_digest"] is None
+
+
+@pytest.mark.asyncio
 async def test_large_detector_result_is_inserted_without_exceeding_database_parameter_limit(txn_schema, monkeypatch):
     tenant = uuid.uuid4()
     movements = []
