@@ -2,6 +2,15 @@
 
 ## Unreleased - Release integration fixes
 
+- Keep local-only Insights browser fixtures out of the hosted regression suite.
+  Give connector integration fixtures synthetic DNS answers while retaining
+  private, link-local, mixed-answer and unresolved-host refusal checks. Timestamp
+  rollup fixtures independently of the database wall clock.
+- Raise the MCP adapter's existing Hono and query-string patch floors. Pin the
+  UI's development-only glob matcher to minimatch 11.0.3 after checking the
+  ESLint and TypeScript matching consumers against its changed API. Keep the
+  dependency audit policy unchanged.
+
 - Refuse credential and action names in public shop and product details even
   when written as API keys, camel-case names, or compatibility Unicode. Apply
   the same check to stored details, catalog uploads, Shopify fields and tags.
