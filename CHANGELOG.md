@@ -2,6 +2,12 @@
 
 ## Unreleased - Release integration fixes
 
+- Explicitly disable SDK tracing under existing deployment residency
+  enforcement, including cached tracing flags, global context and an already
+  installed redaction hook. Keep residency and tracing defaults unchanged.
+- Bound the complete production-source grant-sentinel AST scan at 120 seconds
+  without narrowing its directories, parsed files or security assertions.
+  Keep runtime latency limits and the global test timeout unchanged.
 - Pass transaction insert rows as bounded Core parameter batches to avoid
   repeated multi-row ORM compilation, preserving conflict order, tenant RLS,
   first-payload retention, returned-row accounting and provenance hooks.

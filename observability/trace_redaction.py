@@ -80,8 +80,6 @@ def install_trace_redaction() -> bool:
     Returns True when a redacting client is installed.
     """
     global _installed
-    if _installed or not tracing_enabled():
-        return _installed
     from core.config import settings
 
     if settings.residency_enforce:
@@ -90,8 +88,18 @@ def install_trace_redaction() -> bool:
         # Tenant-scoped enforcement is honoured per payload by _redact_payload.
         for name in _TRACING_ENV_VARS:
             os.environ.pop(name, None)
+        try:
+            import langsmith
+        except ImportError:
+            pass
+        else:
+            # SDK context and cached environment lookups can outlive the flags.
+            langsmith.configure(enabled=False)
+        _installed = False
         logger.warning("langsmith_tracing_refused_residency")
         return False
+    if _installed or not tracing_enabled():
+        return _installed
     try:
         import langsmith
         from langsmith import Client
