@@ -15,7 +15,7 @@ from typing import Any
 
 import pytest
 from pydantic import ValidationError
-from sqlalchemy import select
+from sqlalchemy import bindparam, select
 from sqlalchemy.dialects import postgresql
 from sqlalchemy.schema import CreateIndex, CreateTable
 from sqlalchemy.sql.elements import TextClause
@@ -1328,6 +1328,37 @@ class TestImports:
 
 
 class TestFakeQuery:
+    def test_bound_values_are_resolved_once_per_execution_without_stale_reuse(self):
+        from core.models.spend import SpendFxRate
+
+        store = FakeSession()
+        for tenant, currency in ((TENANT, "USD"), (TENANT, "EUR"), (OTHER_TENANT, "USD")):
+            store.add(SpendFxRate(tenant_id=tenant, currency=currency, rate_date=T0.date(), rate_to_inr=Decimal("80")))
+        wanted = "USD"
+        reads = []
+
+        def currency_value():
+            reads.append(wanted)
+            return wanted
+
+        statement = select(SpendFxRate).where(
+            SpendFxRate.tenant_id == TENANT,
+            SpendFxRate.currency == bindparam("wanted_currency", callable_=currency_value),
+        )
+        assert store._select(statement).all() == [store.rows[0]]
+        assert reads == ["USD"]
+        wanted = "EUR"
+        assert store._select(statement).all() == [store.rows[1]]
+        assert reads == ["USD", "EUR"]
+
+    def test_unsupported_predicate_still_refuses_the_query(self):
+        from core.models.spend import SpendFxRate
+
+        store = FakeSession()
+        store.add(SpendFxRate(tenant_id=TENANT, currency="USD", rate_date=T0.date(), rate_to_inr=Decimal("80")))
+        with pytest.raises(NotImplementedError):
+            store._select(select(SpendFxRate).where(SpendFxRate.currency.like("U%")))
+
     def test_whereclause_is_resolved_once_without_losing_tenant_filter(self):
         from core.models.spend import SpendFxRate
 

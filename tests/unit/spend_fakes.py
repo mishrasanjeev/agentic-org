@@ -67,21 +67,27 @@ def _value(element: Any) -> Any:
     raise NotImplementedError(repr(element))
 
 
-def matches(clause: Any, row: Any) -> bool:
+def matches(clause: Any, row: Any, resolved: dict[Any, tuple[str, Any, Any]] | None = None) -> bool:
     """Evaluate a where clause against one row."""
+    if resolved is None:
+        resolved = {}
     if clause is None or isinstance(clause, True_):
         return True
     if isinstance(clause, BooleanClauseList):
-        parts = [matches(part, row) for part in clause.clauses]
+        parts = [matches(part, row, resolved) for part in clause.clauses]
         return any(parts) if clause.operator is operators.or_ else all(parts)
     if isinstance(clause, Grouping):
-        return matches(clause.element, row)
+        return matches(clause.element, row, resolved)
     if isinstance(clause, BinaryExpression):
-        attr = getattr(row, clause.left.key)
-        op = _OPS.get(clause.operator)
-        if op is None:
-            raise NotImplementedError(str(clause.operator))
-        return bool(op(attr, _value(clause.right)))
+        operands = resolved.get(clause)
+        if operands is None:
+            op = _OPS.get(clause.operator)
+            if op is None:
+                raise NotImplementedError(str(clause.operator))
+            operands = (clause.left.key, op, _value(clause.right))
+            resolved[clause] = operands
+        key, op, value = operands
+        return bool(op(getattr(row, key), value))
     raise NotImplementedError(str(clause))
 
 
@@ -268,7 +274,9 @@ class FakeSession:
     def _select(self, statement: Any) -> Result:
         table = statement.get_final_froms()[0]
         whereclause = statement.whereclause
-        rows = [row for row in self.rows if row.__tablename__ == table.name and matches(whereclause, row)]
+        # Bound values belong to this execution, never to a row or a later query.
+        resolved: dict[Any, tuple[str, Any, Any]] = {}
+        rows = [row for row in self.rows if row.__tablename__ == table.name and matches(whereclause, row, resolved)]
         for clause in reversed(list(statement._order_by_clauses)):
             descending = isinstance(clause, UnaryExpression) and clause.modifier is operators.desc_op
             column = clause.element if isinstance(clause, UnaryExpression) else clause

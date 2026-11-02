@@ -2,6 +2,8 @@
 
 ## Unreleased - Release integration fixes
 
+- Resolve spend test-query operands once per execution while preserving tenant
+  predicates, mutable row reads and the complete 450-row import audit replay.
 - Keep local-only Insights browser fixtures out of the hosted regression suite.
   Give connector integration fixtures synthetic DNS answers while retaining
   private, link-local, mixed-answer and unresolved-host refusal checks. Timestamp
