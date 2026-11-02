@@ -59,6 +59,10 @@ BASE_TABLES = (
     "spend_fx_rates",
     "budget_alerts",
     "audit_log",
+    # v6z109: the views read money saved and alerts.
+    "value_baselines",
+    "value_rates",
+    "insights_alerts",
 )
 
 pytestmark = [
