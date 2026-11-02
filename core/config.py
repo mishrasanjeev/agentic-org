@@ -562,6 +562,11 @@ class Settings(BaseSettings):
     network_telegram_webhook_secret: str = ""
     network_telegram_chat_limit_per_hour: int = 20
     network_telegram_global_limit_per_minute: int = 60
+    # The scheduled catalog sync of listed network shops on Shopify
+    # (core/commerce/catalog_autosync.py): a listed shop's Shopify catalog is read
+    # again once it is this many minutes old, or sooner when a Shopify product
+    # webhook marks it. 0 turns the sync off. Env: AGENTICORG_NETWORK_CATALOG_SYNC_MINUTES.
+    network_catalog_sync_minutes: int = 60
     # Platform subdomains <slug>.<apex> for network shops without a host of
     # their own, served through the Firebase Hosting front (a wildcard CNAME
     # *.<apex> -> <site>.web.app). Firebase allows 20 custom domains per apex,

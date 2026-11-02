@@ -665,7 +665,7 @@ async def update_checkout(
         state = evaluation.state
         state["buyer_authority"] = vendor.get("buyer_authority") or (row.state or {}).get("buyer_authority")
         state["platform"] = (row.state or {}).get("platform")
-        for member in ("handoff_refs", "handoff_orders", "handoff_events"):
+        for member in ("handoff_refs", "handoff_orders", "handoff_events", "handoff_unmatched_notified"):
             # A payment on an earlier hand-off link must still find its session (and is checked against it).
             if (row.state or {}).get(member):
                 state[member] = (row.state or {})[member]
@@ -897,6 +897,59 @@ async def _blocked_response(
     return UcpResponse(status=200, body=rendered, outcome=outcome, recorded=True, resource_id=row.id)
 
 
+async def _catalog_recheck(
+    runtime: UcpRuntime, merchant: MerchantUcp, negotiated: Negotiated, row: Any, state: dict[str, Any], now: datetime
+) -> list[dict[str, Any]]:
+    """Complete's check of the stored cart against the shop's catalog as it is now (``catalog_recheck``).
+
+    Empty when every item, price and stock still matches. Otherwise the row is
+    re-priced at the current catalog (``incomplete`` when an item is gone or short)
+    and the change messages are returned, so the Complete is refused and the
+    buyer's agent sees the new total before it completes again.
+
+    Skipped while an earlier Plural link of the checkout can still be paid: that
+    link's payment must keep matching the cart it was issued for (``cart_hash``),
+    the daily maximum keeps counting it, and the checkout cannot be updated anyway.
+    When the Complete negotiated other capabilities than the stored checkout (a
+    re-evaluation could drop its shipping), the row is set ``incomplete`` instead,
+    so the buyer's agent updates it.
+    """
+    from core.commerce import payment_handoff as ph
+    from core.commerce.ucp import catalog_recheck as recheck
+
+    if any(ph.payable(record) for record in (state.get("handoff_orders") or {}).values()):
+        return []
+    found = await recheck.catalog_changes(runtime.catalog_for(merchant), merchant, state)
+    if not found:
+        return []
+    fresh: dict[str, Any] | None = None
+    status, currency = "incomplete", None
+    if sorted(negotiated.active) == list(state.get("capabilities") or []):
+        try:
+            evaluation = await evaluate(
+                resource="checkout",
+                merchant=merchant,
+                negotiated=negotiated,
+                body=recheck.rebuild_body(state),
+                previous=state,
+                deps=_deps(runtime, merchant, None),
+                now=now,
+            )
+            fresh = recheck.merged_state(evaluation.state, state)
+            status, currency = evaluation.status, evaluation.currency
+        except RequestError:
+            fresh = None
+    if fresh is None:
+        # Not rebuilt here: the checkout waits for the buyer's agent to update it.
+        fresh = {**state, "messages": [*(state.get("messages") or []), *found]}
+    row.state = fresh
+    row.status = status
+    row.currency = currency or row.currency
+    row.revision = row.revision + 1
+    row.updated_at = now
+    return recheck.not_repeated(found, fresh.get("messages") or [])
+
+
 async def complete_checkout(
     runtime: UcpRuntime, req: UcpRequest, merchant: MerchantUcp, negotiated: Negotiated, session_id: str | None
 ) -> UcpResponse:
@@ -944,6 +997,9 @@ async def complete_checkout(
             return await _blocked(
                 [msg.error("missing", "The checkout is not ready to complete; see its messages.", path="$.status")]
             )
+        changed = await _catalog_recheck(runtime, merchant, negotiated, row, state, now)
+        if changed:
+            return await _blocked(changed, outcome="refused")
         split_active = negotiated.has(v.SPLIT_PAYMENTS)
         total = int(next(t["amount"] for t in state["totals"] if t["type"] == "total"))
         payment_messages = completion_messages(
@@ -1939,6 +1995,9 @@ async def _complete_with_handoff(
                 )
         if target.problem is not None:
             return await _blocked([msg.error(target.problem, target.message, severity="unrecoverable")])
+        changed = await _catalog_recheck(runtime, merchant, negotiated, row, state, now)
+        if changed:
+            return await _blocked(changed, outcome="refused")
         if settings.mode == ph.MODE_SHOPIFY_CART:
             cart_url = ph.shopify_cart_url(target.shop_domain, state.get("line_items") or [])
             if cart_url is None:
@@ -2187,6 +2246,10 @@ async def _complete_with_handoff(
     return UcpResponse(status=200, body=rendered, recorded=True, resource_id=session_id)
 
 
+# A paid Plural hosted order that no order here matches (``confirm_handoff_payment``).
+UNMATCHED_RESULTS = ("amount_mismatch", "paid_after_cancel", "checkout_changed", "order_mismatch", "paid_twice")
+
+
 async def confirm_handoff_payment(
     *,
     tenant_id: str,
@@ -2208,7 +2271,8 @@ async def confirm_handoff_payment(
     issues a new one. Returns ``(result, order_id)``; results:
     ``completed``, ``already_completed``, ``pending``, ``link_retired``,
     ``unknown_reference``, ``order_mismatch``, ``amount_mismatch``,
-    ``checkout_changed``, ``paid_after_cancel``, ``duplicate_event``, ``not_applicable``.
+    ``checkout_changed``, ``paid_after_cancel``, ``paid_twice`` (another link of the
+    already paid checkout was paid too), ``duplicate_event``, ``not_applicable``.
     """
     from core.commerce import payment_handoff as ph
     from core.commerce.ucp.merchant import config_from_row, merchant_ucp_from_config
@@ -2255,6 +2319,10 @@ async def confirm_handoff_payment(
             result = "order_mismatch"
         elif row.status == "completed":
             result, order_id = "already_completed", row.order_id
+            if payment == "paid" and record and record.get("status") != "paid":
+                # Another link of this checkout was paid first: this payment has no order of its own.
+                ph.set_reference_status(state, reference, "paid")
+                result = "paid_twice"
         elif payment == "failed":
             handoff = state.get("handoff") if isinstance(state.get("handoff"), Mapping) else {}
             if handoff.get("reference") == reference and row.status in ("requires_escalation", "complete_in_progress"):
@@ -2307,6 +2375,13 @@ async def confirm_handoff_payment(
             )
             order_id = order_event.order_id
             result = "completed"
+        tell_merchant = False
+        if result in UNMATCHED_RESULTS:
+            # Money reached the merchant's Plural account and no order matches it: tell the merchant once.
+            notified = [r for r in state.get("handoff_unmatched_notified") or [] if isinstance(r, str)]
+            if reference not in notified:
+                state["handoff_unmatched_notified"] = [*notified, reference][-20:]
+                tell_merchant = True
         row.state = state
         row.revision = row.revision + 1
         row.updated_at = now
@@ -2325,9 +2400,21 @@ async def confirm_handoff_payment(
                 "provider_order_ref_present": bool(provider_order_id),
             },
         )
-    if result in ("amount_mismatch", "paid_after_cancel", "checkout_changed", "order_mismatch"):
-        # The merchant's Plural account holds money no order here matches: the ledger event and this log say so.
+    if result in UNMATCHED_RESULTS:
+        # The merchant's Plural account holds money no order here matches: the ledger event, this log
+        # and an email to the merchant's administrators (once per payment link) say so.
         logger.error("plural_hosted_payment_unmatched", result=result, source=source)
+        if tell_merchant:
+            from core.commerce.order_notifications import kick_unmatched_payment_notification
+
+            kick_unmatched_payment_notification(
+                str(tenant),
+                scope.id,
+                result=result,
+                amount_minor_units=amount_minor_units,
+                currency=currency,
+                provider_order_id=provider_order_id,
+            )
     if order_event is not None:
         from core.commerce.ucp.webhooks import kick_dispatch
 

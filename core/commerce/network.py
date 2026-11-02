@@ -408,6 +408,11 @@ async def _listed_rows(slug: str | None = None) -> list[CommerceNetworkListingRo
         return list((await session.scalars(query.order_by(CommerceNetworkListingRow.opted_in_at))).all())
 
 
+async def listed_rows() -> list[CommerceNetworkListingRow]:
+    """Every listed shop, oldest listing first (servable or not; platform context read)."""
+    return await _listed_rows()
+
+
 async def directory() -> list[dict[str, Any]]:
     """Every listed shop that is servable right now (cached for a minute)."""
     cached = _DIRECTORY_CACHE.get("all")

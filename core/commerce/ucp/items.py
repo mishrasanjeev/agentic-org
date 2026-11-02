@@ -24,6 +24,25 @@ from core.commerce.ucp.merchant import MerchantUcp
 from core.commerce.ucp.quantity import EACH_UNIT, QuantityError, QuantityUnit, parse_quantity_unit
 
 
+def newest_per_source(rows: Sequence[Any]) -> list[Any]:
+    """The newest evidence row of each catalog source (``rows`` newest first).
+
+    Each Shopify read or upload stores a new snapshot. Only the latest one of a
+    source says what the shop sells now: a product removed since then is gone,
+    not still offered from an older snapshot. Different sources (Shopify and an
+    upload) are kept side by side for the source precedence.
+    """
+    seen: set[str] = set()
+    out = []
+    for row in rows:
+        source = str(getattr(row, "source_system", "") or "")
+        if source in seen:
+            continue
+        seen.add(source)
+        out.append(row)
+    return out
+
+
 @dataclass(frozen=True)
 class CatalogItem:
     id: str

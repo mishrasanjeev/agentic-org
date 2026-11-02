@@ -6,7 +6,8 @@ webhook: it reads the order status of every open Plural hosted-checkout
 hand-off once and applies it, and releases a reservation whose order creation
 never finished. It runs only while ``AGENTICORG_UCP_CHECKOUT_ENABLED`` or
 ``AGENTICORG_ACP_CHECKOUT_ENABLED`` is true. ``notify_order`` emails the
-merchant's administrators about a new order after its commit.
+merchant's administrators about a new order after its commit, and
+``notify_unmatched_payment`` about a Plural payment no order matches.
 """
 
 from __future__ import annotations
@@ -36,3 +37,18 @@ def notify_order(tenant_id: str, order_id: str) -> dict[str, Any]:
     from core.commerce.order_notifications import notify_merchant_of_order
 
     return {"sent": run_async(notify_merchant_of_order(tenant_id, order_id))}
+
+
+@app.task(name="core.tasks.payment_handoff_tasks.notify_unmatched_payment")
+def notify_unmatched_payment(tenant_id: str, checkout_session_id: str, details: dict[str, Any]) -> dict[str, Any]:
+    from core.commerce.order_notifications import notify_merchant_of_unmatched_payment
+
+    sent = notify_merchant_of_unmatched_payment(
+        tenant_id,
+        checkout_session_id,
+        result=str(details.get("result") or ""),
+        amount_minor_units=details.get("amount_minor_units"),
+        currency=details.get("currency"),
+        provider_order_id=str(details.get("provider_order_id") or ""),
+    )
+    return {"sent": run_async(sent)}
