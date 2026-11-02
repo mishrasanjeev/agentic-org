@@ -296,6 +296,16 @@ app.conf.beat_schedule = {
         "schedule": 300.0,  # every 5 minutes
         "options": {"queue": "maintenance"},
     },
+    "sync-network-shop-catalogs": {
+        # Re-reads listed network shops' Shopify catalogs once they are an hour old (or a Shopify
+        # product webhook marked them), so buyers' agents see current prices and stock; a no-op
+        # while AGENTICORG_NETWORK_ENABLED is off or AGENTICORG_NETWORK_CATALOG_SYNC_MINUTES is 0
+        # (core/tasks/network_tasks.py, core/commerce/catalog_autosync.py).
+        "task": "core.tasks.network_tasks.sync_shop_catalogs",
+        "schedule": 600.0,  # every 10 minutes
+        # A run still queued when the next is due is dropped (a Redis lock also keeps runs apart).
+        "options": {"queue": "maintenance", "expires": 540},
+    },
     "advance-custom-domains": {
         # Moves merchant custom domains toward live (mapping and certificate checks,
         # operator email); a no-op unless AGENTICORG_CUSTOM_DOMAINS_ENABLED is true

@@ -9,14 +9,14 @@ import logging
 import os
 import re
 from collections.abc import Mapping, Sequence
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any, cast
 from uuid import UUID
 
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import AwareDatetime, BaseModel, ConfigDict, Field
-from sqlalchemy import select
+from sqlalchemy import delete, select
 
 from api.deps import get_current_tenant, require_tenant_admin
 from api.route_metadata import route_meta
@@ -107,6 +107,7 @@ from core.commerce.offline_pos_bridge import (
     verify_offline_pos_callback_signature,
 )
 from core.commerce.ucp.catalog import usable_artifact_ids
+from core.commerce.ucp.items import newest_per_source
 from core.commerce.ucp.profile import build_profile, merchant_serve_state
 from core.commerce.ucp.state import (
     attested_host,
@@ -838,8 +839,13 @@ async def _sync_shopify_packet(
     page_size: int,
     max_pages: int,
     currency: str | None,
+    mark_blocked: bool = True,
 ) -> dict[str, Any]:
-    """The read-only Shopify sync of one packet (the sync route, and the artifact refresh when evidence is old)."""
+    """The read-only Shopify sync of one packet (the sync route, and the artifact refresh when evidence is old).
+
+    ``mark_blocked=False`` (the scheduled catalog sync) leaves the packet's status as it is when
+    the credentials cannot be read: a background read never takes a listed shop offline.
+    """
     blocked_exc: HTTPException | None = None
     evidence: dict[str, Any] | None = None
     credentials: ShopifyCredentials | None = None
@@ -856,7 +862,8 @@ async def _sync_shopify_packet(
                 packet=packet,
             )
         except HTTPException as exc:
-            packet_row.status = "blocked_missing_credentials"
+            if mark_blocked:
+                packet_row.status = "blocked_missing_credentials"
             blocked_exc = exc
         if blocked_exc is None:
             if credentials is None:
@@ -2555,7 +2562,8 @@ async def _load_runtime_scope(
             await session.scalars(capability_query.order_by(C6ZProviderCapabilityEvidenceRow.checked_at.desc()))
         ).all()
         products: list[dict[str, Any]] = []
-        for evidence_row in evidence_rows:
+        # Only each source's latest snapshot: a product removed from the shop is no longer offered.
+        for evidence_row in newest_per_source(evidence_rows):
             products.extend([dict(product) for product in list(evidence_row.products or [])])
         capabilities = [_row_to_capability_summary(row) for row in capability_rows]
     if refresh:
@@ -3240,6 +3248,105 @@ async def refresh_scope_artifacts(*, tenant_id: str, merchant_id: str, seller_ag
     except C6ZRuntimeValidationError:
         return freshness.REFUSED
     return freshness.REFRESHED
+
+
+async def resync_shopify_scope(*, tenant_id: str, merchant_id: str, seller_agent_id: str, max_age_seconds: int) -> str:
+    """Re-read a Shopify shop's catalog when it is older than ``max_age_seconds`` or a webhook marked it.
+
+    The scheduled catalog sync (``core/commerce/catalog_autosync.py``) calls this
+    for listed network shops, so prices and stock buyers' agents see follow the
+    shop. Returns ``synced``, ``fresh`` (read recently and not marked),
+    ``not_shopify`` (an uploaded or demo catalog, or no packet) or ``failed``.
+    """
+    tid = _tenant_uuid(tenant_id)
+    async with get_tenant_session(tid) as session:
+        packet_row = (
+            await session.scalars(
+                select(C6ZSellerOnboardingPacketRow)
+                .where(
+                    C6ZSellerOnboardingPacketRow.tenant_id == tenant_id,
+                    C6ZSellerOnboardingPacketRow.merchant_id == merchant_id,
+                    C6ZSellerOnboardingPacketRow.seller_agent_id == seller_agent_id,
+                )
+                .order_by(C6ZSellerOnboardingPacketRow.created_at.desc())
+            )
+        ).first()
+        evidence_row = (
+            await session.scalars(
+                select(C6ZConnectorEvidenceRow)
+                .where(
+                    C6ZConnectorEvidenceRow.tenant_id == tenant_id,
+                    C6ZConnectorEvidenceRow.merchant_id == merchant_id,
+                    C6ZConnectorEvidenceRow.seller_agent_id == seller_agent_id,
+                )
+                .order_by(C6ZConnectorEvidenceRow.synced_at.desc())
+            )
+        ).first()
+        scope = None if packet_row is None or evidence_row is None else (
+            packet_row.packet_id,
+            packet_row.status,
+            evidence_row.source_system,
+            evidence_row.currency,
+            evidence_row.source_observed_at,
+        )
+    if scope is None or scope[2] != "shopify":
+        return "not_shopify"
+    packet_id, packet_status, _source, currency, observed_at = scope
+    observed = observed_at if observed_at.tzinfo else observed_at.replace(tzinfo=UTC)
+    if packet_status != "cache_refresh_needed" and (datetime.now(UTC) - observed).total_seconds() < max_age_seconds:
+        return "fresh"
+    try:
+        synced = await _sync_shopify_packet(
+            tenant_id=tenant_id,
+            packet_id=packet_id,
+            page_size=50,
+            max_pages=10,
+            currency=currency,
+            mark_blocked=False,
+        )
+    except (HTTPException, httpx.HTTPError, C6ZRuntimeValidationError, TimeoutError):
+        return "failed"
+    await _prune_shopify_evidence(
+        tenant_id=tenant_id, merchant_id=merchant_id, seller_agent_id=seller_agent_id, keep=str(synced["evidence_id"])
+    )
+    return "synced"
+
+
+# Older Shopify snapshots of a scope that the scheduled sync deletes: never the newest few, and only
+# once no signed artifact can still name them (Grantex refuses evidence older than 15 minutes).
+EVIDENCE_KEEP_LATEST = 2
+EVIDENCE_PRUNE_AFTER = timedelta(hours=6)
+
+
+async def _prune_shopify_evidence(*, tenant_id: str, merchant_id: str, seller_agent_id: str, keep: str) -> int:
+    """Delete a scope's Shopify snapshots past the newest ``EVIDENCE_KEEP_LATEST`` and older than six hours."""
+    cutoff = datetime.now(UTC) - EVIDENCE_PRUNE_AFTER
+    async with get_tenant_session(_tenant_uuid(tenant_id)) as session:
+        rows = (
+            await session.execute(
+                select(C6ZConnectorEvidenceRow.evidence_id, C6ZConnectorEvidenceRow.synced_at)
+                .where(
+                    C6ZConnectorEvidenceRow.tenant_id == tenant_id,
+                    C6ZConnectorEvidenceRow.merchant_id == merchant_id,
+                    C6ZConnectorEvidenceRow.seller_agent_id == seller_agent_id,
+                    C6ZConnectorEvidenceRow.source_system == "shopify",
+                )
+                .order_by(C6ZConnectorEvidenceRow.synced_at.desc())
+            )
+        ).all()
+        doomed = [
+            evidence_id
+            for evidence_id, synced_at in rows[EVIDENCE_KEEP_LATEST:]
+            if evidence_id != keep and (synced_at if synced_at.tzinfo else synced_at.replace(tzinfo=UTC)) < cutoff
+        ]
+        if doomed:
+            await session.execute(
+                delete(C6ZConnectorEvidenceRow).where(
+                    C6ZConnectorEvidenceRow.tenant_id == tenant_id,
+                    C6ZConnectorEvidenceRow.evidence_id.in_(doomed),
+                )
+            )
+    return len(doomed)
 
 
 def _merchant_config_template(

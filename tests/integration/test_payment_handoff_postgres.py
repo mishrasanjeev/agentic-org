@@ -1159,3 +1159,253 @@ async def test_order_email_goes_to_this_tenants_active_admins_only_and_orders_li
     assert theirs["orders"] == []
     filtered = await commerce_payments.list_orders(merchant_id="another.example", limit=25, offset=0, tenant_id=tenant)
     assert filtered["orders"] == []
+
+
+# --- the catalog at Complete, and payments no order matches ------------------------------------------
+
+
+def _with_catalog(runtime: handlers.UcpRuntime, tenant: str, **variant: Any) -> handlers.UcpRuntime:
+    """The runtime with the shop's catalog changed after the checkout was built (first product's variant)."""
+    import dataclasses
+
+    from core.commerce.ucp.items import ProductEvidenceCatalog
+
+    async def _products(_m: Any) -> list[dict[str, Any]]:
+        products = uf.products(tenant)
+        first, *rest = products[0]["variants"]
+        products[0] = {**products[0], "variants": [{**dict(first), **variant}, *rest]}
+        return products
+
+    return dataclasses.replace(runtime, catalog_for=lambda _m: ProductEvidenceCatalog(_products))
+
+
+@pytest.mark.asyncio
+async def test_a_new_price_before_the_payment_link_reprices_the_checkout_and_the_next_complete_goes_through(
+    db, executor, kicks, monkeypatch
+):
+    tenant = await _tenant(db)
+    runtime = _runtime(monkeypatch, tenant, {"mode": "shopify_cart"})
+    session = await _ready(runtime, tenant)
+    old_total = next(t["amount"] for t in session["totals"] if t["type"] == "total")
+    changed = _with_catalog(runtime, tenant, price="30.00")
+
+    refused = await _complete(changed, tenant, session["id"], body=uf.complete_body())
+    assert refused.status == 200, refused.body
+    errors = [m for m in refused.body["messages"] if m["type"] == "error"]
+    assert [m["code"] for m in errors] == ["price_changed"]
+    assert "Rs 30.00" in errors[0]["content"]
+    # Re-priced at the shop's current catalog, the delivery choice kept: ready to complete again.
+    assert refused.body["status"] == "ready_for_complete"
+    assert refused.body["line_items"][0]["item"]["price"] == 3000
+    new_total = next(t["amount"] for t in refused.body["totals"] if t["type"] == "total")
+    assert new_total == old_total + 500
+    assert any(t["type"] == "fulfillment" for t in refused.body["totals"])
+    assert "continue_url" not in refused.body and await _decisions(db, tenant) == []
+
+    done = await _complete(changed, tenant, session["id"], body=uf.complete_body())
+    assert done.body["status"] == "requires_escalation", done.body
+    assert done.body["continue_url"] == f"https://{SHOP}/cart/1:1"
+    assert "commerce.ucp.checkout.complete" in await _ledger(db, tenant)
+
+
+@pytest.mark.asyncio
+async def test_stock_that_ran_out_before_the_payment_link_stops_the_checkout_and_no_plural_order_opens(
+    db, executor, hosted, kicks, monkeypatch
+):
+    tenant = await _tenant(db)
+    await _save_plural(tenant)
+    runtime = _runtime(monkeypatch, tenant, _plural_payments())
+    session = await _ready(runtime, tenant)
+
+    refused = await _complete(_with_catalog(runtime, tenant, inventory_quantity_snapshot=0), tenant, session["id"])
+    codes = [m["code"] for m in refused.body["messages"] if m["type"] == "error"]
+    assert "out_of_stock" in codes and refused.body["status"] == "incomplete", refused.body
+    assert hosted.bodies("/checkout/v1/orders") == [] and executor.calls == []
+    # The shop restocks: the agent updates the checkout and the payment link opens.
+    again = await _complete(runtime, tenant, session["id"])
+    assert again.body["status"] == "incomplete"
+    updated = await handlers.run(
+        "update_checkout",
+        runtime,
+        uf.request(tenant, {"id": session["id"], **uf.create_body(item_id=ITEM_ID, fulfillment=uf.SHIPPING)}),
+        session["id"],
+    )
+    assert updated.body["status"] == "ready_for_complete", updated.body
+    linked = await _complete(runtime, tenant, session["id"])
+    assert linked.body["status"] == "requires_escalation" and len(hosted.bodies("/checkout/v1/orders")) == 1
+
+
+@pytest.mark.asyncio
+async def test_an_unchanged_catalog_never_reprices_or_rewrites_the_checkout(db, executor, kicks, monkeypatch):
+    tenant = await _tenant(db)
+    runtime = _runtime(monkeypatch, tenant, {"mode": "shopify_cart"})
+    session = await _ready(runtime, tenant)
+    _status, before = await _state_of(db, session["id"])
+    done = await _complete(runtime, tenant, session["id"], body=uf.complete_body())
+    assert done.body["status"] == "requires_escalation"
+    assert not [m for m in done.body["messages"] if m.get("code") in ("price_changed", "out_of_stock")]
+    _status, after = await _state_of(db, session["id"])
+    for member in ("line_items", "totals", "fulfillment", "buyer", "next_line_seq"):
+        assert after.get(member) == before.get(member), member
+
+
+@pytest.mark.asyncio
+async def test_a_payment_no_order_matches_emails_the_merchant_once(db, executor, hosted, kicks, monkeypatch):
+    from core.commerce import order_notifications
+
+    told: list[tuple[str, str, dict[str, Any]]] = []
+    monkeypatch.setattr(
+        order_notifications,
+        "kick_unmatched_payment_notification",
+        lambda t, c, **details: told.append((t, c, details)),
+    )
+    tenant = await _tenant(db)
+    stored = await _save_plural(tenant)
+    runtime = _runtime(monkeypatch, tenant, _plural_payments())
+    session = await _ready(runtime, tenant)
+    await _complete(runtime, tenant, session["id"])
+    reference = hosted.bodies("/checkout/v1/orders")[0]["merchant_order_reference"]
+    short = _event("v1-hosted-1", reference, "PROCESSED", 100)
+    for webhook_id in ("wh_short_1", "wh_short_2"):
+        result = await plural_hosted.apply_webhook(
+            tenant_id=tenant,
+            webhook_key=stored.webhook_key,
+            raw_body=short,
+            headers=_signed(short, webhook_id=webhook_id),
+        )
+        assert result["result"] == "amount_mismatch"
+    assert told == [
+        (
+            tenant,
+            session["id"],
+            {
+                "result": "amount_mismatch",
+                "amount_minor_units": 100,
+                "currency": "INR",
+                "provider_order_id": "v1-hosted-1",
+            },
+        )
+    ]
+    assert kicks == []
+
+
+@pytest.mark.asyncio
+async def test_a_lapsed_plural_link_that_can_still_be_paid_keeps_its_cart_when_the_price_changes(
+    db, executor, hosted, kicks, monkeypatch
+):
+    tenant = await _tenant(db)
+    stored = await _save_plural(tenant)
+    runtime = _runtime(monkeypatch, tenant, _plural_payments())
+    session = await _ready(runtime, tenant)
+    first = await _complete(runtime, tenant, session["id"])
+    assert first.body["status"] == "requires_escalation", first.body
+    reference_a = hosted.bodies("/checkout/v1/orders")[0]["merchant_order_reference"]
+    amount_a = hosted.bodies("/checkout/v1/orders")[0]["order_amount"]["value"]
+    _status, before = await _state_of(db, session["id"])
+
+    # Link A lapses and the price changes: the reissued link keeps the cart A was issued for.
+    await _lapse_link(db, session["id"])
+    reissued = await _complete(_with_catalog(runtime, tenant, price="30.00"), tenant, session["id"])
+    assert reissued.body["status"] == "requires_escalation", reissued.body
+    assert not [m for m in reissued.body["messages"] if m.get("code") == "price_changed"]
+    status, after = await _state_of(db, session["id"])
+    assert status == "requires_escalation" and after["totals"] == before["totals"]
+
+    # The buyer pays A after all: it still matches its checkout and becomes the order.
+    paid = _event("v1-hosted-1", reference_a, "PROCESSED", amount_a)
+    result = await plural_hosted.apply_webhook(
+        tenant_id=tenant, webhook_key=stored.webhook_key, raw_body=paid, headers=_signed(paid, webhook_id="wh_a_paid")
+    )
+    assert result["result"] == "completed", result
+
+
+@pytest.mark.asyncio
+async def test_a_second_payment_on_an_older_link_of_a_paid_checkout_emails_the_merchant(
+    db, executor, hosted, kicks, monkeypatch
+):
+    from core.commerce import order_notifications
+
+    told: list[tuple[str, str, dict[str, Any]]] = []
+    monkeypatch.setattr(
+        order_notifications,
+        "kick_unmatched_payment_notification",
+        lambda t, c, **details: told.append((t, c, details)),
+    )
+    tenant = await _tenant(db)
+    stored = await _save_plural(tenant)
+    runtime = _runtime(monkeypatch, tenant, _plural_payments())
+    session = await _ready(runtime, tenant)
+    await _complete(runtime, tenant, session["id"])
+    await _lapse_link(db, session["id"])
+    await _complete(runtime, tenant, session["id"])
+    bodies = hosted.bodies("/checkout/v1/orders")
+    assert len(bodies) == 2
+    (ref_a, amount), ref_b = (
+        (bodies[0]["merchant_order_reference"], bodies[0]["order_amount"]["value"]),
+        bodies[1]["merchant_order_reference"],
+    )
+    paid_b = _event("v1-hosted-2", ref_b, "PROCESSED", amount)
+    first = await plural_hosted.apply_webhook(
+        tenant_id=tenant, webhook_key=stored.webhook_key, raw_body=paid_b, headers=_signed(paid_b, webhook_id="wh_b")
+    )
+    assert first["result"] == "completed"
+    paid_a = _event("v1-hosted-1", ref_a, "PROCESSED", amount)
+    for webhook_id in ("wh_a_1", "wh_a_2"):
+        again = await plural_hosted.apply_webhook(
+            tenant_id=tenant,
+            webhook_key=stored.webhook_key,
+            raw_body=paid_a,
+            headers=_signed(paid_a, webhook_id=webhook_id),
+        )
+        assert again["result"] in ("paid_twice", "already_completed") and again["applied"] is False
+    assert [(c, d["result"]) for _t, c, d in told] == [(session["id"], "paid_twice")]
+    assert len(await _rows(db, "SELECT id FROM commerce_orders WHERE tenant_id = :t", t=tenant)) == 1
+
+
+@pytest.mark.asyncio
+async def test_a_removed_product_is_no_longer_sold_and_old_shopify_snapshots_are_pruned(db):
+    from api.v1 import commerce_runtime
+    from core.commerce.ucp.store import load_catalog_inputs
+    from core.database import get_tenant_session
+    from core.models.commerce_c6z_runtime import C6ZConnectorEvidenceRow
+
+    tenant = await _tenant(db)
+    now = datetime.now(UTC)
+
+    def snapshot(evidence_id: str, age: timedelta, refs: list[str], source: str = "shopify") -> C6ZConnectorEvidenceRow:
+        return C6ZConnectorEvidenceRow(
+            evidence_id=evidence_id,
+            packet_id="pkt_1",
+            tenant_id=tenant,
+            merchant_id=uf.fx.MERCHANT,
+            seller_agent_id=uf.fx.SELLER,
+            source_system=source,
+            source_evidence_ref=evidence_id,
+            source_observed_at=now - age,
+            synced_at=now - age,
+            products=[{"product_ref": ref, "title": ref, "variants": []} for ref in refs],
+        )
+
+    async with get_tenant_session(uuid.UUID(tenant)) as session:
+        session.add_all(
+            [
+                snapshot("ev_new", timedelta(minutes=1), ["kept"]),
+                snapshot("ev_hour", timedelta(hours=1), ["kept", "removed"]),
+                snapshot("ev_day", timedelta(days=1), ["kept", "removed"]),
+                snapshot("ev_week", timedelta(days=7), ["kept", "removed"]),
+                snapshot("ev_upload", timedelta(days=3), ["uploaded"], source="catalog_upload"),
+            ]
+        )
+    _records, products = await load_catalog_inputs(
+        tenant_id=tenant, merchant_id=uf.fx.MERCHANT, seller_agent_id=uf.fx.SELLER
+    )
+    assert sorted(p["product_ref"] for p in products) == ["kept", "uploaded"]
+
+    pruned = await commerce_runtime._prune_shopify_evidence(
+        tenant_id=tenant, merchant_id=uf.fx.MERCHANT, seller_agent_id=uf.fx.SELLER, keep="ev_new"
+    )
+    assert pruned == 2
+    left = await _rows(
+        db, "SELECT evidence_id FROM commerce_c6z_connector_evidence_records WHERE tenant_id = :t", t=tenant
+    )
+    assert sorted(r["evidence_id"] for r in left) == ["ev_hour", "ev_new", "ev_upload"]

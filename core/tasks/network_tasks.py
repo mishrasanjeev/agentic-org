@@ -1,5 +1,7 @@
 # SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
-"""The public AgenticOrg shopping bot: answer one Telegram update off the webhook request.
+"""Network tasks: the public shopping bot's Telegram updates, and the scheduled shop catalog sync.
+
+The public AgenticOrg shopping bot answers one Telegram update off the webhook request.
 
 The webhook (``api.v1.network.network_telegram_webhook``) checks Telegram's secret header and
 queues the update here, so Telegram gets its 200 at once. The answer is produced by
@@ -47,3 +49,23 @@ async def _handle_async(update: Any) -> str:
 def handle_telegram_update(update: Any) -> str:
     """Answer one update from the public network bot (behind the flags)."""
     return run_async(_handle_async(update))
+
+
+async def _sync_catalogs_async() -> dict[str, Any]:
+    from core.commerce.catalog_autosync import sync_listed_catalogs  # noqa: PLC0415
+
+    result = await sync_listed_catalogs()
+    if result.get("enabled") and (result.get("synced") or result.get("failed")):
+        logger.info(
+            "network_catalog_sync",
+            synced=result["synced"],
+            failed=result["failed"],
+            left_for_next_run=result["left_for_next_run"],
+        )
+    return result
+
+
+@app.task(name="core.tasks.network_tasks.sync_shop_catalogs")
+def sync_shop_catalogs() -> dict[str, Any]:
+    """Re-read the listed shops' Shopify catalogs that are due (behind the network flag)."""
+    return run_async(_sync_catalogs_async())

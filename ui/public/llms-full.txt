@@ -4551,6 +4551,11 @@ access token blank to keep the one you saved: Shopify shows a token only once. A
 delivery with your secret; a changed product shows **Changed in your store** until the catalog is read
 again.
 
+While your shop is on the network, AgenticOrg reads your Shopify catalog again by itself: usually within ten
+minutes of a **Product update** webhook, and about once an hour without one (a little later when many shops are
+due at once, or an hour after a read that failed). **Read catalog again** on the page reads it at once. Each read
+replaces the one before: a product you removed from your store is no longer offered.
+
 **Product details from Shopify.** Along with titles, prices and stock, AgenticOrg reads each product's tags,
 its barcode, its page on your online store and the product metafields you show on your storefront. In
 Shopify, a metafield is shown on the storefront when its definition (**Settings**, **Custom data**,
@@ -4693,6 +4698,32 @@ sell the same product (the same barcode with a valid check digit), the answer al
 with each shop's price and stock for that item, lowest price first (in the currency most of those shops
 use). Adding the barcode to your products lets a buyer's AI app see that you sell the same item as
 another shop and compare the offers.
+
+### When a price or stock changes
+
+A buyer's AI app may build a cart now and ask for the payment link later. Before any payment link is
+issued, AgenticOrg checks the cart against your catalog as it is at that moment:
+
+- **A new price.** The checkout is re-priced at your current price, with the same delivery choice, and no
+  link is issued yet. The buyer's AI app is told the new total and asks again once the buyer agrees.
+- **Fewer in stock than the cart holds, or a product you no longer sell.** No link is issued. The buyer's AI
+  app is told what is short and changes the quantity or the item.
+
+While an earlier payment link of the checkout can still be paid on your Plural page, the cart stays as that link
+was issued, so a payment on it still becomes your order.
+
+So the price the buyer pays is your current price, as AgenticOrg last read your catalog: when you upload a
+file, when you select **Read catalog again**, and on the automatic reads above. On your Shopify checkout, Shopify also
+checks the price and stock itself.
+
+### A payment with no order
+
+On your Plural page, a buyer pays for the exact checkout the link was issued for. If a payment reaches your
+Plural account and AgenticOrg cannot match it to that checkout (a different amount, a checkout that was
+canceled or changed after the link was issued, another Plural order, or a second payment for a checkout the
+buyer already paid through another of its links), no order is created for it and nothing more ships. Every administrator of your workspace gets one email that names the Plural order, the reason and
+the buyer's contact as given. The money is in your own Plural account: refund it there, or contact the
+buyer.
 
 #### Pause or resume
 

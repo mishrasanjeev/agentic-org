@@ -1,5 +1,30 @@
 # Changelog
 
+## Unreleased - Current prices and stock at the payment link
+
+- Before a payment link is issued (Shopify checkout or Plural page) or an executor runs, Complete checks the
+  cart against the shop's catalog as it is now (`core/commerce/ucp/catalog_recheck.py`). A new price or
+  currency re-prices the checkout at the current catalog, keeping the buyer, delivery choice, hand-off
+  records and consent, and refuses this Complete with `price_changed`, so the buyer's agent confirms the new
+  total before it completes again. A product no longer sold (`item_unavailable`) or fewer in stock than the
+  cart holds (`out_of_stock`) set the checkout to `incomplete`. A checkout whose items match is untouched.
+  ACP maps `price_changed` to `conflict`; the Telegram shopper asks the buyer before paying a new price. The
+  check is skipped while an earlier Plural link of the checkout can still be paid (its payment must keep matching
+  its cart, and the daily maximum keeps counting it), and a Complete that negotiated other capabilities than the
+  checkout sets it `incomplete` instead of re-pricing it.
+- Catalog search, lookup and checkout read only the newest snapshot of each catalog source (Shopify, an upload),
+  so a product removed from the shop is no longer offered from an older snapshot.
+- Listed network shops on Shopify are read again on the existing beat and worker every ten minutes when due:
+  once their catalog is an hour old (`AGENTICORG_NETWORK_CATALOG_SYNC_MINUTES`, default 60, 0 turns it off),
+  or as soon as a Shopify product webhook marked them (it only marked them before). At most 25 Shopify reads
+  per run, in a random order; a shop whose read failed waits an hour; one run at a time (a Redis lock, and the
+  beat entry expires). The scheduled read never marks a shop `blocked_missing_credentials`, and deletes the
+  shop's Shopify snapshots past the newest two once they are six hours old. Uploaded catalogs are left alone.
+- A Plural payment that no order matches (`amount_mismatch`, `paid_after_cancel`, `checkout_changed`,
+  `order_mismatch`, and the new `paid_twice`: an older link of an already paid checkout paid too) now emails the tenant's active administrators once per payment link, with the Plural
+  order, the reason, the buyer's contact as given and what to do (refund in Plural or contact the buyer). It
+  was only a ledger event and an error log.
+
 ## Unreleased - Fair search across the network's shops
 
 - UCP catalog search orders a shop's products best match first: a whole word of the title counts most (more

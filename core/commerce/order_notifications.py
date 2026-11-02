@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
-"""Tell the merchant about a new order: an email to every active administrator of the tenant.
+"""Tell the merchant about a new order, or a payment no order matches: an email to its administrators.
 
 Sent after the order's transaction commits, from a Celery task
 (``core.tasks.payment_handoff_tasks.notify_order``), through the platform SMTP
@@ -8,6 +8,13 @@ the total, the delivery address and shipping choice, and the buyer contact,
 exactly as the buyer gave them to the checkout;
 nothing is invented. A failed send is logged and never changes the order.
 The ledger records how many administrators were emailed, never their addresses.
+
+A payment no order matches (``unmatched_payment_email``): a buyer paid on the
+merchant's Plural page, but AgenticOrg created no order (the amount differed,
+the checkout was canceled or changed, or the payment is for another Plural
+order, or a second payment for a checkout already paid through another of its links).
+The money is in the merchant's own Plural account, so the email names
+the Plural order and asks the merchant to refund the buyer or contact them.
 """
 
 from __future__ import annotations
@@ -24,6 +31,14 @@ from sqlalchemy import select
 logger = structlog.get_logger()
 
 NOTIFY_EVENT = "commerce.order.notification"
+UNMATCHED_NOTIFY_EVENT = "commerce.payment.unmatched_notification"
+UNMATCHED_REASONS = {
+    "amount_mismatch": "the amount paid is not the amount of the checkout",
+    "paid_after_cancel": "the checkout had been canceled before the payment arrived",
+    "checkout_changed": "the cart changed after the payment link was issued",
+    "order_mismatch": "the payment is for a different Plural order than the one this checkout issued",
+    "paid_twice": "the buyer had already paid this checkout through another of its payment links",
+}
 SURFACE_LABELS = {
     "telegram": "Telegram",
     "mcp": "AI assistant (MCP)",
@@ -116,6 +131,23 @@ def total_of(snapshot: Mapping[str, Any], kind: str) -> Any:
     return next((t.get("amount") for t in snapshot.get("totals") or [] if t.get("type") == kind), None)
 
 
+def _contact_items(buyer: Mapping[str, Any]) -> str:
+    """The buyer's contact as ``<li>`` items, exactly as given (escaped)."""
+    return (
+        "".join(
+            f"<li>{html.escape(label)}: {html.escape(str(buyer[key]))}</li>"
+            for key, label in (
+                ("first_name", "First name"),
+                ("last_name", "Last name"),
+                ("email", "Email"),
+                ("phone_number", "Phone"),
+            )
+            if buyer.get(key)
+        )
+        or "<li>The buyer gave no contact details.</li>"
+    )
+
+
 def order_email(
     *, merchant_name: str, order_id: str, snapshot: Mapping[str, Any], buyer: Mapping[str, Any], surface: str
 ) -> tuple[str, str]:
@@ -139,19 +171,7 @@ def order_email(
     )
     fee = shipping_fee_line(deliveries, money(total_of(snapshot, "fulfillment"), currency))
     fee_html = f"<p>{html.escape(fee)}</p>" if fee else ""
-    contact = (
-        "".join(
-            f"<li>{html.escape(label)}: {html.escape(str(buyer[key]))}</li>"
-            for key, label in (
-                ("first_name", "First name"),
-                ("last_name", "Last name"),
-                ("email", "Email"),
-                ("phone_number", "Phone"),
-            )
-            if buyer.get(key)
-        )
-        or "<li>The buyer gave no contact details.</li>"
-    )
+    contact = _contact_items(buyer)
     subject = f"New order {order_id} - {money(total, currency)}".strip(" -")
     body = (
         f"<p>{html.escape(merchant_name)} has a new paid order.</p>"
@@ -239,6 +259,150 @@ async def notify_merchant_of_order(tenant_id: str, order_id: str) -> int:
             details={"recipients": len(recipients), "sent": sent},
         )
     return sent
+
+
+def unmatched_payment_email(
+    *,
+    merchant_name: str,
+    checkout_id: str,
+    result: str,
+    amount_minor_units: int | None,
+    currency: str | None,
+    provider_order_id: str,
+    buyer: Mapping[str, Any],
+    surface: str,
+) -> tuple[str, str]:
+    """``(subject, html)`` of the email about a payment no order matches; every value is escaped."""
+    paid = money(amount_minor_units, currency) or "an amount"
+    reason = UNMATCHED_REASONS.get(result, "it does not match the checkout")
+    subject = f"Action needed: a payment of {paid} has no order"
+    body = (
+        f"<p>A buyer paid {html.escape(paid)} on {html.escape(merchant_name)}'s Plural payment page, "
+        f"but AgenticOrg created no order, because {html.escape(reason)}. No order was confirmed to the "
+        "buyer, so nothing needs to ship.</p>"
+        f"<p><strong>Plural order:</strong> {html.escape(provider_order_id or 'not given')}<br>"
+        f"<strong>Checkout:</strong> {html.escape(checkout_id)}<br>"
+        f"<strong>Placed through:</strong> {html.escape(surface)}</p>"
+        f"<p><strong>Buyer contact (as given)</strong></p><ul>{_contact_items(buyer)}</ul>"
+        "<p>The money is in your own Plural account. Find this Plural order in your Plural dashboard and "
+        "refund it, or contact the buyer to sort it out.</p>"
+    )
+    return subject, body
+
+
+async def notify_merchant_of_unmatched_payment(
+    tenant_id: str,
+    checkout_session_id: str,
+    *,
+    result: str,
+    amount_minor_units: int | None,
+    currency: str | None,
+    provider_order_id: str,
+) -> int:
+    """Email the tenant's active administrators about a payment no order matches; returns how many accepted."""
+    from core.commerce.ledger import record_commerce_event
+    from core.database import get_tenant_session
+    from core.email import send_email
+    from core.models.commerce_c6z_runtime import C6ZMerchantCommerceConfigRow
+    from core.models.commerce_ucp import CommerceCheckoutSessionRow
+    from core.models.user import User
+
+    tenant = uuid.UUID(str(tenant_id))
+    async with get_tenant_session(tenant) as session:
+        checkout = (
+            await session.execute(
+                select(CommerceCheckoutSessionRow).where(
+                    CommerceCheckoutSessionRow.tenant_id == tenant,
+                    CommerceCheckoutSessionRow.id == checkout_session_id,
+                )
+            )
+        ).scalar_one_or_none()
+        if checkout is None:
+            return 0
+        config = (
+            await session.execute(
+                select(C6ZMerchantCommerceConfigRow.merchant_display_name).where(
+                    C6ZMerchantCommerceConfigRow.tenant_id == str(tenant),
+                    C6ZMerchantCommerceConfigRow.merchant_id == checkout.merchant_id,
+                )
+            )
+        ).first()
+        recipients = list(
+            (
+                await session.scalars(
+                    select(User.email).where(User.tenant_id == tenant, User.role == "admin", User.status == "active")
+                )
+            ).all()
+        )
+        state = dict(checkout.state or {})
+        merchant_id, seller = checkout.merchant_id, checkout.seller_agent_id
+        profile_url = checkout.platform_profile_url
+    subject, body = unmatched_payment_email(
+        merchant_name=str((config[0] if config else None) or merchant_id),
+        checkout_id=checkout_session_id,
+        result=result,
+        amount_minor_units=amount_minor_units,
+        currency=currency,
+        provider_order_id=provider_order_id,
+        buyer=dict(state.get("buyer") or {}),
+        surface=surface_label(state, profile_url),
+    )
+    sent = 0
+    for address in sorted({str(a) for a in recipients if a}):
+        try:
+            if await asyncio.to_thread(send_email, address, subject, body):
+                sent += 1
+        # enterprise-gate: broad-except-ok reason=unmatched-payment-email-failure-is-logged-ledger-stays
+        except Exception as exc:
+            logger.warning("unmatched_payment_notification_failed", error_type=type(exc).__name__)
+    async with get_tenant_session(tenant) as session:
+        await record_commerce_event(
+            session,
+            tenant_id=str(tenant),
+            event=UNMATCHED_NOTIFY_EVENT,
+            outcome="success" if sent else "blocked",
+            merchant_id=merchant_id,
+            seller_agent_id=seller,
+            buyer_agent_id=None,
+            payload={"checkout_session_id": checkout_session_id, "result": result, "recipients": len(recipients)},
+            resource_id=checkout_session_id,
+            details={"result": result, "recipients": len(recipients), "sent": sent},
+        )
+    return sent
+
+
+def _send_unmatched_kick(tenant_id: str, checkout_session_id: str, details: dict[str, Any]) -> None:
+    try:
+        from core.tasks.payment_handoff_tasks import notify_unmatched_payment
+
+        notify_unmatched_payment.delay(str(tenant_id), str(checkout_session_id), details)
+    # enterprise-gate: broad-except-ok reason=queue-failure-is-logged-the-ledger-and-error-log-stay-authoritative
+    except Exception as exc:
+        logger.warning("unmatched_payment_notification_not_queued", error_type=type(exc).__name__)
+
+
+def kick_unmatched_payment_notification(
+    tenant_id: str,
+    checkout_session_id: str,
+    *,
+    result: str,
+    amount_minor_units: int | None,
+    currency: str | None,
+    provider_order_id: str,
+) -> None:
+    """Queue the unmatched-payment email after the confirmation's commit, off the event loop."""
+    details = {
+        "result": result,
+        "amount_minor_units": amount_minor_units,
+        "currency": currency,
+        "provider_order_id": provider_order_id,
+    }
+    try:
+        loop = asyncio.get_running_loop()
+    except RuntimeError:
+        _send_unmatched_kick(tenant_id, checkout_session_id, details)
+        return
+    loop.run_in_executor(None, _send_unmatched_kick, tenant_id, checkout_session_id, details)
 
 
 def _send_kick(tenant_id: str, order_id: str) -> None:
