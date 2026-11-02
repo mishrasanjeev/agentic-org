@@ -86,7 +86,7 @@
     "public_exempt_reason": "public-a2a-agent-card-no-tenant-data",
     "rate_limit": "a2a-discovery",
     "scope": "public:a2a.discovery",
-    "source_line": 50,
+    "source_line": 51,
     "tenant_required": false
   },
   {
@@ -104,7 +104,7 @@
     "public_exempt_reason": "public-a2a-agent-card-no-tenant-data",
     "rate_limit": "a2a-discovery",
     "scope": "public:a2a.discovery",
-    "source_line": 50,
+    "source_line": 51,
     "tenant_required": false
   },
   {
@@ -122,7 +122,7 @@
     "public_exempt_reason": "public-a2a-agent-list-no-tenant-data",
     "rate_limit": "a2a-discovery",
     "scope": "public:a2a.agent_discovery",
-    "source_line": 96,
+    "source_line": 97,
     "tenant_required": false
   },
   {
@@ -230,7 +230,7 @@
     "public_exempt_reason": null,
     "rate_limit": "a2a-task-execute",
     "scope": "a2a.external.agent_execution.sensitive.write",
-    "source_line": 122,
+    "source_line": 123,
     "tenant_required": true
   },
   {
@@ -248,7 +248,7 @@
     "public_exempt_reason": null,
     "rate_limit": "a2a-task-read",
     "scope": "a2a.task.sensitive.read",
-    "source_line": 408,
+    "source_line": 409,
     "tenant_required": true
   },
   {
@@ -986,7 +986,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "agents.debug.sensitive.read",
-    "source_line": 86,
+    "source_line": 87,
     "tenant_required": true
   },
   {
@@ -1004,7 +1004,7 @@
     "public_exempt_reason": null,
     "rate_limit": "agent-write",
     "scope": "agents.debug.sensitive.write",
-    "source_line": 110,
+    "source_line": 111,
     "tenant_required": true
   },
   {
@@ -1022,7 +1022,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "agents.debug.sensitive.read",
-    "source_line": 154,
+    "source_line": 155,
     "tenant_required": true
   },
   {
@@ -1040,7 +1040,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "agents.debug.sensitive.read",
-    "source_line": 212,
+    "source_line": 213,
     "tenant_required": true
   },
   {
@@ -1058,7 +1058,7 @@
     "public_exempt_reason": null,
     "rate_limit": "agent-control",
     "scope": "agents.debug.sensitive.write",
-    "source_line": 482,
+    "source_line": 486,
     "tenant_required": true
   },
   {
@@ -1076,7 +1076,7 @@
     "public_exempt_reason": null,
     "rate_limit": "agent-control",
     "scope": "agents.debug.sensitive.write",
-    "source_line": 463,
+    "source_line": 467,
     "tenant_required": true
   },
   {
@@ -1094,7 +1094,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "agents.debug.sensitive.read",
-    "source_line": 181,
+    "source_line": 182,
     "tenant_required": true
   },
   {
@@ -1724,7 +1724,7 @@
     "public_exempt_reason": "auth-bootstrap-config-no-tenant-data",
     "rate_limit": "public-read",
     "scope": "public:auth.config",
-    "source_line": 970,
+    "source_line": 988,
     "tenant_required": false
   },
   {
@@ -1742,7 +1742,7 @@
     "public_exempt_reason": "password-reset-bootstrap-rate-limited",
     "rate_limit": "auth-password-reset",
     "scope": "public:auth.password_reset.request",
-    "source_line": 701,
+    "source_line": 719,
     "tenant_required": false
   },
   {
@@ -1760,7 +1760,7 @@
     "public_exempt_reason": "google-id-token-verification",
     "rate_limit": "auth-login",
     "scope": "public:auth.google",
-    "source_line": 573,
+    "source_line": 591,
     "tenant_required": false
   },
   {
@@ -1778,7 +1778,7 @@
     "public_exempt_reason": "auth-bootstrap-rate-limited-credentials",
     "rate_limit": "auth-login",
     "scope": "public:auth.login",
-    "source_line": 519,
+    "source_line": 537,
     "tenant_required": false
   },
   {
@@ -1796,7 +1796,7 @@
     "public_exempt_reason": null,
     "rate_limit": "auth-mutating",
     "scope": "auth.session.logout",
-    "source_line": 818,
+    "source_line": 836,
     "tenant_required": true
   },
   {
@@ -1814,7 +1814,7 @@
     "public_exempt_reason": null,
     "rate_limit": "auth-mutating",
     "scope": "auth.session.logout",
-    "source_line": 852,
+    "source_line": 870,
     "tenant_required": true
   },
   {
@@ -1832,7 +1832,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "auth.session.read",
-    "source_line": 900,
+    "source_line": 918,
     "tenant_required": true
   },
   {
@@ -1958,7 +1958,7 @@
     "public_exempt_reason": "one-time-reset-code-validated",
     "rate_limit": "auth-password-reset",
     "scope": "public:auth.password_reset.consume",
-    "source_line": 761,
+    "source_line": 779,
     "tenant_required": false
   },
   {
@@ -1976,7 +1976,7 @@
     "public_exempt_reason": "auth-bootstrap-rate-limited-password-policy",
     "rate_limit": "auth-signup",
     "scope": "public:auth.signup",
-    "source_line": 230,
+    "source_line": 231,
     "tenant_required": false
   },
   {
@@ -3128,7 +3128,7 @@
     "public_exempt_reason": null,
     "rate_limit": "chat-history-read",
     "scope": "chat.history.sensitive.read",
-    "source_line": 1290,
+    "source_line": 1291,
     "tenant_required": true
   },
   {
@@ -3146,7 +3146,7 @@
     "public_exempt_reason": null,
     "rate_limit": "chat-query",
     "scope": "chat.agent_execution.external_tool_sensitive.write",
-    "source_line": 794,
+    "source_line": 795,
     "tenant_required": true
   },
   {
@@ -5360,7 +5360,7 @@
     "public_exempt_reason": null,
     "rate_limit": "config-read",
     "scope": "config.fleet_limits.control_plane.sensitive.read",
-    "source_line": 31,
+    "source_line": 39,
     "tenant_required": true
   },
   {
@@ -5378,7 +5378,43 @@
     "public_exempt_reason": null,
     "rate_limit": "config-write",
     "scope": "config.fleet_limits.control_plane.sensitive.write",
-    "source_line": 57,
+    "source_line": 65,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "config.reporting.read",
+    "auth_required": true,
+    "function": "get_reporting_settings",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/config/reporting api/v1/config.py:get_reporting_settings",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/config.py",
+    "path": "/api/v1/config/reporting",
+    "public_exempt_reason": null,
+    "rate_limit": "config-read",
+    "scope": "config.reporting.control_plane.read",
+    "source_line": 94,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "config.reporting.write",
+    "auth_required": true,
+    "function": "update_reporting_settings",
+    "idempotency": "idempotent-upsert-by-tenant",
+    "key": "PUT /api/v1/config/reporting api/v1/config.py:update_reporting_settings",
+    "metadata_present": true,
+    "methods": [
+      "PUT"
+    ],
+    "module": "api/v1/config.py",
+    "path": "/api/v1/config/reporting",
+    "public_exempt_reason": null,
+    "rate_limit": "config-write",
+    "scope": "config.reporting.control_plane.write",
+    "source_line": 117,
     "tenant_required": true
   },
   {
@@ -8352,6 +8388,150 @@
     "tenant_required": true
   },
   {
+    "audit_event": "insights.bi_access.read",
+    "auth_required": true,
+    "function": "list_bi_access",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/insights/bi-access api/v1/insights_bi.py:list_bi_access",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/insights_bi.py",
+    "path": "/api/v1/insights/bi-access",
+    "public_exempt_reason": null,
+    "rate_limit": "reporting-admin",
+    "scope": "insights.bi.read",
+    "source_line": 69,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "insights.bi_access.create",
+    "auth_required": true,
+    "function": "create_bi_access",
+    "idempotency": "not-idempotent-create",
+    "key": "POST /api/v1/insights/bi-access api/v1/insights_bi.py:create_bi_access",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/insights_bi.py",
+    "path": "/api/v1/insights/bi-access",
+    "public_exempt_reason": null,
+    "rate_limit": "reporting-admin",
+    "scope": "insights.bi.write",
+    "source_line": 91,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "insights.bi_access.revoke",
+    "auth_required": true,
+    "function": "revoke_bi_access",
+    "idempotency": "idempotent-delete",
+    "key": "DELETE /api/v1/insights/bi-access/{role_name} api/v1/insights_bi.py:revoke_bi_access",
+    "metadata_present": true,
+    "methods": [
+      "DELETE"
+    ],
+    "module": "api/v1/insights_bi.py",
+    "path": "/api/v1/insights/bi-access/{role_name}",
+    "public_exempt_reason": null,
+    "rate_limit": "reporting-admin",
+    "scope": "insights.bi.write",
+    "source_line": 134,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "insights.catalog.read",
+    "auth_required": true,
+    "function": "insights_catalog",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/insights/catalog api/v1/insights.py:insights_catalog",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/insights.py",
+    "path": "/api/v1/insights/catalog",
+    "public_exempt_reason": null,
+    "rate_limit": "reporting-read",
+    "scope": "insights.read",
+    "source_line": 202,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "insights.metric.read",
+    "auth_required": true,
+    "function": "insights_metric",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/insights/metrics/{key} api/v1/insights.py:insights_metric",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/insights.py",
+    "path": "/api/v1/insights/metrics/{key}",
+    "public_exempt_reason": null,
+    "rate_limit": "reporting-read",
+    "scope": "insights.read",
+    "source_line": 278,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "insights.export",
+    "auth_required": true,
+    "function": "insights_export",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/insights/metrics/{key}/export api/v1/insights.py:insights_export",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/insights.py",
+    "path": "/api/v1/insights/metrics/{key}/export",
+    "public_exempt_reason": null,
+    "rate_limit": "reporting-export",
+    "scope": "insights.read",
+    "source_line": 320,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "insights.status.read",
+    "auth_required": true,
+    "function": "insights_status",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/insights/status api/v1/insights.py:insights_status",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/insights.py",
+    "path": "/api/v1/insights/status",
+    "public_exempt_reason": null,
+    "rate_limit": "reporting-read",
+    "scope": "insights.read",
+    "source_line": 175,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "insights.view.read",
+    "auth_required": true,
+    "function": "insights_view",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/insights/views/{view} api/v1/insights.py:insights_view",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/insights.py",
+    "path": "/api/v1/insights/views/{view}",
+    "public_exempt_reason": null,
+    "rate_limit": "reporting-read",
+    "scope": "insights.read",
+    "source_line": 234,
+    "tenant_required": true
+  },
+  {
     "audit_event": "integrations.status.read",
     "auth_required": true,
     "function": "integrations_status",
@@ -8600,7 +8780,7 @@
     "public_exempt_reason": null,
     "rate_limit": "business-metrics-read",
     "scope": "kpis.executive.sensitive.cbo",
-    "source_line": 1027,
+    "source_line": 1075,
     "tenant_required": true
   },
   {
@@ -8618,7 +8798,7 @@
     "public_exempt_reason": null,
     "rate_limit": "business-metrics-read",
     "scope": "kpis.executive.sensitive.ceo",
-    "source_line": 907,
+    "source_line": 955,
     "tenant_required": true
   },
   {
@@ -8636,7 +8816,7 @@
     "public_exempt_reason": null,
     "rate_limit": "business-metrics-read",
     "scope": "kpis.executive.sensitive.cfo",
-    "source_line": 936,
+    "source_line": 984,
     "tenant_required": true
   },
   {
@@ -8654,7 +8834,7 @@
     "public_exempt_reason": null,
     "rate_limit": "business-metrics-read",
     "scope": "kpis.executive.sensitive.chro",
-    "source_line": 970,
+    "source_line": 1018,
     "tenant_required": true
   },
   {
@@ -8672,7 +8852,7 @@
     "public_exempt_reason": null,
     "rate_limit": "business-metrics-read",
     "scope": "kpis.executive.sensitive.cmo",
-    "source_line": 989,
+    "source_line": 1037,
     "tenant_required": true
   },
   {
@@ -8690,7 +8870,7 @@
     "public_exempt_reason": null,
     "rate_limit": "business-metrics-read",
     "scope": "kpis.executive.sensitive.coo",
-    "source_line": 1008,
+    "source_line": 1056,
     "tenant_required": true
   },
   {
@@ -8906,7 +9086,7 @@
     "public_exempt_reason": null,
     "rate_limit": "mcp-tool-call",
     "scope": "mcp.external_agent_execution.sensitive.write",
-    "source_line": 117,
+    "source_line": 118,
     "tenant_required": true
   },
   {
@@ -8924,7 +9104,7 @@
     "public_exempt_reason": "public-tool-discovery-no-tenant-data",
     "rate_limit": "mcp-discovery",
     "scope": "public:mcp.tool_discovery.read",
-    "source_line": 45,
+    "source_line": 46,
     "tenant_required": false
   },
   {
@@ -11106,6 +11286,60 @@
     "tenant_required": true
   },
   {
+    "audit_event": "platform.insights.posture.read",
+    "auth_required": true,
+    "function": "platform_posture",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/platform/insights/posture api/v1/insights_platform.py:platform_posture",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/insights_platform.py",
+    "path": "/api/v1/platform/insights/posture",
+    "public_exempt_reason": null,
+    "rate_limit": "reporting-read",
+    "scope": "platform.insights.read",
+    "source_line": 128,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "platform.insights.summary.read",
+    "auth_required": true,
+    "function": "platform_summary",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/platform/insights/summary api/v1/insights_platform.py:platform_summary",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/insights_platform.py",
+    "path": "/api/v1/platform/insights/summary",
+    "public_exempt_reason": null,
+    "rate_limit": "reporting-read",
+    "scope": "platform.insights.read",
+    "source_line": 75,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "platform.insights.tenants.read",
+    "auth_required": true,
+    "function": "platform_tenants",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/platform/insights/tenants api/v1/insights_platform.py:platform_tenants",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/insights_platform.py",
+    "path": "/api/v1/platform/insights/tenants",
+    "public_exempt_reason": null,
+    "rate_limit": "reporting-read",
+    "scope": "platform.insights.read",
+    "source_line": 102,
+    "tenant_required": true
+  },
+  {
     "audit_event": "none-public-product-facts",
     "auth_required": false,
     "function": "product_facts",
@@ -12092,7 +12326,7 @@
     "public_exempt_reason": null,
     "rate_limit": "bulk-import",
     "scope": "sales.pipeline.sensitive.bulk_import",
-    "source_line": 609,
+    "source_line": 611,
     "tenant_required": true
   },
   {
@@ -12110,7 +12344,7 @@
     "public_exempt_reason": null,
     "rate_limit": "business-metrics-read",
     "scope": "sales.metrics.sensitive.read",
-    "source_line": 529,
+    "source_line": 531,
     "tenant_required": true
   },
   {
@@ -12128,7 +12362,7 @@
     "public_exempt_reason": null,
     "rate_limit": "sales-read",
     "scope": "sales.pipeline.sensitive.list",
-    "source_line": 144,
+    "source_line": 145,
     "tenant_required": true
   },
   {
@@ -12146,7 +12380,7 @@
     "public_exempt_reason": null,
     "rate_limit": "sales-read",
     "scope": "sales.pipeline.sensitive.followups",
-    "source_line": 183,
+    "source_line": 184,
     "tenant_required": true
   },
   {
@@ -12164,7 +12398,7 @@
     "public_exempt_reason": null,
     "rate_limit": "sales-write",
     "scope": "sales.pipeline.sensitive.write",
-    "source_line": 111,
+    "source_line": 112,
     "tenant_required": true
   },
   {
@@ -12182,7 +12416,7 @@
     "public_exempt_reason": null,
     "rate_limit": "sales-agent-trigger",
     "scope": "sales.pipeline.external_action.process",
-    "source_line": 207,
+    "source_line": 208,
     "tenant_required": true
   },
   {
@@ -12200,7 +12434,7 @@
     "public_exempt_reason": null,
     "rate_limit": "sales-read",
     "scope": "sales.pipeline.sensitive.read",
-    "source_line": 252,
+    "source_line": 253,
     "tenant_required": true
   },
   {
@@ -12218,7 +12452,7 @@
     "public_exempt_reason": null,
     "rate_limit": "sales-write",
     "scope": "sales.pipeline.sensitive.write",
-    "source_line": 299,
+    "source_line": 300,
     "tenant_required": true
   },
   {
@@ -12236,7 +12470,7 @@
     "public_exempt_reason": null,
     "rate_limit": "sales-inbox-sync",
     "scope": "sales.pipeline.external_action.process_inbox",
-    "source_line": 967,
+    "source_line": 969,
     "tenant_required": true
   },
   {
@@ -12254,7 +12488,7 @@
     "public_exempt_reason": null,
     "rate_limit": "sales-agent-trigger",
     "scope": "sales.pipeline.external_action.run_followups",
-    "source_line": 769,
+    "source_line": 771,
     "tenant_required": true
   },
   {
@@ -12272,7 +12506,7 @@
     "public_exempt_reason": null,
     "rate_limit": "sales-write",
     "scope": "sales.pipeline.sensitive.seed_demo",
-    "source_line": 887,
+    "source_line": 889,
     "tenant_required": true
   },
   {

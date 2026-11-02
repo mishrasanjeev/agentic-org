@@ -208,6 +208,8 @@ async def _record_success(
             Decimal(str(avg_quality)) if avg_quality is not None else None
         )
         _advance_next_run(row)
+        script_key = getattr(row, "script_key", None)
+    await _record_run_fact(tid, sid, script_key, "completed", None)
 
 
 def _advance_next_run(row: Any) -> None:
@@ -260,6 +262,33 @@ async def _record_failure(
         # A failed due run must not remain due forever. Advancing here
         # prevents the five-minute dispatcher from creating a retry storm.
         _advance_next_run(row)
+        script_key = getattr(row, "script_key", None)
+    await _record_run_fact(tid, sid, script_key, "failed", _failure_code(reason))
+
+
+def _failure_code(reason: str) -> str:
+    """An error code for a failure reason: the exception class or a fixed code, never the script's message."""
+    if reason.startswith("script_error: "):
+        return reason.removeprefix("script_error: ")
+    return reason if reason == "script_not_registered" else "script_failed"
+
+
+async def _record_run_fact(
+    tid: _uuid.UUID, sid: _uuid.UUID, script_key: str | None, status: str, error_class: str | None
+) -> None:
+    """Insights: the scheduled execution's run fact (agent_ref is the script key). Never fails the task."""
+    from core.insights.run_facts import record_run_fact
+
+    await record_run_fact(
+        tenant_id=tid,
+        run_key=f"rpa:schedule:{sid}",
+        entrypoint="rpa",
+        agent_ref=script_key,
+        task_type=script_key,
+        status=status,
+        error_class=error_class,
+        started_at=datetime.now(UTC),
+    )
 
 
 def _source_hash(chunk: dict[str, Any]) -> str:

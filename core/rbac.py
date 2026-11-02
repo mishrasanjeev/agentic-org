@@ -55,24 +55,36 @@ _DOMAIN_ROLE_SCOPES = [
     "connectors.personal.write",
 ]
 
+# The CxO roles that have a KPI page (/kpis/<role>). api/v1/kpis.py still
+# admits each role to its own page only.
+_KPI_PAGE_SCOPES = ["kpis:read"]
+
+# Insights (/insights/*): every non-admin role may call the routes (status
+# and catalog answer what the caller may see); api/v1/insights.py admits each
+# role only to the views it is allowed (finance: cfo; executive: admin).
+_INSIGHTS_SCOPES = ["insights:read"]
+
 ROLE_SCOPES: dict[str, list[str]] = {
-    "cfo": _DOMAIN_ROLE_SCOPES,
-    "chro": _DOMAIN_ROLE_SCOPES,
+    "cfo": [*_DOMAIN_ROLE_SCOPES, *_KPI_PAGE_SCOPES, *_INSIGHTS_SCOPES],
+    "chro": [*_DOMAIN_ROLE_SCOPES, *_KPI_PAGE_SCOPES, *_INSIGHTS_SCOPES],
     "cmo": [
         *_DOMAIN_ROLE_SCOPES,
+        *_KPI_PAGE_SCOPES,
+        *_INSIGHTS_SCOPES,
         "connectors.cmo_vendor_sandbox.write",
     ],
-    "coo": _DOMAIN_ROLE_SCOPES,
-    "merchant": ["commerce.merchant_config.write"],
+    "coo": [*_DOMAIN_ROLE_SCOPES, *_KPI_PAGE_SCOPES, *_INSIGHTS_SCOPES],
+    "merchant": ["commerce.merchant_config.write", *_INSIGHTS_SCOPES],
     "admin": ["agenticorg:admin"],
-    "auditor": ["audit:read"],
-    "domain_lead": _DOMAIN_ROLE_SCOPES,
+    "auditor": ["audit:read", *_INSIGHTS_SCOPES],
+    "domain_lead": [*_DOMAIN_ROLE_SCOPES, *_INSIGHTS_SCOPES],
     "analyst": [
         "agents:read",
         "workflows:read",
         "approvals:read",
         "connectors.read",
         "report_schedules.read",
+        *_INSIGHTS_SCOPES,
     ],
     # Row 52: developers build personal agents in any domain. agents:write
     # and approvals:* let them run, edit, and approve their OWN personal
@@ -89,6 +101,7 @@ ROLE_SCOPES: dict[str, list[str]] = {
         "connectors.registry.read",
         "connectors.tools.read",
         "connectors.personal.write",
+        *_INSIGHTS_SCOPES,
     ],
 }
 

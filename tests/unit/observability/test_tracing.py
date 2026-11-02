@@ -205,6 +205,24 @@ class TestSettings:
             tracing.init_tracing_from_settings()
         assert tracing.enabled() is False
 
+    def test_export_none_lets_a_strict_runtime_record_without_an_endpoint(self, on, monkeypatch):
+        monkeypatch.setattr(tracing.settings, "env", "production")
+        monkeypatch.setattr(tracing.settings, "tracing_export", "none")
+        built: list[tuple[str, str]] = []
+        monkeypatch.setattr(tracing, "otlp_exporter", lambda p, e: built.append((p, e)) or InMemorySpanExporter())
+        monkeypatch.setattr(tracing.external_keys, "otel_exporter_otlp_endpoint", "https://collector.example")
+        assert tracing.validate_settings() == ("http/protobuf", 1.0, "")
+        assert tracing.init_tracing_from_settings() is True
+        assert built == []
+        with tracing.span("recorded") as current:
+            assert current.is_recording() is True
+
+    def test_an_unknown_export_mode_is_refused(self, on, monkeypatch):
+        monkeypatch.setattr(tracing.settings, "tracing_export", "stdout")
+        with pytest.raises(tracing.TracingError, match="AGENTICORG_TRACING_EXPORT"):
+            tracing.init_tracing_from_settings()
+        assert tracing.enabled() is False
+
     def test_a_relaxed_runtime_records_without_an_exporter(self, on):
         assert tracing.init_tracing_from_settings() is True
         assert tracing.enabled() is True

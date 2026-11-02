@@ -295,6 +295,7 @@ async def run_script(
         started_at=started_at.isoformat(),
     )
 
+    failure_class: str | None = None
     try:
         from core.rpa.executor import execute_rpa_script
 
@@ -314,6 +315,7 @@ async def run_script(
 
     # enterprise-gate: broad-except-ok reason=rpa-execution-failure-records-failed-result
     except Exception as exc:
+        failure_class = type(exc).__name__
         execution.status = "failed"
         execution.success = False
         execution.error = str(exc)[:500]
@@ -341,6 +343,21 @@ async def run_script(
         success=execution.success,
         elapsed_ms=execution.elapsed_ms,
         history_durable=durable,
+    )
+
+    # Insights: the execution's run fact (agent_ref is the script key); never fails the response.
+    from core.insights.run_facts import record_run_fact  # noqa: PLC0415
+
+    await record_run_fact(
+        tenant_id=tenant_id,
+        run_key=f"rpa:{execution_id}",
+        entrypoint="rpa",
+        agent_ref=script_key,
+        task_type=script_key,
+        status=execution.status,
+        duration_ms=execution.elapsed_ms,
+        error_class=execution.error_class or failure_class,
+        started_at=started_at,
     )
 
     return execution

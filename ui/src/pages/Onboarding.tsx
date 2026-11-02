@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router";
-import { useAuth } from "../contexts/AuthContext";
+import { defaultLandingForRole, useAuth } from "../contexts/AuthContext";
 import api, { extractApiError } from "../lib/api";
 
 /* ── Milestone Tracker Types ──────────────────────────────────────────── */
@@ -211,7 +211,9 @@ export default function Onboarding() {
     } catch {
       // best-effort
     }
-    navigate("/dashboard");
+    // Same landing as sign-in: roles not admitted to /dashboard would
+    // otherwise finish onboarding on an Access Denied page.
+    navigate(defaultLandingForRole(user?.role));
   };
 
   const GETTING_STARTED_STEPS = [

@@ -20,6 +20,7 @@ from core.channels.providers import CATALOG, ChannelError, Message, send_reply
 from core.channels.replies import final_answer
 from core.crypto.tenant_secrets import decrypt_for_tenant, encrypt_with_kek, resolve_tenant_kek
 from core.database import get_tenant_session
+from core.insights.context import entrypoint as insights_entrypoint
 from core.models.channel import ChannelBinding, ChannelDelivery, ChannelSenderLink
 from core.models.user import User
 from core.ownership import caller_from_request
@@ -426,17 +427,18 @@ async def dispatch_one(tenant_id: uuid.UUID, binding_id: uuid.UUID) -> str:
                 payload["context"] = await _recent_answer_context(
                     binding, receipt, message, conversation_scope, conversation_credentials
                 )
-            result = await asyncio.wait_for(
-                run_agent(
-                    binding.target_id,
-                    request,
-                    payload,
-                    str(tenant_id),
-                    get_user_domains(request),
-                    caller_from_request(request),
-                ),
-                timeout=1800,
-            )
+            with insights_entrypoint("channel"):
+                result = await asyncio.wait_for(
+                    run_agent(
+                        binding.target_id,
+                        request,
+                        payload,
+                        str(tenant_id),
+                        get_user_domains(request),
+                        caller_from_request(request),
+                    ),
+                    timeout=1800,
+                )
         else:
             if user.role != "admin":
                 raise ChannelError("workflow_channel_requires_admin")

@@ -24,6 +24,7 @@ from pydantic import BaseModel
 from api.deps import get_current_tenant
 from api.route_metadata import route_meta
 from core.database import get_tenant_session
+from core.insights.context import entrypoint as insights_entrypoint
 from core.spend import context as spend_context
 
 router = APIRouter(prefix="/mcp", tags=["MCP"])
@@ -226,7 +227,7 @@ async def call_tool(
     )
 
     try:
-        with spend_context.scope(application="mcp"):
+        with spend_context.scope(application="mcp"), insights_entrypoint("mcp"):
             result = await langgraph_run(
                 agent_id=f"mcp_{_uuid.uuid4().hex[:12]}",
                 agent_type=agent_type,

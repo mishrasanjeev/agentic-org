@@ -58,6 +58,7 @@ from core.config import external_keys, is_strict_runtime_env, settings
 logger = structlog.get_logger()
 
 PROTOCOLS: tuple[str, ...] = ("http/protobuf", "grpc")
+EXPORTS: tuple[str, ...] = ("otlp", "none")
 TRACE_CONTEXT_HEADERS: tuple[str, ...] = ("traceparent", "tracestate")
 LOG_KEY = "trace_id"
 TENANT_REF_KEY = "tenant.ref"
@@ -126,17 +127,25 @@ def init_tracing(
 def validate_settings() -> tuple[str, float, str]:
     """Check the tracing settings and return the protocol, the sample ratio and the endpoint.
 
-    Raises ``TracingError`` for an unknown protocol, a sample ratio outside 0
-    to 1, or a strict runtime with tracing on and no OTLP endpoint (spans with
-    nowhere to go would be a silent gap in the evidence trail). The worker
-    process refuses to start on it, as the API's lifespan does.
+    Raises ``TracingError`` for an unknown protocol or export mode, a sample
+    ratio outside 0 to 1, or a strict runtime with tracing on and no OTLP
+    endpoint (spans with nowhere to go would be a silent gap in the evidence
+    trail). With ``AGENTICORG_TRACING_EXPORT=none`` the operator has chosen to
+    keep spans in the process, so no endpoint is needed and the returned
+    endpoint is empty. The worker process refuses to start on it, as the API's
+    lifespan does.
     """
+    export = str(settings.tracing_export or "").strip().lower()
+    if export not in EXPORTS:
+        raise TracingError(f"AGENTICORG_TRACING_EXPORT must be one of {', '.join(EXPORTS)}, not {export!r}")
     protocol = str(settings.tracing_protocol or "").strip().lower()
     if protocol not in PROTOCOLS:
         raise TracingError(f"AGENTICORG_TRACING_PROTOCOL must be one of {', '.join(PROTOCOLS)}, not {protocol!r}")
     ratio = settings.tracing_sample_ratio
     if isinstance(ratio, bool) or not isinstance(ratio, int | float) or not math.isfinite(ratio) or not 0 <= ratio <= 1:
         raise TracingError("AGENTICORG_TRACING_SAMPLE_RATIO must be a number from 0 to 1")
+    if export == "none":
+        return protocol, float(ratio), ""
     endpoint = str(external_keys.otel_exporter_otlp_endpoint or "").strip()
     if not endpoint and is_strict_runtime_env(settings.env):
         raise TracingError("tracing is on and OTEL_EXPORTER_OTLP_ENDPOINT is not set: spans would have nowhere to go")
@@ -161,6 +170,8 @@ def init_tracing_from_settings() -> bool:
         logger.warning("tracing_export_withheld_residency", env=settings.env)
     elif endpoint:
         exporter = ResidencyExporter(otlp_exporter(protocol, endpoint))
+    elif str(settings.tracing_export or "").strip().lower() == "none":
+        logger.info("tracing_export_disabled", env=settings.env)
     else:
         logger.warning("tracing_without_exporter", env=settings.env)
     init_tracing(

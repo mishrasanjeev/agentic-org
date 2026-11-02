@@ -55,6 +55,7 @@ async def seed_task_results(tenant_id: uuid.UUID, count: int = 60) -> int:
 
     now = datetime.now(UTC)
     created = 0
+    facts: list[dict] = []
 
     async with get_tenant_session(tenant_id) as session:
         for _i in range(count):
@@ -73,6 +74,7 @@ async def seed_task_results(tenant_id: uuid.UUID, count: int = 60) -> int:
             cost = round(tokens * 0.000375 / 1000, 6)
             duration = random.randint(500, 15000)
             created_at = now - timedelta(days=random.randint(0, 29), hours=random.randint(0, 23))
+            row_id, agent_id, llm_model = str(uuid.uuid4()), str(uuid.uuid4()), random.choice(_LLM_MODELS)
 
             await session.execute(
                 text("""
@@ -86,16 +88,16 @@ async def seed_task_results(tenant_id: uuid.UUID, count: int = 60) -> int:
                      :cost_usd, :duration_ms, :status, :hitl_required, :created_at)
                 """),
                 {
-                    "id": str(uuid.uuid4()),
+                    "id": row_id,
                     "tenant_id": str(tenant_id),
-                    "agent_id": str(uuid.uuid4()),
+                    "agent_id": agent_id,
                     "agent_type": agent_type,
                     "domain": domain,
                     "task_type": task_type,
                     "task_input": f'{{"action":"{task_type}","demo":true}}',
                     "task_output": f'{{"result":"Demo {task_type}","items":{random.randint(1, 50)}}}',
                     "confidence": confidence,
-                    "llm_model": random.choice(_LLM_MODELS),
+                    "llm_model": llm_model,
                     "tokens_used": tokens,
                     "cost_usd": cost,
                     "duration_ms": duration,
@@ -105,6 +107,31 @@ async def seed_task_results(tenant_id: uuid.UUID, count: int = 60) -> int:
                 },
             )
             created += 1
+            facts.append(
+                {
+                    "run_key": f"seed:{row_id}",
+                    "entrypoint": "agents",
+                    "agent_id": agent_id,
+                    "agent_type": agent_type,
+                    "domain": domain,
+                    "task_type": task_type,
+                    "status": status,
+                    "confidence": confidence,
+                    "duration_ms": duration,
+                    "hitl_required": status == "hitl_triggered",
+                    "tokens_total": tokens,
+                    "cost_usd": cost,
+                    "model": llm_model,
+                    "data_quality": "seeded",
+                    "started_at": created_at,
+                }
+            )
+
+    # Insights: the same runs as seeded run facts, only while Insights is on for the
+    # tenant (core/insights/run_facts.py); a failed write never fails the seeder.
+    from core.insights.run_facts import record_run_facts
+
+    await record_run_facts(tenant_id, facts)
 
     logger.info("seed_task_results", tenant_id=str(tenant_id), count=created)
     return created
