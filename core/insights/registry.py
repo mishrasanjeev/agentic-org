@@ -35,6 +35,7 @@ from typing import Any, Literal
 
 from core.insights import metrics as runs
 from core.insights import metrics_cost as cost
+from core.insights import metrics_domain as domain
 from core.insights import value
 from core.insights.metrics import RUN_GROUPS, MetricContext, Period
 
@@ -46,12 +47,31 @@ Resolver = Callable[[MetricContext], Awaitable[dict[str, Any]]]
 
 EXECUTIVE = "executive"
 FINANCE = "finance"
+OPERATIONS = "operations"
+HR = "hr"
+MARKETING = "marketing"
+COMMERCE = "commerce"
 
 # Which roles may read each view. Administrators hold every view; the check is
 # made server side in every handler (403 insights_view_forbidden).
 VIEW_ROLES: dict[str, frozenset[str]] = {
     EXECUTIVE: frozenset({"admin"}),
     FINANCE: frozenset({"admin", "cfo"}),
+    OPERATIONS: frozenset({"admin", "coo"}),
+    HR: frozenset({"admin", "chro"}),
+    MARKETING: frozenset({"admin", "cmo"}),
+    COMMERCE: frozenset({"admin", "merchant"}),
+}
+
+# A role view shows the run and approval metrics of its domains only (and of the caller's domains within
+# them); the Executive and Finance views keep the caller's domains as they are.
+VIEW_DOMAINS: dict[str, tuple[str, ...] | None] = {
+    EXECUTIVE: None,
+    FINANCE: None,
+    OPERATIONS: ("ops", "operations"),
+    HR: ("hr",),
+    MARKETING: ("marketing",),
+    COMMERCE: ("commerce",),
 }
 
 RUN_QUALITY_RULE = (
@@ -143,7 +163,7 @@ _METRICS: tuple[Metric, ...] = (
         ),
         unit="count",
         source=RUN_SOURCE,
-        views=(EXECUTIVE, FINANCE),
+        views=(EXECUTIVE, FINANCE, OPERATIONS, HR, MARKETING),
         data_quality_rule=RUN_QUALITY_RULE,
         resolver=runs.resolve_runs_volume,
         group_by=RUN_GROUPS,
@@ -160,7 +180,7 @@ _METRICS: tuple[Metric, ...] = (
         ),
         unit="percent",
         source=RUN_SOURCE,
-        views=(EXECUTIVE,),
+        views=(EXECUTIVE, OPERATIONS, HR),
         data_quality_rule=RUN_QUALITY_RULE,
         resolver=runs.resolve_runs_success_rate,
         thresholds=Thresholds(watch=95.0, act=90.0, direction="below"),
@@ -192,7 +212,7 @@ _METRICS: tuple[Metric, ...] = (
         ),
         unit="duration_ms",
         source=RUN_SOURCE,
-        views=(EXECUTIVE,),
+        views=(EXECUTIVE, OPERATIONS),
         data_quality_rule=RUN_QUALITY_RULE,
         resolver=runs.resolve_runs_latency,
         thresholds=Thresholds(watch=30_000.0, act=60_000.0, direction="above"),
@@ -204,7 +224,7 @@ _METRICS: tuple[Metric, ...] = (
         definition="Approvals waiting on a person now; rows list the oldest five.",
         unit="count",
         source=("hitl_queue",),
-        views=(EXECUTIVE,),
+        views=(EXECUTIVE, OPERATIONS, HR, MARKETING),
         data_quality_rule=SNAPSHOT_QUALITY_RULE,
         resolver=runs.resolve_approvals_pending,
         thresholds=Thresholds(watch=5.0, act=20.0, direction="above"),
@@ -217,7 +237,7 @@ _METRICS: tuple[Metric, ...] = (
         definition="The median time from an approval request to its decision, for decisions made in the period.",
         unit="duration_ms",
         source=("hitl_queue",),
-        views=(EXECUTIVE,),
+        views=(EXECUTIVE, HR),
         data_quality_rule="measured from decided approvals; no_data when none was decided in the period.",
         resolver=runs.resolve_approvals_cycle_time,
         thresholds=Thresholds(watch=4 * 3_600_000.0, act=24 * 3_600_000.0, direction="above"),
@@ -393,6 +413,132 @@ _METRICS: tuple[Metric, ...] = (
         thresholds=Thresholds(watch=50.0, act=0.0, direction="below"),
         kind="value",
     ),
+    Metric(
+        key="workflows.runs",
+        title="Workflow runs",
+        definition="Workflow runs that started in the period; rows break them down by their status now.",
+        unit="count",
+        source=("workflow_runs",),
+        views=(OPERATIONS,),
+        data_quality_rule="measured; no_data when no workflow run started in the period.",
+        resolver=domain.resolve_workflow_runs,
+    ),
+    Metric(
+        key="workflows.stalled",
+        title="Stalled workflow runs",
+        definition="Workflow runs still open past their timeout, now; rows list the five oldest.",
+        unit="count",
+        source=("workflow_runs", "workflow_definitions"),
+        views=(OPERATIONS,),
+        data_quality_rule=SNAPSHOT_QUALITY_RULE,
+        resolver=domain.resolve_workflows_stalled,
+        thresholds=Thresholds(watch=1.0, act=5.0, direction="above"),
+        comparable=False,
+        kind="snapshot",
+    ),
+    Metric(
+        key="connectors.unhealthy",
+        title="Unhealthy connectors",
+        definition=(
+            "Connector configurations whose last health check failed, now; rows count configurations by health."
+        ),
+        unit="count",
+        source=("connector_configs",),
+        views=(OPERATIONS,),
+        data_quality_rule=SNAPSHOT_QUALITY_RULE,
+        resolver=domain.resolve_connectors_unhealthy,
+        thresholds=Thresholds(watch=1.0, act=3.0, direction="above"),
+        comparable=False,
+        kind="snapshot",
+    ),
+    Metric(
+        key="hr.pt_returns",
+        title="Professional tax returns filed",
+        definition=(
+            "Professional tax returns submitted in the period; rows add the returns prepared but not submitted yet."
+        ),
+        unit="count",
+        source=("professional_tax_returns",),
+        views=(HR,),
+        data_quality_rule="measured; no_data when no return was prepared or filed.",
+        resolver=domain.resolve_pt_returns,
+    ),
+    Metric(
+        key="marketing.leads",
+        title="New leads",
+        definition="Leads added to the pipeline in the period; rows break them down by their stage now.",
+        unit="count",
+        source=("lead_pipeline",),
+        views=(MARKETING,),
+        data_quality_rule="measured; no_data when no lead was added in the period.",
+        resolver=domain.resolve_leads,
+    ),
+    Metric(
+        key="marketing.content_drafts",
+        title="Content drafts",
+        definition=(
+            "Content drafts created in the period; rows break them down by status (draft, pending, approved, "
+            "rejected)."
+        ),
+        unit="count",
+        source=("content_drafts",),
+        views=(MARKETING,),
+        data_quality_rule="measured; no_data when no draft was created in the period.",
+        resolver=domain.resolve_content_drafts,
+    ),
+    Metric(
+        key="marketing.draft_cycle_time",
+        title="Draft approval time (median)",
+        definition=(
+            "The median time from a content draft's creation to its approval or rejection, for drafts decided in "
+            "the period."
+        ),
+        unit="duration_ms",
+        source=("content_drafts",),
+        views=(MARKETING,),
+        data_quality_rule="measured; no_data when no draft was decided in the period.",
+        resolver=domain.resolve_draft_cycle_time,
+        thresholds=Thresholds(watch=24 * 3_600_000.0, act=72 * 3_600_000.0, direction="above"),
+    ),
+    Metric(
+        key="commerce.funnel",
+        title="Shopping funnel",
+        definition=(
+            "Carts, checkout sessions, completed checkouts, orders and paid orders created in the period, in order. "
+            "An order counts as paid when a payment capture for it succeeded. The value is the orders."
+        ),
+        unit="count",
+        source=("commerce_carts", "commerce_checkout_sessions", "commerce_orders", "commerce_payment_operations"),
+        views=(COMMERCE,),
+        data_quality_rule="measured; no_data when there was no shopping activity in the period.",
+        resolver=domain.resolve_commerce_funnel,
+        comparable=False,
+    ),
+    Metric(
+        key="commerce.orders",
+        title="Orders",
+        definition="Orders placed in the period.",
+        unit="count",
+        source=("commerce_orders",),
+        views=(COMMERCE,),
+        data_quality_rule="measured; no_data when no order was placed in the period.",
+        resolver=domain.resolve_commerce_orders,
+    ),
+    Metric(
+        key="commerce.webhook_failures",
+        title="Order webhooks given up",
+        definition=(
+            "Order webhooks created in the period that were given up after their retries (dead lettered); rows add "
+            "the delivered and still pending ones."
+        ),
+        unit="count",
+        source=("commerce_order_webhook_deliveries",),
+        views=(COMMERCE,),
+        data_quality_rule="measured; no_data when no order webhook was sent in the period.",
+        resolver=domain.resolve_webhook_failures,
+        thresholds=Thresholds(watch=1.0, act=10.0, direction="above"),
+        comparable=False,
+    ),
 )
 
 METRICS: dict[str, Metric] = {metric.key: metric for metric in _METRICS}
@@ -438,6 +584,38 @@ VIEWS: dict[str, View] = {
                "value.roi"),
         charts=("cost.spend", "cost.by_agent", "cost.by_model", "cost.forecast", "cost.budgets", "tokens.by_unit",
                 "value.money_saved"),
+    ),
+    OPERATIONS: View(
+        key=OPERATIONS,
+        title="Operations",
+        tiles=(
+            "workflows.runs",
+            "workflows.stalled",
+            "runs.success_rate",
+            "runs.latency",
+            "approvals.pending",
+            "connectors.unhealthy",
+        ),
+        charts=("workflows.runs", "runs.volume", "connectors.unhealthy"),
+    ),
+    HR: View(
+        key=HR,
+        title="HR",
+        tiles=("runs.volume", "runs.success_rate", "approvals.pending", "approvals.cycle_time", "hr.pt_returns"),
+        charts=("runs.volume", "hr.pt_returns"),
+    ),
+    MARKETING: View(
+        key=MARKETING,
+        title="Marketing",
+        tiles=("marketing.leads", "marketing.content_drafts", "marketing.draft_cycle_time", "runs.volume",
+               "approvals.pending"),
+        charts=("marketing.leads", "marketing.content_drafts"),
+    ),
+    COMMERCE: View(
+        key=COMMERCE,
+        title="Commerce",
+        tiles=("commerce.orders", "commerce.webhook_failures"),
+        charts=("commerce.funnel", "commerce.orders"),
     ),
 }
 

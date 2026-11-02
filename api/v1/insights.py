@@ -185,6 +185,23 @@ async def _alert_items(session: Any, tid: uuid.UUID, caller: Caller) -> list[dic
     return items
 
 
+# Domains filed under another name: the COO's "ops" also covers agents in "operations".
+DOMAIN_ALIASES: dict[str, tuple[str, ...]] = {"ops": ("operations",)}
+
+
+def view_domains(view: str, caller_domains: list[str] | None) -> list[str] | None:
+    """The domains a view's run and approval metrics read: the view's own, within the caller's."""
+    own = registry.VIEW_DOMAINS.get(view)
+    if own is None:
+        return caller_domains
+    if caller_domains is None:
+        return list(own)
+    allowed = set(caller_domains)
+    for domain in caller_domains:
+        allowed.update(DOMAIN_ALIASES.get(domain, ()))
+    return [d for d in own if d in allowed]
+
+
 # ---------------------------------------------------------------- status and catalog
 
 
@@ -277,6 +294,7 @@ async def insights_view(
     spec = registry.VIEWS[view]
     async with get_tenant_session(tid) as session:
         ctx = await _context(session, tid, caller, start=from_, end=to, compare=compare, company=company)
+        ctx.domains = view_domains(view, caller.domains)
         resolved: dict[str, dict[str, Any]] = {}
         for key in spec.keys:
             resolved[key] = await registry.resolve(registry.METRICS[key], ctx)

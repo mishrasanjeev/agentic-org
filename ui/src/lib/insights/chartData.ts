@@ -237,3 +237,29 @@ export function waterfallData(rows: MetricRow[] | null | undefined): WaterfallSt
   });
   return out;
 }
+
+export interface FunnelStage {
+  label: string;
+  value: number;
+  /** The share of the first stage, 0 to 100. */
+  ofFirst: number;
+  /** The share of the stage before kept at this one, 0 to 100; null for the first stage or after an empty one. */
+  kept: number | null;
+}
+
+/** Funnel stages in the order the API sent them (never re-sorted), with the share kept between stages. */
+export function funnelData(rows: MetricRow[] | null | undefined): FunnelStage[] {
+  const items = (rows ?? [])
+    .map((r) => ({ label: typeof r?.label === "string" ? r.label : "", value: toFiniteNumber(r?.value) }))
+    .filter((r): r is { label: string; value: number } => r.label !== "" && r.value !== null);
+  const first = items[0]?.value ?? 0;
+  return items.map((item, i) => {
+    const prev = i > 0 ? items[i - 1].value : null;
+    return {
+      label: item.label,
+      value: item.value,
+      ofFirst: first > 0 ? Math.min(100, (100 * item.value) / first) : 0,
+      kept: prev !== null && prev > 0 ? Math.round((1000 * item.value) / prev) / 10 : null,
+    };
+  });
+}

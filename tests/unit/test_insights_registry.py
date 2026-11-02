@@ -32,6 +32,16 @@ V1_KEYS = {
     "value.money_saved",
     "value.hours_saved",
     "value.roi",
+    "workflows.runs",
+    "workflows.stalled",
+    "connectors.unhealthy",
+    "hr.pt_returns",
+    "marketing.leads",
+    "marketing.content_drafts",
+    "marketing.draft_cycle_time",
+    "commerce.funnel",
+    "commerce.orders",
+    "commerce.webhook_failures",
 }
 EXECUTIVE = {
     "agents.by_status",
@@ -58,6 +68,24 @@ FINANCE = {
     "value.money_saved",
     "value.roi",
 }
+OPERATIONS = {
+    "workflows.runs",
+    "workflows.stalled",
+    "runs.success_rate",
+    "runs.latency",
+    "approvals.pending",
+    "connectors.unhealthy",
+    "runs.volume",
+}
+HR = {"runs.volume", "runs.success_rate", "approvals.pending", "approvals.cycle_time", "hr.pt_returns"}
+MARKETING = {
+    "marketing.leads",
+    "marketing.content_drafts",
+    "marketing.draft_cycle_time",
+    "runs.volume",
+    "approvals.pending",
+}
+COMMERCE = {"commerce.orders", "commerce.webhook_failures", "commerce.funnel"}
 
 
 def test_the_v1_metric_keys_are_exactly_registered() -> None:
@@ -66,9 +94,13 @@ def test_the_v1_metric_keys_are_exactly_registered() -> None:
 
 
 def test_views_show_exactly_their_metrics() -> None:
-    assert set(VIEWS) == {"executive", "finance"}
+    assert set(VIEWS) == {"executive", "finance", "operations", "hr", "marketing", "commerce"}
     assert set(VIEWS["executive"].keys) == EXECUTIVE
     assert set(VIEWS["finance"].keys) == FINANCE
+    assert set(VIEWS["operations"].keys) == OPERATIONS
+    assert set(VIEWS["hr"].keys) == HR
+    assert set(VIEWS["marketing"].keys) == MARKETING
+    assert set(VIEWS["commerce"].keys) == COMMERCE
     for view in VIEWS.values():
         for key in view.keys:
             assert key in METRICS, key
@@ -79,14 +111,40 @@ def test_views_show_exactly_their_metrics() -> None:
 
 
 def test_view_roles() -> None:
-    assert VIEW_ROLES == {"executive": frozenset({"admin"}), "finance": frozenset({"admin", "cfo"})}
-    assert registry.allowed_views("admin", is_admin=True) == ["executive", "finance"]
-    assert registry.allowed_views("", is_admin=True) == ["executive", "finance"]
+    assert VIEW_ROLES == {
+        "executive": frozenset({"admin"}),
+        "finance": frozenset({"admin", "cfo"}),
+        "operations": frozenset({"admin", "coo"}),
+        "hr": frozenset({"admin", "chro"}),
+        "marketing": frozenset({"admin", "cmo"}),
+        "commerce": frozenset({"admin", "merchant"}),
+    }
+    every = ["executive", "finance", "operations", "hr", "marketing", "commerce"]
+    assert registry.allowed_views("admin", is_admin=True) == every
+    assert registry.allowed_views("", is_admin=True) == every
     assert registry.allowed_views("cfo", is_admin=False) == ["finance"]
+    assert registry.allowed_views("coo", is_admin=False) == ["operations"]
+    assert registry.allowed_views("chro", is_admin=False) == ["hr"]
+    assert registry.allowed_views("cmo", is_admin=False) == ["marketing"]
+    assert registry.allowed_views("merchant", is_admin=False) == ["commerce"]
     # A role claim of "admin" without the admin scope is not an administrator.
     assert registry.allowed_views("admin", is_admin=False) == []
-    for role in ("analyst", "chro", "cmo", "coo", "auditor", "domain_lead", "developer", "merchant", ""):
+    for role in ("analyst", "auditor", "domain_lead", "developer", ""):
         assert registry.allowed_views(role, is_admin=False) == [], role
+
+
+def test_role_views_read_their_own_domains_within_the_callers() -> None:
+    from api.v1.insights import view_domains
+
+    assert registry.VIEW_DOMAINS["executive"] is None and registry.VIEW_DOMAINS["finance"] is None
+    assert view_domains("executive", ["finance"]) == ["finance"]
+    assert view_domains("executive", None) is None
+    assert view_domains("operations", None) == ["ops", "operations"]
+    # The COO's "ops" covers agents filed under "operations".
+    assert view_domains("operations", ["ops"]) == ["ops", "operations"]
+    assert view_domains("hr", ["hr"]) == ["hr"]
+    assert view_domains("hr", ["finance"]) == []
+    assert view_domains("commerce", ["commerce"]) == ["commerce"]
 
 
 @pytest.mark.parametrize("key", sorted(V1_KEYS))
@@ -121,7 +179,8 @@ def test_group_by_is_an_allow_list() -> None:
         assert "status" not in METRICS[key].group_by
     assert METRICS["cost.spend"].group_by == ("agent",)
     for key in ("cost.by_agent", "cost.by_model", "cost.forecast", "cost.budgets", "cost.data_quality",
-                "value.money_saved", "value.hours_saved", "value.roi"):
+                "value.money_saved", "value.hours_saved", "value.roi", "workflows.runs", "hr.pt_returns",
+                "marketing.leads", "commerce.funnel", "commerce.orders"):
         assert METRICS[key].group_by == ()
 
 
@@ -134,7 +193,8 @@ def test_thresholds_state() -> None:
 
 def test_readable_metrics_follow_the_views() -> None:
     assert {m.key for m in registry.readable_metrics(["finance"])} == FINANCE
-    assert {m.key for m in registry.readable_metrics(["executive", "finance"])} == V1_KEYS
+    assert {m.key for m in registry.readable_metrics(["executive", "finance"])} == EXECUTIVE | FINANCE
+    assert {m.key for m in registry.readable_metrics(list(registry.VIEWS))} == V1_KEYS
     assert registry.readable_metrics([]) == []
 
 

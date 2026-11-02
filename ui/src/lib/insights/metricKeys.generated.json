@@ -2,6 +2,10 @@
   "agents.by_status",
   "approvals.cycle_time",
   "approvals.pending",
+  "commerce.funnel",
+  "commerce.orders",
+  "commerce.webhook_failures",
+  "connectors.unhealthy",
   "cost.budgets",
   "cost.by_agent",
   "cost.by_model",
@@ -9,6 +13,10 @@
   "cost.forecast",
   "cost.per_run",
   "cost.spend",
+  "hr.pt_returns",
+  "marketing.content_drafts",
+  "marketing.draft_cycle_time",
+  "marketing.leads",
   "runs.latency",
   "runs.straight_through_rate",
   "runs.success_rate",
@@ -16,5 +24,7 @@
   "tokens.by_unit",
   "value.hours_saved",
   "value.money_saved",
-  "value.roi"
+  "value.roi",
+  "workflows.runs",
+  "workflows.stalled"
 ]

@@ -24,6 +24,7 @@ import {
   lineData,
   rankedData,
   stackedData,
+  funnelData,
   waterfallData,
   type BulletItem,
 } from "@/lib/insights/chartData";
@@ -76,6 +77,17 @@ export function chartSummary(metric: MetricResponse, kind: ChartKind, t: TFuncti
         groups: groups.length,
         top: top.g,
         value: fmt(top.v),
+      });
+    }
+    case "funnel": {
+      const stages = funnelData(metric.rows);
+      if (stages.length === 0) break;
+      return t("insights.chart.summaryFunnel", {
+        title,
+        first: t(`insights.funnel.${stages[0].label}`, { defaultValue: stages[0].label }),
+        firstValue: fmt(stages[0].value),
+        last: t(`insights.funnel.${stages[stages.length - 1].label}`, { defaultValue: stages[stages.length - 1].label }),
+        lastValue: fmt(stages[stages.length - 1].value),
       });
     }
     case "waterfall": {
@@ -213,6 +225,26 @@ export default function InsightChart({
           <Bar dataKey="value" name={metric.title} fill={chartColor(0)} isAnimationActive={false} />
         </BarChart>
       </ResponsiveContainer>
+    );
+  } else if (kind === "funnel") {
+    const stages = funnelData(metric.rows);
+    body = (
+      <ol className="flex flex-col gap-2" data-testid="funnel">
+        {stages.map((s) => (
+          <li key={s.label} className="flex flex-col gap-0.5">
+            <div className="flex items-baseline justify-between gap-2 text-xs">
+              <span className="font-medium">{t(`insights.funnel.${s.label}`, { defaultValue: s.label })}</span>
+              <span className="tabular-nums text-muted-foreground">
+                {fmt(s.value)}
+                {s.kept !== null ? ` · ${t("insights.chart.kept", { pct: s.kept })}` : ""}
+              </span>
+            </div>
+            <div className="h-3 w-full rounded bg-muted" aria-hidden="true">
+              <div className="h-3 rounded" style={{ width: `${Math.max(s.ofFirst, s.value > 0 ? 1 : 0)}%`, background: chartColor(0) }} />
+            </div>
+          </li>
+        ))}
+      </ol>
     );
   } else if (kind === "waterfall") {
     const steps = waterfallData(metric.rows).map((s) => ({ ...s, name: t(`insights.waterfall.${s.label}`, { defaultValue: s.label }) }));

@@ -9,7 +9,7 @@
  */
 import api from "@/lib/api";
 
-export type InsightsViewKey = "executive" | "finance";
+export type InsightsViewKey = "executive" | "finance" | "operations" | "hr" | "marketing" | "commerce";
 export type DataQuality = "measured" | "estimated" | "seeded" | "no_data" | "mixed";
 export type MetricUnit = "count" | "percent" | "duration_ms" | "usd" | "inr" | "tokens" | "hours";
 export type MetricState = "ok" | "watch" | "act";
@@ -17,7 +17,14 @@ export type ReportingCurrency = "INR" | "USD";
 export type CompareMode = "previous" | "none";
 export type ExportFormat = "csv" | "xlsx" | "json";
 
-export const VIEW_KEYS: readonly InsightsViewKey[] = ["executive", "finance"];
+export const VIEW_KEYS: readonly InsightsViewKey[] = [
+  "executive",
+  "finance",
+  "operations",
+  "hr",
+  "marketing",
+  "commerce",
+];
 export const EXPORT_FORMATS: readonly ExportFormat[] = ["csv", "xlsx", "json"];
 
 export interface ReportingSettings {
