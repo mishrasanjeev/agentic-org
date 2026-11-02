@@ -5,6 +5,7 @@ import {
   Bar,
   BarChart,
   CartesianGrid,
+  Cell,
   ComposedChart,
   ErrorBar,
   Legend,
@@ -23,6 +24,7 @@ import {
   lineData,
   rankedData,
   stackedData,
+  waterfallData,
   type BulletItem,
 } from "@/lib/insights/chartData";
 import { formatMetricValue, formatMoney, MISSING } from "@/lib/insights/format";
@@ -74,6 +76,17 @@ export function chartSummary(metric: MetricResponse, kind: ChartKind, t: TFuncti
         groups: groups.length,
         top: top.g,
         value: fmt(top.v),
+      });
+    }
+    case "waterfall": {
+      const steps = waterfallData(metric.rows);
+      if (steps.length === 0) break;
+      const first = steps[0];
+      const last = steps[steps.length - 1];
+      return t("insights.chart.summaryWaterfall", {
+        title,
+        gross: fmt(first.value),
+        net: fmt(last.value),
       });
     }
     case "hbar": {
@@ -198,6 +211,29 @@ export default function InsightChart({
           <YAxis type="category" dataKey="label" tick={AXIS_TICK} tickLine={false} axisLine={false} width={128} />
           <Tooltip formatter={tooltipFormatter} contentStyle={TOOLTIP_STYLE} />
           <Bar dataKey="value" name={metric.title} fill={chartColor(0)} isAnimationActive={false} />
+        </BarChart>
+      </ResponsiveContainer>
+    );
+  } else if (kind === "waterfall") {
+    const steps = waterfallData(metric.rows).map((s) => ({ ...s, name: t(`insights.waterfall.${s.label}`, { defaultValue: s.label }) }));
+    body = (
+      <ResponsiveContainer width="100%" height={HEIGHT}>
+        <BarChart data={steps} margin={{ top: 8, right: 12, bottom: 0, left: 0 }}>
+          <CartesianGrid stroke={GRID_STROKE} strokeDasharray="3 3" vertical={false} />
+          <XAxis dataKey="name" tick={AXIS_TICK} tickLine={false} axisLine={false} interval={0} />
+          <YAxis tick={AXIS_TICK} tickLine={false} axisLine={false} width={72} tickFormatter={(v) => fmt(v)} />
+          <Tooltip
+            contentStyle={TOOLTIP_STYLE}
+            formatter={(_v: unknown, name: unknown, item: { payload?: { value?: number } }) =>
+              name === "size" ? [fmt(item?.payload?.value), metric.title] : [null, null]
+            }
+          />
+          <Bar dataKey="base" stackId="w" fill="transparent" isAnimationActive={false} />
+          <Bar dataKey="size" stackId="w" isAnimationActive={false}>
+            {steps.map((s) => (
+              <Cell key={s.label} fill={s.kind === "decrease" ? stateColor("act") : chartColor(0)} />
+            ))}
+          </Bar>
         </BarChart>
       </ResponsiveContainer>
     );

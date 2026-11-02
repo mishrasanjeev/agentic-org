@@ -856,7 +856,8 @@
       "summaryBullet": "{{title}}: {{count}} budgets, {{breached}} breached and {{warn}} at warning.",
       "summaryForecast": "{{title}}: forecast {{point}}, likely between {{low}} and {{high}}.",
       "summaryForecastNoBand": "{{title}}: forecast {{point}}.",
-      "summaryEmpty": "{{title}}: no data for this period."
+      "summaryEmpty": "{{title}}: no data for this period.",
+      "summaryWaterfall": "{{title}}: gross saved {{gross}}, net saved {{net}} after spend, review time and errors."
     },
     "table": {
       "caption": "{{title}} data",
@@ -881,7 +882,10 @@
       "title": "Needs you",
       "empty": "Nothing needs you right now.",
       "age": "waiting {{age}}",
-      "open": "Open"
+      "open": "Open",
+      "ack": "Acknowledge",
+      "ackLabel": "Acknowledge: {{title}}",
+      "ackFailed": "Could not acknowledge"
     },
     "actions": {
       "openAgents": "Open agents",
@@ -894,7 +898,8 @@
       "exploreSlowRuns": "See slowest runs",
       "explorePending": "See pending approvals",
       "exploreApprovals": "Explore approvals",
-      "exploreCost": "Explain the spend"
+      "exploreCost": "Explain the spend",
+      "openValue": "Review assumptions"
     },
     "disabled": {
       "title": "Insights is turned off",
@@ -914,6 +919,14 @@
     },
     "explore": {
       "heading": "Explore the data"
+    },
+    "valueLink": "Money saved",
+    "waterfall": {
+      "gross_saved": "Gross saved",
+      "spend": "AI spend",
+      "review_cost": "Review time",
+      "error_cost": "Errors",
+      "net_saved": "Net saved"
     }
   },
   "insightsBi": {
@@ -1040,7 +1053,8 @@
       "cost": "Cost and drivers",
       "quality": "Quality and learning",
       "connectors": "Connectors",
-      "audit": "Security and audit"
+      "audit": "Security and audit",
+      "value": "Value and savings"
     },
     "filters": {
       "label": "Filters",
@@ -1110,5 +1124,67 @@
       "action": "Action",
       "signed": "Signed"
     }
+  },
+  "insightsValue": {
+    "title": "Money saved",
+    "subtitle": "An estimate from completed tasks, the minutes each replaces and hourly rates your organisation confirms.",
+    "loading": "Loading money saved…",
+    "forbidden": {
+      "title": "Money saved is for administrators and the CFO",
+      "body": "Ask an administrator for access."
+    },
+    "summaryTitle": "This period",
+    "estimated": "Estimated",
+    "confidence": {
+      "high": "High confidence",
+      "medium": "Medium confidence",
+      "low": "Low confidence"
+    },
+    "net": "Net saved",
+    "hours": "Hours saved",
+    "roi": "ROI",
+    "roiBelowFloor": "Shown once spend reaches {{floor}}",
+    "waterfallTitle": "Gross to net",
+    "unconfirmedTitle": "Confirm the assumptions to see savings",
+    "unconfirmedBody": "{{baselines}} baselines and {{rates}} hourly rates used this period are not confirmed yet. Review them below; nothing is shown until they are.",
+    "askAdmin": "A tenant administrator confirms them.",
+    "confirmAll": "Confirm all used ({{count}})",
+    "confirmedAll": "Assumptions confirmed.",
+    "confirmedOne": "Confirmed.",
+    "counts": "{{completed}} completed and {{failed}} failed tasks with a baseline; {{reviews}} approvals decided.",
+    "unpriced": "Agent types with no baseline, not valued: {{types}}.",
+    "baselines": "Baselines: minutes of work one task replaces",
+    "baselinesHint": "Seeded defaults are starting points. Edit any figure to your own; your figure counts as confirmed by you. Every change is audited.",
+    "rates": "Hourly rates by role",
+    "ratesHint": "Loaded hourly cost of the person who would do the task by hand. Seeded rates cite their public source.",
+    "agentType": "Agent type",
+    "task": "Task",
+    "anyTask": "Any task",
+    "minutes": "Minutes per task",
+    "minutesFor": "Minutes per task for {{type}}",
+    "role": "Done by",
+    "roleFor": "Role for {{type}}",
+    "status": "Source",
+    "hourly": "Hourly cost",
+    "hourlyFor": "Hourly cost for {{role}}",
+    "citation": "Source of the default",
+    "source": {
+      "seeded": "Default",
+      "tenant": "Yours"
+    },
+    "confirmed": "confirmed",
+    "notConfirmed": "not confirmed",
+    "confirm": "Confirm",
+    "confirmLabel": "Confirm {{name}}",
+    "save": "Save",
+    "saved": "Saved.",
+    "saveFailed": "Could not save.",
+    "adminOnly": "Only an administrator signed in as a person can change the assumptions.",
+    "usedInPeriod": "used",
+    "addFor": "Add a baseline for",
+    "add": "Add",
+    "added": "Baseline added.",
+    "roiFloor": "Show ROI from a period spend of ({{currency}})",
+    "roiFloorDefault": "Use the default"
   }
 }

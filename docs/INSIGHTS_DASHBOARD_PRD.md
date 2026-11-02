@@ -27,7 +27,7 @@ Being delivered first:
 Level 4; shipped first), (2) the money-saved model and alerts, (3) the Operations, HR, Marketing and Commerce
 views. Release 1 delivers eight of the nine explorers (Value and savings arrives with the money-saved model);
 the Security and audit explorer reads the audit log, and sign-in, lockout and rate-limit counters arrive with
-`security_events_daily` later. Connector call counts wait for a `tool_calls` writer.
+`security_events_daily` later. Connector call counts wait for a `tool_calls` writer. Release 2 adds the money-saved model (seeded baselines for the built-in agent types; hourly rates from BLS OEWS May 2025 for USD tenants and MoSPI PLFS 2025 for INR tenants, each cited and confirmed by the tenant administrator), the Value and savings explorer, and alerts (in-app and an email for `act` alerts). Workflow steps count as tasks per completed step run (the rollup keeps no per-workflow distinct count), so a retried step charges its failure once in the error cost. A forecast-above-budget alert is not in this release.
 
 Later phases are unchanged. In v1 the legacy dashboard pages stay: deleting them would remove working features that need a new home first, namely the CMO work queue, approvals, connector setup and promotion gates; the Observability run debugger and synthetic-check management; the Company management list, bulk upload and archive; and ABM account upload and campaign launch.
 

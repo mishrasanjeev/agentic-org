@@ -166,6 +166,34 @@ _EXPLORERS: tuple[Explorer, ...] = (
         ),
     ),
     Explorer(
+        key="value",
+        title="Value and savings",
+        definition=(
+            "The money-saved estimate line by line: completed and failed tasks of each agent type in the period, "
+            "the baseline minutes per task, the role and its hourly rate, hours saved, gross saved and error cost, "
+            "and whether a tenant administrator has confirmed the baseline and rate. Every figure is an estimate."
+        ),
+        source=("run_facts", "insights_daily", "value_baselines", "value_rates"),
+        readers=frozenset({"cfo"}),
+        default_sort="gross_saved",
+        resolver=src.explore_value,
+        columns=(
+            Column("agent_type", "Agent type", "text", filter="text"),
+            Column("task_type", "Task", "text", filter="text"),
+            Column("completed", "Completed", "count", filter="min"),
+            Column("failed", "Failed", "count"),
+            Column("baseline_minutes", "Minutes per task", "number"),
+            Column("role", "Done by hand by", "text", filter="enum"),
+            Column("hourly_rate", "Hourly rate", "money"),
+            Column("hours_saved", "Hours saved", "number", filter="min"),
+            Column("gross_saved", "Gross saved", "money"),
+            Column("error_cost", "Error cost", "money"),
+            Column("baseline_source", "Baseline source", "text", filter="enum", options=("seeded", "tenant")),
+            Column("confirmed", "Confirmed", "bool", filter="bool"),
+            Column("priced", "Priced", "bool", filter="bool"),
+        ),
+    ),
+    Explorer(
         key="quality",
         title="Quality and learning",
         definition=(

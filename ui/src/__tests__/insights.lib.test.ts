@@ -98,7 +98,7 @@ describe("metric keys used by the Insights page", () => {
       const target = METRIC_PRESENTATION[key].action.to;
       const explorer = /^\/dashboard\/insights\/explore\/([a-z]+)/.exec(target)?.[1];
       if (explorer) expect(cfoExplorers, key).toContain(explorer);
-      else expect(target, key).toBe("/dashboard/costs");
+      else expect(["/dashboard/costs", "/dashboard/insights/value"], key).toContain(target);
     }
   });
 });

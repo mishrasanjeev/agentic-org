@@ -29,6 +29,9 @@ V1_KEYS = {
     "cost.budgets",
     "tokens.by_unit",
     "cost.data_quality",
+    "value.money_saved",
+    "value.hours_saved",
+    "value.roi",
 }
 EXECUTIVE = {
     "agents.by_status",
@@ -39,6 +42,8 @@ EXECUTIVE = {
     "approvals.pending",
     "approvals.cycle_time",
     "cost.spend",
+    "value.money_saved",
+    "value.hours_saved",
 }
 FINANCE = {
     "cost.spend",
@@ -50,6 +55,8 @@ FINANCE = {
     "tokens.by_unit",
     "cost.data_quality",
     "runs.volume",
+    "value.money_saved",
+    "value.roi",
 }
 
 
@@ -91,7 +98,7 @@ def test_every_metric_is_fully_described(key: str) -> None:
     assert metric.source and all(isinstance(name, str) and name for name in metric.source)
     assert metric.views and set(metric.views) <= set(VIEWS)
     assert callable(metric.resolver)
-    assert metric.kind in {"run", "cost", "snapshot"}
+    assert metric.kind in {"run", "cost", "snapshot", "value"}
     if metric.thresholds is not None:
         assert metric.thresholds.direction in {"above", "below"}
         if metric.thresholds.direction == "above":
@@ -113,7 +120,8 @@ def test_group_by_is_an_allow_list() -> None:
     for key in ("runs.success_rate", "runs.straight_through_rate", "runs.latency"):
         assert "status" not in METRICS[key].group_by
     assert METRICS["cost.spend"].group_by == ("agent",)
-    for key in ("cost.by_agent", "cost.by_model", "cost.forecast", "cost.budgets", "cost.data_quality"):
+    for key in ("cost.by_agent", "cost.by_model", "cost.forecast", "cost.budgets", "cost.data_quality",
+                "value.money_saved", "value.hours_saved", "value.roi"):
         assert METRICS[key].group_by == ()
 
 

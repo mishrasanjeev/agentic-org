@@ -268,3 +268,38 @@ def reconcile_yesterday() -> dict[str, Any]:
     if off is not None:
         return off
     return run_async(_sweep("reconcile_yesterday", _reconcile))
+
+
+async def _evaluate_alerts(tenant: TenantClock, now: datetime) -> int:
+    """Open, refresh and resolve the tenant's alerts; email new ``act`` alerts once. Answers alerts opened."""
+    from core.database import get_tenant_session
+    from core.insights import alerts
+    from core.insights.metrics import MetricContext, apply_statement_timeout, local_today
+    from core.insights.reporting_settings import load_reporting_settings
+
+    async with get_tenant_session(tenant.tenant_id) as session:
+        await apply_statement_timeout(session)
+        reporting = await load_reporting_settings(session, tenant.tenant_id)
+        current, previous = alerts.window(local_today(reporting.zone(), now))
+        ctx = MetricContext(
+            session=session,
+            tenant_id=tenant.tenant_id,
+            reporting=reporting,
+            period=current,
+            compare=previous,
+            now=now,
+        )
+        candidates = await alerts.evaluate(ctx)
+        applied = await alerts.apply(session, tenant.tenant_id, candidates, now)
+    if applied.to_notify:
+        await alerts.notify(tenant.tenant_id, applied.to_notify, now)
+    return applied.opened
+
+
+@app.task(name="core.tasks.insights_tasks.evaluate_alerts")
+def evaluate_alerts() -> dict[str, Any]:
+    """Every 15 minutes: each enabled tenant's Insights alerts (``days`` counts alerts opened)."""
+    off = _off()
+    if off is not None:
+        return off
+    return run_async(_sweep("evaluate_alerts", _evaluate_alerts))

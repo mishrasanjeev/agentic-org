@@ -75,7 +75,13 @@ export default function Approvals() {
       setItems(merged);
       setTotal(results.reduce((acc, r) => acc + r.total, 0));
       setPages(Math.max(1, ...results.map((r) => r.pages)));
-      if (which === "pending") setPendingTotal(results[0].total);
+      if (which === "pending") {
+        setPendingTotal(results[0].total);
+        // Record that a person has seen these approvals (money saved prices review time from it).
+        // Best effort: the list never waits on it or fails because of it.
+        const ids = merged.map((item) => item.id).slice(0, 100);
+        if (ids.length > 0) api.post("/approvals/viewed", { ids }).catch(() => undefined);
+      }
     } catch (e: unknown) {
       // Explicit error state: never render "No pending approvals" on a failed fetch.
       setItems([]);

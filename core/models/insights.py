@@ -37,7 +37,7 @@ from sqlalchemy import (
     func,
     text,
 )
-from sqlalchemy.dialects.postgresql import ARRAY, UUID
+from sqlalchemy.dialects.postgresql import ARRAY, JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
 from core.models.base import BaseModel
@@ -275,3 +275,117 @@ class InsightsBiLogin(BaseModel):
     created_by: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), server_default=func.now(), nullable=False)
     revoked_at: Mapped[datetime | None] = mapped_column(TIMESTAMP(timezone=True), nullable=True)
+
+
+# ---------------------------------------------------------------- money saved and alerts (v6z109)
+
+VALUE_SOURCES: tuple[str, ...] = ("seeded", "tenant")
+VALUE_CURRENCIES: tuple[str, ...] = ("INR", "USD")
+ALERT_SEVERITIES: tuple[str, ...] = ("watch", "act")
+ALERT_STATES: tuple[str, ...] = ("open", "acked", "resolved")
+
+
+class ValueBaseline(BaseModel):
+    """Minutes of human work one completed task of an agent type replaces, and who would do it. Forced RLS.
+
+    ``task_type`` ``*`` covers every task of the agent type; a specific task type wins over it.
+    ``source`` says where the figure came from (``seeded`` defaults or the ``tenant``); savings
+    count only once a tenant administrator confirmed it (``confirmed_at``).
+    """
+
+    __tablename__ = "value_baselines"
+    __table_args__ = (
+        CheckConstraint(f"source IN ({_in_list(VALUE_SOURCES)})", name="ck_value_baselines_source"),
+        CheckConstraint("baseline_minutes > 0 AND baseline_minutes <= 1440", name="ck_value_baselines_minutes"),
+        CheckConstraint("setup_cost IS NULL OR setup_cost >= 0", name="ck_value_baselines_setup_cost"),
+        UniqueConstraint("tenant_id", "agent_type", "task_type", name="uq_value_baselines_tenant_type_task"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    tenant_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("tenants.id"), nullable=False)
+    agent_type: Mapped[str] = mapped_column(String(100), nullable=False)
+    task_type: Mapped[str] = mapped_column(String(100), nullable=False, server_default=text("'*'"), default="*")
+    baseline_minutes: Mapped[Decimal] = mapped_column(Numeric(8, 2), nullable=False)
+    role: Mapped[str] = mapped_column(String(50), nullable=False)
+    setup_cost: Mapped[Decimal | None] = mapped_column(Numeric(14, 2), nullable=True)
+    source: Mapped[str] = mapped_column(String(10), nullable=False)
+    confirmed_by: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
+    confirmed_at: Mapped[datetime | None] = mapped_column(TIMESTAMP(timezone=True), nullable=True)
+    updated_by: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
+    updated_at: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), server_default=func.now(), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), server_default=func.now(), nullable=False)
+
+
+class ValueRate(BaseModel):
+    """A role's loaded hourly cost, with where the figure came from. Forced RLS.
+
+    Role ``reviewer`` prices the time people spend deciding approvals. ``citation`` names the
+    source of a seeded default (publisher, series, period); savings count only once a tenant
+    administrator confirmed the rate.
+    """
+
+    __tablename__ = "value_rates"
+    __table_args__ = (
+        CheckConstraint(f"source IN ({_in_list(VALUE_SOURCES)})", name="ck_value_rates_source"),
+        CheckConstraint(f"currency IN ({_in_list(VALUE_CURRENCIES)})", name="ck_value_rates_currency"),
+        CheckConstraint("hourly_cost >= 0", name="ck_value_rates_hourly_cost"),
+        UniqueConstraint("tenant_id", "role", name="uq_value_rates_tenant_role"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    tenant_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("tenants.id"), nullable=False)
+    role: Mapped[str] = mapped_column(String(50), nullable=False)
+    hourly_cost: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False)
+    currency: Mapped[str] = mapped_column(String(3), nullable=False)
+    source: Mapped[str] = mapped_column(String(10), nullable=False)
+    citation: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    confirmed_by: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
+    confirmed_at: Mapped[datetime | None] = mapped_column(TIMESTAMP(timezone=True), nullable=True)
+    updated_by: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
+    updated_at: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), server_default=func.now(), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), server_default=func.now(), nullable=False)
+
+
+class InsightsAlert(BaseModel):
+    """An Insights alert: one per (rule, entity) while it is not resolved. Forced RLS.
+
+    Opened by the alert sweep (``core/insights/alerts.py``), refreshed while the condition
+    holds (``last_seen_at``), resolved when it clears; a person acknowledges it in place.
+    ``notified_at`` records the one email an ``act`` alert sends.
+    """
+
+    __tablename__ = "insights_alerts"
+    __table_args__ = (
+        CheckConstraint(f"severity IN ({_in_list(ALERT_SEVERITIES)})", name="ck_insights_alerts_severity"),
+        CheckConstraint(f"state IN ({_in_list(ALERT_STATES)})", name="ck_insights_alerts_state"),
+        Index(
+            "ux_insights_alerts_live",
+            "tenant_id",
+            "rule_key",
+            "entity_ref",
+            unique=True,
+            postgresql_where=text("state <> 'resolved'"),
+        ),
+        Index("ix_insights_alerts_tenant_state", "tenant_id", "state", "fired_at"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    tenant_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("tenants.id"), nullable=False)
+    rule_key: Mapped[str] = mapped_column(String(64), nullable=False)
+    metric_key: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    entity_ref: Mapped[str] = mapped_column(String(200), nullable=False, server_default=text("''"), default="")
+    severity: Mapped[str] = mapped_column(String(8), nullable=False)
+    owner_role: Mapped[str] = mapped_column(String(32), nullable=False)
+    domain: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    title: Mapped[str] = mapped_column(String(300), nullable=False)
+    detail: Mapped[dict[str, Any]] = mapped_column(
+        JSONB, nullable=False, server_default=text("'{}'::jsonb"), default=dict
+    )
+    deep_link: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    state: Mapped[str] = mapped_column(String(10), nullable=False, server_default=text("'open'"), default="open")
+    fired_at: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), server_default=func.now(), nullable=False)
+    last_seen_at: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), server_default=func.now(), nullable=False)
+    acked_by: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
+    acked_at: Mapped[datetime | None] = mapped_column(TIMESTAMP(timezone=True), nullable=True)
+    resolved_at: Mapped[datetime | None] = mapped_column(TIMESTAMP(timezone=True), nullable=True)
+    notified_at: Mapped[datetime | None] = mapped_column(TIMESTAMP(timezone=True), nullable=True)

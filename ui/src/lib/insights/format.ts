@@ -133,6 +133,10 @@ export function formatMetricValue(
       return formatDuration(value);
     case "tokens":
       return formatTokens(value);
+    case "hours": {
+      const n = toFiniteNumber(value);
+      return n === null ? MISSING : `${new Intl.NumberFormat("en-IN", { maximumFractionDigits: 1 }).format(n)} h`;
+    }
     case "count":
       return formatCount(value, currency);
     default:

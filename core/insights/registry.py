@@ -35,10 +35,11 @@ from typing import Any, Literal
 
 from core.insights import metrics as runs
 from core.insights import metrics_cost as cost
+from core.insights import value
 from core.insights.metrics import RUN_GROUPS, MetricContext, Period
 
-Unit = Literal["count", "percent", "duration_ms", "usd", "inr", "tokens"]
-UNITS: tuple[str, ...] = ("count", "percent", "duration_ms", "usd", "inr", "tokens")
+Unit = Literal["count", "percent", "duration_ms", "usd", "inr", "tokens", "hours"]
+UNITS: tuple[str, ...] = ("count", "percent", "duration_ms", "usd", "inr", "tokens", "hours")
 DATA_QUALITIES: tuple[str, ...] = ("measured", "estimated", "seeded", "no_data", "mixed")
 STATES: tuple[str, ...] = ("ok", "watch", "act")
 Resolver = Callable[[MetricContext], Awaitable[dict[str, Any]]]
@@ -98,7 +99,7 @@ class Metric:
     group_by: tuple[str, ...] = ()
     # True when the metric covers the requested period and may be compared with the previous one.
     comparable: bool = True
-    kind: Literal["run", "cost", "snapshot"] = "run"
+    kind: Literal["run", "cost", "snapshot", "value"] = "run"
 
     def describe(self, allowed_views: frozenset[str] | set[str] | None = None) -> dict[str, Any]:
         views = [v for v in self.views if allowed_views is None or v in allowed_views]
@@ -347,6 +348,51 @@ _METRICS: tuple[Metric, ...] = (
         comparable=False,
         kind="cost",
     ),
+    Metric(
+        key="value.money_saved",
+        title="Money saved (estimated)",
+        definition=(
+            "Net money saved in the period: completed tasks times baseline minutes per task, valued at the "
+            "role's loaded hourly rate, less AI spend, the time people spent deciding approvals and the manual "
+            "redo of failed tasks. An estimate from tenant-confirmed baselines and rates; hidden until a tenant "
+            "administrator has confirmed every baseline and rate the period uses. Rows give the waterfall."
+        ),
+        unit="inr",
+        source=("run_facts", "insights_daily", "value_baselines", "value_rates", "hitl_queue", *COST_SOURCE),
+        views=(EXECUTIVE, FINANCE),
+        data_quality_rule="estimated, always; no_data when no completed task of a priced agent type is recorded.",
+        resolver=value.resolve_money_saved,
+        kind="value",
+    ),
+    Metric(
+        key="value.hours_saved",
+        title="Hours saved (estimated)",
+        definition=(
+            "Completed tasks in the period times baseline minutes per task, in hours. Hidden until a tenant "
+            "administrator has confirmed the baselines and rates the period uses. Rows give hours per agent type."
+        ),
+        unit="hours",
+        source=("run_facts", "insights_daily", "value_baselines"),
+        views=(EXECUTIVE,),
+        data_quality_rule="estimated, always; no_data when no completed task of a priced agent type is recorded.",
+        resolver=value.resolve_hours_saved,
+        kind="value",
+    ),
+    Metric(
+        key="value.roi",
+        title="ROI (estimated)",
+        definition=(
+            "Net money saved over AI spend in the period, as a percentage. Shown once the period's spend reaches "
+            "the floor (INR 5,000 or USD 60 unless the tenant set its own) and the assumptions are confirmed."
+        ),
+        unit="percent",
+        source=("run_facts", "insights_daily", "value_baselines", "value_rates", "hitl_queue", *COST_SOURCE),
+        views=(FINANCE,),
+        data_quality_rule="estimated, always; no_data when no completed task of a priced agent type is recorded.",
+        resolver=value.resolve_roi,
+        thresholds=Thresholds(watch=50.0, act=0.0, direction="below"),
+        kind="value",
+    ),
 )
 
 METRICS: dict[str, Metric] = {metric.key: metric for metric in _METRICS}
@@ -380,14 +426,18 @@ VIEWS: dict[str, View] = {
             "approvals.pending",
             "approvals.cycle_time",
             "cost.spend",
+            "value.money_saved",
+            "value.hours_saved",
         ),
-        charts=("runs.volume", "agents.by_status", "runs.success_rate", "cost.spend"),
+        charts=("runs.volume", "agents.by_status", "runs.success_rate", "cost.spend", "value.money_saved"),
     ),
     FINANCE: View(
         key=FINANCE,
         title="Finance",
-        tiles=("cost.spend", "cost.per_run", "cost.forecast", "runs.volume", "cost.data_quality"),
-        charts=("cost.spend", "cost.by_agent", "cost.by_model", "cost.forecast", "cost.budgets", "tokens.by_unit"),
+        tiles=("cost.spend", "cost.per_run", "cost.forecast", "runs.volume", "cost.data_quality", "value.money_saved",
+               "value.roi"),
+        charts=("cost.spend", "cost.by_agent", "cost.by_model", "cost.forecast", "cost.budgets", "tokens.by_unit",
+                "value.money_saved"),
     ),
 }
 
@@ -465,7 +515,7 @@ async def resolve(metric: Metric, ctx: MetricContext) -> dict[str, Any]:
     part.pop("compare_value", None)
     if state is not None:
         response["state"] = state
-    for name in ("series", "rows", "hint", "conversion", "lower_bound"):
+    for name in ("series", "rows", "hint", "conversion", "lower_bound", "confirmation"):
         if part.get(name) is not None:
             response[name] = part[name]
     if response["data_quality"] not in DATA_QUALITIES:

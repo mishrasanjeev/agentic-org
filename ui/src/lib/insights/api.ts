@@ -11,7 +11,7 @@ import api from "@/lib/api";
 
 export type InsightsViewKey = "executive" | "finance";
 export type DataQuality = "measured" | "estimated" | "seeded" | "no_data" | "mixed";
-export type MetricUnit = "count" | "percent" | "duration_ms" | "usd" | "inr" | "tokens";
+export type MetricUnit = "count" | "percent" | "duration_ms" | "usd" | "inr" | "tokens" | "hours";
 export type MetricState = "ok" | "watch" | "act";
 export type ReportingCurrency = "INR" | "USD";
 export type CompareMode = "previous" | "none";
@@ -84,6 +84,8 @@ export interface MetricResponse {
   hint?: string | null;
   /** The value is only a floor (a latency percentile over 10 minutes): show it as "> 10m". */
   lower_bound?: boolean | null;
+  /** Money saved: whether the assumptions are confirmed, and how much of the estimate rests on confirmed baselines. */
+  confirmation?: { confirmed: boolean; confidence: string; unpriced_task_types: number; link?: string } | null;
 }
 
 export interface NeedsYouItem {
@@ -97,6 +99,9 @@ export interface NeedsYouItem {
   /** Metric state, or a budget state (ok / warn / breached). */
   state?: MetricState | "warn" | "breached" | string | null;
   detail?: string | null;
+  /** An Insights alert (kind "alert") can be acknowledged by its id. */
+  id?: string | null;
+  rule_key?: string | null;
 }
 
 export interface InsightsViewResponse {

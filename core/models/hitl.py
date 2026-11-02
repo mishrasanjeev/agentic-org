@@ -60,6 +60,8 @@ class HITLQueue(BaseModel):
         UUID(as_uuid=True), ForeignKey("users.id"), nullable=True
     )
     decision_at: Mapped[datetime | None] = mapped_column(TIMESTAMP(timezone=True), nullable=True)
+    # When a person first opened the approval (v6z109); review time for money saved runs from here.
+    first_viewed_at: Mapped[datetime | None] = mapped_column(TIMESTAMP(timezone=True), nullable=True)
     decision_notes: Mapped[str | None] = mapped_column(Text, nullable=True)
     expires_at: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), nullable=False)
     created_at: Mapped[datetime] = mapped_column(
