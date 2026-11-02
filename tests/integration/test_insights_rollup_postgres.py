@@ -292,15 +292,18 @@ async def test_closed_day_and_reconcile_sweeps(scratch: Scratch, monkeypatch) ->
     tenant_on, tenant_off = s.tenant("IN"), s.tenant("IN")
     deleted = s.tenant("IN")
     s.rows("UPDATE tenants SET deleted_at = now() WHERE id = :t RETURNING id", t=deleted)
+    # 03:00 IST on 2 November: yesterday is DAY. The sweep's clock is faked, so every fact gets an
+    # explicit created_at on that clock: the database's own now() would make facts written after
+    # that wall-clock moment look late and the sweep would rightly roll their day again.
+    now = datetime(2026, 11, 2, 3, 0, tzinfo=IST).astimezone(UTC)
     for tenant in (tenant_on, tenant_off, deleted):
-        s.fact(tenant, _utc(2026, 11, 1, 6, 0), tokens_total=10, cost_usd=Decimal("0.001000"), duration_ms=100)
+        s.fact(tenant, _utc(2026, 11, 1, 6, 0), tokens_total=10, cost_usd=Decimal("0.001000"), duration_ms=100,
+               created_at=now - timedelta(hours=1))  # fmt: skip
 
     async def enabled(tenant_id):
         return tenant_id != tenant_off
 
     monkeypatch.setattr(insights_tasks, "_enabled_for", enabled)
-    # 03:00 IST on 2 November: yesterday is DAY.
-    now = datetime(2026, 11, 2, 3, 0, tzinfo=IST).astimezone(UTC)
     monkeypatch.setattr(insights_tasks, "_now", lambda: now)
 
     def as_of_now() -> None:
@@ -340,7 +343,7 @@ async def test_closed_day_and_reconcile_sweeps(scratch: Scratch, monkeypatch) ->
     assert found["days"] == 0
 
     # rollup_today rolls the enabled tenant's local today (2 November in IST).
-    s.fact(tenant_on, _utc(2026, 11, 1, 21, 0), tokens_total=3)  # 02:30 IST on 2 November
+    s.fact(tenant_on, _utc(2026, 11, 1, 21, 0), tokens_total=3, created_at=now)  # 02:30 IST on 2 November
     found = await insights_tasks._sweep("rollup_today", insights_tasks._roll_today)
     assert found == {"tenants": 1, "days": 1, "skipped": 1, "failed": 0}
     assert _state(s, tenant_on, date(2026, 11, 2)).rolled_tokens == 3
