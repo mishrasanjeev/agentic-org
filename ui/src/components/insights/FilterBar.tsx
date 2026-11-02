@@ -20,11 +20,14 @@ export default function FilterBar({
   onChange,
   companyScoped,
   disabled = false,
+  showCompare = true,
 }: {
   value: FilterValue;
   onChange: (next: Partial<FilterValue>) => void;
   companyScoped?: boolean;
   disabled?: boolean;
+  /** Explorers compare on their own terms (the cost explorer always uses the previous period). */
+  showCompare?: boolean;
 }) {
   const { t } = useTranslation();
   const id = useId();
@@ -114,6 +117,7 @@ export default function FilterBar({
         </p>
       )}
 
+      {showCompare ? (
       <label className="flex flex-col gap-1 text-xs font-medium text-muted-foreground" htmlFor={`${id}-compare`}>
         {t("insights.filters.compare")}
         <select
@@ -127,6 +131,7 @@ export default function FilterBar({
           <option value="none">{t("insights.filters.compareNone")}</option>
         </select>
       </label>
+      ) : null}
 
       {companyScoped ? (
         <p className="pb-1.5 text-xs text-muted-foreground" data-testid="insights-company-scope">

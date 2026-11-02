@@ -12,6 +12,7 @@ import { AGENT_CREATOR_ROLES, APPROVAL_ROLES, CONNECTOR_ROLES, LINEAGE_ROLES, SU
 import Landing from "./pages/Landing";
 import NotFound from "./pages/NotFound";
 import "./pages/documentation.css";
+import { INSIGHTS_ROLES } from "@/lib/insights/metrics";
 
 /* -- Lazy import with auto-reload on chunk failure -- */
 function lazyRetry(factory: () => Promise<{ default: React.ComponentType }>) {
@@ -88,6 +89,8 @@ const CFODashboard = lazyRetry(() => import("./pages/CFODashboard"));
 const CostDashboard = lazyRetry(() => import("./pages/CostDashboard"));
 const InsightsDashboard = lazyRetry(() => import("./pages/InsightsDashboard"));
 const InsightsBiAccess = lazyRetry(() => import("./pages/InsightsBiAccess"));
+const InsightsExplorer = lazyRetry(() => import("./pages/InsightsExplorer"));
+const InsightsRun = lazyRetry(() => import("./pages/InsightsRun"));
 const PlatformInsights = lazyRetry(() => import("./pages/PlatformInsights"));
 const StatusPage = lazyRetry(() => import("./pages/Status"));
 const SSOCallback = lazyRetry(() => import("./pages/SSOCallback"));
@@ -259,9 +262,29 @@ export default function App() {
       <Route
         path="/dashboard/insights"
         element={
-          <ProtectedRoute allowedRoles={["admin", "cfo"]}>
+          <ProtectedRoute allowedRoles={[...INSIGHTS_ROLES]}>
             <Layout>
               <InsightsDashboard />
+            </Layout>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/dashboard/insights/explore/:explorer?"
+        element={
+          <ProtectedRoute allowedRoles={[...INSIGHTS_ROLES]}>
+            <Layout>
+              <InsightsExplorer />
+            </Layout>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/dashboard/insights/runs/:runId"
+        element={
+          <ProtectedRoute allowedRoles={[...INSIGHTS_ROLES]}>
+            <Layout>
+              <InsightsRun />
             </Layout>
           </ProtectedRoute>
         }

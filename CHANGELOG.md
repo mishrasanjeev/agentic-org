@@ -1,5 +1,31 @@
 # Changelog
 
+## Unreleased - Insights explorers and run evidence
+
+- Eight Insights explorers, the tables behind every tile (`/dashboard/insights/explore/<key>`): Agents, Runs,
+  Workflows, Approvals, Cost and drivers, Quality and learning, Connectors, and Security and audit. Each declares
+  its columns once (`core/insights/explore_registry.py`); the API filters (`filter[column]=value`), sorts and pages
+  only by declared columns and answers 422 for anything else. Tables of runs, approvals, workflows and the audit
+  log page in SQL; per-agent tables are built whole (at most 50,000 rows). Every explorer exports CSV, XLSX or
+  JSON with its filters (at most 50,000 rows, one signed `insights.export` audit row), and the XLSX describes each
+  column.
+- Who sees what is decided on the server: administrators read every explorer; the CFO, CHRO, CMO and COO read
+  agents, runs, approvals, cost and quality limited to their domains (a COO's `ops` includes agents filed under
+  `operations`); the COO also reads workflows and connectors; the audit log is for administrators. Cost is
+  tenant-wide for administrators and the CFO, as in the Finance view.
+- Agents shows runs, success rate, p95, spend, last run, idle days (from the last run in 90 days, or creation) and
+  the shadow promotion checks with the reason an agent is not eligible, the same checks the promote endpoint
+  applies. Cost and drivers splits each agent's change against the previous period into volume, price and mix
+  (metered units per model when both periods are metered, otherwise runs) and names the driver. Quality and
+  learning lists every learned rule with its agent's feedback, and revokes a rule through the agent's existing
+  endpoint after checking the rule is still the one shown. The runs table covers at most the period's last 31
+  days, and says so.
+- Run evidence (`/dashboard/insights/runs/<id>?at=<started_at>`): one run's fact, model gateway records, trace
+  spans, approvals and audit rows. No output text, prompt or tool argument is returned. A run outside the
+  caller's tenant, domains or company is not found.
+- Insights tiles now open the explorer rows behind them (failed runs, slowest runs, pending approvals, spend
+  drivers). The CHRO, CMO and COO get Insights with their explorers until their landing views arrive.
+
 ## Unreleased - Current prices and stock at the payment link
 
 - Before a payment link is issued (Shopify checkout or Plural page) or an executor runs, Complete checks the

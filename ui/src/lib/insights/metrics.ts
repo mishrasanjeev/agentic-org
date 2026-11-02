@@ -23,28 +23,50 @@ export interface MetricPresentation {
   action: { to: string; labelKey: string };
 }
 
+const RUNS = "/dashboard/insights/explore/runs";
+const APPROVALS = "/dashboard/insights/explore/approvals";
+const AGENTS = "/dashboard/insights/explore/agents";
+const COST = "/dashboard/insights/explore/cost";
+const COSTS_PAGE = "/dashboard/costs";
+
+/** Every tile drills to the explorer rows behind it, with the filter or sort that produced the number. */
 export const METRIC_PRESENTATION: Record<string, MetricPresentation> = {
-  "agents.by_status": { chart: "hbar", action: { to: "/dashboard/agents", labelKey: "insights.actions.openAgents" } },
-  "runs.volume": { chart: "stacked", action: { to: "/dashboard/agents", labelKey: "insights.actions.openAgents" } },
-  "runs.success_rate": { chart: "line", action: { to: "/dashboard/agents", labelKey: "insights.actions.openAgents" } },
+  "agents.by_status": { chart: "hbar", action: { to: AGENTS, labelKey: "insights.actions.exploreAgents" } },
+  "runs.volume": { chart: "stacked", action: { to: RUNS, labelKey: "insights.actions.exploreRuns" } },
+  "runs.success_rate": {
+    chart: "line",
+    action: { to: `${RUNS}?filter%5Bstatus%5D=failed`, labelKey: "insights.actions.exploreFailedRuns" },
+  },
   "runs.straight_through_rate": {
     chart: "line",
-    action: { to: "/dashboard/approvals", labelKey: "insights.actions.openApprovals" },
+    action: { to: `${RUNS}?filter%5Bhitl_required%5D=true`, labelKey: "insights.actions.exploreApprovedRuns" },
   },
-  "runs.latency": { chart: "line", action: { to: "/dashboard/agents", labelKey: "insights.actions.openAgents" } },
-  "approvals.pending": { chart: "line", action: { to: "/dashboard/approvals", labelKey: "insights.actions.openApprovals" } },
+  "runs.latency": {
+    chart: "line",
+    action: { to: `${RUNS}?sort=duration_ms&order=desc`, labelKey: "insights.actions.exploreSlowRuns" },
+  },
+  "approvals.pending": {
+    chart: "line",
+    action: { to: `${APPROVALS}?filter%5Bstatus%5D=pending`, labelKey: "insights.actions.explorePending" },
+  },
   "approvals.cycle_time": {
     chart: "line",
-    action: { to: "/dashboard/approvals", labelKey: "insights.actions.openApprovals" },
+    action: { to: `${APPROVALS}?sort=cycle_time_ms&order=desc`, labelKey: "insights.actions.exploreApprovals" },
   },
-  "cost.spend": { chart: "line", action: { to: "/dashboard/costs", labelKey: "insights.actions.openCosts" } },
-  "cost.per_run": { chart: "line", action: { to: "/dashboard/costs", labelKey: "insights.actions.openCosts" } },
-  "cost.by_agent": { chart: "hbar", action: { to: "/dashboard/agents", labelKey: "insights.actions.openAgents" } },
-  "cost.by_model": { chart: "hbar", action: { to: "/dashboard/costs", labelKey: "insights.actions.openCosts" } },
-  "cost.forecast": { chart: "forecast", action: { to: "/dashboard/costs", labelKey: "insights.actions.openCosts" } },
-  "cost.budgets": { chart: "bullet", action: { to: "/dashboard/costs", labelKey: "insights.actions.openCosts" } },
-  "tokens.by_unit": { chart: "stacked", action: { to: "/dashboard/costs", labelKey: "insights.actions.openCosts" } },
-  "cost.data_quality": { chart: "hbar", action: { to: "/dashboard/costs", labelKey: "insights.actions.openCosts" } },
+  "cost.spend": { chart: "line", action: { to: COST, labelKey: "insights.actions.exploreCost" } },
+  "cost.per_run": {
+    chart: "line",
+    action: { to: `${COST}?sort=cost_per_run&order=desc`, labelKey: "insights.actions.exploreCost" },
+  },
+  "cost.by_agent": { chart: "hbar", action: { to: COST, labelKey: "insights.actions.exploreCost" } },
+  "cost.by_model": { chart: "hbar", action: { to: COSTS_PAGE, labelKey: "insights.actions.openCosts" } },
+  "cost.forecast": { chart: "forecast", action: { to: COSTS_PAGE, labelKey: "insights.actions.openCosts" } },
+  "cost.budgets": { chart: "bullet", action: { to: COSTS_PAGE, labelKey: "insights.actions.openCosts" } },
+  "tokens.by_unit": {
+    chart: "stacked",
+    action: { to: `${RUNS}?sort=tokens_total&order=desc`, labelKey: "insights.actions.exploreRuns" },
+  },
+  "cost.data_quality": { chart: "hbar", action: { to: COSTS_PAGE, labelKey: "insights.actions.openCosts" } },
 };
 
 /** Expected metric keys per view (registry views; the API decides what it returns). */
@@ -78,8 +100,11 @@ export const ROLE_VIEWS: Record<string, readonly InsightsViewKey[]> = {
   cfo: ["finance"],
 };
 
-/** Insights is offered to these roles; the route guard and the nav entry use the same list. */
-export const INSIGHTS_ROLES: readonly string[] = ["admin", "cfo"];
+/**
+ * Insights is offered to these roles; the route guard and the nav entry use the same list. The CHRO, CMO and
+ * COO open the explorers for their domains (their landing views arrive with the role views).
+ */
+export const INSIGHTS_ROLES: readonly string[] = ["admin", "cfo", "chro", "cmo", "coo"];
 
 export function defaultViewForRole(role: string | null | undefined): InsightsViewKey {
   return role === "cfo" ? "finance" : "executive";

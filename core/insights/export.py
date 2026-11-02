@@ -107,6 +107,9 @@ def definition_rows(response: dict[str, Any]) -> list[tuple[str, Any]]:
     conversion = response.get("conversion")
     if conversion:
         pairs.append(("conversion", json.dumps(conversion, sort_keys=True)))
+    # An explorer export describes each column it carries.
+    for key, title, description in response.get("columns") or []:
+        pairs.append((f"column:{key}", f"{title}. {description}".strip() if description else title))
     return pairs
 
 
