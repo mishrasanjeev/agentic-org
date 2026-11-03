@@ -75,6 +75,9 @@ export default function ViewFiles({
           {t("insights.files.schedule")}
         </Link>
       ) : null}
+      {view === "partner" && FINANCE_PACK_ROLES.has(role)
+        ? button("partner", t("insights.files.partnerPack"), { kind: "partner_pack", format: "zip", params: period })
+        : null}
       {view === "compliance" && EVIDENCE_PACK_ROLES.has(role)
         ? button("evidence", t("insights.files.evidencePack"), { kind: "evidence_pack", format: "zip", params: period })
         : null}

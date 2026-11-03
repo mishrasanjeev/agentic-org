@@ -1,5 +1,24 @@
 # Changelog
 
+## Unreleased - Insights Partner view, client pack, saved views and what changed
+
+- **Partner view** (administrators, CFO, COO, auditor) for a CA firm's client companies: active clients with each
+  one's health (its recorded score less 25 per overdue deadline and 5 per filing waiting), runs and run success in
+  the period, open deadlines, filings waiting and the balance outstanding; deadlines not yet filed; filings waiting
+  for approval by type; what the firm invoiced, received and is owed, per currency. No revenue is estimated.
+- **Partner client pack** (administrators and the CFO): a ZIP with one PDF per client company (summary, open
+  deadlines, the period's invoices), `partner.xlsx` (clients, deadlines, filings, billing, filters, definitions) and
+  a signed manifest, from Downloads.
+- **Saved views** on every landing view and explorer: save the current filters under a name, optionally shared
+  with everyone who may open that view; open one from the list; delete your own (administrators may delete a shared
+  one). `GET/POST /api/v1/insights/saved-views`, `PATCH/DELETE /api/v1/insights/saved-views/{id}`.
+- **What changed since you last looked** on the landing views: agents added, agent status changes, approvals
+  decided and failed runs within your domains, alerts for your role and (administrators and auditors)
+  configuration changes, each linking to the rows (`GET /api/v1/insights/changes`; the visit is recorded with
+  `POST /api/v1/insights/changes/seen`).
+- Migration v6z113 adds `saved_views` and `insights_user_state` (forced row-level security) and the
+  `partner_pack` export kind.
+
 ## Unreleased - Insights Domain and Back-office views, entity pages and search
 
 - Domain leads and analysts land on a new **My domain** view (runs, success and straight-through rates, latency,

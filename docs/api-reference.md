@@ -671,6 +671,17 @@ their domains), workflows and connectors (administrators and the COO), companies
 auditor), people (administrators and auditors), cost centres (administrators and the CFO). Another kind is 403; an
 entity of another tenant or outside the caller's domains is 404.
 
+### Saved views and what changed
+
+| Method and path | Purpose |
+| --- | --- |
+| `GET /api/v1/insights/saved-views?view_key=` | The caller's saved views and the shared ones, on views the caller may open |
+| `POST /api/v1/insights/saved-views` | `{"view_key", "name", "filters", "shared"}`; `view_key` is a landing view or `explore:<explorer>`; 409 when the name is taken |
+| `PATCH /api/v1/insights/saved-views/{id}` | The owner renames, refilters, shares or unshares it |
+| `DELETE /api/v1/insights/saved-views/{id}` | The owner, or an administrator for a shared view |
+| `GET /api/v1/insights/changes` | Counts since the caller's last visit (7 days on a first visit, 30 at most), each with a link |
+| `POST /api/v1/insights/changes/seen` | Records the visit |
+
 ### Background exports, packs and sign-off
 
 | Method and path | Purpose |
@@ -683,7 +694,7 @@ entity of another tenant or outside the caller's domains is 404.
 
 Kinds: `metric` (params as the metric route: `key`, `from`, `to`, `granularity`, `group_by` as a list,
 `filter` as an object), `explorer` (`key`, `query`), `run_bundle`, `view_pdf` (`view`), `finance_pack`
-(administrators and the CFO) and `evidence_pack` (administrators and auditors, at most 366 days). Files are kept
+(administrators and the CFO), `partner_pack` (administrators and the CFO: one PDF per client company and an XLSX rollup) and `evidence_pack` (administrators and auditors, at most 366 days). Files are kept
 7 days; at most 500,000 rows per file. Someone else's file, or another tenant's, is 404.
 
 ### Value, alerts and BI access

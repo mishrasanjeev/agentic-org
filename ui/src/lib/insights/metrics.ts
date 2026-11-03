@@ -64,6 +64,9 @@ export const METRIC_PRESENTATION: Record<string, MetricPresentation> = {
     chart: "hbar",
     action: { to: COMPANIES_PAGE, labelKey: "insights.actions.openCompanies" },
   },
+  "partner.clients": { chart: "hbar", action: { to: COMPANIES_PAGE, labelKey: "insights.actions.openCompanies" } },
+  "partner.filings": { chart: "hbar", action: { to: COMPANIES_PAGE, labelKey: "insights.actions.openCompanies" } },
+  "partner.billing": { chart: "hbar", action: { to: COMPANIES_PAGE, labelKey: "insights.actions.openCompanies" } },
   "backoffice.txn_findings": {
     chart: "line",
     action: { to: TRANSACTIONS_PAGE, labelKey: "insights.actions.openTransactions" },
@@ -220,6 +223,7 @@ export const VIEW_METRICS: Record<InsightsViewKey, readonly string[]> = {
     "quality.feedback",
     "agents.by_status",
   ],
+  partner: ["partner.clients", "backoffice.deadlines", "partner.filings", "partner.billing"],
 };
 
 /** Views each role may open; mirrors the server-side check (admin both, cfo finance). */
@@ -235,13 +239,14 @@ export const ROLE_VIEWS: Record<string, readonly InsightsViewKey[]> = {
     "engineering",
     "back_office",
     "domain",
+    "partner",
   ],
-  cfo: ["finance"],
-  coo: ["operations"],
+  cfo: ["finance", "partner"],
+  coo: ["operations", "partner"],
   chro: ["hr"],
   cmo: ["marketing"],
   merchant: ["commerce"],
-  auditor: ["compliance"],
+  auditor: ["compliance", "partner"],
   developer: ["engineering"],
   domain_lead: ["domain"],
   analyst: ["domain"],

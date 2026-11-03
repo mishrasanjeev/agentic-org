@@ -18,7 +18,9 @@ import DecisionTile from "@/components/insights/DecisionTile";
 import EmptyState from "@/components/insights/EmptyState";
 import FilterBar, { type FilterValue } from "@/components/insights/FilterBar";
 import NeedsYouList from "@/components/insights/NeedsYouList";
+import SavedViews from "@/components/insights/SavedViews";
 import SearchPalette from "@/components/insights/SearchPalette";
+import WhatChanged from "@/components/insights/WhatChanged";
 import ViewFiles from "@/components/insights/ViewFiles";
 import { ChartSkeleton, TileSkeleton } from "@/components/insights/Skeleton";
 import {
@@ -352,6 +354,8 @@ export default function InsightsDashboard() {
           </h2>
         )}
 
+        <WhatChanged />
+
         {status?.late_data ? (
           <p role="status" className="rounded-md border px-3 py-2 text-sm" data-testid="insights-late-data">
             {t("insights.freshness.lateData")}
@@ -366,6 +370,7 @@ export default function InsightsDashboard() {
         />
 
         <ViewFiles view={activeView} filters={filters} role={role} />
+        <SavedViews viewKey={activeView} keep={["view"]} />
 
         <div
           id="insights-panel"

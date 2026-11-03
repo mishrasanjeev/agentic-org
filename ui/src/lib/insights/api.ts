@@ -19,7 +19,8 @@ export type InsightsViewKey =
   | "compliance"
   | "engineering"
   | "back_office"
-  | "domain";
+  | "domain"
+  | "partner";
 export type DataQuality = "measured" | "estimated" | "seeded" | "no_data" | "mixed";
 export type MetricUnit = "count" | "percent" | "duration_ms" | "usd" | "inr" | "tokens" | "hours";
 export type MetricState = "ok" | "watch" | "act";

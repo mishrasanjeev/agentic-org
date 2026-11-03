@@ -807,7 +807,8 @@
       "compliance": "Compliance",
       "engineering": "Engineering",
       "back_office": "Back office",
-      "domain": "My domain"
+      "domain": "My domain",
+      "partner": "Partner"
     },
     "filters": {
       "label": "Filters",
@@ -970,7 +971,8 @@
       "evidencePack": "Evidence pack",
       "asking": "Asking…",
       "queued": "It is being prepared; you will get an email when it is ready.",
-      "schedule": "Schedule weekly"
+      "schedule": "Schedule weekly",
+      "partnerPack": "Partner client pack"
     },
     "breadcrumbs": "Where you are in Insights",
     "search": {
@@ -988,6 +990,40 @@
         "user": "Person",
         "cost_centre": "Cost centre",
         "run": "Run"
+      }
+    },
+    "saved": {
+      "label": "Saved views",
+      "choose": "Open a saved view",
+      "none": "No saved views yet",
+      "sharedTag": "shared",
+      "saveCurrent": "Save this view",
+      "namePlaceholder": "Name this view",
+      "share": "Share with everyone who can open it",
+      "save": "Save",
+      "cancel": "Cancel",
+      "saved": "Saved.",
+      "failed": "The saved view could not be changed.",
+      "manage": "My saved views",
+      "delete": "Delete",
+      "deleteNamed": "Delete the saved view {{name}}"
+    },
+    "changes": {
+      "title": "Since you last looked ({{since}})",
+      "firstVisit": "In the last 7 days",
+      "items": {
+        "agents_created_one": "{{count}} agent added",
+        "agents_created_other": "{{count}} agents added",
+        "agent_status_changes_one": "{{count}} agent status change",
+        "agent_status_changes_other": "{{count}} agent status changes",
+        "approvals_decided_one": "{{count}} approval decided",
+        "approvals_decided_other": "{{count}} approvals decided",
+        "runs_failed_one": "{{count}} failed run",
+        "runs_failed_other": "{{count}} failed runs",
+        "alerts_fired_one": "{{count}} new alert",
+        "alerts_fired_other": "{{count}} new alerts",
+        "config_changes_one": "{{count}} configuration change",
+        "config_changes_other": "{{count}} configuration changes"
       }
     }
   },
@@ -1308,7 +1344,8 @@
       "run_bundle": "Run evidence",
       "view_pdf": "View PDF",
       "finance_pack": "Finance pack",
-      "evidence_pack": "Evidence pack"
+      "evidence_pack": "Evidence pack",
+      "partner_pack": "Partner client pack"
     },
     "rawPii": "raw personal data",
     "download": "Download",

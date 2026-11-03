@@ -807,7 +807,8 @@
       "compliance": "अनुपालन",
       "engineering": "इंजीनियरिंग",
       "back_office": "बैक ऑफ़िस",
-      "domain": "मेरा डोमेन"
+      "domain": "मेरा डोमेन",
+      "partner": "पार्टनर"
     },
     "filters": {
       "label": "फ़िल्टर",
@@ -970,7 +971,8 @@
       "evidencePack": "साक्ष्य पैक",
       "asking": "माँगा जा रहा है…",
       "queued": "यह तैयार हो रहा है; तैयार होने पर आपको ईमेल मिलेगा।",
-      "schedule": "साप्ताहिक शेड्यूल करें"
+      "schedule": "साप्ताहिक शेड्यूल करें",
+      "partnerPack": "पार्टनर क्लाइंट पैक"
     },
     "breadcrumbs": "इनसाइट्स में आप कहाँ हैं",
     "search": {
@@ -988,6 +990,40 @@
         "user": "व्यक्ति",
         "cost_centre": "लागत केंद्र",
         "run": "रन"
+      }
+    },
+    "saved": {
+      "label": "सहेजे गए दृश्य",
+      "choose": "सहेजा गया दृश्य खोलें",
+      "none": "अभी कोई सहेजा गया दृश्य नहीं",
+      "sharedTag": "साझा",
+      "saveCurrent": "यह दृश्य सहेजें",
+      "namePlaceholder": "इस दृश्य को नाम दें",
+      "share": "इसे खोल सकने वाले सभी के साथ साझा करें",
+      "save": "सहेजें",
+      "cancel": "रद्द करें",
+      "saved": "सहेज लिया।",
+      "failed": "सहेजा गया दृश्य बदला नहीं जा सका।",
+      "manage": "मेरे सहेजे गए दृश्य",
+      "delete": "हटाएँ",
+      "deleteNamed": "सहेजा गया दृश्य {{name}} हटाएँ"
+    },
+    "changes": {
+      "title": "आपके पिछली बार देखने के बाद से ({{since}})",
+      "firstVisit": "पिछले 7 दिनों में",
+      "items": {
+        "agents_created_one": "{{count}} एजेंट जोड़ा गया",
+        "agents_created_other": "{{count}} एजेंट जोड़े गए",
+        "agent_status_changes_one": "{{count}} एजेंट स्थिति बदलाव",
+        "agent_status_changes_other": "{{count}} एजेंट स्थिति बदलाव",
+        "approvals_decided_one": "{{count}} स्वीकृति पर निर्णय",
+        "approvals_decided_other": "{{count}} स्वीकृतियों पर निर्णय",
+        "runs_failed_one": "{{count}} रन विफल",
+        "runs_failed_other": "{{count}} रन विफल",
+        "alerts_fired_one": "{{count}} नया अलर्ट",
+        "alerts_fired_other": "{{count}} नए अलर्ट",
+        "config_changes_one": "{{count}} कॉन्फ़िगरेशन बदलाव",
+        "config_changes_other": "{{count}} कॉन्फ़िगरेशन बदलाव"
       }
     }
   },
@@ -1308,7 +1344,8 @@
       "run_bundle": "रन साक्ष्य",
       "view_pdf": "व्यू PDF",
       "finance_pack": "वित्त पैक",
-      "evidence_pack": "साक्ष्य पैक"
+      "evidence_pack": "साक्ष्य पैक",
+      "partner_pack": "पार्टनर क्लाइंट पैक"
     },
     "rawPii": "असली व्यक्तिगत डेटा",
     "download": "डाउनलोड",

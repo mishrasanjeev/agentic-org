@@ -46,7 +46,12 @@ from core.insights.metrics import day_bounds, local_today
 
 KOLKATA = ZoneInfo("Asia/Kolkata")
 VERSIONS = Path(__file__).resolve().parents[2] / "migrations" / "versions"
-MIGRATIONS = ("v6_z106_insights_foundation.py", "v6_z110_insights_exports.py")
+MIGRATIONS = (
+    "v6_z106_insights_foundation.py",
+    "v6_z110_insights_exports.py",
+    # Saved views, last visits and the partner_pack export kind.
+    "v6_z113_insights_saved_views.py",
+)
 PASSWORD = "local-test-password"  # noqa: S105 - a throwaway role in a disposable test database
 BASE_TABLES = (
     "tenants",
@@ -91,6 +96,9 @@ BASE_TABLES = (
     "txn_findings",
     "cost_centers",
     "agent_lifecycle_events",
+    "filing_approvals",
+    "ca_client_invoices",
+    "ca_client_payments",
 )
 
 pytestmark = [
