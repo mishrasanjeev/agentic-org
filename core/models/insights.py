@@ -408,6 +408,11 @@ class InsightsExport(BaseModel):
         CheckConstraint(f"status IN ({_in_list(EXPORT_STATUSES)})", name="ck_insights_exports_status"),
         CheckConstraint(f"format IN ({_in_list(EXPORT_FORMATS)})", name="ck_insights_exports_format"),
         Index("ix_insights_exports_tenant_user_created", "tenant_id", "user_id", text("created_at DESC")),
+        Index(
+            "ix_insights_exports_expiry",
+            "expires_at",
+            postgresql_where=text("status IN ('ready','failed','queued','running')"),
+        ),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
