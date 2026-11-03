@@ -217,7 +217,7 @@ async def _workflow(ctx: MetricContext, entity_id: uuid.UUID, caller: EntityCall
         "unit": "count",
         "value": total if total else None,
         "data_quality": "measured" if total else "no_data",
-        "rows": sorted(({"label": k, "value": v} for k, v in counts.items()), key=lambda r: -r["value"]),
+        "rows": [{"label": k, "value": v} for k, v in sorted(counts.items(), key=lambda kv: -kv[1])],
         "source": "workflow_runs",
     }
     if not total:
