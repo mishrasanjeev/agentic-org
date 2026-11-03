@@ -489,6 +489,7 @@ function ViewBody({
                 key={metric.key}
                 metric={metric}
                 currency={currency}
+                filters={filters}
                 action={presentation ? { to: presentation.action.to, label: t(presentation.action.labelKey) } : null}
               />
             );

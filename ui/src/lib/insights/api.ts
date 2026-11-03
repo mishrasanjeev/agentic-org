@@ -26,7 +26,7 @@ export type MetricUnit = "count" | "percent" | "duration_ms" | "usd" | "inr" | "
 export type MetricState = "ok" | "watch" | "act";
 export type ReportingCurrency = "INR" | "USD";
 export type CompareMode = "previous" | "none";
-export type ExportFormat = "csv" | "xlsx" | "json";
+export type ExportFormat = "csv" | "xlsx" | "json" | "pdf";
 
 export const VIEW_KEYS: readonly InsightsViewKey[] = [
   "executive",

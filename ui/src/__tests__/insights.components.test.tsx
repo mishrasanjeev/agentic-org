@@ -255,7 +255,7 @@ describe("ChartCard", () => {
     await user.click(button);
     const menu = screen.getByRole("menu");
     const items = within(menu).getAllByRole("menuitem");
-    expect(items.map((i) => i.textContent)).toEqual(["CSV", "Excel (XLSX)", "JSON", "Chart (SVG)", "Chart (PNG)"]);
+    expect(items.map((i) => i.textContent)).toEqual(["CSV", "Excel (XLSX)", "JSON", "Chart (SVG)", "Chart (PNG)", "Chart (PDF)"]);
     expect(items[0]).toHaveFocus();
     await user.keyboard("{ArrowDown}");
     expect(items[1]).toHaveFocus();

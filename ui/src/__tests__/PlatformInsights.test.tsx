@@ -176,8 +176,13 @@ describe("PlatformInsights", () => {
 
     const chart = screen.getByTestId("chart-card");
     expect(within(chart).getByText("Runs per day")).toBeInTheDocument();
-    // No export endpoint exists for platform figures.
-    expect(chart.querySelector('[aria-haspopup="menu"]')).toBeNull();
+    // The platform figures export through their own endpoint: CSV, XLSX and JSON, never a PDF.
+    fireEvent.click(within(chart).getByRole("button", { name: "Export Runs per day" }));
+    const formats = within(chart)
+      .getAllByRole("menuitem")
+      .map((item) => item.getAttribute("data-format"));
+    expect(formats).toEqual(["csv", "xlsx", "json", "svg", "png"]);
+    fireEvent.keyDown(within(chart).getByRole("menu"), { key: "Escape" });
     fireEvent.click(within(chart).getByRole("button", { name: /view data/i }));
     expect(within(chart).getByTestId("insights-data-table")).toBeInTheDocument();
 

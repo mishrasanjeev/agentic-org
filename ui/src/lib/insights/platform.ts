@@ -193,6 +193,18 @@ export function normalisePosture(data: unknown): PlatformPosture {
 }
 
 export const platformApi = {
+  /** The daily figures or the tenant table as a file (CSV, XLSX or JSON); the server audits the export. */
+  async exportFile(
+    dataset: "daily" | "tenants",
+    format: "csv" | "xlsx" | "json",
+    range: PlatformPeriod,
+  ): Promise<{ blob: Blob; filename: string }> {
+    const { data } = await api.get("/platform/insights/export", {
+      params: { dataset, format, from: range.from, to: range.to },
+      responseType: "blob",
+    });
+    return { blob: data as Blob, filename: `platform-${dataset}-${range.from}-${range.to}.${format}` };
+  },
   async summary(range: PlatformPeriod): Promise<PlatformSummary> {
     const { data } = await api.get("/platform/insights/summary", { params: { from: range.from, to: range.to } });
     return normaliseSummary(data);

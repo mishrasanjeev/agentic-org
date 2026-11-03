@@ -892,7 +892,8 @@
       "openDownloads": "Open Downloads",
       "svg": "Chart (SVG)",
       "png": "Chart (PNG)",
-      "noPicture": "This chart has no picture to save; export its data instead."
+      "noPicture": "This chart has no picture to save; export its data instead.",
+      "pdf": "Chart (PDF)"
     },
     "empty": {
       "title": "No data yet",

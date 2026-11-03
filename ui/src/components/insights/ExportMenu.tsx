@@ -198,6 +198,22 @@ export default function ExportMenu({
                   </button>
                 ))
               : null}
+            {picture && !download ? (
+              // A registry chart also downloads as a one-page PDF from the server, with its data and data quality.
+              <button
+                ref={(el) => {
+                  itemRefs.current[EXPORT_FORMATS.length + 2] = el;
+                }}
+                type="button"
+                role="menuitem"
+                tabIndex={-1}
+                data-format="pdf"
+                onClick={() => void run("pdf")}
+                className="block w-full px-3 py-1.5 text-left text-xs hover:bg-muted focus:bg-muted"
+              >
+                {t("insights.export.pdf")}
+              </button>
+            ) : null}
             {mayIncludePii ? (
               <label className="mt-1 flex items-start gap-1.5 border-t px-3 pt-1.5 text-[11px] leading-tight">
                 <input

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 import { useId, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import type { InsightsFilters, MetricResponse } from "@/lib/insights/api";
+import type { InsightsFilters, MetricResponse, ExportFormat } from "@/lib/insights/api";
 import { dataShape, isEmptyMetric, tableColumns, tableRows } from "@/lib/insights/chartData";
 import { chartSvg } from "@/lib/insights/chartImage";
 import { chartKindFor, tableFromSeries, type ChartKind } from "@/lib/insights/metrics";
@@ -22,12 +22,15 @@ export default function ChartCard({
   currency,
   kind,
   exportable = true,
+  download,
 }: {
   metric: MetricResponse;
   filters: InsightsFilters;
   currency?: string | null;
   kind?: ChartKind;
   exportable?: boolean;
+  /** Where the data downloads from when it is not a registry metric (the platform view's own export). */
+  download?: (format: ExportFormat, includePii: boolean) => Promise<{ blob: Blob; filename: string }>;
 }) {
   const { t } = useTranslation();
   const [showData, setShowData] = useState(false);
@@ -88,6 +91,7 @@ export default function ChartCard({
               title={metric.title}
               filters={filters}
               picture={empty ? undefined : picture}
+              download={download}
             />
           ) : null}
         </div>

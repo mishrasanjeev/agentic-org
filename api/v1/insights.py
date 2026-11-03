@@ -61,6 +61,8 @@ router = APIRouter(prefix="/insights", tags=["Insights"])
 Compare = Literal["previous", "none"]
 Granularity = Literal["day", "week", "month"]
 ExportFormat = Literal["csv", "xlsx", "json"]
+# A metric (a chart) also exports as a one-page PDF: its title, period, filters, data quality and data.
+MetricExportFormat = Literal["csv", "xlsx", "json", "pdf"]
 FromDay = Annotated[date | None, Query(alias="from")]
 ToDay = Annotated[date | None, Query()]
 CompanyId = Annotated[str | None, Query(max_length=64)]
@@ -394,6 +396,37 @@ async def insights_metric(
         return response
 
 
+async def _metric_pdf(
+    session: Any, tid: uuid.UUID, caller: Caller, response: dict[str, Any], filters: dict[str, Any], include_pii: bool
+) -> bytes:
+    """One metric as a PDF (the chart's data as a table with bars), its labels masked as the other formats are."""
+    from sqlalchemy import select
+
+    from core.insights import pdf
+    from core.models.tenant import Tenant
+
+    shown = dict(response)
+    for part in ("rows", "series"):
+        values = shown.get(part)
+        if isinstance(values, list) and values:
+            shown[part], _masked = await pii.apply(
+                session, tid, [dict(v) for v in values], include_pii=include_pii, role=caller.role,
+                is_admin=caller.is_admin,
+            )
+    organisation = await session.scalar(select(Tenant.name).where(Tenant.id == tid))
+    return await asyncio.to_thread(
+        pdf.view_pdf,
+        title=f"Insights - {response.get('title') or response.get('key')}",
+        organisation=str(organisation or "Your organisation"),
+        period=response.get("period") or {},
+        filters={k: v for k, v in filters.items() if k not in ("from", "to")},
+        tiles=[],
+        charts=[shown],
+        currency=response.get("currency"),
+        computed_at=datetime.now(UTC),
+    )
+
+
 @router.get("/metrics/{key}/export")
 @route_meta(
     auth_required=True,
@@ -407,7 +440,7 @@ async def insights_export(
     key: str,
     request: Request,
     tenant_id: str = Depends(get_current_tenant),
-    format: Annotated[ExportFormat, Query()] = "csv",  # noqa: A002 - the public query parameter name
+    format: Annotated[MetricExportFormat, Query()] = "csv",  # noqa: A002 - the public query parameter name
     from_: FromDay = None,
     to: ToDay = None,
     compare: Annotated[Compare, Query()] = "none",
@@ -460,7 +493,10 @@ async def insights_export(
             "company_id": str(company) if company else None,
             **query.as_filters(),
         }
-        content = await asyncio.to_thread(exports.render, format, rows, filters, response)
+        if format == "pdf":
+            content = await _metric_pdf(session, tid, caller, response, filters, include_pii)
+        else:
+            content = await asyncio.to_thread(exports.render, format, rows, filters, response)
         session.add(
             audit_entry(
                 tid,
@@ -482,6 +518,6 @@ async def insights_export(
     name = exports.filename(metric.key, response["period"], format)
     return Response(
         content=content,
-        media_type=exports.MEDIA_TYPES[format],
+        media_type="application/pdf" if format == "pdf" else exports.MEDIA_TYPES[format],
         headers={"Content-Disposition": f'attachment; filename="{name}"', "Cache-Control": "no-store"},
     )

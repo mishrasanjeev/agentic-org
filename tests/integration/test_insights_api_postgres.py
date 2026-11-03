@@ -397,6 +397,11 @@ async def test_views_metrics_and_exports_keep_to_the_tenant(world, monkeypatch) 
     body = json.loads(finance_json.body)
     assert body["filters"]["filter"] == {"domain": ["finance"]} and body["filters"]["group_by"] is None
     assert sum(r["value"] for r in body["rows"]) == 5
+    # A chart also exports as a PDF (audited like the other formats).
+    chart_pdf = await api.insights_export("runs.volume", ADMIN, tenant_id=str(seed.a), format="pdf", group_by="agent")
+    assert chart_pdf.body[:5] == b"%PDF-" and chart_pdf.media_type == "application/pdf"
+    disposition = chart_pdf.headers["content-disposition"]
+    assert "runs.volume" in disposition and disposition.endswith('.pdf"')
     world.scalar("DELETE FROM audit_log WHERE tenant_id = :t RETURNING 1", t=seed.a)
 
     # Export: tenant A's rows only, and one signed audit row in tenant A.

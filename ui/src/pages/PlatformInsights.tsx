@@ -227,7 +227,13 @@ function Body({
         filters={{ from: summary.period.from, to: summary.period.to }}
         currency="USD"
         kind="line"
-        exportable={false}
+        download={(format) =>
+          // The menu offers CSV, XLSX and JSON here (no PDF: the platform figures are not a registry metric).
+          platformApi.exportFile("daily", format === "pdf" ? "csv" : format, {
+            from: summary.period.from,
+            to: summary.period.to,
+          })
+        }
       />
       <TenantTable data={tenants} />
       <PostureChecklist posture={posture} />

@@ -35,7 +35,7 @@ USER_ID = uuid.UUID("00000000-0000-4000-8000-0000000000d1")
 ADMIN_SCOPES = list(ROLE_SCOPES["admin"])
 # A claims_extra value that removes the claim.
 _ABSENT = object()
-PATHS = ("/summary", "/tenants", "/posture")
+PATHS = ("/summary", "/tenants", "/posture", "/export")
 POSTURE = {
     "computed_at": "2026-11-01T00:00:00+00:00",
     "ok": True,
@@ -547,7 +547,8 @@ def test_routes_are_registered_with_their_metadata(app) -> None:
     assert set(meta) == {f"/platform/insights{p}" for p in PATHS}
     for path, m in meta.items():
         assert m["scope"] == "platform.insights.read" and m["auth_required"] and m["tenant_required"], path
-        assert m["rate_limit"] == "reporting-read" and m["idempotency"] == "read-only", path
+        expected_rate = "reporting-export" if path.endswith("/export") else "reporting-read"
+        assert m["rate_limit"] == expected_rate and m["idempotency"] == "read-only", path
         assert m["audit_event"] == f"platform.insights.{path.rsplit('/', 1)[1]}.read", path
     for route in insights_platform.router.routes:
         names = {d.call.__name__ for d in route.dependant.dependencies}
@@ -555,3 +556,26 @@ def test_routes_are_registered_with_their_metadata(app) -> None:
     assert SCOPE_FAMILIES["platform"] == ("agenticorg:admin", "agenticorg:admin")
     assert required_scopes_for("platform.insights.read", "GET") == ("agenticorg:admin",)
     assert "agenticorg:admin" not in GRANTABLE_ROUTE_SCOPES
+
+
+def test_export_route_writes_each_dataset_in_each_format_and_audits_it(app) -> None:
+    import csv
+    import io
+    import json
+
+    with _client(app) as client:
+        daily = client.get("/api/v1/platform/insights/export",
+                           params={"dataset": "daily", "format": "csv", "from": "2026-10-30", "to": "2026-10-31"})
+        tenants = client.get("/api/v1/platform/insights/export", params={"dataset": "tenants", "format": "json"})
+        workbook = client.get("/api/v1/platform/insights/export", params={"dataset": "tenants", "format": "xlsx"})
+        refused = client.get("/api/v1/platform/insights/export", params={"dataset": "runs", "format": "csv"})
+        audits = client.sessions["user"].added
+    assert daily.status_code == 200 and "platform-daily" in daily.headers["content-disposition"]
+    rows = list(csv.DictReader(io.StringIO(daily.content.decode("utf-8-sig"))))
+    assert [r["runs"] for r in rows] == ["10", "4"]
+    body = json.loads(tenants.content)
+    assert [r["tenant_name"] for r in body["rows"]][0] == "Synthetic Traders"
+    assert workbook.content[:2] == b"PK"
+    assert refused.status_code == 422
+    assert [a.event_type for a in audits] == ["platform.insights.export.read"] * 3
+    assert audits[0].details["row_count"] == 2 and audits[0].details["dataset"] == "daily"
