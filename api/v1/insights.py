@@ -25,7 +25,7 @@ from __future__ import annotations
 
 import asyncio
 import uuid
-from datetime import date
+from datetime import UTC, date, datetime
 from typing import Annotated, Any, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
@@ -39,6 +39,7 @@ from core.insights import registry
 from core.insights.audit import audit_entry
 from core.insights.bi_access import bi_configured
 from core.insights.flags import insights_enabled_for
+from core.insights.freshness import rollup_late
 from core.insights.metrics import (
     MetricContext,
     Period,
@@ -221,9 +222,12 @@ async def insights_status(request: Request, tenant_id: str = Depends(get_current
     enabled = await insights_enabled_for(tid)
     async with get_tenant_session(tid) as session:
         reporting = await load_reporting_settings(session, tid)
+        late = await rollup_late(session, tid, reporting.zone(), datetime.now(UTC)) if enabled else False
     return {
         "enabled": enabled,
         "views": _views_for(caller) if enabled else [],
+        # Yesterday's daily figures are not rolled up yet (the landing views show a banner).
+        "late_data": late,
         # The caller may open the cross-tenant platform view (never raises; see core/insights/platform.py).
         "platform_operator": await is_platform_operator(request),
         "settings": reporting.model_dump(),
@@ -397,9 +401,7 @@ async def insights_export(
         try:
             exports.check_size(rows)
         except exports.ExportTooLargeError as exc:
-            raise HTTPException(
-                413, detail={"error": "export_too_large", "hint": str(exc), "rows": exc.rows}
-            ) from None
+            raise HTTPException(413, detail={"error": "export_too_large", "hint": str(exc), "rows": exc.rows}) from None
         filters = {
             "from": ctx.period.start.isoformat(),
             "to": ctx.period.end.isoformat(),

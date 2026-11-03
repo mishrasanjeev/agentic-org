@@ -43,12 +43,14 @@ COMPANY = str(uuid.UUID("00000000-0000-4000-8000-0000000000c2"))
 REPO_ROOT = Path(__file__).resolve().parents[2]
 ROLES = ("admin", "cfo", "chro", "cmo", "coo", "auditor", "domain_lead", "analyst", "developer", "merchant")
 EXPECTED_VIEWS: dict[str, set[str]] = {
-    "admin": {"executive", "finance", "operations", "hr", "marketing", "commerce"},
+    "admin": {"executive", "finance", "operations", "hr", "marketing", "commerce", "compliance", "engineering"},
     "cfo": {"finance"},
     "coo": {"operations"},
     "chro": {"hr"},
     "cmo": {"marketing"},
     "merchant": {"commerce"},
+    "auditor": {"compliance"},
+    "developer": {"engineering"},
 }
 
 

@@ -93,7 +93,20 @@ describe("metric keys used by the Insights page", () => {
   });
 
   it("role views mirror the server rule (core/insights/registry.py VIEW_ROLES)", () => {
-    expect(ROLE_VIEWS.admin).toEqual(["executive", "finance", "operations", "hr", "marketing", "commerce"]);
+    expect(ROLE_VIEWS.admin).toEqual([
+      "executive",
+      "finance",
+      "operations",
+      "hr",
+      "marketing",
+      "commerce",
+      "compliance",
+      "engineering",
+    ]);
+    expect(ROLE_VIEWS.auditor).toEqual(["compliance"]);
+    expect(ROLE_VIEWS.developer).toEqual(["engineering"]);
+    expect(defaultViewForRole("auditor")).toBe("compliance");
+    expect(defaultViewForRole("developer")).toBe("engineering");
     expect(ROLE_VIEWS.cfo).toEqual(["finance"]);
     expect(ROLE_VIEWS.coo).toEqual(["operations"]);
     expect(ROLE_VIEWS.chro).toEqual(["hr"]);
@@ -111,13 +124,26 @@ describe("metric keys used by the Insights page", () => {
       chro: ["agents", "runs", "approvals", "cost", "quality"],
       cmo: ["agents", "runs", "approvals", "cost", "quality"],
       merchant: [],
+      // core/insights/explore_registry.py: auditors read runs, approvals and the audit log; developers their
+      // domain's agents, runs and quality.
+      auditor: ["runs", "approvals", "audit"],
+      developer: ["agents", "runs", "quality"],
     };
-    const pagesFor: Record<string, string[]> = { coo: [], chro: [], cmo: [], merchant: ["/dashboard/orders"] };
-    const views: Record<string, "operations" | "hr" | "marketing" | "commerce"> = {
+    const pagesFor: Record<string, string[]> = {
+      coo: [],
+      chro: [],
+      cmo: [],
+      merchant: ["/dashboard/orders"],
+      auditor: [],
+      developer: [],
+    };
+    const views: Record<string, "operations" | "hr" | "marketing" | "commerce" | "compliance" | "engineering"> = {
       coo: "operations",
       chro: "hr",
       cmo: "marketing",
       merchant: "commerce",
+      auditor: "compliance",
+      developer: "engineering",
     };
     for (const [role, view] of Object.entries(views)) {
       for (const key of VIEW_METRICS[view]) {

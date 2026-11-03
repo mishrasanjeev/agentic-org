@@ -1,5 +1,25 @@
 # Changelog
 
+## Unreleased - Insights evidence, Compliance and Engineering views
+
+- Run evidence draws the run's own trace as a waterfall (each span indented under its parent, placed by when it
+  started and sized by how long it took, errors in the critical colour, with a data table and a text summary) and
+  opens with why the run failed: the error span with no erroring child, its exception and the tool or model it was
+  calling. Approvals show who decided under whose delegation and each vote; audit rows show whether their signature
+  verifies and their place in the audit chain.
+- `GET /api/v1/insights/runs/{id}/bundle?at=...`: the run's evidence as one JSON file whose SHA-256 is in
+  `X-Content-SHA256` (the checksum of the file's bytes). Administrators and auditors also get each audit row's signed
+  payload, signature and chain links. Every download writes a signed `insights.export` audit row.
+- Compliance view (administrators and auditors): audit rows verified, approvals decided directly or under a
+  delegation, approvals decided in under 20 seconds, open data subject requests and their median completion time,
+  residency attestations expiring within 30 days, and changes made (agents, prompts, governance, spend controls,
+  settings, access, delegations, packs). Auditors read the Runs, Approvals and Security and audit explorers.
+- Engineering view (administrators and developers, limited to the developer's domain): run success rate and p95
+  latency, model calls that failed or fell back, the slowest steps by p95, the latest eval pass rate (administrators)
+  and prompt edits. Developers read the Agents, Runs and Quality explorers for their domain.
+- Landing views refresh every 60 seconds while the page is visible, in place, and show a banner when yesterday's daily
+  figures are not rolled up by 03:00 tenant time (`late_data` on `GET /api/v1/insights/status`).
+
 ## Unreleased - Insights role views
 
 - Four more Insights views, each the landing view of its role: Operations (COO), HR (CHRO), Marketing (CMO) and

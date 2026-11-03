@@ -20,8 +20,10 @@ days from the start of the comparison window (``compare.complete_days`` of
 them). Otherwise ``compare.basis`` is ``full_period`` and ``compare_value``
 covers the whole comparison window. The tile ``value`` always includes today.
 
-Views: ``executive`` (administrators) and ``finance`` (administrators and the
-CFO). A metric may be read by a role that may read any view showing it.
+Views: ``executive`` (administrators), ``finance`` (and the CFO),
+``operations`` (COO), ``hr`` (CHRO), ``marketing`` (CMO), ``commerce``
+(merchant), ``compliance`` (auditor) and ``engineering`` (developer). A
+metric may be read by a role that may read any view showing it.
 ``ui/src/lib/insights/metricKeys.generated.json`` lists the keys
 (``scripts/generate_insights_metric_keys.py`` writes it).
 """
@@ -36,6 +38,7 @@ from typing import Any, Literal
 from core.insights import metrics as runs
 from core.insights import metrics_cost as cost
 from core.insights import metrics_domain as domain
+from core.insights import metrics_governance as governance
 from core.insights import value
 from core.insights.metrics import RUN_GROUPS, MetricContext, Period
 
@@ -51,6 +54,8 @@ OPERATIONS = "operations"
 HR = "hr"
 MARKETING = "marketing"
 COMMERCE = "commerce"
+COMPLIANCE = "compliance"
+ENGINEERING = "engineering"
 
 # Which roles may read each view. Administrators hold every view; the check is
 # made server side in every handler (403 insights_view_forbidden).
@@ -61,6 +66,8 @@ VIEW_ROLES: dict[str, frozenset[str]] = {
     HR: frozenset({"admin", "chro"}),
     MARKETING: frozenset({"admin", "cmo"}),
     COMMERCE: frozenset({"admin", "merchant"}),
+    COMPLIANCE: frozenset({"admin", "auditor"}),
+    ENGINEERING: frozenset({"admin", "developer"}),
 }
 
 # A role view shows the run and approval metrics of its domains only (and of the caller's domains within
@@ -72,6 +79,8 @@ VIEW_DOMAINS: dict[str, tuple[str, ...] | None] = {
     HR: ("hr",),
     MARKETING: ("marketing",),
     COMMERCE: ("commerce",),
+    COMPLIANCE: None,
+    ENGINEERING: None,
 }
 
 RUN_QUALITY_RULE = (
@@ -163,7 +172,7 @@ _METRICS: tuple[Metric, ...] = (
         ),
         unit="count",
         source=RUN_SOURCE,
-        views=(EXECUTIVE, FINANCE, OPERATIONS, HR, MARKETING),
+        views=(EXECUTIVE, FINANCE, OPERATIONS, HR, MARKETING, ENGINEERING),
         data_quality_rule=RUN_QUALITY_RULE,
         resolver=runs.resolve_runs_volume,
         group_by=RUN_GROUPS,
@@ -180,7 +189,7 @@ _METRICS: tuple[Metric, ...] = (
         ),
         unit="percent",
         source=RUN_SOURCE,
-        views=(EXECUTIVE, OPERATIONS, HR),
+        views=(EXECUTIVE, OPERATIONS, HR, ENGINEERING),
         data_quality_rule=RUN_QUALITY_RULE,
         resolver=runs.resolve_runs_success_rate,
         thresholds=Thresholds(watch=95.0, act=90.0, direction="below"),
@@ -212,7 +221,7 @@ _METRICS: tuple[Metric, ...] = (
         ),
         unit="duration_ms",
         source=RUN_SOURCE,
-        views=(EXECUTIVE, OPERATIONS),
+        views=(EXECUTIVE, OPERATIONS, ENGINEERING),
         data_quality_rule=RUN_QUALITY_RULE,
         resolver=runs.resolve_runs_latency,
         thresholds=Thresholds(watch=30_000.0, act=60_000.0, direction="above"),
@@ -539,6 +548,157 @@ _METRICS: tuple[Metric, ...] = (
         thresholds=Thresholds(watch=1.0, act=10.0, direction="above"),
         comparable=False,
     ),
+    Metric(
+        key="compliance.audit_integrity",
+        title="Audit rows verified",
+        definition=(
+            "The newest 1,000 links of the audit chain checked now: rows whose signature and chain link verify. "
+            "The tile is in act when any link is broken; rows add unsigned and not yet sealed rows and the first break."
+        ),
+        unit="count",
+        source=("audit_log", "audit_chain_anchors"),
+        views=(COMPLIANCE,),
+        data_quality_rule="measured from the chain now; no_data when sealing is off or nothing is sealed yet.",
+        resolver=governance.resolve_audit_integrity,
+        comparable=False,
+        kind="snapshot",
+    ),
+    Metric(
+        key="compliance.approvals_decided",
+        title="Approvals decided",
+        definition=(
+            "Approvals decided in the period; rows split them by decided directly or under a delegation "
+            "(another user acting for the approver)."
+        ),
+        unit="count",
+        source=("hitl_queue", "audit_log"),
+        views=(COMPLIANCE,),
+        data_quality_rule="measured; no_data when no approval was decided in the period.",
+        resolver=governance.resolve_approvals_decided,
+    ),
+    Metric(
+        key="compliance.rubber_stamps",
+        title="Approvals decided in under 20 seconds",
+        definition=(
+            "The share of approvals decided in the period less than 20 seconds after the reviewer opened them "
+            "(or after they were raised, when the reviewer never opened them)."
+        ),
+        unit="percent",
+        source=("hitl_queue",),
+        views=(COMPLIANCE,),
+        data_quality_rule="measured; no_data when no approval was decided in the period.",
+        resolver=governance.resolve_rubber_stamps,
+        thresholds=Thresholds(watch=25.0, act=50.0, direction="above"),
+    ),
+    Metric(
+        key="compliance.dsar_open",
+        title="Open data subject requests",
+        definition=(
+            "Data subject requests (access, erase, export) received or in progress now; rows count every request by "
+            "status and give the oldest open one's age in days. No subject is shown."
+        ),
+        unit="count",
+        source=("dsar_requests",),
+        views=(COMPLIANCE,),
+        data_quality_rule=SNAPSHOT_QUALITY_RULE,
+        resolver=governance.resolve_dsar_open,
+        thresholds=Thresholds(watch=1.0, act=5.0, direction="above"),
+        comparable=False,
+        kind="snapshot",
+    ),
+    Metric(
+        key="compliance.dsar_completion_time",
+        title="Data subject request completion (median)",
+        definition=(
+            "The median time from a data subject request to its completion, for requests completed in the period."
+        ),
+        unit="duration_ms",
+        source=("dsar_requests",),
+        views=(COMPLIANCE,),
+        data_quality_rule="measured; no_data when no request was completed in the period.",
+        resolver=governance.resolve_dsar_completion_time,
+        thresholds=Thresholds(watch=7 * 86_400_000.0, act=25 * 86_400_000.0, direction="above"),
+    ),
+    Metric(
+        key="compliance.attestations_expiring",
+        title="Residency attestations expiring",
+        definition=(
+            "Provider residency attestations in force that expire within 30 days or have expired, now; rows list them."
+        ),
+        unit="count",
+        source=("provider_residency_attestations",),
+        views=(COMPLIANCE,),
+        data_quality_rule=SNAPSHOT_QUALITY_RULE,
+        resolver=governance.resolve_attestations_expiring,
+        thresholds=Thresholds(watch=1.0, act=3.0, direction="above"),
+        comparable=False,
+        kind="snapshot",
+    ),
+    Metric(
+        key="compliance.change_log",
+        title="Changes made",
+        definition=(
+            "Changes made in the period, by kind: agents created, deleted or re-scoped; prompt edits; governance "
+            "(policies, residency, operator overrides, model gateway policies and limits); spend controls; settings; "
+            "access (BI logins, delegations); industry packs."
+        ),
+        unit="count",
+        source=("audit_log", "prompt_edit_history", "prompt_template_edit_history", "user_delegations"),
+        views=(COMPLIANCE,),
+        data_quality_rule="measured; no_data when nothing was changed in the period.",
+        resolver=governance.resolve_change_log,
+    ),
+    Metric(
+        key="engineering.gateway_issues",
+        title="Model calls failed or fell back",
+        definition=(
+            "Model calls in the period that failed or were served by a fallback model; rows add every call and the "
+            "calls restricted by policy."
+        ),
+        unit="count",
+        source=("model_gateway_records",),
+        views=(ENGINEERING,),
+        data_quality_rule="measured; no_data when no model call was recorded in the period.",
+        resolver=governance.resolve_gateway_issues,
+        thresholds=Thresholds(watch=1.0, act=25.0, direction="above"),
+    ),
+    Metric(
+        key="engineering.slow_spans",
+        title="Slowest step (p95)",
+        definition=(
+            "Trace spans in the period grouped by name (agent runs, reasoning, tool calls, knowledge searches), "
+            "ordered by total time, with calls, total time, p95 and errors; the value is the highest p95."
+        ),
+        unit="duration_ms",
+        source=("run_spans",),
+        views=(ENGINEERING,),
+        data_quality_rule="measured; no_data when no span was stored in the period.",
+        resolver=governance.resolve_slow_spans,
+        thresholds=Thresholds(watch=30_000.0, act=60_000.0, direction="above"),
+        comparable=False,
+    ),
+    Metric(
+        key="engineering.eval_pass_rate",
+        title="Eval pass rate (latest)",
+        definition="The pass rate of the newest eval run in the period; rows give the newest run of each dataset.",
+        unit="percent",
+        source=("eval_runs",),
+        views=(ENGINEERING,),
+        data_quality_rule="measured; no_data when no eval run finished in the period.",
+        resolver=governance.resolve_eval_pass_rate,
+        thresholds=Thresholds(watch=90.0, act=80.0, direction="below"),
+        comparable=False,
+    ),
+    Metric(
+        key="engineering.prompt_edits",
+        title="Prompt edits",
+        definition="Agent prompt and prompt template edits made in the period.",
+        unit="count",
+        source=("prompt_edit_history", "prompt_template_edit_history"),
+        views=(ENGINEERING,),
+        data_quality_rule="measured; no_data when no prompt was edited in the period.",
+        resolver=governance.resolve_prompt_edits,
+    ),
 )
 
 METRICS: dict[str, Metric] = {metric.key: metric for metric in _METRICS}
@@ -616,6 +776,33 @@ VIEWS: dict[str, View] = {
         title="Commerce",
         tiles=("commerce.orders", "commerce.webhook_failures"),
         charts=("commerce.funnel", "commerce.orders"),
+    ),
+    COMPLIANCE: View(
+        key=COMPLIANCE,
+        title="Compliance",
+        tiles=(
+            "compliance.audit_integrity",
+            "compliance.approvals_decided",
+            "compliance.rubber_stamps",
+            "compliance.dsar_open",
+            "compliance.dsar_completion_time",
+            "compliance.attestations_expiring",
+            "compliance.change_log",
+        ),
+        charts=("compliance.approvals_decided", "compliance.change_log"),
+    ),
+    ENGINEERING: View(
+        key=ENGINEERING,
+        title="Engineering",
+        tiles=(
+            "runs.success_rate",
+            "runs.latency",
+            "engineering.gateway_issues",
+            "engineering.slow_spans",
+            "engineering.eval_pass_rate",
+            "engineering.prompt_edits",
+        ),
+        charts=("engineering.slow_spans", "runs.volume"),
     ),
 }
 

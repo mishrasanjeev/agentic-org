@@ -55,6 +55,9 @@ function readCompanyId(): string {
   }
 }
 
+/** Landing tiles refresh this often while the page is visible (PRD: every 60 s). */
+export const REFRESH_MS = 60_000;
+
 export default function InsightsDashboard() {
   const { t } = useTranslation();
   const { user } = useAuth();
@@ -200,6 +203,27 @@ export default function InsightsDashboard() {
     };
   }, [activeView, filters, reloadKey]);
 
+  // -- quiet refresh: new numbers replace the old ones in place, never a skeleton over them --------------
+  useEffect(() => {
+    if (!activeView) return;
+    let live = true;
+    const timer = window.setInterval(() => {
+      if (typeof document !== "undefined" && document.visibilityState !== "visible") return;
+      insightsApi
+        .view(activeView, filters)
+        .then((data) => {
+          if (live) setViewState((prev) => (prev.kind === "ready" ? { kind: "ready", data } : prev));
+        })
+        .catch(() => {
+          // The next tick or the Refresh button tries again; the numbers on screen stay.
+        });
+    }, REFRESH_MS);
+    return () => {
+      live = false;
+      window.clearInterval(timer);
+    };
+  }, [activeView, filters]);
+
   const selectView = (view: InsightsViewKey) => updateParams({ view });
 
   const onTabKey = (e: React.KeyboardEvent<HTMLButtonElement>, index: number) => {
@@ -317,6 +341,12 @@ export default function InsightsDashboard() {
             {t(`insights.tabs.${activeView}`)}
           </h2>
         )}
+
+        {status?.late_data ? (
+          <p role="status" className="rounded-md border px-3 py-2 text-sm" data-testid="insights-late-data">
+            {t("insights.freshness.lateData")}
+          </p>
+        ) : null}
 
         <FilterBar
           value={{ preset, from: range.from, to: range.to, compare }}

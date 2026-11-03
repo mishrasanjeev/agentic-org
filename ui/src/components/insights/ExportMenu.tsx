@@ -9,18 +9,7 @@ import {
   type ExportFormat,
   type InsightsFilters,
 } from "@/lib/insights/api";
-
-function saveBlob(blob: Blob, filename: string) {
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = filename;
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-  // Give the browser a tick to start the download before revoking.
-  setTimeout(() => URL.revokeObjectURL(url), 0);
-}
+import { saveBlob } from "@/lib/insights/download";
 
 /**
  * Export menu (CSV / XLSX / JSON) for one metric, using the same filters as

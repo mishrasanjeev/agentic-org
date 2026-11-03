@@ -9,7 +9,15 @@
  */
 import api from "@/lib/api";
 
-export type InsightsViewKey = "executive" | "finance" | "operations" | "hr" | "marketing" | "commerce";
+export type InsightsViewKey =
+  | "executive"
+  | "finance"
+  | "operations"
+  | "hr"
+  | "marketing"
+  | "commerce"
+  | "compliance"
+  | "engineering";
 export type DataQuality = "measured" | "estimated" | "seeded" | "no_data" | "mixed";
 export type MetricUnit = "count" | "percent" | "duration_ms" | "usd" | "inr" | "tokens" | "hours";
 export type MetricState = "ok" | "watch" | "act";
@@ -24,6 +32,8 @@ export const VIEW_KEYS: readonly InsightsViewKey[] = [
   "hr",
   "marketing",
   "commerce",
+  "compliance",
+  "engineering",
 ];
 export const EXPORT_FORMATS: readonly ExportFormat[] = ["csv", "xlsx", "json"];
 
@@ -40,6 +50,8 @@ export interface InsightsStatus {
   /** Per-tenant BI database access is on and configured, and the caller is a human administrator. */
   bi_access?: boolean;
   settings?: ReportingSettings | null;
+  /** Yesterday's daily figures are not rolled up yet (after 03:00 tenant time). */
+  late_data?: boolean;
 }
 
 export interface MetricPeriod {
@@ -163,6 +175,7 @@ function normaliseStatus(data: unknown): InsightsStatus {
     views,
     platform_operator: raw.platform_operator === true,
     bi_access: raw.bi_access === true,
+    late_data: raw.late_data === true,
     settings,
   };
 }

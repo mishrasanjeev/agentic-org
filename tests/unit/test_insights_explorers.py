@@ -177,7 +177,8 @@ def test_registry_declarations_are_consistent() -> None:
         for column in explorer.columns:
             assert column.options == () or column.filter == "enum", (explorer.key, column.key)
         assert explorer.title and explorer.definition and explorer.source
-    # Administrators read everything; the audit log is theirs alone; a role claim of admin is not enough.
+    # Administrators read everything; the audit log is theirs and the auditor's; a role claim of admin is not
+    # enough.
     assert [e.key for e in explore_registry.readable_explorers("", is_admin=True)] == [
         e.key for e in explore_registry.EXPLORERS.values()
     ]
@@ -192,7 +193,17 @@ def test_registry_declarations_are_consistent() -> None:
         "quality",
         "connectors",
     ]
-    for role in ("analyst", "auditor", "developer", "merchant", "domain_lead", ""):
+    assert [e.key for e in explore_registry.readable_explorers("auditor", is_admin=False)] == [
+        "runs",
+        "approvals",
+        "audit",
+    ]
+    assert [e.key for e in explore_registry.readable_explorers("developer", is_admin=False)] == [
+        "agents",
+        "runs",
+        "quality",
+    ]
+    for role in ("analyst", "merchant", "domain_lead", ""):
         assert explore_registry.readable_explorers(role, is_admin=False) == [], role
     assert DOMAIN_HEADS == {"cfo", "chro", "cmo", "coo"}
 

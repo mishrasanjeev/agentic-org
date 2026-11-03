@@ -11,14 +11,18 @@ import { Link, useParams, useSearchParams } from "react-router";
 import { useTranslation } from "react-i18next";
 import DataQualityBadge from "@/components/insights/DataQualityBadge";
 import EmptyState from "@/components/insights/EmptyState";
+import SpanWaterfall from "@/components/insights/SpanWaterfall";
 import { errorStatus, readErrorDetail } from "@/lib/insights/api";
+import { saveBlob } from "@/lib/insights/download";
 import {
   exploreApi,
   type ExplorerColumn,
   type RunEvidence,
+  type RunFailure,
 } from "@/lib/insights/explore";
 import { formatCell } from "@/lib/insights/explorerCells";
-import { MISSING } from "@/lib/insights/format";
+import { MISSING, formatDuration } from "@/lib/insights/format";
+import { STATE_CHIP_CLASSES } from "@/lib/insights/tokens";
 
 type State =
   | { kind: "loading" }
@@ -48,6 +52,20 @@ export default function InsightsRun() {
   const [searchParams] = useSearchParams();
   const at = searchParams.get("at") || "";
   const [state, setState] = useState<State>({ kind: "loading" });
+  const [bundle, setBundle] = useState<
+    { kind: "idle" } | { kind: "busy" } | { kind: "done"; sha256: string | null } | { kind: "error"; message: string | null }
+  >({ kind: "idle" });
+
+  async function downloadBundle() {
+    setBundle({ kind: "busy" });
+    try {
+      const { blob, sha256 } = await exploreApi.runBundle(runId, at, readCompanyId() || undefined);
+      saveBlob(blob, `run-${runId}.json`);
+      setBundle({ kind: "done", sha256 });
+    } catch (e) {
+      setBundle({ kind: "error", message: await readErrorDetail(e) });
+    }
+  }
 
   useEffect(() => {
     let live = true;
@@ -97,7 +115,14 @@ export default function InsightsRun() {
       spans,
       approvals,
       audit,
+      failure,
     } = state.data;
+    const approvalRows = approvals.map((a) => ({
+      ...a,
+      votes_text: (a.votes ?? [])
+        .map((v) => `${v.by}: ${v.decision ?? MISSING}`)
+        .join(", "),
+    }));
     const facts: Array<[string, ExplorerColumn, unknown]> = [
       [
         "status",
@@ -159,6 +184,7 @@ export default function InsightsRun() {
     ];
     body = (
       <>
+        {failure ? <FailurePanel failure={failure} /> : null}
         <section aria-labelledby="run-facts" className="rounded-lg border p-4">
           <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
             <h2 id="run-facts" className="text-base font-semibold">
@@ -217,30 +243,33 @@ export default function InsightsRun() {
           ]}
           cell={cell}
         />
-        <EvidenceTable
-          id="run-spans"
-          title={t("insightsRun.spans")}
-          empty={t("insightsRun.noSpans")}
-          rows={spans}
-          columns={[
-            col("name", t("insightsRun.fields.span"), "text"),
-            col("kind", t("insightsRun.fields.kind"), "text"),
-            col("status", t("insightsRun.fields.status"), "status"),
-            col("duration_ms", t("insightsRun.fields.duration"), "duration_ms"),
-            col("started_at", t("insightsRun.fields.started"), "datetime"),
-          ]}
-          cell={cell}
-        />
+        <section aria-labelledby="run-spans" className="flex flex-col gap-2">
+          <h2 id="run-spans" className="text-sm font-semibold">
+            {t("insightsRun.spans")}{" "}
+            <span className="font-normal text-muted-foreground">({spans.length})</span>
+          </h2>
+          {spans.length === 0 ? (
+            <p className="text-xs text-muted-foreground">{t("insightsRun.noSpans")}</p>
+          ) : (
+            <SpanWaterfall
+              spans={spans}
+              totalMs={state.data.span_total_ms ?? 0}
+              failedSpanId={failure?.source === "span" ? failure.span_id : null}
+            />
+          )}
+        </section>
         <EvidenceTable
           id="run-approvals"
           title={t("insightsRun.approvals")}
           empty={t("insightsRun.noApprovals")}
-          rows={approvals}
+          rows={approvalRows}
           columns={[
             col("title", t("insightsRun.fields.approval"), "text"),
             col("status", t("insightsRun.fields.status"), "status"),
             col("decision", t("insightsRun.fields.decision"), "text"),
             col("decided_by", t("insightsRun.fields.decidedBy"), "text"),
+            col("delegated_from", t("insightsRun.fields.delegatedFrom"), "text"),
+            col("votes_text", t("insightsRun.fields.votes"), "text"),
             col("decision_at", t("insightsRun.fields.decided"), "datetime"),
           ]}
           cell={cell}
@@ -257,6 +286,8 @@ export default function InsightsRun() {
             col("action", t("insightsRun.fields.action"), "text"),
             col("outcome", t("insightsRun.fields.outcome"), "status"),
             col("signed", t("insightsRun.fields.signed"), "bool"),
+            col("verified", t("insightsRun.fields.verified"), "bool"),
+            col("chain_seq", t("insightsRun.fields.chainSeq"), "count"),
           ]}
           cell={cell}
         />
@@ -278,15 +309,63 @@ export default function InsightsRun() {
             {t("insightsRun.subtitle")}
           </p>
         </div>
-        <Link
-          to="/dashboard/insights/explore/runs"
-          className="insights-target inline-flex h-8 items-center rounded-md border px-3 text-sm font-medium hover:bg-muted"
-        >
-          {t("insightsRun.back")}
-        </Link>
+        <div className="flex flex-wrap items-center gap-2">
+          {state.kind === "ready" ? (
+            <button
+              type="button"
+              className="insights-target inline-flex h-8 items-center rounded-md border px-3 text-sm font-medium hover:bg-muted disabled:opacity-60"
+              onClick={downloadBundle}
+              disabled={bundle.kind === "busy"}
+              data-testid="run-bundle"
+            >
+              {bundle.kind === "busy" ? t("insightsRun.bundle.busy") : t("insightsRun.bundle.download")}
+            </button>
+          ) : null}
+          <Link
+            to="/dashboard/insights/explore/runs"
+            className="insights-target inline-flex h-8 items-center rounded-md border px-3 text-sm font-medium hover:bg-muted"
+          >
+            {t("insightsRun.back")}
+          </Link>
+        </div>
       </div>
+      {bundle.kind === "done" ? (
+        <p role="status" className="break-all text-xs text-muted-foreground" data-testid="run-bundle-sha">
+          {bundle.sha256 ? t("insightsRun.bundle.checksum", { sha256: bundle.sha256 }) : t("insightsRun.bundle.saved")}
+        </p>
+      ) : null}
+      {bundle.kind === "error" ? (
+        <p role="alert" className="text-xs text-destructive">
+          {bundle.message || t("insightsRun.bundle.failed")}
+        </p>
+      ) : null}
       {body}
     </div>
+  );
+}
+
+function FailurePanel({ failure }: { failure: RunFailure }) {
+  const { t } = useTranslation();
+  const where =
+    failure.source === "span"
+      ? t("insightsRun.failure.atSpan", {
+          name: (failure.name ?? "").replace(/^agenticorg\./, ""),
+          offset: formatDuration(failure.offset_ms ?? 0),
+        })
+      : t("insightsRun.failure.atRun", { status: failure.status ?? MISSING });
+  const detail = [failure.exception, failure.summary, failure.error_class].filter(Boolean).join(" · ");
+  return (
+    <section
+      aria-labelledby="run-failure"
+      className={`rounded-lg border p-4 ${STATE_CHIP_CLASSES.act}`}
+      data-testid="run-failure"
+    >
+      <h2 id="run-failure" className="text-base font-semibold">
+        {t("insightsRun.failure.title")}
+      </h2>
+      <p className="text-sm">{where}</p>
+      {detail ? <p className="mt-1 text-sm">{detail}</p> : null}
+    </section>
   );
 }
 

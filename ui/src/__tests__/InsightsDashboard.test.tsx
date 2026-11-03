@@ -249,6 +249,24 @@ describe("InsightsDashboard", () => {
     expectNoBadText();
   });
 
+  it("shows the late-data banner and refreshes the numbers in place every minute", async () => {
+    vi.useFakeTimers({ toFake: ["Date", "setInterval", "clearInterval"] });
+    vi.setSystemTime(new Date("2026-11-01T06:00:00Z"));
+    routeGet(
+      { executive: executiveView() },
+      { enabled: true, views: ["executive"], platform_operator: false, settings: SETTINGS, late_data: true },
+    );
+    renderPage();
+    await screen.findByTestId("insights-tiles");
+    expect(screen.getByTestId("insights-late-data")).toHaveTextContent("Yesterday's figures are not in yet");
+    expect(viewCalls()).toHaveLength(1);
+    vi.advanceTimersByTime(60_000);
+    await waitFor(() => expect(viewCalls()).toHaveLength(2));
+    // A quiet refresh: the tiles stay on screen, no skeleton replaces them.
+    expect(screen.getByTestId("insights-tiles")).toBeInTheDocument();
+    expect(screen.queryByTestId("insights-loading")).not.toBeInTheDocument();
+  });
+
   it("switching tabs loads the Finance view and writes it to the URL", async () => {
     const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
     routeGet({ executive: executiveView(), finance: financeView() });
