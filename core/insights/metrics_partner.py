@@ -142,8 +142,9 @@ async def resolve_partner_filings(ctx: MetricContext) -> dict[str, Any]:
         if not any_filing:
             return no_data("filing_approvals", "No filing has been prepared for approval yet.")
         return {"value": 0, "rows": [], "source": "filing_approvals", "data_quality": "measured"}
-    rows = sorted(({"label": str(t), "value": int(n)} for t, n in by_type), key=lambda r: (-r["value"], r["label"]))
-    total = sum(r["value"] for r in rows)
+    counts = sorted(((str(t), int(n)) for t, n in by_type), key=lambda kv: (-kv[1], kv[0]))
+    rows = [{"label": label, "value": n} for label, n in counts]
+    total = sum(n for _, n in counts)
     return {"value": total, "rows": rows, "source": "filing_approvals", "data_quality": "measured"}
 
 
