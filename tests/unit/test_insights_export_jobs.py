@@ -191,8 +191,13 @@ def test_the_migration_follows_v6z109_and_matches_the_model() -> None:
     ]
     assert children == [path.name]
     source = path.read_text(encoding="utf-8")
-    for values in (EXPORT_KINDS, EXPORT_STATUSES, EXPORT_FORMATS):
+    v6z110_kinds = tuple(k for k in EXPORT_KINDS if k != "partner_pack")
+    for values in (v6z110_kinds, EXPORT_STATUSES, EXPORT_FORMATS):
         assert ",".join(f"'{v}'" for v in values) in source
+    # v6z113 widens the kind check to the partner client pack.
+    later = (path.parent / "v6_z113_insights_saved_views.py").read_text(encoding="utf-8")
+    assert '_KINDS = _KINDS_V6Z110 + ",\'partner_pack\'"' in later
+    assert f'_KINDS_V6Z110 = "{",".join(repr(k) for k in v6z110_kinds)}"' in later
     assert set(export_jobs.FORMATS_BY_KIND) == set(EXPORT_KINDS)
     assert "FORCE ROW LEVEL SECURITY" in source
 

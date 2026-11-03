@@ -42,6 +42,9 @@ from typing import Any
 from core.insights.export_jobs import Built, ExportJobError, builder, caller_from_snapshot
 
 FINANCE_ROLES = frozenset({"cfo"})
+# The partner client pack carries the firm's billing: administrators and the CFO.
+PARTNER_PACK_ROLES = frozenset({"cfo"})
+MAX_PACK_CLIENTS = 500
 EVIDENCE_ROLES = frozenset({"auditor"})
 MAX_EVIDENCE_DAYS = 366
 MAX_AUDIT_ROWS = 200_000
@@ -72,6 +75,12 @@ def validate(kind: str, params: dict[str, Any], caller: Any) -> dict[str, Any]:
         if not (caller.is_admin or role in FINANCE_ROLES):
             raise ExportJobError("insights_pack_forbidden", "the finance pack is for administrators and the CFO", 403)
         return {"view": "finance", "compare": "previous"}
+    if kind == "partner_pack":
+        if not (caller.is_admin or role in PARTNER_PACK_ROLES):
+            raise ExportJobError(
+                "insights_pack_forbidden", "the partner client pack is for administrators and the CFO", 403
+            )
+        return {"view": "partner", "compare": "none"}
     if kind == "evidence_pack":
         if not (caller.is_admin or role in EVIDENCE_ROLES):
             raise ExportJobError("insights_pack_forbidden", "the evidence pack is for administrators and auditors", 403)
@@ -325,6 +334,149 @@ async def _build_finance_pack(session: Any, job: Any, params: dict[str, Any]) ->
         _zip(files),
         f"insights-finance-pack-{period['from']}-{period['to']}.zip",
         None,
+        False,
+        meta={"manifest_sha256": hashlib.sha256(files["manifest.json"]).hexdigest()},
+    )
+
+
+# ------------------------------------------------------------------ partner client pack
+
+
+def _slug(text: str) -> str:
+    cleaned = "".join(ch.lower() if ch.isalnum() else "-" for ch in text).strip("-")
+    while "--" in cleaned:
+        cleaned = cleaned.replace("--", "-")
+    return cleaned[:40] or "client"
+
+
+@builder("partner_pack")
+async def _build_partner_pack(session: Any, job: Any, params: dict[str, Any]) -> Built:
+    """One PDF per client company and ``partner.xlsx`` (clients, deadlines, filings, billing) with a manifest."""
+    from datetime import timedelta
+
+    from openpyxl import Workbook
+    from sqlalchemy import select
+
+    from core.insights import pdf
+    from core.insights.export import definition_rows, guard_cell
+    from core.models.ca_client_billing import CAClientInvoice as I
+    from core.models.compliance_deadline import ComplianceDeadline as D
+
+    ctx, resolved = await _resolve_view(session, job, params, "partner")
+    clients = (resolved.get("partner.clients") or {}).get("rows") or []
+    if not clients:
+        raise ExportJobError("no_clients", "no client company is recorded")
+    if len(clients) > MAX_PACK_CLIENTS:
+        raise ExportJobError("too_many_clients", f"at most {MAX_PACK_CLIENTS} client companies in one pack")
+    organisation = await _organisation(session, job.tenant_id)
+    period = ctx.period.as_dict()
+    period_text = f"{period['from']} to {period['to']}"
+    today = ctx.today
+    deadlines = (
+        await session.execute(
+            select(D.company_id, D.deadline_type, D.filing_period, D.due_date)
+            .where(
+                D.tenant_id == job.tenant_id,
+                D.filed.is_(False),
+                D.due_date <= today + timedelta(days=30),
+            )
+            .order_by(D.due_date)
+        )
+    ).all()
+    invoices = (
+        await session.execute(
+            select(I.company_id, I.invoice_number, I.issue_date, I.total, I.balance_due, I.status, I.currency)
+            .where(
+                I.tenant_id == job.tenant_id,
+                I.issue_date >= ctx.period.start,
+                I.issue_date <= ctx.period.end,
+                I.status.notin_(("void", "cancelled", "draft")),
+            )
+            .order_by(I.issue_date)
+        )
+    ).all()
+    by_company_deadlines: dict[str, list[list[str]]] = {}
+    for company_id, kind, filing_period, due in deadlines:
+        state = "overdue" if due < today else "due"
+        by_company_deadlines.setdefault(str(company_id), []).append([kind, filing_period, due.isoformat(), state])
+    by_company_invoices: dict[str, list[list[str]]] = {}
+    for company_id, number, issued, total, balance, status, currency in invoices:
+        by_company_invoices.setdefault(str(company_id), []).append(
+            [
+                number,
+                issued.isoformat(),
+                pdf.format_value(float(total or 0), "inr" if currency == "INR" else "usd"),
+                pdf.format_value(float(balance or 0), "inr" if currency == "INR" else "usd"),
+                status,
+            ]
+        )
+    computed = datetime.now(UTC)
+    files: dict[str, bytes] = {}
+    used: set[str] = set()
+    for client in clients:
+        company_id = str(client.get("company_id"))
+        name = f"clients/{_slug(str(client.get('label')))}-{company_id[:8]}.pdf"
+        while name in used:
+            name = name.replace(".pdf", "-1.pdf")
+        used.add(name)
+        rate = client.get("success_rate")
+        files[name] = pdf.client_pdf(
+            client=str(client.get("label")),
+            organisation=organisation,
+            period=period_text,
+            facts=[
+                ("Active", "yes" if client.get("active") else "no"),
+                ("Health (0 to 100)", str(client.get("health"))),
+                ("Agent runs in the period", str(client.get("runs"))),
+                ("Run success", "-" if rate is None else f"{rate}%"),
+                ("Overdue deadlines", str(client.get("overdue_deadlines"))),
+                ("Filings waiting for approval", str(client.get("pending_filings"))),
+                ("Balance outstanding", pdf.format_value(client.get("outstanding"), "inr")),
+            ],
+            deadlines=by_company_deadlines.get(company_id, []),
+            invoices=by_company_invoices.get(company_id, []),
+            computed_at=computed,
+        )
+    workbook = Workbook(write_only=True)
+    for sheet_name, key in (
+        ("Clients", "partner.clients"),
+        ("Deadlines", "backoffice.deadlines"),
+        ("Filings", "partner.filings"),
+        ("Billing", "partner.billing"),
+    ):
+        sheet = workbook.create_sheet(sheet_name)
+        header, rows = _sheet_rows(resolved.get(key) or {})
+        if not header:
+            hint = (resolved.get(key) or {}).get("hint") or "nothing recorded"
+            sheet.append([guard_cell(f"No data: {hint}")])
+            continue
+        sheet.append(header)
+        for row in rows:
+            sheet.append(row)
+    sheet = workbook.create_sheet("Filters")
+    sheet.append(["filter", "value"])
+    for name, val in (("from", period["from"]), ("to", period["to"]), ("company_id", params.get("company_id"))):
+        sheet.append([name, val])
+    sheet = workbook.create_sheet("Definitions")
+    sheet.append(["metric", "field", "value"])
+    for key, m in resolved.items():
+        for name, val in definition_rows(m):
+            sheet.append([key, name, guard_cell(_text(val))])
+    buffer = io.BytesIO()
+    workbook.save(buffer)
+    files["partner.xlsx"] = buffer.getvalue()
+    meta = {
+        "kind": "partner_pack",
+        "tenant_id": str(job.tenant_id),
+        "period": period,
+        "clients": len(clients),
+        "generated_at": computed,
+    }
+    files["manifest.json"] = json.dumps(manifest(files, meta), indent=2, default=str).encode("utf-8")
+    return Built(
+        _zip(files),
+        f"insights-partner-pack-{period['from']}-{period['to']}.zip",
+        len(clients),
         False,
         meta={"manifest_sha256": hashlib.sha256(files["manifest.json"]).hexdigest()},
     )

@@ -14,6 +14,9 @@ from core.insights.registry import METRICS, UNITS, VIEW_ROLES, VIEWS, Thresholds
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 V1_KEYS = {
+    "partner.clients",
+    "partner.filings",
+    "partner.billing",
     "runs.confidence",
     "quality.feedback",
     "backoffice.deadlines",
@@ -115,6 +118,7 @@ BACK_OFFICE = {
     "runs.volume",
     "runs.success_rate",
 }
+PARTNER = {"partner.clients", "backoffice.deadlines", "partner.filings", "partner.billing"}
 DOMAIN = {
     "runs.volume",
     "runs.success_rate",
@@ -165,6 +169,7 @@ def test_views_show_exactly_their_metrics() -> None:
         "engineering",
         "back_office",
         "domain",
+        "partner",
     }
     assert set(VIEWS["executive"].keys) == EXECUTIVE
     assert set(VIEWS["finance"].keys) == FINANCE
@@ -176,6 +181,7 @@ def test_views_show_exactly_their_metrics() -> None:
     assert set(VIEWS["engineering"].keys) == ENGINEERING
     assert set(VIEWS["back_office"].keys) == BACK_OFFICE
     assert set(VIEWS["domain"].keys) == DOMAIN
+    assert set(VIEWS["partner"].keys) == PARTNER
     for view in VIEWS.values():
         for key in view.keys:
             assert key in METRICS, key
@@ -197,6 +203,7 @@ def test_view_roles() -> None:
         "engineering": frozenset({"admin", "developer"}),
         "back_office": frozenset({"admin"}),
         "domain": frozenset({"admin", "domain_lead", "analyst"}),
+        "partner": frozenset({"admin", "cfo", "coo", "auditor"}),
     }
     every = [
         "executive",
@@ -209,15 +216,16 @@ def test_view_roles() -> None:
         "engineering",
         "back_office",
         "domain",
+        "partner",
     ]
     assert registry.allowed_views("admin", is_admin=True) == every
     assert registry.allowed_views("", is_admin=True) == every
-    assert registry.allowed_views("cfo", is_admin=False) == ["finance"]
-    assert registry.allowed_views("coo", is_admin=False) == ["operations"]
+    assert registry.allowed_views("cfo", is_admin=False) == ["finance", "partner"]
+    assert registry.allowed_views("coo", is_admin=False) == ["operations", "partner"]
     assert registry.allowed_views("chro", is_admin=False) == ["hr"]
     assert registry.allowed_views("cmo", is_admin=False) == ["marketing"]
     assert registry.allowed_views("merchant", is_admin=False) == ["commerce"]
-    assert registry.allowed_views("auditor", is_admin=False) == ["compliance"]
+    assert registry.allowed_views("auditor", is_admin=False) == ["compliance", "partner"]
     assert registry.allowed_views("developer", is_admin=False) == ["engineering"]
     # A role claim of "admin" without the admin scope is not an administrator.
     assert registry.allowed_views("admin", is_admin=False) == []

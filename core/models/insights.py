@@ -283,7 +283,15 @@ VALUE_SOURCES: tuple[str, ...] = ("seeded", "tenant")
 VALUE_CURRENCIES: tuple[str, ...] = ("INR", "USD")
 ALERT_SEVERITIES: tuple[str, ...] = ("watch", "act")
 ALERT_STATES: tuple[str, ...] = ("open", "acked", "resolved")
-EXPORT_KINDS: tuple[str, ...] = ("metric", "explorer", "run_bundle", "view_pdf", "finance_pack", "evidence_pack")
+EXPORT_KINDS: tuple[str, ...] = (
+    "metric",
+    "explorer",
+    "run_bundle",
+    "view_pdf",
+    "finance_pack",
+    "evidence_pack",
+    "partner_pack",
+)
 EXPORT_STATUSES: tuple[str, ...] = ("queued", "running", "ready", "failed", "expired")
 EXPORT_FORMATS: tuple[str, ...] = ("csv", "xlsx", "json", "pdf", "zip")
 
@@ -438,3 +446,42 @@ class InsightsExport(BaseModel):
     started_at: Mapped[datetime | None] = mapped_column(TIMESTAMP(timezone=True), nullable=True)
     finished_at: Mapped[datetime | None] = mapped_column(TIMESTAMP(timezone=True), nullable=True)
     expires_at: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), nullable=False)
+
+
+class SavedView(BaseModel):
+    """A named filter set on one Insights landing view or explorer (``view_key`` is the view, or ``explore:<key>``).
+
+    ``filters`` is the URL query the page already uses. Owned by one person; ``shared`` shows it to everyone in the
+    tenant who may open that view or explorer. Forced RLS.
+    """
+
+    __tablename__ = "saved_views"
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "user_id", "view_key", "name", name="uq_saved_views_owner_name"),
+        Index("ix_saved_views_tenant_view", "tenant_id", "view_key"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    tenant_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("tenants.id"), nullable=False)
+    user_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
+    view_key: Mapped[str] = mapped_column(String(64), nullable=False)
+    name: Mapped[str] = mapped_column(String(120), nullable=False)
+    filters: Mapped[dict[str, Any]] = mapped_column(
+        JSONB, nullable=False, server_default=text("'{}'::jsonb"), default=dict
+    )
+    shared: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("false"), default=False)
+    created_at: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), server_default=func.now(), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), server_default=func.now(), nullable=False)
+
+
+class InsightsUserState(BaseModel):
+    """When a person last opened Insights (the "what changed since you last looked" strip). Forced RLS."""
+
+    __tablename__ = "insights_user_state"
+
+    tenant_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("tenants.id"), primary_key=True, nullable=False
+    )
+    user_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, nullable=False)
+    last_seen_at: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), server_default=func.now(), nullable=False)

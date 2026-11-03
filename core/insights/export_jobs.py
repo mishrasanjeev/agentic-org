@@ -43,6 +43,7 @@ FORMATS_BY_KIND: dict[str, tuple[str, ...]] = {
     "view_pdf": ("pdf",),
     "finance_pack": ("zip",),
     "evidence_pack": ("zip",),
+    "partner_pack": ("zip",),
 }
 MEDIA_TYPES: dict[str, str] = {
     **exports.MEDIA_TYPES,

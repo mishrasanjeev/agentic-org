@@ -119,7 +119,9 @@ from core.models.insights import InsightsBiLogin as InsightsBiLogin
 from core.models.insights import InsightsDaily as InsightsDaily
 from core.models.insights import InsightsExport as InsightsExport
 from core.models.insights import InsightsRollupState as InsightsRollupState
+from core.models.insights import InsightsUserState as InsightsUserState
 from core.models.insights import RunFact as RunFact
+from core.models.insights import SavedView as SavedView
 from core.models.insights import ValueBaseline as ValueBaseline
 from core.models.insights import ValueRate as ValueRate
 from core.models.invoice import Invoice as Invoice

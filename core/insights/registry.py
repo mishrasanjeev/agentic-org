@@ -39,6 +39,7 @@ from core.insights import metrics as runs
 from core.insights import metrics_cost as cost
 from core.insights import metrics_domain as domain
 from core.insights import metrics_governance as governance
+from core.insights import metrics_partner as partner
 from core.insights import value
 from core.insights.metrics import RUN_GROUPS, MetricContext, Period
 
@@ -58,6 +59,7 @@ COMPLIANCE = "compliance"
 ENGINEERING = "engineering"
 BACK_OFFICE = "back_office"
 DOMAIN = "domain"
+PARTNER = "partner"
 
 # Which roles may read each view. Administrators hold every view; the check is
 # made server side in every handler (403 insights_view_forbidden).
@@ -74,6 +76,8 @@ VIEW_ROLES: dict[str, frozenset[str]] = {
     BACK_OFFICE: frozenset({"admin"}),
     # Domain leads and analysts: everything in their assigned domain.
     DOMAIN: frozenset({"admin", "domain_lead", "analyst"}),
+    # A CA firm's view of its client companies: the roles the legacy partner dashboard admitted.
+    PARTNER: frozenset({"admin", "cfo", "coo", "auditor"}),
 }
 
 # A role view shows the run and approval metrics of its domains only (and of the caller's domains within
@@ -90,6 +94,7 @@ VIEW_DOMAINS: dict[str, tuple[str, ...] | None] = {
     BACK_OFFICE: ("backoffice", "legal", "risk", "corporate", "comms"),
     # The caller's own domains (an analyst's assigned domain; every domain for an administrator).
     DOMAIN: None,
+    PARTNER: None,
 }
 
 RUN_QUALITY_RULE = (
@@ -808,7 +813,7 @@ _METRICS: tuple[Metric, ...] = (
         ),
         unit="count",
         source=("compliance_deadlines",),
-        views=(BACK_OFFICE,),
+        views=(BACK_OFFICE, PARTNER),
         data_quality_rule=SNAPSHOT_QUALITY_RULE,
         resolver=domain.resolve_compliance_deadlines,
         thresholds=Thresholds(watch=1.0, act=3.0, direction="above"),
@@ -827,6 +832,50 @@ _METRICS: tuple[Metric, ...] = (
         views=(BACK_OFFICE,),
         data_quality_rule="measured from the findings rows; no_data when none was detected in the period.",
         resolver=domain.resolve_txn_findings,
+    ),
+    Metric(
+        key="partner.clients",
+        title="Active client companies",
+        definition=(
+            "Client companies marked active; rows give every client's health (its recorded score less 25 per "
+            "overdue deadline and 5 per filing waiting for approval), its runs and run success in the period, "
+            "overdue deadlines, filings waiting and the balance outstanding on its invoices."
+        ),
+        unit="count",
+        source=("companies", "run_facts", "compliance_deadlines", "filing_approvals", "ca_client_invoices"),
+        views=(PARTNER,),
+        data_quality_rule=SNAPSHOT_QUALITY_RULE,
+        resolver=partner.resolve_partner_clients,
+        comparable=False,
+        kind="snapshot",
+    ),
+    Metric(
+        key="partner.filings",
+        title="Filings waiting for approval",
+        definition="Filings prepared for the firm's clients that wait for an approval now, by filing type.",
+        unit="count",
+        source=("filing_approvals",),
+        views=(PARTNER,),
+        data_quality_rule=SNAPSHOT_QUALITY_RULE,
+        resolver=partner.resolve_partner_filings,
+        thresholds=Thresholds(watch=5.0, act=15.0, direction="above"),
+        comparable=False,
+        kind="snapshot",
+    ),
+    Metric(
+        key="partner.billing",
+        title="Invoiced to clients",
+        definition=(
+            "What the firm invoiced its clients in the period (issued invoices, not drafts or voided ones); rows "
+            "give, per currency, the amount invoiced, the payments received in the period and the balance "
+            "outstanding now."
+        ),
+        unit="inr",
+        source=("ca_client_invoices", "ca_client_payments"),
+        views=(PARTNER,),
+        data_quality_rule="measured from the firm's invoices and payments; no_data when no invoice is recorded.",
+        resolver=partner.resolve_partner_billing,
+        comparable=False,
     ),
 )
 
@@ -965,6 +1014,12 @@ VIEWS: dict[str, View] = {
             "quality.feedback",
         ),
         charts=("runs.volume", "runs.success_rate", "runs.confidence", "quality.feedback", "agents.by_status"),
+    ),
+    PARTNER: View(
+        key=PARTNER,
+        title="Partner",
+        tiles=("partner.clients", "backoffice.deadlines", "partner.filings", "partner.billing"),
+        charts=("partner.clients", "backoffice.deadlines", "partner.filings", "partner.billing"),
     ),
 }
 
