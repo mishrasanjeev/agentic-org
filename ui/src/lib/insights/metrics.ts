@@ -34,6 +34,8 @@ const VALUE_PAGE = "/dashboard/insights/value";
 const WORKFLOWS = "/dashboard/insights/explore/workflows";
 const CONNECTORS = "/dashboard/insights/explore/connectors";
 const ORDERS_PAGE = "/dashboard/orders";
+const AUDIT = "/dashboard/insights/explore/audit";
+const QUALITY = "/dashboard/insights/explore/quality";
 
 /** Every tile drills to the explorer rows behind it, with the filter or sort that produced the number. */
 export const METRIC_PRESENTATION: Record<string, MetricPresentation> = {
@@ -92,6 +94,38 @@ export const METRIC_PRESENTATION: Record<string, MetricPresentation> = {
   "commerce.funnel": { chart: "funnel", action: { to: ORDERS_PAGE, labelKey: "insights.actions.openOrders" } },
   "commerce.orders": { chart: "line", action: { to: ORDERS_PAGE, labelKey: "insights.actions.openOrders" } },
   "commerce.webhook_failures": { chart: "hbar", action: { to: ORDERS_PAGE, labelKey: "insights.actions.openOrders" } },
+  "compliance.audit_integrity": { chart: "hbar", action: { to: AUDIT, labelKey: "insights.actions.exploreAudit" } },
+  "compliance.approvals_decided": {
+    chart: "line",
+    action: { to: APPROVALS, labelKey: "insights.actions.exploreApprovals" },
+  },
+  "compliance.rubber_stamps": {
+    chart: "line",
+    action: { to: `${APPROVALS}?sort=cycle_time_ms&order=asc`, labelKey: "insights.actions.exploreApprovals" },
+  },
+  "compliance.dsar_open": {
+    chart: "hbar",
+    action: { to: `${AUDIT}?filter%5Bcategory%5D=dsar`, labelKey: "insights.actions.exploreAudit" },
+  },
+  "compliance.dsar_completion_time": {
+    chart: "line",
+    action: { to: `${AUDIT}?filter%5Bcategory%5D=dsar`, labelKey: "insights.actions.exploreAudit" },
+  },
+  "compliance.attestations_expiring": {
+    chart: "hbar",
+    action: { to: `${AUDIT}?filter%5Bcategory%5D=residency_attestation`, labelKey: "insights.actions.exploreAudit" },
+  },
+  "compliance.change_log": { chart: "hbar", action: { to: AUDIT, labelKey: "insights.actions.exploreAudit" } },
+  "engineering.gateway_issues": {
+    chart: "hbar",
+    action: { to: `${RUNS}?filter%5Bstatus%5D=failed`, labelKey: "insights.actions.exploreRuns" },
+  },
+  "engineering.slow_spans": {
+    chart: "hbar",
+    action: { to: `${RUNS}?sort=duration_ms&order=desc`, labelKey: "insights.actions.exploreRuns" },
+  },
+  "engineering.eval_pass_rate": { chart: "hbar", action: { to: QUALITY, labelKey: "insights.actions.exploreQuality" } },
+  "engineering.prompt_edits": { chart: "hbar", action: { to: AGENTS, labelKey: "insights.actions.exploreAgents" } },
 };
 
 /** Expected metric keys per view (registry views; the API decides what it returns). */
@@ -127,23 +161,52 @@ export const VIEW_METRICS: Record<InsightsViewKey, readonly string[]> = {
   marketing: ["marketing.leads", "marketing.content_drafts", "marketing.draft_cycle_time", "runs.volume",
     "approvals.pending"],
   commerce: ["commerce.orders", "commerce.webhook_failures", "commerce.funnel"],
+  compliance: [
+    "compliance.audit_integrity",
+    "compliance.approvals_decided",
+    "compliance.rubber_stamps",
+    "compliance.dsar_open",
+    "compliance.dsar_completion_time",
+    "compliance.attestations_expiring",
+    "compliance.change_log",
+  ],
+  engineering: [
+    "runs.success_rate",
+    "runs.latency",
+    "engineering.gateway_issues",
+    "engineering.slow_spans",
+    "engineering.eval_pass_rate",
+    "engineering.prompt_edits",
+    "runs.volume",
+  ],
 };
 
 /** Views each role may open; mirrors the server-side check (admin both, cfo finance). */
 export const ROLE_VIEWS: Record<string, readonly InsightsViewKey[]> = {
-  admin: ["executive", "finance", "operations", "hr", "marketing", "commerce"],
+  admin: ["executive", "finance", "operations", "hr", "marketing", "commerce", "compliance", "engineering"],
   cfo: ["finance"],
   coo: ["operations"],
   chro: ["hr"],
   cmo: ["marketing"],
   merchant: ["commerce"],
+  auditor: ["compliance"],
+  developer: ["engineering"],
 };
 
 /**
  * Insights is offered to these roles; the route guard and the nav entry use the same list. The CHRO, CMO and
  * COO open the explorers for their domains (their landing views arrive with the role views).
  */
-export const INSIGHTS_ROLES: readonly string[] = ["admin", "cfo", "chro", "cmo", "coo", "merchant"];
+export const INSIGHTS_ROLES: readonly string[] = [
+  "admin",
+  "cfo",
+  "chro",
+  "cmo",
+  "coo",
+  "merchant",
+  "auditor",
+  "developer",
+];
 
 const DEFAULT_VIEW: Record<string, InsightsViewKey> = {
   cfo: "finance",
@@ -151,6 +214,8 @@ const DEFAULT_VIEW: Record<string, InsightsViewKey> = {
   chro: "hr",
   cmo: "marketing",
   merchant: "commerce",
+  auditor: "compliance",
+  developer: "engineering",
 };
 
 export function defaultViewForRole(role: string | null | undefined): InsightsViewKey {

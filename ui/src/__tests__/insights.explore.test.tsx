@@ -402,6 +402,7 @@ describe("InsightsRun", () => {
           },
           gateway_records: [{ provider: "gemini", model: "gemini-2.5-flash", outcome: "ok", latency_ms: 800 }],
           spans: [{ name: "llm.call", kind: "llm", status: "ok", duration_ms: 800 }],
+          failure: null,
           approvals: [{ title: "Approve invoice INV-1", status: "decided", link: "/dashboard/approvals?id=h1" }],
           audit: [],
           links: { agent: "/dashboard/agents/a1" },
@@ -416,6 +417,75 @@ describe("InsightsRun", () => {
     expect(screen.getByRole("link", { name: "Approve invoice INV-1" })).toHaveAttribute("href", "/dashboard/approvals?id=h1");
     expect(screen.getByText("No audit rows for this run.")).toBeInTheDocument();
     expect(document.body.textContent).not.toMatch(/NaN|undefined|\[object Object\]/);
+  });
+
+  it("leads with why the run failed and draws its spans as a waterfall", async () => {
+    route({
+      "/insights/runs/r3": () => ({
+        run: { id: "r3", agent: "Payroll checker", status: "failed", error_class: "ToolError", data_quality: "measured" },
+        failure: {
+          source: "span",
+          span_id: "s2",
+          name: "agenticorg.tool.call",
+          summary: "zoho:get_payslip failed",
+          exception: "exception TimeoutError",
+          offset_ms: 400,
+          error_class: "ToolError",
+        },
+        gateway_records: [],
+        spans: [
+          { span_id: "s1", parent_span_id: null, depth: 0, name: "agenticorg.agent.run", kind: "internal", status: "error",
+            started_at: "2026-11-01T03:00:00+00:00", offset_ms: 0, duration_ms: 1500, summary: "failed", events: [] },
+          { span_id: "s2", parent_span_id: "s1", depth: 1, name: "agenticorg.tool.call", kind: "client", status: "error",
+            started_at: "2026-11-01T03:00:00.400+00:00", offset_ms: 400, duration_ms: 1000,
+            summary: "zoho:get_payslip failed", events: [{ name: "exception", offset_ms: 990, label: "exception TimeoutError" }] },
+        ],
+        span_total_ms: 1500,
+        approvals: [
+          { title: "Release payroll", status: "decided", decision: "approve", decided_by: "Asha", delegated_from: "Ravi",
+            votes: [{ by: "Asha", decision: "approve", step: 1, at: "2026-11-01T04:00:00+00:00" }], link: "/dashboard/approvals?id=h3" },
+        ],
+        audit: [{ created_at: "2026-11-01T03:00:01+00:00", event_type: "tool.get_payslip", action: "call", outcome: "failure",
+          signed: true, verified: true, chain_seq: 42, sealed: true }],
+        links: {},
+        limits: { records: 50, spans: 200 },
+      }),
+    });
+    renderAt("/dashboard/insights/runs/r3?at=2026-11-01T03%3A00%3A00%2B00%3A00");
+    const panel = await screen.findByTestId("run-failure");
+    expect(panel).toHaveTextContent("Why this run failed");
+    expect(panel).toHaveTextContent("tool.call");
+    expect(panel).toHaveTextContent("exception TimeoutError");
+    expect(screen.getByTestId("span-waterfall")).toBeInTheDocument();
+    expect(screen.getByTestId("waterfall-span-s2")).toHaveAccessibleName(/tool\.call, error/);
+    expect(screen.getByText("Ravi")).toBeInTheDocument();
+    expect(screen.getByText("Asha: approve")).toBeInTheDocument();
+    expect(screen.getByText("42")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "View data" }));
+    expect(screen.getByRole("table", { name: "Trace (waterfall)" })).toBeInTheDocument();
+    expect(document.body.textContent).not.toMatch(/NaN|undefined|\[object Object\]/);
+  });
+
+  it("downloads the run's evidence bundle and shows its checksum", async () => {
+    const created: Blob[] = [];
+    const createObjectURL = vi.fn((b: Blob) => {
+      created.push(b);
+      return "blob:x";
+    });
+    Object.assign(URL, { createObjectURL, revokeObjectURL: vi.fn() });
+    route({
+      // Listed first: the router matches by prefix.
+      "/insights/runs/r4/bundle": () =>
+        Promise.resolve({ data: new Blob(["{}"]), headers: { "x-content-sha256": "ab12" } }),
+      "/insights/runs/r4": () => ({
+        run: { id: "r4", agent: "A", status: "completed", data_quality: "measured" },
+        gateway_records: [], spans: [], approvals: [], audit: [], links: {}, limits: { records: 50, spans: 200 },
+      }),
+    });
+    renderAt("/dashboard/insights/runs/r4?at=2026-11-01T03%3A00%3A00%2B00%3A00");
+    fireEvent.click(await screen.findByTestId("run-bundle"));
+    expect(await screen.findByTestId("run-bundle-sha")).toHaveTextContent("SHA-256: ab12");
+    expect(created).toHaveLength(1);
   });
 
   it("says the run was not found for a 404", async () => {

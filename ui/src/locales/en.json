@@ -803,7 +803,9 @@
       "operations": "Operations",
       "hr": "HR",
       "marketing": "Marketing",
-      "commerce": "Commerce"
+      "commerce": "Commerce",
+      "compliance": "Compliance",
+      "engineering": "Engineering"
     },
     "filters": {
       "label": "Filters",
@@ -909,7 +911,9 @@
       "exploreWorkflows": "Explore workflows",
       "exploreStalled": "See stalled runs",
       "exploreConnectors": "See unhealthy connectors",
-      "openOrders": "Open orders"
+      "openOrders": "Open orders",
+      "exploreAudit": "Explore the audit log",
+      "exploreQuality": "Explore quality"
     },
     "disabled": {
       "title": "Insights is turned off",
@@ -944,6 +948,10 @@
       "checkouts_completed": "Checkouts completed",
       "orders": "Orders",
       "orders_paid": "Orders paid"
+    },
+    "freshness": {
+      "lateData": "Yesterday's figures are not in yet, so the totals may be low. They are added by 02:00 your time.",
+      "autoRefresh": "Updates every minute"
     }
   },
   "insightsBi": {
@@ -1104,7 +1112,7 @@
       "body": "It may belong to another domain or company, or the link is incomplete. Open it again from the Runs table."
     },
     "gateway": "Model calls",
-    "spans": "Trace spans (longest first)",
+    "spans": "Trace (waterfall)",
     "approvals": "Approvals",
     "audit": "Audit rows",
     "noGateway": "No model gateway records for this run.",
@@ -1139,7 +1147,32 @@
       "decided": "Decided",
       "event": "Event",
       "action": "Action",
-      "signed": "Signed"
+      "signed": "Signed",
+      "delegatedFrom": "For (delegation)",
+      "votes": "Votes",
+      "verified": "Signature verifies",
+      "chainSeq": "Chain position"
+    },
+    "waterfall": {
+      "summary": "{{count}} spans over {{total}}; {{errors}} with errors; the longest is {{longest}} ({{longestMs}}).",
+      "viewData": "View data",
+      "hideData": "Show waterfall",
+      "offset": "Starts at",
+      "detail": "Detail",
+      "error": "error",
+      "row": "{{name}}, {{status}}, starts at {{offset}}, takes {{duration}}"
+    },
+    "failure": {
+      "title": "Why this run failed",
+      "atSpan": "The first error is in {{name}}, {{offset}} into the run.",
+      "atRun": "The run ended as {{status}}; no trace span recorded the error."
+    },
+    "bundle": {
+      "download": "Download evidence (JSON)",
+      "busy": "Preparing…",
+      "checksum": "Saved. SHA-256: {{sha256}}",
+      "saved": "Saved.",
+      "failed": "The evidence file could not be prepared."
     }
   },
   "insightsValue": {

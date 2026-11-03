@@ -145,6 +145,32 @@ export function explorerExportFilename(
   return `insights-explore-${key}-${query.from || "start"}-${query.to || "today"}.${format}`;
 }
 
+export interface RunSpan {
+  span_id: string;
+  parent_span_id: string | null;
+  depth: number;
+  name: string;
+  kind: string;
+  status: string;
+  started_at: string;
+  offset_ms: number;
+  duration_ms: number;
+  summary: string;
+  events: Array<{ name: string; offset_ms: number | null; label: string }>;
+}
+
+/** Why the run failed: its earliest error span, or the run's own error class. */
+export interface RunFailure {
+  source: "span" | "run";
+  span_id?: string;
+  name?: string;
+  summary?: string;
+  exception?: string | null;
+  offset_ms?: number;
+  error_class?: string | null;
+  status?: string;
+}
+
 export interface RunEvidence {
   run: Record<string, unknown> & {
     id: string;
@@ -160,11 +186,46 @@ export interface RunEvidence {
     };
   };
   gateway_records: Array<Record<string, unknown>>;
-  spans: Array<Record<string, unknown>>;
-  approvals: Array<Record<string, unknown> & { link?: string }>;
+  failure?: RunFailure | null;
+  spans: RunSpan[];
+  span_total_ms?: number;
+  approvals: Array<
+    Record<string, unknown> & {
+      link?: string;
+      votes?: Array<{ by: string; decision: string | null; step: number | null; at: string | null }>;
+    }
+  >;
   audit: Array<Record<string, unknown>>;
   links: Record<string, string>;
   limits: { records: number; spans: number };
+}
+
+/** Spans with every field the waterfall reads; a span the server sent without one gets a neutral value. */
+export function normaliseSpans(raw: unknown): RunSpan[] {
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .filter((s): s is Record<string, unknown> => Boolean(s) && typeof s === "object")
+    .map((s, i) => ({
+      span_id: typeof s.span_id === "string" && s.span_id ? s.span_id : `span-${i}`,
+      parent_span_id: typeof s.parent_span_id === "string" ? s.parent_span_id : null,
+      depth: typeof s.depth === "number" && s.depth >= 0 ? s.depth : 0,
+      name: typeof s.name === "string" ? s.name : "",
+      kind: typeof s.kind === "string" ? s.kind : "",
+      status: typeof s.status === "string" ? s.status : "unset",
+      started_at: typeof s.started_at === "string" ? s.started_at : "",
+      offset_ms: typeof s.offset_ms === "number" && s.offset_ms >= 0 ? s.offset_ms : 0,
+      duration_ms: typeof s.duration_ms === "number" && s.duration_ms >= 0 ? s.duration_ms : 0,
+      summary: typeof s.summary === "string" ? s.summary : "",
+      events: Array.isArray(s.events)
+        ? (s.events as unknown[])
+            .filter((e): e is Record<string, unknown> => Boolean(e) && typeof e === "object")
+            .map((e) => ({
+              name: String(e.name ?? ""),
+              offset_ms: typeof e.offset_ms === "number" ? e.offset_ms : null,
+              label: String(e.label ?? e.name ?? ""),
+            }))
+        : [],
+    }));
 }
 
 function normaliseExplorer(data: unknown): ExplorerResponse {
@@ -236,6 +297,18 @@ export const exploreApi = {
     const { data } = await api.get(`/insights/runs/${encodeURIComponent(id)}`, {
       params,
     });
-    return data as RunEvidence;
+    const evidence = data as RunEvidence;
+    return { ...evidence, spans: normaliseSpans(evidence.spans) };
+  },
+  /** The run's evidence bundle (JSON) and its SHA-256 from the server; the server audits the download. */
+  async runBundle(id: string, at: string, companyId?: string): Promise<{ blob: Blob; sha256: string | null }> {
+    const params: Record<string, string> = { at };
+    if (companyId) params.company_id = companyId;
+    const response = await api.get(`/insights/runs/${encodeURIComponent(id)}/bundle`, {
+      params,
+      responseType: "blob",
+    });
+    const header = (response.headers as Record<string, unknown> | undefined)?.["x-content-sha256"];
+    return { blob: response.data as Blob, sha256: typeof header === "string" ? header : null };
   },
 };

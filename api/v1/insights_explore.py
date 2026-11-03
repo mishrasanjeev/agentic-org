@@ -6,7 +6,8 @@ columns. ``GET /insights/explore/{key}`` returns one page of an explorer for
 the period, filters (``filter[column]=value``), sort and page;
 ``GET /insights/explore/{key}/export`` the filtered rows as CSV, XLSX or JSON
 (at most 50,000; audited). ``GET /insights/runs/{fact_id}?at=...`` returns one
-run's evidence.
+run's evidence, and ``GET /insights/runs/{fact_id}/bundle?at=...`` the same as one
+JSON file with its SHA-256 (audited).
 
 Every route needs ``insights:read``. Which explorers a role may open is
 decided here, server side (``core/insights/explore_registry.py``); any other
@@ -21,6 +22,7 @@ from __future__ import annotations
 import asyncio
 import uuid
 from dataclasses import replace
+from datetime import UTC, datetime
 from typing import Annotated, Any, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
@@ -44,7 +46,7 @@ from core.insights import explore_registry
 from core.insights import explorers as ex
 from core.insights import export as exports
 from core.insights.audit import audit_entry
-from core.insights.evidence import EvidenceNotFoundError, parse_at, run_evidence
+from core.insights.evidence import EvidenceNotFoundError, canonical_json, parse_at, run_bundle, run_evidence
 from core.ownership import Caller, caller_from_request
 
 router = APIRouter(prefix="/insights", tags=["Insights"])
@@ -257,3 +259,66 @@ async def insights_run_evidence(
             return await run_evidence(ctx, fact_id, instant)
         except EvidenceNotFoundError:
             raise HTTPException(404, detail={"error": "run_not_found", "message": "no such run for you"}) from None
+
+
+@router.get("/runs/{fact_id}/bundle")
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="insights.read",
+    rate_limit="reporting-export",
+    idempotency="read-only",
+    audit_event="insights.export",
+)
+async def insights_run_bundle(
+    fact_id: uuid.UUID,
+    request: Request,
+    tenant_id: str = Depends(get_current_tenant),
+    at: Annotated[str | None, Query(max_length=64)] = None,
+    company_id: CompanyId = None,
+) -> Response:
+    """The run's evidence as one JSON file whose SHA-256 is in ``X-Content-SHA256``, with one signed audit row.
+
+    Administrators and auditors also get each audit row's signed payload, signature and chain links.
+    """
+    tid = _tenant(tenant_id)
+    await _require_enabled(tid)
+    caller = _caller(request)
+    _explorer("runs", caller)
+    instant = parse_at(at)
+    if instant is None:
+        raise HTTPException(
+            422, detail={"error": "invalid_at", "message": "at is the run's started_at as an ISO timestamp with offset"}
+        )
+    company = await _company(tid, company_id)
+    payloads = caller.is_admin or caller.role == "auditor"
+    async with get_tenant_session(tid) as session:
+        ctx = await _context(session, tid, caller, start=None, end=None, compare="none", company=company)
+        try:
+            built = await run_bundle(
+                ctx, fact_id, instant, include_audit_payloads=payloads, generated_at=datetime.now(UTC)
+            )
+        except EvidenceNotFoundError:
+            raise HTTPException(404, detail={"error": "run_not_found", "message": "no such run for you"}) from None
+        session.add(
+            audit_entry(
+                tid,
+                event_type="insights.export",
+                actor_id=_actor(request),
+                action="export",
+                resource_type="insights_run_bundle",
+                resource_id=str(fact_id),
+                details={"run": str(fact_id), "format": "json", "sha256": built["sha256"], "audit_payloads": payloads},
+            )
+        )
+    body = canonical_json(built["bundle"])
+    return Response(
+        content=body,
+        media_type="application/json",
+        headers={
+            "Content-Disposition": f'attachment; filename="run-{fact_id}.json"',
+            "Cache-Control": "no-store",
+            "X-Content-Type-Options": "nosniff",
+            "X-Content-SHA256": built["sha256"],
+        },
+    )
