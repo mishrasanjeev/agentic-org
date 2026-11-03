@@ -36,6 +36,8 @@ const CONNECTORS = "/dashboard/insights/explore/connectors";
 const ORDERS_PAGE = "/dashboard/orders";
 const AUDIT = "/dashboard/insights/explore/audit";
 const QUALITY = "/dashboard/insights/explore/quality";
+const COMPANIES_PAGE = "/dashboard/companies";
+const TRANSACTIONS_PAGE = "/dashboard/transactions";
 
 /** Every tile drills to the explorer rows behind it, with the filter or sort that produced the number. */
 export const METRIC_PRESENTATION: Record<string, MetricPresentation> = {
@@ -52,6 +54,19 @@ export const METRIC_PRESENTATION: Record<string, MetricPresentation> = {
   "runs.latency": {
     chart: "line",
     action: { to: `${RUNS}?sort=duration_ms&order=desc`, labelKey: "insights.actions.exploreSlowRuns" },
+  },
+  "runs.confidence": {
+    chart: "line",
+    action: { to: `${RUNS}?filter%5Bhitl_required%5D=true`, labelKey: "insights.actions.exploreApprovedRuns" },
+  },
+  "quality.feedback": { chart: "hbar", action: { to: QUALITY, labelKey: "insights.actions.exploreQuality" } },
+  "backoffice.deadlines": {
+    chart: "hbar",
+    action: { to: COMPANIES_PAGE, labelKey: "insights.actions.openCompanies" },
+  },
+  "backoffice.txn_findings": {
+    chart: "line",
+    action: { to: TRANSACTIONS_PAGE, labelKey: "insights.actions.openTransactions" },
   },
   "approvals.pending": {
     chart: "line",
@@ -141,6 +156,7 @@ export const VIEW_METRICS: Record<InsightsViewKey, readonly string[]> = {
     "cost.spend",
     "value.money_saved",
     "value.hours_saved",
+    "runs.confidence",
   ],
   finance: [
     "cost.spend",
@@ -152,12 +168,16 @@ export const VIEW_METRICS: Record<InsightsViewKey, readonly string[]> = {
     "tokens.by_unit",
     "cost.data_quality",
     "runs.volume",
+    "runs.success_rate",
+    "runs.straight_through_rate",
+    "agents.by_status",
     "value.money_saved",
     "value.roi",
   ],
-  operations: ["workflows.runs", "workflows.stalled", "runs.success_rate", "runs.latency", "approvals.pending",
-    "connectors.unhealthy", "runs.volume"],
-  hr: ["runs.volume", "runs.success_rate", "approvals.pending", "approvals.cycle_time", "hr.pt_returns"],
+  operations: ["workflows.runs", "workflows.stalled", "runs.success_rate", "runs.straight_through_rate",
+    "runs.latency", "approvals.pending", "connectors.unhealthy", "runs.volume", "agents.by_status"],
+  hr: ["runs.volume", "runs.success_rate", "runs.straight_through_rate", "approvals.pending", "approvals.cycle_time",
+    "hr.pt_returns", "agents.by_status"],
   marketing: ["marketing.leads", "marketing.content_drafts", "marketing.draft_cycle_time", "runs.volume",
     "approvals.pending"],
   commerce: ["commerce.orders", "commerce.webhook_failures", "commerce.funnel"],
@@ -178,12 +198,44 @@ export const VIEW_METRICS: Record<InsightsViewKey, readonly string[]> = {
     "engineering.eval_pass_rate",
     "engineering.prompt_edits",
     "runs.volume",
+    "runs.confidence",
+    "quality.feedback",
+  ],
+  back_office: [
+    "backoffice.deadlines",
+    "backoffice.txn_findings",
+    "approvals.pending",
+    "approvals.cycle_time",
+    "runs.volume",
+    "runs.success_rate",
+  ],
+  domain: [
+    "runs.volume",
+    "runs.success_rate",
+    "runs.straight_through_rate",
+    "runs.latency",
+    "runs.confidence",
+    "approvals.pending",
+    "approvals.cycle_time",
+    "quality.feedback",
+    "agents.by_status",
   ],
 };
 
 /** Views each role may open; mirrors the server-side check (admin both, cfo finance). */
 export const ROLE_VIEWS: Record<string, readonly InsightsViewKey[]> = {
-  admin: ["executive", "finance", "operations", "hr", "marketing", "commerce", "compliance", "engineering"],
+  admin: [
+    "executive",
+    "finance",
+    "operations",
+    "hr",
+    "marketing",
+    "commerce",
+    "compliance",
+    "engineering",
+    "back_office",
+    "domain",
+  ],
   cfo: ["finance"],
   coo: ["operations"],
   chro: ["hr"],
@@ -191,11 +243,13 @@ export const ROLE_VIEWS: Record<string, readonly InsightsViewKey[]> = {
   merchant: ["commerce"],
   auditor: ["compliance"],
   developer: ["engineering"],
+  domain_lead: ["domain"],
+  analyst: ["domain"],
 };
 
 /**
- * Insights is offered to these roles; the route guard and the nav entry use the same list. The CHRO, CMO and
- * COO open the explorers for their domains (their landing views arrive with the role views).
+ * Insights is offered to these roles; the route guard and the nav entry use the same list. Domain leads and
+ * analysts land on the Domain view, limited to their assigned domain.
  */
 export const INSIGHTS_ROLES: readonly string[] = [
   "admin",
@@ -206,6 +260,8 @@ export const INSIGHTS_ROLES: readonly string[] = [
   "merchant",
   "auditor",
   "developer",
+  "domain_lead",
+  "analyst",
 ];
 
 const DEFAULT_VIEW: Record<string, InsightsViewKey> = {
@@ -216,6 +272,8 @@ const DEFAULT_VIEW: Record<string, InsightsViewKey> = {
   merchant: "commerce",
   auditor: "compliance",
   developer: "engineering",
+  domain_lead: "domain",
+  analyst: "domain",
 };
 
 export function defaultViewForRole(role: string | null | undefined): InsightsViewKey {

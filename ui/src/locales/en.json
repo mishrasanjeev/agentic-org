@@ -805,7 +805,9 @@
       "marketing": "Marketing",
       "commerce": "Commerce",
       "compliance": "Compliance",
-      "engineering": "Engineering"
+      "engineering": "Engineering",
+      "back_office": "Back office",
+      "domain": "My domain"
     },
     "filters": {
       "label": "Filters",
@@ -920,7 +922,9 @@
       "exploreConnectors": "See unhealthy connectors",
       "openOrders": "Open orders",
       "exploreAudit": "Explore the audit log",
-      "exploreQuality": "Explore quality"
+      "exploreQuality": "Explore quality",
+      "openCompanies": "Open companies",
+      "openTransactions": "Open transactions"
     },
     "disabled": {
       "title": "Insights is turned off",

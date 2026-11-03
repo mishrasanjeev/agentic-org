@@ -102,6 +102,8 @@ describe("metric keys used by the Insights page", () => {
       "commerce",
       "compliance",
       "engineering",
+      "back_office",
+      "domain",
     ]);
     expect(ROLE_VIEWS.auditor).toEqual(["compliance"]);
     expect(ROLE_VIEWS.developer).toEqual(["engineering"]);
@@ -112,7 +114,10 @@ describe("metric keys used by the Insights page", () => {
     expect(ROLE_VIEWS.chro).toEqual(["hr"]);
     expect(ROLE_VIEWS.cmo).toEqual(["marketing"]);
     expect(ROLE_VIEWS.merchant).toEqual(["commerce"]);
-    expect(ROLE_VIEWS.analyst).toBeUndefined();
+    expect(ROLE_VIEWS.analyst).toEqual(["domain"]);
+    expect(ROLE_VIEWS.domain_lead).toEqual(["domain"]);
+    expect(defaultViewForRole("analyst")).toBe("domain");
+    expect(ROLE_VIEWS.viewer).toBeUndefined();
     expect(defaultViewForRole("coo")).toBe("operations");
     expect(defaultViewForRole("merchant")).toBe("commerce");
     expect(defaultViewForRole("admin")).toBe("executive");

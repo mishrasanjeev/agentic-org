@@ -305,7 +305,7 @@ export default function App() {
         path="/dashboard/insights/downloads"
         element={
           // Scheduled Insights reports may be sent to anyone in the organisation who reads Insights.
-          <ProtectedRoute allowedRoles={[...INSIGHTS_ROLES, "analyst", "domain_lead"]}>
+          <ProtectedRoute allowedRoles={[...INSIGHTS_ROLES]}>
             <Layout>
               <InsightsDownloads />
             </Layout>

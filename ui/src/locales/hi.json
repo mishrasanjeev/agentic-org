@@ -805,7 +805,9 @@
       "marketing": "मार्केटिंग",
       "commerce": "कॉमर्स",
       "compliance": "अनुपालन",
-      "engineering": "इंजीनियरिंग"
+      "engineering": "इंजीनियरिंग",
+      "back_office": "बैक ऑफ़िस",
+      "domain": "मेरा डोमेन"
     },
     "filters": {
       "label": "फ़िल्टर",
@@ -920,7 +922,9 @@
       "exploreConnectors": "खराब कनेक्टर देखें",
       "openOrders": "ऑर्डर खोलें",
       "exploreAudit": "ऑडिट लॉग देखें",
-      "exploreQuality": "गुणवत्ता देखें"
+      "exploreQuality": "गुणवत्ता देखें",
+      "openCompanies": "कंपनियाँ खोलें",
+      "openTransactions": "लेन-देन खोलें"
     },
     "disabled": {
       "title": "इनसाइट्स बंद है",
