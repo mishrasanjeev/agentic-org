@@ -11,6 +11,8 @@
 import { useCallback, useEffect, useId, useMemo, useState } from "react";
 import { Helmet } from "react-helmet-async";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router";
+import Breadcrumbs from "@/components/insights/Breadcrumbs";
+import SearchPalette from "@/components/insights/SearchPalette";
 import { useTranslation } from "react-i18next";
 import api from "@/lib/api";
 import DataQualityBadge from "@/components/insights/DataQualityBadge";
@@ -382,6 +384,16 @@ export default function InsightsExplorer() {
       <Helmet>
         <title>{`${t("insightsExplore.title")} — AgenticOrg`}</title>
       </Helmet>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <Breadcrumbs
+          items={
+            active
+              ? [{ label: t("insightsExplore.title"), to: "/dashboard/insights/explore" }, { label: active.title }]
+              : [{ label: t("insightsExplore.title") }]
+          }
+        />
+        <SearchPalette />
+      </div>
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <h1 className="text-xl font-bold md:text-2xl">

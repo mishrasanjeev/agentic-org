@@ -13,6 +13,7 @@ import Landing from "./pages/Landing";
 import NotFound from "./pages/NotFound";
 import "./pages/documentation.css";
 import { INSIGHTS_ROLES } from "@/lib/insights/metrics";
+import { ENTITY_SEGMENTS } from "@/lib/insights/entities";
 
 /* -- Lazy import with auto-reload on chunk failure -- */
 function lazyRetry(factory: () => Promise<{ default: React.ComponentType }>) {
@@ -91,6 +92,7 @@ const InsightsDashboard = lazyRetry(() => import("./pages/InsightsDashboard"));
 const InsightsBiAccess = lazyRetry(() => import("./pages/InsightsBiAccess"));
 const InsightsExplorer = lazyRetry(() => import("./pages/InsightsExplorer"));
 const InsightsRun = lazyRetry(() => import("./pages/InsightsRun"));
+const InsightsEntity = lazyRetry(() => import("./pages/InsightsEntity"));
 const InsightsDownloads = lazyRetry(() => import("./pages/InsightsDownloads"));
 const InsightsValue = lazyRetry(() => import("./pages/InsightsValue"));
 const PlatformInsights = lazyRetry(() => import("./pages/PlatformInsights"));
@@ -301,6 +303,20 @@ export default function App() {
           </ProtectedRoute>
         }
       />
+      {/* Level 3 entity pages: agents, workflows, connectors, companies, users, cost-centres. */}
+      {Object.values(ENTITY_SEGMENTS).map((segment) => (
+        <Route
+          key={segment}
+          path={`/dashboard/insights/${segment}/:id`}
+          element={
+            <ProtectedRoute allowedRoles={[...INSIGHTS_ROLES]}>
+              <Layout>
+                <InsightsEntity />
+              </Layout>
+            </ProtectedRoute>
+          }
+        />
+      ))}
       <Route
         path="/dashboard/insights/downloads"
         element={

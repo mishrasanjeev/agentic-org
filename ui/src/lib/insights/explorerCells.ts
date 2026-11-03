@@ -99,13 +99,14 @@ export function isNumericColumn(column: ExplorerColumn): boolean {
   ].includes(column.type);
 }
 
-/** Where a row drills to: the run, then the approval, the workflow run, the agent, the connector. */
+/** Where a row drills to: the run, then the approval, the workflow run, the workflow, the agent, the connector. */
 export function primaryLink(row: ExplorerRow): string | null {
   const links = row.links ?? {};
   for (const name of [
     "run",
     "approval",
     "workflow_run",
+    "workflow",
     "agent",
     "connector",
     "value",

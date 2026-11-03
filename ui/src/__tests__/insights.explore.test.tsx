@@ -411,7 +411,11 @@ describe("InsightsRun", () => {
       },
     });
     renderAt("/dashboard/insights/runs/r1?at=2026-11-01T03%3A00%3A00%2B00%3A00");
-    expect(await screen.findByRole("link", { name: "Invoice matcher" })).toHaveAttribute("href", "/dashboard/agents/a1");
+    // The run's agent opens its Insights entity page (which links on to the agent's management page).
+    expect(await screen.findByRole("link", { name: "Invoice matcher" })).toHaveAttribute(
+      "href",
+      "/dashboard/insights/agents/a1",
+    );
     expect(screen.getByText("gemini-2.5-flash")).toBeInTheDocument();
     expect(screen.getByText("llm.call")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Approve invoice INV-1" })).toHaveAttribute("href", "/dashboard/approvals?id=h1");

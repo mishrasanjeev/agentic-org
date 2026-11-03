@@ -971,6 +971,24 @@
       "asking": "Asking…",
       "queued": "It is being prepared; you will get an email when it is ready.",
       "schedule": "Schedule weekly"
+    },
+    "breadcrumbs": "Where you are in Insights",
+    "search": {
+      "open": "Search",
+      "title": "Search Insights",
+      "placeholder": "Find an agent, workflow, connector, company, person or run id",
+      "hint": "Type at least two characters.",
+      "none": "Nothing you can open matches.",
+      "error": "Search failed. Try again.",
+      "kinds": {
+        "agent": "Agent",
+        "workflow": "Workflow",
+        "connector": "Connector",
+        "company": "Company",
+        "user": "Person",
+        "cost_centre": "Cost centre",
+        "run": "Run"
+      }
     }
   },
   "insightsBi": {
@@ -1311,5 +1329,72 @@
     "signed": "Signed.",
     "signFailed": "The pack could not be signed.",
     "signedBy": "Signed by {{name}} on {{when}}:"
+  },
+  "insightsEntity": {
+    "kinds": {
+      "agent": "Agent",
+      "workflow": "Workflow",
+      "connector": "Connector",
+      "company": "Company",
+      "user": "Person",
+      "cost_centre": "Cost centre"
+    },
+    "missing": "Not found",
+    "missingHint": "It does not exist, or it is outside the data you can see.",
+    "forbidden": "Not available to your role",
+    "forbiddenHint": "Ask an administrator if you need this page.",
+    "error": "This page could not be loaded.",
+    "yes": "Yes",
+    "no": "No",
+    "cards": "From {{from}} to {{to}}",
+    "noCards": "Nothing was recorded for this in the period.",
+    "agents": "Agents",
+    "linksTitle": "Open in",
+    "timeline": "Timeline",
+    "noTimeline": "No recorded activity yet.",
+    "facts": {
+      "title": "Facts",
+      "status": "Status",
+      "agent_type": "Type",
+      "domain": "Domain",
+      "version": "Version",
+      "created_at": "Created",
+      "spend_usd": "Spend in the period (USD)",
+      "trigger": "Trigger",
+      "active": "Active",
+      "mean_duration_s": "Mean run time (seconds)",
+      "category": "Category",
+      "auth_type": "Sign-in method",
+      "health_check_at": "Last health check",
+      "agents": "Agents using it",
+      "industry": "Industry",
+      "state_code": "State code",
+      "health_score": "Health score",
+      "overdue_deadlines": "Overdue deadlines",
+      "role": "Role",
+      "mfa_enabled": "Two-step sign-in",
+      "last_login_at": "Last sign-in",
+      "code": "Code",
+      "budget_limit": "Budget",
+      "budget_used_pct": "Budget used (%)",
+      "fiscal_year": "Fiscal year"
+    },
+    "links": {
+      "runs": "Runs",
+      "approvals": "Approvals",
+      "quality": "Quality",
+      "manage": "Manage",
+      "workflows": "Workflow runs",
+      "connectors": "Connector status",
+      "audit": "Audit log",
+      "cost": "Cost"
+    },
+    "columns": {
+      "at": "When",
+      "event": "Event",
+      "action": "Action",
+      "outcome": "Outcome",
+      "actor": "By"
+    }
   }
 }

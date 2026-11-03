@@ -9,6 +9,7 @@ import { useEffect, useState } from "react";
 import { Helmet } from "react-helmet-async";
 import { Link, useParams, useSearchParams } from "react-router";
 import { useTranslation } from "react-i18next";
+import Breadcrumbs from "@/components/insights/Breadcrumbs";
 import DataQualityBadge from "@/components/insights/DataQualityBadge";
 import EmptyState from "@/components/insights/EmptyState";
 import SpanWaterfall from "@/components/insights/SpanWaterfall";
@@ -190,7 +191,7 @@ export default function InsightsRun() {
             <h2 id="run-facts" className="text-base font-semibold">
               {run.agent_id ? (
                 <Link
-                  to={`/dashboard/agents/${run.agent_id}`}
+                  to={`/dashboard/insights/agents/${run.agent_id}`}
                   className="text-primary hover:underline"
                 >
                   {run.agent || t("insightsRun.agent")}
@@ -300,6 +301,12 @@ export default function InsightsRun() {
       <Helmet>
         <title>{`${t("insightsRun.title")} — AgenticOrg`}</title>
       </Helmet>
+      <Breadcrumbs
+        items={[
+          { label: t("insightsExplore.title"), to: "/dashboard/insights/explore/runs" },
+          { label: t("insightsRun.title") },
+        ]}
+      />
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <h1 className="text-xl font-bold md:text-2xl">

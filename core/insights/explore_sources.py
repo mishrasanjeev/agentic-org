@@ -46,9 +46,10 @@ MIN_PRODUCTION_SHADOW_ACCURACY = Decimal("0.600")
 # How far back the agents explorer looks for each agent's last run.
 IDLE_WINDOW_DAYS = 90
 RUNS_LINK = "/dashboard/insights/runs"
-AGENT_LINK = "/dashboard/agents"
+# Entity pages (Level 3); each links on to the record's own management page.
+AGENT_LINK = "/dashboard/insights/agents"
 APPROVALS_LINK = "/dashboard/approvals"
-CONNECTOR_LINK = "/dashboard/connectors"
+CONNECTOR_LINK = "/dashboard/insights/connectors"
 NO_DOMAIN_HINT = "No domain is assigned to you, so there is nothing to show here."
 
 
@@ -405,7 +406,10 @@ async def explore_workflows(ctx: ExploreContext) -> ExploreData:
             "steps_completed": r.steps_completed,
             "steps_total": r.steps_total,
             "past_timeout": bool(r.late),
-            "links": {"workflow_run": f"/dashboard/workflows/{r[1]}/runs/{r[0]}"},
+            "links": {
+                "workflow_run": f"/dashboard/workflows/{r[1]}/runs/{r[0]}",
+                "workflow": f"/dashboard/insights/workflows/{r[1]}",
+            },
         }
         for r in found
     ]

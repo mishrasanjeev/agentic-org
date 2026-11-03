@@ -18,6 +18,7 @@ import DecisionTile from "@/components/insights/DecisionTile";
 import EmptyState from "@/components/insights/EmptyState";
 import FilterBar, { type FilterValue } from "@/components/insights/FilterBar";
 import NeedsYouList from "@/components/insights/NeedsYouList";
+import SearchPalette from "@/components/insights/SearchPalette";
 import ViewFiles from "@/components/insights/ViewFiles";
 import { ChartSkeleton, TileSkeleton } from "@/components/insights/Skeleton";
 import {
@@ -251,6 +252,7 @@ export default function InsightsDashboard() {
       </div>
       {statusState.kind === "ready" ? (
         <div className="flex flex-wrap items-center gap-2">
+          <SearchPalette />
           {/* The assumptions behind money saved: administrators edit and confirm them, the CFO reads them. */}
           {role === "admin" || role === "cfo" ? (
             <Link
