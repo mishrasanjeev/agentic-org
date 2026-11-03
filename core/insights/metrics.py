@@ -67,7 +67,8 @@ NEEDS_YOU_APPROVALS = 5
 PAUSED_AGENT_DAYS = 7
 APPROVALS_LINK = "/dashboard/approvals"
 AGENTS_LINK = "/dashboard/agents"
-COSTS_LINK = "/dashboard/costs"
+# Budget and spend items drill to the cost explorer (the legacy Cost page is retired).
+COSTS_LINK = "/dashboard/insights/explore/cost"
 UNATTRIBUTED = "unattributed"
 
 # Run statuses that are not an outcome yet: a person still has to act.

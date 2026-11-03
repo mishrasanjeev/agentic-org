@@ -1,22 +1,14 @@
 import { useState, useEffect } from "react";
+import { useSearchParams } from "react-router";
+import MarketingTabs from "@/components/MarketingTabs";
 import { Helmet } from "react-helmet-async";
 import { useTranslation } from "react-i18next";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import api from "@/lib/api";
-import {
-  BarChart,
-  Bar,
-  XAxis,
-  YAxis,
-  Tooltip,
-  ResponsiveContainer,
-  CartesianGrid,
-} from "recharts";
 
 type BadgeVariant = "default" | "success" | "warning" | "destructive" | "secondary" | "outline";
-type CapabilityStatus = "production" | "beta" | "stub" | "unavailable" | "demo";
 type ConnectorHealthStatus = "healthy" | "missing" | "expired_auth" | "insufficient_scope" | "stale" | "degraded" | "unknown";
 type ConnectorCTAState = "none" | "setup" | "reconnect" | "add_scope" | "refresh" | "review";
 type ConnectorContractState =
@@ -39,14 +31,6 @@ type WorkQueueSeverity = "critical" | "high" | "medium" | "low" | "info";
 type WorkQueueStatus = "open" | "blocked" | "waiting" | "resolved" | "dismissed";
 type KpiDrilldownStatus = "ready" | "degraded" | "blocked" | "unavailable";
 type ApprovalReviewStatus = "pending" | "approved" | "rejected" | "overridden" | "timed_out" | "escalated" | "blocked";
-
-const STATUS_BADGE_VARIANT: Record<CapabilityStatus, BadgeVariant> = {
-  production: "success",
-  beta: "warning",
-  stub: "secondary",
-  unavailable: "destructive",
-  demo: "outline",
-};
 
 const CONNECTOR_BADGE_VARIANT: Record<ConnectorHealthStatus, BadgeVariant> = {
   healthy: "success",
@@ -549,12 +533,6 @@ interface CMOKPIData {
 // Helpers
 // ---------------------------------------------------------------------------
 
-const USD = new Intl.NumberFormat("en-US", {
-  style: "currency",
-  currency: "USD",
-  maximumFractionDigits: 2,
-});
-
 function formatNumber(n: number): string {
   return new Intl.NumberFormat("en-IN").format(n);
 }
@@ -585,7 +563,7 @@ function workQueueActionTarget(row: CMOWorkQueueItem): string {
   if (typeof row.next_action_cta === "object" && row.next_action_cta?.path) {
     return row.next_action_cta.path;
   }
-  return row.next_action_path || "/dashboard/cmo";
+  return row.next_action_path || "/dashboard/marketing-ops";
 }
 
 function workQueueCtaLabel(row: CMOWorkQueueItem): string {
@@ -613,7 +591,7 @@ function kpiDrilldownActionTarget(row: CMOKpiDrilldown): string {
   if (typeof row.next_action_cta === "object" && row.next_action_cta?.path) {
     return row.next_action_cta.path;
   }
-  return "/dashboard/cmo";
+  return "/dashboard/marketing-ops";
 }
 
 function kpiDrilldownCtaLabel(row: CMOKpiDrilldown): string {
@@ -803,23 +781,16 @@ function contractStatusVariant(value?: string): BadgeVariant {
   return "secondary";
 }
 
-const MARKETING_DOMAINS = new Set([
-  "marketing",
-  "content",
-  "social",
-  "email",
-  "seo",
-  "ads",
-  "brand",
-  "campaign",
-]);
-
 // ---------------------------------------------------------------------------
 // Component
 // ---------------------------------------------------------------------------
 
-export default function CMODashboard() {
+/** Backend deep links name a panel (?panel=...); reconciliation and the KPI list open the KPI lineage. */
+const PANEL_ALIASES: Record<string, string> = { reconciliation: "kpi-lineage", kpis: "kpi-lineage" };
+
+export default function MarketingOperations() {
   const { t } = useTranslation();
+  const [searchParams] = useSearchParams();
   const [data, setData] = useState<CMOKPIData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -827,6 +798,14 @@ export default function CMODashboard() {
   useEffect(() => {
     fetchData();
   }, []);
+
+  // Open the panel a deep link names, once the data is drawn.
+  const panelParam = searchParams.get("panel") || (searchParams.get("kpi") ? "kpis" : null);
+  useEffect(() => {
+    if (!data || !panelParam) return;
+    const id = PANEL_ALIASES[panelParam] ?? panelParam;
+    document.getElementById(`panel-${id}`)?.scrollIntoView?.({ block: "start" });
+  }, [data, panelParam]);
 
   async function fetchData() {
     setLoading(true);
@@ -849,7 +828,7 @@ export default function CMODashboard() {
   if (loading) {
     return (
       <div className="space-y-6">
-        <h2 className="text-2xl font-bold">{t("kpi.cmoDashboard", "CMO Dashboard")}</h2>
+        <h2 className="text-2xl font-bold">{t("marketingOps.title", "Marketing operations")}</h2>
         <p className="text-muted-foreground">{t("kpi.loading", "Loading...")}</p>
       </div>
     );
@@ -858,7 +837,7 @@ export default function CMODashboard() {
   if (error || !data) {
     return (
       <div className="space-y-6">
-        <h2 className="text-2xl font-bold">{t("kpi.cmoDashboard", "CMO Dashboard")}</h2>
+        <h2 className="text-2xl font-bold">{t("marketingOps.title", "Marketing operations")}</h2>
         <div className="rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-800">
           {error || "No data available"}
         </div>
@@ -866,113 +845,6 @@ export default function CMODashboard() {
     );
   }
 
-  const domains = data.domain_breakdown ?? [];
-  const marketingDomains = domains.filter((d) =>
-    MARKETING_DOMAINS.has(d.domain.toLowerCase())
-  );
-  const displayDomains = marketingDomains.length > 0 ? marketingDomains : domains;
-
-  const kpiCards = [
-    { label: t("kpi.agents", "Agents"), value: formatNumber(data.agent_count ?? 0), color: "text-blue-600" },
-    { label: t("kpi.totalTasks", "Total Tasks (30d)"), value: formatNumber(data.total_tasks_30d ?? 0), color: "text-emerald-600" },
-    { label: t("kpi.successRate", "Success Rate"), value: `${(data.success_rate ?? 0).toFixed(1)}%`, color: "text-purple-600" },
-    { label: t("kpi.hitlInterventions", "HITL Interventions"), value: formatNumber(data.hitl_interventions ?? 0), color: "text-orange-600" },
-    { label: t("kpi.totalCost", "Total Cost (USD)"), value: USD.format(data.total_cost_usd ?? 0), color: "text-rose-600" },
-  ];
-  const statusLabels: Record<CapabilityStatus, string> = {
-    production: t("cmoCapability.states.production", "Production"),
-    beta: t("cmoCapability.states.beta", "Beta"),
-    stub: t("cmoCapability.states.stub", "Stub"),
-    unavailable: t("cmoCapability.states.unavailable", "Unavailable"),
-    demo: t("cmoCapability.states.demo", "Demo"),
-  };
-  const capabilityRows: Array<{ name: string; status: CapabilityStatus; detail: string }> = [
-    {
-      name: t("cmoCapability.campaignPilot.name", "Campaign Pilot"),
-      status: "production",
-      detail: t(
-        "cmoCapability.campaignPilot.detail",
-        "Strongest current CMO agent: domain-specific campaign execution, budget checks, performance polling, and HITL gates.",
-      ),
-    },
-    {
-      name: t("cmoCapability.contentFactory.name", "Content Factory"),
-      status: "beta",
-      detail: t(
-        "cmoCapability.contentFactory.detail",
-        "Substantial content workflow exists, including draft generation and brand checks; publish loops and QA policy are still maturing.",
-      ),
-    },
-    {
-      name: t("cmoCapability.emailMarketing.name", "Email Marketing"),
-      status: "beta",
-      detail: t(
-        "cmoCapability.emailMarketing.detail",
-        "Available through a separate LangGraph path and approval-gated tooling, not a complete autonomous CMO pillar yet.",
-      ),
-    },
-    {
-      name: t("cmoCapability.brandMonitor.name", "Brand Monitor"),
-      status: "stub",
-      detail: t(
-        "cmoCapability.brandMonitor.detail",
-        "Registered, but the core marketing implementation still wraps shared/base behavior; not production-grade brand monitoring.",
-      ),
-    },
-    {
-      name: t("cmoCapability.seoStrategist.name", "SEO Strategist"),
-      status: "stub",
-      detail: t(
-        "cmoCapability.seoStrategist.detail",
-        "Registered, but the core marketing implementation still wraps shared/base behavior; not production-grade SEO execution.",
-      ),
-    },
-    {
-      name: t("cmoCapability.crmIntelligence.name", "CRM Intelligence"),
-      status: "beta",
-      detail: t(
-        "cmoCapability.crmIntelligence.detail",
-        "First-class deterministic CRM/pipeline intelligence for velocity, funnel conversion, lead scoring refresh, churn signals, segments, SQL promotion, and account health; policy/approval/audit/write-confirmation gates for CRM writes. Not production-grade without real HubSpot/Salesforce/intent connectors and pilot proof.",
-      ),
-    },
-    {
-      name: t("cmoCapability.socialMedia.name", "Social Media"),
-      status: "unavailable",
-      detail: t(
-        "cmoCapability.socialMedia.detail",
-        "Not a first-class core marketing agent yet; any graph-level surface should be treated as experimental/demo only.",
-      ),
-    },
-    {
-      name: t("cmoCapability.abm.name", "ABM"),
-      status: "unavailable",
-      detail: t(
-        "cmoCapability.abm.detail",
-        "ABM dashboard/API surfaces exist, but a first-class core marketing ABM agent is not implemented yet.",
-      ),
-    },
-    {
-      name: t("cmoCapability.competitiveIntel.name", "Competitive Intel"),
-      status: "unavailable",
-      detail: t(
-        "cmoCapability.competitiveIntel.detail",
-        "Not a first-class core marketing agent yet; any graph-level surface should be treated as experimental/demo only.",
-      ),
-    },
-    {
-      name: t("cmoCapability.kpiFeed.name", "CMO KPI feed"),
-      status: data.demo ? "demo" : "beta",
-      detail: data.demo
-        ? t(
-            "cmoCapability.kpiFeed.demoDetail",
-            "This dashboard is currently showing demo KPI data, not proof of end-to-end autonomous CMO operation.",
-          )
-        : t(
-            "cmoCapability.kpiFeed.liveDetail",
-            "KPI data is not flagged as demo, but capability maturity still follows the agent states listed above.",
-          ),
-    },
-  ];
   const connectorRows = data.connector_setup ?? [];
   const connectorSummary = data.connector_setup_summary;
   const connectorStatusLabels: Record<ConnectorHealthStatus, string> = {
@@ -1167,13 +1039,13 @@ export default function CMODashboard() {
     value === "ready" ? "success" : value === "blocked" ? "destructive" : "warning";
 
   return (
-    <div className="space-y-4 p-3 md:space-y-6 md:p-6" role="main" aria-label={t("kpi.cmoDashboard", "CMO Dashboard")}>
+    <div className="space-y-4 p-3 md:space-y-6 md:p-6" role="main" aria-label={t("marketingOps.title", "Marketing operations")}>
       <Helmet>
-        <title>CMO Dashboard — AgenticOrg</title>
+        <title>Marketing operations — AgenticOrg</title>
       </Helmet>
       <div className="flex flex-col items-start justify-between gap-2 md:flex-row md:items-center">
-        <h1 className="text-xl font-bold md:text-2xl">{t("kpi.cmoDashboard", "CMO Dashboard")}</h1>
-        {data.demo && <Badge variant="secondary">{t("kpi.demoData", "Demo Data")}</Badge>}
+        <h1 className="text-xl font-bold md:text-2xl">{t("marketingOps.title", "Marketing operations")}</h1>
+        <MarketingTabs current="operations" />
       </div>
 
       {data.production_data_blocked && (
@@ -1186,7 +1058,7 @@ export default function CMODashboard() {
         </div>
       )}
 
-      <Card>
+      <Card id="panel-work-queue" className="scroll-mt-4">
         <CardHeader>
           <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
             <div>
@@ -1289,7 +1161,7 @@ export default function CMODashboard() {
         </CardContent>
       </Card>
 
-      <Card>
+      <Card id="panel-approval-reviews" className="scroll-mt-4">
         <CardHeader>
           <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
             <div>
@@ -1438,7 +1310,7 @@ export default function CMODashboard() {
         </CardContent>
       </Card>
 
-      <Card>
+      <Card id="panel-kpi-lineage" className="scroll-mt-4">
         <CardHeader>
           <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
             <div>
@@ -1561,7 +1433,7 @@ export default function CMODashboard() {
         </CardContent>
       </Card>
 
-      <Card>
+      <Card id="panel-connector-setup" className="scroll-mt-4">
         <CardHeader>
           <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
             <div>
@@ -1671,7 +1543,7 @@ export default function CMODashboard() {
         </CardContent>
       </Card>
 
-      <Card>
+      <Card id="panel-connector-contracts" className="scroll-mt-4">
         <CardHeader>
           <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
             <div>
@@ -1833,7 +1705,7 @@ export default function CMODashboard() {
         </CardContent>
       </Card>
 
-      <Card>
+      <Card id="panel-data-readiness" className="scroll-mt-4">
         <CardHeader>
           <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
             <div>
@@ -2025,7 +1897,7 @@ export default function CMODashboard() {
         </CardContent>
       </Card>
 
-      <Card>
+      <Card id="panel-promotion-gates" className="scroll-mt-4">
         <CardHeader>
           <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
             <div>
@@ -2148,127 +2020,6 @@ export default function CMODashboard() {
         </CardContent>
       </Card>
 
-      <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
-        {kpiCards.map((m) => (
-          <Card key={m.label}>
-            <CardHeader>
-              <CardTitle className="text-sm text-muted-foreground">{m.label}</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <p className={`text-2xl font-bold ${m.color}`}>{m.value}</p>
-            </CardContent>
-          </Card>
-        ))}
-      </div>
-
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-sm font-semibold">{t("cmoCapability.title", "CMO Capability Status")}</CardTitle>
-          <p className="text-sm text-muted-foreground">
-            {t(
-              "cmoCapability.subtitle",
-              "Current CMO autonomy is partial: stronger operators are separated from beta, stub, unavailable, and demo surfaces.",
-            )}
-          </p>
-        </CardHeader>
-        <CardContent>
-          <div className="mb-3 rounded-md border bg-muted/40 px-3 py-2 text-sm text-muted-foreground">
-            {t(
-              "cmoCapability.notice",
-              "Do not treat this dashboard as proof of end-to-end CMO agent autonomy.",
-            )}
-          </div>
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b text-left text-muted-foreground">
-                  <th className="pb-2 pr-4">{t("cmoCapability.capability", "Capability")}</th>
-                  <th className="pb-2 pr-4">{t("cmoCapability.state", "State")}</th>
-                  <th className="pb-2">{t("cmoCapability.currentLimit", "Current limit")}</th>
-                </tr>
-              </thead>
-              <tbody>
-                {capabilityRows.map((row) => (
-                  <tr key={row.name} className="border-b last:border-0">
-                    <td className="py-2 pr-4 font-medium">{row.name}</td>
-                    <td className="py-2 pr-4">
-                      <Badge variant={STATUS_BADGE_VARIANT[row.status]}>{statusLabels[row.status]}</Badge>
-                    </td>
-                    <td className="py-2 text-muted-foreground">{row.detail}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* ── Domain Breakdown ── */}
-      {displayDomains.length === 0 ? (
-        <Card>
-          <CardContent className="py-12 text-center text-muted-foreground">
-            {t("kpi.noActivity", "No agent activity yet. Once agents run tasks, KPIs will appear here.")}
-          </CardContent>
-        </Card>
-      ) : (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-sm font-semibold">{t("kpi.domainBreakdown", "Domain Breakdown")}</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="border-b text-left text-muted-foreground">
-                      <th className="pb-2 pr-4">{t("kpi.domain", "Domain")}</th>
-                      <th className="pb-2 pr-4 text-right">{t("kpi.total", "Total Tasks")}</th>
-                      <th className="pb-2 pr-4 text-right">{t("kpi.completed", "Completed")}</th>
-                      <th className="pb-2 pr-4 text-right">{t("kpi.failed", "Failed")}</th>
-                      <th className="pb-2 text-right">{t("kpi.avgConfidence", "Avg Confidence")}</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {displayDomains.map((d) => (
-                      <tr key={d.domain} className="border-b last:border-0">
-                        <td className="py-2 pr-4 font-medium">{d.domain}</td>
-                        <td className="py-2 pr-4 text-right">{formatNumber(d.total)}</td>
-                        <td className="py-2 pr-4 text-right text-green-600">
-                          {formatNumber(d.completed)}
-                        </td>
-                        <td className="py-2 pr-4 text-right text-red-600">
-                          {formatNumber(d.failed)}
-                        </td>
-                        <td className="py-2 text-right text-muted-foreground">
-                          {(d.avg_confidence * 100).toFixed(0)}%
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-sm font-semibold">{t("kpi.totalTasksPerDomain", "Total Tasks per Domain")}</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <ResponsiveContainer width="100%" height={280}>
-                <BarChart data={displayDomains}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="domain" tick={{ fontSize: 12 }} />
-                  <YAxis tick={{ fontSize: 12 }} />
-                  <Tooltip />
-                  <Bar dataKey="completed" name="Completed" fill="#22c55e" stackId="a" />
-                  <Bar dataKey="failed" name="Failed" fill="#ef4444" stackId="a" />
-                </BarChart>
-              </ResponsiveContainer>
-            </CardContent>
-          </Card>
-        </div>
-      )}
     </div>
   );
 }

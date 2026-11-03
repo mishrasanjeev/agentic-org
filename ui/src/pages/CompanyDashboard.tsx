@@ -312,7 +312,7 @@ export default function CompanyDashboard() {
             <Upload className="mr-2 h-4 w-4" />
             {bulkUploading ? "Uploading..." : "Upload Clients"}
           </Button>
-          <Link to="/dashboard/partner">
+          <Link to="/dashboard/insights?view=partner">
             <Button variant="outline">Partner View</Button>
           </Link>
           <Link to="/dashboard/companies/new">

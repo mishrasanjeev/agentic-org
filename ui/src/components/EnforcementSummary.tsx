@@ -1,5 +1,4 @@
 import { useState, useEffect, useMemo } from "react";
-import { Helmet } from "react-helmet-async";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -48,7 +47,11 @@ const PERMISSIONS = ["All", "READ", "WRITE", "DELETE", "ADMIN"];
 /*  Component                                                          */
 /* ------------------------------------------------------------------ */
 
-export default function ScopeDashboard() {
+/**
+ * Enforcement summary (the former Scope dashboard, now a section of the Enforce Audit page): tool-gateway calls and
+ * denials per agent and connector, from the enforcement audit rows.
+ */
+export default function EnforcementSummary() {
   const [scopes, setScopes] = useState<AgentScope[]>([]);
   const [loading, setLoading] = useState(true);
   const [errors, setErrors] = useState<string[]>([]);
@@ -171,11 +174,9 @@ export default function ScopeDashboard() {
   ];
 
   return (
-    <div className="space-y-6">
-      <Helmet><title>Scope Dashboard — AgenticOrg</title></Helmet>
-
+    <section className="space-y-6" aria-labelledby="enforcement-summary" data-testid="enforcement-summary">
       <div className="flex justify-between items-center">
-        <h2 className="text-2xl font-bold">Scope Dashboard</h2>
+        <h3 id="enforcement-summary" className="text-lg font-semibold">Enforcement summary</h3>
         <Button variant="outline" onClick={fetchData}>Refresh</Button>
       </div>
 
@@ -295,6 +296,6 @@ export default function ScopeDashboard() {
           </table>
         </div>
       )}
-    </div>
+    </section>
   );
 }

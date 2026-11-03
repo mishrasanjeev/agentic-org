@@ -163,6 +163,19 @@ def _spans_out(rows: list[Any]) -> tuple[list[dict[str, Any]], int]:
     return spans, max(0, int(end - start.timestamp() * 1000))
 
 
+def debug_ref(rows: list[Any], agent_id: Any) -> dict[str, str] | None:
+    """The agent and LangGraph thread the run's root span names, for the run debugger (identifiers only)."""
+    if not rows:
+        return None
+    root = next((r for r in rows if not r.parent_span_id), rows[0])
+    attributes = dict(root.attributes or {})
+    thread = attributes.get("agent.thread_id")
+    agent = attributes.get("agent.id") or (str(agent_id) if agent_id else None)
+    if not isinstance(thread, str) or not thread or not isinstance(agent, str) or not agent:
+        return None
+    return {"agent_id": agent, "thread_id": thread}
+
+
 def first_failure(run: dict[str, Any], spans: list[dict[str, Any]]) -> dict[str, Any] | None:
     """Why the run failed: the earliest error span with no erroring child (an error marks every span above it, so
     that span is where it started), else the run's own error class."""
@@ -287,7 +300,8 @@ async def _collect(ctx: MetricContext, fact_id: uuid.UUID, at: datetime) -> tupl
                     "verified": bool(g.signature) and _verifies(verify_record, g),
                 }
             )
-    spans, span_total_ms = _spans_out(await _run_spans(ctx, fact))
+    span_rows = await _run_spans(ctx, fact)
+    spans, span_total_ms = _spans_out(span_rows)
     approvals: list[dict[str, Any]] = []
     links = []
     if fact.correlation_id:
@@ -407,6 +421,7 @@ async def _collect(ctx: MetricContext, fact_id: uuid.UUID, at: datetime) -> tupl
         "gateway_records": gateway,
         "spans": spans,
         "span_total_ms": span_total_ms,
+        "debug": debug_ref(span_rows, fact.agent_id),
         "approvals": approvals,
         "audit": audit,
         "links": {

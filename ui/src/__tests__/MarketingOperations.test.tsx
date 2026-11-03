@@ -30,7 +30,7 @@ vi.mock("@/lib/api", () => ({
 // Import component under test
 // ---------------------------------------------------------------------------
 
-import CMODashboard from "@/pages/CMODashboard";
+import MarketingOperations from "@/pages/MarketingOperations";
 
 // ---------------------------------------------------------------------------
 // Test data matching current CMOKPIData interface (basic metrics shape)
@@ -979,7 +979,7 @@ function renderCMO() {
   return render(
     <HelmetProvider>
       <MemoryRouter initialEntries={["/dashboard/cmo"]}>
-        <CMODashboard />
+        <MarketingOperations />
       </MemoryRouter>
     </HelmetProvider>,
   );
@@ -989,7 +989,7 @@ function renderCMO() {
 // Tests
 // ---------------------------------------------------------------------------
 
-describe("CMODashboard", () => {
+describe("MarketingOperations", () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
@@ -997,80 +997,7 @@ describe("CMODashboard", () => {
   it("renders loading state initially", () => {
     mockGet.mockReturnValue(new Promise(() => {}));
     renderCMO();
-    expect(screen.getByText("CMO Dashboard")).toBeInTheDocument();
-  });
-
-  it("renders all KPI cards after data loads", async () => {
-    mockGet.mockResolvedValue({ data: MOCK_CMO_DATA });
-    renderCMO();
-    await waitFor(() => {
-      expect(screen.getByText("Agents")).toBeInTheDocument();
-    });
-    expect(screen.getByText("Total Tasks (30d)")).toBeInTheDocument();
-    expect(screen.getByText("Success Rate")).toBeInTheDocument();
-    expect(screen.getByText("HITL Interventions")).toBeInTheDocument();
-    expect(screen.getByText("Total Cost (USD)")).toBeInTheDocument();
-  });
-
-  it("displays agent count correctly", async () => {
-    mockGet.mockResolvedValue({ data: MOCK_CMO_DATA });
-    renderCMO();
-    await waitFor(() => {
-      expect(screen.getByText("Agents")).toBeInTheDocument();
-    });
-    // Agent count of 5 rendered somewhere in the document
-    expect(document.body.textContent).toContain("5");
-  });
-
-  it("displays success rate as percentage", async () => {
-    mockGet.mockResolvedValue({ data: MOCK_CMO_DATA });
-    renderCMO();
-    await waitFor(() => {
-      expect(screen.getByText("91.2%")).toBeInTheDocument();
-    });
-  });
-
-  it("shows Demo Data badge when demo is true", async () => {
-    mockGet.mockResolvedValue({ data: MOCK_CMO_DATA });
-    renderCMO();
-    await waitFor(() => {
-      expect(screen.getByText("Demo Data")).toBeInTheDocument();
-    });
-  });
-
-  it("does not show Demo Data badge when demo is false", async () => {
-    mockGet.mockResolvedValue({ data: { ...MOCK_CMO_DATA, demo: false } });
-    renderCMO();
-    await waitFor(() => {
-      expect(screen.getByText("Agents")).toBeInTheDocument();
-    });
-    expect(screen.queryByText("Demo Data")).not.toBeInTheDocument();
-  });
-
-  it("renders domain breakdown when data exists", async () => {
-    mockGet.mockResolvedValue({ data: MOCK_CMO_DATA });
-    renderCMO();
-    await waitFor(() => {
-      expect(screen.getByText("Domain Breakdown")).toBeInTheDocument();
-    });
-    expect(screen.getByText("marketing")).toBeInTheDocument();
-  });
-
-  it("renders truthful CMO capability states", async () => {
-    mockGet.mockResolvedValue({ data: MOCK_CMO_DATA });
-    renderCMO();
-    await waitFor(() => {
-      expect(screen.getByText("CMO Capability Status")).toBeInTheDocument();
-    });
-
-    expect(screen.getByText("Campaign Pilot")).toBeInTheDocument();
-    expect(screen.getByText("Production")).toBeInTheDocument();
-    expect(screen.getByText("Content Factory")).toBeInTheDocument();
-    expect(screen.getAllByText("Beta")).toHaveLength(3);
-    expect(screen.getAllByText("Stub")).toHaveLength(2);
-    expect(screen.getAllByText("Unavailable").length).toBeGreaterThanOrEqual(3);
-    expect(screen.getByText("Demo")).toBeInTheDocument();
-    expect(screen.getByText("Do not treat this dashboard as proof of end-to-end CMO agent autonomy.")).toBeInTheDocument();
+    expect(screen.getByText("Marketing operations")).toBeInTheDocument();
   });
 
   it("renders marketing connector setup states and CTAs", async () => {
@@ -1310,7 +1237,7 @@ describe("CMODashboard", () => {
     });
   });
 
-  it("handles missing/null KPI fields without crashing", async () => {
+  it("draws the panels without the retired KPI cards when the KPI fields are missing", async () => {
     const partialData = {
       demo: false,
       company_id: "comp-001",
@@ -1324,9 +1251,11 @@ describe("CMODashboard", () => {
     mockGet.mockResolvedValue({ data: partialData });
     renderCMO();
     await waitFor(() => {
-      expect(screen.getByText("Agents")).toBeInTheDocument();
+      expect(screen.getByText("CMO Work Queue")).toBeInTheDocument();
     });
-    expect(screen.getByText("0.0%")).toBeInTheDocument();
+    expect(screen.queryByText("Total Tasks (30d)")).not.toBeInTheDocument();
+    expect(screen.queryByText("CMO Capability Status")).not.toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "ABM accounts" })).toHaveAttribute("href", "/dashboard/marketing-ops/abm");
   });
 
   it("calls /kpis/cmo endpoint on mount", async () => {

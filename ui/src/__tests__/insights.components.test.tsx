@@ -64,7 +64,7 @@ describe("DecisionTile", () => {
             { t: "2026-11-01", value: 20 },
           ],
         })}
-        action={{ to: "/dashboard/costs", label: "Open cost details" }}
+        action={{ to: "/dashboard/insights/explore/cost", label: "Open cost details" }}
       />,
     );
     expect(screen.getByTestId("tile-value")).toHaveTextContent("₹12,34,567");
@@ -74,7 +74,7 @@ describe("DecisionTile", () => {
     expect(screen.getByTestId("state-chip")).toHaveTextContent("Watch");
     expect(screen.getByTestId("sparkline")).toBeInTheDocument();
     expect(screen.getByTestId("data-quality-badge")).toHaveTextContent("Measured");
-    expect(screen.getByRole("link", { name: "Open cost details" })).toHaveAttribute("href", "/dashboard/costs");
+    expect(screen.getByRole("link", { name: "Open cost details" })).toHaveAttribute("href", "/dashboard/insights/explore/cost");
     expectNoBadText(container);
   });
 

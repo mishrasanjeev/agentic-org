@@ -6,7 +6,6 @@ import { describe, expect, it } from "vitest";
 
 import { isHitlTriggered, parseTraceLines } from "@/pages/Playground";
 import { ONBOARDING_COMPLETE_PAYLOAD, partitionInviteResults } from "@/pages/Onboarding";
-import { auditEntryTimestamp, classifyAuditEventType } from "@/pages/Observatory";
 import { deadlineStatus, parseLocalDate } from "@/pages/CompanyDetail";
 import { isSeededIntent } from "@/pages/ABMDashboard";
 import { normalizeSearchResult } from "@/pages/KnowledgeBase";
@@ -54,23 +53,6 @@ describe("Onboarding payloads (K1/K2)", () => {
   });
 });
 
-describe("Observatory audit mapping (L)", () => {
-  it("classifies the real prefixed event types", () => {
-    expect(classifyAuditEventType("agent.run")).toBe("result");
-    expect(classifyAuditEventType("tool.zoho_books.get_ledger_balance")).toBe("tool_call");
-    expect(classifyAuditEventType("hitl.decided")).toBe("hitl_trigger");
-    expect(classifyAuditEventType("agent.create")).toBe("thinking");
-    // Legacy bare values still classify.
-    expect(classifyAuditEventType("hitl_trigger")).toBe("hitl_trigger");
-    expect(classifyAuditEventType("tool_call")).toBe("tool_call");
-  });
-
-  it("prefers created_at (what /audit emits) over the legacy timestamp key", () => {
-    expect(auditEntryTimestamp({ created_at: "2026-09-13T10:00:00+00:00" })).toBe("2026-09-13T10:00:00+00:00");
-    expect(auditEntryTimestamp({ timestamp: "2026-09-13T09:00:00+00:00" })).toBe("2026-09-13T09:00:00+00:00");
-    expect(auditEntryTimestamp({})).toBeNull();
-  });
-});
 
 describe("CompanyDetail due dates (U)", () => {
   it("parses YYYY-MM-DD as a local calendar day", () => {

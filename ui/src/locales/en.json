@@ -60,7 +60,9 @@
     "billing": "Billing",
     "accountSecurity": "Account Security",
     "settings": "Settings",
-    "lineage": "Lineage"
+    "lineage": "Lineage",
+    "marketingOps": "Marketing operations",
+    "monitoring": "Monitoring"
   },
   "roles": {
     "cfo": "CFO",
@@ -1246,6 +1248,11 @@
       "checksum": "Saved. SHA-256: {{sha256}}",
       "saved": "Saved.",
       "failed": "The evidence file could not be prepared."
+    },
+    "debug": {
+      "title": "Step through this run",
+      "open": "Open the debugger",
+      "close": "Close the debugger"
     }
   },
   "insightsValue": {
@@ -1433,5 +1440,11 @@
       "outcome": "Outcome",
       "actor": "By"
     }
+  },
+  "marketingOps": {
+    "title": "Marketing operations",
+    "tabs": "Marketing pages",
+    "operations": "Operations",
+    "abm": "ABM accounts"
   }
 }

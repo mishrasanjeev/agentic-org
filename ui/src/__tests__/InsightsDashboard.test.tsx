@@ -143,7 +143,7 @@ function financeView(): InsightsViewResponse {
       }),
     ],
     needs_you: [
-      { kind: "budget", title: "Ops monthly", link: "/dashboard/costs", state: "act", detail: "125.5% of the monthly budget used" },
+      { kind: "budget", title: "Ops monthly", link: "/dashboard/insights/explore/cost", state: "act", detail: "125.5% of the monthly budget used" },
     ],
   };
 }

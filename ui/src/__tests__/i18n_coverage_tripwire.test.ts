@@ -48,19 +48,14 @@ const insightsComponentSources = import.meta.glob("../components/insights/*.tsx"
   eager: true,
 }) as Record<string, string>;
 
+// The home, CxO, Partner and Observatory dashboards are retired (their features live in Insights).
 const CRITICAL_PAGES = [
-  "Dashboard.tsx",
-  "PartnerDashboard.tsx",
   "ABMDashboard.tsx",
   "ReportScheduler.tsx",
   "KnowledgeBase.tsx",
-  "CBODashboard.tsx",
-  "CEODashboard.tsx",
-  "CFODashboard.tsx",
-  "CHRODashboard.tsx",
-  "CMODashboard.tsx",
-  "COODashboard.tsx",
+  "MarketingOperations.tsx",
   "InsightsDashboard.tsx",
+  "InsightsEntity.tsx",
   "PlatformInsights.tsx",
 ];
 
@@ -94,40 +89,8 @@ describe("i18n coverage tripwire (Codex 2026-04-22 gap)", () => {
     expect(chatPanelSource).toContain("company_id");
   });
 
-  // Codex 2026-04-23 reopen: the previous test only checked the
-  // ``useTranslation`` import; it did not prove visible strings were
-  // wrapped. This stricter assertion counts ``t("...")`` call sites on
-  // Dashboard.tsx and requires at least 10 — enough that incremental
-  // regressions ("someone dropped the import back to unused") get
-  // caught. Each subsequent page-translation PR should raise the
-  // floor as it lands.
-  it("Dashboard.tsx has substantive t() coverage (>=10 call sites)", () => {
-    const source = findSource("Dashboard.tsx");
-    const matches = source.match(/\bt\(\s*["']/g) ?? [];
-    expect(matches.length).toBeGreaterThanOrEqual(10);
-  });
 
-  it("PartnerDashboard.tsx has translated dashboard metric labels", () => {
-    const source = findSource("PartnerDashboard.tsx");
-    const matches = source.match(/\bt\(\s*["']partnerDashboard\./g) ?? [];
-    expect(matches.length).toBeGreaterThanOrEqual(20);
-    expect(source).toContain("partnerDashboard.overdueFilings");
-    expect(source).not.toContain(">Overdue<");
-    expect(source).not.toContain("{overdueFilings} clients");
-  });
 
-  it("PartnerDashboard locale keys exist in English and Hindi", () => {
-    const source = findSource("PartnerDashboard.tsx");
-    const keys = Array.from(
-      source.matchAll(/\bt\(\s*["']partnerDashboard\.([^"']+)/g),
-      (match) => match[1],
-    );
-
-    for (const key of keys) {
-      expect(en.partnerDashboard).toHaveProperty(key);
-      expect(hi.partnerDashboard).toHaveProperty(key);
-    }
-  });
 
   it("Layout nav and role translation keys exist in English and Hindi", () => {
     expect(layoutSource).toBeTruthy();
@@ -170,13 +133,4 @@ describe("i18n coverage tripwire (Codex 2026-04-22 gap)", () => {
     }
   });
 
-  it("Dashboard.tsx no longer documents English-fallback policy", () => {
-    // Codex flagged the old comment "falls back to the existing
-    // English where no key is defined yet" as the product telling on
-    // itself. The fallback policy is gone; the comment is too.
-    const source = findSource("Dashboard.tsx");
-    expect(source).not.toContain(
-      "falls back to the existing English",
-    );
-  });
 });

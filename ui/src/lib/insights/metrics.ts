@@ -29,7 +29,6 @@ const RUNS = "/dashboard/insights/explore/runs";
 const APPROVALS = "/dashboard/insights/explore/approvals";
 const AGENTS = "/dashboard/insights/explore/agents";
 const COST = "/dashboard/insights/explore/cost";
-const COSTS_PAGE = "/dashboard/costs";
 const VALUE_PAGE = "/dashboard/insights/value";
 const WORKFLOWS = "/dashboard/insights/explore/workflows";
 const CONNECTORS = "/dashboard/insights/explore/connectors";
@@ -85,14 +84,14 @@ export const METRIC_PRESENTATION: Record<string, MetricPresentation> = {
     action: { to: `${COST}?sort=cost_per_run&order=desc`, labelKey: "insights.actions.exploreCost" },
   },
   "cost.by_agent": { chart: "hbar", action: { to: COST, labelKey: "insights.actions.exploreCost" } },
-  "cost.by_model": { chart: "hbar", action: { to: COSTS_PAGE, labelKey: "insights.actions.openCosts" } },
-  "cost.forecast": { chart: "forecast", action: { to: COSTS_PAGE, labelKey: "insights.actions.openCosts" } },
-  "cost.budgets": { chart: "bullet", action: { to: COSTS_PAGE, labelKey: "insights.actions.openCosts" } },
+  "cost.by_model": { chart: "hbar", action: { to: COST, labelKey: "insights.actions.exploreCost" } },
+  "cost.forecast": { chart: "forecast", action: { to: COST, labelKey: "insights.actions.exploreCost" } },
+  "cost.budgets": { chart: "bullet", action: { to: COST, labelKey: "insights.actions.exploreCost" } },
   "tokens.by_unit": {
     chart: "stacked",
     action: { to: `${RUNS}?sort=tokens_total&order=desc`, labelKey: "insights.actions.exploreRuns" },
   },
-  "cost.data_quality": { chart: "hbar", action: { to: COSTS_PAGE, labelKey: "insights.actions.openCosts" } },
+  "cost.data_quality": { chart: "hbar", action: { to: COST, labelKey: "insights.actions.exploreCost" } },
   "value.money_saved": { chart: "waterfall", action: { to: VALUE_PAGE, labelKey: "insights.actions.openValue" } },
   "value.hours_saved": { chart: "hbar", action: { to: VALUE_PAGE, labelKey: "insights.actions.openValue" } },
   "value.roi": { chart: "line", action: { to: VALUE_PAGE, labelKey: "insights.actions.openValue" } },
