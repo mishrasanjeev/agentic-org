@@ -11,9 +11,8 @@ criteria"): a moderated test in which one participant per role finds answers in 
 
 Two tasks change something that only some roles may change: confirming a savings baseline (a tenant administrator)
 and revoking a learned rule (an administrator, or the agent's owner). For a participant whose role may not make the
-change, the task passes when they reach the control and can say, from the page, who can make it. Agree this reading
-with the product owner before the sessions; if it is not accepted, those two tasks are run with the admin participant
-only and the others are scored on the remaining five.
+change, the task passes when they reach the control and can say, from the page, who can make it. The product owner
+approved this reading on 3 November 2026, so every participant is scored on all seven tasks.
 
 ## Before the sessions
 
