@@ -104,6 +104,11 @@ async def test_pii_is_masked_by_the_tenant_setting_unless_an_admin_or_auditor_as
     masked, did = await pii.apply(_Session(None), tenant, rows, include_pii=False, role="cfo", is_admin=False)
     assert did and "9876543210" not in str(masked) and "pay@vendor.example" not in str(masked)
     assert masked[0]["runs"] == 12345678  # numbers are not text: never masked
+    # Ids and digests stay whole (a UUID may start with eight digits, which reads as an account number).
+    ids = [{"id": "72950245-7edf-433c-8c81-badd186a2c77", "sha": "1234567890abcdef" * 4, "note": "acct 123456789012"}]
+    kept, _did = await pii.apply(_Session(None), tenant, ids, include_pii=False, role="cfo", is_admin=False)
+    assert kept[0]["id"] == ids[0]["id"] and kept[0]["sha"] == ids[0]["sha"]
+    assert "123456789012" not in kept[0]["note"]
     off = type("Config", (), {"pii_masking": False})()
     assert await pii.apply(_Session(off), tenant, rows, include_pii=False, role="cfo", is_admin=False) == (rows, False)
     assert await pii.apply(_Session(None), tenant, rows, include_pii=True, role="auditor", is_admin=False) == (

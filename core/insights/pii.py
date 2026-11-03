@@ -10,11 +10,17 @@ recorded on the audit row of the export.
 
 from __future__ import annotations
 
+import re
 import uuid
 from typing import Any
 
 # Roles that may ask for unmasked values (with the admin scope for administrators).
 RAW_PII_ROLES = frozenset({"auditor"})
+# Ids and digests are not personal data, and the masking patterns would mangle them (a UUID can begin with eight
+# digits, which reads as a bank account number): a value that is wholly a UUID or a hex digest is kept as it is.
+_IDENTIFIER = re.compile(
+    r"^(?:[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}|[0-9a-fA-F]{16,128})$"
+)
 
 
 class IncludePiiForbiddenError(PermissionError):
@@ -33,10 +39,21 @@ async def masking_on(session: Any, tenant_id: uuid.UUID) -> bool:
     return True if config is None else bool(config.pii_masking)
 
 
-def mask_rows(rows: list[Any]) -> list[Any]:
-    from core.tool_gateway.pii_masker import mask_pii
+def mask_value(value: Any) -> Any:
+    """``mask_pii`` for one cell or nested value, keeping ids and digests whole."""
+    from core.tool_gateway.pii_masker import mask_string
 
-    return [mask_pii(row) for row in rows]
+    if isinstance(value, str):
+        return value if _IDENTIFIER.match(value) else mask_string(value)
+    if isinstance(value, dict):
+        return {k: mask_value(v) for k, v in value.items()}
+    if isinstance(value, list):
+        return [mask_value(v) for v in value]
+    return value
+
+
+def mask_rows(rows: list[Any]) -> list[Any]:
+    return [mask_value(row) for row in rows]
 
 
 async def apply(
