@@ -22,6 +22,23 @@
 - Migration v6z114 adds `insights_platform_operations` (aggregates only, owned by the platform aggregate role,
   column grants on `insights_exports` status and creation time) and the `insights_landing` synthetic check kind.
 
+## Unreleased - Legacy dashboards retired into Insights
+
+- `/dashboard` now opens each role's landing page: Insights for the roles that have a view, the workbench or the
+  agents list for the rest, and the commerce runtime for merchants.
+- The CEO, CFO, CHRO, COO, CBO, Cost, Partner and Observatory dashboard pages are removed. Their addresses redirect
+  to the matching Insights view (CEO to Executive, CFO to Finance, CHRO to HR, COO to Operations, CBO to Back
+  office, Cost to the cost explorer, Partner to the Partner view) and the Observatory to the audit explorer for
+  administrators and auditors, otherwise to the audit log.
+- The CMO dashboard becomes **Marketing operations** (`/dashboard/marketing-ops`, with ABM at
+  `/dashboard/marketing-ops/abm`): its working panels stay, the KPI cards move to the Marketing view. The old
+  addresses redirect and keep their query.
+- Observability becomes **Monitoring** (`/dashboard/monitoring`): workload and synthetic checks; a run's trace is on
+  its Insights run page, where administrators can also open the run debugger. The scope dashboard becomes the
+  enforcement summary inside the enforcement audit log.
+- The navigation, the natural-language bar, the Companies page, alert links and cost drills point at the new homes;
+  the budget hint now says when no budget alert is set. The Report Scheduler stays the scheduling page.
+
 ## Unreleased - Insights Partner view, client pack, saved views and what changed
 
 - **Partner view** (administrators, CFO, COO, auditor) for a CA firm's client companies: active clients with each
