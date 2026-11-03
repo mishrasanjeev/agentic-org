@@ -1,5 +1,21 @@
 # Changelog
 
+## Unreleased - Insights PDFs, finance pack and period evidence pack
+
+- Every Insights view has "PDF of this view": the tiles as a table and each chart as its data with a bar per row,
+  with the organisation, period, filters, data quality and when it was computed on every page.
+- Finance pack (administrators and the CFO), from the Finance view: a ZIP of `finance.xlsx` (spend by day, agent
+  and model, budgets, tokens, money saved with its assumptions, filters and definitions), the Finance view PDF and
+  a manifest of SHA-256 checksums.
+- Period evidence pack (administrators and auditors), from the Compliance view: the summary PDF, CSVs of the
+  period's audit rows (chain position and signature check), approval decisions (delegation, votes, time to decide),
+  delegations, data subject requests (no subject), residency attestations and the change log, `verification.json`
+  (row signatures and the audit chain re-verified over the period, anchor and witness checkpoints) and a signed
+  manifest. An auditor signs a ready pack once on the Downloads page (`POST /api/v1/insights/exports/{id}/sign`);
+  the sign-off is a signed audit row.
+- Charts export as SVG and PNG from their menu, with the title, period, filters and data quality drawn in.
+- Masking keeps ids and digests whole (a UUID that begins with eight digits read as an account number).
+
 ## Unreleased - Insights background exports and Downloads
 
 - `POST /api/v1/insights/exports`: a metric or explorer table too large for an inline export (up to 500,000 rows) or

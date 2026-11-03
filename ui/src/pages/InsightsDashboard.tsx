@@ -18,6 +18,7 @@ import DecisionTile from "@/components/insights/DecisionTile";
 import EmptyState from "@/components/insights/EmptyState";
 import FilterBar, { type FilterValue } from "@/components/insights/FilterBar";
 import NeedsYouList from "@/components/insights/NeedsYouList";
+import ViewFiles from "@/components/insights/ViewFiles";
 import { ChartSkeleton, TileSkeleton } from "@/components/insights/Skeleton";
 import {
   errorStatus,
@@ -361,6 +362,8 @@ export default function InsightsDashboard() {
           companyScoped={Boolean(companyId)}
           disabled={viewState.kind === "loading"}
         />
+
+        <ViewFiles view={activeView} filters={filters} role={role} />
 
         <div
           id="insights-panel"

@@ -196,3 +196,138 @@ describe("InsightsDownloads", () => {
     expect(await screen.findByText(/Background files are not set up/)).toBeInTheDocument();
   });
 });
+
+describe("chart pictures and view files", () => {
+  beforeEach(async () => {
+    mockGet.mockReset();
+    mockPost.mockReset();
+    await i18n.changeLanguage("en");
+  });
+
+  it("serialises a chart with its title, period and data quality burned in, colours resolved", async () => {
+    const { chartSvg } = await import("@/lib/insights/chartImage");
+    document.documentElement.style.setProperty("--chart-1", "243 75% 59%");
+    const host = document.createElement("figure");
+    host.innerHTML = '<svg width="400" height="200"><rect width="10" height="10" fill="hsl(var(--chart-1))"/></svg>';
+    document.body.appendChild(host);
+    const markup = chartSvg(host, { title: "Spend <INR>", subtitle: "2026-10-01 to 2026-10-31", quality: "Measured" });
+    expect(markup).toContain("Spend &lt;INR&gt;");
+    expect(markup).toContain("2026-10-01 to 2026-10-31");
+    expect(markup).toContain("Measured");
+    expect(markup).toContain('fill="hsl(243 75% 59%)"');
+    expect(markup).not.toContain("var(--");
+    expect(chartSvg(document.createElement("div"), { title: "x", subtitle: "", quality: "" })).toBeNull();
+    host.remove();
+  });
+
+  it("saves the chart as SVG from the export menu", async () => {
+    const user = userEvent.setup();
+    const created: Blob[] = [];
+    Object.assign(URL, {
+      createObjectURL: vi.fn((b: Blob) => {
+        created.push(b);
+        return "blob:x";
+      }),
+      revokeObjectURL: vi.fn(),
+    });
+    render(
+      <MemoryRouter>
+        <ExportMenu metricKey="cost.spend" title="Spend" filters={{}} picture={() => "<svg>chart</svg>"} />
+      </MemoryRouter>,
+    );
+    await user.click(screen.getByRole("button", { name: "Export Spend" }));
+    await user.click(screen.getByRole("menuitem", { name: "Chart (SVG)" }));
+    await waitFor(() => expect(created).toHaveLength(1));
+    expect(created[0].type).toBe("image/svg+xml;charset=utf-8");
+    expect(await created[0].text()).toBe("<svg>chart</svg>");
+  });
+
+  it("asks for the view PDF, and the packs only on their views for their roles", async () => {
+    const { default: ViewFiles } = await import("@/components/insights/ViewFiles");
+    mockPost.mockResolvedValue({ data: { export: job({ status: "queued", kind: "view_pdf" }) } });
+    const filters = { from: "2026-10-01", to: "2026-10-31", compare: "previous" as const };
+    const { rerender } = render(
+      <MemoryRouter>
+        <ViewFiles view="finance" filters={filters} role="cfo" />
+      </MemoryRouter>,
+    );
+    expect(screen.getByTestId("view-file-finance")).toBeInTheDocument();
+    expect(screen.queryByTestId("view-file-evidence")).toBeNull();
+    fireEvent.click(screen.getByTestId("view-file-pdf"));
+    await waitFor(() =>
+      expect(mockPost).toHaveBeenCalledWith("/insights/exports", {
+        include_pii: false,
+        kind: "view_pdf",
+        format: "pdf",
+        params: { view: "finance", compare: "previous", from: "2026-10-01", to: "2026-10-31", company_id: undefined },
+      }),
+    );
+    expect(await screen.findByText(/It is being prepared/)).toBeInTheDocument();
+    rerender(
+      <MemoryRouter>
+        <ViewFiles view="compliance" filters={filters} role="auditor" />
+      </MemoryRouter>,
+    );
+    expect(screen.queryByTestId("view-file-finance")).toBeNull();
+    fireEvent.click(screen.getByTestId("view-file-evidence"));
+    await waitFor(() =>
+      expect(mockPost).toHaveBeenLastCalledWith("/insights/exports", {
+        include_pii: false,
+        kind: "evidence_pack",
+        format: "zip",
+        params: { from: "2026-10-01", to: "2026-10-31", company_id: undefined },
+      }),
+    );
+  });
+
+  it("lets an auditor sign a ready evidence pack once, with a statement", async () => {
+    mockRole = "auditor";
+    const pack = job({
+      id: "p1",
+      kind: "evidence_pack",
+      format: "zip",
+      filename: "insights-evidence-pack-2026-10-01-2026-10-31.zip",
+      verification_status: "signatures_verified",
+    });
+    let signed = false;
+    mockGet.mockImplementation(() =>
+      Promise.resolve({
+        data: {
+          exports: [
+            signed
+              ? {
+                  ...pack,
+                  signed_at: "2026-11-03T06:00:00+00:00",
+                  signature: { by: "Meera", statement: "Reviewed and accepted." },
+                }
+              : pack,
+          ],
+          storage: true,
+        },
+      }),
+    );
+    mockPost.mockImplementation(() => {
+      signed = true;
+      return Promise.resolve({ data: { export: { ...pack, signed_at: "2026-11-03T06:00:00+00:00" } } });
+    });
+    render(
+      <HelmetProvider>
+        <MemoryRouter>
+          <InsightsDownloads />
+        </MemoryRouter>
+      </HelmetProvider>,
+    );
+    expect(await screen.findByTestId("verification-p1")).toHaveTextContent("every signature verified");
+    fireEvent.click(screen.getByRole("button", { name: "Sign this pack" }));
+    const box = screen.getByLabelText("Your sign-off statement");
+    expect(box).toHaveValue("I have reviewed the evidence pack for 2026-10-01 to 2026-10-31 and its verification report.");
+    fireEvent.change(box, { target: { value: "Reviewed and accepted." } });
+    fireEvent.click(screen.getByRole("button", { name: "Sign" }));
+    await waitFor(() =>
+      expect(mockPost).toHaveBeenCalledWith("/insights/exports/p1/sign", { statement: "Reviewed and accepted." }),
+    );
+    expect(await screen.findByTestId("signature-p1")).toHaveTextContent("Signed by Meera");
+    expect(screen.queryByRole("button", { name: "Sign this pack" })).toBeNull();
+    mockRole = "cfo";
+  });
+});

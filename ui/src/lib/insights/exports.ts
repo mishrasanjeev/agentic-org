@@ -28,6 +28,8 @@ export interface ExportJob {
   expires_at: string | null;
   signed_at: string | null;
   signature: Record<string, unknown> | null;
+  /** An evidence pack's verification: verified, signatures_verified or broken. */
+  verification_status: string | null;
   download: string | null;
 }
 
@@ -65,6 +67,7 @@ function normaliseJob(raw: unknown): ExportJob | null {
     expires_at: str(j.expires_at),
     signed_at: str(j.signed_at),
     signature: j.signature && typeof j.signature === "object" ? (j.signature as Record<string, unknown>) : null,
+    verification_status: str(j.verification_status),
     download: str(j.download),
   };
 }
@@ -86,6 +89,13 @@ export const exportsApi = {
     const raw = (data as { exports?: unknown; storage?: unknown }) ?? {};
     const jobs = Array.isArray(raw.exports) ? raw.exports.map(normaliseJob).filter((j): j is ExportJob => j !== null) : [];
     return { jobs, storage: raw.storage !== false };
+  },
+  /** An auditor or administrator signs a ready evidence pack (once). */
+  async sign(id: string, statement: string): Promise<ExportJob> {
+    const { data } = await api.post(`/insights/exports/${encodeURIComponent(id)}/sign`, { statement });
+    const job = normaliseJob((data as { export?: unknown })?.export);
+    if (!job) throw new Error("export_response_invalid");
+    return job;
   },
   async download(job: ExportJob): Promise<Blob> {
     const { data } = await api.get(`/insights/exports/${encodeURIComponent(job.id)}/download`, {

@@ -8640,6 +8640,24 @@
     "tenant_required": true
   },
   {
+    "audit_event": "insights.evidence_pack.signed",
+    "auth_required": true,
+    "function": "sign_export",
+    "idempotency": "idempotent-first-write-wins",
+    "key": "POST /api/v1/insights/exports/{export_id}/sign api/v1/insights_exports.py:sign_export",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/insights_exports.py",
+    "path": "/api/v1/insights/exports/{export_id}/sign",
+    "public_exempt_reason": null,
+    "rate_limit": "reporting-admin",
+    "scope": "insights.read",
+    "source_line": 284,
+    "tenant_required": true
+  },
+  {
     "audit_event": "insights.metric.read",
     "auth_required": true,
     "function": "insights_metric",

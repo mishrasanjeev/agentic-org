@@ -1,8 +1,9 @@
 // SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
-import { useId, useState } from "react";
+import { useId, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import type { InsightsFilters, MetricResponse } from "@/lib/insights/api";
 import { dataShape, isEmptyMetric, tableColumns, tableRows } from "@/lib/insights/chartData";
+import { chartSvg } from "@/lib/insights/chartImage";
 import { chartKindFor, tableFromSeries, type ChartKind } from "@/lib/insights/metrics";
 import DataQualityBadge from "./DataQualityBadge";
 import DataTable from "./DataTable";
@@ -38,6 +39,19 @@ export default function ChartCard({
   const fromSeries = tableFromSeries(chartKind);
   const summary = chartSummary(metric, chartKind, t, currency);
   const cur = metric.currency || currency || null;
+  const figureRef = useRef<HTMLElement>(null);
+  const picture = () =>
+    chartSvg(figureRef.current, {
+      title: metric.title,
+      subtitle: [
+        metric.period ? `${metric.period.from} to ${metric.period.to}` : null,
+        filters.compare ? `compare: ${filters.compare}` : null,
+        filters.company_id ? `company: ${filters.company_id}` : null,
+      ]
+        .filter(Boolean)
+        .join(" · "),
+      quality: t(`insights.quality.${metric.data_quality}`, { defaultValue: metric.data_quality }),
+    });
 
   return (
     <section
@@ -68,14 +82,27 @@ export default function ChartCard({
               {showData ? t("insights.chart.hideData") : t("insights.chart.viewData")}
             </button>
           ) : null}
-          {exportable ? <ExportMenu metricKey={metric.key} title={metric.title} filters={filters} /> : null}
+          {exportable ? (
+            <ExportMenu
+              metricKey={metric.key}
+              title={metric.title}
+              filters={filters}
+              picture={empty ? undefined : picture}
+            />
+          ) : null}
         </div>
       </header>
 
       {empty ? (
         <EmptyState hint={metric.hint} />
       ) : (
-        <figure role="figure" aria-labelledby={`${baseId}-title`} aria-describedby={summaryId} className="m-0">
+        <figure
+          ref={figureRef}
+          role="figure"
+          aria-labelledby={`${baseId}-title`}
+          aria-describedby={summaryId}
+          className="m-0"
+        >
           <InsightChart metric={metric} kind={chartKind} currency={currency} />
           <figcaption id={summaryId} className="sr-only" data-testid="chart-summary">
             {summary}

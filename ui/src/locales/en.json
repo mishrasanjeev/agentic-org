@@ -884,7 +884,10 @@
       "includePii": "Include raw personal data (recorded in the audit log)",
       "background": "Prepare it in the background",
       "queued": "It is being prepared; you will get an email when it is ready.",
-      "openDownloads": "Open Downloads"
+      "openDownloads": "Open Downloads",
+      "svg": "Chart (SVG)",
+      "png": "Chart (PNG)",
+      "noPicture": "This chart has no picture to save; export its data instead."
     },
     "empty": {
       "title": "No data yet",
@@ -956,6 +959,13 @@
     "freshness": {
       "lateData": "Yesterday's figures are not in yet, so the totals may be low. They are added by 02:00 your time.",
       "autoRefresh": "Updates every minute"
+    },
+    "files": {
+      "pdf": "PDF of this view",
+      "financePack": "Finance pack",
+      "evidencePack": "Evidence pack",
+      "asking": "Asking…",
+      "queued": "It is being prepared; you will get an email when it is ready."
     }
   },
   "insightsBi": {
@@ -1282,6 +1292,19 @@
     "downloading": "Downloading…",
     "downloadLabel": "Download {{name}}",
     "saved": "Saved.",
-    "failed": "The file could not be downloaded."
+    "failed": "The file could not be downloaded.",
+    "verification": {
+      "verified": "Verification: signatures and audit chain verified",
+      "signatures_verified": "Verification: every signature verified (the audit chain is not sealed for this period)",
+      "broken": "Verification: a break was found; see verification.json"
+    },
+    "sign": "Sign this pack",
+    "statementLabel": "Your sign-off statement",
+    "defaultStatement": "I have reviewed the evidence pack for {{from}} to {{to}} and its verification report.",
+    "confirmSign": "Sign",
+    "cancel": "Cancel",
+    "signed": "Signed.",
+    "signFailed": "The pack could not be signed.",
+    "signedBy": "Signed by {{name}} on {{when}}:"
   }
 }
