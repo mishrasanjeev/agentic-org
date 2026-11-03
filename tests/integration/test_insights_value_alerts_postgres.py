@@ -61,6 +61,8 @@ BASE_TABLES = (
     "connector_configs",
     "workflow_definitions",
     "workflow_runs",
+    # Exports read the tenant's PII masking setting (v6z110 release).
+    "governance_config",
 )
 MIGRATED = ("value_baselines", "value_rates", "insights_alerts")
 
