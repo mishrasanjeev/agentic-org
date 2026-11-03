@@ -34,29 +34,33 @@ _REPORTS_DIR.mkdir(parents=True, exist_ok=True)
 # Helpers
 # ---------------------------------------------------------------------------
 
-def _next_run_after(cron: str, now: datetime | None = None) -> datetime:
-    """Compute the next run time from the cron expression (simplified).
+_INTERVALS: dict[str, timedelta] = {
+    "every_5_minutes": timedelta(minutes=5),
+    "hourly": timedelta(hours=1),
+    "daily": timedelta(days=1),
+    "weekly": timedelta(weeks=1),
+    "monthly": timedelta(days=30),
+}
 
-    Handles the interval keywords the API accepts and real cron strings via
-    ``croniter`` when installed; unrecognised expressions fall back to daily.
+
+def _next_run_after(cron: str, now: datetime | None = None, zone: Any = None) -> datetime:
+    """Compute the next run time from the cron expression.
+
+    The interval keywords the API accepts run that long after the last run; a
+    five-field cron string runs at its next matching minute in ``zone`` (the
+    tenant's reporting time zone; UTC when None) via ``core.reports.cron``. An
+    expression the evaluator cannot read falls back to daily.
     """
     now = now or datetime.now(UTC)
-    interval_map: dict[str, timedelta] = {
-        "every_5_minutes": timedelta(minutes=5),
-        "hourly": timedelta(hours=1),
-        "daily": timedelta(days=1),
-        "weekly": timedelta(weeks=1),
-        "monthly": timedelta(days=30),
-    }
-    delta = interval_map.get(cron or "daily")
+    delta = _INTERVALS.get(cron or "daily")
     if delta is not None:
         return now + delta
-    try:
-        from croniter import croniter  # type: ignore[import-untyped]
+    from core.reports.cron import CronError, next_after
 
-        return croniter(cron, now).get_next(datetime)
-    # enterprise-gate: broad-except-ok reason=optional-cron-parser-fallbacks-to-daily
-    except Exception:
+    try:
+        return next_after(cron, now, zone)
+    except CronError:
+        log.warning("report_schedule_cron_unreadable", cron=cron)
         return now + timedelta(days=1)
 
 
@@ -124,28 +128,37 @@ async def _claim_due_schedules() -> list[dict[str, Any]]:
     from sqlalchemy import select
 
     from core.database import get_tenant_session
+    from core.insights.reporting_settings import load_reporting_settings
     from core.models.report_schedule import ReportSchedule
 
     now = datetime.now(UTC)
     claimed: list[dict[str, Any]] = []
     for tenant_id in await _all_tenant_ids():
         async with get_tenant_session(tenant_id) as session:
+            zone = None
             rows = (
-                await session.execute(
-                    select(ReportSchedule)
-                    .where(
-                        ReportSchedule.tenant_id == tenant_id,
-                        ReportSchedule.enabled.is_(True),
-                        (ReportSchedule.next_run_at.is_(None)) | (ReportSchedule.next_run_at <= now),
+                (
+                    await session.execute(
+                        select(ReportSchedule)
+                        .where(
+                            ReportSchedule.tenant_id == tenant_id,
+                            ReportSchedule.enabled.is_(True),
+                            (ReportSchedule.next_run_at.is_(None)) | (ReportSchedule.next_run_at <= now),
+                        )
+                        .order_by(ReportSchedule.next_run_at.asc().nullsfirst())
+                        .limit(500)
+                        .with_for_update(skip_locked=True)
                     )
-                    .order_by(ReportSchedule.next_run_at.asc().nullsfirst())
-                    .limit(500)
-                    .with_for_update(skip_locked=True)
                 )
-            ).scalars().all()
+                .scalars()
+                .all()
+            )
             for row in rows:
+                if zone is None and row.cron_expression not in _INTERVALS:
+                    # Cron strings run on the tenant's clock; the interval keywords need no zone.
+                    zone = (await load_reporting_settings(session, tenant_id)).zone()
                 row.last_run_at = now
-                row.next_run_at = _next_run_after(row.cron_expression, now)
+                row.next_run_at = _next_run_after(row.cron_expression, now, zone)
                 claimed.append(_schedule_report_config(row))
     return claimed
 
@@ -153,6 +166,7 @@ async def _claim_due_schedules() -> list[dict[str, Any]]:
 # ---------------------------------------------------------------------------
 # Tasks
 # ---------------------------------------------------------------------------
+
 
 @app.task(name="core.tasks.report_tasks.generate_scheduled_reports", bind=True, max_retries=2)
 def generate_scheduled_reports(self: Any) -> dict[str, Any]:
@@ -197,12 +211,33 @@ def generate_scheduled_reports(self: Any) -> dict[str, Any]:
 def generate_report(self: Any, report_config: dict[str, Any]) -> dict[str, Any]:
     """Main report pipeline: generate -> render -> deliver.
 
+    Insights report types (``insights_view``, ``insights_finance_pack``,
+    ``insights_evidence_pack``) run through ``core.insights.scheduled``, which
+    makes the file as an Insights export and records the run. Every other type
+    runs the report generator below; its outcome is recorded in
+    ``report_schedule_runs`` too.
+
     Parameters
     ----------
     report_config : dict
         Keys: report_type, params, company_id, tenant_id, delivery_channels,
-        format, schedule_id (optional).
+        format, schedule_id (optional), trigger (``schedule`` or ``manual``).
     """
+    from core.insights import scheduled
+    from core.tasks.async_runner import run_async
+
+    trigger = "manual" if report_config.get("trigger") == "manual" else "schedule"
+    if str(report_config.get("report_type") or "") in scheduled.REPORT_TYPES:
+        return run_async(scheduled.run(report_config, trigger=trigger))
+    result = _generate_legacy(self, report_config)
+    run_async(
+        scheduled.record_run(str(report_config.get("tenant_id")), report_config.get("schedule_id"), result, trigger)
+    )
+    return result
+
+
+def _generate_legacy(self: Any, report_config: dict[str, Any]) -> dict[str, Any]:
+    """The report generator pipeline for the legacy report types."""
     report_id = str(uuid.uuid4())
     report_type = report_config["report_type"]
     company_id = report_config.get("company_id", "default")
@@ -337,9 +372,7 @@ def generate_report(self: Any, report_config: dict[str, Any]) -> dict[str, Any]:
                     tenant_id=tenant_id,
                     company_id=company_id,
                     proof_status=pilot_proof_summary.get("proof_status"),
-                    production_claim_allowed=pilot_proof_summary.get(
-                        "production_claim_allowed"
-                    ),
+                    production_claim_allowed=pilot_proof_summary.get("production_claim_allowed"),
                     readiness_score=pilot_proof_summary.get("readiness_score"),
                 )
 

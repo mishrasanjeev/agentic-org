@@ -1493,6 +1493,8 @@ async def _legacy_startup_schema_repair_for_local_only() -> None:
             END $$;
         """)
         )
+        # v6z111: the schedule's owner (Insights report types run with that user's access).
+        await conn.execute(text("ALTER TABLE report_schedules ADD COLUMN IF NOT EXISTS created_by UUID NULL;"))
         await conn.execute(
             text("CREATE INDEX IF NOT EXISTS ix_report_schedules_tenant ON report_schedules(tenant_id);")
         )

@@ -780,8 +780,8 @@ def test_sso_rpa_target_routes_have_metadata() -> None:
     findings = gates.route_metadata_findings(routes)
 
     # 38 since the prompt template check and render routes, the five change-request routes
-    # and the three comparison routes.
-    assert len(routes) == 38
+    # and the three comparison routes; 39 with GET /report-schedules/{id}/runs.
+    assert len(routes) == 39
     assert findings == []
     assert all(route.metadata_present for route in routes)
     assert all(route.scope for route in routes)

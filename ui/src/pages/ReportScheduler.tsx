@@ -1,4 +1,7 @@
-import { useState, useEffect, useCallback } from "react";
+import { Fragment, useState, useEffect, useCallback } from "react";
+import { useSearchParams } from "react-router";
+import { useOptionalRole } from "@/contexts/AuthContext";
+import { ROLE_VIEWS } from "@/lib/insights/metrics";
 import { useTranslation } from "react-i18next";
 
 // SEC-002 (PR-F): direct fetch() calls (instead of the global axios
@@ -41,7 +44,52 @@ const REPORT_TYPES = [
   { value: "pnl_report", label: "P&L Monthly" },
   { value: "aging_report", label: "AR/AP Aging" },
   { value: "campaign_report", label: "Campaign Performance" },
+  { value: "insights_view", label: "Insights view (PDF)" },
+  { value: "insights_finance_pack", label: "Insights finance pack" },
+  { value: "insights_evidence_pack", label: "Insights evidence pack" },
 ] as const;
+
+// Mirrors api/v1/report_schedules.py _REPORT_TYPES_BY_ROLE (administrators may schedule every type); the server
+// also checks the Insights view against the views the role may read.
+const TYPES_BY_ROLE: Record<string, readonly string[]> = {
+  cfo: ["cfo_daily", "aging_report", "pnl_report", "insights_view", "insights_finance_pack"],
+  cmo: ["cmo_weekly", "campaign_report", "insights_view"],
+  chro: ["insights_view"],
+  coo: ["insights_view"],
+};
+
+const INSIGHTS_PERIODS = [
+  { value: "last_7_days", label: "Last 7 days" },
+  { value: "last_30_days", label: "Last 30 days" },
+  { value: "last_week", label: "Last week (Monday to Sunday)" },
+  { value: "last_month", label: "Last month" },
+  { value: "month_to_date", label: "Month to date" },
+] as const;
+
+const VIEW_LABELS: Record<string, string> = {
+  executive: "Executive",
+  finance: "Finance",
+  operations: "Operations",
+  hr: "HR",
+  marketing: "Marketing",
+  commerce: "Commerce",
+  compliance: "Compliance",
+  engineering: "Engineering",
+};
+
+interface ScheduleRun {
+  id: string;
+  trigger: string;
+  status: string;
+  reason: string | null;
+  export_id: string | null;
+  started_at: string | null;
+  finished_at: string | null;
+}
+
+function isInsightsType(rt: string): boolean {
+  return rt.startsWith("insights_");
+}
 
 type FrequencyPreset = "daily" | "weekly" | "monthly";
 
@@ -78,8 +126,11 @@ const WHATSAPP_RE = /^\+?[1-9]\d{7,14}$/;
 
 /* ── Helpers ───────────────────────────────────────────────────────── */
 
-function reportTypeLabel(rt: string): string {
-  return REPORT_TYPES.find((t) => t.value === rt)?.label ?? rt;
+function reportTypeLabel(rt: string, params?: Record<string, unknown>): string {
+  const label = REPORT_TYPES.find((t) => t.value === rt)?.label ?? rt;
+  const view = typeof params?.view === "string" ? VIEW_LABELS[params.view] ?? params.view : null;
+  const period = INSIGHTS_PERIODS.find((p) => p.value === params?.period)?.label;
+  return [label, view, period?.toLowerCase()].filter(Boolean).join(" · ");
 }
 
 function formatDate(iso: string | null): string {
@@ -231,6 +282,50 @@ export default function ReportScheduler() {
   const [formWhatsappEnabled, setFormWhatsappEnabled] = useState(false);
   const [formWhatsappTarget, setFormWhatsappTarget] = useState("");
   const [formFieldErrors, setFormFieldErrors] = useState<Record<string, string>>({});
+  const [formView, setFormView] = useState("executive");
+  const [formPeriod, setFormPeriod] = useState("last_7_days");
+  const [historyFor, setHistoryFor] = useState<string | null>(null);
+  const [history, setHistory] = useState<ScheduleRun[] | null>(null);
+  const role = useOptionalRole();
+  const allowedTypes = REPORT_TYPES.filter((t) => role === "admin" || (TYPES_BY_ROLE[role] ?? []).includes(t.value));
+  const viewOptions = ROLE_VIEWS[role] ?? [];
+  const [searchParams, setSearchParams] = useSearchParams();
+
+  // "Schedule this view" on Insights opens the form here, weekly on Monday for last week.
+  useEffect(() => {
+    const type = searchParams.get("type");
+    if (!type || !isInsightsType(type)) return;
+    setEditingId(null);
+    setFormType(type);
+    const view = searchParams.get("view");
+    if (view) setFormView(view);
+    setFormPeriod(searchParams.get("period") || "last_week");
+    setFormFreq("weekly");
+    setFormDayOfWeek("1");
+    setFormTime("09:00");
+    setFormAdvanced(false);
+    setShowForm(true);
+    setSearchParams({}, { replace: true });
+  }, [searchParams, setSearchParams]);
+
+  async function toggleHistory(id: string) {
+    if (historyFor === id) {
+      setHistoryFor(null);
+      setHistory(null);
+      return;
+    }
+    setHistoryFor(id);
+    setHistory(null);
+    try {
+      const resp = await fetch(`${API_BASE}/report-schedules/${id}/runs`, { credentials: "include" });
+      if (!resp.ok) throw new Error(await extractError(resp));
+      const data = (await resp.json()) as { runs?: ScheduleRun[] };
+      setHistory(Array.isArray(data.runs) ? data.runs : []);
+    } catch (err: unknown) {
+      setHistory([]);
+      setError(err instanceof Error ? err.message : "Could not load the run history");
+    }
+  }
 
   // TC_002 (Aishwarya 2026-04-21): a stale per-channel error that was
   // set on a previous submit persisted after the user unchecked the
@@ -336,6 +431,8 @@ export default function ReportScheduler() {
     setFormSlackTarget("");
     setFormWhatsappEnabled(false);
     setFormWhatsappTarget("");
+    setFormView("executive");
+    setFormPeriod("last_7_days");
     setEditingId(null);
     setShowForm(false);
     setFormFieldErrors({});
@@ -354,6 +451,8 @@ export default function ReportScheduler() {
     setFormCustomCron(parsed.advanced ? parsed.raw : "0 9 * * *");
     setFormFormat(s.format);
     setFormActive(s.is_active);
+    if (typeof s.params?.view === "string") setFormView(s.params.view);
+    if (typeof s.params?.period === "string") setFormPeriod(s.params.period);
 
     const email = s.delivery_channels.find((c) => c.type === "email");
     const slack = s.delivery_channels.find((c) => c.type === "slack");
@@ -388,12 +487,20 @@ export default function ReportScheduler() {
     setSubmitting(true);
 
     try {
+      const insights = isInsightsType(formType);
       const payload = {
         report_type: formType,
         cron_expression: cron,
         delivery_channels: channels,
-        format: formFormat,
+        // An Insights report's file type is fixed by its kind (the server sets it).
+        format: insights ? "pdf" : formFormat,
         is_active: formActive,
+        ...(insights
+          ? {
+              params:
+                formType === "insights_view" ? { view: formView, period: formPeriod } : { period: formPeriod },
+            }
+          : {}),
       };
       const csrf = readCsrf();
       const resp = editingId
@@ -546,13 +653,58 @@ export default function ReportScheduler() {
                 onChange={(e) => setFormType(e.target.value)}
                 className="w-full border rounded-lg px-3 py-2 text-sm bg-background"
               >
-                {REPORT_TYPES.map((t) => (
+                {(allowedTypes.length ? allowedTypes : REPORT_TYPES).map((t) => (
                   <option key={t.value} value={t.value}>
                     {t.label}
                   </option>
                 ))}
               </select>
             </div>
+
+            {isInsightsType(formType) && (
+              <>
+                {formType === "insights_view" && (
+                  <div>
+                    <label className="block text-sm font-medium mb-1" htmlFor="rs-insights-view">
+                      Insights view
+                    </label>
+                    <select
+                      id="rs-insights-view"
+                      value={formView}
+                      onChange={(e) => setFormView(e.target.value)}
+                      className="w-full border rounded-lg px-3 py-2 text-sm bg-background"
+                    >
+                      {(viewOptions.length ? viewOptions : Object.keys(VIEW_LABELS)).map((v) => (
+                        <option key={v} value={v}>
+                          {VIEW_LABELS[v] ?? v}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+                <div>
+                  <label className="block text-sm font-medium mb-1" htmlFor="rs-insights-period">
+                    Period covered
+                  </label>
+                  <select
+                    id="rs-insights-period"
+                    value={formPeriod}
+                    onChange={(e) => setFormPeriod(e.target.value)}
+                    className="w-full border rounded-lg px-3 py-2 text-sm bg-background"
+                  >
+                    {INSIGHTS_PERIODS.map((p) => (
+                      <option key={p.value} value={p.value}>
+                        {p.label}
+                      </option>
+                    ))}
+                  </select>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Email recipients get a link to Downloads (they sign in to open it); Slack and WhatsApp get the file.
+                    A view with no data for the period is not sent.
+                  </p>
+                </div>
+              </>
+            )}
 
             {/* Frequency */}
             <div>
@@ -661,7 +813,7 @@ export default function ReportScheduler() {
             </div>
 
             {/* Format */}
-            <div>
+            <div hidden={isInsightsType(formType)}>
               <label className="block text-sm font-medium mb-1" htmlFor="rs-format">
                 Output Format
               </label>
@@ -845,9 +997,10 @@ export default function ReportScheduler() {
             </thead>
             <tbody>
               {schedules.map((s) => (
-                <tr key={s.id} className="border-b last:border-0 hover:bg-muted/30">
+                <Fragment key={s.id}>
+                <tr className="border-b last:border-0 hover:bg-muted/30">
                   <td className="px-4 py-3 font-medium">
-                    {reportTypeLabel(s.report_type)}
+                    {reportTypeLabel(s.report_type, s.params)}
                     <div className="text-xs text-muted-foreground mt-0.5">
                       {s.delivery_channels
                         .map((c) => c.type)
@@ -882,6 +1035,14 @@ export default function ReportScheduler() {
                         {actionLoading === s.id ? "..." : "Run"}
                       </button>
                       <button
+                        onClick={() => void toggleHistory(s.id)}
+                        className="px-2.5 py-1 rounded border text-xs hover:bg-muted"
+                        aria-expanded={historyFor === s.id}
+                        title="Run history"
+                      >
+                        History
+                      </button>
+                      <button
                         onClick={() => startEdit(s)}
                         className="px-2.5 py-1 rounded border text-xs hover:bg-muted"
                         title="Edit"
@@ -898,6 +1059,42 @@ export default function ReportScheduler() {
                     </div>
                   </td>
                 </tr>
+                {historyFor === s.id && (
+                  <tr className="border-b bg-muted/20" data-testid={`history-${s.id}`}>
+                    <td colSpan={7} className="px-4 py-3">
+                      {history === null ? (
+                        <p className="text-xs text-muted-foreground">Loading runs...</p>
+                      ) : history.length === 0 ? (
+                        <p className="text-xs text-muted-foreground">No runs yet.</p>
+                      ) : (
+                        <table className="w-full text-xs">
+                          <caption className="sr-only">Run history</caption>
+                          <thead>
+                            <tr className="text-left text-muted-foreground">
+                              <th className="py-1 pr-3 font-medium">Started</th>
+                              <th className="py-1 pr-3 font-medium">Trigger</th>
+                              <th className="py-1 pr-3 font-medium">Outcome</th>
+                              <th className="py-1 pr-3 font-medium">Why</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {history.map((r) => (
+                              <tr key={r.id}>
+                                <td className="py-1 pr-3">{formatDate(r.started_at)}</td>
+                                <td className="py-1 pr-3">{r.trigger === "manual" ? "Run now" : "Schedule"}</td>
+                                <td className="py-1 pr-3 capitalize">{r.status}</td>
+                                <td className="py-1 pr-3">
+                                  {r.reason || (r.export_id ? "File on Downloads" : "")}
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      )}
+                    </td>
+                  </tr>
+                )}
+                </Fragment>
               ))}
             </tbody>
           </table>

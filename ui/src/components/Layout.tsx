@@ -66,7 +66,7 @@ const ALL_NAV: Array<{ path: string; labelKey: string; label: string; roles: rea
   { path: "/dashboard/integrations", labelKey: "nav.integrations", label: "A2A / MCP", roles: ["admin"] },
   { path: "/dashboard/sales", labelKey: "nav.sales", label: "Sales Pipeline", roles: ["admin"] },
   { path: "/dashboard/schemas", labelKey: "nav.schemas", label: "Schemas", roles: ["admin"] },
-  { path: "/dashboard/report-schedules", labelKey: "nav.reportSchedules", label: "Report Schedules", roles: ["admin", "cfo", "cmo"] },
+  { path: "/dashboard/report-schedules", labelKey: "nav.reportSchedules", label: "Report Schedules", roles: ["admin", "cfo", "cmo", "chro", "coo"] },
   { path: "/dashboard/scopes", labelKey: "nav.scopes", label: "Scope Dashboard", roles: ["admin", "cfo", "chro", "cmo", "coo"] },
   { path: "/dashboard/enforce-audit", labelKey: "nav.enforceAudit", label: "Enforce Audit", roles: ["admin", "cfo", "chro", "cmo", "coo", "auditor"] },
   { path: "/dashboard/audit", labelKey: "nav.audit", label: "Audit Log", roles: ["admin", "cfo", "chro", "cmo", "coo", "auditor"] },

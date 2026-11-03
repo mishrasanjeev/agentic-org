@@ -168,6 +168,7 @@ from core.models.prompt_template import PromptEditHistory as PromptEditHistory
 from core.models.prompt_template import PromptTemplate as PromptTemplate
 from core.models.provider_attestation import ProviderAttestation as ProviderAttestation
 from core.models.report_schedule import ReportSchedule as ReportSchedule
+from core.models.report_schedule import ReportScheduleRun as ReportScheduleRun
 from core.models.rpa_schedule import RPASchedule as RPASchedule
 from core.models.run_span import RunSpan as RunSpan
 from core.models.schema_registry import SchemaRegistry as SchemaRegistry

@@ -477,9 +477,18 @@ class TestScheduledReportPoller:
         assert rt._next_run_after("hourly", now) == now + timedelta(hours=1)
         assert rt._next_run_after("bogus expr", now) == now + timedelta(days=1)
         nxt = rt._next_run_after("0 6 * * *", now)
-        assert nxt > now
-        if pytest.importorskip("croniter", reason="croniter optional"):
-            assert nxt.hour == 6
+        assert nxt == datetime(2026, 9, 14, 6, 0, tzinfo=UTC)
+        # In the tenant's time zone: 06:00 in Kolkata is 00:30 UTC.
+        from zoneinfo import ZoneInfo
+
+        assert rt._next_run_after("0 6 * * *", now, ZoneInfo("Asia/Kolkata")) == datetime(
+            2026, 9, 14, 0, 30, tzinfo=UTC
+        )
+        # Weekly on Monday 09:00 runs next Monday, not tomorrow (2026-09-13 is a Sunday).
+        assert rt._next_run_after("0 9 * * 1", now) == datetime(2026, 9, 14, 9, 0, tzinfo=UTC)
+        assert rt._next_run_after("0 9 * * 1", datetime(2026, 9, 14, 9, 0, tzinfo=UTC)) == datetime(
+            2026, 9, 21, 9, 0, tzinfo=UTC
+        )
 
 
 class TestDemoContentNeverDelivered:

@@ -14,6 +14,8 @@ import { exportsApi, type ExportRequest } from "@/lib/insights/exports";
 
 const FINANCE_PACK_ROLES = new Set(["admin", "cfo"]);
 const EVIDENCE_PACK_ROLES = new Set(["admin", "auditor"]);
+// Roles that may open the Report Scheduler (report_schedules scopes) and schedule an Insights view.
+const SCHEDULING_ROLES = new Set(["admin", "cfo", "chro", "cmo", "coo"]);
 
 export default function ViewFiles({
   view,
@@ -64,6 +66,15 @@ export default function ViewFiles({
       {view === "finance" && FINANCE_PACK_ROLES.has(role)
         ? button("finance", t("insights.files.financePack"), { kind: "finance_pack", format: "zip", params: period })
         : null}
+      {SCHEDULING_ROLES.has(role) ? (
+        <Link
+          to={`/dashboard/report-schedules?type=insights_view&view=${encodeURIComponent(view)}`}
+          className="insights-target inline-flex h-8 items-center rounded-md border px-3 text-xs font-medium hover:bg-muted"
+          data-testid="view-file-schedule"
+        >
+          {t("insights.files.schedule")}
+        </Link>
+      ) : null}
       {view === "compliance" && EVIDENCE_PACK_ROLES.has(role)
         ? button("evidence", t("insights.files.evidencePack"), { kind: "evidence_pack", format: "zip", params: period })
         : null}

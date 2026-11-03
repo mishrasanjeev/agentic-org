@@ -8582,7 +8582,7 @@
     "public_exempt_reason": null,
     "rate_limit": "reporting-read",
     "scope": "insights.read",
-    "source_line": 158,
+    "source_line": 177,
     "tenant_required": true
   },
   {
@@ -8600,7 +8600,7 @@
     "public_exempt_reason": null,
     "rate_limit": "reporting-export",
     "scope": "insights.read",
-    "source_line": 89,
+    "source_line": 108,
     "tenant_required": true
   },
   {
@@ -8618,7 +8618,7 @@
     "public_exempt_reason": null,
     "rate_limit": "reporting-read",
     "scope": "insights.read",
-    "source_line": 203,
+    "source_line": 224,
     "tenant_required": true
   },
   {
@@ -8636,7 +8636,7 @@
     "public_exempt_reason": null,
     "rate_limit": "reporting-export",
     "scope": "insights.read",
-    "source_line": 223,
+    "source_line": 244,
     "tenant_required": true
   },
   {
@@ -8654,7 +8654,7 @@
     "public_exempt_reason": null,
     "rate_limit": "reporting-admin",
     "scope": "insights.read",
-    "source_line": 285,
+    "source_line": 306,
     "tenant_required": true
   },
   {
@@ -12344,7 +12344,7 @@
     "public_exempt_reason": null,
     "rate_limit": "report-schedule-read",
     "scope": "report_schedules.sensitive.list",
-    "source_line": 421,
+    "source_line": 428,
     "tenant_required": true
   },
   {
@@ -12362,7 +12362,7 @@
     "public_exempt_reason": null,
     "rate_limit": "report-schedule-write",
     "scope": "report_schedules.write",
-    "source_line": 534,
+    "source_line": 541,
     "tenant_required": true
   },
   {
@@ -12380,7 +12380,7 @@
     "public_exempt_reason": null,
     "rate_limit": "report-schedule-write",
     "scope": "report_schedules.write",
-    "source_line": 729,
+    "source_line": 739,
     "tenant_required": true
   },
   {
@@ -12398,7 +12398,7 @@
     "public_exempt_reason": null,
     "rate_limit": "report-schedule-write",
     "scope": "report_schedules.write",
-    "source_line": 648,
+    "source_line": 655,
     "tenant_required": true
   },
   {
@@ -12416,7 +12416,25 @@
     "public_exempt_reason": null,
     "rate_limit": "manual-report-trigger",
     "scope": "report_schedules.external_action.run",
-    "source_line": 764,
+    "source_line": 774,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "report_schedules.runs.read",
+    "auth_required": true,
+    "function": "list_report_schedule_runs",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/report-schedules/{schedule_id}/runs api/v1/report_schedules.py:list_report_schedule_runs",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/report_schedules.py",
+    "path": "/api/v1/report-schedules/{schedule_id}/runs",
+    "public_exempt_reason": null,
+    "rate_limit": "report-schedule-read",
+    "scope": "report_schedules.read",
+    "source_line": 831,
     "tenant_required": true
   },
   {
