@@ -115,9 +115,9 @@ from core.models.hitl import HITLQueue as HITLQueue
 from core.models.idp_document import IdpDocument as IdpDocument
 from core.models.industry_pack_install import IndustryPackInstall as IndustryPackInstall
 from core.models.insights import InsightsAlert as InsightsAlert
-from core.models.insights import InsightsExport as InsightsExport
 from core.models.insights import InsightsBiLogin as InsightsBiLogin
 from core.models.insights import InsightsDaily as InsightsDaily
+from core.models.insights import InsightsExport as InsightsExport
 from core.models.insights import InsightsRollupState as InsightsRollupState
 from core.models.insights import RunFact as RunFact
 from core.models.insights import ValueBaseline as ValueBaseline
