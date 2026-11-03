@@ -247,3 +247,23 @@ def test_storage_uses_the_configured_bucket_when_no_fake_is_active(monkeypatch) 
         storage.get("t/a.csv")
     storage.delete("t/a.csv")  # already gone: no error
     assert set(buckets) == {"exports-real"}
+
+
+def test_a_metric_job_takes_two_run_groupings_and_filters() -> None:
+    clean = export_jobs.validate(
+        "metric",
+        "csv",
+        {"key": "runs.volume", "group_by": ["agent", "status"], "filter": {"domain": "finance,hr"}},
+        ADMIN,
+    )
+    assert clean["group_by"] == ["agent", "status"] and clean["filter"] == {"domain": ["finance", "hr"]}
+    # A job stored before two-level grouping (one dimension as a string) still validates.
+    assert export_jobs.validate("metric", "csv", {"key": "runs.volume", "group_by": "domain"}, ADMIN)["group_by"] == [
+        "domain"
+    ]
+    assert _refused("metric", "csv", {"key": "cost.spend", "filter": {"domain": "finance"}}, ADMIN).error == (
+        "filter_not_allowed"
+    )
+    assert _refused("metric", "csv", {"key": "runs.volume", "filter": "domain=finance"}, ADMIN).error == (
+        "invalid_filter"
+    )

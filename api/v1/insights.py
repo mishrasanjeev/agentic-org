@@ -25,11 +25,13 @@ from __future__ import annotations
 
 import asyncio
 import uuid
+from dataclasses import dataclass
 from datetime import UTC, date, datetime
 from typing import Annotated, Any, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import Response
+from starlette.datastructures import QueryParams
 
 from api.deps import get_current_tenant
 from api.route_metadata import route_meta
@@ -62,7 +64,8 @@ ExportFormat = Literal["csv", "xlsx", "json"]
 FromDay = Annotated[date | None, Query(alias="from")]
 ToDay = Annotated[date | None, Query()]
 CompanyId = Annotated[str | None, Query(max_length=64)]
-GroupBy = Annotated[str | None, Query(max_length=32)]
+# ``group_by=a`` or, for run metrics, two dimensions: ``group_by=a&group_by=b`` (``group_by[]`` also works).
+GroupBy = Annotated[list[str] | None, Query()]
 
 
 def _tenant(tenant_id: str) -> uuid.UUID:
@@ -112,13 +115,38 @@ def _metric(key: str, views: list[str]) -> registry.Metric:
     return metric
 
 
-def _group_by(metric: registry.Metric, group_by: str | None) -> str | None:
-    if group_by is None or not group_by.strip():
-        return None
-    if group_by not in metric.group_by:
-        allowed = ", ".join(metric.group_by) or "none"
-        raise _unprocessable("group_by_not_allowed", f"{metric.key} may be grouped by: {allowed}")
-    return group_by
+@dataclass(frozen=True)
+class _MetricQuery:
+    group_by: str | None
+    group_by_2: str | None
+    filters: dict[str, tuple[str, ...]]
+
+    def as_filters(self) -> dict[str, Any]:
+        """The grouping and filters as recorded in an export's Filters sheet and audit row."""
+        grouping = [g for g in (self.group_by, self.group_by_2) if g]
+        return {
+            "group_by": grouping[0] if len(grouping) == 1 else (grouping or None),
+            "filter": {dim: list(values) for dim, values in self.filters.items()} or None,
+        }
+
+
+def _metric_query(metric: registry.Metric, request: Request, group_by: list[str] | str | None) -> _MetricQuery:
+    """``group_by`` (one dimension, or two on run metrics) and ``filter[dim]=a,b`` (run metrics) for ``metric``."""
+    params = getattr(request, "query_params", None) or QueryParams()
+    given = [group_by] if isinstance(group_by, str) else list(group_by or [])
+    values = [*given, *params.getlist("group_by[]")]
+    raw_filters: dict[str, list[str]] = {}
+    for name in params:
+        if name.startswith("filter[") and name.endswith("]") and len(name) > len("filter[]"):
+            raw_filters[name[len("filter[") : -1]] = params.getlist(name)
+        elif name.startswith("filter"):
+            raise _unprocessable("invalid_filter", f"{name} is not a filter; use filter[dimension]=value")
+    try:
+        first, second = registry.parse_grouping(metric, values)
+        filters = registry.parse_filters(metric, raw_filters)
+    except registry.MetricQueryError as exc:
+        raise _unprocessable(exc.error, exc.message) from None
+    return _MetricQuery(first, second, filters)
 
 
 def _period(start: date | None, end: date | None, today: date, granularity: str | None) -> Period:
@@ -138,7 +166,7 @@ async def _context(
     compare: str,
     company: uuid.UUID | None,
     granularity: str | None = None,
-    group_by: str | None = None,
+    query: _MetricQuery | None = None,
 ) -> MetricContext:
     await apply_statement_timeout(session)
     reporting = await load_reporting_settings(session, tid)
@@ -152,7 +180,9 @@ async def _context(
         compare=previous_period(period) if compare == "previous" else None,
         company_id=company,
         domains=caller.domains,
-        group_by=group_by,
+        group_by=query.group_by if query else None,
+        group_by_2=query.group_by_2 if query else None,
+        filters=dict(query.filters) if query else {},
     )
 
 
@@ -334,12 +364,17 @@ async def insights_metric(
     granularity: Annotated[Granularity | None, Query()] = None,
     group_by: GroupBy = None,
 ) -> dict[str, Any]:
-    """One metric for the period, at a granularity, optionally grouped by an allowed dimension."""
+    """One metric for the period, at a granularity, optionally grouped and filtered.
+
+    ``group_by`` takes one of the metric's dimensions; run metrics take two (rows then carry ``groups``) and
+    ``filter[dim]=a,b`` on their run dimensions. Anything else is 422 ``group_by_not_allowed`` or
+    ``filter_not_allowed``.
+    """
     tid = _tenant(tenant_id)
     await _require_enabled(tid)
     caller = caller_from_request(request)
     metric = _metric(key, _views_for(caller))
-    grouping = _group_by(metric, group_by)
+    query = _metric_query(metric, request, group_by)
     company = await _company(tid, company_id)
     async with get_tenant_session(tid) as session:
         ctx = await _context(
@@ -351,9 +386,12 @@ async def insights_metric(
             compare=compare,
             company=company,
             granularity=granularity,
-            group_by=grouping,
+            query=query,
         )
-        return await registry.resolve(metric, ctx)
+        response = await registry.resolve(metric, ctx)
+        if query.filters:
+            response["filters"] = {dim: list(values) for dim, values in query.filters.items()}
+        return response
 
 
 @router.get("/metrics/{key}/export")
@@ -386,7 +424,7 @@ async def insights_export(
     await _require_enabled(tid)
     caller = caller_from_request(request)
     metric = _metric(key, _views_for(caller))
-    grouping = _group_by(metric, group_by)
+    query = _metric_query(metric, request, group_by)
     company = await _company(tid, company_id)
     async with get_tenant_session(tid) as session:
         ctx = await _context(
@@ -398,7 +436,7 @@ async def insights_export(
             compare=compare,
             company=company,
             granularity=granularity,
-            group_by=grouping,
+            query=query,
         )
         response = await registry.resolve(metric, ctx)
         rows = exports.export_rows(response)
@@ -420,7 +458,7 @@ async def insights_export(
             "granularity": ctx.period.granularity,
             "compare": compare,
             "company_id": str(company) if company else None,
-            "group_by": grouping,
+            **query.as_filters(),
         }
         content = await asyncio.to_thread(exports.render, format, rows, filters, response)
         session.add(

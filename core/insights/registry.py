@@ -30,7 +30,7 @@ metric may be read by a role that may read any view showing it.
 
 from __future__ import annotations
 
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Mapping, Sequence
 from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime, timedelta
 from typing import Any, Literal
@@ -126,6 +126,9 @@ class Metric:
     resolver: Resolver
     thresholds: Thresholds | None = None
     group_by: tuple[str, ...] = ()
+    # Run dimensions the metric may be filtered by (``filter[dim]``); only run metrics take filters, and
+    # they may also be grouped by two of their ``group_by`` dimensions at once.
+    filters: tuple[str, ...] = ()
     # True when the metric covers the requested period and may be compared with the previous one.
     comparable: bool = True
     kind: Literal["run", "cost", "snapshot", "value"] = "run"
@@ -142,8 +145,62 @@ class Metric:
             "data_quality_rule": self.data_quality_rule,
             "thresholds": self.thresholds.as_dict() if self.thresholds else None,
             "group_by": list(self.group_by),
+            "filters": list(self.filters),
             "comparable": self.comparable,
         }
+
+
+MAX_GROUP_DIMENSIONS = 2
+MAX_FILTER_VALUES = 50
+MAX_FILTER_VALUE_LENGTH = 128
+
+
+class MetricQueryError(ValueError):
+    """A metric request asked for a grouping or filter the metric does not offer."""
+
+    def __init__(self, error: str, message: str) -> None:
+        super().__init__(message)
+        self.error = error
+        self.message = message
+
+
+def parse_grouping(metric: Metric, values: Sequence[str | None]) -> tuple[str | None, str | None]:
+    """``group_by`` values (``group_by=a`` or ``group_by[]=a&group_by[]=b``) as at most two allowed dimensions."""
+    dims = list(dict.fromkeys(v.strip() for v in values if v and v.strip()))
+    if not dims:
+        return None, None
+    unknown = [d for d in dims if d not in metric.group_by]
+    if unknown:
+        allowed = ", ".join(metric.group_by) or "none"
+        raise MetricQueryError("group_by_not_allowed", f"{metric.key} may be grouped by: {allowed}")
+    if len(dims) > 1 and not metric.filters:
+        raise MetricQueryError("group_by_not_allowed", f"{metric.key} may be grouped by one dimension at a time")
+    if len(dims) > MAX_GROUP_DIMENSIONS:
+        raise MetricQueryError(
+            "group_by_not_allowed", f"{metric.key} may be grouped by at most {MAX_GROUP_DIMENSIONS} dimensions"
+        )
+    return dims[0], dims[1] if len(dims) > 1 else None
+
+
+def parse_filters(metric: Metric, raw: Mapping[str, str | Sequence[str]]) -> dict[str, tuple[str, ...]]:
+    """``filter[dim]=a,b`` parameters (``dim`` without the brackets) as allowed values per dimension."""
+    out: dict[str, tuple[str, ...]] = {}
+    for dim, given in raw.items():
+        if dim not in metric.filters:
+            allowed = ", ".join(metric.filters) or "none"
+            raise MetricQueryError("filter_not_allowed", f"{metric.key} may be filtered by: {allowed}")
+        parts = [given] if isinstance(given, str) else list(given)
+        values = tuple(dict.fromkeys(v.strip() for part in parts for v in str(part).split(",") if v.strip()))
+        if not values:
+            raise MetricQueryError("invalid_filter", f"filter[{dim}] needs at least one value")
+        if len(values) > MAX_FILTER_VALUES:
+            raise MetricQueryError("invalid_filter", f"filter[{dim}] takes at most {MAX_FILTER_VALUES} values")
+        if any(len(v) > MAX_FILTER_VALUE_LENGTH for v in values):
+            raise MetricQueryError(
+                "invalid_filter", f"filter[{dim}] values are at most {MAX_FILTER_VALUE_LENGTH} characters"
+            )
+        out[dim] = values
+    return out
 
 
 RUN_SOURCE = ("insights_daily", "run_facts")
@@ -176,6 +233,7 @@ _METRICS: tuple[Metric, ...] = (
         data_quality_rule=RUN_QUALITY_RULE,
         resolver=runs.resolve_runs_volume,
         group_by=RUN_GROUPS,
+        filters=RUN_GROUPS,
     ),
     Metric(
         key="runs.success_rate",
@@ -194,6 +252,7 @@ _METRICS: tuple[Metric, ...] = (
         resolver=runs.resolve_runs_success_rate,
         thresholds=Thresholds(watch=95.0, act=90.0, direction="below"),
         group_by=RATE_GROUPS,
+        filters=RUN_GROUPS,
     ),
     Metric(
         key="runs.straight_through_rate",
@@ -209,6 +268,7 @@ _METRICS: tuple[Metric, ...] = (
         resolver=runs.resolve_runs_straight_through_rate,
         thresholds=Thresholds(watch=70.0, act=50.0, direction="below"),
         group_by=RATE_GROUPS,
+        filters=RUN_GROUPS,
     ),
     Metric(
         key="runs.latency",
@@ -226,6 +286,7 @@ _METRICS: tuple[Metric, ...] = (
         resolver=runs.resolve_runs_latency,
         thresholds=Thresholds(watch=30_000.0, act=60_000.0, direction="above"),
         group_by=RATE_GROUPS,
+        filters=RUN_GROUPS,
     ),
     Metric(
         key="approvals.pending",

@@ -352,3 +352,37 @@ async def test_a_period_with_a_partial_today_compares_complete_days_only() -> No
     out = await registry.resolve(metric, today_only)
     assert out["compare"]["basis"] == "complete_days" and out["compare"]["current_value"] is None
     assert out["compare_value"] is None
+
+
+def test_grouping_and_filters_are_parsed_against_the_metric() -> None:
+    volume, spend = METRICS["runs.volume"], METRICS["cost.spend"]
+    assert registry.parse_grouping(volume, []) == (None, None)
+    assert registry.parse_grouping(volume, [" agent ", "status", "agent"]) == ("agent", "status")
+    assert registry.parse_grouping(spend, ["agent"]) == ("agent", None)
+    for metric, values in ((spend, ["agent", "domain"]), (volume, ["agent", "status", "domain"]), (volume, ["x"])):
+        with pytest.raises(registry.MetricQueryError) as refused:
+            registry.parse_grouping(metric, values)
+        assert refused.value.error == "group_by_not_allowed"
+
+    assert registry.parse_filters(volume, {"domain": "finance, hr,finance", "status": ["failed", "refused"]}) == {
+        "domain": ("finance", "hr"),
+        "status": ("failed", "refused"),
+    }
+    for metric, raw, error in (
+        (spend, {"domain": "finance"}, "filter_not_allowed"),
+        (volume, {"tenant_id": "x"}, "filter_not_allowed"),
+        (volume, {"domain": " , "}, "invalid_filter"),
+        (volume, {"domain": ",".join(str(i) for i in range(registry.MAX_FILTER_VALUES + 1))}, "invalid_filter"),
+        (volume, {"domain": "x" * (registry.MAX_FILTER_VALUE_LENGTH + 1)}, "invalid_filter"),
+    ):
+        with pytest.raises(registry.MetricQueryError) as refused:
+            registry.parse_filters(metric, raw)
+        assert refused.value.error == error
+
+
+def test_only_run_metrics_take_filters_and_they_take_every_run_dimension() -> None:
+    filtered = {key for key, metric in METRICS.items() if metric.filters}
+    assert filtered == {"runs.volume", "runs.success_rate", "runs.straight_through_rate", "runs.latency"}
+    for key in filtered:
+        assert METRICS[key].filters == RUN_GROUPS
+        assert METRICS[key].describe()["filters"] == list(RUN_GROUPS)

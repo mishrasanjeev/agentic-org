@@ -150,10 +150,20 @@ def validate(kind: str, fmt: str, params: dict[str, Any], caller: Any) -> dict[s
         if params.get("granularity") in ("day", "week", "month"):
             clean["granularity"] = params["granularity"]
         group_by = params.get("group_by")
-        if group_by:
-            if group_by not in metric.group_by:
-                raise ExportJobError("group_by_not_allowed", f"{key} may not be grouped by {group_by!r}")
-            clean["group_by"] = group_by
+        raw_filters = params.get("filter") or {}
+        if not isinstance(raw_filters, dict):
+            raise ExportJobError("invalid_filter", "filter is an object of dimension to values")
+        try:
+            first, second = registry.parse_grouping(
+                metric, [group_by] if isinstance(group_by, str) else list(group_by or [])
+            )
+            filters = registry.parse_filters(metric, {str(k): v for k, v in raw_filters.items()})
+        except registry.MetricQueryError as exc:
+            raise ExportJobError(exc.error, exc.message) from None
+        if first:
+            clean["group_by"] = [g for g in (first, second) if g]
+        if filters:
+            clean["filter"] = {dim: list(values) for dim, values in filters.items()}
     elif kind == "explorer":
         key = str(params.get("key") or "")
         explorer = explore_registry.EXPLORERS.get(key)
@@ -281,17 +291,26 @@ async def _masked(session: Any, tenant_id: uuid.UUID, rows: list[Any], job: Any,
 
 @builder("metric")
 async def _build_metric(session: Any, job: Any, params: dict[str, Any]) -> Built:
+    from api.v1.insights import _MetricQuery
     from core.insights import registry
 
     caller = caller_from_snapshot(params["caller"])
     metric = registry.METRICS[params["key"]]
+    # Jobs made before two-level grouping stored one dimension as a string.
+    stored = params.get("group_by")
+    grouping = [stored] if isinstance(stored, str) else list(stored or [])
+    query = _MetricQuery(
+        grouping[0] if grouping else None,
+        grouping[1] if len(grouping) > 1 else None,
+        {dim: tuple(values) for dim, values in (params.get("filter") or {}).items()},
+    )
     ctx = await _metric_context(
         session,
         job.tenant_id,
         caller,
         params,
         granularity=params.get("granularity"),
-        group_by=params.get("group_by"),
+        query=query,
     )
     response = await registry.resolve(metric, ctx)
     rows = exports.export_rows(response)
@@ -304,7 +323,7 @@ async def _build_metric(session: Any, job: Any, params: dict[str, Any]) -> Built
         "granularity": ctx.period.granularity,
         "compare": params.get("compare") or "none",
         "company_id": params.get("company_id"),
-        "group_by": params.get("group_by"),
+        **query.as_filters(),
         "pii": "masked" if masked else "raw",
     }
     content = await asyncio.to_thread(exports.render, job.format, rows, filters, response)
