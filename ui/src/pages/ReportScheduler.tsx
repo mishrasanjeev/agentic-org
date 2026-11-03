@@ -305,8 +305,9 @@ export default function ReportScheduler() {
     setFormTime("09:00");
     setFormAdvanced(false);
     setShowForm(true);
-    setSearchParams({}, { replace: true });
-  }, [searchParams, setSearchParams]);
+    // The query stays until the form is saved or closed (resetForm): the page can mount again while the session
+    // loads, and a cleared query would then open an empty list instead of the prefilled form.
+  }, [searchParams]);
 
   async function toggleHistory(id: string) {
     if (historyFor === id) {
@@ -416,6 +417,7 @@ export default function ReportScheduler() {
 
   /* ── Reset form ── */
   function resetForm() {
+    if (searchParams.get("type")) setSearchParams({}, { replace: true });
     setFormType("cfo_daily");
     setFormFreq("daily");
     setFormTime("09:00");
