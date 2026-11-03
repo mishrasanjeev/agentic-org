@@ -104,6 +104,13 @@ def get(bucket: str, key: str) -> StoredObject | None:
     return None
 
 
+def delete(bucket: str, key: str) -> bool:
+    """Remove every captured object at (bucket, key); True when one was there (as a GCS delete would)."""
+    before = len(_OBJECTS)
+    _OBJECTS[:] = [obj for obj in _OBJECTS if not (obj.bucket == bucket and obj.key == key)]
+    return len(_OBJECTS) < before
+
+
 def list_in(bucket: str) -> list[str]:
     """Return all keys captured in ``bucket``, oldest first."""
     return [obj.key for obj in _OBJECTS if obj.bucket == bucket]

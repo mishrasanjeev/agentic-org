@@ -834,6 +834,12 @@ class Settings(BaseSettings):
     insights_bi_host: str = ""
     insights_bi_database: str = ""
     insights_bi_max_logins_per_tenant: int = 3
+    # Insights background exports (core/insights/export_jobs.py, migration v6z110): the
+    # Google Cloud Storage bucket that holds export files for seven days (a lifecycle
+    # rule should delete objects after eight). Unset: background exports answer
+    # 503 ``export_storage_unconfigured``; inline exports (up to 50,000 rows) still
+    # work. Env: AGENTICORG_INSIGHTS_EXPORT_BUCKET.
+    insights_export_bucket: str = ""
     # AI spend intelligence (core/spend/): an organisation tree, rate cards,
     # commitments and FX rates; a usage record with its attribution for every
     # model call and metered service, priced in the card's currency and in INR;

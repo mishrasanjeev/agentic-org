@@ -21,6 +21,7 @@ vi.mock("@/lib/api", () => ({
 
 let mockRole = "admin";
 vi.mock("@/contexts/AuthContext", () => ({
+  useOptionalRole: () => mockRole,
   useAuth: () => ({
     user: { user_id: "u1", email: "x@example.com", name: "X", role: mockRole, domain: "all", tenant_id: "t1" },
     isAuthenticated: true,

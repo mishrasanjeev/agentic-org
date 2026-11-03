@@ -1,5 +1,19 @@
 # Changelog
 
+## Unreleased - Insights background exports and Downloads
+
+- `POST /api/v1/insights/exports`: a metric or explorer table too large for an inline export (up to 500,000 rows) or
+  a run evidence bundle is built by the worker with the caller's scope as read when it was asked for, stored for seven
+  days and listed on the new Downloads page (`/dashboard/insights/downloads`); the requester gets an email with a link
+  and a web push. `GET /api/v1/insights/exports/{id}/download` streams the file through the API with one signed audit
+  row (no signed URLs); others see only their own files, administrators the tenant's. An inline export that is too
+  large now offers "Prepare it in the background".
+- Exports mask PII (emails, phone numbers, Aadhaar, PAN, bank account and IFSC) when the tenant's `pii_masking`
+  governance setting is on, which is the default; administrators and auditors may ask for raw values
+  (`include_pii`), recorded on the audit row.
+- Migration v6z110 adds `insights_exports` (forced row-level security). Setting `AGENTICORG_INSIGHTS_EXPORT_BUCKET`;
+  daily `insights-expire-exports`. Runbook: `docs/runbooks/insights-exports.md`.
+
 ## Unreleased - Insights evidence, Compliance and Engineering views
 
 - Run evidence draws the run's own trace as a waterfall (each span indented under its parent, placed by when it

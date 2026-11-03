@@ -323,3 +323,8 @@ export function useAuth() {
   if (!ctx) throw new Error("useAuth must be used within AuthProvider");
   return ctx;
 }
+
+/** The signed-in user's role, or "" outside an AuthProvider (shared components rendered on their own). */
+export function useOptionalRole(): string {
+  return useContext(AuthContext)?.user?.role ?? "";
+}

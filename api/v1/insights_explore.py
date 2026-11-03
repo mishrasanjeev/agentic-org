@@ -42,7 +42,7 @@ from api.v1.insights import (
     _tenant,
 )
 from core.database import get_tenant_session
-from core.insights import explore_registry
+from core.insights import explore_registry, pii
 from core.insights import explorers as ex
 from core.insights import export as exports
 from core.insights.audit import audit_entry
@@ -52,7 +52,7 @@ from core.ownership import Caller, caller_from_request
 router = APIRouter(prefix="/insights", tags=["Insights"])
 
 ExportFormat = Literal["csv", "xlsx", "json"]
-_RESERVED = frozenset({"from", "to", "compare", "company_id", "format"})
+_RESERVED = frozenset({"from", "to", "compare", "company_id", "format", "include_pii"})
 
 
 def explorer_domains(domains: list[str] | None) -> list[str] | None:
@@ -168,8 +168,12 @@ async def insights_explore_export(
     from_: FromDay = None,
     to: ToDay = None,
     company_id: CompanyId = None,
+    include_pii: Annotated[bool, Query()] = False,
 ) -> Response:
-    """Every row of the explorer with the filters applied (at most 50,000), with one signed audit row."""
+    """Every row of the explorer with the filters applied (at most 50,000), with one signed audit row.
+
+    PII is masked by the tenant's setting; ``include_pii`` (administrators and auditors) asks for raw values.
+    """
     tid = _tenant(tenant_id)
     await _require_enabled(tid)
     caller = _caller(request)
@@ -183,9 +187,20 @@ async def insights_explore_export(
         if response["total"] > exports.MAX_EXPORT_ROWS:
             raise HTTPException(
                 413,
-                detail={"error": "export_too_large", "hint": exports.EXPORT_TOO_LARGE_HINT, "rows": response["total"]},
+                detail={
+                    "error": "export_too_large",
+                    "hint": exports.EXPORT_TOO_LARGE_HINT,
+                    "rows": response["total"],
+                    "background": True,
+                },
             )
         rows = ex.export_rows(explorer, response)
+        try:
+            rows, masked = await pii.apply(
+                session, tid, rows, include_pii=include_pii, role=caller.role, is_admin=caller.is_admin
+            )
+        except pii.IncludePiiForbiddenError:
+            raise HTTPException(403, "include_pii_forbidden") from None
         period = response.get("period") or {"from": metric_ctx.today.isoformat(), "to": metric_ctx.today.isoformat()}
         filters: dict[str, Any] = {
             "from": period.get("from"),
@@ -215,7 +230,14 @@ async def insights_explore_export(
                 action="export",
                 resource_type="insights_explorer",
                 resource_id=explorer.key,
-                details={"explorer": explorer.key, "format": format, "filters": filters, "row_count": len(rows)},
+                details={
+                    "explorer": explorer.key,
+                    "format": format,
+                    "filters": filters,
+                    "row_count": len(rows),
+                    "include_pii": include_pii,
+                    "masked": masked,
+                },
             )
         )
     name = exports.filename(f"explore-{explorer.key}", period, format)

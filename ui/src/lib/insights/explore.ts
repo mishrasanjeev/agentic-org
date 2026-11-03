@@ -280,12 +280,13 @@ export const exploreApi = {
     key: string,
     format: ExportFormat,
     query: ExplorerQuery,
+    includePii = false,
   ): Promise<Blob> {
     const { page: _page, page_size: _size, ...rest } = query;
     const { data } = await api.get(
       `/insights/explore/${encodeURIComponent(key)}/export`,
       {
-        params: { format, ...explorerParams(rest) },
+        params: { format, ...explorerParams(rest), ...(includePii ? { include_pii: "true" } : {}) },
         responseType: "blob",
       },
     );

@@ -97,6 +97,10 @@ class FakeSession:
     def add(self, obj) -> None:
         self.added.append(obj)
 
+    async def get(self, _model, _key):
+        # No saved governance settings: PII masking is on (the default).
+        return None
+
 
 @pytest.fixture(scope="module")
 def app():

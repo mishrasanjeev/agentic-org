@@ -211,9 +211,9 @@ export const insightsApi = {
     return data as MetricResponse;
   },
   /** Fetch an export as a Blob through the authenticated client (cookies and the 413 hint included). */
-  async exportBlob(key: string, format: ExportFormat, filters: InsightsFilters): Promise<Blob> {
+  async exportBlob(key: string, format: ExportFormat, filters: InsightsFilters, includePii = false): Promise<Blob> {
     const { data } = await api.get(exportPath(key), {
-      params: { format, ...filterParams(filters) },
+      params: { format, ...filterParams(filters), ...(includePii ? { include_pii: "true" } : {}) },
       responseType: "blob",
     });
     return data as Blob;
