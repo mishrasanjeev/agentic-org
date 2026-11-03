@@ -7,6 +7,7 @@ import {
   exportFilename,
   exportPath,
   exportUrl,
+  VIEW_KEYS,
   filterParams,
   readErrorDetail,
   type MetricResponse,
@@ -90,6 +91,11 @@ describe("metric keys used by the Insights page", () => {
     for (const src of sources) {
       for (const m of src.matchAll(pattern)) expect(registry.has(m[1]), m[1]).toBe(true);
     }
+  });
+
+  it("every view a role may open survives the status normaliser (VIEW_KEYS)", () => {
+    for (const views of Object.values(ROLE_VIEWS)) for (const v of views) expect(VIEW_KEYS, v).toContain(v);
+    for (const v of Object.keys(VIEW_METRICS)) expect(VIEW_KEYS, v).toContain(v);
   });
 
   it("role views mirror the server rule (core/insights/registry.py VIEW_ROLES)", () => {
