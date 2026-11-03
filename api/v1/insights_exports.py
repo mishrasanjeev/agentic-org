@@ -3,9 +3,9 @@
 
 ``POST /insights/exports`` asks for a file the worker makes: a metric or an
 explorer table larger than an inline export allows (up to 500,000 rows), a run
-evidence bundle, a view PDF, the finance pack or a period evidence pack. ``GET /insights/exports`` lists the caller's files (an
-administrator's list is the tenant's), ``GET /insights/exports/{id}`` one of
-them, and ``GET /insights/exports/{id}/download`` streams the file through the
+evidence bundle, a view PDF, the finance pack or a period evidence pack.
+``GET /insights/exports`` lists the caller's files (an administrator's list is
+the tenant's), ``GET /insights/exports/{id}`` one of them, and ``GET /insights/exports/{id}/download`` streams the file through the
 API with one signed ``insights.export`` audit row; there are no signed URLs.
 Files are kept seven days. ``POST /insights/exports/{id}/sign`` records an
 auditor's or administrator's sign-off of a ready evidence pack.
