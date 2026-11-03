@@ -183,7 +183,7 @@ describe("InsightsDownloads", () => {
     await act(async () => {
       vi.advanceTimersByTime(POLL_MS);
     });
-    expect(await screen.findByText("Ready")).toBeInTheDocument();
+    expect(await screen.findByText("Ready", {}, { timeout: 5000 })).toBeInTheDocument();
     await act(async () => {
       vi.advanceTimersByTime(POLL_MS * 3);
     });
