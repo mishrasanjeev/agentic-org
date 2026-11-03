@@ -87,6 +87,8 @@ BASE_TABLES = (
     "commerce_orders",
     "commerce_payment_operations",
     "commerce_order_webhook_deliveries",
+    "compliance_deadlines",
+    "txn_findings",
 )
 
 pytestmark = [

@@ -451,9 +451,13 @@ async def resolve_compliance_deadlines(ctx: MetricContext) -> dict[str, Any]:
     horizon = today + timedelta(days=DEADLINE_WINDOW_DAYS)
     rows = (
         await ctx.session.execute(
-            select(D.deadline_type, D.due_date < today, func.count())
+            select(
+                D.deadline_type,
+                func.count().filter(D.due_date < today),
+                func.count().filter(D.due_date >= today),
+            )
             .where(*clauses, D.due_date <= horizon)
-            .group_by(D.deadline_type, D.due_date < today)
+            .group_by(D.deadline_type)
         )
     ).all()
     if not rows:
@@ -470,14 +474,10 @@ async def resolve_compliance_deadlines(ctx: MetricContext) -> dict[str, Any]:
             return {"value": 0, "rows": [], "source": "compliance_deadlines", "data_quality": "measured",
                     "hint": hint}
         return no_data("compliance_deadlines", hint)
-    overdue: dict[str, int] = defaultdict(int)
-    upcoming: dict[str, int] = defaultdict(int)
-    for kind, late, n in rows:
-        (overdue if late else upcoming)[str(kind)] += int(n)
-    kinds = sorted(set(overdue) | set(upcoming))
+    counts = {str(kind): (int(late), int(soon)) for kind, late, soon in rows}
     return {
-        "value": sum(overdue.values()),
-        "rows": [{"label": k, "overdue": overdue.get(k, 0), "due_30d": upcoming.get(k, 0)} for k in kinds],
+        "value": sum(late for late, _soon in counts.values()),
+        "rows": [{"label": k, "overdue": late, "due_30d": soon} for k, (late, soon) in sorted(counts.items())],
         "source": "compliance_deadlines",
         "data_quality": "measured",
     }
