@@ -219,10 +219,17 @@ class MetricContext:
 
 
 async def apply_statement_timeout(session: Any) -> None:
-    """Bound every statement of the current transaction (the Insights reads) to ``STATEMENT_TIMEOUT``."""
+    """Bound every statement of the current transaction (the Insights reads) to ``STATEMENT_TIMEOUT``.
+
+    It also plans every statement for its own parameters (``plan_cache_mode = force_custom_plan``, transaction
+    local). The driver prepares statements, and after five runs Postgres may switch a prepared statement to a
+    generic plan that cannot prune ``run_facts``' monthly partitions by tenant and date: on a tenant with a
+    million runs a month the runs explorer went from 0.3 s to 9 s on its sixth request.
+    """
     from sqlalchemy import text
 
     await session.execute(text("SELECT set_config('statement_timeout', :v, true)"), {"v": STATEMENT_TIMEOUT})
+    await session.execute(text("SELECT set_config('plan_cache_mode', 'force_custom_plan', true)"))
 
 
 # ------------------------------------------------------------------ helpers
