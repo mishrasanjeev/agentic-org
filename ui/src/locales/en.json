@@ -880,7 +880,11 @@
       "xlsx": "Excel (XLSX)",
       "json": "JSON",
       "downloading": "Preparing...",
-      "failed": "The export could not be created. Try again or narrow the date range."
+      "failed": "The export could not be created. Try again or narrow the date range.",
+      "includePii": "Include raw personal data (recorded in the audit log)",
+      "background": "Prepare it in the background",
+      "queued": "It is being prepared; you will get an email when it is ready.",
+      "openDownloads": "Open Downloads"
     },
     "empty": {
       "title": "No data yet",
@@ -1236,5 +1240,48 @@
     "added": "Baseline added.",
     "roiFloor": "Show ROI from a period spend of ({{currency}})",
     "roiFloorDefault": "Use the default"
+  },
+  "insightsDownloads": {
+    "title": "Downloads",
+    "subtitle": "Insights files prepared for you. Each is kept for seven days; every download is recorded.",
+    "link": "Downloads",
+    "back": "Back to Insights",
+    "loading": "Loading your files…",
+    "pending": "Some files are still being prepared; this list updates by itself.",
+    "empty": {
+      "title": "No files yet",
+      "body": "When an export is too large to download at once, prepare it in the background and it appears here."
+    },
+    "noStorage": "Background files are not set up for this deployment. Exports up to 50,000 rows still download at once.",
+    "cols": {
+      "file": "File",
+      "status": "Status",
+      "rows": "Rows",
+      "size": "Size",
+      "made": "Asked for",
+      "expires": "Kept until",
+      "action": "Action"
+    },
+    "status": {
+      "queued": "Waiting",
+      "running": "Preparing",
+      "ready": "Ready",
+      "failed": "Failed",
+      "expired": "Expired"
+    },
+    "kinds": {
+      "metric": "Metric",
+      "explorer": "Table",
+      "run_bundle": "Run evidence",
+      "view_pdf": "View PDF",
+      "finance_pack": "Finance pack",
+      "evidence_pack": "Evidence pack"
+    },
+    "rawPii": "raw personal data",
+    "download": "Download",
+    "downloading": "Downloading…",
+    "downloadLabel": "Download {{name}}",
+    "saved": "Saved.",
+    "failed": "The file could not be downloaded."
   }
 }

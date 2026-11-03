@@ -32,6 +32,7 @@ import {
 } from "@/lib/insights/dates";
 import {
   explorerExportFilename,
+  explorerParams,
   exploreApi,
   filtersFromSearch,
   type ExplorerColumn,
@@ -331,10 +332,25 @@ export default function InsightsExplorer() {
             metricKey={active.key}
             title={active.title}
             filters={query}
-            download={async (format) => ({
-              blob: await exploreApi.exportBlob(active.key, format, query),
+            download={async (format, includePii) => ({
+              blob: await exploreApi.exportBlob(active.key, format, query, includePii),
               filename: explorerExportFilename(active.key, format, query),
             })}
+            background={(format) => {
+              const { page: _page, page_size: _size, filters: tableFilters, compare: _compare, from, to, company_id, ...rest } =
+                query;
+              return {
+                kind: "explorer",
+                format,
+                params: {
+                  key: active.key,
+                  from,
+                  to,
+                  company_id,
+                  query: explorerParams({ ...rest, filters: tableFilters }),
+                },
+              };
+            }}
           />
         </div>
 

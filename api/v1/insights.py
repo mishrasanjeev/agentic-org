@@ -35,7 +35,7 @@ from api.deps import get_current_tenant
 from api.route_metadata import route_meta
 from core.database import get_tenant_session
 from core.insights import export as exports
-from core.insights import registry
+from core.insights import pii, registry
 from core.insights.audit import audit_entry
 from core.insights.bi_access import bi_configured
 from core.insights.flags import insights_enabled_for
@@ -376,8 +376,12 @@ async def insights_export(
     company_id: CompanyId = None,
     granularity: Annotated[Granularity | None, Query()] = None,
     group_by: GroupBy = None,
+    include_pii: Annotated[bool, Query()] = False,
 ) -> Response:
-    """The metric's data as a file (at most 50,000 rows), with one signed ``insights.export`` audit row."""
+    """The metric's data as a file (at most 50,000 rows), with one signed ``insights.export`` audit row.
+
+    PII is masked by the tenant's setting; ``include_pii`` (administrators and auditors) asks for raw values.
+    """
     tid = _tenant(tenant_id)
     await _require_enabled(tid)
     caller = caller_from_request(request)
@@ -401,7 +405,15 @@ async def insights_export(
         try:
             exports.check_size(rows)
         except exports.ExportTooLargeError as exc:
-            raise HTTPException(413, detail={"error": "export_too_large", "hint": str(exc), "rows": exc.rows}) from None
+            raise HTTPException(
+                413, detail={"error": "export_too_large", "hint": str(exc), "rows": exc.rows, "background": True}
+            ) from None
+        try:
+            rows, masked = await pii.apply(
+                session, tid, rows, include_pii=include_pii, role=caller.role, is_admin=caller.is_admin
+            )
+        except pii.IncludePiiForbiddenError:
+            raise HTTPException(403, "include_pii_forbidden") from None
         filters = {
             "from": ctx.period.start.isoformat(),
             "to": ctx.period.end.isoformat(),
@@ -419,7 +431,14 @@ async def insights_export(
                 action="export",
                 resource_type="insights_metric",
                 resource_id=metric.key,
-                details={"metric": metric.key, "format": format, "filters": filters, "row_count": len(rows)},
+                details={
+                    "metric": metric.key,
+                    "format": format,
+                    "filters": filters,
+                    "row_count": len(rows),
+                    "include_pii": include_pii,
+                    "masked": masked,
+                },
             )
         )
     name = exports.filename(metric.key, response["period"], format)

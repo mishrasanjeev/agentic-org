@@ -283,6 +283,9 @@ VALUE_SOURCES: tuple[str, ...] = ("seeded", "tenant")
 VALUE_CURRENCIES: tuple[str, ...] = ("INR", "USD")
 ALERT_SEVERITIES: tuple[str, ...] = ("watch", "act")
 ALERT_STATES: tuple[str, ...] = ("open", "acked", "resolved")
+EXPORT_KINDS: tuple[str, ...] = ("metric", "explorer", "run_bundle", "view_pdf", "finance_pack", "evidence_pack")
+EXPORT_STATUSES: tuple[str, ...] = ("queued", "running", "ready", "failed", "expired")
+EXPORT_FORMATS: tuple[str, ...] = ("csv", "xlsx", "json", "pdf", "zip")
 
 
 class ValueBaseline(BaseModel):
@@ -389,3 +392,49 @@ class InsightsAlert(BaseModel):
     acked_at: Mapped[datetime | None] = mapped_column(TIMESTAMP(timezone=True), nullable=True)
     resolved_at: Mapped[datetime | None] = mapped_column(TIMESTAMP(timezone=True), nullable=True)
     notified_at: Mapped[datetime | None] = mapped_column(TIMESTAMP(timezone=True), nullable=True)
+
+
+class InsightsExport(BaseModel):
+    """One background export job and the file it made (migration v6z110). Forced RLS.
+
+    ``params`` holds what to export and the caller's role, domains and admin flag as the server read them when
+    the job was made; the worker builds the file with exactly that scope. A ready file lives in the export bucket
+    under ``storage_key`` until ``expires_at``; downloads go through the API (never a signed URL).
+    """
+
+    __tablename__ = "insights_exports"
+    __table_args__ = (
+        CheckConstraint(f"kind IN ({_in_list(EXPORT_KINDS)})", name="ck_insights_exports_kind"),
+        CheckConstraint(f"status IN ({_in_list(EXPORT_STATUSES)})", name="ck_insights_exports_status"),
+        CheckConstraint(f"format IN ({_in_list(EXPORT_FORMATS)})", name="ck_insights_exports_format"),
+        Index("ix_insights_exports_tenant_user_created", "tenant_id", "user_id", text("created_at DESC")),
+        Index(
+            "ix_insights_exports_expiry",
+            "expires_at",
+            postgresql_where=text("status IN ('ready','failed','queued','running')"),
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    tenant_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("tenants.id"), nullable=False)
+    user_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
+    kind: Mapped[str] = mapped_column(String(20), nullable=False)
+    format: Mapped[str] = mapped_column(String(10), nullable=False)
+    params: Mapped[dict[str, Any]] = mapped_column(
+        JSONB, nullable=False, server_default=text("'{}'::jsonb"), default=dict
+    )
+    include_pii: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("false"), default=False)
+    status: Mapped[str] = mapped_column(String(10), nullable=False, server_default=text("'queued'"), default="queued")
+    error: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    row_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    size_bytes: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    sha256: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    storage_key: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    filename: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    signed_by: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
+    signed_at: Mapped[datetime | None] = mapped_column(TIMESTAMP(timezone=True), nullable=True)
+    signature: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), server_default=func.now(), nullable=False)
+    started_at: Mapped[datetime | None] = mapped_column(TIMESTAMP(timezone=True), nullable=True)
+    finished_at: Mapped[datetime | None] = mapped_column(TIMESTAMP(timezone=True), nullable=True)
+    expires_at: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), nullable=False)

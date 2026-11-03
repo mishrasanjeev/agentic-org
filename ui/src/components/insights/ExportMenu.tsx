@@ -9,27 +9,40 @@ import {
   type ExportFormat,
   type InsightsFilters,
 } from "@/lib/insights/api";
+import { useOptionalRole } from "@/contexts/AuthContext";
 import { saveBlob } from "@/lib/insights/download";
+import { exportsApi, offersBackground, type ExportRequest } from "@/lib/insights/exports";
 
 /**
  * Export menu (CSV / XLSX / JSON) for one metric, using the same filters as
  * the view. The file comes from GET /insights/metrics/{key}/export through
  * the authenticated client; the server audits every export and answers 413
- * with a hint when the range is too large, which is shown here. An explorer
- * passes its own ``download`` (the explorer export with its table filters).
+ * with a hint when the range is too large, which is shown here with an offer
+ * to make the file in the background (POST /insights/exports; it appears on
+ * the Downloads page). An explorer passes its own ``download`` and
+ * ``background`` (its table filters). Administrators and auditors may ask for
+ * raw personal data where the organisation masks it; the server audits that.
  */
+const RAW_PII_ROLES = new Set(["admin", "auditor"]);
+
 export default function ExportMenu({
   metricKey,
   title,
   filters,
   download,
+  background,
 }: {
   metricKey: string;
   title: string;
   filters: InsightsFilters;
-  download?: (format: ExportFormat) => Promise<{ blob: Blob; filename: string }>;
+  download?: (format: ExportFormat, includePii: boolean) => Promise<{ blob: Blob; filename: string }>;
+  background?: (format: ExportFormat) => ExportRequest;
 }) {
   const { t } = useTranslation();
+  const mayIncludePii = RAW_PII_ROLES.has(useOptionalRole());
+  const [includePii, setIncludePii] = useState(false);
+  const [tooLarge, setTooLarge] = useState<ExportFormat | null>(null);
+  const [queued, setQueued] = useState(false);
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState<ExportFormat | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -50,14 +63,34 @@ export default function ExportMenu({
     close();
     setBusy(format);
     setError(null);
+    setTooLarge(null);
+    setQueued(false);
     try {
       if (download) {
-        const file = await download(format);
+        const file = await download(format, includePii);
         saveBlob(file.blob, file.filename);
       } else {
-        const blob = await insightsApi.exportBlob(metricKey, format, filters);
+        const blob = await insightsApi.exportBlob(metricKey, format, filters, includePii);
         saveBlob(blob, exportFilename(metricKey, format, filters));
       }
+    } catch (e) {
+      setError((await readErrorDetail(e)) || t("insights.export.failed"));
+      if (await offersBackground(e)) setTooLarge(format);
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const runInBackground = async (format: ExportFormat) => {
+    setBusy(format);
+    setError(null);
+    try {
+      const request: ExportRequest = background
+        ? background(format)
+        : { kind: "metric", format, params: { key: metricKey, ...filters } };
+      await exportsApi.create({ ...request, include_pii: includePii });
+      setTooLarge(null);
+      setQueued(true);
     } catch (e) {
       setError((await readErrorDetail(e)) || t("insights.export.failed"));
     } finally {
@@ -129,12 +162,42 @@ export default function ExportMenu({
                 {t(`insights.export.${format}`)}
               </button>
             ))}
+            {mayIncludePii ? (
+              <label className="mt-1 flex items-start gap-1.5 border-t px-3 pt-1.5 text-[11px] leading-tight">
+                <input
+                  type="checkbox"
+                  className="mt-0.5"
+                  checked={includePii}
+                  onChange={(e) => setIncludePii(e.target.checked)}
+                />
+                <span>{t("insights.export.includePii")}</span>
+              </label>
+            ) : null}
           </div>
         </>
       ) : null}
       {error ? (
         <p role="alert" className="mt-1 max-w-xs text-right text-xs text-[hsl(var(--state-act))]">
           {error}
+        </p>
+      ) : null}
+      {tooLarge ? (
+        <button
+          type="button"
+          onClick={() => void runInBackground(tooLarge)}
+          disabled={busy !== null}
+          className="mt-1 rounded-md border px-2.5 py-1 text-xs font-medium hover:bg-muted disabled:opacity-60"
+          data-testid="export-background"
+        >
+          {t("insights.export.background")}
+        </button>
+      ) : null}
+      {queued ? (
+        <p role="status" className="mt-1 max-w-xs text-right text-xs text-muted-foreground">
+          {t("insights.export.queued")}{" "}
+          <a href="/dashboard/insights/downloads" className="text-primary hover:underline">
+            {t("insights.export.openDownloads")}
+          </a>
         </p>
       ) : null}
     </div>

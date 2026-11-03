@@ -91,6 +91,7 @@ const InsightsDashboard = lazyRetry(() => import("./pages/InsightsDashboard"));
 const InsightsBiAccess = lazyRetry(() => import("./pages/InsightsBiAccess"));
 const InsightsExplorer = lazyRetry(() => import("./pages/InsightsExplorer"));
 const InsightsRun = lazyRetry(() => import("./pages/InsightsRun"));
+const InsightsDownloads = lazyRetry(() => import("./pages/InsightsDownloads"));
 const InsightsValue = lazyRetry(() => import("./pages/InsightsValue"));
 const PlatformInsights = lazyRetry(() => import("./pages/PlatformInsights"));
 const StatusPage = lazyRetry(() => import("./pages/Status"));
@@ -296,6 +297,16 @@ export default function App() {
           <ProtectedRoute allowedRoles={[...INSIGHTS_ROLES]}>
             <Layout>
               <InsightsRun />
+            </Layout>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/dashboard/insights/downloads"
+        element={
+          <ProtectedRoute allowedRoles={[...INSIGHTS_ROLES]}>
+            <Layout>
+              <InsightsDownloads />
             </Layout>
           </ProtectedRoute>
         }

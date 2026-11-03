@@ -82,6 +82,7 @@ from api.v1 import (
     insights_alerts,
     insights_bi,
     insights_explore,
+    insights_exports,
     insights_platform,
     insights_value,
     integrations_status,
@@ -397,6 +398,7 @@ app.include_router(onboarding_desk.router, prefix="/api/v1")
 app.include_router(spend.router, prefix="/api/v1")
 app.include_router(insights.router, prefix="/api/v1")
 app.include_router(insights_alerts.router, prefix="/api/v1")
+app.include_router(insights_exports.router, prefix="/api/v1")
 app.include_router(insights_bi.router, prefix="/api/v1")
 app.include_router(insights_explore.router, prefix="/api/v1")
 app.include_router(insights_platform.router, prefix="/api/v1")

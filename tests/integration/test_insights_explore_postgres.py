@@ -66,6 +66,8 @@ BASE_TABLES = (
     "workflow_runs",
     "model_gateway_records",
     "run_spans",
+    # Exports read the tenant's PII masking setting (v6z110 release).
+    "governance_config",
 )
 
 pytestmark = [

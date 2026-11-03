@@ -303,3 +303,35 @@ def evaluate_alerts() -> dict[str, Any]:
     if off is not None:
         return off
     return run_async(_sweep("evaluate_alerts", _evaluate_alerts))
+
+
+@app.task(name="core.tasks.insights_tasks.build_export", acks_late=True)
+def build_export(tenant_id: str, export_id: str) -> dict[str, Any]:
+    """One background export (core/insights/export_jobs.py); the job records why when it cannot be made."""
+    from core.insights import export_jobs
+
+    status = run_async(export_jobs.build(uuid.UUID(tenant_id), uuid.UUID(export_id)))
+    return {"export_id": export_id, "status": status}
+
+
+async def _expire_exports() -> dict[str, Any]:
+    from core.insights import export_jobs
+
+    now = _now()
+    totals = {"tenants": 0, "expired": 0, "failed": 0}
+    # Every tenant, Insights on or off: a file is deleted on time even after Insights was turned off.
+    for tenant in await _tenants():
+        try:
+            totals["expired"] += await export_jobs.expire(tenant.tenant_id, now)
+            totals["tenants"] += 1
+        # enterprise-gate: broad-except-ok reason=one-tenants-export-cleanup-failure-is-logged-the-sweep-continues
+        except Exception as exc:
+            totals["failed"] += 1
+            logger.warning("insights_export_expiry_failed", error_type=type(exc).__name__)
+    return totals
+
+
+@app.task(name="core.tasks.insights_tasks.expire_exports")
+def expire_exports() -> dict[str, Any]:
+    """Daily: delete Insights export files past their seven days and report lost builds as failed."""
+    return run_async(_expire_exports())

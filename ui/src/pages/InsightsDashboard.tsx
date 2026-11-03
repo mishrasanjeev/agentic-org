@@ -270,6 +270,13 @@ export default function InsightsDashboard() {
               {t("insightsBi.link")}
             </Link>
           ) : null}
+          <Link
+            to="/dashboard/insights/downloads"
+            className="insights-target inline-flex h-8 items-center rounded-md border px-3 text-sm font-medium hover:bg-muted"
+            data-testid="insights-downloads-link"
+          >
+            {t("insightsDownloads.link")}
+          </Link>
           <button
             type="button"
             onClick={retry}

@@ -94,6 +94,8 @@ app.conf.update(
         "core.tasks.report_tasks.generate_report": {"queue": "reports"},
         "core.tasks.report_tasks.deliver_report": {"queue": "delivery"},
         "core.tasks.report_tasks.cleanup_old_reports": {"queue": "maintenance"},
+        # Insights background exports build next to the report jobs (core/insights/export_jobs.py).
+        "core.tasks.insights_tasks.build_export": {"queue": "reports"},
         "core.tasks.workflow_tasks.*": {"queue": "workflows"},
         "core.tasks.channel_tasks.*": {"queue": "workflows"},
         "core.tasks.network_tasks.*": {"queue": "workflows"},
@@ -229,6 +231,13 @@ app.conf.beat_schedule = {
         "task": "core.tasks.insights_tasks.rollup_today",
         "schedule": 900.0,
         "options": {"queue": "maintenance", "expires": 900},
+    },
+    "insights-expire-exports": {
+        # Deletes Insights export files past their seven days and marks builds that never finished as failed
+        # (core/insights/export_jobs.py). Runs for every tenant so files go on time even with Insights off.
+        "task": "core.tasks.insights_tasks.expire_exports",
+        "schedule": crontab(hour=3, minute=15),
+        "options": {"queue": "maintenance", "expires": 3600},
     },
     "insights-evaluate-alerts": {
         # Opens, refreshes and resolves each tenant's Insights alerts and emails new act alerts once
