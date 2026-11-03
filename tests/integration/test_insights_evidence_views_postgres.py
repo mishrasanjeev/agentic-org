@@ -70,6 +70,8 @@ BASE_TABLES = (
     "value_baselines",
     "value_rates",
     "insights_alerts",
+    # Exports read the tenant's PII masking setting (v6z110 release).
+    "governance_config",
 )
 
 pytestmark = [
