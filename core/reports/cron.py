@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
 """Five-field cron schedules, evaluated in a time zone.
 
 ``next_after(expression, after, zone)`` is the first minute strictly after
