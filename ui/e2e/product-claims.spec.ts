@@ -83,20 +83,19 @@ test.describe("Product claims consistency", () => {
     }
   });
 
-  test("Dashboard counts strip matches /product-facts", async ({ page, request }) => {
+  test("Dashboard counts strip is retired with the home dashboard", async ({ page, request }) => {
     requireAuth();
-    const facts = await fetchFacts(request);
+    await fetchFacts(request);
 
     await page.goto(`${APP}/login`, { waitUntil: "domcontentloaded" });
     await setSessionToken(page, E2E_TOKEN);
 
+    // /dashboard lands on Insights now; the app shell carries no inventory
+    // counts strip, so no hardcoded count can drift there.
     await page.goto(`${APP}/dashboard`, { waitUntil: "domcontentloaded" });
+    await expect(page).toHaveURL(/\/dashboard\/insights/, { timeout: 15000 });
     await page.waitForLoadState("networkidle").catch(() => {});
-
-    const counts = page.getByTestId("dashboard-counts");
-    await expect(counts).toBeVisible({ timeout: 15000 });
-    await expect(counts).toContainText(`${facts.connector_count}`);
-    await expect(counts).toContainText(`${facts.agent_count}`);
-    await expect(counts).toContainText(`${facts.tool_count}`);
+    await expect(page.getByRole("heading", { name: "Insights", exact: true })).toBeVisible({ timeout: 15000 });
+    await expect(page.getByTestId("dashboard-counts")).toHaveCount(0);
   });
 });

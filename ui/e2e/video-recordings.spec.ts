@@ -49,12 +49,17 @@ test.describe("Video Flows: Platform Overview (auth required)", () => {
   });
 
   test("dashboard loads", async ({ page }) => {
+    // The home dashboard is retired: /dashboard lands on Insights.
     await page.goto("/dashboard", { waitUntil: "domcontentloaded" });
+    await expect(page).toHaveURL(/\/dashboard\/insights/, { timeout: 15000 });
     await expectSignedIn(page);
   });
 
-  test("observatory page loads", async ({ page }) => {
+  test("observatory URL opens the audit trail", async ({ page }) => {
+    // The Observatory is retired: admins land on the Insights audit explorer,
+    // other roles on the audit log.
     await page.goto("/dashboard/observatory", { waitUntil: "domcontentloaded" });
+    await expect(page).toHaveURL(/\/dashboard\/(insights\/explore\/audit|audit)(\?|$)/, { timeout: 15000 });
     await expectSignedIn(page);
   });
 
@@ -95,8 +100,10 @@ test.describe("Video Flows: CFO Finance (auth required)", () => {
     await expectSignedIn(page);
   });
 
-  test("observatory page loads for finance tracing", async ({ page }) => {
-    await page.goto("/dashboard/observatory", { waitUntil: "domcontentloaded" });
+  test("Insights runs explorer loads for finance tracing", async ({ page }) => {
+    // Run timelines moved from the Observatory to the Insights runs explorer.
+    await page.goto("/dashboard/insights/explore/runs", { waitUntil: "domcontentloaded" });
+    await expect(page).toHaveURL(/\/dashboard\/insights\/explore\/runs/, { timeout: 15000 });
     await expectSignedIn(page);
   });
 });

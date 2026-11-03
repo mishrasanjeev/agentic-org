@@ -93,6 +93,8 @@ test.describe("Login Page — Auth Flow @auth", () => {
     await page.goto(`${APP}/login`);
     await setSessionToken(page, E2E_TOKEN);
     await page.goto(`${APP}/dashboard`, { waitUntil: "networkidle" });
-    await expect(page.getByText("Dashboard").first()).toBeVisible({ timeout: 10000 });
+    // The home dashboard is retired: a signed-in user lands on Insights.
+    await expect(page).toHaveURL(/\/dashboard\/insights/, { timeout: 10000 });
+    await expect(page.getByRole("heading", { name: "Insights", exact: true })).toBeVisible({ timeout: 10000 });
   });
 });

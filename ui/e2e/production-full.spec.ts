@@ -217,39 +217,38 @@ test.describe("Dashboard (authenticated)", () => {
     await injectAuth(page);
   });
 
-  test("Main dashboard loads with agent metrics", async ({ page }) => {
+  test("Main dashboard lands on Insights", async ({ page }) => {
     await page.goto(`${APP}/dashboard`, { waitUntil: "domcontentloaded" });
+    // The home dashboard is retired: /dashboard lands on the role's Insights view.
+    await expect(page).toHaveURL(/\/dashboard\/insights/, { timeout: 15000 });
     await page.waitForLoadState("networkidle").catch(() => {});
-    // Should show some metrics content (Dashboard heading, agent counts, etc.)
+    await expect(page.getByRole("heading", { name: "Insights", exact: true })).toBeVisible({ timeout: 15000 });
     const body = await page.textContent("body");
     expect(body?.length).toBeGreaterThan(200);
-    const hasDashContent =
-      body?.includes("Dashboard") ||
-      body?.includes("Agent") ||
-      body?.includes("Total");
-    expect(hasDashContent).toBe(true);
   });
 
-  test("CFO Dashboard shows KPI cards and charts", async ({ page }) => {
+  test("CFO Dashboard URL opens the Insights finance view", async ({ page }) => {
     await page.goto(`${APP}/dashboard/cfo`, { waitUntil: "domcontentloaded" });
+    await expect(page).toHaveURL(/\/dashboard\/insights\?(.*&)?view=finance/, { timeout: 15000 });
     await page.waitForLoadState("networkidle").catch(() => {});
-    // Look for KPI-style content
-    const kpiTerms = ["cash", "runway", "burn", "revenue", "dso", "expense", "dashboard", "cfo"];
-    const body = (await page.textContent("body"))?.toLowerCase() || "";
-    const found = kpiTerms.filter((t) => body.includes(t));
-    expect(found.length).toBeGreaterThanOrEqual(1);
+    await expect(page.getByRole("heading", { name: "Insights", exact: true })).toBeVisible({ timeout: 15000 });
+    await expect(page.locator("#insights-tab-finance")).toBeVisible({ timeout: 15000 });
   });
 
-  test("CMO Dashboard shows marketing metrics", async ({ page }) => {
+  test("CMO Dashboard URL opens Marketing operations", async ({ page }) => {
     await page.goto(`${APP}/dashboard/cmo`, { waitUntil: "domcontentloaded" });
+    await expect(page).toHaveURL(/\/dashboard\/marketing-ops/, { timeout: 15000 });
     await page.waitForLoadState("networkidle").catch(() => {});
+    await expect(page.getByRole("heading", { name: "Marketing operations" }).first()).toBeVisible({ timeout: 15000 });
     const body = await page.textContent("body");
     expect(body?.length).toBeGreaterThan(100);
   });
 
-  test("ABM Dashboard shows account table", async ({ page }) => {
+  test("ABM Dashboard URL opens the ABM accounts page under Marketing operations", async ({ page }) => {
     await page.goto(`${APP}/dashboard/abm`, { waitUntil: "domcontentloaded" });
+    await expect(page).toHaveURL(/\/dashboard\/marketing-ops\/abm/, { timeout: 15000 });
     await page.waitForLoadState("networkidle").catch(() => {});
+    await expect(page.getByRole("heading", { name: "Account-Based Marketing" })).toBeVisible({ timeout: 15000 });
     const body = await page.textContent("body");
     expect(body?.length).toBeGreaterThan(50);
   });
@@ -405,6 +404,7 @@ test.describe("Navigation", () => {
     await injectAuth(page);
     const paths = [
       "/dashboard",
+      "/dashboard/insights",
       "/dashboard/agents",
       "/dashboard/workflows",
       "/dashboard/approvals",
