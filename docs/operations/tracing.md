@@ -150,11 +150,12 @@ their depths are not part of a tenant's workload.
 The run response of `POST /api/v1/agents/{id}/run` carries `trace_id` when tracing is on, so a
 client can open the run's waterfall directly.
 
-The console page `/dashboard/observability` (administrators) has two views: **Traces**, the
-stored runs and the waterfall of the selected one (model, tool and retrieval spans with their
-durations, the model gateway's decision and every guardrail outcome as events on the span they
-belong to), and **Workload**, the reviews with a countdown to the soonest deadline and the last
-hour's outcomes, refreshed every fifteen seconds.
+A run's waterfall (model, tool and retrieval spans with their durations, the model gateway's
+decision and every guardrail outcome as events on the span they belong to) is on its Insights run
+page, reached from the runs explorer. The console page `/dashboard/monitoring` (administrators;
+`/dashboard/observability` redirects there) keeps **Workload**, the reviews with a countdown to the
+soonest deadline and the last hour's outcomes, refreshed every fifteen seconds, and the synthetic
+**Checks**.
 
 ## Streaming latency
 

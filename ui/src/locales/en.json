@@ -789,6 +789,19 @@
       "roleBypass": "Connected as {{role}}, which bypasses row-level security.",
       "healthNone": "No health snapshot in the last {{hours}} hours.",
       "healthDetail": "{{snapshots}} snapshots in the last {{hours}} hours, {{unhealthy}} unhealthy. Latest version {{version}}, commit {{commit}}."
+    },
+    "operations": {
+      "title": "Dashboard operations",
+      "definition": "Background export jobs made in the range, and tenants whose rollup is behind. A job open for over an hour or a late rollup needs a look.",
+      "exports": "Export jobs",
+      "exportsDetail": "{{ready}} ready, {{failed}} failed, {{expired}} expired, {{open}} still open.",
+      "exportFailure": "Export failure rate",
+      "oldestOpen": "Oldest open export",
+      "noneOpen": "None open",
+      "rollupLate": "Rollups older than {{hours}} hours",
+      "rollupOnTime": "Every tenant's rollup is on time.",
+      "minutes": "{{count}} min",
+      "rollupLateDetail": "Tenants late: {{count}}. The furthest behind by {{hours}} hours."
     }
   },
   "insights": {

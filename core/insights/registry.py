@@ -1061,7 +1061,10 @@ async def _complete_days_compare(metric: Metric, ctx: MetricContext, days: int) 
 
 async def resolve(metric: Metric, ctx: MetricContext) -> dict[str, Any]:
     """The metric's response for ``ctx``."""
-    part = await metric.resolver(ctx)
+    from core.insights.telemetry import metric_seconds, timed
+
+    with timed(metric_seconds, metric.key):
+        part = await metric.resolver(ctx)
     period = part.pop("period", None) or ctx.period.as_dict()
     value = part.get("value")
     state = part.pop("state", None)

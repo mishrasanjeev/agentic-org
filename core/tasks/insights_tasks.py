@@ -258,7 +258,11 @@ def rollup_closed_days() -> dict[str, Any]:
     off = _off()
     if off is not None:
         return off
-    return run_async(_sweep("rollup_closed_days", _roll_closed))
+    result = run_async(_sweep("rollup_closed_days", _roll_closed))
+    from core.insights.telemetry import rollup_last_success
+
+    rollup_last_success.set_to_current_time()
+    return result
 
 
 @app.task(name="core.tasks.insights_tasks.reconcile_yesterday")

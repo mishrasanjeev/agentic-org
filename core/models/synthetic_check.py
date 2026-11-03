@@ -26,7 +26,7 @@ class SyntheticCheck(BaseModel):
     __tablename__ = "synthetic_checks"
     __table_args__ = (
         CheckConstraint(
-            "kind IN ('model','knowledge','audit_chain','guardrail','adversarial','eval_dataset')",
+            "kind IN ('model','knowledge','audit_chain','guardrail','adversarial','eval_dataset','insights_landing')",
             name="ck_synthetic_checks_kind",
         ),
         CheckConstraint("interval_minutes >= 5 AND interval_minutes <= 1440", name="ck_synthetic_checks_interval"),

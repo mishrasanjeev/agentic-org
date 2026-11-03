@@ -468,6 +468,9 @@ async def build(tenant_id: uuid.UUID, job_id: uuid.UUID) -> str:
         job.status = status
         job.error = error
         job.finished_at = datetime.now(UTC)
+        from core.insights.telemetry import export_jobs_total
+
+        export_jobs_total.labels(job.kind, status).inc()
         if built is not None and status == "ready":
             job.filename = built.filename
             job.storage_key = storage_key(tenant_id, job_id, built.filename)

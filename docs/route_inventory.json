@@ -8510,7 +8510,7 @@
     "public_exempt_reason": null,
     "rate_limit": "reporting-read",
     "scope": "insights.read",
-    "source_line": 278,
+    "source_line": 280,
     "tenant_required": true
   },
   {
@@ -8726,7 +8726,7 @@
     "public_exempt_reason": null,
     "rate_limit": "reporting-read",
     "scope": "insights.read",
-    "source_line": 356,
+    "source_line": 368,
     "tenant_required": true
   },
   {
@@ -8744,7 +8744,7 @@
     "public_exempt_reason": null,
     "rate_limit": "reporting-export",
     "scope": "insights.read",
-    "source_line": 406,
+    "source_line": 449,
     "tenant_required": true
   },
   {
@@ -8888,7 +8888,7 @@
     "public_exempt_reason": null,
     "rate_limit": "reporting-read",
     "scope": "insights.read",
-    "source_line": 248,
+    "source_line": 250,
     "tenant_required": true
   },
   {
@@ -9032,7 +9032,7 @@
     "public_exempt_reason": null,
     "rate_limit": "reporting-read",
     "scope": "insights.read",
-    "source_line": 310,
+    "source_line": 312,
     "tenant_required": true
   },
   {
@@ -11790,6 +11790,24 @@
     "tenant_required": true
   },
   {
+    "audit_event": "platform.insights.export.read",
+    "auth_required": true,
+    "function": "platform_export",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/platform/insights/export api/v1/insights_platform.py:platform_export",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/insights_platform.py",
+    "path": "/api/v1/platform/insights/export",
+    "public_exempt_reason": null,
+    "rate_limit": "reporting-export",
+    "scope": "platform.insights.read",
+    "source_line": 154,
+    "tenant_required": true
+  },
+  {
     "audit_event": "platform.insights.posture.read",
     "auth_required": true,
     "function": "platform_posture",
@@ -11804,7 +11822,7 @@
     "public_exempt_reason": null,
     "rate_limit": "reporting-read",
     "scope": "platform.insights.read",
-    "source_line": 128,
+    "source_line": 131,
     "tenant_required": true
   },
   {
@@ -11822,7 +11840,7 @@
     "public_exempt_reason": null,
     "rate_limit": "reporting-read",
     "scope": "platform.insights.read",
-    "source_line": 75,
+    "source_line": 76,
     "tenant_required": true
   },
   {
@@ -11840,7 +11858,7 @@
     "public_exempt_reason": null,
     "rate_limit": "reporting-read",
     "scope": "platform.insights.read",
-    "source_line": 102,
+    "source_line": 105,
     "tenant_required": true
   },
   {

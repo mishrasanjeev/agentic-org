@@ -328,6 +328,16 @@ async def insights_view(
         raise _forbidden()
     company = await _company(tid, company_id)
     spec = registry.VIEWS[view]
+    from core.insights.telemetry import timed, view_seconds
+
+    with timed(view_seconds, view):
+        return await _answer_view(view, spec, tid, caller, from_, to, compare, company)
+
+
+async def _answer_view(
+    view: str, spec: Any, tid: uuid.UUID, caller: Caller, from_: date | None, to: date | None, compare: str,
+    company: uuid.UUID | None,
+) -> dict[str, Any]:
     async with get_tenant_session(tid) as session:
         ctx = await _context(session, tid, caller, start=from_, end=to, compare=compare, company=company)
         ctx.domains = view_domains(view, caller.domains)

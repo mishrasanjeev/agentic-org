@@ -1,5 +1,27 @@
 # Changelog
 
+## Unreleased - Insights performance, browser journeys, remaining exports and self-observability
+
+- **Performance on a million runs**: `scripts/seed_perf_tenant.py` seeds a local synthetic tenant with 1,000,000
+  runs (it refuses any non-local database) and `scripts/insights_perf_bench.py` times every landing view and
+  explorer. Locally the slowest view answers in 0.74 s and the slowest explorer in 0.45 s at p95
+  (`docs/insights/phase4-perf-local.json`). Insights reads now plan every statement for its own parameters; a
+  prepared statement's generic plan could not prune the monthly run partitions and took the runs explorer from
+  0.3 s to 9 s on its sixth request.
+- **Browser journeys**: twelve Playwright journeys (`ui/tests/browser/insights.spec.ts`) cover each role's landing
+  view with a WCAG 2.2 AA scan, a drill to one run, CSV, XLSX and JSON downloads, the view PDF and a weekly
+  schedule; the deploy workflow runs them.
+- **Exports**: a chart downloads as PDF as well as PNG and SVG; decision tiles have their own export menu; the
+  Value waterfall is a chart card with the same menu; the Platform view's daily figures download as CSV, XLSX or
+  JSON (`GET /api/v1/platform/insights/export`, audited as `platform.insights.export.read`).
+- **The dashboard's own health**: Prometheus histograms for metric, view and explorer answer times, export jobs by
+  kind and outcome, and the last successful rollup sweep; a synthetic check kind `insights_landing` that fails a
+  landing view slower than its budget (1.5 s by default); and **Dashboard operations** on the Platform view: export
+  jobs by status, the failure rate, the oldest open job and tenants whose rollup is more than two hours late.
+- The Report Scheduler keeps an Insights prefill until the form closes.
+- Migration v6z114 adds `insights_platform_operations` (aggregates only, owned by the platform aggregate role,
+  column grants on `insights_exports` status and creation time) and the `insights_landing` synthetic check kind.
+
 ## Unreleased - Insights Partner view, client pack, saved views and what changed
 
 - **Partner view** (administrators, CFO, COO, auditor) for a CA firm's client companies: active clients with each

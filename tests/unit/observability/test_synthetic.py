@@ -623,9 +623,11 @@ class TestTasks:
         assert "FORCE ROW LEVEL SECURITY" in migration and "current_setting('agenticorg.tenant_id', true)" in migration
         later = (ROOT / "migrations" / "versions" / "v6_z46_synthetic_check_kinds.py").read_text(encoding="utf-8")
         assert 'down_revision = "v6z45_eval_runs"' in later
+        latest = (ROOT / "migrations" / "versions" / "v6_z114_insights_operations.py").read_text(encoding="utf-8")
+        assert 'down_revision = "v6z113_insights_saved_views"' in latest
         for kind in synthetic.KINDS:
-            # The first four kinds were created with the table; the later two widened its check constraint.
-            assert f"'{kind}'" in migration or f"'{kind}'" in later
+            # The first four kinds were created with the table; later migrations widened its check constraint.
+            assert f"'{kind}'" in migration or f"'{kind}'" in later or f"'{kind}'" in latest
         assert "DROP CONSTRAINT IF EXISTS ck_synthetic_checks_kind" in later
         from core.models.synthetic_check import SyntheticCheck
 

@@ -76,17 +76,19 @@ async def _audit(operator: PlatformOperator, event: str, details: dict[str, Any]
 async def platform_summary(
     operator: Operator, from_: FromDay = None, to: ToDay = None
 ) -> dict[str, Any]:
-    """Daily platform totals and the range totals."""
+    """Daily platform totals, the range totals, and the dashboard's own export and rollup figures."""
     start, end = _range(from_, to)
     async with get_platform_session() as session:
         daily = await platform.platform_daily(session, start, end)
         tenants = await platform.platform_tenants(session, start, end)
+        operations = await platform.platform_operations(session, start, end)
     period = {"from": start.isoformat(), "to": end.isoformat()}
     await _audit(operator, "platform.insights.summary.read", {"period": period})
     return {
         "period": period,
         "totals": platform.totals(daily, tenants),
         "series": daily,
+        "operations": operations,
         "reconciled_gate_nights": platform.RECONCILED_GATE_NIGHTS,
     }
 
