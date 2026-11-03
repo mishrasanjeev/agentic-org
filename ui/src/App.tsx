@@ -525,7 +525,7 @@ export default function App() {
       <Route
         path="/dashboard/observatory"
         element={
-          <ProtectedRoute allowedRoles={["admin", "cfo", "chro", "cmo", "coo"]}>
+          <ProtectedRoute allowedRoles={["admin", "cfo", "chro", "cmo", "coo", "auditor"]}>
             <LegacyRedirect to={(role) => (role === "admin" || role === "auditor" ? "/dashboard/insights/explore/audit" : "/dashboard/audit")} />
           </ProtectedRoute>
         }
