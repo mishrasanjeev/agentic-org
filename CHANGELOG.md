@@ -1,5 +1,19 @@
 # Changelog
 
+## Unreleased - Scheduled Insights reports
+
+- The Report Scheduler schedules an Insights view (PDF), the finance pack or the period evidence pack for a period
+  preset (last 7 or 30 days, last week, last month, month to date) in the tenant's time zone. "Schedule weekly" on
+  every Insights view opens it prefilled. A run builds the file as the schedule's owner with that user's access,
+  emails recipients a link to Downloads (they open it when signed in) and sends the file to Slack and WhatsApp. A
+  view with no data for the period is not sent.
+- Run history for every schedule (`GET /api/v1/report-schedules/{id}/runs`, the History button): when, scheduled or
+  run now, delivered, generated, failed or blocked, and why.
+- Cron schedules run at their real times in the tenant's time zone (`core/reports/cron.py`); before this every cron
+  string ran daily because `croniter` is not installed. The CHRO and COO can open the Report Scheduler.
+- Migration v6z111 adds `report_schedule_runs` and `report_schedules.created_by`. The Phase 3 acceptance script is
+  `docs/insights/phase3-acceptance.md`.
+
 ## Unreleased - Insights PDFs, finance pack and period evidence pack
 
 - Every Insights view has "PDF of this view": the tiles as a table and each chart as its data with a bar per row,

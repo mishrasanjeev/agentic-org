@@ -63,3 +63,24 @@ says background files are not set up; inline exports (up to 50,000 rows) keep wo
   "auditor signs a period evidence pack".
 - **Chart pictures**: every chart's export menu also saves the chart as SVG or PNG, with the title, period, filters
   and data quality drawn above it (made in the browser; nothing is sent to the server).
+
+## Scheduled Insights reports
+
+- The Report Scheduler (`/dashboard/report-schedules`) has three Insights types: `insights_view` (a view as a PDF),
+  `insights_finance_pack` and `insights_evidence_pack`. Each keeps a period preset (`last_7_days`, `last_30_days`,
+  `last_week`, `last_month`, `month_to_date`) counted in the tenant's time zone. "Schedule weekly" on an Insights view
+  opens the form for that view, every Monday at 09:00, for last week.
+- Who may schedule what: administrators any type; the CFO the Finance view and the finance pack; the CFO, CHRO, CMO
+  and COO their own view. Evidence pack schedules are made by administrators: auditors have no report-schedule
+  scopes.
+- A run builds the file as the schedule's owner (`report_schedules.created_by`, migration v6z111), with that user's
+  access read at run time; older schedules without an owner run as the tenant's first active administrator. If the
+  owner is no longer active the run fails (`no_owner`); if they may no longer read the view it is blocked.
+- Delivery: email recipients get a link to Downloads, never the file. They download it after signing in, and only
+  if their email address is a user of the organisation with Insights access (`shared_with` on the export).
+  Slack and WhatsApp get the file. A view whose every figure has no data for the period is not sent (`blocked`,
+  `no_data`).
+- Every run (Insights and the older report types, scheduled or "Run now") is recorded in `report_schedule_runs`; the
+  scheduler's History button lists the last 20 with why a run failed or was held back.
+- Cron strings are now evaluated by `core.reports.cron` in the tenant's time zone. Before this, `croniter` was not
+  installed and every cron schedule ran daily. The preset keywords still mean "this long after the last run".

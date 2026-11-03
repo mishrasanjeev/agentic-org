@@ -115,9 +115,9 @@ from core.models.hitl import HITLQueue as HITLQueue
 from core.models.idp_document import IdpDocument as IdpDocument
 from core.models.industry_pack_install import IndustryPackInstall as IndustryPackInstall
 from core.models.insights import InsightsAlert as InsightsAlert
-from core.models.insights import InsightsExport as InsightsExport
 from core.models.insights import InsightsBiLogin as InsightsBiLogin
 from core.models.insights import InsightsDaily as InsightsDaily
+from core.models.insights import InsightsExport as InsightsExport
 from core.models.insights import InsightsRollupState as InsightsRollupState
 from core.models.insights import RunFact as RunFact
 from core.models.insights import ValueBaseline as ValueBaseline
@@ -168,6 +168,7 @@ from core.models.prompt_template import PromptEditHistory as PromptEditHistory
 from core.models.prompt_template import PromptTemplate as PromptTemplate
 from core.models.provider_attestation import ProviderAttestation as ProviderAttestation
 from core.models.report_schedule import ReportSchedule as ReportSchedule
+from core.models.report_schedule import ReportScheduleRun as ReportScheduleRun
 from core.models.rpa_schedule import RPASchedule as RPASchedule
 from core.models.run_span import RunSpan as RunSpan
 from core.models.schema_registry import SchemaRegistry as SchemaRegistry

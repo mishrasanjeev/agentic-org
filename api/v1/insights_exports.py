@@ -3,9 +3,10 @@
 
 ``POST /insights/exports`` asks for a file the worker makes: a metric or an
 explorer table larger than an inline export allows (up to 500,000 rows), a run
-evidence bundle, a view PDF, the finance pack or a period evidence pack. ``GET /insights/exports`` lists the caller's files (an
-administrator's list is the tenant's), ``GET /insights/exports/{id}`` one of
-them, and ``GET /insights/exports/{id}/download`` streams the file through the
+evidence bundle, a view PDF, the finance pack or a period evidence pack.
+``GET /insights/exports`` lists the caller's files and the scheduled reports
+sent to their email (an administrator's list is the tenant's),
+``GET /insights/exports/{id}`` one of them, and ``GET /insights/exports/{id}/download`` streams the file through the
 API with one signed ``insights.export`` audit row; there are no signed URLs.
 Files are kept seven days. ``POST /insights/exports/{id}/sign`` records an
 auditor's or administrator's sign-off of a ready evidence pack.
@@ -49,15 +50,33 @@ class ExportRequest(BaseModel):
     include_pii: bool = False
 
 
-def _visible(caller: Caller) -> Any:
-    """Whose jobs the caller sees: an administrator the tenant's, anyone else their own."""
+def _visible(caller: Caller, email: str | None = None) -> Any:
+    """Whose jobs the caller sees: an administrator the tenant's; anyone else their own and the scheduled reports
+    sent to their email address."""
+    from sqlalchemy import or_
+
     from core.models.insights import InsightsExport as X
 
     if caller.is_admin:
         return X.id.is_not(None)
     if caller.user_id is None:
         return X.id.is_(None)
+    if email:
+        return or_(X.user_id == caller.user_id, X.params["shared_with"].contains([email.lower()]))
     return X.user_id == caller.user_id
+
+
+async def _email_of(tid: uuid.UUID, caller: Caller) -> str | None:
+    from sqlalchemy import select
+
+    from core.models.user import User
+
+    if caller.user_id is None:
+        return None
+    async with get_tenant_session(tid) as session:
+        return (
+            await session.execute(select(User.email).where(User.tenant_id == tid, User.id == caller.user_id))
+        ).scalar_one_or_none()
 
 
 def _refuse(exc: export_jobs.ExportJobError) -> HTTPException:
@@ -167,10 +186,11 @@ async def list_exports(
     tid = _tenant(tenant_id)
     await _require_enabled(tid)
     caller = caller_from_request(request)
+    email = await _email_of(tid, caller)
     async with get_tenant_session(tid) as session:
         rows = (
             await session.execute(
-                select(X).where(X.tenant_id == tid, _visible(caller)).order_by(X.created_at.desc()).limit(limit)
+                select(X).where(X.tenant_id == tid, _visible(caller, email)).order_by(X.created_at.desc()).limit(limit)
             )
         ).scalars()
         return {"exports": [export_jobs.serialize(job) for job in rows], "storage": storage.configured()}
@@ -181,9 +201,10 @@ async def _job(tid: uuid.UUID, caller: Caller, export_id: uuid.UUID) -> Any:
 
     from core.models.insights import InsightsExport as X
 
+    email = await _email_of(tid, caller)
     async with get_tenant_session(tid) as session:
         job = (
-            await session.execute(select(X).where(X.tenant_id == tid, X.id == export_id, _visible(caller)))
+            await session.execute(select(X).where(X.tenant_id == tid, X.id == export_id, _visible(caller, email)))
         ).scalar_one_or_none()
     if job is None:
         raise HTTPException(404, detail={"error": "export_not_found", "message": "no such export for you"})

@@ -965,7 +965,8 @@
       "financePack": "Finance pack",
       "evidencePack": "Evidence pack",
       "asking": "Asking…",
-      "queued": "It is being prepared; you will get an email when it is ready."
+      "queued": "It is being prepared; you will get an email when it is ready.",
+      "schedule": "Schedule weekly"
     }
   },
   "insightsBi": {
