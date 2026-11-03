@@ -99,6 +99,9 @@ BASE_TABLES = (
     "filing_approvals",
     "ca_client_invoices",
     "ca_client_payments",
+    "tool_calls",
+    "guardrail_events",
+    "security_events_daily",
 )
 
 pytestmark = [
@@ -340,6 +343,16 @@ def _seed_tenant(world: World, label: str) -> SimpleNamespace:
     world.add(
         WorkflowRun(tenant_id=tid, workflow_def_id=workflow, status="failed", steps_total=3, steps_completed=1,
                     started_at=start, completed_at=start + timedelta(minutes=4)),
+    )
+    from core.models.insights import GuardrailEvent, SecurityEventDaily
+    from core.models.tool_call import ToolCall
+
+    world.add(
+        ToolCall(tenant_id=tid, agent_id=fin, tool_name=f"{slug}.post_invoice", connector_name=f"{slug}-ledger",
+                 status="failed", error_code="E1001", latency_ms=250, called_at=start + timedelta(minutes=1)),
+        GuardrailEvent(tenant_id=tid, day=now.date(), stage="input", detector=f"{slug}_pii", action="mask",
+                       mode="enforced", count=3),
+        SecurityEventDaily(tenant_id=tid, day=now.date(), event_kind="login_failed", count=2),
     )
     midnight = datetime(today.year, today.month, today.day)  # noqa: DTZ001 - the ledger is naive UTC
     world.add(

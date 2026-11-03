@@ -139,7 +139,7 @@ describe("metric keys used by the Insights page", () => {
       // core/insights/explore_registry.py: auditors read runs, approvals and the audit log; developers their
       // domain's agents, runs and quality.
       auditor: ["runs", "approvals", "audit"],
-      developer: ["agents", "runs", "quality"],
+      developer: ["agents", "runs", "quality", "connectors"],
     };
     const pagesFor: Record<string, string[]> = {
       coo: [],

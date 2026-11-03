@@ -3,8 +3,12 @@
 from __future__ import annotations
 
 import asyncio
+import functools
 import hashlib
+import inspect
 import time
+from collections.abc import Awaitable, Callable
+from contextvars import ContextVar
 from typing import Any
 
 import structlog
@@ -29,6 +33,51 @@ from core.tool_gateway.pii_masker import mask_pii
 from core.tool_gateway.rate_limiter import RateLimiter
 
 logger = structlog.get_logger()
+
+# Set by ``execute`` when it answers from the idempotency store, so the recorder counts a replay, not a dispatch.
+_replayed: ContextVar[bool] = ContextVar("agenticorg_tool_call_replayed", default=False)
+
+
+def _records_tool_call(
+    execute: Callable[..., Awaitable[dict[str, Any]]],
+) -> Callable[..., Awaitable[dict[str, Any]]]:
+    """Record every outcome of ``execute`` as a ``tool_calls`` row in the background (core/insights/runtime_counters).
+
+    Recording never changes or delays the result: the row is written by a background task, and an exception from
+    ``execute`` propagates after it is recorded as a failure.
+    """
+    signature = inspect.signature(execute)
+
+    @functools.wraps(execute)
+    async def wrapper(*args: Any, **kwargs: Any) -> dict[str, Any]:
+        started = time.monotonic()
+        token = _replayed.set(False)
+        result: Any = {"error": {"code": "E1001"}}
+        try:
+            result = await execute(*args, **kwargs)
+            return result
+        finally:
+            replayed = _replayed.get()
+            _replayed.reset(token)
+            try:
+                from core.insights.runtime_counters import schedule_tool_call
+
+                bound = signature.bind_partial(*args, **kwargs).arguments
+                schedule_tool_call(
+                    tenant_id=bound.get("tenant_id"),
+                    agent_id=bound.get("agent_id"),
+                    tool_name=bound.get("tool_name"),
+                    connector_name=bound.get("connector_name"),
+                    result=result,
+                    started=started,
+                    idempotency_key=bound.get("idempotency_key"),
+                    replayed=replayed,
+                )
+            # enterprise-gate: broad-except-ok reason=tool-call-record-never-fails-the-tool-call
+            except Exception as exc:
+                logger.warning("tool_call_write_failed", error_type=type(exc).__name__)
+
+    return wrapper
 
 
 class ToolGateway:
@@ -77,6 +126,7 @@ class ToolGateway:
                 self._connector_locks[key] = asyncio.Lock()
             return self._connector_locks[key]
 
+    @_records_tool_call
     async def execute(
         self,
         tenant_id: str,
@@ -364,6 +414,7 @@ class ToolGateway:
         if scoped_idempotency_key and self.idempotency:
             reserved, cached = await self.idempotency.reserve(tenant_id, scoped_idempotency_key)
             if cached is not None:
+                _replayed.set(True)
                 return cached
             if not reserved:
                 return {

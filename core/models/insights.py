@@ -485,3 +485,51 @@ class InsightsUserState(BaseModel):
     user_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, nullable=False)
     last_seen_at: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), nullable=False)
     updated_at: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), server_default=func.now(), nullable=False)
+
+
+SECURITY_EVENT_KINDS: tuple[str, ...] = (
+    "login_failed",
+    "rate_limited",
+    "scope_denied",
+    "session_revoked",
+    "api_key_used",
+    "webhook_signature_failed",
+)
+
+
+class GuardrailEvent(BaseModel):
+    """Per tenant and UTC day, how many guardrail outcomes a stage, detector, action and mode produced. Forced RLS."""
+
+    __tablename__ = "guardrail_events"
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "day", "stage", "detector", "action", "mode", name="uq_guardrail_events_day"),
+        CheckConstraint("count >= 0", name="ck_guardrail_events_count"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    tenant_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("tenants.id"), nullable=False)
+    day: Mapped[date] = mapped_column(Date, nullable=False)
+    stage: Mapped[str] = mapped_column(String(16), nullable=False)
+    detector: Mapped[str] = mapped_column(String(64), nullable=False)
+    action: Mapped[str] = mapped_column(String(16), nullable=False)
+    mode: Mapped[str] = mapped_column(String(16), nullable=False)
+    count: Mapped[int] = mapped_column(BigInteger, nullable=False, server_default=text("0"), default=0)
+    updated_at: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), server_default=func.now(), nullable=False)
+
+
+class SecurityEventDaily(BaseModel):
+    """Per tenant and UTC day, how many of each security event kind happened. Counts only. Forced RLS."""
+
+    __tablename__ = "security_events_daily"
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "day", "event_kind", name="uq_security_events_daily_day"),
+        CheckConstraint(f"event_kind IN ({_in_list(SECURITY_EVENT_KINDS)})", name="ck_security_events_daily_kind"),
+        CheckConstraint("count >= 0", name="ck_security_events_daily_count"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    tenant_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("tenants.id"), nullable=False)
+    day: Mapped[date] = mapped_column(Date, nullable=False)
+    event_kind: Mapped[str] = mapped_column(String(32), nullable=False)
+    count: Mapped[int] = mapped_column(BigInteger, nullable=False, server_default=text("0"), default=0)
+    updated_at: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), server_default=func.now(), nullable=False)

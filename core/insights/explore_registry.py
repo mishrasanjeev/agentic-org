@@ -228,10 +228,12 @@ _EXPLORERS: tuple[Explorer, ...] = (
         title="Connectors",
         definition=(
             "Every connector with its status, the worst health across the companies it is configured for, its "
-            "last health check and the agents that use it. A snapshot of now."
+            "last health check, the agents that use it, and its tool calls in the last seven days (count, success "
+            "rate and p95 latency). A snapshot of now."
         ),
-        source=("connectors", "connector_configs", "agents"),
-        readers=frozenset({"coo"}),
+        source=("connectors", "connector_configs", "agents", "tool_calls"),
+        # Developers too: the Engineering view's tool calls drill here.
+        readers=frozenset({"coo", "developer"}),
         default_sort="health",
         default_order="asc",
         uses_period=False,
@@ -251,6 +253,9 @@ _EXPLORERS: tuple[Explorer, ...] = (
             Column("sync_failing", "Sync failing", "bool", filter="bool"),
             Column("last_health_check", "Last health check", "datetime"),
             Column("dependent_agents", "Agents using it", "count", filter="min"),
+            Column("calls_7d", "Calls (7 days)", "count", filter="min"),
+            Column("success_rate_7d", "Success rate (7 days)", "percent"),
+            Column("p95_ms_7d", "p95 latency (7 days)", "duration_ms"),
         ),
     ),
     Explorer(

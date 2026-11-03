@@ -56,10 +56,13 @@ V1_KEYS = {
     "compliance.dsar_completion_time",
     "compliance.attestations_expiring",
     "compliance.change_log",
+    "compliance.security_events",
+    "compliance.guardrail_events",
     "engineering.gateway_issues",
     "engineering.slow_spans",
     "engineering.eval_pass_rate",
     "engineering.prompt_edits",
+    "engineering.tool_usage",
 }
 EXECUTIVE = {
     "runs.confidence",
@@ -149,6 +152,7 @@ ENGINEERING = {
     "engineering.slow_spans",
     "engineering.eval_pass_rate",
     "engineering.prompt_edits",
+    "engineering.tool_usage",
 }
 
 
@@ -177,7 +181,7 @@ def test_views_show_exactly_their_metrics() -> None:
     assert set(VIEWS["hr"].keys) == HR
     assert set(VIEWS["marketing"].keys) == MARKETING
     assert set(VIEWS["commerce"].keys) == COMMERCE
-    assert set(VIEWS["compliance"].keys) == COMPLIANCE and len(COMPLIANCE) == 7
+    assert set(VIEWS["compliance"].keys) == COMPLIANCE and len(COMPLIANCE) == 9
     assert set(VIEWS["engineering"].keys) == ENGINEERING
     assert set(VIEWS["back_office"].keys) == BACK_OFFICE
     assert set(VIEWS["domain"].keys) == DOMAIN

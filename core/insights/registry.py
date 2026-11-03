@@ -40,6 +40,7 @@ from core.insights import metrics_cost as cost
 from core.insights import metrics_domain as domain
 from core.insights import metrics_governance as governance
 from core.insights import metrics_partner as partner
+from core.insights import metrics_runtime as runtime
 from core.insights import value
 from core.insights.metrics import RUN_GROUPS, MetricContext, Period
 
@@ -805,6 +806,46 @@ _METRICS: tuple[Metric, ...] = (
         resolver=governance.resolve_prompt_edits,
     ),
     Metric(
+        key="engineering.tool_usage",
+        title="Tool calls",
+        definition=(
+            "Tool calls agents made through the tool gateway in the period; rows give each tool's calls, failures, "
+            "refusals (policy, scope or limits), idempotent replays, success rate and p95 latency."
+        ),
+        unit="count",
+        source=("tool_calls",),
+        views=(ENGINEERING,),
+        data_quality_rule="measured from the gateway's tool-call records; no_data when none was recorded.",
+        resolver=runtime.resolve_tool_usage,
+    ),
+    Metric(
+        key="compliance.guardrail_events",
+        title="Guardrail outcomes",
+        definition=(
+            "Guardrail outcomes in the period (a rule found something), by stage, detector, action and whether it "
+            "was enforced or only flagged. Dry runs are not counted. Counted per UTC day."
+        ),
+        unit="count",
+        source=("guardrail_events",),
+        views=(COMPLIANCE,),
+        data_quality_rule="measured from the daily counters; no_data when no outcome was counted.",
+        resolver=runtime.resolve_guardrail_events,
+    ),
+    Metric(
+        key="compliance.security_events",
+        title="Security events",
+        definition=(
+            "Failed sign-ins, rate-limit and scope denials, session revocations, API-key use and webhook "
+            "signature failures in the period, by kind. A kind spikes when its last day is more than three "
+            "standard deviations above its 30 days before (and at least 5). Counted per UTC day."
+        ),
+        unit="count",
+        source=("security_events_daily",),
+        views=(COMPLIANCE,),
+        data_quality_rule="measured from the daily counters; no_data when no event was counted.",
+        resolver=runtime.resolve_security_events,
+    ),
+    Metric(
         key="backoffice.deadlines",
         title="Compliance deadlines",
         definition=(
@@ -969,8 +1010,10 @@ VIEWS: dict[str, View] = {
             "compliance.dsar_completion_time",
             "compliance.attestations_expiring",
             "compliance.change_log",
+            "compliance.security_events",
+            "compliance.guardrail_events",
         ),
-        charts=("compliance.approvals_decided", "compliance.change_log"),
+        charts=("compliance.approvals_decided", "compliance.change_log", "compliance.security_events"),
     ),
     ENGINEERING: View(
         key=ENGINEERING,
@@ -982,10 +1025,12 @@ VIEWS: dict[str, View] = {
             "engineering.slow_spans",
             "engineering.eval_pass_rate",
             "engineering.prompt_edits",
+            "engineering.tool_usage",
             "runs.confidence",
             "quality.feedback",
         ),
-        charts=("engineering.slow_spans", "runs.volume", "runs.confidence", "quality.feedback"),
+        charts=("engineering.slow_spans", "engineering.tool_usage", "runs.volume", "runs.confidence",
+                "quality.feedback"),
     ),
     BACK_OFFICE: View(
         key=BACK_OFFICE,

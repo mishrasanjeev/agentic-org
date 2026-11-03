@@ -33,6 +33,21 @@ been seen on the deployed service.
   oldest open job, and tenants whose newest rollup is more than two hours old
   (`public.insights_platform_operations`, migration v6z114, aggregates only).
 
+## Runtime counters (release 6, migration v6z115)
+
+- `tool_calls`: the tool gateway records every call it answers (success, failure, refusal or idempotent replay)
+  with the tool and connector names, the error code, the latency, the attempt and a digest of the idempotency key,
+  never the parameters or the result. Read by `engineering.tool_usage` and the connectors explorer's seven-day
+  call figures.
+- `guardrail_events`: guardrail outcomes per UTC day by stage, detector, action and mode (dry runs are not
+  counted). Read by `compliance.guardrail_events`.
+- `security_events_daily`: failed sign-ins for a known account, rate-limit and scope denials, session
+  revocations, API-key use and webhook signature failures for a tenant's own configured sources. Read by
+  `compliance.security_events`, which flags a kind whose last day is more than three standard deviations above its
+  30 days before. Lockouts by address and Grantex rejections carry no trusted tenant and are not counted.
+- All three are written only while Insights is on for the tenant and never fail or slow the call they record; the
+  two counters add up in memory and are written every five seconds as one upsert per tenant.
+
 ## Still open
 
 - Criterion 6 on staging, criterion 7 (time), and the manual part of criterion 9.

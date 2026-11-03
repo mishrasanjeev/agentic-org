@@ -202,6 +202,7 @@ def test_registry_declarations_are_consistent() -> None:
         "agents",
         "runs",
         "quality",
+        "connectors",
     ]
     for role in ("analyst", "domain_lead"):
         assert [e.key for e in explore_registry.readable_explorers(role, is_admin=False)] == [

@@ -557,6 +557,9 @@ async def login(body: LoginRequest, request: Request, response: Response):
         if not user or not user.password_hash:
             raise HTTPException(status_code=401, detail="Invalid email or password")
         if not await _verify_password(body.password, user.password_hash):
+            from core.insights.runtime_counters import count_security_event
+
+            count_security_event(user.tenant_id, "login_failed")
             raise HTTPException(status_code=401, detail="Invalid email or password")
         # Fetch tenant for onboarding status
         tenant_result = await session.execute(
@@ -854,6 +857,9 @@ async def logout(request: Request, response: Response):
     except Exception as exc:
         logger.error("Session revocation failed; refusing to report logout success")
         raise HTTPException(status_code=503, detail="Unable to revoke session; please retry") from exc
+    from core.insights.runtime_counters import count_security_event
+
+    count_security_event(getattr(request.state, "tenant_id", None), "session_revoked")
     _clear_session_cookie(response)
     return {"status": "logged_out"}
 
@@ -902,6 +908,9 @@ async def logout_all(request: Request, response: Response):
         await session.commit()
 
     await invalidate_user_session_state(str(tenant_id), email)
+    from core.insights.runtime_counters import count_security_event
+
+    count_security_event(tenant_id, "session_revoked")
     _clear_session_cookie(response)
     return {"status": "logged_out_all"}
 

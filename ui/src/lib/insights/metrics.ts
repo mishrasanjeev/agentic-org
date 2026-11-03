@@ -143,6 +143,12 @@ export const METRIC_PRESENTATION: Record<string, MetricPresentation> = {
   },
   "engineering.eval_pass_rate": { chart: "hbar", action: { to: QUALITY, labelKey: "insights.actions.exploreQuality" } },
   "engineering.prompt_edits": { chart: "hbar", action: { to: AGENTS, labelKey: "insights.actions.exploreAgents" } },
+  "engineering.tool_usage": {
+    chart: "hbar",
+    action: { to: `${CONNECTORS}?sort=calls_7d&order=desc`, labelKey: "insights.actions.exploreConnectors" },
+  },
+  "compliance.guardrail_events": { chart: "hbar", action: { to: AUDIT, labelKey: "insights.actions.exploreAudit" } },
+  "compliance.security_events": { chart: "line", action: { to: AUDIT, labelKey: "insights.actions.exploreAudit" } },
 };
 
 /** Expected metric keys per view (registry views; the API decides what it returns). */
@@ -191,6 +197,8 @@ export const VIEW_METRICS: Record<InsightsViewKey, readonly string[]> = {
     "compliance.dsar_completion_time",
     "compliance.attestations_expiring",
     "compliance.change_log",
+    "compliance.security_events",
+    "compliance.guardrail_events",
   ],
   engineering: [
     "runs.success_rate",
@@ -199,6 +207,7 @@ export const VIEW_METRICS: Record<InsightsViewKey, readonly string[]> = {
     "engineering.slow_spans",
     "engineering.eval_pass_rate",
     "engineering.prompt_edits",
+    "engineering.tool_usage",
     "runs.volume",
     "runs.confidence",
     "quality.feedback",

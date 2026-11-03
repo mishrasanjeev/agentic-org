@@ -1,5 +1,21 @@
 # Changelog
 
+## Unreleased - Insights runtime counters: tool calls, guardrail outcomes and security events
+
+- The tool gateway now records each tool call in `tool_calls` (success, failure, refusal or idempotent replay,
+  with the tool and connector, error code, latency and attempt; never the parameters or the result). The
+  Engineering view gains **Tool calls** (per tool: calls, failures, refusals, replays, success rate, p95 latency)
+  and the connectors explorer shows each connector's calls, success rate and p95 latency for the last seven days.
+  Developers may now open the connectors explorer.
+- The Compliance view gains **Guardrail outcomes** (by stage, detector, action and mode) and **Security events**
+  (failed sign-ins, rate-limit and scope denials, session revocations, API-key use and webhook signature failures,
+  with a spike flag when a kind's last day is three standard deviations above its previous 30 days).
+- The counters are written only while Insights is on for the organisation and never fail or slow the request they
+  count.
+- Migration v6z115 lets gateway calls be stored without a workflow step or a stored agent, adds `connector_name`,
+  `run_id`, `attempt` and `replayed` to `tool_calls`, and adds `guardrail_events` and `security_events_daily`
+  (forced row-level security). Downgrade refuses while gateway tool calls exist.
+
 ## Unreleased - Insights performance, browser journeys, remaining exports and self-observability
 
 - **Performance on a million runs**: `scripts/seed_perf_tenant.py` seeds a local synthetic tenant with 1,000,000
