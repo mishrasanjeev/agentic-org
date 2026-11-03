@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
-"""Insights metrics for the role views: operations, HR, marketing and commerce.
+"""Insights metrics for the role views: operations, HR, marketing, commerce, back office and domain quality.
 
 Each resolver reads the tenant's own tables in the tenant session (forced
 row-level security) for the period's tenant-local days, or now for snapshots,
@@ -380,3 +380,149 @@ async def resolve_webhook_failures(ctx: MetricContext) -> dict[str, Any]:
         "source": "commerce_order_webhook_deliveries",
         "data_quality": "measured",
     }
+
+
+# ------------------------------------------------------------------ domain quality
+
+
+FEEDBACK_HINT = (
+    "No feedback was recorded on agent runs in this period. Reviewers add it from a run (thumbs up or down, or a "
+    "correction)."
+)
+
+
+async def resolve_quality_feedback(ctx: MetricContext) -> dict[str, Any]:
+    """Feedback on agent runs in the period, by type; limited to the caller's domains through the agent."""
+    from sqlalchemy import func, select
+
+    from core.models.agent import Agent
+    from core.models.feedback import AgentFeedback as F
+
+    clauses: list[Any] = [F.tenant_id == ctx.tenant_id]
+    if ctx.domains is not None or ctx.company_id is not None:
+        scoped = select(Agent.id).where(Agent.tenant_id == ctx.tenant_id)
+        if ctx.domains is not None:
+            scoped = scoped.where(Agent.domain.in_(list(ctx.domains)))
+        if ctx.company_id is not None:
+            scoped = scoped.where(Agent.company_id == ctx.company_id)
+        clauses.append(F.agent_id.in_(scoped))
+    daily = await _daily_counts(ctx, F.created_at, *clauses)
+    total = sum(daily.values())
+    if not total:
+        return no_data("agent_feedback", FEEDBACK_HINT)
+    lo, hi = _bounds(ctx)
+    kinds = (
+        await ctx.session.execute(
+            select(F.feedback_type, func.count())
+            .where(*clauses, F.created_at >= lo, F.created_at < hi)
+            .group_by(F.feedback_type)
+        )
+    ).all()
+    out: dict[str, Any] = {
+        "value": total,
+        "series": _series(ctx, daily),
+        "rows": sorted(({"label": str(k), "value": int(n)} for k, n in kinds), key=lambda r: (-r["value"], r["label"])),
+        "source": "agent_feedback",
+        "data_quality": "measured",
+    }
+    previous = _compare_bounds(ctx)
+    if previous is not None:
+        out["compare_value"] = await _count_between(ctx, F.created_at, previous, *clauses) or None
+    return out
+
+
+# ------------------------------------------------------------------ back office
+
+DEADLINE_WINDOW_DAYS = 30
+
+
+async def resolve_compliance_deadlines(ctx: MetricContext) -> dict[str, Any]:
+    """Statutory deadlines not yet filed: overdue now, and due in the next 30 days, by deadline type."""
+    from datetime import timedelta
+
+    from sqlalchemy import func, select
+
+    from core.models.compliance_deadline import ComplianceDeadline as D
+
+    today = ctx.today
+    clauses: list[Any] = [D.tenant_id == ctx.tenant_id, D.filed.is_(False)]
+    if ctx.company_id is not None:
+        clauses.append(D.company_id == ctx.company_id)
+    horizon = today + timedelta(days=DEADLINE_WINDOW_DAYS)
+    rows = (
+        await ctx.session.execute(
+            select(D.deadline_type, D.due_date < today, func.count())
+            .where(*clauses, D.due_date <= horizon)
+            .group_by(D.deadline_type, D.due_date < today)
+        )
+    ).all()
+    if not rows:
+        any_deadline = (
+            await ctx.session.execute(select(func.count()).where(D.tenant_id == ctx.tenant_id))
+        ).scalar_one()
+        hint = (
+            "Nothing is overdue or due in the next 30 days."
+            if any_deadline
+            else "No compliance deadline is recorded. Deadlines are created when a company is onboarded with its "
+            "filing obligations."
+        )
+        if any_deadline:
+            return {"value": 0, "rows": [], "source": "compliance_deadlines", "data_quality": "measured",
+                    "hint": hint}
+        return no_data("compliance_deadlines", hint)
+    overdue: dict[str, int] = defaultdict(int)
+    upcoming: dict[str, int] = defaultdict(int)
+    for kind, late, n in rows:
+        (overdue if late else upcoming)[str(kind)] += int(n)
+    kinds = sorted(set(overdue) | set(upcoming))
+    return {
+        "value": sum(overdue.values()),
+        "rows": [{"label": k, "overdue": overdue.get(k, 0), "due_30d": upcoming.get(k, 0)} for k in kinds],
+        "source": "compliance_deadlines",
+        "data_quality": "measured",
+    }
+
+
+async def resolve_txn_findings(ctx: MetricContext) -> dict[str, Any]:
+    """Transaction findings detected in the period, by severity; rows also give the open ones."""
+    from sqlalchemy import func, select
+
+    from core.models.txn_finding import TxnFinding as T
+
+    clauses: list[Any] = [T.tenant_id == ctx.tenant_id]
+    daily = await _daily_counts(ctx, T.detected_at, *clauses)
+    total = sum(daily.values())
+    if not total:
+        return no_data(
+            "txn_findings",
+            "No transaction finding was detected in this period. Findings come from transaction monitoring once "
+            "transaction records are loaded.",
+        )
+    lo, hi = _bounds(ctx)
+    found = (
+        await ctx.session.execute(
+            select(T.severity, T.status, func.count())
+            .where(*clauses, T.detected_at >= lo, T.detected_at < hi)
+            .group_by(T.severity, T.status)
+        )
+    ).all()
+    by_severity: dict[str, dict[str, int]] = defaultdict(lambda: {"value": 0, "open": 0})
+    for severity, status, n in found:
+        entry = by_severity[str(severity)]
+        entry["value"] += int(n)
+        if status == "open":
+            entry["open"] += int(n)
+    order = {"critical": 0, "high": 1, "medium": 2, "low": 3}
+    out: dict[str, Any] = {
+        "value": total,
+        "series": _series(ctx, daily),
+        "rows": [
+            {"label": k, **v} for k, v in sorted(by_severity.items(), key=lambda kv: (order.get(kv[0], 9), kv[0]))
+        ],
+        "source": "txn_findings",
+        "data_quality": "measured",
+    }
+    previous = _compare_bounds(ctx)
+    if previous is not None:
+        out["compare_value"] = await _count_between(ctx, T.detected_at, previous, *clauses) or None
+    return out

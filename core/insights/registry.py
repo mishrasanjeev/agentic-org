@@ -56,6 +56,8 @@ MARKETING = "marketing"
 COMMERCE = "commerce"
 COMPLIANCE = "compliance"
 ENGINEERING = "engineering"
+BACK_OFFICE = "back_office"
+DOMAIN = "domain"
 
 # Which roles may read each view. Administrators hold every view; the check is
 # made server side in every handler (403 insights_view_forbidden).
@@ -68,6 +70,10 @@ VIEW_ROLES: dict[str, frozenset[str]] = {
     COMMERCE: frozenset({"admin", "merchant"}),
     COMPLIANCE: frozenset({"admin", "auditor"}),
     ENGINEERING: frozenset({"admin", "developer"}),
+    # There is no back-office role (no cbo): administrators read it.
+    BACK_OFFICE: frozenset({"admin"}),
+    # Domain leads and analysts: everything in their assigned domain.
+    DOMAIN: frozenset({"admin", "domain_lead", "analyst"}),
 }
 
 # A role view shows the run and approval metrics of its domains only (and of the caller's domains within
@@ -81,6 +87,9 @@ VIEW_DOMAINS: dict[str, tuple[str, ...] | None] = {
     COMMERCE: ("commerce",),
     COMPLIANCE: None,
     ENGINEERING: None,
+    BACK_OFFICE: ("backoffice", "legal", "risk", "corporate", "comms"),
+    # The caller's own domains (an analyst's assigned domain; every domain for an administrator).
+    DOMAIN: None,
 }
 
 RUN_QUALITY_RULE = (
@@ -214,7 +223,7 @@ _METRICS: tuple[Metric, ...] = (
         definition="The number of agents in each lifecycle status now (shadow, active, paused, retired).",
         unit="count",
         source=("agents",),
-        views=(EXECUTIVE,),
+        views=(EXECUTIVE, FINANCE, OPERATIONS, HR, DOMAIN),
         data_quality_rule=SNAPSHOT_QUALITY_RULE,
         resolver=runs.resolve_agents_by_status,
         comparable=False,
@@ -229,7 +238,7 @@ _METRICS: tuple[Metric, ...] = (
         ),
         unit="count",
         source=RUN_SOURCE,
-        views=(EXECUTIVE, FINANCE, OPERATIONS, HR, MARKETING, ENGINEERING),
+        views=(EXECUTIVE, FINANCE, OPERATIONS, HR, MARKETING, ENGINEERING, DOMAIN, BACK_OFFICE),
         data_quality_rule=RUN_QUALITY_RULE,
         resolver=runs.resolve_runs_volume,
         group_by=RUN_GROUPS,
@@ -247,7 +256,7 @@ _METRICS: tuple[Metric, ...] = (
         ),
         unit="percent",
         source=RUN_SOURCE,
-        views=(EXECUTIVE, OPERATIONS, HR, ENGINEERING),
+        views=(EXECUTIVE, OPERATIONS, HR, ENGINEERING, FINANCE, DOMAIN, BACK_OFFICE),
         data_quality_rule=RUN_QUALITY_RULE,
         resolver=runs.resolve_runs_success_rate,
         thresholds=Thresholds(watch=95.0, act=90.0, direction="below"),
@@ -263,7 +272,7 @@ _METRICS: tuple[Metric, ...] = (
         ),
         unit="percent",
         source=RUN_SOURCE,
-        views=(EXECUTIVE,),
+        views=(EXECUTIVE, FINANCE, OPERATIONS, HR, DOMAIN),
         data_quality_rule=RUN_QUALITY_RULE,
         resolver=runs.resolve_runs_straight_through_rate,
         thresholds=Thresholds(watch=70.0, act=50.0, direction="below"),
@@ -281,7 +290,7 @@ _METRICS: tuple[Metric, ...] = (
         ),
         unit="duration_ms",
         source=RUN_SOURCE,
-        views=(EXECUTIVE, OPERATIONS, ENGINEERING),
+        views=(EXECUTIVE, OPERATIONS, ENGINEERING, DOMAIN),
         data_quality_rule=RUN_QUALITY_RULE,
         resolver=runs.resolve_runs_latency,
         thresholds=Thresholds(watch=30_000.0, act=60_000.0, direction="above"),
@@ -289,12 +298,42 @@ _METRICS: tuple[Metric, ...] = (
         filters=RUN_GROUPS,
     ),
     Metric(
+        key="runs.confidence",
+        title="Run confidence",
+        definition=(
+            "The mean confidence the agents reported for their runs in the period (0 to 100). Rows give the runs "
+            "below their agent's confidence floor (sent to a person) and the runs that reported a score; runs "
+            "without a score are left out. Debugging-console runs are not counted."
+        ),
+        unit="percent",
+        source=RUN_SOURCE,
+        views=(EXECUTIVE, ENGINEERING, DOMAIN),
+        data_quality_rule=RUN_QUALITY_RULE,
+        resolver=runs.resolve_runs_confidence,
+        thresholds=Thresholds(watch=80.0, act=70.0, direction="below"),
+        group_by=RATE_GROUPS,
+        filters=RUN_GROUPS,
+    ),
+    Metric(
+        key="quality.feedback",
+        title="Feedback on runs",
+        definition=(
+            "Feedback reviewers recorded on agent runs in the period (thumbs up, thumbs down, corrections); rows "
+            "give the count of each type. Limited to the agents of the caller's domains."
+        ),
+        unit="count",
+        source=("agent_feedback",),
+        views=(DOMAIN, ENGINEERING),
+        data_quality_rule="measured from the feedback rows; no_data when none was recorded in the period.",
+        resolver=domain.resolve_quality_feedback,
+    ),
+    Metric(
         key="approvals.pending",
         title="Pending approvals",
         definition="Approvals waiting on a person now; rows list the oldest five.",
         unit="count",
         source=("hitl_queue",),
-        views=(EXECUTIVE, OPERATIONS, HR, MARKETING),
+        views=(EXECUTIVE, OPERATIONS, HR, MARKETING, DOMAIN, BACK_OFFICE),
         data_quality_rule=SNAPSHOT_QUALITY_RULE,
         resolver=runs.resolve_approvals_pending,
         thresholds=Thresholds(watch=5.0, act=20.0, direction="above"),
@@ -307,7 +346,7 @@ _METRICS: tuple[Metric, ...] = (
         definition="The median time from an approval request to its decision, for decisions made in the period.",
         unit="duration_ms",
         source=("hitl_queue",),
-        views=(EXECUTIVE, HR),
+        views=(EXECUTIVE, HR, DOMAIN, BACK_OFFICE),
         data_quality_rule="measured from decided approvals; no_data when none was decided in the period.",
         resolver=runs.resolve_approvals_cycle_time,
         thresholds=Thresholds(watch=4 * 3_600_000.0, act=24 * 3_600_000.0, direction="above"),
@@ -760,6 +799,35 @@ _METRICS: tuple[Metric, ...] = (
         data_quality_rule="measured; no_data when no prompt was edited in the period.",
         resolver=governance.resolve_prompt_edits,
     ),
+    Metric(
+        key="backoffice.deadlines",
+        title="Compliance deadlines",
+        definition=(
+            "Statutory deadlines not yet filed that are overdue today; rows give, per deadline type, the overdue "
+            "ones and those due in the next 30 days."
+        ),
+        unit="count",
+        source=("compliance_deadlines",),
+        views=(BACK_OFFICE,),
+        data_quality_rule=SNAPSHOT_QUALITY_RULE,
+        resolver=domain.resolve_compliance_deadlines,
+        thresholds=Thresholds(watch=1.0, act=3.0, direction="above"),
+        comparable=False,
+        kind="snapshot",
+    ),
+    Metric(
+        key="backoffice.txn_findings",
+        title="Transaction findings",
+        definition=(
+            "Findings transaction monitoring detected in the period; rows give each severity's findings and how "
+            "many are still open."
+        ),
+        unit="count",
+        source=("txn_findings",),
+        views=(BACK_OFFICE,),
+        data_quality_rule="measured from the findings rows; no_data when none was detected in the period.",
+        resolver=domain.resolve_txn_findings,
+    ),
 )
 
 METRICS: dict[str, Metric] = {metric.key: metric for metric in _METRICS}
@@ -796,15 +864,16 @@ VIEWS: dict[str, View] = {
             "value.money_saved",
             "value.hours_saved",
         ),
-        charts=("runs.volume", "agents.by_status", "runs.success_rate", "cost.spend", "value.money_saved"),
+        charts=("runs.volume", "agents.by_status", "runs.success_rate", "runs.confidence", "cost.spend",
+                "value.money_saved"),
     ),
     FINANCE: View(
         key=FINANCE,
         title="Finance",
-        tiles=("cost.spend", "cost.per_run", "cost.forecast", "runs.volume", "cost.data_quality", "value.money_saved",
-               "value.roi"),
+        tiles=("cost.spend", "cost.per_run", "cost.forecast", "runs.volume", "runs.success_rate",
+               "runs.straight_through_rate", "cost.data_quality", "value.money_saved", "value.roi"),
         charts=("cost.spend", "cost.by_agent", "cost.by_model", "cost.forecast", "cost.budgets", "tokens.by_unit",
-                "value.money_saved"),
+                "value.money_saved", "agents.by_status"),
     ),
     OPERATIONS: View(
         key=OPERATIONS,
@@ -813,17 +882,19 @@ VIEWS: dict[str, View] = {
             "workflows.runs",
             "workflows.stalled",
             "runs.success_rate",
+            "runs.straight_through_rate",
             "runs.latency",
             "approvals.pending",
             "connectors.unhealthy",
         ),
-        charts=("workflows.runs", "runs.volume", "connectors.unhealthy"),
+        charts=("workflows.runs", "runs.volume", "connectors.unhealthy", "agents.by_status"),
     ),
     HR: View(
         key=HR,
         title="HR",
-        tiles=("runs.volume", "runs.success_rate", "approvals.pending", "approvals.cycle_time", "hr.pt_returns"),
-        charts=("runs.volume", "hr.pt_returns"),
+        tiles=("runs.volume", "runs.success_rate", "runs.straight_through_rate", "approvals.pending",
+               "approvals.cycle_time", "hr.pt_returns"),
+        charts=("runs.volume", "hr.pt_returns", "agents.by_status"),
     ),
     MARKETING: View(
         key=MARKETING,
@@ -862,8 +933,38 @@ VIEWS: dict[str, View] = {
             "engineering.slow_spans",
             "engineering.eval_pass_rate",
             "engineering.prompt_edits",
+            "runs.confidence",
+            "quality.feedback",
         ),
-        charts=("engineering.slow_spans", "runs.volume"),
+        charts=("engineering.slow_spans", "runs.volume", "runs.confidence", "quality.feedback"),
+    ),
+    BACK_OFFICE: View(
+        key=BACK_OFFICE,
+        title="Back office",
+        tiles=(
+            "backoffice.deadlines",
+            "backoffice.txn_findings",
+            "approvals.pending",
+            "approvals.cycle_time",
+            "runs.volume",
+            "runs.success_rate",
+        ),
+        charts=("backoffice.deadlines", "backoffice.txn_findings", "runs.volume"),
+    ),
+    DOMAIN: View(
+        key=DOMAIN,
+        title="My domain",
+        tiles=(
+            "runs.volume",
+            "runs.success_rate",
+            "runs.straight_through_rate",
+            "runs.latency",
+            "runs.confidence",
+            "approvals.pending",
+            "approvals.cycle_time",
+            "quality.feedback",
+        ),
+        charts=("runs.volume", "runs.success_rate", "runs.confidence", "quality.feedback", "agents.by_status"),
     ),
 }
 

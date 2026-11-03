@@ -786,6 +786,28 @@ async def resolve_runs_straight_through_rate(ctx: MetricContext) -> dict[str, An
     return await _run_metric(ctx, _straight_through, fill_zero=False)
 
 
+def _confidence(t: dict[str, Any]) -> float | None:
+    """Mean confidence (0 to 100) of the runs that reported one."""
+    return pct(t["confidence_sum"], t["confidence_n"])
+
+
+async def resolve_runs_confidence(ctx: MetricContext) -> dict[str, Any]:
+    out = await _run_metric(
+        ctx,
+        _confidence,
+        fill_zero=False,
+        empty="No run in this period reported a confidence score.",
+    )
+    if out.get("data_quality") == "no_data" or ctx.group_by is not None:
+        return out
+    t = totals((await run_data(ctx, ctx.period)).rows)
+    out["rows"] = [
+        {"label": "below_floor", "value": int(t["below_floor"])},
+        {"label": "scored_runs", "value": int(t["confidence_n"])},
+    ]
+    return out
+
+
 async def resolve_runs_latency(ctx: MetricContext) -> dict[str, Any]:
     out = await _run_metric(
         ctx,

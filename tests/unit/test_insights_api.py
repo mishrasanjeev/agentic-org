@@ -43,7 +43,18 @@ COMPANY = str(uuid.UUID("00000000-0000-4000-8000-0000000000c2"))
 REPO_ROOT = Path(__file__).resolve().parents[2]
 ROLES = ("admin", "cfo", "chro", "cmo", "coo", "auditor", "domain_lead", "analyst", "developer", "merchant")
 EXPECTED_VIEWS: dict[str, set[str]] = {
-    "admin": {"executive", "finance", "operations", "hr", "marketing", "commerce", "compliance", "engineering"},
+    "admin": {
+        "executive",
+        "finance",
+        "operations",
+        "hr",
+        "marketing",
+        "commerce",
+        "compliance",
+        "engineering",
+        "back_office",
+        "domain",
+    },
     "cfo": {"finance"},
     "coo": {"operations"},
     "chro": {"hr"},
@@ -51,6 +62,8 @@ EXPECTED_VIEWS: dict[str, set[str]] = {
     "merchant": {"commerce"},
     "auditor": {"compliance"},
     "developer": {"engineering"},
+    "domain_lead": {"domain"},
+    "analyst": {"domain"},
 }
 
 

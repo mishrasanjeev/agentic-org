@@ -14,6 +14,10 @@ from core.insights.registry import METRICS, UNITS, VIEW_ROLES, VIEWS, Thresholds
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 V1_KEYS = {
+    "runs.confidence",
+    "quality.feedback",
+    "backoffice.deadlines",
+    "backoffice.txn_findings",
     "agents.by_status",
     "runs.volume",
     "runs.success_rate",
@@ -55,6 +59,7 @@ V1_KEYS = {
     "engineering.prompt_edits",
 }
 EXECUTIVE = {
+    "runs.confidence",
     "agents.by_status",
     "runs.volume",
     "runs.success_rate",
@@ -67,6 +72,9 @@ EXECUTIVE = {
     "value.hours_saved",
 }
 FINANCE = {
+    "agents.by_status",
+    "runs.success_rate",
+    "runs.straight_through_rate",
     "cost.spend",
     "cost.per_run",
     "cost.by_agent",
@@ -80,6 +88,8 @@ FINANCE = {
     "value.roi",
 }
 OPERATIONS = {
+    "runs.straight_through_rate",
+    "agents.by_status",
     "workflows.runs",
     "workflows.stalled",
     "runs.success_rate",
@@ -88,7 +98,34 @@ OPERATIONS = {
     "connectors.unhealthy",
     "runs.volume",
 }
-HR = {"runs.volume", "runs.success_rate", "approvals.pending", "approvals.cycle_time", "hr.pt_returns"}
+HR = {
+    "runs.volume",
+    "runs.success_rate",
+    "runs.straight_through_rate",
+    "approvals.pending",
+    "approvals.cycle_time",
+    "hr.pt_returns",
+    "agents.by_status",
+}
+BACK_OFFICE = {
+    "backoffice.deadlines",
+    "backoffice.txn_findings",
+    "approvals.pending",
+    "approvals.cycle_time",
+    "runs.volume",
+    "runs.success_rate",
+}
+DOMAIN = {
+    "runs.volume",
+    "runs.success_rate",
+    "runs.straight_through_rate",
+    "runs.latency",
+    "runs.confidence",
+    "approvals.pending",
+    "approvals.cycle_time",
+    "quality.feedback",
+    "agents.by_status",
+}
 MARKETING = {
     "marketing.leads",
     "marketing.content_drafts",
@@ -99,6 +136,8 @@ MARKETING = {
 COMMERCE = {"commerce.orders", "commerce.webhook_failures", "commerce.funnel"}
 COMPLIANCE = {key for key in V1_KEYS if key.startswith("compliance.")}
 ENGINEERING = {
+    "runs.confidence",
+    "quality.feedback",
     "runs.success_rate",
     "runs.latency",
     "runs.volume",
@@ -124,6 +163,8 @@ def test_views_show_exactly_their_metrics() -> None:
         "commerce",
         "compliance",
         "engineering",
+        "back_office",
+        "domain",
     }
     assert set(VIEWS["executive"].keys) == EXECUTIVE
     assert set(VIEWS["finance"].keys) == FINANCE
@@ -133,6 +174,8 @@ def test_views_show_exactly_their_metrics() -> None:
     assert set(VIEWS["commerce"].keys) == COMMERCE
     assert set(VIEWS["compliance"].keys) == COMPLIANCE and len(COMPLIANCE) == 7
     assert set(VIEWS["engineering"].keys) == ENGINEERING
+    assert set(VIEWS["back_office"].keys) == BACK_OFFICE
+    assert set(VIEWS["domain"].keys) == DOMAIN
     for view in VIEWS.values():
         for key in view.keys:
             assert key in METRICS, key
@@ -152,8 +195,21 @@ def test_view_roles() -> None:
         "commerce": frozenset({"admin", "merchant"}),
         "compliance": frozenset({"admin", "auditor"}),
         "engineering": frozenset({"admin", "developer"}),
+        "back_office": frozenset({"admin"}),
+        "domain": frozenset({"admin", "domain_lead", "analyst"}),
     }
-    every = ["executive", "finance", "operations", "hr", "marketing", "commerce", "compliance", "engineering"]
+    every = [
+        "executive",
+        "finance",
+        "operations",
+        "hr",
+        "marketing",
+        "commerce",
+        "compliance",
+        "engineering",
+        "back_office",
+        "domain",
+    ]
     assert registry.allowed_views("admin", is_admin=True) == every
     assert registry.allowed_views("", is_admin=True) == every
     assert registry.allowed_views("cfo", is_admin=False) == ["finance"]
@@ -165,8 +221,12 @@ def test_view_roles() -> None:
     assert registry.allowed_views("developer", is_admin=False) == ["engineering"]
     # A role claim of "admin" without the admin scope is not an administrator.
     assert registry.allowed_views("admin", is_admin=False) == []
-    for role in ("analyst", "domain_lead", ""):
-        assert registry.allowed_views(role, is_admin=False) == [], role
+    for role in ("analyst", "domain_lead"):
+        assert registry.allowed_views(role, is_admin=False) == ["domain"], role
+    assert registry.allowed_views("", is_admin=False) == []
+    # The Domain view keeps the caller's own domains; Back office reads its five domains.
+    assert registry.VIEW_DOMAINS["domain"] is None
+    assert registry.VIEW_DOMAINS["back_office"] == ("backoffice", "legal", "risk", "corporate", "comms")
     # The Compliance view is the auditor's (no domain limit); Engineering keeps the developer's domain.
     assert registry.VIEW_DOMAINS["compliance"] is None and registry.VIEW_DOMAINS["engineering"] is None
 
@@ -382,7 +442,13 @@ def test_grouping_and_filters_are_parsed_against_the_metric() -> None:
 
 def test_only_run_metrics_take_filters_and_they_take_every_run_dimension() -> None:
     filtered = {key for key, metric in METRICS.items() if metric.filters}
-    assert filtered == {"runs.volume", "runs.success_rate", "runs.straight_through_rate", "runs.latency"}
+    assert filtered == {
+        "runs.volume",
+        "runs.success_rate",
+        "runs.straight_through_rate",
+        "runs.latency",
+        "runs.confidence",
+    }
     for key in filtered:
         assert METRICS[key].filters == RUN_GROUPS
         assert METRICS[key].describe()["filters"] == list(RUN_GROUPS)
