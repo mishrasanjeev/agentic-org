@@ -8510,7 +8510,7 @@
     "public_exempt_reason": null,
     "rate_limit": "reporting-read",
     "scope": "insights.read",
-    "source_line": 248,
+    "source_line": 278,
     "tenant_required": true
   },
   {
@@ -8672,7 +8672,7 @@
     "public_exempt_reason": null,
     "rate_limit": "reporting-read",
     "scope": "insights.read",
-    "source_line": 326,
+    "source_line": 356,
     "tenant_required": true
   },
   {
@@ -8690,7 +8690,7 @@
     "public_exempt_reason": null,
     "rate_limit": "reporting-export",
     "scope": "insights.read",
-    "source_line": 368,
+    "source_line": 406,
     "tenant_required": true
   },
   {
@@ -8744,7 +8744,7 @@
     "public_exempt_reason": null,
     "rate_limit": "reporting-read",
     "scope": "insights.read",
-    "source_line": 218,
+    "source_line": 248,
     "tenant_required": true
   },
   {
@@ -8888,7 +8888,7 @@
     "public_exempt_reason": null,
     "rate_limit": "reporting-read",
     "scope": "insights.read",
-    "source_line": 280,
+    "source_line": 310,
     "tenant_required": true
   },
   {
@@ -11372,7 +11372,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "companies.sensitive.partner_dashboard",
-    "source_line": 3170,
+    "source_line": 3192,
     "tenant_required": true
   },
   {

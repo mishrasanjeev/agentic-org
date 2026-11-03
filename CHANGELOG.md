@@ -1,5 +1,25 @@
 # Changelog
 
+## Unreleased - Insights Phase 4 foundation
+
+- The platform view's reconciled-nights count no longer resets every day: today's rollup (still being rolled) and
+  yesterday's (not yet due to reconcile) are skipped, so the Phase 1 gate of 14 reconciled nights can show as
+  met. A day older than that which never reconciled still ends the streak, as do a mismatch and a gap. Migration
+  v6z112 replaces `insights_platform_tenants` in place.
+- The metrics API takes `filter[dim]=a,b` on run metrics (agent, agent type, domain, entry point, task type,
+  environment, status) and two `group_by` dimensions at once (`group_by[]` also accepted); grouped rows carry each
+  dimension's value. Inline exports and background export jobs take the same filters and record them. A filter
+  never widens a domain-limited caller.
+- The legacy partner dashboard (`GET /api/v1/companies/partner-dashboard`) is enforced on the server for the roles
+  its page admits (admin, CFO, COO, auditor); other roles get 403.
+- Tests: tenant isolation across every Insights view, metric, explorer, export format, value summary, alerts list,
+  run evidence, run bundle and background job kind (download and sign-off included), both directions, under a
+  NOBYPASSRLS role; English and Hindi parity for every Insights namespace; every explorer the UI links to exists
+  in the registry (`ui/src/lib/insights/explorerKeys.generated.json`, written by
+  `scripts/generate_insights_metric_keys.py`).
+- `docs/api-reference.md` has an Insights section: views, metrics, filters and grouping, exports, explorers, run
+  evidence, background jobs and sign-off, value, alerts and BI access.
+
 ## Unreleased - Scheduled Insights reports
 
 - The Report Scheduler schedules an Insights view (PDF), the finance pack or the period evidence pack for a period
