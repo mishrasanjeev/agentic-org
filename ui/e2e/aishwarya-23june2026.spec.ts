@@ -145,7 +145,7 @@ test.describe("Aishwarya 23 June 2026 workbook regressions", () => {
       await route.fulfill({ json: cmoPayload() });
     });
 
-    await page.goto(`${baseURL}/dashboard/cmo`, { waitUntil: "domcontentloaded" });
+    await page.goto(`${baseURL}/dashboard/marketing-ops`, { waitUntil: "domcontentloaded" });
 
     const hubspotRow = page.locator("tr", { hasText: "HubSpot" }).first();
     await expect(hubspotRow.locator("td").nth(1)).toContainText("Healthy");

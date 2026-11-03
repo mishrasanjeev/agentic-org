@@ -1,72 +1,86 @@
 import { expect, test } from "./helpers/test";
 import { authenticate } from "./helpers/auth";
 
+// The Partner dashboard is retired: /dashboard/partner opens the Insights partner
+// view. The mock gives the partner view the figures the old page showed.
 async function mockPartnerDashboard(page: import("@playwright/test").Page) {
-  await page.route("**/api/v1/partner-dashboard", async (route) => {
+  const period = { from: "2026-05-01", to: "2026-05-04", granularity: "day" };
+  const metric = (key: string, title: string, value: number, unit = "count") => ({
+    key,
+    title,
+    definition: `${title} for the firm's client companies.`,
+    unit,
+    source: "fixture",
+    data_quality: "measured",
+    computed_at: "2026-05-04T00:00:00Z",
+    period,
+    value,
+    state: "ok",
+    series: [],
+    rows: [],
+  });
+  await page.route("**/api/v1/insights/status", async (route) => {
     await route.fulfill({
       status: 200,
       contentType: "application/json",
       body: JSON.stringify({
-        total_clients: 2,
-        active_clients: 1,
-        avg_health_score: 75,
-        total_pending_filings: 2,
-        total_overdue: 3,
-        revenue_per_month_inr: 4999,
-        clients: [
-          {
-            id: "company-active",
-            name: "Active CA Client",
-            health_score: 75,
-            pending_filings: 2,
-            overdue_filings: 1,
-            is_active: true,
-            status: "active",
-            subscription_status: "trial",
-          },
-          {
-            id: "company-inactive",
-            name: "Archived CA Client",
-            health_score: 50,
-            pending_filings: 0,
-            overdue_filings: 2,
-            is_active: false,
-            status: "inactive",
-            subscription_status: "trial",
-          },
+        enabled: true,
+        views: ["executive", "finance", "partner"],
+        platform_operator: false,
+        settings: { timezone: "Asia/Kolkata", fiscal_year_start_month: 4, currency: "INR" },
+      }),
+    });
+  });
+  await page.route("**/api/v1/insights/views/partner**", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        view: "partner",
+        period,
+        tiles: [
+          // One active client; the archived one is not counted.
+          metric("partner.clients", "Active client companies", 1),
+          // Three overdue statutory deadlines across the clients.
+          metric("backoffice.deadlines", "Compliance deadlines", 3),
+          metric("partner.filings", "Filings waiting for approval", 2),
+          metric("partner.billing", "Invoiced to clients", 4999, "inr"),
         ],
-        upcoming_deadlines: [],
+        charts: [],
+        needs_you: [],
       }),
     });
   });
 }
 
-test("Partner dashboard labels overdue values as filings and reflects inactive clients", async ({ page }) => {
+test("Partner dashboard URL opens the Insights partner view with overdue deadlines and active clients", async ({ page }) => {
   await authenticate(page);
   await mockPartnerDashboard(page);
 
   await page.goto("/dashboard/partner");
 
-  await expect(page.getByRole("heading", { name: "Partner Dashboard" })).toBeVisible();
-  await expect(page.getByText("Overdue Filings").first()).toBeVisible();
-  await expect(page.getByText("3 filings")).toBeVisible();
-  await expect(page.getByText("Archived CA Client")).toBeVisible();
-  await expect(page.getByText("Inactive", { exact: true }).first()).toBeVisible();
-  await expect(page.getByText("Avg Health Score")).toBeVisible();
-  await expect(page.getByText("75%").first()).toBeVisible();
-  await expect(page.getByText("Overdue (score < 50)")).toHaveCount(0);
+  await expect(page).toHaveURL(/\/dashboard\/insights\?(.*&)?view=partner/);
+  await expect(page.getByRole("heading", { name: "Insights", exact: true })).toBeVisible();
+  await expect(page.getByRole("tab", { name: "Partner" })).toHaveAttribute("aria-selected", "true");
+  const deadlines = page.locator('[data-metric-key="backoffice.deadlines"]');
+  await expect(deadlines).toContainText("Compliance deadlines");
+  await expect(deadlines.getByTestId("tile-value")).toHaveText("3");
+  const clients = page.locator('[data-metric-key="partner.clients"]');
+  await expect(clients).toContainText("Active client companies");
+  await expect(clients.getByTestId("tile-value")).toHaveText("1");
+  await expect(page.getByRole("heading", { name: "Partner Dashboard" })).toHaveCount(0);
 });
 
-test("Hindi language switch reaches partner dashboard metric labels", async ({ page }) => {
+test("Hindi language switch reaches the Insights partner view", async ({ page }) => {
   await page.addInitScript(() => localStorage.setItem("agenticorg_lang", "hi"));
   await authenticate(page);
   await mockPartnerDashboard(page);
 
   await page.goto("/dashboard/partner");
 
-  await expect(page.getByRole("heading", { name: "पार्टनर डैशबोर्ड" })).toBeVisible();
-  await expect(page.getByText("अतिदेय फाइलिंग").first()).toBeVisible();
-  await expect(page.getByText("निष्क्रिय", { exact: true }).first()).toBeVisible();
+  await expect(page).toHaveURL(/\/dashboard\/insights\?(.*&)?view=partner/);
+  await expect(page.getByRole("heading", { name: "इनसाइट्स", exact: true })).toBeVisible();
+  await expect(page.getByRole("tab", { name: "पार्टनर" })).toHaveAttribute("aria-selected", "true");
 });
 
 test("OAuth2 connector setup registers internally without external authorization", async ({ page }) => {

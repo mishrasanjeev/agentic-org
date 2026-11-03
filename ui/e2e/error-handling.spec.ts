@@ -185,7 +185,7 @@ test.describe("Token Expiry", () => {
     // ProtectedRoute redirects to /login.
     await setSessionToken(page, "expired.invalid.token");
 
-    await page.goto(`${baseURL}/dashboard/cfo`, {
+    await page.goto(`${baseURL}/dashboard/insights`, {
       waitUntil: "domcontentloaded",
     });
     await page.waitForLoadState("networkidle");
@@ -355,7 +355,7 @@ test.describe("Network Error Handling", () => {
 // ===========================================================================
 
 test.describe("No Unhandled Errors", () => {
-  test("CFO Dashboard loads without unhandled console errors", async ({
+  test("CFO Dashboard URL opens the Insights finance view without unhandled console errors", async ({
     page,
     baseURL,
   }) => {
@@ -371,6 +371,8 @@ test.describe("No Unhandled Errors", () => {
     await page.goto(`${baseURL}/dashboard/cfo`, {
       waitUntil: "domcontentloaded",
     });
+    // The CFO dashboard is retired: its URL opens the Insights finance view.
+    await expect(page).toHaveURL(/\/dashboard\/insights\?(.*&)?view=finance/, { timeout: 15000 });
     await page.waitForLoadState("networkidle");
 
     // Filter out known non-critical errors
@@ -389,7 +391,7 @@ test.describe("No Unhandled Errors", () => {
     }
   });
 
-  test("CMO Dashboard loads without unhandled console errors", async ({
+  test("CMO Dashboard URL opens Marketing operations without unhandled console errors", async ({
     page,
     baseURL,
   }) => {
@@ -405,6 +407,8 @@ test.describe("No Unhandled Errors", () => {
     await page.goto(`${baseURL}/dashboard/cmo`, {
       waitUntil: "domcontentloaded",
     });
+    // The CMO dashboard is retired: its URL opens Marketing operations.
+    await expect(page).toHaveURL(/\/dashboard\/marketing-ops/, { timeout: 15000 });
     await page.waitForLoadState("networkidle");
 
     const criticalErrors = consoleErrors.filter(
@@ -434,8 +438,10 @@ test.describe("Protected Route Guards", () => {
   }) => {
     const protectedPaths = [
       "/dashboard",
+      "/dashboard/insights",
       "/dashboard/cfo",
       "/dashboard/cmo",
+      "/dashboard/marketing-ops",
       "/dashboard/agents",
       "/dashboard/workflows",
       "/dashboard/approvals",

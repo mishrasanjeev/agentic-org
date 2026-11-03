@@ -65,8 +65,9 @@ test.describe("Public Routes — Reachability", () => {
 test.describe("Dashboard Routes — Auth Required", () => {
   test.describe.configure({ mode: "serial" });
 
-  const dashboardRoutes = [
-    { path: "/dashboard", name: "Dashboard", expectText: "Dashboard" },
+  // `expectUrl` marks a retired page's URL: it must redirect to the page that now holds its features.
+  const dashboardRoutes: { path: string; name: string; expectText: string; expectUrl?: RegExp }[] = [
+    { path: "/dashboard", name: "Dashboard home (redirects to Insights)", expectText: "Insights", expectUrl: /\/dashboard\/insights/ },
     { path: "/dashboard/agents", name: "Agents", expectText: "Agent" },
     { path: "/dashboard/agents/new", name: "Create Agent", expectText: "Agent" },
     { path: "/dashboard/workflows", name: "Workflows", expectText: "Workflow" },
@@ -77,7 +78,13 @@ test.describe("Dashboard Routes — Auth Required", () => {
     { path: "/dashboard/schemas", name: "Schemas", expectText: "Schema" },
     { path: "/dashboard/audit", name: "Audit", expectText: "Audit" },
     { path: "/dashboard/settings", name: "Settings", expectText: "Settings" },
-    { path: "/dashboard/cfo", name: "CFO Dashboard", expectText: "Dashboard" },
+    { path: "/dashboard/insights", name: "Insights", expectText: "Insights" },
+    {
+      path: "/dashboard/cfo",
+      name: "CFO Dashboard (redirects to Insights finance view)",
+      expectText: "Insights",
+      expectUrl: /\/dashboard\/insights\?view=finance/,
+    },
   ];
 
   test.beforeEach(async ({ page }) => {
@@ -95,6 +102,10 @@ test.describe("Dashboard Routes — Auth Required", () => {
       // Page should not be blank
       const bodyText = await page.locator("body").textContent();
       expect(bodyText?.trim().length).toBeGreaterThan(0);
+
+      if (route.expectUrl) {
+        await expect(page).toHaveURL(route.expectUrl, { timeout: 15000 });
+      }
 
       // Should contain expected text
       await expect(page.getByText(route.expectText).first()).toBeVisible({ timeout: 15000 });
@@ -139,7 +150,7 @@ test.describe("Dashboard — Sidebar Navigation", () => {
   test.describe.configure({ mode: "serial" });
 
   const sidebarLinks = [
-    { label: "Dashboard", expectPath: "/dashboard", expectText: "Dashboard" },
+    { label: "Insights", expectPath: "/dashboard/insights", expectText: "Insights" },
     { label: "Agents", expectPath: "/dashboard/agents", expectText: "Agent" },
     { label: "Workflows", expectPath: "/dashboard/workflows", expectText: "Workflow" },
     { label: "Approvals", expectPath: "/dashboard/approvals", expectText: "Approval" },
@@ -147,6 +158,8 @@ test.describe("Dashboard — Sidebar Navigation", () => {
     { label: "Schemas", expectPath: "/dashboard/schemas", expectText: "Schema" },
     { label: "Audit", expectPath: "/dashboard/audit", expectText: "Audit" },
     { label: "Settings", expectPath: "/dashboard/settings", expectText: "Settings" },
+    { label: "Marketing operations", expectPath: "/dashboard/marketing-ops", expectText: "Marketing operations" },
+    { label: "Monitoring", expectPath: "/dashboard/monitoring", expectText: "Monitoring" },
   ];
 
   test.beforeEach(async ({ page }) => {

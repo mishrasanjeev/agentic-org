@@ -73,9 +73,11 @@ test.describe("Full App — Dashboard (Auth Required)", () => {
   });
 
   // --- Dashboard ---
-  test("Dashboard loads with metric cards", async ({ page }) => {
+  test("Dashboard lands on Insights with metric tiles", async ({ page }) => {
     await page.goto(`${APP}/dashboard`, { waitUntil: "networkidle" });
-    await expect(page.getByText("Dashboard").first()).toBeVisible({ timeout: 10000 });
+    // The home dashboard is retired: /dashboard lands on Insights.
+    await expect(page).toHaveURL(/\/dashboard\/insights/, { timeout: 10000 });
+    await expect(page.getByRole("heading", { name: "Insights", exact: true })).toBeVisible({ timeout: 10000 });
     // Should show some metric label
     const mainText = await page.locator("main").textContent() || "";
     expect(mainText).not.toContain("NaN");
