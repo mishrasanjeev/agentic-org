@@ -8514,6 +8514,24 @@
     "tenant_required": true
   },
   {
+    "audit_event": "insights.entity.read",
+    "auth_required": true,
+    "function": "insights_entity",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/insights/entities/{kind}/{entity_id} api/v1/insights_entities.py:insights_entity",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/insights_entities.py",
+    "path": "/api/v1/insights/entities/{kind}/{entity_id}",
+    "public_exempt_reason": null,
+    "rate_limit": "reporting-read",
+    "scope": "insights.read",
+    "source_line": 43,
+    "tenant_required": true
+  },
+  {
     "audit_event": "insights.explore.read",
     "auth_required": true,
     "function": "insights_explore",
@@ -8727,6 +8745,24 @@
     "rate_limit": "reporting-export",
     "scope": "insights.read",
     "source_line": 295,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "insights.search",
+    "auth_required": true,
+    "function": "insights_search",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/insights/search api/v1/insights_entities.py:insights_search",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/insights_entities.py",
+    "path": "/api/v1/insights/search",
+    "public_exempt_reason": null,
+    "rate_limit": "reporting-read",
+    "scope": "insights.read",
+    "source_line": 79,
     "tenant_required": true
   },
   {
