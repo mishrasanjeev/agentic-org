@@ -195,3 +195,55 @@ def test_the_migration_follows_v6z109_and_matches_the_model() -> None:
         assert ",".join(f"'{v}'" for v in values) in source
     assert set(export_jobs.FORMATS_BY_KIND) == set(EXPORT_KINDS)
     assert "FORCE ROW LEVEL SECURITY" in source
+
+
+def test_storage_uses_the_configured_bucket_when_no_fake_is_active(monkeypatch) -> None:
+    """The real path: one bucket from settings, objects written, read and deleted through the client."""
+    from google.cloud import storage as gcs
+
+    from core.config import settings
+
+    objects: dict[str, tuple[bytes, str]] = {}
+    buckets: list[str] = []
+
+    class Blob:
+        def __init__(self, key: str) -> None:
+            self.key = key
+
+        def upload_from_string(self, data: bytes, content_type: str) -> None:
+            objects[self.key] = (data, content_type)
+
+        def exists(self) -> bool:
+            return self.key in objects
+
+        def download_as_bytes(self) -> bytes:
+            return objects[self.key][0]
+
+        def delete(self) -> None:
+            del objects[self.key]
+
+    class Client:
+        def bucket(self, name: str):
+            buckets.append(name)
+            return type("Bucket", (), {"blob": staticmethod(Blob)})()
+
+    monkeypatch.delenv("AGENTICORG_TEST_FAKE_STORAGE", raising=False)
+    monkeypatch.setattr(gcs, "Client", Client)
+    monkeypatch.setattr(settings, "insights_export_bucket", "")
+    with pytest.raises(storage.ExportStorageError, match="unconfigured"):
+        storage.get("k")
+    with pytest.raises(storage.ExportStorageError, match="unconfigured"):
+        storage._bucket()
+    storage.delete("k")  # nothing configured: nothing to delete
+
+    monkeypatch.setattr(settings, "insights_export_bucket", " exports-real ")
+    assert storage.configured() and storage.bucket_name() == "exports-real"
+    storage.put("t/a.csv", b"x,y\n", "text/csv")
+    assert objects == {"t/a.csv": (b"x,y\n", "text/csv")}
+    assert storage.get("t/a.csv") == b"x,y\n"
+    storage.delete("t/a.csv")
+    assert objects == {}
+    with pytest.raises(storage.ExportStorageError, match="missing"):
+        storage.get("t/a.csv")
+    storage.delete("t/a.csv")  # already gone: no error
+    assert set(buckets) == {"exports-real"}
