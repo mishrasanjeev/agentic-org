@@ -659,6 +659,18 @@ carry a Filters sheet and a Definitions sheet. Personal data is masked by the te
 Explorer keys: `agents`, `runs`, `workflows`, `approvals`, `cost`, `value`, `quality`, `connectors`, `audit`. A
 run of another tenant, or outside the caller's domains, is 404.
 
+### Entity pages and search
+
+| Method and path | Returns |
+| --- | --- |
+| `GET /api/v1/insights/entities/{kind}/{id}` | `kind` is `agent`, `workflow`, `connector`, `company`, `user` or `cost_centre`: `title`, `facts`, `cards` (metrics scoped to the entity for `from`/`to`), `timeline` (audit log), `links` |
+| `GET /api/v1/insights/search?q=` | Entities the caller may open whose name matches `q` (at least two characters), and a run when `q` is its id |
+
+Who may open each kind: agents (administrators, CxO roles, developers, domain leads, analysts and auditors, within
+their domains), workflows and connectors (administrators and the COO), companies (administrators, CFO, COO,
+auditor), people (administrators and auditors), cost centres (administrators and the CFO). Another kind is 403; an
+entity of another tenant or outside the caller's domains is 404.
+
 ### Background exports, packs and sign-off
 
 | Method and path | Purpose |

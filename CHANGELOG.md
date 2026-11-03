@@ -1,5 +1,23 @@
 # Changelog
 
+## Unreleased - Insights Domain and Back-office views, entity pages and search
+
+- Domain leads and analysts land on a new **My domain** view (runs, success and straight-through rates, latency,
+  run confidence, approvals and feedback, limited to their assigned domain; nothing when no domain is assigned) and
+  open the agents, runs, approvals, cost and quality explorers for that domain. Administrators get a
+  **Back office** view: overdue compliance deadlines (and those due in 30 days), the period's transaction findings
+  by severity, and approvals and runs of the backoffice, legal, risk, corporate and comms agents.
+- New metrics: `runs.confidence` (mean confidence, runs below their agent's floor), `quality.feedback`,
+  `backoffice.deadlines`, `backoffice.txn_findings`. The Finance, HR and Operations views carry the cards the legacy
+  CxO dashboards had (success and straight-through rates, agents by status); the Executive view shows confidence.
+- **Entity pages** (Level 3) for one agent, workflow, connector, company, person or cost centre
+  (`GET /api/v1/insights/entities/{kind}/{id}`): facts, metric cards scoped to the entity, its timeline from the audit
+  log and links to the explorers filtered to it and to its management page. Explorer rows and the run page open
+  them. Who may open each kind follows the explorers; an entity outside the caller's tenant or domains is 404.
+- **Search**: Ctrl/Cmd-K on Insights pages finds agents, workflows, connectors, companies, people and cost centres by
+  name, and a run by its id (`GET /api/v1/insights/search?q=`), among what the caller may open. Breadcrumbs on the
+  explorer, run and entity pages.
+
 ## Unreleased - Insights Phase 4 foundation
 
 - The platform view's reconciled-nights count no longer resets every day: today's rollup (still being rolled) and
