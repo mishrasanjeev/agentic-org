@@ -15,7 +15,7 @@ from datetime import date, datetime
 from typing import Annotated, Literal
 
 from cryptography.fernet import InvalidToken
-from fastapi import APIRouter, Depends, File, HTTPException, Query, Response, UploadFile
+from fastapi import APIRouter, Depends, File, HTTPException, Query, Request, Response, UploadFile
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 from sqlalchemy import func, select
 from sqlalchemy.exc import SQLAlchemyError
@@ -3154,10 +3154,32 @@ def _effective_client_health(
 # PARTNER DASHBOARD -- GET
 # ---------------------------------------------------------------------------
 
+# The roles the partner dashboard page admits (ui/src/App.tsx); the server enforces the same set.
+PARTNER_DASHBOARD_ROLES = frozenset({"admin", "cfo", "coo", "auditor"})
+
+
+def _partner_dashboard_reader(request: Request) -> None:
+    """Admit administrators and the partner dashboard's roles; 403 for anyone else."""
+    from core.rbac import has_admin_scope
+
+    if has_admin_scope(getattr(request.state, "scopes", None) or []):
+        return
+    claims = getattr(request.state, "claims", None) or {}
+    if str(claims.get("role") or "") in PARTNER_DASHBOARD_ROLES:
+        return
+    raise HTTPException(
+        403,
+        detail={
+            "error": "partner_dashboard_forbidden",
+            "message": "The partner dashboard is not available to your role.",
+        },
+    )
+
 
 @router.get(
     "/partner-dashboard",
     response_model=PartnerDashboardOut,
+    dependencies=[Depends(_partner_dashboard_reader)],
 )
 @route_meta(
     auth_required=True,
