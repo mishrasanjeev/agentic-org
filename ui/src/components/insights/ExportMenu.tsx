@@ -11,6 +11,7 @@ import {
 } from "@/lib/insights/api";
 import { useOptionalRole } from "@/contexts/AuthContext";
 import { saveBlob } from "@/lib/insights/download";
+import { svgToPng } from "@/lib/insights/chartImage";
 import { exportsApi, offersBackground, type ExportRequest } from "@/lib/insights/exports";
 
 /**
@@ -31,12 +32,15 @@ export default function ExportMenu({
   filters,
   download,
   background,
+  picture,
 }: {
   metricKey: string;
   title: string;
   filters: InsightsFilters;
   download?: (format: ExportFormat, includePii: boolean) => Promise<{ blob: Blob; filename: string }>;
   background?: (format: ExportFormat) => ExportRequest;
+  /** The chart as a picture (SVG markup with its context), when the metric is drawn as one. */
+  picture?: () => string | null;
 }) {
   const { t } = useTranslation();
   const mayIncludePii = RAW_PII_ROLES.has(useOptionalRole());
@@ -78,6 +82,20 @@ export default function ExportMenu({
       if (await offersBackground(e)) setTooLarge(format);
     } finally {
       setBusy(null);
+    }
+  };
+
+  const savePicture = async (kind: "svg" | "png") => {
+    close();
+    setError(null);
+    const markup = picture?.();
+    if (!markup) return setError(t("insights.export.noPicture"));
+    try {
+      const blob =
+        kind === "svg" ? new Blob([markup], { type: "image/svg+xml;charset=utf-8" }) : await svgToPng(markup);
+      saveBlob(blob, `${exportFilename(metricKey, "csv", filters).replace(/\.csv$/, "")}.${kind}`);
+    } catch {
+      setError(t("insights.export.failed"));
     }
   };
 
@@ -162,6 +180,24 @@ export default function ExportMenu({
                 {t(`insights.export.${format}`)}
               </button>
             ))}
+            {picture
+              ? (["svg", "png"] as const).map((kind, j) => (
+                  <button
+                    key={kind}
+                    ref={(el) => {
+                      itemRefs.current[EXPORT_FORMATS.length + j] = el;
+                    }}
+                    type="button"
+                    role="menuitem"
+                    tabIndex={-1}
+                    data-format={kind}
+                    onClick={() => void savePicture(kind)}
+                    className="block w-full px-3 py-1.5 text-left text-xs hover:bg-muted focus:bg-muted"
+                  >
+                    {t(`insights.export.${kind}`)}
+                  </button>
+                ))
+              : null}
             {mayIncludePii ? (
               <label className="mt-1 flex items-start gap-1.5 border-t px-3 pt-1.5 text-[11px] leading-tight">
                 <input

@@ -10,6 +10,7 @@ import { Helmet } from "react-helmet-async";
 import { Link } from "react-router";
 import { useTranslation } from "react-i18next";
 import EmptyState from "@/components/insights/EmptyState";
+import { useOptionalRole } from "@/contexts/AuthContext";
 import { errorStatus, readErrorDetail } from "@/lib/insights/api";
 import { saveBlob } from "@/lib/insights/download";
 import { anyPending, exportsApi, type ExportJob } from "@/lib/insights/exports";
@@ -17,6 +18,7 @@ import { MISSING, formatCount } from "@/lib/insights/format";
 import { STATE_CHIP_CLASSES } from "@/lib/insights/tokens";
 
 export const POLL_MS = 10_000;
+const SIGNING_ROLES = new Set(["admin", "auditor"]);
 
 type State =
   | { kind: "loading" }
@@ -50,6 +52,23 @@ export default function InsightsDownloads() {
   const [state, setState] = useState<State>({ kind: "loading" });
   const [busy, setBusy] = useState<string | null>(null);
   const [notice, setNotice] = useState<{ id: string; text: string; error?: boolean } | null>(null);
+  const role = useOptionalRole();
+  const [signing, setSigning] = useState<{ id: string; statement: string } | null>(null);
+
+  const sign = async (job: ExportJob, statement: string) => {
+    setBusy(job.id);
+    setNotice(null);
+    try {
+      await exportsApi.sign(job.id, statement);
+      setSigning(null);
+      setNotice({ id: job.id, text: t("insightsDownloads.signed") });
+      await load(true);
+    } catch (e) {
+      setNotice({ id: job.id, text: (await readErrorDetail(e)) || t("insightsDownloads.signFailed"), error: true });
+    } finally {
+      setBusy(null);
+    }
+  };
 
   const load = useCallback(async (quiet = false) => {
     if (!quiet) setState({ kind: "loading" });
@@ -144,6 +163,58 @@ export default function InsightsDownloads() {
                     <div className="break-all text-[11px] text-muted-foreground">SHA-256 {job.sha256}</div>
                   ) : null}
                   {job.error ? <div className="text-xs text-[hsl(var(--state-act))]">{job.error}</div> : null}
+                  {job.verification_status ? (
+                    <div className="text-xs" data-testid={`verification-${job.id}`}>
+                      {t(`insightsDownloads.verification.${job.verification_status}`, {
+                        defaultValue: job.verification_status,
+                      })}
+                    </div>
+                  ) : null}
+                  {job.signature ? (
+                    <div className="text-xs text-muted-foreground" data-testid={`signature-${job.id}`}>
+                      {t("insightsDownloads.signedBy", {
+                        name: String(job.signature.by ?? ""),
+                        when: formatWhen(job.signed_at, i18n.language),
+                      })}{" "}
+                      “{String(job.signature.statement ?? "")}”
+                    </div>
+                  ) : null}
+                  {signing?.id === job.id ? (
+                    <form
+                      className="mt-2 flex flex-col gap-1"
+                      onSubmit={(e) => {
+                        e.preventDefault();
+                        void sign(job, signing.statement);
+                      }}
+                    >
+                      <label className="text-xs font-medium" htmlFor={`statement-${job.id}`}>
+                        {t("insightsDownloads.statementLabel")}
+                      </label>
+                      <textarea
+                        id={`statement-${job.id}`}
+                        className="min-h-[64px] rounded-md border p-2 text-xs"
+                        maxLength={1000}
+                        value={signing.statement}
+                        onChange={(e) => setSigning({ id: job.id, statement: e.target.value })}
+                      />
+                      <div className="flex gap-2">
+                        <button
+                          type="submit"
+                          disabled={busy === job.id || !signing.statement.trim()}
+                          className="insights-target inline-flex h-8 items-center rounded-md border px-3 text-xs font-medium hover:bg-muted disabled:opacity-60"
+                        >
+                          {t("insightsDownloads.confirmSign")}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setSigning(null)}
+                          className="insights-target inline-flex h-8 items-center rounded-md px-3 text-xs hover:bg-muted"
+                        >
+                          {t("insightsDownloads.cancel")}
+                        </button>
+                      </div>
+                    </form>
+                  ) : null}
                   {notice?.id === job.id ? (
                     <div
                       role={notice.error ? "alert" : "status"}
@@ -163,6 +234,27 @@ export default function InsightsDownloads() {
                 <td className="px-3 py-2 whitespace-nowrap">{formatWhen(job.created_at, i18n.language)}</td>
                 <td className="px-3 py-2 whitespace-nowrap">{formatWhen(job.expires_at, i18n.language)}</td>
                 <td className="px-3 py-2 text-right">
+                  {job.kind === "evidence_pack" &&
+                  job.status === "ready" &&
+                  !job.signature &&
+                  SIGNING_ROLES.has(role) &&
+                  signing?.id !== job.id ? (
+                    <button
+                      type="button"
+                      className="insights-target mb-1 mr-2 inline-flex h-8 items-center rounded-md border px-3 text-xs font-medium hover:bg-muted"
+                      onClick={() =>
+                        setSigning({
+                          id: job.id,
+                          statement: t("insightsDownloads.defaultStatement", {
+                            from: job.period.from ?? "",
+                            to: job.period.to ?? "",
+                          }),
+                        })
+                      }
+                    >
+                      {t("insightsDownloads.sign")}
+                    </button>
+                  ) : null}
                   {job.status === "ready" ? (
                     <button
                       type="button"

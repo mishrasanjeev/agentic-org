@@ -3,12 +3,13 @@
 
 ``POST /insights/exports`` asks for a file the worker makes: a metric or an
 explorer table larger than an inline export allows (up to 500,000 rows), a run
-evidence bundle, and (with the packs) a view PDF, the finance pack or a period
-evidence pack. ``GET /insights/exports`` lists the caller's files (an
-administrator's list is the tenant's), ``GET /insights/exports/{id}`` one of
-them, and ``GET /insights/exports/{id}/download`` streams the file through the
-API with one signed ``insights.export`` audit row; there are no signed URLs.
-Files are kept seven days.
+evidence bundle, a view PDF, the finance pack or a period evidence pack.
+``GET /insights/exports`` lists the caller's files (an administrator's list is
+the tenant's), ``GET /insights/exports/{id}`` one of them, and
+``GET /insights/exports/{id}/download`` streams the file through the API with
+one signed ``insights.export`` audit row; there are no signed URLs.
+Files are kept seven days. ``POST /insights/exports/{id}/sign`` records an
+auditor's or administrator's sign-off of a ready evidence pack.
 
 Every route needs ``insights:read`` and Insights on for the tenant. What a job
 may export is checked when it is made, against the caller's views and
@@ -266,3 +267,69 @@ async def download_export(
             "X-Content-SHA256": job.sha256 or "",
         },
     )
+
+
+class SignRequest(BaseModel):
+    statement: str = Field(min_length=1, max_length=1000)
+
+
+@router.post("/{export_id}/sign")
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="insights.read",
+    rate_limit="reporting-admin",
+    idempotency="idempotent-first-write-wins",
+    audit_event="insights.evidence_pack.signed",
+)
+async def sign_export(
+    body: SignRequest,
+    request: Request,
+    export_id: Annotated[uuid.UUID, Path()],
+    tenant_id: str = Depends(get_current_tenant),
+) -> dict[str, Any]:
+    """An auditor or administrator signs a ready evidence pack once: who, the statement and the manifest's SHA-256
+    go on the pack and on a signed ``insights.evidence_pack.signed`` audit row."""
+    from sqlalchemy import select
+
+    from core.insights import packs
+    from core.models.insights import InsightsExport as X
+    from core.models.user import User
+
+    tid = _tenant(tenant_id)
+    await _require_enabled(tid)
+    caller = caller_from_request(request)
+    now = datetime.now(UTC)
+    async with get_tenant_session(tid) as session:
+        job = (
+            await session.execute(
+                select(X).where(X.tenant_id == tid, X.id == export_id, _visible(caller)).with_for_update()
+            )
+        ).scalar_one_or_none()
+        if job is None:
+            raise HTTPException(404, detail={"error": "export_not_found", "message": "no such export for you"})
+        name = None
+        if caller.user_id is not None:
+            name = (
+                await session.execute(select(User.name).where(User.tenant_id == tid, User.id == caller.user_id))
+            ).scalar_one_or_none()
+        try:
+            signature = packs.sign(job, caller, name=name or "", statement=body.statement, now=now)
+        except export_jobs.ExportJobError as exc:
+            raise _refuse(exc) from None
+        job.signature = signature
+        job.signed_by = caller.user_id
+        job.signed_at = now
+        session.add(
+            audit_entry(
+                tid,
+                event_type="insights.evidence_pack.signed",
+                actor_id=_actor(request),
+                action="sign",
+                resource_type="insights_export",
+                resource_id=str(job.id),
+                details={k: v for k, v in signature.items() if k != "user_id"},
+            )
+        )
+        out = export_jobs.serialize(job)
+    return {"export": out}

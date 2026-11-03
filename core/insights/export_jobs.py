@@ -22,7 +22,7 @@ import asyncio
 import hashlib
 import uuid
 from collections.abc import Awaitable, Callable
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from datetime import UTC, date, datetime, timedelta
 from typing import Any
 
@@ -69,6 +69,8 @@ class Built:
     filename: str
     row_count: int | None
     masked: bool
+    # Facts recorded on the job (a pack's manifest SHA-256 and verification status).
+    meta: dict[str, Any] = field(default_factory=dict)
 
 
 Builder = Callable[[Any, Any, dict[str, Any]], Awaitable[Built]]
@@ -125,10 +127,10 @@ def validate(kind: str, fmt: str, params: dict[str, Any], caller: Any) -> dict[s
     if fmt not in FORMATS_BY_KIND[kind]:
         raise ExportJobError("invalid_format", f"{kind} exports as {', '.join(FORMATS_BY_KIND[kind])}")
     clean: dict[str, Any] = {}
-    for field in ("from", "to"):
-        day = _day(params.get(field))
+    for name in ("from", "to"):
+        day = _day(params.get(name))
         if day is not None:
-            clean[field] = day.isoformat()
+            clean[name] = day.isoformat()
     company = params.get("company_id")
     if company:
         try:
@@ -242,6 +244,7 @@ def serialize(job: Any) -> dict[str, Any]:
         "expires_at": job.expires_at.isoformat() if job.expires_at else None,
         "signed_at": job.signed_at.isoformat() if job.signed_at else None,
         "signature": job.signature,
+        "verification_status": params.get("verification_status"),
         "download": f"/insights/exports/{job.id}/download" if job.status == "ready" else None,
     }
 
@@ -453,6 +456,7 @@ async def build(tenant_id: uuid.UUID, job_id: uuid.UUID) -> str:
             job.row_count = built.row_count
             params = dict(job.params or {})
             params["masked"] = built.masked
+            params.update(built.meta)
             job.params = params
         user_id = job.user_id
         name = job.filename or job.kind
