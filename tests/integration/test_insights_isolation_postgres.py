@@ -253,9 +253,9 @@ def _seed_tenant(world: World, label: str) -> SimpleNamespace:
     world.add(Tenant(id=tid, name=f"{label} Holdings", slug=f"{slug}-{tid.hex}", data_region="IN", settings={}))
     world.add(
         Company(id=company, tenant_id=tid, name=f"{label} Books", pan="AAAPA1234A"),
-        User(id=admin_id, tenant_id=tid, email=f"{slug}-admin-{tid.hex[:6]}@example.test",
+        User(id=admin_id, tenant_id=tid, email=f"{slug}-admin-{tid.hex}@example.test",
              name=f"{label} Admin", role="admin"),
-        User(id=auditor_id, tenant_id=tid, email=f"{slug}-auditor-{tid.hex[:6]}@example.test",
+        User(id=auditor_id, tenant_id=tid, email=f"{slug}-auditor-{tid.hex}@example.test",
              name=f"{label} Auditor", role="auditor"),
     )
     base = {"system_prompt_ref": "prompts/synthetic.txt", "hitl_condition": "confidence < 0.8", "status": "active"}

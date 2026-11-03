@@ -166,7 +166,11 @@ async def _view_has_data(session: Any, tenant_id: uuid.UUID, caller: Any, view: 
 
     ctx = await _context(session, tenant_id, caller, start=start, end=end, compare="none", company=None)
     ctx.domains = view_domains(view, caller.domains)
-    for key in registry.VIEWS[view].keys:
+    keys = registry.VIEWS[view].keys
+    # A snapshot ("now", such as agents by status) says nothing about the period; it counts only for a view made
+    # of snapshots alone.
+    period_keys = [key for key in keys if registry.METRICS[key].kind != "snapshot"] or list(keys)
+    for key in period_keys:
         if (await registry.resolve(registry.METRICS[key], ctx)).get("data_quality") != "no_data":
             return True
     return False
