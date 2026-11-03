@@ -386,3 +386,20 @@ def test_only_run_metrics_take_filters_and_they_take_every_run_dimension() -> No
     for key in filtered:
         assert METRICS[key].filters == RUN_GROUPS
         assert METRICS[key].describe()["filters"] == list(RUN_GROUPS)
+
+
+def test_ui_explorer_keys_file_matches_the_registry_and_server_links_name_real_explorers() -> None:
+    import re
+
+    from core.insights.explore_registry import EXPLORERS
+    from scripts.generate_insights_metric_keys import render_explorers
+
+    path = REPO_ROOT / "ui" / "src" / "lib" / "insights" / "explorerKeys.generated.json"
+    assert json.loads(path.read_text(encoding="utf-8")) == sorted(EXPLORERS)
+    assert path.read_text(encoding="utf-8") == render_explorers()
+    linked = set()
+    for source in (REPO_ROOT / "core").rglob("*.py"):
+        for key in re.findall(r"/dashboard/insights/explore/([a-z_]+)", source.read_text(encoding="utf-8")):
+            linked.add(key)
+            assert key in EXPLORERS, (source.name, key)
+    assert linked
