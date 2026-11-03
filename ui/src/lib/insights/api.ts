@@ -39,6 +39,7 @@ export const VIEW_KEYS: readonly InsightsViewKey[] = [
   "engineering",
   "back_office",
   "domain",
+  "partner",
 ];
 export const EXPORT_FORMATS: readonly ExportFormat[] = ["csv", "xlsx", "json"];
 
