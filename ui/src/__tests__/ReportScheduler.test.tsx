@@ -21,6 +21,8 @@ const originalFetch = globalThis.fetch;
 // Import component under test
 // ---------------------------------------------------------------------------
 
+// The page renders through react-i18next; load the English resources.
+import "@/i18n";
 import ReportScheduler from "@/pages/ReportScheduler";
 
 // ---------------------------------------------------------------------------

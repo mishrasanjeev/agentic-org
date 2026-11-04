@@ -33,6 +33,8 @@ vi.mock("@/contexts/AuthContext", () => ({
   }),
 }));
 
+// The page renders through react-i18next; load the English resources.
+import "@/i18n";
 import Agents from "@/pages/Agents";
 
 const scopedAgent = {

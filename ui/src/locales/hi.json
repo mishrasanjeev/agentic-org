@@ -620,6 +620,51 @@
     "promote": "प्रमोट करें",
     "noAgents": "कोई एजेंट नहीं मिला।"
   },
+  "agentsList": {
+    "title": "एजेंट समूह",
+    "importCsv": "CSV आयात करें",
+    "createFromSop": "SOP से बनाएं",
+    "importTitle": "CSV से एजेंट आयात करें",
+    "importHelp": "अपने संगठन की पदानुक्रम वाली CSV अपलोड करें। एजेंट शैडो मोड में बनाए जाते हैं। पैरेंट लिंक \"reporting_to_name\" कॉलम से सेट होते हैं।",
+    "downloadTemplate": "टेम्पलेट डाउनलोड करें",
+    "importing": "आयात हो रहा है...",
+    "uploadImport": "अपलोड और आयात करें",
+    "onlyCsv": "केवल CSV फ़ाइलें समर्थित हैं। कृपया .csv फ़ाइल चुनें।",
+    "fileTooLarge": "फ़ाइल बहुत बड़ी है। अधिकतम आकार 5 MB है।",
+    "fileEmpty": "फ़ाइल खाली है। कृपया एक मान्य CSV फ़ाइल चुनें।",
+    "noValidRows": "CSV फ़ाइल में कोई मान्य एजेंट पंक्ति नहीं है। कृपया फ़ाइल का प्रारूप जांचें और सुनिश्चित करें कि उसमें आवश्यक कॉलम वाली डेटा पंक्तियां हों: name, agent_type, domain।",
+    "importFailed": "आयात विफल रहा",
+    "resultImported": "एजेंट आयात किए गए",
+    "resultParentLinks": "पैरेंट लिंक सेट किए गए",
+    "resultSkipped": "छोड़े गए",
+    "skippedRows": "छोड़ी गई पंक्तियां",
+    "unknownRow": "अज्ञात",
+    "stats": {
+      "total": "कुल",
+      "active": "सक्रिय",
+      "shadow": "शैडो",
+      "paused": "रुके हुए"
+    },
+    "searchPlaceholder": "एजेंट खोजें...",
+    "allDomains": "सभी डोमेन",
+    "domains": {
+      "finance": "वित्त",
+      "hr": "मानव संसाधन",
+      "marketing": "मार्केटिंग",
+      "ops": "ऑपरेशंस",
+      "backoffice": "बैक ऑफ़िस",
+      "comms": "संचार"
+    },
+    "allStatuses": "सभी स्थितियां",
+    "statuses": {
+      "active": "सक्रिय",
+      "shadow": "शैडो",
+      "paused": "रुका हुआ",
+      "staging": "स्टेजिंग",
+      "deprecated": "अप्रचलित"
+    },
+    "loading": "एजेंट लोड हो रहे हैं..."
+  },
   "workflows": {
     "title": "वर्कफ़्लो",
     "create": "वर्कफ़्लो बनाएं",
@@ -629,6 +674,101 @@
     "steps": "चरण",
     "trigger": "ट्रिगर",
     "noWorkflows": "कोई वर्कफ़्लो नहीं मिला।"
+  },
+  "workflowsList": {
+    "tabMine": "मेरे वर्कफ़्लो",
+    "tabTemplates": "टेम्पलेट",
+    "loading": "वर्कफ़्लो लोड हो रहे हैं...",
+    "loadFailed": "वर्कफ़्लो लोड नहीं हो सके",
+    "loadFailedWithError": "वर्कफ़्लो लोड नहीं हो सके: {{error}}",
+    "retry": "फिर से कोशिश करें",
+    "empty": "अभी तक कोई वर्कफ़्लो कॉन्फ़िगर नहीं किया गया है।",
+    "active": "सक्रिय",
+    "inactive": "निष्क्रिय",
+    "triggerLabel": "ट्रिगर:",
+    "createdLabel": "बनाया गया:",
+    "triggerTypes": {
+      "manual": "मैन्युअल",
+      "schedule": "शेड्यूल",
+      "api_event": "API इवेंट",
+      "email_received": "ईमेल प्राप्त होने पर",
+      "webhook": "वेबहुक"
+    },
+    "view": "देखें",
+    "runNow": "अभी चलाएं",
+    "runFailed": "वर्कफ़्लो रन शुरू नहीं हो सका",
+    "showing": "पेज {{page}} / {{pages}} पर {{total}} में से {{shown}} दिखाए जा रहे हैं",
+    "previous": "पिछला",
+    "next": "अगला",
+    "templatesLoading": "टेम्पलेट लोड हो रहे हैं…",
+    "noTemplates": "कोई टेम्पलेट उपलब्ध नहीं है। जांचें कि /api/v1/workflows/templates तक पहुंचा जा सकता है।",
+    "domains": {
+      "finance": "वित्त",
+      "hr": "मानव संसाधन",
+      "marketing": "मार्केटिंग",
+      "ops": "ऑपरेशंस"
+    },
+    "stepsCount": "{{steps}} चरण",
+    "templateTriggers": {
+      "schedule": "शेड्यूल",
+      "api_event": "API इवेंट",
+      "manual": "मैन्युअल",
+      "email_received": "ईमेल प्राप्त होने पर"
+    },
+    "useTemplate": "टेम्पलेट इस्तेमाल करें"
+  },
+  "approvals": {
+    "subnavLabel": "अनुमोदन",
+    "subnavAgentApprovals": "एजेंट अनुमोदन",
+    "subnavGovernedCases": "नियंत्रित मामले",
+    "title": "अनुमोदन कतार",
+    "pendingBadge": "{{total}} लंबित",
+    "tabPending": "लंबित",
+    "tabDecided": "निर्णीत",
+    "allPriorities": "सभी प्राथमिकताएं",
+    "priority": {
+      "critical": "गंभीर",
+      "high": "उच्च",
+      "normal": "सामान्य",
+      "low": "निम्न"
+    },
+    "priorityBadge": {
+      "critical": "गंभीर",
+      "high": "उच्च",
+      "normal": "सामान्य",
+      "low": "निम्न"
+    },
+    "loading": "अनुमोदन लोड हो रहे हैं...",
+    "loadFailed": "अनुमोदन लोड नहीं हो सके",
+    "loadFailedWithError": "अनुमोदन लोड नहीं हो सके: {{error}}",
+    "retry": "फिर से कोशिश करें",
+    "noPending": "कोई लंबित अनुमोदन नहीं।",
+    "noDecided": "कोई निर्णीत आइटम नहीं।",
+    "showing": "पेज {{page}} / {{pages}} पर {{total}} में से {{shown}} दिखाए जा रहे हैं",
+    "previous": "पिछला",
+    "next": "अगला",
+    "decisionSubmitted": "निर्णय \"{{decision}}\" सफलतापूर्वक जमा किया गया।",
+    "decisionWord": {
+      "approve": "स्वीकृत",
+      "reject": "अस्वीकृत",
+      "defer": "स्थगित"
+    },
+    "submitFailed": "निर्णय जमा नहीं हो सका",
+    "triggerAndRole": "ट्रिगर: {{trigger}} | भूमिका: {{role}}",
+    "reasoningTrace": "तर्क का विवरण",
+    "decisionLabel": "निर्णय:",
+    "outcome": {
+      "approve": "स्वीकृत",
+      "reject": "अस्वीकृत",
+      "defer": "स्थगित",
+      "pending": "लंबित",
+      "decided": "निर्णीत",
+      "rejected": "अस्वीकृत",
+      "expired": "समय सीमा समाप्त"
+    },
+    "approve": "स्वीकृत करें",
+    "reject": "अस्वीकार करें",
+    "defer": "स्थगित करें"
   },
   "sales": {
     "title": "बिक्री पाइपलाइन",
@@ -1240,7 +1380,121 @@
     "next": "अगला रन",
     "active": "सक्रिय",
     "paused": "रुका हुआ",
-    "noSchedules": "कोई शेड्यूल नहीं। पहले बनाएं।"
+    "noSchedules": "कोई शेड्यूल नहीं। पहले बनाएं।",
+    "subtitle": "स्वचालित रिपोर्ट बनाना और भेजना कॉन्फ़िगर करें",
+    "newSchedule": "+ नया शेड्यूल",
+    "dismiss": "हटाएं",
+    "editSchedule": "शेड्यूल संपादित करें",
+    "updateSchedule": "शेड्यूल अपडेट करें",
+    "saving": "सहेजा जा रहा है...",
+    "cancel": "रद्द करें",
+    "reportTypes": {
+      "cfo_daily": "CFO दैनिक ब्रीफ़िंग",
+      "cmo_weekly": "CMO साप्ताहिक रिपोर्ट",
+      "pnl_report": "मासिक लाभ-हानि (P&L)",
+      "aging_report": "AR/AP एजिंग",
+      "campaign_report": "अभियान प्रदर्शन",
+      "insights_view": "Insights दृश्य (PDF)",
+      "insights_finance_pack": "Insights वित्त पैक",
+      "insights_evidence_pack": "Insights साक्ष्य पैक"
+    },
+    "periods": {
+      "last_7_days": "पिछले 7 दिन",
+      "last_30_days": "पिछले 30 दिन",
+      "last_week": "पिछला सप्ताह (सोमवार से रविवार)",
+      "last_month": "पिछला महीना",
+      "month_to_date": "इस महीने अब तक"
+    },
+    "frequencies": {
+      "daily": "दैनिक",
+      "weekly": "साप्ताहिक",
+      "monthly": "मासिक"
+    },
+    "days": {
+      "monday": "सोमवार",
+      "tuesday": "मंगलवार",
+      "wednesday": "बुधवार",
+      "thursday": "गुरुवार",
+      "friday": "शुक्रवार",
+      "saturday": "शनिवार",
+      "sunday": "रविवार"
+    },
+    "formats": {
+      "pdf": "PDF",
+      "excel": "Excel",
+      "both": "दोनों"
+    },
+    "insightsView": "Insights दृश्य",
+    "periodCovered": "शामिल अवधि",
+    "insightsDeliveryNote": "ईमेल प्राप्तकर्ताओं को डाउनलोड का लिंक मिलता है (खोलने के लिए उन्हें साइन इन करना होता है); Slack और WhatsApp पर फ़ाइल भेजी जाती है। जिस दृश्य में इस अवधि का कोई डेटा नहीं है, वह नहीं भेजा जाता।",
+    "executionTime": "चलने का समय (UTC)",
+    "dayOfWeek": "सप्ताह का दिन",
+    "dayOfMonth": "महीने का दिन",
+    "advancedToggle": "उन्नत — CRON एक्सप्रेशन सीधे लिखें",
+    "cronPlaceholder": "0 9 * * 1-5   (हर कार्यदिवस 09:00 UTC पर)",
+    "cronAriaLabel": "कस्टम cron एक्सप्रेशन",
+    "cronHelp": "5 फ़ील्ड: मिनट (0-59), घंटा (0-23), महीने का दिन (1-31), महीना (1-12), सप्ताह का दिन (0-7)।",
+    "cronInvalid": "उन्नत cron 5 फ़ील्ड वाला एक्सप्रेशन होना चाहिए (मिनट घंटा महीने-का-दिन महीना सप्ताह-का-दिन)",
+    "outputFormat": "आउटपुट प्रारूप",
+    "scheduleActive": "शेड्यूल सक्रिय",
+    "channelLabels": {
+      "email": "ईमेल"
+    },
+    "channelNames": {
+      "email": "ईमेल",
+      "slack": "Slack",
+      "whatsapp": "WhatsApp"
+    },
+    "slackPlaceholder": "चैनल ID (जैसे C01ABC23DEF) या #channel-name",
+    "recipientRequired": "{{channel}} प्राप्तकर्ता आवश्यक है",
+    "invalidEmail": "अमान्य ईमेल पता (अपेक्षित name@domain.tld)",
+    "invalidSlack": "अमान्य Slack चैनल — C01ABC23DEF या #channel-name इस्तेमाल करें",
+    "invalidWhatsapp": "अमान्य WhatsApp नंबर — E.164 प्रारूप इस्तेमाल करें (जैसे +919876543210)",
+    "channelRequired": "कम से कम एक डिलीवरी चैनल आवश्यक है",
+    "loading": "शेड्यूल लोड हो रहे हैं...",
+    "loadFailed": "शेड्यूल लोड नहीं हो सके",
+    "empty": "अभी तक कोई रिपोर्ट शेड्यूल नहीं है। शुरू करने के लिए \"नया शेड्यूल\" पर क्लिक करें।",
+    "columns": {
+      "report": "रिपोर्ट",
+      "schedule": "शेड्यूल",
+      "lastRun": "पिछला रन",
+      "status": "स्थिति",
+      "actions": "कार्रवाइयां"
+    },
+    "noDelivery": "कोई डिलीवरी नहीं",
+    "toggleActive": "सक्रिय/निष्क्रिय करें",
+    "runNow": "अभी चलाएं",
+    "run": "चलाएं",
+    "runHistory": "रन इतिहास",
+    "history": "इतिहास",
+    "edit": "संपादित करें",
+    "delete": "हटाएं",
+    "del": "हटाएं",
+    "confirmDelete": "यह शेड्यूल हटाएं?",
+    "saveFailed": "सहेजना विफल रहा",
+    "deleteFailedStatus": "हटाना विफल रहा (HTTP {{status}})",
+    "deleteFailed": "हटाना विफल रहा",
+    "updateFailedStatus": "अपडेट विफल रहा (HTTP {{status}})",
+    "updateFailed": "अपडेट विफल रहा",
+    "runTriggered": "रिपोर्ट शुरू की गई। टास्क ID: {{taskId}}",
+    "runFailed": "रन विफल रहा",
+    "historyLoadFailed": "रन इतिहास लोड नहीं हो सका",
+    "loadingRuns": "रन लोड हो रहे हैं...",
+    "noRuns": "अभी तक कोई रन नहीं।",
+    "runColumns": {
+      "started": "शुरू हुआ",
+      "trigger": "ट्रिगर",
+      "outcome": "परिणाम",
+      "why": "कारण"
+    },
+    "triggerScheduled": "शेड्यूल से",
+    "runStatuses": {
+      "delivered": "भेजी गई",
+      "generated": "बनाई गई",
+      "failed": "विफल",
+      "blocked": "रोकी गई"
+    },
+    "fileOnDownloads": "फ़ाइल डाउनलोड में है"
   },
   "settings": {
     "title": "सेटिंग्स",

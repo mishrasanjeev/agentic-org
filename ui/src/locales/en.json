@@ -620,6 +620,51 @@
     "promote": "Promote",
     "noAgents": "No agents found."
   },
+  "agentsList": {
+    "title": "Agent Fleet",
+    "importCsv": "Import CSV",
+    "createFromSop": "Create from SOP",
+    "importTitle": "Import Agents from CSV",
+    "importHelp": "Upload a CSV with your org hierarchy. Agents are created in shadow mode. Parent links set via \"reporting_to_name\" column.",
+    "downloadTemplate": "Download Template",
+    "importing": "Importing...",
+    "uploadImport": "Upload & Import",
+    "onlyCsv": "Only CSV files are supported. Please select a .csv file.",
+    "fileTooLarge": "File too large. Maximum size is 5 MB.",
+    "fileEmpty": "File is empty. Please select a valid CSV file.",
+    "noValidRows": "CSV file contains no valid agent rows. Please check the file format and ensure it has data rows with required columns: name, agent_type, domain.",
+    "importFailed": "Import failed",
+    "resultImported": "agents imported",
+    "resultParentLinks": "parent links set",
+    "resultSkipped": "skipped",
+    "skippedRows": "Skipped rows",
+    "unknownRow": "unknown",
+    "stats": {
+      "total": "total",
+      "active": "active",
+      "shadow": "shadow",
+      "paused": "paused"
+    },
+    "searchPlaceholder": "Search agents...",
+    "allDomains": "All Domains",
+    "domains": {
+      "finance": "Finance",
+      "hr": "Hr",
+      "marketing": "Marketing",
+      "ops": "Ops",
+      "backoffice": "Backoffice",
+      "comms": "Comms"
+    },
+    "allStatuses": "All Statuses",
+    "statuses": {
+      "active": "Active",
+      "shadow": "Shadow",
+      "paused": "Paused",
+      "staging": "Staging",
+      "deprecated": "Deprecated"
+    },
+    "loading": "Loading agents..."
+  },
   "workflows": {
     "title": "Workflows",
     "create": "Create Workflow",
@@ -629,6 +674,101 @@
     "steps": "Steps",
     "trigger": "Trigger",
     "noWorkflows": "No workflows found."
+  },
+  "workflowsList": {
+    "tabMine": "My Workflows",
+    "tabTemplates": "Templates",
+    "loading": "Loading workflows...",
+    "loadFailed": "Failed to load workflows",
+    "loadFailedWithError": "Failed to load workflows: {{error}}",
+    "retry": "Retry",
+    "empty": "No workflows configured yet.",
+    "active": "Active",
+    "inactive": "Inactive",
+    "triggerLabel": "Trigger:",
+    "createdLabel": "Created:",
+    "triggerTypes": {
+      "manual": "manual",
+      "schedule": "schedule",
+      "api_event": "api_event",
+      "email_received": "email_received",
+      "webhook": "webhook"
+    },
+    "view": "View",
+    "runNow": "Run Now",
+    "runFailed": "Failed to trigger workflow run",
+    "showing": "Showing {{shown}} of {{total}} on page {{page}} of {{pages}}",
+    "previous": "Previous",
+    "next": "Next",
+    "templatesLoading": "Loading templates…",
+    "noTemplates": "No templates available. Check that /api/v1/workflows/templates is reachable.",
+    "domains": {
+      "finance": "Finance",
+      "hr": "Hr",
+      "marketing": "Marketing",
+      "ops": "Ops"
+    },
+    "stepsCount": "{{steps}} steps",
+    "templateTriggers": {
+      "schedule": "schedule",
+      "api_event": "api event",
+      "manual": "manual",
+      "email_received": "email received"
+    },
+    "useTemplate": "Use Template"
+  },
+  "approvals": {
+    "subnavLabel": "Approvals",
+    "subnavAgentApprovals": "Agent approvals",
+    "subnavGovernedCases": "Governed cases",
+    "title": "Approval Queue",
+    "pendingBadge": "{{total}} pending",
+    "tabPending": "Pending",
+    "tabDecided": "Decided",
+    "allPriorities": "All Priorities",
+    "priority": {
+      "critical": "Critical",
+      "high": "High",
+      "normal": "Normal",
+      "low": "Low"
+    },
+    "priorityBadge": {
+      "critical": "critical",
+      "high": "high",
+      "normal": "normal",
+      "low": "low"
+    },
+    "loading": "Loading approvals...",
+    "loadFailed": "Failed to load approvals",
+    "loadFailedWithError": "Failed to load approvals: {{error}}",
+    "retry": "Retry",
+    "noPending": "No pending approvals.",
+    "noDecided": "No decided items.",
+    "showing": "Showing {{shown}} of {{total}} on page {{page}} of {{pages}}",
+    "previous": "Previous",
+    "next": "Next",
+    "decisionSubmitted": "Decision \"{{decision}}\" submitted successfully.",
+    "decisionWord": {
+      "approve": "approve",
+      "reject": "reject",
+      "defer": "defer"
+    },
+    "submitFailed": "Failed to submit decision",
+    "triggerAndRole": "Trigger: {{trigger}} | Role: {{role}}",
+    "reasoningTrace": "Reasoning Trace",
+    "decisionLabel": "Decision:",
+    "outcome": {
+      "approve": "Approve",
+      "reject": "Reject",
+      "defer": "Defer",
+      "pending": "Pending",
+      "decided": "Decided",
+      "rejected": "Rejected",
+      "expired": "Expired"
+    },
+    "approve": "Approve",
+    "reject": "Reject",
+    "defer": "Defer"
   },
   "sales": {
     "title": "Sales Pipeline",
@@ -1240,7 +1380,121 @@
     "next": "Next Run",
     "active": "Active",
     "paused": "Paused",
-    "noSchedules": "No schedules yet. Create one to get started."
+    "noSchedules": "No schedules yet. Create one to get started.",
+    "subtitle": "Configure automated report generation and delivery",
+    "newSchedule": "+ New Schedule",
+    "dismiss": "Dismiss",
+    "editSchedule": "Edit Schedule",
+    "updateSchedule": "Update Schedule",
+    "saving": "Saving...",
+    "cancel": "Cancel",
+    "reportTypes": {
+      "cfo_daily": "CFO Daily Briefing",
+      "cmo_weekly": "CMO Weekly Report",
+      "pnl_report": "P&L Monthly",
+      "aging_report": "AR/AP Aging",
+      "campaign_report": "Campaign Performance",
+      "insights_view": "Insights view (PDF)",
+      "insights_finance_pack": "Insights finance pack",
+      "insights_evidence_pack": "Insights evidence pack"
+    },
+    "periods": {
+      "last_7_days": "Last 7 days",
+      "last_30_days": "Last 30 days",
+      "last_week": "Last week (Monday to Sunday)",
+      "last_month": "Last month",
+      "month_to_date": "Month to date"
+    },
+    "frequencies": {
+      "daily": "Daily",
+      "weekly": "Weekly",
+      "monthly": "Monthly"
+    },
+    "days": {
+      "monday": "Monday",
+      "tuesday": "Tuesday",
+      "wednesday": "Wednesday",
+      "thursday": "Thursday",
+      "friday": "Friday",
+      "saturday": "Saturday",
+      "sunday": "Sunday"
+    },
+    "formats": {
+      "pdf": "PDF",
+      "excel": "Excel",
+      "both": "Both"
+    },
+    "insightsView": "Insights view",
+    "periodCovered": "Period covered",
+    "insightsDeliveryNote": "Email recipients get a link to Downloads (they sign in to open it); Slack and WhatsApp get the file. A view with no data for the period is not sent.",
+    "executionTime": "Execution Time (UTC)",
+    "dayOfWeek": "Day of Week",
+    "dayOfMonth": "Day of Month",
+    "advancedToggle": "Advanced — write CRON expression directly",
+    "cronPlaceholder": "0 9 * * 1-5   (every weekday at 09:00 UTC)",
+    "cronAriaLabel": "Custom cron expression",
+    "cronHelp": "5 fields: minute (0-59), hour (0-23), day-of-month (1-31), month (1-12), day-of-week (0-7).",
+    "cronInvalid": "Advanced cron must be a 5-field expression (min hour dom mon dow)",
+    "outputFormat": "Output Format",
+    "scheduleActive": "Schedule active",
+    "channelLabels": {
+      "email": "Email"
+    },
+    "channelNames": {
+      "email": "email",
+      "slack": "slack",
+      "whatsapp": "whatsapp"
+    },
+    "slackPlaceholder": "Channel ID (e.g. C01ABC23DEF) or #channel-name",
+    "recipientRequired": "{{channel}} recipient is required",
+    "invalidEmail": "Invalid email address (expected name@domain.tld)",
+    "invalidSlack": "Invalid Slack channel — use C01ABC23DEF or #channel-name",
+    "invalidWhatsapp": "Invalid WhatsApp number — use E.164 (e.g. +919876543210)",
+    "channelRequired": "At least one delivery channel is required",
+    "loading": "Loading schedules...",
+    "loadFailed": "Failed to load schedules",
+    "empty": "No report schedules yet. Click \"New Schedule\" to get started.",
+    "columns": {
+      "report": "Report",
+      "schedule": "Schedule",
+      "lastRun": "Last Run",
+      "status": "Status",
+      "actions": "Actions"
+    },
+    "noDelivery": "No delivery",
+    "toggleActive": "Toggle active",
+    "runNow": "Run now",
+    "run": "Run",
+    "runHistory": "Run history",
+    "history": "History",
+    "edit": "Edit",
+    "delete": "Delete",
+    "del": "Del",
+    "confirmDelete": "Delete this schedule?",
+    "saveFailed": "Save failed",
+    "deleteFailedStatus": "Delete failed (HTTP {{status}})",
+    "deleteFailed": "Delete failed",
+    "updateFailedStatus": "Update failed (HTTP {{status}})",
+    "updateFailed": "Update failed",
+    "runTriggered": "Report triggered. Task ID: {{taskId}}",
+    "runFailed": "Run failed",
+    "historyLoadFailed": "Could not load the run history",
+    "loadingRuns": "Loading runs...",
+    "noRuns": "No runs yet.",
+    "runColumns": {
+      "started": "Started",
+      "trigger": "Trigger",
+      "outcome": "Outcome",
+      "why": "Why"
+    },
+    "triggerScheduled": "Schedule",
+    "runStatuses": {
+      "delivered": "delivered",
+      "generated": "generated",
+      "failed": "failed",
+      "blocked": "blocked"
+    },
+    "fileOnDownloads": "File on Downloads"
   },
   "settings": {
     "title": "Settings",
