@@ -74,3 +74,89 @@ def test_the_nightly_task_is_scheduled_and_off_without_insights(monkeypatch) -> 
     assert entry["task"] == "core.tasks.insights_tasks.compute_benchmarks"
     monkeypatch.setattr(settings, "insights_enabled", False)
     assert insights_tasks.compute_benchmarks() == {"skipped": "insights_disabled"}
+
+
+class _Session:
+    async def __aenter__(self):
+        return "session"
+
+    async def __aexit__(self, *exc):
+        return False
+
+
+def _wire(monkeypatch, *, role: str, is_admin: bool, is_machine: bool = False) -> list:
+    import uuid
+    from types import SimpleNamespace
+
+    from api.v1 import insights_benchmarks as route
+
+    calls: list = []
+
+    async def enabled(tid):
+        calls.append(("enabled", tid))
+
+    async def card(session, tid):
+        calls.append(("card", session, tid))
+        return {"opted_in": True, "cohorts": []}
+
+    async def set_opt_in(session, tid, user_id, opt_in):
+        calls.append(("opt_in", session, tid, user_id, opt_in))
+        return {"opted_in": opt_in}
+
+    caller = SimpleNamespace(role=role, is_admin=is_admin, is_machine=is_machine, user_id=uuid.uuid4())
+    monkeypatch.setattr(route, "_require_enabled", enabled)
+    monkeypatch.setattr(route, "caller_from_request", lambda request: caller)
+    monkeypatch.setattr(route, "get_tenant_session", lambda tid: _Session())
+    monkeypatch.setattr(route.benchmarks, "card", card)
+    monkeypatch.setattr(route.benchmarks, "set_opt_in", set_opt_in)
+    return calls
+
+
+@pytest.mark.parametrize(
+    ("role", "is_admin", "is_machine", "can_change"),
+    [("admin", True, False, True), ("cfo", False, False, False), ("admin", True, True, False)],
+)
+async def test_reading_benchmarks_says_who_may_change_them(monkeypatch, role, is_admin, is_machine, can_change) -> None:
+    import uuid
+
+    from api.v1 import insights_benchmarks as route
+
+    calls = _wire(monkeypatch, role=role, is_admin=is_admin, is_machine=is_machine)
+    tid = uuid.uuid4()
+    body = await route.read_benchmarks(object(), str(tid))
+    assert body == {"opted_in": True, "cohorts": [], "can_change": can_change}
+    assert calls == [("enabled", tid), ("card", "session", tid)]
+
+
+async def test_roles_outside_the_card_cannot_read_benchmarks(monkeypatch) -> None:
+    import uuid
+
+    from fastapi import HTTPException
+
+    from api.v1 import insights_benchmarks as route
+
+    calls = _wire(monkeypatch, role="analyst", is_admin=False)
+    with pytest.raises(HTTPException) as caught:
+        await route.read_benchmarks(object(), str(uuid.uuid4()))
+    assert caught.value.status_code == 403 and caught.value.detail == "insights_benchmarks_forbidden"
+    assert [c[0] for c in calls] == ["enabled"]
+
+
+async def test_opting_in_is_the_administrators_own_tenant_only(monkeypatch) -> None:
+    import uuid
+
+    from fastapi import HTTPException
+
+    from api.deps import ActiveHumanAdmin
+    from api.v1 import insights_benchmarks as route
+
+    calls = _wire(monkeypatch, role="admin", is_admin=True)
+    tid, uid = uuid.uuid4(), uuid.uuid4()
+    admin = ActiveHumanAdmin(user_id=uid, tenant_id=tid, email="a@example.com", role="admin")
+    assert await route.set_opt_in(route.OptIn(opt_in=True), admin, str(tid)) == {"opted_in": True}
+    assert calls == [("enabled", tid), ("opt_in", "session", tid, uid, True)]
+
+    with pytest.raises(HTTPException) as caught:
+        await route.set_opt_in(route.OptIn(opt_in=False), admin, str(uuid.uuid4()))
+    assert caught.value.status_code == 403
+    assert len(calls) == 2
