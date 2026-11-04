@@ -170,7 +170,7 @@ export default function CMOVendorSandboxConnectors() {
   async function fetchStatus() {
     setLoading(true);
     try {
-      // CMODashboard reads company-scoped rows; without company_id the
+      // Marketing operations reads company-scoped rows; without company_id the
       // connectors would be read/written tenant-global and never show up.
       const companyId = localStorage.getItem("company_id") || "";
       const { data } = await api.get("/connectors/cmo-vendor-sandbox", {
