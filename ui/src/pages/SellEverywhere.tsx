@@ -20,10 +20,18 @@ interface Surfaces {
   web: { status: string; host: string | null };
   mcp: { status: string; server_url: string };
   telegram: { status: string; link: string | null };
-  google: { status: string };
-  microsoft: { status: string };
-  perplexity: { status: string };
+  chatgpt?: Registration;
+  google: Registration;
+  microsoft: Registration;
+  perplexity: Registration;
   payments: { status: string; mode?: string | null };
+}
+
+// An outside program (core/commerce/network_registrations.py): reason is set while not_eligible.
+interface Registration {
+  status: string;
+  reason?: string | null;
+  feed_url?: string | null;
 }
 
 interface NetworkView {
@@ -94,7 +102,9 @@ const STATUS: Record<string, { label: string; variant: "success" | "warning" | "
   waiting_for_publication: { label: "Waiting for publication", variant: "warning" },
   waiting_for_web_address: { label: "Waiting for your web address", variant: "warning" },
   coming_soon: { label: "Coming soon", variant: "secondary" },
-  registration_pending: { label: "Coming: registration in progress", variant: "secondary" },
+  registration_pending: { label: "Coming: AgenticOrg has not registered yet", variant: "secondary" },
+  submitted: { label: "Submitted, waiting for approval", variant: "warning" },
+  not_eligible: { label: "Not eligible yet", variant: "warning" },
   not_started: { label: "Not started", variant: "secondary" },
   off: { label: "Off", variant: "secondary" },
   ready: { label: "Done", variant: "success" },
@@ -120,6 +130,26 @@ const REFUSALS: Record<string, string> = {
   namespace_not_authority_bound: "Your web address cannot carry your shop profile. Contact support.",
   vendor_entry_outside_namespace: "An integration claims your web address outside your shop. Contact support.",
 };
+
+const REGISTRATION_REASON: Record<string, string> = {
+  not_listed: "Turn on Sell everywhere first.",
+  web_address_not_live: "Waiting for your web address to go live.",
+  catalog_not_verified: "Waiting for Grantex to verify your catalog.",
+  no_eligible_products: "No product has a price, a stock figure and an image yet.",
+};
+
+function RegistrationDetail({ registration, label }: { registration?: Registration; label: string }) {
+  if (!registration) return null;
+  if (registration.reason) return <span>{REGISTRATION_REASON[registration.reason] ?? registration.reason}</span>;
+  if (!registration.feed_url) return null;
+  return (
+    <span className="flex items-center gap-2">
+      <span>Your product feed:</span>
+      <code className="break-all">{registration.feed_url}</code>
+      <CopyButton value={registration.feed_url} label={`${label} product feed address`} />
+    </span>
+  );
+}
 
 const MISSING_LABEL: Record<string, string> = {
   catalog: "your catalog",
@@ -971,6 +1001,13 @@ export default function SellEverywhere() {
                     <CopyButton value={surfaces.mcp.server_url} label="AI app server address" />
                   </span>
                   <span>Buyers add this once as a custom MCP server and can then shop every network shop.</span>
+                  {surfaces.chatgpt ? (
+                    <span className="flex flex-wrap items-center gap-2">
+                      <span>ChatGPT app directory:</span>
+                      <StatusBadge status={surfaces.chatgpt.status} />
+                      <RegistrationDetail registration={{ status: surfaces.chatgpt.status, reason: surfaces.chatgpt.reason }} label="ChatGPT" />
+                    </span>
+                  ) : null}
                 </SurfaceRow>
                 <SurfaceRow title="Telegram" status={surfaces.telegram.status}>
                   {surfaces.telegram.link ? (
@@ -984,9 +1021,15 @@ export default function SellEverywhere() {
                     <span>Your link to the AgenticOrg shopping bot appears here once it is on.</span>
                   )}
                 </SurfaceRow>
-                <SurfaceRow title="Google Gemini and AI Mode" status={surfaces.google.status} />
-                <SurfaceRow title="Microsoft Copilot" status={surfaces.microsoft.status} />
-                <SurfaceRow title="Perplexity" status={surfaces.perplexity.status} />
+                <SurfaceRow title="Google Gemini and AI Mode" status={surfaces.google.status}>
+                  <RegistrationDetail registration={surfaces.google} label="Google" />
+                </SurfaceRow>
+                <SurfaceRow title="Microsoft Copilot" status={surfaces.microsoft.status}>
+                  <RegistrationDetail registration={surfaces.microsoft} label="Microsoft" />
+                </SurfaceRow>
+                <SurfaceRow title="Perplexity" status={surfaces.perplexity.status}>
+                  <RegistrationDetail registration={surfaces.perplexity} label="Perplexity" />
+                </SurfaceRow>
                 <SurfaceRow title="Payments" status={surfaces.payments.status}>
                   <span>
                     {surfaces.payments.mode === "shopify_cart"
