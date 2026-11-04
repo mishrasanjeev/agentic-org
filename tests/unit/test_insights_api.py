@@ -906,7 +906,8 @@ def test_insights_family_rate_classes_and_role_scopes_are_pinned() -> None:
     assert RATE_LIMIT_CLASSES["reporting-export"] == (30, 60)
     assert required_scopes_for("insights.read", "GET") == ("insights:read",)
     assert required_scopes_for("insights.read", "POST") == ("insights:write",)
-    assert {"insights:read", "insights:write"} <= GRANTABLE_ROUTE_SCOPES and "agenticorg:admin" not in GRANTABLE_ROUTE_SCOPES
+    assert {"insights:read", "insights:write"} <= GRANTABLE_ROUTE_SCOPES
+    assert "agenticorg:admin" not in GRANTABLE_ROUTE_SCOPES
     holders = {role for role, scopes in ROLE_SCOPES.items() if "insights:read" in scopes}
     assert holders == {"cfo", "chro", "cmo", "coo", "auditor", "domain_lead", "analyst", "developer", "merchant"}
     assert ROLE_SCOPES["admin"] == ["agenticorg:admin"]
