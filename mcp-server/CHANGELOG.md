@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+### Added
+- Network mode server metadata: title `AgenticOrg shopping network`, website, https icons and
+  instructions, and the no-auth security scheme in every tool's `_meta`.
+- `MCP_OPENAI_APPS_CHALLENGE`: the ChatGPT app directory's domain-verification token at
+  `GET /.well-known/openai-apps-challenge` (404 while unset).
+- `shopping/server.json`: an MCP registry entry `io.github.mishrasanjeev/agenticorg-shopping` for the
+  hosted Streamable HTTP endpoint `https://mcp.agenticorg.ai/mcp`, and `shopping/openai-plugin/`, the
+  ChatGPT app directory package (manifest, MCP config, review test cases).
+
 ### Changed
 - Network `search_catalog` across shops no longer follows the directory's order: it asks up to 50
   shops, five at a time, picked and ordered at random on every search (the directory is now read up
