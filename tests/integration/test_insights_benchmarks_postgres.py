@@ -267,7 +267,10 @@ async def test_the_migration_rolls_back_and_reapplies():
             "from scripts.alembic_migrate import _alembic_cfg;"
             f"command.{verb}(_alembic_cfg(), '{target}')"
         )
-        return subprocess.run([sys.executable, "-c", script], capture_output=True, text=True, check=False)
+        # The interpreter running the tests and a fixed alembic command; no outside input.
+        return subprocess.run(  # noqa: S603
+            [sys.executable, "-c", script], capture_output=True, text=True, check=False
+        )
 
     url = os.getenv("AGENTICORG_DB_URL")
     admin = create_async_engine(url, poolclass=NullPool)

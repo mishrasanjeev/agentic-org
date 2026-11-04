@@ -171,8 +171,8 @@ def upgrade() -> None:
             opted_in_by UUID NULL
         )
     """)
-    op.execute(f"ALTER TABLE {OPTINS} ENABLE ROW LEVEL SECURITY")
-    op.execute(f"ALTER TABLE {OPTINS} FORCE ROW LEVEL SECURITY")
+    op.execute("ALTER TABLE insights_benchmark_optins ENABLE ROW LEVEL SECURITY")
+    op.execute("ALTER TABLE insights_benchmark_optins FORCE ROW LEVEL SECURITY")
     op.execute(f"DROP POLICY IF EXISTS {OPTINS}_tenant_isolation ON {OPTINS}")
     op.execute(f"""
         CREATE POLICY {OPTINS}_tenant_isolation ON {OPTINS}
