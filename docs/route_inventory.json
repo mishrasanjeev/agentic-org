@@ -8473,7 +8473,7 @@
     "path": "/api/v1/insights/bi-access",
     "public_exempt_reason": null,
     "rate_limit": "reporting-admin",
-    "scope": "insights.bi.write",
+    "scope": "insights_admin.bi.write",
     "source_line": 91,
     "tenant_required": true
   },
@@ -8491,7 +8491,7 @@
     "path": "/api/v1/insights/bi-access/{role_name}",
     "public_exempt_reason": null,
     "rate_limit": "reporting-admin",
-    "scope": "insights.bi.write",
+    "scope": "insights_admin.bi.write",
     "source_line": 134,
     "tenant_required": true
   },
@@ -8923,7 +8923,7 @@
     "path": "/api/v1/insights/value/baselines",
     "public_exempt_reason": null,
     "rate_limit": "reporting-admin",
-    "scope": "insights.value.write",
+    "scope": "insights_admin.value.write",
     "source_line": 209,
     "tenant_required": true
   },
@@ -8941,7 +8941,7 @@
     "path": "/api/v1/insights/value/baselines/{baseline_id}",
     "public_exempt_reason": null,
     "rate_limit": "reporting-admin",
-    "scope": "insights.value.write",
+    "scope": "insights_admin.value.write",
     "source_line": 258,
     "tenant_required": true
   },
@@ -8959,7 +8959,7 @@
     "path": "/api/v1/insights/value/confirm",
     "public_exempt_reason": null,
     "rate_limit": "reporting-admin",
-    "scope": "insights.value.write",
+    "scope": "insights_admin.value.write",
     "source_line": 395,
     "tenant_required": true
   },
@@ -8977,7 +8977,7 @@
     "path": "/api/v1/insights/value/rates",
     "public_exempt_reason": null,
     "rate_limit": "reporting-admin",
-    "scope": "insights.value.write",
+    "scope": "insights_admin.value.write",
     "source_line": 308,
     "tenant_required": true
   },
@@ -8995,7 +8995,7 @@
     "path": "/api/v1/insights/value/rates/{rate_id}",
     "public_exempt_reason": null,
     "rate_limit": "reporting-admin",
-    "scope": "insights.value.write",
+    "scope": "insights_admin.value.write",
     "source_line": 350,
     "tenant_required": true
   },
@@ -9013,7 +9013,7 @@
     "path": "/api/v1/insights/value/settings",
     "public_exempt_reason": null,
     "rate_limit": "reporting-admin",
-    "scope": "insights.value.write",
+    "scope": "insights_admin.value.write",
     "source_line": 450,
     "tenant_required": true
   },

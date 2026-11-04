@@ -901,11 +901,12 @@ def test_budget_state() -> None:
 def test_insights_family_rate_classes_and_role_scopes_are_pinned() -> None:
     from api.route_enforcement import GRANTABLE_ROUTE_SCOPES, RATE_LIMIT_CLASSES, SCOPE_FAMILIES, required_scopes_for
 
-    assert SCOPE_FAMILIES["insights"] == ("insights:read", "agenticorg:admin")
+    assert SCOPE_FAMILIES["insights"] == ("insights:read", "insights:write")
     assert RATE_LIMIT_CLASSES["reporting-read"] == (300, 60)
     assert RATE_LIMIT_CLASSES["reporting-export"] == (30, 60)
     assert required_scopes_for("insights.read", "GET") == ("insights:read",)
-    assert "insights:read" in GRANTABLE_ROUTE_SCOPES and "agenticorg:admin" not in GRANTABLE_ROUTE_SCOPES
+    assert required_scopes_for("insights.read", "POST") == ("insights:write",)
+    assert {"insights:read", "insights:write"} <= GRANTABLE_ROUTE_SCOPES and "agenticorg:admin" not in GRANTABLE_ROUTE_SCOPES
     holders = {role for role, scopes in ROLE_SCOPES.items() if "insights:read" in scopes}
     assert holders == {"cfo", "chro", "cmo", "coo", "auditor", "domain_lead", "analyst", "developer", "merchant"}
     assert ROLE_SCOPES["admin"] == ["agenticorg:admin"]

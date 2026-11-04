@@ -409,7 +409,7 @@ class TestEndpoints:
 
         # A read-only analyst holds neither; an auditor may recall but not write.
         assert "audit:read" not in ROLE_SCOPES["analyst"] and "approvals:write" not in ROLE_SCOPES["analyst"]
-        assert ROLE_SCOPES["auditor"] == ["audit:read", "insights:read"]
+        assert ROLE_SCOPES["auditor"] == ["audit:read", "insights:read", "insights:write"]
 
     def test_the_run_recalls_and_remembers_and_the_task_is_scheduled(self):
         runner = (ROOT / "core" / "langgraph" / "runner.py").read_text(encoding="utf-8")

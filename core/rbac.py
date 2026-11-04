@@ -62,7 +62,10 @@ _KPI_PAGE_SCOPES = ["kpis:read"]
 # Insights (/insights/*): every non-admin role may call the routes (status
 # and catalog answer what the caller may see); api/v1/insights.py admits each
 # role only to the views it is allowed (finance: cfo; executive: admin).
-_INSIGHTS_SCOPES = ["insights:read"]
+# insights:write reaches the Insights actions (background exports, saved
+# views, acknowledging an alert, signing an evidence pack); each handler
+# still decides who may act (value and BI changes: an administrator).
+_INSIGHTS_SCOPES = ["insights:read", "insights:write"]
 
 ROLE_SCOPES: dict[str, list[str]] = {
     "cfo": [*_DOMAIN_ROLE_SCOPES, *_KPI_PAGE_SCOPES, *_INSIGHTS_SCOPES],

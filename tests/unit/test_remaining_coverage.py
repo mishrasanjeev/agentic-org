@@ -2331,7 +2331,7 @@ class TestRBAC:
     def test_get_scopes_for_role_auditor(self):
         from core.rbac import get_scopes_for_role
 
-        assert get_scopes_for_role("auditor") == ["audit:read", "insights:read"]
+        assert get_scopes_for_role("auditor") == ["audit:read", "insights:read", "insights:write"]
 
     def test_get_scopes_for_role_unknown(self):
         from core.rbac import get_scopes_for_role
