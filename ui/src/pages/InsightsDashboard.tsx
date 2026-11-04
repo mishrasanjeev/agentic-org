@@ -391,6 +391,7 @@ export default function InsightsDashboard() {
           className="flex flex-col gap-4"
         >
           <ViewBody state={viewState} filters={filters} currency={currency} onRetry={retry} />
+          {BENCHMARK_VIEWS.has(activeView) && BENCHMARK_ROLES.has(role) ? <BenchmarkCard /> : null}
         </div>
         {explorers.length > 0 ? <ExploreLinks explorers={explorers} /> : null}
       </>
@@ -518,8 +519,6 @@ function ViewBody({
         </div>
         <NeedsYouList items={data.needs_you} />
       </div>
-
-      {activeView && BENCHMARK_VIEWS.has(activeView) && BENCHMARK_ROLES.has(role) ? <BenchmarkCard /> : null}
 
       {updated && !Number.isNaN(updated.getTime()) ? (
         <p className="text-xs text-muted-foreground" data-testid="insights-updated">
