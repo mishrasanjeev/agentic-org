@@ -1,5 +1,40 @@
 # Changelog
 
+## Unreleased - Commerce close-out: hosted refunds, durable merchant emails, held stock, loyalty re-price, 1,000-product reads
+
+- Orders paid on a merchant's Plural hosted page (executor `plural_hosted`) can now be refunded through
+  `POST /commerce/runtime/ucp/orders/{id}/refunds`, with the merchant's own Plural credentials (the vault
+  credential the checkout's link was issued under). Refundable is the order total less refunds already recorded on
+  the order (completed or pending) or journalled for it; no agent payment allowance applies. The arbiter decision,
+  the same-currency check, the journal and the ledger events are as for executed orders. The Plural call is the one
+  the executor already makes (`POST /pay/v1/refunds/{plural order id}`).
+- Refund idempotency: the Plural `merchant_order_reference` is now derived from the order id and the request id.
+  A repeated `request_id` for the same order returns the earlier refund (`replayed: true`) without a second Plural
+  call, and records a missing order adjustment under its fixed id. This also applies to `plural_pine` orders.
+- Payments no order matches are kept in `commerce_unmatched_payments`. Administrators see them on the Orders page
+  under **Payments with no order** (`GET /commerce/runtime/payments/unmatched`) and can refund the full paid amount
+  once (`POST /commerce/runtime/ucp/payments/unmatched/{id}/refunds`, tenant administrators). The unmatched-payment
+  email now says to refund it from AgenticOrg on the Orders page, or in Plural.
+- The Orders page has a **Refund** action with a confirmation step and shows each order's refunds.
+- Merchant emails (new order, payment needing attention) go through a durable outbox,
+  `commerce_merchant_notifications`, written in the transaction of the order or payment. A beat sweep
+  (`sweep-merchant-notifications`, every 60 s, maintenance queue) sends due rows with `FOR UPDATE SKIP LOCKED`
+  leasing and backoff, and marks a row `dead` after eight attempts. A send that no administrator accepted (an SMTP
+  failure for every recipient) is retried. The kick after commit is now a best-effort fast path.
+- Plural links hold stock: a new Plural link is refused with `out_of_stock` when the inventory less the units held
+  by other checkouts' still-payable links (issued, not lapsed) is less than the quantity. The message says when the
+  held stock frees up. Only checkouts updated within the link lifetime are read.
+- Stock at payment: before a Plural payment becomes an order, the catalog is checked again. When stock is short the
+  order is still created (the money is taken), marked `stock_short` with the short lines, and the merchant is
+  emailed with the new reason `out_of_stock_at_payment` to ship what they can or refund.
+- Loyalty on re-price: when Complete re-prices a checkout, the loyalty forecast is recomputed from the new total
+  with the Shopify reads; without them the stored loyalty is kept.
+- Shopify catalog reads take up to 1,000 products (`SHOPIFY_CATALOG_READ_LIMIT`, 50 a page, 20 pages) everywhere:
+  the sync route default, the setup flow, the artifact refresh and the scheduled sync. The sync answer carries
+  `read_limit` and `read_limit_reached`, and the setup page tells the merchant when the store has more.
+- Migration v6z122 adds `commerce_merchant_notifications` and `commerce_unmatched_payments` (forced row-level
+  security).
+
 ## Unreleased - Insights runtime counters: tool calls, guardrail outcomes and security events
 
 - The tool gateway now records each tool call in `tool_calls` (success, failure, refusal or idempotent replay,

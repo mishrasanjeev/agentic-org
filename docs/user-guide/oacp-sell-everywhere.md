@@ -71,6 +71,10 @@ minutes of a **Product update** webhook, and about once an hour without one (a l
 due at once, or an hour after a read that failed). **Read catalog again** on the page reads it at once. Each read
 replaces the one before: a product you removed from your store is no longer offered.
 
+One read takes at most 1,000 products (20 pages of 50). If your store has more, only the first 1,000 that
+Shopify returns are offered to buyers. The page says so after a read that stopped at the limit, and shows a
+note while your catalog is at the limit.
+
 **Product details from Shopify.** Along with titles, prices and stock, AgenticOrg reads each product's tags,
 its barcode, its page on your online store and the product metafields you show on your storefront. In
 Shopify, a metafield is shown on the storefront when its definition (**Settings**, **Custom data**,
@@ -223,9 +227,22 @@ issued, AgenticOrg checks the cart against your catalog as it is at that moment:
   link is issued yet. The buyer's AI app is told the new total and asks again once the buyer agrees.
 - **Fewer in stock than the cart holds, or a product you no longer sell.** No link is issued. The buyer's AI
   app is told what is short and changes the quantity or the item.
+- **Stock held by another buyer's payment.** With your Plural page, a payment link holds its items for the
+  30 minutes it is valid. When the stock left after those holds is less than the cart needs, no link is
+  issued. The buyer's AI app is told how many can be bought now and when the held stock frees up if that
+  other payment does not go through.
+- **Loyalty.** When the checkout is re-priced and AgenticOrg can read the buyer's membership from your Shopify
+  store, the points forecast is worked out again from the new total. If the store cannot be read at that
+  moment, the forecast already shown is kept.
 
 While an earlier payment link of the checkout can still be paid on your Plural page, the cart stays as that link
 was issued, so a payment on it still becomes your order.
+
+**Stock when the payment arrives.** The money is already taken when Plural reports a payment, so the order is
+always created. AgenticOrg first checks your catalog again. If your stock no longer covers every item (for
+example, you sold the last one in your own store meanwhile), the order is marked **Stock was short when the
+payment arrived** on the Orders page, with the short items, and every administrator gets an email. Ship what
+you can and refund the rest, or refund the order (see Refunds below).
 
 So the price the buyer pays is your current price, as AgenticOrg last read your catalog: when you upload a
 file, when you select **Read catalog again**, and on the automatic reads above. On your Shopify checkout, Shopify also
@@ -237,8 +254,26 @@ On your Plural page, a buyer pays for the exact checkout the link was issued for
 Plural account and AgenticOrg cannot match it to that checkout (a different amount, a checkout that was
 canceled or changed after the link was issued, another Plural order, or a second payment for a checkout the
 buyer already paid through another of its links), no order is created for it and nothing more ships. Every administrator of your workspace gets one email that names the Plural order, the reason and
-the buyer's contact as given. The money is in your own Plural account: refund it there, or contact the
-buyer.
+the buyer's contact as given. The money is in your own Plural account: refund it from AgenticOrg, on the
+Orders page under **Payments with no order**, or in your Plural dashboard, or contact the buyer.
+
+The email is kept until it is sent. If your mail server cannot take it, AgenticOrg tries again after one
+minute, then after longer waits, for up to eight attempts. The new-order email works the same way. A payment
+is emailed about once, however often Plural reports it.
+
+### Refunds
+
+- **Orders paid on your Plural page.** On the Orders page, choose **Refund** on the order, enter the amount
+  (the whole order or part of it) and confirm. AgenticOrg refunds through your own Plural account, with the
+  Plural credentials you saved. You can refund at most the order total less the refunds already made; a
+  refund Plural has not confirmed yet counts as made. The order then shows the refund as refunded or
+  pending. Only workspace administrators can refund. Each refund is decided by the commerce arbiter and
+  recorded in your ledger. Choosing **Confirm refund** twice sends one refund, not two.
+- **Payments with no order.** Choose **Refund** on the payment under **Payments with no order** and confirm.
+  The whole amount the buyer paid is refunded once. A payment whose order was created while stock was short
+  is refunded through that order.
+- **Orders paid in your Shopify checkout.** AgenticOrg never sees these orders. Refund them in your Shopify
+  admin.
 
 ## Pause or resume
 

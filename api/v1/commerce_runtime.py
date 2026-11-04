@@ -47,6 +47,8 @@ from core.commerce.c6z_runtime_vertical import (
     DEMO_SOURCE_SYSTEM,
     GRANTEX_AUTHORITY_ENV_VARS,
     PLURAL_PINE_ENV_VARS,
+    SHOPIFY_CATALOG_MAX_PAGES,
+    SHOPIFY_CATALOG_PAGE_SIZE,
     SHOPIFY_ENV_VARS,
     C6ZRuntimeValidationError,
     ShopifyAdminGraphQLClient,
@@ -215,8 +217,8 @@ class MerchantCommerceConfigUpsert(BaseModel):
 
 class ShopifySyncRequest(BaseModel):
     packet_id: str
-    page_size: int = Field(default=50, ge=1, le=100)
-    max_pages: int = Field(default=10, ge=1, le=20)
+    page_size: int = Field(default=SHOPIFY_CATALOG_PAGE_SIZE, ge=1, le=100)
+    max_pages: int = Field(default=SHOPIFY_CATALOG_MAX_PAGES, ge=1, le=SHOPIFY_CATALOG_MAX_PAGES)
     currency: str | None = None
 
 
@@ -850,6 +852,7 @@ async def _sync_shopify_packet(
     evidence: dict[str, Any] | None = None
     credentials: ShopifyCredentials | None = None
     credential_source = "unknown"
+    read_limit_reached = False
     async with get_tenant_session(_tenant_uuid(tenant_id)) as session:
         packet_row = await session.get(C6ZSellerOnboardingPacketRow, packet_id)
         if packet_row is None or packet_row.tenant_id != tenant_id:
@@ -873,6 +876,7 @@ async def _sync_shopify_packet(
                 products = await client.fetch_products(page_size=page_size, max_pages=max_pages)
             except (httpx.HTTPError, C6ZRuntimeValidationError) as exc:
                 raise HTTPException(status_code=502, detail=f"Shopify read-only sync failed: {exc}") from exc
+            read_limit_reached = bool(getattr(client, "read_limit_reached", False))
             now_iso = _now_iso()
             evidence = build_shopify_connector_evidence(
                 packet=packet,
@@ -908,6 +912,9 @@ async def _sync_shopify_packet(
         "evidence_id": evidence["evidence_id"],
         "product_count": evidence["product_count"],
         "variant_count": evidence["variant_count"],
+        # The store has more products than one read takes (page_size x max_pages): only the first are listed.
+        "read_limit": page_size * max_pages,
+        "read_limit_reached": read_limit_reached,
         "raw_payload_stored": False,
         "allowed_to_execute": False,
     }
@@ -3225,7 +3232,11 @@ async def refresh_scope_artifacts(*, tenant_id: str, merchant_id: str, seller_ag
                 ]
             elif source_system == "shopify":
                 synced = await _sync_shopify_packet(
-                    tenant_id=tenant_id, packet_id=packet_id, page_size=50, max_pages=10, currency=currency
+                    tenant_id=tenant_id,
+                    packet_id=packet_id,
+                    page_size=SHOPIFY_CATALOG_PAGE_SIZE,
+                    max_pages=SHOPIFY_CATALOG_MAX_PAGES,
+                    currency=currency,
                 )
                 evidence_id = synced["evidence_id"]
             else:
@@ -3299,8 +3310,8 @@ async def resync_shopify_scope(*, tenant_id: str, merchant_id: str, seller_agent
         synced = await _sync_shopify_packet(
             tenant_id=tenant_id,
             packet_id=packet_id,
-            page_size=50,
-            max_pages=10,
+            page_size=SHOPIFY_CATALOG_PAGE_SIZE,
+            max_pages=SHOPIFY_CATALOG_MAX_PAGES,
             currency=currency,
             mark_blocked=False,
         )

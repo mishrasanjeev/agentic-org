@@ -1,20 +1,28 @@
 # SPDX-License-Identifier: LicenseRef-Orchestrum-Personal-Use-1.0
-"""Tell the merchant about a new order, or a payment no order matches: an email to its administrators.
+"""Tell the merchant about a new order, or a payment that needs its attention: an email to its administrators.
 
-Sent after the order's transaction commits, from a Celery task
-(``core.tasks.payment_handoff_tasks.notify_order``), through the platform SMTP
+Each email has a row in the durable outbox (``core.commerce.merchant_notifications``),
+written in the transaction that created the order or recorded the payment; the
+row is sent from a Celery task (kicked after commit, and retried by a beat
+sweep with backoff until it is sent or dead), through the platform SMTP
 transport (``core.email.send_email``). The email carries the order, the items,
 the total, the delivery address and shipping choice, and the buyer contact,
-exactly as the buyer gave them to the checkout;
-nothing is invented. A failed send is logged and never changes the order.
-The ledger records how many administrators were emailed, never their addresses.
+exactly as the buyer gave them to the checkout; nothing is invented. A failed
+send never changes the order. The ledger records how many administrators were
+emailed, never their addresses.
 
 A payment no order matches (``unmatched_payment_email``): a buyer paid on the
 merchant's Plural page, but AgenticOrg created no order (the amount differed,
 the checkout was canceled or changed, or the payment is for another Plural
 order, or a second payment for a checkout already paid through another of its links).
 The money is in the merchant's own Plural account, so the email names
-the Plural order and asks the merchant to refund the buyer or contact them.
+the Plural order and asks the merchant to refund the buyer (from the Orders page
+of AgenticOrg, or in Plural) or contact them.
+
+Stock short at payment (``out_of_stock_at_payment``): the buyer paid, the order
+was created, but the shop's catalog no longer has enough stock for every line.
+The email names the order and the short lines and asks the merchant to ship
+what it can and refund the rest, or refund the order.
 """
 
 from __future__ import annotations
@@ -38,7 +46,19 @@ UNMATCHED_REASONS = {
     "checkout_changed": "the cart changed after the payment link was issued",
     "order_mismatch": "the payment is for a different Plural order than the one this checkout issued",
     "paid_twice": "the buyer had already paid this checkout through another of its payment links",
+    "out_of_stock_at_payment": "the shop's stock no longer covers every item of the order",
 }
+# The reasons whose payment did become an order (the merchant still has to act on it).
+ORDER_ATTENTION_REASONS = frozenset({"out_of_stock_at_payment"})
+ORDERS_PAGE_PATH = "/dashboard/orders"
+
+
+def orders_page_url() -> str:
+    """The console's Orders page: absolute when ``AGENTICORG_UI_BASE_URL`` is set, else the path."""
+    from core.config import settings
+
+    base = str(getattr(settings, "ui_base_url", "") or "").strip().rstrip("/")
+    return f"{base}{ORDERS_PAGE_PATH}" if base.startswith("https://") else ORDERS_PAGE_PATH
 SURFACE_LABELS = {
     "telegram": "Telegram",
     "mcp": "AI assistant (MCP)",
@@ -284,8 +304,44 @@ def unmatched_payment_email(
         f"<strong>Checkout:</strong> {html.escape(checkout_id)}<br>"
         f"<strong>Placed through:</strong> {html.escape(surface)}</p>"
         f"<p><strong>Buyer contact (as given)</strong></p><ul>{_contact_items(buyer)}</ul>"
-        "<p>The money is in your own Plural account. Find this Plural order in your Plural dashboard and "
-        "refund it, or contact the buyer to sort it out.</p>"
+        "<p>The money is in your own Plural account. Refund it from AgenticOrg: open the Orders page "
+        f"({html.escape(orders_page_url())}) and use Refund under Payments with no order. Or find this "
+        "Plural order in your Plural dashboard and refund it there, or contact the buyer to sort it out.</p>"
+    )
+    return subject, body
+
+
+def stock_short_email(
+    *,
+    merchant_name: str,
+    order_id: str,
+    lines: Any,
+    amount_minor_units: int | None,
+    currency: str | None,
+    provider_order_id: str,
+    buyer: Mapping[str, Any],
+    surface: str,
+) -> tuple[str, str]:
+    """``(subject, html)`` of the email about an order paid while stock was short; every value is escaped."""
+    paid = money(amount_minor_units, currency) or "an amount"
+    short = "".join(
+        f"<li>{html.escape(str(line.get('title') or line.get('item_id') or 'An item'))}: ordered "
+        f"{html.escape(str(line.get('quantity', '')))}, in stock {html.escape(str(line.get('in_stock', 0)))}</li>"
+        for line in (lines if isinstance(lines, list) else [])
+        if isinstance(line, Mapping)
+    ) or "<li>The catalog no longer covers every item.</li>"
+    subject = f"Action needed: order {order_id} was paid but stock is short"
+    body = (
+        f"<p>A buyer paid {html.escape(paid)} on {html.escape(merchant_name)}'s Plural payment page and "
+        f"AgenticOrg created order {html.escape(order_id)}, but the shop's catalog no longer has enough "
+        "stock for every item. The money was already taken.</p>"
+        f"<p><strong>Short items</strong></p><ul>{short}</ul>"
+        f"<p><strong>Plural order:</strong> {html.escape(provider_order_id or 'not given')}<br>"
+        f"<strong>Placed through:</strong> {html.escape(surface)}</p>"
+        f"<p><strong>Buyer contact (as given)</strong></p><ul>{_contact_items(buyer)}</ul>"
+        "<p>Ship what you can and refund the rest, or refund the order. Refund it from AgenticOrg: open the "
+        f"Orders page ({html.escape(orders_page_url())}) and use Refund on this order. Or refund it in your "
+        "Plural dashboard, and contact the buyer.</p>"
     )
     return subject, body
 
@@ -298,8 +354,10 @@ async def notify_merchant_of_unmatched_payment(
     amount_minor_units: int | None,
     currency: str | None,
     provider_order_id: str,
+    order_id: str | None = None,
+    lines: Any = None,
 ) -> int:
-    """Email the tenant's active administrators about a payment no order matches; returns how many accepted."""
+    """Email the tenant's active administrators about a payment that needs them; returns how many accepted."""
     from core.commerce.ledger import record_commerce_event
     from core.database import get_tenant_session
     from core.email import send_email
@@ -337,16 +395,29 @@ async def notify_merchant_of_unmatched_payment(
         state = dict(checkout.state or {})
         merchant_id, seller = checkout.merchant_id, checkout.seller_agent_id
         profile_url = checkout.platform_profile_url
-    subject, body = unmatched_payment_email(
-        merchant_name=str((config[0] if config else None) or merchant_id),
-        checkout_id=checkout_session_id,
-        result=result,
-        amount_minor_units=amount_minor_units,
-        currency=currency,
-        provider_order_id=provider_order_id,
-        buyer=dict(state.get("buyer") or {}),
-        surface=surface_label(state, profile_url),
-    )
+        checkout_order_id = checkout.order_id
+    if result in ORDER_ATTENTION_REASONS:
+        subject, body = stock_short_email(
+            merchant_name=str((config[0] if config else None) or merchant_id),
+            order_id=str(order_id or checkout_order_id or ""),
+            lines=lines,
+            amount_minor_units=amount_minor_units,
+            currency=currency,
+            provider_order_id=provider_order_id,
+            buyer=dict(state.get("buyer") or {}),
+            surface=surface_label(state, profile_url),
+        )
+    else:
+        subject, body = unmatched_payment_email(
+            merchant_name=str((config[0] if config else None) or merchant_id),
+            checkout_id=checkout_session_id,
+            result=result,
+            amount_minor_units=amount_minor_units,
+            currency=currency,
+            provider_order_id=provider_order_id,
+            buyer=dict(state.get("buyer") or {}),
+            surface=surface_label(state, profile_url),
+        )
     sent = 0
     for address in sorted({str(a) for a in recipients if a}):
         try:
@@ -371,16 +442,6 @@ async def notify_merchant_of_unmatched_payment(
     return sent
 
 
-def _send_unmatched_kick(tenant_id: str, checkout_session_id: str, details: dict[str, Any]) -> None:
-    try:
-        from core.tasks.payment_handoff_tasks import notify_unmatched_payment
-
-        notify_unmatched_payment.delay(str(tenant_id), str(checkout_session_id), details)
-    # enterprise-gate: broad-except-ok reason=queue-failure-is-logged-the-ledger-and-error-log-stay-authoritative
-    except Exception as exc:
-        logger.warning("unmatched_payment_notification_not_queued", error_type=type(exc).__name__)
-
-
 def kick_unmatched_payment_notification(
     tenant_id: str,
     checkout_session_id: str,
@@ -390,36 +451,18 @@ def kick_unmatched_payment_notification(
     currency: str | None,
     provider_order_id: str,
 ) -> None:
-    """Queue the unmatched-payment email after the confirmation's commit, off the event loop."""
-    details = {
-        "result": result,
-        "amount_minor_units": amount_minor_units,
-        "currency": currency,
-        "provider_order_id": provider_order_id,
-    }
-    try:
-        loop = asyncio.get_running_loop()
-    except RuntimeError:
-        _send_unmatched_kick(tenant_id, checkout_session_id, details)
-        return
-    loop.run_in_executor(None, _send_unmatched_kick, tenant_id, checkout_session_id, details)
+    """After the confirmation's commit: send the payment-attention email now (best effort, off the event loop).
 
+    The email's outbox row was written in the confirmation's transaction; the beat sweep sends it if
+    this kick is lost or the send fails.
+    """
+    from core.commerce.merchant_notifications import kick
 
-def _send_kick(tenant_id: str, order_id: str) -> None:
-    try:
-        from core.tasks.payment_handoff_tasks import notify_order
-
-        notify_order.delay(str(tenant_id), str(order_id))
-    # enterprise-gate: broad-except-ok reason=queue-failure-is-logged-the-order-and-orders-page-stay-authoritative
-    except Exception as exc:
-        logger.warning("order_notification_not_queued", error_type=type(exc).__name__)
+    kick(str(tenant_id))
 
 
 def kick_order_notification(tenant_id: str, order_id: str) -> None:
-    """Queue the email after the order's commit, off the event loop (a broker publish may block)."""
-    try:
-        loop = asyncio.get_running_loop()
-    except RuntimeError:
-        _send_kick(tenant_id, order_id)
-        return
-    loop.run_in_executor(None, _send_kick, tenant_id, order_id)
+    """After the order's commit: send the new-order email now (best effort; the outbox sweep backs it up)."""
+    from core.commerce.merchant_notifications import kick
+
+    kick(str(tenant_id))

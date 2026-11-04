@@ -351,6 +351,13 @@ export const paymentsApi = {
 // The merchant's orders (api/v1/commerce_payments.py)
 export const ordersApi = {
   list: (params?: { merchant_id?: string; limit?: number; offset?: number }) => api.get("/commerce/runtime/orders", { params }),
+  // Tenant administrators only: refunds go through the merchant's own Plural account.
+  refund: (orderId: string, body: { amount: number; reason?: string; request_id: string }) =>
+    api.post(`/commerce/runtime/ucp/orders/${encodeURIComponent(orderId)}/refunds`, body),
+  unmatched: (params?: { merchant_id?: string; limit?: number; offset?: number }) =>
+    api.get("/commerce/runtime/payments/unmatched", { params }),
+  refundUnmatched: (paymentId: string, body: { reason?: string }) =>
+    api.post(`/commerce/runtime/ucp/payments/unmatched/${encodeURIComponent(paymentId)}/refunds`, body),
 };
 
 // ABM (Account-Based Marketing)

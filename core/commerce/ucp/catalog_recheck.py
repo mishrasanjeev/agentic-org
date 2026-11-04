@@ -21,6 +21,7 @@ before it completes again. Nothing changes for a checkout whose items match.
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
+from datetime import UTC, datetime
 from typing import Any
 
 from core.commerce.ucp import messages as msg
@@ -28,7 +29,8 @@ from core.commerce.ucp.items import CatalogItem, ItemCatalog
 from core.commerce.ucp.merchant import MerchantUcp
 
 # Members of the stored state that the rebuilt update cannot carry exactly (kept as they were).
-KEPT_MEMBERS = ("consent", "attribution", "signals", "payment", "loyalty")
+# Loyalty is recomputed from the new total when the Shopify reads are available (``merged_state``).
+KEPT_MEMBERS = ("consent", "attribution", "signals", "payment")
 
 
 def _money(amount: int, currency: str) -> str:
@@ -140,10 +142,105 @@ def rebuild_body(state: Mapping[str, Any]) -> dict[str, Any]:
     return body
 
 
-def merged_state(fresh: Mapping[str, Any], stored: Mapping[str, Any]) -> dict[str, Any]:
-    """The re-priced state plus what only the stored state holds (platform, hand-offs, consent, payment...)."""
+def merged_state(
+    fresh: Mapping[str, Any], stored: Mapping[str, Any], *, loyalty_recomputed: bool = False
+) -> dict[str, Any]:
+    """The re-priced state plus what only the stored state holds (platform, hand-offs, consent, payment...).
+
+    ``loyalty_recomputed``: the re-pricing read the buyer's membership again (Shopify reads were
+    available), so its loyalty forecast is for the new total. Otherwise the stored loyalty is kept
+    rather than erased.
+    """
     out = dict(fresh)
     for key, value in stored.items():
         if key not in out or key in KEPT_MEMBERS:
             out[key] = value
+    if not loyalty_recomputed and "loyalty" in stored:
+        out["loyalty"] = stored["loyalty"]
     return out
+
+
+def _whole_units(quantity: int, item: CatalogItem) -> int:
+    return -(-quantity // (10**item.quantity_unit.scale))
+
+
+def _clock(moment: datetime) -> str:
+    return moment.astimezone(UTC).strftime("%H:%M UTC")
+
+
+def held_stock_changes(
+    line_items: Sequence[Mapping[str, Any]],
+    found: Mapping[str, CatalogItem],
+    held: Mapping[str, Sequence[tuple[int, datetime]]],
+) -> list[dict[str, Any]]:
+    """``out_of_stock`` for each line whose stock, less what other buyers' payable Plural links hold, is short.
+
+    ``held`` maps an item id to ``(quantity, until)`` per checkout holding it. The message says how
+    many can be bought now and when enough frees up if those payments do not go through.
+    """
+    out: list[dict[str, Any]] = []
+    for index, line in enumerate(line_items):
+        stored = line.get("item") if isinstance(line.get("item"), Mapping) else {}
+        item_id = str(stored.get("id") or "")
+        item = found.get(item_id)
+        quantity = line.get("quantity")
+        holds = sorted(held.get(item_id) or (), key=lambda hold: hold[1])
+        if item is None or item.inventory is None or not isinstance(quantity, int) or not holds:
+            continue
+        need = _whole_units(quantity, item)
+        units = [_whole_units(q, item) for q, _until in holds]
+        held_total = sum(units)
+        if item.inventory - held_total >= need:
+            continue
+        free_at: datetime | None = None
+        remaining = held_total
+        for count, (_q, until) in zip(units, holds, strict=True):
+            remaining -= count
+            if item.inventory - remaining >= need:
+                free_at = until
+                break
+        available = max(item.inventory - held_total, 0)
+        when = f" until about {_clock(free_at)}" if free_at is not None else ""
+        out.append(
+            msg.error(
+                "out_of_stock",
+                f"Only {available} of {_title(line)} can be bought now: {held_total} are held by another "
+                f"buyer's pending payment{when}. If that payment does not go through, they free up then; "
+                "change the quantity or try again later.",
+                path=f"$.line_items[{index}]",
+            )
+        )
+    return out
+
+
+async def stock_short_lines(
+    catalog: ItemCatalog, merchant: MerchantUcp, state: Mapping[str, Any]
+) -> list[dict[str, Any]]:
+    """The lines whose quantity the catalog's stock no longer covers (``out_of_stock`` of ``catalog_changes``).
+
+    For a payment that already arrived: one entry per short line (``line_item_id``, ``item_id``,
+    ``title``, ``quantity`` in whole units, ``in_stock``). An item the catalog no longer lists, or one
+    whose stock is not tracked, is not counted as short.
+    """
+    line_items = [li for li in state.get("line_items") or [] if isinstance(li, Mapping)]
+    if not line_items:
+        return []
+    ids = [str((li.get("item") or {}).get("id") or "") for li in line_items]
+    found = await catalog.lookup(merchant, [i for i in ids if i])
+    short: list[dict[str, Any]] = []
+    for message in changes(line_items, found, state.get("currency")):
+        path = str(message.get("path") or "")
+        if message.get("code") != "out_of_stock" or not path.startswith("$.line_items["):
+            continue
+        line = line_items[int(path[len("$.line_items[") : -1])]
+        item = found[str((line.get("item") or {}).get("id") or "")]
+        short.append(
+            {
+                "line_item_id": line.get("id"),
+                "item_id": item.id,
+                "title": _title(line),
+                "quantity": _whole_units(int(line["quantity"]), item),
+                "in_stock": max(int(item.inventory or 0), 0),
+            }
+        )
+    return short

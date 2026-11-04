@@ -46,6 +46,9 @@ from api.v1 import commerce_runtime as runtime
 from api.v1.commerce_runtime import require_merchant_commerce_config_write
 from core.commerce.c6z_runtime_vertical import (
     CATALOG_UPLOAD_SOURCE_SYSTEM,
+    SHOPIFY_CATALOG_MAX_PAGES,
+    SHOPIFY_CATALOG_PAGE_SIZE,
+    SHOPIFY_CATALOG_READ_LIMIT,
     SHOPIFY_SOURCE_SYSTEM,
     contains_private_or_executable_value,
 )
@@ -438,6 +441,14 @@ async def setup_view(tenant_id: str, merchant_id: str) -> dict[str, Any]:
         "source": source,
         "shop_domain": connector_config.get("shop_domain") if source == SHOPIFY_SOURCE_SYSTEM else None,
         "product_count": evidence.product_count if evidence_matches and evidence is not None else 0,
+        # One read takes at most this many Shopify products; a store at the limit may have more.
+        "read_limit": SHOPIFY_CATALOG_READ_LIMIT if source == SHOPIFY_SOURCE_SYSTEM else None,
+        "at_read_limit": bool(
+            source == SHOPIFY_SOURCE_SYSTEM
+            and evidence_matches
+            and evidence is not None
+            and int(evidence.product_count or 0) >= SHOPIFY_CATALOG_READ_LIMIT
+        ),
         "last_synced_at": _iso(evidence.synced_at) if evidence_matches and evidence is not None else None,
         "currency": evidence.currency if evidence_matches and evidence is not None else None,
         "last_error": connector.sync_error if connector is not None else None,
@@ -729,7 +740,11 @@ async def sync_catalog(merchant_id: str, tenant_id: str = Depends(get_current_te
     assert packet is not None
     if source == SHOPIFY_SOURCE_SYSTEM:
         result = await runtime._sync_shopify_packet(
-            tenant_id=tenant_id, packet_id=str(packet["packet_id"]), page_size=50, max_pages=10, currency=None
+            tenant_id=tenant_id,
+            packet_id=str(packet["packet_id"]),
+            page_size=SHOPIFY_CATALOG_PAGE_SIZE,
+            max_pages=SHOPIFY_CATALOG_MAX_PAGES,
+            currency=None,
         )
     elif evidence_id is not None:
         result = await runtime.reread_uploaded_catalog(tenant_id=tenant_id, evidence_id=evidence_id)

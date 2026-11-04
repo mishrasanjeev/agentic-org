@@ -52,6 +52,8 @@ interface Setup {
     source: string | null;
     shop_domain: string | null;
     product_count: number;
+    read_limit?: number | null;
+    at_read_limit?: boolean;
     last_synced_at: string | null;
     currency: string | null;
     last_error: string | null;
@@ -198,6 +200,12 @@ const inputClass = "h-11 rounded-md border bg-background px-3 sm:h-10";
 const areaClass = "min-h-[5rem] rounded-md border bg-background px-3 py-2";
 
 /** The one setup page: a shop, its catalog, policies and order limits, then every AI surface at once. */
+/** A sentence for a Shopify read that stopped at its limit with more products in the store, else "". */
+function readLimitNote(sync: { read_limit?: number; read_limit_reached?: boolean } | null | undefined): string {
+  if (!sync?.read_limit_reached || !sync.read_limit) return "";
+  return ` Your store has more than ${sync.read_limit} products; only the first ${sync.read_limit} were read.`;
+}
+
 export default function SellEverywhere() {
   const [merchants, setMerchants] = useState<MerchantSummary[]>([]);
   const [merchantId, setMerchantId] = useState("");
@@ -356,7 +364,10 @@ export default function SellEverywhere() {
           const detail = data.sync_error;
           setError(typeof detail === "object" && detail?.message ? detail.message : "Reading the catalog failed. Try again.");
         } else {
-          setNotice(`Connected. ${data.setup.catalog.product_count} products read from ${data.setup.catalog.shop_domain}.`);
+          setNotice(
+            `Connected. ${data.setup.catalog.product_count} products read from ${data.setup.catalog.shop_domain}.` +
+              readLimitNote(data.sync),
+          );
         }
       } finally {
         setShopToken("");
@@ -390,7 +401,7 @@ export default function SellEverywhere() {
     run("sync", async () => {
       const { data } = await merchantSetupApi.syncCatalog(merchantId);
       applySetup(data.setup);
-      setNotice(`${data.setup.catalog.product_count} products read.`);
+      setNotice(`${data.setup.catalog.product_count} products read.${readLimitNote(data.sync)}`);
     });
 
   const savePolicies = () =>
@@ -680,6 +691,12 @@ export default function SellEverywhere() {
                 <Button variant="outline" disabled={busy !== null} onClick={() => void syncCatalog()}>
                   Read catalog again
                 </Button>
+                {setup.catalog.at_read_limit && setup.catalog.read_limit ? (
+                  <span className="w-full" role="note">
+                    One read takes at most {setup.catalog.read_limit} Shopify products. If your store has more, only the first{" "}
+                    {setup.catalog.read_limit} are listed for buyers.
+                  </span>
+                ) : null}
               </div>
             ) : null}
           </Step>

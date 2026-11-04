@@ -437,4 +437,33 @@ describe("Sell everywhere", () => {
       await screen.findByText("Your web address cannot carry your shop profile. Contact support."),
     ).toBeInTheDocument();
   }, 20000);
+
+  it("tells the merchant when the Shopify store has more products than one read takes", async () => {
+    const atLimit = {
+      status: "ready",
+      source: "shopify",
+      shop_domain: "tea-corner.myshopify.com",
+      product_count: 1000,
+      read_limit: 1000,
+      at_read_limit: true,
+      last_synced_at: "2026-10-29T08:00:00Z",
+      currency: "INR",
+      last_error: null,
+      webhook_status: "configured",
+      webhook_path: "/api/v1/webhooks/shopify/t/0123456789abcdef0123456789abcdef",
+    };
+    setup.list.mockResolvedValue({ data: { merchants: [{ ...merchant, catalog_source: "shopify" }], count: 1 } });
+    setup.get.mockResolvedValue({ data: setupView({ catalog: atLimit }) });
+    get.mockResolvedValue({ data: view() });
+    setup.syncCatalog.mockResolvedValue({
+      data: { sync: { product_count: 1000, read_limit: 1000, read_limit_reached: true }, setup: setupView({ catalog: atLimit }) },
+    });
+    renderPage();
+
+    expect(await screen.findByText(/One read takes at most 1000 Shopify products/)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Read catalog again" }));
+    expect(
+      await screen.findByText("1000 products read. Your store has more than 1000 products; only the first 1000 were read."),
+    ).toBeInTheDocument();
+  }, 20000);
 });

@@ -693,6 +693,12 @@ async def test_an_order_shows_the_buyer_contact_delivery_items_total_and_surface
         ],
         "shipping": "Rs 49.00",
         "payment": {"status": "paid", "provider": "plural", "provider_order_ref_present": True},
+        # A Plural hosted order can be refunded from AgenticOrg, up to its total less earlier refunds.
+        "refunds": [],
+        "refunded_minor_units": 0,
+        "refundable_minor_units": 44900,
+        "refund_available": True,
+        "stock_short": None,
         "surface": "Telegram",
         "permalink_url": "https://tea-corner.shops.example/orders/ord_1",
     }

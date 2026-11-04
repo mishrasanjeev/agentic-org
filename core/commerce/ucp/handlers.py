@@ -907,6 +907,9 @@ async def _catalog_recheck(
     and the change messages are returned, so the Complete is refused and the
     buyer's agent sees the new total before it completes again.
 
+    Loyalty is recomputed from the new total when the Shopify reads are available
+    (the stored membership and forecast are kept when they are not).
+
     Skipped while an earlier Plural link of the checkout can still be paid: that
     link's payment must keep matching the cart it was issued for (``cart_hash``),
     the daily maximum keeps counting it, and the checkout cannot be updated anyway.
@@ -925,6 +928,9 @@ async def _catalog_recheck(
     fresh: dict[str, Any] | None = None
     status, currency = "incomplete", None
     if sorted(negotiated.active) == list(state.get("capabilities") or []):
+        # The Shopify reads let loyalty be recomputed from the new total; without them the stored
+        # loyalty is kept rather than erased.
+        reads = await _reads(runtime, merchant, negotiated)
         try:
             evaluation = await evaluate(
                 resource="checkout",
@@ -932,10 +938,10 @@ async def _catalog_recheck(
                 negotiated=negotiated,
                 body=recheck.rebuild_body(state),
                 previous=state,
-                deps=_deps(runtime, merchant, None),
+                deps=_deps(runtime, merchant, reads),
                 now=now,
             )
-            fresh = recheck.merged_state(evaluation.state, state)
+            fresh = recheck.merged_state(evaluation.state, state, loyalty_recomputed=reads is not None)
             status, currency = evaluation.status, evaluation.currency
         except RequestError:
             fresh = None
@@ -1462,8 +1468,13 @@ async def _complete_into_order(
     policies: Sequence[Mapping[str, Any]],
     now: datetime,
     order_created_event: str = ORDER_CREATED_EVENT,
+    snapshot_extra: Mapping[str, Any] | None = None,
 ) -> OrderEvent:
-    """Create the order for a session whose payment the provider completed, in ``session``; returns its event."""
+    """Create the order for a session whose payment the provider completed, in ``session``; returns its event.
+
+    ``snapshot_extra`` adds internal members to the stored snapshot (never rendered to platforms), such as
+    ``stock_short`` for an order paid while the catalog's stock no longer covered it.
+    """
     from core.models.commerce_ucp import CommerceOrderRow
 
     order_id = new_order_id()
@@ -1476,6 +1487,8 @@ async def _complete_into_order(
     )
     if policies:
         snapshot["policies"] = list(policies)
+    if snapshot_extra:
+        snapshot.update(dict(snapshot_extra))
     capability = merchant.mandate_capability
     if capability is not None:
         # The handler allowance the payment was captured under; refunds are bounded by it too.
@@ -1915,6 +1928,110 @@ async def daily_committed_minor_units(
     return committed
 
 
+# Checkouts read when summing the stock other buyers' Plural links hold (newest first).
+HELD_STOCK_SCAN_LIMIT = 500
+
+
+async def held_stock(
+    session: Any, *, tenant_id: Any, merchant_id: str, exclude_session_id: str, item_ids: set[str], now: datetime
+) -> dict[str, list[tuple[int, datetime]]]:
+    """The units of each item other checkouts of the merchant hold: ``{item_id: [(quantity, until), ...]}``.
+
+    A checkout holds its line items while one of its Plural links can still be paid and has not
+    lapsed (``issued``, ``expires_at`` in the future), or while its Plural order is being created
+    (counted for one link lifetime). A link lives at most ``PLURAL_LINK_TTL`` and its checkout is
+    updated when it is issued, so only checkouts updated within that time are read, through the
+    ``ix_commerce_checkout_sessions_status`` ranges (three statuses, ``expires_at`` in the future).
+    """
+    from core.commerce import payment_handoff as ph
+    from core.models.commerce_ucp import CommerceCheckoutSessionRow as Row
+
+    rows = (
+        await session.execute(
+            select(Row.state)
+            .where(
+                Row.tenant_id == tenant_id,
+                Row.status.in_(("requires_escalation", "complete_in_progress", "canceled")),
+                Row.expires_at > now,
+                Row.updated_at >= now - ph.PLURAL_LINK_TTL,
+                Row.merchant_id == merchant_id,
+                Row.id != exclude_session_id,
+            )
+            .order_by(Row.updated_at.desc())
+            .limit(HELD_STOCK_SCAN_LIMIT)
+        )
+    ).scalars().all()
+    held: dict[str, list[tuple[int, datetime]]] = {}
+    for state in rows:
+        until = ph.held_until(state or {}, now)
+        if until is None:
+            continue
+        for line in (state or {}).get("line_items") or []:
+            if not isinstance(line, Mapping):
+                continue
+            item_id = str((line.get("item") or {}).get("id") or "")
+            quantity = line.get("quantity")
+            if item_id in item_ids and isinstance(quantity, int) and not isinstance(quantity, bool) and quantity > 0:
+                held.setdefault(item_id, []).append((quantity, until))
+    return held
+
+
+async def _held_stock_messages(
+    session: Any, runtime: UcpRuntime, merchant: MerchantUcp, row: Any, state: Mapping[str, Any], now: datetime
+) -> list[dict[str, Any]]:
+    """``out_of_stock`` messages for lines whose stock other buyers' payable Plural links already hold."""
+    from core.commerce.ucp import catalog_recheck as recheck
+
+    line_items = [li for li in state.get("line_items") or [] if isinstance(li, Mapping)]
+    ids = {str((li.get("item") or {}).get("id") or "") for li in line_items} - {""}
+    if not ids:
+        return []
+    found = await runtime.catalog_for(merchant).lookup(merchant, sorted(ids))
+    tracked = {item_id for item_id, item in found.items() if item.inventory is not None}
+    if not tracked:
+        return []
+    held = await held_stock(
+        session,
+        tenant_id=row.tenant_id,
+        merchant_id=merchant.merchant_id,
+        exclude_session_id=row.id,
+        item_ids=tracked,
+        now=now,
+    )
+    return recheck.held_stock_changes(line_items, found, held) if held else []
+
+
+async def _stock_short_at_payment(
+    merchant: MerchantUcp, state: Mapping[str, Any]
+) -> list[dict[str, Any]]:
+    """The order lines the shop's catalog no longer has enough stock for, when a Plural payment arrives.
+
+    Read before the confirmation's transaction (the catalog read opens its own). A catalog that
+    cannot be read is logged and treated as unchanged: the money is taken either way.
+    """
+    from core.commerce.ucp import catalog_recheck as recheck
+
+    try:
+        catalog = (payment_catalog_for or _default_payment_catalog)(merchant)
+        return await recheck.stock_short_lines(catalog, merchant, state)
+    # enterprise-gate: broad-except-ok reason=a-catalog-read-failure-at-payment-never-blocks-the-paid-order
+    except Exception as exc:
+        logger.warning("plural_hosted_stock_check_unavailable", error_type=type(exc).__name__)
+        return []
+
+
+def _default_payment_catalog(merchant: MerchantUcp) -> ItemCatalog:
+    """The catalog the REST binding prices with (``api.v1.commerce_ucp._products``)."""
+    from api.v1.commerce_ucp import _products  # noqa: PLC0415 - the API module owns the products loader
+    from core.commerce.ucp.items import ProductEvidenceCatalog
+
+    return ProductEvidenceCatalog(_products)
+
+
+# The catalog a Plural payment confirmation re-checks stock with (tests replace it; None: the REST binding's).
+payment_catalog_for: Callable[[MerchantUcp], ItemCatalog] | None = None
+
+
 async def _complete_with_handoff(
     runtime: UcpRuntime,
     req: UcpRequest,
@@ -1998,6 +2115,10 @@ async def _complete_with_handoff(
         changed = await _catalog_recheck(runtime, merchant, negotiated, row, state, now)
         if changed:
             return await _blocked(changed, outcome="refused")
+        if settings.mode == ph.MODE_PLURAL_HOSTED:
+            held = await _held_stock_messages(session, runtime, merchant, row, state, now)
+            if held:
+                return await _blocked(held, outcome="refused")
         if settings.mode == ph.MODE_SHOPIFY_CART:
             cart_url = ph.shopify_cart_url(target.shop_domain, state.get("line_items") or [])
             if cart_url is None:
@@ -2248,6 +2369,82 @@ async def _complete_with_handoff(
 
 # A paid Plural hosted order that no order here matches (``confirm_handoff_payment``).
 UNMATCHED_RESULTS = ("amount_mismatch", "paid_after_cancel", "checkout_changed", "order_mismatch", "paid_twice")
+# A paid Plural hosted order that became an order the merchant still has to act on.
+STOCK_SHORT_AT_PAYMENT = "out_of_stock_at_payment"
+ATTENTION_RESULTS = (*UNMATCHED_RESULTS, STOCK_SHORT_AT_PAYMENT)
+
+
+async def _record_payment_attention(
+    session: Any,
+    *,
+    tenant: uuid.UUID,
+    row: Any,
+    reference: str,
+    record: Mapping[str, Any],
+    provider_order_id: str,
+    reason: str,
+    amount_minor_units: int | None,
+    currency: str | None,
+    order_id: str | None,
+    lines: Sequence[Mapping[str, Any]],
+    now: datetime,
+) -> None:
+    """Keep the payment the merchant must act on (``commerce_unmatched_payments``) and queue its email."""
+    from sqlalchemy.dialects.postgresql import insert
+
+    from core.commerce import merchant_notifications as outbox
+    from core.commerce.hosted_refunds import credential_ref_for_order
+    from core.models.commerce_payments import CommerceUnmatchedPaymentRow as Unmatched
+
+    if not provider_order_id:
+        return
+    payment_id = uuid.uuid4()
+    inserted = (
+        await session.execute(
+            insert(Unmatched)
+            .values(
+                id=payment_id,
+                tenant_id=tenant,
+                merchant_id=row.merchant_id,
+                seller_agent_id=row.seller_agent_id,
+                checkout_session_id=row.id,
+                reference=reference[:64],
+                provider_order_id=provider_order_id[:120],
+                reason=reason,
+                amount_minor_units=amount_minor_units,
+                currency=(str(currency).upper()[:3] if currency else None),
+                credential_ref=(
+                    str(record.get("credential_ref") or "") or credential_ref_for_order(dict(row.state or {}), None)
+                ),
+                order_id=order_id,
+                details={"lines": [dict(line) for line in lines]} if lines else {},
+                refund_status="none",
+                created_at=now,
+                updated_at=now,
+            )
+            .on_conflict_do_nothing(constraint="uq_commerce_unmatched_payments_provider_order")
+            .returning(Unmatched.id)
+        )
+    ).first()
+    if inserted is None:
+        return
+    await outbox.enqueue(
+        session,
+        tenant_id=tenant,
+        merchant_id=row.merchant_id,
+        kind=outbox.KIND_PAYMENT_ATTENTION,
+        payload_ref=str(payment_id),
+        details={
+            "checkout_session_id": row.id,
+            "result": reason,
+            "amount_minor_units": amount_minor_units,
+            "currency": currency,
+            "provider_order_id": provider_order_id,
+            "order_id": order_id,
+            "lines": [dict(line) for line in lines],
+        },
+        now=now,
+    )
 
 
 async def confirm_handoff_payment(
@@ -2274,6 +2471,7 @@ async def confirm_handoff_payment(
     ``checkout_changed``, ``paid_after_cancel``, ``paid_twice`` (another link of the
     already paid checkout was paid too), ``duplicate_event``, ``not_applicable``.
     """
+    from core.commerce import merchant_notifications as outbox
     from core.commerce import payment_handoff as ph
     from core.commerce.ucp.merchant import config_from_row, merchant_ucp_from_config
     from core.commerce.ucp.store import load_merchant_config_row
@@ -2285,7 +2483,9 @@ async def confirm_handoff_payment(
     async with get_tenant_session(tenant) as session:
         scope = (
             await session.execute(
-                select(Row.id, Row.merchant_id, Row.seller_agent_id).where(Row.tenant_id == tenant, contains)
+                select(Row.id, Row.merchant_id, Row.seller_agent_id, Row.serving_host, Row.status, Row.state).where(
+                    Row.tenant_id == tenant, contains
+                )
             )
         ).first()
     if scope is None:
@@ -2293,6 +2493,15 @@ async def confirm_handoff_payment(
     config_row = await load_merchant_config_row(
         tenant_id=str(tenant), merchant_id=scope.merchant_id, seller_agent_id=scope.seller_agent_id
     )
+    # The money is already taken when Plural reports a payment: the stock is re-checked first (outside the
+    # transaction), and a short order is still created but marked, and the merchant is told.
+    stock_short: list[dict[str, Any]] = []
+    if ph.payment_state(status) == "paid" and scope.status != "completed" and config_row is not None:
+        paying = merchant_ucp_from_config(
+            config_from_row(config_row), tenant_id=str(tenant), serving_host=scope.serving_host
+        )
+        if paying is not None:
+            stock_short = await _stock_short_at_payment(paying, dict(scope.state or {}))
     req = UcpRequest(tenant_id=str(tenant), host="", ucp_agent=None)
     order_event: OrderEvent | None = None
     order_id: str | None = None
@@ -2358,6 +2567,11 @@ async def confirm_handoff_payment(
                 created_event = ORDER_CREATED_EVENT
             ph.set_reference_status(state, reference, "paid")
             ph.clear_handoff(state, "paid")
+            short_extra = (
+                {"stock_short": {"lines": stock_short, "checked_at": ph.iso(now), "reason": STOCK_SHORT_AT_PAYMENT}}
+                if stock_short
+                else None
+            )
             order_event = await _complete_into_order(
                 session,
                 req,
@@ -2372,16 +2586,45 @@ async def confirm_handoff_payment(
                 policies=(),
                 now=now,
                 order_created_event=created_event,
+                snapshot_extra=short_extra,
             )
             order_id = order_event.order_id
             result = "completed"
+            # The new-order email, sent from the outbox after this transaction commits.
+            await outbox.enqueue(
+                session,
+                tenant_id=tenant,
+                merchant_id=row.merchant_id,
+                kind=outbox.KIND_ORDER,
+                payload_ref=order_id,
+                details={"checkout_session_id": row.id},
+                now=now,
+            )
+        attention = result if result in UNMATCHED_RESULTS else None
+        if result == "completed" and stock_short:
+            attention = STOCK_SHORT_AT_PAYMENT
         tell_merchant = False
-        if result in UNMATCHED_RESULTS:
-            # Money reached the merchant's Plural account and no order matches it: tell the merchant once.
+        if attention is not None:
+            # Money reached the merchant's Plural account and needs the merchant (no order matches it,
+            # or the order is short of stock): keep it for a refund and tell the merchant once.
             notified = [r for r in state.get("handoff_unmatched_notified") or [] if isinstance(r, str)]
             if reference not in notified:
                 state["handoff_unmatched_notified"] = [*notified, reference][-20:]
                 tell_merchant = True
+                await _record_payment_attention(
+                    session,
+                    tenant=tenant,
+                    row=row,
+                    reference=reference,
+                    record=record,
+                    provider_order_id=provider_order_id,
+                    reason=attention,
+                    amount_minor_units=amount_minor_units,
+                    currency=currency,
+                    order_id=order_id if attention == STOCK_SHORT_AT_PAYMENT else None,
+                    lines=stock_short if attention == STOCK_SHORT_AT_PAYMENT else [],
+                    now=now,
+                )
         row.state = state
         row.revision = row.revision + 1
         row.updated_at = now
@@ -2398,19 +2641,21 @@ async def confirm_handoff_payment(
                 "payment_state": payment,
                 "decision_id": record.get("decision_id"),
                 "provider_order_ref_present": bool(provider_order_id),
+                "stock_short": bool(stock_short) if result == "completed" else None,
             },
         )
-    if result in UNMATCHED_RESULTS:
-        # The merchant's Plural account holds money no order here matches: the ledger event, this log
-        # and an email to the merchant's administrators (once per payment link) say so.
-        logger.error("plural_hosted_payment_unmatched", result=result, source=source)
+    if attention is not None:
+        # The merchant's Plural account holds money no order here matches (or an order short of stock):
+        # the ledger event, this log and an email to the merchant's administrators (once per payment
+        # link, from the outbox row written above) say so.
+        logger.error("plural_hosted_payment_needs_merchant", result=attention, source=source)
         if tell_merchant:
             from core.commerce.order_notifications import kick_unmatched_payment_notification
 
             kick_unmatched_payment_notification(
                 str(tenant),
                 scope.id,
-                result=result,
+                result=attention,
                 amount_minor_units=amount_minor_units,
                 currency=currency,
                 provider_order_id=provider_order_id,
@@ -2621,8 +2866,12 @@ async def apply_order_change(
     adjustment: Mapping[str, Any] | None,
     now: datetime,
     event_id: str | None = None,
+    adjustment_id: str | None = None,
 ) -> tuple[int, dict[str, Any], str]:
     """Record a fulfillment event or an adjustment on an order and queue the full snapshot to every subscriber.
+
+    ``adjustment_id`` (server-side callers only, never a request body) fixes the new adjustment's id;
+    when the order already has an adjustment with that id the order is returned unchanged.
 
     Returns ``(revision, snapshot, ucp_version)``; raises ``OrderChangeError`` (404 unknown order, 422 a change
     that does not apply, 409 a fulfillment ``event_id`` already recorded). The ledger event, the outbox rows and
@@ -2653,11 +2902,15 @@ async def apply_order_change(
         if row is None:
             raise OrderChangeError(404, "Order not found")
         snapshot = json.loads(json.dumps(row.snapshot))
+        if adjustment_id is not None and any(
+            isinstance(a, Mapping) and a.get("id") == adjustment_id for a in snapshot.get("adjustments") or []
+        ):
+            return row.revision, snapshot, row.ucp_version
         try:
             if fulfillment_event is not None:
                 entry = apply_fulfillment_event(snapshot, fulfillment_event, now=now, event_id=event_id)
             else:
-                entry = apply_adjustment(snapshot, adjustment or {}, now=now)
+                entry = apply_adjustment(snapshot, adjustment or {}, now=now, entry_id=adjustment_id)
         except DuplicateOrderEventError as exc:
             raise OrderChangeError(409, "event_already_recorded") from exc
         except OrderUpdateError as exc:

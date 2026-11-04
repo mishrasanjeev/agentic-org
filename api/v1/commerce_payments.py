@@ -16,7 +16,13 @@ Merchant routes (``commerce.merchant_config.write`` or tenant admin), under
   fetch a Plural access token with them (nothing else is called).
 * ``GET /orders`` - the tenant's orders, newest first, paginated, with the
   buyer contact and delivery address as the buyer gave them, the shipping
-  choice, items, total, payment status and the surface the buyer used.
+  choice, items, total, payment status, refunds and what is left to refund,
+  whether stock was short at payment, and the surface the buyer used.
+* ``GET /payments/unmatched`` - Plural payments that reached the merchant's
+  Plural account with no order (or an order made while stock was short),
+  newest first, with their refund state. The refund itself is
+  ``POST /commerce/runtime/ucp/payments/unmatched/{id}/refunds`` (tenant
+  administrators).
 
 Public (no session; the handlers check what they need), under
 ``/api/v1/payments/plural``:
@@ -297,7 +303,25 @@ def _order_view(order: Any, checkout: Any) -> dict[str, Any]:
         for k, v in dict(state.get("buyer") or {}).items()
         if k in ("first_name", "last_name", "email", "phone_number")
     }
+    from core.commerce.hosted_refunds import recorded_refunds
+
     provider = "plural" if order.executor in ("plural_hosted", "plural_pine") else order.executor
+    refunded = recorded_refunds(snapshot)
+    total = int(order.total_minor_units)
+    refunds = [
+        {
+            "id": entry.get("id"),
+            "status": entry.get("status"),
+            "amount": money(
+                abs(next((t.get("amount") for t in entry.get("totals") or [] if t.get("type") == "total"), 0) or 0),
+                order.currency,
+            ),
+            "occurred_at": entry.get("occurred_at"),
+        }
+        for entry in snapshot.get("adjustments") or []
+        if isinstance(entry, dict) and entry.get("type") == "refund"
+    ]
+    short = snapshot.get("stock_short") if isinstance(snapshot.get("stock_short"), dict) else None
     return {
         "id": order.id,
         "merchant_id": order.merchant_id,
@@ -325,6 +349,12 @@ def _order_view(order: Any, checkout: Any) -> dict[str, Any]:
             "provider": provider,
             "provider_order_ref_present": bool(order.provider_order_ref),
         },
+        "refunds": refunds,
+        "refunded_minor_units": refunded,
+        "refundable_minor_units": max(total - refunded, 0),
+        # Refunds from AgenticOrg go through Plural; any other executor's orders are refunded where they were paid.
+        "refund_available": order.executor in ("plural_hosted", "plural_pine") and bool(order.provider_order_ref),
+        "stock_short": list(short.get("lines") or []) if short else None,
         "surface": surface_label(state, order.platform_profile_url),
         "permalink_url": snapshot.get("permalink_url"),
     }
@@ -381,6 +411,46 @@ async def list_orders(
         )
     return {
         "orders": [_order_view(r, checkouts.get(r.checkout_session_id)) for r in page],
+        "limit": limit,
+        "offset": offset,
+        "next_offset": offset + limit if len(rows) > limit else None,
+    }
+
+
+@merchant_router.get("/payments/unmatched")
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="commerce.runtime.orders.read",
+    rate_limit="standard",
+    idempotency="read-only",
+)
+async def list_unmatched_payments(
+    merchant_id: str | None = None,
+    limit: int = 25,
+    offset: int = 0,
+    tenant_id: str = Depends(get_current_tenant),
+) -> dict[str, Any]:
+    """Plural payments that need the merchant (no order matches them, or stock was short), newest first."""
+    from core.commerce.hosted_refunds import unmatched_view
+    from core.models.commerce_payments import CommerceUnmatchedPaymentRow as Unmatched
+
+    if not 1 <= limit <= 100 or not 0 <= offset <= 100_000:
+        raise HTTPException(422, "limit must be 1-100 and offset 0-100000")
+    tenant = _tenant_uuid(tenant_id)
+    async with get_tenant_session(tenant) as session:
+        query = select(Unmatched).where(Unmatched.tenant_id == tenant)
+        if merchant_id:
+            query = query.where(Unmatched.merchant_id == merchant_id)
+        rows = list(
+            (
+                await session.scalars(
+                    query.order_by(Unmatched.created_at.desc(), Unmatched.id.desc()).offset(offset).limit(limit + 1)
+                )
+            ).all()
+        )
+    return {
+        "payments": [unmatched_view(row) for row in rows[:limit]],
         "limit": limit,
         "offset": offset,
         "next_offset": offset + limit if len(rows) > limit else None,

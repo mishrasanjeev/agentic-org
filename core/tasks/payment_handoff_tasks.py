@@ -5,9 +5,12 @@
 webhook: it reads the order status of every open Plural hosted-checkout
 hand-off once and applies it, and releases a reservation whose order creation
 never finished. It runs only while ``AGENTICORG_UCP_CHECKOUT_ENABLED`` or
-``AGENTICORG_ACP_CHECKOUT_ENABLED`` is true. ``notify_order`` emails the
-merchant's administrators about a new order after its commit, and
-``notify_unmatched_payment`` about a Plural payment no order matches.
+``AGENTICORG_ACP_CHECKOUT_ENABLED`` is true.
+
+``notify_order`` and ``notify_unmatched_payment`` send one email directly. New
+code no longer queues them: merchant emails go through the durable outbox
+(``core.tasks.merchant_notification_tasks``). They stay registered so messages
+queued before the outbox existed are still sent during a rolling deploy.
 """
 
 from __future__ import annotations

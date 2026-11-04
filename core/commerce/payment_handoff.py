@@ -267,6 +267,27 @@ def payable(record: Any) -> bool:
     return isinstance(record, Mapping) and record.get("status") == "issued"
 
 
+def held_until(state: Mapping[str, Any], now: datetime) -> datetime | None:
+    """Until when a checkout's Plural links hold its items for the buyer, or None when nothing holds them.
+
+    A link holds the items while it can be paid and has not lapsed (``issued``, ``expires_at`` after
+    ``now``); a Plural order being created holds them for one link lifetime. The latest such time.
+    """
+    latest: datetime | None = None
+    handoff = state.get("handoff")
+    creating = isinstance(handoff, Mapping) and handoff.get("status") == "creating"
+    if creating and isinstance(handoff, Mapping) and handoff.get("mode") == MODE_PLURAL_HOSTED:
+        latest = now + PLURAL_LINK_TTL
+    orders = state.get("handoff_orders")
+    for record in orders.values() if isinstance(orders, Mapping) else ():
+        if not payable(record):
+            continue
+        expires = _parse(record.get("expires_at"))
+        if expires is not None and expires > now and (latest is None or expires > latest):
+            latest = expires
+    return latest
+
+
 def link_record(handoff: Mapping[str, Any]) -> dict[str, Any]:
     """An issued Plural hand-off as its reference's record keeps it: payable, with its link."""
     return {**{key: handoff[key] for key in _LINK_FIELDS if key in handoff}, "status": "issued"}
