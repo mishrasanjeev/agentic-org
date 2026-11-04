@@ -8,10 +8,13 @@ and every other role holds only ``insights:read``. Route enforcement runs in
 not acknowledge an alert, save a view or start a background export (the finance
 pack, a view PDF), and an auditor could not sign a period evidence pack.
 
-The family's write side is now ``insights:write``, held by every role that holds
-``insights:read``. Each handler still decides who may act: value and BI changes
-need an active human administrator, signing needs an auditor or administrator,
-acknowledging needs the alert's owner.
+The family's write side is now ``insights:write``, held by every Insights role
+except the auditor, who stays read-only (no ``:write`` scope). POSTs that change
+no organisation state (a background export of figures the caller may read, the
+caller's own saved views and last visit, an auditor's signature on a pack) are
+the ``insights_personal`` family and need ``insights:read``. Each handler still
+decides who may act: value and BI changes need an active human administrator
+(and ``agenticorg:admin`` at the route), acknowledging needs the alert's owner.
 """
 
 from __future__ import annotations
@@ -30,12 +33,14 @@ from api.v1 import insights_alerts, insights_exports, insights_saved_views
 from core.rbac import ROLE_SCOPES
 
 READERS = sorted(role for role, scopes in ROLE_SCOPES.items() if "insights:read" in scopes)
+WRITERS = sorted(set(READERS) - {"auditor"})
 
 # The roles each handler admits (the handler checks; route enforcement must let them reach it).
 HANDLER_ROLES: dict[tuple[str, str], set[str]] = {
     ("POST", "/api/v1/insights/alerts/{alert_id}/ack"): {"cfo", "chro", "cmo", "coo"},
     ("POST", "/api/v1/insights/exports"): set(READERS),
     ("POST", "/api/v1/insights/exports/{export_id}/sign"): {"auditor"},
+    # Acknowledging is a change to the organisation's alert: insights:write (the owner roles hold it).
     ("POST", "/api/v1/insights/saved-views"): set(READERS),
     ("PATCH", "/api/v1/insights/saved-views/{view_id}"): set(READERS),
     ("DELETE", "/api/v1/insights/saved-views/{view_id}"): set(READERS),
@@ -72,10 +77,13 @@ def test_every_role_a_handler_admits_passes_route_enforcement(app) -> None:
             assert required & _expand_granted(ROLE_SCOPES[role]), (key, role, required)
 
 
-def test_the_insights_family_writes_with_insights_write() -> None:
+def test_the_insights_family_writes_with_insights_write_and_auditors_stay_read_only() -> None:
     assert SCOPE_FAMILIES["insights"] == ("insights:read", "insights:write")
-    for role in READERS:
+    assert SCOPE_FAMILIES["insights_personal"] == ("insights:read", "insights:read")
+    assert SCOPE_FAMILIES["insights_admin"] == ("insights:read", "agenticorg:admin")
+    for role in WRITERS:
         assert "insights:write" in ROLE_SCOPES[role], role
+    assert ROLE_SCOPES["auditor"] == ["audit:read", "insights:read"]
     assert ROLE_SCOPES["admin"] == ["agenticorg:admin"]
 
 
@@ -114,7 +122,15 @@ def _client(scopes: list[str]) -> TestClient:
 
 @pytest.mark.parametrize(
     ("role", "path"),
-    [("cfo", "/ack"), ("cfo", "/export"), ("cfo", "/save"), ("auditor", "/sign"), ("analyst", "/save")],
+    [
+        ("cfo", "/ack"),
+        ("cfo", "/export"),
+        ("cfo", "/save"),
+        ("auditor", "/sign"),
+        ("auditor", "/export"),
+        ("auditor", "/save"),
+        ("analyst", "/save"),
+    ],
 )
 def test_a_non_admin_role_reaches_the_insights_write_handler(role: str, path: str) -> None:
     from api import route_enforcement
@@ -127,16 +143,17 @@ def test_a_non_admin_role_reaches_the_insights_write_handler(role: str, path: st
     assert response.status_code == 200, response.text
 
 
-def test_a_read_only_credential_still_cannot_write() -> None:
+def test_a_read_only_credential_cannot_acknowledge_an_alert() -> None:
     from api import route_enforcement
 
     with (
         patch.object(route_enforcement, "_check_rate_limit", AsyncMock(return_value=None)),
         patch.object(route_enforcement.settings, "route_enforcement_mode", "enforce"),
     ):
-        response = _client(["insights:read"]).post("/export")
-    assert response.status_code == 403
-    assert "insights:write" in response.text
+        response = _client(ROLE_SCOPES["auditor"]).post("/ack")
+        nothing = _client(["audit:read"]).post("/export")
+    assert response.status_code == 403 and "insights:write" in response.text
+    assert nothing.status_code == 403 and "insights:read" in nothing.text
 
 
 def test_value_and_bi_changes_stay_the_administrators_at_the_route(app) -> None:

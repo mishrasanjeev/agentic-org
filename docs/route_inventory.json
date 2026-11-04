@@ -8437,7 +8437,7 @@
     "path": "/api/v1/insights/alerts/{alert_id}/ack",
     "public_exempt_reason": null,
     "rate_limit": "reporting-admin",
-    "scope": "insights.read",
+    "scope": "insights.alerts.ack",
     "source_line": 80,
     "tenant_required": true
   },
@@ -8545,7 +8545,7 @@
     "path": "/api/v1/insights/changes/seen",
     "public_exempt_reason": null,
     "rate_limit": "reporting-read",
-    "scope": "insights.read",
+    "scope": "insights_personal.changes.seen",
     "source_line": 166,
     "tenant_required": true
   },
@@ -8653,7 +8653,7 @@
     "path": "/api/v1/insights/exports",
     "public_exempt_reason": null,
     "rate_limit": "reporting-export",
-    "scope": "insights.read",
+    "scope": "insights_personal.exports.create",
     "source_line": 108,
     "tenant_required": true
   },
@@ -8707,7 +8707,7 @@
     "path": "/api/v1/insights/exports/{export_id}/sign",
     "public_exempt_reason": null,
     "rate_limit": "reporting-admin",
-    "scope": "insights.read",
+    "scope": "insights_personal.evidence_pack.sign",
     "source_line": 306,
     "tenant_required": true
   },
@@ -8815,7 +8815,7 @@
     "path": "/api/v1/insights/saved-views",
     "public_exempt_reason": null,
     "rate_limit": "reporting-read",
-    "scope": "insights.read",
+    "scope": "insights_personal.saved_views.write",
     "source_line": 77,
     "tenant_required": true
   },
@@ -8833,7 +8833,7 @@
     "path": "/api/v1/insights/saved-views/{view_id}",
     "public_exempt_reason": null,
     "rate_limit": "reporting-read",
-    "scope": "insights.read",
+    "scope": "insights_personal.saved_views.write",
     "source_line": 124,
     "tenant_required": true
   },
@@ -8851,7 +8851,7 @@
     "path": "/api/v1/insights/saved-views/{view_id}",
     "public_exempt_reason": null,
     "rate_limit": "reporting-read",
-    "scope": "insights.read",
+    "scope": "insights_personal.saved_views.write",
     "source_line": 100,
     "tenant_required": true
   },
