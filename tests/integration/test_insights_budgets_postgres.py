@@ -44,7 +44,8 @@ def _audit(world, tid: str) -> list[tuple[str, dict]]:
         conn.exec_driver_sql(f'SET search_path TO "{world.schema}"')
         rows = conn.execute(
             text(
-                "SELECT event_type, details FROM audit_log WHERE tenant_id = :t AND event_type LIKE 'insights.budget.%' "
+                "SELECT event_type, details FROM audit_log "
+                "WHERE tenant_id = :t AND event_type LIKE 'insights.budget.%' "
                 "ORDER BY created_at, event_type"
             ),
             {"t": tid},
