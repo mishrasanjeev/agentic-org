@@ -100,7 +100,7 @@ def _enqueue(tid: uuid.UUID, job_id: uuid.UUID) -> bool:
 @route_meta(
     auth_required=True,
     tenant_required=True,
-    scope="insights.read",
+    scope="insights_personal.exports.create",
     rate_limit="reporting-export",
     idempotency="non-idempotent-create",
     audit_event="insights.export.requested",
@@ -298,7 +298,7 @@ class SignRequest(BaseModel):
 @route_meta(
     auth_required=True,
     tenant_required=True,
-    scope="insights.read",
+    scope="insights_personal.evidence_pack.sign",
     rate_limit="reporting-admin",
     idempotency="idempotent-first-write-wins",
     audit_event="insights.evidence_pack.signed",

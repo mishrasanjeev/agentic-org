@@ -247,13 +247,19 @@ SCOPE_FAMILIES: dict[str, tuple[str, str]] = {
     # are no writes, so the write scope is the administrator's.
     "kpis": ("kpis:read", ADMIN_SCOPE),
     # Insights (/insights/*, api/v1/insights*.py). Every role but admin is
-    # given insights:read and insights:write (administrators pass on
-    # agenticorg:admin); each handler then admits only the roles it serves
-    # (finance: admin, cfo; signing a pack: auditor, admin; value and BI
-    # changes: an active human administrator). The write side was once the
+    # given insights:read, and every role but the auditor insights:write
+    # (administrators pass on agenticorg:admin); each handler then admits only
+    # the roles it serves (finance: admin, cfo; acknowledging: the alert's
+    # owner; budgets: admin, cfo). The write side was once the
     # administrator's, which refused every other role the actions their
     # handlers allow (regression test_insights_non_admin_writes_20261104).
     "insights": ("insights:read", "insights:write"),
+    # Insights POSTs that change no organisation state: a background export of
+    # figures the caller may already read, the caller's own saved views and
+    # last visit, and an auditor's signature on an evidence pack they
+    # reviewed. Reading Insights is enough at this layer (auditors stay
+    # read-only); each handler decides who may act.
+    "insights_personal": ("insights:read", "insights:read"),
     # Insights changes only an administrator makes (BI database logins, the
     # money-saved baselines, rates and settings): read with insights:read, but
     # writes stay the administrator's at this layer too, as well as in the

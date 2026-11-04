@@ -6,9 +6,12 @@
   administrator: a CFO could not acknowledge an alert, save a view or start a background export (the finance pack,
   a view PDF), and an auditor could not sign a period evidence pack. The Insights route family's write side was
   the administrator's scope, and the other roles hold only `insights:read`.
-- Every role that reads Insights now also holds `insights:write`, and the family's writes take it. Each handler
-  still decides who may act. BI database logins and the money-saved baselines, rates and settings move to the
-  `insights_admin` family, whose writes stay the administrator's at the route as well as in the handler.
+- Every Insights role except the auditor now also holds `insights:write`, and the family's writes take it
+  (acknowledging an alert). POSTs that change no organisation state (a background export, the caller's own saved
+  views and last visit, an auditor's evidence-pack signature) move to the `insights_personal` family, which needs
+  only `insights:read`, so auditors stay read-only. BI database logins and the money-saved baselines, rates and
+  settings move to the `insights_admin` family, whose writes stay the administrator's at the route as well as in
+  the handler. Each handler still decides who may act.
 - Sessions pick up the new scope when their token is next issued (at most 60 minutes).
 
 ## Unreleased - Insights runtime counters: tool calls, guardrail outcomes and security events
