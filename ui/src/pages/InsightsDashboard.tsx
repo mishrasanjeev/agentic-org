@@ -17,6 +17,7 @@ import ChartCard from "@/components/insights/ChartCard";
 import DecisionTile from "@/components/insights/DecisionTile";
 import EmptyState from "@/components/insights/EmptyState";
 import FilterBar, { type FilterValue } from "@/components/insights/FilterBar";
+import BenchmarkCard, { BENCHMARK_ROLES, BENCHMARK_VIEWS } from "@/components/insights/BenchmarkCard";
 import NeedsYouList from "@/components/insights/NeedsYouList";
 import SavedViews from "@/components/insights/SavedViews";
 import SearchPalette from "@/components/insights/SearchPalette";
@@ -517,6 +518,8 @@ function ViewBody({
         </div>
         <NeedsYouList items={data.needs_you} />
       </div>
+
+      {activeView && BENCHMARK_VIEWS.has(activeView) && BENCHMARK_ROLES.has(role) ? <BenchmarkCard /> : null}
 
       {updated && !Number.isNaN(updated.getTime()) ? (
         <p className="text-xs text-muted-foreground" data-testid="insights-updated">

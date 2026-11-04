@@ -254,6 +254,13 @@ app.conf.beat_schedule = {
         "schedule": crontab(minute=5),
         "options": {"queue": "maintenance"},
     },
+    "insights-compute-benchmarks": {
+        # Publishes the opted-in cross-tenant cohort figures (at least 20 tenants each) for the last 30
+        # complete UTC days (core/insights/benchmarks.py). A no-op unless AGENTICORG_INSIGHTS_ENABLED.
+        "task": "core.tasks.insights_tasks.compute_benchmarks",
+        "schedule": crontab(hour=4, minute=10),
+        "options": {"queue": "maintenance", "expires": 3600},
+    },
     "insights-reconcile-yesterday": {
         # Reconciles each tenant's local yesterday against its run facts from 02:30
         # local, until reconciled. Hourly at :35. A no-op unless

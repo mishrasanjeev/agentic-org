@@ -801,7 +801,9 @@
       "rollupLate": "Rollups older than {{hours}} hours",
       "rollupOnTime": "Every tenant's rollup is on time.",
       "minutes": "{{count}} min",
-      "rollupLateDetail": "Tenants late: {{count}}. The furthest behind by {{hours}} hours."
+      "rollupLateDetail": "Tenants late: {{count}}. The furthest behind by {{hours}} hours.",
+      "benchmarks": "Benchmarks",
+      "benchmarksDetail": "{{optedIn}} organisations opted in; cohorts publish from {{min}}."
     }
   },
   "insights": {
@@ -1111,6 +1113,40 @@
     "forbidden": {
       "title": "Administrators only",
       "body": "Only an organisation administrator signed in as a person can manage BI database logins."
+    }
+  },
+  "insightsBenchmarks": {
+    "title": "Benchmarks",
+    "window": "Last 30 complete days, {{from}} to {{to}}. Organisations taking part: {{count}}.",
+    "loading": "Loading benchmarks…",
+    "loadFailed": "Benchmarks could not be loaded.",
+    "changeFailed": "The choice could not be saved.",
+    "optIn": "Take part in benchmarks",
+    "optOut": "Stop taking part",
+    "notOptedIn": "Benchmarks compare organisations that choose to take part. Once an administrator opts in, this organisation's figures count towards cohorts of at least {{min}} organisations and you see where you stand. No other organisation sees your figures.",
+    "noCohort": "No cohort large enough yet",
+    "band": "{{cohort}} ({{count}}): 25th {{p25}}, median {{p50}}, 75th {{p75}}",
+    "footnote": "Production runs that were measured, never demo data. A cohort is shown only with at least {{min}} organisations, each with at least {{runs}} runs in the window; only percentiles are shared.",
+    "columns": {
+      "metric": "Benchmark",
+      "yours": "Yours",
+      "cohort": "Cohorts"
+    },
+    "cohorts": {
+      "all": "All taking part",
+      "plan": "Plan {{plan}}"
+    },
+    "positions": {
+      "below_p25": "below the 25th percentile",
+      "p25_p50": "between the 25th percentile and the median",
+      "p50_p75": "between the median and the 75th percentile",
+      "above_p75": "above the 75th percentile"
+    },
+    "metrics": {
+      "success_rate": "Run success rate",
+      "cost_per_run_usd": "Cost per run",
+      "approvals_per_100_runs": "Approvals per 100 runs",
+      "avg_run_ms": "Average run time"
     }
   },
   "insightsBudgets": {

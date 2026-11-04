@@ -534,3 +534,39 @@ class SecurityEventDaily(BaseModel):
     event_kind: Mapped[str] = mapped_column(String(32), nullable=False)
     count: Mapped[int] = mapped_column(BigInteger, nullable=False, server_default=text("0"), default=0)
     updated_at: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), server_default=func.now(), nullable=False)
+
+
+# ---------------------------------------------------------------- benchmarks (v6z117)
+
+
+class InsightsBenchmarkOptin(BaseModel):
+    """A tenant that chose to take part in cross-tenant benchmarks (an administrator's choice). Forced RLS."""
+
+    __tablename__ = "insights_benchmark_optins"
+
+    tenant_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("tenants.id", ondelete="CASCADE"), primary_key=True
+    )
+    opted_in_at: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), server_default=func.now(), nullable=False)
+    opted_in_by: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
+
+
+class InsightsBenchmark(BaseModel):
+    """A published cohort figure: percentiles over at least 20 opted-in tenants. Holds no tenant id."""
+
+    __tablename__ = "insights_benchmarks"
+    __table_args__ = (
+        UniqueConstraint("cohort", "metric", name="uq_insights_benchmarks_cohort_metric"),
+        CheckConstraint("tenants >= 20", name="ck_insights_benchmarks_tenants"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    cohort: Mapped[str] = mapped_column(String(64), nullable=False)
+    metric: Mapped[str] = mapped_column(String(64), nullable=False)
+    window_from: Mapped[date] = mapped_column(Date, nullable=False)
+    window_to: Mapped[date] = mapped_column(Date, nullable=False)
+    p25: Mapped[Decimal] = mapped_column(Numeric(20, 6), nullable=False)
+    p50: Mapped[Decimal] = mapped_column(Numeric(20, 6), nullable=False)
+    p75: Mapped[Decimal] = mapped_column(Numeric(20, 6), nullable=False)
+    tenants: Mapped[int] = mapped_column(Integer, nullable=False)
+    computed_at: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), server_default=func.now(), nullable=False)

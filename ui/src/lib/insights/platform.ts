@@ -60,6 +60,8 @@ export interface PlatformSummary {
   totals: PlatformTotals;
   series: PlatformDay[];
   operations: PlatformOperations;
+  /** Organisations that opted in to benchmarks, and the cohort floor (a count only). */
+  benchmarks: { opted_in: number; min_tenants: number };
   reconciled_gate_nights: number;
 }
 
@@ -162,6 +164,10 @@ export function normaliseSummary(data: unknown): PlatformSummary {
   const t = obj(raw.totals);
   return {
     operations: normaliseOperations(raw.operations),
+    benchmarks: {
+      opted_in: num(obj(raw.benchmarks).opted_in),
+      min_tenants: toFiniteNumber(obj(raw.benchmarks).min_tenants) ?? 20,
+    },
     period: normalisePeriod(raw.period),
     totals: {
       tenants_active: num(t.tenants_active),

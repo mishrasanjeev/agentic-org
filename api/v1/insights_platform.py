@@ -31,7 +31,7 @@ from fastapi.responses import Response
 
 from api.route_metadata import route_meta
 from core.database import get_platform_session, get_tenant_session
-from core.insights import platform
+from core.insights import benchmarks, platform
 from core.insights.audit import audit_entry
 from core.insights.platform import PlatformOperator, PlatformRangeError, require_platform_operator
 
@@ -82,6 +82,7 @@ async def platform_summary(
         daily = await platform.platform_daily(session, start, end)
         tenants = await platform.platform_tenants(session, start, end)
         operations = await platform.platform_operations(session, start, end)
+        opted_in = await benchmarks.participation(session)
     period = {"from": start.isoformat(), "to": end.isoformat()}
     await _audit(operator, "platform.insights.summary.read", {"period": period})
     return {
@@ -89,6 +90,7 @@ async def platform_summary(
         "totals": platform.totals(daily, tenants),
         "series": daily,
         "operations": operations,
+        "benchmarks": {"opted_in": opted_in, "min_tenants": benchmarks.MIN_TENANTS},
         "reconciled_gate_nights": platform.RECONCILED_GATE_NIGHTS,
     }
 
