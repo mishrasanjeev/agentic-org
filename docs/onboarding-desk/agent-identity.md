@@ -70,6 +70,12 @@ From then on, grants Grantex issues or delegates to the agent carry the key's th
 
 Every desk action, allowed or not, is recorded with its outcome and reason.
 
+Only the agent's own conversational reply waits on the check. HELP is always answered, PERSON always raises the hand-off to a person and confirms it, and STOP is recorded by the inbound route before the conversation runs.
+
+A provider or grant check that raises something unexpected, returns the wrong type or takes longer than its timeout (5 seconds for each provider call, 12 for the grant check) holds the action with a reason; it never allows it. Expiries without a time zone are read as UTC, and only text scopes count. One lead or tenant failing never stops the outreach run for the rest.
+
+The grant check uses a run-grant isolation key derived from the tenant and the role (32 hexadecimal characters), so it works with run-token isolation on (`grants_isolate_run_tokens`).
+
 ## Presented identity
 
 A verification provider can declare `accepts_presented_identity`. For such a provider, the case investigator's `verify_business` call carries `VerifyOptions.presented_identity`: the identifier, attestation, attestation hash and trust tier. A provider that does not declare it never receives one. The call record says whether the identity was presented. The mock verification provider accepts it and echoes the identifier in the verification handle's `accepted_identity`.
@@ -122,7 +128,9 @@ Only after the hand-off: the application is submitted and a person approved its 
 1. The applicant gives their name, role and contact and ticks the box (`POST /apply/agent-ready/accept`).
 2. The desk records a consent with purpose `agent_enrolment` on the `web` channel. The wording names the person and their role, and the person's details are stored encrypted.
 3. The desk asks Grantex for a consent grant for that person (`POST /v1/authorize`, scope `agenticorg:onboarding_desk:enrol:agent`, purpose `x-agenticorg.agent_enrolment`). The person approves it on the Grantex consent page. Without a configured Grantex issuer the offer cannot be accepted (`consent_service_not_configured`).
-4. `POST /apply/agent-ready/continue` finds the active grant and hands the business to the identity provider.
+4. `POST /apply/agent-ready/continue` finds the grant the person approved for this enrolment and hands the business to the identity provider. Only an active grant with the enrolment scope, purpose `x-agenticorg.agent_enrolment`, issued after the enrolment began and not yet expired counts, so an approval from an earlier, withdrawn enrolment is never reused. Grantex's grant view does not name the consent request it came from, so the issue time is what ties the two.
+
+The consent page link is kept while the enrolment waits for approval, so a repeat accept or a return to the page shows it again. Accepting twice at once leaves one enrolment; the second answer is that enrolment. With agent identity off, continue and withdraw answer `agent_ready_not_offered` and read nothing.
 
 ### What is shared
 
@@ -140,7 +148,7 @@ A business verification older than `max_verification_age_days` is never shared. 
 
 ### Withdrawing
 
-`POST /apply/agent-ready/withdraw` withdraws the consent and revokes the Grantex grant (`DELETE /v1/grants/{id}`). Before any sharing the desk checks that the consent is still granted and the Grantex grant still active, so a withdrawal, or a grant the person revoked at Grantex, blocks any further sharing. What was already shared stays with the identity provider; the desk has no route to recall it.
+`POST /apply/agent-ready/withdraw` withdraws the consent and revokes every active enrolment grant the person holds at Grantex (`DELETE /v1/grants/{id}`), including one approved but not yet picked up. The enrolment is revoked either way; a revocation Grantex did not confirm is recorded on it as `consent_withdrawn_grant_revoke_failed`. Before any sharing the desk checks that the consent is still granted and the Grantex grant still active and not expired, so a withdrawal, or a grant the person revoked at Grantex, blocks any further sharing. What was already shared stays with the identity provider; the desk has no route to recall it.
 
 ## Evidence and reporting
 
@@ -160,9 +168,9 @@ Migration `v6z121_desk_agent_identity` adds:
 | `onboarding_desk_contact_attempts` columns | `agent_identity_id`, `agent_attestation_sha256`, `agent_trust_tier` |
 | `onboarding_desk_consents` | The `web` channel and `subject_ciphertext`, the encrypted person behind an agent-enrolment consent |
 | `onboarding_desk_agent_actions` | Each desk agent action, its outcome, reason, identity fields and grant |
-| `onboarding_desk_enrolments` | Each enrolment: consent, consent request and grant, status, provider reference and status, shared fields, verification reference and times |
+| `onboarding_desk_enrolments` | Each enrolment: consent, consent request, its consent page and grant, status, provider reference and status, shared fields, verification reference and times |
 
-Both new tables are tenant-scoped under forced row-level security.
+Both new tables are tenant-scoped under forced row-level security. The downgrade removes every tenant's `web` consents with the consents table's forced row-level security lifted for the migration role, then forces it again.
 
 ## Who may do what
 

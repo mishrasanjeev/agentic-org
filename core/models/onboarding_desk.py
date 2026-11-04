@@ -322,6 +322,8 @@ class OnboardingEnrolment(BaseModel):
     case_ref: Mapped[str] = mapped_column(String(128), nullable=False)
     status: Mapped[str] = mapped_column(String(16), nullable=False, default="consent_pending")
     consent_request_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    #: The Grantex consent page, shown again while the enrolment waits for the person's approval.
+    consent_url: Mapped[str | None] = mapped_column(String(2048), nullable=True)
     consent_grant_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
     provider: Mapped[str | None] = mapped_column(String(64), nullable=True)
     provider_ref: Mapped[str | None] = mapped_column(String(256), nullable=True)

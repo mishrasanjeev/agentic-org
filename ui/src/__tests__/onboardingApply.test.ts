@@ -463,6 +463,23 @@ describe("onboarding applicant element", () => {
     await flush();
     box = element.shadowRoot!.querySelector('[data-role="agent-ready"]') as HTMLElement;
     expect(box.querySelector("h2")!.textContent).toBe("Rendre votre entreprise accessible aux agents IA");
+    // A closed tab: on return, the consent page the server kept is offered again; an unsafe one is not.
+    for (const [url, shown] of [
+      ["https://grantex.example/c/1", true],
+      ["javascript:alert(1)", false],
+    ] as const) {
+      document.body.innerHTML = "";
+      const pending = { status: "consent_pending", offer: "x", enrolment: { status: "consent_pending" }, consent_url: url };
+      fetchMock.mockResolvedValueOnce(
+        json({ ...SESSION, application: application({ status: "submitted", agent_ready: pending }) })
+      );
+      element = mount();
+      await flush();
+      box = element.shadowRoot!.querySelector('[data-role="agent-ready"]') as HTMLElement;
+      const link = box.querySelector("a") as HTMLAnchorElement | null;
+      expect(Boolean(link)).toBe(shown);
+      if (link) expect(link.href).toBe(url);
+    }
   });
 
   it("has every string in English and French", () => {

@@ -9,9 +9,9 @@ Contact attempts gain the acting agent's identity identifier, attestation hash a
 ``onboarding_desk_agent_actions`` records each desk agent action and the identity check it ran
 under. Consents may now be captured on the ``web`` channel (the agent-enrolment consent) and keep
 the consenting person, encrypted. ``onboarding_desk_enrolments`` keeps each agent-ready merchant's
-consent grant, what was shared, the provider's reference and status, and when. Both new tables are
-tenant-scoped under forced row-level security. Every column is nullable or defaulted, so rows
-written with agent identity off are unchanged.
+consent request, its consent page and grant, what was shared, the provider's reference and
+status, and when. Both new tables are tenant-scoped under forced row-level security. Every column
+is nullable or defaulted, so rows written with agent identity off are unchanged.
 """
 
 from alembic import op
@@ -80,6 +80,7 @@ def upgrade() -> None:
             case_ref VARCHAR(128) NOT NULL,
             status VARCHAR(16) NOT NULL DEFAULT 'consent_pending',
             consent_request_id VARCHAR(128) NULL,
+            consent_url VARCHAR(2048) NULL,
             consent_grant_id VARCHAR(128) NULL,
             provider VARCHAR(64) NULL,
             provider_ref VARCHAR(256) NULL,
@@ -107,7 +108,11 @@ def upgrade() -> None:
 def downgrade() -> None:
     for table in reversed(TABLES):
         op.execute(f"DROP TABLE IF EXISTS {table};")
+    # The consents table forces row-level security and no tenant is set here: lift the force for the
+    # table owner (the migration role) just long enough to remove every tenant's web consents.
+    op.execute("ALTER TABLE onboarding_desk_consents NO FORCE ROW LEVEL SECURITY;")
     op.execute("DELETE FROM onboarding_desk_consents WHERE channel = 'web';")
+    op.execute("ALTER TABLE onboarding_desk_consents FORCE ROW LEVEL SECURITY;")
     op.execute("ALTER TABLE onboarding_desk_consents DROP CONSTRAINT IF EXISTS ck_onboarding_consents_channel;")
     op.execute(
         "ALTER TABLE onboarding_desk_consents ADD CONSTRAINT ck_onboarding_consents_channel "

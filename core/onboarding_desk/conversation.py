@@ -108,9 +108,14 @@ async def handle_sms(tenant_id: uuid.UUID, phone: str, body: str, *, now: dateti
     partner = branding.partner_name
     inbound = " ".join(body.split())[: applications.MAX_TRANSCRIPT_TEXT]
     keyword = _keyword(body)
-    stamp = await _identity(tenant_id, lead.id, application.id, inbound, moment)
-    if stamp is False:
-        return None
+    # HELP and PERSON are fixed answers the desk owes any applicant (carriers require HELP; PERSON raises the
+    # hand-off to a person), so they never wait on the agent identity check. STOP never reaches here: the
+    # inbound route records the opt-out first. Only the agent's own conversational reply is gated.
+    stamp: dict[str, str] | None | bool = None
+    if keyword not in HELP_KEYWORDS and keyword not in PERSON_KEYWORDS:
+        stamp = await _identity(tenant_id, lead.id, application.id, inbound, moment)
+        if stamp is False:
+            return None
     reply = await _reply(tenant_id, application, keyword, inbound, lang, partner, branding, lead.id, moment)
     if len(reply) > messages.MAX_SMS:
         link = outreach.onboarding_link(branding.onboarding_url, tenant_id, lead.id, moment)
@@ -120,7 +125,12 @@ async def handle_sms(tenant_id: uuid.UUID, phone: str, body: str, *, now: dateti
         application.id,
         [
             {"channel": "sms", "from": "applicant", "text": inbound},
-            {"channel": "sms", "from": "desk", "text": reply, **({"agent_identity": stamp} if stamp else {})},
+            {
+                "channel": "sms",
+                "from": "desk",
+                "text": reply,
+                **({"agent_identity": stamp} if isinstance(stamp, dict) else {}),
+            },
         ],
         now=moment,
     )

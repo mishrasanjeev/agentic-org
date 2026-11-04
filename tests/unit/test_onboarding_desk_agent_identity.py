@@ -329,6 +329,76 @@ class TestGuard:
         identity.provider.set_fixture(scopes.OUTREACH_ROLE, "active")
         assert check(identity).allowed
 
+    def test_a_misbehaving_provider_holds_never_raises(self, identity, monkeypatch):
+        async def explode(agent, *, deadline):
+            raise RuntimeError("plugin bug")
+
+        monkeypatch.setattr(identity.provider, "resolve", explode)
+        assert (check(identity).outcome, check(identity).reason) == ("held", "agent_identity_provider_error")
+
+        async def wrong_type(agent, *, deadline):
+            return {"identifier": "x"}
+
+        monkeypatch.setattr(identity.provider, "resolve", wrong_type)
+        assert check(identity).reason == "agent_identity_provider_error"
+
+        async def slow(agent, *, deadline):
+            await asyncio.sleep(1)
+
+        monkeypatch.setattr(identity.provider, "resolve", slow)
+        monkeypatch.setattr(guard, "CALL_SECONDS", 0.01)
+        assert check(identity).reason == "agent_identity_unreachable"
+
+    def test_a_factory_that_raises_holds(self, identity):
+        def factory():
+            raise RuntimeError("bad configuration")
+
+        broken = guard.AgentIdentityGuard(provider_factory=factory, grant_source=identity.grants,
+                                          provider_name=lambda: "broken")  # fmt: skip
+        result = asyncio.run(broken.check(TENANT, scopes.OUTREACH_ROLE, scopes.OUTREACH_SEND))
+        assert (result.outcome, result.reason) == ("held", "identity_provider_unavailable")
+
+    def test_plugin_values_are_normalised(self, identity, monkeypatch):
+        credential = identity.provider.credential(scopes.OUTREACH_ROLE)
+        naive = _replace(
+            credential,
+            expires_at=(NOW + timedelta(days=1)).replace(tzinfo=None),
+            allowed_scopes=[scopes.OUTREACH_SEND, 3, None],
+            status="active",
+        )
+
+        async def resolve(agent, *, deadline):
+            return naive
+
+        async def status(identifier, *, deadline):
+            return "active"
+
+        monkeypatch.setattr(identity.provider, "resolve", resolve)
+        monkeypatch.setattr(identity.provider, "check_status", status)
+        result = check(identity)
+        assert result.allowed and result.scopes == frozenset({scopes.OUTREACH_SEND})
+        assert guard._status("nonsense") is IdentityStatus.UNKNOWN and guard._aware("2026") is None
+
+    def test_a_grant_check_that_fails_unexpectedly_holds(self, identity, monkeypatch):
+        async def explode(tenant_id, role):
+            raise RuntimeError("bug")
+
+        monkeypatch.setattr(identity.grants, "grant", explode)
+        assert (check(identity).outcome, check(identity).reason) == ("held", "agent_grant_check_failed")
+
+        async def wrong(tenant_id, role):
+            return {"active": True}
+
+        monkeypatch.setattr(identity.grants, "grant", wrong)
+        assert check(identity).reason == "agent_grant_check_failed"
+
+        async def slow(tenant_id, role):
+            await asyncio.sleep(1)
+
+        monkeypatch.setattr(identity.grants, "grant", slow)
+        monkeypatch.setattr(guard, "GRANT_SECONDS", 0.01)
+        assert check(identity).reason == "grantex_unreachable"
+
 
 def _replace(credential, **changes):
     import dataclasses
@@ -471,6 +541,37 @@ class TestGrantex:
         assert consent["authRequestId"] == "areq_1"
         assert fake.requests[-1][2]["purpose"] == "x-agenticorg.agent_enrolment"
 
+    def test_the_isolation_key_is_one_the_token_pool_accepts(self, monkeypatch):
+        """With run-token isolation on, the guard's grant goes through the pool, which takes only 32 hex."""
+        import re
+
+        import core.cases.grant_authorizer as authorizer
+        from auth.token_pool import RunGrantToken, token_pool
+
+        key = guard.isolation_key_for(str(TENANT), scopes.OUTREACH_ROLE)
+        assert re.fullmatch("[0-9a-f]{32}", key)
+        assert key == guard.isolation_key_for(str(TENANT), scopes.OUTREACH_ROLE), "stable per tenant and role"
+        assert key != guard.isolation_key_for(str(TENANT), scopes.CONVERSATION_ROLE)
+        assert key != guard.isolation_key_for(str(uuid.uuid4()), scopes.OUTREACH_ROLE)
+        monkeypatch.setattr(settings, "grants_isolate_run_tokens", True)
+        seen = []
+
+        async def cached(cache_key):
+            seen.append(cache_key)
+            return RunGrantToken(token="tok", grant_id="grnt_iso", expires_at=None, source="pool_cache")
+
+        async def active_agent(tenant_id, role):
+            return "agent-1", {"grantex_agent_id": "ag_1", "grantex_scopes": [scopes.OUTREACH_SEND]}
+
+        fake = FakeGrantex()
+        fake.verify_answer = {"active": True, "claims": {"grnt": "grnt_iso", "scp": [scopes.OUTREACH_SEND],
+                                                         "cnf": {"jkt": "thumb"}}}  # fmt: skip
+        monkeypatch.setattr(token_pool, "_cached_run_grant", cached)
+        monkeypatch.setattr(authorizer, "_active_agent", active_agent)
+        view = asyncio.run(guard.GrantexBoundGrantSource(service_factory=fake.service).grant(
+            str(TENANT), scopes.OUTREACH_ROLE))  # fmt: skip
+        assert view.grant_id == "grnt_iso" and view.active and seen, "the pool accepted the key"
+
     def test_the_grant_source_checks_the_key_binding(self, monkeypatch):
         import auth.run_grants as run_grants
         import core.cases.grant_authorizer as authorizer
@@ -561,6 +662,45 @@ class TestOutreach:
         assert engine["sent"] == [] and [a["outcome"] for a in actions] == ["held", "stopped", "stopped"]
 
 
+class TestOutreachRuns:
+    def test_one_lead_or_tenant_failing_never_stops_the_rest(self, monkeypatch):
+        from tests.unit.test_onboarding_desk_outreach import full_branding
+
+        due = [lead_row(id=uuid.uuid4()), lead_row(id=uuid.uuid4())]
+
+        async def due_leads(tid, *, now, first_contact_delay, limit):
+            return due
+
+        results = iter([RuntimeError("plugin bug"), outreach.Outcome(True, "sent")])
+
+        async def contact(tid, lid, *, kind, now):
+            item = next(results)
+            if isinstance(item, Exception):
+                raise item
+            return item
+
+        async def branding_for(tid):
+            return full_branding()
+
+        monkeypatch.setattr(store, "due_leads", due_leads)
+        monkeypatch.setattr(store, "get_branding", branding_for)
+        monkeypatch.setattr(outreach, "contact_lead", contact)
+        assert asyncio.run(outreach.run_due(TENANT, now=NOW)) == {"due": 2, "sent": 1, "deferred": 0, "refused": 1}
+        broken, healthy = uuid.uuid4(), uuid.uuid4()
+
+        async def tenants():
+            return [broken, healthy]
+
+        async def run(tid, *, now=None):
+            if tid == broken:
+                raise RuntimeError("tenant failure")
+            return {"due": 1, "sent": 1, "deferred": 0, "refused": 0}
+
+        monkeypatch.setattr(store, "tenant_ids_with_desk", tenants)
+        monkeypatch.setattr(outreach, "run_due", run)
+        assert asyncio.run(outreach.sweep(now=NOW)) == {"tenants": 1, "sent": 1, "deferred": 0, "refused": 0}
+
+
 class TestStoreRecords:
     def test_attempt_view_carries_identity_only_when_set(self):
         base = SimpleNamespace(id=uuid.uuid4(), channel="sms", kind="first_contact", status="sent", refusal_reason=None,
@@ -620,6 +760,16 @@ class TestConversation:
         assert say("Northwind Coffee LLC") is None
         assert chat["transcript"] == [{"channel": "sms", "from": "applicant", "text": "Northwind Coffee LLC"}]
         assert chat["answers"] == {} and actions[0]["outcome"] in ("held", "stopped")
+
+    @pytest.mark.parametrize("fixture", ["revoked", "unreachable"])
+    def test_help_and_person_are_answered_whatever_the_identity(self, chat, identity, actions, fixture):
+        identity.provider.set_fixture(scopes.CONVERSATION_ROLE, fixture)
+        assert "Reply PERSON" in say("HELP") and "STOP" in say("help")
+        assert "will contact you" in say("person")
+        assert chat["people"] == ["sms"], "the hand-off to a person is raised"
+        assert actions == [], "fixed answers are not agent actions"
+        assert all("agent_identity" not in e for e in chat["transcript"])
+        assert say("Northwind Coffee LLC") is None, "the agent's own reply is still withheld"
 
     def test_off_transcript_is_unchanged(self, chat, monkeypatch):
         monkeypatch.setattr(settings, "onboarding_desk_agent_identity_enabled", False)

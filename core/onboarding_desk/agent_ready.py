@@ -345,7 +345,20 @@ async def offer_view(tenant_id: uuid.UUID, application: Any, *, now: datetime | 
         "status": live.status if live is not None else "offered",
         "offer": found.settings.offer(lang),
         "enrolment": enrolment_view(live) if live is not None else None,
+        "consent_url": _pending_url(live),
     }
+
+
+def _pending_url(row: Any) -> str | None:
+    """The Grantex consent page, only while the enrolment still waits for the person's approval."""
+    if row is None or row.status != "consent_pending":
+        return None
+    return getattr(row, "consent_url", None) or None
+
+
+def _safe_url(value: Any) -> str | None:
+    text = str(value or "")
+    return text[:2048] if text.startswith("https://") and len(text) <= 2048 else None
 
 
 async def sms_offer(tenant_id: uuid.UUID, application: Any, *, partner: str, link: str) -> str | None:
@@ -420,7 +433,7 @@ async def accept(
         raise _reverify(application, branding.partner_name)
     live = await _live(tenant_id, application.id)
     if live is not None:
-        return {"enrolment": enrolment_view(live), "consent_url": None}
+        return {"enrolment": enrolment_view(live), "consent_url": _pending_url(live)}
     person = {
         "name": _text(name, "name", 120),
         "role": _text(role, "role", 80),
@@ -470,14 +483,24 @@ async def accept(
         case_ref=application.case_ref,
         status="consent_pending",
         consent_request_id=str(requested.get("authRequestId") or "")[:128] or None,
+        consent_url=_safe_url(requested.get("consentUrl")),
         shared_fields=[],
         verification_ref=reference,
         verified_at=found.verified_at,
         created_at=moment,
     )
-    await _add(tenant_id, consent, enrolment)
+    from sqlalchemy.exc import IntegrityError
+
+    try:
+        await _add(tenant_id, consent, enrolment)
+    except IntegrityError as exc:
+        # Another accept for this application won the race; its consent and enrolment stand, this one is dropped.
+        live = await _live(tenant_id, application.id)
+        if live is None:
+            raise DeskError(409, "enrolment_in_progress", "the offer is being accepted; try again") from exc
+        return {"enrolment": enrolment_view(live), "consent_url": _pending_url(live)}
     logger.info("onboarding_agent_ready_accepted")
-    return {"enrolment": enrolment_view(enrolment), "consent_url": requested.get("consentUrl")}
+    return {"enrolment": enrolment_view(enrolment), "consent_url": enrolment.consent_url}
 
 
 async def _add(tenant_id: uuid.UUID, *rows: Any) -> None:
@@ -541,7 +564,7 @@ async def _update(tenant_id: uuid.UUID, enrolment_id: uuid.UUID, **values: Any) 
     return row
 
 
-async def sharing_allowed(tenant_id: uuid.UUID, enrolment: Any, service: Any) -> str:
+async def sharing_allowed(tenant_id: uuid.UUID, enrolment: Any, service: Any, *, now: datetime | None = None) -> str:
     """Why sharing is blocked ("" when allowed): the consent row and the Grantex grant must both be live."""
     from core.agent_identity.grantex import GrantexIdentityError
 
@@ -554,7 +577,41 @@ async def sharing_allowed(tenant_id: uuid.UUID, enrolment: Any, service: Any) ->
         grant = await service.get_grant(enrolment.consent_grant_id)
     except GrantexIdentityError:
         return "consent_service_unavailable"
-    return "" if grant.get("status") == "active" else "consent_grant_revoked"
+    if grant.get("status") != "active":
+        return "consent_grant_revoked"
+    expires = _parse(grant.get("expiresAt"))
+    if expires is None or expires <= (now or datetime.now(UTC)):
+        return "consent_grant_expired"
+    return ""
+
+
+def _matching_grant(grants: list[dict[str, Any]], enrolment: Any, moment: datetime) -> dict[str, Any] | None:
+    """The grant the person approved for *this* enrolment: enrolment scope and purpose, issued after it began.
+
+    Grantex's grant view does not name the consent request it came from, so the issue time is what ties a
+    grant to this enrolment; an approval from an earlier, withdrawn enrolment is never reused.
+    """
+    from core.agent_identity import scopes
+    from core.agent_identity.grantex import ENROLMENT_PURPOSE
+
+    created = _parse(enrolment.created_at)
+    candidates = []
+    for grant in grants:
+        issued = _parse(grant.get("issuedAt"))
+        expires = _parse(grant.get("expiresAt"))
+        if (
+            grant.get("status") == "active"
+            and grant.get("purpose") == ENROLMENT_PURPOSE
+            and scopes.ENROLMENT in (grant.get("scopes") or [])
+            and created is not None
+            and issued is not None
+            and issued >= created
+            and expires is not None
+            and expires > moment
+            and grant.get("grantId")
+        ):
+            candidates.append((issued, grant))
+    return max(candidates, key=lambda pair: pair[0])[1] if candidates else None
 
 
 async def continue_enrolment(tenant_id: uuid.UUID, application: Any, *, now: datetime | None = None) -> dict[str, Any]:
@@ -565,11 +622,11 @@ async def continue_enrolment(tenant_id: uuid.UUID, application: Any, *, now: dat
         EnrolmentRequest,
     )
     from connectors.framework.verification_provider import Deadline
-    from core.agent_identity import scopes
     from core.agent_identity.grantex import GrantexIdentityError
     from core.agent_identity.guard import GrantUnavailableError, _configured_provider
 
     moment = now or datetime.now(UTC)
+    _require_available()
     live = await _live(tenant_id, application.id)
     if live is None:
         raise DeskError(404, "enrolment_not_found", "there is no agent-ready enrolment for this application")
@@ -589,11 +646,11 @@ async def continue_enrolment(tenant_id: uuid.UUID, application: Any, *, now: dat
             )
         except GrantexIdentityError as exc:
             raise DeskError(503, "consent_service_unavailable", "the consent grant could not be checked") from exc
-        grant = next((g for g in grants if scopes.ENROLMENT in (g.get("scopes") or [])), None)
+        grant = _matching_grant(grants, live, moment)
         if grant is None:
-            return {"enrolment": enrolment_view(live)}
+            return {"enrolment": enrolment_view(live), "consent_url": _pending_url(live)}
         live = await _update(tenant_id, live.id, consent_grant_id=str(grant.get("grantId") or "")[:128] or None)
-    blocked = await sharing_allowed(tenant_id, live, service)
+    blocked = await sharing_allowed(tenant_id, live, service, now=moment)
     if blocked == "consent_service_unavailable":
         raise DeskError(503, blocked, "the consent grant could not be checked")
     if blocked:
@@ -636,21 +693,45 @@ async def continue_enrolment(tenant_id: uuid.UUID, application: Any, *, now: dat
 
 
 async def withdraw(tenant_id: uuid.UUID, application: Any, *, now: datetime | None = None) -> dict[str, Any]:
-    """Withdraw the agent-enrolment consent and revoke its Grantex grant; nothing more is shared."""
+    """Withdraw the agent-enrolment consent and revoke the person's Grantex enrolment grants.
+
+    Every active enrolment grant for the person is revoked, not only the one this enrolment recorded: a
+    grant approved but not yet picked up must not outlive the withdrawal. The enrolment is revoked here
+    either way, so nothing more is shared; a revocation Grantex did not confirm is recorded on it.
+    """
+    from core.agent_identity import scopes
     from core.agent_identity.grantex import GrantexIdentityError, grantex_identity_service
 
     moment = now or datetime.now(UTC)
+    _require_available()
     live = await _live(tenant_id, application.id)
     if live is None:
         raise DeskError(404, "enrolment_not_found", "there is no agent-ready enrolment for this application")
     await _withdraw_consent(tenant_id, live.consent_id, moment)
-    grant_revoked = False
-    if live.consent_grant_id:
-        service = grantex_identity_service()
+    revoked: list[str] = []
+    failed = False
+    service = grantex_identity_service()
+    if service is None:
+        failed = True
+    else:
         try:
-            grant_revoked = bool(service and await service.revoke_grant(live.consent_grant_id))
-        except GrantexIdentityError:
-            # The local consent is withdrawn either way, and sharing checks it first.
-            logger.warning("onboarding_agent_ready_grant_revoke_failed")
-    row = await _update(tenant_id, live.id, status="revoked", revoked_at=moment, refusal_reason="consent_withdrawn")
-    return {"enrolment": enrolment_view(row), "grant_revoked": grant_revoked}
+            held = await service.active_grants(
+                agent_id=await _grantex_agent(tenant_id), principal_id=_principal(tenant_id, application.lead_id)
+            )
+            ids = {str(g["grantId"]) for g in held if g.get("grantId") and scopes.ENROLMENT in (g.get("scopes") or [])}
+            if live.consent_grant_id:
+                ids.add(str(live.consent_grant_id))
+            for grant_id in sorted(ids):
+                if await service.revoke_grant(grant_id):
+                    revoked.append(grant_id)
+        except (GrantexIdentityError, DeskError) as exc:
+            failed = True
+            logger.warning("onboarding_agent_ready_grant_revoke_failed", error=type(exc).__name__)
+    reason = "consent_withdrawn_grant_revoke_failed" if failed else "consent_withdrawn"
+    row = await _update(tenant_id, live.id, status="revoked", revoked_at=moment, refusal_reason=reason)
+    return {"enrolment": enrolment_view(row), "grant_revoked": bool(revoked) and not failed, "revoke_failed": failed}
+
+
+def _require_available() -> None:
+    if not available():
+        raise DeskError(404, "agent_ready_not_offered", "the agent-ready offer is not available")

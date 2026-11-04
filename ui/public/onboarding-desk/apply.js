@@ -843,9 +843,11 @@
       var enrolment = offer.enrolment || {};
       if (offer.status === "consent_pending") {
         box.appendChild(el("p", "message", this._t("agentReadyPending")));
-        if (consentUrl && /^https:\/\//.test(consentUrl)) {
+        // The consent page from this accept, or the one the server kept while approval is pending.
+        var url = consentUrl || offer.consent_url;
+        if (url && /^https:\/\//.test(url)) {
           var link = el("a", "primary", this._t("agentReadyConfirm"));
-          link.href = consentUrl;
+          link.href = url;
           link.target = "_blank";
           link.rel = "noopener noreferrer";
           box.appendChild(link);

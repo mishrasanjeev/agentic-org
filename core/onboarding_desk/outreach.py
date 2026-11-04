@@ -201,6 +201,11 @@ async def run_due(tenant_id: uuid.UUID, *, now: datetime | None = None, limit: i
             logger.info("onboarding_outreach_skipped", code=exc.code)
             counts["refused"] += 1
             continue
+        # enterprise-gate: broad-except-ok reason=one-lead-failure-continues-to-next-lead
+        except Exception as exc:
+            logger.error("onboarding_outreach_lead_failed", error=type(exc).__name__)
+            counts["refused"] += 1
+            continue
         if outcome.sent:
             counts["sent"] += 1
         elif outcome.next_allowed_at:
@@ -214,10 +219,15 @@ async def sweep(*, now: datetime | None = None) -> dict[str, int]:
     """The beat entry: run due outreach for each tenant whose branding turns on automatic contact."""
     totals = {"tenants": 0, "sent": 0, "deferred": 0, "refused": 0}
     for tenant_id in await store.tenant_ids_with_desk():
-        branding = await store.get_branding(tenant_id)
-        if not branding.auto_contact:
+        try:
+            branding = await store.get_branding(tenant_id)
+            if not branding.auto_contact:
+                continue
+            counts = await run_due(tenant_id, now=now)
+        # enterprise-gate: broad-except-ok reason=one-tenant-failure-continues-to-next-tenant
+        except Exception as exc:
+            logger.error("onboarding_outreach_tenant_failed", error=type(exc).__name__)
             continue
-        counts = await run_due(tenant_id, now=now)
         totals["tenants"] += 1
         for key in ("sent", "deferred", "refused"):
             totals[key] += counts[key]

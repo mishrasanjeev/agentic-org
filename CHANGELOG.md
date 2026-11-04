@@ -28,6 +28,11 @@
   the verification reference and registry-verified fields, and records the provider's reference and status as
   received. Verifications older than the configured age are not shared. Withdrawing revokes the grant and blocks any
   further sharing. The partner report gains `funnel.agent_ready` with identity on.
+- HELP and PERSON text replies never wait on the identity check; only the agent's own reply does. A misbehaving or
+  slow identity provider or grant check holds the action, and one lead or tenant failing never stops an outreach run.
+- An enrolment accepts only a grant issued for it (enrolment purpose and scope, issued after it began, not expired);
+  withdrawal revokes every enrolment grant the person holds and records a revocation that failed. The consent page
+  link is kept while approval is pending.
 - Migration v6z121 adds the identity columns to contact attempts, the `web` consent channel and the encrypted consent
   subject, and the `onboarding_desk_agent_actions` and `onboarding_desk_enrolments` tables (forced row-level security).
 

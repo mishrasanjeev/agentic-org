@@ -25,6 +25,7 @@ from __future__ import annotations
 
 import asyncio
 import dataclasses
+import hashlib
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
@@ -47,6 +48,8 @@ from core.agent_identity import scopes as identity_scopes
 logger = structlog.get_logger()
 
 CALL_SECONDS = 5.0
+#: The grant check resolves the run grant and asks Grantex: two calls.
+GRANT_SECONDS = 12.0
 
 
 @dataclass(frozen=True)
@@ -127,6 +130,43 @@ def _configured_provider() -> AgentIdentityProvider:
         raise GrantUnavailableError("identity_provider_unavailable") from exc
 
 
+def isolation_key_for(tenant_id: str, role: str) -> str:
+    """The run-grant isolation key for one tenant's agent role: 32 lowercase hex, as the token pool requires."""
+    return hashlib.sha256(f"agent_identity:{tenant_id}:{role}".encode()).hexdigest()[:32]
+
+
+def _aware(value: Any) -> datetime | None:
+    """A provider's expiry as an aware UTC time; a naive one is read as UTC, anything else as none."""
+    if not isinstance(value, datetime):
+        return None
+    return value if value.tzinfo is not None else value.replace(tzinfo=UTC)
+
+
+def _status(value: Any) -> IdentityStatus:
+    try:
+        return value if isinstance(value, IdentityStatus) else IdentityStatus(str(value))
+    except ValueError:
+        return IdentityStatus.UNKNOWN
+
+
+def _normalised(credential: Any) -> AgentIdentityCredential:
+    """A plugin's credential with an aware expiry, string scopes and a known status, or ``TypeError``."""
+    if not isinstance(credential, AgentIdentityCredential):
+        raise TypeError("the provider did not return an agent identity credential")
+    raw = credential.allowed_scopes
+    scopes_in = raw if isinstance(raw, list | tuple | set | frozenset) else ()
+    return dataclasses.replace(
+        credential,
+        allowed_scopes=frozenset(s for s in scopes_in if isinstance(s, str)),
+        expires_at=_aware(credential.expires_at),
+        status=_status(credential.status),
+        identifier=str(credential.identifier),
+        attestation=str(credential.attestation),
+        trust_tier=str(credential.trust_tier),
+        key_thumbprint=str(credential.key_thumbprint),
+    )
+
+
 class GrantexBoundGrantSource:
     """The agent's run grant, checked at Grantex: active, its scopes, and the key it is bound to."""
 
@@ -159,7 +199,7 @@ class GrantexBoundGrantSource:
             grantex_config=config,
             mode=EnforcementMode.DENY,
             runtime="agent_identity",
-            isolation_key=f"agent_identity:{role}",
+            isolation_key=isolation_key_for(tenant_id, role),
         )
         if not run_grant.token:
             raise GrantUnavailableError(run_grant.missing_sub_reason or "agent_grant_missing")
@@ -186,6 +226,7 @@ class _Entry:
     until: datetime
 
 
+# enterprise-gate: process-local-ok reason=bounded-ttl-identity-status-cache-never-past-credential-expiry
 _CACHE: dict[tuple[str, str, str], _Entry] = {}
 
 
@@ -220,20 +261,46 @@ class AgentIdentityGuard:
             provider = self.provider_factory()
         except GrantUnavailableError as exc:
             return self._held(exc.reason)
+        # enterprise-gate: broad-except-ok reason=provider-factory-failure-fails-closed-as-a-held-action
+        except Exception as exc:
+            logger.error("agent_identity_provider_construction_failed", error=type(exc).__name__)
+            return self._held("identity_provider_unavailable")
         deadline = Deadline.after(CALL_SECONDS)
         try:
-            credential = await provider.resolve(AgentRef(tenant_id=tenant_id, role=role), deadline=deadline)
-            status = await provider.check_status(credential.identifier, deadline=deadline)
+            credential = _normalised(
+                await asyncio.wait_for(
+                    provider.resolve(AgentRef(tenant_id=tenant_id, role=role), deadline=deadline), CALL_SECONDS
+                )
+            )
+            status = _status(
+                await asyncio.wait_for(provider.check_status(credential.identifier, deadline=deadline), CALL_SECONDS)
+            )
+        except asyncio.CancelledError:
+            raise
         except AgentIdentityNotFound:
             return self._held("agent_identity_not_found")
-        except AgentIdentityError:
+        except (AgentIdentityError, TimeoutError):
             return self._held("agent_identity_unreachable")
+        # enterprise-gate: broad-except-ok reason=provider-error-fails-closed-as-a-held-action
+        except Exception as exc:
+            logger.error("agent_identity_provider_error", error=type(exc).__name__)
+            return self._held("agent_identity_provider_error")
         grant: AgentGrantView | None = None
         if status is IdentityStatus.ACTIVE and not _expired(credential, moment):
             try:
-                grant = await self.grant_source.grant(tenant_id, role)
+                grant = await asyncio.wait_for(self.grant_source.grant(tenant_id, role), GRANT_SECONDS)
+            except asyncio.CancelledError:
+                raise
             except GrantUnavailableError as exc:
                 return self._held(exc.reason)
+            except TimeoutError:
+                return self._held("grantex_unreachable")
+            # enterprise-gate: broad-except-ok reason=grant-check-error-fails-closed-as-a-held-action
+            except Exception as exc:
+                logger.error("agent_identity_grant_check_error", error=type(exc).__name__)
+                return self._held("agent_grant_check_failed")
+            if not isinstance(grant, AgentGrantView):
+                return self._held("agent_grant_check_failed")
         until = moment + timedelta(seconds=self.cache_seconds())
         if credential.expires_at is not None:
             until = min(until, credential.expires_at)
@@ -285,12 +352,19 @@ class AgentIdentityGuard:
         if not check.allowed or check.credential is None:
             return None
         try:
-            return await self.provider_factory().present(
-                check.credential, audience=audience, deadline=Deadline.after(CALL_SECONDS)
+            presented = await asyncio.wait_for(
+                self.provider_factory().present(
+                    check.credential, audience=audience, deadline=Deadline.after(CALL_SECONDS)
+                ),
+                CALL_SECONDS,
             )
-        except (AgentIdentityError, GrantUnavailableError) as exc:
+        except asyncio.CancelledError:
+            raise
+        # enterprise-gate: broad-except-ok reason=presentation-failure-degrades-to-no-presented-identity
+        except Exception as exc:
             logger.warning("agent_identity_presentation_unavailable", error=type(exc).__name__)
             return None
+        return presented if isinstance(presented, PresentedIdentity) else None
 
 
 def _expired(credential: AgentIdentityCredential, moment: datetime) -> bool:

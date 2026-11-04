@@ -169,8 +169,17 @@ def accept(**overrides):
     return run(agent_ready.accept(TENANT, application(), **values))
 
 
-def grant_approved(state, grant_id="grnt_enrol_1"):
-    state["grantex"].grants[grant_id] = {"grantId": grant_id, "status": "active", "scopes": [scopes.ENROLMENT]}
+def grant_approved(state, grant_id="grnt_enrol_1", *, issued=NOW + timedelta(minutes=1), purpose=None,
+                   expires=NOW + timedelta(days=1), grant_scopes=None):  # fmt: skip
+    """The person approved the consent grant at Grantex, as Grantex's grant view shows it."""
+    state["grantex"].grants[grant_id] = {
+        "grantId": grant_id,
+        "status": "active",
+        "scopes": grant_scopes or [scopes.ENROLMENT],
+        "purpose": purpose or grantex.ENROLMENT_PURPOSE,
+        "issuedAt": issued.isoformat(),
+        "expiresAt": expires.isoformat(),
+    }
 
 
 # ── MO-70: settings ──────────────────────────────────────────────────────────
@@ -441,6 +450,117 @@ class TestEnrolment:
         refused = run(agent_ready.continue_enrolment(TENANT, application(), now=NOW))["enrolment"]
         assert refused["status"] == "refused" and refused["provider_ref"] is None
 
+    def test_only_a_grant_issued_for_this_enrolment_is_accepted(self, offer):
+        accept()
+        # An approval from before this enrolment began (an earlier, withdrawn one) is never reused.
+        grant_approved(offer, "grnt_old", issued=NOW - timedelta(days=2))
+        grant_approved(offer, "grnt_wrong_purpose", purpose="aml.cdd.onboarding")
+        grant_approved(offer, "grnt_wrong_scope", grant_scopes=["agenticorg:other:read:x"])
+        grant_approved(offer, "grnt_expired", expires=NOW - timedelta(minutes=1))
+        pending = run(agent_ready.continue_enrolment(TENANT, application(), now=NOW))
+        assert pending["enrolment"]["status"] == "consent_pending" and offer["provider"].enrolments == {}
+        assert pending["consent_url"] == "https://grantex.example/c/1"
+        grant_approved(offer, "grnt_new")
+        shared = run(agent_ready.continue_enrolment(TENANT, application(), now=NOW))["enrolment"]
+        assert shared["status"] == "shared" and shared["consent_grant_id"] == "grnt_new"
+
+    def test_an_expired_grant_blocks_sharing(self, offer):
+        accept()
+        grant_approved(offer, "grnt_enrol_1", expires=NOW + timedelta(minutes=5))
+        offer["enrolments"][0].consent_grant_id = "grnt_enrol_1"
+        blocked = run(agent_ready.continue_enrolment(TENANT, application(), now=NOW + timedelta(minutes=10)))
+        assert blocked["enrolment"]["refusal_reason"] == "consent_grant_expired"
+        assert offer["provider"].enrolments == {}
+        record = SimpleNamespace(consent_id=offer["consents"][0].id, consent_grant_id="grnt_enrol_1")
+        offer["grantex"].grants["grnt_enrol_1"].pop("expiresAt")
+        assert run(agent_ready.sharing_allowed(TENANT, record, offer["grantex"].service(), now=NOW)) == (
+            "consent_grant_expired"
+        )
+
+    def test_withdrawal_revokes_every_enrolment_grant_the_person_holds(self, offer):
+        accept()
+        # Approved at Grantex but never picked up by continue: withdrawal must still revoke it.
+        grant_approved(offer, "grnt_unclaimed")
+        grant_approved(offer, "grnt_older", issued=NOW - timedelta(days=3))
+        grant_approved(offer, "grnt_other", grant_scopes=["agenticorg:other:read:x"])
+        result = run(agent_ready.withdraw(TENANT, application(), now=NOW))
+        assert result["grant_revoked"] is True and result["revoke_failed"] is False
+        grants = offer["grantex"].grants
+        assert grants["grnt_unclaimed"]["status"] == grants["grnt_older"]["status"] == "revoked"
+        assert grants["grnt_other"]["status"] == "active", "only enrolment grants"
+        assert result["enrolment"]["refusal_reason"] == "consent_withdrawn"
+
+    def test_a_failed_revocation_is_recorded_and_still_blocks_sharing(self, offer, monkeypatch):
+        accept()
+        grant_approved(offer)
+        offer["grantex"].down = True
+        result = run(agent_ready.withdraw(TENANT, application(), now=NOW))
+        assert result["revoke_failed"] is True and result["grant_revoked"] is False
+        assert result["enrolment"]["status"] == "revoked"
+        assert result["enrolment"]["refusal_reason"] == "consent_withdrawn_grant_revoke_failed"
+        offer["grantex"].down = False
+        with pytest.raises(DeskError):
+            run(agent_ready.continue_enrolment(TENANT, application(), now=NOW))
+        assert offer["provider"].enrolments == {}
+        offer["enrolments"].clear()
+        offer["consents"].clear()
+        accept()
+        monkeypatch.setattr(grantex, "grantex_identity_service", lambda: None)
+        result = run(agent_ready.withdraw(TENANT, application(), now=NOW))
+        assert result["revoke_failed"] is True and result["enrolment"]["status"] == "revoked"
+
+    def test_the_consent_page_is_kept_while_approval_is_pending(self, offer):
+        first = accept()
+        assert first["consent_url"] == "https://grantex.example/c/1"
+        assert offer["enrolments"][0].consent_url == "https://grantex.example/c/1"
+        again = accept()
+        assert again["consent_url"] == "https://grantex.example/c/1", "a repeat accept shows it again"
+        view = run(agent_ready.offer_view(TENANT, application(), now=NOW))
+        assert view["status"] == "consent_pending" and view["consent_url"] == "https://grantex.example/c/1"
+        assert "consent_url" not in view["enrolment"], "the evidence view never carries it"
+        grant_approved(offer)
+        run(agent_ready.continue_enrolment(TENANT, application(), now=NOW))
+        assert run(agent_ready.offer_view(TENANT, application(), now=NOW))["consent_url"] is None
+        assert agent_ready._safe_url("http://grantex.example/c/1") is None
+        assert agent_ready._safe_url("javascript:alert(1)") is None
+
+    def test_a_concurrent_second_accept_returns_the_live_enrolment(self, offer, monkeypatch):
+        from sqlalchemy.exc import IntegrityError
+
+        winner = SimpleNamespace(id=uuid.uuid4(), status="consent_pending", consent_id=uuid.uuid4(),
+                                 consent_request_id="areq_0", consent_grant_id=None, shared_fields=[],
+                                 verification_ref={}, verified_at=NOW, provider=None, provider_ref=None,
+                                 provider_status=None, refusal_reason=None, created_at=NOW, shared_at=None,
+                                 revoked_at=None, consent_url="https://grantex.example/c/0")  # fmt: skip
+        race = {"added": False, "after": [winner]}
+
+        async def lists(tid, aid):
+            return race["after"] if race["added"] else []
+
+        async def add(tid, *rows):
+            race["added"] = True
+            raise IntegrityError("INSERT", {}, Exception("ux_onboarding_enrolments_live"))
+
+        monkeypatch.setattr(agent_ready, "list_enrolments", lists)
+        monkeypatch.setattr(agent_ready, "_add", add)
+        result = accept()
+        assert result["enrolment"]["id"] == str(winner.id) and result["consent_url"] == "https://grantex.example/c/0"
+        race.update(added=False, after=[])
+        with pytest.raises(DeskError) as caught:
+            accept()
+        assert caught.value.code == "enrolment_in_progress" and caught.value.status == 409
+
+    def test_continue_and_withdraw_read_nothing_while_unavailable(self, offer, monkeypatch):
+        async def boom(tid, aid):
+            raise AssertionError("no enrolment is read while the offer is unavailable")
+
+        monkeypatch.setattr(agent_ready, "list_enrolments", boom)
+        monkeypatch.setattr(settings, "onboarding_desk_agent_identity_enabled", False)
+        for call in (agent_ready.continue_enrolment, agent_ready.withdraw):
+            with pytest.raises(DeskError) as caught:
+                run(call(TENANT, application(), now=NOW))
+            assert (caught.value.status, caught.value.code) == (404, "agent_ready_not_offered")
+
     def test_enrolment_view(self):
         row = SimpleNamespace(id=uuid.uuid4(), status="shared", consent_id=uuid.uuid4(), consent_request_id="a",
                               consent_grant_id="g", shared_fields=["legal_name"], verification_ref={"case_ref": "c"},
@@ -599,7 +719,9 @@ class TestRoutes:
         assert client.post(f"{base}/accept", json=body).status_code == 422
         accepted = client.post(f"{base}/accept", json={**body, "accept": True}).json()
         assert accepted["enrolment"]["status"] == "consent_pending"
-        grant_approved(offer)
+        # The routes run on the real clock.
+        real_now = datetime.now(UTC)
+        grant_approved(offer, issued=real_now + timedelta(minutes=1), expires=real_now + timedelta(days=1))
         assert client.post(f"{base}/continue").json()["enrolment"]["status"] == "shared"
         assert client.post(f"{base}/withdraw").json()["enrolment"]["status"] == "revoked"
         assert client.post(f"{base}/withdraw").status_code == 404
@@ -647,8 +769,15 @@ class TestMigration:
             assert f"ALTER TABLE {table} FORCE ROW LEVEL SECURITY" in joined
             assert f"CREATE POLICY {table}_tenant_isolation" in joined
         assert "'voice','web'" in joined and "WHERE status <> 'revoked'" in joined
+        assert "consent_url VARCHAR(2048) NULL" in joined
         statements.clear()
         module.downgrade()
+        # The web consents are removed with the forced row-level security lifted, then it is forced again.
+        delete = statements.index("DELETE FROM onboarding_desk_consents WHERE channel = 'web';")
+        assert statements[delete - 1] == "ALTER TABLE onboarding_desk_consents NO FORCE ROW LEVEL SECURITY;"
+        assert statements[delete + 1] == "ALTER TABLE onboarding_desk_consents FORCE ROW LEVEL SECURITY;"
+        assert statements.index("ALTER TABLE onboarding_desk_consents ADD CONSTRAINT ck_onboarding_consents_channel "
+                                "CHECK (channel IN ('sms','email','whatsapp','voice'));") > delete  # fmt: skip
         assert any("DROP TABLE IF EXISTS onboarding_desk_enrolments" in s for s in statements)
         assert any("DROP COLUMN IF EXISTS agent_identity_id" in s for s in statements)
 
