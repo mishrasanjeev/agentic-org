@@ -91,7 +91,7 @@ for (const width of [390, 1440]) {
           }
           await expect(page).toHaveTitle(/ — AgenticOrg$/);
           await expect(page.locator('input[placeholder^="Ask anything"]')).toHaveAttribute("placeholder", "Ask anything... (⌘K)");
-          expect(await page.locator("body").innerText()).not.toMatch(/â€|Ã[\u0080-¿]|�/);
+          expect(await page.locator("body").innerText()).not.toMatch(/\u00e2\u20ac|\u00c3[\u0080-\u00bf]|\ufffd/);
           expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
           for (const value of await page.locator('[data-testid="insights-tiles"] p').all()) {
             expect(await value.evaluate(element => element.scrollWidth <= element.clientWidth)).toBe(true);
